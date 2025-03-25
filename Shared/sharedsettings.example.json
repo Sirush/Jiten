@@ -1,6 +1,6 @@
 {
   "ConnectionStrings": {
-      "JitenDatabase": "Host=localhost;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}"
+      "JitenDatabase": "Host=${DB_HOST};Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}"
   },
   "StaticFilesPath": "${STATIC_FILES_PATH}",
   "UseBunnyCdn": ${USE_BUNNYCDN},
