@@ -28,16 +28,13 @@ services:
     depends_on:
       - postgres
     environment:
-      - DB_HOST=${DB_HOST:-postgres}
-      - DB_NAME=${DB_NAME:-jiten}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-password}
-      - STATIC_FILES_PATH=${STATIC_FILES_PATH:-/app/uploads}
-      - USE_BUNNYCDN=${USE_BUNNYCDN:-false}
-      - BUNNYCDN_SECRET=${BUNNYCDN_SECRET:-}
-      - BUNNYCDN_STORAGE_ZONE=${BUNNYCDN_STORAGE_ZONE:-}
-      - CDN_BASE_URL=${CDN_BASE_URL:-}
-      - DICTIONARY_PATH=${DICTIONARY_PATH:-/path/to/system_full.dic}
+      - ConnectionStrings__DefaultConnection=Host=${DB_HOST:-postgres};Database=${DB_NAME:-jiten};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-password}
+      - StaticFilesPath=${STATIC_FILES_PATH:-/app/uploads}
+      - UseBunnyCdn=${USE_BUNNYCDN:-false}
+      - BunnyCdnSecret=${BUNNYCDN_SECRET:-}
+      - BunnyCdnStorageZone=${BUNNYCDN_STORAGE_ZONE:-}
+      - CdnBaseUrl=${CDN_BASE_URL:-}
+      - DictionaryPath=${DICTIONARY_PATH:-/path/to/system_full.dic}
     volumes:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads
