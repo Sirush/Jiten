@@ -7,5 +7,7 @@
   "BunnyCdnSecret": "",
   "BunnyCdnStorageZone": "jiten",
   "CdnBaseUrl": "https://jiten.b-cdn.net",
-  "DictionaryPath": "path/to/system_full.dic"
+  "DictionaryPath": "path/to/system_full.dic",
+  "JimakuApiKey" : "YourApiKey",
+  "TmdbApiKey" : "YourApiKey"
 }

@@ -35,6 +35,8 @@ services:
       - BunnyCdnStorageZone=${BUNNYCDN_STORAGE_ZONE:-}
       - CdnBaseUrl=${CDN_BASE_URL:-}
       - DictionaryPath=${DICTIONARY_PATH:-/path/to/system_full.dic}
+      - JimakuApiKey=${JIMAKU_API_KEY:-}
+      - TmdbApiKey=${TMDB_API_KEY:-}
     volumes:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads
