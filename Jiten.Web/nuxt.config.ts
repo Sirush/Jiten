@@ -48,6 +48,7 @@ export default defineNuxtConfig({
     '@nuxt/eslint',
     '@pinia/nuxt',
     '@nuxtjs/seo',
+    'nuxt-link-checker',
   ],
   primevue: {
     options: {
@@ -71,5 +72,12 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   sitemap: {
     sources: ['/api/__sitemap__/urls'],
+  },
+  robots: {
+    disallow: ['/decks/media'],
+  },
+  site: {
+    url: 'https://jiten.moe',
+    name: 'Vocabulary lists and anki decks for all your Japanese media',
   },
 });

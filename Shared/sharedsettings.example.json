@@ -1,11 +1,11 @@
 {
   "ConnectionStrings": {
-      "JitenDatabase": "Host=localhost;Database=jiten;Username=postgres;Password=password"
+      "JitenDatabase": "Host=localhost;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}"
   },
-  "StaticFilesPath": "C:\\Path\\To\\StaticFiles",
-  "UseBunnyCdn": false,
-  "BunnyCdnSecret": "",
-  "BunnyCdnStorageZone": "jiten",
-  "CdnBaseUrl": "https://jiten.b-cdn.net",
-  "DictionaryPath": "path/to/system_full.dic"
+  "StaticFilesPath": "${STATIC_FILES_PATH}",
+  "UseBunnyCdn": ${USE_BUNNYCDN},
+  "BunnyCdnSecret": "${BUNNYCDN_SECRET}",
+  "BunnyCdnStorageZone": "${BUNNYCDN_STORAGE_ZONE}",
+  "CdnBaseUrl": "${CDN_BASE_URL}",
+  "DictionaryPath": "${DICTIONARY_PATH}",
 }

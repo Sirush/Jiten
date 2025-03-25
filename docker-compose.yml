@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_MULTIPLE_DATABASES: ${DB_NAME},umami
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    networks:
+      - jiten_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Jiten.Api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      - DB_HOST="localhost"
+      - DB_NAME="jiten"
+      - DB_USER="postgres"
+      - DB_PASSWORD="password"
+      - STATIC_FILES_PATH="/app/uploads"
+      - USE_BUNNYCDN="false"
+      - BUNNYCDN_SECRET=""
+      - BUNNYCDN_STORAGE_ZONE=""
+      - CDN_BASE_URL=""
+      - DICTIONARY_PATH="/path/to/system_full.dic"
+    volumes:
+      - ./Shared:/app/Shared:ro
+      - uploads:/app/uploads
+    networks:
+      - jiten_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.jiten.moe`)"
+
+  web:
+    build:
+      context: .
+      dockerfile: Jiten.Web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - jiten_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=Host(`jiten.moe`)"
+
+  umami:
+    image: docker.umami.is/umami-software/umami:postgresql-latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://umami:umami@postgres:5432/umami
+      DATABASE_TYPE: postgresql
+      APP_SECRET: ${UMAMI_APP_SECRET:-replace-me-with-a-random-string}
+      HASH_SALT: ${UMAMI_HASH_SALT:-some-random-string}
+    init: true
+    networks:
+      - jiten_network
+    healthcheck:
+      test: [ "CMD-SHELL", "curl http://localhost:3005/api/heartbeat" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.umami.rule=Host(`umami.jiten.moe`)"
+      - "traefik.http.services.umami.loadbalancer.server.port=3005"
+
+networks:
+  jiten_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  uploads:

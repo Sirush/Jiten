@@ -1,4 +1,4 @@
-import type { MediaType } from '~/types';
+import type {MediaType, ReadingType} from '~/types';
 
 export interface Deck {
   deckId: number;

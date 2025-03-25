@@ -1,7 +1,7 @@
 <script setup lang="ts">
   useSeoMeta({
     title: 'Jiten',
-    description: 'Get vocabulary lists for all your Japanese media.',
+    description: 'Vocabulary lists and anki decks for all your Japanese media.',
   });
 
   useHead({
