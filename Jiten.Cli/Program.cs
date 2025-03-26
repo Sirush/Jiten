@@ -89,6 +89,9 @@ public class Program
         [Option(longName: "user-dic-mass-add", Required = false,
                 HelpText = "Add a list of words to the user dictionary from a file if they're not parsed correctly")]
         public string UserDicMassAdd { get; set; }
+
+        [Option(longName: "apply-migrations", Required = false, HelpText = "Apply migrations to the database")]
+        public bool ApplyMigrations { get; set; }
     }
 
     static async Task Main(string[] args)
@@ -198,6 +201,14 @@ public class Program
 
                             Console.WriteLine("Importing words...");
                             await AddWordsToUserDictionary(o.UserDicMassAdd, o.XmlPath);
+                        }
+
+                        if (o.ApplyMigrations)
+                        {
+                            Console.WriteLine("Applying migrations to the database.");
+                            await using var context = new JitenDbContext(_dbOptions);
+                            await context.Database.MigrateAsync();
+                            Console.WriteLine("Migrations applied.");
                         }
 
                         if (o.Verbose)
