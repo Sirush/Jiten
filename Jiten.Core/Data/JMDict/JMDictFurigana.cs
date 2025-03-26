@@ -5,9 +5,9 @@ namespace Jiten.Core.Data.JMDict;
 
 public class JMDictFurigana
 {
-    [JsonPropertyName("text")] public string Text { get; set; }
-    [JsonPropertyName("reading")] public string Reading { get; set; }
-    [JsonPropertyName("furigana")] public List<Furigana> Furiganas { get; set; }
+    [JsonPropertyName("text")] public string Text { get; set; } = string.Empty;
+    [JsonPropertyName("reading")] public string Reading { get; set; } = string.Empty;
+    [JsonPropertyName("furigana")] public List<Furigana> Furiganas { get; set; } = new();
 
     public string Parse()
     {
@@ -31,6 +31,6 @@ public class JMDictFurigana
 
 public class Furigana
 {
-    [JsonPropertyName("ruby")] public string Ruby { get; set; }
-    [JsonPropertyName("rt")] public string Rt { get; set; }
+    [JsonPropertyName("ruby")] public string Ruby { get; set; } = string.Empty;
+    [JsonPropertyName("rt")] public string Rt { get; set; } = string.Empty;
 }

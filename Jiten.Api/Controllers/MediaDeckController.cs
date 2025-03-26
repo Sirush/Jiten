@@ -19,12 +19,12 @@ namespace Jiten.Api.Controllers;
 public class MediaDeckController(JitenDbContext context) : ControllerBase
 {
     [HttpGet("get-media-decks-id")]
-    [ResponseCache(Duration = 60*60*24)]
+    [ResponseCache(Duration = 60 * 60 * 24)]
     public async Task<List<int>> GetMediaDecksId()
     {
         return await context.Decks.AsNoTracking().Select(d => d.DeckId).ToListAsync();
     }
-    
+
     [HttpGet("get-media-decks")]
     [ResponseCache(Duration = 300)]
     public async Task<PaginatedResponse<List<Deck>>> GetMediaDecks(int? offset = 0, MediaType? mediaType = null,
@@ -112,12 +112,15 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
     [HttpGet("{id}/vocabulary")]
     [ResponseCache(Duration = 600)]
-    public PaginatedResponse<DeckVocabularyListDto> GetVocabulary(int id, string? sortBy = "", SortOrder sortOrder = SortOrder.Ascending,
-                                                                  int? offset = 0)
+    public PaginatedResponse<DeckVocabularyListDto?> GetVocabulary(int id, string? sortBy = "", SortOrder sortOrder = SortOrder.Ascending,
+                                                                   int? offset = 0)
     {
         int pageSize = 100;
 
         var deck = context.Decks.AsNoTracking().FirstOrDefault(d => d.DeckId == id);
+
+        if (deck == null)
+            return new PaginatedResponse<DeckVocabularyListDto?>(null, 0, pageSize, offset ?? 0);
 
 
         var query = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == id);
@@ -174,10 +177,8 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             List<ReadingDto> alternativeReadings = word.jmDictWord.ReadingsFurigana
                                                        .Select((r, i) => new ReadingDto
                                                                          {
-                                                                             Text = r,
-                                                                             ReadingIndex = i,
-                                                                             ReadingType = word.jmDictWord.ReadingTypes[i],
-                                                                             FrequencyRank =
+                                                                             Text = r, ReadingIndex = i,
+                                                                             ReadingType = word.jmDictWord.ReadingTypes[i], FrequencyRank =
                                                                                  frequencies.First(f => f.WordId == word.dw.WordId)
                                                                                             .ReadingsFrequencyRank[i],
                                                                              FrequencyPercentage =
@@ -193,8 +194,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
             var mainReading = new ReadingDto()
                               {
-                                  Text = reading,
-                                  ReadingIndex = word.dw.ReadingIndex,
+                                  Text = reading, ReadingIndex = word.dw.ReadingIndex,
                                   ReadingType = word.jmDictWord.ReadingTypes[word.dw.ReadingIndex],
                                   FrequencyRank = frequency.ReadingsFrequencyRank[word.dw.ReadingIndex],
                                   FrequencyPercentage = frequency.ReadingsFrequencyPercentage[word.dw.ReadingIndex]
@@ -202,27 +202,28 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
             var wordDto = new WordDto
                           {
-                              WordId = word.jmDictWord.WordId,
-                              MainReading = mainReading,
-                              AlternativeReadings = alternativeReadings,
+                              WordId = word.jmDictWord.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                               PartsOfSpeech = word.jmDictWord.PartsOfSpeech.ToHumanReadablePartsOfSpeech(),
-                              Definitions = word.jmDictWord.Definitions.ToDefinitionDtos(),
-                              Occurences = word.dw.Occurrences
+                              Definitions = word.jmDictWord.Definitions.ToDefinitionDtos(), Occurences = word.dw.Occurrences
                           };
 
             dto.Words.Add(wordDto);
         }
 
-        return new PaginatedResponse<DeckVocabularyListDto>(dto, totalCount, pageSize, offset ?? 0);
+        return new PaginatedResponse<DeckVocabularyListDto?>(dto, totalCount, pageSize, offset ?? 0);
     }
 
     [HttpGet("{id}/detail")]
     [ResponseCache(Duration = 600)]
-    public PaginatedResponse<DeckDetailDto> GetMediaDeckDetail(int id, int? offset = 0)
+    public PaginatedResponse<DeckDetailDto?> GetMediaDeckDetail(int id, int? offset = 0)
     {
         int pageSize = 25;
 
         var deck = context.Decks.AsNoTracking().FirstOrDefault(d => d.DeckId == id);
+
+        if (deck == null)
+            return new PaginatedResponse<DeckDetailDto?>(null, 0, pageSize, offset ?? 0);
+
         var subDecks = context.Decks.AsNoTracking()
                               .Where(d => d.ParentDeckId == id);
         int totalCount = subDecks.Count();
@@ -234,7 +235,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
         var dto = new DeckDetailDto { MainDeck = deck, SubDecks = subDecks.ToList() };
 
-        return new PaginatedResponse<DeckDetailDto>(dto, totalCount, pageSize, offset ?? 0);
+        return new PaginatedResponse<DeckDetailDto?>(dto, totalCount, pageSize, offset ?? 0);
     }
 
     [HttpGet("{id}/download")]

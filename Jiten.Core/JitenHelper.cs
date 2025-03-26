@@ -184,7 +184,7 @@ public static class JitenHelper
           AND column_name != 'id'
     ", conn);
 
-        string tableStructure = (string)await command.ExecuteScalarAsync();
+        string tableStructure = (string)(await command.ExecuteScalarAsync())!;
 
         // Create temp table with exact same structure
         await using (var cmd = new NpgsqlCommand($@"
@@ -430,27 +430,27 @@ public static class JitenHelper
         await context.SaveChangesAsync();
 
         // Map to the weight in a linear way
-        float MapToWeight(uint value, uint min, uint max, int weight)
-        {
-            if (value < min)
-                return 0;
-
-            if (value > max)
-                return weight;
-
-            return (value - min) / (float)(max - min) * weight;
-        }
-
-        float MapDoubleToWeight(double value, double min, double max, int weight)
-        {
-            if (value < min)
-                return 0;
-
-            if (value > max)
-                return weight;
-
-            return (float)((value - min) / (max - min)) * weight;
-        }
+        // float MapToWeight(uint value, uint min, uint max, int weight)
+        // {
+        //     if (value < min)
+        //         return 0;
+        //
+        //     if (value > max)
+        //         return weight;
+        //
+        //     return (value - min) / (float)(max - min) * weight;
+        // }
+        //
+        // float MapDoubleToWeight(double value, double min, double max, int weight)
+        // {
+        //     if (value < min)
+        //         return 0;
+        //
+        //     if (value > max)
+        //         return weight;
+        //
+        //     return (float)((value - min) / (max - min)) * weight;
+        // }
 
         float MapWithZScore(double value, List<double> allValues, int weight)
         {

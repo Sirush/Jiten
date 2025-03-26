@@ -117,12 +117,12 @@ public class Deck
     /// <summary>
     /// List of words that appear in this deck
     /// </summary>
-    public ICollection<DeckWord> DeckWords { get; set; }
+    public ICollection<DeckWord> DeckWords { get; set; } = new List<DeckWord>();
 
     /// <summary>
     /// List of links to external websites
     /// </summary>
-    public List<Link> Links { get; set; }
+    public List<Link> Links { get; set; } = new List<Link>();
 
     private string? _romajiTitle;
     private string? _englishTitle;

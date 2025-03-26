@@ -361,7 +361,7 @@ public class Program
                 if (Path.GetExtension(filePath)?.ToLower() == ".epub")
                 {
                     var extractor = new EbookExtractor();
-                    var text = await ExtractEpub(metadata.FilePath, extractor, options);
+                    var text = await ExtractEpub(filePath, extractor, options);
 
                     if (string.IsNullOrEmpty(text))
                     {
@@ -444,7 +444,7 @@ public class Program
                 // if it's a directory or a single file
                 if (Directory.Exists(o.ExtractFilePath))
                 {
-                    string?[] files = Directory.GetFiles(o.ExtractFilePath, "*.*",
+                    string?[] files = Directory.GetFiles(o.ExtractFilePath, "*.epub",
                                                          new EnumerationOptions()
                                                          {
                                                              IgnoreInaccessible = true, RecurseSubdirectories = true

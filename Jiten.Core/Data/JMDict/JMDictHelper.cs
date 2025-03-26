@@ -446,7 +446,7 @@ public static class JmDictHelper
 
         var furiganas = await JsonSerializer.DeserializeAsync<List<JMDictFurigana>>(File.OpenRead(furiganaPath));
         Dictionary<string, string> furiganaDict = new();
-        foreach (var f in furiganas)
+        foreach (var f in furiganas!)
         {
             // We only take the first one
             if (!furiganaDict.ContainsKey(f.Text))
@@ -558,7 +558,7 @@ public static class JmDictHelper
             {
                 if (isObsolete)
                 {
-                    wordInfo.ObsoleteReadings.Add(reb);
+                    wordInfo.ObsoleteReadings?.Add(reb);
                 }
                 else
                 {

@@ -54,6 +54,8 @@ services:
     restart: unless-stopped
     depends_on:
       - api
+    environment:
+      - ApiBaseUrl=${API_BASE_URL:-https://api.jiten.moe}
     networks:
       - jiten_network
     labels:

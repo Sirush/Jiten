@@ -30,7 +30,7 @@ public class JitenDbContext : DbContext
                             .SetBasePath(Directory.GetCurrentDirectory())
                             .AddJsonFile(Path.Combine(Environment.CurrentDirectory, "..", "Shared", "sharedsettings.json"), optional: true)
                             .AddJsonFile("sharedsettings.json", optional: true)
-                            .AddJsonFile("appsettings.json")
+                            .AddJsonFile("appsettings.json", optional: true)
                             .Build();
 
         var connectionString = configuration.GetConnectionString("JitenDatabase");

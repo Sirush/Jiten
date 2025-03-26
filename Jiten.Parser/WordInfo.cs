@@ -6,13 +6,13 @@ namespace Jiten.Parser;
 
 public class WordInfo
 {
-    public string Text { get; set; }
+    public string Text { get; set; } = string.Empty;
     public PartOfSpeech PartOfSpeech { get; set; }
     public PartOfSpeechSection PartOfSpeechSection1 { get; set; }
     public PartOfSpeechSection PartOfSpeechSection2 { get; set; }
     public PartOfSpeechSection PartOfSpeechSection3 { get; set; }
-    public string DictionaryForm { get; set; }
-    public string Reading { get; set; }
+    public string DictionaryForm { get; set; } = string.Empty;
+    public string Reading { get; set; } = string.Empty;
     public bool IsInvalid { get; set; }
     
     public WordInfo(){}

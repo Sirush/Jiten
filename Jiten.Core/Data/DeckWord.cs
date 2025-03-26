@@ -17,7 +17,7 @@ public class DeckWord
     /// <summary>
     /// Original text before any deconjugation
     /// </summary>
-    public string OriginalText { get; set; }
+    public string OriginalText { get; set; } = string.Empty;
     
     /// <summary>
     /// The index of the reading in the list of readings
@@ -29,5 +29,5 @@ public class DeckWord
     /// </summary>
     public int Occurrences { get; set; }
 
-    public Deck Deck { get; set; }
+    public Deck Deck { get; set; } = new();
 }

@@ -116,7 +116,7 @@ public class Parser
                             .SetBasePath(Directory.GetCurrentDirectory())
                             .AddJsonFile(Path.Combine(Environment.CurrentDirectory, "..", "Shared", "sharedsettings.json"), optional: true)
                             .AddJsonFile("sharedsettings.json", optional: true)
-                            .AddJsonFile("appsettings.json")
+                            .AddJsonFile("appsettings.json", optional:true)
                             .Build();
 
         // Build dictionary  sudachi ubuild Y:\CODE\Jiten\Shared\resources\user_dic.xml -s F:\00_RawJap\sudachi.rs\resources\system_full.dic -o "Y:\CODE\Jiten\Shared\resources\user_dic.dic"
