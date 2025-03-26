@@ -23,6 +23,9 @@ public static class JitenHelper
         // Fix potential null references to decks
         deck.SetParentsAndDeckWordDeck(deck);
         deck.ParentDeckId = null;
+        
+        if (deck.OriginalTitle == null)
+            deck.OriginalTitle = deck.RomajiTitle ?? deck.EnglishTitle;
 
         context.Decks.Add(deck);
 
