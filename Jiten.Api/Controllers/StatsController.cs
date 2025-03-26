@@ -16,12 +16,13 @@ public class StatsController(JitenDbContext context) : ControllerBase
     public async Task<GlobalStatsDto> GetGlobalStats()
     {
         Dictionary<MediaType, int> mediaByType = new();
+        var decks = context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null);
         foreach (var mediaType in Enum.GetValues<MediaType>())
         {
-            mediaByType.Add(mediaType, await context.Decks.CountAsync(d => d.MediaType == mediaType));
+            mediaByType.Add(mediaType, await decks.CountAsync(d => d.MediaType == mediaType));
         }
 
-        var totalMojis = await context.Decks.SumAsync(d => d.CharacterCount);
+        var totalMojis = await decks.SumAsync(d => d.CharacterCount);
         var totalMedias = mediaByType.Values.Sum();
 
         return new GlobalStatsDto { MediaByType = mediaByType, TotalMojis = totalMojis, TotalMedia = totalMedias };

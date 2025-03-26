@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  jiten-cli:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      restart: "on-failure"
+
+    # Environment Variables
+    environment:
+      - ConnectionStrings__JitenDatabase=Host=${HOST_NAME:-postgres};Port=5432;Database=${DB_NAME:-jiten};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-password}
+      - UseBunnyCdn=${USE_BUNNYCDN:-false}
+      - BunnyCdnSecret=${BUNNYCDN_SECRET:-}
+      - BunnyCdnStorageZone=${BUNNYCDN_STORAGE_ZONE:-}
+      - DictionaryPath=${DICTIONARY_PATH:-/path/to/system_full.dic}
+      - JimakuApiKey=${JIMAKU_API_KEY:-}
+      - TmdbApiKey=${TMDB_API_KEY:-}
+    volumes:
+      - /home/ubuntu/jiten:/files
+
+    networks:
+      - jiten_network
+
+networks:
+  jiten_network:
+    external: true
