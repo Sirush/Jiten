@@ -24,19 +24,6 @@ public class JitenDbContext : DbContext
     {
     }
 
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        var configuration = new ConfigurationBuilder()
-                            .SetBasePath(Directory.GetCurrentDirectory())
-                            .AddJsonFile(Path.Combine(Environment.CurrentDirectory, "..", "Shared", "sharedsettings.json"), optional: true)
-                            .AddJsonFile("sharedsettings.json", optional: true)
-                            .AddJsonFile("appsettings.json", optional: true)
-                            .Build();
-
-        var connectionString = configuration.GetConnectionString("JitenDatabase");
-        optionsBuilder.UseNpgsql(connectionString);
-    }
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("fuzzystrmatch");

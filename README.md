@@ -7,11 +7,7 @@
 - [JmdictFurigana](https://github.com/Doublevil/JmdictFurigana) Furigana dictionary for JMDict
 
 # Installation
-Import the dictionary
-```-i --xml "path/to/jmdict_dtd.xml" --dic path/to/JMdict --furi path/to/JmdictFurigana.json```
-
-Parse decks
-```-v -t 8 -p "/path/to/directories/" --deck-type "VisualNovel"```
+Coming soon.
 
 # Parser performance & cache
 Activating the cache can offer an appreciable speedup at the cost of RAM

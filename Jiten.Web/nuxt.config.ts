@@ -39,6 +39,14 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       baseURL: process.env.API_BASE_URL || 'https://localhost:7299/api/',
+      $production: {
+        scripts: {
+          umamiAnalytics: {
+            websiteId: '',
+            hostUrl: 'https://umami.jiten.moe',
+          },
+        },
+      },
     },
   },
   modules: [
@@ -49,6 +57,7 @@ export default defineNuxtConfig({
     '@pinia/nuxt',
     '@nuxtjs/seo',
     'nuxt-link-checker',
+    '@nuxt/scripts',
   ],
   primevue: {
     options: {
@@ -79,5 +88,10 @@ export default defineNuxtConfig({
   site: {
     url: 'https://jiten.moe',
     name: 'Vocabulary lists and anki decks for all your Japanese media',
+  },
+  scripts: {
+    registry: {
+      umamiAnalytics: true,
+    },
   },
 });

@@ -57,7 +57,9 @@ services:
     depends_on:
       - api
     environment:
-      - ApiBaseUrl=${API_BASE_URL:-https://api.jiten.moe}
+      - API_BASE_URL=${API_BASE_URL:-https://api.jiten.moe}
+      - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID=${UMAMI_ANALYTICS_WEBSITE_ID:-}
+      - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_HOST_URL=${UMAMI_ANALYTICS_HOST_URL:-https://umami.jiten.moe}
     networks:
       - jiten_network
     labels:
@@ -76,6 +78,7 @@ services:
       APP_SECRET: ${UMAMI_APP_SECRET:-replace-me-with-a-random-string}
       HASH_SALT: ${UMAMI_HASH_SALT:-some-random-string}
       PORT: 3005
+      TRACKER_SCRIPT_NAME: ${UMAMI_TRACKER_SCRIPT_NAME:-umm.js}
     init: true
     networks:
       - jiten_network

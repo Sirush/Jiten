@@ -16,6 +16,7 @@
   "dependencies": {
     "@nuxt/eslint": "^1.2.0",
     "@nuxt/icon": "^1.11.0",
+    "@nuxt/scripts": "0.11.5",
     "@nuxtjs/google-fonts": "^3.2.0",
     "@nuxtjs/seo": "^3.0.1",
     "@pinia/nuxt": "^0.10.1",
@@ -23,6 +24,7 @@
     "@primevue/forms": "^4.3.2",
     "@radix-icons/vue": "^1.0.0",
     "@tailwindcss/vite": "^4.0.15",
+    "@unhead/vue": "^2.0.0-rc.8",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.3",
     "nuxt": "^3.16.1",

@@ -9,6 +9,8 @@ using Jiten.Cli;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using WanaKanaShaapu;
 
 // ReSharper disable MethodSupportsCancellation
@@ -17,30 +19,13 @@ public class Program
 {
     private static List<string> _subtitleCleanStartsWith = new List<string>
                                                            {
-                                                               "---",
-                                                               "本字幕由",
-                                                               "更多中日",
-                                                               "本整理",
-                                                               "压制",
-                                                               "日听",
-                                                               "校对",
-                                                               "时轴",
-                                                               "台本整理",
-                                                               "听翻",
-                                                               "翻译",
-                                                               "ED",
-                                                               "OP",
-                                                               "字幕",
-                                                               "诸神",
-                                                               "负责",
-                                                               "阿里",
-                                                               "日校",
-                                                               "翻译",
-                                                               "校对",
-                                                               "片源",
-                                                               "◎",
-                                                               "m"
+                                                               "---", "本字幕由", "更多中日", "本整理", "压制", "日听",
+                                                               "校对", "时轴", "台本整理", "听翻", "翻译", "ED",
+                                                               "OP", "字幕", "诸神", "负责", "阿里", "日校",
+                                                               "翻译", "校对", "片源", "◎", "m"
                                                            };
+
+    private static DbContextOptions<JitenDbContext> _dbOptions;
 
     public class Options
     {
@@ -108,6 +93,18 @@ public class Program
 
     static async Task Main(string[] args)
     {
+        var configuration = new ConfigurationBuilder()
+                            .SetBasePath(Directory.GetCurrentDirectory())
+                            .AddJsonFile("sharedsettings.json", optional: true, reloadOnChange: true)
+                            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                            .AddEnvironmentVariables()
+                            .Build();
+
+        var connectionString = configuration.GetConnectionString("JitenDatabase");
+        var optionsBuilder = new DbContextOptionsBuilder<JitenDbContext>();
+        optionsBuilder.UseNpgsql(connectionString, o => { o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery); });
+        _dbOptions = optionsBuilder.Options;
+
         await Parser.Default.ParseArguments<Options>(args)
                     .WithParsedAsync<Options>(async o =>
                     {
@@ -175,20 +172,20 @@ public class Program
 
                         if (o.ComputeFrequencies)
                         {
-                            await JitenHelper.ComputeFrequencies();
+                            await JitenHelper.ComputeFrequencies(_dbOptions);
                         }
 
                         if (o.ComputeDifficulty)
                         {
                             foreach (var mediaType in Enum.GetValues(typeof(MediaType)))
                             {
-                                await JitenHelper.ComputeDifficulty(o.Verbose, (MediaType)mediaType);
+                                await JitenHelper.ComputeDifficulty(_dbOptions, o.Verbose, (MediaType)mediaType);
                             }
                         }
 
                         if (o.DebugDeck != null)
                         {
-                            await JitenHelper.DebugDeck(o.DebugDeck.Value);
+                            await JitenHelper.DebugDeck(_dbOptions, o.DebugDeck.Value);
                         }
 
                         if (o.UserDicMassAdd != null)
@@ -215,8 +212,7 @@ public class Program
 
         var serializerOptions = new JsonSerializerOptions
                                 {
-                                    WriteIndented = true,
-                                    Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+                                    WriteIndented = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
                                     ReferenceHandler = ReferenceHandler.Preserve
                                 };
 
@@ -249,7 +245,7 @@ public class Program
             coverOptimized.Quality = 85;
             coverOptimized.Format = ImageMagick.MagickFormat.Jpeg;
 
-            await JitenHelper.InsertDeck(deck, coverOptimized.ToByteArray());
+            await JitenHelper.InsertDeck(_dbOptions, deck, coverOptimized.ToByteArray());
 
             if (options.Verbose)
                 Console.WriteLine($"Deck {deck.OriginalTitle} inserted into the database.");
@@ -275,8 +271,7 @@ public class Program
 
         var serializerOptions = new JsonSerializerOptions
                                 {
-                                    WriteIndented = true,
-                                    Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+                                    WriteIndented = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
                                     ReferenceHandler = ReferenceHandler.Preserve
                                 };
 
@@ -629,7 +624,7 @@ public class Program
         var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount };
 
         var linesToProcess = lines.Skip(startLine).ToArray();
-        await using var context = new JitenDbContext();
+        await using var context = new JitenDbContext(_dbOptions);
 
         var lookups = context.Lookups.ToList();
         var words = context.JMDictWords.ToList();

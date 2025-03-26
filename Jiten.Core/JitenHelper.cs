@@ -9,10 +9,10 @@ namespace Jiten.Core;
 
 public static class JitenHelper
 {
-    public static async Task InsertDeck(Deck deck, byte[] cover)
+    public static async Task InsertDeck(DbContextOptions<JitenDbContext> options, Deck deck, byte[] cover)
     {
         // Ignore if the deck already exists
-        await using var context = new JitenDbContext();
+        await using var context = new JitenDbContext(options);
 
         if (await context.Decks.AnyAsync(d => d.OriginalTitle == deck.OriginalTitle && d.MediaType == deck.MediaType))
         {
@@ -34,10 +34,10 @@ public static class JitenHelper
         await context.SaveChangesAsync();
     }
 
-    public static async Task ComputeFrequencies()
+    public static async Task ComputeFrequencies(DbContextOptions<JitenDbContext> options)
     {
         int batchSize = 100000;
-        await using var context = new JitenDbContext();
+        await using var context = new JitenDbContext(options);
 
         Dictionary<int, JmDictWordFrequency> wordFrequencies = new();
 
@@ -229,7 +229,7 @@ public static class JitenHelper
     /// <summary>
     /// Calculate the difficulty of decks. Still very WIP
     /// </summary>
-    public static async Task ComputeDifficulty(bool verbose, MediaType mediaType)
+    public static async Task ComputeDifficulty(DbContextOptions<JitenDbContext> options, bool verbose, MediaType mediaType)
     {
         int averageWordDifficultyWeight = 25;
         int peakWordDifficultyWeight = 15;
@@ -239,7 +239,7 @@ public static class JitenHelper
         int averageSentenceLengthWeight = 15;
 
         int batchSize = 10;
-        await using var context = new JitenDbContext();
+        await using var context = new JitenDbContext(options);
 
         var allDecks = await context.Decks.Where(d => d.MediaType == mediaType && d.ParentDeck == null).ToListAsync();
         
@@ -468,9 +468,9 @@ public static class JitenHelper
     /// <summary>
     /// Get infos about a deck to debug the difficulty
     /// </summary>
-    public static async Task DebugDeck(int deckId)
+    public static async Task DebugDeck(DbContextOptions<JitenDbContext> options, int deckId)
     {
-        await using var context = new JitenDbContext();
+        await using var context = new JitenDbContext(options);
 
 // Retrieve the deck
         var deck = await context.Decks

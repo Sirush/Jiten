@@ -16,6 +16,7 @@
       <PackageReference Include="AngleSharp" Version="1.2.0" />
       <PackageReference Include="CommandLineParser" Version="2.9.1" />
       <PackageReference Include="Magick.NET-Q16-x64" Version="14.5.0" />
+      <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.0-preview.2.25163.2" />
       <PackageReference Include="SharpCompress" Version="0.38.0" />
       <PackageReference Include="SubtitlesParser" Version="1.5.1" />
       <PackageReference Include="VersOne.Epub" Version="3.3.3" />
