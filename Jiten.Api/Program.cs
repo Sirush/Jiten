@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Threading.RateLimiting;
 using Jiten.Core;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -39,10 +40,8 @@ builder.Services.AddRateLimiter(options =>
                                                         "unknown",
                                                         _ => new FixedWindowRateLimiterOptions
                                                              {
-                                                                 PermitLimit = 120,
-                                                                 Window = TimeSpan.FromSeconds(60),
-                                                                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                                                                 QueueLimit = 3,
+                                                                 PermitLimit = 120, Window = TimeSpan.FromSeconds(60),
+                                                                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 3,
                                                                  AutoReplenishment = true
                                                              });
     });
@@ -55,11 +54,9 @@ builder.Services.AddRateLimiter(options =>
                                                           "unknown",
                                                           _ => new SlidingWindowRateLimiterOptions
                                                                {
-                                                                   PermitLimit = 5,
-                                                                   Window = TimeSpan.FromSeconds(60),
+                                                                   PermitLimit = 5, Window = TimeSpan.FromSeconds(60),
                                                                    SegmentsPerWindow = 10,
-                                                                   QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                                                                   QueueLimit = 2,
+                                                                   QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 2,
                                                                    AutoReplenishment = true
                                                                });
     });
@@ -83,13 +80,19 @@ builder.Services.AddCors(options =>
     options.AddPolicy(name: "AllowSpecificOrigin",
                       policy =>
                       {
-                          policy.WithOrigins("https://localhost:3000")
+                          policy.WithOrigins("https://localhost:3000",
+                                             "https://jiten.moe")
                                 .AllowAnyHeader()
                                 .AllowAnyMethod();
                       });
 });
 
 var app = builder.Build();
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+                        {
+                            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+                        });
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -100,13 +103,12 @@ if (app.Environment.IsDevelopment())
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "API V1");
         c.RoutePrefix = "";
     });
+    app.UseHttpsRedirection();
 }
 
 app.UseRouting();
 
 app.UseCors("AllowSpecificOrigin");
-
-app.UseHttpsRedirection();
 
 app.UseRateLimiter();
 

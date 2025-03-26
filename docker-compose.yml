@@ -46,6 +46,8 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=Host(`api.jiten.moe`)"
+      - "traefik.http.services.api.loadbalancer.server.port=8080"
+
 
   web:
     build:
@@ -73,11 +75,12 @@ services:
       DATABASE_TYPE: postgresql
       APP_SECRET: ${UMAMI_APP_SECRET:-replace-me-with-a-random-string}
       HASH_SALT: ${UMAMI_HASH_SALT:-some-random-string}
+      PORT: 3005
     init: true
     networks:
       - jiten_network
     healthcheck:
-      test: [ "CMD-SHELL", "curl http://localhost:3005/api/heartbeat" ]
+      test: [ "CMD-SHELL", "curl --fail http://localhost:3005/api/heartbeat || exit 1" ]
       interval: 5s
       timeout: 5s
       retries: 5
