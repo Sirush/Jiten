@@ -11,5 +11,6 @@ COPY --from=build /app/.output ./
 RUN ls -la server
 ENV NUXT_HOST=0.0.0.0
 ENV NUXT_PORT=3001
+ENV PORT=3001
 EXPOSE 3001
 CMD ["node", "server/index.mjs"]
