@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using WanaKanaShaapu;
+using ZstdSharp.Unsafe;
 
 namespace Jiten.Api.Controllers;
 
@@ -45,9 +46,9 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         {
             query = query.Where(d =>
                                     // Fuzzy matching
-                                    EF.Functions.FuzzyStringMatchLevenshtein(d.OriginalTitle, titleFilter) <= 3 ||
-                                    EF.Functions.FuzzyStringMatchLevenshtein(d.RomajiTitle!, titleFilter) <= 3 ||
-                                    EF.Functions.FuzzyStringMatchLevenshtein(d.EnglishTitle!, titleFilter) <= 3 ||
+                                    // EF.Functions.FuzzyStringMatchLevenshtein(d.OriginalTitle, titleFilter) <= 2 ||
+                                    // EF.Functions.FuzzyStringMatchLevenshtein(d.RomajiTitle!, titleFilter) <= 2 ||
+                                    // EF.Functions.FuzzyStringMatchLevenshtein(d.EnglishTitle!, titleFilter) <= 2 ||
 
                                     // Substring matching
                                     EF.Functions.ILike(d.OriginalTitle, $"%{titleFilter}%") ||
@@ -97,6 +98,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             "uKanjiOnce" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.UniqueKanjiUsedOnceCount)
                 : query.OrderByDescending(d => d.UniqueKanjiUsedOnceCount),
+            "filter" => query ,
             _ => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.RomajiTitle)
                 : query.OrderByDescending(d => d.RomajiTitle),

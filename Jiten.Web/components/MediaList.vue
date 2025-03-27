@@ -40,10 +40,12 @@
 
   watch(titleFilter, (newValue) => {
     updateDebounced(newValue);
+    sortBy.value = "filter";
     router.replace({
       query: {
         ...route.query,
         title: newValue || undefined,
+        sortBy: "filter"
       },
     });
   });
