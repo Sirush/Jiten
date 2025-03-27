@@ -16,10 +16,3 @@ services:
       - CdnBaseUrl=${CDN_BASE_URL:-}
     volumes:
       - /home/ubuntu/jiten:/files
-
-    networks:
-      - jiten_network
-
-networks:
-  jiten_network:
-    external: true

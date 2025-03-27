@@ -10,8 +10,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d
-    networks:
-      - jiten_network
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${DB_USER}" ]
       interval: 5s
@@ -39,8 +37,6 @@ services:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads
       - dictionaries:/app/dictionaries
-    networks:
-      - jiten_network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=Host(`api.jiten.moe`)"
@@ -58,8 +54,6 @@ services:
       - NUXT_PUBLIC_BASE_URL=${API_BASE_URL:-https://api.jiten.moe}
       - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID=${UMAMI_ANALYTICS_WEBSITE_ID:-}
       - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_HOST_URL=${UMAMI_ANALYTICS_HOST_URL:-https://umami.jiten.moe}
-    networks:
-      - jiten_network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.web.rule=Host(`jiten.moe`)"
@@ -78,8 +72,6 @@ services:
       PORT: 3005
       TRACKER_SCRIPT_NAME: ${UMAMI_TRACKER_SCRIPT_NAME:-umm.js}
     init: true
-    networks:
-      - jiten_network
     healthcheck:
       test: [ "CMD-SHELL", "curl --fail http://localhost:3005/api/heartbeat || exit 1" ]
       interval: 5s
@@ -89,10 +81,6 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.umami.rule=Host(`umami.jiten.moe`)"
       - "traefik.http.services.umami.loadbalancer.server.port=3005"
-
-networks:
-  jiten_network:
-    driver: bridge
 
 volumes:
   postgres_data:
