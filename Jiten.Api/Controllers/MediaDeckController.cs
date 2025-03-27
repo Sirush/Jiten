@@ -22,7 +22,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
     [ResponseCache(Duration = 60 * 60 * 24)]
     public async Task<List<int>> GetMediaDecksId()
     {
-        return await context.Decks.AsNoTracking().Select(d => d.DeckId).ToListAsync();
+        return await context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null).Select(d => d.DeckId).ToListAsync();
     }
 
     [HttpGet("get-media-decks")]

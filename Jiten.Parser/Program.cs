@@ -23,28 +23,16 @@ namespace Jiten.Parser
         // Those cases are hardcoded, a better solution would be preferable but they don't work well with the current rules
         private static Dictionary<string, int> _specialCases = new()
                                                                {
-                                                                   { "この", 1582920 },
-                                                                   { "こと", 1313580 },
-                                                                   { "もの", 1502390 },
-                                                                   { "もん", 2780660 },
-                                                                   { "くせ", 1509350 },
-                                                                   { "いくら", 1219980 },
-                                                                   { "とき", 1315840 },
-                                                                   { "な", 2029110 },
-                                                                   { "どん", 2142690 },
-                                                                   { "いる", 1577980 },
-                                                                   { "そう", 1006610 },
-                                                                   { "ない", 1529520 },
-                                                                   { "なんだ", 2119750 },
-                                                                   { "わけ", 1538330 },
-                                                                   { "いう", 1587040 },
-                                                                   { "まま", 1585410 },
-                                                                   { "いく", 1219950 },
-                                                                   { "つく", 1495740 },
-                                                                   { "たら", 2029050 },
-                                                                   { "彼", 1483070 },
-                                                                   { "いい", 2820690 },
+                                                                   { "この", 1582920 }, { "こと", 1313580 }, { "もの", 1502390 },
+                                                                   { "もん", 2780660 }, { "くせ", 1509350 }, { "いくら", 1219980 },
+                                                                   { "とき", 1315840 }, { "な", 2029110 }, { "どん", 2142690 },
+                                                                   { "いる", 1577980 }, { "そう", 1006610 }, { "ない", 1529520 },
+                                                                   { "なんだ", 2119750 }, { "わけ", 1538330 }, { "いう", 1587040 },
+                                                                   { "まま", 1585410 }, { "いく", 1219950 }, { "つく", 1495740 },
+                                                                   { "たら", 2029050 }, { "彼", 1483070 }, { "いい", 2820690 },
                                                                };
+
+        private static JitenDbContext _dbContext = null;
 
         public static async Task Main(string[] args)
         {
@@ -56,12 +44,13 @@ namespace Jiten.Parser
 
         public static async Task InitDictionaries()
         {
-            _lookups = await JmDictHelper.LoadLookupTable();
-            _allWords = (await JmDictHelper.LoadAllWords()).ToDictionary(word => word.WordId);
+            _lookups = await JmDictHelper.LoadLookupTable(_dbContext);
+            _allWords = (await JmDictHelper.LoadAllWords(_dbContext)).ToDictionary(word => word.WordId);
         }
 
-        public static async Task<List<DeckWord>> ParseText(string text)
+        public static async Task<List<DeckWord>> ParseText(JitenDbContext context, string text)
         {
+            _dbContext = context;
             if (!_initialized)
             {
                 await _initSemaphore.WaitAsync();
@@ -237,15 +226,12 @@ namespace Jiten.Parser
 
             return new Deck
                    {
-                       CharacterCount = characterCount,
-                       WordCount = wordInfos.Count,
-                       UniqueWordCount = processedWords.Length,
+                       CharacterCount = characterCount, WordCount = wordInfos.Count, UniqueWordCount = processedWords.Length,
                        UniqueWordUsedOnceCount = processedWords.Count(x => x.Occurrences == 1),
                        UniqueKanjiCount = wordInfos.SelectMany(w => w.Text).Distinct().Count(c => WanaKana.IsKanji(c.ToString())),
                        UniqueKanjiUsedOnceCount = wordInfos.SelectMany(w => w.Text).GroupBy(c => c)
                                                            .Count(g => g.Count() == 1 && WanaKana.IsKanji(g.Key.ToString())),
-                       SentenceCount = sentences.Length,
-                       DeckWords = processedWords
+                       SentenceCount = sentences.Length, DeckWords = processedWords
                    };
         }
 
@@ -261,9 +247,7 @@ namespace Jiten.Parser
             {
                 return new DeckWord
                        {
-                           WordId = cachedWord.WordId,
-                           OriginalText = cachedWord.OriginalText,
-                           ReadingIndex = cachedWord.ReadingIndex,
+                           WordId = cachedWord.WordId, OriginalText = cachedWord.OriginalText, ReadingIndex = cachedWord.ReadingIndex,
                            Occurrences = wordData.occurrences
                        };
             }
@@ -320,8 +304,7 @@ namespace Jiten.Parser
                     DeckWordCache.TryAdd(cacheKey,
                                          new DeckWord
                                          {
-                                             WordId = processedWord.WordId,
-                                             OriginalText = processedWord.OriginalText,
+                                             WordId = processedWord.WordId, OriginalText = processedWord.OriginalText,
                                              ReadingIndex = processedWord.ReadingIndex
                                          });
                 }
@@ -387,9 +370,7 @@ namespace Jiten.Parser
 
                 DeckWord deckWord = new()
                                     {
-                                        WordId = bestMatch.WordId,
-                                        OriginalText = wordData.wordInfo.Text,
-                                        ReadingIndex = readingIndex,
+                                        WordId = bestMatch.WordId, OriginalText = wordData.wordInfo.Text, ReadingIndex = readingIndex,
                                         Occurrences = wordData.occurrences
                                     };
                 processedWord = deckWord;
@@ -467,12 +448,10 @@ namespace Jiten.Parser
                             word.Readings.Select(r => WanaKana.ToHiragana(r)).ToList();
                         readingIndex = (byte)normalizedReadings.IndexOf(candidate.text);
                     }
-                    
+
                     DeckWord deckWord = new()
                                         {
-                                            WordId = id,
-                                            OriginalText = wordData.wordInfo.Text,
-                                            ReadingIndex = readingIndex,
+                                            WordId = id, OriginalText = wordData.wordInfo.Text, ReadingIndex = readingIndex,
                                             Occurrences = wordData.occurrences
                                         };
                     processedWord = deckWord;

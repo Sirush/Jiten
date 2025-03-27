@@ -82,7 +82,7 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
         if (text.Length > 200)
             return Results.BadRequest("Text is too long");
 
-        var parsedWords = await Parser.Program.ParseText(text);
+        var parsedWords = await Parser.Program.ParseText(context, text);
 
         // We want both parsed words and unparsed ones
         var allWords = new List<DeckWord>();

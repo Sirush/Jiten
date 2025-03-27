@@ -80,9 +80,6 @@ export default defineNuxtConfig({
   sitemap: {
     sources: ['/api/__sitemap__/urls'],
   },
-  robots: {
-    disallow: ['/decks/media'],
-  },
   site: {
     url: 'https://jiten.moe',
     name: 'Vocabulary lists and anki decks for all your Japanese media',

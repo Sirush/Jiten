@@ -346,9 +346,8 @@ public static class JmDictHelper
                                                                             { "sk", "search-only kana form" },
                                                                         };
 
-    public static async Task<List<JmDictWord>> LoadAllWords()
+    public static async Task<List<JmDictWord>> LoadAllWords(JitenDbContext context)
     {
-        await using var context = new JitenDbContext();
         context.ChangeTracker.AutoDetectChangesEnabled = false;
         context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
@@ -358,9 +357,8 @@ public static class JmDictHelper
     }
 
 
-    public static async Task<Dictionary<string, List<int>>> LoadLookupTable()
+    public static async Task<Dictionary<string, List<int>>> LoadLookupTable(JitenDbContext context)
     {
-        await using var context = new JitenDbContext();
         var lookupTable = new Dictionary<string, List<int>>();
 
         await foreach (var lookup in context.Lookups.AsNoTracking().AsAsyncEnumerable())

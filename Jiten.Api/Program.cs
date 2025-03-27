@@ -63,6 +63,14 @@ builder.Services.AddRateLimiter(options =>
 
     options.OnRejected = async (context, token) =>
     {
+        var origin = context.HttpContext.Request.Headers.Origin.FirstOrDefault();
+        var allowedOrigins = new[] { "https://localhost:3000", "https://jiten.moe" };
+        
+        if (!string.IsNullOrEmpty(origin) && allowedOrigins.Contains(origin))
+        {
+            context.HttpContext.Response.Headers.Append("Access-Control-Allow-Origin", origin);
+        }
+        
         if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
         {
             context.HttpContext.Response.Headers.RetryAfter =
@@ -70,10 +78,12 @@ builder.Services.AddRateLimiter(options =>
         }
 
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "text/plain";
         await context.HttpContext.Response.WriteAsync("Too many requests. Please try again later.", token);
     };
 });
 
+builder.Services.AddResponseCaching();
 
 builder.Services.AddCors(options =>
 {
@@ -109,6 +119,8 @@ if (app.Environment.IsDevelopment())
 app.UseRouting();
 
 app.UseCors("AllowSpecificOrigin");
+
+app.UseResponseCaching();
 
 app.UseRateLimiter();
 

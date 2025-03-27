@@ -4,7 +4,7 @@
   const router = useRouter();
   const route = useRoute();
 
-  const searchContent = ref(route.query.text || '');
+  const searchContent = ref<string>(Array.isArray(route.query.text) ? route.query.text[0] || '' : route.query.text || '');
 
   const onSearch = async () => {
     await navigateTo({
@@ -19,7 +19,7 @@
 <template>
   <div class="flex flex-row">
     <InputText
-      :v-model="searchContent"
+      v-model="searchContent"
       type="text"
       placeholder="Search a word or a sentence"
       class="w-full"
