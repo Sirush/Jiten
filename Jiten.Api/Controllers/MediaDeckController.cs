@@ -26,7 +26,8 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
     }
 
     [HttpGet("get-media-decks")]
-    [ResponseCache(Duration = 300)]
+    [ResponseCache(Duration = 300,
+                   VaryByQueryKeys = ["offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder"])]
     public async Task<PaginatedResponse<List<Deck>>> GetMediaDecks(int? offset = 0, MediaType? mediaType = null,
                                                                    int wordId = 0, int readingIndex = 0, string? titleFilter = "",
                                                                    string? sortBy = "",
@@ -111,7 +112,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
     }
 
     [HttpGet("{id}/vocabulary")]
-    [ResponseCache(Duration = 600)]
+    [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "sortBy", "sortOrder", "offset"])]
     public PaginatedResponse<DeckVocabularyListDto?> GetVocabulary(int id, string? sortBy = "", SortOrder sortOrder = SortOrder.Ascending,
                                                                    int? offset = 0)
     {
@@ -214,7 +215,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
     }
 
     [HttpGet("{id}/detail")]
-    [ResponseCache(Duration = 600)]
+    [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "offset"])]
     public PaginatedResponse<DeckDetailDto?> GetMediaDeckDetail(int id, int? offset = 0)
     {
         int pageSize = 25;

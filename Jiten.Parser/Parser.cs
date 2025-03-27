@@ -10,18 +10,46 @@ namespace Jiten.Parser;
 
 class SudachiInterop
 {
-    // Import the `run_cli_ffi` function from the Rust DLL
-    [DllImport("resources/sudachi_lib.dll", CallingConvention = CallingConvention.Cdecl)]
-    private static extern IntPtr run_cli_ffi(string configPath, string filePath, string dictionaryPath, string outputPath);
+    private delegate IntPtr RunCliFfiDelegate(string configPath, string filePath, string dictionaryPath, string outputPath);
 
-    [DllImport("resources/sudachi_lib.dll", CallingConvention = CallingConvention.Cdecl)]
-    private static extern IntPtr process_text_ffi(string configPath, IntPtr inputText, string dictionaryPath, char mode, bool printAll,
-                                                  bool wakati);
+    private delegate IntPtr ProcessTextFfiDelegate(string configPath, IntPtr inputText, string dictionaryPath, char mode, bool printAll,
+                                                   bool wakati);
 
+    private delegate void FreeStringDelegate(IntPtr ptr);
 
-    // Import the `free_string` function to free memory allocated in Rust
-    [DllImport("resources/sudachi_lib.dll", CallingConvention = CallingConvention.Cdecl)]
-    private static extern void free_string(IntPtr ptr);
+    private static RunCliFfiDelegate _runCliFfi;
+    private static ProcessTextFfiDelegate _processTextFfi;
+    private static FreeStringDelegate _freeString;
+
+    private static readonly IntPtr _libHandle;
+
+    private static string GetSudachiLibPath()
+    {
+        string basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources");
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return Path.Combine(basePath, "sudachi_lib.dll");
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            return Path.Combine(basePath, "libsudachi_lib.so");
+        else
+            throw new PlatformNotSupportedException("Unsupported platform");
+    }
+
+    static SudachiInterop()
+    {
+        // Load the appropriate native library for the current platform
+        _libHandle = NativeLibrary.Load(GetSudachiLibPath());
+
+        // Get function pointers
+        IntPtr runCliFfiPtr = NativeLibrary.GetExport(_libHandle, "run_cli_ffi");
+        IntPtr processTextFfiPtr = NativeLibrary.GetExport(_libHandle, "process_text_ffi");
+        IntPtr freeStringPtr = NativeLibrary.GetExport(_libHandle, "free_string");
+
+        // Create delegates from function pointers
+        _runCliFfi = Marshal.GetDelegateForFunctionPointer<RunCliFfiDelegate>(runCliFfiPtr);
+        _processTextFfi = Marshal.GetDelegateForFunctionPointer<ProcessTextFfiDelegate>(processTextFfiPtr);
+        _freeString = Marshal.GetDelegateForFunctionPointer<FreeStringDelegate>(freeStringPtr);
+    }
 
     private static readonly object ProcessTextLock = new object();
 
@@ -29,13 +57,13 @@ class SudachiInterop
     public static string RunCli(string configPath, string filePath, string dictionaryPath, string outputPath)
     {
         // Call the FFI function
-        IntPtr resultPtr = run_cli_ffi(configPath, filePath, dictionaryPath, outputPath);
+        IntPtr resultPtr = _runCliFfi(configPath, filePath, dictionaryPath, outputPath);
 
         // Convert the result to a C# string
         string result = Marshal.PtrToStringAnsi(resultPtr) ?? string.Empty;
 
         // Free the string allocated in Rust
-        free_string(resultPtr);
+        _freeString(resultPtr);
 
         return result;
     }
@@ -53,15 +81,15 @@ class SudachiInterop
             // if there's no kanas or kanjis, abort
             if (WanaKana.IsRomaji(inputText))
                 return "";
-            
+
             byte[] inputBytes = Encoding.UTF8.GetBytes(inputText + "\0");
             IntPtr inputTextPtr = Marshal.AllocHGlobal(inputBytes.Length);
             Marshal.Copy(inputBytes, 0, inputTextPtr, inputBytes.Length);
-            
-            IntPtr resultPtr = process_text_ffi(configPath, inputTextPtr, dictionaryPath, mode, printAll, wakati);
+
+            IntPtr resultPtr = _processTextFfi(configPath, inputTextPtr, dictionaryPath, mode, printAll, wakati);
             string result = Marshal.PtrToStringUTF8(resultPtr) ?? string.Empty;
 
-            free_string(resultPtr);
+            _freeString(resultPtr);
 
             Marshal.FreeHGlobal(inputTextPtr);
 
@@ -116,7 +144,7 @@ public class Parser
                             .SetBasePath(Directory.GetCurrentDirectory())
                             .AddJsonFile(Path.Combine(Environment.CurrentDirectory, "..", "Shared", "sharedsettings.json"), optional: true)
                             .AddJsonFile("sharedsettings.json", optional: true)
-                            .AddJsonFile("appsettings.json", optional:true)
+                            .AddJsonFile("appsettings.json", optional: true)
                             .Build();
 
         // Build dictionary  sudachi ubuild Y:\CODE\Jiten\Shared\resources\user_dic.xml -s F:\00_RawJap\sudachi.rs\resources\system_full.dic -o "Y:\CODE\Jiten\Shared\resources\user_dic.dic"
@@ -519,10 +547,7 @@ public class Parser
 
                 var suffix = new WordInfo()
                              {
-                                 Text = honorific,
-                                 PartOfSpeech = PartOfSpeech.Suffix,
-                                 Reading = honorific,
-                                 DictionaryForm = honorific
+                                 Text = honorific, PartOfSpeech = PartOfSpeech.Suffix, Reading = honorific, DictionaryForm = honorific
                              };
                 wordInfos.Insert(i + 1, suffix);
                 i++;
