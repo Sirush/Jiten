@@ -36,18 +36,19 @@
 
   const updateDebounced = debounce(async (newValue) => {
     debouncedTitleFilter.value = newValue;
+    await router.replace({
+      query: {
+        ...route.query,
+        title: newValue || undefined,
+        sortBy: 'filter',
+        offset: 0,
+      },
+    });
+    sortBy.value = 'filter';
   }, 300);
 
   watch(titleFilter, (newValue) => {
     updateDebounced(newValue);
-    sortBy.value = "filter";
-    router.replace({
-      query: {
-        ...route.query,
-        title: newValue || undefined,
-        sortBy: "filter"
-      },
-    });
   });
 
   watch(sortOrder, (newValue) => {
@@ -102,6 +103,12 @@
   const nextLink = computed(() => {
     return response.value?.hasNextPage ? { query: { ...route.query, offset: response.value.nextOffset } } : null;
   });
+
+  const scrollToTop = () => {
+    nextTick(() => {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  };
 </script>
 
 <template>
@@ -184,10 +191,20 @@
         </div>
       </div>
       <div class="flex gap-8 pl-2">
-        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''">
+        <NuxtLink
+          :to="previousLink"
+          :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''"
+          @click="scrollToTop"
+        >
           Previous
         </NuxtLink>
-        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''"> Next</NuxtLink>
+        <NuxtLink
+          :to="nextLink"
+          :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''"
+          @click="scrollToTop"
+        >
+          Next</NuxtLink
+        >
       </div>
     </div>
   </div>

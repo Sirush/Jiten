@@ -80,6 +80,12 @@
       title: `${response.value?.data.title} - Vocabulary`,
     };
   });
+
+  const scrollToTop = () => {
+    nextTick(() => {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  };
 </script>
 
 <template>
@@ -129,13 +135,25 @@
     </div>
     <div v-else-if="error">Error: {{ error }}</div>
     <div v-else class="flex flex-col gap-2">
-      <VocabularyEntry v-for="word in response.data.words" :key="word.wordId" :word="word" :is-compact="true" />
+      <VocabularyEntry
+        v-for="word in response.data.words"
+        :key="word.wordId"
+        :word="word"
+        :is-compact="true"
+        @click="scrollToTop"
+      />
     </div>
     <div class="flex gap-8 pl-2">
       <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''">
         Previous
       </NuxtLink>
-      <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''"> Next</NuxtLink>
+      <NuxtLink
+        :to="nextLink"
+        :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''"
+        @click="scrollToTop"
+      >
+        Next
+      </NuxtLink>
     </div>
   </div>
 </template>
