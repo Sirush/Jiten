@@ -9,6 +9,7 @@
 
   const searchContent = ref(route.query.text || '');
 
+
   useHead(() => {
     return {
       title: 'Search ' + searchContent.value,
@@ -35,18 +36,24 @@
   const words = computed<DeckWord[]>(() => response.value || []);
   const selectedWord = ref<DeckWord | undefined>();
 
-  if (status.value === 'success') {
-    selectedWord.value = response.value?.find((word) => word.wordId != 0);
-  }
-
   watch(
     () => status.value,
     (newStatus) => {
-      if (newStatus === 'success') {
-        selectedWord.value = response.value?.find((word) => word.wordId != 0);
+      if (!selectedWord.value) {
+        selectedWord.value = words.value.find((word) => word.wordId != 0);
+      } else if (newStatus === 'error' || newStatus === 'idle') {
+        selectedWord.value = undefined;
       }
-    }
+    },
+    { immediate: true }
   );
+
+  const handleWordClick = (word: DeckWord) => {
+    if (word.wordId !== 0) {
+      selectedWord.value = word;
+    }
+  }
+
 </script>
 
 <template>
@@ -56,7 +63,7 @@
       <span
         v-if="word.wordId != 0"
         class="text-purple-600 text-lg underline underline-offset-4 cursor-pointer hover:font-bold"
-        @click="selectedWord = word"
+        @click="handleWordClick(word)"
       >
         {{ word.originalText }}
       </span>
@@ -75,6 +82,4 @@
   </div>
 </template>
 
-<style scoped>
-
-</style>
+<style scoped></style>

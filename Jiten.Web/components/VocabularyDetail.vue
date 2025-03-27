@@ -114,22 +114,24 @@
           <div class="md:text-right pt-4">
             Appears in <b>{{ response.data.mainReading.usedInMediaAmount }} media</b>
           </div>
-          <table v-if="response.data.mainReading.usedInMediaAmount > 0">
-            <thead>
-              <tr>
-                <th></th>
-                <th class="text-gray-500 dark:text-gray-300 text-sm pl-4">Amount</th>
-                <th class="text-gray-500 dark:text-gray-300 text-sm pl-4">% of total</th>
+          <ClientOnly>
+            <table v-if="response.data.mainReading.usedInMediaAmount > 0">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th class="text-gray-500 dark:text-gray-300 text-sm pl-4">Amount</th>
+                  <th class="text-gray-500 dark:text-gray-300 text-sm pl-4">% of total</th>
+                </tr>
+              </thead>
+              <tr v-for="(amount, mediaType) in response.data.mainReading.usedInMediaAmountByType" :key="mediaType">
+                <th class="text-right p-0.5 !font-bold">{{ getMediaTypeText(Number(mediaType)) }}</th>
+                <th class="text-right p-0.5">{{ amount }}</th>
+                <th class="text-right p-0.5">
+                  {{ ((amount / mediaAmountResponse[Number(mediaType)]) * 100).toFixed(0) }}%
+                </th>
               </tr>
-            </thead>
-            <tr v-for="(amount, mediaType) in response.data.mainReading.usedInMediaAmountByType" :key="mediaType">
-              <th class="text-right p-0.5 !font-bold">{{ getMediaTypeText(Number(mediaType)) }}</th>
-              <th class="text-right p-0.5">{{ amount }}</th>
-              <th class="text-right p-0.5">
-                {{ ((amount / mediaAmountResponse[Number(mediaType)]) * 100).toFixed(0) }}%
-              </th>
-            </tr>
-          </table>
+            </table>
+          </ClientOnly>
         </div>
       </div>
       <Accordion value="0" lazy>
