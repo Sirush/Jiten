@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Jiten.Core.Migrations
 {
     [DbContext(typeof(JitenDbContext))]
-    [Migration("20250325124134_InitialBeta")]
+    [Migration("20250326221547_InitialBeta")]
     partial class InitialBeta
     {
         /// <inheritdoc />

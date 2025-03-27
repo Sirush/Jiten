@@ -38,13 +38,11 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   runtimeConfig: {
     public: {
-      baseURL: process.env.API_BASE_URL || 'https://localhost:7299/api/',
-      $production: {
-        scripts: {
-          umamiAnalytics: {
-            websiteId: '',
-            hostUrl: 'https://umami.jiten.moe',
-          },
+      baseURL: 'https://localhost:7299/api/',
+      scripts: {
+        umamiAnalytics: {
+          websiteId: '',
+          hostUrl: 'https://umami.jiten.moe',
         },
       },
     },

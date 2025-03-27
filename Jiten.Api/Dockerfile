@@ -4,11 +4,11 @@ COPY ["Jiten.Core/Jiten.Core.csproj", "Jiten.Core/"]
 COPY ["Jiten.Api/Jiten.Api.csproj", "Jiten.Api/"]
 COPY ["Jiten.Parser/Jiten.Parser.csproj", "Jiten.Parser/"]
 
-# Create the directory structure first
 RUN mkdir -p /src/Shared/
+RUN mkdir -p /src/Shared/resources
 
-# Copy the example file to the correct location
 COPY ["Shared/sharedsettings.example.json", "/src/Shared/sharedsettings.json"]
+COPY ["Shared/resources", "/src/Shared/resources"]
 
 RUN dotnet restore "Jiten.Api/Jiten.Api.csproj"
 COPY . .
@@ -22,4 +22,5 @@ COPY --from=build /app/publish .
 RUN mkdir -p /app/Shared
 # Copy the settings file from the build stage
 COPY --from=build /src/Shared/sharedsettings.json /app/Shared/
+COPY --from=build /src/Shared/resources /app/resources
 ENTRYPOINT ["dotnet", "Jiten.Api.dll"]

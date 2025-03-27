@@ -389,7 +389,7 @@ public static class JmDictHelper
     }
 
 
-    public static async Task<bool> Import(string dtdPath, string dictionaryPath, string furiganaPath)
+    public static async Task<bool> Import(DbContextOptions<JitenDbContext> options, string dtdPath, string dictionaryPath, string furiganaPath)
     {
         Regex reg = new Regex(@"<!ENTITY (.*) ""(.*)"">");
 
@@ -453,7 +453,7 @@ public static class JmDictHelper
                 furiganaDict.Add(f.Text, f.Parse());
         }
 
-        await using var context = new JitenDbContext();
+        await using var context = new JitenDbContext(options);
         foreach (var reading in wordInfos)
         {
             List<JmDictLookup> lookups = new();

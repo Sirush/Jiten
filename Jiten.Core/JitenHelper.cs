@@ -33,7 +33,8 @@ public static class JitenHelper
 
         var coverUrl = await BunnyCdnHelper.UploadFile(cover, $"{deck.DeckId}/cover.jpg");
         deck.CoverName = coverUrl;
-
+        context.Entry(deck).State = EntityState.Modified;
+        
         await context.SaveChangesAsync();
     }
 

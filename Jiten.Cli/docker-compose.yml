@@ -1,11 +1,8 @@
-version: '3.8'
-
 services:
   jiten-cli:
     build:
-      context: .
-      dockerfile: ./Dockerfile
-      restart: "on-failure"
+      context: ../
+      dockerfile: ./Jiten.Cli/Dockerfile
 
     # Environment Variables
     environment:
@@ -16,6 +13,7 @@ services:
       - DictionaryPath=${DICTIONARY_PATH:-/path/to/system_full.dic}
       - JimakuApiKey=${JIMAKU_API_KEY:-}
       - TmdbApiKey=${TMDB_API_KEY:-}
+      - CdnBaseUrl=${CDN_BASE_URL:-}
     volumes:
       - /home/ubuntu/jiten:/files
 

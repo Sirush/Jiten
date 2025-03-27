@@ -130,7 +130,7 @@ public class Program
                             }
 
                             Console.WriteLine("Importing JMdict...");
-                            await JmDictHelper.Import(o.XmlPath, o.DictionaryPath, o.FuriganaPath);
+                            await JmDictHelper.Import(_dbOptions, o.XmlPath, o.DictionaryPath, o.FuriganaPath);
                         }
 
                         if (o.ExtractFilePath != null)

@@ -16,6 +16,7 @@ public class BunnyCdnHelper
                             .AddJsonFile(Path.Combine(Environment.CurrentDirectory, "..", "Shared", "sharedsettings.json"), optional: true)
                             .AddJsonFile("sharedsettings.json", optional: true)
                             .AddJsonFile("appsettings.json", optional: true)
+                            .AddEnvironmentVariables()
                             .Build();
 
         _secret = configuration.GetValue<string>("BunnyCdnSecret");
