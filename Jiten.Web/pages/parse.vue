@@ -76,6 +76,7 @@
           :key="`${selectedWord.wordId}-${selectedWord.readingIndex}`"
           :word-id="selectedWord.wordId"
           :reading-index="selectedWord.readingIndex"
+          :show-redirect=true
         />
       </Transition>
     </div>

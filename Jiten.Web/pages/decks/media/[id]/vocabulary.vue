@@ -63,6 +63,10 @@
     return response.value?.hasNextPage ? { query: { offset: response.value.nextOffset } } : null;
   });
 
+  const deckId = computed(() => {
+    return response.value?.data.deck.deckId;
+  });
+
   const title = computed(() => {
     if (!response.value?.data) {
       return '';
@@ -71,13 +75,14 @@
     return localiseTitle(response.value?.data.deck);
   });
 
-  const deckId = computed(() => {
-    return response.value?.data.deck.deckId;
-  });
-
   useHead(() => {
     return {
-      title: `${response.value?.data.title} - Vocabulary`,
+      title: `${title.value} - Vocabulary`,
+      meta: [
+        {
+          name: 'description',
+          content: `Vocabulary list for ${title.value}`
+        }]
     };
   });
 
@@ -124,7 +129,7 @@
         </NuxtLink>
         <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''"> Next</NuxtLink>
       </div>
-      <div>viewing words {{ start }}-{{ end }} from {{ totalItems }} total</div>
+      <div class="text-gray-500 dark:text-gray-300">viewing words {{ start }}-{{ end }} from {{ totalItems }} total</div>
     </div>
     <div v-if="status === 'pending'" class="flex flex-col gap-2">
       <Card v-for="i in 10" :key="i" class="p-2">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { MediaType, type Word } from '~/types';
+  import type { MediaType,  Word } from '~/types';
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
   import { convertToRuby } from '~/utils/convertToRuby';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
@@ -12,6 +12,10 @@
     readingIndex: {
       type: Number,
       required: true,
+    },
+    showRedirect: {
+      type: Boolean,
+      required: false,
     },
   });
 
@@ -53,15 +57,6 @@
     { immediate: false }
   );
 
-  // watch(
-  //   () => props.readingIndex,
-  //   async (newReadingIndex) => {
-  //     currentReadingIndex.value = newReadingIndex;
-  //     await refresh();
-  //   },
-  //   { immediate: true }
-  // );
-
   watch(
     () => response.value?.data?.mainReading.text,
     (newText) => {
@@ -77,7 +72,14 @@
       <div class="flex flex-col justify-between md:flex-row">
         <div class="flex flex-col gap-4 max-w-2xl">
           <div class="flex justify-between">
-            <div class="text-3xl font-noto-sans" v-html="convertToRuby(response.data.mainReading.text)"></div>
+            <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`">
+              <div class="text-3xl font-noto-sans" v-html="convertToRuby(response.data.mainReading.text)"/>
+            </NuxtLink>
+            <div
+              v-if="!showRedirect"
+              class="text-3xl font-noto-sans"
+              v-html="convertToRuby(response.data.mainReading.text)"
+            />
             <div class="text-gray-500 dark:text-gray-300 text-right md:hidden">
               Rank #{{ response.data.mainReading.frequencyRank }}
             </div>
@@ -118,7 +120,7 @@
             <table v-if="response.data.mainReading.usedInMediaAmount > 0">
               <thead>
                 <tr>
-                  <th></th>
+                  <th/>
                   <th class="text-gray-500 dark:text-gray-300 text-sm pl-4">Amount</th>
                   <th class="text-gray-500 dark:text-gray-300 text-sm pl-4">% of total</th>
                 </tr>

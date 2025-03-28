@@ -10,7 +10,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using WanaKanaShaapu;
-using ZstdSharp.Unsafe;
 
 namespace Jiten.Api.Controllers;
 
@@ -29,14 +28,14 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
     [HttpGet("get-media-decks")]
     [ResponseCache(Duration = 300,
                    VaryByQueryKeys = ["offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder"])]
-    public async Task<PaginatedResponse<List<Deck>>> GetMediaDecks(int? offset = 0, MediaType? mediaType = null,
+    public async Task<PaginatedResponse<List<DeckDto>>> GetMediaDecks(int? offset = 0, MediaType? mediaType = null,
                                                                    int wordId = 0, int readingIndex = 0, string? titleFilter = "",
                                                                    string? sortBy = "",
                                                                    SortOrder sortOrder = SortOrder.Ascending)
     {
         int pageSize = 50;
 
-        var query = context.Decks.AsNoTracking();
+        var query = context.Decks.Include(d => d.Children).AsNoTracking();
 
         query = query.Where(d => d.ParentDeckId == null);
         if (mediaType != null)
@@ -78,8 +77,8 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         query = sortBy switch
         {
             "difficulty" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.Difficulty)
-                : query.OrderByDescending(d => d.Difficulty),
+                ? query.OrderBy(d => d.Difficulty).Where(d => d.Difficulty != 0)
+                : query.OrderByDescending(d => d.Difficulty).Where(d => d.Difficulty != 0),
             "charCount" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.CharacterCount)
                 : query.OrderByDescending(d => d.CharacterCount),
@@ -110,7 +109,13 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                     .Take(pageSize)
                     .ToList();
 
-        return new PaginatedResponse<List<Deck>>(decks, totalCount, pageSize, offset ?? 0);
+        List<DeckDto> dtos = new();
+        foreach (var deck in decks)
+        {
+            dtos.Add(new DeckDto(deck));
+        }
+
+        return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset ?? 0);
     }
 
     [HttpGet("{id}/vocabulary")]
@@ -222,7 +227,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
     {
         int pageSize = 25;
 
-        var deck = context.Decks.AsNoTracking().FirstOrDefault(d => d.DeckId == id);
+        var deck = context.Decks.AsNoTracking().Include(d => d.Children).FirstOrDefault(d => d.DeckId == id);
 
         if (deck == null)
             return new PaginatedResponse<DeckDetailDto?>(null, 0, pageSize, offset ?? 0);
@@ -235,8 +240,14 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                    .OrderBy(dw => dw.DeckOrder)
                    .Skip(offset ?? 0)
                    .Take(pageSize);
+        
+        var mainDeckDto = new DeckDto(deck);
+        List<DeckDto> subDeckDtos = new();
+        
+        foreach (var subDeck in subDecks)
+            subDeckDtos.Add(new DeckDto(subDeck));
 
-        var dto = new DeckDetailDto { MainDeck = deck, SubDecks = subDecks.ToList() };
+        var dto = new DeckDetailDto { MainDeck = mainDeckDto, SubDecks = subDeckDtos };
 
         return new PaginatedResponse<DeckDetailDto?>(dto, totalCount, pageSize, offset ?? 0);
     }
@@ -313,10 +324,13 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                                        .Include(w => w.Definitions)
                                        .Where(w => wordIds.Contains(w.WordId))
                                        .ToDictionaryAsync(w => w.WordId);
-
+        
         switch (format)
         {
             case DeckFormat.Anki:
+                var frequencies = context.JmDictWordFrequencies.Where(f => wordIds.Contains(f.WordId))
+                                         .ToDictionary(f => f.WordId, f => f);
+                
                 // Lapis template from https://github.com/donkuri/lapis/tree/main
                 var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "lapis.apkg");
                 var template = await AnkiFileReader.ReadFromFileAsync(templatePath);
@@ -354,8 +368,8 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                     string isSentenceCard = "";
                     string pitchPosition = "";
                     string pitchCategories = "";
-                    string frequency = "";
-                    string freqSort = "";
+                    string frequency = $"<ul><li>Jiten: {frequencies[word.WordId].ReadingsFrequencyRank[word.ReadingIndex]}</li></ul>";
+                    string freqSort = $"{frequencies[word.WordId].ReadingsFrequencyRank[word.ReadingIndex]}";
                     string miscInfo = $"From {deck.OriginalTitle} - generated by Jiten.moe";
 
 

@@ -31,6 +31,11 @@
   useHead(() => {
     return {
       title: 'Word - ' + title.value,
+      meta: [
+        {
+          name: 'description',
+          content: `Detail for the word ${title.value}`
+        }]
     };
   });
 

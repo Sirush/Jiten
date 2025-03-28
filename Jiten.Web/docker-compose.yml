@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  jiten-web:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - NUXT_HOST=0.0.0.0
+      - NUXT_PORT=3001
+      - PORT=3001
+    restart: unless-stopped

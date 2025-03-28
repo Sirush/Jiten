@@ -23,7 +23,7 @@ public static class JitenHelper
         // Fix potential null references to decks
         deck.SetParentsAndDeckWordDeck(deck);
         deck.ParentDeckId = null;
-        
+
         if (deck.OriginalTitle == null)
             deck.OriginalTitle = deck.RomajiTitle ?? deck.EnglishTitle;
 
@@ -34,7 +34,7 @@ public static class JitenHelper
         var coverUrl = await BunnyCdnHelper.UploadFile(cover, $"{deck.DeckId}/cover.jpg");
         deck.CoverName = coverUrl;
         context.Entry(deck).State = EntityState.Modified;
-        
+
         await context.SaveChangesAsync();
     }
 
@@ -55,9 +55,7 @@ public static class JitenHelper
         {
             wordFrequencies.Add(kvp.Key, new JmDictWordFrequency
                                          {
-                                             WordId = kvp.Key,
-                                             FrequencyRank = 0,
-                                             UsedInMediaAmount = 0,
+                                             WordId = kvp.Key, FrequencyRank = 0, UsedInMediaAmount = 0,
                                              ReadingsFrequencyPercentage = [..new float[kvp.Value]],
                                              ReadingsObservedFrequency = [..new Double[kvp.Value]],
                                              ReadingsFrequencyRank = [..new int[kvp.Value]],
@@ -70,105 +68,150 @@ public static class JitenHelper
                                         .Select(d => d.DeckId)
                                         .ToListAsync();
 
-        int totalEntries = await context.DeckWords.Where(d => primaryDecks.Contains(d.DeckId)).CountAsync();
-        var processedDecks = new HashSet<(int, int)>();
+        var wordAggregates = await context.DeckWords
+                                          .Where(d => primaryDecks.Contains(d.DeckId))
+                                          .GroupBy(d => d.WordId)
+                                          .Select(g => new
+                                                       {
+                                                           WordId = g.Key, TotalOccurrences = g.Sum(dw => dw.Occurrences),
+                                                           DistinctDeckCount =
+                                                               g.Select(dw => dw.DeckId).Distinct().Count()
+                                                       })
+                                          .ToListAsync();
 
-        for (int i = 0; i < totalEntries; i += batchSize)
+        foreach (var agg in wordAggregates)
         {
-            var deckWords = await context.DeckWords
-                                         .AsNoTracking()
-                                         .Where(d => primaryDecks.Contains(d.DeckId))
-                                         .Skip(i)
-                                         .Take(batchSize)
-                                         .ToListAsync();
-
-            foreach (var deckWord in deckWords)
+            if (wordFrequencies.TryGetValue(agg.WordId, out var freq))
             {
-                var word = wordFrequencies[deckWord.WordId];
+                freq.FrequencyRank = agg.TotalOccurrences; // Store raw count
+                freq.UsedInMediaAmount = agg.DistinctDeckCount;
+            }
+        }
 
-                word.FrequencyRank += deckWord.Occurrences;
+        var readingAggregates = await context.DeckWords
+                                             .Where(d => primaryDecks.Contains(d.DeckId))
+                                             .GroupBy(d => new { d.WordId, d.ReadingIndex })
+                                             .Select(g => new
+                                                          {
+                                                              g.Key.WordId, g.Key.ReadingIndex,
+                                                              TotalOccurrences = g.Sum(dw => dw.Occurrences), EntryCount = g.Count()
+                                                          })
+                                             .ToListAsync();
 
-                // The word itself must be only counted once per deck
-                if (!processedDecks.Contains((deckWord.DeckId, deckWord.WordId)))
-                {
-                    word.UsedInMediaAmount++;
-                    processedDecks.Add((deckWord.DeckId, deckWord.WordId));
-                }
-
-                word.ReadingsUsedInMediaAmount[deckWord.ReadingIndex]++;
-                word.ReadingsFrequencyRank[deckWord.ReadingIndex] += deckWord.Occurrences;
-
-                wordFrequencies.TryAdd(deckWord.WordId, word);
+        foreach (var agg in readingAggregates)
+        {
+            if (wordFrequencies.TryGetValue(agg.WordId, out var freq))
+            {
+                freq.ReadingsFrequencyRank[agg.ReadingIndex] = agg.TotalOccurrences; // Store raw count
+                freq.ReadingsUsedInMediaAmount[agg.ReadingIndex] = agg.EntryCount;
             }
         }
 
         var sortedWordFrequencies = wordFrequencies.Values
-                                                   .OrderByDescending(w => w.FrequencyRank)
+                                                   .OrderByDescending(w => w
+                                                                          .FrequencyRank)
                                                    .ToList();
 
+
+        long totalOccurrences = sortedWordFrequencies.Sum(w => (long)w.FrequencyRank);
+
         int currentRank = 0;
-        int previousFrequencyRank = sortedWordFrequencies.FirstOrDefault()?.FrequencyRank ?? 0;
-        int duplicateCount = 0;
-        int totalOccurences = sortedWordFrequencies.Sum(w => w.FrequencyRank);
+        int previousRawFrequency = -1;
+        int rankStep = 0;
 
         for (int i = 0; i < sortedWordFrequencies.Count; i++)
         {
             var word = sortedWordFrequencies[i];
 
-            for (int j = 0; j < word.ReadingsUsedInMediaAmount.Count; j++)
+            int wordRawFrequencyCount = word.FrequencyRank;
+
+            for (int j = 0; j < word.ReadingsObservedFrequency.Count; j++)
             {
-                word.ReadingsObservedFrequency[j] = word.ReadingsFrequencyRank[j] / (double)totalOccurences;
-                word.ReadingsFrequencyPercentage[j] = (word.ReadingsFrequencyRank[j] / (double)word.FrequencyRank) * 100;
+                // Prevent division by zero
+                if (totalOccurrences > 0)
+                    word.ReadingsObservedFrequency[j] = word.ReadingsFrequencyRank[j] / (double)totalOccurrences;
+                else
+                    word.ReadingsObservedFrequency[j] = 0;
+
+                // Prevent division by zero
+                if (wordRawFrequencyCount > 0)
+                    word.ReadingsFrequencyPercentage[j] = (word.ReadingsFrequencyRank[j] / (double)wordRawFrequencyCount) * 100.0;
+                else
+                    word.ReadingsFrequencyPercentage[j] = 0;
             }
 
-            // Keep the same rank if they have the same amount of occurences
-
-            if (word.FrequencyRank == previousFrequencyRank)
+            // Prevent division by zero
+            if (totalOccurrences > 0)
             {
-                duplicateCount++;
+                word.ObservedFrequency = wordRawFrequencyCount / (double)totalOccurrences;
             }
             else
             {
-                currentRank += duplicateCount;
-                duplicateCount = 1;
-                previousFrequencyRank = word.FrequencyRank;
+                word.ObservedFrequency = 0;
             }
 
-            word.ObservedFrequency = word.FrequencyRank / (double)totalOccurences;
+            if (wordRawFrequencyCount != previousRawFrequency)
+            {
+                currentRank += rankStep;
+                rankStep = 1;
+                previousRawFrequency = wordRawFrequencyCount;
+            }
+            else
+            {
+                rankStep++;
+            }
+
             word.FrequencyRank = currentRank + 1;
         }
 
-        var allReadings = new List<int>();
+        var readingFrequencyCounts = new Dictionary<int, int>();
 
         foreach (var wordFreq in sortedWordFrequencies)
         {
-            allReadings.AddRange(wordFreq.ReadingsFrequencyRank);
+            foreach (int readingRawFreq in wordFreq.ReadingsFrequencyRank)
+            {
+                if (readingRawFreq <= 0) continue;
+
+                readingFrequencyCounts.TryGetValue(readingRawFreq, out int currentCount);
+                readingFrequencyCounts[readingRawFreq] = currentCount + 1;
+            }
         }
 
-        // Sort by occurences and group the readings with the same amount of occurences so we can skip ranks 
-        var frequencyGroups = allReadings
-                              .GroupBy(x => x)
-                              .OrderByDescending(g => g.Key)
-                              .ToList();
 
-        var frequencyRanks = new Dictionary<int, int>();
+        // Sort frequencies descending and calculate ranks
+        var sortedReadingFrequencies = readingFrequencyCounts.OrderByDescending(kvp => kvp.Key).ToList();
+        var readingFrequencyFinalRanks = new Dictionary<int, int>();
         currentRank = 1;
-
-        // Assign a rank for each amount of occurence, skip ranks based on number of duplicates
-        foreach (var group in frequencyGroups)
+        foreach (var kvp in sortedReadingFrequencies)
         {
-            frequencyRanks[group.Key] = currentRank;
-            currentRank += group.Count();
+            readingFrequencyFinalRanks.Add(kvp.Key, currentRank);
+            currentRank += kvp.Value; // Increment rank by the number of readings sharing this frequency
         }
 
+        int zeroReadingRank = currentRank;
+
+        // Assign the calculated ranks back to the readings
         foreach (var wordFreq in sortedWordFrequencies)
         {
             for (int i = 0; i < wordFreq.ReadingsFrequencyRank.Count; i++)
             {
-                int frequency = wordFreq.ReadingsFrequencyRank[i];
-                wordFreq.ReadingsFrequencyRank[i] = frequencyRanks[frequency];
+                int readingRawFreq = wordFreq.ReadingsFrequencyRank[i];
+
+                // Check if this reading had a non-zero frequency and find its rank
+                if (readingRawFreq > 0 && readingFrequencyFinalRanks.TryGetValue(readingRawFreq, out int finalRank))
+                {
+                    // Overwrite raw count with final rank
+                    wordFreq.ReadingsFrequencyRank[i] = finalRank;
+                }
+                else
+                {
+                    wordFreq.ReadingsFrequencyRank[i] = zeroReadingRank;
+                }
             }
         }
+
+        Console.WriteLine("Finished calculations.");
+
 
         // Delete previous frequency data if it exists
         await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE jmdict.\"WordFrequencies\"");
@@ -246,13 +289,13 @@ public static class JitenHelper
         await using var context = new JitenDbContext(options);
 
         var allDecks = await context.Decks.Where(d => d.MediaType == mediaType && d.ParentDeck == null).ToListAsync();
-        
+
         if (allDecks.Count == 0)
         {
             Console.WriteLine("No decks found for media type " + mediaType);
             return;
         }
-        
+
         var allFrequencies = await context.JmDictWordFrequencies.AsNoTracking().ToListAsync();
         var wordFrequencies = allFrequencies.ToDictionary(f => f.WordId, f => f);
 
@@ -337,9 +380,9 @@ public static class JitenHelper
                         peakWordFrequencyBy1k[nRank]++;
                 }
 
-                var peakWordList = wordFrequencyBy1k.Select(x => (x.Key, x.Value))
-                                                    .OrderBy(x => x.Key)
-                                                    .ToList();
+                var peakWordList = peakWordFrequencyBy1k.Select(x => (x.Key, x.Value))
+                                                        .OrderBy(x => x.Key)
+                                                        .ToList();
 
                 // Scale each value by rank exponentially
                 foreach (var wf in peakWordList)
@@ -350,62 +393,32 @@ public static class JitenHelper
             }
         }
 
+        (double mean, double stdDev) wordDifficultyStats = GetStats(wordDifficultiesTotal.Values.ToList());
+        (double mean, double stdDev) peakWordDifficultyStats = GetStats(peakWordDifficulties.Values.ToList());
+        (double mean, double stdDev) characterCountStats = GetStats(allDecks.Select(d => (double)d.CharacterCount).ToList());
+        (double mean, double stdDev) uniqueWordCountStats = GetStats(allDecks.Select(d => (double)d.UniqueWordCount).ToList());
+        (double mean, double stdDev) uniqueKanjiCountStats = GetStats(allDecks.Select(d => (double)d.UniqueKanjiCount).ToList());
+        (double mean, double stdDev) averageSentenceLengthStats = GetStats(allDecks.Select(d => (double)d.AverageSentenceLength).ToList());
 
-        // Take the min and max values among all the decks
-        // We go by 1st and 9th decile to avoid outliers
-        double minDifficulty = wordDifficultiesTotal.Values.Min();
-        double maxDifficulty = wordDifficultiesTotal.Values.Max();
-        uint minCharacterCount = (uint)allDecks.Min(d => d.CharacterCount);
-        uint maxCharacterCount = (uint)allDecks.Max(d => d.CharacterCount);
-        uint minUniqueWordCount = (uint)allDecks.Min(d => d.UniqueWordCount);
-        uint maxUniqueWordCount = (uint)allDecks.Max(d => d.UniqueWordCount);
-        uint minUniqueKanjiCount = (uint)allDecks.Min(d => d.UniqueKanjiCount);
-        uint maxUniqueKanjiCount = (uint)allDecks.Max(d => d.UniqueKanjiCount);
-        double minAverageSentenceLength = allDecks.Min(d => d.AverageSentenceLength);
-        double maxAverageSentenceLength = allDecks.Max(d => d.AverageSentenceLength);
-
-        // double minDifficulty = wordDifficultiesTotal.Values.OrderBy(d => d).ElementAt((int)(allDecks.Count * 0.05f));
-        // double maxDifficulty = wordDifficultiesTotal.Values.OrderBy(d => d).ElementAt((int)(allDecks.Count * 0.99f));
-        // uint minCharacterCount = (uint)allDecks.OrderBy(d => d.CharacterCount).ElementAt((int)(allDecks.Count * 0.05f)).CharacterCount;
-        // uint maxCharacterCount = (uint)allDecks.OrderBy(d => d.CharacterCount).ElementAt((int)(allDecks.Count * 0.99f)).CharacterCount;
-        // uint minUniqueWordCount = (uint)allDecks.OrderBy(d => d.UniqueWordCount).ElementAt((int)(allDecks.Count * 0.05f)).UniqueWordCount;
-        // uint maxUniqueWordCount = (uint)allDecks.OrderBy(d => d.UniqueWordCount).ElementAt((int)(allDecks.Count * 0.99f)).UniqueWordCount;
-        // uint minUniqueKanjiCount = (uint)allDecks.OrderBy(d => d.UniqueKanjiCount).ElementAt((int)(allDecks.Count * 0.05f)).UniqueKanjiCount;
-        // uint maxUniqueKanjiCount = (uint)allDecks.OrderBy(d => d.UniqueKanjiCount).ElementAt((int)(allDecks.Count * 0.99f)).UniqueKanjiCount;
-        // double minAverageSentenceLength =
-        //     allDecks.OrderBy(d => d.AverageSentenceLength).ElementAt((int)(allDecks.Count * 0.05f)).AverageSentenceLength;
-        // double maxAverageSentenceLength =
-        //     allDecks.OrderBy(d => d.AverageSentenceLength).ElementAt((int)(allDecks.Count * 0.99f)).AverageSentenceLength;
 
         foreach (var deck in allDecks)
         {
             double difficulty = 0;
 
-            // float wordDifficulty =
-            //     MapDoubleToWeight(wordDifficultiesTotal[deck.DeckId], minDifficulty, maxDifficulty, wordDifficultyWeight);
-            // float characterCountDifficulty =
-            //     MapToWeight((uint)deck.CharacterCount, minCharacterCount, maxCharacterCount, characterCountWeight);
-            // float uniqueWordCountDifficulty =
-            //     MapToWeight((uint)deck.UniqueWordCount, minUniqueWordCount, maxUniqueWordCount, uniqueWordCountWeight);
-            // float uniqueKanjiCountDifficulty =
-            //     MapToWeight((uint)deck.UniqueKanjiCount, minUniqueKanjiCount, maxUniqueKanjiCount, uniqueKanjiCountWeight);
-            // float averageSentenceLengthDifficulty = MapDoubleToWeight(deck.AverageSentenceLength, minAverageSentenceLength,
-            //                                                           maxAverageSentenceLength, averageSentenceLengthWeight);
-
-            float wordDifficulty = MapWithZScore(wordDifficultiesTotal[deck.DeckId], wordDifficultiesTotal.Values.ToList(),
+            float wordDifficulty = MapWithZScore(wordDifficultiesTotal[deck.DeckId], wordDifficultyStats.mean, wordDifficultyStats.stdDev,
                                                  averageWordDifficultyWeight);
-            float peakWordDifficulty = MapWithZScore(peakWordDifficulties[deck.DeckId], peakWordDifficulties.Values.ToList(),
+            float peakWordDifficulty = MapWithZScore(peakWordDifficulties[deck.DeckId], peakWordDifficultyStats.mean,
+                                                     peakWordDifficultyStats.stdDev,
                                                      peakWordDifficultyWeight);
-            float characterCountDifficulty = MapWithZScore((uint)deck.CharacterCount,
-                                                           allDecks.Select(d => (double)d.CharacterCount).ToList(), characterCountWeight);
-            float uniqueWordCountDifficulty = MapWithZScore((uint)deck.UniqueWordCount,
-                                                            allDecks.Select(d => (double)d.UniqueWordCount).ToList(),
+            float characterCountDifficulty = MapWithZScore(deck.CharacterCount, characterCountStats.mean, characterCountStats.stdDev,
+                                                           characterCountWeight);
+            float uniqueWordCountDifficulty = MapWithZScore(deck.UniqueWordCount, uniqueWordCountStats.mean, uniqueWordCountStats.stdDev,
                                                             uniqueWordCountWeight);
-            float uniqueKanjiCountDifficulty = MapWithZScore((uint)deck.UniqueKanjiCount,
-                                                             allDecks.Select(d => (double)d.UniqueKanjiCount).ToList(),
+            float uniqueKanjiCountDifficulty = MapWithZScore(deck.UniqueKanjiCount, uniqueKanjiCountStats.mean,
+                                                             uniqueKanjiCountStats.stdDev,
                                                              uniqueKanjiCountWeight);
-            float averageSentenceLengthDifficulty = MapWithZScore(deck.AverageSentenceLength,
-                                                                  allDecks.Select(d => (double)d.AverageSentenceLength).ToList(),
+            float averageSentenceLengthDifficulty = MapWithZScore(deck.AverageSentenceLength
+                                                                  , averageSentenceLengthStats.mean, averageSentenceLengthStats.stdDev,
                                                                   averageSentenceLengthWeight);
 
             difficulty += wordDifficulty;
@@ -433,37 +446,26 @@ public static class JitenHelper
 
         await context.SaveChangesAsync();
 
-        // Map to the weight in a linear way
-        // float MapToWeight(uint value, uint min, uint max, int weight)
-        // {
-        //     if (value < min)
-        //         return 0;
-        //
-        //     if (value > max)
-        //         return weight;
-        //
-        //     return (value - min) / (float)(max - min) * weight;
-        // }
-        //
-        // float MapDoubleToWeight(double value, double min, double max, int weight)
-        // {
-        //     if (value < min)
-        //         return 0;
-        //
-        //     if (value > max)
-        //         return weight;
-        //
-        //     return (float)((value - min) / (max - min)) * weight;
-        // }
-
-        float MapWithZScore(double value, List<double> allValues, int weight)
+        (double mean, double stdDev) GetStats(List<double> allValues)
         {
             double mean = allValues.Average(v => v);
             double stdDev = Math.Sqrt(allValues.Average(v => Math.Pow(v - mean, 2)));
 
+            return (mean, stdDev);
+        }
+
+        float MapWithZScore(double value, double mean, double stdDev, int weight)
+        {
+            if (weight == 0)
+                return 0;
+
+            if (stdDev == 0)
+                return (float)(0.5 * weight);
+
             // Convert to z-score then normalize to 0-1 range (cap at ±2 std deviations)
             double zScore = (value - mean) / stdDev;
-            double normalized = (Math.Max(-2, Math.Min(2, zScore)) + 2) / 4;
+            double cappedZScore = Math.Max(-2.0, Math.Min(2.0, zScore));
+            double normalized = (cappedZScore + 2.0) / 4.0;
 
             return (float)(normalized * weight);
         }

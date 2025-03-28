@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import type { Deck } from '~/types';
   import Card from 'primevue/card';
-  import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import {getChildrenCountText, getMediaTypeText} from '~/utils/mediaTypeMapper';
   import { getLinkTypeText } from '~/utils/linkTypeMapper';
 
   const props = defineProps<{
@@ -61,7 +61,7 @@
                     <span class="text-gray-600 dark:text-gray-300">Average sentence length</span>
                     <span class="ml-8 tabular-nums">{{ deck.averageSentenceLength.toFixed(1) }}</span>
                   </div>
-                  <div class="flex justify-between mb-2" v-if="deck.difficulty != 0">
+                  <div v-if="deck.difficulty != 0" class="flex justify-between mb-2">
                     <span
                       v-tooltip="
                         'This is a work in progress.\nThe current analysis only takes into account the vocabulary and not the grammar patterns, cultural references or wordplay, which might make some works easier or harder than the score they\'re given.'
@@ -72,6 +72,13 @@
                       <span class="text-purple-500 text-xs align-super"> beta </span>
                     </span>
                     <span class="ml-8 tabular-nums">{{ deck.difficulty }}</span>
+                  </div>
+                </div>
+
+                <div class="w-full md:w-64">
+                  <div v-if="deck.childrenDeckCount != 0" class="flex justify-between mb-2">
+                    <span class="text-gray-600 dark:text-gray-300">{{ getChildrenCountText(deck.mediaType) }}</span>
+                    <span class="ml-8 tabular-nums">{{ deck.childrenDeckCount.toLocaleString() }}</span>
                   </div>
                 </div>
               </div>

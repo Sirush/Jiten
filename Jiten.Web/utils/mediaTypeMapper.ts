@@ -22,3 +22,26 @@ export function getMediaTypeText(mediaType: MediaType): string {
       return 'Unknown';
   }
 }
+
+export function getChildrenCountText(mediaType: MediaType): string {
+    switch (mediaType) {
+        case MediaType.Anime:
+        return 'Episodes';
+        case MediaType.Drama:
+        return 'Episodes';
+        case MediaType.Movie:
+        return 'Movies';
+        case MediaType.Novel:
+        return 'Volumes';
+        case MediaType.NonFiction:
+        return 'Volumes';
+        case MediaType.VideoGame:
+        return 'Entries';
+        case MediaType.VisualNovel:
+        return 'Routes';
+        case MediaType.WebNovel:
+        return 'Chapters';
+        default:
+        return 'Unknown';
+    }
+}

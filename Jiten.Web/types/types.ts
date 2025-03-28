@@ -18,6 +18,7 @@ export interface Deck {
   parentDeckId: number;
   deckWords: DeckWord[];
   links: Link[];
+  childrenDeckCount: number;
 }
 
 export interface DeckDetail {

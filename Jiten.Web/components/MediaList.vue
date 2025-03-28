@@ -173,7 +173,7 @@
               Next
             </NuxtLink>
           </div>
-          <div class="pr-2">viewing decks {{ start }}-{{ end }} from {{ totalItems }} total</div>
+          <div class="pr-2 text-gray-500 dark:text-gray-300">viewing decks {{ start }}-{{ end }} from {{ totalItems }} total</div>
         </div>
 
         <div v-if="status === 'pending'" class="flex flex-col gap-4">

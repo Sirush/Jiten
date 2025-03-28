@@ -80,6 +80,15 @@ export default defineNuxtConfig({
   sitemap: {
     sources: ['/api/__sitemap__/urls'],
   },
+  app: {
+    head: {
+      title: 'Jiten',
+      htmlAttrs: {
+        lang: 'en',
+      },
+      link: [{ rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }],
+    },
+  },
   site: {
     url: 'https://jiten.moe',
     name: 'Vocabulary lists and anki decks for all your Japanese media',

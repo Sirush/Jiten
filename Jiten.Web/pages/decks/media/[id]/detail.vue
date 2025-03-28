@@ -36,6 +36,25 @@
   const nextLink = computed(() => {
     return response.value?.hasNextPage ? { query: { ...route.query, offset: response.value.nextOffset } } : null;
   });
+
+  const title = computed(() => {
+    if (!response.value?.data) {
+      return '';
+    }
+
+    return localiseTitle(response.value?.data.mainDeck);
+  });
+
+  useHead(() => {
+    return {
+      title: `${title.value} - Detail`,
+      meta: [
+        {
+          name: 'description',
+          content: `Detail for the deck ${title.value}`
+        }]
+    };
+  });
 </script>
 
 <template>
@@ -61,7 +80,7 @@
               Next
             </NuxtLink>
           </div>
-          <div class="pr-2">viewing decks {{ start }}-{{ end }} from {{ totalItems }} total</div>
+          <div class="pr-2 text-gray-500 dark:text-gray-300">viewing decks {{ start }}-{{ end }} from {{ totalItems }} total</div>
         </div>
         <div class="flex flex-row flex-wrap gap-2 justify-center pt-4">
           <MediaDeckCard v-for="deck in response.data.subDecks" :key="deck.deckId" :deck="deck" :is-compact="true" />
