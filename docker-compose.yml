@@ -21,8 +21,6 @@ services:
       context: .
       dockerfile: Jiten.Api/Dockerfile
     restart: unless-stopped
-    ports:
-      - "8080:8080"
     depends_on:
       - postgres
     environment:
@@ -51,8 +49,6 @@ services:
       context: .
       dockerfile: Jiten.Web/Dockerfile
     restart: unless-stopped
-    ports:
-      - "3001:3001"
     depends_on:
       - api
     environment:
@@ -66,8 +62,6 @@ services:
   umami:
     image: docker.umami.is/umami-software/umami:postgresql-latest
     restart: unless-stopped
-    ports:
-      - "3005:3005"
     depends_on:
       postgres:
         condition: service_healthy
