@@ -75,7 +75,7 @@ class SudachiInterop
         {
             // Clean up text
             inputText = Regex.Replace(inputText,
-                                      "[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005\u3001-\u3003\u3008-\u3011\u3014-\u301F\uFF01-\uFF0F\uFF1A-\uFF1F\uFF3B-\uFF3F\uFF5B-\uFF60\uFF62-\uFF65．\\n…\u3000―\u2500() ]",
+                                      "[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005\u3001-\u3003\u3008-\u3011\u3014-\u301F\uFF01-\uFF0F\uFF1A-\uFF1F\uFF3B-\uFF3F\uFF5B-\uFF60\uFF62-\uFF65．\\n…\u3000―\u2500() 」]",
                                       "");
 
             // if there's no kanas or kanjis, abort
@@ -254,6 +254,39 @@ public class Parser
             }
         }
 
+        // I'm not sure why this happens, but sudachi thinks those words are proper nouns
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            if (wordInfos[i].Text == "俺の")
+            {
+                wordInfos[i].Text = "俺";
+                wordInfos[i].DictionaryForm = "俺";
+                wordInfos[i].PartOfSpeech = PartOfSpeech.Pronoun;
+                wordInfos[i].PartOfSpeechSection1 = PartOfSpeechSection.None;
+                var no = new WordInfo
+                         {
+                             Text = "の", PartOfSpeech = PartOfSpeech.Particle,
+                             PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle, Reading = "の", DictionaryForm = "の"
+                         };
+                wordInfos.Insert(i + 1, no);
+            }
+            
+            if (wordInfos[i].Text == "泣きながら")
+            {
+                wordInfos[i].Text = "泣き";
+                wordInfos[i].DictionaryForm = "泣き";
+                wordInfos[i].PartOfSpeech = PartOfSpeech.Noun;
+                wordInfos[i].PartOfSpeechSection1 = PartOfSpeechSection.None;
+                var no = new WordInfo
+                         {
+                             Text = "ながら", PartOfSpeech = PartOfSpeech.Particle,
+                             PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle, Reading = "ながら", DictionaryForm = "ながら"
+                         };
+                wordInfos.Insert(i + 1, no);
+            }
+            
+        }
+
         return wordInfos;
     }
 
@@ -343,7 +376,10 @@ public class Parser
                 wordInfos[i].DictionaryForm != "なる" &&
                 wordInfos[i].DictionaryForm != "行く" &&
                 wordInfos[i].DictionaryForm != "やる" &&
-                wordInfos[i].DictionaryForm != "いい"
+                wordInfos[i].DictionaryForm != "いい" &&
+                wordInfos[i].DictionaryForm != "もらえる" &&
+                wordInfos[i].DictionaryForm != "来る" &&
+                wordInfos[i].DictionaryForm != "出す"
                )
             {
                 wordInfos[i - 1].Text += wordInfos[i].Text;
@@ -356,7 +392,7 @@ public class Parser
         for (int i = 0; i < wordInfos.Count - 1; i++)
         {
             if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) &&
-                wordInfos[i + 1].DictionaryForm == "する" && wordInfos[i + 1].Text != "する")
+                wordInfos[i + 1].DictionaryForm == "する" && wordInfos[i + 1].Text != "する" && wordInfos[i + 1].Text != "しない")
             {
                 wordInfos[i].Text += wordInfos[i + 1].Text;
                 wordInfos[i].PartOfSpeech = PartOfSpeech.Verb;
@@ -424,10 +460,13 @@ public class Parser
                 && (wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb ||
                     wordInfos[i - 1].PartOfSpeech == PartOfSpeech.IAdjective)
                 && wordInfos[i].Text != "な"
+                && wordInfos[i].Text != "に"
                 && wordInfos[i].DictionaryForm != "です"
                 && wordInfos[i].DictionaryForm != "らしい"
                 && wordInfos[i].Text != "なら"
-                // && wordInfos[i].DictionaryForm != "だ"
+                && wordInfos[i].DictionaryForm != "べし"
+                && wordInfos[i].DictionaryForm != "ようだ"
+                && wordInfos[i].Text != "だろう"
                )
             {
                 wordInfos[i - 1].Text += wordInfos[i].Text;
@@ -476,6 +515,7 @@ public class Parser
             if ((wordInfos[i].PartOfSpeech == PartOfSpeech.Suffix || wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Suffix))
                 && wordInfos[i].DictionaryForm != "っぽい" && wordInfos[i].DictionaryForm != "にくい" &&
                 wordInfos[i].DictionaryForm != "事" && wordInfos[i].DictionaryForm != "っぷり" &&
+                wordInfos[i].DictionaryForm != "ごと" &&
                 (wordInfos[i].DictionaryForm != "たち" || wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Pronoun))
             {
                 wordInfos[i - 1].Text += wordInfos[i].Text;

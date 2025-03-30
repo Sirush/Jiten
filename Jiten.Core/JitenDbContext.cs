@@ -116,6 +116,11 @@ public class JitenDbContext : DbContext
 
             entity.Property(e => e.PartsOfSpeech)
                   .HasColumnType("text[]");
+            
+            entity.Property(e => e.PitchAccents)
+                  .HasColumnType("int[]")
+                  .IsRequired(false);
+
         });
 
         modelBuilder.Entity<JmDictDefinition>(entity =>

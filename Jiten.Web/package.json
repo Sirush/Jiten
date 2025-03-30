@@ -25,8 +25,11 @@
     "@radix-icons/vue": "^1.0.0",
     "@tailwindcss/vite": "^4.0.15",
     "@unhead/vue": "^2.0.0-rc.8",
+    "chart.js": "^4.4.8",
+    "chartjs-plugin-datalabels": "^2.2.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.3",
+    "hatsuon": "^2.0.0",
     "nuxt": "^3.16.1",
     "perfect-debounce": "^1.0.0",
     "pinia": "^3.0.1",
@@ -35,6 +38,7 @@
     "tailwindcss": "^4.0.15",
     "tailwindcss-primeui": "^0.5.1",
     "vue": "latest",
+    "vue-chartjs": "^5.3.2",
     "vue-router": "latest"
   },
   "devDependencies": {

@@ -27,7 +27,9 @@ public class PsbExtractor
         // TODO: Handle subfolders separately
         if (Directory.Exists(filePath))
         {
-            files = Directory.GetFiles(filePath, "*.txt.json", SearchOption.AllDirectories);
+            files = Directory.GetFiles(filePath, "*.txt.json", SearchOption.AllDirectories)
+                             .Concat(Directory.GetFiles(filePath, "*.ks.json", SearchOption.AllDirectories))
+                             .ToArray();
         }
         else
         {
@@ -63,7 +65,7 @@ public class PsbExtractor
 
                     // Filter [tags]
                     string line = Regex.Replace(text[2].ToString(), @"\[.*?\]", "", RegexOptions.None);
-                     line = Regex.Replace(line, @"\\n", "", RegexOptions.None);
+                    line = Regex.Replace(line, @"\\n", "", RegexOptions.None);
 
                     extractedText.AppendLine(line);
                 }

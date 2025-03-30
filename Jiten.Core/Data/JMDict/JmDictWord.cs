@@ -10,4 +10,5 @@ public class JmDictWord
     public List<string> PartsOfSpeech { get; set; } = new();
     public List<JmDictDefinition> Definitions { get; set; } = new();
     public List<JmDictLookup> Lookups { get; set; } = new();
+    public List<int>? PitchAccents { get; set; } = new();
 }

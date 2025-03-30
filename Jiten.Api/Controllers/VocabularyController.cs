@@ -73,6 +73,7 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
                               AlternativeReadings = alternativeReadings,
                               Definitions = word.Definitions.ToDefinitionDtos(),
                               PartsOfSpeech = word.PartsOfSpeech,
+                              PitchAccents = word.PitchAccents
                           });
     }
 

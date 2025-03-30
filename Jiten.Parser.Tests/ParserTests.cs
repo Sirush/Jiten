@@ -33,7 +33,7 @@ public class ParserTests
     [InlineData("だけど気付けば馴染んじゃってる", new[] { "だけど", "気付けば", "馴染んじゃってる" })]
     [InlineData("飲んで笑っちゃえば", new[] { "飲んで", "笑っちゃえば" })]
     [InlineData("なんで", new[] { "なんで" })]
-    [InlineData("遠慮しないでね", new[] { "遠慮しないで", "ね" })]
+    [InlineData("遠慮しないでね", new[] { "遠慮", "しないで", "ね" })]
     [InlineData("出かけるまえに", new[] { "出かける", "まえ", "に" })]
     [InlineData("感じたいでしょ", new[] { "感じたい", "でしょ" })]
     [InlineData("まじで", new[] { "まじ", "で" })]
@@ -489,7 +489,13 @@ public class ParserTests
     [InlineData("信じて貰えなかった", new[] { "信じて", "貰えなかった" })]
     [InlineData("生きて行けばいい", new[] { "生きて行けば", "いい" })]
     [InlineData("持てそうだ", new[] { "持てそう", "だ" })]
-    [InlineData("引けなくなってしまって", new[] { "引けなく","なってしまって" })]
+    [InlineData("引けなくなってしまって", new[] { "引けなく", "なってしまって" })]
+    [InlineData("ぶつけるべき", new[] { "ぶつける", "べき" })]
+    [InlineData("助けてもらえる", new[] { "助けて", "もらえる" })]
+    [InlineData("近づいて来ている", new[] { "近づいて", "来ている" })]
+    [InlineData("教えてくれるだろうけれど", new[] { "教えて", "くれる", "だろう", "けれど" })]
+    [InlineData("通用しない果てしない遠慮しない", new[] { "通用", "しない", "果てしない", "遠慮", "しない" })]
+    [InlineData("痛み出したり", new[] { "痛み", "出したり" })]
     public async Task SegmentationTest(string text, string[] expectedResult)
     {
         (await Parse(text)).Select(r => r.Text).Should().Equal(expectedResult);

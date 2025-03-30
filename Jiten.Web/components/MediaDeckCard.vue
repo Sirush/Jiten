@@ -24,7 +24,7 @@
               <img
                 :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
                 :alt="deck.originalTitle"
-                class="h-48 w-34"
+                class="h-48 w-34 min-w-34"
               />
             </div>
             <div>

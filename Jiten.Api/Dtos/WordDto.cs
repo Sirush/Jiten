@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 
 namespace Jiten.Api.Dtos;
@@ -12,6 +10,7 @@ public class WordDto
     public List<string> PartsOfSpeech { get; set; } = new();
     public List<DefinitionDto> Definitions { get; set; } = new();
     public int Occurences { get; set; }
+    public List<int>? PitchAccents { get; set; }
 }
 
 public class ReadingDto

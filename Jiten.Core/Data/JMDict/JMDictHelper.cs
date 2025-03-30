@@ -1,7 +1,9 @@
 ﻿using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml;
+using CsvHelper;
 using Microsoft.EntityFrameworkCore;
 using WanaKanaShaapu;
 
@@ -13,155 +15,86 @@ public static class JmDictHelper
 
     private static readonly Dictionary<string, string> _posDictionary = new()
                                                                         {
-                                                                            { "bra", "Brazilian" },
-                                                                            { "hob", "Hokkaido-ben" },
-                                                                            { "ksb", "Kansai-ben" },
-                                                                            { "ktb", "Kantou-ben" },
-                                                                            { "kyb", "Kyoto-ben" },
-                                                                            { "kyu", "Kyuushuu-ben" },
-                                                                            { "nab", "Nagano-ben" },
-                                                                            { "osb", "Osaka-ben" },
-                                                                            { "rkb", "Ryuukyuu-ben" },
-                                                                            { "thb", "Touhoku-ben" },
-                                                                            { "tsb", "Tosa-ben" },
-                                                                            { "tsug", "Tsugaru-ben" },
-                                                                            { "agric", "agriculture" },
-                                                                            { "anat", "anatomy" },
-                                                                            { "archeol", "archeology" },
-                                                                            { "archit", "architecture" },
-                                                                            { "art", "art, aesthetics" },
-                                                                            { "astron", "astronomy" },
-                                                                            { "audvid", "audiovisual" },
-                                                                            { "aviat", "aviation" },
-                                                                            { "baseb", "baseball" },
-                                                                            { "biochem", "biochemistry" },
-                                                                            { "biol", "biology" },
-                                                                            { "bot", "botany" },
-                                                                            { "Buddh", "Buddhism" },
-                                                                            { "bus", "business" },
-                                                                            { "cards", "card games" },
-                                                                            { "chem", "chemistry" },
-                                                                            { "Christn", "Christianity" },
-                                                                            { "cloth", "clothing" },
-                                                                            { "comp", "computing" },
-                                                                            { "cryst", "crystallography" },
-                                                                            { "dent", "dentistry" },
-                                                                            { "ecol", "ecology" },
-                                                                            { "econ", "economics" },
-                                                                            { "elec", "electricity, elec. eng." },
-                                                                            { "electr", "electronics" },
-                                                                            { "embryo", "embryology" },
-                                                                            { "engr", "engineering" },
-                                                                            { "ent", "entomology" },
-                                                                            { "film", "film" },
-                                                                            { "finc", "finance" },
-                                                                            { "fish", "fishing" },
-                                                                            { "food", "food, cooking" },
-                                                                            { "gardn", "gardening, horticulture" },
-                                                                            { "genet", "genetics" },
-                                                                            { "geogr", "geography" },
-                                                                            { "geol", "geology" },
-                                                                            { "geom", "geometry" },
-                                                                            { "go", "go (game)" },
-                                                                            { "golf", "golf" },
-                                                                            { "gramm", "grammar" },
-                                                                            { "grmyth", "Greek mythology" },
-                                                                            { "hanaf", "hanafuda" },
-                                                                            { "horse", "horse racing" },
-                                                                            { "kabuki", "kabuki" },
-                                                                            { "law", "law" },
-                                                                            { "ling", "linguistics" },
-                                                                            { "logic", "logic" },
-                                                                            { "MA", "martial arts" },
-                                                                            { "mahj", "mahjong" },
-                                                                            { "manga", "manga" },
-                                                                            { "math", "mathematics" },
-                                                                            { "mech", "mechanical engineering" },
-                                                                            { "med", "medicine" },
-                                                                            { "met", "meteorology" },
-                                                                            { "mil", "military" },
-                                                                            { "mining", "mining" },
-                                                                            { "music", "music" },
-                                                                            { "noh", "noh" },
-                                                                            { "ornith", "ornithology" },
-                                                                            { "paleo", "paleontology" },
-                                                                            { "pathol", "pathology" },
-                                                                            { "pharm", "pharmacology" },
-                                                                            { "phil", "philosophy" },
-                                                                            { "photo", "photography" },
-                                                                            { "physics", "physics" },
-                                                                            { "physiol", "physiology" },
-                                                                            { "politics", "politics" },
-                                                                            { "print", "printing" },
-                                                                            { "psy", "psychiatry" },
-                                                                            { "psyanal", "psychoanalysis" },
-                                                                            { "psych", "psychology" },
-                                                                            { "rail", "railway" },
-                                                                            { "rommyth", "Roman mythology" },
-                                                                            { "Shinto", "Shinto" },
-                                                                            { "shogi", "shogi" },
-                                                                            { "ski", "skiing" },
-                                                                            { "sports", "sports" },
-                                                                            { "stat", "statistics" },
-                                                                            { "stockm", "stock market" },
-                                                                            { "sumo", "sumo" },
-                                                                            { "telec", "telecommunications" },
-                                                                            { "tradem", "trademark" },
-                                                                            { "tv", "television" },
-                                                                            { "vidg", "video games" },
-                                                                            { "zool", "zoology" },
-                                                                            { "abbr", "abbreviation" },
-                                                                            { "arch", "archaic" },
-                                                                            { "char", "character" },
-                                                                            { "chn", "children's language" },
-                                                                            { "col", "colloquial" },
-                                                                            { "company", "company name" },
-                                                                            { "creat", "creature" },
-                                                                            { "dated", "dated term" },
-                                                                            { "dei", "deity" },
-                                                                            { "derog", "derogatory" },
-                                                                            { "doc", "document" },
-                                                                            { "euph", "euphemistic" },
-                                                                            { "ev", "event" },
+                                                                            { "bra", "Brazilian" }, { "hob", "Hokkaido-ben" },
+                                                                            { "ksb", "Kansai-ben" }, { "ktb", "Kantou-ben" },
+                                                                            { "kyb", "Kyoto-ben" }, { "kyu", "Kyuushuu-ben" },
+                                                                            { "nab", "Nagano-ben" }, { "osb", "Osaka-ben" },
+                                                                            { "rkb", "Ryuukyuu-ben" }, { "thb", "Touhoku-ben" },
+                                                                            { "tsb", "Tosa-ben" }, { "tsug", "Tsugaru-ben" },
+                                                                            { "agric", "agriculture" }, { "anat", "anatomy" },
+                                                                            { "archeol", "archeology" }, { "archit", "architecture" },
+                                                                            { "art", "art, aesthetics" }, { "astron", "astronomy" },
+                                                                            { "audvid", "audiovisual" }, { "aviat", "aviation" },
+                                                                            { "baseb", "baseball" }, { "biochem", "biochemistry" },
+                                                                            { "biol", "biology" }, { "bot", "botany" },
+                                                                            { "Buddh", "Buddhism" }, { "bus", "business" },
+                                                                            { "cards", "card games" }, { "chem", "chemistry" },
+                                                                            { "Christn", "Christianity" }, { "cloth", "clothing" },
+                                                                            { "comp", "computing" }, { "cryst", "crystallography" },
+                                                                            { "dent", "dentistry" }, { "ecol", "ecology" },
+                                                                            { "econ", "economics" }, { "elec", "electricity, elec. eng." },
+                                                                            { "electr", "electronics" }, { "embryo", "embryology" },
+                                                                            { "engr", "engineering" }, { "ent", "entomology" },
+                                                                            { "film", "film" }, { "finc", "finance" },
+                                                                            { "fish", "fishing" }, { "food", "food, cooking" },
+                                                                            { "gardn", "gardening, horticulture" }, { "genet", "genetics" },
+                                                                            { "geogr", "geography" }, { "geol", "geology" },
+                                                                            { "geom", "geometry" }, { "go", "go (game)" },
+                                                                            { "golf", "golf" }, { "gramm", "grammar" },
+                                                                            { "grmyth", "Greek mythology" }, { "hanaf", "hanafuda" },
+                                                                            { "horse", "horse racing" }, { "kabuki", "kabuki" },
+                                                                            { "law", "law" }, { "ling", "linguistics" },
+                                                                            { "logic", "logic" }, { "MA", "martial arts" },
+                                                                            { "mahj", "mahjong" }, { "manga", "manga" },
+                                                                            { "math", "mathematics" }, { "mech", "mechanical engineering" },
+                                                                            { "med", "medicine" }, { "met", "meteorology" },
+                                                                            { "mil", "military" }, { "mining", "mining" },
+                                                                            { "music", "music" }, { "noh", "noh" },
+                                                                            { "ornith", "ornithology" }, { "paleo", "paleontology" },
+                                                                            { "pathol", "pathology" }, { "pharm", "pharmacology" },
+                                                                            { "phil", "philosophy" }, { "photo", "photography" },
+                                                                            { "physics", "physics" }, { "physiol", "physiology" },
+                                                                            { "politics", "politics" }, { "print", "printing" },
+                                                                            { "psy", "psychiatry" }, { "psyanal", "psychoanalysis" },
+                                                                            { "psych", "psychology" }, { "rail", "railway" },
+                                                                            { "rommyth", "Roman mythology" }, { "Shinto", "Shinto" },
+                                                                            { "shogi", "shogi" }, { "ski", "skiing" },
+                                                                            { "sports", "sports" }, { "stat", "statistics" },
+                                                                            { "stockm", "stock market" }, { "sumo", "sumo" },
+                                                                            { "telec", "telecommunications" }, { "tradem", "trademark" },
+                                                                            { "tv", "television" }, { "vidg", "video games" },
+                                                                            { "zool", "zoology" }, { "abbr", "abbreviation" },
+                                                                            { "arch", "archaic" }, { "char", "character" },
+                                                                            { "chn", "children's language" }, { "col", "colloquial" },
+                                                                            { "company", "company name" }, { "creat", "creature" },
+                                                                            { "dated", "dated term" }, { "dei", "deity" },
+                                                                            { "derog", "derogatory" }, { "doc", "document" },
+                                                                            { "euph", "euphemistic" }, { "ev", "event" },
                                                                             { "fam", "familiar language" },
-                                                                            { "fem", "female term or language" },
-                                                                            { "fict", "fiction" },
+                                                                            { "fem", "female term or language" }, { "fict", "fiction" },
                                                                             { "form", "formal or literary term" },
                                                                             { "given", "given name or forename, gender not specified" },
-                                                                            { "group", "group" },
-                                                                            { "hist", "historical term" },
+                                                                            { "group", "group" }, { "hist", "historical term" },
                                                                             { "hon", "honorific or respectful (sonkeigo)" },
                                                                             { "hum", "humble (kenjougo)" },
                                                                             { "id", "idiomatic expression" },
-                                                                            { "joc", "jocular, humorous term" },
-                                                                            { "leg", "legend" },
-                                                                            { "m-sl", "manga slang" },
-                                                                            { "male", "male term or language" },
-                                                                            { "myth", "mythology" },
-                                                                            { "net-sl", "Internet slang" },
-                                                                            { "obj", "object" },
-                                                                            { "obs", "obsolete term" },
+                                                                            { "joc", "jocular, humorous term" }, { "leg", "legend" },
+                                                                            { "m-sl", "manga slang" }, { "male", "male term or language" },
+                                                                            { "myth", "mythology" }, { "net-sl", "Internet slang" },
+                                                                            { "obj", "object" }, { "obs", "obsolete term" },
                                                                             { "on-mim", "onomatopoeic or mimetic" },
-                                                                            { "organization", "organization name" },
-                                                                            { "oth", "other" },
+                                                                            { "organization", "organization name" }, { "oth", "other" },
                                                                             { "person", "full name of a particular person" },
-                                                                            { "place", "place name" },
-                                                                            { "poet", "poetical term" },
-                                                                            { "pol", "polite (teineigo)" },
-                                                                            { "product", "product name" },
-                                                                            { "proverb", "proverb" },
-                                                                            { "quote", "quotation" },
-                                                                            { "rare", "rare term" },
-                                                                            { "relig", "religion" },
-                                                                            { "sens", "sensitive" },
-                                                                            { "serv", "service" },
-                                                                            { "ship", "ship name" },
-                                                                            { "sl", "slang" },
+                                                                            { "place", "place name" }, { "poet", "poetical term" },
+                                                                            { "pol", "polite (teineigo)" }, { "product", "product name" },
+                                                                            { "proverb", "proverb" }, { "quote", "quotation" },
+                                                                            { "rare", "rare term" }, { "relig", "religion" },
+                                                                            { "sens", "sensitive" }, { "serv", "service" },
+                                                                            { "ship", "ship name" }, { "sl", "slang" },
                                                                             { "station", "railway station" },
                                                                             { "surname", "family or surname" },
                                                                             { "uk", "usually written using kana" },
-                                                                            { "unclass", "unclassified name" },
-                                                                            { "vulg", "vulgar" },
+                                                                            { "unclass", "unclassified name" }, { "vulg", "vulgar" },
                                                                             { "work", "work of art, literature, music, etc. name" },
                                                                             {
                                                                                 "X",
@@ -184,15 +117,11 @@ public static class JmDictHelper
                                                                             },
                                                                             { "adj-pn", "pre-noun adjectival (rentaishi)" },
                                                                             { "adj-shiku", "'shiku' adjective (archaic)" },
-                                                                            { "adj-t", "'taru' adjective" },
-                                                                            { "adv", "adverb (fukushi)" },
+                                                                            { "adj-t", "'taru' adjective" }, { "adv", "adverb (fukushi)" },
                                                                             { "adv-to", "adverb taking the 'to' particle" },
-                                                                            { "aux", "auxiliary" },
-                                                                            { "aux-adj", "auxiliary adjective" },
-                                                                            { "aux-v", "auxiliary verb" },
-                                                                            { "conj", "conjunction" },
-                                                                            { "cop", "copula" },
-                                                                            { "ctr", "counter" },
+                                                                            { "aux", "auxiliary" }, { "aux-adj", "auxiliary adjective" },
+                                                                            { "aux-v", "auxiliary verb" }, { "conj", "conjunction" },
+                                                                            { "cop", "copula" }, { "ctr", "counter" },
                                                                             { "exp", "expressions (phrases, clauses, etc.)" },
                                                                             { "int", "interjection (kandoushi)" },
                                                                             { "n", "noun (common) (futsuumeishi)" },
@@ -201,13 +130,9 @@ public static class JmDictHelper
                                                                             { "n-pref", "noun, used as a prefix" },
                                                                             { "n-suf", "noun, used as a suffix" },
                                                                             { "n-t", "noun (temporal) (jisoumeishi)" },
-                                                                            { "num", "numeric" },
-                                                                            { "pn", "pronoun" },
-                                                                            { "pref", "prefix" },
-                                                                            { "prt", "particle" },
-                                                                            { "suf", "suffix" },
-                                                                            { "unc", "unclassified" },
-                                                                            { "v-unspec", "verb unspecified" },
+                                                                            { "num", "numeric" }, { "pn", "pronoun" }, { "pref", "prefix" },
+                                                                            { "prt", "particle" }, { "suf", "suffix" },
+                                                                            { "unc", "unclassified" }, { "v-unspec", "verb unspecified" },
                                                                             { "v1", "Ichidan verb" },
                                                                             { "v1-s", "Ichidan verb - kureru special class" },
                                                                             { "v2a-s", "Nidan verb with 'u' ending (archaic)" },
@@ -387,7 +312,8 @@ public static class JmDictHelper
     }
 
 
-    public static async Task<bool> Import(DbContextOptions<JitenDbContext> options, string dtdPath, string dictionaryPath, string furiganaPath)
+    public static async Task<bool> Import(DbContextOptions<JitenDbContext> options, string dtdPath, string dictionaryPath,
+                                          string furiganaPath)
     {
         Regex reg = new Regex(@"<!ENTITY (.*) ""(.*)"">");
 
@@ -661,9 +587,7 @@ public static class JmDictHelper
 
         customWordInfos.Add(new JmDictWord
                             {
-                                WordId = 8000000,
-                                Readings = new List<string> { "でした" },
-                                ReadingTypes = [JmDictReadingType.KanaReading],
+                                WordId = 8000000, Readings = new List<string> { "でした" }, ReadingTypes = [JmDictReadingType.KanaReading],
                                 Definitions =
                                 [
                                     new JmDictDefinition { EnglishMeanings = ["was, were"], PartsOfSpeech = ["exp"] }
@@ -671,5 +595,84 @@ public static class JmDictHelper
                             });
 
         return customWordInfos;
+    }
+
+    public static async Task<bool> ImportPitchAccents(bool verbose, DbContextOptions<JitenDbContext> options,
+                                                      string pitchAcentsDirectoryPath)
+    {
+        if (!Directory.Exists(pitchAcentsDirectoryPath))
+        {
+            Console.WriteLine($"Directory {pitchAcentsDirectoryPath} does not exist.");
+            return false;
+        }
+
+        var pitchAccentFiles = Directory.GetFiles(pitchAcentsDirectoryPath, "term_meta_bank_*.json");
+
+        if (pitchAccentFiles.Length == 0)
+        {
+            Console.WriteLine($"No pitch accent files found in {pitchAcentsDirectoryPath}. The files should be named term_meta_bank_*.json");
+            return false;
+        }
+
+        var pitchAccentDict = new Dictionary<string, List<int>>();
+
+        foreach (var file in pitchAccentFiles)
+        {
+            string jsonContent = await File.ReadAllTextAsync(file);
+            using JsonDocument doc = JsonDocument.Parse(jsonContent);
+
+            foreach (JsonElement item in doc.RootElement.EnumerateArray())
+            {
+                string? word = item[0].GetString();
+
+                if (word == null)
+                    continue;
+
+                string? type = item[1].GetString();
+
+                JsonElement pitchInfo = item[2];
+                string? reading = pitchInfo.GetProperty("reading").GetString();
+
+                List<int> positions = new();
+                foreach (JsonElement pitch in pitchInfo.GetProperty("pitches").EnumerateArray())
+                {
+                    positions.Add(pitch.GetProperty("position").GetInt32());
+                }
+
+                pitchAccentDict.TryAdd(word, positions);
+            }
+        }
+
+        if (verbose)
+            Console.WriteLine($"Found {pitchAccentDict.Count()} pitch accent records.");
+
+        var context = new JitenDbContext(options);
+        var allWords = await context.JMDictWords.ToListAsync();
+        int wordsUpdated = 0;
+
+        for (var i = 0; i < allWords.Count; i++)
+        {
+            if (verbose && i % 10000 == 0)
+                Console.WriteLine($"Processing word {i + 1}/{allWords.Count} ({(i + 1) * 100 / allWords.Count}%)");
+
+            var word = allWords[i];
+
+            foreach (var reading in word.Readings)
+            {
+                if (pitchAccentDict.TryGetValue(reading, out var pitchAccents))
+                {
+                    word.PitchAccents = pitchAccents;
+
+                    wordsUpdated++;
+                    break; // Stop at the first match
+                }
+            }
+        }
+
+        if (verbose)
+            Console.WriteLine($"Updated pitch accents for {wordsUpdated} words. Saving to database...");
+
+        await context.SaveChangesAsync();
+        return true;
     }
 }

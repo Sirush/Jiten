@@ -4,6 +4,8 @@ using System.Text.RegularExpressions;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using WanaKanaShaapu;
 
 namespace Jiten.Parser
@@ -37,9 +39,21 @@ namespace Jiten.Parser
         public static async Task Main(string[] args)
         {
             var text = "「あそこ美味しいよねー。早くお祭り終わって欲しいなー。ノンビリ遊びに行きたーい」";
-            // text = await File.ReadAllTextAsync(@"Y:\00_JapaneseStudy\JL\Backlogs\Default_2024.12.28_10.52.47-2024.12.28_19.58.40.txt");
+            
+            var configuration = new ConfigurationBuilder()
+                                .SetBasePath(Directory.GetCurrentDirectory())
+                                .AddJsonFile("sharedsettings.json", optional: true, reloadOnChange: true)
+                                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                                .AddEnvironmentVariables()
+                                .Build();
 
-            await ParseTextToDeck(text);
+            var connectionString = configuration.GetConnectionString("JitenDatabase");
+            var optionsBuilder = new DbContextOptionsBuilder<JitenDbContext>();
+            optionsBuilder.UseNpgsql(connectionString, o => { o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery); });
+            
+            await using var context = new JitenDbContext(optionsBuilder.Options);
+
+            await ParseTextToDeck(context, text);
         }
 
         public static async Task InitDictionaries()
@@ -97,8 +111,9 @@ namespace Jiten.Parser
                    .ToList();
         }
 
-        public static async Task<Deck> ParseTextToDeck(string text)
+        public static async Task<Deck> ParseTextToDeck(JitenDbContext context, string text)
         {
+            _dbContext = context;
             if (!_initialized)
             {
                 await _initSemaphore.WaitAsync();
@@ -431,11 +446,18 @@ namespace Jiten.Parser
             {
                 foreach (var id in candidate.ids)
                 {
-                    if (!_allWords.TryGetValue(id, out var word)) continue;
+                    var currentId = id;
+                    if (!_allWords.TryGetValue(currentId, out var word)) continue;
 
                     List<PartOfSpeech> pos = word.PartsOfSpeech.Select(x => x.ToPartOfSpeech())
                                                  .ToList();
                     if (!pos.Contains(wordData.wordInfo.PartOfSpeech)) continue;
+                    
+                    if (_specialCases.TryGetValue(candidate.text, out int specialCaseId))
+                    {
+                        word = _allWords[specialCaseId];
+                        currentId = specialCaseId;
+                    }
 
                     var normalizedReadings =
                         word.Readings.Select(r => WanaKana.ToHiragana(r, new DefaultOptions() { ConvertLongVowelMark = false })).ToList();
@@ -451,7 +473,7 @@ namespace Jiten.Parser
 
                     DeckWord deckWord = new()
                                         {
-                                            WordId = id, OriginalText = wordData.wordInfo.Text, ReadingIndex = readingIndex,
+                                            WordId = currentId, OriginalText = wordData.wordInfo.Text, ReadingIndex = readingIndex,
                                             Occurrences = wordData.occurrences
                                         };
                     processedWord = deckWord;

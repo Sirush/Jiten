@@ -29,9 +29,9 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
     [ResponseCache(Duration = 300,
                    VaryByQueryKeys = ["offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder"])]
     public async Task<PaginatedResponse<List<DeckDto>>> GetMediaDecks(int? offset = 0, MediaType? mediaType = null,
-                                                                   int wordId = 0, int readingIndex = 0, string? titleFilter = "",
-                                                                   string? sortBy = "",
-                                                                   SortOrder sortOrder = SortOrder.Ascending)
+                                                                      int wordId = 0, int readingIndex = 0, string? titleFilter = "",
+                                                                      string? sortBy = "",
+                                                                      SortOrder sortOrder = SortOrder.Ascending)
     {
         int pageSize = 50;
 
@@ -97,7 +97,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
             "uKanjiOnce" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.UniqueKanjiUsedOnceCount)
                 : query.OrderByDescending(d => d.UniqueKanjiUsedOnceCount),
-            "filter" => query ,
+            "filter" => query,
             _ => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.RomajiTitle)
                 : query.OrderByDescending(d => d.RomajiTitle),
@@ -212,7 +212,8 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                           {
                               WordId = word.jmDictWord.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                               PartsOfSpeech = word.jmDictWord.PartsOfSpeech.ToHumanReadablePartsOfSpeech(),
-                              Definitions = word.jmDictWord.Definitions.ToDefinitionDtos(), Occurences = word.dw.Occurrences
+                              Definitions = word.jmDictWord.Definitions.ToDefinitionDtos(), Occurences = word.dw.Occurrences,
+                              PitchAccents = word.jmDictWord.PitchAccents
                           };
 
             dto.Words.Add(wordDto);
@@ -240,10 +241,10 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                    .OrderBy(dw => dw.DeckOrder)
                    .Skip(offset ?? 0)
                    .Take(pageSize);
-        
+
         var mainDeckDto = new DeckDto(deck);
         List<DeckDto> subDeckDtos = new();
-        
+
         foreach (var subDeck in subDecks)
             subDeckDtos.Add(new DeckDto(subDeck));
 
@@ -281,7 +282,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
             case DeckDownloadType.TopDeckFrequency:
                 deckWordsQuery = deckWordsQuery
-                                 .OrderBy(dw => dw.Occurrences)
+                                 .OrderByDescending(dw => dw.Occurrences)
                                  .Skip(minFrequency)
                                  .Take(maxFrequency - minFrequency);
                 break;
@@ -311,26 +312,26 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 break;
 
             case DeckOrder.DeckFrequency:
-                deckWordsQuery = deckWordsQuery.OrderBy(dw => dw.Occurrences);
+                deckWordsQuery = deckWordsQuery.OrderByDescending(dw => dw.Occurrences);
                 break;
             default:
                 return Results.BadRequest();
         }
 
         var wordIds = await deckWordsQuery.Select(dw => dw.WordId).ToListAsync();
-        var deckWords = await deckWordsQuery.Select(dw => new { dw.WordId, dw.ReadingIndex }).ToListAsync();
+        var deckWords = await deckWordsQuery.Select(dw => new { dw.WordId, dw.ReadingIndex, dw.Occurrences }).ToListAsync();
 
         var jmdictWords = await context.JMDictWords.AsNoTracking()
                                        .Include(w => w.Definitions)
                                        .Where(w => wordIds.Contains(w.WordId))
                                        .ToDictionaryAsync(w => w.WordId);
-        
+        var frequencies = context.JmDictWordFrequencies.Where(f => wordIds.Contains(f.WordId))
+                                 .ToDictionary(f => f.WordId, f => f);
+
         switch (format)
         {
             case DeckFormat.Anki:
-                var frequencies = context.JmDictWordFrequencies.Where(f => wordIds.Contains(f.WordId))
-                                         .ToDictionary(f => f.WordId, f => f);
-                
+
                 // Lapis template from https://github.com/donkuri/lapis/tree/main
                 var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "lapis.apkg");
                 var template = await AnkiFileReader.ReadFromFileAsync(templatePath);
@@ -368,10 +369,13 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                     string isSentenceCard = "";
                     string pitchPosition = "";
                     string pitchCategories = "";
-                    string frequency = $"<ul><li>Jiten: {frequencies[word.WordId].ReadingsFrequencyRank[word.ReadingIndex]}</li></ul>";
+                    string frequency =
+                        $"<ul><li>Jiten: {word.Occurrences} occurrences ; #{frequencies[word.WordId].ReadingsFrequencyRank[word.ReadingIndex]} global rank</li></ul>";
                     string freqSort = $"{frequencies[word.WordId].ReadingsFrequencyRank[word.ReadingIndex]}";
                     string miscInfo = $"From {deck.OriginalTitle} - generated by Jiten.moe";
 
+                    if (jmdictWords[word.WordId].PitchAccents != null)
+                        pitchPosition = string.Join(",", jmdictWords[word.WordId].PitchAccents!.Select(p => p.ToString()));
 
                     collection.CreateNote(deckId, noteTypeId,
                                           expression, expressionFurigana,
@@ -395,10 +399,18 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
             case DeckFormat.Csv:
                 StringBuilder sb = new StringBuilder();
+
+                sb.AppendLine($"\"Reading\",\"ReadingFurigana\",\"ReadingKana\",\"Occurences\",\"ReadingFrequency\",\"PitchPositions\",\"Definitions\"");
+
                 foreach (var word in deckWords)
                 {
                     string reading = jmdictWords[word.WordId].Readings[word.ReadingIndex];
                     string readingFurigana = jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex];
+                    string pitchPositions = "";
+
+                    if (jmdictWords[word.WordId].PitchAccents != null)
+                        pitchPositions = string.Join(",", jmdictWords[word.WordId].PitchAccents!.Select(p => p.ToString()));
+
                     // Very unoptimized, might have to rework
                     string readingKana = string.Join("", jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex]
                                                                                  .Where(c => WanaKana.IsKana(c.ToString()))
@@ -406,8 +418,10 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                     string definitions = string.Join(",", jmdictWords[word.WordId].Definitions
                                                                                   .SelectMany(d => d.EnglishMeanings)
                                                                                   .Select(m => m.Replace("\"", "\"\"")));
+                    var occurrences = word.Occurrences;
+                    var readingFrequency = frequencies[word.WordId].ReadingsFrequencyRank[word.ReadingIndex];
 
-                    sb.AppendLine($"\"{reading}\",\"{readingFurigana}\",\"{readingKana}\",\"{definitions}\"");
+                    sb.AppendLine($"\"{reading}\",\"{readingFurigana}\",\"{readingKana}\",\"{occurrences}\",\"{readingFrequency}\",\"{pitchPositions}\",\"{definitions}\"");
                 }
 
                 return Results.File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", $"{deck.OriginalTitle}.csv");

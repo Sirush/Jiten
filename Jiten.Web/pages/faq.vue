@@ -50,7 +50,7 @@
       Some VN scripts from <a href="http://wiki.wareya.moe/Stats" target="_blank">Wareya</a>.<br />
       Everything else comes from me or our generous contributors on
       <a :href="getDiscordLink()" target="_blank">Discord</a>:
-      Zakamutt, 人木, Zwansanwan, Rock, Usagi
+      Zakamutt, 人木, Zwansanwan, Rock, Usagi, 櫻子, Armory
     </Panel>
 
     <Panel header="What's next for the website?">

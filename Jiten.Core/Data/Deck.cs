@@ -127,7 +127,7 @@ public class Deck
     private string? _romajiTitle;
     private string? _englishTitle;
 
-    public async Task AddChildDeckWords()
+    public async Task AddChildDeckWords(JitenDbContext context)
     {
         if (Children.Count == 0)
             return;
@@ -168,8 +168,6 @@ public class Deck
         // Not the most efficient or elegant way to do it, rebuilding the text, but it works and I don't have a better idea for now
 
         StringBuilder sb = new();
-
-        await using var context = new JitenDbContext();
 
         var wordIds = DeckWords.Select(dw => dw.WordId).ToList();
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { MediaType,  Word } from '~/types';
+  import type { MediaType, Word } from '~/types';
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
   import { convertToRuby } from '~/utils/convertToRuby';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
@@ -73,7 +73,7 @@
         <div class="flex flex-col gap-4 max-w-2xl">
           <div class="flex justify-between">
             <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`">
-              <div class="text-3xl font-noto-sans" v-html="convertToRuby(response.data.mainReading.text)"/>
+              <div class="text-3xl font-noto-sans" v-html="convertToRuby(response.data.mainReading.text)" />
             </NuxtLink>
             <div
               v-if="!showRedirect"
@@ -81,7 +81,7 @@
               v-html="convertToRuby(response.data.mainReading.text)"
             />
             <div class="text-gray-500 dark:text-gray-300 text-right md:hidden">
-              Rank #{{ response.data.mainReading.frequencyRank }}
+              Rank #{{ response.data.mainReading.frequencyRank.toLocaleString() }}
             </div>
           </div>
 
@@ -108,6 +108,19 @@
               </span>
             </div>
           </div>
+
+          <ClientOnly>
+            <div v-if="response.data.pitchAccents && response.data.pitchAccents.length > 0">
+              <h1 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm">Pitch accents</h1>
+              <div class="pl-2 flex flex-row flex-wrap gap-8">
+                <span v-for="pitchAccent in response.data.pitchAccents" :key="pitchAccent">
+                  <div>
+                    <PitchDiagram :reading="response.data.mainReading.text" :pitch-accent="pitchAccent" />
+                  </div>
+                </span>
+              </div>
+            </div>
+          </ClientOnly>
         </div>
         <div class="min-w-64">
           <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">
@@ -120,7 +133,7 @@
             <table v-if="response.data.mainReading.usedInMediaAmount > 0">
               <thead>
                 <tr>
-                  <th/>
+                  <th />
                   <th class="text-gray-500 dark:text-gray-300 text-sm pl-4">Amount</th>
                   <th class="text-gray-500 dark:text-gray-300 text-sm pl-4">% of total</th>
                 </tr>
@@ -129,7 +142,11 @@
                 <th class="text-right p-0.5 !font-bold">{{ getMediaTypeText(Number(mediaType)) }}</th>
                 <th class="text-right p-0.5">{{ amount }}</th>
                 <th class="text-right p-0.5">
-                  {{ ((amount / mediaAmountResponse[Number(mediaType)]) * 100).toFixed(0) }}%
+                  {{
+                    mediaAmountResponse
+                      ? ((amount / mediaAmountResponse[mediaType as MediaType]) * 100).toFixed(0)
+                      : '0'
+                  }}%
                 </th>
               </tr>
             </table>
