@@ -6,7 +6,7 @@
 
   const props = defineProps<{
     deck: Deck;
-    isCompact?: bool;
+    isCompact?: boolean;
   }>();
 
   const showDownloadDialog = ref(false);

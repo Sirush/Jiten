@@ -26,7 +26,7 @@ namespace Jiten.Cli.Data.Vndb
                 return default;
             }
 
-            throw new JsonException("Invalid date format");
+            return new DateTime();
         }
 
         public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)

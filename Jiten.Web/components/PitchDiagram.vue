@@ -138,6 +138,12 @@
     return {
       responsive: true,
       maintainAspectRatio: false,
+      layout: {
+        padding: {
+          left: 12,
+
+        }
+      },
       scales: {
         x: {
           display: false,
@@ -172,7 +178,7 @@
           },
           offset: (context: Context) => {
             const dataValue = context.dataset.data[context.dataIndex] as number;
-            return dataValue === 1 ? '10' : '4';
+            return dataValue === 1 ? '10' : '5';
           },
           formatter: (value: number, context: Context) => {
             return effectiveMorae.value[context.dataIndex] ?? '';
@@ -232,7 +238,7 @@
     padding: 1rem 0.6rem 0;
     text-align: center;
     margin-top: -10px;
-    font-size: 0.9em;
+        font-size: 0.9em;
   }
 
   .pitch-label small {

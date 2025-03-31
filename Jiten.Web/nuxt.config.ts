@@ -98,4 +98,13 @@ export default defineNuxtConfig({
       umamiAnalytics: true,
     },
   },
+  ogImage: {
+    fonts: [
+      {
+        name: 'Noto Sans JP',
+        weight: 400,
+        path: '/fonts/NotoSansJP-Regular.ttf',
+      },
+    ],
+  },
 });

@@ -42,6 +42,7 @@
     "vue-router": "latest"
   },
   "devDependencies": {
+    "@css-inline/css-inline-wasm": "^0.14.3",
     "@primevue/nuxt-module": "^4.3.2",
     "typescript": "^5.8.2"
   }

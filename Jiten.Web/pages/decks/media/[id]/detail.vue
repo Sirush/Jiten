@@ -5,6 +5,7 @@
   import Skeleton from 'primevue/skeleton';
 
   const route = useRoute();
+  const deckId = computed(() => route.params.id as string);
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const url = computed(() => `media-deck/${route.params.id}/detail`);
@@ -51,10 +52,13 @@
       meta: [
         {
           name: 'description',
-          content: `Detail for the deck ${title.value}`
-        }]
+          content: `Detail for the deck ${title.value}`,
+        },
+      ],
     };
   });
+
+  defineOgImageComponent('MediaDeckCardOgImage', { deckId: deckId });
 </script>
 
 <template>
@@ -80,7 +84,10 @@
               Next
             </NuxtLink>
           </div>
-          <div class="pr-2 text-gray-500 dark:text-gray-300">viewing decks {{ start }}-{{ end }} from {{ totalItems }} total</div>
+          <div class="pr-2 text-gray-500 dark:text-gray-300">
+            viewing decks {{ start }}-{{ end }} from {{ totalItems }}
+            total
+          </div>
         </div>
         <div class="flex flex-row flex-wrap gap-2 justify-center pt-4">
           <MediaDeckCard v-for="deck in response.data.subDecks" :key="deck.deckId" :deck="deck" :is-compact="true" />

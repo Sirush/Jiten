@@ -85,6 +85,9 @@ dependencies:
     version: 4.5.0(vue@3.5.13)
 
 devDependencies:
+  '@css-inline/css-inline-wasm':
+    specifier: ^0.14.3
+    version: 0.14.3
   '@primevue/nuxt-module':
     specifier: ^4.3.2
     version: 4.3.3(vue@3.5.13)
@@ -392,6 +395,11 @@ packages:
     dependencies:
       mime: 3.0.0
     dev: false
+
+  /@css-inline/css-inline-wasm@0.14.3:
+    resolution: {integrity: sha512-n+Alny5fjS0WgJwPP+VxC5HIWFdrP3HknLpqnN6shlJ1ZmsjQ57pIfsoEUVS44sWzMymkRjW5vfEE824rNrBsg==}
+    engines: {node: '>= 10'}
+    dev: true
 
   /@emnapi/core@1.4.0:
     resolution: {integrity: sha512-H+N/FqT07NmLmt6OFFtDfwe8PNygprzBikrEMyQfgqSmT0vzE515Pz7R8izwB9q/zsH/MA64AKoul3sA6/CzVg==}

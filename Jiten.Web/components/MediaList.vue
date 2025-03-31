@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { useApiFetchPaginated } from '~/composables/useApiFetch';
-  import { type Deck, type Definition, MediaType, type Reading, SortOrder } from '~/types';
+  import { type Deck, MediaType, SortOrder, type Word } from '~/types';
   import Skeleton from 'primevue/skeleton';
   import Card from 'primevue/card';
   import InputText from 'primevue/inputtext';
@@ -109,6 +109,25 @@
       window.scrollTo({ top: 0, behavior: 'instant' });
     });
   };
+
+  const mediaTypeOptions = [
+    { type: null, label: 'All' },
+    { type: MediaType.Anime, label: 'Anime' },
+    { type: MediaType.Drama, label: 'Dramas' },
+    { type: MediaType.Movie, label: 'Movies' },
+    { type: MediaType.Novel, label: 'Novels' },
+    { type: MediaType.NonFiction, label: 'Non-Fiction' },
+    { type: MediaType.VideoGame, label: 'Video Games' },
+    { type: MediaType.VisualNovel, label: 'Visual Novels' },
+    { type: MediaType.WebNovel, label: 'Web Novels' },
+  ];
+
+  const isActive = (type: MediaType | null) => {
+    if (type === null) {
+      return !mediaType.value || mediaType.value === '0';
+    }
+    return Number(mediaType.value) === type;
+  };
 </script>
 
 <template>
@@ -116,15 +135,14 @@
     <Card>
       <template #content>
         <div class="flex flex-row flex-wrap justify-around gap-2">
-          <NuxtLink :to="{ query: {} }">All</NuxtLink>
-          <NuxtLink :to="{ query: { mediaType: MediaType.Anime } }">Anime</NuxtLink>
-          <NuxtLink :to="{ query: { mediaType: MediaType.Drama } }">Dramas</NuxtLink>
-          <NuxtLink :to="{ query: { mediaType: MediaType.Movie } }">Movies</NuxtLink>
-          <NuxtLink :to="{ query: { mediaType: MediaType.Novel } }">Novels</NuxtLink>
-          <NuxtLink :to="{ query: { mediaType: MediaType.NonFiction } }">Non-Fiction</NuxtLink>
-          <NuxtLink :to="{ query: { mediaType: MediaType.VideoGame } }">Video Games</NuxtLink>
-          <NuxtLink :to="{ query: { mediaType: MediaType.VisualNovel } }">Visual Novels</NuxtLink>
-          <NuxtLink :to="{ query: { mediaType: MediaType.WebNovel } }">Web Novels</NuxtLink>
+          <NuxtLink
+            v-for="option in mediaTypeOptions"
+            :key="option.label"
+            :to="{ query: option.type ? { mediaType: option.type } : {} }"
+            :class="{ 'font-bold !text-purple-500': isActive(option.type) }"
+          >
+            {{ option.label }}
+          </NuxtLink>
         </div>
       </template>
     </Card>
@@ -160,6 +178,9 @@
           <Icon name="material-symbols:search-rounded" />
         </InputIcon>
         <InputText v-model="titleFilter" type="text" placeholder="Search by name" class="w-full" />
+        <InputIcon v-if="titleFilter" class="cursor-pointer" @click="titleFilter = null">
+          <Icon name="material-symbols:close" />
+        </InputIcon>
       </IconField>
     </div>
     <div>
@@ -173,7 +194,10 @@
               Next
             </NuxtLink>
           </div>
-          <div class="pr-2 text-gray-500 dark:text-gray-300">viewing decks {{ start }}-{{ end }} from {{ totalItems }} total</div>
+          <div class="pr-2 text-gray-500 dark:text-gray-300">
+            viewing decks {{ start }}-{{ end }} from {{ totalItems }}
+            total
+          </div>
         </div>
 
         <div v-if="status === 'pending'" class="flex flex-col gap-4">
@@ -203,11 +227,13 @@
           :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''"
           @click="scrollToTop"
         >
-          Next</NuxtLink
-        >
+          Next
+        </NuxtLink>
       </div>
     </div>
   </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+
+</style>

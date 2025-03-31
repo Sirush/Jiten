@@ -96,9 +96,9 @@
             <h1 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm">Readings</h1>
             <div class="pl-2 flex flex-row flex-wrap gap-8">
               <span v-for="reading in sortedReadings" :key="reading.readingIndex">
-                <div :class="reading.readingIndex === currentReadingIndex ? 'font-bold' : ''">
+                <div :class="reading.readingIndex === currentReadingIndex ? 'font-bold !text-purple-500' : ' text-blue-500'">
                   <div
-                    class="text-center font-noto-sans text-blue-500 cursor-pointer hover:underline"
+                    class="text-center font-noto-sans cursor-pointer hover:underline"
                     @click="selectReading(reading.readingIndex)"
                   >
                     {{ reading.text }}

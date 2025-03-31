@@ -597,6 +597,23 @@ public class Program
                 }
 
                 break;
+            
+            case "txt":
+                result = await new TxtExtractor().Extract(o.ExtractFilePath, "SHIFT-JIS", o.Verbose);
+                if (o.Output != null)
+                {
+                    await File.WriteAllTextAsync(o.Output, result);
+                }
+
+                break;
+            case "txt-utf8":
+                result = await new TxtExtractor().Extract(o.ExtractFilePath, "UTF-8", o.Verbose);
+                if (o.Output != null)
+                {
+                    await File.WriteAllTextAsync(o.Output, result);
+                }
+
+                break;
         }
 
         return false;

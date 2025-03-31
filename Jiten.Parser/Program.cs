@@ -33,6 +33,11 @@ namespace Jiten.Parser
                                                                    { "まま", 1585410 }, { "いく", 1219950 }, { "つく", 1495740 },
                                                                    { "たら", 2029050 }, { "彼", 1483070 }, { "いい", 2820690 },
                                                                };
+        
+        private static Dictionary<string, int> _specialCasesVerbs = new()
+                                                               {
+                                                                   { "かす", 1411160 }
+                                                               };
 
         private static JitenDbContext _dbContext = null;
 
@@ -457,6 +462,12 @@ namespace Jiten.Parser
                     {
                         word = _allWords[specialCaseId];
                         currentId = specialCaseId;
+                    }
+                    
+                    if (_specialCasesVerbs.TryGetValue(candidate.text, out int specialCaseVerbId))
+                    {
+                        word = _allWords[specialCaseVerbId];
+                        currentId = specialCaseVerbId;
                     }
 
                     var normalizedReadings =
