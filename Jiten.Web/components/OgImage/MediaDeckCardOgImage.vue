@@ -29,50 +29,52 @@
 
 <template>
   <div
-    v-if="status !== 'pending' && deck"
-    class="og-card-container bg-white text-black border border-gray-300 flex flex-row overflow-hidden"
-    style="padding: 16px; font-family: 'Noto Sans JP', sans-serif"  >
-    <div class="flex-shrink-0 h-full" style="width: 180px; margin-right: 16px;">
+      v-if="status !== 'pending' && deck"
+      class="og-card-container bg-white text-black border border-gray-300 flex flex-row overflow-hidden"
+      style="width: 1200px; height: 630px; padding: 32px; font-family: 'Noto Sans JP', sans-serif"
+  >
+    <div class="flex-shrink-0 h-full" style="width: 340px; margin-right: 32px;">
       <img
-        :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
-        :alt="deck.originalTitle"
-        class="object-cover rounded"
-        style="height: 100%; width: 100%"
+          :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
+          :alt="deck.originalTitle"
+          class="object-cover rounded"
+          style="height: 100%; width: 100%"
       />
     </div>
 
     <div class="flex flex-col flex-grow">
       <h1
-        class="font-bold truncate"
-        style="font-size: 1.25rem; margin-bottom: 4px; max-height: 2.8em; overflow: hidden">
-        {{ deck.originalTitle }}
+          class="font-bold truncate"
+          style="font-size: 2.25rem; margin-bottom: 8px; max-height: 2.8em;"
+      >
+        {{ deck.originalTitle.slice(0, 20) }}
       </h1>
 
-      <span class="text-gray-600" style="font-size: 0.875rem; margin-bottom: 16px;">
+      <span class="text-gray-600" style="font-size: 1.5rem; margin-bottom: 32px;">
         {{ getMediaTypeText(deck.mediaType) }}
       </span>
 
       <div class="flex-grow"></div>
 
-      <div class="flex flex-col" style="font-size: 0.75rem;">
-        <div class="flex justify-between" style="margin-bottom: 4px">
+      <div class="flex flex-col" style="font-size: 1.75rem;">
+        <div class="flex justify-between" style="margin-bottom: 8px">
           <span class="text-gray-700">Character count:</span>
           <span class="font-mono">{{ deck.characterCount?.toLocaleString() ?? 'N/A' }}</span>
         </div>
-        <div class="flex justify-between" style="margin-bottom: 4px">
+        <div class="flex justify-between" style="margin-bottom: 8px">
           <span class="text-gray-700">Words:</span>
           <span class="font-mono">{{ deck.wordCount?.toLocaleString() ?? 'N/A' }}</span>
         </div>
-        <div class="flex justify-between" style="margin-bottom: 4px">
+        <div class="flex justify-between" style="margin-bottom: 8px">
           <span class="text-gray-700">Unique Words:</span>
           <span class="font-mono">{{ deck.uniqueWordCount?.toLocaleString() ?? 'N/A' }}</span>
         </div>
 
-        <div class="flex justify-between" style="margin-bottom: 4px">
+        <div class="flex justify-between" style="margin-bottom: 8px">
           <span class="text-gray-700">Kanji:</span>
           <span class="font-mono">{{ deck.uniqueKanjiCount?.toLocaleString() ?? 'N/A' }}</span>
         </div>
-        <div class="flex justify-between" style="margin-bottom: 4px">
+        <div class="flex justify-between" style="margin-bottom: 8px">
           <span class="text-gray-700">Unique Kanji:</span>
           <span class="font-mono">{{ deck.uniqueKanjiUsedOnceCount?.toLocaleString() ?? 'N/A' }}</span>
         </div>
@@ -86,12 +88,13 @@
   </div>
 
   <div
-    v-else
-    class="og-card-container bg-white text-black border border-gray-300 flex items-center justify-center"
-    style="width: 600px; height: 315px; padding: 16px; font-family: sans-serif"
+      v-else
+      class="og-card-container bg-white text-black border border-gray-300 flex items-center justify-center"
+      style="width: 1200px; height: 630px; padding: 32px; font-family: 'Noto Sans JP', sans-serif"
   >
     <span class="text-gray-500">Loading OG Image...</span>
   </div>
 </template>
+
 
 <style scoped></style>
