@@ -139,7 +139,7 @@ public class JimakuDownloader
             {
                 var ssaFile = Path.ChangeExtension(assFile, ".ssa");
                 var lines = await File.ReadAllLinesAsync(assFile);
-                var filteredLines = lines.Where(line => !line.TrimStart().StartsWith(";")).ToList();
+                var filteredLines = lines.Where(line => !line.TrimStart().StartsWith(";") && !line.Contains("cn")).ToList();
                 await File.WriteAllLinesAsync(ssaFile, filteredLines);
                 File.Delete(assFile);
             }

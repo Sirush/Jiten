@@ -9,6 +9,7 @@ using Jiten.Core.Data.JMDict;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using WanaKanaShaapu;
 
 namespace Jiten.Api.Controllers;
@@ -37,24 +38,21 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
         var query = context.Decks.Include(d => d.Children).AsNoTracking();
 
-        query = query.Where(d => d.ParentDeckId == null);
-        if (mediaType != null)
-            query = query.Where(d => d.MediaType == mediaType);
-
         if (!string.IsNullOrEmpty(titleFilter))
         {
-            query = query.Where(d =>
-                                    // Fuzzy matching
-                                    // EF.Functions.FuzzyStringMatchLevenshtein(d.OriginalTitle, titleFilter) <= 2 ||
-                                    // EF.Functions.FuzzyStringMatchLevenshtein(d.RomajiTitle!, titleFilter) <= 2 ||
-                                    // EF.Functions.FuzzyStringMatchLevenshtein(d.EnglishTitle!, titleFilter) <= 2 ||
+            FormattableString sql = $"""
+                                     SELECT *
+                                     FROM jiten."Decks"
+                                     WHERE "ParentDeckId" IS NULL AND
+                                     ("OriginalTitle" &@~ {titleFilter} OR "RomajiTitle" &@~ {titleFilter} OR "EnglishTitle" &@~ {titleFilter})
+                                     ORDER BY pgroonga_score(tableoid, ctid) DESC
+                                     """;
 
-                                    // Substring matching
-                                    EF.Functions.ILike(d.OriginalTitle, $"%{titleFilter}%") ||
-                                    EF.Functions.ILike(d.RomajiTitle!, $"%{titleFilter}%") ||
-                                    EF.Functions.ILike(d.EnglishTitle!, $"%{titleFilter}%")
-                               );
+            query = context.Set<Deck>().FromSqlInterpolated(sql);
         }
+        
+        if (mediaType != null)
+            query = query.Where(d => d.MediaType == mediaType);
 
         if (wordId != 0)
         {
@@ -212,7 +210,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                           {
                               WordId = word.jmDictWord.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                               PartsOfSpeech = word.jmDictWord.PartsOfSpeech.ToHumanReadablePartsOfSpeech(),
-                              Definitions = word.jmDictWord.Definitions.ToDefinitionDtos(), Occurences = word.dw.Occurrences,
+                              Definitions = word.jmDictWord.Definitions.ToDefinitionDtos(), Occurrences = word.dw.Occurrences,
                               PitchAccents = word.jmDictWord.PitchAccents
                           };
 
@@ -228,7 +226,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
     {
         int pageSize = 25;
 
-        var deck = context.Decks.AsNoTracking().Include(d => d.Children).FirstOrDefault(d => d.DeckId == id);
+        var deck = context.Decks.AsNoTracking().Include(d => d.Children).Include(d => d.Links).FirstOrDefault(d => d.DeckId == id);
 
         if (deck == null)
             return new PaginatedResponse<DeckDetailDto?>(null, 0, pageSize, offset ?? 0);
@@ -425,11 +423,18 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 }
 
                 return Results.File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", $"{deck.OriginalTitle}.csv");
+            case DeckFormat.Txt:
+                StringBuilder txtSb = new StringBuilder();
+                foreach (var word in deckWords)
+                {
+                    txtSb.AppendLine(jmdictWords[word.WordId].Readings[word.ReadingIndex]);
+                }
+
+                return Results.File(Encoding.UTF8.GetBytes(txtSb.ToString()), "text/plain", $"{deck.OriginalTitle}.txt");
+
             default:
                 return Results.BadRequest();
         }
-
-        return Results.BadRequest();
     }
 
     [HttpGet("decks-count")]

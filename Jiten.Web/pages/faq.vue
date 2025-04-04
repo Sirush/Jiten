@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { ref } from 'vue';
   import { useHead } from '#imports';
+  import { getDiscordLink } from '~/utils/getDiscordLink';
 
   const faqData = ref([
     {
@@ -63,6 +64,13 @@
     },
   ]);
 
+  const stripHtml = (html: string): string => {
+    if (!html) return '';
+    const plainText = html.replace(/<[^>]*>/g, '');
+
+    return plainText.replace(/\s+/g, ' ').trim();
+  };
+
   // 2. Generate the JSON-LD structured data
   const generateFaqSchema = () => {
     return {
@@ -73,17 +81,19 @@
         name: item.question,
         acceptedAnswer: {
           '@type': 'Answer',
-          text: item.answer,
+          text: stripHtml(item.answer),
         },
       })),
     };
   };
 
+  const faqSchemaJson = computed(() => JSON.stringify(generateFaqSchema()));
+
   useHead({
     script: [
       {
         type: 'application/ld+json',
-        children: JSON.stringify(generateFaqSchema()),
+        textContent: faqSchemaJson.value,
       },
     ],
     title: 'FAQ',
@@ -99,6 +109,4 @@
   </div>
 </template>
 
-<style scoped>
-
-</style>
+<style scoped></style>

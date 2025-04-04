@@ -43,10 +43,8 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
 
         var mainReading = new ReadingDto()
                           {
-                              Text = word.ReadingsFurigana[readingIndex],
-                              ReadingIndex = readingIndex,
-                              ReadingType = word.ReadingTypes[readingIndex],
-                              FrequencyRank = frequency.ReadingsFrequencyRank[readingIndex],
+                              Text = word.ReadingsFurigana[readingIndex], ReadingIndex = readingIndex,
+                              ReadingType = word.ReadingTypes[readingIndex], FrequencyRank = frequency.ReadingsFrequencyRank[readingIndex],
                               FrequencyPercentage = frequency.ReadingsFrequencyPercentage[readingIndex].ZeroIfNaN(),
                               UsedInMediaAmount = frequency.ReadingsUsedInMediaAmount[readingIndex],
                               UsedInMediaAmountByType = usedInMediaByType
@@ -55,9 +53,7 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
         List<ReadingDto> alternativeReadings = word.Readings
                                                    .Select((r, i) => new ReadingDto
                                                                      {
-                                                                         Text = r,
-                                                                         ReadingIndex = i,
-                                                                         ReadingType = word.ReadingTypes[i],
+                                                                         Text = r, ReadingIndex = i, ReadingType = word.ReadingTypes[i],
                                                                          FrequencyRank =
                                                                              frequency.ReadingsFrequencyRank[i],
                                                                          FrequencyPercentage =
@@ -68,11 +64,8 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
 
         return Results.Ok(new WordDto
                           {
-                              WordId = word.WordId,
-                              MainReading = mainReading,
-                              AlternativeReadings = alternativeReadings,
-                              Definitions = word.Definitions.ToDefinitionDtos(),
-                              PartsOfSpeech = word.PartsOfSpeech,
+                              WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
+                              Definitions = word.Definitions.ToDefinitionDtos(), PartsOfSpeech = word.PartsOfSpeech,
                               PitchAccents = word.PitchAccents
                           });
     }
@@ -86,9 +79,9 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
         var parsedWords = await Parser.Program.ParseText(context, text);
 
         // We want both parsed words and unparsed ones
-        var allWords = new List<DeckWord>();
+        var allWords = new List<DeckWordDto>();
 
-        var wordsWithPositions = new List<(DeckWord Word, int Position)>();
+        var wordsWithPositions = new List<(DeckWordDto Word, int Position)>();
         int currentPosition = 0;
 
         foreach (var word in parsedWords)
@@ -96,7 +89,7 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
             int position = text.IndexOf(word.OriginalText, currentPosition, StringComparison.Ordinal);
             if (position >= 0)
             {
-                wordsWithPositions.Add((word, position));
+                wordsWithPositions.Add((new DeckWordDto(word), position));
                 currentPosition = position + word.OriginalText.Length;
             }
         }
@@ -108,7 +101,7 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
             if (position > currentPosition)
             {
                 string gap = text.Substring(currentPosition, position - currentPosition);
-                allWords.Add(new DeckWord { OriginalText = gap });
+                allWords.Add(new DeckWordDto(gap));
             }
 
             allWords.Add(word);
@@ -119,7 +112,7 @@ public class VocabularyController(JitenDbContext context) : ControllerBase
         if (currentPosition < text.Length)
         {
             string gap = text.Substring(currentPosition);
-            allWords.Add(new DeckWord { OriginalText = gap });
+            allWords.Add(new DeckWordDto(gap));
         }
 
         return Results.Ok(allWords);

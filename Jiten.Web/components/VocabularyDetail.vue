@@ -17,6 +17,11 @@
       type: Boolean,
       required: false,
     },
+    conjugations: {
+      type: Array as PropType<string[]>,
+      default: () => [],
+      required: false
+    }
   });
 
   const emit = defineEmits(['mainReadingTextChanged', 'readingSelected']);
@@ -64,6 +69,17 @@
     },
     { immediate: true }
   );
+
+const conjugationString = computed(() =>{
+  let conjugations = [...props.conjugations];
+  conjugations = conjugations.filter(conj => !conj.startsWith('(')).filter(conj => conj != "");
+  conjugations.reverse();
+
+  if (conjugations.length == 0)
+    return null;
+
+  return conjugations.join(' ; ')
+});
 </script>
 
 <template>
@@ -72,6 +88,10 @@
       <div class="flex flex-col justify-between md:flex-row">
         <div class="flex flex-col gap-4 max-w-2xl">
           <div class="flex justify-between">
+            <div>
+              <div v-if="conjugationString != null" class="text-gray-500 text-xs font-noto-sans">
+                (Conjugation: {{conjugationString}})
+              </div>
             <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`">
               <div class="text-3xl font-noto-sans" v-html="convertToRuby(response.data.mainReading.text)" />
             </NuxtLink>
@@ -80,6 +100,7 @@
               class="text-3xl font-noto-sans"
               v-html="convertToRuby(response.data.mainReading.text)"
             />
+            </div>
             <div class="text-gray-500 dark:text-gray-300 text-right md:hidden">
               Rank #{{ response.data.mainReading.frequencyRank.toLocaleString() }}
             </div>

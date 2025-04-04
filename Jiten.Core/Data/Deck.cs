@@ -33,21 +33,12 @@ public class Deck
     /// <summary>
     /// Romaji transcription of the title
     /// </summary>
-    public string? RomajiTitle
-    {
-        get => _romajiTitle ?? OriginalTitle;
-        set => _romajiTitle = value;
-    }
+    public string? RomajiTitle { get; set; }
 
     /// <summary>
     /// English translation of the title, if it exists
     /// </summary>
-    public string? EnglishTitle
-    {
-        get => _englishTitle ?? RomajiTitle;
-        set => _englishTitle = value;
-    }
-
+    public string? EnglishTitle { get; set; }
 
     /// <summary>
     /// Total character count, without punctuation
@@ -123,9 +114,11 @@ public class Deck
     /// List of links to external websites
     /// </summary>
     public List<Link> Links { get; set; } = new List<Link>();
-
-    private string? _romajiTitle;
-    private string? _englishTitle;
+    
+    /// <summary>
+    /// Raw text from which the deck was parsed with
+    /// </summary>
+    public DeckRawText? RawText { get; set; }
 
     public async Task AddChildDeckWords(JitenDbContext context)
     {

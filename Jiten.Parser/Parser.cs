@@ -74,6 +74,7 @@ class SudachiInterop
         lock (ProcessTextLock)
         {
             // Clean up text
+            inputText = inputText.ToFullWidthDigits();
             inputText = Regex.Replace(inputText,
                                       "[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005\u3001-\u3003\u3008-\u3011\u3014-\u301F\uFF01-\uFF0F\uFF1A-\uFF1F\uFF3B-\uFF3F\uFF5B-\uFF60\uFF62-\uFF65．\\n…\u3000―\u2500() 」]",
                                       "");
@@ -176,10 +177,10 @@ public class Parser
         wordInfos = CombineAmounts(wordInfos);
         wordInfos = CombineTte(wordInfos);
         wordInfos = CombineAuxiliaryVerbStem(wordInfos);
-        wordInfos = CombineAuxiliary(wordInfos);
         wordInfos = CombineVerbDependant(wordInfos);
         wordInfos = CombineAdverbialParticle(wordInfos);
         wordInfos = CombineSuffix(wordInfos);
+        wordInfos = CombineAuxiliary(wordInfos);
         wordInfos = CombineParticles(wordInfos);
 
         wordInfos = CombineFinal(wordInfos);
@@ -270,7 +271,7 @@ public class Parser
                          };
                 wordInfos.Insert(i + 1, no);
             }
-            
+
             if (wordInfos[i].Text == "泣きながら")
             {
                 wordInfos[i].Text = "泣き";
@@ -284,7 +285,6 @@ public class Parser
                          };
                 wordInfos.Insert(i + 1, no);
             }
-            
         }
 
         return wordInfos;
@@ -312,12 +312,10 @@ public class Parser
             if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Amount) ||
                 wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Numeral))
             {
-                string fullWidthDigits = wordInfos[i].Text.ToFullWidthDigits();
-
-                if (!AmountCombinations.Combinations.Contains((fullWidthDigits, wordInfos[i + 1].Text)))
+                if (!AmountCombinations.Combinations.Contains((wordInfos[i].Text, wordInfos[i + 1].Text)))
                     continue;
 
-                wordInfos[i + 1].Text = fullWidthDigits + wordInfos[i + 1].Text;
+                wordInfos[i + 1].Text = wordInfos[i].Text + wordInfos[i + 1].Text;
                 wordInfos[i + 1].PartOfSpeech = PartOfSpeech.Noun;
                 wordInfos.RemoveAt(i);
                 i--;
@@ -356,31 +354,20 @@ public class Parser
             }
         }
 
-        // Possible dependants, might need special rules?
-        // Switch this out for a whitelist instead?
         for (int i = 1; i < wordInfos.Count; i++)
         {
             if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
                 wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb &&
-                wordInfos[i].DictionaryForm != "ござる" &&
-                wordInfos[i].DictionaryForm != "かける" &&
-                wordInfos[i].DictionaryForm != "あげる" &&
-                wordInfos[i].DictionaryForm != "くれる" &&
-                wordInfos[i].DictionaryForm != "終わる" &&
-                wordInfos[i].DictionaryForm != "欲しい" &&
-                wordInfos[i].DictionaryForm != "始める" &&
-                wordInfos[i].DictionaryForm != "下さる" &&
-                wordInfos[i].DictionaryForm != "貰う" &&
-                wordInfos[i].DictionaryForm != "貰える" &&
-                wordInfos[i].DictionaryForm != "まくる" &&
-                wordInfos[i].DictionaryForm != "なる" &&
-                wordInfos[i].DictionaryForm != "行く" &&
-                wordInfos[i].DictionaryForm != "やる" &&
-                wordInfos[i].DictionaryForm != "いい" &&
-                wordInfos[i].DictionaryForm != "もらえる" &&
-                wordInfos[i].DictionaryForm != "来る" &&
-                wordInfos[i].DictionaryForm != "出す"
-               )
+                (wordInfos[i].DictionaryForm == "得る" ||
+                 wordInfos[i].DictionaryForm == "する" ||
+                 wordInfos[i].DictionaryForm == "しまう" ||
+                 wordInfos[i].DictionaryForm == "おる" ||
+                 wordInfos[i].DictionaryForm == "きる" ||
+                 wordInfos[i].DictionaryForm == "こなす" ||
+                 wordInfos[i].DictionaryForm == "いく" ||
+                 wordInfos[i].DictionaryForm == "貰う" ||
+                 wordInfos[i].DictionaryForm == "いる"
+                ))
             {
                 wordInfos[i - 1].Text += wordInfos[i].Text;
                 wordInfos.RemoveAt(i);

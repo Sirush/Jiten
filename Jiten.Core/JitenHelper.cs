@@ -9,33 +9,152 @@ namespace Jiten.Core;
 
 public static class JitenHelper
 {
-    public static async Task InsertDeck(DbContextOptions<JitenDbContext> options, Deck deck, byte[] cover)
+    public static async Task InsertDeck(DbContextOptions<JitenDbContext> options, Deck deck, byte[] cover, bool update = false)
     {
-        // Ignore if the deck already exists
         await using var context = new JitenDbContext(options);
+        await using var transaction = await context.Database.BeginTransactionAsync();
 
-        if (await context.Decks.AnyAsync(d => d.OriginalTitle == deck.OriginalTitle && d.MediaType == deck.MediaType))
+        try
         {
-            Console.WriteLine($"Deck {deck.OriginalTitle} already exists, skipping.");
-            return;
+            var existingDeck =
+                await context.Decks
+                             .Include(d => d.DeckWords)
+                             .Include(d => d.Children)
+                             .FirstOrDefaultAsync(d => d.OriginalTitle == deck.OriginalTitle && d.MediaType == deck.MediaType);
+
+            if (existingDeck != null)
+            {
+                if (!update || update && existingDeck.LastUpdate >= deck.LastUpdate)
+                {
+                    Console.WriteLine($"Deck {deck.OriginalTitle} already exists, no update flag or deck not changed, skipping.");
+                    await transaction.RollbackAsync();
+                    return;
+                }
+                else
+                {
+                    Console.WriteLine($"Deck {deck.OriginalTitle} already exists, updating.");
+                    await UpdateDeck(context, existingDeck, deck);
+                }
+            }
+            else
+            {
+                // Fix potential null references to decks
+                deck.SetParentsAndDeckWordDeck(deck);
+                deck.ParentDeckId = null;
+
+                context.Decks.Add(deck);
+
+                await context.SaveChangesAsync();
+
+                var coverUrl = await BunnyCdnHelper.UploadFile(cover, $"{deck.DeckId}/cover.jpg");
+                deck.CoverName = coverUrl;
+                context.Entry(deck).State = EntityState.Modified;
+            }
+
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            Console.WriteLine($"Error inserting deck: {ex.Message}");
+        }
+    }
+
+    private static async Task UpdateDeck(JitenDbContext context, Deck existingDeck, Deck deck)
+    {
+        var deckId = existingDeck.DeckId;
+
+        existingDeck.LastUpdate = DateTime.UtcNow;
+        existingDeck.MediaType = deck.MediaType;
+        existingDeck.OriginalTitle = deck.OriginalTitle;
+        existingDeck.RomajiTitle = deck.RomajiTitle;
+        existingDeck.EnglishTitle = deck.EnglishTitle;
+        existingDeck.CharacterCount = deck.CharacterCount;
+        existingDeck.WordCount = deck.WordCount;
+        existingDeck.UniqueWordCount = deck.UniqueWordCount;
+        existingDeck.UniqueWordUsedOnceCount = deck.UniqueWordUsedOnceCount;
+        existingDeck.UniqueKanjiCount = deck.UniqueKanjiCount;
+        existingDeck.UniqueKanjiUsedOnceCount = deck.UniqueKanjiUsedOnceCount;
+        existingDeck.SentenceCount = deck.SentenceCount;
+        existingDeck.RawText = deck.RawText;
+
+        context.DeckWords.RemoveRange(existingDeck.DeckWords);
+        foreach (var dw in deck.DeckWords)
+        {
+            var newDeckWord = new DeckWord
+                              {
+                                  WordId = dw.WordId, ReadingIndex = dw.ReadingIndex, Occurrences = dw.Occurrences, DeckId = deckId,
+                                  Deck = existingDeck
+                              };
+            existingDeck.DeckWords.Add(newDeckWord);
         }
 
-        // Fix potential null references to decks
-        deck.SetParentsAndDeckWordDeck(deck);
-        deck.ParentDeckId = null;
+        await UpdateChildDecks(context, existingDeck, deck.Children);
+    }
 
-        if (deck.OriginalTitle == null)
-            deck.OriginalTitle = deck.RomajiTitle ?? deck.EnglishTitle;
+    private static async Task UpdateChildDecks(JitenDbContext context, Deck existingDeck, ICollection<Deck> children)
+    {
+        var newChildren = children.ToDictionary(c => c.OriginalTitle);
+        var existingChildren = existingDeck.Children.ToList();
 
-        context.Decks.Add(deck);
+        foreach (var child in children)
+        {
+            var key = child.OriginalTitle;
+            Deck? existingChild = existingChildren.FirstOrDefault(c => c.OriginalTitle == key);
 
-        await context.SaveChangesAsync();
+            if (existingChild != null)
+            {
+                Console.WriteLine("Updating child deck " + key);
+                await UpdateDeck(context, existingChild, child);
+                newChildren.Remove(key);
+            }
+            else
+            {
+                Console.WriteLine("Inserting new child deck " + key);
 
-        var coverUrl = await BunnyCdnHelper.UploadFile(cover, $"{deck.DeckId}/cover.jpg");
-        deck.CoverName = coverUrl;
-        context.Entry(deck).State = EntityState.Modified;
+                var newChildDeck = new Deck();
+                newChildDeck.ParentDeckId = existingDeck.DeckId;
+                newChildDeck.ParentDeck = existingDeck;
+                newChildDeck.CreationDate = DateTime.UtcNow;
+                newChildDeck.LastUpdate = DateTimeOffset.UtcNow;
+                newChildDeck.MediaType = existingDeck.MediaType;
+                newChildDeck.OriginalTitle = child.OriginalTitle;
+                newChildDeck.RomajiTitle = child.RomajiTitle;
+                newChildDeck.EnglishTitle = child.EnglishTitle;
+                newChildDeck.DeckOrder = child.DeckOrder;
+                newChildDeck.CharacterCount = child.CharacterCount;
+                newChildDeck.UniqueWordCount = child.UniqueWordCount;
+                newChildDeck.UniqueKanjiCount = child.UniqueKanjiCount;
+                newChildDeck.SentenceCount = child.SentenceCount;
+                newChildDeck.WordCount = child.WordCount;
+                newChildDeck.RawText = child.RawText;
+                
+                foreach (var dw in child.DeckWords)
+                {
+                    var newDeckWord = new DeckWord
+                                      {
+                                          WordId = dw.WordId, ReadingIndex = dw.ReadingIndex, Occurrences = dw.Occurrences, Deck = child
+                                      };
+                    newChildDeck.DeckWords.Add(newDeckWord);
+                }
 
-        await context.SaveChangesAsync();
+                context.Decks.Add(newChildDeck);
+                newChildren.Remove(key);
+            }
+        }
+
+        var childrenToDelete = existingChildren
+                               .Where(ec => children.All(c => c.OriginalTitle != ec.OriginalTitle))
+                               .ToList();
+
+
+        foreach (var childToDelete in childrenToDelete)
+        {
+            Console.WriteLine($"Deleting child deck {childToDelete.OriginalTitle}.");
+            context.DeckWords.RemoveRange(childToDelete.DeckWords);
+            context.Decks.Remove(childToDelete);
+        }
     }
 
     public static async Task ComputeFrequencies(DbContextOptions<JitenDbContext> options)

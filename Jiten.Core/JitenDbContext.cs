@@ -10,7 +10,8 @@ public class JitenDbContext : DbContext
 {
     public DbSet<Deck> Decks { get; set; }
     public DbSet<DeckWord> DeckWords { get; set; }
-
+    public DbSet<DeckRawText> DeckRawTexts { get; set; }
+          
     public DbSet<JmDictWord> JMDictWords { get; set; }
     public DbSet<JmDictWordFrequency> JmDictWordFrequencies { get; set; }
     public DbSet<JmDictDefinition> Definitions { get; set; }
@@ -82,6 +83,18 @@ public class JitenDbContext : DbContext
             entity.HasOne(dw => dw.Deck)
                   .WithMany(d => d.DeckWords)
                   .HasForeignKey(dw => dw.DeckId);
+        });
+        
+        modelBuilder.Entity<DeckRawText>(entity =>
+        {
+              entity.HasKey(drt => drt.DeckId);
+
+              entity.HasIndex(dw => dw.DeckId)
+                    .HasDatabaseName("IX_DeckRawText_DeckId");
+
+              entity.HasOne(drt => drt.Deck)
+                    .WithOne(d => d.RawText)
+                    .HasForeignKey<DeckRawText>(drt => drt.DeckId);
         });
 
         modelBuilder.Entity<Link>(entity =>

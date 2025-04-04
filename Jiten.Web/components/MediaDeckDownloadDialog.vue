@@ -59,15 +59,17 @@
         const link = document.createElement('a');
         link.href = blobUrl;
         if (format.value === DeckFormat.Anki) {
-          link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.apkg`); // You can set the desired file name here
+          link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.apkg`);
         } else if (format.value === DeckFormat.Csv) {
-          link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.csv`); // You can set the desired file name here
+          link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.csv`);
+        } else  if (format.value === DeckFormat.Txt)  {
+          link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.txt`);
         }
+
         document.body.appendChild(link);
         link.click();
         link.remove();
         downloading.value = false;
-        // document.body.removeChild(link);
       } else {
         downloading.value = false;
         console.error('Error downloading file:', error.value);
@@ -86,9 +88,12 @@
         <div class="text-gray-500 text-sm">Format</div>
         <SelectButton v-model="format" :options="deckFormats" option-value="value" option-label="label" size="small" />
       </div>
-      <span v-if="format == DeckFormat.Anki" class="text-sm"
-        >Uses the Lapis template from <a href="https://github.com/donkuri/lapis/tree/main">Lapis</a></span
-      >
+      <span v-if="format == DeckFormat.Anki" class="text-sm">
+        Uses the Lapis template from <a href="https://github.com/donkuri/lapis/tree/main">Lapis</a>
+      </span>
+      <span v-if="format == DeckFormat.Txt" class="text-sm">
+        Plain text format, one word per line, vocabulary only. <br/> Perfect for importing in other websites.
+      </span>
       <div>
         <div class="text-gray-500 text-sm">Filter type</div>
         <Select
@@ -123,7 +128,6 @@
           label="Download"
           @click="
             downloadFile()
-            // localVisible = false;
           "
         />
       </div>

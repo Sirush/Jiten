@@ -24,7 +24,8 @@ public enum PartOfSpeech
     BlankSpace = 19,
     Expression = 20,
     NominalAdjective = 21,
-    Numeral = 22
+    Numeral = 22,
+    PrenounAdjectival = 23
 }
 
 public enum PartOfSpeechSection
@@ -85,8 +86,7 @@ public enum PartOfSpeechSection
     Name = 53,
     Letter = 54,
     PlaceName = 55,
-    TaruAdjective = 56
-}
+    TaruAdjective = 56, }
 
 public static class PartOfSpeechExtension
 {
@@ -97,13 +97,12 @@ public static class PartOfSpeechExtension
             "名詞" or "n" => PartOfSpeech.Noun,
             "動詞" => PartOfSpeech.Verb,
             _ when pos.StartsWith('v') => PartOfSpeech.Verb,
-            "形容詞" or "adj-i" => PartOfSpeech.IAdjective,
+            "形容詞" or "adj-i" or "adj-ix" => PartOfSpeech.IAdjective,
             "形状詞" or "adj-na" => PartOfSpeech.NaAdjective,
             "副詞" or "adv" => PartOfSpeech.Adverb,
             "助詞" or "prt" => PartOfSpeech.Particle,
             "接続詞" or "conj" => PartOfSpeech.Conjunction,
             "助動詞" or "aux" or "aux-v" => PartOfSpeech.Auxiliary,
-            "連体詞" => PartOfSpeech.Adnominal,
             "感動詞" or "int" => PartOfSpeech.Interjection,
             "記号" => PartOfSpeech.Symbol,
             "接頭詞" or "接頭辞" or "pref" => PartOfSpeech.Prefix,
@@ -115,7 +114,8 @@ public static class PartOfSpeechExtension
             "補助記号" => PartOfSpeech.SupplementarySymbol,
             "空白" => PartOfSpeech.BlankSpace,
             "表現" or "exp" => PartOfSpeech.Expression,
-            "形動" or "adj-no" or "adj-t" or "adj-f" or "adj-pn" => PartOfSpeech.NominalAdjective,
+            "形動" or "adj-no" or "adj-t" or "adj-f" => PartOfSpeech.NominalAdjective,
+            "連体詞" or "adj-pn" => PartOfSpeech.PrenounAdjectival,
             "数詞" or "num" => PartOfSpeech.Numeral,
             // _ => throw new ArgumentException($"Invalid part of speech : {pos}")
             _ => PartOfSpeech.Unknown

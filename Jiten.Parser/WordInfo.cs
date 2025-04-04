@@ -11,6 +11,7 @@ public class WordInfo
     public PartOfSpeechSection PartOfSpeechSection1 { get; set; }
     public PartOfSpeechSection PartOfSpeechSection2 { get; set; }
     public PartOfSpeechSection PartOfSpeechSection3 { get; set; }
+    public string NormalizedForm { get; set; } = string.Empty;
     public string DictionaryForm { get; set; } = string.Empty;
     public string Reading { get; set; } = string.Empty;
     public bool IsInvalid { get; set; }
@@ -40,6 +41,7 @@ public class WordInfo
         PartOfSpeechSection1 = pos[1].ToPartOfSpeechSection();
         PartOfSpeechSection2 = pos[2].ToPartOfSpeechSection();
         PartOfSpeechSection3 = pos[3].ToPartOfSpeechSection();
+        NormalizedForm = parts[2];
         DictionaryForm = parts[3];
         Reading = parts[5];
     }

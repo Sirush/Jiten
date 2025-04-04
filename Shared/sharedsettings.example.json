@@ -9,5 +9,6 @@
   "CdnBaseUrl": "https://jiten.b-cdn.net",
   "DictionaryPath": "path/to/system_full.dic",
   "JimakuApiKey" : "YourApiKey",
-  "TmdbApiKey" : "YourApiKey"
+  "TmdbApiKey" : "YourApiKey",
+  "StoreRawText": false
 }

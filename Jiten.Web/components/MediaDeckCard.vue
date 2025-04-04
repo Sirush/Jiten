@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import type { Deck } from '~/types';
   import Card from 'primevue/card';
-  import {getChildrenCountText, getMediaTypeText} from '~/utils/mediaTypeMapper';
+  import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getLinkTypeText } from '~/utils/linkTypeMapper';
 
   const props = defineProps<{
@@ -10,6 +10,14 @@
   }>();
 
   const showDownloadDialog = ref(false);
+
+  const sortedLinks = computed(() => {
+    return [...props.deck.links].sort((a, b) => {
+      const textA = getLinkTypeText(Number(a.linkType));
+      const textB = getLinkTypeText(Number(b.linkType));
+      return textA.localeCompare(textB);
+    });
+  });
 </script>
 
 <template>
@@ -75,7 +83,7 @@
                   </div>
                 </div>
 
-                <div class="w-full md:w-64">
+                <div class="w-full md:w-50">
                   <div v-if="deck.childrenDeckCount != 0" class="flex justify-between mb-2">
                     <span class="text-gray-600 dark:text-gray-300">{{ getChildrenCountText(deck.mediaType) }}</span>
                     <span class="ml-8 tabular-nums">{{ deck.childrenDeckCount.toLocaleString() }}</span>
@@ -84,7 +92,9 @@
               </div>
 
               <div class="mt-4 flex flex-col md:flex-row gap-4">
-                <a v-for="link in deck.links" :href="link.url" target="_blank">{{ getLinkTypeText(link.linkType) }}</a>
+                <a v-for="link in sortedLinks" :key="link.url" :href="link.url" target="_blank">{{
+                  getLinkTypeText(Number(link.linkType))
+                }}</a>
               </div>
               <div class="mt-4">
                 <div class="flex flex-col md:flex-row gap-4">

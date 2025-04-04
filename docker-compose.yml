@@ -34,6 +34,7 @@ services:
       - JimakuApiKey=${JIMAKU_API_KEY:-}
       - TmdbApiKey=${TMDB_API_KEY:-}
       - DOTNET_ENVIRONMENT=${DOTNET_ENVIRONMENT:-}
+      - StoreRawText=${STORE_RAW_TEXT:-false}
     volumes:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads

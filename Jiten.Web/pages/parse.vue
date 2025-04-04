@@ -77,6 +77,7 @@
           :word-id="selectedWord.wordId"
           :reading-index="selectedWord.readingIndex"
           :show-redirect=true
+          :conjugations="selectedWord.conjugations"
         />
       </Transition>
     </div>

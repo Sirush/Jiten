@@ -37,6 +37,7 @@ export interface DeckWord {
   wordId: number;
   readingType: string;
   readingIndex: number;
+  conjugations: string[];
 }
 
 export interface Link {
@@ -52,7 +53,7 @@ export interface Word {
   alternativeReadings: Reading[];
   partsOfSpeech: string[];
   definitions: Definition[];
-  occurences: number;
+  occurrences: number;
   pitchAccents: number[];
 }
 

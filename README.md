@@ -95,6 +95,13 @@ _coming soon™_
 
 - **Persistent Storage:**  
   The Docker Compose file defines persistent volumes (`postgres_data`, `uploads`, and `dictionaries`) to store data across container restarts.
+- **Installing Pgroonga:**  
+  To use the search function, you must install Pgroonga, a powerful full text search engine compatible with Japanese. Follow the instructions in the [Pgroonga documentation](https://pgroonga.github.io/install/) according to your platform, and then execute the following command to activate the extension in your database and create the index:
+```sql
+CREATE EXTENSION IF NOT EXISTS pgroonga;
+CREATE INDEX "IX_Decks_Title_Pgroonga" ON jiten."Decks"
+USING pgroonga ("OriginalTitle", "RomajiTitle", "EnglishTitle");
+```
 
 # Parser performance & cache
 Activating the cache can offer an appreciable speedup at the cost of RAM

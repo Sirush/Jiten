@@ -108,6 +108,23 @@ namespace Jiten.Core.Migrations
                     b.ToTable("Decks", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.DeckRawText", b =>
+                {
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RawText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("DeckId");
+
+                    b.HasIndex("DeckId")
+                        .HasDatabaseName("IX_DeckRawText_DeckId");
+
+                    b.ToTable("DeckRawTexts", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.DeckWord", b =>
                 {
                     b.Property<int>("DeckWordId")
@@ -121,10 +138,6 @@ namespace Jiten.Core.Migrations
 
                     b.Property<int>("Occurrences")
                         .HasColumnType("integer");
-
-                    b.Property<string>("OriginalText")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<byte>("ReadingIndex")
                         .HasColumnType("smallint");
@@ -226,8 +239,10 @@ namespace Jiten.Core.Migrations
                         .HasColumnType("text[]");
 
                     b.PrimitiveCollection<List<int>>("PitchAccents")
-                        .IsRequired()
                         .HasColumnType("int[]");
+
+                    b.PrimitiveCollection<List<string>>("Priorities")
+                        .HasColumnType("text[]");
 
                     b.PrimitiveCollection<int[]>("ReadingTypes")
                         .IsRequired()
@@ -316,6 +331,17 @@ namespace Jiten.Core.Migrations
                     b.Navigation("ParentDeck");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.DeckRawText", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
+                        .WithOne("RawText")
+                        .HasForeignKey("Jiten.Core.Data.DeckRawText", "DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Deck");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.DeckWord", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Deck", "Deck")
@@ -372,6 +398,8 @@ namespace Jiten.Core.Migrations
                     b.Navigation("DeckWords");
 
                     b.Navigation("Links");
+
+                    b.Navigation("RawText");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWord", b =>

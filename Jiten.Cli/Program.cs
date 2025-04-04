@@ -27,6 +27,8 @@ public class Program
 
     private static DbContextOptions<JitenDbContext> _dbOptions;
 
+    private static bool _storeRawText;
+
     public class Options
     {
         [Option('v', "verbose", Required = false, HelpText = "Set output to verbose messages.")]
@@ -76,6 +78,9 @@ public class Program
 
         [Option(longName: "insert", Required = false, HelpText = "Insert the parsed deck.json into the database from a directory.")]
         public string Insert { get; set; }
+        
+        [Option(longName: "update", Required = false, HelpText = "Update the parsed deck.json into the database from a directory if it's more recent'.")]
+        public bool UpdateDecks { get; set; }
 
         [Option(longName: "compute-frequencies", Required = false, HelpText = "Compute global word frequencies")]
         public bool ComputeFrequencies { get; set; }
@@ -110,6 +115,7 @@ public class Program
         var optionsBuilder = new DbContextOptionsBuilder<JitenDbContext>();
         optionsBuilder.UseNpgsql(connectionString, o => { o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery); });
         _dbOptions = optionsBuilder.Options;
+        _storeRawText = configuration.GetValue<bool>("StoreRawText");
 
         await Parser.Default.ParseArguments<Options>(args)
                     .WithParsedAsync<Options>(async o =>
@@ -266,7 +272,7 @@ public class Program
             coverOptimized.Quality = 85;
             coverOptimized.Format = ImageMagick.MagickFormat.Jpeg;
 
-            await JitenHelper.InsertDeck(_dbOptions, deck, coverOptimized.ToByteArray());
+            await JitenHelper.InsertDeck(_dbOptions, deck, coverOptimized.ToByteArray(), options.UpdateDecks);
 
             if (options.Verbose)
                 Console.WriteLine($"Deck {deck.OriginalTitle} inserted into the database.");
@@ -414,7 +420,7 @@ public class Program
                     }
                 }
 
-                deck = await Jiten.Parser.Program.ParseTextToDeck(context, string.Join(Environment.NewLine, lines));
+                deck = await Jiten.Parser.Program.ParseTextToDeck(context, string.Join(Environment.NewLine, lines), _storeRawText);
                 deck.ParentDeck = parentDeck;
                 deck.DeckOrder = deckOrder;
                 deck.OriginalTitle = metadata.OriginalTitle;

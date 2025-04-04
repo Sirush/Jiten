@@ -6,6 +6,8 @@ export function getDeckFormatText(deckFormat: DeckFormat): string {
       return 'Anki';
     case DeckFormat.Csv:
       return 'CSV';
+    case DeckFormat.Txt:
+      return 'TXT (vocab only)';
     default:
       return 'Unknown';
   }

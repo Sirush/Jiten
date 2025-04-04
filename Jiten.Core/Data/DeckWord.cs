@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
+
 namespace Jiten.Core.Data;
 
 public class DeckWord
@@ -17,6 +20,8 @@ public class DeckWord
     /// <summary>
     /// Original text before any deconjugation
     /// </summary>
+    [JsonIgnore]
+    [NotMapped]
     public string OriginalText { get; set; } = string.Empty;
     
     /// <summary>
@@ -28,6 +33,11 @@ public class DeckWord
     /// Number of times the exact word & reading appears in the deck
     /// </summary>
     public int Occurrences { get; set; }
+    
+    [JsonIgnore]
+    [NotMapped]
+    public List<string> Conjugations { get; set; } = new();
 
+    [JsonIgnore]
     public Deck Deck { get; set; } = new();
 }

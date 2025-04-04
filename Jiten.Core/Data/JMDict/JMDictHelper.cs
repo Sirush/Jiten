@@ -430,11 +430,21 @@ public static class JmDictHelper
 
         while (await reader.ReadAsync())
         {
-            if (reader is { NodeType: XmlNodeType.Element, Name: "keb" })
+            if (reader.NodeType == XmlNodeType.Element)
             {
-                var keb = await reader.ReadElementContentAsStringAsync();
-                wordInfo.Readings.Add(keb);
-                wordInfo.ReadingTypes.Add(JmDictReadingType.Reading);
+                if (reader.Name == "keb")
+                {
+                    var keb = await reader.ReadElementContentAsStringAsync();
+                    wordInfo.Readings.Add(keb);
+                    wordInfo.ReadingTypes.Add(JmDictReadingType.Reading);
+                }
+
+                if (reader.Name == "ke_pri")
+                {
+                    var pri = await reader.ReadElementContentAsStringAsync();
+                    if (!wordInfo.Priorities.Contains(pri))
+                        wordInfo.Priorities.Add(pri);
+                }
             }
 
             if (reader.NodeType != XmlNodeType.EndElement) continue;
@@ -472,6 +482,13 @@ public static class JmDictHelper
                     var inf = await reader.ReadElementContentAsStringAsync();
                     if (inf.ToLower() == "&ok")
                         isObsolete = true;
+                }
+
+                if (reader.Name == "re_pri")
+                {
+                    var pri = await reader.ReadElementContentAsStringAsync();
+                    if (!wordInfo.Priorities.Contains(pri))
+                        wordInfo.Priorities.Add(pri);
                 }
             }
 
