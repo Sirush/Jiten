@@ -1,7 +1,11 @@
 services:
   postgres:
-    image: postgres:17-bookworm
-    restart: unless-stopped
+    build:
+      context: ./postgres-pgroonga
+      dockerfile: Dockerfile
+      args:
+        PG_VERSION: 17
+    image: jiten/postgres-pgroonga:17
     environment:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_USER: ${DB_USER}
