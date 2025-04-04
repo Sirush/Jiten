@@ -56,7 +56,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
         }
 
         query = query.Include(d => d.Children);
-        
+
         if (mediaType != null)
             query = query.Where(d => d.MediaType == mediaType);
 
@@ -453,5 +453,20 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                                                  .ToDictionary(g => (int)g.Key, g => g.Count());
 
         return Results.Ok(decksCount);
+    }
+
+    [HttpGet("{id}/vocabulary-count-frequency")]
+    public IResult GetVocabularyCountByMediaFrequencyRange(int id, int minFrequency, int maxFrequency)
+    {
+        var query = context.DeckWords.AsNoTracking()
+                           .Where(dw => dw.DeckId == id &&
+                                        context.JmDictWordFrequencies
+                                               .Any(f => f.WordId == dw.WordId &&
+                                                         f.ReadingsFrequencyRank[dw.ReadingIndex] >= minFrequency &&
+                                                         f.ReadingsFrequencyRank[dw.ReadingIndex] <= maxFrequency));
+
+        var count = query.Count();
+
+        return Results.Ok(count);
     }
 }

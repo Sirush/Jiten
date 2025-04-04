@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import { type Deck, DeckDownloadType, DeckFormat, DeckOrder } from '~/types';
   import { SelectButton } from 'primevue';
+  import { debounce } from 'perfect-debounce';
+  import { useApiFetch, useApiFetchPaginated } from '~/composables/useApiFetch';
 
   const props = defineProps<{
     deck: Deck;
@@ -34,12 +36,67 @@
     }
   );
 
+  watch(
+    () => downloadType.value,
+    (newVal) => {
+      if (newVal == DeckDownloadType.Full) {
+        frequencyRange.value = [0, Math.min(props.deck.uniqueWordCount, 5000)];
+        currentSliderMax.value = props.deck.uniqueWordCount;
+      } else if (newVal == DeckDownloadType.TopDeckFrequency || newVal == DeckDownloadType.TopChronological) {
+        frequencyRange.value = [0, Math.min(props.deck.uniqueWordCount, 5000)];
+        currentSliderMax.value = props.deck.uniqueWordCount;
+      } else if (newVal == DeckDownloadType.TopGlobalFrequency) {
+        frequencyRange.value = [1, Math.min(200000, 30000)];
+        currentSliderMax.value = 200000;
+        updateDebounced();
+      }
+    }
+  );
+
+  watch(
+    () => frequencyRange.value,
+    () => {
+      if (downloadType.value == DeckDownloadType.TopGlobalFrequency) {
+        updateDebounced();
+      }
+    }
+  );
+
   watch(localVisible, (newVal) => {
     emit('update:visible', newVal);
   });
 
+  const updateDebounced = debounce(async () => {
+    const { data: response } = await useApiFetch<number>(`media-deck/${props.deck.deckId}/vocabulary-count-frequency`, {
+      query: {
+        minFrequency: frequencyRange.value![0],
+        maxFrequency: frequencyRange.value![1],
+      },
+    });
+    debouncedCurrentCardAmount.value = response;
+  }, 500);
+
+  const debouncedCurrentCardAmount = ref(0);
+
   const url = `media-deck/${props.deck.deckId}/download`;
   const { $api } = useNuxtApp();
+
+  const currentSliderMax = ref(props.deck.uniqueWordCount);
+
+  const currentCardAmount = computed(() => {
+    if (downloadType.value == DeckDownloadType.Full) {
+      return props.deck.uniqueWordCount;
+    } else if (
+      downloadType.value == DeckDownloadType.TopDeckFrequency ||
+      downloadType.value == DeckDownloadType.TopChronological
+    ) {
+      return frequencyRange.value![1] - frequencyRange.value![0];
+    } else if (downloadType.value == DeckDownloadType.TopGlobalFrequency) {
+      return debouncedCurrentCardAmount;
+    }
+
+    return 0;
+  });
 
   const downloadFile = async () => {
     try {
@@ -50,8 +107,8 @@
           format: format.value,
           downloadType: downloadType.value,
           order: deckOrder.value,
-          minFrequency: frequencyRange.value[0],
-          maxFrequency: frequencyRange.value[1],
+          minFrequency: frequencyRange.value![0],
+          maxFrequency: frequencyRange.value![1],
         },
       });
       if (response) {
@@ -62,7 +119,7 @@
           link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.apkg`);
         } else if (format.value === DeckFormat.Csv) {
           link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.csv`);
-        } else  if (format.value === DeckFormat.Txt)  {
+        } else if (format.value === DeckFormat.Txt) {
           link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.txt`);
         }
 
@@ -72,17 +129,34 @@
         downloading.value = false;
       } else {
         downloading.value = false;
-        console.error('Error downloading file:', error.value);
+        console.error('Error downloading file.');
       }
     } catch (err) {
       downloading.value = false;
       console.error('Error:', err);
     }
   };
+
+  const updateMinFrequency = (value: number) => {
+    if (frequencyRange.value) {
+      frequencyRange.value = [value, frequencyRange.value[1]];
+    }
+  };
+
+  const updateMaxFrequency = (value: number) => {
+    if (frequencyRange.value) {
+      frequencyRange.value = [frequencyRange.value[0], value];
+    }
+  };
 </script>
 
 <template>
-  <Dialog v-model:visible="localVisible" modal :header="`Download deck ${localiseTitle(deck)}`" :style="{ width: '30rem' }">
+  <Dialog
+    v-model:visible="localVisible"
+    modal
+    :header="`Download deck ${localiseTitle(deck)}`"
+    :style="{ width: '30rem' }"
+  >
     <div class="flex flex-col gap-2">
       <div>
         <div class="text-gray-500 text-sm">Format</div>
@@ -92,7 +166,8 @@
         Uses the Lapis template from <a href="https://github.com/donkuri/lapis/tree/main">Lapis</a>
       </span>
       <span v-if="format == DeckFormat.Txt" class="text-sm">
-        Plain text format, one word per line, vocabulary only. <br/> Perfect for importing in other websites.
+        Plain text format, one word per line, vocabulary only. <br >
+        Perfect for importing in other websites.
       </span>
       <div>
         <div class="text-gray-500 text-sm">Filter type</div>
@@ -111,25 +186,36 @@
       <div v-if="downloadType != DeckDownloadType.Full">
         <div class="text-gray-500 text-sm">Range</div>
         <div class="flex flex-row flex-wrap gap-2 items-center">
-          <InputNumber v-model="frequencyRange[0]" show-buttons fluid size="small" class="max-w-20 flex-shrink-0" />
+          <InputNumber
+            :model-value="frequencyRange?.[0] ?? 0"
+            show-buttons
+            fluid
+            size="small"
+            class="max-w-20 flex-shrink-0"
+            @update:model-value="updateMinFrequency"
+          />
           <Slider
             v-model="frequencyRange"
             range
             :min="0"
-            :max="deck.uniqueWordCount"
+            :max="currentSliderMax"
             class="flex-grow mx-2 flex-basis-auto"
           />
-          <InputNumber v-model="frequencyRange[1]" show-buttons fluid size="small" class="max-w-20 flex-shrink-0" />
+          <InputNumber
+            :model-value="frequencyRange?.[1] ?? 0"
+            show-buttons
+            fluid
+            size="small"
+            class="max-w-20 flex-shrink-0"
+            @update:model-value="updateMaxFrequency"
+          />
         </div>
       </div>
+      <div>
+        This will download <span class="font-bold">{{ currentCardAmount }} cards</span>.
+      </div>
       <div class="flex justify-center">
-        <Button
-          type="button"
-          label="Download"
-          @click="
-            downloadFile()
-          "
-        />
+        <Button type="button" label="Download" @click="downloadFile()" />
       </div>
     </div>
   </Dialog>

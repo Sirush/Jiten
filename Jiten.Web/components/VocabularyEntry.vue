@@ -31,7 +31,7 @@
         <Button text @click="toggleCompact">{{ isCompact ? 'Expand' : 'Compact' }}</Button>
         </div>
         <div class="text-gray-500 dark:text-gray-300 text-sm text-right">
-          x{{ word.occurences }} | Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}
+          x{{ word.occurrences }} | Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}
         </div>
       </div>
     </template>
