@@ -11,7 +11,7 @@ RUN apt-get update \
         && apt-get install -y --no-install-recommends ./groonga-apt-source-latest-${CODENAME}.deb \
         && rm groonga-apt-source-latest-${CODENAME}.deb \
         && apt-get update \
-        && apt-get install -y -V postgresql-${PG_VERSION}-pgdg-pgroonga \
+        && apt-get install -y -V postgresql-17-pgdg-pgroonga \
         && apt-get clean \
         && rm -rf /var/lib/apt/lists/*
 
