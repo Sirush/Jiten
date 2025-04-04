@@ -36,7 +36,7 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
     {
         int pageSize = 50;
 
-        var query = context.Decks.Include(d => d.Children).AsNoTracking();
+        var query = context.Decks.AsNoTracking();
 
         if (!string.IsNullOrEmpty(titleFilter))
         {
@@ -50,6 +50,12 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
 
             query = context.Set<Deck>().FromSqlInterpolated(sql);
         }
+        else
+        {
+            query = query.Where(d => d.ParentDeckId == null);
+        }
+
+        query = query.Include(d => d.Children);
         
         if (mediaType != null)
             query = query.Where(d => d.MediaType == mediaType);
