@@ -9,6 +9,7 @@ namespace Jiten.Core.Data
         NonFiction = 5,
         VideoGame = 6,
         VisualNovel = 7,
-        WebNovel = 8
+        WebNovel = 8,
+        Manga = 9
     }
 }

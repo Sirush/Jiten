@@ -78,8 +78,9 @@ public class Program
 
         [Option(longName: "insert", Required = false, HelpText = "Insert the parsed deck.json into the database from a directory.")]
         public string Insert { get; set; }
-        
-        [Option(longName: "update", Required = false, HelpText = "Update the parsed deck.json into the database from a directory if it's more recent'.")]
+
+        [Option(longName: "update", Required = false,
+                HelpText = "Update the parsed deck.json into the database from a directory if it's more recent'.")]
         public bool UpdateDecks { get; set; }
 
         [Option(longName: "compute-frequencies", Required = false, HelpText = "Compute global word frequencies")]
@@ -97,7 +98,7 @@ public class Program
 
         [Option(longName: "apply-migrations", Required = false, HelpText = "Apply migrations to the database")]
         public bool ApplyMigrations { get; set; }
-        
+
         [Option(longName: "import-pitch-accents", Required = false, HelpText = "Import pitch accents from a yomitan dictinoary directory.")]
         public string ImportPitchAccents { get; set; }
     }
@@ -168,7 +169,10 @@ public class Program
                             }
                             else
                             {
-                                await MetadataDownloader.DownloadMetadata(o.Metadata, o.Api);
+                                if (o.Api == "anilist-manga")
+                                    await MetadataDownloader.DownloadMetadata(o.Metadata, o.Api, true, "Volume");
+                                else
+                                    await MetadataDownloader.DownloadMetadata(o.Metadata, o.Api);
                             }
                         }
 
@@ -412,6 +416,7 @@ public class Program
                         }
 
                         lines[i] = Regex.Replace(lines[i], @"\((.*?)\)", "");
+                        lines[i] = Regex.Replace(lines[i], @"（(.*?)）", "");
 
                         if (string.IsNullOrWhiteSpace(lines[i]))
                         {
@@ -603,7 +608,7 @@ public class Program
                 }
 
                 break;
-            
+
             case "txt":
                 result = await new TxtExtractor().Extract(o.ExtractFilePath, "SHIFT-JIS", o.Verbose);
                 if (o.Output != null)
@@ -617,6 +622,20 @@ public class Program
                 if (o.Output != null)
                 {
                     await File.WriteAllTextAsync(o.Output, result);
+                }
+
+                break;
+            case "mokuro":
+                var directories = Directory.GetDirectories(o.ExtractFilePath).ToList();
+                for (var i = 0; i < directories.Count; i++)
+                {
+                    string? directory = directories[i];
+
+                    result = await new MokuroExtractor().Extract(directory, o.Verbose);
+                    if (o.Output != null)
+                    {
+                        await File.WriteAllTextAsync(Path.Combine(o.Output, $"Volume {(i + 1):00}.txt"), result);
+                    }
                 }
 
                 break;

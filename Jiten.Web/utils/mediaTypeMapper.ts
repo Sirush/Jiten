@@ -18,30 +18,34 @@ export function getMediaTypeText(mediaType: MediaType): string {
       return 'Visual Novel';
     case MediaType.WebNovel:
       return 'Web Novel';
+    case MediaType.Manga:
+      return 'Manga';
     default:
       return 'Unknown';
   }
 }
 
 export function getChildrenCountText(mediaType: MediaType): string {
-    switch (mediaType) {
-        case MediaType.Anime:
-        return 'Episodes';
-        case MediaType.Drama:
-        return 'Episodes';
-        case MediaType.Movie:
-        return 'Movies';
-        case MediaType.Novel:
-        return 'Volumes';
-        case MediaType.NonFiction:
-        return 'Volumes';
-        case MediaType.VideoGame:
-        return 'Entries';
-        case MediaType.VisualNovel:
-        return 'Routes';
-        case MediaType.WebNovel:
-        return 'Chapters';
-        default:
-        return 'Unknown';
-    }
+  switch (mediaType) {
+    case MediaType.Anime:
+      return 'Episodes';
+    case MediaType.Drama:
+      return 'Episodes';
+    case MediaType.Movie:
+      return 'Movies';
+    case MediaType.Manga:
+      return 'Volumes';
+    case MediaType.Novel:
+      return 'Volumes';
+    case MediaType.NonFiction:
+      return 'Volumes';
+    case MediaType.VideoGame:
+      return 'Entries';
+    case MediaType.VisualNovel:
+      return 'Routes';
+    case MediaType.WebNovel:
+      return 'Chapters';
+    default:
+      return 'Unknown';
+  }
 }

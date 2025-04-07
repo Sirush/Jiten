@@ -20,6 +20,7 @@ public static class JitenHelper
                 await context.Decks
                              .Include(d => d.DeckWords)
                              .Include(d => d.Children)
+                             .Include(d => d.RawText)
                              .FirstOrDefaultAsync(d => d.OriginalTitle == deck.OriginalTitle && d.MediaType == deck.MediaType);
 
             if (existingDeck != null)
@@ -106,6 +107,19 @@ public static class JitenHelper
             if (existingChild != null)
             {
                 Console.WriteLine("Updating child deck " + key);
+                try
+                {
+                    var rawTextReference =
+                        context.Entry(existingChild)
+                               .Reference(nameof(existingChild.RawText)); // Or the actual navigation property name if different
+                    await rawTextReference.LoadAsync();
+                }
+                catch (Exception loadEx)
+                {
+                    Console.WriteLine($"Error explicitly loading data for child deck {key}: {loadEx.Message}");
+                    continue;
+                }
+
                 await UpdateDeck(context, existingChild, child);
                 newChildren.Remove(key);
             }
@@ -129,7 +143,7 @@ public static class JitenHelper
                 newChildDeck.SentenceCount = child.SentenceCount;
                 newChildDeck.WordCount = child.WordCount;
                 newChildDeck.RawText = child.RawText;
-                
+
                 foreach (var dw in child.DeckWords)
                 {
                     var newDeckWord = new DeckWord

@@ -13,8 +13,10 @@ namespace Jiten.Cli;
 public static class MetadataDownloader
 {
     private static Func<string, Task<List<Metadata>>> _currentApi;
+    private static bool _autoName;
+    private static string _autoNamePrefix = "";
 
-    public static async Task DownloadMetadata(string? directory, string? api)
+    public static async Task DownloadMetadata(string? directory, string? api, bool autoName = false, string autoNamePrefix = "")
     {
         if (!Directory.Exists(directory))
         {
@@ -26,9 +28,13 @@ public static class MetadataDownloader
         {
             "vndb" => VndbApi,
             "books" => GoogleBooksApi,
-            "anilist" => AnilistApi,
+            "anilist" => AnilistNovelApi,
+            "anilist-manga" => AnilistMangaApi,
             _ => throw new ArgumentException("Invalid API")
         };
+
+        _autoName = autoName;
+        _autoNamePrefix = autoNamePrefix;
 
         var directories = Directory.GetDirectories(directory);
         foreach (var dir in directories)
@@ -65,13 +71,15 @@ public static class MetadataDownloader
         }
 
         var metadatas = new List<Metadata>();
+        int i = 1;
         foreach (var file in orderedFiles)
         {
-            var apiResult = await ProcessFileWithApi(file);
+            var apiResult = await ProcessFileWithApi(file, i);
             if (apiResult == null) continue;
 
             apiResult.FilePath = file;
             metadatas.Add(apiResult);
+            i++;
         }
 
         if (metadatas.Count == 0)
@@ -79,23 +87,43 @@ public static class MetadataDownloader
             return;
         }
 
+        string? originalTitle = null;
+        string? romajiTitle = null;
+        string? englishTitle = null;
+
         var suggestedOriginalTitle = metadatas.First().OriginalTitle;
-        Console.WriteLine($"Enter Original Title (suggested: {suggestedOriginalTitle}):");
-        var originalTitle = Console.ReadLine()?.Trim();
-        if (string.IsNullOrEmpty(originalTitle))
-            originalTitle = suggestedOriginalTitle;
-
         var suggestedRomajiTitle = metadatas.First().RomajiTitle;
-        Console.WriteLine($"Enter Romaji Title (suggested: {suggestedRomajiTitle}):");
-        var romajiTitle = Console.ReadLine()?.Trim();
-        if (string.IsNullOrEmpty(romajiTitle))
-            romajiTitle = suggestedRomajiTitle;
-
         var suggestedEnglishTitle = metadatas.First().EnglishTitle;
-        Console.WriteLine($"Enter English Title (suggested: {suggestedEnglishTitle}):");
-        var englishTitle = Console.ReadLine()?.Trim();
-        if (string.IsNullOrEmpty(englishTitle))
+
+
+        if (!_autoName)
+        {
+            Console.WriteLine($"Enter Original Title (suggested: {suggestedOriginalTitle}):");
+            originalTitle = Console.ReadLine()?.Trim();
+            if (string.IsNullOrEmpty(originalTitle))
+                originalTitle = suggestedOriginalTitle;
+
+            Console.WriteLine($"Enter Romaji Title (suggested: {suggestedRomajiTitle}):");
+            romajiTitle = Console.ReadLine()?.Trim();
+            if (string.IsNullOrEmpty(romajiTitle))
+                romajiTitle = suggestedRomajiTitle;
+
+            Console.WriteLine($"Enter English Title (suggested: {suggestedEnglishTitle}):");
+            englishTitle = Console.ReadLine()?.Trim();
+            if (string.IsNullOrEmpty(englishTitle))
+                englishTitle = suggestedEnglishTitle;
+        }
+        else
+        {
+            originalTitle = suggestedOriginalTitle;
+            romajiTitle = suggestedRomajiTitle;
             englishTitle = suggestedEnglishTitle;
+
+            Console.WriteLine("Autonaming enabled:");
+            Console.WriteLine($"Original Title: {originalTitle}");
+            Console.WriteLine($"Romaji Title: {romajiTitle}");
+            Console.WriteLine($"English Title: {englishTitle}");
+        }
 
         var imageUrl = metadatas.First().Image;
         if (!string.IsNullOrEmpty(imageUrl))
@@ -115,10 +143,20 @@ public static class MetadataDownloader
             var links = metadatas.First().Links;
             var releaseDate = metadatas.First().ReleaseDate;
 
-            // Ask if you want to name the first metadata originaltitle
-            Console.WriteLine($"What should **{Path.GetFileNameWithoutExtension(metadatas.First().FilePath)}** be named? Or press enter to keep the name {metadatas.First().OriginalTitle}");
 
-            var input = Console.ReadLine()?.Trim();
+            string? input = "";
+            if (!_autoName)
+            {
+                // Ask if you want to name the first metadata originaltitle
+                Console.WriteLine($"What should **{Path.GetFileNameWithoutExtension(metadatas.First().FilePath)}** be named? Or press enter to keep the name {metadatas.First().OriginalTitle}");
+
+                input = Console.ReadLine()?.Trim();
+            }
+            else
+            {
+                input = $"{_autoNamePrefix} 1";
+            }
+
             if (!string.IsNullOrEmpty(input))
             {
                 metadatas.First().OriginalTitle = input;
@@ -130,13 +168,8 @@ public static class MetadataDownloader
 
             var metadata = new Metadata
                            {
-                               OriginalTitle = originalTitle,
-                               RomajiTitle = romajiTitle,
-                               EnglishTitle = englishTitle,
-                               ReleaseDate = releaseDate,
-                               Image = image,
-                               Links = links,
-                               Children = metadatas,
+                               OriginalTitle = originalTitle, RomajiTitle = romajiTitle, EnglishTitle = englishTitle,
+                               ReleaseDate = releaseDate, Image = image, Links = links, Children = metadatas,
                            };
 
             await File.WriteAllTextAsync(metadataPath,
@@ -176,11 +209,14 @@ public static class MetadataDownloader
             return input is "s" or "skip" ? [] : files;
         }
 
-        Console.WriteLine("\nEnter file order (comma-separated numbers) or 's' to skip:");
+        Console.WriteLine("\nEnter file order (comma-separated numbers), 'a' for all or 's' to skip:");
         input = Console.ReadLine()?.Trim().ToLower();
 
         if (string.IsNullOrEmpty(input) || input == "s" || input == "skip")
             return [];
+
+        if (input == "a" || input == "all")
+            return files;
 
         var orderedFiles = new List<string>();
         var numbers = input.Split(',', StringSplitOptions.RemoveEmptyEntries);
@@ -195,13 +231,20 @@ public static class MetadataDownloader
         return orderedFiles;
     }
 
-    private static async Task<Metadata?> ProcessFileWithApi(string filePath)
+    private static async Task<Metadata?> ProcessFileWithApi(string filePath, int fileIndex)
     {
         var fileName = new DirectoryInfo(Path.GetDirectoryName(filePath)!).Name;
 
         while (true)
         {
             Console.WriteLine($"File: {Path.GetFileNameWithoutExtension(filePath)}");
+
+            if (_autoName && fileIndex > 1)
+            {
+                Console.WriteLine($"Auto naming enabled, named {_autoNamePrefix} {fileIndex}");
+                return new Metadata() { OriginalTitle = $"{_autoNamePrefix} {fileIndex}" };
+            }
+
             Console.WriteLine($"Press enter to query **{fileName}**, press 'q' or 'query' to write a custom query, 'a' or 'abort' to abort or type a string to give a custom title and return immediately:");
 
             var input = Console.ReadLine()?.Trim();
@@ -220,7 +263,6 @@ public static class MetadataDownloader
                     continue;
                 }
             }
-
             else if (input.Equals("a", StringComparison.OrdinalIgnoreCase) || input.Equals("abort", StringComparison.OrdinalIgnoreCase))
             {
                 return null;
@@ -280,11 +322,9 @@ public static class MetadataDownloader
 
         var requestContent = new StringContent(JsonSerializer.Serialize(new
                                                                         {
-                                                                            filters = filter,
-                                                                            fields =
+                                                                            filters = filter, fields =
                                                                                 "id,title,released,titles{main,official,lang,title,latin},image{url,sexual}, extlinks{label,url, name}",
-                                                                            results = 10,
-                                                                            page = 1
+                                                                            results = 10, page = 1
                                                                         }));
         var http = new HttpClient();
         requestContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
@@ -340,9 +380,7 @@ public static class MetadataDownloader
 
             metadatas = result!.Items.Select(i => new Metadata
                                                   {
-                                                      OriginalTitle = i.VolumeInfo.Title,
-                                                      RomajiTitle = null,
-                                                      EnglishTitle = null,
+                                                      OriginalTitle = i.VolumeInfo.Title, RomajiTitle = null, EnglishTitle = null,
                                                       ReleaseDate = i.VolumeInfo.PublishedDate,
                                                       Links = [new Link { LinkType = LinkType.GoogleBooks, Url = i.SelfLink }],
                                                       Image = i.VolumeInfo.ImageLinks?.Thumbnail
@@ -352,7 +390,17 @@ public static class MetadataDownloader
         return metadatas;
     }
 
-    private static async Task<List<Metadata>> AnilistApi(string query)
+    private static async Task<List<Metadata>> AnilistNovelApi(string query)
+    {
+        return await AnilistApi(query, "NOVEL");
+    }
+
+    private static async Task<List<Metadata>> AnilistMangaApi(string query)
+    {
+        return await AnilistApi(query, "MANGA");
+    }
+
+    private static async Task<List<Metadata>> AnilistApi(string query, string format)
     {
         var requestBody = new
                           {
@@ -379,7 +427,7 @@ public static class MetadataDownloader
             }
           }
         }",
-                              variables = new { search = query, type = "MANGA", format = "NOVEL" }
+                              variables = new { search = query, type = "MANGA", format = format }
                           };
 
         var httpClient = new HttpClient();
@@ -397,11 +445,8 @@ public static class MetadataDownloader
 
         return result?.Data?.Page?.Media.Select(media => new Metadata
                                                          {
-                                                             OriginalTitle = media.Title.Native,
-                                                             RomajiTitle = media.Title.Romaji,
-                                                             EnglishTitle = media.Title.English,
-                                                             ReleaseDate = media.ReleaseDate,
-                                                             Links =
+                                                             OriginalTitle = media.Title.Native, RomajiTitle = media.Title.Romaji,
+                                                             EnglishTitle = media.Title.English, ReleaseDate = media.ReleaseDate, Links =
                                                              [
                                                                  new Link
                                                                  {
