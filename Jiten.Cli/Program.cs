@@ -431,6 +431,9 @@ public class Program
                 deck.OriginalTitle = metadata.OriginalTitle;
                 deck.MediaType = deckType;
 
+                if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama)
+                    deck.SentenceCount = 0;
+
                 if (options.Verbose)
                     Console.WriteLine($"Parsed {filePath} with {deck.DeckWords.Count} words.");
             }

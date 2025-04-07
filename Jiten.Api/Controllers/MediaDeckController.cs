@@ -87,8 +87,8 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 ? query.OrderBy(d => d.CharacterCount)
                 : query.OrderByDescending(d => d.CharacterCount),
             "sentenceLength" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.CharacterCount / (d.SentenceCount + 1))
-                : query.OrderByDescending(d => d.CharacterCount / (d.SentenceCount + 1)),
+                ? query.OrderBy(d => d.CharacterCount / (d.SentenceCount + 1)).Where(d => d.SentenceCount != 0)
+                : query.OrderByDescending(d => d.CharacterCount / (d.SentenceCount + 1)).Where(d => d.SentenceCount != 0),
             "wordCount" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.WordCount)
                 : query.OrderByDescending(d => d.WordCount),
