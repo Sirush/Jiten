@@ -114,7 +114,7 @@
     { type: null, label: 'All' },
     { type: MediaType.Anime, label: 'Anime' },
     { type: MediaType.Drama, label: 'Dramas' },
-    { type: MediaType.Manga, label: 'Mangas' },
+    { type: MediaType.Manga, label: 'Manga' },
     { type: MediaType.Movie, label: 'Movies' },
     { type: MediaType.Novel, label: 'Novels' },
     { type: MediaType.NonFiction, label: 'Non-Fiction' },

@@ -37,7 +37,8 @@ export enum DeckDownloadType {
 export enum DeckFormat {
   Anki = 1,
   Csv = 2,
-  Txt = 3
+  Txt = 3,
+  TxtRepeated
 }
 
 export enum DeckOrder {

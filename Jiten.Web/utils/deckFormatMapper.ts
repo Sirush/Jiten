@@ -8,6 +8,8 @@ export function getDeckFormatText(deckFormat: DeckFormat): string {
       return 'CSV';
     case DeckFormat.Txt:
       return 'TXT (vocab only)';
+    case DeckFormat.TxtRepeated:
+      return 'TXT (repeated vocab)';
     default:
       return 'Unknown';
   }

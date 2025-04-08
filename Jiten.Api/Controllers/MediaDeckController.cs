@@ -260,7 +260,8 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
     [HttpGet("{id}/download")]
     [EnableRateLimiting("download")]
     public async Task<IResult> DownloadDeck(int id, DeckFormat format, DeckDownloadType downloadType, DeckOrder order,
-                                            int minFrequency = 0, int maxFrequency = 0)
+                                            int minFrequency = 0, int maxFrequency = 0, bool excludeKana = false,
+                                            bool excludeFullWidthDigits = false)
     {
         var deck = context.Decks.AsNoTracking().FirstOrDefault(d => d.DeckId == id);
 
@@ -348,6 +349,13 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 foreach (var word in deckWords)
                 {
                     string expression = jmdictWords[word.WordId].Readings[word.ReadingIndex];
+
+                    if (excludeKana && WanaKana.IsKana(expression))
+                        continue;
+
+                    if (excludeFullWidthDigits && expression.All(char.IsDigit))
+                        continue;
+
                     string expressionFurigana = jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex];
                     // Very unoptimized, might have to rework
                     string expressionReading = string.Join("", jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex]
@@ -409,6 +417,13 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 foreach (var word in deckWords)
                 {
                     string reading = jmdictWords[word.WordId].Readings[word.ReadingIndex];
+
+                    if (excludeKana && WanaKana.IsKana(reading))
+                        continue;
+
+                    if (excludeFullWidthDigits && reading.All(char.IsDigit))
+                        continue;
+
                     string readingFurigana = jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex];
                     string pitchPositions = "";
 
@@ -433,10 +448,34 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                 StringBuilder txtSb = new StringBuilder();
                 foreach (var word in deckWords)
                 {
-                    txtSb.AppendLine(jmdictWords[word.WordId].Readings[word.ReadingIndex]);
+                    string reading = jmdictWords[word.WordId].Readings[word.ReadingIndex];
+                    if (excludeKana && WanaKana.IsKana(reading))
+                        continue;
+
+                    if (excludeFullWidthDigits && reading.All(char.IsDigit))
+                        continue;
+
+                    txtSb.AppendLine(reading);
                 }
 
                 return Results.File(Encoding.UTF8.GetBytes(txtSb.ToString()), "text/plain", $"{deck.OriginalTitle}.txt");
+
+            case DeckFormat.TxtRepeated:
+                StringBuilder txtRepeatedSb = new StringBuilder();
+                foreach (var word in deckWords)
+                {
+                    string reading = jmdictWords[word.WordId].Readings[word.ReadingIndex];
+                    if (excludeKana && WanaKana.IsKana(reading))
+                        continue;
+
+                    if (excludeFullWidthDigits && reading.All(char.IsDigit))
+                        continue;
+
+                    for (int i = 0; i < word.Occurrences; i++)
+                        txtRepeatedSb.AppendLine(reading);
+                }
+
+                return Results.File(Encoding.UTF8.GetBytes(txtRepeatedSb.ToString()), "text/plain", $"{deck.OriginalTitle}.txt");
 
             default:
                 return Results.BadRequest();

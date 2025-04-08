@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { type Deck, DeckDownloadType, DeckFormat, DeckOrder } from '~/types';
-  import { SelectButton } from 'primevue';
+  import { Accordion, AccordionPanel, AccordionHeader, AccordionContent, SelectButton } from 'primevue';
   import { debounce } from 'perfect-debounce';
   import { useApiFetch, useApiFetchPaginated } from '~/composables/useApiFetch';
 
@@ -98,6 +98,9 @@
     return 0;
   });
 
+  const excludeFullWidthDigits = ref(true);
+  const excludeKana = ref(false);
+
   const downloadFile = async () => {
     try {
       downloading.value = true;
@@ -109,17 +112,20 @@
           order: deckOrder.value,
           minFrequency: frequencyRange.value![0],
           maxFrequency: frequencyRange.value![1],
+          excludeFullWidthDigits: excludeFullWidthDigits.value,
+          excludeKana: excludeKana.value,
         },
+        responseType: 'blob'
       });
       if (response) {
-        const blobUrl = window.URL.createObjectURL(new Blob([response], { type: response.type }));
+        const blobUrl = window.URL.createObjectURL(response);
         const link = document.createElement('a');
         link.href = blobUrl;
         if (format.value === DeckFormat.Anki) {
           link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.apkg`);
         } else if (format.value === DeckFormat.Csv) {
           link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.csv`);
-        } else if (format.value === DeckFormat.Txt) {
+        } else if (format.value === DeckFormat.Txt || format.value === DeckFormat.TxtRepeated) {
           link.setAttribute('download', `${localiseTitle(props.deck).substring(0, 30)}.txt`);
         }
 
@@ -166,8 +172,12 @@
         Uses the Lapis template from <a href="https://github.com/donkuri/lapis/tree/main">Lapis</a>
       </span>
       <span v-if="format == DeckFormat.Txt" class="text-sm">
-        Plain text format, one word per line, vocabulary only. <br >
+        Plain text format, one word per line, vocabulary only. <br />
         Perfect for importing in other websites.
+      </span>
+      <span v-if="format == DeckFormat.TxtRepeated" class="text-sm">
+        Plain text format, one word per line, vocabulary only. <br />
+        The vocabulary is repeated for each occurrence to handle frequency on some websites.
       </span>
       <div>
         <div class="text-gray-500 text-sm">Filter type</div>
@@ -211,6 +221,27 @@
           />
         </div>
       </div>
+      <Accordion>
+        <AccordionPanel value="0" >
+          <AccordionHeader>
+            Advanced
+          </AccordionHeader>
+          <AccordionContent>
+            <div class="flex flex-col gap-2">
+          <div class="text-sm text-gray-500">These options might not be reflected in the card count below.</div>
+            <div class="flex items-center gap-2">
+              <Checkbox v-model="excludeFullWidthDigits" input-id="excludeFullWidthDigits" name="digits" :binary="true" />
+              <label for="excludeFullWidthDigits">Exclude Western-style numbers (e.g. 13, ６０)"</label>
+            </div>
+            <div class="flex items-center gap-2">
+              <Checkbox v-model="excludeKana" input-id="excludeKana" name="kanaOnly" :binary="true" />
+              <label for="excludeKana">Exclude kana-only vocabulary</label>
+            </div>
+            </div>
+          </AccordionContent>
+        </AccordionPanel>
+      </Accordion>
+
       <div>
         This will download <span class="font-bold">{{ currentCardAmount }} cards</span>.
       </div>
