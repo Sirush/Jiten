@@ -203,351 +203,593 @@ public class Parser
     /// <returns></returns>
     private List<WordInfo> ProcessSpecialCases(List<WordInfo> wordInfos)
     {
-        for (int i = 0; i < wordInfos.Count - 2; i++)
+        if (wordInfos.Count == 0)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
+
+
+        for (int i = 0; i < wordInfos.Count;)
         {
-            // surukudasai
-            if (wordInfos[i].DictionaryForm == "する" && wordInfos[i + 1].Text == "て" && wordInfos[i + 2].DictionaryForm == "くださる")
-            {
-                wordInfos[i].Text = wordInfos[i].Text + wordInfos[i + 1].Text + wordInfos[i + 2].Text;
-                wordInfos.RemoveAt(i + 1);
-                wordInfos.RemoveAt(i + 1);
-            }
+            WordInfo w1 = wordInfos[i];
 
-            foreach (var sc in SpecialCases3)
+            if (i < wordInfos.Count - 2)
             {
-                if (wordInfos[i].Text == sc.Item1 && wordInfos[i + 1].Text == sc.Item2 && wordInfos[i + 2].Text == sc.Item3)
+                WordInfo w2 = wordInfos[i + 1];
+                WordInfo w3 = wordInfos[i + 2];
+
+                // surukudasai
+                if (w1.DictionaryForm == "する" && w2.Text == "て" && w3.DictionaryForm == "くださる")
                 {
-                    wordInfos[i].Text = wordInfos[i].Text + wordInfos[i + 1].Text + wordInfos[i + 2].Text;
-                    wordInfos.RemoveAt(i + 1);
-                    wordInfos.RemoveAt(i + 1);
+                    var newWord = new WordInfo(w1);
+                    newWord.Text = w1.Text + w2.Text + w3.Text;
 
-                    if (sc.Item4 != null)
+                    newList.Add(newWord);
+                    i += 3;
+
+                    continue;
+                }
+
+                bool found = false;
+                foreach (var sc in SpecialCases3)
+                {
+                    if (w1.Text == sc.Item1 && w2.Text == sc.Item2 && w3.Text == sc.Item3)
                     {
-                        wordInfos[i].PartOfSpeech = sc.Item4.Value;
+                        var newWord = new WordInfo(w1);
+                        newWord.Text = w1.Text + w2.Text + w3.Text;
+
+                        if (sc.Item4 != null)
+                        {
+                            newWord.PartOfSpeech = sc.Item4.Value;
+                        }
+
+                        newList.Add(newWord);
+                        i += 3;
+                        found = true;
+                        break;
                     }
                 }
+
+                if (found)
+                    continue;
             }
-        }
 
-        for (int i = 0; i < wordInfos.Count - 1; i++)
-        {
-            foreach (var sc in SpecialCases2)
+            if (i < wordInfos.Count - 1)
             {
-                if (wordInfos[i].Text == sc.Item1 && wordInfos[i + 1].Text == sc.Item2)
-                {
-                    wordInfos[i].Text += wordInfos[i + 1].Text;
-                    wordInfos.RemoveAt(i + 1);
+                WordInfo w2 = wordInfos[i + 1];
 
-                    if (sc.Item3 != null)
+                bool found = false;
+                foreach (var sc in SpecialCases2)
+                {
+                    if (w1.Text == sc.Item1 && w2.Text == sc.Item2)
                     {
-                        wordInfos[i].PartOfSpeech = sc.Item3.Value;
+                        var newWord = new WordInfo(w1);
+                        newWord.Text = w1.Text + w2.Text;
+
+                        if (sc.Item3 != null)
+                        {
+                            newWord.PartOfSpeech = sc.Item3.Value;
+                        }
+
+                        newList.Add(newWord);
+                        i += 2;
+                        found = true;
+                        break;
                     }
                 }
-            }
-        }
 
-        for (int i = 0; i < wordInfos.Count; i++)
-        {
+                if (found)
+                    continue;
+            }
+
             // This word is (sometimes?) parsed as auxiliary for some reason
-            if (wordInfos[i].Text == "でしょう")
+            if (w1.Text == "でしょう")
             {
-                wordInfos[i].PartOfSpeech = PartOfSpeech.Expression;
-            }
-        }
+                var newWord = new WordInfo(w1);
+                newWord.PartOfSpeech = PartOfSpeech.Expression;
+                newWord.PartOfSpeechSection1 = PartOfSpeechSection.None;
 
-        // I'm not sure why this happens, but sudachi thinks those words are proper nouns
-        for (int i = 0; i < wordInfos.Count; i++)
-        {
-            if (wordInfos[i].Text == "俺の")
+                newList.Add(newWord);
+                i++;
+                continue;
+            }
+            // I'm not sure why this happens, but sudachi thinks those words are proper nouns
+
+            if (w1.Text == "俺の")
             {
-                wordInfos[i].Text = "俺";
-                wordInfos[i].DictionaryForm = "俺";
-                wordInfos[i].PartOfSpeech = PartOfSpeech.Pronoun;
-                wordInfos[i].PartOfSpeechSection1 = PartOfSpeechSection.None;
+                var ore = new WordInfo
+                          {
+                              Text = "俺", DictionaryForm = "俺", PartOfSpeech = PartOfSpeech.Pronoun,
+                              PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "おれ"
+                          };
                 var no = new WordInfo
                          {
                              Text = "の", PartOfSpeech = PartOfSpeech.Particle,
                              PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle, Reading = "の", DictionaryForm = "の"
                          };
-                wordInfos.Insert(i + 1, no);
+
+                newList.Add(ore);
+                newList.Add(no);
+                i += 2;
+                continue;
             }
 
-            if (wordInfos[i].Text == "泣きながら")
+            if (w1.Text == "泣きながら")
             {
-                wordInfos[i].Text = "泣き";
-                wordInfos[i].DictionaryForm = "泣き";
-                wordInfos[i].PartOfSpeech = PartOfSpeech.Noun;
-                wordInfos[i].PartOfSpeechSection1 = PartOfSpeechSection.None;
-                var no = new WordInfo
-                         {
-                             Text = "ながら", PartOfSpeech = PartOfSpeech.Particle,
-                             PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle, Reading = "ながら", DictionaryForm = "ながら"
-                         };
-                wordInfos.Insert(i + 1, no);
+                var naki = new WordInfo
+                           {
+                               Text = "泣き", DictionaryForm = "泣き", PartOfSpeech = PartOfSpeech.Noun,
+                               PartOfSpeechSection1 = PartOfSpeechSection.None, Reading = "なき"
+                           };
+                var nagara = new WordInfo
+                             {
+                                 Text = "ながら", PartOfSpeech = PartOfSpeech.Particle,
+                                 PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle, Reading = "ながら", DictionaryForm = "ながら"
+                             };
+
+                newList.Add(naki);
+                newList.Add(nagara);
+                i += 2;
+                continue;
             }
+
+            newList.Add(w1);
+            i++;
         }
 
-        return wordInfos;
+        return newList;
     }
 
     private List<WordInfo> CombinePrefixes(List<WordInfo> wordInfos)
     {
-        for (int i = 0; i < wordInfos.Count - 1; i++)
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
+        var currentWord = new WordInfo(wordInfos[0]);
+
+        for (int i = 1; i < wordInfos.Count; i++)
         {
-            if (wordInfos[i].PartOfSpeech == PartOfSpeech.Prefix)
+            var nextWord = wordInfos[i];
+            if (currentWord.PartOfSpeech == PartOfSpeech.Prefix)
             {
-                wordInfos[i + 1].Text = wordInfos[i].Text + wordInfos[i + 1].Text;
-                wordInfos.RemoveAt(i);
-                i--;
+                var newText = currentWord.Text + nextWord.Text;
+                currentWord = new WordInfo(nextWord);
+                currentWord.Text = newText;
+            }
+            else
+            {
+                newList.Add(currentWord);
+                currentWord = new WordInfo(nextWord);
             }
         }
 
-        return wordInfos;
+        newList.Add(currentWord);
+
+        return newList;
     }
 
     private List<WordInfo> CombineAmounts(List<WordInfo> wordInfos)
     {
-        for (int i = 0; i < wordInfos.Count - 1; i++)
-        {
-            if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Amount) ||
-                wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Numeral))
-            {
-                if (!AmountCombinations.Combinations.Contains((wordInfos[i].Text, wordInfos[i + 1].Text)))
-                    continue;
+        if (wordInfos.Count < 2)
+            return wordInfos;
 
-                wordInfos[i + 1].Text = wordInfos[i].Text + wordInfos[i + 1].Text;
-                wordInfos[i + 1].PartOfSpeech = PartOfSpeech.Noun;
-                wordInfos.RemoveAt(i);
-                i--;
+        List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
+        var currentWord = new WordInfo(wordInfos[0]);
+        for (int i = 1; i < wordInfos.Count; i++)
+        {
+            var nextWord = wordInfos[i];
+
+            if ((currentWord.HasPartOfSpeechSection(PartOfSpeechSection.Amount) ||
+                 currentWord.HasPartOfSpeechSection(PartOfSpeechSection.Numeral)) &&
+                AmountCombinations.Combinations.Contains((currentWord.Text, nextWord.Text)))
+            {
+                currentWord = new WordInfo(nextWord);
+                currentWord.Text += nextWord.Text;
+                currentWord.PartOfSpeech = PartOfSpeech.Noun;
+            }
+            else
+            {
+                newList.Add(currentWord);
+                currentWord = new WordInfo(nextWord);
             }
         }
 
-        return wordInfos;
+        newList.Add(currentWord);
+
+        return newList;
     }
 
     private List<WordInfo> CombineTte(List<WordInfo> wordInfos)
     {
-        for (int i = 0; i < wordInfos.Count - 1; i++)
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
+        var currentWord = new WordInfo(wordInfos[0]);
+        for (int i = 1; i < wordInfos.Count; i++)
         {
-            if (wordInfos[i].Text.EndsWith("っ") && wordInfos[i + 1].Text.StartsWith("て"))
+            WordInfo nextWord = wordInfos[i];
+
+            if (currentWord.Text.EndsWith("っ") && nextWord.Text.StartsWith("て"))
             {
-                wordInfos[i].Text += wordInfos[i + 1].Text;
-                wordInfos.RemoveAt(i + 1);
-                i--;
+                currentWord.Text += nextWord.Text;
+            }
+            else
+            {
+                newList.Add(currentWord);
+                currentWord = new WordInfo(nextWord);
             }
         }
 
-        return wordInfos;
+        newList.Add(currentWord);
+
+        return newList;
     }
 
     private List<WordInfo> CombineVerbDependant(List<WordInfo> wordInfos)
     {
-        // Dependants
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Dependant) &&
-                wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb)
-            {
-                wordInfos[i - 1].Text += wordInfos[i].Text;
-                wordInfos.RemoveAt(i);
-                i--;
-            }
-        }
+        if (wordInfos.Count < 2)
+            return wordInfos;
 
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
-                wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb &&
-                (wordInfos[i].DictionaryForm == "得る" ||
-                 wordInfos[i].DictionaryForm == "する" ||
-                 wordInfos[i].DictionaryForm == "しまう" ||
-                 wordInfos[i].DictionaryForm == "おる" ||
-                 wordInfos[i].DictionaryForm == "きる" ||
-                 wordInfos[i].DictionaryForm == "こなす" ||
-                 wordInfos[i].DictionaryForm == "いく" ||
-                 wordInfos[i].DictionaryForm == "貰う" ||
-                 wordInfos[i].DictionaryForm == "いる"
-                ))
-            {
-                wordInfos[i - 1].Text += wordInfos[i].Text;
-                wordInfos.RemoveAt(i);
-                i--;
-            }
-        }
-
-        // 注意してください
-        for (int i = 0; i < wordInfos.Count - 1; i++)
-        {
-            if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) &&
-                wordInfos[i + 1].DictionaryForm == "する" && wordInfos[i + 1].Text != "する" && wordInfos[i + 1].Text != "しない")
-            {
-                wordInfos[i].Text += wordInfos[i + 1].Text;
-                wordInfos[i].PartOfSpeech = PartOfSpeech.Verb;
-                wordInfos.RemoveAt(i + 1);
-            }
-        }
-
-        // ている
-        for (int i = 0; i < wordInfos.Count - 2; i++)
-        {
-            if (wordInfos[i].PartOfSpeech == PartOfSpeech.Verb && wordInfos[i + 1].DictionaryForm == "て" &&
-                wordInfos[i + 2].DictionaryForm == "いる")
-            {
-                wordInfos[i].Text += wordInfos[i + 1].Text;
-                wordInfos[i].Text += wordInfos[i + 2].Text;
-                wordInfos.RemoveAt(i + 2);
-                wordInfos.RemoveAt(i + 1);
-            }
-        }
+        wordInfos = CombineVerbDependants(wordInfos);
+        wordInfos = CombineVerbPossibleDependants(wordInfos);
+        wordInfos = CombineVerbDependantsSuru(wordInfos);
+        wordInfos = CombineVerbDependantsTeiru(wordInfos);
 
         return wordInfos;
+    }
+
+    private List<WordInfo> CombineVerbDependants(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>();
+        WordInfo currentWord = new WordInfo(wordInfos[0]);
+
+        for (int i = 1; i < wordInfos.Count; i++)
+        {
+            WordInfo nextWord = wordInfos[i];
+
+            if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.Dependant) &&
+                currentWord.PartOfSpeech == PartOfSpeech.Verb)
+            {
+                currentWord.Text += nextWord.Text;
+            }
+            else
+            {
+                newList.Add(currentWord);
+                currentWord = new WordInfo(nextWord);
+            }
+        }
+
+        newList.Add(currentWord);
+        return newList;
+    }
+
+    private List<WordInfo> CombineVerbPossibleDependants(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>();
+        WordInfo currentWord = new WordInfo(wordInfos[0]);
+
+        for (int i = 1; i < wordInfos.Count; i++)
+        {
+            WordInfo nextWord = wordInfos[i];
+
+            // Condition uses accumulator (verb) and next word (possible dependant + specific forms)
+            if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
+                currentWord.PartOfSpeech == PartOfSpeech.Verb &&
+                (nextWord.DictionaryForm == "得る" ||
+                 nextWord.DictionaryForm == "する" ||
+                 nextWord.DictionaryForm == "しまう" ||
+                 nextWord.DictionaryForm == "おる" ||
+                 nextWord.DictionaryForm == "きる" ||
+                 nextWord.DictionaryForm == "こなす" ||
+                 nextWord.DictionaryForm == "いく" ||
+                 nextWord.DictionaryForm == "貰う" ||
+                 nextWord.DictionaryForm == "いる"
+                ))
+            {
+                currentWord.Text += nextWord.Text;
+            }
+            else
+            {
+                newList.Add(currentWord);
+                currentWord = new WordInfo(nextWord);
+            }
+        }
+
+        newList.Add(currentWord);
+        return newList;
+    }
+
+    private List<WordInfo> CombineVerbDependantsSuru(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>();
+        int i = 0;
+        while (i < wordInfos.Count)
+        {
+            WordInfo currentWord = wordInfos[i];
+
+            if (i + 1 < wordInfos.Count)
+            {
+                WordInfo nextWord = wordInfos[i + 1];
+                if (currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) &&
+                    nextWord.DictionaryForm == "する" && nextWord.Text != "する" && nextWord.Text != "しない")
+                {
+                    WordInfo combinedWord = new WordInfo(currentWord);
+                    combinedWord.Text += nextWord.Text;
+                    combinedWord.PartOfSpeech = PartOfSpeech.Verb;
+                    newList.Add(combinedWord);
+                    i += 2;
+                    continue;
+                }
+            }
+
+            newList.Add(new WordInfo(currentWord));
+            i++;
+        }
+
+        return newList;
+    }
+
+    private List<WordInfo> CombineVerbDependantsTeiru(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 3)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>();
+        int i = 0;
+        while (i < wordInfos.Count)
+        {
+            WordInfo currentWord = wordInfos[i];
+
+            if (i + 2 < wordInfos.Count)
+            {
+                WordInfo nextWord1 = wordInfos[i + 1];
+                WordInfo nextWord2 = wordInfos[i + 2];
+
+                if (currentWord.PartOfSpeech == PartOfSpeech.Verb &&
+                    nextWord1.DictionaryForm == "て" &&
+                    nextWord2.DictionaryForm == "いる")
+                {
+                    WordInfo combinedWord = new WordInfo(currentWord);
+                    combinedWord.Text += nextWord1.Text + nextWord2.Text;
+                    newList.Add(combinedWord);
+                    i += 3;
+                    continue;
+                }
+            }
+
+            newList.Add(new WordInfo(currentWord));
+            i++;
+        }
+
+        return newList;
     }
 
     private List<WordInfo> CombineAdverbialParticle(List<WordInfo> wordInfos)
     {
-        // Dependants
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>();
+        WordInfo currentWord = new WordInfo(wordInfos[0]);
+
         for (int i = 1; i < wordInfos.Count; i++)
         {
+            WordInfo nextWord = wordInfos[i];
+
             // i.e　だり, たり
-            if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.AdverbialParticle) &&
-                (wordInfos[i].DictionaryForm == "だり" || wordInfos[i].DictionaryForm == "たり") &&
-                wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb)
+            if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.AdverbialParticle) &&
+                (nextWord.DictionaryForm == "だり" || nextWord.DictionaryForm == "たり") &&
+                currentWord.PartOfSpeech == PartOfSpeech.Verb)
+
             {
-                wordInfos[i - 1].Text += wordInfos[i].Text;
-                wordInfos.RemoveAt(i);
-                i--;
+                currentWord.Text += nextWord.Text;
+            }
+            else
+            {
+                newList.Add(currentWord);
+                currentWord = new WordInfo(nextWord);
             }
         }
 
-        return wordInfos;
+        newList.Add(currentWord);
+
+        return newList;
     }
 
     private List<WordInfo> CombineConjunctiveParticle(List<WordInfo> wordInfos)
     {
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList = [wordInfos[0]];
+
         for (int i = 1; i < wordInfos.Count; i++)
         {
-            if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle) &&
-                wordInfos[i].Text is "て" or "で" or "ながら" or "ちゃ" or "ば" &&
-                wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb)
+            WordInfo currentWord = wordInfos[i];
+            WordInfo previousWord = newList[^1];
+            bool combined = false;
+
+            if (currentWord.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle) &&
+                currentWord.Text is "て" or "で" or "ながら" or "ちゃ" or "ば" &&
+                previousWord.PartOfSpeech == PartOfSpeech.Verb)
             {
-                wordInfos[i - 1].Text += wordInfos[i].Text;
-                wordInfos.RemoveAt(i);
-                i--;
+                previousWord.Text += currentWord.Text;
+                combined = true;
+            }
+
+            if (!combined)
+            {
+                newList.Add(currentWord);
             }
         }
 
-        return wordInfos;
+        return newList;
     }
 
     private List<WordInfo> CombineAuxiliary(List<WordInfo> wordInfos)
     {
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList =
+        [
+            wordInfos[0]
+        ];
+
         for (int i = 1; i < wordInfos.Count; i++)
         {
-            if (wordInfos[i].PartOfSpeech == PartOfSpeech.Auxiliary
-                && (wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb ||
-                    wordInfos[i - 1].PartOfSpeech == PartOfSpeech.IAdjective)
-                && wordInfos[i].Text != "な"
-                && wordInfos[i].Text != "に"
-                && wordInfos[i].DictionaryForm != "です"
-                && wordInfos[i].DictionaryForm != "らしい"
-                && wordInfos[i].Text != "なら"
-                && wordInfos[i].DictionaryForm != "べし"
-                && wordInfos[i].DictionaryForm != "ようだ"
-                && wordInfos[i].Text != "だろう"
-               )
+            WordInfo currentWord = wordInfos[i];
+            WordInfo previousWord = newList[^1];
+            bool combined = false;
+
+            if (currentWord.PartOfSpeech != PartOfSpeech.Auxiliary)
             {
-                wordInfos[i - 1].Text += wordInfos[i].Text;
-                wordInfos.RemoveAt(i);
-                i--;
+                newList.Add(currentWord);
+                continue;
             }
 
-            if (wordInfos[i].PartOfSpeech == PartOfSpeech.Auxiliary &&
-                (wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleNaAdjective) ||
-                 wordInfos[i - 1].PartOfSpeech == PartOfSpeech.NaAdjective)
-                && wordInfos[i].Text == "な")
+            if (previousWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
+                && currentWord.Text != "な"
+                && currentWord.Text != "に"
+                && currentWord.DictionaryForm != "です"
+                && currentWord.DictionaryForm != "らしい"
+                && currentWord.Text != "なら"
+                && currentWord.DictionaryForm != "べし"
+                && currentWord.DictionaryForm != "ようだ"
+                && currentWord.Text != "だろう"
+               )
             {
-                wordInfos[i - 1].Text += wordInfos[i].Text;
-                wordInfos[i - 1].PartOfSpeech = PartOfSpeech.NaAdjective;
-                wordInfos.RemoveAt(i);
-                i--;
+                previousWord.Text += currentWord.Text;
+                combined = true;
+            }
+
+            if (currentWord.Text == "な" &&
+                (previousWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleNaAdjective) ||
+                 previousWord.PartOfSpeech == PartOfSpeech.NaAdjective))
+            {
+                previousWord.Text += currentWord.Text;
+                previousWord.PartOfSpeech = PartOfSpeech.NaAdjective;
+                combined = true;
+            }
+
+            if (!combined)
+            {
+                newList.Add(currentWord);
             }
         }
 
-        return wordInfos;
+        return newList;
     }
 
     private List<WordInfo> CombineAuxiliaryVerbStem(List<WordInfo> wordInfos)
     {
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>();
+        WordInfo currentWord = new WordInfo(wordInfos[0]);
+
         for (int i = 1; i < wordInfos.Count; i++)
         {
-            if ( /*wordInfos[i].AnyPartOfSpeechSection(PartOfSpeechSection.Suffix) &&*/
-                wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem) &&
+            var nextWord = wordInfos[i];
+
+            if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem) &&
                 wordInfos[i].Text != "ように" &&
                 wordInfos[i].Text != "よう" &&
                 (wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb || wordInfos[i - 1].PartOfSpeech == PartOfSpeech.IAdjective))
             {
-                wordInfos[i - 1].Text += wordInfos[i].Text;
-                wordInfos.RemoveAt(i);
-                i--;
+                currentWord.Text += nextWord.Text;
+            }
+            else
+            {
+                newList.Add(currentWord);
+                currentWord = new WordInfo(nextWord);
             }
         }
 
-        return wordInfos;
+        newList.Add(currentWord);
+
+        return newList;
     }
 
     private List<WordInfo> CombineSuffix(List<WordInfo> wordInfos)
     {
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>();
+        WordInfo currentWord = new WordInfo(wordInfos[0]);
+
         for (int i = 1; i < wordInfos.Count; i++)
         {
+            var nextWord = wordInfos[i];
+
             if ((wordInfos[i].PartOfSpeech == PartOfSpeech.Suffix || wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Suffix))
                 && wordInfos[i].DictionaryForm != "っぽい" && wordInfos[i].DictionaryForm != "にくい" &&
                 wordInfos[i].DictionaryForm != "事" && wordInfos[i].DictionaryForm != "っぷり" &&
                 wordInfos[i].DictionaryForm != "ごと" &&
                 (wordInfos[i].DictionaryForm != "たち" || wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Pronoun))
             {
-                wordInfos[i - 1].Text += wordInfos[i].Text;
-                wordInfos.RemoveAt(i);
-                i--;
+                currentWord.Text += nextWord.Text;
+            }
+            else
+            {
+                newList.Add(currentWord);
+                currentWord = new WordInfo(nextWord);
             }
         }
 
-        return wordInfos;
+        newList.Add(currentWord);
+        return newList;
     }
 
     private List<WordInfo> CombineParticles(List<WordInfo> wordInfos)
     {
-        for (int i = 0; i < wordInfos.Count - 1; i++)
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>();
+        int i = 0;
+        while (i < wordInfos.Count)
         {
-            // には
-            if (wordInfos[i].Text == "に" && wordInfos[i + 1].Text == "は")
+            WordInfo currentWord = wordInfos[i];
+
+            if (i + 1 < wordInfos.Count)
             {
-                wordInfos[i].Text = "には";
-                wordInfos.RemoveAt(i + 1);
+                WordInfo nextWord = wordInfos[i + 1];
+                string combinedText = "";
+
+                if (currentWord.Text == "に" && nextWord.Text == "は") combinedText = "には";
+                else if (currentWord.Text == "と" && nextWord.Text == "は") combinedText = "とは";
+                else if (currentWord.Text == "で" && nextWord.Text == "は") combinedText = "では";
+                else if (currentWord.Text == "の" && nextWord.Text == "に") combinedText = "のに";
+
+                if (!string.IsNullOrEmpty(combinedText))
+                {
+                    WordInfo combinedWord = new WordInfo(currentWord);
+                    combinedWord.Text = combinedText;
+                    newList.Add(combinedWord);
+                    i += 2;
+                    continue;
+                }
             }
 
-            // とは
-            if (wordInfos[i].Text == "と" && wordInfos[i + 1].Text == "は")
-            {
-                wordInfos[i].Text = "とは";
-                wordInfos.RemoveAt(i + 1);
-            }
-
-            // では
-            if (wordInfos[i].Text == "で" && wordInfos[i + 1].Text == "は")
-            {
-                wordInfos[i].Text = "では";
-                wordInfos.RemoveAt(i + 1);
-            }
-
-            // のに
-            if (wordInfos[i].Text == "の" && wordInfos[i + 1].Text == "に")
-            {
-                wordInfos[i].Text = "のに";
-                wordInfos.RemoveAt(i + 1);
-            }
+            newList.Add(new WordInfo(currentWord));
+            i++;
         }
 
-        return wordInfos;
+        return newList;
     }
 
     /// <summary>
@@ -558,30 +800,41 @@ public class Parser
     /// <returns></returns>
     private List<WordInfo> SeparateSuffixHonorifics(List<WordInfo> wordInfos)
     {
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>();
+
         for (var i = 0; i < wordInfos.Count; i++)
         {
+            WordInfo currentWord = new WordInfo(wordInfos[i]);
+            bool separated = false;
             foreach (var honorific in HonorificsSuffixes)
             {
-                if (!wordInfos[i].Text.EndsWith(honorific) || wordInfos[i].Text.Length <= honorific.Length ||
-                    (!wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.PersonName) &&
-                     !wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.ProperNoun))) continue;
+                if (!currentWord.Text.EndsWith(honorific) || currentWord.Text.Length <= honorific.Length ||
+                    (!currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PersonName) &&
+                     !currentWord.HasPartOfSpeechSection(PartOfSpeechSection.ProperNoun))) continue;
 
-                wordInfos[i].Text = wordInfos[i].Text.Substring(0, wordInfos[i].Text.Length - honorific.Length);
-                if (wordInfos[i].DictionaryForm.EndsWith(honorific))
+                currentWord.Text = currentWord.Text.Substring(0, currentWord.Text.Length - honorific.Length);
+                if (currentWord.DictionaryForm.EndsWith(honorific))
                 {
-                    wordInfos[i].DictionaryForm =
-                        wordInfos[i].DictionaryForm.Substring(0, wordInfos[i].DictionaryForm.Length - honorific.Length);
+                    currentWord.DictionaryForm =
+                        currentWord.DictionaryForm.Substring(0, currentWord.DictionaryForm.Length - honorific.Length);
                 }
 
                 var suffix = new WordInfo()
                              {
                                  Text = honorific, PartOfSpeech = PartOfSpeech.Suffix, Reading = honorific, DictionaryForm = honorific
                              };
-                wordInfos.Insert(i + 1, suffix);
-                i++;
+                newList.Add(currentWord);
+                newList.Add(suffix);
+                separated = true;
 
                 break;
             }
+
+            if (!separated)
+                newList.Add(currentWord);
         }
 
         return wordInfos;
@@ -595,17 +848,30 @@ public class Parser
     /// <exception cref="NotImplementedException"></exception>
     private List<WordInfo> CombineFinal(List<WordInfo> wordInfos)
     {
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo> newList = new List<WordInfo>();
+        WordInfo currentWord = new WordInfo(wordInfos[0]);
+
         for (int i = 1; i < wordInfos.Count; i++)
         {
+            var nextWord = wordInfos[i];
+
             if (wordInfos[i].Text == "ば" &&
                 wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb)
             {
-                wordInfos[i - 1].Text += wordInfos[i].Text;
-                wordInfos.RemoveAt(i);
-                i--;
+                currentWord.Text += nextWord.Text;
+            }
+            else
+            {
+                newList.Add(currentWord);
+                currentWord = new WordInfo(nextWord);
             }
         }
 
-        return wordInfos;
+        newList.Add(currentWord);
+
+        return newList;
     }
 }

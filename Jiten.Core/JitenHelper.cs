@@ -431,6 +431,7 @@ public static class JitenHelper
 
         var allFrequencies = await context.JmDictWordFrequencies.AsNoTracking().ToListAsync();
         var wordFrequencies = allFrequencies.ToDictionary(f => f.WordId, f => f);
+        var allJmDictWords = await context.JMDictWords.AsNoTracking().Select(w => new {w.WordId, w.ReadingTypes}).ToDictionaryAsync(x => x.WordId, x => x.ReadingTypes);
 
         Dictionary<int, double> wordDifficultiesTotal = new();
         Dictionary<int, double> peakWordDifficulties = new();
@@ -488,6 +489,10 @@ public static class JitenHelper
 
                     var nRank = frequencyRank / 1000;
 
+                    // If the word is in kana, we take the rank of the vocabulary instead
+                    if (allJmDictWords[word.WordId][word.ReadingIndex] == JmDictReadingType.KanaReading)
+                        nRank = wordFrequencies[word.WordId].FrequencyRank / 1000;
+
                     if (!wordFrequencyBy1k.TryAdd(nRank, 1))
                         wordFrequencyBy1k[nRank] += word.Occurrences;
                 }
@@ -500,14 +505,18 @@ public static class JitenHelper
                 foreach (var wf in list)
                 {
                     wordDifficultiesTotal[deck.DeckId] +=
-                        (wf.Value / (double)deck.WordCount * 100) * Math.Exp(wf.Key / 10.0);
+                        (wf.Value / (double)deck.WordCount * 100) * Math.Exp(wf.Key / 7.0);
                 }
 
                 Dictionary<int, int> peakWordFrequencyBy1k = new Dictionary<int, int>();
 
-                foreach (var word in peakWordEntries)
+                foreach (var peakEntry in peakWordEntries)
                 {
-                    var nRank = word.rank / 1000;
+                    var nRank = peakEntry.rank / 1000;
+                    
+                    // If the word is in kana, we take the rank of the vocabulary instead
+                    if (allJmDictWords[peakEntry.word.WordId][peakEntry.word.ReadingIndex] == JmDictReadingType.KanaReading)
+                        nRank = wordFrequencies[peakEntry.word.WordId].FrequencyRank / 1000;
 
                     if (!peakWordFrequencyBy1k.TryAdd(nRank, 1))
                         peakWordFrequencyBy1k[nRank]++;
@@ -521,7 +530,7 @@ public static class JitenHelper
                 foreach (var wf in peakWordList)
                 {
                     peakWordDifficulties[deck.DeckId] +=
-                        (wf.Value / (double)deck.WordCount * 100) * Math.Exp(wf.Key / 5.0);
+                        (wf.Value / (double)deck.WordCount * 100) * Math.Exp(wf.Key / 4.0);
                 }
             }
         }

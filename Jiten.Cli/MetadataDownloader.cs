@@ -382,7 +382,7 @@ public static class MetadataDownloader
                                                   {
                                                       OriginalTitle = i.VolumeInfo.Title, RomajiTitle = null, EnglishTitle = null,
                                                       ReleaseDate = i.VolumeInfo.PublishedDate,
-                                                      Links = [new Link { LinkType = LinkType.GoogleBooks, Url = i.SelfLink }],
+                                                      Links = [new Link { LinkType = LinkType.GoogleBooks, Url =  $"https://www.google.co.jp/books/edition/{i.VolumeInfo.Title}/{i.Id}" }],
                                                       Image = i.VolumeInfo.ImageLinks?.Thumbnail
                                                   }).ToList();
         }

@@ -18,6 +18,19 @@ public class WordInfo
     
     public WordInfo(){}
     
+    public WordInfo(WordInfo other)
+    {
+        Text = other.Text;
+        PartOfSpeech = other.PartOfSpeech;
+        PartOfSpeechSection1 = other.PartOfSpeechSection1;
+        PartOfSpeechSection2 = other.PartOfSpeechSection2;
+        PartOfSpeechSection3 = other.PartOfSpeechSection3;
+        NormalizedForm = other.NormalizedForm;
+        DictionaryForm = other.DictionaryForm;
+        Reading = other.Reading;
+        IsInvalid = other.IsInvalid;
+    }
+    
     public WordInfo(string sudachiLine)
     {
         var parts = Regex.Split(sudachiLine, @"\t");

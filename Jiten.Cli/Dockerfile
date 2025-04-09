@@ -9,6 +9,7 @@ RUN mkdir -p /src/Shared/
 
 # Copy the example file to the correct location
 COPY ["Shared/sharedsettings.example.json", "/src/Shared/sharedsettings.json"]
+COPY ["Shared/resources", "/src/Shared/resources"]
 
 RUN dotnet restore "Jiten.Cli/Jiten.Cli.csproj"
 COPY . .
@@ -22,4 +23,5 @@ COPY --from=build /app/publish .
 RUN mkdir -p /app/Shared
 # Copy the settings file from the build stage
 COPY --from=build /src/Shared/sharedsettings.json /app/Shared/
+COPY --from=build /src/Shared/resources /app/resources
 ENTRYPOINT ["dotnet", "Jiten.Cli.dll"]
