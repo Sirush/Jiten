@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using AnkiNet;
 using Jiten.Api.Dtos;
 using Jiten.Api.Enums;
@@ -356,7 +357,8 @@ public class MediaDeckController(JitenDbContext context) : ControllerBase
                     if (excludeFullWidthDigits && expression.All(char.IsDigit))
                         continue;
 
-                    string expressionFurigana = jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex];
+                    // Need a space before the kanji for lapis
+                    string expressionFurigana = Regex.Replace(jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex], @"(.)(\[.*?\])", " $1$2");
                     // Very unoptimized, might have to rework
                     string expressionReading = string.Join("", jmdictWords[word.WordId].ReadingsFurigana[word.ReadingIndex]
                                                                                        .Where(c => WanaKana.IsKana(c.ToString()))
