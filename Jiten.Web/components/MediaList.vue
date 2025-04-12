@@ -188,10 +188,14 @@
       <div class="flex flex-col gap-1">
         <div class="flex flex-col md:flex-row justify-between">
           <div class="flex gap-8 pl-2">
-            <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''">
+            <NuxtLink
+              :to="previousLink"
+              :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''"
+              no-rel
+            >
               Previous
             </NuxtLink>
-            <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''">
+            <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel>
               Next
             </NuxtLink>
           </div>
@@ -220,6 +224,7 @@
           :to="previousLink"
           :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''"
           @click="scrollToTop"
+          no-rel
         >
           Previous
         </NuxtLink>
@@ -227,6 +232,7 @@
           :to="nextLink"
           :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''"
           @click="scrollToTop"
+          no-rel
         >
           Next
         </NuxtLink>
@@ -235,6 +241,4 @@
   </div>
 </template>
 
-<style scoped>
-
-</style>
+<style scoped></style>

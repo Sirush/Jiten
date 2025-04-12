@@ -22,11 +22,13 @@ export interface Deck {
 }
 
 export interface DeckDetail {
+  parentDeck: Deck | null;
   mainDeck: Deck;
   subDecks: Deck[];
 }
 
 export interface DeckVocabularyList {
+  parentDeck: Deck | null;
   deck: Deck;
   words: DeckWord[];
 }

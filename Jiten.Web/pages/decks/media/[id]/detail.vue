@@ -43,7 +43,12 @@
       return '';
     }
 
-    return localiseTitle(response.value?.data.mainDeck);
+    let title = '';
+    if (response.value?.data.parentDeck != null) title += localiseTitle(response.value?.data.parentDeck) + ' - ';
+
+    title += localiseTitle(response.value?.data.mainDeck);
+
+    return title;
   });
 
   useHead(() => {
@@ -52,7 +57,7 @@
       meta: [
         {
           name: 'description',
-          content: `Detail for the deck ${title.value}`,
+          content: `Detail for the deck ${title.value}. Get statistics and download the anki deck.`,
         },
       ],
     };
@@ -73,6 +78,12 @@
     <div v-else>
       <MediaDeckCard :deck="response.data.mainDeck" />
 
+      <div v-if="response.data.parentDeck != null" class="pt-4">
+        This deck belongs to
+        <NuxtLink :to="`/decks/media/${response.data.parentDeck.deckId}/detail`">
+          {{ localiseTitle(response.data.parentDeck) }}
+        </NuxtLink>
+      </div>
       <div v-if="response.data.subDecks.length > 0" class="pt-4">
         <span class="font-bold">Subdecks</span>
         <div v-if="previousLink != null || nextLink != null" class="flex flex-col md:flex-row justify-between">
@@ -93,7 +104,7 @@
           <MediaDeckCard v-for="deck in response.data.subDecks" :key="deck.deckId" :deck="deck" :is-compact="true" />
         </div>
       </div>
-      <div v-else class="pt-4">This deck has no subdecks</div>
+<!--      <div v-else class="pt-4">This deck has no subdecks</div>-->
     </div>
   </div>
 </template>

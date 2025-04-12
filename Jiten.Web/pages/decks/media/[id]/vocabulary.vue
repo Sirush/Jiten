@@ -72,7 +72,12 @@
       return '';
     }
 
-    return localiseTitle(response.value?.data.deck);
+    let title = '';
+    if (response.value?.data.parentDeck != null) title += localiseTitle(response.value?.data.parentDeck) + ' - ';
+
+    title += localiseTitle(response.value?.data.deck);
+
+    return title;
   });
 
   useHead(() => {
@@ -81,8 +86,9 @@
       meta: [
         {
           name: 'description',
-          content: `Vocabulary list for ${title.value}`
-        }]
+          content: `Vocabulary list for ${title.value}`,
+        },
+      ],
     };
   });
 
@@ -124,12 +130,16 @@
     </div>
     <div class="flex justify-between flex-col md:flex-row">
       <div class="flex gap-8 pl-2">
-        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''">
+        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel>
           Previous
         </NuxtLink>
-        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''"> Next</NuxtLink>
+        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel>
+          Next
+        </NuxtLink>
       </div>
-      <div class="text-gray-500 dark:text-gray-300">viewing words {{ start }}-{{ end }} from {{ totalItems }} total</div>
+      <div class="text-gray-500 dark:text-gray-300">
+        viewing words {{ start }}-{{ end }} from {{ totalItems }} total
+      </div>
     </div>
     <div v-if="status === 'pending'" class="flex flex-col gap-2">
       <Card v-for="i in 10" :key="i" class="p-2">
@@ -149,13 +159,14 @@
       />
     </div>
     <div class="flex gap-8 pl-2">
-      <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''">
+      <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel>
         Previous
       </NuxtLink>
       <NuxtLink
         :to="nextLink"
         :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''"
         @click="scrollToTop"
+        no-rel
       >
         Next
       </NuxtLink>
