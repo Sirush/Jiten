@@ -53,6 +53,10 @@ services:
     build:
       context: .
       dockerfile: Jiten.Web/Dockerfile
+    args:
+      - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID=${UMAMI_ANALYTICS_WEBSITE_ID:-}
+      - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_HOST_URL=${UMAMI_ANALYTICS_HOST_URL:-https://umami.jiten.moe}
+      - NUXT_PUBLIC_BASE_URL=${API_BASE_URL:-https://api.jiten.moe}
     restart: unless-stopped
     depends_on:
       - api
