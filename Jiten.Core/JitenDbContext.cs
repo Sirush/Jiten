@@ -1,3 +1,4 @@
+using Jiten.Cli.NGrams;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Microsoft.Extensions.Configuration;
@@ -19,7 +20,7 @@ public class JitenDbContext : DbContext
     public DbSet<JmDictWordFrequency> JmDictWordFrequencies { get; set; }
     public DbSet<JmDictDefinition> Definitions { get; set; }
     public DbSet<JmDictLookup> Lookups { get; set; }
-    
+
     public DbSet<ExampleSentence> ExampleSentences { get; set; }
     public DbSet<ExampleSentenceWord> ExampleSentenceWords { get; set; }
 
@@ -75,20 +76,20 @@ public class JitenDbContext : DbContext
                   .HasForeignKey(d => d.ParentDeckId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
-        
+
         modelBuilder.Entity<DeckTitle>(entity =>
         {
-              entity.HasKey(dt => dt.DeckTitleId);
-              entity.Property(dt => dt.Title).IsRequired().HasMaxLength(200);
-              entity.Property(dt => dt.TitleType).IsRequired();
+            entity.HasKey(dt => dt.DeckTitleId);
+            entity.Property(dt => dt.Title).IsRequired().HasMaxLength(200);
+            entity.Property(dt => dt.TitleType).IsRequired();
 
-              entity.HasOne(dt => dt.Deck)
-                    .WithMany(d => d.Titles)
-                    .HasForeignKey(dt => dt.DeckId)
-                    .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(dt => dt.Deck)
+                  .WithMany(d => d.Titles)
+                  .HasForeignKey(dt => dt.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
 
-              entity.HasIndex(dt => dt.Title).HasDatabaseName("IX_DeckTitles_Title");
-              entity.HasIndex(dt => new { dt.DeckId, dt.TitleType }).HasDatabaseName("IX_DeckTitles_DeckId_TitleType");
+            entity.HasIndex(dt => dt.Title).HasDatabaseName("IX_DeckTitles_Title");
+            entity.HasIndex(dt => new { dt.DeckId, dt.TitleType }).HasDatabaseName("IX_DeckTitles_DeckId_TitleType");
         });
 
         modelBuilder.Entity<DeckWord>(entity =>
@@ -160,7 +161,7 @@ public class JitenDbContext : DbContext
             entity.Property(e => e.PitchAccents)
                   .HasColumnType("int[]")
                   .IsRequired(false);
-            
+
             entity.Property(e => e.Origin)
                   .HasColumnType("int");
         });
@@ -215,31 +216,219 @@ public class JitenDbContext : DbContext
             entity.HasKey(e => e.SentenceId);
             entity.Property(e => e.SentenceId).ValueGeneratedOnAdd();
             entity.Property(e => e.Text).IsRequired();
-            
+
             entity.HasIndex(e => e.DeckId).HasDatabaseName("IX_ExampleSentence_DeckId");
-            
+
             entity.HasOne(e => e.Deck)
                   .WithMany(d => d.ExampleSentences)
                   .HasForeignKey(e => e.DeckId)
                   .OnDelete(DeleteBehavior.Cascade);
-                  
+
             entity.HasMany(e => e.Words)
                   .WithOne(w => w.ExampleSentence)
                   .HasForeignKey(w => w.ExampleSentenceId);
         });
-        
+
         modelBuilder.Entity<ExampleSentenceWord>(entity =>
         {
             entity.ToTable("ExampleSentenceWords", "jiten");
             entity.HasKey(e => new { e.ExampleSentenceId, e.WordId, e.Position });
-            
+
             entity.HasIndex(dw => new { dw.WordId, dw.ReadingIndex }).HasDatabaseName("IX_ExampleSentenceWord_WordIdReadingIndex");
-            
+
             entity.HasOne(e => e.Word)
                   .WithMany()
                   .HasForeignKey(e => e.WordId);
         });
-        
+
+        // PrecomputedNgrams configuration
+        modelBuilder.Entity<PrecomputedNgram>(entity =>
+        {
+            entity.ToTable("PrecomputedNgrams", "jiten");
+
+            entity.HasKey(e => e.NgramId);
+
+            entity.Property(e => e.WordId)
+                  .IsRequired();
+
+            entity.Property(e => e.ReadingIndex)
+                  .IsRequired();
+
+            entity.Property(e => e.ContextBefore)
+                  .IsRequired()
+                  .HasMaxLength(500);
+
+            entity.Property(e => e.ContextAfter)
+                  .IsRequired()
+                  .HasMaxLength(500);
+
+            entity.Property(e => e.ContextSize)
+                  .IsRequired();
+
+            entity.Property(e => e.TokensBefore)
+                  .IsRequired();
+
+            entity.Property(e => e.TokensAfter)
+                  .IsRequired();
+
+            entity.Property(e => e.FullContext)
+                  .IsRequired()
+                  .HasMaxLength(1000);
+
+            entity.Property(e => e.Occurrences)
+                  .IsRequired()
+                  .HasDefaultValue(1);
+
+            entity.Property(e => e.SignificanceScore)
+                  .IsRequired();
+
+            entity.Property(e => e.BertEmbedding)
+                  .HasColumnType("real[]"); // Store as array of floats
+
+            entity.Property(e => e.BertEmbeddingComputed)
+                  .IsRequired()
+                  .HasDefaultValue(false);
+
+            entity.Property(e => e.LastUpdated)
+                  .IsRequired()
+                  .HasDefaultValueSql("NOW()");
+
+            // Indexes
+            entity.HasIndex(e => new { e.WordId, e.ReadingIndex })
+                  .HasDatabaseName("IX_PrecomputedNgrams_WordId_ReadingIndex");
+
+            entity.HasIndex(e => new { e.WordId, e.SignificanceScore })
+                  .HasDatabaseName("IX_PrecomputedNgrams_WordId_SignificanceScore");
+
+            entity.HasIndex(e => e.BertEmbeddingComputed)
+                  .HasDatabaseName("IX_PrecomputedNgrams_BertEmbeddingComputed")
+                  .HasFilter("\"BertEmbeddingComputed\" = false");
+
+            // Partial index for high-significance n-grams
+            entity.HasIndex(e => new { e.WordId, e.ReadingIndex, e.SignificanceScore })
+                  .HasDatabaseName("IX_PrecomputedNgrams_HighSignificance")
+                  .HasFilter("\"SignificanceScore\" > 0.5");
+
+            // Foreign key to JmDictWord
+            entity.HasOne<JmDictWord>()
+                  .WithMany()
+                  .HasForeignKey(e => e.WordId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // NgramSources configuration
+        modelBuilder.Entity<NgramSource>(entity =>
+        {
+            entity.ToTable("NgramSources", "jiten");
+
+            entity.HasKey(e => new { e.NgramId, e.ExampleSentenceId });
+
+            entity.Property(e => e.WordPosition)
+                  .IsRequired();
+
+            // Indexes
+            entity.HasIndex(e => e.ExampleSentenceId)
+                  .HasDatabaseName("IX_NgramSources_ExampleSentenceId");
+
+            entity.HasIndex(e => e.NgramId)
+                  .HasDatabaseName("IX_NgramSources_NgramId");
+
+            // Foreign key to PrecomputedNgram
+            entity.HasOne(e => e.Ngram)
+                  .WithMany(n => n.Sources)
+                  .HasForeignKey(e => e.NgramId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // Foreign key to ExampleSentence
+            entity.HasOne(e => e.ExampleSentence)
+                  .WithMany()
+                  .HasForeignKey(e => e.ExampleSentenceId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // NgramStatistics configuration
+        modelBuilder.Entity<NgramStatistics>(entity =>
+        {
+            entity.ToTable("NgramStatistics", "jiten");
+
+            entity.HasKey(e => e.WordId);
+
+            entity.Property(e => e.TotalNgrams)
+                  .IsRequired();
+
+            entity.Property(e => e.SignificantNgrams)
+                  .IsRequired();
+
+            entity.Property(e => e.AvgSignificanceScore)
+                  .IsRequired();
+
+            entity.Property(e => e.BertEmbeddingsComputed)
+                  .IsRequired();
+
+            entity.Property(e => e.LastProcessed);
+
+            entity.Property(e => e.AmbiguityScore);
+
+            // Indexes
+            entity.HasIndex(e => e.AmbiguityScore)
+                  .HasDatabaseName("IX_NgramStatistics_AmbiguityScore");
+
+            entity.HasIndex(e => e.LastProcessed)
+                  .HasDatabaseName("IX_NgramStatistics_LastProcessed");
+
+            // Foreign key to JmDictWord
+            entity.HasOne<JmDictWord>()
+                  .WithMany()
+                  .HasForeignKey(e => e.WordId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // NgramProcessingQueue configuration
+        modelBuilder.Entity<NgramProcessingQueue>(entity =>
+        {
+            entity.ToTable("NgramProcessingQueue", "jiten");
+
+            entity.HasKey(e => e.QueueId);
+
+            entity.Property(e => e.NgramId)
+                  .IsRequired();
+
+            entity.Property(e => e.Priority)
+                  .IsRequired()
+                  .HasDefaultValue(1);
+
+            entity.Property(e => e.Status)
+                  .IsRequired()
+                  .HasMaxLength(20)
+                  .HasDefaultValue(ProcessingStatus.Pending)
+                  .HasConversion<string>(); // Store enum as string
+
+            entity.Property(e => e.RetryCount)
+                  .IsRequired()
+                  .HasDefaultValue(0);
+
+            entity.Property(e => e.ErrorMessage)
+                  .HasMaxLength(2000);
+
+            entity.Property(e => e.CreatedAt)
+                  .IsRequired()
+                  .HasDefaultValueSql("NOW()");
+
+            entity.Property(e => e.ProcessedAt);
+
+            // Indexes
+            entity.HasIndex(e => new { e.Status, e.Priority })
+                  .HasDatabaseName("IX_NgramProcessingQueue_Status_Priority")
+                  .HasFilter("\"Status\" = 'Pending'");
+
+            // Foreign key to PrecomputedNgram
+            entity.HasOne(e => e.Ngram)
+                  .WithMany()
+                  .HasForeignKey(e => e.NgramId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+
         base.OnModelCreating(modelBuilder);
     }
 }

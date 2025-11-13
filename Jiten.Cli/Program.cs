@@ -7,6 +7,7 @@ using System.Text.Unicode;
 using CommandLine;
 using Jiten.Cli;
 using Jiten.Cli.ML;
+using Jiten.Cli.NGrams;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.Authentication;
@@ -113,7 +114,7 @@ public class Program
 
         [Option(longName: "extract-features", Required = false, HelpText = "Extract features from directory for ML.")]
         public string ExtractFeatures { get; set; }
-        
+
         [Option(longName: "extract-features-db", Required = false, HelpText = "Extract features from DB for ML.")]
         public string ExtractFeaturesDb { get; set; }
 
@@ -138,6 +139,13 @@ public class Program
 
         [Option(longName: "prune-sudachi", Required = false, HelpText = "Prune CSV files from sudachi directory")]
         public string PruneSudachiCsvDirectory { get; set; }
+
+        [Option(longName: "generate-ngrams", Required = false, HelpText = "Generate ngrams from the database.")]
+        public bool GenerateNGrams { get; set; }
+
+        [Option(longName: "generate-bert-embeddings", Required = false,
+                HelpText = "Generate bert embeddings for the ngrams from the database.")]
+        public bool GenerateBertEmbdeddings { get; set; }
     }
 
     static async Task Main(string[] args)
@@ -290,7 +298,7 @@ public class Program
                             await featureExtractor.ExtractFeatures(Jiten.Parser.Parser.ParseTextToDeck, o.ExtractFeatures);
                             Console.WriteLine("All features extracted.");
                         }
-                        
+
                         if (!string.IsNullOrEmpty(o.ExtractFeaturesDb))
                         {
                             Console.WriteLine("Extracting features...");
@@ -322,6 +330,24 @@ public class Program
                             }
 
                             await JmDictHelper.CompareJMDicts(o.XmlPath, o.DictionaryPath, o.Extra);
+                        }
+
+                        if (o.GenerateNGrams)
+                        {
+                            var job = new AmbiguousWordNgramJob(_dbOptions);
+                            await job.ProcessAmbiguousWordsAsync(new AmbiguousWordProcessingConfig());
+                        }
+
+                        if (o.GenerateBertEmbdeddings)
+                        {
+                            var job = new BertEmbeddingJob(_dbOptions, new BertModelService(new DisambiguationConfig()
+                                                                                             {
+                                                                                                 ModelPath =
+                                                                                                     "S:\\Jiten\\bert-base-japanese-v3\\model.onnx",
+                                                                                                 VocabPath =
+                                                                                                     "S:\\Jiten\\bert-base-japanese-v3\\vocab.txt"
+                                                                                             }));
+                            await job.ComputeEmbeddingsAsync(new BertEmbeddingConfig());
                         }
 
                         if (o.Verbose)
@@ -876,7 +902,7 @@ public class Program
             {
                 if (reading == "ていい" || reading == "からな")
                     continue;
-                
+
                 posKanji = "名詞";
             }
             else if (pos.Contains(PartOfSpeech.Particle))
@@ -906,7 +932,7 @@ public class Program
             else if (pos.Contains(PartOfSpeech.Name))
             {
                 // Remove problematic readings
-                if (WanaKana.IsHiragana(reading) ||reading == "イーノ" ||reading == "ドーダ" || reading == "コトカ")
+                if (WanaKana.IsHiragana(reading) || reading == "イーノ" || reading == "ドーダ" || reading == "コトカ")
                     continue;
                 posKanji = "名";
             }
