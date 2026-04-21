@@ -575,10 +575,27 @@
     "detail": "classical attributive"
   },
   {
-    "type": "stdrule",
+    "type": "onlyfinalrule",
+    "dec_end": [""],
+    "con_end": ["な"],
+    "dec_tag": ["adj-na"],
+    "con_tag": ["uninflectable"],
+    "detail": "attributive"
+  },
+  {
+    "type": "onlyfinalrule",
+    "dec_end": [""],
+    "con_end": ["に"],
+    "dec_tag": ["adj-na"],
+    "con_tag": ["uninflectable"],
+    "detail": "adverbial"
+  },
+  {
+    "_disabled_comment": "(stem) rule removed: over-generated 〜くな spurious stems like たくな from たくない. Ichiran's +conj-adjective-stem+ = 51 is rarely productive; retaining it chained with negative/adverbial/te caused boundary theft (見られたくな/いとこ pattern).",
+    "type": "neverfinalrule",
     "dec_end": ["い"],
     "con_end": [""],
-    "dec_tag": ["adj-i"],
+    "dec_tag": ["adj-i-root-only"],
     "con_tag": ["stem-adj-base"],
     "detail": "(stem)"
   },
@@ -605,6 +622,14 @@
     "dec_tag": ["stem-ren"],
     "con_tag": ["v1"],
     "detail": "seemingness"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["がち"],
+    "dec_tag": ["stem-ren"],
+    "con_tag": ["adj-na"],
+    "detail": "tendency"
   },
   {
     "type": "stdrule",
@@ -733,6 +758,14 @@
     "dec_tag": ["stem-mizenkei"],
     "con_tag": ["adj-i"],
     "detail": "negative"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["らしい"],
+    "dec_tag": ["stem-past"],
+    "con_tag": ["adj-i"],
+    "detail": "apparent"
   },
   {
     "type": "stdrule",
@@ -1323,6 +1356,18 @@
     ],
     "con_tag": ["uninflectable"],
     "detail": "negative volition/conjecture"
+  },
+  {
+    "type": "onlyfinalrule",
+    "dec_end": [""],
+    "con_end": ["な"],
+    "dec_tag": [
+      "v5k", "v5s", "v5t", "v5u", "v5r", "v5g", "v5b", "v5n", "v5m",
+      "v1", "v1-s", "vk", "vs-i", "vs-s", "v5aru", "v5k-s", "v5u-s",
+      "v5r-i", "vz"
+    ],
+    "con_tag": ["uninflectable"],
+    "detail": "negative imperative"
   },
   {
     "type": "onlyfinalrule",

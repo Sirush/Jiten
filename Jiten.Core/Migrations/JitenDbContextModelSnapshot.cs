@@ -621,6 +621,37 @@ namespace Jiten.Core.Migrations
                     b.ToTable("ExternalTagMappings", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictConjugatedForm", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.PrimitiveCollection<List<string>>("ConjugationChain")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<short>("FormIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
+                    b.Property<string>("Surface")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ConjugatedForms", "jmdict");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictDefinition", b =>
                 {
                     b.Property<int>("DefinitionId")
@@ -1625,6 +1656,15 @@ namespace Jiten.Core.Migrations
                         .IsRequired();
 
                     b.Navigation("Tag");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictConjugatedForm", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.JMDict.JmDictWord", null)
+                        .WithMany()
+                        .HasForeignKey("WordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictDefinition", b =>

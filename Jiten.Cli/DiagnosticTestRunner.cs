@@ -36,16 +36,12 @@ public class DiagnosticTestRunner
             Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "Jiten.Tests", "bin", "Debug", "net9.0", "Jiten.Tests.dll")),
         };
 
-        string? testAssemblyPath = null;
-        foreach (var path in candidatePaths)
-        {
-            var fullPath = Path.GetFullPath(path);
-            if (File.Exists(fullPath))
-            {
-                testAssemblyPath = fullPath;
-                break;
-            }
-        }
+        // Pick the newest existing candidate so a stale Debug/Release build doesn't mask recent edits.
+        string? testAssemblyPath = candidatePaths
+            .Select(Path.GetFullPath)
+            .Where(File.Exists)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
 
         if (testAssemblyPath == null)
         {
@@ -201,16 +197,12 @@ public class DiagnosticTestRunner
             Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "Jiten.Tests", "bin", "Debug", "net9.0", "Jiten.Tests.dll")),
         };
 
-        string? testAssemblyPath = null;
-        foreach (var path in candidatePaths)
-        {
-            var fullPath = Path.GetFullPath(path);
-            if (File.Exists(fullPath))
-            {
-                testAssemblyPath = fullPath;
-                break;
-            }
-        }
+        // Pick the newest existing candidate so a stale Debug/Release build doesn't mask recent edits.
+        string? testAssemblyPath = candidatePaths
+            .Select(Path.GetFullPath)
+            .Where(File.Exists)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
 
         if (testAssemblyPath == null)
         {

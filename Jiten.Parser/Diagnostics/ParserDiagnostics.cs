@@ -24,10 +24,30 @@ public class ParserDiagnostics
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<DroppedTokenEntry>? DroppedTokens { get; private set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ResegmentationPathEntry>? ResegmentationPaths { get; private set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<BeamSentenceAnalysis>? BeamSentences { get; private set; }
+
+    internal void LogBeamSentence(BeamSentenceAnalysis analysis)
+    {
+        BeamSentences ??= [];
+        BeamSentences.Add(analysis);
+    }
+
     internal void LogDroppedToken(string text, PartOfSpeech pos, string reason)
     {
         DroppedTokens ??= [];
         DroppedTokens.Add(new DroppedTokenEntry(text, pos, reason));
+    }
+
+    internal void LogResegmentationPath(string spanText, int segmentCount, int gapChars,
+                                        int gapCost, int score, bool accepted, string source)
+    {
+        ResegmentationPaths ??= [];
+        ResegmentationPaths.Add(new ResegmentationPathEntry(
+            spanText, segmentCount, gapChars, gapCost, score, accepted, source));
     }
 
     internal void LogTransitionViolation(string ruleId, in TokenWindow window)
@@ -57,6 +77,49 @@ public sealed record TransitionViolationEntry(
     PartOfSpeech TokenPos,
     [property: JsonConverter(typeof(JsonStringEnumConverter))]
     PartOfSpeech? PrevPos);
+
+public sealed record ResegmentationPathEntry(
+    string SpanText,
+    int SegmentCount,
+    int GapChars,
+    int GapCost,
+    int Score,
+    bool Accepted,
+    string Source);
+
+public sealed record BeamSentenceAnalysis(
+    string SentenceText,
+    int SudachiBaselineScore,
+    int BestBeamScore,
+    int ThresholdUsed,
+    bool BeamApplied,
+    List<BeamPathEntry> TopPaths,
+    BeamPathEntry? SudachiPath);
+
+public sealed record BeamPathEntry(
+    int Rank,
+    int TotalScore,
+    int NodeScoreSum,
+    int AdjacencyBonusSum,
+    int GapCost,
+    int GapChars,
+    List<BeamPathSegmentEntry> Segments);
+
+public sealed record BeamPathSegmentEntry(
+    int Start,
+    int Len,
+    string Surface,
+    int? WordId,
+    string? DictForm,
+    int NodeScore,
+    int FormTotal,
+    int FreqBonus,
+    int LengthBonus,
+    int HintBonus,
+    int KanaPenalty,
+    int AdjacencyBonus,
+    List<string>? ConjChain,
+    bool IsGap);
 
 /// <summary>
 /// Lightweight counters for parse-run-level health and fallback behavior.

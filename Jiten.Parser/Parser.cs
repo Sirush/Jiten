@@ -30,6 +30,54 @@ namespace Jiten.Parser
         private static Dictionary<int, int> _wordFrequencyRanks = null!;
         private static HashSet<int> _nameOnlyWordIds = null!;
         private static HashSet<int> _expressionWordIds = null!;
+        private static HashSet<string> _ambiguousSurfaces = null!;
+        private static readonly HashSet<char> SentenceEnders = ['。', '！', '？', '」'];
+
+        private static readonly bool SelectiveSudachi =
+            Environment.GetEnvironmentVariable("JITEN_SELECTIVE_SUDACHI") != "0"
+            && BeamResegmentationEngine.IsPureIchiranMode;
+
+        private static List<SentenceInfo> SplitTextIntoRawSentences(string text)
+        {
+            text = text.Replace("\r", "").Replace("\n", "");
+            if (string.IsNullOrEmpty(text)) return [];
+
+            var result = new List<SentenceInfo>();
+            int sentenceStart = 0;
+            bool seenEnder = false;
+
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (SentenceEnders.Contains(text[i]))
+                {
+                    seenEnder = true;
+                    continue;
+                }
+
+                if (seenEnder)
+                {
+                    var sentenceText = text[sentenceStart..i];
+                    if (sentenceText.Length > 0)
+                    {
+                        var si = new SentenceInfo(sentenceText);
+                        si.Words.Add((new WordInfo { Text = sentenceText, PartOfSpeech = PartOfSpeech.Unknown }, 0, sentenceText.Length));
+                        result.Add(si);
+                    }
+                    sentenceStart = i;
+                    seenEnder = false;
+                }
+            }
+
+            var remaining = text[sentenceStart..];
+            if (remaining.Length > 0)
+            {
+                var si = new SentenceInfo(remaining);
+                si.Words.Add((new WordInfo { Text = remaining, PartOfSpeech = PartOfSpeech.Unknown }, 0, remaining.Length));
+                result.Add(si);
+            }
+
+            return result;
+        }
 
         // Cache for compound expression lookups with bounded eviction
         private static readonly Dictionary<string, (bool validExpression, int? wordId)> CompoundExpressionCache = new();
@@ -54,23 +102,9 @@ namespace Jiten.Parser
             "ウー", "うー", "ううう", "うう", "ウウウウ", "ウウ", "ううっ", "かー", "ぐわー", "違", "タ", "ッ"
         ];
 
-        // Excluded (WordId, ReadingIndex) pairs to filter from final parsing results
-        private static readonly HashSet<(int WordId, byte ReadingIndex)> ExcludedMisparses =
-        [
-            (1291070, 1), (1587980, 1), (1443970, 5), (2029660, 0), (1177490, 5), (2029000, 1),
-            (1244950, 1), (1243940, 1), (2747970, 1), (2029680, 0), (1193570, 6), (1796500, 2),
-            (1811220, 1), (2654270, 0), (2269410, 1), (2439040, 3), (2861095, 0), (2836250, 0),
-            (1595910, 4), (2577750, 0), (1365520, 1), (1310720, 1), (1528180, 1), (2866457, 1),
-            (2394370, 4), (1203250, 2), (1537250, 2), (2783750, 1), (2654250, 0), (2609820, 1),
-            (2080360, 3), (1333240, 2), (2035220, 2), (5616612, 5), (2249020, 1), (2783700, 1),
-            (2411420, 0), (1604890, 2), (2602280, 1), (1407450, 1), (1595120, 1), (2083370, 1),
-            (2862482, 0), (2849996, 0), (1266970, 2), (2574180, 2), (2574180, 1), (1550770, 1),
-            (5626489, 28), (5045509, 3), (2029780, 0), (5430309, 1), (1496170, 2), (2564800, 1),
-            (2026870, 1), (1585310, 4), (1585310, 5), (2252690, 1), (2835861, 0), (1223130, 1),
-            (1246880, 1), (1246880, 2), (1461140, 8), (1461140, 6), (2029700, 0), (2594040, 2),
-            (1324950, 1), (1949190, 1), (1344210, 1), (2029730, 0), (5612068, 1), (1370270,3), (1581200,2), (1332670,2), (1150090,1),
-            (1533340,3)
-        ];
+        // Excluded (WordId, ReadingIndex) pairs filtered from final parsing results.
+        // Source of truth: Shared/resources/excluded_readings.json (see ExcludedReadings loader).
+        private static HashSet<(int WordId, byte ReadingIndex)> ExcludedMisparses => ExcludedReadings.Set;
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
         {
@@ -87,6 +121,58 @@ namespace Jiten.Parser
             _wordFrequencyRanks = runtime.WordFrequencyRanks;
             _nameOnlyWordIds = runtime.NameOnlyWordIds;
             _expressionWordIds = runtime.ExpressionWordIds;
+            _ambiguousSurfaces = runtime.AmbiguousSurfaces;
+            Console.Error.WriteLine($"[parser-init] SelectiveSudachi={SelectiveSudachi} ambiguousSurfaces={_ambiguousSurfaces?.Count ?? 0}");
+        }
+
+        // Returns the candidate provider the beam should use. The beam always
+        // prefers the pre-materialised jmdict."ConjugatedForms" table; every
+        // subsequent parse reuses the loaded table. On any load failure we fall
+        // back to the runtime deconjugator so the parser still works even if the
+        // table is missing or stale.
+        //
+        // Cached once per process so surface caches inside the fallback
+        // DeconjugatorCandidateProvider survive across texts — the per-sentence
+        // SentenceSurfaceCache wrapper still scopes the hot-path cache, but the
+        // underlying deconjugator memo amortises across every text in the batch.
+        private static ICandidateProvider? _beamProviderCached;
+        private static readonly SemaphoreSlim _beamProviderInit = new(1, 1);
+        private static async Task<ICandidateProvider> GetBeamCandidateProviderAsync()
+        {
+            if (_beamProviderCached != null) return _beamProviderCached;
+            await _beamProviderInit.WaitAsync();
+            try
+            {
+                if (_beamProviderCached != null) return _beamProviderCached;
+                try
+                {
+                    await ConjugationTableLoader.EnsureLoadedAsync(_contextFactory);
+                    var table = ConjugationTableLoader.Table;
+                    if (table != null)
+                    {
+                        var wordIds = table.GetUniqueWordIds();
+                        foreach (var ids in _lookups.Values)
+                            foreach (var id in ids)
+                                wordIds.Add(id);
+                        _ = Task.Run(async () =>
+                        {
+                            try { await JmDictCache.PreloadWordsAsync(wordIds); }
+                            catch (Exception ex) { Console.Error.WriteLine($"[BeamWordPreload] Background preload failed: {ex.Message}"); }
+                        });
+                        return _beamProviderCached = new TableCandidateProvider(table, _lookups);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[Parser] Conjugation table load failed, falling back to DeconjugatorCandidateProvider: {ex.Message}");
+                }
+
+                return _beamProviderCached = new DeconjugatorCandidateProvider(_lookups, Deconjugator.Instance);
+            }
+            finally
+            {
+                _beamProviderInit.Release();
+            }
         }
 
         private static async Task PreprocessSentences(List<SentenceInfo> sentences,
@@ -103,11 +189,11 @@ namespace Jiten.Parser
             FilterOrphanedMisparses(sentences);
             ValidateGrammaticalSequences(sentences, diagnostics);
             StripTrailingParticles(sentences);
-            await ResegmentationEngine.TryImproveUncertainSpans(sentences, _lookups, _wordFrequencyRanks, JmDictCache);
+            await ResegmentationEngine.TryImproveUncertainSpans(sentences, _lookups, _wordFrequencyRanks, JmDictCache, diagnostics);
             MarkPersonNameHonorificContexts(sentences);
         }
 
-        private static readonly HashSet<string> ArchaicPosTypes =
+        internal static readonly HashSet<string> ArchaicPosTypes =
         [
             "v2a-s", "v2b-k", "v2b-s", "v2d-k", "v2d-s", "v2g-k", "v2g-s",
             "v2h-k", "v2h-s", "v2k-k", "v2k-s", "v2m-k", "v2m-s", "v2n-s",
@@ -145,6 +231,31 @@ namespace Jiten.Parser
             "かめ", "カメ", "亀",
             "ねずみ", "ネズミ", "鼠",
         ];
+
+        private static void EnrichWithSudachiReadings(SentenceInfo sentence, List<(WordInfo word, int position, int length)> sudachiTokens)
+        {
+            foreach (var (beamWord, beamPos, beamLen) in sentence.Words)
+            {
+                if (!_ambiguousSurfaces.Contains(beamWord.Text)) continue;
+                if (!string.IsNullOrEmpty(beamWord.Reading)) continue;
+
+                foreach (var (sudWord, sudPos, sudLen) in sudachiTokens)
+                {
+                    if (sudPos == beamPos && sudLen == beamLen)
+                    {
+                        if (!string.IsNullOrEmpty(sudWord.Reading))
+                            beamWord.Reading = sudWord.Reading;
+                        if (!string.IsNullOrEmpty(sudWord.DictionaryForm))
+                            beamWord.DictionaryForm = sudWord.DictionaryForm;
+                        if (!string.IsNullOrEmpty(sudWord.NormalizedForm))
+                            beamWord.NormalizedForm = sudWord.NormalizedForm;
+                        if (sudWord.PartOfSpeech != PartOfSpeech.Unknown)
+                            beamWord.PartOfSpeech = sudWord.PartOfSpeech;
+                        break;
+                    }
+                }
+            }
+        }
 
         private static void MarkPersonNameHonorificContexts(List<SentenceInfo> sentences)
         {
@@ -493,55 +604,22 @@ namespace Jiten.Parser
             var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound };
             var sentences = await parser.Parse(text, preserveStopToken: preserveStopToken, diagnostics: diagnostics);
 
-            await PreprocessSentences(sentences, diagnostics);
+            // Beam-first: the Ichiran beam owns segmentation. Sudachi supplies only
+            // morphology metadata on boundaries that happen to align in writeback.
+            // PreprocessSentences / initial lookup / pre-beam resegmentation are
+            // intentionally absent — they would contaminate the lattice with
+            // Sudachi-normalisation opinions. See PLAN_BeamPhase1_Ports.md.
+            var beamProvider = await GetBeamCandidateProviderAsync();
+            await BeamResegmentationEngine.ResegmentSentences(
+                sentences, beamProvider, _lookups, _wordFrequencyRanks, JmDictCache,
+                resolvedWordIdLookup: null, diagnostics);
+
+            MarkPersonNameHonorificContexts(sentences);
             PropagatePersonNameContexts(sentences);
+
             var wordInfos = ExtractWordInfos(sentences);
             var wordsWithOccurrences = wordInfos.Select(w => (w, 0)).ToList();
-
             var processedWithMargins = await ProcessWordsInBatches(wordsWithOccurrences, Deconjugator.Instance, diagnostics: diagnostics);
-
-            var marginMap = BuildMarginMap(sentences, processedWithMargins);
-            if (await ResegmentationEngine.TryResegmentLowConfidenceTokens(sentences, _lookups, _wordFrequencyRanks, marginMap,
-                                                                           JmDictCache))
-            {
-                diagnostics?.Results.Clear();
-
-                // Build lookup from old results so we can reuse them
-                var oldResultLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool), (DeckWord? word, int? margin)>();
-                for (int i = 0; i < wordInfos.Count; i++)
-                {
-                    var key = GetDedupKey(wordInfos[i]);
-                    oldResultLookup.TryAdd(key, processedWithMargins[i]);
-                }
-
-                wordInfos = ExtractWordInfos(sentences);
-
-                // Only process tokens not already resolved
-                var newTokens = new List<(WordInfo wordInfo, int occurrences)>();
-                foreach (var wi in wordInfos)
-                {
-                    var key = GetDedupKey(wi);
-                    if (!oldResultLookup.ContainsKey(key))
-                        newTokens.Add((wi, 0));
-                }
-
-                if (newTokens.Count > 0)
-                {
-                    var newResults = await ProcessWordsInBatches(newTokens, Deconjugator.Instance, diagnostics: diagnostics);
-                    for (int i = 0; i < newTokens.Count; i++)
-                    {
-                        var key = GetDedupKey(newTokens[i].wordInfo);
-                        oldResultLookup.TryAdd(key, newResults[i]);
-                    }
-                }
-
-                // Rebuild flat list aligned to new token stream
-                processedWithMargins = wordInfos.Select(wi =>
-                {
-                    var key = GetDedupKey(wi);
-                    return oldResultLookup.TryGetValue(key, out var r) ? r : ((DeckWord?)null, (int?)null);
-                }).ToList();
-            }
 
             var corrected = await ApplyAdjacentScoring(sentences, processedWithMargins, diagnostics);
             return ExcludeFinalMisparses(corrected);
@@ -577,21 +655,33 @@ namespace Jiten.Parser
             var timer = new Stopwatch();
             timer.Start();
 
-            // Batch morphological analysis
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound };
-            var batchedSentences = await parser.ParseBatch(texts, diagnostics: diagnostics);
+            List<List<SentenceInfo>> batchedSentences;
+            var sudachiStart = ParserBenchmarkInstrumentation.Now();
 
-            timer.Stop();
-            double sudachiTime = timer.Elapsed.TotalMilliseconds;
-            Console.WriteLine($"Batch parsed {texts.Count} texts. Sudachi time: {sudachiTime:0.0}ms");
+            if (SelectiveSudachi && diagnostics == null)
+            {
+                batchedSentences = texts.Select(SplitTextIntoRawSentences).ToList();
+                ParserBenchmarkInstrumentation.AddSudachi(sudachiStart);
+                timer.Stop();
+                if (!ParserBenchmarkInstrumentation.SuppressStageLogs)
+                    Console.WriteLine($"Text-split {texts.Count} texts (selective Sudachi). Time: {timer.Elapsed.TotalMilliseconds:0.0}ms");
+            }
+            else
+            {
+                var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound };
+                batchedSentences = await parser.ParseBatch(texts, diagnostics: diagnostics);
+                ParserBenchmarkInstrumentation.AddSudachi(sudachiStart);
+                timer.Stop();
+                if (!ParserBenchmarkInstrumentation.SuppressStageLogs)
+                    Console.WriteLine($"Batch parsed {texts.Count} texts. Sudachi time: {timer.Elapsed.TotalMilliseconds:0.0}ms");
+            }
 
             timer.Restart();
 
-            // Pass 1: Preprocess all texts, then propagate person names across all texts
-            for (int textIndex = 0; textIndex < batchedSentences.Count; textIndex++)
-                await PreprocessSentences(batchedSentences[textIndex], diagnostics);
-
-            PropagatePersonNameContexts(batchedSentences);
+            // Beam-first: PreprocessSentences and PropagatePersonNameContexts are deferred
+            // until AFTER the beam has produced its own segmentation (see ProcessSentencesToDeck).
+            // Running them here would feed the beam a Jiten-rewritten lattice — the exact
+            // contamination we're eliminating.
 
             // Pass 2: Process each preprocessed result through deconjugation/lookup pipeline
             var decks = new List<Deck>();
@@ -607,7 +697,8 @@ namespace Jiten.Parser
             }
 
             timer.Stop();
-            Console.WriteLine($"Processing time: {timer.Elapsed.TotalMilliseconds:0.0}ms");
+            if (!ParserBenchmarkInstrumentation.SuppressStageLogs)
+                Console.WriteLine($"Processing time: {timer.Elapsed.TotalMilliseconds:0.0}ms");
 
             return decks;
         }
@@ -624,12 +715,66 @@ namespace Jiten.Parser
             bool predictDifficulty,
             MediaType mediatype)
         {
+            // Beam-first: run the beam against raw Sudachi output (PreprocessSentences
+            // was intentionally skipped upstream), then mark person-name contexts on
+            // the beam-chosen token stream, then do a single lookup pass.
+            var resegStart = ParserBenchmarkInstrumentation.Now();
+            var beamProvider = await GetBeamCandidateProviderAsync();
+            await BeamResegmentationEngine.ResegmentSentences(
+                sentences, beamProvider, _lookups, _wordFrequencyRanks, JmDictCache,
+                resolvedWordIdLookup: null);
+            ParserBenchmarkInstrumentation.AddResegmentation(resegStart);
+
+            if (SelectiveSudachi && _ambiguousSurfaces is { Count: > 0 })
+            {
+                var sudachiNeeded = new List<int>();
+                for (int si = 0; si < sentences.Count; si++)
+                    foreach (var (word, _, _) in sentences[si].Words)
+                        if (_ambiguousSurfaces.Contains(word.Text))
+                        {
+                            sudachiNeeded.Add(si);
+                            break;
+                        }
+
+                int ambChars = sudachiNeeded.Sum(i => sentences[i].Text.Length);
+                var triggerCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+                foreach (var si in sudachiNeeded)
+                    foreach (var (word, _, _) in sentences[si].Words)
+                        if (_ambiguousSurfaces.Contains(word.Text))
+                        {
+                            triggerCounts.TryGetValue(word.Text, out var c);
+                            triggerCounts[word.Text] = c + 1;
+                        }
+                var topTriggers = triggerCounts.OrderByDescending(kv => kv.Value).Take(20)
+                    .Select(kv => $"{kv.Key}({kv.Value})");
+                Console.Error.WriteLine($"[selective-sudachi] {sudachiNeeded.Count}/{sentences.Count} sentences need Sudachi ({ambChars} chars) top: {string.Join(" ", topTriggers)}");
+
+                if (sudachiNeeded.Count > 0)
+                {
+                    var sudStart = ParserBenchmarkInstrumentation.Now();
+                    var ambTexts = sudachiNeeded.Select(i => sentences[i].Text).ToList();
+                    var sudParser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound };
+                    var sudResult = await sudParser.ParseBatch(ambTexts);
+                    ParserBenchmarkInstrumentation.AddSudachi(sudStart);
+
+                    for (int k = 0; k < sudachiNeeded.Count && k < sudResult.Count; k++)
+                    {
+                        var si = sudachiNeeded[k];
+                        var sudachiTokens = sudResult[k].SelectMany(s => s.Words).ToList();
+                        EnrichWithSudachiReadings(sentences[si], sudachiTokens);
+                    }
+                }
+            }
+
+            MarkPersonNameHonorificContexts(sentences);
+
             var wordInfos = ExtractWordInfos(sentences);
             var uniqueWords = CountUniqueWords(wordInfos);
 
+            var deconjLookupStart = ParserBenchmarkInstrumentation.Now();
             var allProcessedWithMargins = await ProcessWordsInBatches(uniqueWords, deconjugator);
+            ParserBenchmarkInstrumentation.AddDeconjugationLookup(deconjLookupStart);
 
-            // Build lookup by direct 1:1 index mapping
             var resultLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool), (DeckWord? word, int? margin)>();
             for (int i = 0; i < uniqueWords.Count; i++)
             {
@@ -637,34 +782,9 @@ namespace Jiten.Parser
                 resultLookup.TryAdd(key, allProcessedWithMargins[i]);
             }
 
-            var marginMap = BuildMarginMapFromLookup(sentences, resultLookup);
-            if (await ResegmentationEngine.TryResegmentLowConfidenceTokens(sentences, _lookups, _wordFrequencyRanks, marginMap,
-                                                                           JmDictCache))
-            {
-                var newWordInfos = ExtractWordInfos(sentences);
-                var newUniqueWords = new List<(WordInfo wordInfo, int occurrences)>();
-                foreach (var wi in newWordInfos)
-                {
-                    var key = GetDedupKey(wi);
-                    if (!resultLookup.ContainsKey(key))
-                        newUniqueWords.Add((wi, 0));
-                }
-
-                if (newUniqueWords.Count > 0)
-                {
-                    var deduped = CountUniqueWords(newUniqueWords.Select(w => w.wordInfo).ToList());
-                    var newResults = await ProcessWordsInBatches(deduped, deconjugator);
-                    for (int i = 0; i < deduped.Count; i++)
-                    {
-                        var key = GetDedupKey(deduped[i].wordInfo);
-                        resultLookup.TryAdd(key, newResults[i]);
-                    }
-                }
-
-                wordInfos = newWordInfos;
-            }
-
+            var adjStart = ParserBenchmarkInstrumentation.Now();
             var corrected = await ApplyAdjacentScoring(sentences, resultLookup);
+            ParserBenchmarkInstrumentation.AddAdjacentScoring(adjStart);
 
             // Sum occurrences while deduplicating by WordId and ReadingIndex
             var processedWords = corrected
@@ -1600,7 +1720,7 @@ namespace Jiten.Parser
                             {
                                 var dictWordCache = await JmDictCache.GetWordsAsync(dictLookup);
                                 var recoveredProcess = deconjugated
-                                                       .Where(d => d.Process.Count > 0 && d.Text.StartsWith(dictFormHiragana))
+                                                       .Where(d => d.Process.Count > 0 && d.Text == dictFormHiragana)
                                                        .MinBy(d => d.Text.Length)?.Process
                                                        ?.Where(p => !string.IsNullOrEmpty(p)).ToList() ?? [];
                                 foreach (var dictWord in dictWordCache.Values)
@@ -1638,8 +1758,8 @@ namespace Jiten.Parser
                                 var normalizedWordCache = await JmDictCache.GetWordsAsync(normalizedLookup);
                                 var recoveredProcess = deconjugated
                                                        .Where(d => d.Process.Count > 0 &&
-                                                                   (d.Text.StartsWith(normalizedHiragana) ||
-                                                                    d.Text.StartsWith(baseDictionaryWord)))
+                                                                   (d.Text == normalizedHiragana ||
+                                                                    d.Text == baseDictionaryWord))
                                                        .MinBy(d => d.Text.Length)?.Process
                                                        ?.Where(p => !string.IsNullOrEmpty(p)).ToList() ?? [];
                                 foreach (var normalizedWord in normalizedWordCache.Values)
@@ -3401,7 +3521,80 @@ namespace Jiten.Parser
                 }
             }
 
+            MergeNaAdjAttributive(corrected);
+            MergeNdaExpression(corrected);
+
             return corrected;
+        }
+
+        // Writeback merge: bare ん + だ → んだ expression (JMDict 2849387), AND なん + だ → なんだ
+        // (where なん is treated as a 2-char form of the ん explanatory). The lattice often fails
+        // to keep these bundled — the 1-char edges for ん and だ outscore the 2-char compound because
+        // both pieces are common particles. The test suite always expects んだ / なんだ as one token
+        // after a predicate. Gated on the preceding token being verb / adj-i / adj-na / expression
+        // (so standalone ん at sentence start stays split: `ほうがいい + ん + じゃない` has じゃない, not だ).
+        private const int NdaExpressionWordId = 2849387;
+        private static void MergeNdaExpression(List<DeckWord> words)
+        {
+            for (int i = words.Count - 2; i >= 0; i--)
+            {
+                var cur = words[i];
+                var next = words[i + 1];
+                if (next.OriginalText != "だ") continue;
+                if (cur.OriginalText != "ん" && cur.OriginalText != "なん") continue;
+                if (i == 0) continue;
+                var prev = words[i - 1];
+                if (!PrecedesNdaExpression(prev)) continue;
+
+                cur.OriginalText = cur.OriginalText + "だ";
+                cur.WordId = NdaExpressionWordId;
+                cur.PartsOfSpeech = new List<PartOfSpeech> { PartOfSpeech.Expression };
+                words.RemoveAt(i + 1);
+            }
+        }
+
+        private static bool PrecedesNdaExpression(DeckWord prev)
+        {
+            foreach (var p in prev.PartsOfSpeech)
+            {
+                if (p == PartOfSpeech.Verb || p == PartOfSpeech.IAdjective
+                    || p == PartOfSpeech.NaAdjective || p == PartOfSpeech.Auxiliary
+                    || p == PartOfSpeech.Expression)
+                    return true;
+            }
+            return false;
+        }
+
+        // Writeback merge: adj-na + bare な → single attributive token. Pure output-side post-processing;
+        // runs after beam segmentation so mis-split na-adjectives (e.g. 元気 + な) are rejoined.
+        private static void MergeNaAdjAttributive(List<DeckWord> words)
+        {
+            for (int i = words.Count - 2; i >= 0; i--)
+            {
+                var cur = words[i];
+                var next = words[i + 1];
+                if (next.OriginalText != "な") continue;
+                if (cur == null || next == null) continue;
+                if (!cur.PartsOfSpeech.Contains(PartOfSpeech.NaAdjective)) continue;
+
+                // Only merge when the adj-na token is its canonical dictionary surface — avoids merging
+                // derived surfaces (e.g. verb+そう which Ichiran also tags adj-na) that tests expect split.
+                if (!string.IsNullOrEmpty(cur.SudachiReading) &&
+                    cur.SudachiPartOfSpeech != PartOfSpeech.NaAdjective &&
+                    cur.SudachiPartOfSpeech != PartOfSpeech.Noun &&
+                    cur.SudachiPartOfSpeech != PartOfSpeech.PrenounAdjectival &&
+                    cur.SudachiPartOfSpeech != PartOfSpeech.NominalAdjective)
+                    continue;
+
+                cur.OriginalText += "な";
+                var conj = cur.Conjugations;
+                if (!conj.Contains("attributive"))
+                {
+                    conj.Add("attributive");
+                    cur.Conjugations = conj;
+                }
+                words.RemoveAt(i + 1);
+            }
         }
 
         #endregion

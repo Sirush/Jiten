@@ -1,5 +1,6 @@
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Parser.Scoring;
 
 namespace Jiten.Parser.Resegmentation;
 
@@ -10,10 +11,29 @@ internal static class ResegmentationScorer
     private const int MaxEdgesPerStart   = 10;
     private const int BeamWidth          = 16;
 
+    // Upper bound on uncovered characters allowed in a single path. Gap edges
+    // are charged Constants.UncoveredCharPenalty each so paths with gaps lose
+    // to fully-covered alternatives under normal scoring; the cap just keeps
+    // the beam from exploring degenerate all-gap paths on long spans.
+    private const int MaxGapChars        = 2;
+
     public static List<SpanTokenCandidate> BuildEdges(
         string spanText,
         int startPos,
         Dictionary<string, List<int>> lookups)
+        => BuildEdges(spanText, startPos, new DirectLookupCandidateProvider(lookups));
+
+    public static SpanPath? FindBestPath(
+        string spanText,
+        Dictionary<string, List<int>> lookups,
+        Dictionary<int, int>? frequencyRanks = null,
+        int beamWidth = BeamWidth)
+        => FindBestPath(spanText, new DirectLookupCandidateProvider(lookups), frequencyRanks, beamWidth);
+
+    public static List<SpanTokenCandidate> BuildEdges(
+        string spanText,
+        int startPos,
+        ICandidateProvider candidates)
     {
         var result = new List<SpanTokenCandidate>(MaxEdgesPerStart);
         int maxLen = Math.Min(MaxEdgeLength, spanText.Length - startPos);
@@ -21,26 +41,21 @@ internal static class ResegmentationScorer
         for (int len = maxLen; len >= 1 && result.Count < MaxEdgesPerStart; len--)
         {
             var slice = spanText.Substring(startPos, len);
-            List<int>? wordIds = null;
+            var hits = candidates.GetCandidates(slice);
+            if (hits.Count == 0)
+                continue;
 
-            if (lookups.TryGetValue(slice, out var direct) && direct.Count > 0)
+            // Collapse SurfaceCandidates back to distinct WordIds — the span-scope
+            // scorer ignores ReadingIndex/ConjugationChain. The beam (which uses the
+            // same provider) consumes them directly.
+            var wordIds = new List<int>(hits.Count);
+            for (int i = 0; i < hits.Count; i++)
             {
-                wordIds = direct;
-            }
-            else
-            {
-                try
-                {
-                    var hira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(slice, convertLongVowelMark: false));
-                    if (hira != slice && lookups.TryGetValue(hira, out var hiraIds) && hiraIds.Count > 0)
-                        wordIds = hiraIds;
-
-                }
-                catch { }
+                int id = hits[i].WordId;
+                if (!wordIds.Contains(id)) wordIds.Add(id);
             }
 
-            if (wordIds != null)
-                result.Add(new SpanTokenCandidate(startPos, len, wordIds));
+            result.Add(new SpanTokenCandidate(startPos, len, wordIds));
         }
 
         return result;
@@ -48,26 +63,27 @@ internal static class ResegmentationScorer
 
     public static SpanPath? FindBestPath(
         string spanText,
-        Dictionary<string, List<int>> lookups,
+        ICandidateProvider candidates,
         Dictionary<int, int>? frequencyRanks = null,
         int beamWidth = BeamWidth)
     {
         if (spanText.Length == 0 || spanText.Length > MaxSpanLength)
             return null;
 
-        // beamByPos[pos] = list of (segmentCount, lastLength, partialScore, segments)
-        // partialScore = sum of per-segment frequency bonuses minus 15 per segment (matches ScorePath's additive terms)
-        var beamByPos = new Dictionary<int, List<(int segCount, int lastLen, int partialScore, List<SpanTokenCandidate> segs)>>();
-        beamByPos[0] = [(0, 0, 0, [])];
+        // beamByPos[pos] = list of (segmentCount, lastLength, partialScore, gapChars, segments)
+        // partialScore = sum of per-segment frequency + length bonuses minus 15 per content segment,
+        //                minus Constants.UncoveredCharPenalty per gap char (matches ScorePath)
+        // Gap segments (WordIds empty, length 1) let the DP tolerate a bounded number of uncovered
+        // chars — charged heavily so fully-covered paths win when they exist.
+        var beamByPos = new Dictionary<int, List<(int segCount, int lastLen, int partialScore, int gapChars, List<SpanTokenCandidate> segs)>>();
+        beamByPos[0] = [(0, 0, 0, 0, [])];
 
         for (int pos = 0; pos < spanText.Length; pos++)
         {
             if (!beamByPos.TryGetValue(pos, out var states) || states.Count == 0)
                 continue;
 
-            var edges = BuildEdges(spanText, pos, lookups);
-            if (edges.Count == 0)
-                continue;
+            var edges = BuildEdges(spanText, pos, candidates);
 
             foreach (var state in states)
             {
@@ -85,26 +101,41 @@ internal static class ResegmentationScorer
                             if (frequencyRanks.TryGetValue(wordId, out int rank) && rank < bestRank)
                                 bestRank = rank;
                         }
-                        edgeFreqBonus = bestRank switch
-                        {
-                            <= 5000  => 30,
-                            <= 15000 => 15,
-                            <= 30000 => 5,
-                            _        => 0
-                        };
+                        edgeFreqBonus = FreqBonus(bestRank);
                     }
 
-                    int edgeLengthBonus = edge.Length switch { >= 5 => 40, >= 4 => 25, >= 3 => 10, _ => 0 };
+                    int edgeLengthBonus = LengthBonus(edge.Length);
                     int nextPartial = state.partialScore + edgeFreqBonus + edgeLengthBonus - 15;
 
                     if (!beamByPos.TryGetValue(nextPos, out var nextStates))
                     {
-                        nextStates = new List<(int, int, int, List<SpanTokenCandidate>)>(beamWidth);
+                        nextStates = new List<(int, int, int, int, List<SpanTokenCandidate>)>(beamWidth);
                         beamByPos[nextPos] = nextStates;
                     }
 
                     var newSegs = new List<SpanTokenCandidate>(state.segs) { edge };
-                    nextStates.Add((nextCount, edge.Length, nextPartial, newSegs));
+                    nextStates.Add((nextCount, edge.Length, nextPartial, state.gapChars, newSegs));
+                }
+
+                // Gap edge: advance one char as uncovered, charge UncoveredCharPenalty.
+                // Capped at MaxGapChars per path so the beam can't explore all-gap paths on long spans.
+                if (state.gapChars < MaxGapChars && pos + 1 <= spanText.Length)
+                {
+                    int nextPos = pos + 1;
+                    int nextPartial = state.partialScore - Constants.UncoveredCharPenalty;
+
+                    if (!beamByPos.TryGetValue(nextPos, out var nextStates))
+                    {
+                        nextStates = new List<(int, int, int, int, List<SpanTokenCandidate>)>(beamWidth);
+                        beamByPos[nextPos] = nextStates;
+                    }
+
+                    var gapSeg = new SpanTokenCandidate(pos, 1, new List<int>());
+                    var newSegs = new List<SpanTokenCandidate>(state.segs) { gapSeg };
+                    // Gap segments do not count toward segCount (they are not content) and
+                    // lastLen tracks the *content* edge so a gap followed by nothing doesn't
+                    // win tiebreakers over a length-1 dict edge.
+                    nextStates.Add((state.segCount, state.lastLen, nextPartial, state.gapChars + 1, newSegs));
                 }
             }
 
@@ -115,13 +146,16 @@ internal static class ResegmentationScorer
                 {
                     if (frequencyRanks != null)
                     {
-                        // Higher partial score first (encodes both frequency quality and fewer-segments penalty)
+                        // Higher partial score first (encodes frequency, length, segment count, gap penalty)
                         bucket.Sort((a, b) => b.partialScore.CompareTo(a.partialScore));
                     }
                     else
                     {
+                        // Fewer gaps, then fewer segments, then longer last content edge
                         bucket.Sort((a, b) =>
                         {
+                            int g = a.gapChars.CompareTo(b.gapChars);
+                            if (g != 0) return g;
                             int c = a.segCount.CompareTo(b.segCount);
                             return c != 0 ? c : b.lastLen.CompareTo(a.lastLen);
                         });
@@ -134,8 +168,17 @@ internal static class ResegmentationScorer
         if (!beamByPos.TryGetValue(spanText.Length, out var completeStates) || completeStates.Count == 0)
             return null;
 
+        // Reject paths consisting entirely of gaps — those add no information over returning null.
+        completeStates = completeStates.Where(s => s.segs.Any(seg => !seg.IsGap)).ToList();
+        if (completeStates.Count == 0)
+            return null;
+
+        // Prefer paths without gaps when any exist; gap paths are only kept as a last resort.
+        int minGaps = completeStates.Min(s => s.gapChars);
+        completeStates = completeStates.Where(s => s.gapChars == minGaps).ToList();
+
         // Prefer paths that:
-        // 1. don't exceed half the span length in segment count (too fragmented)
+        // 1. don't exceed half the span length in content segment count (too fragmented)
         // 2. don't have single-char kana in non-terminal positions (likely wrong word boundary)
         //    Exception: a single-char katakana at the LAST position is allowed (common particles like ガ/ニ/ヲ)
         int maxSegments = (spanText.Length + 1) / 2;
@@ -168,12 +211,14 @@ internal static class ResegmentationScorer
     {
         int score = 0;
         int totalLength = 0;
-
-        score -= 15 * path.Segments.Count;
+        int contentSegCount = 0;
 
         bool noWeakSingleCharSegments = true;
         foreach (var seg in path.Segments)
         {
+            if (seg.IsGap) continue;
+
+            contentSegCount++;
             totalLength += seg.Length;
             if (seg.Length < 2)
             {
@@ -188,21 +233,17 @@ internal static class ResegmentationScorer
                     bestRank = rank;
             }
 
-            score += bestRank switch
-            {
-                <= 5000  => 30,
-                <= 15000 => 15,
-                <= 30000 => 5,
-                _        => 0
-            };
-
-            score += seg.Length switch { >= 5 => 40, >= 4 => 25, >= 3 => 10, _ => 0 };
+            score += FreqBonus(bestRank);
+            score += LengthBonus(seg.Length);
         }
+
+        score -= 15 * contentSegCount;
+        score -= path.GapCost;
 
         if (noWeakSingleCharSegments)
             score += 50;
 
-        if (path.Segments.Count > 0 && totalLength / path.Segments.Count >= 3)
+        if (contentSegCount > 0 && totalLength / contentSegCount >= 3)
             score += 20;
 
         return score;
@@ -217,8 +258,12 @@ internal static class ResegmentationScorer
     {
         int score = 0;
 
-        var firstPos = ResolveSegmentPos(path.Segments[0], wordPosByWordId, frequencyRanks);
-        var lastPos  = ResolveSegmentPos(path.Segments[^1], wordPosByWordId, frequencyRanks);
+        var resolvedPos = new PartOfSpeech?[path.Segments.Count];
+        for (int i = 0; i < path.Segments.Count; i++)
+            resolvedPos[i] = ResolveSegmentPos(path.Segments[i], wordPosByWordId, frequencyRanks);
+
+        var firstPos = resolvedPos[0];
+        var lastPos  = resolvedPos[^1];
 
         if (lastPos.HasValue && IsNounLike(lastPos.Value) && nextNeighborPos == PartOfSpeech.Particle)
             score += 20;
@@ -238,20 +283,34 @@ internal static class ResegmentationScorer
         if (prevNeighborPos == PartOfSpeech.Particle && firstPos.HasValue && !IsNounLike(firstPos.Value))
             score -= 15;
 
-        bool allNounLike = path.Segments.All(s => ResolveSegmentPos(s, wordPosByWordId, frequencyRanks) is { } p && IsNounLike(p));
+        bool allNounLike = resolvedPos.All(p => p is { } v && IsNounLike(v));
         if (allNounLike && path.Segments.Count > 1)
             score += 10;
 
-        for (int i = 0; i < path.Segments.Count - 1; i++)
+        for (int i = 0; i < resolvedPos.Length - 1; i++)
         {
-            var a = ResolveSegmentPos(path.Segments[i],     wordPosByWordId, frequencyRanks);
-            var b = ResolveSegmentPos(path.Segments[i + 1], wordPosByWordId, frequencyRanks);
-            if (a == PartOfSpeech.Particle && b == PartOfSpeech.Particle)
+            if (resolvedPos[i] == PartOfSpeech.Particle && resolvedPos[i + 1] == PartOfSpeech.Particle)
                 score -= 20;
         }
 
         return score;
     }
+
+    private static int FreqBonus(int rank) => rank switch
+    {
+        <= 5000  => 30,
+        <= 15000 => 15,
+        <= 30000 => 5,
+        _        => 0
+    };
+
+    private static int LengthBonus(int length) => length switch
+    {
+        >= 5 => 40,
+        >= 4 => 25,
+        >= 3 => 10,
+        _    => 0
+    };
 
     private static PartOfSpeech? ResolveSegmentPos(
         SpanTokenCandidate seg,

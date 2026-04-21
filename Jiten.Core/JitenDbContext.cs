@@ -23,6 +23,7 @@ public class JitenDbContext : DbContext
     public DbSet<JmDictLookup> Lookups { get; set; }
     public DbSet<JmDictWordForm> WordForms { get; set; }
     public DbSet<JmDictWordFormFrequency> WordFormFrequencies { get; set; }
+    public DbSet<JmDictConjugatedForm> ConjugatedForms { get; set; }
     public DbSet<Kanji> Kanjis { get; set; }
     public DbSet<WordKanji> WordKanjis { get; set; }
     public DbSet<JmDictWordComposition> WordCompositions { get; set; }
@@ -366,6 +367,31 @@ public class JitenDbContext : DbContext
 
             entity.HasIndex(e => e.FrequencyRank)
                   .HasDatabaseName("IX_WordFormFrequencies_FrequencyRank");
+        });
+
+        modelBuilder.Entity<JmDictConjugatedForm>(entity =>
+        {
+            entity.ToTable("ConjugatedForms", "jmdict");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.Surface).IsRequired();
+            entity.Property(e => e.WordId).IsRequired();
+            entity.Property(e => e.FormIndex).HasDefaultValue((short)0);
+
+            if (isNpgsql)
+            {
+                entity.Property(e => e.ConjugationChain).HasColumnType("text[]").HasDefaultValueSql("'{}'");
+            }
+
+            // No secondary indexes: the binary cache is the primary read path. The
+            // Postgres table is only written to (by --generate-conjugations) and
+            // read as a fallback when the cache is missing; both tolerate seq scans.
+            // Dropping IX_Surface + IX_WordId reclaims ~2 GB of disk.
+
+            entity.HasOne<JmDictWord>()
+                  .WithMany()
+                  .HasForeignKey(e => e.WordId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Kanji>(entity =>

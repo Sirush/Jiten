@@ -7,7 +7,6 @@ using Jiten.Parser;
 using Jiten.Parser.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using StackExchange.Redis;
 using WanaKanaShaapu;
 
 namespace Jiten.Cli.Commands;
@@ -67,7 +66,9 @@ public class DiagnosticCommands(CliContext context)
             FormScoring = diagnostics.Results,
             AdjacentScoring = diagnostics.AdjacentScoring,
             DroppedTokens = diagnostics.DroppedTokens,
-            TransitionViolations = diagnostics.TransitionViolations
+            TransitionViolations = diagnostics.TransitionViolations,
+            ResegmentationPaths = diagnostics.ResegmentationPaths,
+            BeamSentences = diagnostics.BeamSentences
         };
 
         var jsonOptions = new JsonSerializerOptions
@@ -377,6 +378,25 @@ public class DiagnosticCommands(CliContext context)
         }
     }
 
+    public void SearchConj(string surface)
+    {
+        var binPath = Jiten.Parser.Resolution.ConjugationTableBinaryFile.DefaultPath;
+        var table = Jiten.Parser.Resolution.ConjugationTableBinaryFile.TryRead(binPath, Console.WriteLine);
+        if (table == null)
+        {
+            Console.WriteLine($"Failed to load conjugation binary at {binPath}");
+            return;
+        }
+
+        var hits = table.GetHits(surface);
+        Console.WriteLine($"Surface '{surface}' → {hits.Length} hit(s)");
+        foreach (var h in hits)
+        {
+            var chain = h.Chain == null ? "(null)" : string.Join("|", h.Chain);
+            Console.WriteLine($"  wordId={h.WordId} formIndex={h.FormIndex} chain=[{chain}]");
+        }
+    }
+
     public async Task SearchLookup(string query)
     {
         await using var context1 = await context.ContextFactory.CreateDbContextAsync();
@@ -485,27 +505,105 @@ public class DiagnosticCommands(CliContext context)
         }
     }
 
-    public async Task FlushRedisCache()
+    public Task FlushRedisCache() => context.FlushRedisAsync();
+
+    public async Task CountAmbiguous()
     {
-        var redisConnectionString = context.Configuration.GetConnectionString("Redis");
-        if (string.IsNullOrEmpty(redisConnectionString))
+        await using var ctx = await context.ContextFactory.CreateDbContextAsync();
+
+        Console.WriteLine("Loading lookups...");
+        var rawLookups = await ctx.Lookups
+            .Select(l => new { l.LookupKey, l.WordId })
+            .ToListAsync();
+
+        var lookups = rawLookups
+            .GroupBy(l => l.LookupKey)
+            .Select(g => new { Surface = g.Key, WordIds = g.Select(l => l.WordId).Distinct().ToList() })
+            .Where(g => g.WordIds.Count > 1)
+            .ToList();
+
+        Console.WriteLine($"Surfaces with 2+ distinct WordIds: {lookups.Count}");
+
+        var allWordIds = lookups.SelectMany(l => l.WordIds).Distinct().ToList();
+        Console.WriteLine($"Loading {allWordIds.Count} words with forms...");
+
+        var words = await ctx.JMDictWords
+            .Include(w => w.Forms)
+            .Where(w => allWordIds.Contains(w.WordId))
+            .ToDictionaryAsync(w => w.WordId);
+
+        Console.WriteLine($"Loaded {words.Count} words. Analyzing...");
+
+        int ambiguousSurfaces = 0;
+        int totalMultiEntry = lookups.Count;
+        var examples = new List<(string Surface, int ReadingCount, List<(int WordId, string Reading, string Pos)> Entries)>();
+
+        foreach (var lookup in lookups)
         {
-            Console.WriteLine("Redis connection string not found in configuration.");
-            return;
+            var entries = new List<(int WordId, HashSet<string> Readings, List<string> Pos, bool HasPriority)>();
+
+            foreach (var wid in lookup.WordIds)
+            {
+                if (wid >= 5000000) continue;
+                if (!words.TryGetValue(wid, out var word)) continue;
+
+                var matchingForm = word.Forms.FirstOrDefault(f => f.Text == lookup.Surface);
+                if (matchingForm == null) continue;
+
+                var readings = new HashSet<string>();
+                foreach (var f in word.Forms)
+                    if (f.FormType == JmDictFormType.KanaForm)
+                        readings.Add(f.Text);
+                if (readings.Count == 0) readings.Add(lookup.Surface);
+
+                bool hasPri = (word.Priorities != null && word.Priorities.Count > 0)
+                    || word.Forms.Any(f => f.Priorities != null && f.Priorities.Count > 0);
+
+                entries.Add((wid, readings, word.PartsOfSpeech, hasPri));
+            }
+
+            if (entries.Count < 2) continue;
+
+            // Only consider entries that are common enough to appear in real text.
+            // Entries with Priorities (ichi1, news1, nf##, etc.) are in frequency lists.
+            var common = entries.Where(e => e.HasPriority).ToList();
+            if (common.Count < 2) continue;
+
+            bool hasOverlappingPos = false;
+            for (int i = 0; i < common.Count && !hasOverlappingPos; i++)
+                for (int j = i + 1; j < common.Count; j++)
+                    if (common[i].Pos.Any(p => common[j].Pos.Contains(p)))
+                    {
+                        hasOverlappingPos = true;
+                        break;
+                    }
+
+            if (!hasOverlappingPos) continue;
+
+            ambiguousSurfaces++;
+            if (examples.Count < 50)
+            {
+                examples.Add((lookup.Surface, common.SelectMany(e => e.Readings).Distinct().Count(),
+                    common.Select(e => (e.WordId, string.Join("/", e.Readings), string.Join(",", e.Pos))).ToList()));
+            }
         }
 
-        try
-        {
-            var connection = await ConnectionMultiplexer.ConnectAsync(redisConnectionString);
-            var redisDb = connection.GetDatabase();
-            redisDb.Execute("FLUSHALL");
-            await connection.CloseAsync();
+        Console.WriteLine();
+        Console.WriteLine($"=== Results ===");
+        Console.WriteLine($"Total surfaces with 2+ WordIds:       {totalMultiEntry:N0}");
+        Console.WriteLine($"Ambiguous (different reading + POS):   {ambiguousSurfaces:N0}");
+        Console.WriteLine($"Non-ambiguous (same reading or no POS overlap): {totalMultiEntry - ambiguousSurfaces:N0}");
+        Console.WriteLine();
 
-            Console.WriteLine("Redis cache flushed successfully.");
-        }
-        catch (Exception ex)
+        if (examples.Count > 0)
         {
-            Console.WriteLine($"Failed to flush Redis cache: {ex.Message}");
+            Console.WriteLine($"Examples (first {examples.Count}):");
+            foreach (var (surface, readingCount, entries) in examples)
+            {
+                Console.WriteLine($"  {surface} ({readingCount} readings):");
+                foreach (var (wid, reading, pos) in entries)
+                    Console.WriteLine($"    {wid}: {reading} [{pos}]");
+            }
         }
     }
 
@@ -518,16 +616,20 @@ public class DiagnosticCommands(CliContext context)
         Console.WriteLine($"PartsOfSpeech: [{string.Join(", ", word.PartsOfSpeech)}]");
         Console.WriteLine($"PitchAccents: [{string.Join(", ", word.PitchAccents ?? [])}]");
         Console.WriteLine($"Priorities: [{string.Join(", ", word.Priorities ?? [])}]");
+        Console.WriteLine("PerFormPriorities:");
+        foreach (var f in orderedForms)
+            Console.WriteLine($"  [{f.ReadingIndex}] {f.Text} → [{string.Join(", ", f.Priorities ?? [])}]");
         Console.WriteLine($"Origin: {word.Origin}");
 
         if (word.Definitions?.Count > 0)
         {
-            Console.WriteLine("Definitions:");
-            foreach (var def in word.Definitions.Take(3))
+            Console.WriteLine($"Definitions ({word.Definitions.Count}):");
+            foreach (var def in word.Definitions)
             {
                 var posStr = def.PartsOfSpeech.Count > 0 ? string.Join(", ", def.PartsOfSpeech) : "";
+                var miscStr = def.Misc != null && def.Misc.Count > 0 ? $" misc=[{string.Join(",", def.Misc)}]" : "";
                 var meanings = def.EnglishMeanings.Count > 0 ? string.Join("; ", def.EnglishMeanings) : "(no English)";
-                Console.WriteLine($"  [{posStr}] {meanings}");
+                Console.WriteLine($"  SI={def.SenseIndex} [{posStr}]{miscStr} {meanings}");
             }
         }
     }

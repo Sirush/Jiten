@@ -75,7 +75,37 @@ internal sealed class ParserRuntime
         // works correctly even while the cache is still being populated on a cold start.
         _ = Task.Run(() => PrefillRedisCacheAsync(jmDictCache, contextFactory));
 
-        return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds);
+        // Non-archaic POS map — Redis-backed. Tries Redis first (fast); falls back to
+        // a single DB query and writes the result back. Runs synchronously on the
+        // critical path so IchiranPropScorer has the override BEFORE any parsing starts.
+        var napSw = Stopwatch.StartNew();
+        var cachedMap = await jmDictCache.GetNonArchaicPosMapAsync();
+        if (cachedMap != null)
+        {
+            Scoring.IchiranPropScorer.NonArchaicPosOverride = cachedMap;
+            log?.Invoke($"NonArchaicPos map: {cachedMap.Count} words from Redis in {napSw.ElapsedMilliseconds}ms");
+        }
+        else
+        {
+            try
+            {
+                await using var napCtx = await contextFactory.CreateDbContextAsync();
+                var map = await JmDictHelper.LoadNonArchaicPosMapAsync(napCtx);
+                Scoring.IchiranPropScorer.NonArchaicPosOverride = map;
+                _ = Task.Run(() => jmDictCache.SetNonArchaicPosMapAsync(map));
+                log?.Invoke($"NonArchaicPos map: {map.Count} words from DB in {napSw.ElapsedMilliseconds}ms");
+            }
+            catch
+            {
+                // Non-fatal: scorer falls back to word.PartsOfSpeech.
+            }
+        }
+
+        var ambSw = Stopwatch.StartNew();
+        var ambiguousSurfaces = await BuildAmbiguousSurfacesAsync(lookups, jmDictCache, contextFactory);
+        log?.Invoke($"Ambiguous surfaces: {ambiguousSurfaces.Count} in {ambSw.ElapsedMilliseconds}ms");
+
+        return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, ambiguousSurfaces);
     }
 
     private static async Task<(Dictionary<string, List<int>> lookups, Dictionary<int, int> wordFrequencyRanks,
@@ -107,6 +137,137 @@ internal sealed class ParserRuntime
 
         return (t1.Result, t2.Result, t3.Result, t4.Result, lookupsMs, freqMs, nameOnlyMs);
     }
+
+    private static async Task<HashSet<string>> BuildAmbiguousSurfacesAsync(
+        Dictionary<string, List<int>> lookups, IJmDictCache jmDictCache,
+        IDbContextFactory<JitenDbContext> contextFactory)
+    {
+        var result = new HashSet<string>(StringComparer.Ordinal);
+
+        // Collect all WordIds we need to check (non-JMNedict, from multi-entry surfaces)
+        var neededIds = new HashSet<int>();
+        foreach (var (_, wordIds) in lookups)
+        {
+            if (wordIds.Count < 2) continue;
+            foreach (var wid in wordIds)
+                if (wid < 5_000_000) neededIds.Add(wid);
+        }
+
+        // Load POS + priorities for needed words. Try word array first (warm start),
+        // fall back to DB query (cold start).
+        var wordPos = new Dictionary<int, (List<string> Pos, bool HasPriority)>(neededIds.Count);
+        var wordArray = jmDictCache.GetWordArray();
+        List<int>? uncached = null;
+
+        foreach (var wid in neededIds)
+        {
+            JmDictWord? word = null;
+            if (wordArray != null && (uint)wid < (uint)wordArray.Length)
+                word = wordArray[wid];
+            if (word != null)
+            {
+                bool hasPri = word.Priorities is { Count: > 0 };
+                if (!hasPri && word.Forms != null)
+                    foreach (var f in word.Forms)
+                        if (f.Priorities is { Count: > 0 }) { hasPri = true; break; }
+                wordPos[wid] = (word.PartsOfSpeech, hasPri);
+            }
+            else
+            {
+                uncached ??= new List<int>();
+                uncached.Add(wid);
+            }
+        }
+
+        if (uncached is { Count: > 0 })
+        {
+            await using var ctx = await contextFactory.CreateDbContextAsync();
+            await using var conn = ctx.Database.GetDbConnection();
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT w."WordId", w."PartsOfSpeech", w."Priorities",
+                       EXISTS(SELECT 1 FROM jmdict."WordForms" f WHERE f."WordId" = w."WordId" AND array_length(f."Priorities", 1) > 0) AS has_form_pri
+                FROM jmdict."Words" w
+                WHERE w."WordId" = ANY(@ids)
+                """;
+            var param = cmd.CreateParameter();
+            param.ParameterName = "ids";
+            param.Value = uncached.ToArray();
+            cmd.Parameters.Add(param);
+            cmd.CommandTimeout = 30;
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var wid = reader.GetInt32(0);
+                var pos = reader.IsDBNull(1) ? new List<string>() : ((string[])reader.GetValue(1)).ToList();
+                var hasPri = !reader.IsDBNull(2) && ((string[])reader.GetValue(2)).Length > 0;
+                if (!hasPri) hasPri = reader.GetBoolean(3);
+                wordPos[wid] = (pos, hasPri);
+            }
+        }
+
+        // Check each multi-entry surface for POS overlap between common entries.
+        // Skip short kana-only surfaces (≤2 chars) — these are particles/interjections
+        // where the beam's frequency scoring always picks the right entry.
+        foreach (var (surface, wordIds) in lookups)
+        {
+            if (wordIds.Count < 2) continue;
+            if (surface.Length <= 2 && IsAllKana(surface)) continue;
+
+            List<List<string>>? commonPos = null;
+            foreach (var wid in wordIds)
+            {
+                if (wid >= 5_000_000) continue;
+                if (!wordPos.TryGetValue(wid, out var wp) || !wp.HasPriority) continue;
+                commonPos ??= new List<List<string>>();
+                commonPos.Add(wp.Pos);
+            }
+
+            if (commonPos == null || commonPos.Count < 2) continue;
+
+            bool overlapping = false;
+            for (int i = 0; i < commonPos.Count && !overlapping; i++)
+                for (int j = i + 1; j < commonPos.Count; j++)
+                {
+                    foreach (var p in commonPos[i])
+                        if (commonPos[j].Contains(p)) { overlapping = true; break; }
+                    if (overlapping) break;
+                }
+
+            if (overlapping)
+                result.Add(surface);
+        }
+
+        // Manual overrides
+        var overridePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "ambiguous_overrides.json");
+        if (File.Exists(overridePath))
+        {
+            try
+            {
+                var json = await File.ReadAllTextAsync(overridePath);
+                var overrides = System.Text.Json.JsonSerializer.Deserialize<List<AmbiguousOverride>>(json,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (overrides != null)
+                    foreach (var o in overrides)
+                        if (!string.IsNullOrEmpty(o.Surface))
+                            result.Add(o.Surface);
+            }
+            catch { }
+        }
+
+        return result;
+    }
+
+    private static bool IsAllKana(string s)
+    {
+        foreach (char c in s)
+            if (!((c >= '\u3040' && c <= '\u309F') || (c >= '\u30A0' && c <= '\u30FF')))
+                return false;
+        return true;
+    }
+
+    private sealed record AmbiguousOverride(string Surface, string? Reason);
 
     private static async Task PrefillRedisCacheAsync(IJmDictCache jmDictCache, IDbContextFactory<JitenDbContext> contextFactory)
     {
@@ -146,7 +307,8 @@ internal sealed class ParserRuntimeSnapshot(
     Dictionary<string, List<int>> lookups,
     Dictionary<int, int> wordFrequencyRanks,
     HashSet<int> nameOnlyWordIds,
-    HashSet<int> expressionWordIds)
+    HashSet<int> expressionWordIds,
+    HashSet<string> ambiguousSurfaces)
 {
     public IDeckWordCache DeckWordCache { get; } = deckWordCache;
     public IJmDictCache JmDictCache { get; } = jmDictCache;
@@ -154,4 +316,5 @@ internal sealed class ParserRuntimeSnapshot(
     public Dictionary<int, int> WordFrequencyRanks { get; } = wordFrequencyRanks;
     public HashSet<int> NameOnlyWordIds { get; } = nameOnlyWordIds;
     public HashSet<int> ExpressionWordIds { get; } = expressionWordIds;
+    public HashSet<string> AmbiguousSurfaces { get; } = ambiguousSurfaces;
 }

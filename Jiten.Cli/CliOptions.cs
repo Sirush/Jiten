@@ -151,11 +151,35 @@ public class CliOptions
     [Option(longName: "search-lookup", Required = false, HelpText = "Search the lookups table for a text and show all matching WordIds.")]
     public string? SearchLookup { get; set; }
 
+    [Option(longName: "search-conj", Required = false, HelpText = "Search the loaded ConjugationTable binary for a surface; prints (wordId, chain, formIndex) rows.")]
+    public string? SearchConj { get; set; }
+
     [Option(longName: "deconjugate-test", Required = false, HelpText = "Show all deconjugation results for a word.")]
     public string? DeconjugateTest { get; set; }
 
     [Option(longName: "flush-redis", Required = false, HelpText = "Flush the Redis cache (clears all cached parser results).")]
     public bool FlushRedis { get; set; }
+
+    [Option(longName: "count-ambiguous", Required = false, HelpText = "Analyze JMDict lookups to count surfaces with genuinely ambiguous readings (same surface, overlapping POS, different entries).")]
+    public bool CountAmbiguous { get; set; }
+
+    [Option(longName: "generate-conjugations", Required = false, HelpText = "Rebuild the jmdict.ConjugatedForms table from deconjugator.json rules. Also runs as final step of --import.")]
+    public bool GenerateConjugations { get; set; }
+
+    [Option(longName: "conjugations-max-depth", Required = false, Default = 3, HelpText = "Max BFS depth for --generate-conjugations (default: 3).")]
+    public int ConjugationsMaxDepth { get; set; } = 3;
+
+    [Option(longName: "conjugations-per-word-cap", Required = false, Default = 300, HelpText = "Per-word emission cap for --generate-conjugations (default: 300).")]
+    public int ConjugationsPerWordCap { get; set; } = 300;
+
+    [Option(longName: "conj-mode", Required = false, Default = "forward", HelpText = "Conjugation generator: 'forward' (JMdictDB paradigms from conjo.csv, DEFAULT — produces the 26M-surface table the beam is calibrated for) or 'bfs' (legacy deconjugator.json BFS; ~9M surfaces, regresses the parser-test suite — not for runtime use).")]
+    public string ConjMode { get; set; } = "forward";
+
+    [Option(longName: "conjugation-stats", Required = false, HelpText = "Print distribution stats for jmdict.ConjugatedForms (chain counts, per-word counts, length histogram).")]
+    public bool ConjugationStats { get; set; }
+
+    [Option(longName: "conjugation-inspect", Required = false, HelpText = "Show all conjugation-table rows for the given surface (diagnostic).")]
+    public string? ConjugationInspect { get; set; }
 
     [Option(longName: "create-wordset-from-pos", Required = false, HelpText = "Create a WordSet from words with specific Part of Speech.")]
     public bool CreateWordSetFromPos { get; set; }
@@ -192,6 +216,18 @@ public class CliOptions
 
     [Option(longName: "benchmark-warmup", Required = false, Default = true, HelpText = "Run a warmup parse before benchmarking (default: true).")]
     public bool BenchmarkWarmup { get; set; }
+
+    [Option(longName: "benchmark-iterations", Required = false, Default = 3, HelpText = "Number of parse iterations per file (default: 3). Used for percentile/stddev statistics.")]
+    public int BenchmarkIterations { get; set; } = 3;
+
+    [Option(longName: "benchmark-stages", Required = false, HelpText = "Enable per-stage timing instrumentation (Sudachi / Preprocess / DeconjugationLookup / Resegmentation / AdjacentScoring). Small overhead.")]
+    public bool BenchmarkStages { get; set; }
+
+    [Option(longName: "benchmark-cold", Required = false, HelpText = "Flush Redis before iteration 1 of each file to measure cold-cache behaviour. Subsequent iterations run warm.")]
+    public bool BenchmarkCold { get; set; }
+
+    [Option(longName: "benchmark-label", Required = false, HelpText = "Optional label stored in the benchmark JSON output (e.g. \"baseline-pre-lesson-2\").")]
+    public string? BenchmarkLabel { get; set; }
 
     [Option(longName: "scan-confidence", Required = false, HelpText = "Scan a corpus file for low-confidence token resolutions. Requires --input.")]
     public bool ScanConfidence { get; set; }

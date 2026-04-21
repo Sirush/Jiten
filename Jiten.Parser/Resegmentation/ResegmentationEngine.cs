@@ -2,6 +2,7 @@ using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Jiten.Parser.Data.Redis;
+using Jiten.Parser.Diagnostics;
 using Jiten.Parser.Scoring;
 
 namespace Jiten.Parser.Resegmentation;
@@ -15,10 +16,12 @@ internal static class ResegmentationEngine
         List<SentenceInfo> sentences,
         Dictionary<string, List<int>> lookups,
         Dictionary<int, int> frequencyRanks,
-        IJmDictCache jmDictCache)
+        IJmDictCache jmDictCache,
+        ParserDiagnostics? diagnostics = null)
     {
         // Phase 1: collect all valid (sentence, span, path) tuples — pure CPU, no I/O
         var pending = new List<(SentenceInfo sentence, UncertainSpan span, SpanPath path, PartOfSpeech? prevPos, PartOfSpeech? nextPos)>();
+        var candidates = new DirectLookupCandidateProvider(lookups);
 
         foreach (var sentence in sentences)
         {
@@ -27,7 +30,7 @@ internal static class ResegmentationEngine
 
             foreach (var span in spans.OrderByDescending(s => s.WordIndex))
             {
-                var path = ResegmentationScorer.FindBestPath(span.Text, lookups, frequencyRanks);
+                var path = ResegmentationScorer.FindBestPath(span.Text, candidates, frequencyRanks);
                 if (path == null || !path.IsComplete(span.Text.Length) || path.Segments.Count <= 1)
                     continue;
                 if (path.Segments.Count > (span.Text.Length + 1) / 2)
@@ -62,7 +65,10 @@ internal static class ResegmentationEngine
         {
             var freqScore = ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text);
             var posScore  = ResegmentationScorer.ScorePosTransitions(path, wordPosByWordId, prevPos, nextPos, frequencyRanks);
-            if (freqScore + posScore < MinAcceptScore)
+            bool accepted = freqScore + posScore >= MinAcceptScore;
+            diagnostics?.LogResegmentationPath(span.Text, path.Segments.Count, path.GapChars,
+                path.GapCost, freqScore + posScore, accepted, "ImproveUncertainSpans");
+            if (!accepted)
                 continue;
             ReplaceSpan(sentence, span, path, frequencyRanks, wordCache);
         }
@@ -73,10 +79,12 @@ internal static class ResegmentationEngine
         Dictionary<string, List<int>> lookups,
         Dictionary<int, int> frequencyRanks,
         Dictionary<(int sentenceIndex, int wordIndex), int?> marginMap,
-        IJmDictCache jmDictCache)
+        IJmDictCache jmDictCache,
+        ParserDiagnostics? diagnostics = null)
     {
         // Phase 1: collect all valid replacements — pure CPU, no I/O
         var pending = new List<(SentenceInfo sentence, UncertainSpan span, SpanPath path, PartOfSpeech? prevPos, PartOfSpeech? nextPos)>();
+        var candidates = new DirectLookupCandidateProvider(lookups);
 
         for (int si = 0; si < sentences.Count; si++)
         {
@@ -97,7 +105,7 @@ internal static class ResegmentationEngine
                 if (!marginMap.TryGetValue((si, wi), out var margin) || margin == null || margin >= ScoringPolicy.LowConfidenceThreshold)
                     continue;
 
-                var path = ResegmentationScorer.FindBestPath(word.Text, lookups, frequencyRanks);
+                var path = ResegmentationScorer.FindBestPath(word.Text, candidates, frequencyRanks);
                 if (path == null || !path.IsComplete(word.Text.Length) || path.Segments.Count <= 1)
                     continue;
                 if (path.Segments.Count > (word.Text.Length + 1) / 2)
@@ -137,7 +145,10 @@ internal static class ResegmentationEngine
         {
             var freqScore = ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text);
             var posScore  = ResegmentationScorer.ScorePosTransitions(path, wordPosByWordId, prevPos, nextPos, frequencyRanks);
-            if (freqScore + posScore < MinAcceptScoreConfidence)
+            bool accepted = freqScore + posScore >= MinAcceptScoreConfidence;
+            diagnostics?.LogResegmentationPath(span.Text, path.Segments.Count, path.GapChars,
+                path.GapCost, freqScore + posScore, accepted, "LowConfidenceTokens");
+            if (!accepted)
                 continue;
             ReplaceSpan(sentence, span, path, frequencyRanks, wordCache);
             anyApplied = true;
@@ -157,6 +168,9 @@ internal static class ResegmentationEngine
         // or where the path doesn't cover the span from position 0. Without these guards
         // user-visible text can silently disappear (e.g. ファルマ → ルマ with ファ dropping
         // because IsComplete only checks end coverage, not start coverage).
+        // Also guards against gap segments (WordIds empty) emitted by FindBestPath's
+        // uncovered-char fallback — those are scored for path selection but should never
+        // replace user-visible tokens here.
         if (path.Segments.Count == 0
             || path.Segments[0].StartChar != 0
             || path.Segments.Any(s => s.WordIds == null || s.WordIds.Count == 0))

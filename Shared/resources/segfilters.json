@@ -1,0 +1,203 @@
+[
+  {
+    "name": "wokarasu",
+    "targetWordIds": [
+      2087020
+    ],
+    "leftIsNot": [
+      2029010
+    ],
+    "description": "嗄らす only follows を particle",
+    "source": "ichiran:dict-grammar.lisp:segfilter-wokarasu"
+  },
+  {
+    "name": "mononi",
+    "targetWordIds": [
+      1009980
+    ],
+    "leftIs": [
+      2028940
+    ],
+    "description": "ものに not after も",
+    "source": "ichiran:dict-grammar.lisp:segfilter-mononi"
+  },
+  {
+    "name": "nohayamete",
+    "targetWordIds": [
+      1601080
+    ],
+    "leftIs": [
+      1469800
+    ],
+    "description": "early(速めて) not after の",
+    "source": "ichiran:dict-grammar.lisp:segfilter-nohayamete"
+  },
+  {
+    "name": "tsu-iru",
+    "targetWordIds": [
+      1577980
+    ],
+    "leftIs": [
+      2221640
+    ],
+    "description": "いる not after counter つ (avoids つ+いる misparse)",
+    "source": "ichiran:dict-grammar.lisp:segfilter-tsu-iru"
+  },
+  {
+    "name": "dekiru",
+    "targetWordIds": [
+      2830009,
+      1547720
+    ],
+    "leftIs": [
+      1896380,
+      2422860
+    ],
+    "description": "来てる/来る not after 出/で or 出/しゅつ (suppresses 出-来る spurious parse)",
+    "source": "ichiran:dict-grammar.lisp:segfilter-dekiru"
+  },
+  {
+    "name": "aux-verb-someru",
+    "targetWordIds": [
+      1342560
+    ],
+    "leftStemType": "masu-stem",
+    "description": "初める (aux-v 'begin to') only follows a masu-stem/ren'youkei base",
+    "source": "ichiran:dict-grammar.lisp:segfilter-aux-verb"
+  },
+  {
+    "name": "n-after-particle",
+    "targetWordIds": [
+      2139720,
+      2849370,
+      2849387
+    ],
+    "leftIs": [
+      2028920,
+      2028930,
+      2028990,
+      2028980,
+      2029000,
+      1007340,
+      1579080,
+      1525680,
+      2028940,
+      1582300,
+      2215430,
+      1469800,
+      1009990,
+      2029010,
+      1005120,
+      2034520,
+      1008490,
+      1008530,
+      1008590,
+      2028950,
+      2028960,
+      1009600
+    ],
+    "description": "ん / んだ / のだ not after a noun-attaching particle (は/が/に/で/へ/だけ/ごろ/まで/も/など/には/の/のみ/を/さえ/でさえ/すら/と/とか/として/とは/や/にとって)",
+    "source": "ichiran:dict-grammar.lisp:segfilter-n"
+  },
+  {
+    "name": "honorific",
+    "targetWordIds": [
+      1247260
+    ],
+    "leftIs": [
+      2028920,
+      2028930,
+      2028990,
+      2028980,
+      2029000,
+      1007340,
+      1579080,
+      1525680,
+      2028940,
+      1582300,
+      2215430,
+      1469800,
+      1009990,
+      2029010,
+      1005120,
+      2034520,
+      1008490,
+      1008530,
+      1008590,
+      2028950,
+      2028960,
+      1009600
+    ],
+    "description": "君 (honorific suffix) not after a noun-attaching particle — otherwise it'd be mis-parsed as the name 'kun'",
+    "source": "ichiran:dict-grammar.lisp:segfilter-honorific"
+  },
+  {
+    "name": "toomou",
+    "targetWordIds": [
+      1589350,
+      1587040
+    ],
+    "leftIs": [
+      2837117
+    ],
+    "description": "思う / 言う not after 何だと (forces the と particle to split off as a separate segment before these verbs)",
+    "source": "ichiran:dict-grammar.lisp:segfilter-toomou"
+  },
+  {
+    "name": "sae",
+    "rightSurfaceStartsWith": [
+      "え"
+    ],
+    "leftSurfaceEndsWith": [
+      "さえ"
+    ],
+    "description": "reject right-segment starting with え after a left ending in さえ (prevents さえ+え-prefix mis-split)",
+    "source": "ichiran:dict-grammar.lisp:segfilter-sae"
+  },
+  {
+    "name": "roku",
+    "rightSurfaceStartsWith": [
+      "く"
+    ],
+    "leftSurfaceEndsWith": [
+      "いろ"
+    ],
+    "description": "reject right-segment starting with く after a left ending in いろ (prevents 色-く mis-split, e.g. 色々)",
+    "source": "ichiran:dict-grammar.lisp:segfilter-roku"
+  },
+  {
+    "name": "janai",
+    "targetWordIds": [1529520, 1296400, 2139720],
+    "leftCompoundEndText": ["は"],
+    "description": "reject ない/ある/ん after a compound whose last piece is は (e.g. ではない). Only fires on compound words (splits.json entries); single-segment は is NOT rejected — Ichiran's filter-is-compound-end requires listp seq",
+    "source": "ichiran:dict-grammar.lisp:segfilter-janai"
+  },
+  {
+    "name": "dashi",
+    "targetWordIds": [1157170, 2424740, 1305070],
+    "leftCompoundSeqIncludes": [2089020],
+    "leftCompoundSeqExcludes": [2028980],
+    "description": "reject する (and its conjugations) after a compound whose component-seq set contains だ (2089020) but NOT で (2028980). Implements Ichiran segfilter-dashi via the new compound-seq-set infrastructure: the filter only bites on true compounds (splits.json entries) — single-segment だ is unaffected. Activates when Phase 1c-seq synthesises compounds whose piece-wordId set tracks Ichiran semantics.",
+    "source": "ichiran:dict-grammar.lisp:segfilter-dashi"
+  },
+  {
+    "name": "badend",
+    "rightCompoundEndText": ["ちゃい", "いか", "とか", "とき", "い"],
+    "description": "unconditionally reject compounds whose last piece text matches these endings — prevents spurious compound-edge mis-parses. Only fires on compound words (splits.json entries); non-compound い-adjectives etc. are unaffected",
+    "source": "ichiran:dict-grammar.lisp:segfilter-badend"
+  },
+  {
+    "name": "sukiyoki",
+    "leftSurfaceEndsWith": ["好き"],
+    "leftConjType": 54,
+    "description": "reject any segment ending in 好き that was reached via adj-literary (き-form of adj-i) conjugation — kills the 好い/好き misparse where adj-ix 好い's き-form collides with adj-na 好き. Ichiran def-segfilter-must-follow segfilter-sukiyoki with left-filter (constantly nil).",
+    "source": "ichiran:dict-grammar.lisp:segfilter-sukiyoki"
+  },
+  {
+    "name": "totte",
+    "targetWordIds": [2086960],
+    "leftIs": [1008490],
+    "description": "reject って/て particle (2086960) after と particle (1008490) — prevents spurious と+って splits. Ichiran complement + filter-in-seq-set, :allow-first t.",
+    "source": "ichiran:dict-grammar.lisp:segfilter-totte"
+  }
+]

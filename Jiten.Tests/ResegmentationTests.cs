@@ -94,6 +94,121 @@ public class ResegmentationTests
         path.Segments.Should().HaveCount(2, "2-segment path should be preferred over 3-segment");
     }
 
+    // ─── Gap penalty (lesson #4) ──────────────────────────────────────────────
+
+    [Fact]
+    public void SpanPath_GapCharsAndGapCost_DerivedFromEmptyWordIdSegments()
+    {
+        var path = new SpanPath([
+            new SpanTokenCandidate(0, 2, [1]),
+            new SpanTokenCandidate(2, 1, []),  // gap
+            new SpanTokenCandidate(3, 2, [2]),
+        ]);
+
+        path.GapChars.Should().Be(1);
+        path.GapCost.Should().Be(500, "gap cost is gapChars * UncoveredCharPenalty(=500)");
+        path.Segments[1].IsGap.Should().BeTrue();
+        path.Segments[0].IsGap.Should().BeFalse();
+    }
+
+    [Fact]
+    public void FindBestPath_PrefersZeroGapPathWhenCompleteDictPathExists()
+    {
+        // Dictionary covers the whole span — no gap path should win over it.
+        var lookups = Dict(("あい", [1]), ("うえ", [2]));
+        var freqs = new Dictionary<int, int> { [1] = 100, [2] = 200 };
+
+        var path = ResegmentationScorer.FindBestPath("あいうえ", lookups, freqs);
+
+        path.Should().NotBeNull();
+        path!.IsComplete(4).Should().BeTrue();
+        path.GapChars.Should().Be(0, "zero-gap dict path should always beat gap paths");
+        path.Segments.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void FindBestPath_ReturnsNullWhenOnlyAllGapPathsReachEnd()
+    {
+        // 2-char span, no lookups. All-gap path reaches the end but is filtered
+        // because a path with zero content segments is equivalent to no path at all.
+        var lookups = new Dictionary<string, List<int>>();
+        var path = ResegmentationScorer.FindBestPath("あい", lookups);
+
+        path.Should().BeNull("all-gap paths carry no information and are rejected");
+    }
+
+    [Fact]
+    public void FindBestPath_CapsGapsAtMaxGapChars()
+    {
+        // 5-char span with empty lookups needs 5 gap chars to reach the end
+        // but the per-path cap is 2, so no path reaches the final position → null.
+        var lookups = new Dictionary<string, List<int>>();
+        var path = ResegmentationScorer.FindBestPath("あいうえお", lookups);
+
+        path.Should().BeNull("cap on uncovered chars must prevent degenerate all-gap paths");
+    }
+
+    [Fact]
+    public void FindBestPath_AcceptsGapBetweenDictSegmentsWhenNoFullCoverageExists()
+    {
+        // "あい" (pos 0-1) and "えお" (pos 3-4) are in dict; "う" at pos 2 has no match.
+        // Best path: dict-"あい" + gap("う") + dict-"えお" — 1 gap char.
+        var lookups = Dict(("あい", [1]), ("えお", [2]));
+        var freqs = new Dictionary<int, int> { [1] = 100, [2] = 200 };
+
+        var path = ResegmentationScorer.FindBestPath("あいうえお", lookups, freqs);
+
+        path.Should().NotBeNull();
+        path!.IsComplete(5).Should().BeTrue();
+        path.GapChars.Should().Be(1);
+        path.GapCost.Should().Be(500);
+        path.Segments.Should().HaveCount(3);
+        path.Segments[1].IsGap.Should().BeTrue();
+        path.Segments[1].StartChar.Should().Be(2);
+    }
+
+    [Fact]
+    public void ScorePath_SubtractsGapCostFromTotal()
+    {
+        var freqs = new Dictionary<int, int> { [1] = 100, [2] = 200 };
+
+        var noGapPath = new SpanPath([
+            new SpanTokenCandidate(0, 2, [1]),
+            new SpanTokenCandidate(2, 2, [2]),
+        ]);
+
+        var gapPath = new SpanPath([
+            new SpanTokenCandidate(0, 2, [1]),
+            new SpanTokenCandidate(2, 1, []),          // gap
+            new SpanTokenCandidate(3, 2, [2]),
+        ]);
+
+        int noGapScore = ResegmentationScorer.ScorePath(noGapPath, freqs);
+        int gapScore   = ResegmentationScorer.ScorePath(gapPath, freqs);
+
+        (noGapScore - gapScore).Should().Be(500,
+            "equivalent path with one gap char must lose exactly UncoveredCharPenalty(=500)");
+    }
+
+    [Fact]
+    public async Task ResegmentationEngine_DoesNotReplaceTokensViaGapPath()
+    {
+        // Only "あい" is in the dictionary; the rest of the span ("うえ") is unknown.
+        // A gap path could reach the end but must never replace the user-visible token —
+        // the empty-WordIds guard in ReplaceSpan prevents silent text loss.
+        var lookups = Dict(("あい", [1]));
+        var freqs = new Dictionary<int, int> { [1] = 100 };
+
+        var word = new WordInfo { Text = "あいうえ", PartOfSpeech = PartOfSpeech.Noun };
+        var sentence = new SentenceInfo("あいうえ");
+        sentence.Words.Add((word, 0, 4));
+
+        await ResegmentationEngine.TryImproveUncertainSpans([sentence], lookups, freqs, StubCache);
+
+        sentence.Words.Should().HaveCount(1, "gap paths must never apply to user-visible tokens");
+        sentence.Words[0].word.Text.Should().Be("あいうえ");
+    }
+
     // ─── UncertaintyDetector ──────────────────────────────────────────────────
 
     [Fact]
@@ -678,6 +793,12 @@ file sealed class StubJmDictCache : IJmDictCache
     public Task<bool> SetWordsAsync(Dictionary<int, JmDictWord> words) => Task.FromResult(true);
     public Task<bool> IsCacheInitializedAsync() => Task.FromResult(true);
     public Task SetCacheInitializedAsync() => Task.CompletedTask;
+    public Task<Dictionary<int, List<string>>?> GetNonArchaicPosMapAsync()
+        => Task.FromResult<Dictionary<int, List<string>>?>(null);
+    public Task SetNonArchaicPosMapAsync(Dictionary<int, List<string>> map) => Task.CompletedTask;
+    public Task PreloadWordsAsync(IEnumerable<int> wordIds) => Task.CompletedTask;
+    public bool TryGetWordLocal(int wordId, out JmDictWord? word) { word = null; return false; }
+    public JmDictWord?[]? GetWordArray() => null;
 }
 
 file sealed class MockJmDictCache(Dictionary<int, JmDictWord> words) : IJmDictCache
@@ -690,4 +811,10 @@ file sealed class MockJmDictCache(Dictionary<int, JmDictWord> words) : IJmDictCa
     public Task<bool> SetWordsAsync(Dictionary<int, JmDictWord> w) => Task.FromResult(true);
     public Task<bool> IsCacheInitializedAsync() => Task.FromResult(true);
     public Task SetCacheInitializedAsync() => Task.CompletedTask;
+    public Task<Dictionary<int, List<string>>?> GetNonArchaicPosMapAsync()
+        => Task.FromResult<Dictionary<int, List<string>>?>(null);
+    public Task SetNonArchaicPosMapAsync(Dictionary<int, List<string>> map) => Task.CompletedTask;
+    public Task PreloadWordsAsync(IEnumerable<int> wordIds) => Task.CompletedTask;
+    public bool TryGetWordLocal(int wordId, out JmDictWord? word) { word = words.GetValueOrDefault(wordId); return word != null; }
+    public JmDictWord?[]? GetWordArray() => null;
 }

@@ -5,6 +5,7 @@ using MessagePack.Resolvers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using StackExchange.Redis;
+using System.Collections.Concurrent;
 
 namespace Jiten.Parser.Data.Redis;
 
@@ -16,6 +17,9 @@ public class RedisJmDictCache : IJmDictCache
     private readonly TimeSpan _cacheExpiry = TimeSpan.FromDays(30);
     private const string InitializedKey = "jmdict:initialized";
     private readonly IDbContextFactory<JitenDbContext> _contextFactory;
+    private static readonly ConcurrentDictionary<int, JmDictWord> LocalWordCache = new();
+    private const int WordArraySize = 10_000_000;
+    private static JmDictWord?[]? _wordArray;
 
     private static readonly SemaphoreSlim DbSemaphore = new SemaphoreSlim(10, 10);
 
@@ -39,6 +43,8 @@ public class RedisJmDictCache : IJmDictCache
     {
         var redisKey = BuildLookupKey(key);
         var value = await _redisDb.StringGetAsync(redisKey);
+        Jiten.Parser.Diagnostics.ParserBenchmarkInstrumentation.RecordLookupCacheResult(
+            hits: value.IsNullOrEmpty ? 0 : 1, misses: value.IsNullOrEmpty ? 1 : 0);
         if (value.IsNullOrEmpty)
         {
             await using var dbContext = await _contextFactory.CreateDbContextAsync();
@@ -106,6 +112,9 @@ public class RedisJmDictCache : IJmDictCache
             }
         }
 
+        Jiten.Parser.Diagnostics.ParserBenchmarkInstrumentation.RecordLookupCacheResult(
+            hits: uniqueKeys.Count - missedKeys.Count, misses: missedKeys.Count);
+
         // 3. If any keys were not in the cache, fetch them from the database in a single query
         if (missedKeys.Any())
         {
@@ -140,8 +149,16 @@ public class RedisJmDictCache : IJmDictCache
 
     public async Task<JmDictWord?> GetWordAsync(int wordId)
     {
+        if (LocalWordCache.TryGetValue(wordId, out var localWord))
+        {
+            Jiten.Parser.Diagnostics.ParserBenchmarkInstrumentation.RecordWordCacheResult(hits: 1, misses: 0);
+            return localWord;
+        }
+
         var redisKey = BuildWordKey(wordId);
         var value = await _redisDb.StringGetAsync(redisKey);
+        Jiten.Parser.Diagnostics.ParserBenchmarkInstrumentation.RecordWordCacheResult(
+            hits: value.IsNullOrEmpty ? 0 : 1, misses: value.IsNullOrEmpty ? 1 : 0);
         if (value.IsNullOrEmpty)
         {
             await using var dbContext = await _contextFactory.CreateDbContextAsync();
@@ -156,6 +173,7 @@ public class RedisJmDictCache : IJmDictCache
             {
                 ComputeArchaicFlag(word);
                 StripDefinitionMeanings(word);
+                CacheWordLocally(wordId, word);
                 var bytes = MessagePackSerializer.Serialize(word, MsgPackOptions);
                 await _redisDb.StringSetAsync(redisKey, bytes, expiry: _cacheExpiry);
             }
@@ -165,7 +183,9 @@ public class RedisJmDictCache : IJmDictCache
 
         try
         {
-            return MessagePackSerializer.Deserialize<JmDictWord>((byte[])value!, MsgPackOptions);
+            var word = MessagePackSerializer.Deserialize<JmDictWord>((byte[])value!, MsgPackOptions);
+            if (word != null) CacheWordLocally(wordId, word);
+            return word;
         }
         catch
         {
@@ -182,15 +202,30 @@ public class RedisJmDictCache : IJmDictCache
             return new Dictionary<int, JmDictWord>();
         }
 
-        var redisKeys = uniqueIds.Select(id => (RedisKey)BuildWordKey(id)).ToArray();
-        var redisValues = await _redisDb.StringGetAsync(redisKeys);
-
         var results = new Dictionary<int, JmDictWord>();
+        var unresolvedIds = new List<int>();
+        foreach (var id in uniqueIds)
+        {
+            if (LocalWordCache.TryGetValue(id, out var localWord))
+                results[id] = localWord;
+            else
+                unresolvedIds.Add(id);
+        }
+
+        if (!unresolvedIds.Any())
+        {
+            Jiten.Parser.Diagnostics.ParserBenchmarkInstrumentation.RecordWordCacheResult(
+                hits: uniqueIds.Count, misses: 0);
+            return results;
+        }
+
+        var redisKeys = unresolvedIds.Select(id => (RedisKey)BuildWordKey(id)).ToArray();
+        var redisValues = await _redisDb.StringGetAsync(redisKeys);
         var missedIds = new List<int>();
 
         for (int i = 0; i < redisKeys.Length; i++)
         {
-            var id = uniqueIds[i];
+            var id = unresolvedIds[i];
             var value = redisValues[i];
 
             if (value.IsNullOrEmpty)
@@ -203,7 +238,10 @@ public class RedisJmDictCache : IJmDictCache
                 {
                     var word = MessagePackSerializer.Deserialize<JmDictWord>((byte[])value!, MsgPackOptions);
                     if (word != null)
+                    {
                         results[id] = word;
+                        CacheWordLocally(id, word);
+                    }
                 }
                 catch
                 {
@@ -211,6 +249,9 @@ public class RedisJmDictCache : IJmDictCache
                 }
             }
         }
+
+        Jiten.Parser.Diagnostics.ParserBenchmarkInstrumentation.RecordWordCacheResult(
+            hits: uniqueIds.Count - missedIds.Count, misses: missedIds.Count);
 
         if (missedIds.Any())
         {
@@ -251,6 +292,7 @@ public class RedisJmDictCache : IJmDictCache
                                     ComputeArchaicFlag(word);
                                     StripDefinitionMeanings(word);
                                     results[word.WordId] = word;
+                                    CacheWordLocally(word.WordId, word);
                                     var redisKey = BuildWordKey(word.WordId);
                                     var bytes = MessagePackSerializer.Serialize(word, MsgPackOptions);
                                     _ = cacheBatch.StringSetAsync(redisKey, bytes, expiry: _cacheExpiry, flags: CommandFlags.FireAndForget);
@@ -302,6 +344,7 @@ public class RedisJmDictCache : IJmDictCache
 
     public async Task<bool> SetWordAsync(int wordId, JmDictWord word)
     {
+        CacheWordLocally(wordId, word);
         var redisKey = BuildWordKey(wordId);
         var bytes = MessagePackSerializer.Serialize(word, MsgPackOptions);
         return await _redisDb.StringSetAsync(redisKey, bytes, expiry: _cacheExpiry);
@@ -316,6 +359,7 @@ public class RedisJmDictCache : IJmDictCache
         {
             ComputeArchaicFlag(word);
             StripDefinitionMeanings(word);
+            CacheWordLocally(wordId, word);
             var redisKey = BuildWordKey(wordId);
             var bytes = MessagePackSerializer.Serialize(word, MsgPackOptions);
             tasks.Add(batch.StringSetAsync(redisKey, bytes, expiry: _cacheExpiry));
@@ -367,5 +411,146 @@ public class RedisJmDictCache : IJmDictCache
     public async Task SetCacheInitializedAsync()
     {
         await _redisDb.StringSetAsync(InitializedKey, "1", expiry: _cacheExpiry);
+    }
+
+    private const string NonArchaicPosMapKey = "jmdict:non_arch_pos_map";
+
+    public async Task<Dictionary<int, List<string>>?> GetNonArchaicPosMapAsync()
+    {
+        var value = await _redisDb.StringGetAsync(NonArchaicPosMapKey);
+        if (value.IsNullOrEmpty) return null;
+        try
+        {
+            return MessagePackSerializer.Deserialize<Dictionary<int, List<string>>>((byte[])value!, MsgPackOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task SetNonArchaicPosMapAsync(Dictionary<int, List<string>> map)
+    {
+        var bytes = MessagePackSerializer.Serialize(map, MsgPackOptions);
+        await _redisDb.StringSetAsync(NonArchaicPosMapKey, bytes, expiry: _cacheExpiry);
+    }
+
+    public bool TryGetWordLocal(int wordId, out JmDictWord? word)
+    {
+        var arr = _wordArray;
+        if (arr != null && (uint)wordId < (uint)arr.Length)
+        {
+            word = arr[wordId];
+            return word != null;
+        }
+        return LocalWordCache.TryGetValue(wordId, out word);
+    }
+
+    public JmDictWord?[]? GetWordArray() => _wordArray;
+
+    public async Task PreloadWordsAsync(IEnumerable<int> wordIds)
+    {
+        var needed = new HashSet<int>();
+        foreach (var id in wordIds)
+            if (!LocalWordCache.ContainsKey(id))
+                needed.Add(id);
+
+        if (needed.Count == 0) return;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        await using var ctx = await _contextFactory.CreateDbContextAsync();
+        var conn = (Npgsql.NpgsqlConnection)ctx.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
+            await conn.OpenAsync();
+
+        var words = new Dictionary<int, JmDictWord>(needed.Count);
+
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = @"SELECT ""WordId"", ""PartsOfSpeech"", ""Priorities"" FROM jmdict.""Words"" ORDER BY ""WordId""";
+            cmd.CommandTimeout = 30;
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var wordId = reader.GetInt32(0);
+                if (!needed.Contains(wordId)) continue;
+                var pos = reader.IsDBNull(1) ? new List<string>() : ((string[])reader.GetValue(1)).ToList();
+                var priorities = reader.IsDBNull(2) ? null : ((string[])reader.GetValue(2)).ToList();
+                words[wordId] = new JmDictWord
+                {
+                    WordId = wordId,
+                    PartsOfSpeech = pos,
+                    Priorities = priorities,
+                    Forms = [],
+                    Definitions = []
+                };
+            }
+        }
+
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = @"SELECT ""WordId"", ""ReadingIndex"", ""Text"", ""FormType"", ""Priorities"", ""IsNoKanji"", ""IsSearchOnly"", ""IsObsolete"" FROM jmdict.""WordForms"" ORDER BY ""WordId"", ""ReadingIndex""";
+            cmd.CommandTimeout = 30;
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var wordId = reader.GetInt32(0);
+                if (!words.TryGetValue(wordId, out var word)) continue;
+                word.Forms.Add(new JmDictWordForm
+                {
+                    WordId = wordId,
+                    ReadingIndex = reader.GetInt16(1),
+                    Text = reader.GetString(2),
+                    FormType = (JmDictFormType)reader.GetInt32(3),
+                    Priorities = reader.IsDBNull(4) ? null : ((string[])reader.GetValue(4)).ToList(),
+                    IsNoKanji = reader.GetBoolean(5),
+                    IsSearchOnly = reader.GetBoolean(6),
+                    IsObsolete = reader.GetBoolean(7)
+                });
+            }
+        }
+
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = @"SELECT ""WordId"", ""SenseIndex"", ""Misc"", ""PartsOfSpeech"", (array_length(""EnglishMeanings"", 1) IS NOT NULL) AS has_eng FROM jmdict.""Definitions"" ORDER BY ""WordId"", ""SenseIndex""";
+            cmd.CommandTimeout = 30;
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var wordId = reader.GetInt32(0);
+                if (!words.TryGetValue(wordId, out var word)) continue;
+                word.Definitions.Add(new JmDictDefinition
+                {
+                    WordId = wordId,
+                    SenseIndex = reader.GetInt32(1),
+                    Misc = reader.IsDBNull(2) ? [] : ((string[])reader.GetValue(2)).ToList(),
+                    PartsOfSpeech = reader.IsDBNull(3) ? [] : ((string[])reader.GetValue(3)).ToList(),
+                    EnglishMeanings = reader.GetBoolean(4) ? ["_"] : []
+                });
+            }
+        }
+
+        var arr = new JmDictWord?[WordArraySize];
+        foreach (var word in words.Values)
+        {
+            ComputeArchaicFlag(word);
+            StripDefinitionMeanings(word);
+            LocalWordCache.TryAdd(word.WordId, word);
+            if ((uint)word.WordId < (uint)arr.Length)
+                arr[word.WordId] = word;
+        }
+        _wordArray = arr;
+
+        sw.Stop();
+        Console.Error.WriteLine($"[BeamWordPreload] Loaded {words.Count}/{needed.Count} words in {sw.ElapsedMilliseconds}ms");
+    }
+
+    private static void CacheWordLocally(int wordId, JmDictWord word)
+    {
+        LocalWordCache[wordId] = word;
+        var arr = _wordArray;
+        if (arr != null && (uint)wordId < (uint)arr.Length)
+            arr[wordId] = word;
     }
 }

@@ -14,4 +14,11 @@ public interface IJmDictCache
     Task<bool> SetWordsAsync(Dictionary<int, JmDictWord> words);
     Task<bool> IsCacheInitializedAsync();
     Task SetCacheInitializedAsync();
+
+    Task<Dictionary<int, List<string>>?> GetNonArchaicPosMapAsync();
+    Task SetNonArchaicPosMapAsync(Dictionary<int, List<string>> map);
+
+    Task PreloadWordsAsync(IEnumerable<int> wordIds);
+    bool TryGetWordLocal(int wordId, out JmDictWord? word);
+    JmDictWord?[]? GetWordArray();
 }

@@ -373,6 +373,57 @@ public static class JmDictHelper
         }
     }
 
+    // One-shot build of WordId → non-archaic POS list. A sense counts as archaic when
+    // its PartsOfSpeech contains "arch" (our ingestion flattens Misc.arch into POS).
+    // Mirrors Ichiran's `get-non-arch-posi` (dict.lisp ~860). Uses raw SQL aggregation
+    // (array_agg + unnest) — a single query returns WordId → already-unioned POS list,
+    // keeping the client-side work to a simple dictionary fill.
+    public static async Task<Dictionary<int, List<string>>> LoadNonArchaicPosMapAsync(JitenDbContext context)
+    {
+        var result = new Dictionary<int, List<string>>();
+        // A sense is archaic when ANY of its definition rows (across languages) has arch
+        // in PartsOfSpeech or Misc. Our ingestion creates one row per sense per language
+        // and the arch tag only lands on the primary (English) row, so alt-lang duplicates
+        // like [prt] without Misc would otherwise slip through. Group by (WordId, SenseIndex)
+        // to identify archaic senses before unioning non-archaic POS.
+        const string sql = @"
+            WITH arch_senses AS (
+                SELECT DISTINCT ""WordId"", ""SenseIndex""
+                FROM jmdict.""Definitions""
+                WHERE ""PartsOfSpeech"" @> ARRAY['arch']
+                   OR ""Misc"" @> ARRAY['arch']
+            )
+            SELECT d.""WordId"", array_agg(DISTINCT p) AS non_arch_pos
+            FROM jmdict.""Definitions"" d
+            CROSS JOIN LATERAL unnest(d.""PartsOfSpeech"") AS p
+            WHERE NOT EXISTS (
+                SELECT 1 FROM arch_senses a
+                WHERE a.""WordId"" = d.""WordId"" AND a.""SenseIndex"" = d.""SenseIndex""
+            )
+              AND p <> 'arch'
+            GROUP BY d.""WordId""";
+
+        var conn = (Npgsql.NpgsqlConnection)context.Database.GetDbConnection();
+        bool shouldClose = conn.State == System.Data.ConnectionState.Closed;
+        if (shouldClose) await conn.OpenAsync();
+        try
+        {
+            using var cmd = new Npgsql.NpgsqlCommand(sql, conn);
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                int wordId = reader.GetInt32(0);
+                var arr = (string[])reader.GetValue(1);
+                result[wordId] = new List<string>(arr);
+            }
+        }
+        finally
+        {
+            if (shouldClose) await conn.CloseAsync();
+        }
+        return result;
+    }
+
 
     public static async Task<Dictionary<string, List<int>>> LoadLookupTable(JitenDbContext context)
     {
@@ -393,12 +444,28 @@ public static class JmDictHelper
                 var ids = (int[])reader.GetValue(1);
                 result[reader.GetString(0)] = new List<int>(ids);
             }
+            AddSupplementalLookups(result);
             return result;
         }
         finally
         {
             if (shouldClose) await conn.CloseAsync();
         }
+    }
+
+    // Surfaces absent from JMDict but correctly recognised by Sudachi — injected so the
+    // beam lattice can find them without a DB schema change.
+    private static void AddSupplementalLookups(Dictionary<string, List<int>> result)
+    {
+        // おかけ: honorific stem of 掛ける (v1, seq 1207610). JMDict lacks this prefixed
+        // form; Sudachi maps おかけします → 掛ける correctly on the live site.
+        const int kakeru = 1207610;
+        foreach (var surface in new[]
+        {
+            "おかけ", "おかけする", "おかけします", "おかけして", "おかけし",
+            "おかけした", "おかけしました", "おかけしない", "おかけしなかった",
+        })
+            result[surface] = [kakeru];
     }
 
     public static async Task<Dictionary<int, int>> LoadWordFrequencyRanks(JitenDbContext context)

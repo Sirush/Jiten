@@ -161,9 +161,22 @@ public partial class MorphologicalAnalyser
             }
 
             ComputeTokenOffsets(originalTexts[i], wordInfos);
-            wordInfos = RunPipeline(wordInfos, diagnostics);
 
-            results.Add(SplitIntoSentences(originalTexts[i], wordInfos));
+            // Split into sentences twice: once with raw tokens (captures Sudachi's
+            // original segmentation), once after pipeline merges. The raw boundaries
+            // flow to the beam so it can score against Sudachi's actual choice rather
+            // than our pipeline's merged view.
+            var rawSnapshot = new List<WordInfo>(wordInfos);
+            var rawSentences = SplitIntoSentences(originalTexts[i], rawSnapshot);
+
+            wordInfos = RunPipeline(wordInfos, diagnostics);
+            var sentences = SplitIntoSentences(originalTexts[i], wordInfos);
+
+            for (int si = 0; si < sentences.Count && si < rawSentences.Count; si++)
+                sentences[si].RawSudachiBoundaries =
+                    rawSentences[si].Words.Select(w => (w.position, w.length)).ToList();
+
+            results.Add(sentences);
         }
 
         return Task.FromResult(results);

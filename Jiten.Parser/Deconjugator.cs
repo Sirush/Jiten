@@ -167,11 +167,19 @@ public class Deconjugator
 
     public IReadOnlyList<DeconjugationForm> Deconjugate(string text)
     {
-        if (UseCache && TryGetCached(text, out var cached))
-            return cached;
+        var instrStart = Diagnostics.ParserBenchmarkInstrumentation.Now();
+        try
+        {
+            if (UseCache && TryGetCached(text, out var cached))
+            {
+                Diagnostics.ParserBenchmarkInstrumentation.RecordDeconjugatorCall(cacheHit: true);
+                return cached;
+            }
 
-        if (string.IsNullOrEmpty(text))
-            return [];
+            Diagnostics.ParserBenchmarkInstrumentation.RecordDeconjugatorCall(cacheHit: false);
+
+            if (string.IsNullOrEmpty(text))
+                return [];
 
         var processed = new HashSet<DeconjugationForm>(Math.Min(text.Length * 2, 100));
         var novel = new HashSet<DeconjugationForm>(20);
@@ -217,7 +225,12 @@ public class Deconjugator
         if (UseCache)
             StoreCached(text, result);
 
-        return result;
+            return result;
+        }
+        finally
+        {
+            Diagnostics.ParserBenchmarkInstrumentation.AddDeconjugator(instrStart);
+        }
     }
 
     private DeconjugationForm CreateInitialForm(string text)

@@ -9,7 +9,8 @@ internal static class AdjacentWordScorer
         List<PartOfSpeech>? PrevResolvedPOS,
         List<PartOfSpeech>? NextResolvedPOS,
         string? PrevText,
-        string? NextText);
+        string? NextText,
+        IReadOnlyList<string>? NextConjChain = null);
 
     internal static (int bonus, List<string> rulesMatched) CalculateContextBonus(
         FormCandidate candidate,
@@ -20,8 +21,27 @@ internal static class AdjacentWordScorer
             context.PrevResolvedPOS,
             context.NextResolvedPOS,
             context.PrevText,
-            context.NextText);
+            context.NextText,
+            context.NextConjChain);
 
         return TransitionRuleEngine.EvaluateSoftRules(window);
+    }
+
+    // Ichiran-mode synergies — separate channel used only by the pure-Ichiran beam.
+    // Returns a raw additive bonus (no halving); SoftRules remain the Sudachi-mode
+    // tiebreaker path and are unaffected.
+    internal static int CalculateIchiranSynergies(
+        FormCandidate candidate,
+        AdjacentContext context)
+    {
+        var window = new ScoringWindow(
+            candidate,
+            context.PrevResolvedPOS,
+            context.NextResolvedPOS,
+            context.PrevText,
+            context.NextText,
+            context.NextConjChain);
+
+        return TransitionRuleEngine.EvaluateIchiranSynergies(window);
     }
 }

@@ -1,0 +1,196 @@
+[
+  {
+    "wordId": 1291070, "readingIndex": 1,
+    "surface": "さ", "word": "差",
+    "reason": "rare-kana-reading-collides-with-grammar",
+    "notes": "さ as sentence-final particle / nominaliser dominates; 差 as さ is effectively never intended",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 1443970, "readingIndex": 5,
+    "surface": "う", "word": "兎",
+    "reason": "rare-kana-reading-collides-with-grammar",
+    "notes": "う is part of thousands of u-verb stems / volitional endings",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 1177490, "readingIndex": 5,
+    "surface": "え", "word": "縁",
+    "reason": "rare-kana-reading-collides-with-grammar",
+    "notes": "え collides with e-stem / imperative endings across many verbs",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 1244950, "readingIndex": 1,
+    "surface": "ぐ", "word": "具",
+    "reason": "rare-kana-reading-collides-with-grammar",
+    "notes": "collides with adv-making -ぐ / verb stems",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 1528180, "readingIndex": 1,
+    "surface": "し", "word": "巳",
+    "reason": "rare-kana-reading-collides-with-grammar",
+    "notes": "し is conjunction particle / verb stem everywhere",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 1310720, "readingIndex": 1,
+    "surface": "し", "word": "死",
+    "reason": "rare-kana-reading-collides-with-grammar",
+    "notes": "し collides with conjunction particle / 為る renyou form",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 1550770, "readingIndex": 1,
+    "surface": "り", "word": "里",
+    "reason": "rare-kana-reading-collides-with-grammar",
+    "notes": "り appears as nominaliser -り ending",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 1324950, "readingIndex": 1,
+    "surface": "しゅ", "word": "主",
+    "reason": "rare-kana-reading-collides-with-grammar",
+    "notes": "rare reading; collides with common morphemes",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 1344210, "readingIndex": 1,
+    "surface": "しょ", "word": "諸",
+    "reason": "rare-kana-reading-collides-with-grammar",
+    "notes": "prefix reading, almost never standalone",
+    "addedOn": "2026-04-15"
+  },
+
+  {
+    "wordId": 1587980, "readingIndex": 1,
+    "surface": "がしん", "word": "餓死",
+    "reason": "obscure-archaic-reading",
+    "notes": "obscure alternate reading of 餓死",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 1193570, "readingIndex": 6,
+    "word": "河豚",
+    "reason": "obscure-archaic-reading",
+    "notes": "rare alternate reading (ふくべ / かとん etc.)",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 1811220, "readingIndex": 1,
+    "surface": "うぐ", "word": "迂愚",
+    "reason": "obscure-archaic-reading",
+    "notes": "extremely rare word overall",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 1150090, "readingIndex": 1,
+    "surface": "あゆ", "word": "阿諛",
+    "reason": "obscure-archaic-reading",
+    "notes": "literary / very rare",
+    "addedOn": "2026-04-15"
+  },
+
+  {
+    "wordId": 2029660, "readingIndex": 0,
+    "surface": "レ",
+    "reason": "single-letter-or-symbol",
+    "notes": "single katakana",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 2594040, "readingIndex": 2,
+    "surface": "イー", "word": "Ｅ",
+    "reason": "single-letter-or-symbol",
+    "notes": "single Latin letter",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 2029000, "readingIndex": 1,
+    "surface": "ェ", "word": "へ",
+    "reason": "single-letter-or-symbol",
+    "notes": "variant particle form, collides badly",
+    "addedOn": "2026-04-15"
+  },
+
+  {
+    "wordId": 1595910, "readingIndex": 4,
+    "surface": "する", "word": "擦る",
+    "reason": "homograph-with-common-auxiliary",
+    "notes": "する is overwhelmingly the auxiliary 為る",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 2577750, "readingIndex": 0,
+    "surface": "っこ", "word": "こ",
+    "reason": "homograph-with-common-auxiliary",
+    "notes": "suffix, not standalone",
+    "addedOn": "2026-04-15"
+  },
+  {
+    "wordId": 2026870, "readingIndex": 1,
+    "surface": "すっ", "word": "素っ",
+    "reason": "homograph-with-common-auxiliary",
+    "notes": "prefix, not standalone",
+    "addedOn": "2026-04-15"
+  },
+
+  { "wordId": 1243940, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2747970, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2029680, "readingIndex": 0, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1796500, "readingIndex": 2, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2654270, "readingIndex": 0, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2269410, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2439040, "readingIndex": 3, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2861095, "readingIndex": 0, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2836250, "readingIndex": 0, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1365520, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2866457, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2394370, "readingIndex": 4, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1203250, "readingIndex": 2, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1537250, "readingIndex": 2, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2783750, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2654250, "readingIndex": 0, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2609820, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2080360, "readingIndex": 3, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1333240, "readingIndex": 2, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2035220, "readingIndex": 2, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 5616612, "readingIndex": 5, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2249020, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2783700, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2411420, "readingIndex": 0, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1604890, "readingIndex": 2, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2602280, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1407450, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1595120, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2083370, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2862482, "readingIndex": 0, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2849996, "readingIndex": 0, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1266970, "readingIndex": 2, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2574180, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2574180, "readingIndex": 2, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 5626489, "readingIndex": 28, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 5045509, "readingIndex": 3, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2029780, "readingIndex": 0, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 5430309, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1496170, "readingIndex": 2, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2564800, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1585310, "readingIndex": 4, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1585310, "readingIndex": 5, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2252690, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2835861, "readingIndex": 0, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1223130, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1246880, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1246880, "readingIndex": 2, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1461140, "readingIndex": 6, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1461140, "readingIndex": 8, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2029700, "readingIndex": 0, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1949190, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 2029730, "readingIndex": 0, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 5612068, "readingIndex": 1, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1370270, "readingIndex": 3, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1581200, "readingIndex": 2, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1332670, "readingIndex": 2, "reason": "legacy-uncategorized", "addedOn": "pre-2026" },
+  { "wordId": 1533340, "readingIndex": 3, "reason": "legacy-uncategorized", "addedOn": "pre-2026" }
+]

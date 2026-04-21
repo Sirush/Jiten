@@ -1,0 +1,480 @@
+[
+  {
+    "name": "desu",
+    "stemType": "neg-form",
+    "attachedWordIds": [
+      1628500
+    ],
+    "score": 200,
+    "scoreIsConstant": true,
+    "stemBlacklistWordIds": [
+      2755350
+    ],
+    "description": "ない/なかった + です (polite negative). Ichiran suffix-desu; score is (constantly 200). *suffix-unique-only* predicate excludes じゃない (seq 2755350).",
+    "source": "ichiran:suffix-desu"
+  },
+  {
+    "name": "desho",
+    "stemType": "neg-form",
+    "attachedWordIds": [
+      1008420
+    ],
+    "score": 300,
+    "scoreIsConstant": true,
+    "stemBlacklistWordIds": [
+      2755350
+    ],
+    "description": "ない + でしょう (polite presumptive negative). Ichiran suffix-desho; score is (constantly 300). Excludes じゃない.",
+    "source": "ichiran:suffix-desho"
+  },
+  {
+    "name": "kudasai",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1184270
+    ],
+    "score": 360,
+    "scoreIsConstant": true,
+    "description": "te-form + ください (please do ~). Ichiran suffix-kudasai; score is (constantly 360).",
+    "source": "ichiran:suffix-kudasai"
+  },
+  {
+    "name": "teiru",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1577980
+    ],
+    "score": 6,
+    "stemStripScore": 3,
+    "stemStrip": 1,
+    "description": "te-form + いる (progressive). Ichiran has TWO classes: :teiru+ (score 6, full kana form like いる/いた/いて) and :teiru (score 3, 1-char-stripped form like る/た/て used for the contracted てる/てた contractions). dict-grammar.lisp:212-215. Score field is :teiru+ for the regular suffix-compound path; stemStripScore=3 is :teiru used by BuildStemStripCompoundEdges for the contracted attached surfaces.",
+    "source": "ichiran:suffix-teiru,suffix-teiru+"
+  },
+  {
+    "name": "teii",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      2820690,
+      1605820
+    ],
+    "score": 1,
+    "description": "te-form + いい/よい (permission). Ichiran suffix-teii.",
+    "source": "ichiran:suffix-teii"
+  },
+  {
+    "name": "tai",
+    "stemType": "masu-stem",
+    "attachedWordIds": [
+      2017560
+    ],
+    "score": 5,
+    "description": "masu-stem + たい (desire). Ichiran suffix-tai.",
+    "source": "ichiran:suffix-tai"
+  },
+  {
+    "name": "sugiru",
+    "stemType": "masu-stem",
+    "attachedWordIds": [
+      1195970
+    ],
+    "score": 5,
+    "description": "masu-stem + すぎる (excess). Ichiran suffix-sugiru.",
+    "source": "ichiran:suffix-sugiru"
+  },
+  {
+    "name": "sugiru-adj",
+    "stemType": "adj-stem",
+    "attachedWordIds": [
+      1195970
+    ],
+    "score": 5,
+    "description": "adj-stem + すぎる (e.g. まぶしすぎる, 優しすぎ). Ichiran suffix-sugiru closure: root+い → find-word-with-pos adj-i. Same score 5.",
+    "source": "ichiran:suffix-sugiru"
+  },
+  {
+    "name": "suru",
+    "stemType": "vs-noun",
+    "attachedWordIds": [
+      1157170
+    ],
+    "score": 5,
+    "description": "vs-noun + する (verbalization). Ichiran suffix-suru.",
+    "source": "ichiran:suffix-suru"
+  },
+  {
+    "name": "chau",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      2013800,
+      2210750
+    ],
+    "score": 5,
+    "stemStrip": 1,
+    "description": "te-form contraction to ちゃう/ちまう/じゃう/じまう. Ichiran suffix-chau (:stem 1 :score 5). StemStrip=1 — the stem's て/で is absorbed into the attached surface.",
+    "source": "ichiran:suffix-chau"
+  },
+  {
+    "name": "toku",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      2108590
+    ],
+    "score": 0,
+    "stemStrip": 1,
+    "noFurtherChain": true,
+    "description": "te-form + とく (contraction of ておく). Ichiran suffix-to (:stem 1 :score 0). StemStrip=1 — stem's て/で is absorbed into the attached's leading と/ど.",
+    "source": "ichiran:suffix-to"
+  },
+  {
+    "name": "teiku-ct",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1578850
+    ],
+    "score": 3,
+    "stemStrip": 1,
+    "noFurtherChain": true,
+    "description": "te-form + てく (contraction of ていく). Ichiran registers short-form iku surfaces (く etc.) under :te class; we model the composite てく as a :stem 1 contraction so the て overlaps the stem's final te.",
+    "source": "ichiran:suffix-te iku-short"
+  },
+  {
+    "name": "shimau",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1305380
+    ],
+    "score": 5,
+    "description": "te-form + しまう. Ichiran suffix-chau class (score 5).",
+    "source": "ichiran:suffix-chau"
+  },
+  {
+    "name": "oru",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1577985
+    ],
+    "score": 3,
+    "noFurtherChain": true,
+    "description": "te-form + おる. Ichiran :te+space class (score 3).",
+    "source": "ichiran:suffix-te+space"
+  },
+  {
+    "name": "aru",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1296400
+    ],
+    "score": 3,
+    "noFurtherChain": true,
+    "description": "te-form + ある. Ichiran :te+space class (score 3).",
+    "source": "ichiran:suffix-te+space"
+  },
+  {
+    "name": "kuru",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1547720
+    ],
+    "score": 3,
+    "noFurtherChain": true,
+    "description": "te-form + くる. Ichiran :te+space class (score 3).",
+    "source": "ichiran:suffix-te+space"
+  },
+  {
+    "name": "iku",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1578850
+    ],
+    "score": 3,
+    "noFurtherChain": true,
+    "description": "te-form + いく/く. Ichiran :te+space class (score 3).",
+    "source": "ichiran:suffix-te+space"
+  },
+  {
+    "name": "oku",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1421850
+    ],
+    "score": 3,
+    "noFurtherChain": true,
+    "description": "te-form + おく. Ichiran :te+space class (score 3).",
+    "source": "ichiran:suffix-te+space"
+  },
+  {
+    "name": "kureru",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1269130
+    ],
+    "score": 3,
+    "noFurtherChain": true,
+    "description": "te-form + くれる. Ichiran :te+space class (score 3).",
+    "source": "ichiran:suffix-te+space"
+  },
+  {
+    "name": "morau",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1535910
+    ],
+    "score": 3,
+    "noFurtherChain": true,
+    "description": "te-form + もらう. Ichiran :te+space 1535910 :morau (score 3).",
+    "source": "ichiran:suffix-te+space"
+  },
+  {
+    "name": "itadaku",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1587290
+    ],
+    "score": 3,
+    "noFurtherChain": true,
+    "description": "te-form + いただく. Ichiran :te+space class (score 3).",
+    "source": "ichiran:suffix-te+space"
+  },
+  {
+    "name": "yagaru",
+    "stemType": "te-form",
+    "attachedWordIds": [
+      1012740
+    ],
+    "score": 4,
+    "description": "te-form/masu-stem + やがる. Ichiran :teren 1012740 :yagaru (score 4).",
+    "source": "ichiran:suffix-teren"
+  },
+  {
+    "name": "nikui",
+    "stemType": "masu-stem",
+    "uniqueOnly": true,
+    "attachedWordIds": [
+      2772730
+    ],
+    "score": 0,
+    "description": "masu-stem + にくい. Ichiran :ren- 2772730 :nikui (score 0). uniqueOnly per Ichiran *suffix-unique-only*.",
+    "source": "ichiran:suffix-ren-"
+  },
+  {
+    "name": "gatai",
+    "stemType": "masu-stem",
+    "attachedWordIds": [
+      2867504
+    ],
+    "score": 0,
+    "description": "masu-stem + がたい. Ichiran :ren- 2867504 :gatai (score 0).",
+    "source": "ichiran:suffix-ren-"
+  },
+  {
+    "name": "garu",
+    "stemType": "adj-stem",
+    "attachedWordIds": [
+      1631750
+    ],
+    "score": 0,
+    "description": "adj-stem + がる. Ichiran suffix-garu (score 0).",
+    "source": "ichiran:suffix-garu"
+  },
+  {
+    "name": "gachi",
+    "stemType": "masu-stem",
+    "attachedWordIds": [
+      2016470
+    ],
+    "score": 5,
+    "description": "masu-stem + がち. Ichiran :ren 2016470 :gachi (score 5). Productive suffix — attaches to any masu-stem per Ichiran's suffix-ren; no compound-lookup requirement.",
+    "source": "ichiran:suffix-ren"
+  },
+  {
+    "name": "gai",
+    "stemType": "masu-stem",
+    "uniqueOnly": true,
+    "attachedWordIds": [
+      2606690
+    ],
+    "score": 0,
+    "description": "masu-stem + がい. Ichiran :ren- 2606690 :gai (score 0). uniqueOnly per Ichiran *suffix-unique-only*.",
+    "source": "ichiran:suffix-ren-"
+  },
+  {
+    "name": "sa",
+    "stemType": "adj-stem",
+    "attachedWordIds": [
+      2029120
+    ],
+    "score": 2,
+    "description": "adj-stem + さ (nominalising). Ichiran suffix-sa (score 2).",
+    "source": "ichiran:suffix-sa"
+  },
+  {
+    "name": "tsutsu",
+    "stemType": "masu-stem",
+    "attachedWordIds": [
+      1008120
+    ],
+    "score": 5,
+    "description": "masu-stem + つつ. Ichiran :ren class (score 5).",
+    "source": "ichiran:suffix-ren"
+  },
+  {
+    "name": "tsutsuaru",
+    "stemType": "masu-stem",
+    "attachedWordIds": [
+      2027910
+    ],
+    "score": 5,
+    "description": "masu-stem + つつある. Ichiran :ren 2027910 :tsutsuaru (score 5).",
+    "source": "ichiran:suffix-ren"
+  },
+  {
+    "name": "naku",
+    "stemType": "masu-stem",
+    "attachedWordIds": [
+      1529520
+    ],
+    "attachedSurface": "なく",
+    "score": 5,
+    "description": "adj-stem/masu-stem + なく. Ichiran :neg class — load-kf at dict-grammar.lisp:263 keys the class to the specific kana form なく of ない (seq 1529520), NOT every conjugation of ない. Without the surface restriction the rule over-fires on ない/なかった/なければ and drops the scorer into compound-text mode (using dict-form mora count instead of surface mora count), undervaluing plain verb+ない conjugations by ~2×.",
+    "source": "ichiran:suffix-neg"
+  },
+  {
+    "name": "naru",
+    "stemType": "adv-form",
+    "attachedWordIds": [
+      1375610
+    ],
+    "score": 1,
+    "description": "adv form + なる. Ichiran :adv 1375610 :naru (score 1).",
+    "source": "ichiran:suffix-adv"
+  },
+  {
+    "name": "rashii",
+    "stemType": "past-form",
+    "attachedWordIds": [
+      1013240
+    ],
+    "score": 3,
+    "description": "V-past + らしい (apparent/seemingly). Ichiran suffix-rashii (dict-grammar.lisp:511) requires (find-word-with-conj-type root 2) — past-form. Synth-compound audit identified 4 V-past+rashii misses (参考にしたらしい +218, 教われたらしい +758, 決めたらしい +362, となったらしい +8) under the previous masu-stem stemType. The earlier comment about 参考にしたらしい over-merge was the inverse — past-form is needed to merge correctly.",
+    "source": "ichiran:suffix-rashii"
+  },
+  {
+    "name": "sou",
+    "stemType": "sou-base",
+    "attachedWordIds": [
+      1006610
+    ],
+    "score": 70,
+    "scoreIsConstant": true,
+    "stemScoreOverrides": {
+      "から": 40,
+      "い": 0,
+      "出来": 100
+    },
+    "description": "sou-base + そう. Ichiran suffix-sou (constantly (cond ((equal root 'から') 40) ((equal root 'い') 0) ((equal root '出来') 100) (t 70))). Root-sensitive scoring via stemScoreOverrides.",
+    "source": "ichiran:suffix-sou"
+  },
+  {
+    "name": "sou-nai",
+    "stemType": "masu-stem",
+    "attachedWordIds": [
+      2141080
+    ],
+    "score": 1,
+    "description": "masu-stem + そうにない. Ichiran :sou+ class (score 1). Ichiran's def-simple-suffix for suffix-sou+ has no compound-existence gate.",
+    "source": "ichiran:suffix-sou+"
+  },
+  {
+    "name": "rou",
+    "stemType": "past-form",
+    "attachedWordIds": [
+      1928670
+    ],
+    "attachedSurface": "ろう",
+    "score": 1,
+    "description": "past-tense + ろう (probably/I guess). Ichiran suffix-rou: (find-word-with-conj-type root 2). AttachedSurface=ろう ports Ichiran's (load-kf :rou (get-kana-form 1928670 'だろう') :text 'ろう') restriction — the rule only fires against the 2-char truncation, not the full だろう entry, so 喜んだ/だろう splits as expected.",
+    "source": "ichiran:suffix-rou"
+  },
+  {
+    "name": "kurai",
+    "stemType": "masu-stem",
+    "attachedWordIds": [
+      1154340
+    ],
+    "score": 3,
+    "description": "verb/stem + くらい/ぐらい. Ichiran suffix-kurai (score 3).",
+    "source": "ichiran:suffix-kurai"
+  },
+  {
+    "name": "itasu",
+    "stemType": "vs-noun",
+    "attachedWordIds": [
+      1421900
+    ],
+    "score": 5,
+    "description": "vs-noun + いたす. Ichiran :suru class (score 5).",
+    "source": "ichiran:suffix-suru"
+  },
+  {
+    "name": "sareru",
+    "stemType": "vs-noun",
+    "attachedWordIds": [
+      2269820
+    ],
+    "score": 5,
+    "description": "vs-noun + される. Ichiran :suru class (score 5).",
+    "source": "ichiran:suffix-suru"
+  },
+  {
+    "name": "saseru",
+    "stemType": "vs-noun",
+    "attachedWordIds": [
+      1005160
+    ],
+    "score": 5,
+    "description": "vs-noun + させる. Ichiran :suru class (score 5).",
+    "source": "ichiran:suffix-suru"
+  },
+  {
+    "name": "tosuru",
+    "stemType": "masu-stem",
+    "attachedWordIds": [
+      2136890
+    ],
+    "score": 3,
+    "description": "volitional-stem + とする. Ichiran suffix-tosuru (score 3).",
+    "source": "ichiran:suffix-tosuru"
+  },
+  {
+    "name": "ra",
+    "stemType": "pronoun",
+    "attachedWordIds": [
+      2067770
+    ],
+    "attachedSurface": "ら",
+    "score": 1,
+    "bridgeOnly": true,
+    "description": "pronoun + ら (plural). Ichiran suffix-ra. bridgeOnly: synthetic pronoun+ら edges are not exposed as standalone lattice segments — prevents 何か+ら from beating 何+から. Real lexical plurals (彼ら etc.) already exist as lookup/table edges and are unaffected.",
+    "source": "ichiran:suffix-ra"
+  },
+  {
+    "name": "iadj-ge",
+    "stemType": "adj-stem",
+    "attachedWordIds": [
+      2006580
+    ],
+    "score": 1,
+    "description": "adj-stem + げ. Ichiran suffix-iadj (score 1).",
+    "source": "ichiran:suffix-iadj"
+  },
+  {
+    "name": "iadj-me",
+    "stemType": "adj-stem",
+    "attachedWordIds": [
+      1604890
+    ],
+    "score": 1,
+    "description": "adj-stem + め. Ichiran suffix-iadj (score 1).",
+    "source": "ichiran:suffix-iadj"
+  }
+]

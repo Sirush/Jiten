@@ -19,6 +19,11 @@ public class ImportCommands(CliContext context)
         Console.WriteLine("Importing JMdict...");
         await JmDictHelper.Import(context.ContextFactory, options.XmlPath, options.DictionaryPath, options.FuriganaPath);
         await JmDictHelper.ImportJMNedict(context.ContextFactory, options.NameDictionaryPath!);
+
+        // Regenerate conjugation table as the final step so the beam's
+        // TableCandidateProvider has fresh data after a full re-import.
+        Console.WriteLine("Regenerating conjugation table...");
+        await new ConjugationCommands(context).GenerateConjugations(options);
     }
 
     public async Task ImportKanjidic(string path)

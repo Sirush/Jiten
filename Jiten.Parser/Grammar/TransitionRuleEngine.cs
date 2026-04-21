@@ -7,9 +7,10 @@ namespace Jiten.Parser.Grammar;
 
 internal static class TransitionRuleEngine
 {
-    // Two-pass approach
-    //   Pass 1 — while-loop strips all leading verb-attaching auxiliaries
-    //   Pass 2 — backwards loop validates aux context and counter placement
+    private static readonly TransitionRule[] LeadingStripRules = Array.FindAll(
+        TransitionRuleSets.HardRules,
+        r => r.Id is "leading-aux-strip" or "particle-at-sentence-start");
+
     internal static void ApplyHardRules(
         List<(WordInfo word, int pos, int len)> words,
         Func<string, bool> hasLookup,
@@ -17,10 +18,8 @@ internal static class TransitionRuleEngine
     {
         var rules = TransitionRuleSets.HardRules;
 
-        // Pass 1: strip all sentence-initial tokens that can never begin a clause (needs while loop:
-        // removing index 0 exposes a new index 0 that also needs to be checked)
-        var leadingStripRules = Array.FindAll(rules,
-            r => r.Id is "leading-aux-strip" or "particle-at-sentence-start");
+        // Pass 1 needs a while loop: removing index 0 exposes a new index 0 that also needs checking.
+        var leadingStripRules = LeadingStripRules;
         bool leadingRemoved;
         do
         {
@@ -203,6 +202,47 @@ internal static class TransitionRuleEngine
     private static bool IsSingleKanji(string? text) =>
         text is { Length: 1 } && text[0] >= '\u4E00' && text[0] <= '\u9FFF';
 
+    private static bool HasKanji(string text)
+    {
+        foreach (var c in text)
+            if (c >= '\u4E00' && c <= '\u9FFF') return true;
+        return false;
+    }
+
+    private static bool IsNounLikePOS(PartOfSpeech p) =>
+        p is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+            or PartOfSpeech.NaAdjective or PartOfSpeech.Pronoun
+            or PartOfSpeech.Name or PartOfSpeech.NominalAdjective;
+
+    // Approximation of Ichiran's filter-is-conjugation :negative gate: surface
+    // ends in a negative-form tail (ない / ねえ / ぬ / ん) or is one of these.
+    // Misses nuanced cases (nakute, zu, nai-continuation) but matches the common
+    // negative predicates that trigger shika-negative binding.
+    private static bool IsNegativeSurface(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        if (text.EndsWith("ない", StringComparison.Ordinal)) return true;
+        if (text.EndsWith("なかった", StringComparison.Ordinal)) return true;
+        if (text.EndsWith("ねえ", StringComparison.Ordinal)) return true;
+        if (text.EndsWith("ねぇ", StringComparison.Ordinal)) return true;
+        if (text.EndsWith("ぬ", StringComparison.Ordinal)) return true;
+        if (text.Length == 1 && text[0] == 'ん') return true;
+        if (text.EndsWith("ません", StringComparison.Ordinal)) return true;
+        if (text.EndsWith("ませんでした", StringComparison.Ordinal)) return true;
+        return false;
+    }
+
+    // Ichiran penalty-short predicate: 1-char kana (hiragana/katakana), not と.
+    // Hiragana 0x3040-0x309F, Katakana 0x30A0-0x30FF. と / ト explicitly excluded.
+    private static bool IsShortKanaNotTo(string? text)
+    {
+        if (text is not { Length: 1 }) return false;
+        char c = text[0];
+        bool isKana = (c >= '\u3040' && c <= '\u309F') || (c >= '\u30A0' && c <= '\u30FF');
+        if (!isKana) return false;
+        return c != 'と' && c != 'ト';
+    }
+
     private static TokenWindow BuildWindow(List<(WordInfo word, int pos, int len)> words, int i)
     {
         var prev = i > 0 ? words[i - 1].word : null;
@@ -227,6 +267,66 @@ internal static class TransitionRuleEngine
 
         return (bonus, rulesMatched);
     }
+
+    // Ichiran-mode synergies — evaluated ONLY on the pure-Ichiran beam path. Uses raw
+    // Ichiran values (no halving), additive on top of multiplicative prop×coeff node
+    // scores. Kept separate from EvaluateSoftRules so the two rule sets evolve
+    // independently — Sudachi-mode tiebreakers and Ichiran-native synergies have
+    // different calibration requirements.
+    internal static int EvaluateIchiranSynergies(ScoringWindow window)
+    {
+        int bonus = 0;
+        var ctx = ConditionContext.FromScoringWindow(window);
+
+        foreach (var rule in TransitionRuleSets.IchiranSynergies)
+        {
+            if (!MatchesAll(ctx, rule.CandidateMatch)) continue;
+            if (!MatchesAll(ctx, rule.ContextMatch)) continue;
+            bonus += rule.Delta;
+        }
+
+        // §13.1 length-dependent synergy formulas. Ichiran's noun-particle and
+        // to-adverbs synergies scale with surface length; we can't express that
+        // as a single integer delta, so they live here as a post-loop block.
+        bonus += EvaluateLengthFormulas(ctx);
+
+        return bonus;
+    }
+
+    // §13.1 Ichiran length-dependent synergies (applied on the IchiranSynergies
+    // channel, raw additive). Ported formulas from dict-grammar.lisp:
+    //   synergy-noun-particle   : 10 + 4 * len(r)  (r = next particle)
+    //   synergy-to-adverbs      : 10 + 10 * len(l) (l = left adv-to)
+    private static int EvaluateLengthFormulas(ConditionContext ctx)
+    {
+        int bonus = 0;
+
+        // synergy-to-adverbs
+        bool leftAdvTo = ctx.CandidatePOS.Contains(PartOfSpeech.AdverbTo);
+        if (leftAdvTo && ctx.NextText == "と"
+            && ctx.NextPOS?.Contains(PartOfSpeech.Particle) == true)
+        {
+            bonus += 10 + 10 * ctx.CandidateText.Length;
+        }
+
+        // synergy-noun-particle: filter-is-noun + *noun-particles* set,
+        // score = 10 + 4*len(r). Ichiran's filter-is-noun gate is (or k l (and p c))
+        // where k=kanji-p, l=long-p. Adverb-primary words (e.g. まだ which has adj-na
+        // secondary) need kanji or length ≥ 4 to qualify — mirrors Ichiran's long-p gate.
+        bool leftIsSubstantiveNoun =
+            ctx.CandidatePOS.Any(p => p is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                                       or PartOfSpeech.NaAdjective or PartOfSpeech.Pronoun
+                                       or PartOfSpeech.Name or PartOfSpeech.NominalAdjective)
+            && (HasKanji(ctx.CandidateText) || ctx.CandidateText.Length >= 2);
+        if (leftIsSubstantiveNoun && ctx.NextText != null
+            && TransitionRuleSets.IchiranCompoundNounParticles.Contains(ctx.NextText))
+        {
+            bonus += 10 + 4 * ctx.NextText.Length;
+        }
+
+        return bonus;
+    }
+
 
     internal static bool HasApplicableSoftRules(ScoringWindow window)
     {
@@ -264,7 +364,10 @@ internal static class TransitionRuleEngine
         string? PrevText,
         List<PartOfSpeech>? NextPOS,
         string? NextText,
-        bool CandidateIsSuruNounVal = false)
+        bool CandidateIsSuruNounVal = false,
+        List<string>? CandidateJmDictPos = null,
+        IReadOnlyList<string>? NextConjChain = null,
+        int CandidateWordId = 0)
     {
         public static ConditionContext FromScoringWindow(ScoringWindow w) => new(
             w.Candidate.Word.CachedPOS,
@@ -273,7 +376,19 @@ internal static class TransitionRuleEngine
             w.PrevText,
             w.NextResolvedPOS,
             w.NextText,
-            w.Candidate.Word.PartsOfSpeech.Any(p => p is "vs" or "vs-i" or "vs-s"));
+            w.Candidate.Word.PartsOfSpeech.Any(p => p is "vs" or "vs-i" or "vs-s"),
+            w.Candidate.Word.PartsOfSpeech,
+            w.NextConjChain,
+            w.Candidate.Word.WordId);
+    }
+
+    private static bool HasNegativeTag(IReadOnlyList<string>? chain)
+    {
+        if (chain == null) return false;
+        foreach (var t in chain)
+            if (t != null && t.Contains("negative", StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     private static bool MatchesAll(ConditionContext ctx, ScoringCondition[] conditions)
@@ -470,6 +585,149 @@ internal static class TransitionRuleEngine
 
                 ScoringCondition.PrevIsAuxiliary =>
                     ctx.PrevPOS?.Contains(PartOfSpeech.Auxiliary) == true,
+
+                ScoringCondition.PrevIsShikaParticle =>
+                    ctx.PrevText == "しか" && ctx.PrevPOS?.Contains(PartOfSpeech.Particle) == true,
+
+                ScoringCondition.NextIsObligationStart =>
+                    ctx.NextText != null && TransitionRuleSets.ObligationStarts.Contains(ctx.NextText),
+
+                ScoringCondition.CandidateIsCopulaForm =>
+                    TransitionRuleSets.CopulaForms.Contains(ctx.CandidateText),
+
+                ScoringCondition.PrevIsCopulaForm =>
+                    ctx.PrevText != null && TransitionRuleSets.CopulaForms.Contains(ctx.PrevText),
+
+                ScoringCondition.CandidateIsOPrefix =>
+                    ctx.CandidatePOS.Contains(PartOfSpeech.Prefix) &&
+                    TransitionRuleSets.OPrefixes.Contains(ctx.CandidateText),
+
+                ScoringCondition.CandidateIsNegationKanjiPrefix =>
+                    ctx.CandidatePOS.Contains(PartOfSpeech.Prefix) &&
+                    TransitionRuleSets.NegationKanjiPrefixes.Contains(ctx.CandidateText),
+
+                ScoringCondition.CandidateIsBuriSuffix =>
+                    ctx.CandidateText == TransitionRuleSets.BuriSuffix &&
+                    ctx.CandidatePOS.Any(p => p is PartOfSpeech.Suffix or PartOfSpeech.NounSuffix),
+
+                ScoringCondition.CandidateIsToori =>
+                    ctx.CandidateText == "通り",
+
+                ScoringCondition.PrevIsCounter =>
+                    ctx.PrevPOS?.Contains(PartOfSpeech.Counter) == true,
+
+                ScoringCondition.CandidateIsOki =>
+                    ctx.CandidateText is "おき" or "置き",
+
+                ScoringCondition.NextIsOPrefixEligibleNoun =>
+                    ctx.NextPOS?.Contains(PartOfSpeech.Noun) == true &&
+                    ctx.NextText is { Length: > 0 } next &&
+                    (HasKanji(next) || next.Length >= 4),
+
+                ScoringCondition.NextIsIchiranCompoundNounParticle =>
+                    ctx.NextPOS != null &&
+                    (ctx.NextPOS.Contains(PartOfSpeech.Particle)
+                     || ctx.NextPOS.Contains(PartOfSpeech.Auxiliary)
+                     || ctx.NextPOS.Contains(PartOfSpeech.Expression)) &&
+                    ctx.NextText != null &&
+                    TransitionRuleSets.IchiranCompoundNounParticles.Contains(ctx.NextText),
+
+                ScoringCondition.CandidateIsSubstantiveNoun =>
+                    ctx.CandidatePOS.Any(IsNounLikePOS) &&
+                    ctx.CandidateText is { Length: > 0 } t &&
+                    (HasKanji(t) || t.Length >= 2),
+
+                ScoringCondition.PrevIsSubstantiveNoun =>
+                    ctx.PrevPOS?.Any(IsNounLikePOS) == true &&
+                    ctx.PrevText is { Length: > 0 } pt &&
+                    (HasKanji(pt) || pt.Length >= 2),
+
+                ScoringCondition.CandidateIsShortKanaNotTo =>
+                    IsShortKanaNotTo(ctx.CandidateText),
+
+                ScoringCondition.PrevIsShortKanaNotTo =>
+                    IsShortKanaNotTo(ctx.PrevText),
+
+                ScoringCondition.NextIsShortKanaNotTo =>
+                    IsShortKanaNotTo(ctx.NextText),
+
+                ScoringCondition.CandidateIsTachiSuffix =>
+                    (ctx.CandidateText == "たち" || ctx.CandidateText == "達")
+                    && ctx.CandidatePOS.Any(p => p is PartOfSpeech.Suffix or PartOfSpeech.NounSuffix),
+
+                ScoringCondition.CandidateIsChuSuffix =>
+                    (ctx.CandidateText == "中" || ctx.CandidateText == "ちゅう")
+                    && ctx.CandidatePOS.Any(p => p is PartOfSpeech.Suffix or PartOfSpeech.NounSuffix),
+
+                ScoringCondition.CandidateIsSeiSuffix =>
+                    ctx.CandidateText == "性"
+                    && ctx.CandidatePOS.Any(p => p is PartOfSpeech.Suffix or PartOfSpeech.NounSuffix),
+
+                ScoringCondition.CandidateIsSou =>
+                    ctx.CandidateText == "そう",
+
+                ScoringCondition.NextIsNanda =>
+                    ctx.NextText == "なんだ",
+
+                ScoringCondition.CandidateIsNoOrNnoParticle =>
+                    (ctx.CandidateText == "の" || ctx.CandidateText == "ん")
+                    && ctx.CandidatePOS.Contains(PartOfSpeech.Particle),
+
+                ScoringCondition.NextIsDaDesuDaroo =>
+                    ctx.NextText != null && TransitionRuleSets.NoDaCopulas.Contains(ctx.NextText),
+
+                ScoringCondition.CandidateIsAdjNo =>
+                    ctx.CandidateJmDictPos?.Contains("adj-no") == true,
+
+                ScoringCondition.NextIsNoParticle =>
+                    ctx.NextText == "の"
+                    && ctx.NextPOS?.Contains(PartOfSpeech.Particle) == true,
+
+                ScoringCondition.CandidateIsNaAdjForIchiran =>
+                    ctx.CandidateJmDictPos?.Contains("adj-na") == true
+                    || ctx.CandidatePOS.Contains(PartOfSpeech.NaAdjective),
+
+                ScoringCondition.NextIsNaAdjConnector =>
+                    ctx.NextText != null && TransitionRuleSets.NaAdjConnectors.Contains(ctx.NextText),
+
+                ScoringCondition.NextIsToParticleExact =>
+                    ctx.NextText == "と"
+                    && ctx.NextPOS?.Contains(PartOfSpeech.Particle) == true,
+
+                ScoringCondition.CandidateIsShikaParticle =>
+                    ctx.CandidateText == "しか"
+                    && ctx.CandidatePOS.Contains(PartOfSpeech.Particle),
+
+                ScoringCondition.NextIsNegativeConjugation =>
+                    HasNegativeTag(ctx.NextConjChain)
+                    || (ctx.NextText != null && IsNegativeSurface(ctx.NextText)),
+
+                ScoringCondition.PrevEndsWithHa =>
+                    ctx.PrevText != null && ctx.PrevText.Length >= 1
+                    && ctx.PrevText[^1] == 'は',
+
+                ScoringCondition.NextIsShichaIkenai =>
+                    ctx.NextText != null && TransitionRuleSets.ShichaIkenaiRightTexts.Contains(ctx.NextText),
+
+                ScoringCondition.CandidateIsSemiFinalParticle =>
+                    TransitionRuleSets.SemiFinalPrtSeqs.Contains(ctx.CandidateWordId)
+                    || (Jiten.Parser.Resolution.Splits.CompoundSeqSets.TryGetValue(ctx.CandidateWordId, out var seqs)
+                        && seqs.Overlaps(TransitionRuleSets.SemiFinalPrtSeqs)),
+
+                ScoringCondition.NextExists =>
+                    ctx.NextText != null || ctx.NextPOS != null,
+
+                ScoringCondition.NextIsDaCopula =>
+                    ctx.NextText == "だ"
+                    && ctx.NextPOS?.Contains(PartOfSpeech.Auxiliary) == true,
+
+                ScoringCondition.PairNotBothShortKanaNotTo =>
+                    !(IsShortKanaNotTo(ctx.CandidateText) && IsShortKanaNotTo(ctx.NextText)),
+
+                ScoringCondition.CandidateIsSubstantiveNounKanjiOrLong =>
+                    ctx.CandidatePOS.Any(IsNounLikePOS) &&
+                    ctx.CandidateText is { Length: > 0 } tk &&
+                    (HasKanji(tk) || tk.Length >= 3),
 
                 _ => false
             };

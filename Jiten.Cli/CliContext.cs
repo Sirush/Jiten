@@ -1,6 +1,7 @@
 using Jiten.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using StackExchange.Redis;
 
 namespace Jiten.Cli;
 
@@ -57,5 +58,26 @@ public class CliContext
         var storeRawText = configuration.GetValue<bool>("StoreRawText");
 
         return new CliContext(dbOptions, contextFactory, configuration, storeRawText);
+    }
+
+    public async Task FlushRedisAsync()
+    {
+        var conn = Configuration.GetConnectionString("Redis");
+        if (string.IsNullOrEmpty(conn))
+        {
+            Console.WriteLine("Redis connection string not found in configuration.");
+            return;
+        }
+
+        try
+        {
+            using var mx = await ConnectionMultiplexer.ConnectAsync(conn);
+            mx.GetDatabase().Execute("FLUSHALL");
+            Console.WriteLine("Redis cache flushed successfully.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to flush Redis cache: {ex.Message}");
+        }
     }
 }

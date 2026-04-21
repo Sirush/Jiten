@@ -228,7 +228,8 @@ public partial class MorphologicalAnalyser
                         var forms = Deconjugator.Instance.Deconjugate(nextHiragana);
                         isKnownSubsidiary = forms.Any(f =>
                             TeFormSubsidiaryVerbs.Contains(f.Text) ||
-                            (TeFormAuxChainVerbs.Contains(f.Text) && f.Tags.Any(t => t.StartsWith("v"))));
+                            (TeFormAuxChainVerbs.Contains(f.Text) && f.Tags.Any(t => t.StartsWith("v"))
+                             && !f.Process.Contains("teiru")));
                     }
 
                     if (isKnownSubsidiary)

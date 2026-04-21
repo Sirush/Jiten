@@ -1,0 +1,2664 @@
+[
+  {
+    "wordId": 1532270,
+    "text": "あけましておめでとうございます",
+    "split": [
+      {
+        "text": "あけまして"
+      },
+      {
+        "text": "おめでとうございます"
+      }
+    ],
+    "score": 100,
+    "conditions": [
+      "none"
+    ],
+    "source": "ichiran:dict-split.lisp:split-akemashite"
+  },
+  {
+    "wordId": 2133750,
+    "text": "よろしくおねがいします",
+    "split": [
+      {
+        "text": "よろしく"
+      },
+      {
+        "text": "おねがいします"
+      }
+    ],
+    "score": 100,
+    "conditions": [
+      "none"
+    ],
+    "source": "ichiran:dict-split.lisp:split-yoroshiku-onegai"
+  },
+  {
+    "wordId": 2612990,
+    "text": "ということだ",
+    "split": [
+      {
+        "text": "という"
+      },
+      {
+        "text": "こと"
+      },
+      {
+        "text": "だ"
+      }
+    ],
+    "score": 30,
+    "conditions": [
+      "none"
+    ],
+    "source": "ichiran:dict-split.lisp:split-toiukotoda"
+  },
+  {
+    "wordId": 1922760,
+    "text": "という",
+    "split": [
+      {
+        "text": "と"
+      },
+      {
+        "text": "いう"
+      }
+    ],
+    "score": 20,
+    "conditions": [
+      "none"
+    ],
+    "source": "ichiran:dict-split.lisp:split-toiu"
+  },
+  {
+    "wordId": 1002970,
+    "text": "かもしれない",
+    "split": [
+      {
+        "text": "かも"
+      },
+      {
+        "text": "しれない"
+      }
+    ],
+    "score": 600,
+    "conditions": [
+      "none"
+    ],
+    "source": "ichiran:dict-split.lisp"
+  },
+  {
+    "wordId": 2819990,
+    "text": "じゃないか",
+    "split": [
+      {
+        "text": "じゃない",
+        "wordId": 2089020
+      },
+      {
+        "text": "か",
+        "wordId": 2028970
+      }
+    ],
+    "score": 20,
+    "conditions": [
+      "none"
+    ],
+    "source": "ichiran:dict-split.lisp:split-janaika"
+  },
+  {
+    "wordId": 1163700,
+    "text": "一人で",
+    "split": [
+      {
+        "text": "一人"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1611020,
+    "text": "何で",
+    "split": [
+      {
+        "text": "何"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1004800,
+    "text": "これで",
+    "split": [
+      {
+        "text": "これ"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 2810720,
+    "text": "此れまでで",
+    "split": [
+      {
+        "text": "此れまで"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1006840,
+    "text": "その上で",
+    "split": [
+      {
+        "text": "その上"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1530610,
+    "text": "無断で",
+    "split": [
+      {
+        "text": "無断"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1245390,
+    "text": "空で",
+    "split": [
+      {
+        "text": "空"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 2719270,
+    "text": "土足で",
+    "split": [
+      {
+        "text": "土足"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1189420,
+    "text": "何用で",
+    "split": [
+      {
+        "text": "何用"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1272220,
+    "text": "交代で",
+    "split": [
+      {
+        "text": "交代"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1311360,
+    "text": "私費で",
+    "split": [
+      {
+        "text": "私費"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1368500,
+    "text": "人前で",
+    "split": [
+      {
+        "text": "人前"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1395670,
+    "text": "全体で",
+    "split": [
+      {
+        "text": "全体"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1417790,
+    "text": "単独で",
+    "split": [
+      {
+        "text": "単独"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1454270,
+    "text": "道理で",
+    "split": [
+      {
+        "text": "道理"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1479100,
+    "text": "半眼で",
+    "split": [
+      {
+        "text": "半眼"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1510140,
+    "text": "別封で",
+    "split": [
+      {
+        "text": "別封"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1518550,
+    "text": "無しで",
+    "split": [
+      {
+        "text": "無し"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1531420,
+    "text": "名義で",
+    "split": [
+      {
+        "text": "名義"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1597400,
+    "text": "力尽くで",
+    "split": [
+      {
+        "text": "力尽く"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1679990,
+    "text": "抜き足で",
+    "split": [
+      {
+        "text": "抜き足"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1682060,
+    "text": "金ずくで",
+    "split": [
+      {
+        "text": "金ずく"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1736650,
+    "text": "水入らずで",
+    "split": [
+      {
+        "text": "水入らず"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1865020,
+    "text": "陰で",
+    "split": [
+      {
+        "text": "陰"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1878880,
+    "text": "差しで",
+    "split": [
+      {
+        "text": "差し"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 2126220,
+    "text": "捩じり鉢巻きで",
+    "split": [
+      {
+        "text": "捩じり鉢巻き"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 2136520,
+    "text": "もう少しで",
+    "split": [
+      {
+        "text": "もう少し"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 2513590,
+    "text": "詰め開きで",
+    "split": [
+      {
+        "text": "詰め開き"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 2771850,
+    "text": "気にしないで",
+    "split": [
+      {
+        "text": "気にしない"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 2810800,
+    "text": "今までで",
+    "split": [
+      {
+        "text": "今まで"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1343110,
+    "text": "ところで",
+    "split": [
+      {
+        "text": "ところ"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 1270210,
+    "text": "お陰で",
+    "split": [
+      {
+        "text": "お陰"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-de-split"
+  },
+  {
+    "wordId": 2253080,
+    "text": "でございます",
+    "split": [
+      {
+        "text": "で"
+      },
+      {
+        "text": "ございます"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:split-degozaimasu"
+  },
+  {
+    "wordId": 2142710,
+    "text": "ど下手",
+    "split": [
+      {
+        "text": "ど"
+      },
+      {
+        "text": "下手"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-do-split"
+  },
+  {
+    "wordId": 2803190,
+    "text": "どすけべ",
+    "split": [
+      {
+        "text": "ど"
+      },
+      {
+        "text": "すけべ"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-do-split"
+  },
+  {
+    "wordId": 2142680,
+    "text": "ど根性",
+    "split": [
+      {
+        "text": "ど"
+      },
+      {
+        "text": "根性"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-do-split"
+  },
+  {
+    "wordId": 2523480,
+    "text": "ど田舎",
+    "split": [
+      {
+        "text": "ど"
+      },
+      {
+        "text": "田舎"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-do-split"
+  },
+  {
+    "wordId": 1005700,
+    "text": "し易い",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "易い"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1005830,
+    "text": "し吹く",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "吹く"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1157200,
+    "text": "し難い",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "難い"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1157220,
+    "text": "し過ぎる",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "過ぎる"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1157230,
+    "text": "し合う",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "合う"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1157280,
+    "text": "し尽す",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "尽す"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1157310,
+    "text": "し続ける",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "続ける"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1304890,
+    "text": "し兼ねる",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "兼ねる"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1304960,
+    "text": "し始める",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "始める"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1305110,
+    "text": "し出す",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "出す"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1305280,
+    "text": "し直す",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "直す"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1305290,
+    "text": "し慣れる",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "慣れる"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1594300,
+    "text": "し損なう",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "損なう"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1594310,
+    "text": "し損じる",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "損じる"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1594460,
+    "text": "し遂げる",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "遂げる"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1594580,
+    "text": "し向ける",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "向ける"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 2518250,
+    "text": "し終える",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "終える"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1157240,
+    "text": "し残す",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "残す"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1304820,
+    "text": "し掛ける",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "掛ける"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 2858937,
+    "text": "し損ねる",
+    "split": [
+      {
+        "text": "し"
+      },
+      {
+        "text": "損ねる"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-shi-split"
+  },
+  {
+    "wordId": 1260990,
+    "text": "元通り",
+    "split": [
+      {
+        "text": "元"
+      },
+      {
+        "text": "通り"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1414570,
+    "text": "大通り",
+    "split": [
+      {
+        "text": "大"
+      },
+      {
+        "text": "通り"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1424950,
+    "text": "中通り",
+    "split": [
+      {
+        "text": "中"
+      },
+      {
+        "text": "通り"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1820790,
+    "text": "型通り",
+    "split": [
+      {
+        "text": "型"
+      },
+      {
+        "text": "通り"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1489800,
+    "text": "表通り",
+    "split": [
+      {
+        "text": "表"
+      },
+      {
+        "text": "通り"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1523010,
+    "text": "本通り",
+    "split": [
+      {
+        "text": "本"
+      },
+      {
+        "text": "通り"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1808080,
+    "text": "目通り",
+    "split": [
+      {
+        "text": "目"
+      },
+      {
+        "text": "通り"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1368820,
+    "text": "人通り",
+    "split": [
+      {
+        "text": "人"
+      },
+      {
+        "text": "通り"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1550490,
+    "text": "裏通り",
+    "split": [
+      {
+        "text": "裏"
+      },
+      {
+        "text": "通り"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1619440,
+    "text": "素通り",
+    "split": [
+      {
+        "text": "素"
+      },
+      {
+        "text": "通り"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1164910,
+    "text": "一通り",
+    "split": [
+      {
+        "text": "一"
+      },
+      {
+        "text": "通り"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1462720,
+    "text": "二通り",
+    "split": [
+      {
+        "text": "二"
+      },
+      {
+        "text": "通り"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1529550,
+    "text": "無くなる",
+    "split": [
+      {
+        "text": "無く"
+      },
+      {
+        "text": "なる"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:split-nakunaru"
+  },
+  {
+    "wordId": 2089710,
+    "text": "手が掛かる",
+    "split": [
+      {
+        "text": "手"
+      },
+      {
+        "text": "が"
+      },
+      {
+        "text": "掛かる"
+      }
+    ],
+    "score": 10,
+    "source": "ichiran:split-tegakakaru"
+  },
+  {
+    "wordId": 2800540,
+    "text": "ドが付ける",
+    "split": [
+      {
+        "text": "ド"
+      },
+      {
+        "text": "が"
+      },
+      {
+        "text": "付ける"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:split-dogatsukeru"
+  },
+  {
+    "wordId": 1006650,
+    "text": "そうだ",
+    "split": [
+      {
+        "text": "そう"
+      },
+      {
+        "text": "だ"
+      }
+    ],
+    "score": 5,
+    "source": "ichiran:split-souda"
+  },
+  {
+    "wordId": 2837492,
+    "text": "そうです",
+    "split": [
+      {
+        "text": "そう"
+      },
+      {
+        "text": "です"
+      }
+    ],
+    "score": 5,
+    "source": "ichiran:split-soudesu"
+  },
+  {
+    "wordId": 1221750,
+    "text": "気のせい",
+    "split": [
+      {
+        "text": "気"
+      },
+      {
+        "text": "の"
+      },
+      {
+        "text": "せい"
+      }
+    ],
+    "score": 100,
+    "source": "ichiran:split-kinosei"
+  },
+  {
+    "wordId": 1591050,
+    "text": "気がつく",
+    "split": [
+      {
+        "text": "気"
+      },
+      {
+        "text": "が"
+      },
+      {
+        "text": "つく"
+      }
+    ],
+    "score": 100,
+    "source": "ichiran:split-kigatsuku"
+  },
+  {
+    "wordId": 2102910,
+    "text": "肩を並べる",
+    "split": [
+      {
+        "text": "肩"
+      },
+      {
+        "text": "を"
+      },
+      {
+        "text": "並べる"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:split-katawonaraberu"
+  },
+  {
+    "wordId": 1236680,
+    "text": "恐れ入る",
+    "split": [
+      {
+        "text": "恐れ"
+      },
+      {
+        "text": "入る"
+      }
+    ],
+    "score": 100,
+    "source": "ichiran:split-osoreiru"
+  },
+  {
+    "wordId": 2104540,
+    "text": "なんとかなる",
+    "split": [
+      {
+        "text": "なんとか"
+      },
+      {
+        "text": "なる"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:split-nantokanaru"
+  },
+  {
+    "wordId": 2610760,
+    "text": "弾け飛ぶ",
+    "split": [
+      {
+        "text": "弾け"
+      },
+      {
+        "text": "飛ぶ"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:split-hajiketobu"
+  },
+  {
+    "wordId": 1315700,
+    "text": "持って行く",
+    "split": [
+      {
+        "text": "持って"
+      },
+      {
+        "text": "行く"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:split-motteiku"
+  },
+  {
+    "wordId": 1881080,
+    "text": "死に掛かる",
+    "split": [
+      {
+        "text": "死"
+      },
+      {
+        "text": "に"
+      },
+      {
+        "text": "掛かる"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:split-shinikakaru"
+  },
+  {
+    "wordId": 1903910,
+    "text": "必死になって",
+    "split": [
+      {
+        "text": "必死"
+      },
+      {
+        "text": "に"
+      },
+      {
+        "text": "なって"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:split-hisshininatte"
+  },
+  {
+    "wordId": 1009600,
+    "text": "にとって",
+    "split": [
+      {
+        "text": "に"
+      },
+      {
+        "text": "とって"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:split-nitotte"
+  },
+  {
+    "wordId": 2215340,
+    "text": "事にする",
+    "split": [
+      {
+        "text": "事"
+      },
+      {
+        "text": "に"
+      },
+      {
+        "text": "する"
+      }
+    ],
+    "score": 100,
+    "source": "ichiran:split-kotonisuru"
+  },
+  {
+    "wordId": 1419350,
+    "text": "弾き出す",
+    "split": [
+      {
+        "text": "弾き"
+      },
+      {
+        "text": "出す"
+      }
+    ],
+    "score": 100,
+    "source": "ichiran:split-hajikidasu"
+  },
+  {
+    "wordId": 1524660,
+    "text": "ごとに",
+    "split": [
+      {
+        "text": "ごと"
+      },
+      {
+        "text": "に"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:split-gotoni"
+  },
+  {
+    "wordId": 1693800,
+    "text": "お下がり",
+    "split": [
+      {
+        "text": "お"
+      },
+      {
+        "text": "下がり"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:split-osagari"
+  },
+  {
+    "wordId": 1752860,
+    "text": "買い支え",
+    "split": [
+      {
+        "text": "買い"
+      },
+      {
+        "text": "支え"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:split-kaisasae"
+  },
+  {
+    "wordId": 2100770,
+    "text": "となったら",
+    "split": [
+      {
+        "text": "と"
+      },
+      {
+        "text": "なったら"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:split-tonattara"
+  },
+  {
+    "wordId": 2100900,
+    "text": "となる",
+    "split": [
+      {
+        "text": "と"
+      },
+      {
+        "text": "なる"
+      }
+    ],
+    "score": 10,
+    "source": "ichiran:split-tonaru"
+  },
+  {
+    "wordId": 1327220,
+    "text": "手に入る",
+    "split": [
+      {
+        "text": "手"
+      },
+      {
+        "text": "に"
+      },
+      {
+        "text": "入る"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1327230,
+    "text": "手に入れる",
+    "split": [
+      {
+        "text": "手"
+      },
+      {
+        "text": "に"
+      },
+      {
+        "text": "入れる"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2433760,
+    "text": "そうなんです",
+    "split": [
+      {
+        "text": "そうな"
+      },
+      {
+        "text": "んです"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2088480,
+    "text": "良さげ",
+    "split": [
+      {
+        "text": "良さ"
+      },
+      {
+        "text": "げ"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2724560,
+    "text": "のせいで",
+    "split": [
+      {
+        "text": "の"
+      },
+      {
+        "text": "せい"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2755350,
+    "text": "じゃない",
+    "split": [
+      {
+        "text": "じゃ",
+        "wordId": 2089020
+      },
+      {
+        "text": "ない",
+        "wordId": 1529520
+      }
+    ],
+    "score": 10,
+    "source": "ichiran:split-janai"
+  },
+  {
+    "wordId": 2135280,
+    "text": "じゃん",
+    "split": [
+      {
+        "text": "じゃ",
+        "wordId": 2089020
+      },
+      {
+        "text": "ん",
+        "wordId": 2139720
+      }
+    ],
+    "score": 10,
+    "source": "ichiran:split-jan"
+  },
+  {
+    "wordId": 2009290,
+    "text": "中でも",
+    "split": [
+      {
+        "text": "中"
+      },
+      {
+        "text": "でも"
+      }
+    ],
+    "score": 100,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1612640,
+    "text": "あのね",
+    "split": [
+      {
+        "text": "あの"
+      },
+      {
+        "text": "ね"
+      }
+    ],
+    "score": 5,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1221680,
+    "text": "気にします",
+    "split": [
+      {
+        "text": "気"
+      },
+      {
+        "text": "に"
+      },
+      {
+        "text": "します"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1538340,
+    "text": "わけがわからない",
+    "split": [
+      {
+        "text": "わけ"
+      },
+      {
+        "text": "が"
+      },
+      {
+        "text": "わからない"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2757500,
+    "text": "わけのわからない",
+    "split": [
+      {
+        "text": "わけ"
+      },
+      {
+        "text": "の"
+      },
+      {
+        "text": "わからない"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1315860,
+    "text": "時には",
+    "split": [
+      {
+        "text": "時"
+      },
+      {
+        "text": "には"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2668400,
+    "text": "汗を流す",
+    "split": [
+      {
+        "text": "汗"
+      },
+      {
+        "text": "を"
+      },
+      {
+        "text": "流す"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2835890,
+    "text": "折りたたみ式",
+    "split": [
+      {
+        "text": "折りたたみ"
+      },
+      {
+        "text": "式"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2526850,
+    "text": "にしろ",
+    "split": [
+      {
+        "text": "に"
+      },
+      {
+        "text": "しろ"
+      }
+    ],
+    "score": 10,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2026650,
+    "text": "にせよ",
+    "split": [
+      {
+        "text": "に"
+      },
+      {
+        "text": "せよ"
+      }
+    ],
+    "score": 10,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1602740,
+    "text": "普段着",
+    "split": [
+      {
+        "text": "普段"
+      },
+      {
+        "text": "着"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1221530,
+    "text": "気がある",
+    "split": [
+      {
+        "text": "気"
+      },
+      {
+        "text": "が"
+      },
+      {
+        "text": "ある"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2272780,
+    "text": "気がない",
+    "split": [
+      {
+        "text": "気"
+      },
+      {
+        "text": "が"
+      },
+      {
+        "text": "ない"
+      }
+    ],
+    "score": 50,
+    "mode": "first-piece-bonus",
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2846470,
+    "text": "気はない",
+    "split": [
+      {
+        "text": "気"
+      },
+      {
+        "text": "は"
+      },
+      {
+        "text": "ない"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1591980,
+    "text": "気を使う",
+    "split": [
+      {
+        "text": "気"
+      },
+      {
+        "text": "を"
+      },
+      {
+        "text": "使う"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1551500,
+    "text": "立ちすくむ",
+    "split": [
+      {
+        "text": "立ち"
+      },
+      {
+        "text": "すくむ"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2002270,
+    "text": "零れ落ちる",
+    "split": [
+      {
+        "text": "零れ"
+      },
+      {
+        "text": "落ちる"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1006280,
+    "text": "すると",
+    "split": [
+      {
+        "text": "する"
+      },
+      {
+        "text": "と"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2757540,
+    "text": "出しな",
+    "split": [
+      {
+        "text": "出し"
+      },
+      {
+        "text": "な"
+      }
+    ],
+    "score": 90,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1606530,
+    "text": "分かりきる",
+    "split": [
+      {
+        "text": "分かり"
+      },
+      {
+        "text": "きる"
+      }
+    ],
+    "score": 100,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2007500,
+    "text": "落ちこぼれる",
+    "split": [
+      {
+        "text": "落ち"
+      },
+      {
+        "text": "こぼれる"
+      }
+    ],
+    "score": 100,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1207840,
+    "text": "割り切れる",
+    "split": [
+      {
+        "text": "割り"
+      },
+      {
+        "text": "切れる"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2109610,
+    "text": "あり得ない",
+    "split": [
+      {
+        "text": "有り"
+      },
+      {
+        "text": "得ない"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1006880,
+    "text": "その上",
+    "split": [
+      {
+        "text": "その"
+      },
+      {
+        "text": "上"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1601010,
+    "text": "跳ね上がる",
+    "split": [
+      {
+        "text": "跳ね"
+      },
+      {
+        "text": "上がる"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1881690,
+    "text": "写真を撮る",
+    "split": [
+      {
+        "text": "写真"
+      },
+      {
+        "text": "を"
+      },
+      {
+        "text": "撮る"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1855670,
+    "text": "取り留めのない",
+    "split": [
+      {
+        "text": "取り留め"
+      },
+      {
+        "text": "の"
+      },
+      {
+        "text": "ない"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 2855921,
+    "text": "取り留めもない",
+    "split": [
+      {
+        "text": "取り留め"
+      },
+      {
+        "text": "も"
+      },
+      {
+        "text": "ない"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1362970,
+    "text": "申し遅れる",
+    "split": [
+      {
+        "text": "申し"
+      },
+      {
+        "text": "遅れる"
+      }
+    ],
+    "score": 100,
+    "source": "ichiran:def-simple-split"
+  },
+  {
+    "wordId": 1609470,
+    "text": "母さん",
+    "split": [
+      {
+        "text": "母"
+      },
+      {
+        "text": "さん"
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:split-kaasan"
+  },
+  {
+    "wordId": 1465460,
+    "text": "入り込める",
+    "split": [
+      {
+        "text": "入り",
+        "wordId": 1465590
+      },
+      {
+        "text": "込める",
+        "wordId": 1288790
+      }
+    ],
+    "score": 100,
+    "source": "ichiran:split-hairikomeru"
+  },
+  {
+    "wordId": 2815260,
+    "text": "早いもので",
+    "split": [
+      {
+        "text": "早い"
+      },
+      {
+        "text": "もの"
+      },
+      {
+        "text": "で"
+      }
+    ],
+    "score": 100,
+    "source": "ichiran:split-hayaimonode"
+  },
+  {
+    "wordId": 1599590,
+    "text": "なにもかも",
+    "split": [
+      {
+        "text": "なにも"
+      },
+      {
+        "text": "かも"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:split-nanimokamo"
+  },
+  {
+    "wordId": 2057340,
+    "text": "申し訳なさそう",
+    "split": [
+      {
+        "text": "申し訳"
+      },
+      {
+        "text": "なさそう"
+      }
+    ],
+    "score": 300,
+    "source": "ichiran:split-moushiwakenasasou"
+  },
+  {
+    "wordId": 1368740,
+    "text": "人たち",
+    "split": [
+      {
+        "text": "人"
+      },
+      {
+        "text": "たち"
+      }
+    ],
+    "score": 100,
+    "source": "ichiran:split-hitotachi"
+  },
+  {
+    "wordId": 2034520,
+    "text": "でさえ",
+    "split": [
+      {
+        "text": "で"
+      },
+      {
+        "text": "さえ"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:split-desura"
+  },
+  {
+    "wordId": 2529050,
+    "text": "者ども",
+    "split": [
+      {
+        "text": "者"
+      },
+      {
+        "text": "ども"
+      }
+    ],
+    "score": 30,
+    "source": "ichiran:split-monodomo"
+  },
+  {
+    "wordId": 1411570,
+    "text": "代わり映え",
+    "split": [
+      {
+        "text": "代わり"
+      },
+      {
+        "text": "映え"
+      }
+    ],
+    "score": 10,
+    "source": "ichiran:split-kawaribae"
+  },
+  {
+    "wordId": 2276360,
+    "text": "尽くし",
+    "split": [
+      {
+        "text": "尽く"
+      },
+      {
+        "text": "し"
+      }
+    ],
+    "score": 10,
+    "source": "ichiran"
+  },
+  {
+    "wordId": 1349300,
+    "text": "なお",
+    "split": [
+      {
+        "text": "な"
+      },
+      {
+        "text": "お"
+      }
+    ],
+    "score": 5,
+    "source": "ichiran"
+  },
+  {
+    "wordId": 1314600,
+    "text": "にない",
+    "split": [
+      {
+        "text": "に"
+      },
+      {
+        "text": "ない"
+      }
+    ],
+    "score": -5,
+    "source": "ichiran"
+  },
+  {
+    "wordId": 1322540,
+    "text": "にない",
+    "split": [
+      {
+        "text": "に"
+      },
+      {
+        "text": "ない"
+      }
+    ],
+    "score": -5,
+    "source": "ichiran"
+  },
+  {
+    "wordId": 1601080,
+    "text": "はやめる",
+    "split": [
+      {
+        "text": "は"
+      },
+      {
+        "text": "やめる"
+      }
+    ],
+    "score": -5,
+    "source": "ichiran"
+  },
+  {
+    "wordId": 1008570,
+    "text": "ところが",
+    "split": [
+      {
+        "text": "ところ"
+      },
+      {
+        "text": "が"
+      }
+    ],
+    "score": -10,
+    "source": "ichiran:segsplit-tokoroga"
+  },
+  {
+    "wordId": 2009220,
+    "text": "ところか",
+    "split": [
+      {
+        "text": "ところ"
+      },
+      {
+        "text": "か"
+      }
+    ],
+    "score": -10,
+    "source": "ichiran:segsplit-dokoroka"
+  },
+  {
+    "wordId": 2097010,
+    "text": "ところへ",
+    "split": [
+      {
+        "text": "ところ"
+      },
+      {
+        "text": "へ"
+      }
+    ],
+    "score": -10,
+    "source": "ichiran:segsplit-tokoroe"
+  },
+  {
+    "wordId": 2136660,
+    "text": "ところを",
+    "split": [
+      {
+        "text": "ところ"
+      },
+      {
+        "text": "を"
+      }
+    ],
+    "score": -10,
+    "source": "ichiran:segsplit-tokorowo"
+  },
+  {
+    "wordId": 1897510,
+    "text": "ところでは",
+    "split": [
+      {
+        "text": "ところ"
+      },
+      {
+        "text": "で"
+      },
+      {
+        "text": "は"
+      }
+    ],
+    "score": -10,
+    "source": "ichiran:segsplit-tokorodewa"
+  },
+  {
+    "wordId": 2409240,
+    "text": "お店",
+    "split": [
+      {
+        "text": "お"
+      },
+      {
+        "text": "店"
+      }
+    ],
+    "score": 20,
+    "source": "ichiran:segsplit-omise"
+  },
+  {
+    "wordId": 1366490,
+    "text": "人らしい",
+    "split": [
+      {
+        "text": "人"
+      },
+      {
+        "text": "らしい"
+      }
+    ],
+    "score": -10,
+    "source": "ichiran:segsplit-hitorashii"
+  },
+  {
+    "wordId": 2028950,
+    "text": "とは",
+    "split": [
+      {
+        "text": "と"
+      },
+      {
+        "text": "は"
+      }
+    ],
+    "score": -5,
+    "mode": "first-piece-bonus",
+    "source": "ichiran:segsplit-toha"
+  },
+  {
+    "wordId": 1008450,
+    "text": "では",
+    "split": [
+      {
+        "text": "で"
+      },
+      {
+        "text": "は"
+      }
+    ],
+    "score": -5,
+    "mode": "first-piece-bonus",
+    "source": "ichiran:segsplit-deha"
+  },
+  {
+    "wordId": 2394710,
+    "text": "ないと",
+    "split": [
+      {
+        "text": "ない"
+      },
+      {
+        "text": "と"
+      }
+    ],
+    "score": -5,
+    "source": "ichiran:segsplit-naito"
+  },
+  {
+    "wordId": 1011740,
+    "text": "ほんの",
+    "split": [
+      {
+        "text": "ほん"
+      },
+      {
+        "text": "の"
+      }
+    ],
+    "score": -5,
+    "source": "ichiran:segsplit-honno"
+  },
+  {
+    "wordId": 1007310,
+    "text": "だから",
+    "split": [
+      {
+        "text": "だ"
+      },
+      {
+        "text": "から"
+      }
+    ],
+    "score": -5,
+    "source": "ichiran:segsplit-dakara"
+  },
+  {
+    "wordId": 2841254,
+    "text": "からって",
+    "split": [
+      {
+        "text": "から"
+      },
+      {
+        "text": "って"
+      }
+    ],
+    "score": 5,
+    "source": "ichiran:segsplit"
+  },
+  {
+    "wordId": 1518540,
+    "text": "なくなる",
+    "split": [
+      { "text": "なく" },
+      { "text": "なる" }
+    ],
+    "score": 10,
+    "source": "ichiran:split-nakunaru2"
+  },
+  {
+    "wordId": 1474200,
+    "text": "はいます",
+    "split": [
+      { "text": "は" },
+      { "text": "います" }
+    ],
+    "score": -10,
+    "source": "ichiran:def-simple-split-1474200"
+  },
+  {
+    "wordId": 1579130,
+    "text": "ことし",
+    "split": [
+      { "text": "こと" },
+      { "text": "し" }
+    ],
+    "score": -1,
+    "source": "ichiran:def-simple-split-1579130"
+  },
+  {
+    "wordId": 1863230,
+    "text": "おれたち",
+    "split": [
+      { "text": "おれ" },
+      { "text": "たち" }
+    ],
+    "score": 15,
+    "source": "ichiran:def-simple-split-1863230"
+  },
+  {
+    "wordId": 2834051,
+    "text": "おまえたち",
+    "split": [
+      { "text": "おまえ" },
+      { "text": "たち" }
+    ],
+    "score": 15,
+    "source": "ichiran:def-simple-split-2834051"
+  },
+  {
+    "wordId": 2771940,
+    "text": "はないか",
+    "split": [
+      { "text": "は" },
+      { "text": "ない" },
+      { "text": "か" }
+    ],
+    "score": -5,
+    "source": "ichiran:def-simple-split-2771940"
+  },
+  {
+    "wordId": 2083990,
+    "text": "ならん",
+    "split": [
+      { "text": "なら" },
+      { "text": "ん" }
+    ],
+    "score": 20,
+    "source": "ichiran:def-simple-split-2083990"
+  },
+  {
+    "wordId": 1508380,
+    "text": "ならんで",
+    "split": [
+      { "text": "ならん" },
+      { "text": "で" }
+    ],
+    "score": 10,
+    "source": "ichiran:def-simple-split-1508380"
+  },
+  {
+    "wordId": 1322560,
+    "text": "につまる",
+    "split": [
+      { "text": "に" },
+      { "text": "つまる" }
+    ],
+    "score": -10,
+    "source": "ichiran:def-simple-split-1322560"
+  },
+  {
+    "wordId": 1774820,
+    "text": "からすき",
+    "split": [
+      { "text": "から" },
+      { "text": "すき" }
+    ],
+    "score": -5,
+    "source": "ichiran:def-simple-split-1774820"
+  },
+  {
+    "wordId": 1314770,
+    "text": "につく",
+    "split": [
+      { "text": "に" },
+      { "text": "つく" }
+    ],
+    "score": -10,
+    "source": "ichiran:def-simple-split-1314770"
+  },
+  {
+    "wordId": 1597740,
+    "text": "ついたて",
+    "split": [
+      { "text": "つい" },
+      { "text": "たて" }
+    ],
+    "score": 5,
+    "source": "ichiran:def-simple-split-1597740"
+  },
+  {
+    "wordId": 1612640,
+    "text": "あのね",
+    "split": [
+      { "text": "あの" },
+      { "text": "ね" }
+    ],
+    "score": 5,
+    "source": "ichiran:def-simple-split-1612640"
+  },
+  {
+    "wordId": 1502500,
+    "text": "物好き",
+    "split": [
+      { "text": "物" },
+      { "text": "好き" }
+    ],
+    "score": 100,
+    "mode": "first-piece-bonus",
+    "source": "ichiran:def-simple-split-1502500"
+  },
+  {
+    "wordId": 1424960,
+    "text": "中通り",
+    "split": [
+      { "text": "中" },
+      { "text": "通り" }
+    ],
+    "score": 50,
+    "source": "ichiran:def-toori-split"
+  },
+  {
+    "wordId": 1951150,
+    "text": "決まって",
+    "split": [ { "text": "決まって", "wordId": 1591420 } ],
+    "score": 50,
+    "source": "ichiran:split-kimatte"
+  },
+  {
+    "wordId": 2666360,
+    "text": "少なくない",
+    "split": [ { "text": "少なくない", "wordId": 1348910 } ],
+    "score": 30,
+    "source": "ichiran:def-simple-split-2666360"
+  },
+  {
+    "wordId": 1009470,
+    "text": "なら",
+    "split": [ { "text": "なら", "wordId": 2089020 } ],
+    "score": 1,
+    "source": "ichiran:split-nara"
+  },
+  {
+    "wordId": 2762260,
+    "text": "ならんで",
+    "split": [ { "text": "ならんで", "wordId": 1508380 } ],
+    "score": 0,
+    "source": "ichiran:def-simple-split-2762260"
+  },
+  {
+    "wordId": 1005600,
+    "text": "しまった",
+    "split": [ { "text": "しまった", "wordId": 1305380 } ],
+    "score": -10,
+    "source": "ichiran:def-simple-split-1005600"
+  },
+  {
+    "wordId": 2016840,
+    "text": "やった",
+    "split": [ { "text": "やった", "wordId": 1012980 } ],
+    "score": -5,
+    "source": "ichiran:def-simple-split-2016840"
+  },
+  {
+    "wordId": 1000430,
+    "text": "あの",
+    "split": [ { "text": "あの", "wordId": 1000420 } ],
+    "score": -5,
+    "source": "ichiran:def-simple-split-1000430"
+  },
+  {
+    "wordId": 1854750,
+    "text": "付いて",
+    "split": [ { "text": "付いて", "wordId": 1495740 } ],
+    "score": 20,
+    "source": "ichiran:def-simple-split-1854750"
+  },
+  {
+    "wordId": 1894260,
+    "text": "ついてる",
+    "split": [
+      {
+        "text": "ついて",
+        "wordId": 1894260
+      },
+      {
+        "text": "る",
+        "wordId": 1577980
+      }
+    ],
+    "score": 50,
+    "source": "ichiran:def-simple-split-1894260"
+  },
+  {
+    "wordId": 2834732,
+    "text": "取り留め",
+    "split": [ { "text": "取り留め", "wordId": 1707770 } ],
+    "score": -10,
+    "source": "ichiran:def-simple-split-2834732"
+  },
+  {
+    "wordId": 1606800,
+    "text": "割り",
+    "split": [ { "text": "割り", "wordId": 1208000 } ],
+    "score": 10,
+    "source": "ichiran:def-simple-split-1606800"
+  },
+  {
+    "wordId": 1008030,
+    "text": "つい",
+    "split": [ { "text": "つい", "wordId": 1008030 } ],
+    "score": -10,
+    "mode": "score",
+    "source": "ichiran:def-simple-split-1008030"
+  },
+  {
+    "wordId": 1010105,
+    "text": "はぐったり",
+    "split": [
+      { "text": "は", "wordId": 2028920 },
+      { "text": "ぐったり", "wordId": 1004070 }
+    ],
+    "score": 5,
+    "source": "ichiran:def-simple-split-1010105"
+  },
+  {
+    "wordId": 1208870,
+    "text": "かなって",
+    "split": [
+      { "text": "かな", "wordId": 1002940 },
+      { "text": "って", "wordId": 2086960 }
+    ],
+    "score": 5,
+    "source": "ichiran:split-kanatte"
+  },
+  {
+    "wordId": 1567610,
+    "text": "もんだ",
+    "split": [
+      { "text": "もん", "wordId": 1502390 },
+      { "text": "だ", "wordId": 2089020 }
+    ],
+    "score": 5,
+    "source": "ichiran:def-simple-split-1567610"
+  },
+  {
+    "wordId": 1675330,
+    "text": "から元気",
+    "split": [
+      { "text": "から", "wordId": 1002980 },
+      { "text": "元気", "wordId": 1260720 }
+    ],
+    "score": 10,
+    "source": "ichiran:def-simple-split-1675330"
+  },
+  {
+    "wordId": 1007310,
+    "text": "だから",
+    "split": [
+      { "text": "だ", "wordId": 2089020 },
+      { "text": "から", "wordId": 1002980 }
+    ],
+    "score": -5,
+    "mode": "score",
+    "source": "ichiran:split-dakara"
+  },
+  {
+    "wordId": 2841254,
+    "text": "からって",
+    "split": [
+      { "text": "から", "wordId": 1002980 },
+      { "text": "って", "wordId": 2086960 }
+    ],
+    "score": 5,
+    "source": "ichiran:def-simple-split-2841254"
+  },
+  {
+    "wordId": 1581550,
+    "text": "雪がない",
+    "split": [
+      { "text": "雪", "wordId": 1386500 },
+      { "text": "が", "wordId": 2028930 },
+      { "text": "ない", "wordId": 1529520 }
+    ],
+    "score": 10,
+    "source": "ichiran:def-simple-split-1581550"
+  }
+]

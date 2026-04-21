@@ -41,6 +41,7 @@ public class Program
         var mlCommands = new MlCommands(context);
         var metadataCommands = new MetadataCommands();
         var benchmarkCommands = new BenchmarkCommands(context);
+        var conjugationCommands = new ConjugationCommands(context);
 
         // Import commands
         if (options.Import)
@@ -167,9 +168,34 @@ public class Program
             await diagnosticCommands.SearchLookup(options.SearchLookup);
         }
 
+        if (!string.IsNullOrEmpty(options.SearchConj))
+        {
+            diagnosticCommands.SearchConj(options.SearchConj);
+        }
+
         if (options.FlushRedis)
         {
             await diagnosticCommands.FlushRedisCache();
+        }
+
+        if (options.CountAmbiguous)
+        {
+            await diagnosticCommands.CountAmbiguous();
+        }
+
+        if (options.GenerateConjugations)
+        {
+            await conjugationCommands.GenerateConjugations(options);
+        }
+
+        if (options.ConjugationStats)
+        {
+            await conjugationCommands.PrintStats();
+        }
+
+        if (!string.IsNullOrEmpty(options.ConjugationInspect))
+        {
+            await conjugationCommands.InspectSurface(options.ConjugationInspect);
         }
 
         if (options.ScanConfidence)
