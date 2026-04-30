@@ -125,11 +125,11 @@
     try {
       const alreadyLoaded = extraSentences.value.map(s => s.sourceDeck.deckId);
 
+      const mediaTypesParam = srsStore.studySettings.exampleSentenceMediaTypes?.map(t => `mediaTypes=${t}`).join('&') ?? '';
+
       if (sorting === 'Random') {
-        const results = await $api<ExampleSentence[]>(
-          `vocabulary/${props.card.wordId}/${props.card.readingIndex}/random-example-sentences`,
-          { method: 'POST', body: alreadyLoaded },
-        );
+        const url = `vocabulary/${props.card.wordId}/${props.card.readingIndex}/random-example-sentences${mediaTypesParam ? '?' + mediaTypesParam : ''}`;
+        const results = await $api<ExampleSentence[]>(url, { method: 'POST', body: alreadyLoaded });
 
         if (results.length === 0) {
           canLoadMoreSentences.value = false;
@@ -139,8 +139,12 @@
         extraSentences.value.push(...results);
       } else {
         const descending = sorting === 'HardestFirst';
+        const params = new URLSearchParams({ minDifficulty: String(nextBandMin.value), maxDifficulty: String(nextBandMax.value), descending: String(descending) });
+        if (srsStore.studySettings.exampleSentenceMediaTypes) {
+          for (const t of srsStore.studySettings.exampleSentenceMediaTypes) params.append('mediaTypes', String(t));
+        }
         const results = await $api<ExampleSentencesByDifficultyResponse>(
-          `vocabulary/${props.card.wordId}/${props.card.readingIndex}/example-sentences-by-difficulty?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}`,
+          `vocabulary/${props.card.wordId}/${props.card.readingIndex}/example-sentences-by-difficulty?${params}`,
           { method: 'POST', body: alreadyLoaded },
         );
 

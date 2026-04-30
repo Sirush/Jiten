@@ -14,6 +14,7 @@
   onMounted(async () => {
     await srsStore.fetchSettings();
     Object.assign(form, srsStore.studySettings);
+    exampleSentenceSource.value = form.exampleSentenceMediaTypes == null ? [null] : [...form.exampleSentenceMediaTypes];
     if (!form.timezone) applyDetectedTimezone();
     loaded.value = true;
     tickInterval = setInterval(() => { nowMinute.value = Date.now(); }, 60_000);
@@ -52,6 +53,33 @@
     { label: 'Easiest', value: 'EasiestFirst' },
     { label: 'Hardest', value: 'HardestFirst' },
   ];
+
+  const exampleSentenceSourceOptions = [
+    { label: 'All', value: null as number | null },
+    { label: 'VN', value: 7 },
+    { label: 'Novel', value: 4 },
+    { label: 'WN', value: 8 },
+    { label: 'VG', value: 6 },
+    { label: 'NF', value: 5 },
+  ];
+
+  // null in the array represents "All"
+  const exampleSentenceSource = ref<(number | null)[]>(
+    form.exampleSentenceMediaTypes == null ? [null] : [...form.exampleSentenceMediaTypes]
+  );
+
+  function onExampleSourceChange(val: (number | null)[]) {
+    const hadAll = form.exampleSentenceMediaTypes === null;
+    const nowHasAll = val.includes(null);
+    if (!hadAll && nowHasAll) {
+      form.exampleSentenceMediaTypes = null;
+      exampleSentenceSource.value = [null];
+    } else {
+      const specific = val.filter((v): v is number => v !== null);
+      form.exampleSentenceMediaTypes = specific.length > 0 ? specific : null;
+      exampleSentenceSource.value = specific.length > 0 ? specific : [null];
+    }
+  }
 
   function getUtcOffsetMinutes(zone: string, date?: Date): number {
     const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', hour12: false, timeZoneName: 'shortOffset' })
@@ -297,6 +325,15 @@
                 </Tooltip>
               </label>
               <SelectButton v-model="form.exampleSentenceSorting" :options="exampleSentenceSortingOptions" option-label="label" option-value="value" :allow-empty="false" />
+            </div>
+            <div v-if="form.exampleSentencePosition !== 'Hidden'" class="mt-2">
+              <label class="text-sm mb-1 block">
+                Example Sentence Media
+                <Tooltip content="Only show example sentences of these types.<br>**VN** — Visual Novel<br>**WN** — Web Novel<br>**VG** — Video Games<br>**NF** — Non-Fiction" placement="right">
+                  <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                </Tooltip>
+              </label>
+              <SelectButton :model-value="exampleSentenceSource" :options="exampleSentenceSourceOptions" option-label="label" option-value="value" :allow-empty="false" :multiple="true" class="flex-wrap" @update:model-value="onExampleSourceChange" />
             </div>
           </div>
           <div class="flex items-center gap-2">

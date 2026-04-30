@@ -81,6 +81,7 @@ export const useSrsStore = defineStore('srs', () => {
     showReviewActivity: true,
     showReviewForecast: true,
     timezone: 'Europe/London',
+    exampleSentenceMediaTypes: null,
   });
   const sessionStats = ref({
     cardsReviewed: 0,

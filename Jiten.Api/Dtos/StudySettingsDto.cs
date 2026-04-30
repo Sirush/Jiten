@@ -127,4 +127,7 @@ public class StudySettingsDto
 
     [JsonPropertyName("timezone")]
     public string? Timezone { get; set; }
+
+    [JsonPropertyName("exampleSentenceMediaTypes")]
+    public List<int>? ExampleSentenceMediaTypes { get; set; }
 }

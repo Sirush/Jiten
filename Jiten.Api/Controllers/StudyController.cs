@@ -2686,6 +2686,9 @@ public class StudyController(
             .ToListAsync();
         var studyDeckIdArray = studyDecks.Where(sd => sd.DeckId.HasValue).Select(sd => sd.DeckId!.Value).ToArray();
 
+        var settings = await LoadStudySettings(userId);
+        var mediaTypeFilter = settings.ExampleSentenceMediaTypes is { Count: > 0 } mt ? mt.ToArray() : null;
+
         var pairWordIds = request.Pairs.Select(p => p.WordId).ToArray();
         var pairReadingIndexes = request.Pairs.Select(p => (short)p.ReadingIndex).ToArray();
         var wordIds = pairWordIds.Distinct().ToList();
@@ -2696,9 +2699,22 @@ public class StudyController(
         List<int> fallbackExampleIds;
         if (isNpgsql)
         {
-            studyExampleIds = studyDeckIdArray.Length > 0
-                ? await context.Database
-                    .SqlQueryRaw<int>(@"
+            if (studyDeckIdArray.Length > 0)
+            {
+                var sql = mediaTypeFilter != null
+                    ? @"
+                        SELECT esw.""ExampleSentenceId""
+                        FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
+                        CROSS JOIN LATERAL (
+                            SELECT esw2.""ExampleSentenceId""
+                            FROM jiten.""ExampleSentenceWords"" esw2
+                            JOIN jiten.""ExampleSentences"" es ON es.""SentenceId"" = esw2.""ExampleSentenceId""
+                            JOIN jiten.""Decks"" d ON d.""DeckId"" = es.""DeckId"" AND d.""MediaType"" = ANY({3})
+                            WHERE esw2.""WordId"" = v.wid AND esw2.""ReadingIndex"" = v.ri
+                              AND es.""DeckId"" = ANY({2})
+                            LIMIT 1
+                        ) esw"
+                    : @"
                         SELECT esw.""ExampleSentenceId""
                         FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
                         CROSS JOIN LATERAL (
@@ -2708,10 +2724,16 @@ public class StudyController(
                             WHERE esw2.""WordId"" = v.wid AND esw2.""ReadingIndex"" = v.ri
                               AND es.""DeckId"" = ANY({2})
                             LIMIT 1
-                        ) esw
-                    ", pairWordIds, pairReadingIndexes, studyDeckIdArray)
-                    .ToListAsync()
-                : [];
+                        ) esw";
+                var args = mediaTypeFilter != null
+                    ? new object[] { pairWordIds, pairReadingIndexes, studyDeckIdArray, mediaTypeFilter }
+                    : new object[] { pairWordIds, pairReadingIndexes, studyDeckIdArray };
+                studyExampleIds = await context.Database.SqlQueryRaw<int>(sql, args).ToListAsync();
+            }
+            else
+            {
+                studyExampleIds = [];
+            }
 
             if (studyExampleIds.Count >= request.Pairs.Count)
             {
@@ -2719,8 +2741,20 @@ public class StudyController(
             }
             else
             {
-                fallbackExampleIds = await context.Database
-                    .SqlQueryRaw<int>(@"
+                var fallbackSql = mediaTypeFilter != null
+                    ? @"
+                        SELECT esw.""ExampleSentenceId""
+                        FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
+                        CROSS JOIN LATERAL (
+                            SELECT esw2.""ExampleSentenceId""
+                            FROM jiten.""ExampleSentenceWords"" esw2
+                            JOIN jiten.""ExampleSentences"" es ON es.""SentenceId"" = esw2.""ExampleSentenceId""
+                            JOIN jiten.""Decks"" d ON d.""DeckId"" = es.""DeckId"" AND d.""MediaType"" = ANY({2})
+                            WHERE esw2.""WordId"" = v.wid AND esw2.""ReadingIndex"" = v.ri
+                            ORDER BY esw2.""ExampleSentenceId""
+                            LIMIT 1
+                        ) esw"
+                    : @"
                         SELECT esw.""ExampleSentenceId""
                         FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
                         CROSS JOIN LATERAL (
@@ -2729,18 +2763,25 @@ public class StudyController(
                             WHERE esw2.""WordId"" = v.wid AND esw2.""ReadingIndex"" = v.ri
                             ORDER BY esw2.""ExampleSentenceId""
                             LIMIT 1
-                        ) esw
-                    ", pairWordIds, pairReadingIndexes)
-                    .ToListAsync();
-
+                        ) esw";
+                var fallbackArgs = mediaTypeFilter != null
+                    ? new object[] { pairWordIds, pairReadingIndexes, mediaTypeFilter }
+                    : new object[] { pairWordIds, pairReadingIndexes };
+                fallbackExampleIds = await context.Database.SqlQueryRaw<int>(fallbackSql, fallbackArgs).ToListAsync();
             }
         }
         else
         {
             studyExampleIds = [];
-            fallbackExampleIds = await context.ExampleSentenceWords
+            var fallbackQuery = context.ExampleSentenceWords
                 .AsNoTracking()
-                .Where(esw => wordIds.Contains(esw.WordId))
+                .Where(esw => wordIds.Contains(esw.WordId));
+            if (mediaTypeFilter != null)
+            {
+                var mediaTypes = mediaTypeFilter.Select(m => (MediaType)m).ToList();
+                fallbackQuery = fallbackQuery.Where(esw => mediaTypes.Contains(esw.ExampleSentence!.Deck!.MediaType));
+            }
+            fallbackExampleIds = await fallbackQuery
                 .GroupBy(esw => new { esw.WordId, esw.ReadingIndex })
                 .Select(g => g.Min(esw => esw.ExampleSentenceId))
                 .ToListAsync();

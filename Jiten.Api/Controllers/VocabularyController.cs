@@ -326,13 +326,13 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     /// <param name="alreadyLoaded">A list of deck IDs already loaded on the client to avoid duplicates.</param>
     /// <param name="mediaType">Optional media type filter.</param>
     /// <returns>A list of example sentences with metadata.</returns>
-    [HttpPost("{wordId}/{readingIndex}/random-example-sentences/{mediaType?}")]
+    [HttpPost("{wordId}/{readingIndex}/random-example-sentences")]
     [SwaggerOperation(Summary = "Get random example sentences",
                       Description =
                           "Returns up to three random example sentences for the given word and reading index, excluding already loaded ones.")]
     [ProducesResponseType(typeof(List<ExampleSentenceDto>), StatusCodes.Status200OK)]
     public async Task<List<ExampleSentenceDto>> GetRandomExampleSentences([FromRoute] int wordId, [FromRoute] int readingIndex,
-                                                                          [FromBody] List<int> alreadyLoaded, [FromRoute] MediaType? mediaType = null)
+                                                                          [FromBody] List<int> alreadyLoaded, [FromQuery] List<MediaType>? mediaTypes = null)
     {
         // Subquery: distinct sentence IDs for this word+reading (not materialised)
         var sentenceIdSubquery = context.ExampleSentenceWords
@@ -347,7 +347,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             .Join(context.Decks.AsNoTracking(),
                   s => s.DeckId, d => d.DeckId,
                   (s, d) => new { Sentence = s, Deck = d })
-            .Where(j => !mediaType.HasValue || j.Deck.MediaType == mediaType.Value)
+            .Where(j => mediaTypes == null || mediaTypes.Count == 0 || mediaTypes.Contains(j.Deck.MediaType))
             .Where(j => !alreadyLoaded.Contains(j.Deck.DeckId)
                      && (!j.Deck.ParentDeckId.HasValue || !alreadyLoaded.Contains(j.Deck.ParentDeckId.Value)))
             .OrderBy(_ => EF.Functions.Random())
@@ -362,7 +362,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         return await BuildExampleSentenceDtos(picked, wordId, readingIndex);
     }
 
-    [HttpPost("{wordId}/{readingIndex}/example-sentences-by-difficulty/{mediaType?}")]
+    [HttpPost("{wordId}/{readingIndex}/example-sentences-by-difficulty")]
     [SwaggerOperation(Summary = "Get example sentences ordered by difficulty",
                       Description =
                           "Returns example sentences for the given word and reading index, ordered by difficulty score. " +
@@ -370,7 +370,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     [ProducesResponseType(typeof(ExampleSentencesByDifficultyResponse), StatusCodes.Status200OK)]
     public async Task<ExampleSentencesByDifficultyResponse> GetExampleSentencesByDifficulty(
         [FromRoute] int wordId, [FromRoute] int readingIndex,
-        [FromBody] List<int> alreadyLoaded, [FromRoute] MediaType? mediaType = null,
+        [FromBody] List<int> alreadyLoaded, [FromQuery] List<MediaType>? mediaTypes = null,
         [FromQuery] float minDifficulty = 0f, [FromQuery] float maxDifficulty = 0.5f,
         [FromQuery] bool descending = false, [FromQuery] int take = 3)
     {
@@ -413,7 +413,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                 .Join(context.Decks.AsNoTracking(),
                       s => s.DeckId, d => d.DeckId,
                       (s, d) => new { Sentence = s, Deck = d })
-                .Where(j => !mediaType.HasValue || j.Deck.MediaType == mediaType.Value)
+                .Where(j => mediaTypes == null || mediaTypes.Count == 0 || mediaTypes.Contains(j.Deck.MediaType))
                 .Where(j => !excludeIds.Contains(j.Deck.DeckId)
                          && (!j.Deck.ParentDeckId.HasValue || !excludeIds.Contains(j.Deck.ParentDeckId.Value)))
                 .OrderBy(_ => EF.Functions.Random())

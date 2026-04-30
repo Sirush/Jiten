@@ -178,7 +178,7 @@
     let url = `vocabulary/${props.wordId}/${currentReadingIndex.value}/random-example-sentences`;
 
     if (selectedMediaType.value != null) {
-      url += '/' + selectedMediaType.value;
+      url += '?mediaTypes=' + selectedMediaType.value;
     }
 
     const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeck.deckId);
@@ -200,15 +200,14 @@
   async function getExampleSentencesByDifficulty() {
     isLoadingExampleSentences.value = true;
     const descending = selectedSortMode.value === 'hardest';
-    let url = `vocabulary/${props.wordId}/${currentReadingIndex.value}/example-sentences-by-difficulty`;
-
+    const params = new URLSearchParams({ minDifficulty: String(nextBandMin.value), maxDifficulty: String(nextBandMax.value), descending: String(descending) });
     if (selectedMediaType.value != null) {
-      url += '/' + selectedMediaType.value;
+      params.append('mediaTypes', String(selectedMediaType.value));
     }
 
     const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeck.deckId);
     const results = await $api<ExampleSentencesByDifficultyResponse>(
-      `${url}?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}`,
+      `vocabulary/${props.wordId}/${currentReadingIndex.value}/example-sentences-by-difficulty?${params}`,
       { method: 'POST', body: alreadyLoaded },
     );
 

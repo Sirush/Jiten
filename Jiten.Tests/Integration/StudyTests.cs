@@ -240,8 +240,8 @@ public class StudyTests(JitenWebApplicationFactory factory)
                 maxReviewsPerDay = 100,
                 gradingButtons = 2,
                 interleaving = "newFirst",
-
-                reviewFrom = "allTracked"
+                reviewFrom = "allTracked",
+                exampleSentenceMediaTypes = new[] { 4, 5, 6, 7, 8 }
             });
         var updateResponse = await _client.SendAsync(update);
         updateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -253,6 +253,8 @@ public class StudyTests(JitenWebApplicationFactory factory)
         var body2 = await get2Response.Content.ReadFromJsonAsync<JsonElement>();
         body2.GetProperty("newCardsPerDay").GetInt32().Should().Be(10);
         body2.GetProperty("gradingButtons").GetInt32().Should().Be(2);
+        body2.GetProperty("exampleSentenceMediaTypes").EnumerateArray()
+            .Select(e => e.GetInt32()).Should().BeEquivalentTo([4, 5, 6, 7, 8]);
     }
 
     [Fact]

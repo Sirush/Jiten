@@ -882,6 +882,7 @@ export interface StudySettingsDto {
   showReviewActivity: boolean;
   showReviewForecast: boolean;
   timezone: string | null;
+  exampleSentenceMediaTypes: number[] | null;
 }
 
 export interface CardExamplesResponse {
