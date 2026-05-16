@@ -1082,6 +1082,33 @@ public class FormSelectionTests
 
         // 一枚 → いちまい (1166710) — number + counter combined
         yield return ["一枚ください", "一枚", 1166710, (byte)0];
+
+        // こと after verb+attributive must not merge with そう — hearsay そうだ, not appearance そう
+        yield return ["できることそうだ。", "こと", 1313580, (byte)2];
+
+        // Colloquial ためとこう = ためておこう → 溜める (1552630)
+        yield return ["よーしお小遣いためとこう！", "ためとこう", 1552630, (byte)1];
+
+        // ぶちキレてる → ぶち切れる (2118860)
+        yield return ["ぶちキレてる！", "ぶちキレてる", 2118860, (byte)2];
+
+        // 誕生日会 as single token → birthday party (2773340)
+        yield return ["まだ？お誕生日会遅れるよ", "誕生日会", 2773340, (byte)0];
+
+        // すまなかった kept as single token (2844144)
+        yield return ["余計な心配をさせてすまなかった", "すまなかった", 2844144, (byte)0];
+
+        // いい子ぶって should match いい子ぶる (2121070), not いい子 (1835640)
+        yield return ["何今さらいい子ぶってんだよ", "いい子ぶって", 2121070, (byte)0];
+
+        // 走り高跳び as single token (1402450)
+        yield return ["あなた日が落ちるまでずっと走り高跳びやってたことがあるでしょ", "走り高跳び", 1402450, (byte)0];
+
+        // うちら should match pronoun (2868804)
+        yield return ["うちらと同じく認識阻害の魔法で守られてるさかい", "うちら", 2868804, (byte)0];
+
+        // いけず should match na-adj (2064110), not いける negative
+        yield return ["いけずやわ", "いけず", 2064110, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
@@ -1095,6 +1122,9 @@ public class FormSelectionTests
 
         // Positive 資格がある must not match as a combined compound at all (no JMDict entry exists).
         yield return ["お前はまだ継承者としての資格がある", "資格がある"];
+
+        // いるか (dolphin) should not appear when か is embedded question particle
+        yield return ["どうしてこんな所にいるかというと、それはまあ、ちょっとした話…。", "いるか"];
     }
 
     [Theory]

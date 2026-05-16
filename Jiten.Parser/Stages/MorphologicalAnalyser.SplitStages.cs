@@ -396,6 +396,12 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            if (HasCompoundLookup != null && HasCompoundLookup(word.Text))
+            {
+                result.Add(word);
+                continue;
+            }
+
             var prev = result[^1];
             bool repaired = false;
 

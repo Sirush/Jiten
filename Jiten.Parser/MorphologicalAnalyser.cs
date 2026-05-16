@@ -42,7 +42,8 @@ public partial class MorphologicalAnalyser
                                                      ParserDiagnostics? diagnostics = null,
                                                      BenchmarkTimings? timings = null,
                                                      byte[]? userDictCsv = null,
-                                                     List<string>? cleanedOriginals = null)
+                                                     List<string>? cleanedOriginals = null,
+                                                     List<int>? rawContentCharCounts = null)
     {
         if (texts.Count == 0) return Task.FromResult<List<List<SentenceInfo>>>([]);
 
@@ -65,10 +66,12 @@ public partial class MorphologicalAnalyser
                 processedTexts.Add("");
                 originalTexts.Add("");
                 cleanedOriginals?.Add("");
+                rawContentCharCounts?.Add(0);
                 continue;
             }
 
-            PreprocessText(ref copy, preserveStopToken);
+            PreprocessText(ref copy, preserveStopToken, out int rawCharCount);
+            rawContentCharCounts?.Add(rawCharCount);
             processedTexts.Add(copy);
 
             var cleanedOriginal = copy.Replace(" ", "");

@@ -740,7 +740,9 @@ public partial class MorphologicalAnalyser
                 wordInfos[i].Text != "みたい" &&
                 (wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb ||
                  wordInfos[i - 1].PartOfSpeech == PartOfSpeech.IAdjective ||
-                 wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Noun ||
+                 (wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Noun &&
+                  (wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleNaAdjective) ||
+                   wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun))) ||
                  isAdjectivalSuffix))
             {
                 currentWord.Text += nextWord.Text;
@@ -781,6 +783,17 @@ public partial class MorphologicalAnalyser
                     || (wordInfos[i].DictionaryForm == "ら" &&
                         wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Pronoun && wordInfos[i - 1].Text != "貴様")))
             {
+                currentWord.Text += nextWord.Text;
+                currentWord.EndOffset = nextWord.EndOffset;
+                currentWord.Reading += nextWord.Reading;
+            }
+            else if (wordInfos[i].DictionaryForm == "ぶる"
+                     && (wordInfos[i].PartOfSpeech == PartOfSpeech.Suffix || wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Suffix))
+                     && HasCompoundLookup != null
+                     && HasCompoundLookup(currentWord.DictionaryForm + "ぶる"))
+            {
+                currentWord.DictionaryForm += "ぶる";
+                currentWord.PartOfSpeech = PartOfSpeech.Verb;
                 currentWord.Text += nextWord.Text;
                 currentWord.EndOffset = nextWord.EndOffset;
                 currentWord.Reading += nextWord.Reading;

@@ -310,7 +310,7 @@ internal static class TransitionRuleSets
         new(
             Id: "sfp-must-be-near-clause-end",
             Severity: RuleSeverity.Hard,
-            WhenToken: [MatchCondition.IsSentenceEndingParticle, MatchCondition.NextIsContentWord],
+            WhenToken: [MatchCondition.IsSentenceEndingParticle, MatchCondition.NextIsContentWord, MatchCondition.NextIsNotQuotative],
             ValidIf: [MatchCondition.PrevIsAuxiliaryOrParticle],
             OnViolation: ViolationAction.MergeWithPrevious),
 

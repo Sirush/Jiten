@@ -70,11 +70,13 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"([ぁ-んァ-ヶ][ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ])([\s、,，っッ]*\1){2,}")]
     private static partial Regex StutteringDigraphRunRegex();
 
-    private void PreprocessText(ref string text, bool preserveStopToken)
+    private void PreprocessText(ref string text, bool preserveStopToken, out int rawContentCharCount)
     {
         text = text.Replace("<", " ").Replace(">", " ").Replace("〝", " ").Replace("〟", " ");
         text = text.ToFullWidthDigits();
         text = NonJapaneseCharRegex().Replace(text, "");
+
+        rawContentCharCount = CountContentChars(text);
 
         if (!preserveStopToken)
             text = text.Replace(_stopToken, "");
@@ -170,6 +172,23 @@ public partial class MorphologicalAnalyser
 
         text = MidSentenceEllipsisRegex().Replace(text, "");
         text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");
+    }
+
+    private static int CountContentChars(string text)
+    {
+        int count = 0;
+        foreach (char c in text)
+        {
+            if (c is >= '぀' and <= 'ゟ'   // hiragana
+                  or >= '゠' and <= 'ヿ'    // katakana (incl. ー)
+                  or >= '一' and <= '龯'    // CJK
+                  or '々'                       // 々
+                  or >= 'Ａ' and <= 'Ｚ'    // fullwidth A-Z
+                  or >= 'ａ' and <= 'ｚ'    // fullwidth a-z
+                  or >= '０' and <= '９')   // fullwidth 0-9
+                count++;
+        }
+        return count;
     }
 
     private static void ComputeTokenOffsets(string originalText, List<WordInfo> wordInfos)

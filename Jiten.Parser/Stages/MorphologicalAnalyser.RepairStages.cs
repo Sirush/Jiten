@@ -1130,6 +1130,36 @@ public partial class MorphologicalAnalyser
                 WordInfo w2 = wordInfos[i + 1];
                 WordInfo w3 = wordInfos[i + 2];
 
+                // Colloquial 〜ておこう contraction: Sudachi splits [verb-stem] + と(particle) + こう(adverb)
+                // e.g., ためとこう = ためておこう (let's save/store for now)
+                if (w1.PartOfSpeech == PartOfSpeech.Noun
+                    && IsAllHiraganaSpan(w1.Text.AsSpan())
+                    && w2 is { Text: "と", PartOfSpeech: PartOfSpeech.Particle }
+                    && w3 is { Text: "こう", PartOfSpeech: PartOfSpeech.Adverb }
+                    && HasCompoundLookup != null)
+                {
+                    var combined = w1.Text + "とこう";
+                    var forms = Deconjugator.Instance.Deconjugate(combined);
+                    var verbForm = forms.FirstOrDefault(f =>
+                        f.Tags.Count > 0 && f.Tags.Count <= 6 &&
+                        f.Tags.Any(t => t.StartsWith("v")) &&
+                        HasCompoundLookup(f.Text));
+                    if (verbForm != null)
+                    {
+                        newList.Add(new WordInfo(w1)
+                        {
+                            Text = combined,
+                            DictionaryForm = verbForm.Text,
+                            NormalizedForm = verbForm.Text,
+                            PartOfSpeech = PartOfSpeech.Verb,
+                            Reading = w1.Reading + "トコウ",
+                            EndOffset = w3.EndOffset
+                        });
+                        i += 3;
+                        continue;
+                    }
+                }
+
                 bool found = false;
                 foreach (var sc in SpecialCases3)
                 {
@@ -1240,6 +1270,27 @@ public partial class MorphologicalAnalyser
                     });
                     i += 2;
                     continue;
+                }
+
+                // ぶち (adverb intensifier) + verb → compound verb when JMDict entry exists
+                // e.g., ぶち + キレ(キレる) → ぶちキレる (2118860)
+                if (w1 is { Text: "ぶち", PartOfSpeech: PartOfSpeech.Adverb }
+                    && w2.PartOfSpeech == PartOfSpeech.Verb
+                    && HasCompoundLookup != null)
+                {
+                    var compoundDict = "ぶち" + w2.DictionaryForm;
+                    if (HasCompoundLookup(compoundDict))
+                    {
+                        var merged = new WordInfo(w2);
+                        merged.Text = "ぶち" + w2.Text;
+                        merged.DictionaryForm = compoundDict;
+                        merged.NormalizedForm = compoundDict;
+                        merged.StartOffset = w1.StartOffset;
+                        merged.Reading = "ブチ" + w2.Reading;
+                        newList.Add(merged);
+                        i += 2;
+                        continue;
+                    }
                 }
 
                 // Special case: ん + だ + DaCompoundSuffix should become ん + だ[suffix]

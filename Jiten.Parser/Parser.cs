@@ -707,7 +707,8 @@ namespace Jiten.Parser
             // Batch morphological analysis
             var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound };
             var cleanedOriginals = new List<string>();
-            var batchedSentences = await parser.ParseBatch(cleanTexts, diagnostics: diagnostics, timings: timings, userDictCsv: userDictCsv, cleanedOriginals: cleanedOriginals);
+            var rawCharCounts = new List<int>();
+            var batchedSentences = await parser.ParseBatch(cleanTexts, diagnostics: diagnostics, timings: timings, userDictCsv: userDictCsv, cleanedOriginals: cleanedOriginals, rawContentCharCounts: rawCharCounts);
 
             timer.Restart();
 
@@ -733,7 +734,7 @@ namespace Jiten.Parser
                     ? FuriganaHintExtractor.RelocateToCleanedOriginal(coFlat, hintsByText[textIndex], cleanTexts[textIndex])
                     : null;
 
-                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, timings, dictionaryEntriesBySurface, relocated);
+                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, timings, dictionaryEntriesBySurface, relocated, rawCharCounts[textIndex]);
                 decks.Add(deck);
                 batchedSentences[textIndex] = null!;
             }
@@ -754,7 +755,8 @@ namespace Jiten.Parser
             MediaType mediatype,
             BenchmarkTimings? timings = null,
             Dictionary<string, DeckDictionaryEntry>? dictionaryEntriesBySurface = null,
-            FuriganaHint[]? relocatedHints = null)
+            FuriganaHint[]? relocatedHints = null,
+            int? rawContentCharCount = null)
         {
             var sw = timings != null ? Stopwatch.StartNew() : null;
 
@@ -843,7 +845,7 @@ namespace Jiten.Parser
             }
 
             var totalWordCount = processedWords.Select(w => w.Occurrences).Sum();
-            var characterCount = wordInfos.Sum(x => x.Text.Length);
+            var characterCount = rawContentCharCount ?? wordInfos.Sum(x => x.Text.Length);
 
             var textWithoutDialogues = DialogueRegex.Replace(text, "");
             textWithoutDialogues = TokenCleanRegex.Replace(textWithoutDialogues, "");

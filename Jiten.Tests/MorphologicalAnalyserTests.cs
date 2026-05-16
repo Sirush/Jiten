@@ -1268,6 +1268,39 @@ public class MorphologicalAnalyserTests
 
         // こう+ついてってる — adverb こう must not merge with verb ついてってる to form 交通
         yield return ["ミミにいろんな勲章がこうついてってる感覚は…", new[] { "ミミ", "に", "いろんな", "勲章", "が", "こう", "ついてってる", "感覚", "は" }];
+
+        // こと+そうだ — plain noun こと must not combine with そう (hearsay copula, not appearance/seeming)
+        yield return ["できることそうだ。", new[] { "できる", "こと", "そう", "だ" }];
+
+        // 元気そう — na-adjective noun must still combine with そう (appearance/seeming)
+        yield return ["元気そうだ", new[] { "元気そう", "だ" }];
+
+        // Colloquial ておこう contraction: ためとこう = ためておこう (let's save)
+        yield return ["よーしお小遣いためとこう！", new[] { "よーし", "お小遣い", "ためとこう" }];
+
+        // ぶち (adverb intensifier) + verb → compound verb ぶちキレる
+        yield return ["ぶちキレてる！", new[] { "ぶちキレてる" }];
+
+        // 誕生日会 (birthday party) should be a single token
+        yield return ["まだ？お誕生日会遅れるよ", new[] { "まだ", "お", "誕生日会", "遅れる", "よ" }];
+
+        // すまなかった should not be split by OOV splitter
+        yield return ["余計な心配をさせてすまなかった", new[] { "余計な", "心配", "を", "させて", "すまなかった" }];
+
+        // いるか (dolphin) should not form when か is an embedded question particle before というと
+        yield return ["どうしてこんな所にいるかというと、それはまあ、ちょっとした話…。", new[] { "どうして", "こんな", "所", "に", "いる", "か", "という", "と", "それ", "は", "まあ", "ちょっと", "した", "話" }];
+
+        // 走り高跳び should be a single token
+        yield return ["あなた日が落ちるまでずっと走り高跳びやってたことがあるでしょ", new[] { "あなた", "日", "が", "落ちる", "まで", "ずっと", "走り高跳び", "やってた", "ことがある", "でしょ" }];
+
+        // うちら should not be split into う + ちらと
+        yield return ["うちらと同じく認識阻害の魔法で守られてるさかい", new[] { "うちら", "と", "同じく", "認識", "阻害", "の", "魔法", "で", "守られてる", "さかい" }];
+
+        // いけず (na-adj, unkind) should not be parsed as いける negative form
+        yield return ["いけずやわ", new[] { "いけず", "や", "わ" }];
+
+        // いい子ぶって should combine when compound exists in JMDict
+        yield return ["何今さらいい子ぶってんだよ", new[] { "何", "今さら", "いい子ぶって", "んだ", "よ" }];
     }
 
     [Theory]

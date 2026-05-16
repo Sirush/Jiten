@@ -150,6 +150,9 @@ internal static class TransitionRuleEngine
                     w.Current.PartOfSpeech == PartOfSpeech.Particle &&
                     TransitionRuleSets.StrictCaseMarkingParticles.Contains(w.Current.DictionaryForm),
 
+                MatchCondition.NextIsNotQuotative =>
+                    w.Next == null || !w.Next.Text.StartsWith("という"),
+
                 _ => false
             };
             if (!ok) return false;

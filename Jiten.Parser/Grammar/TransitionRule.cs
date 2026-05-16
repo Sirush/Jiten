@@ -36,7 +36,8 @@ internal enum MatchCondition
     IsSentenceFinal,     // Index == Count - 1
     NextIsParticle,      // Next.PartOfSpeech == Particle
     IsSuffix,            // PartOfSpeech == Suffix
-    IsStrictCaseMarkingParticle // Particle with DictionaryForm in StrictCaseMarkingParticles (が/を/へ)
+    IsStrictCaseMarkingParticle, // Particle with DictionaryForm in StrictCaseMarkingParticles (が/を/へ)
+    NextIsNotQuotative // Next token text does NOT start with quotative と (excludes embedded question patterns like かというと)
 }
 
 internal sealed record TransitionRule(
