@@ -428,9 +428,9 @@ public static class YomitanHelper
         string title = "Jiten (Kanji)";
         string revision = $"Jiten (Kanji) {DateTime.UtcNow:yy-MM-dd}";
         string description = "Kanji frequency dictionary based on all media from jiten.moe";
-
+        
         return
-            $$"""{"title":"{{title}}","format":3,"revision":"{{revision}}","sequenced":false,"isUpdatable":true,"indexUrl":"https://api.jiten.moe/api/frequency-list/index-kanji","frequencyMode":"rank-based","author":"Jiten","url":"https://jiten.moe","description":"{{description}}"}""";
+            $$"""{"title":"{{title}}","format":3,"revision":"{{revision}}","sequenced":false,"isUpdatable":true,"indexUrl":"https://api.jiten.moe/api/frequency-list/index-kanji","downloadUrl":"https://api.jiten.moe/api/frequency-list/download-kanji","frequencyMode":"rank-based","author":"Jiten","url":"https://jiten.moe","description":"{{description}}"}""";
     }
 
     /// <summary>
