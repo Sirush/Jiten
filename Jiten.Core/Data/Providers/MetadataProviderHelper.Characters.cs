@@ -23,23 +23,26 @@ public static partial class MetadataProviderHelper
         {
             if (string.IsNullOrWhiteSpace(native)) continue;
 
-            var fullName = native.Replace(" ", "").Replace("　", "").Trim();
-            if (fullName.Length < 2) continue;
+            var trimmed = native.Replace(" ", "").Replace("　", "").Trim('・', ' ');
+            if (trimmed.Length < 2) continue;
 
-            Add(fullName);
+            var concatenated = trimmed.Replace("・", "");
+            if (concatenated.Length >= 2)
+                Add(concatenated);
 
-            if (native.Contains('・'))
+            if (trimmed.Contains('・'))
             {
-                foreach (var part in native.Split('・', StringSplitOptions.RemoveEmptyEntries))
+                Add(trimmed);
+                foreach (var part in trimmed.Split('・', StringSplitOptions.RemoveEmptyEntries))
                 {
-                    var cleaned = part.Replace(" ", "").Replace("　", "").Trim();
+                    var cleaned = part.Trim();
                     if (cleaned.Length >= 2)
                         Add(cleaned);
                 }
             }
 
-            // Try splitting
-            var parts = SplitName(native, firstHint, lastHint);
+            // Try splitting (use the cleaned form without ・)
+            var parts = SplitName(concatenated, firstHint, lastHint);
             if (parts != null)
             {
                 Add(parts.Value.family);
@@ -52,6 +55,8 @@ public static partial class MetadataProviderHelper
 
     private static (string family, string given)? SplitName(string native, string? firstHint, string? lastHint)
     {
+        var cleaned = native.Replace(" ", "").Replace("　", "");
+
         // 1. Space-separated — trust the source
         if (native.Contains(' ') || native.Contains('　'))
         {
@@ -60,15 +65,46 @@ public static partial class MetadataProviderHelper
                 return (spaceParts[0], string.Join("", spaceParts[1..]));
         }
 
-        // 2. Romaji hints available — use kana length estimation
+        // 2. Unique kanji↔kana script boundary — most reliable signal
+        var scriptSplit = FindUniqueScriptBoundary(cleaned);
+        if (scriptSplit != null) return scriptSplit;
+
+        // 3. Romaji hints for same-script names (all-kanji, all-kana)
         if (!string.IsNullOrWhiteSpace(firstHint) && !string.IsNullOrWhiteSpace(lastHint))
         {
             var result = SplitWithRomajiHints(native, firstHint, lastHint);
             if (result != null) return result;
         }
 
-        // 3. Heuristic fallback
+        // 4. All-kanji heuristic fallback
         return SplitByHeuristic(native);
+    }
+
+    private static (string family, string given)? FindUniqueScriptBoundary(string cleaned)
+    {
+        if (cleaned.Length < 2) return null;
+
+        int boundaryCount = 0;
+        int boundaryPos = -1;
+
+        for (int i = 1; i < cleaned.Length; i++)
+        {
+            bool prevIsKanji = IsKanjiChar(cleaned[i - 1]);
+            bool currIsKanji = IsKanjiChar(cleaned[i]);
+            bool prevIsKana = JapaneseTextHelper.IsKana(cleaned[i - 1]);
+            bool currIsKana = JapaneseTextHelper.IsKana(cleaned[i]);
+
+            if ((prevIsKanji && currIsKana) || (prevIsKana && currIsKanji))
+            {
+                boundaryCount++;
+                boundaryPos = i;
+            }
+        }
+
+        if (boundaryCount == 1 && boundaryPos > 0)
+            return (cleaned[..boundaryPos], cleaned[boundaryPos..]);
+
+        return null;
     }
 
     private static (string family, string given)? SplitWithRomajiHints(
@@ -96,9 +132,9 @@ public static partial class MetadataProviderHelper
 
         for (int i = 1; i < cleaned.Length; i++)
         {
-            double familyRatio = (double)familyKanaLen / i;
-            double givenRatio = (double)givenKanaLen / (cleaned.Length - i);
-            double score = Math.Abs(familyRatio - givenRatio);
+            int leftKanaEst = EstimateKanaLength(cleaned.AsSpan(0, i));
+            int rightKanaEst = EstimateKanaLength(cleaned.AsSpan(i));
+            double score = Math.Abs(leftKanaEst - familyKanaLen) + Math.Abs(rightKanaEst - givenKanaLen);
 
             if (score < bestScore)
             {
@@ -112,29 +148,22 @@ public static partial class MetadataProviderHelper
         return (cleaned[..bestSplit], cleaned[bestSplit..]);
     }
 
+    private static int EstimateKanaLength(ReadOnlySpan<char> text)
+    {
+        int len = 0;
+        foreach (var c in text)
+            len += IsKanjiChar(c) ? 2 : 1;
+        return len;
+    }
+
     private static (string family, string given)? SplitByHeuristic(string name)
     {
         var cleaned = name.Replace(" ", "").Replace("　", "");
         if (cleaned.Length < 2) return null;
 
-        // Script transition: find kanji→kana or kana→kanji boundary
-        for (int i = 1; i < cleaned.Length; i++)
-        {
-            bool prevIsKanji = IsKanjiChar(cleaned[i - 1]);
-            bool currIsKanji = IsKanjiChar(cleaned[i]);
-            bool prevIsKana = JapaneseTextHelper.IsKana(cleaned[i - 1]);
-            bool currIsKana = JapaneseTextHelper.IsKana(cleaned[i]);
-
-            if ((prevIsKanji && currIsKana) || (prevIsKana && currIsKanji))
-                return (cleaned[..i], cleaned[i..]);
-        }
-
-        // All-kanji heuristics
         if (cleaned.All(IsKanjiChar))
         {
-            if (cleaned.Length == 4)
-                return (cleaned[..2], cleaned[2..]);
-            if (cleaned.Length == 3)
+            if (cleaned.Length >= 3)
                 return (cleaned[..2], cleaned[2..]);
         }
 

@@ -526,14 +526,19 @@ namespace Jiten.Parser
                     if (dictionaryEntriesBySurface != null &&
                         dictionaryEntriesBySurface.TryGetValue(surface, out var dictEntry))
                     {
-                        var overrideWord = dictEntry.EntryType switch
+                        bool shouldOverride = !IsRiskyNameEntry(surface) || batch[j].wordInfo.IsPersonNameContext;
+                        var overrideWord = shouldOverride ? dictEntry.EntryType switch
                         {
                             DeckDictionaryEntryType.Name =>
                                 await ResolveAsNameEntry(surface, batch[j].occurrences, batchWordCache),
                             _ => null
-                        };
-                        allProcessedWords.Add((overrideWord, overrideWord != null ? int.MaxValue : null, null));
-                        continue;
+                        } : null;
+
+                        if (overrideWord != null)
+                        {
+                            allProcessedWords.Add((overrideWord, int.MaxValue, null));
+                            continue;
+                        }
                     }
 
                     allProcessedWords.Add((result.Word, result.Margin, result.FirstPassCandidates));
@@ -3933,18 +3938,19 @@ namespace Jiten.Parser
             if (entries is not { Count: > 0 }) return null;
 
             var sb = new StringBuilder();
-            foreach (var entry in entries)
+            foreach (var entry in entries.OrderByDescending(e => e.Surface.Trim().Length))
             {
                 var surface = entry.Surface.Trim();
                 if (surface.Length < 2 || surface.Contains(',') || surface.Contains('\n')) continue;
+                if (IsRiskyNameEntry(surface)) continue;
 
-                // surface,leftId,rightId,cost,headword,POS1-6,reading,normalizedForm,*,*,*,*,*
+                var cost = -9000 - surface.Length * 100;
                 var pos = entry.EntryType switch
                 {
-                    DeckDictionaryEntryType.Name => "名詞,固有名詞,人名,一般,*,*",
+                    DeckDictionaryEntryType.Name => "名詞,固有名��,人名,一般,*,*",
                     _ => "名詞,普通名詞,一般,*,*,*"
                 };
-                sb.Append(surface).Append(",5146,5146,-9000,")
+                sb.Append(surface).Append(",5146,5146,").Append(cost).Append(',')
                   .Append(surface).Append(',')
                   .Append(pos).Append(',')
                   .Append(surface).Append(',')
@@ -3954,5 +3960,8 @@ namespace Jiten.Parser
 
             return sb.Length > 0 ? Encoding.UTF8.GetBytes(sb.ToString()) : null;
         }
+
+        private static bool IsRiskyNameEntry(string surface) =>
+            surface.Length <= 2 && WanaKana.IsHiragana(surface);
     }
 }
