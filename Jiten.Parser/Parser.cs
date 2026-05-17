@@ -3947,7 +3947,7 @@ namespace Jiten.Parser
                 var cost = -9000 - surface.Length * 100;
                 var pos = entry.EntryType switch
                 {
-                    DeckDictionaryEntryType.Name => "名詞,固有名��,人名,一般,*,*",
+                    DeckDictionaryEntryType.Name => "名詞,固有名詞,人名,一般,*,*",
                     _ => "名詞,普通名詞,一般,*,*,*"
                 };
                 sb.Append(surface).Append(",5146,5146,").Append(cost).Append(',')

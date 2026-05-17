@@ -24,6 +24,18 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
       });
     }
 
+    if (!authStore.user) {
+      try {
+        await authStore.fetchCurrentUser();
+      } catch {
+        authStore.clearAuthData();
+        return navigateTo({
+          path: '/login',
+          query: { redirect: to.fullPath !== '/login' ? to.fullPath : undefined },
+        });
+      }
+    }
+
     if (!authStore.isAdmin) {
       return navigateTo({
         path: '/',

@@ -23,6 +23,17 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
         query: { redirect: to.fullPath !== '/login' ? to.fullPath : undefined },
       });
     }
+    if (!authStore.user) {
+      try {
+        await authStore.fetchCurrentUser();
+      } catch {
+        authStore.clearAuthData();
+        return navigateTo({
+          path: '/login',
+          query: { redirect: to.fullPath !== '/login' ? to.fullPath : undefined },
+        });
+      }
+    }
   } catch (error) {
     if (import.meta.server && authStore.refreshToken) {
       return;

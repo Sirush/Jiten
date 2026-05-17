@@ -41,10 +41,17 @@ function setup401ErrorHandler(
 
       if (!authStore.isRefreshing) {
         const refreshSuccess = await authStore.refreshAccessToken();
-        if (!refreshSuccess) return;
+        if (!refreshSuccess) {
+          navigateTo('/login');
+          return;
+        }
       } else {
         while (authStore.isRefreshing) {
           await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        if (!authStore.isAuthenticated) {
+          navigateTo('/login');
+          return;
         }
       }
 
