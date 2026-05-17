@@ -491,6 +491,7 @@
     error,
     refresh: refreshMediaList,
   } = useApiFetchPaginated<Deck[]>(url, {
+    revalidateOnClient: true,
     query: {
       offset: offset,
       mediaType: mediaType,

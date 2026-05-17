@@ -202,6 +202,7 @@ export interface Metadata {
   isAdultOnly?: boolean;
   isNotOriginallyJapanese?: boolean;
   relations?: MetadataRelation[];
+  dictionaryEntries?: { surface: string }[];
 }
 
 export interface Issues {

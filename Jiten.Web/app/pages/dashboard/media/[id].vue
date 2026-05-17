@@ -27,7 +27,7 @@
   });
 
   definePageMeta({
-    middleware: ['auth'],
+    middleware: ['auth-admin'],
   });
 
   const selectedMediaType = ref<MediaType | null>(null);
@@ -176,7 +176,7 @@
     }
   });
 
-  const { data: response, status, error } = await useApiFetch<DeckDetail>(`admin/deck/${mediaId}`);
+  const { data: response, status, error } = await useApiFetch<DeckDetail>(`admin/deck/${mediaId}`, { server: false });
 
   watchEffect(() => {
     if (error.value) {

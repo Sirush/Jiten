@@ -18,6 +18,7 @@
     error,
     refresh: refreshDetail,
   } = await useApiFetchPaginated<DeckDetail>(url.value, {
+    revalidateOnClient: true,
     query: {
       offset: offset,
     },

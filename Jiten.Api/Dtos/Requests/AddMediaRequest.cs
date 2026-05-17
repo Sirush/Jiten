@@ -20,6 +20,7 @@ public class AddMediaRequest
     public bool IsAdultOnly { get; set; }
     public bool IsNotOriginallyJapanese { get; set; }
     public List<AddMediaRequestRelation> Relations { get; set; } = new List<AddMediaRequestRelation>();
+    public List<string> DictionaryEntries { get; set; } = new List<string>();
 }
 
 public class AddMediaRequestSubdeck

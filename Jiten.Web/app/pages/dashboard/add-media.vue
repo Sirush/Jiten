@@ -367,6 +367,12 @@
         }
       }
 
+      if (selectedMetadata.value?.dictionaryEntries && selectedMetadata.value.dictionaryEntries.length > 0) {
+        for (let i = 0; i < selectedMetadata.value.dictionaryEntries.length; i++) {
+          formData.append(`dictionaryEntries[${i}]`, selectedMetadata.value.dictionaryEntries[i].surface);
+        }
+      }
+
       if (subdecks.value.length === 0 && selectedFile.value) {
         // If no subdecks, include the main file
         formData.append('file', selectedFile.value);

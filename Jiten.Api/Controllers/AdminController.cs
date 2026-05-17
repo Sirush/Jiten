@@ -132,7 +132,12 @@ public partial class AdminController(
                                         Percentage = t.Percentage
                                     }).ToList(),
                                     IsAdultOnly = model.IsAdultOnly,
-                                    IsNotOriginallyJapanese = model.IsNotOriginallyJapanese
+                                    IsNotOriginallyJapanese = model.IsNotOriginallyJapanese,
+                                    DictionaryEntries = model.DictionaryEntries
+                                        .Select(s => s.Trim())
+                                        .Where(s => !string.IsNullOrEmpty(s))
+                                        .Select(s => new DeckDictionaryEntry { Surface = s, EntryType = DeckDictionaryEntryType.Name })
+                                        .ToList()
                                 };
 
             // Parse links and aliases from form data

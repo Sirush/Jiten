@@ -39,6 +39,14 @@ public static partial class MetadataProviderHelper
             if (exists)
                 continue;
 
+            var localExists = context.DeckRelationships.Local.Any(r =>
+                r.SourceDeckId == sourceDeckId &&
+                r.TargetDeckId == actualTargetId &&
+                r.RelationshipType == relation.RelationshipType);
+
+            if (localExists)
+                continue;
+
             var inverseType = DeckRelationship.GetInverse(relation.RelationshipType);
             var inverseExists = await context.DeckRelationships.AnyAsync(r =>
                 r.SourceDeckId == actualTargetId &&
@@ -46,6 +54,14 @@ public static partial class MetadataProviderHelper
                 r.RelationshipType == inverseType);
 
             if (inverseExists)
+                continue;
+
+            var localInverseExists = context.DeckRelationships.Local.Any(r =>
+                r.SourceDeckId == actualTargetId &&
+                r.TargetDeckId == sourceDeckId &&
+                r.RelationshipType == inverseType);
+
+            if (localInverseExists)
                 continue;
 
             context.DeckRelationships.Add(new DeckRelationship

@@ -14,8 +14,6 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     const hasValidToken = await authStore.ensureValidToken();
 
     if (!hasValidToken) {
-      // If tokens still exist after ensureValidToken failed, it was an SSR network error —
-      // the API was unreachable from the server but the client can retry directly
       if (import.meta.server && authStore.refreshToken) {
         return;
       }

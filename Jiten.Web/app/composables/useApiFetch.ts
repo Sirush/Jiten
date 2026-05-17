@@ -1,6 +1,20 @@
 import type { PaginatedResponse } from '~/types/types';
 import type { AsyncDataRequestStatus, UseFetchOptions } from '#app';
 
+function revalidateOnClientAfterSsr(
+  authStore: ReturnType<typeof useAuthStore>,
+  execute: (opts?: any) => Promise<void>,
+): void {
+  if (!import.meta.client || !authStore.isAuthenticated) return;
+
+  const nuxtApp = useNuxtApp();
+  if (!nuxtApp.isHydrating) return;
+
+  authStore.ensureValidToken().then((valid) => {
+    if (valid) execute();
+  });
+}
+
 function setup401ErrorHandler(
   error: Ref<Error | null | undefined>,
   execute: (opts?: any) => Promise<void>,
@@ -86,8 +100,9 @@ export function useApiFetch<T>(
   refresh: (opts?: any) => Promise<void>;
   execute: (opts?: any) => Promise<void>;
 } {
+  const { revalidateOnClient, ...fetchOpts } = opts ?? {};
   const authStore = useAuthStore();
-  const options = buildFetchOptions(opts, authStore, request);
+  const options = buildFetchOptions(fetchOpts, authStore, request);
 
   const { data, status, error, refresh, execute } = useFetch<T>(request, {
     baseURL: useRuntimeConfig().public.baseURL,
@@ -96,6 +111,10 @@ export function useApiFetch<T>(
 
   setup401ErrorHandler(error, execute, request, authStore);
 
+  if (revalidateOnClient) {
+    revalidateOnClientAfterSsr(authStore, execute);
+  }
+
   return { data, status, error, refresh, execute };
 }
 
@@ -103,9 +122,10 @@ export  function useApiFetchPaginated<T>(
   request: string | (() => string),
   opts?: any
 )  {
+  const { revalidateOnClient, ...fetchOpts } = opts ?? {};
   const config = useRuntimeConfig();
   const authStore = useAuthStore();
-  const options = buildFetchOptions(opts, authStore, request);
+  const options = buildFetchOptions(fetchOpts, authStore, request);
 
   const { data, status, error, refresh, execute } = useFetch<PaginatedResponse<T>>(request, {
     baseURL: config.public.baseURL,
@@ -114,6 +134,10 @@ export  function useApiFetchPaginated<T>(
   });
 
   setup401ErrorHandler(error, execute, request, authStore);
+
+  if (revalidateOnClient) {
+    revalidateOnClientAfterSsr(authStore, execute);
+  }
 
   return {
     data,
