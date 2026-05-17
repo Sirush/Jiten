@@ -15,7 +15,7 @@ public static partial class MetadataProviderHelper
         void Add(string surface)
         {
             var trimmed = surface.Trim();
-            if (trimmed.Length >= 1 && seen.Add(trimmed))
+            if (trimmed.Length >= 2 && seen.Add(trimmed))
                 entries.Add(new DeckDictionaryEntry { Surface = trimmed, EntryType = DeckDictionaryEntryType.Name });
         }
 
@@ -40,13 +40,15 @@ public static partial class MetadataProviderHelper
                         Add(cleaned);
                 }
             }
-
-            // Try splitting (use the cleaned form without ・)
-            var parts = SplitName(concatenated, firstHint, lastHint);
-            if (parts != null)
+            else
             {
-                Add(parts.Value.family);
-                Add(parts.Value.given);
+                // Only try heuristic splitting when ・ didn't already provide the split
+                var parts = SplitName(concatenated, firstHint, lastHint);
+                if (parts != null)
+                {
+                    Add(parts.Value.family);
+                    Add(parts.Value.given);
+                }
             }
         }
 
