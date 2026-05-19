@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
@@ -83,10 +84,14 @@ public class SrsController(
             var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
 
             var replayCard = new FsrsCard(userId, card.WordId, card.ReadingIndex);
+            var lapses = 0;
             foreach (var log in remainingLogs)
             {
+                var prevState = replayCard.State;
                 var reviewDt = DateTime.SpecifyKind(log.ReviewDateTime, DateTimeKind.Utc);
                 var result = scheduler.ReviewCard(replayCard, log.Rating, reviewDt);
+                if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
+                    lapses++;
                 replayCard = result.UpdatedCard;
             }
 
@@ -96,6 +101,7 @@ public class SrsController(
             card.Difficulty = replayCard.Difficulty;
             card.Due = replayCard.Due;
             card.LastReview = replayCard.LastReview;
+            card.Lapses = lapses;
         }
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
@@ -160,7 +166,39 @@ public class SrsController(
             card = new FsrsCard(userId, request.WordId, request.ReadingIndex);
         }
 
+        var previousState = card.State;
         var cardAndLog = scheduler.ReviewCard(card, request.Rating, DateTime.UtcNow, request.ReviewDuration);
+
+        var leechDetected = false;
+        var leechSuspended = false;
+        var isLapse = previousState == FsrsState.Review && request.Rating == FsrsRating.Again;
+
+        if (isLapse)
+        {
+            cardAndLog.UpdatedCard.Lapses = card.Lapses + 1;
+
+            var studySettings = GetStudySettings(userSettings);
+            var threshold = studySettings.LeechThreshold;
+
+            if (threshold > 0)
+            {
+                var lapseCount = cardAndLog.UpdatedCard.Lapses;
+                var halfThreshold = Math.Max(threshold / 2, 1);
+                if (lapseCount == threshold || (lapseCount > threshold && (lapseCount - threshold) % halfThreshold == 0))
+                {
+                    leechDetected = true;
+                    if (studySettings.LeechAction == LeechAction.Suspend)
+                    {
+                        cardAndLog.UpdatedCard.State = FsrsState.Suspended;
+                        leechSuspended = true;
+                    }
+                }
+            }
+        }
+        else
+        {
+            cardAndLog.UpdatedCard.Lapses = card.Lapses;
+        }
 
         if (card.CardId == 0)
         {
@@ -191,6 +229,8 @@ public class SrsController(
             newState = (int)cardAndLog.UpdatedCard.State,
             stability = cardAndLog.UpdatedCard.Stability,
             difficulty = cardAndLog.UpdatedCard.Difficulty,
+            leechDetected,
+            leechSuspended,
             intervalPreview = new
             {
                 againSeconds = (int)intervals[FsrsRating.Again].TotalSeconds,
@@ -239,6 +279,7 @@ public class SrsController(
                 Due = card.Due,
                 LastReview = card.LastReview,
                 CreatedAt = card.CreatedAt,
+                Lapses = card.Lapses,
             },
             Reviews = card.ReviewLogs
                 .OrderByDescending(l => l.ReviewDateTime)
@@ -659,6 +700,21 @@ public class SrsController(
                     RestoreCardState(card);
                 }
 
+                break;
+
+            case "bury-add":
+                if (card != null)
+                {
+                    var burySettings = GetStudySettings(await LoadUserSettings(userId));
+                    card.Due = ComputeNextMidnightUtc(DateTime.UtcNow, burySettings.Timezone);
+                }
+                break;
+
+            case "bury-remove":
+                if (card != null)
+                {
+                    card.Due = DateTime.UtcNow;
+                }
                 break;
 
             default:
@@ -1257,6 +1313,33 @@ public class SrsController(
     {
         return string.Join(", ", parameters.Select(value => value.ToString("0.####", CultureInfo.InvariantCulture)));
     }
+
+    private static DateTime ComputeNextMidnightUtc(DateTime utcNow, string? timezone)
+    {
+        if (string.IsNullOrEmpty(timezone))
+            return utcNow.Date.AddDays(1);
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
+            var localDay = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz).Date.AddDays(1);
+            return TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localDay, DateTimeKind.Unspecified), tz);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return utcNow.Date.AddDays(1);
+        }
+    }
+
+    private static StudySettingsDto GetStudySettings(UserFsrsSettings? settings)
+    {
+        if (settings?.SettingsJson is { Length: > 2 } json)
+        {
+            try { return JsonSerializer.Deserialize<StudySettingsDto>(json) ?? new StudySettingsDto(); }
+            catch (JsonException) { }
+        }
+        return new StudySettingsDto();
+    }
+
 
     [HttpPost("reader-study-decks")]
     [SwaggerOperation(Summary = "Get user's static word list decks for the reader extension")]

@@ -113,6 +113,10 @@
               <div class="font-medium">{{ data.card.difficulty != null ? data.card.difficulty.toFixed(1) + '/10' : '—' }}</div>
             </div>
             <div>
+              <div class="text-surface-400 text-xs uppercase tracking-wide mb-0.5">Lapses</div>
+              <div class="font-medium" :class="data.card.lapses >= 8 ? 'text-red-600 dark:text-red-400' : ''">{{ data.card.lapses }}</div>
+            </div>
+            <div>
               <div class="text-surface-400 text-xs uppercase tracking-wide mb-0.5">Due</div>
               <div class="font-medium">{{ formatDate(data.card.due) }}</div>
             </div>

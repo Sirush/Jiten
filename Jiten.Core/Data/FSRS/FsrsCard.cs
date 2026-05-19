@@ -44,6 +44,8 @@ public class FsrsCard
     /// </summary>
     public DateTime? LastReview { get; set; }
 
+    public int Lapses { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
@@ -90,6 +92,7 @@ public class FsrsCard
     {
         return new FsrsCard(UserId, WordId, ReadingIndex, CardId, State, Step, Stability, Difficulty, Due, LastReview)
         {
+            Lapses = Lapses,
             CreatedAt = CreatedAt
         };
     }

@@ -12,6 +12,7 @@ export const DEFAULT_KEYBINDS: StudyKeybinds = {
   forget: 'f',
   master: 'm',
   suspend: 's',
+  bury: 'h',
   undo: 'z',
   wrapUp: 'w',
 };
@@ -50,6 +51,7 @@ export interface StudyKeyboardCallbacks {
   onForget: () => void;
   onMaster: () => void;
   onSuspend: () => void;
+  onBury: () => void;
   onUndo: () => void;
   onWrapUp: () => void;
 }
@@ -115,6 +117,7 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
       if (matchesKeybind(e, kb.forget)) { flashKey(kb.forget); callbacks.onForget(); return; }
       if (matchesKeybind(e, kb.master)) { flashKey(kb.master); callbacks.onMaster(); return; }
       if (matchesKeybind(e, kb.suspend)) { flashKey(kb.suspend); callbacks.onSuspend(); return; }
+      if (matchesKeybind(e, kb.bury)) { flashKey(kb.bury); callbacks.onBury(); return; }
     }
 
     if (store.canUndo && matchesKeybind(e, kb.undo)) {

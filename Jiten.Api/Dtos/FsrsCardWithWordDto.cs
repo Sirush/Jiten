@@ -14,6 +14,8 @@ public class FsrsCardWithWordDto
     public double? Difficulty { get; set; }
     public DateTime Due { get; set; }
     public DateTime? LastReview { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public int Lapses { get; set; }
 
     // Word data
     public string WordText { get; set; } = string.Empty;

@@ -19,7 +19,9 @@
     form.keybinds = { ...srsStore.studySettings.keybinds };
     if (!form.timezone) applyDetectedTimezone();
     loaded.value = true;
-    tickInterval = setInterval(() => { nowMinute.value = Date.now(); }, 60_000);
+    tickInterval = setInterval(() => {
+      nowMinute.value = Date.now();
+    }, 60_000);
   });
 
   const gradingOptions = [
@@ -50,6 +52,11 @@
     { label: 'Back', value: 'Back' },
   ];
 
+  const leechActionOptions = [
+    { label: 'Suspend', value: 'Suspend' },
+    { label: 'Notify only', value: 'NotifyOnly' },
+  ];
+
   const exampleSentenceSortingOptions = [
     { label: 'Random', value: 'Random' },
     { label: 'Easiest', value: 'EasiestFirst' },
@@ -57,9 +64,10 @@
   ];
 
   function getUtcOffsetMinutes(zone: string, date?: Date): number {
-    const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', hour12: false, timeZoneName: 'shortOffset' })
-      .formatToParts(date ?? new Date());
-    const offsetStr = parts.find(p => p.type === 'timeZoneName')?.value ?? 'GMT';
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', hour12: false, timeZoneName: 'shortOffset' }).formatToParts(
+      date ?? new Date()
+    );
+    const offsetStr = parts.find((p) => p.type === 'timeZoneName')?.value ?? 'GMT';
     const match = offsetStr.match(/GMT([+-]?\d+)?(?::(\d+))?/);
     const hours = match?.[1] ? parseInt(match[1]) : 0;
     const minutes = match?.[2] ? parseInt(match[2]) : 0;
@@ -86,9 +94,8 @@
   const dayStartOptions = computed(() => {
     void nowMinute.value;
     const now = new Date();
-    const zones = Intl.supportedValuesOf('timeZone')
-      .filter(z => !z.startsWith('Etc/'));
-    const items = zones.map(zone => {
+    const zones = Intl.supportedValuesOf('timeZone').filter((z) => !z.startsWith('Etc/'));
+    const items = zones.map((zone) => {
       const offsetMinutes = getUtcOffsetMinutes(zone);
       const localTime = now.toLocaleTimeString('en-GB', { timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: false });
       return {
@@ -104,18 +111,34 @@
   function applyDetectedTimezone() {
     try {
       const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (dayStartOptions.value.some(o => o.value === zone)) form.timezone = zone;
-    } catch { /* no-op */ }
+      if (dayStartOptions.value.some((o) => o.value === zone)) form.timezone = zone;
+    } catch {
+      /* no-op */
+    }
   }
 
-  const gradeLabels4: [keyof StudyKeybinds, string][] = [['grade1', 'Again'], ['grade2', 'Hard'], ['grade3', 'Good'], ['grade4', 'Easy']];
-  const gradeLabels2: [keyof StudyKeybinds, string][] = [['grade1', 'Again'], ['grade2', 'Good']];
+  const gradeLabels4: [keyof StudyKeybinds, string][] = [
+    ['grade1', 'Again'],
+    ['grade2', 'Hard'],
+    ['grade3', 'Good'],
+    ['grade4', 'Easy'],
+  ];
+  const gradeLabels2: [keyof StudyKeybinds, string][] = [
+    ['grade1', 'Again'],
+    ['grade2', 'Good'],
+  ];
   const actionEntries: [keyof StudyKeybinds, string][] = [
-    ['flipCard', 'Flip card / Grade Good'], ['blacklist', 'Blacklist'], ['forget', 'Forget'],
-    ['master', 'Master'], ['suspend', 'Suspend'], ['undo', 'Undo'], ['wrapUp', 'Wrap up'],
+    ['flipCard', 'Flip card / Grade Good'],
+    ['blacklist', 'Blacklist'],
+    ['bury', 'Bury for a day'],
+    ['forget', 'Forget'],
+    ['master', 'Master'],
+    ['suspend', 'Suspend'],
+    ['undo', 'Undo'],
+    ['wrapUp', 'Wrap up'],
   ];
 
-  const gradeEntries = computed(() => form.gradingButtons === 4 ? gradeLabels4 : gradeLabels2);
+  const gradeEntries = computed(() => (form.gradingButtons === 4 ? gradeLabels4 : gradeLabels2));
 
   function checkConflict(forKey: keyof StudyKeybinds, value: string): string | null {
     for (const [key, label] of [...gradeEntries.value, ...actionEntries]) {
@@ -160,7 +183,8 @@
       <ProgressSpinner style="width: 24px; height: 24px" />
     </div>
     <div v-else class="flex flex-col gap-4">
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Session limits</h3>
+      <!-- Session -->
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Session</h3>
       <div :class="props.inline ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-3 gap-4'">
         <div class="min-w-0">
           <label class="block text-sm font-medium mb-1">
@@ -183,7 +207,10 @@
         <div class="min-w-0">
           <label class="block text-sm font-medium mb-1">
             Card batch size
-            <Tooltip content="Number of cards loaded at a time during a study session. Smaller batches keep sessions focused, larger batches reduce loading pauses." placement="top">
+            <Tooltip
+              content="Number of cards loaded at a time during a study session. Smaller batches keep sessions focused, larger batches reduce loading pauses."
+              placement="top"
+            >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>
@@ -195,12 +222,72 @@
         <ToggleSwitch v-model="form.countFailedReviews" input-id="countFailedReviews" />
         <label for="countFailedReviews" class="text-sm cursor-pointer">
           Count failed reviews toward daily limit
-          <Tooltip content="When enabled, every review counts toward your daily limit, including repeated reviews of cards you got wrong. When disabled, only unique cards count, so failing a card multiple times won't eat into your daily budget." placement="top">
+          <Tooltip
+            content="When enabled, every review counts toward your daily limit, including repeated reviews of cards you got wrong. When disabled, only unique cards count, so failing a card multiple times won't eat into your daily budget."
+            placement="top"
+          >
             <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
           </Tooltip>
         </label>
       </div>
 
+      <div>
+        <label class="block text-sm font-medium mb-1">
+          Card interleaving
+          <Tooltip
+            content="Controls how new cards and reviews are mixed.<br>**Mixed** — shuffles new and review cards together.<br>**New first** — shows all new cards before reviews.<br>**Reviews first** — clears your review backlog before introducing new cards."
+            placement="top"
+          >
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+        <SelectButton
+          v-model="form.interleaving"
+          :options="interleavingOptions"
+          option-label="label"
+          option-value="value"
+          :allow-empty="false"
+          class="flex-wrap"
+        />
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium mb-1">
+          New card gathering
+          <Tooltip
+            content="How new cards are picked when you have multiple decks.<br>**Top deck** — draws all new cards from your highest-priority deck first before moving to the next.<br>**All decks equally** — rotates between decks so you get new cards from each one.<br>**Cross-deck frequency** — draw words by total occurrence count across all your study decks, picking the words you'll see the most first."
+            placement="top"
+          >
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+        <SelectButton
+          v-model="form.newCardGathering"
+          :options="newCardGatheringOptions"
+          option-label="label"
+          option-value="value"
+          :allow-empty="false"
+          class="flex-wrap"
+        />
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium mb-1">
+          Review cards from
+          <Tooltip
+            content="Which words to include in your reviews.<br>**All tracked** — reviews every word you've ever studied, even if it's no longer in an active deck.<br>**Study decks only** — only reviews words that belong to your current study decks."
+            placement="top"
+          >
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+        <SelectButton v-model="form.reviewFrom" :options="reviewFromOptions" option-label="label" option-value="value" :allow-empty="false" class="flex-wrap" />
+      </div>
+
+      <Divider />
+
+      <!-- Day boundary -->
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Day boundary</h3>
       <div>
         <label class="block text-sm font-medium mb-1">
           Timezone
@@ -214,11 +301,14 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-2 mt-3">
+      <div class="flex items-center gap-2">
         <ToggleSwitch v-model="form.dayBoundaryScheduling" input-id="dayBoundaryScheduling" />
         <label for="dayBoundaryScheduling" class="text-sm cursor-pointer">
           Group reviews by day
-          <Tooltip content="When enabled, all reviews scheduled for today become available at the start of the day instead of at their exact time." placement="top">
+          <Tooltip
+            content="When enabled, all reviews scheduled for today become available at the start of the day instead of at their exact time."
+            placement="top"
+          >
             <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
           </Tooltip>
         </label>
@@ -226,47 +316,15 @@
 
       <Divider />
 
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Scheduling</h3>
-      <div>
-        <label class="block text-sm font-medium mb-1">
-          Card interleaving
-          <Tooltip content="Controls how new cards and reviews are mixed.<br>**Mixed** — shuffles new and review cards together.<br>**New first** — shows all new cards before reviews.<br>**Reviews first** — clears your review backlog before introducing new cards." placement="top">
-            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-          </Tooltip>
-        </label>
-        <SelectButton v-model="form.interleaving" :options="interleavingOptions" option-label="label" option-value="value" :allow-empty="false" class="flex-wrap" />
-      </div>
-
-      <div>
-        <label class="block text-sm font-medium mb-1">
-          New card gathering
-          <Tooltip content="How new cards are picked when you have multiple decks.<br>**Top deck** — draws all new cards from your highest-priority deck first before moving to the next.<br>**All decks equally** — rotates between decks so you get new cards from each one.<br>**Cross-deck frequency** — draw words by total occurrence count across all your study decks, picking the words you'll see the most first." placement="top">
-            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-          </Tooltip>
-        </label>
-        <SelectButton v-model="form.newCardGathering" :options="newCardGatheringOptions" option-label="label" option-value="value" :allow-empty="false" class="flex-wrap" />
-      </div>
-
-      <div>
-        <label class="block text-sm font-medium mb-1">
-          Review cards from
-          <Tooltip content="Which words to include in your reviews.<br>**All tracked** — reviews every word you've ever studied, even if it's no longer in an active deck.<br>**Study decks only** — only reviews words that belong to your current study decks." placement="top">
-            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-          </Tooltip>
-        </label>
-        <SelectButton v-model="form.reviewFrom" :options="reviewFromOptions" option-label="label" option-value="value" :allow-empty="false" class="flex-wrap" />
-      </div>
-
-      <Divider />
-
+      <!-- Card appearance -->
       <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Card appearance</h3>
       <div>
-        <label class="block text-sm font-medium mb-2">Card front</label>
+        <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card front</label>
         <div class="flex flex-col gap-2">
           <div class="flex items-center gap-2">
             <ToggleSwitch v-model="form.showCardStatus" input-id="showCardStatus" />
             <label for="showCardStatus" class="text-sm cursor-pointer">
-              Show card status
+              Show card learning status
               <Tooltip content="Display the card status (New, Review, Again) at the top of the card." placement="right">
                 <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
               </Tooltip>
@@ -294,7 +352,10 @@
             <ToggleSwitch v-model="form.showConfusableReadings" input-id="showConfusableReadings" />
             <label for="showConfusableReadings" class="text-sm cursor-pointer">
               Show confusable readings
-              <Tooltip content="When a kanji has multiple dictionary entries with different readings (e.g. 音 → おと/おん), show the other readings to help avoid mix-ups." placement="right">
+              <Tooltip
+                content="When a kanji has multiple dictionary entries with different readings (e.g. 音 → おと/おん), show the other readings to help avoid mix-ups."
+                placement="right"
+              >
                 <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
               </Tooltip>
             </label>
@@ -303,7 +364,58 @@
       </div>
 
       <div>
-        <label class="block text-sm font-medium mb-2">Card back</label>
+        <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Example sentence</label>
+        <div class="flex flex-col gap-2">
+          <div>
+            <label class="text-sm mb-1 block">
+              Position
+              <Tooltip
+                content="Show an example sentence from the media where the word appears.<br>**Hidden** — no sentence shown.<br>**Front** — sentence visible before you flip the card (sentence card).<br>**Back** — sentence shown only after you flip."
+                placement="right"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+            <SelectButton
+              v-model="form.exampleSentencePosition"
+              :options="exampleSentenceOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+            />
+          </div>
+          <div v-if="form.exampleSentencePosition !== 'Hidden'" class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.blurExampleSentence" input-id="blurExampleSentence" />
+            <label for="blurExampleSentence" class="text-sm cursor-pointer">
+              Blur until clicked
+              <Tooltip content="Example sentence is blurred by default. Click it to reveal." placement="right">
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
+          <div v-if="form.exampleSentencePosition !== 'Hidden'">
+            <label class="text-sm mb-1 block">
+              Sorting
+              <Tooltip
+                content="**Random** — a random example sentence each time.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences."
+                placement="right"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+            <SelectButton
+              v-model="form.exampleSentenceSorting"
+              :options="exampleSentenceSortingOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card back</label>
         <div class="flex flex-col gap-2">
           <div class="flex items-center gap-2">
             <ToggleSwitch v-model="form.showPitchAccent" input-id="showPitchAccent" />
@@ -313,33 +425,6 @@
                 <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
               </Tooltip>
             </label>
-          </div>
-          <div>
-            <label class="text-sm mb-1 block">
-              Example sentence
-              <Tooltip content="Show an example sentence from the media where the word appears.<br>**Hidden** — no sentence shown.<br>**Front** — sentence visible before you flip the card (sentence card).<br>**Back** — sentence shown only after you flip." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-            <SelectButton v-model="form.exampleSentencePosition" :options="exampleSentenceOptions" option-label="label" option-value="value" :allow-empty="false" />
-            <div v-if="form.exampleSentencePosition !== 'Hidden'" class="flex items-center gap-2 mt-2">
-              <ToggleSwitch v-model="form.blurExampleSentence" input-id="blurExampleSentence" />
-              <label for="blurExampleSentence" class="text-sm cursor-pointer">
-                Blur until clicked
-                <Tooltip content="Example sentence is blurred by default. Click it to reveal." placement="right">
-                  <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                </Tooltip>
-              </label>
-            </div>
-            <div v-if="form.exampleSentencePosition !== 'Hidden'" class="mt-2">
-              <label class="text-sm mb-1 block">
-                Sorting
-                <Tooltip content="**Random** — a random example sentence each time.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences." placement="right">
-                  <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                </Tooltip>
-              </label>
-              <SelectButton v-model="form.exampleSentenceSorting" :options="exampleSentenceSortingOptions" option-label="label" option-value="value" :allow-empty="false" />
-            </div>
           </div>
           <div class="flex items-center gap-2">
             <ToggleSwitch v-model="form.showFrequencyRank" input-id="showFrequencyRank" />
@@ -382,11 +467,70 @@
 
       <Divider />
 
+      <!-- Audio -->
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Audio</h3>
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.autoPlayWord" input-id="autoPlayWord" />
+          <label for="autoPlayWord" class="text-sm cursor-pointer">
+            Auto-play word audio on flip
+            <Tooltip content="Automatically read the headword aloud when you flip a card." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.autoPlaySentence" input-id="autoPlaySentence" />
+          <label for="autoPlaySentence" class="text-sm cursor-pointer">
+            Auto-play example sentence audio on flip
+            <Tooltip
+              content="Automatically read the example sentence aloud when you flip a card. If both word and sentence are enabled, they play sequentially."
+              placement="right"
+            >
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.autoPlayWordOnFront" input-id="autoPlayWordOnFront" />
+          <label for="autoPlayWordOnFront" class="text-sm cursor-pointer">
+            Auto-play headword audio on front
+            <Tooltip content="Automatically read the headword aloud when a new card appears, before flipping." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div v-if="form.autoPlayWordOnFront" class="flex items-center gap-2 ml-6">
+          <ToggleSwitch v-model="form.autoPlayWordOnFrontNewOnly" input-id="autoPlayWordOnFrontNewOnly" />
+          <label for="autoPlayWordOnFrontNewOnly" class="text-sm cursor-pointer">
+            New cards only
+            <Tooltip content="Only auto-play on cards you haven't seen before. Review cards will be silent." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div v-if="form.autoPlayWordOnFront" class="flex items-center gap-2 ml-6">
+          <ToggleSwitch v-model="form.autoPlaySentenceOnFront" input-id="autoPlaySentenceOnFront" />
+          <label for="autoPlaySentenceOnFront" class="text-sm cursor-pointer">
+            Also play example sentence
+            <Tooltip content="Play the example sentence after the headword audio finishes." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+      </div>
+
+      <Divider />
+
+      <!-- Study session UI -->
       <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Study session UI</h3>
       <div>
         <label class="block text-sm font-medium mb-1">
           Grading buttons
-          <Tooltip content="**4 buttons** — Again, Hard, Good, Easy — gives finer control over scheduling.<br>**2 buttons** — Forgot and Remembered — simpler and faster to grade." placement="top">
+          <Tooltip
+            content="**4 buttons** — Again, Hard, Good, Easy — gives finer control over scheduling.<br>**2 buttons** — Forgot and Remembered — simpler and faster to grade."
+            placement="top"
+          >
             <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
           </Tooltip>
         </label>
@@ -430,81 +574,75 @@
             </Tooltip>
           </label>
         </div>
-        <div class="flex items-center gap-2">
-          <ToggleSwitch v-model="form.autoPlayWord" input-id="autoPlayWord" />
-          <label for="autoPlayWord" class="text-sm cursor-pointer">
-            Auto-play word audio on flip
-            <Tooltip content="Automatically read the headword aloud when you flip a card." placement="right">
+      </div>
+
+      <Divider />
+
+      <!-- Leeches -->
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Leeches</h3>
+      <p class="text-sm text-surface-500 -mt-1 mb-2">
+        Leeches are cards that you keep forgetting. A card becomes a leech when it reaches a certain number of lapses. A lapse is counted each time you fail a
+        review card (i.e. it goes back to relearning).
+      </p>
+      <div :class="props.inline ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'">
+        <div class="min-w-0">
+          <label class="block text-sm font-medium mb-1">
+            Leech threshold
+            <Tooltip content="Number of lapses before a card is flagged as a leech. Set to 0 to disable leech detection." placement="top">
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>
+          <InputNumber v-model="form.leechThreshold" :min="0" :max="99" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
         </div>
-        <div class="flex items-center gap-2">
-          <ToggleSwitch v-model="form.autoPlaySentence" input-id="autoPlaySentence" />
-          <label for="autoPlaySentence" class="text-sm cursor-pointer">
-            Auto-play example sentence audio on flip
-            <Tooltip content="Automatically read the example sentence aloud when you flip a card. If both word and sentence are enabled, they play sequentially." placement="right">
+        <div v-if="form.leechThreshold > 0" class="min-w-0">
+          <label class="block text-sm font-medium mb-1">
+            Leech action
+            <Tooltip
+              content="What happens when a card is flagged as a leech.<br><b>Suspend</b> — the card is automatically suspended and won't appear in reviews until you unsuspend it manually.<br><b>Notify only</b> — you'll see a notification but the card stays in rotation."
+              placement="top"
+            >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>
-        </div>
-        <div class="flex items-center gap-2">
-          <ToggleSwitch v-model="form.autoPlayWordOnFront" input-id="autoPlayWordOnFront" />
-          <label for="autoPlayWordOnFront" class="text-sm cursor-pointer">
-            Auto-play headword audio on front
-            <Tooltip content="Automatically read the headword aloud when a new card appears, before flipping." placement="right">
-              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-            </Tooltip>
-          </label>
-        </div>
-        <div v-if="form.autoPlayWordOnFront" class="flex items-center gap-2 ml-6">
-          <ToggleSwitch v-model="form.autoPlayWordOnFrontNewOnly" input-id="autoPlayWordOnFrontNewOnly" />
-          <label for="autoPlayWordOnFrontNewOnly" class="text-sm cursor-pointer">
-            New cards only
-            <Tooltip content="Only auto-play on cards you haven't seen before. Review cards will be silent." placement="right">
-              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-            </Tooltip>
-          </label>
-        </div>
-        <div v-if="form.autoPlayWordOnFront" class="flex items-center gap-2 ml-6">
-          <ToggleSwitch v-model="form.autoPlaySentenceOnFront" input-id="autoPlaySentenceOnFront" />
-          <label for="autoPlaySentenceOnFront" class="text-sm cursor-pointer">
-            Also play example sentence
-            <Tooltip content="Play the example sentence after the headword audio finishes." placement="right">
-              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-            </Tooltip>
-          </label>
+          <SelectButton v-model="form.leechAction" :options="leechActionOptions" option-label="label" option-value="value" :allow-empty="false" />
         </div>
       </div>
 
       <Divider />
 
+      <!-- Keyboard shortcuts -->
       <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Keyboard shortcuts</h3>
       <p class="text-xs text-surface-500">Click a key and press the new key to rebind. Escape cancels.</p>
-      <div class="flex flex-col gap-2">
-        <h4 class="text-xs font-medium text-surface-400 uppercase tracking-wide">Grading</h4>
-        <KeybindInput
-          v-for="[key, label] in gradeEntries" :key="key"
-          v-model="form.keybinds[key]"
-          :label="label"
-          :conflict="checkConflict(key, form.keybinds[key])"
-        />
-
-        <h4 class="text-xs font-medium text-surface-400 uppercase tracking-wide mt-2">Actions</h4>
-        <KeybindInput
-          v-for="[key, label] in actionEntries" :key="key"
-          v-model="form.keybinds[key]"
-          :label="label"
-          :conflict="checkConflict(key, form.keybinds[key])"
-        />
-        <div class="mt-1">
-          <Button severity="secondary" size="small" label="Reset to defaults" @click="resetKeybinds" />
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="flex flex-col gap-2">
+          <h4 class="text-xs font-medium text-surface-400 uppercase tracking-wide">Grading</h4>
+          <KeybindInput
+            v-for="[key, label] in gradeEntries"
+            :key="key"
+            v-model="form.keybinds[key]"
+            :label="label"
+            :conflict="checkConflict(key, form.keybinds[key])"
+          />
         </div>
+        <div class="flex flex-col gap-2">
+          <h4 class="text-xs font-medium text-surface-400 uppercase tracking-wide">Actions</h4>
+          <KeybindInput
+            v-for="[key, label] in actionEntries"
+            :key="key"
+            v-model="form.keybinds[key]"
+            :label="label"
+            :conflict="checkConflict(key, form.keybinds[key])"
+          />
+        </div>
+      </div>
+      <div class="flex items-center justify-between">
         <p class="text-xs text-surface-400">Escape and Enter are always available as shortcuts for wrap up and flip card.</p>
+        <Button severity="secondary" size="small" label="Reset to defaults" @click="resetKeybinds" />
       </div>
 
       <Divider />
 
+      <!-- Study deck page -->
       <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Study deck page</h3>
       <div class="flex flex-col gap-2">
         <div class="flex items-center gap-2">

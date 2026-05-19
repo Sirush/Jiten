@@ -23,6 +23,7 @@
     blacklist: [];
     master: [];
     suspend: [];
+    bury: [];
     forget: [event: Event];
     undo: [];
     settings: [];
@@ -225,6 +226,14 @@
       </Button>
       <Popover ref="morePopover" :pt="{ content: { class: 'p-1' } }">
         <div class="flex flex-col gap-1 min-w-[140px]">
+          <button
+            :disabled="props.disabled"
+            class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left disabled:opacity-50"
+            @click="emit('bury'); morePopover?.hide()"
+          >
+            <Icon name="material-symbols:visibility-off-outline" size="16" />
+            Bury for a day
+          </button>
           <button
             :disabled="props.disabled"
             class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left disabled:opacity-50"

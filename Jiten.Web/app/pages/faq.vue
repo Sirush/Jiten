@@ -6,19 +6,30 @@
   const faqData = ref([
     {
       question: 'What can I use the decks for?',
-      answer: `Decks, frequency lists, and derived data are licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>. You're free to use, share, and adapt them for any purpose — including commercial — as long as you give attribution and share any adaptations under the same license.`,
+      answer: `Decks, frequency lists, and other derived statistical data are licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>. You're free to use, share, and adapt them for any purpose — including commercial — as long as you give attribution and share any adaptations under the same license.<br /><br />This does not cover example sentences or media text, which belong to their respective copyright holders.`,
+    },
+    {
+      question: 'Can I use your API or scrape the site?',
+      answer: `The API endpoints are publicly available and you're welcome to use them for personal projects, small-scale research, or tools that complement the learning experience. However, please don't bulk-scrape, crawl, or systematically download the site's data — for example, dumping every deck's vocabulary to mirror the database or build a competing service.<br /><br />
+      In short:
+      <ul class="list-disc pl-8">
+        <li>Personal projects, research, and hobby tools — go for it</li>
+        <li>Bulk downloading or mirroring significant portions of the database — not allowed</li>
+        <li>Redistributing scraped data commercially — not allowed</li>
+      </ul><br />
+      The API may change at any time without notice and is rate-limited. If you're unsure whether your use case is okay, feel free to ask on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>.`,
     },
     {
       question: 'Why is X missing?',
-      answer: `While I aim to make the website the most complete it can be, it's an arduous process and I have to prioritise some media over others. If you have a specific request, please let me know on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>, and it'll be added depending on the availability to source the text.`, // Added rel="noopener noreferrer" for security best practice
+      answer: `While I aim to make the website as complete as possible, it's an arduous process and I have to prioritise some media over others. If you'd like something added, you can submit a request on the <a href="/requests">requests page</a> after creating an account. Requests are fulfilled depending on availability to source the text.`,
     },
     {
       question: 'How accurate are the media decks?',
-      answer: `For VNs: Extracting text from VNs is a manual process. The decks should be fairly accurate, but they might contain extra text depending on the engine. Please report anything that seems off. <br />For books: Books are extracted semi-automatically, and may still contain extra info like the table of contents, please be aware of it. <br />For anime/movies/dramas: The decks are based on subtitle files, extracted in a semi-automated way. The subtitles may contain errors. There's also a chance the episode count, the episode numbers, etc, are not accurate. If you find any mistakes, please let me know on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>.`,
+      answer: `For VNs: Extracting text from VNs is a manual process. The decks should be fairly accurate, but they might contain extra text depending on the engine. Please report anything that seems off. <br />For books: Books are extracted semi-automatically, and may still contain extra info like the table of contents, please be aware of it. <br />For anime/movies/dramas: The decks are based on subtitle files, extracted in a semi-automated way. The subtitles may contain errors. There's also a chance the episode count, the episode numbers, etc, are not accurate. If you find any mistakes, please use the <b>report an issue</b> button.`,
     },
     {
       question: 'Why is the word count or character count different from another website?',
-      answer: `The text extraction process is custom-built and may differ from other websites.. The character count should be mostly the same, unless there's data that's missing or data that was erroneously included. For example, a game can contain item text in another file that was forgotten to be included. The word count can have more differences as there's different ways the words can be split, for example, due to differences in word segmentation. If you find anything that looks erroneous, please let me know on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>.`,
+      answer: `The text extraction process is custom-built and may differ from other websites.. The character count should be mostly the same, unless there's data that's missing or data that was erroneously included. For example, a game can contain item text in another file that was forgotten to be included. The word count can have more differences as there's different ways the words can be split, for example, due to differences in word segmentation. If you find anything that looks erroneous, please use the <b>report an issue</b> button.`,
     },
     {
       question: 'Which websites do you source the information from?',
@@ -38,18 +49,6 @@
       Audio pronunciations are generated using <a href="https://voicevox.hiroshiba.jp/" target="_blank" rel="noopener noreferrer">VOICEVOX</a> with voices <a href="https://zunko.jp/con_ongen_kiyaku.html" target="_blank" rel="noopener noreferrer">四国めたん</a> (Female 1), <a href="https://zunko.jp/con_ongen_kiyaku.html" target="_blank" rel="noopener noreferrer">九州そら</a> (Female 2, ASMR), <a href="https://frontier.creatia.cc/fanclubs/413/posts/4507" target="_blank" rel="noopener noreferrer">剣崎雌雄</a> (Male 1), and <a href="https://virvoxproject.wixsite.com/official/voicevox" target="_blank" rel="noopener noreferrer">青山龍星</a> (Male 2).`,
     },
     {
-      question: "What's next for the website?",
-      answer: `For a more detailed and up-to-date roadmap, please check out the <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>.<br />
-      But in general, the next steps are, in no particular order:
-      <ul class="list-disc pl-8">
-        <li>Add more decks, always</li>
-        <li>Add a complete SRS system integrated to the website</li>
-        <li>Support for names and custom names</li>
-        <li>Add a way for users to add their own, custom decks</li>
-        <li>Add a way for users to submit media (which also means a moderation queue for them)</li>
-      </ul>`,
-    },
-    {
       question: 'Will you support more media types in the future?',
       answer: `Yes, I plan to support YouTube. <br />
       Each comes with its own set of challenges, which is why they will take more time. If you have any other suggestions, please let me know on <a href="${getDiscordLink()}" target="_blank" rel="noopener noreferrer">Discord</a>.`,
@@ -57,10 +56,6 @@
     {
       question: 'Will the website ever be paid?',
       answer: `The core features—including access to the decks and the future SRS—will always be free. There might be some premium, extra features in the future, reserved to supporters, but I want the most important features to be accessible to all.`,
-    },
-    {
-      question: 'Can I use your API endpoints?',
-      answer: `You can use them as they are publicly available, but be aware that they may change at any time without notice. <br />They can also be rate-limited to avoid overloading the servers.`,
     },
   ]);
 

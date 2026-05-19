@@ -186,6 +186,7 @@
     onForget: handleForget,
     onMaster: handleMaster,
     onSuspend: handleSuspend,
+    onBury: handleBury,
     onUndo: handleUndo,
     onWrapUp: handleWrapUp,
   });
@@ -234,6 +235,12 @@
     if (!ok) toast.add({ severity: 'error', summary: 'Review failed', detail: 'Your grade was not saved. Try again.', life: 5000 });
   }
 
+  watch(() => srsStore.lastLeechEvent, (event) => {
+    if (!event) return;
+    const summary = event.suspended ? 'Card marked as leech and suspended' : 'Card marked as leech';
+    toast.add({ severity: 'warn', summary, life: 3000 });
+  });
+
   function handleFlip() {
     srsStore.revealCard();
   }
@@ -251,6 +258,11 @@
   async function handleSuspend() {
     const ok = await srsStore.quickAction('suspend');
     if (!ok) toast.add({ severity: 'error', summary: 'Action failed', detail: 'Could not suspend card. Try again.', life: 5000 });
+  }
+
+  async function handleBury() {
+    const ok = await srsStore.quickAction('bury');
+    if (!ok) toast.add({ severity: 'error', summary: 'Action failed', detail: 'Could not bury card. Try again.', life: 5000 });
   }
 
   function handleForget() {
@@ -324,8 +336,10 @@
         :start-time="srsStore.sessionStats.startTime"
         :hardest-cards="srsStore.hardestCards"
         :grade-counts="srsStore.sessionStats.gradeCounts"
+        :leeches="srsStore.sessionLeeches"
         @close="exitStudy"
         @study-more="studyMore"
+        @suspend-leech="(wordId, readingIndex) => srsStore.suspendLeech(wordId, readingIndex)"
       />
     </div>
 
@@ -494,6 +508,7 @@
             @blacklist="handleBlacklist"
             @master="handleMaster"
             @suspend="handleSuspend"
+            @bury="handleBury"
             @forget="handleForget"
             @undo="handleUndo"
             @settings="showSettingsDialog = true"

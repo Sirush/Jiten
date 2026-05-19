@@ -352,6 +352,10 @@
         <Tooltip content="Refresh decks and due counts" placement="bottom">
           <Button icon="pi pi-refresh" severity="secondary" :loading="refreshing" @click="refresh" />
         </Tooltip>
+        <NuxtLink to="/settings/cards">
+          <Button icon="pi pi-list" class="sm:!hidden" severity="secondary" />
+          <Button icon="pi pi-list" label="My Cards" severity="secondary" class="!hidden sm:!inline-flex" />
+        </NuxtLink>
         <NuxtLink to="/srs/history">
           <Button icon="pi pi-history" class="sm:!hidden" severity="secondary" />
           <Button icon="pi pi-history" label="History" severity="secondary" class="!hidden sm:!inline-flex" />

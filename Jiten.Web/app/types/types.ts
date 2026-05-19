@@ -360,6 +360,8 @@ export interface FsrsCardWithWordDto {
   difficulty?: number;
   due: Date;
   lastReview?: Date;
+  createdAt: Date;
+  lapses: number;
   wordText: string;
   readingType: ReadingType;
   frequencyRank: number;
@@ -876,6 +878,7 @@ export interface StudyKeybinds {
   forget: string;
   master: string;
   suspend: string;
+  bury: string;
   undo: string;
   wrapUp: string;
 }
@@ -914,8 +917,12 @@ export interface StudySettingsDto {
   timezone: string | null;
   showConfusableReadings: boolean;
   dayBoundaryScheduling: boolean;
+  leechThreshold: number;
+  leechAction: LeechAction;
   keybinds: StudyKeybinds;
 }
+
+export type LeechAction = 'Suspend' | 'NotifyOnly';
 
 export interface CardExamplesResponse {
   examples: Record<string, StudyExampleSentenceDto>;
@@ -978,6 +985,7 @@ export interface ReviewHistoryDto {
     due: string;
     lastReview?: string;
     createdAt: string;
+    lapses: number;
   };
   reviews: {
     rating: FsrsRating;

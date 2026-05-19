@@ -12,6 +12,14 @@ interface SessionReview {
   duration: number | undefined;
 }
 
+export interface LeechCard {
+  wordId: number;
+  readingIndex: number;
+  wordText: string;
+  reading: string;
+  suspended: boolean;
+}
+
 export interface HardestCard {
   wordId: number;
   readingIndex: number;
@@ -24,13 +32,14 @@ export interface HardestCard {
 
 interface UndoSnapshot {
   card: StudyCardDto;
-  type: 'grade' | 'blacklist' | 'master' | 'forget' | 'suspend';
+  type: 'grade' | 'blacklist' | 'master' | 'forget' | 'suspend' | 'bury';
   rating?: FsrsRating;
   batch: StudyCardDto[];
   cardIndex: number;
   againKeys: Set<string>;
   grades: ('hard' | 'good' | 'easy' | 'action')[];
   reviews: SessionReview[];
+  leeches: LeechCard[];
   stats: {
     cardsReviewed: number;
     newCardsLearned: number;
@@ -88,8 +97,11 @@ export const useSrsStore = defineStore('srs', () => {
     timezone: 'Europe/London',
     showConfusableReadings: true,
     dayBoundaryScheduling: false,
+    leechThreshold: 8,
+    leechAction: 'Suspend',
     keybinds: { ...DEFAULT_KEYBINDS },
   });
+  const lastLeechEvent = ref<{ detected: boolean; suspended: boolean } | null>(null);
   const sessionStats = ref({
     cardsReviewed: 0,
     newCardsLearned: 0,
@@ -105,6 +117,7 @@ export const useSrsStore = defineStore('srs', () => {
   const clearedGrades = ref<('hard' | 'good' | 'easy' | 'action')[]>([]);
   const undoState = ref<UndoSnapshot | null>(null);
   const sessionReviews = ref<SessionReview[]>([]);
+  const sessionLeeches = ref<LeechCard[]>([]);
   const cardShownAt = ref<number | null>(null);
   const thinkingDuration = ref<number | undefined>(undefined);
   const isBusy = ref(false);
@@ -207,6 +220,7 @@ export const useSrsStore = defineStore('srs', () => {
       againKeys: new Set(againCardKeys.value),
       grades: [...clearedGrades.value],
       reviews: [...sessionReviews.value],
+      leeches: [...sessionLeeches.value],
       stats: JSON.parse(JSON.stringify(sessionStats.value)),
     };
   }
@@ -635,19 +649,43 @@ export const useSrsStore = defineStore('srs', () => {
 
       prefetchSessionSummary();
 
-      if (rating === FsrsRating.Again) {
-        const newSet = new Set(againCardKeys.value);
-        newSet.add(cardKey);
-        againCardKeys.value = newSet;
+      if (reviewResult?.leechDetected || reviewResult?.leechSuspended) {
+        lastLeechEvent.value = { detected: true, suspended: !!reviewResult.leechSuspended };
+        const leechKey = `${card.wordId}-${card.readingIndex}`;
+        if (!sessionLeeches.value.some(l => `${l.wordId}-${l.readingIndex}` === leechKey)) {
+          const kana = card.readings.find(r => r.formType === 1)?.text ?? card.wordTextPlain;
+          sessionLeeches.value = [...sessionLeeches.value, {
+            wordId: card.wordId,
+            readingIndex: card.readingIndex,
+            wordText: card.wordTextPlain,
+            reading: kana,
+            suspended: !!reviewResult.leechSuspended,
+          }];
+        }
+      } else {
+        lastLeechEvent.value = null;
+      }
 
-        const batch = [...currentBatch.value];
-        batch.splice(currentCardIndex.value, 1);
-        const remaining = batch.length - currentCardIndex.value;
-        const offset = remaining <= 0 ? 0 : Math.min(Math.floor(Math.random() * 6) + 5, remaining);
-        const reinsertedCard = { ...card };
-        if (reviewResult?.intervalPreview) reinsertedCard.intervalPreview = reviewResult.intervalPreview;
-        batch.splice(currentCardIndex.value + offset, 0, reinsertedCard);
-        currentBatch.value = batch;
+      if (rating === FsrsRating.Again) {
+        if (reviewResult?.leechSuspended) {
+          const batch = [...currentBatch.value];
+          batch.splice(currentCardIndex.value, 1);
+          currentBatch.value = batch;
+          clearedGrades.value = [...clearedGrades.value, 'action'];
+        } else {
+          const newSet = new Set(againCardKeys.value);
+          newSet.add(cardKey);
+          againCardKeys.value = newSet;
+
+          const batch = [...currentBatch.value];
+          batch.splice(currentCardIndex.value, 1);
+          const remaining = batch.length - currentCardIndex.value;
+          const offset = remaining <= 0 ? 0 : Math.min(Math.floor(Math.random() * 6) + 5, remaining);
+          const reinsertedCard = { ...card };
+          if (reviewResult?.intervalPreview) reinsertedCard.intervalPreview = reviewResult.intervalPreview;
+          batch.splice(currentCardIndex.value + offset, 0, reinsertedCard);
+          currentBatch.value = batch;
+        }
       } else {
         if (isRepeat) {
           const newSet = new Set(againCardKeys.value);
@@ -681,7 +719,7 @@ export const useSrsStore = defineStore('srs', () => {
     }
   }
 
-  async function quickAction(action: 'blacklist' | 'master' | 'forget' | 'suspend'): Promise<boolean> {
+  async function quickAction(action: 'blacklist' | 'master' | 'forget' | 'suspend' | 'bury'): Promise<boolean> {
     const card = currentCard.value;
     if (!card || isBusy.value) return true;
     isBusy.value = true;
@@ -691,6 +729,7 @@ export const useSrsStore = defineStore('srs', () => {
       master: 'neverForget-add',
       forget: 'forget-add',
       suspend: 'suspend-add',
+      bury: 'bury-add',
     };
 
     try {
@@ -731,6 +770,21 @@ export const useSrsStore = defineStore('srs', () => {
     return true;
   }
 
+  async function suspendLeech(wordId: number, readingIndex: number): Promise<boolean> {
+    try {
+      await $api('srs/set-vocabulary-state', {
+        method: 'POST',
+        body: { wordId, readingIndex, state: 'suspend-add' },
+      });
+      sessionLeeches.value = sessionLeeches.value.map(l =>
+        l.wordId === wordId && l.readingIndex === readingIndex ? { ...l, suspended: true } : l,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function undoLastAction(): Promise<boolean> {
     const snap = undoState.value;
     if (!snap || isBusy.value) return true;
@@ -743,7 +797,13 @@ export const useSrsStore = defineStore('srs', () => {
           body: { wordId: snap.card.wordId, readingIndex: snap.card.readingIndex },
         });
       } else {
-        const revertState = snap.type === 'blacklist' ? 'blacklist-remove' : snap.type === 'suspend' ? 'suspend-remove' : 'neverForget-remove';
+        const revertMap: Record<string, string> = {
+          blacklist: 'blacklist-remove',
+          suspend: 'suspend-remove',
+          bury: 'bury-remove',
+          master: 'neverForget-remove',
+        };
+        const revertState = revertMap[snap.type] ?? 'neverForget-remove';
         await $api('srs/set-vocabulary-state', {
           method: 'POST',
           body: {
@@ -759,6 +819,7 @@ export const useSrsStore = defineStore('srs', () => {
       againCardKeys.value = new Set(snap.againKeys);
       clearedGrades.value = [...snap.grades];
       sessionReviews.value = [...snap.reviews];
+      sessionLeeches.value = [...snap.leeches];
       sessionStats.value = {
         ...JSON.parse(JSON.stringify(snap.stats)),
         startTime: snap.stats.startTime ? new Date(snap.stats.startTime) : null,
@@ -853,6 +914,7 @@ export const useSrsStore = defineStore('srs', () => {
     againCardKeys.value = new Set();
     clearedGrades.value = [];
     sessionReviews.value = [];
+    sessionLeeches.value = [];
     sessionStats.value = { cardsReviewed: 0, newCardsLearned: 0, correctCount: 0, startTime: null, gradeCounts: { again: 0, hard: 0, good: 0, easy: 0 } };
     undoState.value = null;
     isBusy.value = false;
@@ -931,6 +993,9 @@ export const useSrsStore = defineStore('srs', () => {
     startStudyMore,
     wrapUp,
     againCardKeys,
+    lastLeechEvent,
+    sessionLeeches,
+    suspendLeech,
     cancelWrapUp,
     srsEnrolled,
     fetchEnrollment,

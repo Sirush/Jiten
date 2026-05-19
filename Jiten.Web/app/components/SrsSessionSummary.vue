@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { HardestCard } from '~/stores/srsStore';
+  import type { HardestCard, LeechCard } from '~/stores/srsStore';
   import { useSrsStore } from '~/stores/srsStore';
   import type { ReviewForecastDto, SessionStreakDto } from '~/types';
 
@@ -10,12 +10,22 @@
     startTime: Date | null;
     hardestCards: HardestCard[];
     gradeCounts: { again: number; hard: number; good: number; easy: number };
+    leeches: LeechCard[];
   }>();
 
   const emit = defineEmits<{
     close: [];
     studyMore: [];
+    suspendLeech: [wordId: number, readingIndex: number];
   }>();
+
+  const suspending = ref(new Set<string>());
+
+  async function handleSuspendLeech(leech: LeechCard) {
+    const key = `${leech.wordId}-${leech.readingIndex}`;
+    suspending.value = new Set([...suspending.value, key]);
+    emit('suspendLeech', leech.wordId, leech.readingIndex);
+  }
 
   const { $api } = useNuxtApp();
   const srsStore = useSrsStore();
@@ -214,6 +224,39 @@
         </div>
         <div v-if="gradeCounts.easy > 0" class="flex items-center gap-1">
           <span class="w-2 h-2 rounded-full bg-blue-500" />{{ gradeCounts.easy }} Easy
+        </div>
+      </div>
+    </div>
+
+    <!-- Leeches -->
+    <div v-if="leeches.length > 0" class="w-full mb-6">
+      <div class="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">These cards were above your leech threshold</div>
+      <div class="space-y-1.5">
+        <div
+          v-for="leech in leeches"
+          :key="`${leech.wordId}-${leech.readingIndex}`"
+          class="flex items-center justify-between px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20"
+        >
+          <NuxtLink
+            :to="`/vocabulary/${leech.wordId}/${leech.readingIndex}`"
+            target="_blank"
+            class="flex items-center gap-2 min-w-0 hover:underline"
+          >
+            <span class="font-medium text-gray-800 dark:text-gray-200 truncate" lang="ja">{{ leech.wordText }}</span>
+            <span v-if="leech.reading !== leech.wordText" class="text-xs text-gray-400 truncate" lang="ja">{{ leech.reading }}</span>
+          </NuxtLink>
+          <span v-if="leech.suspended" class="text-xs px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 shrink-0 ml-2">
+            Suspended
+          </span>
+          <Button
+            v-else
+            size="small"
+            severity="warn"
+            label="Suspend"
+            :loading="suspending.has(`${leech.wordId}-${leech.readingIndex}`)"
+            class="shrink-0 ml-2"
+            @click="handleSuspendLeech(leech)"
+          />
         </div>
       </div>
     </div>

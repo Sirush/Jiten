@@ -41,6 +41,13 @@ public enum ExampleSentenceSorting
     HardestFirst
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<LeechAction>))]
+public enum LeechAction
+{
+    Suspend,
+    NotifyOnly
+}
+
 [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
 public class StudySettingsDto
 {
@@ -143,6 +150,12 @@ public class StudySettingsDto
     [JsonPropertyName("dayBoundaryScheduling")]
     public bool DayBoundaryScheduling { get; set; }
 
+    [JsonPropertyName("leechThreshold")]
+    public int LeechThreshold { get; set; } = 8;
+
+    [JsonPropertyName("leechAction")]
+    public LeechAction LeechAction { get; set; } = LeechAction.NotifyOnly;
+
     [JsonPropertyName("keybinds")]
     public StudyKeybindsDto Keybinds { get; set; } = new();
 }
@@ -159,6 +172,7 @@ public class StudyKeybindsDto
     [JsonPropertyName("forget")] public string Forget { get; set; } = "f";
     [JsonPropertyName("master")] public string Master { get; set; } = "m";
     [JsonPropertyName("suspend")] public string Suspend { get; set; } = "s";
+    [JsonPropertyName("bury")] public string Bury { get; set; } = "h";
     [JsonPropertyName("undo")] public string Undo { get; set; } = "z";
     [JsonPropertyName("wrapUp")] public string WrapUp { get; set; } = "w";
 }

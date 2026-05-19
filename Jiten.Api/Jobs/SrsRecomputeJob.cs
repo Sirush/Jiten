@@ -77,9 +77,13 @@ public class SrsRecomputeJob(
                 : (FsrsState?)null;
 
             var tempCard = new FsrsCard(card.UserId, card.WordId, card.ReadingIndex);
+            var lapses = 0;
             foreach (var log in cardLogs)
             {
+                var prevState = tempCard.State;
                 var review = scheduler.ReviewCard(tempCard, log.Rating, log.ReviewDateTime, log.ReviewDuration);
+                if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
+                    lapses++;
                 tempCard = review.UpdatedCard;
             }
 
@@ -89,6 +93,7 @@ public class SrsRecomputeJob(
             card.Difficulty = tempCard.Difficulty;
             card.LastReview = tempCard.LastReview;
             card.Due = tempCard.Due;
+            card.Lapses = lapses;
 
             if (overrideState != null)
             {

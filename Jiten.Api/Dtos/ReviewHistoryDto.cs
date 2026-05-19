@@ -14,6 +14,7 @@ public class CardStateDto
     public DateTime Due { get; set; }
     public DateTime? LastReview { get; set; }
     public DateTime CreatedAt { get; set; }
+    public int Lapses { get; set; }
 }
 
 public class ReviewLogDto

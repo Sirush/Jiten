@@ -532,9 +532,13 @@ public class UserController(
                 : (FsrsState?)null;
 
             var tempCard = new FsrsCard(card.UserId, card.WordId, card.ReadingIndex);
+            var lapses = 0;
             foreach (var log in cardLogs)
             {
+                var prevState = tempCard.State;
                 var result = scheduler.ReviewCard(tempCard, log.Rating, log.ReviewDateTime);
+                if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
+                    lapses++;
                 tempCard = result.UpdatedCard;
             }
 
@@ -544,6 +548,7 @@ public class UserController(
             card.Difficulty = tempCard.Difficulty;
             card.Due = tempCard.Due;
             card.LastReview = tempCard.LastReview;
+            card.Lapses = lapses;
         }
 
         await userContext.SaveChangesAsync();
@@ -565,6 +570,23 @@ public class UserController(
         "easy" or "known" => FsrsRating.Easy,
         _ => null
     };
+
+    private static int CountLapsesFromLogs(List<FsrsReviewLogExportDto> logs)
+    {
+        var scheduler = new FsrsScheduler(enableFuzzing: false);
+        var tempCard = new FsrsCard("", 0, 0);
+        var lapses = 0;
+        foreach (var log in logs.OrderBy(l => l.ReviewDateTime))
+        {
+            var prevState = tempCard.State;
+            var reviewDt = DateTimeOffset.FromUnixTimeSeconds(log.ReviewDateTime).UtcDateTime;
+            var result = scheduler.ReviewCard(tempCard, log.Rating, reviewDt, log.ReviewDuration);
+            if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
+                lapses++;
+            tempCard = result.UpdatedCard;
+        }
+        return lapses;
+    }
 
     private static byte ResolveReadingIndex(List<JmDictWordForm> forms, string spelling)
     {
@@ -1448,9 +1470,10 @@ public class UserController(
                    {
                        CardId = c.CardId, WordId = c.WordId, ReadingIndex = c.ReadingIndex, State = c.State, Step = c.Step,
                        Stability = EnsureValidNumber(c.Stability), Difficulty = EnsureValidNumber(c.Difficulty), Due = c.Due,
-                       LastReview = c.LastReview, WordText = form?.Text ?? "",
+                       LastReview = c.LastReview, CreatedAt = c.CreatedAt, WordText = form?.Text ?? "",
                        ReadingType = form != null ? (JmDictReadingType)(int)form.FormType : JmDictReadingType.Reading,
-                       FrequencyRank = formFreq?.FrequencyRank ?? 0
+                       FrequencyRank = formFreq?.FrequencyRank ?? 0,
+                       Lapses = c.Lapses,
                    };
         }).ToList();
 
@@ -1564,6 +1587,8 @@ public class UserController(
                                                 .DistinctBy(l => l.ReviewDateTime)
                                                 .ToList();
 
+                var importLapses = CountLapsesFromLogs(uniqueIncomingLogs);
+
                 if (existingCardsMap.TryGetValue(key, out var existingCard))
                 {
                     if (!overwrite)
@@ -1580,10 +1605,10 @@ public class UserController(
                     existingCard.LastReview = cardDto.LastReview.HasValue
                         ? DateTimeOffset.FromUnixTimeSeconds(cardDto.LastReview.Value).UtcDateTime
                         : null;
+                    existingCard.Lapses = importLapses;
                     if (cardDto.CreatedAt > 0)
                         existingCard.CreatedAt = DateTimeOffset.FromUnixTimeSeconds(cardDto.CreatedAt).UtcDateTime;
 
-                    // Replace logs: Clear old ones, Add new ones
                     userContext.FsrsReviewLogs.RemoveRange(existingCard.ReviewLogs);
 
                     foreach (var logDto in uniqueIncomingLogs)
@@ -1594,7 +1619,6 @@ public class UserController(
                                                             .FromUnixTimeSeconds(logDto.ReviewDateTime)
                                                             .UtcDateTime,
                                                         ReviewDuration = logDto.ReviewDuration,
-                                                        // EF Core handles the FK association automatically here
                                                     });
                     }
 
@@ -1610,6 +1634,7 @@ public class UserController(
                                       LastReview = cardDto.LastReview.HasValue
                                           ? DateTimeOffset.FromUnixTimeSeconds(cardDto.LastReview.Value).UtcDateTime
                                           : null,
+                                      Lapses = importLapses,
                                       CreatedAt = cardDto.CreatedAt > 0
                                           ? DateTimeOffset.FromUnixTimeSeconds(cardDto.CreatedAt).UtcDateTime
                                           : DateTime.UtcNow,
