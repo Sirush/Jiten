@@ -474,13 +474,18 @@ function toggleSortDir() {
 
     <!-- Search + Sort -->
     <div class="flex gap-2 mb-3">
-      <IconField icon-position="left" class="flex-1">
+      <IconField class="flex-1">
         <InputIcon class="pi pi-search" />
         <InputText
           v-model="searchQuery"
           placeholder="Search cards..."
           class="w-full"
           @input="page = 1"
+        />
+        <InputIcon
+          v-if="searchQuery"
+          class="pi pi-times cursor-pointer"
+          @click="searchQuery = ''; page = 1"
         />
       </IconField>
       <Select
@@ -545,7 +550,7 @@ function toggleSortDir() {
         <span class="text-xs">{{ filteredCards.length }} card{{ filteredCards.length !== 1 ? 's' : '' }}</span>
       </div>
 
-      <div class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden divide-y divide-surface-100 dark:divide-surface-800">
+      <div class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-visible divide-y divide-surface-100 dark:divide-surface-800">
         <div
           v-for="card in paginatedCards"
           :key="cardKey(card)"
