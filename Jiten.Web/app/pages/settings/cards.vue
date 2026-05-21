@@ -557,14 +557,13 @@ function toggleSortDir() {
         >
           <!-- Main row -->
           <div
-            class="flex items-center gap-3 px-3 py-2.5 hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors cursor-pointer select-none"
+            class="flex items-center gap-2 sm:gap-3 px-3 py-2 sm:py-2.5 hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors cursor-pointer select-none"
             :class="{
               'bg-primary-50 dark:bg-primary-900/20': selectedIds.has(cardKey(card)),
               'bg-surface-50 dark:bg-surface-800/30': expandedCards.has(cardKey(card)) && !selectedIds.has(cardKey(card)),
             }"
             @click="toggleExpand(cardKey(card))"
           >
-            <!-- Checkbox -->
             <Checkbox
               :model-value="selectedIds.has(cardKey(card))"
               :binary="true"
@@ -572,47 +571,49 @@ function toggleSortDir() {
               @click.stop
             />
 
-            <!-- Word -->
-            <NuxtLink
-              :to="`/vocabulary/${card.wordId}/${card.readingIndex}`"
-              target="_blank"
-              class="font-medium text-primary-600 dark:text-primary-400 hover:underline truncate min-w-0 flex-shrink"
-              v-html="sanitiseHtml(card.wordText)"
-              @click.stop
-            />
-
-            <!-- Rank -->
-            <span v-if="card.frequencyRank" class="text-xs text-surface-400 tabular-nums shrink-0">
-              #{{ card.frequencyRank.toLocaleString() }}
-            </span>
-
-            <!-- Spacer -->
-            <div class="flex-1" />
-
-            <!-- Due -->
-            <Tooltip :content="formatFullDateTime(card.due)" placement="top">
+            <!-- Two-line grid on mobile, single-line flex on desktop -->
+            <div class="flex-1 min-w-0 grid grid-cols-[auto_1fr_auto] gap-x-2 gap-y-0.5 items-center sm:flex sm:items-center sm:gap-3">
               <span
-                class="text-xs whitespace-nowrap shrink-0"
-                :class="dueClass(relativeDue(card.due).severity)"
-              >
-                {{ relativeDue(card.due).text }}
+                class="font-medium text-primary-600 dark:text-primary-400 truncate min-w-0 col-start-1 col-span-2 row-start-2 sm:hidden"
+                v-html="sanitiseHtml(card.wordText)"
+              />
+              <NuxtLink
+                :to="`/vocabulary/${card.wordId}/${card.readingIndex}`"
+                target="_blank"
+                class="font-medium text-primary-600 dark:text-primary-400 hover:underline truncate min-w-0 hidden sm:inline sm:order-1 sm:shrink"
+                v-html="sanitiseHtml(card.wordText)"
+                @click.stop
+              />
+
+              <span v-if="card.frequencyRank" class="text-xs text-surface-400 tabular-nums row-start-1 col-start-1 sm:order-2 sm:shrink-0">
+                #{{ card.frequencyRank.toLocaleString() }}
               </span>
-            </Tooltip>
 
-            <!-- State badge -->
-            <Tag
-              :value="getFsrsStateName(card.state)"
-              :severity="getFsrsStateSeverity(card.state)"
-              class="shrink-0 !text-xs"
-            />
+              <div class="hidden sm:block sm:flex-1 sm:order-3" />
 
-            <!-- Expand indicator -->
-            <i
-              class="pi text-xs text-surface-400 shrink-0 transition-transform duration-200"
-              :class="expandedCards.has(cardKey(card)) ? 'pi-chevron-up' : 'pi-chevron-down'"
-            />
+              <div class="row-start-2 col-start-3 sm:order-4 sm:shrink-0">
+                <Tooltip :content="formatFullDateTime(card.due)" placement="top">
+                  <span
+                    class="text-xs whitespace-nowrap"
+                    :class="dueClass(relativeDue(card.due).severity)"
+                  >
+                    {{ relativeDue(card.due).text }}
+                  </span>
+                </Tooltip>
+              </div>
 
-            <!-- Actions button -->
+              <Tag
+                :value="getFsrsStateName(card.state)"
+                :severity="getFsrsStateSeverity(card.state)"
+                class="shrink-0 !text-xs row-start-1 col-start-3 sm:order-5"
+              />
+
+              <i
+                class="pi text-xs text-surface-400 shrink-0 transition-transform duration-200 hidden sm:inline sm:order-6"
+                :class="expandedCards.has(cardKey(card)) ? 'pi-chevron-up' : 'pi-chevron-down'"
+              />
+            </div>
+
             <div class="relative shrink-0" @click.stop>
               <Button
                 icon="pi pi-ellipsis-v"
@@ -624,11 +625,10 @@ function toggleSortDir() {
                 @click="toggleActions(cardKey(card))"
               />
 
-              <!-- Dropdown menu -->
               <Transition name="fade">
                 <div
                   v-if="actionsOpenFor === cardKey(card)"
-                  class="absolute right-0 top-full mt-1 z-30 min-w-40 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-lg py-1"
+                  class="absolute right-0 top-full mt-1 z-30 min-w-40 max-w-[calc(100vw-1rem)] rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-lg py-1"
                 >
                   <button
                     v-for="action in getActions(card)"
@@ -651,6 +651,13 @@ function toggleSortDir() {
               v-if="expandedCards.has(cardKey(card))"
               class="px-3 pb-3 pt-1 bg-surface-50 dark:bg-surface-800/30"
             >
+              <NuxtLink
+                :to="`/vocabulary/${card.wordId}/${card.readingIndex}`"
+                target="_blank"
+                class="inline-flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 hover:underline pl-9 mb-1.5 sm:hidden"
+              >
+                View word <i class="pi pi-external-link text-xs" />
+              </NuxtLink>
               <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm pl-9">
                 <div>
                   <div class="text-surface-400 text-xs">State</div>
