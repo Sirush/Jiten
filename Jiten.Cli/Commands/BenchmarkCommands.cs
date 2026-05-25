@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Unicode;
 using Jiten.Core.Data;
+using Jiten.Parser;
 using Jiten.Parser.Diagnostics;
 
 namespace Jiten.Cli.Commands;
@@ -132,6 +133,27 @@ public class BenchmarkCommands(CliContext context)
         Console.WriteLine($"  Adj. Scoring:    {t.AdjacentScoringMs:N1} ms ({Pct(t.AdjacentScoringMs, t.TotalMs)})");
         Console.WriteLine($"  Stats Build:     {t.StatsBuildMs:N1} ms ({Pct(t.StatsBuildMs, t.TotalMs)})");
         Console.WriteLine($"  Tracked Total:   {t.TotalMs:N1} ms");
+
+        var deconjStats = Deconjugator.Instance.GetCacheStats();
+        Console.WriteLine();
+        Console.WriteLine("Deconjugator Cache:");
+        Console.WriteLine($"    Hits:       {deconjStats.Hits:N0}");
+        Console.WriteLine($"    Misses:     {deconjStats.Misses:N0}");
+        Console.WriteLine($"    Hit Rate:   {(deconjStats.Hits + deconjStats.Misses > 0 ? (double)deconjStats.Hits / (deconjStats.Hits + deconjStats.Misses) * 100 : 0):F1}%");
+        Console.WriteLine($"    BFS calls:  {deconjStats.BfsCalls:N0}");
+        Console.WriteLine($"    BFS time:   {deconjStats.BfsTimeMs:N1} ms ({deconjStats.BfsTimeMs / t.TotalMs * 100:F1}% of total)");
+        Console.WriteLine($"    Avg BFS:    {(deconjStats.BfsCalls > 0 ? deconjStats.BfsTimeMs / deconjStats.BfsCalls : 0):F3} ms/call");
+        Console.WriteLine($"    Entries:    {deconjStats.Count:N0} / {deconjStats.MaxEntries:N0}");
+
+        if (t.PipelineStageMs.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Pipeline Stage Breakdown:");
+            foreach (var (stage, ms) in t.PipelineStageMs.OrderByDescending(kv => kv.Value))
+            {
+                Console.WriteLine($"    {stage,-35} {ms,10:N1} ms ({Pct(ms, t.PipelineMs)})");
+            }
+        }
 
         if (!string.IsNullOrEmpty(options.Output))
         {

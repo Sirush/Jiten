@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Jiten.Parser.Diagnostics;
 
 public class BenchmarkTimings
@@ -20,6 +22,8 @@ public class BenchmarkTimings
     public double ResegmentationMs { get; set; }
     public double AdjacentScoringMs { get; set; }
     public double StatsBuildMs { get; set; }
+
+    public ConcurrentDictionary<string, double> PipelineStageMs { get; } = new();
 
     public double MorphologicalAnalysisMs => TextPreprocessMs + SudachiFFIMs + TokenParsingMs + OffsetRecoveryMs + PipelineMs + SentenceSplitMs;
 
@@ -45,5 +49,8 @@ public class BenchmarkTimings
         ResegmentationMs += other.ResegmentationMs;
         AdjacentScoringMs += other.AdjacentScoringMs;
         StatsBuildMs += other.StatsBuildMs;
+
+        foreach (var (stage, ms) in other.PipelineStageMs)
+            PipelineStageMs.AddOrUpdate(stage, ms, (_, existing) => existing + ms);
     }
 }

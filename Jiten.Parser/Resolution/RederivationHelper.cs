@@ -44,23 +44,24 @@ internal static class RederivationHelper
             or PartOfSpeech.NaAdjective or PartOfSpeech.Expression)
         {
             var normalizedText = KanaNormalizer.Normalize(KanaConverter.ToHiragana(text));
-            var deconjugated = deconjugator.Deconjugate(normalizedText)
-                .OrderByDescending(d => d.Text.Length).ToList();
+            var deconjugated = deconjugator.Deconjugate(normalizedText);
 
-            var deconjIds = new List<int>();
             var deconjMatches = new List<(DeconjugationForm form, List<int> ids)>();
+            var seen = new HashSet<int>(candidateIds);
 
-            foreach (var form in deconjugated)
+            for (int d = 0; d < deconjugated.Count; d++)
             {
+                var form = deconjugated[d];
                 if (lookups.TryGetValue(form.Text, out List<int>? lookup))
                 {
-                    deconjIds.AddRange(lookup);
                     deconjMatches.Add((form, lookup));
+                    foreach (var id in lookup)
+                        if (seen.Add(id))
+                            candidateIds.Add(id);
                 }
             }
 
-            candidateIds.AddRange(deconjIds);
-            candidateIds = candidateIds.Distinct().ToList();
+            deconjMatches.Sort((a, b) => b.form.Text.Length.CompareTo(a.form.Text.Length));
 
             if (candidateIds.Count == 0)
                 return null;

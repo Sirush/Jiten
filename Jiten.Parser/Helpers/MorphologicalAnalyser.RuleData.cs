@@ -19,6 +19,8 @@ public partial class MorphologicalAnalyser
         ("に", "劣ら", "ず", PartOfSpeech.Expression),
         ("しょう", "が", "ねぇ", PartOfSpeech.IAdjective),
         ("しょう", "が", "ねー", PartOfSpeech.IAdjective),
+        ("いけす", "か", "ねぇ", PartOfSpeech.IAdjective),
+        ("いけす", "か", "ねー", PartOfSpeech.IAdjective),
         ("たら", "し", "たら", PartOfSpeech.Verb),
         ("どう", "あって", "も", PartOfSpeech.Expression),
     ];
@@ -68,8 +70,10 @@ public partial class MorphologicalAnalyser
     {
         { "続ける", "続け" }, { "始める", "始め" }, { "終わる", "終わ" },
         { "終える", "終え" }, { "出す", "出" }, { "かける", "かけ" },
-        { "回る", "回" },
+        { "回る", "回" }, { "合う", "合" },
     };
+
+    private static readonly HashSet<string> CompoundVerbSplitSuffixes = [..AuxiliaryVerbs, "合う"];
 
     private static readonly HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
     [
@@ -151,6 +155,7 @@ public partial class MorphologicalAnalyser
         ("当", "たった", PartOfSpeech.Verb),
         ("こそ", "あれ", PartOfSpeech.Conjunction),
         ("こう", "やって", PartOfSpeech.Conjunction),
+        ("そう", "やって", PartOfSpeech.Conjunction),
         ("って", "ば", PartOfSpeech.Particle),
         ("かく", "も", PartOfSpeech.NominalAdjective),
         ("よう", "さん", PartOfSpeech.NominalAdjective),
@@ -186,6 +191,7 @@ public partial class MorphologicalAnalyser
         ("並び", "に", PartOfSpeech.Conjunction),
         ("真っ先","に", PartOfSpeech.Adverb),
         ("です","から", PartOfSpeech.Conjunction),
+        ("つ","か", PartOfSpeech.Conjunction),
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];

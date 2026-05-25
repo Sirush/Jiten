@@ -1113,7 +1113,23 @@
   {
     "type": "stdrule",
     "dec_end": [""],
+    "con_end": ["下さい"],
+    "dec_tag": ["stem-te"],
+    "con_tag": ["adj-i"],
+    "detail": "polite request"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
     "con_end": ["くださいませ"],
+    "dec_tag": ["stem-te"],
+    "con_tag": ["adj-i"],
+    "detail": "polite request"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["下さいませ"],
     "dec_tag": ["stem-te"],
     "con_tag": ["adj-i"],
     "detail": "polite request"

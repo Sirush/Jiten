@@ -792,6 +792,8 @@ public partial class MorphologicalAnalyser
                             negativeWord.DictionaryForm = verbStem.DictionaryForm;
                             negativeWord.NormalizedForm = candidateText;
                             negativeWord.Reading = KanaConverter.ToHiragana(verbStem.Reading + negativeWord.Reading);
+                            if (verbStem.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant))
+                                negativeWord.PartOfSpeechSection1 = PartOfSpeechSection.PossibleDependant;
                         }
                     }
 
@@ -865,6 +867,30 @@ public partial class MorphologicalAnalyser
             {
                 newList.Add(new WordInfo(w1) { PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.SentenceEndingParticle });
                 i++;
+                continue;
+            }
+
+            // Sudachi fuses 私+戦 → 私戦(しせん "private war") from system dict.
+            // When followed by いたく (Sudachi: adverb 痛く), it's 私(わたし)+戦いたく(want to fight).
+            if (w1 is { Text: "私戦", PartOfSpeech: PartOfSpeech.Noun or PartOfSpeech.CommonNoun }
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1] is { Text: "いたく", NormalizedForm: "痛く" })
+            {
+                var w2 = wordInfos[i + 1];
+                int mid = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1;
+                newList.Add(new WordInfo
+                {
+                    Text = "私", DictionaryForm = "私", NormalizedForm = "私",
+                    PartOfSpeech = PartOfSpeech.Pronoun, Reading = "ワタシ",
+                    StartOffset = w1.StartOffset, EndOffset = mid,
+                });
+                newList.Add(new WordInfo
+                {
+                    Text = "戦いたく", DictionaryForm = "戦う", NormalizedForm = "戦う",
+                    PartOfSpeech = PartOfSpeech.Verb, Reading = "タタカイタク",
+                    StartOffset = mid, EndOffset = w2.EndOffset,
+                });
+                i += 2;
                 continue;
             }
 
@@ -991,7 +1017,7 @@ public partial class MorphologicalAnalyser
                 && (w1.Text.EndsWith("んで") || w1.Text.EndsWith("んだ")))
             {
                 var hiragana = NormalizeToHiragana(w1.Text);
-                var deconjForms = Deconjugator.Instance.Deconjugate(hiragana);
+                var deconjForms = PipelineCachedDeconjugate(hiragana);
                 var verbForm = deconjForms.FirstOrDefault(f =>
                     f.Tags.Any(t => t is "v5b" or "v5m" or "v5n" or "v5g") &&
                     (f.Text.EndsWith("ぶ") || f.Text.EndsWith("む") || f.Text.EndsWith("ぬ") || f.Text.EndsWith("ぐ")));
@@ -1139,7 +1165,7 @@ public partial class MorphologicalAnalyser
                     && HasCompoundLookup != null)
                 {
                     var combined = w1.Text + "とこう";
-                    var forms = Deconjugator.Instance.Deconjugate(combined);
+                    var forms = PipelineCachedDeconjugate(combined);
                     var verbForm = forms.FirstOrDefault(f =>
                         f.Tags.Count > 0 && f.Tags.Count <= 6 &&
                         f.Tags.Any(t => t.StartsWith("v")) &&
@@ -1161,46 +1187,45 @@ public partial class MorphologicalAnalyser
                 }
 
                 bool found = false;
-                foreach (var sc in SpecialCases3)
+                if (SpecialCases3Dict.TryGetValue(w1.Text, out var sc3Candidates))
                 {
-                    if (w1.Text == sc.Item1 && w2.Text == sc.Item2 && w3.Text == sc.Item3)
+                    foreach (var sc in sc3Candidates)
                     {
-                        // Check if preceding token + this expression forms a compound verb
-                        // e.g., 板 + に+つい+て → 板につく (idiomatic compound)
-                        if (newList.Count > 0 && HasCompoundLookup != null &&
-                            w2.PartOfSpeech == PartOfSpeech.Verb)
+                        if (w2.Text == sc.Second && w3.Text == sc.Third)
                         {
-                            var prevWord = newList[^1];
-                            var compoundDictForm = prevWord.Text + sc.Item1 + w2.DictionaryForm;
-                            if (HasCompoundLookup(compoundDictForm))
+                            if (newList.Count > 0 && HasCompoundLookup != null &&
+                                w2.PartOfSpeech == PartOfSpeech.Verb)
                             {
-                                newList.RemoveAt(newList.Count - 1);
-                                var compoundWord = new WordInfo(prevWord);
-                                compoundWord.Text = prevWord.Text + w1.Text + w2.Text + w3.Text;
-                                compoundWord.EndOffset = w3.EndOffset;
-                                compoundWord.DictionaryForm = compoundDictForm;
-                                compoundWord.PartOfSpeech = PartOfSpeech.Verb;
-                                newList.Add(compoundWord);
-                                i += 3;
-                                found = true;
-                                break;
+                                var prevWord = newList[^1];
+                                var compoundDictForm = prevWord.Text + w1.Text + w2.DictionaryForm;
+                                if (HasCompoundLookup(compoundDictForm))
+                                {
+                                    newList.RemoveAt(newList.Count - 1);
+                                    var compoundWord = new WordInfo(prevWord);
+                                    compoundWord.Text = prevWord.Text + w1.Text + w2.Text + w3.Text;
+                                    compoundWord.EndOffset = w3.EndOffset;
+                                    compoundWord.DictionaryForm = compoundDictForm;
+                                    compoundWord.PartOfSpeech = PartOfSpeech.Verb;
+                                    newList.Add(compoundWord);
+                                    i += 3;
+                                    found = true;
+                                    break;
+                                }
                             }
+
+                            var newWord = new WordInfo(w1);
+                            newWord.Text = w1.Text + w2.Text + w3.Text;
+                            newWord.EndOffset = w3.EndOffset;
+                            newWord.DictionaryForm = newWord.Text;
+
+                            if (sc.Pos != null)
+                                newWord.PartOfSpeech = sc.Pos.Value;
+
+                            newList.Add(newWord);
+                            i += 3;
+                            found = true;
+                            break;
                         }
-
-                        var newWord = new WordInfo(w1);
-                        newWord.Text = w1.Text + w2.Text + w3.Text;
-                        newWord.EndOffset = w3.EndOffset;
-                        newWord.DictionaryForm = newWord.Text;
-
-                        if (sc.Item4 != null)
-                        {
-                            newWord.PartOfSpeech = sc.Item4.Value;
-                        }
-
-                        newList.Add(newWord);
-                        i += 3;
-                        found = true;
-                        break;
                     }
                 }
 
@@ -1517,36 +1542,34 @@ public partial class MorphologicalAnalyser
                 }
 
                 bool found = false;
-                foreach (var sc in SpecialCases2)
+                if (SpecialCases2Dict.TryGetValue(w1.Text, out var sc2Candidates))
                 {
-                    if (w1.Text == sc.Item1 && w2.Text == sc.Item2
-                        && !(sc.Item3 == PartOfSpeech.Verb && w1.PartOfSpeech == PartOfSpeech.Conjunction))
+                    foreach (var sc in sc2Candidates)
                     {
-                        var newWord = new WordInfo(w1) { Text = w1.Text + w2.Text, EndOffset = w2.EndOffset };
-
-                        // For verb merges where the first token is a conjugated verb form,
-                        // preserve the original dictionary form (e.g., し+て → して with DictionaryForm=する)
-                        // This enables compound lookups like 手にする to work correctly
-                        if (sc.Item3 == PartOfSpeech.Verb &&
-                            !string.IsNullOrEmpty(w1.DictionaryForm) &&
-                            w1.DictionaryForm != w1.Text)
+                        if (w2.Text == sc.Second
+                            && !(sc.Pos == PartOfSpeech.Verb && w1.PartOfSpeech == PartOfSpeech.Conjunction))
                         {
-                            newWord.DictionaryForm = w1.DictionaryForm;
-                        }
-                        else
-                        {
-                            newWord.DictionaryForm = newWord.Text;
-                        }
+                            var newWord = new WordInfo(w1) { Text = w1.Text + w2.Text, EndOffset = w2.EndOffset };
 
-                        if (sc.Item3 != null)
-                        {
-                            newWord.PartOfSpeech = sc.Item3.Value;
-                        }
+                            if (sc.Pos == PartOfSpeech.Verb &&
+                                !string.IsNullOrEmpty(w1.DictionaryForm) &&
+                                w1.DictionaryForm != w1.Text)
+                            {
+                                newWord.DictionaryForm = w1.DictionaryForm;
+                            }
+                            else
+                            {
+                                newWord.DictionaryForm = newWord.Text;
+                            }
 
-                        newList.Add(newWord);
-                        i += 2;
-                        found = true;
-                        break;
+                            if (sc.Pos != null)
+                                newWord.PartOfSpeech = sc.Pos.Value;
+
+                            newList.Add(newWord);
+                            i += 2;
+                            found = true;
+                            break;
+                        }
                     }
                 }
 
@@ -2041,7 +2064,8 @@ public partial class MorphologicalAnalyser
                         w.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary
                             or PartOfSpeech.Prefix or PartOfSpeech.Suffix or PartOfSpeech.NounSuffix
                             or PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol
-                            or PartOfSpeech.BlankSpace or PartOfSpeech.Conjunction)
+                            or PartOfSpeech.BlankSpace or PartOfSpeech.Conjunction
+                        || (w.PartOfSpeech == PartOfSpeech.Expression && w.Text is "だった" or "だったら"))
                     {
                         allValid = false;
                         break;
@@ -2052,6 +2076,21 @@ public partial class MorphologicalAnalyser
 
                 if (!allValid || totalLen < 3 || totalLen > 12)
                     continue;
+
+                bool allSameInterjection = wordInfos[i].PartOfSpeech == PartOfSpeech.Interjection;
+                if (allSameInterjection)
+                {
+                    var firstText = wordInfos[i].Text;
+                    for (int j = i + 1; j < i + spanLen; j++)
+                    {
+                        if (wordInfos[j].Text != firstText || wordInfos[j].PartOfSpeech != PartOfSpeech.Interjection)
+                        {
+                            allSameInterjection = false;
+                            break;
+                        }
+                    }
+                }
+                if (allSameInterjection) continue;
 
                 string combinedText = spanLen switch
                 {

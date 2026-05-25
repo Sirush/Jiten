@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Jiten.Parser.Diagnostics;
 
 namespace Jiten.Parser;
@@ -54,9 +55,13 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Disambiguation, FixReadingAmbiguity),
     ];
 
-    private List<WordInfo> RunPipeline(List<WordInfo> wordInfos, ParserDiagnostics? diagnostics)
+    private List<WordInfo> RunPipeline(List<WordInfo> wordInfos, ParserDiagnostics? diagnostics,
+                                      BenchmarkTimings? timings = null)
     {
+        _pipelineDeconjCache = new Dictionary<string, IReadOnlyList<DeconjugationForm>>(StringComparer.Ordinal);
+        _pipelineDeconjCacheAlt = _pipelineDeconjCache.GetAlternateLookup<ReadOnlySpan<char>>();
         var features = TokenFeatureScanner.Scan(wordInfos);
+        Stopwatch? sw = timings != null ? Stopwatch.StartNew() : null;
 
         foreach (var stage in GetTokenStages())
         {
@@ -67,13 +72,21 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            sw?.Restart();
             var prev = wordInfos;
             wordInfos = TrackStage(stage, wordInfos, diagnostics);
 
             if (!ReferenceEquals(prev, wordInfos))
                 features = TokenFeatureScanner.Scan(wordInfos);
+
+            if (sw != null)
+            {
+                var elapsed = sw.Elapsed.TotalMilliseconds;
+                timings!.PipelineStageMs.AddOrUpdate(stage.Name, elapsed, (_, existing) => existing + elapsed);
+            }
         }
 
+        _pipelineDeconjCache = null;
         return wordInfos;
     }
 

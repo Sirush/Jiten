@@ -28,7 +28,7 @@ public partial class MorphologicalAnalyser
 
             // Check if dictionary form ends with any auxiliary verb
             string? matchedAux = null;
-            foreach (var aux in AuxiliaryVerbs)
+            foreach (var aux in CompoundVerbSplitSuffixes)
             {
                 if (word.DictionaryForm.EndsWith(aux) && word.DictionaryForm.Length > aux.Length)
                 {

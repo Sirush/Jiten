@@ -65,6 +65,7 @@ internal static class TransitionRuleSets
     {
         { 1172400, (1444150, 30) }, // 嘘 → 吐く (to tell a lie), not 点く/付く
         { 1597190, (1444150, 30) }, // ため息 → 吐く (to sigh), not 付く
+        { 1371260, (1229610, 30) }, // 水 → 汲む (to draw water), not 組む
     };
 
     internal static readonly ScoringRule[] SoftRules =
@@ -75,7 +76,7 @@ internal static class TransitionRuleSets
             40),
 
         new("noun-copula-synergy",
-            [ScoringCondition.CandidateIsNounLike, ScoringCondition.CandidateIsNotHonorific],
+            [ScoringCondition.CandidateIsNounLike, ScoringCondition.CandidateIsNotHonorific, ScoringCondition.CandidateIsNotName],
             [ScoringCondition.NextIsCopula],
             65),
 

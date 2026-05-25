@@ -555,7 +555,7 @@ public class MorphologicalAnalyserTests
         yield return ["急にこれを食べさせられちゃったって言われてもちょっと困るなあ", new[] { "急に", "これ", "を", "食べさせられちゃった", "って", "言われて", "も", "ちょっと", "困る", "なあ" }];
         // 指弾 is a vs (suru-verb) so 指弾する is correctly combined
         yield return ["俺は奴の民主主義ぶった欺瞞を指弾する", new[] { "俺", "は", "奴", "の", "民主主義", "ぶった", "欺瞞", "を", "指弾する" }];
-        yield return ["俺はどこか背徳的な昂揚感", new[] { "俺", "は", "どこか", "背徳", "的な", "昂揚感" }];
+        yield return ["俺はどこか背徳的な昂揚感", new[] { "俺", "は", "どこか", "背徳的な", "昂揚感" }];
         // め derogatory suffix is filtered — only the noun remains
         yield return ["欠陥品め", new[] { "欠陥品" }];
         // め kept as part of an adjectival compound (大きめ = "on the large side")
@@ -903,7 +903,7 @@ public class MorphologicalAnalyserTests
         // 第一次/一次/第二次/二次 — ordinal counters should not be split
         yield return ["第一次魔王討伐", new[] { "第一次", "魔王", "討伐" }];
         yield return ["立つ鳥の声一次の日の朝まだき", new[] { "立つ鳥", "の", "声", "一次", "の", "日", "の", "朝まだき" }];
-        yield return ["余のせいで第二次神魔大戦まであるんだけどーっ", new[] { "余", "の", "せい", "で", "第二次", "神", "魔", "大戦", "まで", "ある", "んだ", "けど" }];
+        yield return ["余のせいで第二次神魔大戦まであるんだけどーっ", new[] { "余", "のせいで", "第二次", "神", "魔", "大戦", "まで", "ある", "んだ", "けど" }];
         yield return ["しかも何で二次性徴の部分", new[] { "しかも", "何で", "二次", "性徴", "の", "部分"}];
         yield return ["足元気をつけろ！", new[] { "足元", "気をつけろ" }];
 
@@ -911,7 +911,7 @@ public class MorphologicalAnalyserTests
         yield return ["フンッバカバカしい先に帰るぞ", new[] { "フンッ", "バカバカしい", "先に", "帰る", "ぞ" }];
 
         // たわけ should split into た+わけ after verb contexts, not match 戯け
-        yield return ["術があるったわけではない", new[] { "術", "が", "ある", "わけではない" }];
+        yield return ["術があるったわけではない", new[] { "術", "が", "あるった", "わけではない" }];
         yield return ["どうしてたわけ", new[] { "どうして", "わけ" }];
         yield return ["チクッたわけじゃない", new[] { "チクッ", "わけじゃない" }];
 
@@ -1215,6 +1215,8 @@ public class MorphologicalAnalyserTests
         yield return ["今は、はっきりと感じる", new[] { "今", "は", "はっきり", "と", "感じる" }];
         // は as genuine stutter should still be dropped
         yield return ["は、はい？", new[] { "はい" }];
+        // repeated はい separated by ellipsis should NOT merge into はいはい (crawling)
+        yield return ["はい……はい、分かりました。", new[] { "はい", "分かりました" }];
 
         // === 呼ぶ-family: verb stems must not be split by resegmentation ===
         yield return ["呼ばれもしない", new[] { "呼ばれ", "も", "しない" }];
@@ -1261,7 +1263,7 @@ public class MorphologicalAnalyserTests
         yield return ["国際連合教育科学文化機関", new[] { "国際連合教育科学文化機関" }];
 
         // 連邦国支部長 — resegmentation should split 支部長 as 支部+長 (branch+chief), not 支+部長
-        yield return ["連邦国支部長", new[] { "連邦", "国", "支部", "長" }];
+        yield return ["連邦国支部長", new[] { "連邦", "国", "支部長" }];
 
         // ってば should combine from って+ば into a single particle (WordId 2130420)
         yield return ["……あーあ、馬鹿らしいことで悩んでたわ、私ってば。", new[] { "あーあ", "馬鹿らしい", "こと", "で", "悩んでた", "わ", "私", "ってば" }];
@@ -1301,6 +1303,74 @@ public class MorphologicalAnalyserTests
 
         // いい子ぶって should combine when compound exists in JMDict
         yield return ["何今さらいい子ぶってんだよ", new[] { "何", "今さら", "いい子ぶって", "んだ", "よ" }];
+
+        // 私戦(しせん) should split into 私 + 戦いたく when followed by verb continuation
+        yield return ["私戦いたくなんてないんです", new[] { "私", "戦いたく", "なんて", "ない", "んです" }];
+
+        // そう + だった should not merge into そうだった (争奪)
+        yield return ["そうだったんですか", new[] { "そう", "だった", "んです", "か" }];
+
+        // おおきに (Kansai "thank you") should not be split into お + おきに
+        yield return ["煙幕焚いてもろておおきにな", new[] { "煙幕", "焚いてもろて", "おおきに", "な" }];
+
+        // 倒しちゃいます should be a single token (ちゃう contraction of てしまう)
+        yield return ["倒しちゃいます", new[] { "倒しちゃいます" }];
+
+        // ではなかろうか should be a single token, not split with なかろうか matching 中廊下
+        yield return ["少し飲み過ぎではなかろうか", new[] { "少し", "飲み過ぎ", "ではなかろうか" }];
+        yield return ["恥ずかしい振る舞いではなかろうか", new[] { "恥ずかしい", "振る舞い", "ではなかろうか" }];
+
+        // 用事 should not be swallowed into 私用 + 事
+        yield return ["すみません私用事ができました", new[] { "すみません", "私", "用事", "が", "できました" }];
+
+        // 着なきゃ should be one token (着る + contracted conditional)
+        yield return ["本当にこれ着なきゃダメ", new[] { "本当", "に", "これ", "着なきゃ", "ダメ" }];
+
+        // 長かった should be one token (長い past), not split from 列長 compound
+        yield return ["列長かった？", new[] { "列", "長かった" }];
+
+        // はいてる should be one token (履く progressive), not は particle + 凍てる
+        yield return ["でも、きっとパンツはいてる", new[] { "でも", "きっと", "パンツ", "はいてる" }];
+
+        // 第一人者 as single token — user dic entry
+        yield return ["第一人者", new[] { "第一人者" }];
+
+        // 突然変異 as single token — user dic entry
+        yield return ["突然変異", new[] { "突然変異" }];
+
+        // 丸暗記 as single token — user dic entry
+        yield return ["答え丸暗記させればさすがに何とかなるだろ", new[] { "答え", "丸暗記させれば", "さすがに", "何とかなる", "だろ" }];
+
+        // 会話をする — Sudachi fuses 話をする as MWE, breaking 会話
+        yield return ["会話をする時間", new[] { "会話", "を", "する", "時間" }];
+
+        // 打たれ強い — compound adjective, should not split into 打たれ + 強さ
+        yield return ["打たれ強さ", new[] { "打たれ強さ" }];
+
+        // 全く以って — single expression (全く以て)
+        yield return ["全く以って", new[] { "全く以って" }];
+
+        // 逃れ得ぬ — 得る is a suffix meaning "able to", should NOT merge with preceding verb when compound not in JMDict
+        yield return ["逃れ得ぬ運命", new[] { "逃れ", "得ぬ", "運命" }];
+
+        // はねつける — Sudachi splits as は+ね+つけ+た; user_dic entry forces single verb token
+        yield return ["自国の指導者をからかわれたドイツから厳重な抗議があったが、米国は頑としてはねつけた。",
+            new[] { "自国", "の", "指導者", "を", "からかわれた", "ドイツ", "から", "厳重な", "抗議", "が", "あった", "が", "米国", "は", "頑として", "はねつけた" }];
+
+        // おはよ — colloquial おはよう, Sudachi splits as お+は+よ; user_dic entry forces single token
+        yield return ["おはよ", new[] { "おはよ" }];
+
+        yield return ["やさぐれた感じを受ける", new[] { "やさぐれた", "感じ", "を", "受ける" }];
+
+        // 言うことを聞く (to obey) — user_dic entry makes Sudachi tokenize as single verb
+        yield return ["よく言うことを聞いてるね", new[] { "よく", "言うことを聞いてる", "ね" }];
+
+        // 慈しみ合う not in JMDict — Sudachi compounds it, split stage should decompose into 慈しみ + 合ってる
+        yield return ["そのお互いに見つめ合って分かり合って慈しみ合ってるような瞳は",
+            new[] { "その", "お互い", "に", "見つめ合って", "分かり合って", "慈しみ", "合ってる", "ような", "瞳", "は" }];
+
+        // 思い人 + 様 — Sudachi must prefer 思い人 (user_dic) over 思い + 人様
+        yield return ["思い人様", new[] { "思い人", "様" }];
     }
 
     [Theory]

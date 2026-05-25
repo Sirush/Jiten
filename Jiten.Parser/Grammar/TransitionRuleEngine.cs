@@ -491,6 +491,9 @@ internal static class TransitionRuleEngine
                     ctx.HasPrev && ctx.PrevText == "と"
                     && PosMask.Has(ctx.PrevMask, PosMask.Particle),
 
+                ScoringCondition.CandidateIsNotName =>
+                    !PosMask.Has(ctx.CandidateMask, PosMask.NameBit),
+
                 _ => false
             };
             if (!ok) return false;

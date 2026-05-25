@@ -22,18 +22,15 @@ public partial class MorphologicalAnalyser
     /// Used to prevent combining negative ん (from ない/ぬ contraction) + copula だ (e.g., 知らん + だ).
     /// Returns false if the ん is from a slurred negative form.
     /// </summary>
-    private static bool IsValidNdaPastTense(string verbText)
+    private bool IsValidNdaPastTense(string verbText)
     {
         if (!verbText.EndsWith("ん")) return false;
-        // Check if the verb itself (without だ) is a negative contraction
         var verbHiragana = NormalizeToHiragana(verbText);
-        var verbForms = Deconjugator.Instance.Deconjugate(verbHiragana);
-        // If any form indicates slurred/colloquial negative, don't combine with だ
+        var verbForms = PipelineCachedDeconjugate(verbHiragana);
         if (verbForms.Any(f => f.Process.Any(p => p.Contains("slurred negative") || p.Contains("colloquial negative"))))
             return false;
-        // Otherwise check if んだ is a valid past tense
         var candidate = NormalizeToHiragana(verbText + "だ");
-        var forms = Deconjugator.Instance.Deconjugate(candidate);
+        var forms = PipelineCachedDeconjugate(candidate);
         return IsNdaVerbForm(forms);
     }
 

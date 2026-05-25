@@ -18,6 +18,8 @@ internal static class ResegmentationScorer
         var result = new List<SpanTokenCandidate>(MaxEdgesPerStart);
         int maxLen = Math.Min(MaxEdgeLength, spanText.Length - startPos);
 
+        bool debug = spanText.Contains("ゴブリン") || spanText.Contains("ファルマ");
+
         for (int len = maxLen; len >= 1 && result.Count < MaxEdgesPerStart; len--)
         {
             var slice = spanText.Substring(startPos, len);
@@ -32,6 +34,7 @@ internal static class ResegmentationScorer
                 try
                 {
                     var hira = KanaConverter.ToNormalizedHiragana(slice);
+                    if (debug) Console.Error.WriteLine($"  [BuildEdges] pos={startPos} len={len} slice={slice} hira={hira} hiraMatch={lookups.ContainsKey(hira)}");
                     if (hira != slice && lookups.TryGetValue(hira, out var hiraIds) && hiraIds.Count > 0)
                         wordIds = hiraIds;
 
@@ -40,7 +43,10 @@ internal static class ResegmentationScorer
             }
 
             if (wordIds != null)
+            {
+                if (debug) Console.Error.WriteLine($"  [BuildEdges] pos={startPos} len={len} MATCH slice={slice} ids=[{string.Join(",", wordIds.Take(3))}]");
                 result.Add(new SpanTokenCandidate(startPos, len, wordIds));
+            }
         }
 
         return result;

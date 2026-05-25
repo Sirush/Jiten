@@ -40,18 +40,26 @@ internal static class LookupCandidateCollector
         bool includeKanaNormalized = true,
         bool includeLongVowelStripped = false)
     {
+        var seen = new HashSet<int>();
         var ids = new List<int>();
-        if (lookups.TryGetValue(text, out var direct)) ids.AddRange(direct);
+
+        void AddRange(List<int> source)
+        {
+            foreach (var id in source)
+                if (seen.Add(id)) ids.Add(id);
+        }
+
+        if (lookups.TryGetValue(text, out var direct)) AddRange(direct);
 
         var hiragana = KanaConverter.ToHiragana(text, convertLongVowelMark: false);
         if (hiragana != text && lookups.TryGetValue(hiragana, out var hiraIds))
-            ids.AddRange(hiraIds);
+            AddRange(hiraIds);
 
         if (includeKanaNormalized)
         {
             var normalized = KanaNormalizer.Normalize(hiragana);
             if (normalized != hiragana && lookups.TryGetValue(normalized, out var normIds))
-                ids.AddRange(normIds);
+                AddRange(normIds);
         }
 
         if (includeLongVowelStripped && text.Contains('ー'))
@@ -64,10 +72,10 @@ internal static class LookupCandidateCollector
             {
                 var strippedHira = KanaConverter.ToHiragana(textStripped);
                 if (lookups.TryGetValue(strippedHira, out var stripIds))
-                    ids.AddRange(stripIds);
+                    AddRange(stripIds);
             }
         }
 
-        return ids.Distinct().ToList();
+        return ids;
     }
 }

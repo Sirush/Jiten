@@ -645,16 +645,13 @@ internal static class ReadingScorer
             var word = candidate.Word;
             var sudachiHira = KanaScoringHelpers.ToNormalizedHiragana(context.SudachiReading, convertLongVowelMark: false);
 
-            var kanaForms = new List<string>();
+            int kanaFormCount = 0;
+            bool hasMatchingReading = false;
             foreach (var f in word.Forms)
             {
-                if (f.FormType == JmDictFormType.KanaForm)
-                    kanaForms.Add(KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false));
-            }
-
-            bool hasMatchingReading = false;
-            foreach (var h in kanaForms)
-            {
+                if (f.FormType != JmDictFormType.KanaForm) continue;
+                kanaFormCount++;
+                var h = KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false);
                 if (h == sudachiHira) { hasMatchingReading = true; break; }
             }
 
@@ -665,8 +662,10 @@ internal static class ReadingScorer
             else if (sudachiHira.Length > 1)
             {
                 bool found = false;
-                foreach (var h in kanaForms)
+                foreach (var f in word.Forms)
                 {
+                    if (f.FormType != JmDictFormType.KanaForm) continue;
+                    var h = KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false);
                     if (h.Length > sudachiHira.Length && h.StartsWith(sudachiHira, StringComparison.Ordinal))
                     { found = true; break; }
                 }
@@ -677,8 +676,10 @@ internal static class ReadingScorer
                 }
                 else if (sudachiHira.Length > 2)
                 {
-                    foreach (var h in kanaForms)
+                    foreach (var f in word.Forms)
                     {
+                        if (f.FormType != JmDictFormType.KanaForm) continue;
+                        var h = KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false);
                         if (h.Length < 3 || !h.EndsWith('る')) continue;
                         if (sudachiHira.StartsWith(h[..^1], StringComparison.Ordinal))
                         { found = true; break; }
@@ -691,16 +692,20 @@ internal static class ReadingScorer
                 {
                     var sudachiStem = sudachiHira[..^1];
                     bool hasStemMatch = false;
-                    foreach (var h in kanaForms)
+                    foreach (var f in word.Forms)
                     {
+                        if (f.FormType != JmDictFormType.KanaForm) continue;
+                        var h = KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false);
                         if (h.Length > 1 && h[..^1] == sudachiStem) { hasStemMatch = true; break; }
                     }
 
                     if (!hasStemMatch && sudachiStem.Length > 1 && sudachiStem[^1] == 'い')
                     {
                         var rootStem = sudachiStem[..^1];
-                        foreach (var h in kanaForms)
+                        foreach (var f in word.Forms)
                         {
+                            if (f.FormType != JmDictFormType.KanaForm) continue;
+                            var h = KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false);
                             if (h.Length > 1 && h[..^1] == rootStem) { hasStemMatch = true; break; }
                         }
                     }
@@ -708,8 +713,10 @@ internal static class ReadingScorer
                     if (!hasStemMatch && sudachiStem.Length > 1 && sudachiStem[^1] == 'っ')
                     {
                         var rootStem = sudachiStem[..^1];
-                        foreach (var h in kanaForms)
+                        foreach (var f in word.Forms)
                         {
+                            if (f.FormType != JmDictFormType.KanaForm) continue;
+                            var h = KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false);
                             if (h.Length > 1 && h[..^1] == rootStem) { hasStemMatch = true; break; }
                         }
                     }
@@ -722,8 +729,10 @@ internal static class ReadingScorer
             if (readingMatchScore == 0 && sudachiHira.Length > 2)
             {
                 bool hasSuruStemMatch = false;
-                foreach (var h in kanaForms)
+                foreach (var f in word.Forms)
                 {
+                    if (f.FormType != JmDictFormType.KanaForm) continue;
+                    var h = KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false);
                     if (h.Length < 2 || h.Length >= sudachiHira.Length) continue;
                     if (!sudachiHira.StartsWith(h, StringComparison.Ordinal)) continue;
                     char nextChar = sudachiHira[h.Length];
@@ -733,12 +742,14 @@ internal static class ReadingScorer
                     readingMatchScore += 70;
             }
 
-            if (readingMatchScore == 0 && sudachiHira.Length >= 2 && kanaForms.Count > 0)
+            if (readingMatchScore == 0 && sudachiHira.Length >= 2 && kanaFormCount > 0)
             {
                 char firstChar = sudachiHira[0];
                 bool anyPrefixMatch = false;
-                foreach (var h in kanaForms)
+                foreach (var f in word.Forms)
                 {
+                    if (f.FormType != JmDictFormType.KanaForm) continue;
+                    var h = KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false);
                     if (h.Length > 0 && h[0] == firstChar) { anyPrefixMatch = true; break; }
                 }
 
@@ -748,10 +759,12 @@ internal static class ReadingScorer
                 }
                 else
                 {
-                    bool formMatchesDictForm = !string.IsNullOrEmpty(context.DictionaryForm)
-                        && word.Forms.Any(f => f.Text == context.DictionaryForm);
-                    // Skip penalty when deconjugation validates the match — conjugation can
-                    // change the reading stem for irregular verbs (e.g. 来る くる → 来てない きてない).
+                    bool formMatchesDictForm = false;
+                    if (!string.IsNullOrEmpty(context.DictionaryForm))
+                    {
+                        foreach (var f in word.Forms)
+                            if (f.Text == context.DictionaryForm) { formMatchesDictForm = true; break; }
+                    }
                     if (formMatchesDictForm && candidate.DeconjForm?.Process is not { Count: > 0 })
                         readingMatchScore -= 70;
                 }
@@ -760,9 +773,16 @@ internal static class ReadingScorer
             if (readingMatchScore > 0 && archaicPosTypes is { Count: > 0 })
             {
                 var readingPos = candidate.CachedReadingPos;
-                IEnumerable<string> posToCheck = readingPos.Count > 0 ? readingPos : word.PartsOfSpeech;
-                if (posToCheck.Any(archaicPosTypes.Contains))
-                    readingMatchScore /= 2;
+                if (readingPos.Count > 0)
+                {
+                    foreach (var p in readingPos)
+                        if (archaicPosTypes.Contains(p)) { readingMatchScore /= 2; break; }
+                }
+                else
+                {
+                    foreach (var p in word.PartsOfSpeech)
+                        if (archaicPosTypes.Contains(p)) { readingMatchScore /= 2; break; }
+                }
             }
         }
 
@@ -896,6 +916,13 @@ internal static class PosAffinityScorer
 
         int score = 25;
 
+        // When Sudachi says Suffix but the candidate also has Noun POS, it's a noun+suffix
+        // hybrid (e.g. ゲ [n-suf, n] "videogame") competing with a pure suffix (e.g. げ [suf]).
+        // Penalize the hybrid so noun-particle-synergy can't flip the winner.
+        if (context.SudachiPOS == PartOfSpeech.Suffix
+            && PosMask.Has(candidate.Word.CachedPOSMask, PosMask.NounLike))
+            score -= 50;
+
         // Verb-class matching: when Sudachi identifies a specific godan row via DictionaryForm,
         // penalize candidates from a different row (e.g. こく→v5k vs こる→v5r).
         // Only for unambiguous endings (る is ambiguous between v5r and v1).
@@ -926,6 +953,17 @@ internal static class PosAffinityScorer
                 or "v5u" or "v5u-s" or "v5uru" or "vk" or "vz" or "aux-v"))
         {
             score -= 60;
+        }
+
+        // Sudachi 非自立可能 means the verb is used as an auxiliary (e.g. くれる after te-form).
+        // Boost candidates with aux-v, penalize those without — e.g. 呉れる (aux-v) over 暮れる.
+        if (context.IsSudachiPossibleDependant
+            && context.SudachiPOS == PartOfSpeech.Verb)
+        {
+            if (candidate.Word.PartsOfSpeech.Contains("aux-v"))
+                score += 30;
+            else
+                score -= 30;
         }
 
         return score;

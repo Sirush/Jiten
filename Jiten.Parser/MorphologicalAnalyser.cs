@@ -10,6 +10,66 @@ public partial class MorphologicalAnalyser
 {
     public Func<string, bool>? HasCompoundLookup { get; set; }
 
+    private Dictionary<string, IReadOnlyList<DeconjugationForm>>? _pipelineDeconjCache;
+    private Dictionary<string, IReadOnlyList<DeconjugationForm>>.AlternateLookup<ReadOnlySpan<char>> _pipelineDeconjCacheAlt;
+
+    private IReadOnlyList<DeconjugationForm> PipelineCachedDeconjugate(string hiragana)
+    {
+        var cache = _pipelineDeconjCache;
+        if (cache != null && cache.TryGetValue(hiragana, out var forms))
+            return forms;
+        forms = Deconjugator.Instance.Deconjugate(hiragana);
+        cache?.TryAdd(hiragana, forms);
+        return forms;
+    }
+
+    private static readonly char[] KanaVowelMap = BuildKanaVowelMap();
+
+    private static char[] BuildKanaVowelMap()
+    {
+        var map = new char[0x100];
+        foreach (char c in "おこそとのほもよろをごぞどぼぽょ") map[c - 0x3040] = 'う';
+        foreach (char c in "うくすつぬふむゆるぐずづぶぷゅ") map[c - 0x3040] = 'う';
+        foreach (char c in "えけせてねへめれげぜでべぺ") map[c - 0x3040] = 'え';
+        foreach (char c in "いきしちにひみりぎじぢびぴ") map[c - 0x3040] = 'い';
+        foreach (char c in "あかさたなはまやらわがざだばぱゃ") map[c - 0x3040] = 'あ';
+        return map;
+    }
+
+    private IReadOnlyList<DeconjugationForm> PipelineCachedDeconjugateConcat(string part1, string part2)
+    {
+        int totalLen = part1.Length + part2.Length;
+        Span<char> buf = totalLen <= 128 ? stackalloc char[totalLen] : new char[totalLen];
+        part1.AsSpan().CopyTo(buf);
+        part2.AsSpan().CopyTo(buf[part1.Length..]);
+
+        for (int i = 0; i < buf.Length; i++)
+        {
+            char c = buf[i];
+            if (c >= 'ァ' && c <= 'ヶ') buf[i] = (char)(c - 0x60);
+        }
+
+        bool hasLongVowel = buf.Contains('ー');
+        if (hasLongVowel)
+        {
+            for (int i = 1; i < buf.Length; i++)
+            {
+                if (buf[i] != 'ー') continue;
+                char prev = buf[i - 1];
+                if (prev >= 0x3040 && prev < 0x3140)
+                    buf[i] = KanaVowelMap[prev - 0x3040];
+            }
+        }
+
+        if (_pipelineDeconjCacheAlt.TryGetValue(buf, out var forms))
+            return forms;
+
+        var key = buf.ToString();
+        forms = Deconjugator.Instance.Deconjugate(key);
+        _pipelineDeconjCache!.TryAdd(key, forms);
+        return forms;
+    }
+
     /// <summary>
     /// Parses the given text into a list of SentenceInfo objects by performing morphological analysis.
     /// Delegates to ParseBatch for a single codepath.
@@ -203,7 +263,7 @@ public partial class MorphologicalAnalyser
 
             if (sw != null) { timings!.OffsetRecoveryMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
-            wordInfos = RunPipeline(wordInfos, diagnostics);
+            wordInfos = RunPipeline(wordInfos, diagnostics, timings);
 
             if (sw != null) { timings!.PipelineMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 

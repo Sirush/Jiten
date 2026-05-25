@@ -38,7 +38,9 @@ internal static class ResegmentationEngine
                 }
                 else
                 {
+                    bool debug = span.Text.Contains("ゴブリン") || span.Text.Contains("ファルマ");
                     path = ResegmentationScorer.FindBestPath(span.Text, lookups, frequencyRanks);
+                    if (debug) Console.Error.WriteLine($"[Reseg] span={span.Text} path={path?.Segments.Count ?? -1} complete={path?.IsComplete(span.Text.Length)} segs=[{string.Join("+", path?.Segments.Select(s => span.Text.Substring(s.StartChar, s.Length)) ?? [])}]");
                     if (path == null || !path.IsComplete(span.Text.Length) || path.Segments.Count <= 1)
                         continue;
                     if (path.Segments.Count > (span.Text.Length + 1) / 2)
@@ -47,6 +49,7 @@ internal static class ResegmentationEngine
                         continue;
                     if (ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text) < 0)
                         continue;
+                    if (debug) Console.Error.WriteLine($"[Reseg] ACCEPTED span={span.Text} segs=[{string.Join("+", path.Segments.Select(s => span.Text.Substring(s.StartChar, s.Length)))}] score={ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text)}");
                 }
 
                 var prevPos = span.WordIndex > 0 ? sentence.Words[span.WordIndex - 1].word.PartOfSpeech : (PartOfSpeech?)null;

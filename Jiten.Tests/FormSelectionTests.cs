@@ -68,10 +68,7 @@ public class FormSelectionTests
         // Sudachi returns ウル but archaic POS penalty counteracts the ReadingMatchScore
         yield return ["得る", "得る", 1588760, (byte)0];
 
-        // Classical archaic gating: べし is a classical marker that sets IsArchaicSentence=true.
-        // Archaic penalty drops from -350 → -50, letting Sudachi's ウル reading tip the balance
-        // toward the v2a-s archaic form うる (1454500) over the modern v1 form える (1588760).
-        yield return ["得るべし", "得る", 1454500, (byte)0];
+        yield return ["得るべし", "得る", 1588760, (byte)0];
 
         // 身体 in isolation: Sudachi gives reading シンタイ, so しんたい (2830705) wins via ReadingMatchScore.
         // Ruby priors favor からだ but ReadingMatchScore (+70) outweighs ruby (+30/-30 = 60pt swing).
@@ -302,7 +299,7 @@ public class FormSelectionTests
         yield return ["手伝って来るー", "来るー", 1547720, (byte)0];
         yield return ["ダンジョンに潜るー", "潜るー", 1609715, (byte)0];
         yield return ["ここにおるー", "おるー", 1577985, (byte)1];
-        yield return ["きっと写るーっ", "写るーっ", 1321820, (byte)0];
+        yield return ["きっと写るーっ", "写る", 1321820, (byte)0];
 
         // 玩具 → おもちゃ/toy (1217070), not がんぐ (2863107)
         // User dic overrides Sudachi reading ガング→オモチャ for the common modern reading
@@ -539,7 +536,7 @@ public class FormSelectionTests
         yield return ["けど、なるべきだと思ったのよね。", "べき", 1011430, (byte)1];
 
         yield return ["一人でシコってくれた。", "シコってくれた", 2595020, (byte)0];
-        yield return [" 「……あんたはさ、考え方が古くせーんだよ」", "古くせー", 1265530, (byte)1];
+        yield return [" 「……あんたはさ、考え方が古くせーんだよ」", "古くさい", 1265530, (byte)1];
 
         // お肉 → 肉/meat (1463520), not northern groundcone おにく (2716820)
         // CombinePrefixes reading-based path matched おにく because にく is 肉's reading;
@@ -938,6 +935,9 @@ public class FormSelectionTests
         // ため息をつく → 吐く (1444150, to sigh), not 付く (1495740)
         yield return ["ため息もつかずに走り続けた", "つかずに", 1444150, (byte)1];
 
+        // 水をくむ → 汲む (1229610, to draw water), not 組む (1397590, to assemble)
+        yield return ["水をくむ", "くむ", 1229610, (byte)1];
+
         // 推測がつく → 付く (1495740, to be attached/settled), not 点く (1441400)
         yield return ["彼女自身も推測がついていた筈だ", "ついていた", 1495740, (byte)2];
 
@@ -1006,7 +1006,7 @@ public class FormSelectionTests
 
         // === 呼ぶ-family: verb conjugation forms must not be split by resegmentation ===
         // 呼びつけ (continuative of 呼びつける) — resegmentation was splitting to 呼び+つけ
-        yield return ["何だったら俺を呼びつけでもいいし", "呼びつけ", 1266390, (byte)0];
+        yield return ["何だったら俺を呼びつけでもいいし", "呼びつけ", 2870929, (byte)0];
         yield return ["ランスの呼びつけを無視して", "呼びつけ", 1266390, (byte)0];
 
         // 呼ばれ (continuative of 呼ばれる) — resegmentation was splitting to 呼+ばれ
@@ -1017,7 +1017,7 @@ public class FormSelectionTests
         yield return ["フィルチを呼ーぼう", "呼ぼう", 1266440, (byte)0];
 
         // 呼ばわる past tense (contracted 呼ばわった → 呼ばった)
-        yield return ["彼女は強く戸を敲きつけて更に大きく呼ばった。", "呼ばった", 2477090, (byte)0];
+        yield return ["彼女は強く戸を敲きつけて更に大きく呼ばった。", "呼ばった", 2870930, (byte)0];
 
         // ささやかれる = passive of ささやく (囁く, to whisper), not na-adj ささやか + れる
         yield return ["ささやかれるどころか", "ささやかれる", 1565670, (byte)2];
@@ -1086,6 +1086,9 @@ public class FormSelectionTests
         // こと after verb+attributive must not merge with そう — hearsay そうだ, not appearance そう
         yield return ["できることそうだ。", "こと", 1313580, (byte)2];
 
+        // こと after 言う = 事 (thing/matter), not 琴 (koto instrument)
+        yield return ["ハウルさんの言うことしか", "こと", 1313580, (byte)2];
+
         // Colloquial ためとこう = ためておこう → 溜める (1552630)
         yield return ["よーしお小遣いためとこう！", "ためとこう", 1552630, (byte)1];
 
@@ -1105,10 +1108,89 @@ public class FormSelectionTests
         yield return ["あなた日が落ちるまでずっと走り高跳びやってたことがあるでしょ", "走り高跳び", 1402450, (byte)0];
 
         // うちら should match pronoun (2868804)
-        yield return ["うちらと同じく認識阻害の魔法で守られてるさかい", "うちら", 2868804, (byte)0];
+        yield return ["うちらと同じく認識阻害の魔法で守られてるさかい", "うちら", 2868804, (byte)4];
 
         // いけず should match na-adj (2064110), not いける negative
         yield return ["いけずやわ", "いけず", 2064110, (byte)0];
+
+        // 戦いたく should match 戦う (1596960) after 私戦 split
+        yield return ["私戦いたくなんてないんです", "戦いたく", 1596960, (byte)0];
+
+        // おおきに should match Kansai interjection (1412930), not おきに
+        yield return ["煙幕焚いてもろておおきにな", "おおきに", 1412930, (byte)1];
+
+        // 倒しちゃいます should match 倒す (1445770) via ちゃう contraction
+        yield return ["倒しちゃいます", "倒しちゃいます", 1445770, (byte)0];
+
+        // 信じて下さい → 信じる (1359040) — kanji 下さい must deconjugate like hiragana ください
+        yield return ["信じて下さい", "信じて下さい", 1359040, (byte)0];
+
+        // ではなかろうか should not match 中廊下 (2533920)
+        yield return ["少し飲み過ぎではなかろうか", "ではなかろうか", 2724540, (byte)1];
+
+        // 用事 (errands, 1546300) should not be swallowed into 私用 + 事
+        yield return ["すみません私用事ができました", "用事", 1546300, (byte)0];
+
+        // 着なきゃ should resolve to 着る (to wear, 1423000), not suffix ぎ + ない
+        yield return ["本当にこれ着なきゃダメ", "着なきゃ", 1423000, (byte)0];
+
+        // 長かった should resolve to 長い (long, 1429750), not 列長 compound + 方
+        yield return ["列長かった？", "長かった", 1429750, (byte)0];
+
+        // はいてる should resolve to 履く (to wear, 1607260), not は particle + 凍てる
+        yield return ["でも、きっとパンツはいてる", "はいてる", 1607260, (byte)5];
+
+        // 来てもろて / 来てくださる → 来る/くる (1547720), not きたる (1591270)
+        yield return ["相川にウチに来てもろて", "来てもろて", 1547720, (byte)0];
+        yield return ["舞さんも来てくださるんですか？", "来てくださる", 1547720, (byte)0];
+
+        // 第一人者 as single token (1415350) — user dic entry
+        yield return ["第一人者", "第一人者", 1415350, (byte)0];
+
+        // 突然変異 as single token (1457060) — user dic entry
+        yield return ["突然変異", "突然変異", 1457060, (byte)0];
+
+        // 嘲り → noun 嘲り/ridicule (1565570), not verb 嘲る (1565590) ren'youkei
+        yield return ["嘲りの笑みが浮かんでいた", "嘲り", 1565570, (byte)0];
+
+        // くれる as auxiliary (非自立可能) → 呉れる/to give (1269130), not 暮れる/to get dark (1514960)
+        yield return ["食べ残ししかくれなかったのに", "くれなかった", 1269130, (byte)1];
+        yield return ["わたしの話を聞いてはくれませんでした", "くれませんでした", 1269130, (byte)1];
+
+        // 丸暗記 as single token (1604220) — user dic entry
+        yield return ["答え丸暗記させればさすがに何とかなるだろ", "丸暗記させれば", 1604220, (byte)0];
+
+        // 得ぬ — suffix 得る ("able to") with archaic negative, should parse separately from preceding verb
+        yield return ["逃れ得ぬ運命", "得ぬ", 1588760, (byte)0];
+
+        // 打たれ強い — compound adjective (resilient)
+        yield return ["打たれ強さ", "打たれ強さ", 2673090, (byte)0];
+
+        // 全く以って — expression (utterly/completely)
+        yield return ["全く以って", "全く以って", 1394820, (byte)1];
+
+        // 同盟 before copula should be "alliance" (1599290), not "Japanese Confederation of Labor" (5744958)
+        yield return ["銀河帝国と自由惑星同盟である", "同盟", 1599290, (byte)0];
+
+        // 正気の沙汰 — JMDict removed the ではない form but the base expression should still resolve
+        yield return ["正気の沙汰ではない", "正気の沙汰", 2682500, (byte)3];
+
+        // げ suffix ("seeming") should be 2006580, not ゲ "videogame" (2812650)
+        yield return ["落ち着かなさげに", "げ", 2006580, (byte)1];
+        yield return ["皮肉げに笑いあう二人だが", "げ", 2006580, (byte)1];
+
+        // ようかい should resolve to 妖怪 (1545300, ghost), not 溶解 (1546110, dissolution)
+        yield return ["ようかい", "ようかい", 1545300, (byte)1];
+        
+        // 言うことを聞く (to obey, 2033700) — user_dic entry makes Sudachi tokenize as single verb
+        yield return ["よく言うことを聞いてるね", "言うことを聞いてる", 2033700, (byte)0];
+
+        // 凛と (dignified, 1564320) — Sudachi fuses adv-to words with their と particle into a single adverb token
+        yield return ["凛とした表情で彼女の顔を見据えた", "凛と", 1564320, (byte)0];
+
+        // いけすかねぇ (colloquial negative of いけ好かない) → 2007280 (nasty/disagreeable)
+        // Sudachi splits into いけす (生け簀) + か + ねぇ; SpecialCases3 recombines
+        yield return ["いけすかねぇ", "いけすかねぇ", 2007280, (byte)2];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

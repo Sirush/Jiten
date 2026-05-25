@@ -11,45 +11,33 @@ public partial class MorphologicalAnalyser
     {
         if (wordInfos.Count < 2) return wordInfos;
 
-        var deconjugator = Deconjugator.Instance;
         var result = new List<WordInfo>(wordInfos.Count);
-
-        // Local memoization cache for deconjugation results within this pass
-        var deconjCache = new Dictionary<string, IReadOnlyList<DeconjugationForm>>(StringComparer.Ordinal);
-        IReadOnlyList<DeconjugationForm> CachedDeconjugate(string hiragana)
-        {
-            if (deconjCache.TryGetValue(hiragana, out var forms)) 
-                return forms;
-            
-            forms = deconjugator.Deconjugate(hiragana);
-            deconjCache[hiragana] = forms;
-            return forms;
-        }
+        IReadOnlyList<DeconjugationForm> CachedDeconjugate(string hiragana) => PipelineCachedDeconjugate(hiragana);
 
         for (int i = 0; i < wordInfos.Count; i++)
         {
-            var currentWord = new WordInfo(wordInfos[i]);
+            var word = wordInfos[i];
 
-            // Check if potential base for inflection
-            // Exclude AuxiliaryVerbStem words (みたい, そう, etc.) as they are grammatical suffixes, not standalone inflectable words
-            bool isBase = (PosMapper.IsInflectableBase(currentWord.PartOfSpeech) ||
-                           currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
-                           currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun) ||
-                           (currentWord.PartOfSpeech == PartOfSpeech.Suffix &&
-                            currentWord.HasPartOfSpeechSection(PartOfSpeechSection.VerbLike)))
-                          && currentWord.NormalizedForm != "物"
-                          && !currentWord.HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem);
+            bool isBase = (PosMapper.IsInflectableBase(word.PartOfSpeech) ||
+                           word.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
+                           word.HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun) ||
+                           (word.PartOfSpeech == PartOfSpeech.Suffix &&
+                            word.HasPartOfSpeechSection(PartOfSpeechSection.VerbLike)))
+                          && word.NormalizedForm != "物"
+                          && !word.HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem);
 
             if (!isBase)
             {
-                result.Add(currentWord);
+                result.Add(word);
                 continue;
             }
 
-            // Track current target dictionary form
+            var currentWord = new WordInfo(word);
+
             var currentDictForm = currentWord.DictionaryForm;
             var currentNormForm = currentWord.NormalizedForm;
             var currentPOS = currentWord.PartOfSpeech;
+            var currentDictFormHiragana = KanaNormalizer.Normalize(KanaConverter.ToHiragana(currentDictForm));
 
             // Iteratively try to merge subsequent tokens
             while (i + 1 < wordInfos.Count)
@@ -86,12 +74,11 @@ public partial class MorphologicalAnalyser
                     var stealForms = CachedDeconjugate(stealHiragana);
 
                     string stealTarget = currentPOS == PartOfSpeech.Noun
-                        ? KanaNormalizer.Normalize(KanaConverter.ToHiragana(currentDictForm)) + "する"
-                        : KanaNormalizer.Normalize(KanaConverter.ToHiragana(currentDictForm));
+                        ? currentDictFormHiragana + "する"
+                        : currentDictFormHiragana;
 
-                    if (stealForms.Any(f => f.Text == stealTarget))
+                    if (ContainsText(stealForms, stealTarget))
                     {
-                        // Successful steal - merge base + そう
                         currentWord.Text = stealCandidate;
                         currentWord.Reading += WanaKana.ToKatakana("そう");
                         if (currentPOS == PartOfSpeech.Noun)
@@ -126,10 +113,10 @@ public partial class MorphologicalAnalyser
                     var stealForms = CachedDeconjugate(stealHiragana);
 
                     string stealTarget = currentPOS == PartOfSpeech.Noun
-                        ? KanaNormalizer.Normalize(KanaConverter.ToHiragana(currentDictForm)) + "する"
-                        : KanaNormalizer.Normalize(KanaConverter.ToHiragana(currentDictForm));
+                        ? currentDictFormHiragana + "する"
+                        : currentDictFormHiragana;
 
-                    if (stealForms.Any(f => f.Text == stealTarget))
+                    if (ContainsText(stealForms, stealTarget))
                     {
                         currentWord.Text = stealCandidate;
                         currentWord.EndOffset = nextWord.EndOffset;
@@ -155,35 +142,37 @@ public partial class MorphologicalAnalyser
 
                 if (!isValidPart) break;
 
-                string candidateText = currentWord.Text + nextWord.Text;
-                string candidateHiragana = KanaNormalizer.Normalize(KanaConverter.ToHiragana(candidateText));
-                var forms = CachedDeconjugate(candidateHiragana);
-
                 bool merged = false;
                 string? newDictForm = null;
 
-                // Scenario A: Standard inflection - deconjugates to current target
                 string targetHiragana = currentPOS == PartOfSpeech.Noun
-                    ? KanaNormalizer.Normalize(KanaConverter.ToHiragana(currentDictForm)) + "する"
-                    : KanaNormalizer.Normalize(KanaConverter.ToHiragana(currentDictForm));
+                    ? currentDictFormHiragana + "する"
+                    : currentDictFormHiragana;
 
-                if (forms.Any(f => f.Text == targetHiragana) &&
+                var forms = PipelineCachedDeconjugateConcat(currentWord.Text, nextWord.Text);
+                bool scenarioAMatch = ContainsText(forms, targetHiragana) &&
                     (HasCompoundLookup == null || HasCompoundLookup(currentDictForm) ||
-                     (currentNormForm != currentDictForm && HasCompoundLookup(currentNormForm))))
+                     (currentNormForm != currentDictForm && HasCompoundLookup(currentNormForm)));
+
+                if (scenarioAMatch)
                 {
                     if (currentPOS == PartOfSpeech.NaAdjective)
                     {
-                        // Na-adj surface may collide with a godan verb's a-stem (e.g. ささやか = na-adj
-                        // but also mizenkei of ささやく). When the deconjugation chain has verb-stem tags,
-                        // resolve to the underlying verb instead of the na-adjective.
-                        var matchForm = forms.First(f => f.Text == targetHiragana);
-                        if (matchForm.Tags.Any(t => t.StartsWith("stem-") && t != "stem-adj-base"))
+                        var matchForm = FindByText(forms, targetHiragana)!;
+                        bool hasVerbStemTag = false;
+                        foreach (var t in matchForm.Tags)
+                            if (t.StartsWith("stem-") && t != "stem-adj-base") { hasVerbStemTag = true; break; }
+
+                        if (hasVerbStemTag)
                         {
-                            var verbForm = forms.FirstOrDefault(f =>
-                                f.Text != targetHiragana &&
-                                f.Tags.Count > 0 &&
-                                f.Tags[^1].StartsWith("v") &&
-                                HasCompoundLookup != null && HasCompoundLookup(f.Text));
+                            DeconjugationForm? verbForm = null;
+                            foreach (var f in forms)
+                            {
+                                if (f.Text != targetHiragana && f.Tags.Count > 0 &&
+                                    f.Tags[^1].StartsWith("v") &&
+                                    HasCompoundLookup != null && HasCompoundLookup(f.Text))
+                                { verbForm = f; break; }
+                            }
 
                             if (verbForm != null)
                             {
@@ -208,19 +197,14 @@ public partial class MorphologicalAnalyser
                         else if (currentPOS == PartOfSpeech.IAdjective &&
                                  nextWord is { PartOfSpeech: PartOfSpeech.Suffix, DictionaryForm: "さ" })
                         {
-                            // Keep original DictionaryForm (e.g. 幼い) and POS (IAdjective) so the parser
-                            // matches the base adjective entry rather than a homophonous noun (e.g. 幼/よう)
                         }
                     }
                 }
-                // Scenario A2: Noun with na-adj capability + adj-base suffix (e.g., 贅沢すぎる)
-                // The suru-verb target (贅沢する) doesn't match because すぎる/そう/がる attach to the na-adj stem
-                // Only match when the deconjugation goes through stem-adj-base (not copula stem-te/stem-past)
                 else if (currentPOS == PartOfSpeech.Noun &&
                          currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun))
                 {
-                    string bareTarget = KanaNormalizer.Normalize(KanaConverter.ToHiragana(currentDictForm));
-                    if (forms.Any(f => f.Text == bareTarget && f.Tags.Contains("stem-adj-base")) &&
+                    string bareTarget = currentDictFormHiragana;
+                    if (ContainsTextWithTag(forms, bareTarget, "stem-adj-base") &&
                         (HasCompoundLookup == null || HasCompoundLookup(currentDictForm) ||
                          (currentNormForm != currentDictForm && HasCompoundLookup(currentNormForm))))
                     {
@@ -228,16 +212,6 @@ public partial class MorphologicalAnalyser
                         currentPOS = PartOfSpeech.NaAdjective;
                     }
                 }
-                // Scenario B: Suffix transition - creates new compound verb
-                // Handle both: Suffix with VerbLike (かねる) and Verb with PossibleDependant (切れる, 合う, etc.)
-                // Also handles noun-like suffixes that are verb 連用形 (e.g. 合い from 合う)
-                // IMPORTANT: Only apply when:
-                // 1. Base is a Verb, not a Noun (e.g. 提出+いただき should NOT combine)
-                // 2. Current word doesn't end in te-form or auxiliary patterns (these are grammatical constructions, not compounds)
-                //    - て/で: te-form (探して+みる is NOT a compound)
-                //    - たく/なく: adverbial form of auxiliaries (転げ回りたく+なる is NOT a compound)
-                //    - たり/だり: tari-form is uninflectable (見たり+して should NOT combine)
-                // 3. Next word is not an auxiliary verb (補助動詞) like 続ける, 始める - these add aspect/meaning and should stay separate
                 else if (currentPOS == PartOfSpeech.Verb &&
                          !currentWord.Text.EndsWith("て") &&
                          !currentWord.Text.EndsWith("で") &&
@@ -252,15 +226,13 @@ public partial class MorphologicalAnalyser
                           nextWord.PartOfSpeech == PartOfSpeech.Suffix))
                 {
                     var suffixDict = KanaNormalizer.Normalize(KanaConverter.ToHiragana(nextWord.DictionaryForm));
-                    var match = forms.FirstOrDefault(f => f.Text.EndsWith(suffixDict) && f.Text.Length > suffixDict.Length);
+                    var match = FindEndingWith(forms, suffixDict);
 
-                    // For suffix tokens tagged with noun-like DictionaryForm (e.g. 合い instead of 合う),
-                    // also try the godan verb dictionary form
                     if (match == null && nextWord.PartOfSpeech == PartOfSpeech.Suffix)
                     {
                         var verbDict = TryGodanDictForm(suffixDict);
                         if (verbDict != null)
-                            match = forms.FirstOrDefault(f => f.Text.EndsWith(verbDict) && f.Text.Length > verbDict.Length);
+                            match = FindEndingWith(forms, verbDict);
                     }
 
                     if (match != null && (HasCompoundLookup == null || CompoundExistsInLookup(match.Text, CachedDeconjugate)))
@@ -275,7 +247,7 @@ public partial class MorphologicalAnalyser
 
                 if (merged)
                 {
-                    currentWord.Text = candidateText;
+                    currentWord.Text = currentWord.Text + nextWord.Text;
                     currentWord.EndOffset = nextWord.EndOffset;
                     currentWord.Reading += nextWord.Reading;
                     currentWord.PartOfSpeech = currentPOS;
@@ -283,6 +255,7 @@ public partial class MorphologicalAnalyser
                     if (newDictForm != null)
                         currentWord.DictionaryForm = newDictForm;
                     currentDictForm = currentWord.DictionaryForm;
+                    currentDictFormHiragana = KanaNormalizer.Normalize(KanaConverter.ToHiragana(currentDictForm));
                     i++;
                 }
                 else
@@ -295,6 +268,34 @@ public partial class MorphologicalAnalyser
         }
 
         return result;
+    }
+
+    private static bool ContainsText(IReadOnlyList<DeconjugationForm> forms, string target)
+    {
+        for (int i = 0; i < forms.Count; i++)
+            if (forms[i].Text == target) return true;
+        return false;
+    }
+
+    private static DeconjugationForm? FindByText(IReadOnlyList<DeconjugationForm> forms, string target)
+    {
+        for (int i = 0; i < forms.Count; i++)
+            if (forms[i].Text == target) return forms[i];
+        return null;
+    }
+
+    private static bool ContainsTextWithTag(IReadOnlyList<DeconjugationForm> forms, string target, string tag)
+    {
+        for (int i = 0; i < forms.Count; i++)
+            if (forms[i].Text == target && forms[i].Tags.Contains(tag)) return true;
+        return false;
+    }
+
+    private static DeconjugationForm? FindEndingWith(IReadOnlyList<DeconjugationForm> forms, string suffix)
+    {
+        for (int i = 0; i < forms.Count; i++)
+            if (forms[i].Text.EndsWith(suffix) && forms[i].Text.Length > suffix.Length) return forms[i];
+        return null;
     }
 
     private static bool ShouldStopMerging(WordInfo currentWord, WordInfo nextWord,
@@ -544,32 +545,34 @@ public partial class MorphologicalAnalyser
         if (wordInfos.Count < 2)
             return wordInfos;
 
-        List<WordInfo> newList = new List<WordInfo>();
-        WordInfo currentWord = new WordInfo(wordInfos[0]);
+        List<WordInfo>? newList = null;
+        WordInfo currentWord = wordInfos[0];
+        bool isCopy = false;
 
         for (int i = 1; i < wordInfos.Count; i++)
         {
             WordInfo nextWord = wordInfos[i];
 
-            // i.e　だり, たり
             if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.AdverbialParticle) &&
                 (nextWord.DictionaryForm == "だり" || nextWord.DictionaryForm == "たり") &&
                 currentWord.PartOfSpeech == PartOfSpeech.Verb)
-
             {
+                if (newList == null) { newList = CopyAccumulatorUpTo(wordInfos, i - 1); }
+                if (!isCopy) { currentWord = new WordInfo(currentWord); isCopy = true; }
                 currentWord.Text += nextWord.Text;
                 currentWord.EndOffset = nextWord.EndOffset;
                 currentWord.Reading += nextWord.Reading;
             }
             else
             {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
+                newList?.Add(currentWord);
+                currentWord = nextWord;
+                isCopy = false;
             }
         }
 
+        if (newList == null) return wordInfos;
         newList.Add(currentWord);
-
         return newList;
     }
 
@@ -941,37 +944,77 @@ public partial class MorphologicalAnalyser
         return changed ? newList : wordInfos;
     }
 
+    private static readonly Dictionary<string, List<(string Second, PartOfSpeech? Pos)>> SpecialCases2Dict = BuildSpecialCases2Dict();
+    private static readonly Dictionary<string, List<(string Second, string Third, PartOfSpeech? Pos)>> SpecialCases3Dict = BuildSpecialCases3Dict();
+
+    private static Dictionary<string, List<(string Second, PartOfSpeech? Pos)>> BuildSpecialCases2Dict()
+    {
+        var dict = new Dictionary<string, List<(string, PartOfSpeech?)>>(StringComparer.Ordinal);
+        foreach (var sc in SpecialCases2)
+        {
+            if (!dict.TryGetValue(sc.Item1, out var list))
+            {
+                list = [];
+                dict[sc.Item1] = list;
+            }
+            list.Add((sc.Item2, sc.Item3));
+        }
+        return dict;
+    }
+
+    private static Dictionary<string, List<(string Second, string Third, PartOfSpeech? Pos)>> BuildSpecialCases3Dict()
+    {
+        var dict = new Dictionary<string, List<(string, string, PartOfSpeech?)>>(StringComparer.Ordinal);
+        foreach (var sc in SpecialCases3)
+        {
+            if (!dict.TryGetValue(sc.Item1, out var list))
+            {
+                list = [];
+                dict[sc.Item1] = list;
+            }
+            list.Add((sc.Item2, sc.Item3, sc.Item4));
+        }
+        return dict;
+    }
+
     private List<WordInfo> CombineFinal(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2)
             return wordInfos;
 
-        List<WordInfo> newList = new List<WordInfo>();
-        bool changed = false;
+        List<WordInfo>? newList = null;
 
         for (int i = 0; i < wordInfos.Count; i++)
         {
-            var currentWord = new WordInfo(wordInfos[i]);
-
-            if (i + 1 < wordInfos.Count)
+            if (i + 1 >= wordInfos.Count)
             {
-                var nextWord = wordInfos[i + 1];
+                newList?.Add(wordInfos[i]);
+                continue;
+            }
 
-                if (nextWord.Text == "ば" && currentWord.PartOfSpeech == PartOfSpeech.Verb)
-                {
-                    currentWord.Text += nextWord.Text;
-                    currentWord.EndOffset = nextWord.EndOffset;
-                    currentWord.Reading += nextWord.Reading;
-                    newList.Add(currentWord);
-                    i++;
-                    changed = true;
-                    continue;
-                }
+            var currentWord = wordInfos[i];
+            var nextWord = wordInfos[i + 1];
 
-                foreach (var sc in SpecialCases2)
+            if (nextWord.Text == "ば" && currentWord.PartOfSpeech == PartOfSpeech.Verb)
+            {
+                newList ??= CopyUpTo(wordInfos, i);
+                var merged = new WordInfo(currentWord);
+                merged.Text += nextWord.Text;
+                merged.EndOffset = nextWord.EndOffset;
+                merged.Reading += nextWord.Reading;
+                newList.Add(merged);
+                i++;
+                continue;
+            }
+
+            if (SpecialCases2Dict.TryGetValue(currentWord.Text, out var sc2List))
+            {
+                bool matched = false;
+                foreach (var sc in sc2List)
                 {
-                    if (currentWord.Text == sc.Item1 && nextWord.Text == sc.Item2)
+                    if (nextWord.Text == sc.Second)
                     {
+                        newList ??= CopyUpTo(wordInfos, i);
                         var merged = new WordInfo(currentWord)
                         {
                             Text = currentWord.Text + nextWord.Text,
@@ -979,45 +1022,54 @@ public partial class MorphologicalAnalyser
                             Reading = currentWord.Reading + nextWord.Reading,
                             DictionaryForm = currentWord.Text + nextWord.Text
                         };
-                        if (sc.Item3 != null)
-                            merged.PartOfSpeech = sc.Item3.Value;
+                        if (sc.Pos != null) merged.PartOfSpeech = sc.Pos.Value;
                         newList.Add(merged);
                         i++;
-                        changed = true;
-                        goto next;
+                        matched = true;
+                        break;
                     }
                 }
-
-                if (i + 2 < wordInfos.Count)
-                {
-                    var thirdWord = wordInfos[i + 2];
-                    foreach (var sc in SpecialCases3)
-                    {
-                        if (currentWord.Text == sc.Item1 && nextWord.Text == sc.Item2 && thirdWord.Text == sc.Item3)
-                        {
-                            var merged = new WordInfo(currentWord)
-                            {
-                                Text = currentWord.Text + nextWord.Text + thirdWord.Text,
-                                EndOffset = thirdWord.EndOffset,
-                                Reading = currentWord.Reading + nextWord.Reading + thirdWord.Reading,
-                                DictionaryForm = currentWord.Text + nextWord.Text + thirdWord.Text
-                            };
-                            if (sc.Item4 != null)
-                                merged.PartOfSpeech = sc.Item4.Value;
-                            newList.Add(merged);
-                            i += 2;
-                            changed = true;
-                            goto next;
-                        }
-                    }
-                }
+                if (matched) continue;
             }
 
-            newList.Add(currentWord);
-            next:;
+            if (i + 2 < wordInfos.Count && SpecialCases3Dict.TryGetValue(currentWord.Text, out var sc3List))
+            {
+                var thirdWord = wordInfos[i + 2];
+                bool matched = false;
+                foreach (var sc in sc3List)
+                {
+                    if (nextWord.Text == sc.Item2 && thirdWord.Text == sc.Third)
+                    {
+                        newList ??= CopyUpTo(wordInfos, i);
+                        var merged = new WordInfo(currentWord)
+                        {
+                            Text = currentWord.Text + nextWord.Text + thirdWord.Text,
+                            EndOffset = thirdWord.EndOffset,
+                            Reading = currentWord.Reading + nextWord.Reading + thirdWord.Reading,
+                            DictionaryForm = currentWord.Text + nextWord.Text + thirdWord.Text
+                        };
+                        if (sc.Pos != null) merged.PartOfSpeech = sc.Pos.Value;
+                        newList.Add(merged);
+                        i += 2;
+                        matched = true;
+                        break;
+                    }
+                }
+                if (matched) continue;
+            }
+
+            if (newList != null) newList.Add(currentWord);
         }
 
-        return changed ? newList : wordInfos;
+        return newList ?? wordInfos;
+    }
+
+    private static List<WordInfo> CopyUpTo(List<WordInfo> source, int count)
+    {
+        var list = new List<WordInfo>(source.Count);
+        for (int i = 0; i < count; i++)
+            list.Add(source[i]);
+        return list;
     }
 
     /// <summary>

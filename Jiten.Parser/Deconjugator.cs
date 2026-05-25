@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Runtime.CompilerServices;
 
@@ -11,10 +12,10 @@ public class Deconjugator
 
     public static Deconjugator Instance => _instance.Value;
 
-    private const int DefaultMaxCacheEntries = 10_000;
-    private const int MaxCacheableInputLength = 20;
-    private const int MaxCachedFormsBase = 16;
-    private const int MaxCachedFormsPerChar = 6;
+    private const int DefaultMaxCacheEntries = 50_000;
+    private const int MaxCacheableInputLength = 40;
+    private const int MaxCachedFormsBase = 64;
+    private const int MaxCachedFormsPerChar = 12;
     // Deconjugation shortens text; growth beyond this is spurious rule chaining
     private const int MaxTextGrowthFromOriginal = 10;
     // Deepest real conjugation chain is ~6 steps (e.g. 食べさせられたくなかったらしい)
@@ -29,6 +30,8 @@ public class Deconjugator
     private long _cacheMissCount;
     private long _cacheStoreCount;
     private long _cacheEvictionCount;
+    private long _bfsTotalTicks;
+    private long _bfsCallCount;
 
     private readonly DeconjugationRule[] _rules;
 
@@ -37,13 +40,29 @@ public class Deconjugator
 
     private static readonly bool UseCache = true;
 
-    internal sealed record DeconjugationCacheStats(
+    public sealed record DeconjugationCacheStats(
         long Hits,
         long Misses,
         long Stores,
         long Evictions,
         int Count,
-        int MaxEntries);
+        int MaxEntries,
+        double BfsTimeMs,
+        long BfsCalls);
+
+    private enum RuleMode : byte { Standard, OnlyFinal, NeverFinal, Context, Rewrite }
+
+    private readonly struct RuleIndexEntry(DeconjugationRule rule, DeconjugationVirtualRule virtualRule, RuleMode mode)
+    {
+        public readonly DeconjugationRule Rule = rule;
+        public readonly DeconjugationVirtualRule VirtualRule = virtualRule;
+        public readonly RuleMode Mode = mode;
+    }
+
+    private readonly Dictionary<string, RuleIndexEntry[]> _conEndIndex;
+    private readonly Dictionary<string, RuleIndexEntry[]>.AlternateLookup<ReadOnlySpan<char>> _conEndIndexAlt;
+    private readonly int _maxConEndLength;
+    private readonly DeconjugationRule[] _substitutionRules;
 
     public Deconjugator(int maxCacheEntries = DefaultMaxCacheEntries)
     {
@@ -55,7 +74,7 @@ public class Deconjugator
             ReadCommentHandling = JsonCommentHandling.Skip,
             Converters = { new StringArrayConverter() }
         };
-        
+
         var rules = JsonSerializer
             .Deserialize<List<DeconjugationRule>>(
                 File.ReadAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "deconjugator.json")),
@@ -64,10 +83,11 @@ public class Deconjugator
         _rules = rules.ToArray();
 
         foreach (var rule in _rules)
-        {
-            // Pre-cache virtual rules
             CacheVirtualRules(rule);
-        }
+
+        (_conEndIndex, _maxConEndLength, _substitutionRules) = BuildRuleIndex(_rules);
+        _conEndIndexAlt = _conEndIndex.GetAlternateLookup<ReadOnlySpan<char>>();
+
     }
 
     private void CacheVirtualRules(DeconjugationRule rule)
@@ -86,6 +106,55 @@ public class Deconjugator
             );
         }
         _virtualRulesCache[rule] = virtualRules;
+    }
+
+    private static (Dictionary<string, RuleIndexEntry[]> index, int maxLen, DeconjugationRule[] substitutions)
+        BuildRuleIndex(DeconjugationRule[] rules)
+    {
+        var tempIndex = new Dictionary<string, List<RuleIndexEntry>>(StringComparer.Ordinal);
+        var substitutions = new List<DeconjugationRule>();
+        int maxConEndLen = 0;
+
+        foreach (var rule in rules)
+        {
+            if (rule.Type == "substitution")
+            {
+                substitutions.Add(rule);
+                continue;
+            }
+
+            var mode = rule.Type switch
+            {
+                "onlyfinalrule" => RuleMode.OnlyFinal,
+                "neverfinalrule" => RuleMode.NeverFinal,
+                "contextrule" => RuleMode.Context,
+                "rewriterule" => RuleMode.Rewrite,
+                _ => RuleMode.Standard
+            };
+
+            for (int i = 0; i < rule.DecEnd.Length; i++)
+            {
+                var vr = new DeconjugationVirtualRule(
+                    rule.DecEnd.ElementAtOrDefault(i) ?? rule.DecEnd[0],
+                    rule.ConEnd.ElementAtOrDefault(i) ?? rule.ConEnd[0],
+                    rule.DecTag?.ElementAtOrDefault(i) ?? rule.DecTag?[0],
+                    rule.ConTag?.ElementAtOrDefault(i) ?? rule.ConTag?[0],
+                    rule.Detail);
+
+                var conEnd = vr.ConEnd;
+                if (conEnd.Length > maxConEndLen) maxConEndLen = conEnd.Length;
+
+                if (!tempIndex.TryGetValue(conEnd, out var list))
+                    tempIndex[conEnd] = list = new List<RuleIndexEntry>();
+                list.Add(new RuleIndexEntry(rule, vr, mode));
+            }
+        }
+
+        var index = new Dictionary<string, RuleIndexEntry[]>(tempIndex.Count, StringComparer.Ordinal);
+        foreach (var (key, list) in tempIndex)
+            index[key] = list.ToArray();
+
+        return (index, maxConEndLen, substitutions.ToArray());
     }
 
     private bool TryGetCached(string text, out IReadOnlyList<DeconjugationForm> forms)
@@ -149,15 +218,18 @@ public class Deconjugator
         }
     }
 
-    internal DeconjugationCacheStats GetCacheStats()
+    public DeconjugationCacheStats GetCacheStats()
     {
+        var bfsTicks = Interlocked.Read(ref _bfsTotalTicks);
         return new DeconjugationCacheStats(
             Interlocked.Read(ref _cacheHitCount),
             Interlocked.Read(ref _cacheMissCount),
             Interlocked.Read(ref _cacheStoreCount),
             Interlocked.Read(ref _cacheEvictionCount),
             _gen0.Count + (_gen1?.Count ?? 0),
-            _maxCacheEntries);
+            _maxCacheEntries,
+            (double)bfsTicks / Stopwatch.Frequency * 1000,
+            Interlocked.Read(ref _bfsCallCount));
     }
 
     internal void ClearCacheForTesting()
@@ -180,12 +252,122 @@ public class Deconjugator
         if (string.IsNullOrEmpty(text))
             return [];
 
+        long start = Stopwatch.GetTimestamp();
+        var result = RunBfs(text);
+        Interlocked.Add(ref _bfsTotalTicks, Stopwatch.GetTimestamp() - start);
+        Interlocked.Increment(ref _bfsCallCount);
+
+        if (UseCache)
+            StoreCached(text, result);
+
+        return result;
+    }
+
+    public bool CanDeconjugateTo(string text, string target)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(target))
+            return false;
+        if (text == target) return true;
+
+        if (UseCache && TryGetCached(text, out var cached))
+        {
+            for (int i = 0; i < cached.Count; i++)
+                if (cached[i].Text == target) return true;
+            return false;
+        }
+
         var processed = new HashSet<DeconjugationForm>(Math.Min(text.Length * 2, 100));
         var novel = new HashSet<DeconjugationForm>(20);
-        var startForm = CreateInitialForm(text);
-        novel.Add(startForm);
+        novel.Add(CreateInitialForm(text));
+        bool firstLevel = true;
 
-        var ruleCount = _rules.Length;
+        while (novel.Count > 0)
+        {
+            var newNovel = new HashSet<DeconjugationForm>(novel.Count * 2);
+
+            foreach (var form in novel)
+            {
+                if (form.Text == target) return true;
+                if (ShouldSkipForm(form)) continue;
+
+                if (firstLevel)
+                {
+                    foreach (var rule in _substitutionRules)
+                    {
+                        var newForms = SubstitutionDeconjugate(form, rule);
+                        if (newForms == null) continue;
+                        foreach (var f in newForms)
+                        {
+                            if (f.Text == target) return true;
+                            if (!processed.Contains(f) && !novel.Contains(f) && !newNovel.Contains(f))
+                                newNovel.Add(f);
+                        }
+                    }
+                }
+
+                var formText = form.Text;
+                int maxSuffix = Math.Min(_maxConEndLength, formText.Length);
+                for (int suffixLen = 0; suffixLen <= maxSuffix; suffixLen++)
+                {
+                    var suffix = formText.AsSpan(formText.Length - suffixLen);
+                    if (!_conEndIndexAlt.TryGetValue(suffix, out var entries))
+                        continue;
+
+                    foreach (var entry in entries)
+                    {
+                        switch (entry.Mode)
+                        {
+                            case RuleMode.OnlyFinal when form.Tags.Count > 0:
+                            case RuleMode.NeverFinal when form.Tags.Count == 0:
+                                continue;
+                            case RuleMode.Rewrite when !formText.Equals(entry.VirtualRule.ConEnd, StringComparison.Ordinal):
+                                continue;
+                            case RuleMode.Context:
+                                if (entry.Rule.ContextRule == "v1inftrap" && !V1InfTrapCheck(form)) continue;
+                                if (entry.Rule.ContextRule == "saspecial" && !SaSpecialCheck(form, entry.Rule)) continue;
+                                if (entry.Rule.ContextRule == "temirurule" && !TemiruCheck(form, entry.Rule)) continue;
+                                break;
+                        }
+
+                        if (string.IsNullOrEmpty(entry.Rule.Detail) && form.Tags.Count == 0)
+                            continue;
+
+                        if (form.Tags.Count > 0 && form.Tags[^1] != entry.VirtualRule.ConTag)
+                            continue;
+
+                        var prefixLength = formText.Length - entry.VirtualRule.ConEnd.Length;
+                        Span<char> buffer = stackalloc char[prefixLength + entry.VirtualRule.DecEnd.Length];
+                        formText.AsSpan(0, prefixLength).CopyTo(buffer);
+                        entry.VirtualRule.DecEnd.AsSpan().CopyTo(buffer[prefixLength..]);
+                        var newText = new string(buffer);
+
+                        if (newText.Equals(form.OriginalText, StringComparison.Ordinal))
+                            continue;
+
+                        if (newText == target) return true;
+
+                        var newForm = CreateNewForm(form, newText, entry.VirtualRule.ConTag,
+                            entry.VirtualRule.DecTag, entry.VirtualRule.Detail);
+
+                        if (!processed.Contains(newForm) && !novel.Contains(newForm) && !newNovel.Contains(newForm))
+                            newNovel.Add(newForm);
+                    }
+                }
+            }
+
+            processed.UnionWith(novel);
+            novel = newNovel;
+        }
+
+        return false;
+    }
+
+    private List<DeconjugationForm> RunBfs(string text)
+    {
+        var processed = new HashSet<DeconjugationForm>(Math.Min(text.Length * 2, 100));
+        var novel = new HashSet<DeconjugationForm>(20);
+        novel.Add(CreateInitialForm(text));
+        bool firstLevel = true;
 
         while (novel.Count > 0)
         {
@@ -196,35 +378,82 @@ public class Deconjugator
                 if (ShouldSkipForm(form))
                     continue;
 
-                // Use for loop instead of foreach for better performance
-                for (int i = 0; i < ruleCount; i++)
+                if (firstLevel)
                 {
-                    var rule = _rules[i];
-                    var newForms = ApplyRule(form, rule);
-
-                    if (newForms == null) continue;
-
-                    foreach (var f in newForms)
+                    foreach (var rule in _substitutionRules)
                     {
-                        if (!processed.Contains(f) && !novel.Contains(f) && !newNovel.Contains(f))
-                            newNovel.Add(f);
+                        var newForms = SubstitutionDeconjugate(form, rule);
+                        if (newForms == null) continue;
+                        foreach (var f in newForms)
+                            if (!processed.Contains(f) && !novel.Contains(f) && !newNovel.Contains(f))
+                                newNovel.Add(f);
                     }
                 }
+
+                ApplyIndexedRules(form, newNovel, processed, novel);
             }
 
             processed.UnionWith(novel);
             novel = newNovel;
+            firstLevel = false;
         }
 
-        var result = processed
+        return processed
             .OrderByDescending(f => f.Text.Length)
             .ThenBy(f => f.Text, StringComparer.Ordinal)
             .ToList();
+    }
 
-        if (UseCache)
-            StoreCached(text, result);
+    private void ApplyIndexedRules(DeconjugationForm form, HashSet<DeconjugationForm> newNovel,
+                                    HashSet<DeconjugationForm> processed, HashSet<DeconjugationForm> novel)
+    {
+        var text = form.Text;
+        int maxSuffix = Math.Min(_maxConEndLength, text.Length);
 
-        return result;
+        for (int suffixLen = 0; suffixLen <= maxSuffix; suffixLen++)
+        {
+            var suffix = text.AsSpan(text.Length - suffixLen);
+            if (!_conEndIndexAlt.TryGetValue(suffix, out var entries))
+                continue;
+
+            foreach (var entry in entries)
+            {
+                switch (entry.Mode)
+                {
+                    case RuleMode.OnlyFinal when form.Tags.Count > 0:
+                    case RuleMode.NeverFinal when form.Tags.Count == 0:
+                        continue;
+                    case RuleMode.Rewrite when !text.Equals(entry.VirtualRule.ConEnd, StringComparison.Ordinal):
+                        continue;
+                    case RuleMode.Context:
+                        if (entry.Rule.ContextRule == "v1inftrap" && !V1InfTrapCheck(form)) continue;
+                        if (entry.Rule.ContextRule == "saspecial" && !SaSpecialCheck(form, entry.Rule)) continue;
+                        if (entry.Rule.ContextRule == "temirurule" && !TemiruCheck(form, entry.Rule)) continue;
+                        break;
+                }
+
+                if (string.IsNullOrEmpty(entry.Rule.Detail) && form.Tags.Count == 0)
+                    continue;
+
+                if (form.Tags.Count > 0 && form.Tags[^1] != entry.VirtualRule.ConTag)
+                    continue;
+
+                var prefixLength = text.Length - entry.VirtualRule.ConEnd.Length;
+                Span<char> buffer = stackalloc char[prefixLength + entry.VirtualRule.DecEnd.Length];
+                text.AsSpan(0, prefixLength).CopyTo(buffer);
+                entry.VirtualRule.DecEnd.AsSpan().CopyTo(buffer[prefixLength..]);
+                var newText = new string(buffer);
+
+                if (newText.Equals(form.OriginalText, StringComparison.Ordinal))
+                    continue;
+
+                var newForm = CreateNewForm(form, newText, entry.VirtualRule.ConTag,
+                    entry.VirtualRule.DecTag, entry.VirtualRule.Detail);
+
+                if (!processed.Contains(newForm) && !novel.Contains(newForm) && !newNovel.Contains(newForm))
+                    newNovel.Add(newForm);
+            }
+        }
     }
 
     private DeconjugationForm CreateInitialForm(string text)

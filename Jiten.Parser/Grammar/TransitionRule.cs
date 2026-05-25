@@ -113,6 +113,7 @@ internal enum ScoringCondition
     PrevIsAuxiliary,
     NextIsNaAdj,
     PrevIsToParticle,
+    CandidateIsNotName,
 }
 
 internal sealed record ScoringRule(
