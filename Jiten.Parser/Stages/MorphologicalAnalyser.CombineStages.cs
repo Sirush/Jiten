@@ -1038,15 +1038,17 @@ public partial class MorphologicalAnalyser
                 bool matched = false;
                 foreach (var sc in sc3List)
                 {
-                    if (nextWord.Text == sc.Item2 && thirdWord.Text == sc.Third)
+                    bool thirdMatch = thirdWord.Text == sc.Third ||
+                        (sc.Third.Length > 1 && sc.Third[^1] == 'ー' && thirdWord.Text == sc.Third[..^1]);
+                    if (nextWord.Text == sc.Item2 && thirdMatch)
                     {
                         newList ??= CopyUpTo(wordInfos, i);
                         var merged = new WordInfo(currentWord)
                         {
-                            Text = currentWord.Text + nextWord.Text + thirdWord.Text,
+                            Text = currentWord.Text + nextWord.Text + sc.Third,
                             EndOffset = thirdWord.EndOffset,
                             Reading = currentWord.Reading + nextWord.Reading + thirdWord.Reading,
-                            DictionaryForm = currentWord.Text + nextWord.Text + thirdWord.Text
+                            DictionaryForm = currentWord.Text + nextWord.Text + sc.Third
                         };
                         if (sc.Pos != null) merged.PartOfSpeech = sc.Pos.Value;
                         newList.Add(merged);

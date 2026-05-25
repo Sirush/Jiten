@@ -1191,7 +1191,10 @@ public partial class MorphologicalAnalyser
                 {
                     foreach (var sc in sc3Candidates)
                     {
-                        if (w2.Text == sc.Second && w3.Text == sc.Third)
+                        // Also match when RepairVowelElongation stripped trailing ー from a particle
+                        bool thirdMatch = w3.Text == sc.Third ||
+                            (sc.Third.Length > 1 && sc.Third[^1] == 'ー' && w3.Text == sc.Third[..^1]);
+                        if (w2.Text == sc.Second && thirdMatch)
                         {
                             if (newList.Count > 0 && HasCompoundLookup != null &&
                                 w2.PartOfSpeech == PartOfSpeech.Verb)
@@ -1202,7 +1205,7 @@ public partial class MorphologicalAnalyser
                                 {
                                     newList.RemoveAt(newList.Count - 1);
                                     var compoundWord = new WordInfo(prevWord);
-                                    compoundWord.Text = prevWord.Text + w1.Text + w2.Text + w3.Text;
+                                    compoundWord.Text = prevWord.Text + w1.Text + w2.Text + sc.Third;
                                     compoundWord.EndOffset = w3.EndOffset;
                                     compoundWord.DictionaryForm = compoundDictForm;
                                     compoundWord.PartOfSpeech = PartOfSpeech.Verb;
@@ -1214,7 +1217,7 @@ public partial class MorphologicalAnalyser
                             }
 
                             var newWord = new WordInfo(w1);
-                            newWord.Text = w1.Text + w2.Text + w3.Text;
+                            newWord.Text = w1.Text + w2.Text + sc.Third;
                             newWord.EndOffset = w3.EndOffset;
                             newWord.DictionaryForm = newWord.Text;
 

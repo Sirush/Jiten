@@ -3316,12 +3316,20 @@ namespace Jiten.Parser
             for (int k = 1; k <= maxPrefixTokens; k++)
             {
                 int tokenIdx = wordIndex - k;
+                int prevLen = prefCumLen[k - 1];
+                if (prevLen >= _hashBasePowers!.Length)
+                {
+                    maxPrefixTokens = k - 1;
+                    break;
+                }
                 unchecked
                 {
-                    prefCumHash[k] = tokenHashes[tokenIdx] * _hashBasePowers![prefCumLen[k - 1]] + prefCumHash[k - 1];
+                    prefCumHash[k] = tokenHashes[tokenIdx] * _hashBasePowers[prevLen] + prefCumHash[k - 1];
                 }
-                prefCumLen[k] = wordInfos[tokenIdx].Text.Length + prefCumLen[k - 1];
+                prefCumLen[k] = wordInfos[tokenIdx].Text.Length + prevLen;
             }
+            prefCumHash = prefCumHash[..(maxPrefixTokens + 1)];
+            prefCumLen = prefCumLen[..(maxPrefixTokens + 1)];
 
             if (string.IsNullOrEmpty(dictForm))
             {
