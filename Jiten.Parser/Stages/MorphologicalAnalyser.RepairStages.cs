@@ -863,6 +863,47 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            // Sudachi produces こか (verb こく 未然形) from mis-segmenting e.g.
+            // とこかも → と+こか+も. Redistribute: prev+"こ" | "か"+next when both are known words.
+            if (w1 is { Text: "こか", DictionaryForm: "こく", PartOfSpeech: PartOfSpeech.Verb }
+                && newList.Count > 0
+                && i + 1 < wordInfos.Count
+                && HasCompoundLookup != null)
+            {
+                var prev = newList[^1];
+                var w2 = wordInfos[i + 1];
+                string prevPlusKo = prev.Text + "こ";
+                string kaPlusNext = "か" + w2.Text;
+
+                // Use the non-name lookup so we never reclassify the previous token into a coincidental
+                // name homograph of prev+"こ"; this rewrite overwrites prev's POS/reading, so it must
+                // only fire when prev+"こ" is a genuine (non-name) dictionary word.
+                var nonNameLookup = HasNonNameCompoundLookup ?? HasCompoundLookup;
+                if (nonNameLookup(prevPlusKo) && nonNameLookup(kaPlusNext))
+                {
+                    prev.Text = prevPlusKo;
+                    prev.DictionaryForm = prevPlusKo;
+                    prev.NormalizedForm = prevPlusKo;
+                    prev.PartOfSpeech = PartOfSpeech.CommonNoun;
+                    prev.Reading += "コ";
+                    if (prev.EndOffset >= 0) prev.EndOffset += 1;
+                    int kaStart = prev.EndOffset;
+
+                    newList.Add(new WordInfo
+                    {
+                        Text = kaPlusNext,
+                        DictionaryForm = kaPlusNext,
+                        NormalizedForm = kaPlusNext,
+                        PartOfSpeech = PartOfSpeech.Particle,
+                        Reading = "カ" + w2.Reading,
+                        StartOffset = kaStart,
+                        EndOffset = w2.EndOffset,
+                    });
+                    i += 2;
+                    continue;
+                }
+            }
+
             if (w1 is { Text: "っけ", PartOfSpeech: PartOfSpeech.Suffix })
             {
                 newList.Add(new WordInfo(w1) { PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.SentenceEndingParticle });
@@ -2044,6 +2085,9 @@ public partial class MorphologicalAnalyser
         if (wordInfos.Count < 2 || HasCompoundLookup == null)
             return wordInfos;
 
+        var hasNonNameLookup = HasNonNameCompoundLookup ?? HasCompoundLookup;
+        var hasPrioritizedLookup = HasPrioritizedNonNameCompoundLookup ?? hasNonNameLookup;
+
         var deconjugator = Deconjugator.Instance;
         var result = new List<WordInfo>(wordInfos.Count);
         bool changed = false;
@@ -2102,13 +2146,26 @@ public partial class MorphologicalAnalyser
                     _ => wordInfos[i].Text + wordInfos[i + 1].Text + wordInfos[i + 2].Text + wordInfos[i + 3].Text,
                 };
 
-                if (HasCompoundLookup(combinedText))
+                if (hasNonNameLookup(combinedText))
                 {
                     result.Add(BuildMergedHiraganaToken(wordInfos, i, spanLen, combinedText, combinedText, PartOfSpeech.CommonNoun));
                     i += spanLen;
                     combined = true;
                     break;
                 }
+
+                bool allTokensPrioritized = true;
+                for (int j = i; j < i + spanLen; j++)
+                {
+                    if (!hasPrioritizedLookup(wordInfos[j].Text))
+                    {
+                        allTokensPrioritized = false;
+                        break;
+                    }
+                }
+
+                if (allTokensPrioritized)
+                    continue;
 
                 var hiragana = KanaConverter.ToNormalizedHiragana(combinedText);
                 var forms = deconjugator.Deconjugate(hiragana);
@@ -2119,7 +2176,7 @@ public partial class MorphologicalAnalyser
                     var lastTag = form.Tags[^1];
                     if (!lastTag.StartsWith("v") && lastTag is not "adj-i" and not "adj-na")
                         continue;
-                    if (!HasCompoundLookup(form.Text)) continue;
+                    if (!hasNonNameLookup(form.Text)) continue;
 
                     var pos = lastTag switch
                     {

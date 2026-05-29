@@ -9,20 +9,37 @@
   const props = defineProps<{
     deck?: Deck;
     studyDeck?: StudyDeckDto;
+    mediaList?: { apiBase: string; title: string; totalWords: number; hasExampleSentences: boolean };
     visible: boolean;
   }>();
 
   const isStudyDeckMode = computed(() => !!props.studyDeck);
+  const isMediaListMode = computed(() => !!props.mediaList);
   const isMediaStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.MediaDeck);
   const isNonMediaStudyDeck = computed(() => isStudyDeckMode.value && !isMediaStudyDeck.value);
   const apiBase = computed(() =>
-    isStudyDeckMode.value
-      ? `srs/study-decks/${props.studyDeck!.userStudyDeckId}`
-      : `media-deck/${props.deck!.deckId}`
+    isMediaListMode.value
+      ? props.mediaList!.apiBase
+      : isStudyDeckMode.value
+        ? `srs/study-decks/${props.studyDeck!.userStudyDeckId}`
+        : `media-deck/${props.deck!.deckId}`
   );
   const wordCount = computed(() =>
-    isStudyDeckMode.value ? props.studyDeck!.totalWords : props.deck!.uniqueWordCount
+    isMediaListMode.value
+      ? props.mediaList!.totalWords
+      : isStudyDeckMode.value
+        ? props.studyDeck!.totalWords
+        : props.deck!.uniqueWordCount
   );
+  const baseFileName = computed(() => {
+    if (isMediaListMode.value) return props.mediaList!.title.substring(0, 40);
+    if (isStudyDeckMode.value) {
+      return isMediaStudyDeck.value
+        ? localiseTitle({ originalTitle: props.studyDeck!.title, romajiTitle: props.studyDeck!.romajiTitle, englishTitle: props.studyDeck!.englishTitle }).substring(0, 30)
+        : props.studyDeck!.name.substring(0, 30);
+    }
+    return localiseTitle(props.deck!).substring(0, 30);
+  });
 
   const emit = defineEmits(['update:visible']);
   const { $api } = useNuxtApp();
@@ -126,6 +143,7 @@
   const isOccurrences = computed(() => format.value === DeckFormat.Yomitan);
   const showStrategyAndOptions = computed(() => !isOccurrences.value && !isNonMediaStudyDeck.value);
   const hasExampleSentences = computed(() => {
+    if (isMediaListMode.value) return props.mediaList!.hasExampleSentences;
     const mt = props.deck?.mediaType ?? props.studyDeck?.mediaType;
     return mt === MediaType.Novel || mt === MediaType.NonFiction || mt === MediaType.VideoGame || mt === MediaType.VisualNovel || mt === MediaType.WebNovel;
   });
@@ -568,12 +586,7 @@
           [DeckFormat.TxtRepeated]: 'txt',
         };
 
-        const fileName = isStudyDeckMode.value
-          ? (isMediaStudyDeck.value
-            ? localiseTitle({ originalTitle: props.studyDeck!.title, romajiTitle: props.studyDeck!.romajiTitle, englishTitle: props.studyDeck!.englishTitle }).substring(0, 30)
-            : props.studyDeck!.name.substring(0, 30))
-          : localiseTitle(props.deck!).substring(0, 30);
-        link.setAttribute('download', `${fileName}.${extMap[format.value]}`);
+        link.setAttribute('download', `${baseFileName.value}.${extMap[format.value]}`);
         document.body.appendChild(link);
         link.click();
         link.remove();

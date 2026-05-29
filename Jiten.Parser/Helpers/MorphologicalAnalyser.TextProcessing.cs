@@ -150,6 +150,7 @@ public partial class MorphologicalAnalyser
         text = text
             .Replace("バカバカ", $"バカ{_stopToken}バカ")
             .Replace("事大", $"事{_stopToken}大")
+            .Replace("人魚姫", $"人魚{_stopToken}姫")
             .Replace("日間", $"日{_stopToken}間")
             .Replace("何本", $"何{_stopToken}本")
             .Replace("年未公開", $"年{_stopToken}未公開")

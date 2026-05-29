@@ -26,6 +26,7 @@ public class JitenDbContext : DbContext
     public DbSet<JmDictWordFormFrequency> WordFormFrequencies { get; set; }
     public DbSet<Kanji> Kanjis { get; set; }
     public DbSet<WordKanji> WordKanjis { get; set; }
+    public DbSet<KanjiReadingWord> KanjiReadingWords { get; set; }
     public DbSet<JmDictWordComposition> WordCompositions { get; set; }
     
     public DbSet<ExampleSentence> ExampleSentences { get; set; }
@@ -437,6 +438,21 @@ public class JitenDbContext : DbContext
                   .WithMany(k => k.WordKanjis)
                   .HasForeignKey(e => e.KanjiCharacter)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<KanjiReadingWord>(entity =>
+        {
+            entity.ToTable("KanjiReadingWords", "jmdict");
+            entity.HasKey(e => new { e.KanjiCharacter, e.Reading, e.WordId, e.ReadingIndex });
+
+            entity.Property(e => e.KanjiCharacter).HasColumnType("text").IsRequired();
+            entity.Property(e => e.Reading).HasColumnType("text").IsRequired();
+
+            entity.HasIndex(e => e.WordId)
+                  .HasDatabaseName("IX_KanjiReadingWords_WordId");
+
+            entity.HasIndex(e => new { e.KanjiCharacter, e.Reading })
+                  .HasDatabaseName("IX_KanjiReadingWords_KanjiCharacter_Reading");
         });
 
         modelBuilder.Entity<JmDictWordComposition>(entity =>

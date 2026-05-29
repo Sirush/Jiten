@@ -11,6 +11,7 @@ using Jiten.Core.Data;
 using Jiten.Core.Data.User;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
 using Swashbuckle.AspNetCore.Annotations;
@@ -33,6 +34,8 @@ public class UserController(
     IWordFormSiblingCache wordFormCache,
     IConfiguration configuration,
     IConnectionMultiplexer redis,
+    IDeckWordResolver deckWordResolver,
+    IDeckDownloadService downloadService,
     ILogger<UserController> logger) : ControllerBase
 {
     /// <summary>
@@ -1971,6 +1974,14 @@ public class UserController(
         if (request.IsPublic.HasValue)
             profile.IsPublic = request.IsPublic.Value;
 
+        if (request.IsMediaListPublic.HasValue)
+            profile.IsMediaListPublic = request.IsMediaListPublic.Value;
+
+        // The media list can only be public while the whole profile is public.
+        // Turning the profile private auto-deactivates the media list flag.
+        if (!profile.IsPublic)
+            profile.IsMediaListPublic = false;
+
         await userContext.SaveChangesAsync();
 
         return Results.Ok(profile);
@@ -2002,7 +2013,8 @@ public class UserController(
         {
             return Results.Ok(new UserProfileResponse
                               {
-                                  UserId = user.Id, Username = user.UserName ?? string.Empty, IsPublic = profile?.IsPublic ?? false
+                                  UserId = user.Id, Username = user.UserName ?? string.Empty,
+                                  IsPublic = profile?.IsPublic ?? false, IsMediaListPublic = profile?.IsMediaListPublic ?? false
                               });
         }
 
@@ -2014,7 +2026,8 @@ public class UserController(
 
         return Results.Ok(new UserProfileResponse
                           {
-                              UserId = user.Id, Username = user.UserName ?? string.Empty, IsPublic = profile.IsPublic
+                              UserId = user.Id, Username = user.UserName ?? string.Empty,
+                              IsPublic = profile.IsPublic, IsMediaListPublic = profile.IsMediaListPublic
                           });
     }
 
@@ -2046,8 +2059,347 @@ public class UserController(
 
         return Results.Ok(new UserProfileResponse
                           {
-                              UserId = user.Id, Username = user.UserName ?? string.Empty, IsPublic = profile?.IsPublic ?? false
+                              UserId = user.Id, Username = user.UserName ?? string.Empty,
+                              IsPublic = profile?.IsPublic ?? false, IsMediaListPublic = profile?.IsMediaListPublic ?? false
                           });
+    }
+
+    /// <summary>
+    /// Get a user's tracked media list (decks with a status) by username, as DeckDtos so the frontend
+    /// can render them with the same card/compact/table views as the catalogue. Child decks are collapsed
+    /// to their parent (series) for display. Visible to non-owners only when both the profile and the
+    /// media list are public. Returns 404 otherwise.
+    /// </summary>
+    [HttpGet("profile/{username}/media-list")]
+    [AllowAnonymous]
+    public async Task<IResult> GetUserMediaListByUsername(string username)
+    {
+        var (userId, _, allowed) = await ResolveMediaListAccessAsync(username);
+        if (userId == null || !allowed)
+            return Results.NotFound(new { message = "Media list not found" });
+
+        var entries = await BuildMediaListAsync(userId);
+
+        var dtos = entries
+                   .Select(e => new DeckDto(e.Display) { Status = e.Status, IsFavourite = e.IsFavourite })
+                   .OrderBy(d => d.OriginalTitle)
+                   .ToList();
+
+        // Populate the viewer's coverage so cards render the coverage border, exactly like the catalogue.
+        var viewerId = userService.UserId;
+        if (!string.IsNullOrEmpty(viewerId) && dtos.Count > 0)
+        {
+            var coverage = await UserCoverageChunkHelper.GetCoverage(userContext, viewerId, dtos.Select(d => d.DeckId).ToList());
+            coverage.ApplyTo(dtos);
+        }
+
+        return Results.Ok(dtos);
+    }
+
+    /// <summary>
+    /// Resolves and merges the vocabulary of every tracked deck in a status category into a single
+    /// deduplicated list (occurrences summed), honouring the full set of download filters per deck.
+    /// Shared by the download, count and learn endpoints so previews always match the result.
+    /// </summary>
+    private async Task<(List<(int WordId, byte ReadingIndex, int Occurrences)> Words, List<int> SentenceDeckIds, IResult? Error)>
+        ResolveMergedCategoryAsync(string userId, DeckStatus status, DeckDownloadRequest request)
+    {
+        var entries = (await BuildMediaListAsync(userId)).Where(e => e.Status == status).ToList();
+
+        var merged = new Dictionary<(int WordId, byte ReadingIndex), int>();
+        var sentenceDeckIds = new List<int>();
+        foreach (var (display, _, _) in entries)
+        {
+            var (words, error) = await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
+                display.DeckId, display, request.DownloadType, request.Order,
+                request.MinFrequency, request.MaxFrequency,
+                request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
+                request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
+                StartFromKnown: request.StartFromKnown));
+
+            if (error != null)
+                return (new(), new(), error);
+            if (words == null)
+                continue;
+
+            foreach (var w in words)
+            {
+                var key = (w.WordId, w.ReadingIndex);
+                merged[key] = merged.GetValueOrDefault(key) + w.Occurrences;
+            }
+
+            sentenceDeckIds.AddRange(display.Children.Count != 0
+                                         ? display.Children.Select(c => c.DeckId)
+                                         : new[] { display.DeckId });
+        }
+
+        var list = merged
+                   .Select(kv => (WordId: kv.Key.WordId, ReadingIndex: kv.Key.ReadingIndex, Occurrences: kv.Value))
+                   .ToList();
+
+        if (request.ExcludeKana && list.Count > 0)
+        {
+            var forms = await WordFormHelper.LoadWordForms(jitenContext, list.Select(x => x.WordId).Distinct().ToList());
+            list = list.Where(x =>
+            {
+                var form = forms.GetValueOrDefault((x.WordId, (short)x.ReadingIndex));
+                return form == null || !WanaKana.IsKana(form.Text);
+            }).ToList();
+        }
+
+        return (list, sentenceDeckIds.Distinct().ToList(), null);
+    }
+
+    /// <summary>
+    /// Download the combined vocabulary of every tracked deck in a single status category as one merged file.
+    /// </summary>
+    [HttpPost("profile/{username}/media-list/{status:int}/download")]
+    [AllowAnonymous]
+    [EnableRateLimiting("download")]
+    public async Task<IResult> DownloadMediaList(string username, int status, [FromBody] DeckDownloadRequest request)
+    {
+        var (userId, userName, allowed) = await ResolveMediaListAccessAsync(username);
+        if (userId == null || !allowed)
+            return Results.NotFound(new { message = "Media list not found" });
+
+        var deckStatus = (DeckStatus)status;
+        var (deckWords, sentenceDeckIds, error) = await ResolveMergedCategoryAsync(userId, deckStatus, request);
+        if (error != null)
+            return error;
+        if (deckWords.Count == 0)
+            return Results.NotFound(new { message = "No vocabulary to download." });
+
+        var title = $"{userName} - {deckStatus}";
+
+        if (request.Format == DeckFormat.Yomitan)
+        {
+            var yomitanBytes = await YomitanHelper.GenerateYomitanFrequencyDeckFromWords(contextFactory, deckWords, title);
+            return Results.File(yomitanBytes, "application/zip", $"freq_{title}.zip");
+        }
+
+        var wordIds = deckWords.Select(dw => (long)dw.WordId).Distinct().ToList();
+        var bytes = await downloadService.GenerateDownload(request, wordIds, title, deckWords, sentenceDeckIds);
+        if (bytes == null)
+            return Results.BadRequest();
+
+        logger.LogInformation("User downloaded combined media list: Owner={Owner}, Status={Status}, Words={Words}, Format={Format}",
+                              userId, deckStatus, deckWords.Count, request.Format);
+
+        return request.Format switch
+        {
+            DeckFormat.Anki => Results.File(bytes, "application/x-binary", $"{title}.apkg"),
+            DeckFormat.Csv => Results.File(bytes, "text/csv", $"{title}.csv"),
+            DeckFormat.Txt or DeckFormat.TxtRepeated => Results.File(bytes, "text/plain", $"{title}.txt"),
+            _ => Results.BadRequest()
+        };
+    }
+
+    /// <summary>
+    /// Counts the merged vocabulary of a status category after applying the given download filters.
+    /// </summary>
+    [HttpPost("profile/{username}/media-list/{status:int}/vocabulary-count")]
+    [AllowAnonymous]
+    public async Task<IResult> CountMediaListVocabulary(string username, int status, [FromBody] DeckDownloadRequest request)
+    {
+        var (userId, _, allowed) = await ResolveMediaListAccessAsync(username);
+        if (userId == null || !allowed)
+            return Results.NotFound(new { message = "Media list not found" });
+
+        var (deckWords, _, error) = await ResolveMergedCategoryAsync(userId, (DeckStatus)status, request);
+        if (error != null)
+            return error;
+
+        return Results.Ok(deckWords.Count);
+    }
+
+    /// <summary>
+    /// Counts distinct vocabulary across a status category within a global frequency-rank range.
+    /// </summary>
+    [HttpGet("profile/{username}/media-list/{status:int}/vocabulary-count-frequency")]
+    [AllowAnonymous]
+    public async Task<IResult> CountMediaListFrequency(string username, int status, int minFrequency, int maxFrequency)
+    {
+        var (userId, _, allowed) = await ResolveMediaListAccessAsync(username);
+        if (userId == null || !allowed)
+            return Results.NotFound(new { message = "Media list not found" });
+
+        var deckIds = await GetCategoryDisplayDeckIdsAsync(userId, (DeckStatus)status);
+        if (deckIds.Count == 0)
+            return Results.Ok(0);
+
+        var count = await jitenContext.DeckWords.AsNoTracking()
+                                      .Where(dw => deckIds.Contains(dw.DeckId) &&
+                                                   jitenContext.WordFormFrequencies.Any(wff => wff.WordId == dw.WordId &&
+                                                       wff.ReadingIndex == (short)dw.ReadingIndex &&
+                                                       wff.FrequencyRank >= minFrequency && wff.FrequencyRank <= maxFrequency))
+                                      .Select(dw => new { dw.WordId, dw.ReadingIndex })
+                                      .Distinct()
+                                      .CountAsync();
+
+        return Results.Ok(count);
+    }
+
+    /// <summary>
+    /// Counts distinct vocabulary across a status category filtered by per-deck occurrence thresholds.
+    /// </summary>
+    [HttpGet("profile/{username}/media-list/{status:int}/vocabulary-count-occurrences")]
+    [AllowAnonymous]
+    public async Task<IResult> CountMediaListOccurrences(string username, int status, int? minOccurrences = null, int? maxOccurrences = null)
+    {
+        var (userId, _, allowed) = await ResolveMediaListAccessAsync(username);
+        if (userId == null || !allowed)
+            return Results.NotFound(new { message = "Media list not found" });
+
+        var deckIds = await GetCategoryDisplayDeckIdsAsync(userId, (DeckStatus)status);
+        if (deckIds.Count == 0)
+            return Results.Ok(0);
+
+        var query = jitenContext.DeckWords.AsNoTracking().Where(dw => deckIds.Contains(dw.DeckId));
+        if (minOccurrences.HasValue)
+            query = query.Where(dw => dw.Occurrences >= minOccurrences.Value);
+        if (maxOccurrences.HasValue)
+            query = query.Where(dw => dw.Occurrences <= maxOccurrences.Value);
+
+        var count = await query.Select(dw => new { dw.WordId, dw.ReadingIndex }).Distinct().CountAsync();
+        return Results.Ok(count);
+    }
+
+    /// <summary>
+    /// Marks the combined vocabulary of a status category as mastered or blacklisted in the caller's tracker.
+    /// </summary>
+    [HttpPost("profile/{username}/media-list/{status:int}/learn")]
+    [Authorize]
+    [EnableRateLimiting("download")]
+    public async Task<IResult> LearnMediaList(string username, int status, [FromBody] DeckLearnRequest request)
+    {
+        var state = request.VocabularyState?.ToLowerInvariant();
+        if (state is not ("mastered" or "blacklisted"))
+            return Results.BadRequest("VocabularyState must be 'mastered' or 'blacklisted'.");
+
+        var (userId, _, allowed) = await ResolveMediaListAccessAsync(username);
+        if (userId == null || !allowed)
+            return Results.NotFound(new { message = "Media list not found" });
+
+        var (deckWords, _, error) = await ResolveMergedCategoryAsync(userId, (DeckStatus)status, request.ToDownloadRequest());
+        if (error != null)
+            return error;
+
+        var entities = deckWords
+                       .Select(x => new DeckWord { WordId = x.WordId, ReadingIndex = x.ReadingIndex, Occurrences = x.Occurrences })
+                       .ToList();
+
+        var applied = state == "mastered"
+            ? await userService.AddKnownWords(entities)
+            : await userService.BlacklistWords(entities);
+
+        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userService.UserId!);
+        await userContext.SaveChangesAsync();
+
+        return Results.Ok(new { applied, state });
+    }
+
+    /// <summary>
+    /// Resolves a username to its user id and whether the caller may view that user's media list.
+    /// Non-owners need both the profile and the media list to be public.
+    /// </summary>
+    private async Task<(string? UserId, string? UserName, bool Allowed)> ResolveMediaListAccessAsync(string username)
+    {
+        var user = await userContext.Users
+                                    .AsNoTracking()
+                                    .Where(u => u.NormalizedUserName == username.ToUpperInvariant())
+                                    .Select(u => new { u.Id, u.UserName })
+                                    .FirstOrDefaultAsync();
+
+        if (user == null)
+            return (null, null, false);
+
+        if (userService.UserId == user.Id)
+            return (user.Id, user.UserName, true);
+
+        var flags = await userContext.UserProfiles
+                                     .AsNoTracking()
+                                     .Where(p => p.UserId == user.Id)
+                                     .Select(p => new { p.IsPublic, p.IsMediaListPublic })
+                                     .FirstOrDefaultAsync();
+
+        return (user.Id, user.UserName, flags is { IsPublic: true, IsMediaListPublic: true });
+    }
+
+    /// <summary>
+    /// Returns the display deck ids of a user's tracked decks in a single status category.
+    /// </summary>
+    private async Task<List<int>> GetCategoryDisplayDeckIdsAsync(string userId, DeckStatus status) =>
+        (await BuildMediaListAsync(userId)).Where(e => e.Status == status).Select(e => e.Display.DeckId).ToList();
+
+    /// <summary>
+    /// Builds a user's media list: one entry per display deck (child decks collapsed to their parent series),
+    /// with the most representative status and a favourite flag. Used by both the list and download endpoints.
+    /// </summary>
+    private async Task<List<(Deck Display, DeckStatus Status, bool IsFavourite)>> BuildMediaListAsync(string userId)
+    {
+        var prefs = await userContext.UserDeckPreferences
+                                     .AsNoTracking()
+                                     .Where(p => p.UserId == userId && p.Status != DeckStatus.None)
+                                     .Select(p => new { p.DeckId, p.Status, p.IsFavourite })
+                                     .ToListAsync();
+
+        if (prefs.Count == 0)
+            return new List<(Deck, DeckStatus, bool)>();
+
+        var prefDeckIds = prefs.Select(p => p.DeckId).ToList();
+
+        var parentByDeck = await jitenContext.Decks
+                                             .AsNoTracking()
+                                             .Where(d => prefDeckIds.Contains(d.DeckId))
+                                             .Select(d => new { d.DeckId, d.ParentDeckId })
+                                             .ToDictionaryAsync(d => d.DeckId, d => d.ParentDeckId);
+
+        static int Rank(DeckStatus s) => s switch
+                                         {
+                                             DeckStatus.Completed => 4,
+                                             DeckStatus.Ongoing => 3,
+                                             DeckStatus.Planning => 2,
+                                             DeckStatus.Dropped => 1,
+                                             _ => 0
+                                         };
+
+        var agg = new Dictionary<int, (DeckStatus Status, bool Own, bool Fav)>();
+        foreach (var p in prefs)
+        {
+            if (!parentByDeck.TryGetValue(p.DeckId, out var parentId)) continue;
+            var displayId = parentId ?? p.DeckId;
+            var isOwn = displayId == p.DeckId;
+
+            if (!agg.TryGetValue(displayId, out var cur))
+            {
+                agg[displayId] = (p.Status, isOwn, p.IsFavourite);
+                continue;
+            }
+
+            var statusValue = cur.Status;
+            if (isOwn && !cur.Own)
+                statusValue = p.Status;
+            else if (isOwn == cur.Own && Rank(p.Status) > Rank(cur.Status))
+                statusValue = p.Status;
+
+            agg[displayId] = (statusValue, cur.Own || isOwn, cur.Fav || p.IsFavourite);
+        }
+
+        var displayIds = agg.Keys.ToList();
+        var displayDecks = await jitenContext.Decks
+                                             .AsNoTracking()
+                                             .Include(d => d.Children)
+                                             .Include(d => d.Links)
+                                             .Include(d => d.Titles)
+                                             .Include(d => d.DeckGenres)
+                                             .Include(d => d.DeckTags)
+                                             .ThenInclude(dt => dt.Tag)
+                                             .Where(d => displayIds.Contains(d.DeckId))
+                                             .ToListAsync();
+
+        return displayDecks
+               .Select(d => (Display: d, agg[d.DeckId].Status, agg[d.DeckId].Fav))
+               .ToList();
     }
 
     /// <summary>
@@ -2525,7 +2877,7 @@ public class UserController(
             allKanji = await jitenContext.Kanjis
                                          .AsNoTracking()
                                          .OrderBy(k => k.FrequencyRank ?? int.MaxValue)
-                                         .Select(k => new CachedKanjiInfo(k.Character, k.FrequencyRank, k.JlptLevel))
+                                         .Select(k => new CachedKanjiInfo(k.Character, k.FrequencyRank, k.JlptLevel, k.Grade, k.StrokeCount))
                                          .ToListAsync();
 
             var json = JsonSerializer.Serialize(allKanji);
@@ -2536,30 +2888,45 @@ public class UserController(
                                         .AsNoTracking()
                                         .FirstOrDefaultAsync(ukg => ukg.UserId == targetUserId);
 
-        var userScores = userGrid?.GetKanjiScoresOnce() ?? new Dictionary<string, double[]>();
-        var maxThreshold = double.Parse(configuration["KanjiGrid:MaxScoreThreshold"] ?? "10.0");
+        var userScores = userGrid?.GetKanjiScoresOnce() ?? new Dictionary<string, KanjiScoreEntry>();
 
         var kanjiData = allKanji!
                         .Where(k => !onlySeen || userScores.ContainsKey(k.Character))
                         .Select(k =>
                         {
-                            userScores.TryGetValue(k.Character, out var scoreData);
-                            return new KanjiGridItemDto
-                                   {
-                                       Character = k.Character, FrequencyRank = k.FrequencyRank, JlptLevel = k.JlptLevel,
-                                       Score = scoreData?[0] ?? 0, WordCount = (int)(scoreData?[1] ?? 0)
-                                   };
+                            userScores.TryGetValue(k.Character, out var entry);
+                            var dto = new KanjiGridItemDto
+                            {
+                                Character = k.Character,
+                                FrequencyRank = k.FrequencyRank,
+                                JlptLevel = k.JlptLevel,
+                                Grade = k.Grade,
+                                StrokeCount = k.StrokeCount,
+                                Score = entry?.Score ?? 0,
+                                WordCount = entry?.WordCount ?? 0
+                            };
+                            if (entry?.Readings != null)
+                            {
+                                dto.Readings = entry.Readings
+                                    .Select(r => new KanjiGridReadingDto
+                                    {
+                                        Reading = r.Reading, Known = r.Known,
+                                        Required = r.Required, Weight = r.Weight
+                                    })
+                                    .ToList();
+                            }
+                            return dto;
                         })
                         .ToList();
 
         return Results.Ok(new KanjiGridResponseDto
                           {
-                              Kanji = kanjiData, MaxScoreThreshold = maxThreshold, TotalKanjiCount = allKanji!.Count,
+                              Kanji = kanjiData, TotalKanjiCount = allKanji!.Count,
                               SeenKanjiCount = userScores.Count, LastComputedAt = userGrid?.LastComputedAt
                           });
     }
 
-    private record CachedKanjiInfo(string Character, int? FrequencyRank, short? JlptLevel);
+    private record CachedKanjiInfo(string Character, int? FrequencyRank, short? JlptLevel, short? Grade, short StrokeCount);
     private record ReadingFrequencyResult(int WordId, short ReadingIndex, int FrequencyRank);
 
     private static int StateRank(KnownState s) => s switch

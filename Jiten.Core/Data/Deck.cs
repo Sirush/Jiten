@@ -140,6 +140,7 @@ public class Deck
     /// Whether to hide the dialogue percentage on the deck card
     /// </summary>
     public bool HideDialoguePercentage { get; set; } = false;
+    public bool HideAverageSentenceLength { get; set; } = false;
 
     /// <summary>
     /// Parent deck, null if no parent

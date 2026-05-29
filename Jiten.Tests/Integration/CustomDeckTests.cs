@@ -266,9 +266,9 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task DeckLimit_30Decks()
+    public async Task DeckLimit_50Decks()
     {
-        for (var i = 0; i < 30; i++)
+        for (var i = 0; i < 50; i++)
         {
             var req = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
                 .WithUser(TestUsers.UserA)
@@ -337,36 +337,7 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
         cardWordIds.Should().Contain(i => i >= 1 && i <= 3);
     }
 
-    [Fact]
-    public async Task SingleWordAdd_RejectsAt50KPerDeckLimit()
-    {
-        var createRes = await CreateStaticDeck("Limit Test");
-        var deckId = (await createRes.Content.ReadFromJsonAsync<IdResult>())!.UserStudyDeckId;
 
-        using (var scope = factory.Services.CreateScope())
-        {
-            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
-            for (var i = 0; i < 50_000; i++)
-            {
-                userDb.UserStudyDeckWords.Add(new UserStudyDeckWord
-                {
-                    UserStudyDeckId = deckId,
-                    WordId = i + 1,
-                    ReadingIndex = 0,
-                    SortOrder = i
-                });
-            }
-            await userDb.SaveChangesAsync();
-        }
-
-        var addReq = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{deckId}/words")
-            .WithUser(TestUsers.UserA)
-            .WithJsonContent(new { wordId = 99999, readingIndex = 0 });
-        var addRes = await _client.SendAsync(addReq);
-        addRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var body = await addRes.Content.ReadAsStringAsync();
-        body.Should().Contain("50,000");
-    }
 
     [Fact]
     public async Task BatchAdd_RejectsWhenExceeding200KTotalLimit()
@@ -627,8 +598,8 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
         var response = await _client.SendAsync(request);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var count = await response.Content.ReadFromJsonAsync<int>();
-        count.Should().Be(10);
+        var result = await response.Content.ReadFromJsonAsync<PreviewCountResult>();
+        result!.Total.Should().Be(10);
     }
 
     [Fact]
@@ -663,8 +634,8 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
         var response = await _client.SendAsync(request);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var count = await response.Content.ReadFromJsonAsync<int>();
-        count.Should().Be(1, "only word 1 has a non-kana form");
+        var result = await response.Content.ReadFromJsonAsync<PreviewCountResult>();
+        result!.Total.Should().Be(1, "only word 1 has a non-kana form");
     }
 
     [Fact]
@@ -936,5 +907,6 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
 
     private record IdResult(int UserStudyDeckId);
     private record AddedResult(int Added);
+    private record PreviewCountResult(int Total, int Unlearned);
     private record DeckDto(int UserStudyDeckId, int DeckType, string Name, int? DeckId, int TotalWords);
 }

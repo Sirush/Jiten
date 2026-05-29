@@ -35,7 +35,7 @@
       { label: 'Kanji (1-occurence):', value: deck.value?.uniqueKanjiUsedOnceCount?.toLocaleString() ?? 'N/A' },
     ];
 
-    if (deck.value?.averageSentenceLength !== 0) {
+    if (deck.value?.averageSentenceLength !== 0 && !deck.value?.hideAverageSentenceLength) {
       items.push({ label: 'Average sentence length:', value: deck.value?.averageSentenceLength.toFixed(1) ?? 'N/A' });
     }
 

@@ -36,6 +36,7 @@ public class DeckDto
     public int SelectedWordOccurrences { get; set; }
     public float DialoguePercentage { get; set; }
     public bool HideDialoguePercentage { get; set; }
+    public bool HideAverageSentenceLength { get; set; }
     public float Coverage { get; set; }
     public float UniqueCoverage { get; set; }
     public float YoungCoverage { get; set; }
@@ -88,6 +89,7 @@ public class DeckDto
         SelectedWordOccurrences = occurrences;
         DialoguePercentage = deck.DialoguePercentage;
         HideDialoguePercentage = deck.HideDialoguePercentage;
+        HideAverageSentenceLength = deck.HideAverageSentenceLength;
         Aliases = deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias).Select(t => t.Title).ToList();
         DictionaryEntries = deck.DictionaryEntries.Select(e => new DeckDictionaryEntryDto { Surface = e.Surface, EntryType = e.EntryType }).ToList();
         ExternalRating = deck.ExternalRating;
@@ -134,6 +136,7 @@ public class DeckDto
         ChildrenDeckCount = deck.Children.Count;
         DialoguePercentage = deck.DialoguePercentage;
         HideDialoguePercentage = deck.HideDialoguePercentage;
+        HideAverageSentenceLength = deck.HideAverageSentenceLength;
         Aliases = deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias).Select(t => t.Title).ToList();
         DictionaryEntries = deck.DictionaryEntries.Select(e => new DeckDictionaryEntryDto { Surface = e.Surface, EntryType = e.EntryType }).ToList();
         ExternalRating = deck.ExternalRating;

@@ -78,11 +78,67 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                        })
                        .ToList();
 
+        // Words grouped by reading (top 5 per reading, ordered by frequency-weighted reading importance)
+        var readingWordData = await context.KanjiReadingWords
+            .AsNoTracking()
+            .Where(krw => krw.KanjiCharacter == character)
+            .Join(context.WordFormFrequencies.AsNoTracking(),
+                  krw => new { krw.WordId, ReadingIndex = (short)krw.ReadingIndex },
+                  wff => new { wff.WordId, wff.ReadingIndex },
+                  (krw, wff) => new { krw.Reading, krw.WordId, krw.ReadingIndex, Rank = (int?)wff.FrequencyRank })
+            .Where(x => x.Rank > 0)
+            .ToListAsync();
+
+        var readingGroups = readingWordData
+            .GroupBy(x => x.Reading)
+            .Select(g => new
+            {
+                Reading = g.Key,
+                TotalWords = g.Count(),
+                TopEntries = g.OrderBy(x => x.Rank).Take(10).ToList(),
+                BestRank = g.Min(x => x.Rank ?? int.MaxValue)
+            })
+            .OrderByDescending(g => g.TotalWords)
+            .ToList();
+
+        var readingWordIds = readingGroups.SelectMany(g => g.TopEntries.Select(e => e.WordId)).Distinct().ToList();
+        var readingWords = readingWordIds.Count > 0
+            ? await context.JMDictWords.AsNoTracking()
+                .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
+                .Where(w => readingWordIds.Contains(w.WordId))
+                .ToDictionaryAsync(w => w.WordId)
+            : new Dictionary<int, Core.Data.JMDict.JmDictWord>();
+
+        var readingForms = readingWordIds.Count > 0
+            ? await WordFormHelper.LoadWordForms(context, readingWordIds)
+            : new Dictionary<(int, short), Core.Data.JMDict.JmDictWordForm>();
+
+        var wordsByReading = readingGroups.Select(g => new KanjiReadingWordsDto
+        {
+            Reading = g.Reading,
+            TotalWords = g.TotalWords,
+            Words = g.TopEntries
+                .Where(e => readingWords.ContainsKey(e.WordId))
+                .Select(e =>
+                {
+                    var word = readingWords[e.WordId];
+                    var form = readingForms.GetValueOrDefault((e.WordId, (short)e.ReadingIndex));
+                    return new WordSummaryDto
+                    {
+                        WordId = e.WordId, ReadingIndex = (byte)e.ReadingIndex,
+                        Reading = form?.Text ?? "", ReadingFurigana = form?.RubyText ?? "",
+                        MainDefinition = word.Definitions.FirstOrDefault()?.EnglishMeanings.FirstOrDefault(),
+                        FrequencyRank = e.Rank
+                    };
+                })
+                .ToList()
+        }).ToList();
+
         return Results.Ok(new KanjiDto
                           {
                               Character = kanji.Character, OnReadings = kanji.OnReadings, KunReadings = kanji.KunReadings,
                               Meanings = kanji.Meanings, StrokeCount = kanji.StrokeCount, JlptLevel = kanji.JlptLevel, Grade = kanji.Grade,
-                              FrequencyRank = kanji.FrequencyRank, TopWords = topWords
+                              FrequencyRank = kanji.FrequencyRank, TopWords = topWords, WordsByReading = wordsByReading
                           });
     }
 
@@ -95,32 +151,51 @@ public class KanjiController(JitenDbContext context) : ControllerBase
     [HttpGet("{character}/words")]
     [SwaggerOperation(Summary = "Get words containing kanji",
                       Description =
-                          "Returns a paginated list of words containing the specified kanji, ordered by reading-specific frequency.")]
+                          "Returns a paginated list of words containing the specified kanji, ordered by frequency. Optionally filter by kanji reading.")]
     [ProducesResponseType(typeof(PaginatedResponse<List<WordSummaryDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ResponseCache(Duration = 3600, VaryByQueryKeys = ["page"])]
+    [ResponseCache(Duration = 3600, VaryByQueryKeys = ["page", "pageSize", "reading"])]
     public async Task<IResult> GetKanjiWords(
         [FromRoute] string character,
-        [FromQuery] int page = 1)
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 100,
+        [FromQuery] string? reading = null)
     {
         var kanjiExists = await context.Kanjis.AnyAsync(k => k.Character == character);
         if (!kanjiExists)
             return Results.NotFound();
 
-        var pageSize = 100;
+        pageSize = Math.Clamp(pageSize, 1, 5000);
         page = Math.Max(page, 1);
 
-        // Rank words in SQL via join + PostgreSQL array indexing
-        var rankedQuery = context.WordKanjis
-                                  .AsNoTracking()
-                                  .Where(wk => wk.KanjiCharacter == character)
-                                  .Select(wk => new { wk.WordId, wk.ReadingIndex })
-                                  .Distinct()
-                                  .Join(context.WordFormFrequencies.AsNoTracking(),
-                                        wk => new { wk.WordId, ReadingIndex = (short)wk.ReadingIndex },
-                                        wff => new { wff.WordId, wff.ReadingIndex },
-                                        (wk, wff) => new { wk.WordId, wk.ReadingIndex, Rank = (int?)wff.FrequencyRank })
-                                  .Where(x => x.Rank > 0);
+        IQueryable<WordRankResult> rankedQuery;
+
+        if (!string.IsNullOrEmpty(reading))
+        {
+            rankedQuery = context.KanjiReadingWords
+                .AsNoTracking()
+                .Where(krw => krw.KanjiCharacter == character && krw.Reading == reading)
+                .Select(krw => new { krw.WordId, krw.ReadingIndex })
+                .Distinct()
+                .Join(context.WordFormFrequencies.AsNoTracking(),
+                      krw => new { krw.WordId, ReadingIndex = (short)krw.ReadingIndex },
+                      wff => new { wff.WordId, wff.ReadingIndex },
+                      (krw, wff) => new WordRankResult { WordId = krw.WordId, ReadingIndex = krw.ReadingIndex, Rank = wff.FrequencyRank })
+                .Where(x => x.Rank > 0);
+        }
+        else
+        {
+            rankedQuery = context.WordKanjis
+                .AsNoTracking()
+                .Where(wk => wk.KanjiCharacter == character)
+                .Select(wk => new { wk.WordId, wk.ReadingIndex })
+                .Distinct()
+                .Join(context.WordFormFrequencies.AsNoTracking(),
+                      wk => new { wk.WordId, ReadingIndex = (short)wk.ReadingIndex },
+                      wff => new { wff.WordId, wff.ReadingIndex },
+                      (wk, wff) => new WordRankResult { WordId = wk.WordId, ReadingIndex = wk.ReadingIndex, Rank = wff.FrequencyRank })
+                .Where(x => x.Rank > 0);
+        }
 
         var totalCount = await rankedQuery.CountAsync();
 
@@ -150,7 +225,7 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                                {
                                    WordId = x.WordId, ReadingIndex = (byte)x.ReadingIndex, Reading = form?.Text ?? "",
                                    ReadingFurigana = form?.RubyText ?? "", MainDefinition = mainDefinition,
-                                   FrequencyRank = x.Rank!.Value
+                                   FrequencyRank = x.Rank
                                };
                     })
                     .ToList();
@@ -161,5 +236,12 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                                                                       pageSize,
                                                                       (page - 1) * pageSize
                                                                      ));
+    }
+
+    private class WordRankResult
+    {
+        public int WordId { get; set; }
+        public short ReadingIndex { get; set; }
+        public int Rank { get; set; }
     }
 }

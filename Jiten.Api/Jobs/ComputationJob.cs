@@ -700,25 +700,26 @@ public class ComputationJob(
             await using var context = await contextFactory.CreateDbContextAsync();
             await using var userContext = await userContextFactory.CreateDbContextAsync();
 
-            // Get scoring weights from configuration
             var youngWeight = double.Parse(configuration["KanjiGrid:YoungScoreWeight"] ?? "0.5", CultureInfo.InvariantCulture);
             var matureWeight = double.Parse(configuration["KanjiGrid:MatureScoreWeight"] ?? "1.0", CultureInfo.InvariantCulture);
             var masteredWeight = double.Parse(configuration["KanjiGrid:MasteredScoreWeight"] ?? "1.0", CultureInfo.InvariantCulture);
 
-            // Compute kanji scores
+            var youngStr = youngWeight.ToString(CultureInfo.InvariantCulture);
+            var matureStr = matureWeight.ToString(CultureInfo.InvariantCulture);
+            var masteredStr = masteredWeight.ToString(CultureInfo.InvariantCulture);
+
             var sql = $$"""
                 WITH user_known_words AS (
-                    -- Tier 1: FsrsCards (excluding New and Blacklisted)
                     SELECT
                         fc."WordId",
                         fc."ReadingIndex",
                         CASE
-                            WHEN fc."State" = 5 THEN {{masteredWeight}}
+                            WHEN fc."State" = 5 THEN {{masteredStr}}
                             WHEN fc."LastReview" IS NOT NULL
                                  AND (fc."Due" - fc."LastReview") >= INTERVAL '21 days'
-                            THEN {{matureWeight}}
+                            THEN {{matureStr}}
                             WHEN fc."LastReview" IS NOT NULL
-                            THEN {{youngWeight}}
+                            THEN {{youngStr}}
                             ELSE 0
                         END AS weight
                     FROM "user"."FsrsCards" fc
@@ -727,16 +728,14 @@ public class ComputationJob(
 
                     UNION ALL
 
-                    -- Tier 2: WordSet Mastered (only for words WITHOUT FsrsCard)
-                    -- Only Mastered contributes to kanji grid (Blacklisted does not represent learning)
                     SELECT
                         wsm."WordId",
                         wsm."ReadingIndex",
-                        {{masteredWeight}} AS weight
+                        {{masteredStr}} AS weight
                     FROM "user"."UserWordSetStates" uwss
                     JOIN "jiten"."WordSetMembers" wsm ON wsm."SetId" = uwss."SetId"
                     WHERE uwss."UserId" = {0}::uuid
-                      AND uwss."State" = 2  -- Mastered
+                      AND uwss."State" = 2
                       AND NOT EXISTS (
                           SELECT 1 FROM "user"."FsrsCards" fc
                           WHERE fc."UserId" = {0}::uuid
@@ -745,36 +744,89 @@ public class ComputationJob(
                       )
                     GROUP BY wsm."WordId", wsm."ReadingIndex"
                 ),
-                kanji_scores AS (
-                    SELECT
-                        wk."KanjiCharacter",
-                        SUM(ukw.weight) AS score,
-                        COUNT(DISTINCT (ukw."WordId", ukw."ReadingIndex")) AS word_count
+                user_kanji AS (
+                    SELECT DISTINCT krw."KanjiCharacter"
                     FROM user_known_words ukw
-                    INNER JOIN "jmdict"."WordKanji" wk
-                        ON wk."WordId" = ukw."WordId"
-                        AND wk."ReadingIndex" = ukw."ReadingIndex"
+                    JOIN jmdict."KanjiReadingWords" krw ON krw."WordId" = ukw."WordId"
                     WHERE ukw.weight > 0
-                    GROUP BY wk."KanjiCharacter"
+                ),
+                kanji_reading_raw AS (
+                    SELECT krw."KanjiCharacter", krw."Reading",
+                           COUNT(*) as total_words,
+                           SUM(1.0 / sqrt(COALESCE(NULLIF(wff."FrequencyRank", 0), 200000))
+                               * CASE WHEN COALESCE(NULLIF(wff."FrequencyRank", 0), 200000) <= 100000 THEN 1.0
+                                      ELSE power(100000.0 / COALESCE(NULLIF(wff."FrequencyRank", 0), 200000), 2)
+                                 END) as freq_score
+                    FROM jmdict."KanjiReadingWords" krw
+                    LEFT JOIN jmdict."WordFormFrequencies" wff
+                        ON wff."WordId" = krw."WordId" AND wff."ReadingIndex" = krw."ReadingIndex"
+                    WHERE krw."KanjiCharacter" IN (SELECT "KanjiCharacter" FROM user_kanji)
+                    GROUP BY krw."KanjiCharacter", krw."Reading"
+                ),
+                kanji_reading_weighted AS (
+                    SELECT "KanjiCharacter", "Reading", total_words,
+                           freq_score / SUM(freq_score) OVER (PARTITION BY "KanjiCharacter") as raw_weight
+                    FROM kanji_reading_raw
+                ),
+                kanji_reading_stats AS (
+                    SELECT "KanjiCharacter", "Reading", total_words,
+                           raw_weight / SUM(raw_weight) OVER (PARTITION BY "KanjiCharacter") as freq_weight
+                    FROM kanji_reading_weighted
+                    WHERE raw_weight >= 0.03
+                ),
+                user_known_per_reading AS (
+                    SELECT krw."KanjiCharacter", krw."Reading",
+                           COUNT(DISTINCT ukw."WordId") as known_count
+                    FROM user_known_words ukw
+                    JOIN jmdict."KanjiReadingWords" krw ON krw."WordId" = ukw."WordId"
+                    WHERE ukw.weight > 0
+                    GROUP BY krw."KanjiCharacter", krw."Reading"
+                ),
+                all_reading_scores AS (
+                    SELECT krs."KanjiCharacter", krs."Reading",
+                           krs.freq_weight, krs.total_words,
+                           COALESCE(ukr.known_count, 0) as known_count,
+                           LEAST(1.0, COALESCE(ukr.known_count, 0)::float
+                               / LEAST(5, CEIL(0.3 * krs.total_words))) as reading_score
+                    FROM kanji_reading_stats krs
+                    LEFT JOIN user_known_per_reading ukr
+                        ON ukr."KanjiCharacter" = krs."KanjiCharacter"
+                       AND ukr."Reading" = krs."Reading"
                 )
-                SELECT
-                    "KanjiCharacter",
-                    score AS "Score",
-                    word_count AS "WordCount"
-                FROM kanji_scores
+                SELECT "KanjiCharacter",
+                       SUM(reading_score * freq_weight) as "Score",
+                       SUM(known_count)::int as "WordCount",
+                       json_agg(json_build_object(
+                           'r', "Reading", 'k', known_count,
+                           'q', LEAST(5, CEIL(0.3 * total_words))::int,
+                           'w', ROUND(freq_weight::numeric, 3)
+                       ) ORDER BY freq_weight DESC) as "ReadingsJson"
+                FROM all_reading_scores
+                GROUP BY "KanjiCharacter"
             """;
 
             var kanjiScores = await context.Database
                 .SqlQueryRaw<KanjiScoreResult>(sql, userId)
                 .ToListAsync();
 
-            // Build dictionary for JSONB storage
             var scoresDict = kanjiScores.ToDictionary(
                 ks => ks.KanjiCharacter,
-                ks => new[] { ks.Score, ks.WordCount }
+                ks =>
+                {
+                    var entry = new KanjiScoreEntry
+                    {
+                        Score = Math.Round(ks.Score, 4),
+                        WordCount = ks.WordCount
+                    };
+                    if (!string.IsNullOrEmpty(ks.ReadingsJson))
+                    {
+                        entry.Readings = System.Text.Json.JsonSerializer
+                            .Deserialize<List<ReadingEntry>>(ks.ReadingsJson);
+                    }
+                    return entry;
+                }
             );
 
-            // Upsert the kanji grid
             var existingGrid = await userContext.UserKanjiGrids
                 .SingleOrDefaultAsync(ukg => ukg.UserId == userId);
 
@@ -810,6 +862,7 @@ public class ComputationJob(
         public string KanjiCharacter { get; set; } = string.Empty;
         public double Score { get; set; }
         public int WordCount { get; set; }
+        public string? ReadingsJson { get; set; }
     }
 
     private static readonly object AccomplishmentComputeLock = new();

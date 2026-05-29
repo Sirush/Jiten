@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Jiten.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Jiten.Core.Migrations
 {
     [DbContext(typeof(JitenDbContext))]
-    partial class JitenDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260527202054_DeckHideAverageSentenceLength")]
+    partial class DeckHideAverageSentenceLength
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1044,31 +1047,6 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_Kanji_StrokeCount");
 
                     b.ToTable("Kanji", "jmdict");
-                });
-
-            modelBuilder.Entity("Jiten.Core.Data.JMDict.KanjiReadingWord", b =>
-                {
-                    b.Property<string>("KanjiCharacter")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Reading")
-                        .HasColumnType("text");
-
-                    b.Property<int>("WordId")
-                        .HasColumnType("integer");
-
-                    b.Property<short>("ReadingIndex")
-                        .HasColumnType("smallint");
-
-                    b.HasKey("KanjiCharacter", "Reading", "WordId", "ReadingIndex");
-
-                    b.HasIndex("WordId")
-                        .HasDatabaseName("IX_KanjiReadingWords_WordId");
-
-                    b.HasIndex("KanjiCharacter", "Reading")
-                        .HasDatabaseName("IX_KanjiReadingWords_KanjiCharacter_Reading");
-
-                    b.ToTable("KanjiReadingWords", "jmdict");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.JMDict.WordKanji", b =>

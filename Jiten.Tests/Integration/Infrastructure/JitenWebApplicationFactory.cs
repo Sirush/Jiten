@@ -147,6 +147,7 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
 
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         userDb.UserDeckPreferences.RemoveRange(userDb.UserDeckPreferences);
+        userDb.UserProfiles.RemoveRange(userDb.UserProfiles);
         await userDb.SaveChangesAsync();
     }
 }

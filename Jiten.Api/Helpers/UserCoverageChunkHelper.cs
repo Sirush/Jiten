@@ -1,3 +1,4 @@
+using Jiten.Api.Dtos;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,20 @@ public static class UserCoverageChunkHelper
         public Dictionary<int, float> MatureUniqueCoverage { get; } = new();
         public Dictionary<int, float> YoungCoverage { get; } = new();
         public Dictionary<int, float> YoungUniqueCoverage { get; } = new();
+
+        /// <summary>
+        /// Decorates a set of DeckDtos with the viewer's coverage
+        /// </summary>
+        public void ApplyTo(IEnumerable<DeckDto> dtos)
+        {
+            foreach (var dto in dtos)
+            {
+                if (MatureCoverage.TryGetValue(dto.DeckId, out var c)) dto.Coverage = c;
+                if (MatureUniqueCoverage.TryGetValue(dto.DeckId, out var uc)) dto.UniqueCoverage = uc;
+                if (YoungCoverage.TryGetValue(dto.DeckId, out var yc)) dto.YoungCoverage = yc;
+                if (YoungUniqueCoverage.TryGetValue(dto.DeckId, out var yuc)) dto.YoungUniqueCoverage = yuc;
+            }
+        }
     }
 
     public static async Task<CoverageDictionaries> GetCoverage(UserDbContext userContext, string userId, IReadOnlyCollection<int> deckIds)

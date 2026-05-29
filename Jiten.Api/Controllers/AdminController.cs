@@ -343,6 +343,7 @@ public partial class AdminController(
         deck.Description = model.Description?.Trim();
         deck.DifficultyOverride = model.DifficultyOverride;
         deck.HideDialoguePercentage = model.HideDialoguePercentage;
+        deck.HideAverageSentenceLength = model.HideAverageSentenceLength;
 
         // Update cover image if provided
         if (model.CoverImage is { Length: > 0 })

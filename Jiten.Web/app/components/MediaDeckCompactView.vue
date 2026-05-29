@@ -1,3 +1,9 @@
+<script lang="ts">
+  import { ref } from 'vue';
+
+  const openOverlayDeckId = ref<number | null>(null);
+</script>
+
 <script setup lang="ts">
   import { type Deck, MediaType } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
@@ -33,6 +39,22 @@
     return `${hours}h ${minutes}min`;
   });
 
+  const showOverlay = computed(() => openOverlayDeckId.value === props.deck.deckId);
+
+  function toggleOverlay(e: Event) {
+    if (window.matchMedia('(hover: none)').matches) {
+      e.preventDefault();
+      openOverlayDeckId.value = showOverlay.value ? null : props.deck.deckId;
+    }
+  }
+
+  function closeOverlay() {
+    openOverlayDeckId.value = null;
+  }
+
+  onMounted(() => document.addEventListener('click', closeOverlay));
+  onUnmounted(() => document.removeEventListener('click', closeOverlay));
+
   const borderColor = computed(() => {
     if (!authStore.isAuthenticated || store.hideCoverageBorders || (props.deck.coverage == 0 && props.deck.uniqueCoverage == 0))
       return 'none';
@@ -43,7 +65,7 @@
 <template>
   <div class="relative group h-48 w-34">
     <div class="h-48 w-34 overflow-hidden rounded-md border hover:shadow-md transition-shadow duration-200"   :style="{ 'border': borderColor }">
-      <div class="relative h-full">
+      <div class="relative h-full" @click.stop="toggleOverlay">
         <!-- Cover image -->
         <img
           :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
@@ -62,7 +84,8 @@
 
         <!-- Hover overlay with additional info -->
         <div
-          class="absolute inset-0 bg-black bg-opacity-80 text-white p-2 flex flex-col opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+          class="absolute inset-0 bg-black bg-opacity-80 text-white p-2 flex flex-col transition-opacity duration-200"
+          :class="showOverlay ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
         >
           <div class="font-bold mb-2 truncate">{{ localiseTitle(deck) }}</div>
           <div class="text-xs mb-1">{{ getMediaTypeText(deck.mediaType) }}</div>

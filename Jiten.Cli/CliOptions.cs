@@ -127,6 +127,9 @@ public class CliOptions
     [Option(longName: "populate-word-kanji", Required = false, HelpText = "Populate WordKanji junction table after kanji import.")]
     public bool PopulateWordKanji { get; set; }
 
+    [Option(longName: "compute-kanji-readings", Required = false, HelpText = "Pre-compute kanji reading associations for the kanji grid.")]
+    public bool ComputeKanjiReadings { get; set; }
+
     [Option(longName: "parse-test", Required = false, HelpText = "Parse text with verbose diagnostic output. Use @filepath to read from file.")]
     public string? ParseTest { get; set; }
 

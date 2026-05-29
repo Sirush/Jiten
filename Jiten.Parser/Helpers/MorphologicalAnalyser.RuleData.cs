@@ -67,13 +67,13 @@ public partial class MorphologicalAnalyser
     ];
 
     private static readonly Dictionary<string, string> AuxiliaryVerbStems = new()
-    {
-        { "続ける", "続け" }, { "始める", "始め" }, { "終わる", "終わ" },
-        { "終える", "終え" }, { "出す", "出" }, { "かける", "かけ" },
-        { "回る", "回" }, { "合う", "合" },
-    };
+                                                                            {
+                                                                                { "続ける", "続け" }, { "始める", "始め" }, { "終わる", "終わ" },
+                                                                                { "終える", "終え" }, { "出す", "出" }, { "かける", "かけ" },
+                                                                                { "回る", "回" }, { "合う", "合" }, { "放つ", "放" },
+                                                                            };
 
-    private static readonly HashSet<string> CompoundVerbSplitSuffixes = [..AuxiliaryVerbs, "合う"];
+    private static readonly HashSet<string> CompoundVerbSplitSuffixes = [..AuxiliaryVerbs, "合う", "放つ"];
 
     private static readonly HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
     [
@@ -189,9 +189,16 @@ public partial class MorphologicalAnalyser
         ("なれ", "ど", PartOfSpeech.Conjunction),
         ("ここ", "ぞ", PartOfSpeech.Expression),
         ("並び", "に", PartOfSpeech.Conjunction),
-        ("真っ先","に", PartOfSpeech.Adverb),
-        ("です","から", PartOfSpeech.Conjunction),
-        ("つ","か", PartOfSpeech.Conjunction),
+        ("真っ先", "に", PartOfSpeech.Adverb),
+        ("です", "から", PartOfSpeech.Conjunction),
+        ("つ", "か", PartOfSpeech.Conjunction),
+        ("それ", "じゃ", PartOfSpeech.Conjunction),
+        ("を", "以って", PartOfSpeech.Expression),
+        ("に", "つれ", PartOfSpeech.Conjunction),
+        ("いつまで", "も", PartOfSpeech.Adverb),
+        ("だから", "こそ", PartOfSpeech.Expression),
+        ("では", "あるまい", PartOfSpeech.Expression),
+        ("より", "も", PartOfSpeech.Expression),
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];

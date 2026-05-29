@@ -12,6 +12,7 @@ A free, open-source platform for Japanese immersion learners. Jiten offers detai
 - [Lapis](https://github.com/donkuri/lapis) - Anki notetype
 - [Hatsuon](https://github.com/DJTB/hatsuon) - Pitch accent display
 - [FSRS.Core](https://github.com/TranPhucTien/FSRS.Core) - .NET FSRS Implementation
+- [Kanji Grid](https://github.com/Kuuuube/kanjigrid) - Kanji grouping data (Kanken, WaniKani, RTK, KLC)
 
 # Installation
 

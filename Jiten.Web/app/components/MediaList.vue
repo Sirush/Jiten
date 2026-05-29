@@ -93,13 +93,41 @@
     'addedDate',
   ];
 
+  const sortMeta: Record<string, { default: SortOrder; asc: string; desc: string }> = {
+    title:               { default: SortOrder.Ascending,  asc: 'A → Z',               desc: 'Z → A' },
+    difficulty:          { default: SortOrder.Ascending,  asc: 'Easiest first',        desc: 'Hardest first' },
+    coverage:            { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
+    uCoverage:           { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
+    extRating:           { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
+    sentenceLength:      { default: SortOrder.Ascending,  asc: 'Shortest first',       desc: 'Longest first' },
+    uKanji:              { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
+    uWordCount:          { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
+    wordCount:           { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
+    subdeckCount:        { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
+    uKanjiOnce:          { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
+    releaseDate:         { default: SortOrder.Descending, asc: 'Oldest first',         desc: 'Newest first' },
+    addedDate:           { default: SortOrder.Descending, asc: 'Oldest first',         desc: 'Newest first' },
+    charCount:           { default: SortOrder.Ascending,  asc: 'Shortest first',       desc: 'Longest first' },
+    dialoguePercentage:  { default: SortOrder.Descending, asc: 'Least dialogue',       desc: 'Most dialogue' },
+    speechSpeed:         { default: SortOrder.Ascending,  asc: 'Slowest first',        desc: 'Fastest first' },
+    speechDuration:      { default: SortOrder.Ascending,  asc: 'Shortest first',       desc: 'Longest first' },
+    occurrences:         { default: SortOrder.Descending, asc: 'Fewest first',         desc: 'Most first' },
+    filter:              { default: SortOrder.Descending, asc: 'Least relevant',       desc: 'Most relevant' },
+  };
+
+  const sortOrderLabel = computed(() => {
+    const meta = sortMeta[sortBy.value as string];
+    if (!meta) return sortOrder.value === SortOrder.Ascending ? '↑' : '↓';
+    return sortOrder.value === SortOrder.Ascending ? meta.asc : meta.desc;
+  });
+
   const statusFilter = ref(route.query.status ? (Array.isArray(route.query.status) ? route.query.status[0] : route.query.status) : 'none');
 
   const authStore = useAuthStore();
   const isConnected = computed(() => authStore.isAuthenticated);
 
-  const sortOrder = ref(route.query.sortOrder ? Number(route.query.sortOrder) : SortOrder.Ascending);
   const sortBy = ref(route.query.sortBy ? route.query.sortBy : sortByOptions.value[0].value);
+  const sortOrder = ref(route.query.sortOrder ? Number(route.query.sortOrder) : (sortMeta[sortBy.value as string]?.default ?? SortOrder.Ascending));
   const wordIdRef = ref(props.word?.wordId);
   const readingIndexRef = ref(props.word?.mainReading?.readingIndex);
 
@@ -465,10 +493,15 @@
   });
 
   watch(sortBy, (newValue) => {
+    const meta = sortMeta[newValue as string];
+    if (meta) {
+      sortOrder.value = meta.default;
+    }
     router.replace({
       query: {
         ...route.query,
         sortBy: newValue,
+        sortOrder: sortOrder.value,
       },
     });
   });
@@ -610,10 +643,7 @@
           </Select>
           <label for="sortBy">Sort by</label>
         </FloatLabel>
-        <Button class="w-12" @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending">
-          <Icon v-if="sortOrder == SortOrder.Descending" name="mingcute:az-sort-descending-letters-line" size="1.25em" />
-          <Icon v-if="sortOrder == SortOrder.Ascending" name="mingcute:az-sort-ascending-letters-line" size="1.25em" />
-        </Button>
+        <Button :icon="sortOrder === SortOrder.Ascending ? 'pi pi-arrow-up' : 'pi pi-arrow-down'" class="!px-4" @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending" />
       </div>
 
       <IconField class="w-full">

@@ -47,6 +47,7 @@
   const description = ref('');
   const difficultyOverride = ref(0);
   const hideDialoguePercentage = ref(false);
+  const hideAverageSentenceLength = ref(false);
 
   const coverImage = ref<File | null>(null);
   const coverImageUrl = ref<string | null>(null);
@@ -194,6 +195,7 @@
       releaseDate.value = new Date(mainDeck.releaseDate) || new Date();
       difficultyOverride.value = mainDeck.difficultyOverride || 0;
       hideDialoguePercentage.value = mainDeck.hideDialoguePercentage || false;
+      hideAverageSentenceLength.value = mainDeck.hideAverageSentenceLength || false;
 
       if (mainDeck.coverName) {
         coverImageUrl.value = `${mainDeck.coverName}`;
@@ -635,6 +637,7 @@
       formData.append('description', description.value);
       formData.append('difficultyOverride', difficultyOverride.value);
       formData.append('hideDialoguePercentage', hideDialoguePercentage.value);
+      formData.append('hideAverageSentenceLength', hideAverageSentenceLength.value);
 
       if (coverImage.value) {
         formData.append('coverImage', coverImage.value);
@@ -774,7 +777,7 @@
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Description</label>
-                  <Textarea v-model="description" class="w-full" />
+                  <Textarea v-model="description" class="w-full" :rows="6" />
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Difficulty Override</label>
@@ -784,6 +787,10 @@
                 <div class="flex items-center">
                   <Checkbox id="hideDialoguePercentage" v-model="hideDialoguePercentage" :binary="true" />
                   <label for="hideDialoguePercentage" class="ml-2">Hide Dialogue Percentage</label>
+                </div>
+                <div class="flex items-center mt-2">
+                  <Checkbox id="hideAverageSentenceLength" v-model="hideAverageSentenceLength" :binary="true" />
+                  <label for="hideAverageSentenceLength" class="ml-2">Hide Average Sentence Length</label>
                 </div>
               </div>
               <div>

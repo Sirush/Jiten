@@ -14,6 +14,7 @@ public class UpdateMediaRequest
     public string? Description { get; set; }
     public float DifficultyOverride { get; set; }
     public bool HideDialoguePercentage { get; set; }
+    public bool HideAverageSentenceLength { get; set; }
     public IFormFile? CoverImage { get; set; }
     public IFormFile? File { get; set; }
     public List<Link> Links { get; set; } = new List<Link>();

@@ -4,7 +4,6 @@ namespace Jiten.Parser.Scoring;
 
 /// <summary>
 /// Code-defined priority overrides applied on top of DB-loaded JMDict words.
-/// Equivalent to Ichiran's dict-errata set-common — reproducible without DB changes.
 /// Supports both word-level and per-form (readingIndex) overrides.
 /// </summary>
 internal static class PriorityOverrides
@@ -12,6 +11,7 @@ internal static class PriorityOverrides
     private static readonly HashSet<int> WordLevelJitenIds =
     [
         1204860, // 各 (かく, pref) — prefix "each", beats 各々 おのおの by 1pt
+        1300520, // ３時 (さんじ, n) — "3 o'clock", beats 三次 (third/tertiary) whose ３時 form wins by ruby priors
         1545300, // 妖怪 (ようかい, n) — ghost/yokai, beats 溶解 (dissolution) whose NormalizedForm bonus inflates its score
         1922120, // 兼ねない (かねない, exp/suf) — "might", standalone beats conjugated 兼ねる
         2579880, // コホン/こほん (int) — cough/ahem onomatopoeia, beats 古本 こほん (secondhand book)
@@ -23,6 +23,7 @@ internal static class PriorityOverrides
         (1313580, 2), // 事 reading index 2 = こと (kana) — top-frequency nominalizer, beats 琴 (instrument)
         (1495740, 2), // 付く reading index 2 = つく (kana) — most general つく, beats 点く (to be lit)
         (1508300, 2), // 柄 reading index 2 = ガラ (katakana) — "character/nature", exempts from short-kana gate
+        (1593500, 2), // 轟々 reading index 2 = ごうごう (kana) — thundering/roaring, beats 囂々 (noisy) to avoid margin=0 reseg
         (2013900, 4), // 赤 reading index 4 = あか (kana) — "red", beats 垢 (dirt) and 銅 (copper) homophones
     ];
 

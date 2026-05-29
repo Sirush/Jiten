@@ -1217,6 +1217,8 @@ public class MorphologicalAnalyserTests
         yield return ["は、はい？", new[] { "はい" }];
         // repeated はい separated by ellipsis should NOT merge into はいはい (crawling)
         yield return ["はい……はい、分かりました。", new[] { "はい", "分かりました" }];
+        // はい……おります must not fuse into はいおります (這い降りる)
+        yield return ["はい……おります。", new[] { "はい", "おります" }];
 
         // === 呼ぶ-family: verb stems must not be split by resegmentation ===
         yield return ["呼ばれもしない", new[] { "呼ばれ", "も", "しない" }];
@@ -1371,6 +1373,25 @@ public class MorphologicalAnalyserTests
 
         // 思い人 + 様 — Sudachi must prefer 思い人 (user_dic) over 思い + 人様
         yield return ["思い人様", new[] { "思い人", "様" }];
+
+        // どこか — Sudachi splits as ど+こか (verb こく irrealis); user_dic forces single token
+        yield return ["足音も無くどこかへ消え去った", new[] { "足音", "も", "無く", "どこか", "へ", "消え去った" }];
+
+        // とこ (contraction of ところ) + かも — Sudachi splits as と+こか+も; user_dic とこ forces correct boundary
+        yield return ["たしかに男子だけだと入りづらいとこかも。", new[] { "たしかに", "男子", "だけ", "だ", "と", "入り", "づらい", "とこ", "かも" }];
+
+        // またそう — must not merge into name "Matasou"; また (adverb) + そう (adverb) stay separate
+        yield return ["またそうすると壊れてしまう。", new[] { "また", "そうする", "と", "壊れてしまう" }];
+        yield return ["肉体もまたそうした主の意向に見合った強度を備えていた。", new[] { "肉体", "も", "また", "そうした", "主", "の", "意向", "に", "見合った", "強度", "を", "備えていた" }];
+
+        // 人魚姫 — Sudachi fuses as proper noun (name Marina); must split into 人魚 (mermaid) + 姫 (princess)
+        yield return ["おそらく人魚姫だな", new[] { "おそらく", "人魚", "姫", "だ", "な" }];
+
+        // ごうごう (adv-to) — Sudachi tags as 副詞, must not be split into ご+うごう
+        yield return ["ごうごうとエレベーターの音が五月蝿い。", new[] { "ごうごう", "と", "エレベーター", "の", "音", "が", "五月蝿い" }];
+
+        // 撃ち放つ — compound verb not in JMDict; must split into 撃ち (撃つ stem) + 放った (放つ past)
+        yield return ["銃弾を撃ち放った", new[] { "銃弾", "を", "撃ち", "放った" }];
     }
 
     [Theory]

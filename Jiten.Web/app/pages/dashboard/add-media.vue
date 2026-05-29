@@ -511,7 +511,7 @@
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Description</label>
-                  <Textarea v-model="description" class="w-full" />
+                  <Textarea v-model="description" class="w-full" :rows="6" />
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Selected File</label>

@@ -39,6 +39,12 @@ public class ImportCommands(CliContext context)
         await KanjidicHelper.PopulateWordKanji(context.ContextFactory);
     }
 
+    public async Task ComputeKanjiReadings()
+    {
+        Console.WriteLine("Computing kanji reading associations...");
+        await KanjidicHelper.ComputeKanjiReadings(context.ContextFactory);
+    }
+
     public async Task ImportWordComposition(CliOptions options)
     {
         await WordCompositionImporter.Import(

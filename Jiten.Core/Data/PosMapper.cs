@@ -310,6 +310,11 @@ public static class PosMapper
         if (sudachiPos == PartOfSpeech.Adverb && convertedPosList.Contains(PartOfSpeech.Interjection))
             return true;
 
+        // Sudachi 副詞 (Adverb) should match JMDict adv-to (AdverbTo).
+        // E.g. ごうごう (轟々) is tagged 副詞 by Sudachi but adv-to in JMDict.
+        if (sudachiPos == PartOfSpeech.Adverb && convertedPosList.Contains(PartOfSpeech.AdverbTo))
+            return true;
+
         // Sudachi 名詞 (Noun) should match JMDict adj-no/adj-t/adj-f (NominalAdjective).
         // Sudachi classifies many adj-no words as 名詞 (e.g. 若干, 特別, 本当).
         if (sudachiPos == PartOfSpeech.Noun && convertedPosList.Contains(PartOfSpeech.NominalAdjective))

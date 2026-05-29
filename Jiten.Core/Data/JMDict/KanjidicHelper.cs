@@ -155,6 +155,138 @@ public static class KanjidicHelper
         }
     }
 
+    public static async Task<bool> ComputeKanjiReadings(IDbContextFactory<JitenDbContext> contextFactory)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        var allKanji = await context.Kanjis.AsNoTracking().ToListAsync();
+        Console.WriteLine($"Found {allKanji.Count} kanji in database.");
+
+        var decomposer = new KanjiReadingDecomposer(allKanji);
+        Console.WriteLine($"Expanded to {decomposer.TotalReadingCandidates} reading candidates.");
+
+        Console.WriteLine("Clearing existing KanjiReadingWords data...");
+        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE jmdict.\"KanjiReadingWords\"");
+
+        const int batchSize = 10000;
+        int totalWords = await context.JMDictWords.CountAsync();
+        int processedWords = 0;
+        int decomposedCount = 0;
+        int failedCount = 0;
+        var resultList = new List<KanjiReadingWord>();
+        var failedExamples = new List<(string kanji, string kana)>();
+
+        Console.WriteLine($"Processing {totalWords} words...");
+
+        while (processedWords < totalWords)
+        {
+            var batchWordIds = await context.JMDictWords
+                .AsNoTracking()
+                .OrderBy(w => w.WordId)
+                .Skip(processedWords)
+                .Take(batchSize)
+                .Select(w => w.WordId)
+                .ToListAsync();
+
+            if (batchWordIds.Count == 0) break;
+
+            var wordForms = await context.WordForms
+                .AsNoTracking()
+                .Where(wf => batchWordIds.Contains(wf.WordId))
+                .OrderBy(wf => wf.WordId)
+                .ThenBy(wf => wf.ReadingIndex)
+                .ToListAsync();
+
+            var words = wordForms.GroupBy(wf => wf.WordId).ToList();
+
+            foreach (var wordGroup in words)
+            {
+                var allForms = wordGroup.ToList();
+                var kanjiForms = allForms.Where(f => f.FormType == JmDictFormType.KanjiForm).ToList();
+                var kanaForms = allForms.Where(f => f.FormType == JmDictFormType.KanaForm).ToList();
+
+                if (kanjiForms.Count == 0 || kanaForms.Count == 0) continue;
+
+                foreach (var kanjiForm in kanjiForms)
+                {
+                    if (!kanjiForm.Text.Any(c => JapaneseTextHelper.IsKanji(c)))
+                        continue;
+
+                    var kanaForm = kanaForms.FirstOrDefault(f => f.ReadingIndex == kanjiForm.ReadingIndex)
+                                  ?? kanaForms[0];
+
+                    var pairs = decomposer.Decompose(kanjiForm.Text, kanaForm.Text);
+                    if (pairs == null)
+                    {
+                        failedCount++;
+                        if (failedExamples.Count < 20)
+                            failedExamples.Add((kanjiForm.Text, kanaForm.Text));
+                        continue;
+                    }
+
+                    decomposedCount++;
+                    foreach (var (kanjiChar, reading) in pairs)
+                    {
+                        resultList.Add(new KanjiReadingWord
+                        {
+                            KanjiCharacter = kanjiChar,
+                            Reading = reading,
+                            WordId = kanjiForm.WordId,
+                            ReadingIndex = kanjiForm.ReadingIndex
+                        });
+                    }
+                }
+            }
+
+            processedWords += batchWordIds.Count;
+            Console.WriteLine($"Processed {processedWords}/{totalWords} words, " +
+                              $"{decomposedCount} decomposed, {failedCount} failed, " +
+                              $"{resultList.Count} reading pairs...");
+
+            if (resultList.Count >= 50000)
+            {
+                await InsertKanjiReadingBatch(context, resultList);
+                resultList.Clear();
+            }
+        }
+
+        if (resultList.Count > 0)
+        {
+            await InsertKanjiReadingBatch(context, resultList);
+        }
+
+        var total = decomposedCount + failedCount;
+        var pct = total > 0 ? (double)decomposedCount / total * 100 : 0;
+        Console.WriteLine($"\nComplete: {decomposedCount} decomposed, {failedCount} failed ({pct:F1}% coverage)");
+
+        if (failedExamples.Count > 0)
+        {
+            Console.WriteLine("\nSample failed decompositions:");
+            foreach (var (kanji, kana) in failedExamples)
+                Console.WriteLine($"  {kanji} ({kana})");
+        }
+
+        Console.WriteLine("KanjiReadingWords computation complete.");
+        return true;
+    }
+
+    private static async Task InsertKanjiReadingBatch(JitenDbContext context, List<KanjiReadingWord> items)
+    {
+        var distinct = items
+            .GroupBy(kr => new { kr.KanjiCharacter, kr.Reading, kr.WordId, kr.ReadingIndex })
+            .Select(g => g.First())
+            .ToList();
+
+        const int insertBatchSize = 5000;
+        for (int i = 0; i < distinct.Count; i += insertBatchSize)
+        {
+            var batch = distinct.Skip(i).Take(insertBatchSize).ToList();
+            context.KanjiReadingWords.AddRange(batch);
+            await context.SaveChangesAsync();
+            context.ChangeTracker.Clear();
+        }
+    }
+
     private static async Task<List<Kanji>> ParseKanjidic(string kanjidicPath)
     {
         var kanjis = new List<Kanji>();

@@ -36,6 +36,7 @@ export interface Deck {
   youngCoverage: number;
   youngUniqueCoverage: number;
   hideDialoguePercentage: boolean;
+  hideAverageSentenceLength: boolean;
   externalRating: number;
   exampleSentence?: ExampleSentence;
   genres?: Genre[];
@@ -426,6 +427,7 @@ export interface UserProfile {
   userId: string;
   username: string;
   isPublic: boolean;
+  isMediaListPublic: boolean;
 }
 
 export interface UserAccomplishment {
@@ -445,6 +447,12 @@ export interface AccomplishmentVocabularyDto {
   words: Word[];
 }
 
+export interface KanjiReadingWords {
+  reading: string;
+  totalWords: number;
+  words: WordSummary[];
+}
+
 export interface Kanji {
   character: string;
   onReadings: string[];
@@ -455,6 +463,7 @@ export interface Kanji {
   grade: number | null;
   frequencyRank: number | null;
   topWords?: WordSummary[];
+  wordsByReading?: KanjiReadingWords[];
 }
 
 export interface KanjiList {
@@ -475,17 +484,26 @@ export interface WordSummary {
   matchSurface?: string | null;
 }
 
+export interface KanjiGridReading {
+  reading: string;
+  known: number;
+  required: number;
+  weight: number;
+}
+
 export interface KanjiGridItem {
   character: string;
   frequencyRank: number | null;
   jlptLevel: number | null;
+  grade: number | null;
+  strokeCount: number;
   score: number;
   wordCount: number;
+  readings: KanjiGridReading[] | null;
 }
 
 export interface KanjiGridResponse {
   kanji: KanjiGridItem[];
-  maxScoreThreshold: number;
   totalKanjiCount: number;
   seenKanjiCount: number;
   lastComputedAt: string | null;

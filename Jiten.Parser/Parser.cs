@@ -625,7 +625,7 @@ namespace Jiten.Parser
 
             var (cleanText, furiganaHints) = FuriganaHintExtractor.Extract(text);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup };
             var (sentences, cleanedOriginal) = await parser.ParseWithCleanedOriginal(cleanText, preserveStopToken: preserveStopToken, diagnostics: diagnostics);
 
             // ComputeTokenOffsets strips \r\n — relocate against the same coordinate space
@@ -757,7 +757,7 @@ namespace Jiten.Parser
             timer.Start();
 
             // Batch morphological analysis
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup };
             var cleanedOriginals = new List<string>();
             var rawCharCounts = new List<int>();
             var batchedSentences = await parser.ParseBatch(cleanTexts, diagnostics: diagnostics, timings: timings, userDictCsv: userDictCsv, cleanedOriginals: cleanedOriginals, rawContentCharCounts: rawCharCounts);
@@ -929,7 +929,7 @@ namespace Jiten.Parser
         {
             await EnsureInitializedAsync(contextFactory);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup };
             var sentences = await parser.Parse(text, morphemesOnly: true, diagnostics: diagnostics);
             var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
 
@@ -2715,6 +2715,35 @@ namespace Jiten.Parser
             return false;
         }
 
+        private static bool HasPrioritizedNonNameLookup(string text)
+        {
+            if (HasPrioritizedNonNameIds(text))
+                return true;
+            try
+            {
+                var hira = KanaConverter.ToNormalizedHiragana(text);
+                if (hira != text && HasPrioritizedNonNameIds(hira))
+                    return true;
+            }
+            catch
+            {
+            }
+            return false;
+
+            static bool HasPrioritizedNonNameIds(string key)
+            {
+                if (!_lookups.TryGetValue(key, out var ids) || ids.Count == 0)
+                    return false;
+                foreach (var id in ids)
+                {
+                    if (_nameOnlyWordIds.Contains(id)) continue;
+                    if (WordMeta.TryGetValue(id, out var meta) && meta.GetPriorityScore(true) > 0)
+                        return true;
+                }
+                return false;
+            }
+        }
+
         private static void StripTrailingParticles(List<SentenceInfo> sentences)
         {
             foreach (var sentence in sentences)
@@ -3518,7 +3547,7 @@ namespace Jiten.Parser
                     continue;
 
                 var firstWord = wordInfos[startIndex];
-                if (firstWord.PartOfSpeech == PartOfSpeech.Particle)
+                if (firstWord.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Interjection)
                     continue;
                 if (firstWord is { PartOfSpeech: PartOfSpeech.Conjunction, Text.Length: 1 })
                     continue;

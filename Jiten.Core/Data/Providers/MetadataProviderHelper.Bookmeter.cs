@@ -187,7 +187,10 @@ public static partial class MetadataProviderHelper
 
             // Format: YYYYMM or YYYYMMDD
             if (int.TryParse(pubdate[..4], out var year) && int.TryParse(pubdate.Substring(4, 2), out var month))
-                return new DateTime(year, month, 1);
+            {
+                var day = pubdate.Length >= 8 && int.TryParse(pubdate.Substring(6, 2), out var d) ? d : 1;
+                return new DateTime(year, month, day);
+            }
 
             return null;
         }

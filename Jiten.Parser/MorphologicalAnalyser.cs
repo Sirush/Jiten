@@ -9,6 +9,8 @@ namespace Jiten.Parser;
 public partial class MorphologicalAnalyser
 {
     public Func<string, bool>? HasCompoundLookup { get; set; }
+    public Func<string, bool>? HasNonNameCompoundLookup { get; set; }
+    public Func<string, bool>? HasPrioritizedNonNameCompoundLookup { get; set; }
 
     private Dictionary<string, IReadOnlyList<DeconjugationForm>>? _pipelineDeconjCache;
     private Dictionary<string, IReadOnlyList<DeconjugationForm>>.AlternateLookup<ReadOnlySpan<char>> _pipelineDeconjCacheAlt;

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Jiten.Core.Data;
 
@@ -7,19 +8,19 @@ public class UserKanjiGrid
 {
     public string UserId { get; set; } = string.Empty;
 
-    // Stored as JSON string in database
-    // Format: {"日": [5.5, 10], "本": [3.0, 5]} where array is [score, wordCount]
     public string KanjiScoresJson { get; set; } = "{}";
 
-    // Backing field for cached deserialization
     [NotMapped]
-    private Dictionary<string, double[]>? _cachedScores;
+    private Dictionary<string, KanjiScoreEntry>? _cachedScores;
 
-    // Helper property for working with the data in code (deserializes every time - use GetKanjiScoresOnce for read-only access)
     [NotMapped]
-    public Dictionary<string, double[]> KanjiScores
+    public Dictionary<string, KanjiScoreEntry> KanjiScores
     {
-        get => JsonSerializer.Deserialize<Dictionary<string, double[]>>(KanjiScoresJson) ?? new();
+        get
+        {
+            try { return JsonSerializer.Deserialize<Dictionary<string, KanjiScoreEntry>>(KanjiScoresJson) ?? new(); }
+            catch (JsonException) { return new(); }
+        }
         set
         {
             KanjiScoresJson = JsonSerializer.Serialize(value);
@@ -27,11 +28,36 @@ public class UserKanjiGrid
         }
     }
 
-    // Deserializes once and caches the result for read-only access
-    public Dictionary<string, double[]> GetKanjiScoresOnce()
+    public Dictionary<string, KanjiScoreEntry> GetKanjiScoresOnce()
     {
-        return _cachedScores ??= JsonSerializer.Deserialize<Dictionary<string, double[]>>(KanjiScoresJson) ?? new();
+        if (_cachedScores != null) return _cachedScores;
+
+        try
+        {
+            _cachedScores = JsonSerializer.Deserialize<Dictionary<string, KanjiScoreEntry>>(KanjiScoresJson) ?? new();
+        }
+        catch (JsonException)
+        {
+            _cachedScores = new();
+        }
+
+        return _cachedScores;
     }
 
     public DateTimeOffset LastComputedAt { get; set; }
+}
+
+public class KanjiScoreEntry
+{
+    [JsonPropertyName("s")] public double Score { get; set; }
+    [JsonPropertyName("w")] public int WordCount { get; set; }
+    [JsonPropertyName("r")] public List<ReadingEntry>? Readings { get; set; }
+}
+
+public class ReadingEntry
+{
+    [JsonPropertyName("r")] public string Reading { get; set; } = "";
+    [JsonPropertyName("k")] public int Known { get; set; }
+    [JsonPropertyName("q")] public int Required { get; set; }
+    [JsonPropertyName("w")] public double Weight { get; set; }
 }

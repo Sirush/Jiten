@@ -877,7 +877,7 @@ public class FormSelectionTests
         yield return ["それは俺には関係ない", "関係ない", 2076040, (byte)0];
         yield return ["彼はびくともしません", "びくともしません", 1010720, (byte)0];
 
-        // Sentence-final particle bonus (Ichiran-style :final flag) — sentence-final な/ね/よ/ぞ
+        // Sentence-final particle bonus な/ね/よ/ぞ
         // should resolve to the prt entry, not a homographic noun/name/interjection.
         yield return ["そうだな", "な", 2029110, (byte)0];
         yield return ["行くぞ", "ぞ", 2029130, (byte)0];
@@ -1191,10 +1191,20 @@ public class FormSelectionTests
         // いけすかねぇ (colloquial negative of いけ好かない) → 2007280 (nasty/disagreeable)
         // Sudachi splits into いけす (生け簀) + か + ねぇ; SpecialCases3 recombines
         yield return ["いけすかねぇ", "いけすかねぇ", 2007280, (byte)2];
+
+        // 人魚 (mermaid, 1367090) — Sudachi fuses 人魚姫 as proper noun (name Marina); PreprocessText splits
+        yield return ["おそらく人魚姫だな", "人魚", 1367090, (byte)0];
+
+        // ３時 should be "3 o'clock" (1300520), not 三次 "third/tertiary" (1657930)
+        yield return ["時刻は、午後３時３３分。", "３時", 1300520, (byte)0];
+        yield return ["午前３時過ぎの街角は、まったく人の姿がない。", "３時", 1300520, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
     {
+        // ごうごう (adv-to) should match 轟々 (1593500, thundering/roaring), not go-go (1054120)
+        yield return ["ごうごうとエレベーターの音が五月蝿い。", "ごうごう", 1593500, (byte)2];
+
         // Kana surface ざと should not match kanji 里 — ざと is not a valid standalone reading
         yield return ["次第に周りからざわざと声が聞こえてくる。", "ざと"];
 

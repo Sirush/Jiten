@@ -106,7 +106,7 @@ internal static class WordPriorityScorer
             wordScore += 10;
 
         // Sentence-final particles (ね/よ/ぞ/わ/な/さ/か/の …) get a bonus only at true
-        // end-of-sentence, matching Ichiran's :final flag in gen-score (dict.lisp:1120).
+        // end-of-sentence
         // Resolves homograph conflicts like 〜な (na-adj ending) vs. final 〜な (particle).
         if (isSentenceFinal
             && word.PartsOfSpeech.Any(p => p is "prt")

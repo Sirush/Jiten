@@ -16,7 +16,7 @@
         <PackageReference Include="Hangfire.Core" Version="1.8.23" />
         <PackageReference Include="Hangfire.Dashboard.Authorization" Version="3.1.0" />
         <PackageReference Include="Hangfire.PostgreSql" Version="1.21.1" />
-        <PackageReference Include="MailKit" Version="4.13.0" />
+        <PackageReference Include="MailKit" Version="4.17.0" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="9.0.8" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
         <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.14.0" />

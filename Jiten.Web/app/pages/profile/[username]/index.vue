@@ -13,6 +13,7 @@
   const isOwnProfile = computed(() => auth.isAuthenticated && auth.user?.userName?.toLowerCase() === targetUsername.value.toLowerCase());
 
   const isUpdatingVisibility = ref(false);
+  const isUpdatingMediaListVisibility = ref(false);
   const selectedTab = ref<string>('global');
 
   const {
@@ -95,6 +96,7 @@
         summary: newIsPublic ? 'Your profile is now public and accessible to anyone with the link' : 'Your profile is now private and visible only to you',
         life: 3000,
       });
+      if (!newIsPublic && profile.value) profile.value.isMediaListPublic = false;
     } catch (err) {
       if (profile.value) {
         profile.value.isPublic = !profile.value.isPublic;
@@ -106,6 +108,44 @@
       });
     } finally {
       isUpdatingVisibility.value = false;
+    }
+  };
+
+  const profileMediaListIsPublic = computed({
+    get: () => profile.value?.isMediaListPublic ?? false,
+    set: (value: boolean) => {
+      if (profile.value) {
+        profile.value.isMediaListPublic = value;
+      }
+    },
+  });
+
+  const toggleMediaListVisibility = async () => {
+    if (!isOwnProfile.value || isUpdatingMediaListVisibility.value || !profile.value) return;
+
+    isUpdatingMediaListVisibility.value = true;
+    try {
+      const newIsPublic = profile.value.isMediaListPublic;
+      await $api('user/profile', {
+        method: 'PATCH',
+        body: { isMediaListPublic: newIsPublic },
+      });
+      toast.add({
+        severity: 'success',
+        summary: newIsPublic ? 'Your media list is now public' : 'Your media list is now private',
+        life: 3000,
+      });
+    } catch (err) {
+      if (profile.value) {
+        profile.value.isMediaListPublic = !profile.value.isMediaListPublic;
+      }
+      toast.add({
+        severity: 'error',
+        summary: 'Failed to update media list visibility',
+        life: 5000,
+      });
+    } finally {
+      isUpdatingMediaListVisibility.value = false;
     }
   };
 
@@ -156,9 +196,15 @@
                 <span v-else>Private profile</span>
               </p>
             </div>
-            <div v-if="isOwnProfile" class="flex items-center gap-3">
-              <label for="visibility-toggle" class="text-sm">Public profile</label>
-              <ToggleSwitch v-model="profileIsPublic" input-id="visibility-toggle" :disabled="isUpdatingVisibility" @change="toggleVisibility" />
+            <div v-if="isOwnProfile" class="flex flex-col gap-2">
+              <div class="flex items-center justify-end gap-3">
+                <label for="visibility-toggle" class="text-sm">Public profile</label>
+                <ToggleSwitch v-model="profileIsPublic" input-id="visibility-toggle" :disabled="isUpdatingVisibility" @change="toggleVisibility" />
+              </div>
+              <div v-if="profileIsPublic" class="flex items-center justify-end gap-3">
+                <label for="media-list-visibility-toggle" class="text-sm">Public media list</label>
+                <ToggleSwitch v-model="profileMediaListIsPublic" input-id="media-list-visibility-toggle" :disabled="isUpdatingMediaListVisibility" @change="toggleMediaListVisibility" />
+              </div>
             </div>
           </div>
         </template>
@@ -238,9 +284,17 @@
           <Message severity="info">No data for this category</Message>
         </div>
 
-        <div v-if="isOwnProfile" class="flex justify-center">
+        <div v-if="isOwnProfile" class="flex justify-center gap-3 flex-wrap">
           <NuxtLink :to="{ path: `/profile/${displayUsername}/vocabulary`, query: selectedTab !== 'global' ? { mediaType: selectedTab } : {} }">
             <Button label="View Vocabulary" icon="pi pi-list" />
+          </NuxtLink>
+          <NuxtLink :to="`/profile/${displayUsername}/media`">
+            <Button label="View Media List" icon="pi pi-folder-open" />
+          </NuxtLink>
+        </div>
+        <div v-else-if="profile.isMediaListPublic" class="flex justify-center">
+          <NuxtLink :to="`/profile/${displayUsername}/media`">
+            <Button label="View Media List" icon="pi pi-folder-open" />
           </NuxtLink>
         </div>
       </template>

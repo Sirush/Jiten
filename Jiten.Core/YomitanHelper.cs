@@ -219,7 +219,20 @@ public static class YomitanHelper
     }
 
     /// <summary>
-    /// Generates a zipped Yomitan frequency dictionary from a Deck.
+    /// Generates an occurrence-based Yomitan frequency dictionary from an arbitrary merged word list
+    /// (used for combined downloads that span multiple decks, e.g. a profile's status category).
+    /// </summary>
+    public static async Task<byte[]> GenerateYomitanFrequencyDeckFromWords(
+        IDbContextFactory<JitenDbContext> contextFactory,
+        List<(int WordId, byte ReadingIndex, int Occurrences)> deckWords,
+        string title)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        return await BuildOccurrenceYomitanZip(context, deckWords, title);
+    }
+
+    /// <summary>
+    /// Generates a zipped occurrence-based Yomitan frequency dictionary from a single Deck.
     /// </summary>
     public static async Task<byte[]> GenerateYomitanFrequencyDeckFromDeck(IDbContextFactory<JitenDbContext> contextFactory, Deck deck)
     {
@@ -236,95 +249,92 @@ public static class YomitanHelper
         }
 
         title += deck.OriginalTitle.Substring(0, Math.Min(deck.OriginalTitle.Length, 15));
+
+        var deckRows = await context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deck.DeckId).ToListAsync();
+        var deckWords = deckRows.Select(dw => (dw.WordId, dw.ReadingIndex, dw.Occurrences)).ToList();
+
+        return await BuildOccurrenceYomitanZip(context, deckWords, title);
+    }
+
+    /// <summary>
+    /// Builds the zipped occurrence-based Yomitan dictionary for a merged (WordId, ReadingIndex, Occurrences) list.
+    /// Shared by the per-deck and combined-download generators.
+    /// </summary>
+    private static async Task<byte[]> BuildOccurrenceYomitanZip(
+        JitenDbContext context,
+        List<(int WordId, byte ReadingIndex, int Occurrences)> deckWords,
+        string title)
+    {
         string revision = $"Jiten ({title}) {DateTime.UtcNow:yy-MM-dd}";
         string description = $"Dictionary based on frequency data of {title} from jiten.moe";
 
         var indexJson =
             $$"""{"title":"{{title}}","format":3,"revision":"{{revision}}","sequenced":false,"frequencyMode":"occurrence-based","author":"Jiten","url":"https://jiten.moe","description":"{{description}}"}""";
 
-        var deckWords = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deck.DeckId).ToList();
-
         var wordIds = deckWords.Select(dw => dw.WordId).Distinct().ToList();
 
-        var allForms2 = await context.WordForms.AsNoTracking()
-                                     .Where(wf => wordIds.Contains(wf.WordId))
-                                     .ToListAsync();
-        var formsByWord2 = allForms2.GroupBy(wf => wf.WordId).ToDictionary(g => g.Key, g => g.OrderBy(wf => wf.ReadingIndex).ToList());
-
-        var yomitanTermList = new List<List<object>>();
-        var addedEntries = new HashSet<string>();
+        var allForms = await context.WordForms.AsNoTracking()
+                                    .Where(wf => wordIds.Contains(wf.WordId))
+                                    .ToListAsync();
+        var formsByWord = allForms.GroupBy(wf => wf.WordId).ToDictionary(g => g.Key, g => g.OrderBy(wf => wf.ReadingIndex).ToList());
 
         var deckWordsByWordIdAndReading = deckWords
                                           .GroupBy(dw => new { dw.WordId, dw.ReadingIndex })
                                           .ToDictionary(g => g.Key, g => g.Sum(dw => dw.Occurrences));
 
-        var deckWordsByWordId = deckWords.GroupBy(dw => dw.WordId)
-                                         .ToDictionary(g => g.Key, g => g.ToList());
+        // Each term carries its occurrence count so the final ordering doesn't re-parse the JSON dictionaries.
+        var terms = new List<(int Occurrences, List<object> Entry)>();
+        var addedEntries = new HashSet<string>();
 
         foreach (var wordId in wordIds)
         {
-            if (!formsByWord2.TryGetValue(wordId, out var wordForms) ||
-                !deckWordsByWordId.TryGetValue(wordId, out var wordDeckWords)) continue;
+            if (!formsByWord.TryGetValue(wordId, out var wordForms)) continue;
 
             var kanaReadings = GetKanaReadingsWithOccurrencesFromForms(wordForms, deckWordsByWordIdAndReading, wordId);
             if (kanaReadings.Count == 0) continue;
 
-            // CASE 1: Create standalone kana entries
-            foreach (var (kanaText, kanaOccurrences, kanaIndex) in kanaReadings)
+            // CASE 1: standalone kana entries
+            foreach (var (kanaText, kanaOccurrences, _) in kanaReadings)
             {
                 if (kanaOccurrences <= 0) continue;
-                if (addedEntries.Contains(kanaText)) continue;
+                if (!addedEntries.Add(kanaText)) continue;
 
-                yomitanTermList.Add([
+                terms.Add((kanaOccurrences, [
                     kanaText, "freq",
                     new Dictionary<string, object> { ["value"] = kanaOccurrences, ["displayValue"] = $"{kanaOccurrences}㋕" }
-                ]);
-                addedEntries.Add(kanaText);
+                ]));
             }
 
-            // CASE 2: Create kanji entries
+            // CASE 2: kanji entries
             foreach (var form in wordForms)
             {
                 if (form.FormType != JmDictFormType.KanjiForm) continue;
 
                 var kanjiTerm = form.Text;
                 var key = new { WordId = wordId, ReadingIndex = (byte)form.ReadingIndex };
-                var hasKanjiOccurrences = deckWordsByWordIdAndReading.TryGetValue(key, out int kanjiOccurrences);
-
-                if (!hasKanjiOccurrences || kanjiOccurrences == 0)
+                if (!deckWordsByWordIdAndReading.TryGetValue(key, out int kanjiOccurrences) || kanjiOccurrences == 0)
                     continue;
 
-                foreach (var (kanaText, kanaOccurrences, kanaIndex) in kanaReadings)
+                foreach (var (kanaText, kanaOccurrences, _) in kanaReadings)
                 {
-                    bool isKanaObserved = kanaOccurrences > 0;
-
-                    if (isKanaObserved)
+                    if (kanaOccurrences > 0 && addedEntries.Add($"{kanjiTerm}:{kanaText}:kana"))
                     {
-                        string entryKey1 = $"{kanjiTerm}:{kanaText}:kana";
-                        if (!addedEntries.Contains(entryKey1))
-                        {
-                            yomitanTermList.Add(new List<object>
+                        terms.Add((kanaOccurrences, [
+                            kanjiTerm, "freq",
+                            new Dictionary<string, object>
+                            {
+                                ["reading"] = kanaText,
+                                ["frequency"] = new Dictionary<string, object>
                                                 {
-                                                    kanjiTerm, "freq",
-                                                    new Dictionary<string, object>
-                                                    {
-                                                        ["reading"] = kanaText,
-                                                        ["frequency"] = new Dictionary<string, object>
-                                                                        {
-                                                                            ["value"] = kanaOccurrences,
-                                                                            ["displayValue"] = $"{kanaOccurrences}㋕"
-                                                                        }
-                                                    }
-                                                });
-                            addedEntries.Add(entryKey1);
-                        }
+                                                    ["value"] = kanaOccurrences, ["displayValue"] = $"{kanaOccurrences}㋕"
+                                                }
+                            }
+                        ]));
                     }
 
-                    string entryKey2 = $"{kanjiTerm}:{kanaText}:kanji";
-                    if (addedEntries.Contains(entryKey2)) continue;
-                    yomitanTermList.Add([
-                        kanjiTerm,
-                        "freq",
+                    if (!addedEntries.Add($"{kanjiTerm}:{kanaText}:kanji")) continue;
+                    terms.Add((kanjiOccurrences, [
+                        kanjiTerm, "freq",
                         new Dictionary<string, object>
                         {
                             ["reading"] = kanaText,
@@ -333,26 +343,12 @@ public static class YomitanHelper
                                                 ["value"] = kanjiOccurrences, ["displayValue"] = kanjiOccurrences.ToString()
                                             }
                         }
-                    ]);
-                    addedEntries.Add(entryKey2);
+                    ]));
                 }
             }
         }
 
-        // Sort by occurrences (highest first for occurrence-based)
-        yomitanTermList.Sort((a, b) =>
-        {
-            int GetOccurrences(List<object> entry)
-            {
-                var freqData = (Dictionary<string, object>)entry[2];
-                if (freqData.ContainsKey("frequency"))
-                    return (int)((Dictionary<string, object>)freqData["frequency"])["value"];
-                else
-                    return (int)freqData["value"];
-            }
-
-            return GetOccurrences(b).CompareTo(GetOccurrences(a));
-        });
+        var yomitanTermList = terms.OrderByDescending(t => t.Occurrences).Select(t => t.Entry).ToList();
 
         var termBankJson = JsonSerializer.Serialize(yomitanTermList,
                                                     new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
@@ -360,19 +356,8 @@ public static class YomitanHelper
         using var memoryStream = new MemoryStream();
         using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, true))
         {
-            var indexEntry = archive.CreateEntry("index.json", CompressionLevel.Optimal);
-            await using (var entryStream = indexEntry.Open())
-            await using (var streamWriter = new StreamWriter(entryStream, new UTF8Encoding(false)))
-            {
-                await streamWriter.WriteAsync(indexJson);
-            }
-
-            var termBankEntry = archive.CreateEntry("term_meta_bank_1.json", CompressionLevel.Optimal);
-            await using (var entryStream = termBankEntry.Open())
-            await using (var streamWriter = new StreamWriter(entryStream, new UTF8Encoding(false)))
-            {
-                await streamWriter.WriteAsync(termBankJson);
-            }
+            AddZipEntry(archive, "index.json", indexJson);
+            AddZipEntry(archive, "term_meta_bank_1.json", termBankJson);
         }
 
         return memoryStream.ToArray();

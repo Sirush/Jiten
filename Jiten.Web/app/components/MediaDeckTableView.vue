@@ -75,7 +75,7 @@
             <div class="font-medium tabular-nums">{{ deck.uniqueKanjiCount.toLocaleString() }}</div>
           </div>
 
-          <div class="flex flex-col items-center w-22" :class="{ 'invisible': deck.averageSentenceLength === 0 }">
+          <div class="flex flex-col items-center w-22" :class="{ 'invisible': deck.averageSentenceLength === 0 || deck.hideAverageSentenceLength }">
             <div class="text-xs text-gray-600 dark:text-gray-300">Avg sentence</div>
             <div class="font-medium tabular-nums">{{ deck.averageSentenceLength.toFixed(1) }}</div>
           </div>

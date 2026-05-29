@@ -59,6 +59,11 @@ public class Program
             await importCommands.PopulateWordKanji();
         }
 
+        if (options.ComputeKanjiReadings)
+        {
+            await importCommands.ComputeKanjiReadings();
+        }
+
         if (!string.IsNullOrEmpty(options.ImportPitchAccents))
         {
             await importCommands.ImportPitchAccents(options);

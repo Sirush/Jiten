@@ -241,6 +241,7 @@ public class UserDbContext : IdentityDbContext<User>
             if (isNpgsql)
                 entity.Property(up => up.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
             entity.Property(up => up.IsPublic).HasDefaultValue(false);
+            entity.Property(up => up.IsMediaListPublic).HasDefaultValue(false);
 
             entity.HasOne<User>()
                   .WithOne()
