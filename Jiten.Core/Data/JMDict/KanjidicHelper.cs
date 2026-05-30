@@ -215,7 +215,12 @@ public static class KanjidicHelper
                     var kanaForm = kanaForms.FirstOrDefault(f => f.ReadingIndex == kanjiForm.ReadingIndex)
                                   ?? kanaForms[0];
 
-                    var pairs = decomposer.Decompose(kanjiForm.Text, kanaForm.Text);
+                    // Prefer the curated furigana (RubyText) — it splits regular compounds per-kanji
+                    // and groups jukujikun as a whole span. Fall back to KANJIDIC backtracking only
+                    // when no furigana brackets are present.
+                    List<(string KanjiChar, string Reading)>? pairs = kanjiForm.RubyText.Contains('[')
+                        ? decomposer.DecomposeFromRuby(kanjiForm.RubyText)
+                        : decomposer.Decompose(kanjiForm.Text, kanaForm.Text);
                     if (pairs == null)
                     {
                         failedCount++;

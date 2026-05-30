@@ -47,6 +47,86 @@ public class KanjiReadingDecomposer
 
     public int TotalReadingCandidates => _kanjiReadings.Values.Sum(v => v.Count);
 
+    /// <summary>
+    /// Decomposes a curated RubyText annotation (e.g. "生[せい]活[かつ]", "巫女[みこ]", "食[た]べ物[もの]")
+    /// into (kanji, reading) pairs. Single-kanji ruby groups map directly. Multi-kanji ruby groups
+    /// are first split via KANJIDIC backtracking; if that fails the group is a jukujikun (熟字訓) whose
+    /// reading is assigned to the whole span — we then credit it only to the kanji whose own reading
+    /// set already contains that reading (the "owning" kanji), so passenger kanji like 女 in 巫女 are
+    /// not polluted with spurious readings. Returns an empty list when no kanji owns the reading
+    /// (true ateji such as 今日/寿司) — never null.
+    /// </summary>
+    public List<(string KanjiChar, string Reading)> DecomposeFromRuby(string rubyText)
+    {
+        var pairs = new List<(string, string)>();
+        var pendingBase = new System.Text.StringBuilder();
+
+        int i = 0;
+        while (i < rubyText.Length)
+        {
+            char c = rubyText[i];
+            if (c == '[')
+            {
+                int close = rubyText.IndexOf(']', i);
+                if (close < 0) break;
+
+                var reading = NormalizeReading(rubyText.Substring(i + 1, close - i - 1));
+
+                // The reading annotates the trailing kanji run of the pending base text;
+                // any leading kana in the buffer are literal okurigana.
+                var baseStr = pendingBase.ToString();
+                int k = baseStr.Length;
+                while (k > 0 && IsKanjiChar(baseStr[k - 1])) k--;
+                var kanjiRun = baseStr[k..];
+
+                ResolveRubyGroup(kanjiRun, reading, pairs);
+
+                pendingBase.Clear();
+                i = close + 1;
+            }
+            else
+            {
+                pendingBase.Append(c);
+                i++;
+            }
+        }
+
+        return pairs;
+    }
+
+    private void ResolveRubyGroup(string kanjiRun, string reading, List<(string, string)> pairs)
+    {
+        if (kanjiRun.Length == 0 || reading.Length == 0) return;
+
+        if (kanjiRun.Length == 1)
+        {
+            pairs.Add((kanjiRun, reading));
+            return;
+        }
+
+        // Multi-kanji block: prefer a per-kanji split if the readings line up.
+        var decomposed = BacktrackDecompose(kanjiRun, reading, 0, 0);
+        if (decomposed != null)
+        {
+            pairs.AddRange(decomposed);
+            return;
+        }
+
+        // Jukujikun: whole-span reading credited only to kanji that own it.
+        foreach (var ch in kanjiRun)
+        {
+            var chs = ch.ToString();
+            if (_kanjiReadings.TryGetValue(chs, out var set) && set.Contains(reading))
+                pairs.Add((chs, reading));
+        }
+    }
+
+    private static string NormalizeReading(string reading)
+    {
+        var hira = KatakanaToHiragana(reading);
+        return new string(hira.Where(IsKana).ToArray());
+    }
+
     public List<(string KanjiChar, string Reading)>? Decompose(string kanjiText, string kanaReading)
     {
         if (string.IsNullOrEmpty(kanjiText) || string.IsNullOrEmpty(kanaReading))
