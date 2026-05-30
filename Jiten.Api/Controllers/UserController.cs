@@ -2394,6 +2394,7 @@ public class UserController(
                                              .Include(d => d.DeckGenres)
                                              .Include(d => d.DeckTags)
                                              .ThenInclude(dt => dt.Tag)
+                                             .Include(d => d.DeckDifficulty)
                                              .Where(d => displayIds.Contains(d.DeckId))
                                              .ToListAsync();
 

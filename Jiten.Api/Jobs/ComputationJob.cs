@@ -747,7 +747,8 @@ public class ComputationJob(
                 user_kanji AS (
                     SELECT DISTINCT krw."KanjiCharacter"
                     FROM user_known_words ukw
-                    JOIN jmdict."KanjiReadingWords" krw ON krw."WordId" = ukw."WordId"
+                    JOIN jmdict."KanjiReadingWords" krw
+                        ON krw."WordId" = ukw."WordId" AND krw."ReadingIndex" = ukw."ReadingIndex"
                     WHERE ukw.weight > 0
                 ),
                 kanji_reading_raw AS (
@@ -778,7 +779,8 @@ public class ComputationJob(
                     SELECT krw."KanjiCharacter", krw."Reading",
                            COUNT(DISTINCT ukw."WordId") as known_count
                     FROM user_known_words ukw
-                    JOIN jmdict."KanjiReadingWords" krw ON krw."WordId" = ukw."WordId"
+                    JOIN jmdict."KanjiReadingWords" krw
+                        ON krw."WordId" = ukw."WordId" AND krw."ReadingIndex" = ukw."ReadingIndex"
                     WHERE ukw.weight > 0
                     GROUP BY krw."KanjiCharacter", krw."Reading"
                 ),
