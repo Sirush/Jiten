@@ -199,6 +199,7 @@ public partial class MorphologicalAnalyser
         ("だから", "こそ", PartOfSpeech.Expression),
         ("では", "あるまい", PartOfSpeech.Expression),
         ("より", "も", PartOfSpeech.Expression),
+        ("に", "於いて", PartOfSpeech.Expression),
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];

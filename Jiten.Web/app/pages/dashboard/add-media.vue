@@ -11,6 +11,7 @@
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getLinkTypeText } from '~/utils/linkTypeMapper';
   import SearchDialog from '~/components/dashboard/SearchDialog.vue';
+  import CoverImageField from '~/components/dashboard/CoverImageField.vue';
 
   useHead({
     title: 'Add Media - Admin Dashboard - Jiten',
@@ -44,9 +45,10 @@
       return;
     }
     duplicateTimeout = setTimeout(async () => {
-      duplicateDecks.value = await $api<DuplicateCheckDeckDto[]>('admin/duplicate-check', {
-        query: { title: newTitle.trim(), mediaType: selectedMediaType.value },
-      }) ?? [];
+      duplicateDecks.value =
+        (await $api<DuplicateCheckDeckDto[]>('admin/duplicate-check', {
+          query: { title: newTitle.trim(), mediaType: selectedMediaType.value },
+        })) ?? [];
     }, 500);
   });
 
@@ -59,7 +61,6 @@
 
   const coverImage = ref<File | null>(null); // User uploaded file
   const coverImageUrl = ref<string | null>(null); // URL from API metadata
-  const coverImageObjectUrl = ref<string | null>(null); // Local object URL for preview
 
   const searchQuery = ref('');
   const authorQuery = ref('');
@@ -93,21 +94,7 @@
     return baseText.endsWith('s') ? baseText.slice(0, -1) : baseText;
   });
 
-  watch(coverImage, (newFile) => {
-    if (coverImageObjectUrl.value) {
-      URL.revokeObjectURL(coverImageObjectUrl.value);
-      coverImageObjectUrl.value = null;
-    }
-    if (newFile && typeof window !== 'undefined') {
-      coverImageObjectUrl.value = URL.createObjectURL(newFile);
-    }
-  });
-
   onBeforeUnmount(() => {
-    if (coverImageObjectUrl.value) {
-      URL.revokeObjectURL(coverImageObjectUrl.value);
-      coverImageObjectUrl.value = null;
-    }
     if (duplicateTimeout) clearTimeout(duplicateTimeout);
   });
 
@@ -124,19 +111,6 @@
       const lastDotIndex = fileName.lastIndexOf('.');
       searchQuery.value = lastDotIndex !== -1 ? fileName.substring(0, lastDotIndex) : fileName;
     }
-  }
-
-  function handleCoverImageUpload(event: { files: File[] }) {
-    if (event.files && event.files.length > 0) {
-      const file = event.files[0];
-      coverImage.value = file;
-      coverImageUrl.value = null;
-    }
-  }
-
-  function clearCoverImage() {
-    coverImageUrl.value = null;
-    coverImage.value = null;
   }
 
   function handleSubdeckFileUpload(event: { files: File[] }, subdeckId: number) {
@@ -180,7 +154,7 @@
           });
         }
       }
-      
+
       // Explicitly clear the FileUpload component's selection
       if (newSubdeckUploaderRef.value) {
         newSubdeckUploaderRef.value.clear();
@@ -236,8 +210,7 @@
 
     if (metadata.links) {
       for (const link of metadata.links) {
-        if (!selectedMetadata.value.links.some(l => l.linkType === link.linkType))
-          selectedMetadata.value.links.push(link);
+        if (!selectedMetadata.value.links.some((l) => l.linkType === link.linkType)) selectedMetadata.value.links.push(link);
       }
     }
   }
@@ -270,7 +243,8 @@
       englishTitle.value = '';
       releaseDate.value = new Date();
       description.value = '';
-      clearCoverImage();
+      coverImage.value = null;
+      coverImageUrl.value = null;
       searchQuery.value = '';
       authorQuery.value = '';
       searchResults.value = [];
@@ -478,11 +452,7 @@
                   <label class="block text-sm font-medium mb-1">Romaji Title</label>
                   <div class="flex gap-2">
                     <InputText v-model="romajiTitle" class="flex-1" />
-                    <Button
-                      v-tooltip.top="'Auto-romanize from original title'"
-                      :disabled="!originalTitle || romanizing"
-                      @click="autoRomanize"
-                    >
+                    <Button v-tooltip.top="'Auto-romanize from original title'" :disabled="!originalTitle || romanizing" @click="autoRomanize">
                       <Icon v-if="!romanizing" name="material-symbols-light:translate" size="1.5em" />
                       <Icon v-else name="line-md:loading-loop" size="1.5em" />
                     </Button>
@@ -506,7 +476,8 @@
                       target="_blank"
                       rel="noopener noreferrer"
                       class="text-sm text-primary underline"
-                    >{{ getLinkTypeText(link.linkType) }}</a>
+                      >{{ getLinkTypeText(link.linkType) }}</a
+                    >
                   </div>
                 </div>
                 <div class="mb-4">
@@ -526,27 +497,7 @@
 
               <div>
                 <div class="mb-4">
-                  <label class="block text-sm font-medium mb-1">Cover Image</label>
-                  <div v-if="coverImageUrl || coverImageObjectUrl" class="flex items-center mb-2">
-                    <img :src="coverImageUrl || coverImageObjectUrl" alt="Cover Preview" class="h-48 w-auto mr-2 object-contain border" />
-                    <Button class="p-button-text p-button-sm" @click="clearCoverImage">
-                      <Icon name="material-symbols-light:close" class="w-full" size="1.5em" />
-                    </Button>
-                  </div>
-
-                  <FileUpload
-                    mode="advanced"
-                    accept="image/*"
-                    :auto="true"
-                    choose-label="Select Cover Image"
-                    :multiple="false"
-                    class="w-full cover-image-upload"
-                    :custom-upload="true"
-                    :show-upload-button="false"
-                    :show-cancel-button="false"
-                    drag-drop-text="Select Cover Image or Drag and Drop Here"
-                    @select="handleCoverImageUpload"
-                  />
+                  <CoverImageField v-model:file="coverImage" v-model:url="coverImageUrl" :title="originalTitle" :subtitle="romajiTitle" />
                 </div>
               </div>
             </div>

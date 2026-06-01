@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'; // Added onMounted
+  import { ref, computed, watch, onMounted } from 'vue'; // Added onMounted
   import Card from 'primevue/card';
   import Button from 'primevue/button';
   import FileUpload from 'primevue/fileupload';
@@ -18,6 +18,7 @@
   import Select from 'primevue/select';
   import MultiSelect from 'primevue/multiselect';
   import InputNumber from 'primevue/inputnumber';
+  import CoverImageField from '~/components/dashboard/CoverImageField.vue';
 
   const route = useRoute();
   const mediaId = route.params.id;
@@ -51,7 +52,6 @@
 
   const coverImage = ref<File | null>(null);
   const coverImageUrl = ref<string | null>(null);
-  const coverImageObjectUrl = ref<string | null>(null);
 
   const links = ref<Link[]>([]);
   const showAddLinkDialog = ref(false);
@@ -67,14 +67,14 @@
   const showAddAliasDialog = ref(false);
   const newAlias = ref('');
   const aliasesExpanded = ref(false);
-  const visibleAliases = computed(() => aliasesExpanded.value ? aliases.value : aliases.value.slice(0, 3));
+  const visibleAliases = computed(() => (aliasesExpanded.value ? aliases.value : aliases.value.slice(0, 3)));
 
   // Dictionary entries (character names)
   const dictionaryEntries = ref<string[]>([]);
   const showAddDictEntryDialog = ref(false);
   const newDictEntry = ref('');
   const dictEntriesExpanded = ref(false);
-  const visibleDictEntries = computed(() => dictEntriesExpanded.value ? dictionaryEntries.value : dictionaryEntries.value.slice(0, 3));
+  const visibleDictEntries = computed(() => (dictEntriesExpanded.value ? dictionaryEntries.value : dictionaryEntries.value.slice(0, 3)));
 
   // Genres
   const selectedGenres = ref<number[]>([]);
@@ -86,17 +86,19 @@
   const showAddTagDialog = ref(false);
   const newTag = ref<{ tagId: number | null; percentage: number }>({
     tagId: null,
-    percentage: 50
+    percentage: 50,
   });
   const tagsLoading = ref(false);
 
   // Relationships
-  const relationships = ref<Array<{
-    targetDeckId: number;
-    targetTitle: string;
-    relationshipType: DeckRelationshipType;
-    isInverse: boolean;
-  }>>([]);
+  const relationships = ref<
+    Array<{
+      targetDeckId: number;
+      targetTitle: string;
+      relationshipType: DeckRelationshipType;
+      isInverse: boolean;
+    }>
+  >([]);
   const showAddRelationshipDialog = ref(false);
   const newRelationship = ref<{
     targetDeckId: number | null;
@@ -160,23 +162,6 @@
     return singularText;
   });
 
-  watch(coverImage, (newFile) => {
-    if (coverImageObjectUrl.value) {
-      URL.revokeObjectURL(coverImageObjectUrl.value);
-      coverImageObjectUrl.value = null;
-    }
-    if (newFile && typeof window !== 'undefined') {
-      coverImageObjectUrl.value = URL.createObjectURL(newFile);
-    }
-  });
-
-  onBeforeUnmount(() => {
-    if (coverImageObjectUrl.value) {
-      URL.revokeObjectURL(coverImageObjectUrl.value);
-      coverImageObjectUrl.value = null;
-    }
-  });
-
   const { data: response, status, error } = await useApiFetch<DeckDetail>(`admin/deck/${mediaId}`, { server: false });
 
   watchEffect(() => {
@@ -206,18 +191,20 @@
       dictionaryEntries.value = mainDeck.dictionaryEntries?.map((e: any) => e.surface) || [];
 
       selectedGenres.value = mainDeck.genres || [];
-      selectedTags.value = mainDeck.tags?.map(t => ({
-        tagId: t.tagId,
-        name: t.name,
-        percentage: t.percentage
-      })) || [];
+      selectedTags.value =
+        mainDeck.tags?.map((t) => ({
+          tagId: t.tagId,
+          name: t.name,
+          percentage: t.percentage,
+        })) || [];
 
-      relationships.value = mainDeck.relationships?.map(r => ({
-        targetDeckId: r.targetDeckId,
-        targetTitle: r.targetTitle,
-        relationshipType: r.relationshipType,
-        isInverse: r.isInverse
-      })) || [];
+      relationships.value =
+        mainDeck.relationships?.map((r) => ({
+          targetDeckId: r.targetDeckId,
+          targetTitle: r.targetTitle,
+          relationshipType: r.relationshipType,
+          isInverse: r.isInverse,
+        })) || [];
 
       loadAvailableTags();
 
@@ -234,14 +221,6 @@
       selectedFile.value = new File([], 'dummy.file');
     }
   });
-
-  function handleCoverImageUpload(event: { files: File[] }) {
-    if (event.files && event.files.length > 0) {
-      const file = event.files[0];
-      coverImage.value = file;
-      coverImageUrl.value = null;
-    }
-  }
 
   function handleParentTextFileUpload(event: { files: File[] }) {
     if (event.files && event.files.length > 0) {
@@ -347,18 +326,18 @@
       return;
     }
 
-    const exists = selectedTags.value.some(t => t.tagId === newTag.value.tagId);
+    const exists = selectedTags.value.some((t) => t.tagId === newTag.value.tagId);
     if (exists) {
       showToast('warn', 'Duplicate', 'Tag already added');
       return;
     }
 
-    const tag = availableTags.value.find(t => t.tagId === newTag.value.tagId);
+    const tag = availableTags.value.find((t) => t.tagId === newTag.value.tagId);
     if (tag) {
       selectedTags.value.push({
         tagId: newTag.value.tagId!,
         name: tag.name,
-        percentage: newTag.value.percentage
+        percentage: newTag.value.percentage,
       });
     }
 
@@ -411,8 +390,7 @@
     }
 
     const exists = relationships.value.some(
-      r => r.targetDeckId === newRelationship.value.targetDeckId &&
-           r.relationshipType === newRelationship.value.relationshipType
+      (r) => r.targetDeckId === newRelationship.value.targetDeckId && r.relationshipType === newRelationship.value.relationshipType
     );
     if (exists) {
       showToast('warn', 'Duplicate', 'This relationship already exists');
@@ -423,7 +401,7 @@
       targetDeckId: newRelationship.value.targetDeckId,
       targetTitle: newRelationship.value.targetTitle,
       relationshipType: newRelationship.value.relationshipType,
-      isInverse: false
+      isInverse: false,
     });
     showAddRelationshipDialog.value = false;
   }
@@ -684,7 +662,7 @@
       });
 
       // Add relationships (only direct, not inverse - inverse are computed from other deck's data)
-      const directRelationships = relationships.value.filter(r => !r.isInverse);
+      const directRelationships = relationships.value.filter((r) => !r.isInverse);
       directRelationships.forEach((rel, index) => {
         formData.append(`relationships[${index}].targetDeckId`, rel.targetDeckId.toString());
         formData.append(`relationships[${index}].relationshipType`, rel.relationshipType.toString());
@@ -795,24 +773,7 @@
               </div>
               <div>
                 <div class="mb-4">
-                  <label class="block text-sm font-medium mb-1">Cover Image</label>
-                  <!-- Show image preview if available (either from URL or local file) -->
-                  <div v-if="coverImageUrl || coverImageObjectUrl" class="flex items-center mb-2">
-                    <img :src="coverImageUrl || coverImageObjectUrl" alt="Cover Preview" class="h-48 w-auto mr-2 object-contain border" />
-                  </div>
-                  <FileUpload
-                    mode="advanced"
-                    accept="image/*"
-                    :auto="true"
-                    choose-label="Select Cover Image"
-                    :multiple="false"
-                    class="w-full cover-image-upload"
-                    :custom-upload="true"
-                    :show-upload-button="false"
-                    :show-cancel-button="false"
-                    drag-drop-text="Select Cover Image or Drag and Drop Here"
-                    @select="handleCoverImageUpload"
-                  />
+                  <CoverImageField v-model:file="coverImage" v-model:url="coverImageUrl" :title="originalTitle" :subtitle="romajiTitle" />
                 </div>
               </div>
             </div>
@@ -973,7 +934,9 @@
                 </Button>
               </div>
 
-              <div v-if="dictionaryEntries.length === 0" class="p-4 border rounded text-center text-gray-500">No character names. Click "Add Name" to add one, or fetch metadata to populate automatically.</div>
+              <div v-if="dictionaryEntries.length === 0" class="p-4 border rounded text-center text-gray-500">
+                No character names. Click "Add Name" to add one, or fetch metadata to populate automatically.
+              </div>
 
               <div v-else class="mb-4">
                 <ul class="list-none p-0">
@@ -1030,12 +993,8 @@
                 :key="genre"
                 class="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white rounded-full text-sm"
               >
-                {{ genreOptions.find(g => g.value === genre)?.label }}
-                <button
-                  type="button"
-                  @click="selectedGenres = selectedGenres.filter(g => g !== genre)"
-                  class="hover:opacity-75"
-                >
+                {{ genreOptions.find((g) => g.value === genre)?.label }}
+                <button type="button" @click="selectedGenres = selectedGenres.filter((g) => g !== genre)" class="hover:opacity-75">
                   <Icon name="material-symbols-light:close" size="1em" />
                 </button>
               </span>
@@ -1055,27 +1014,15 @@
             </div>
           </template>
           <template #content>
-            <div v-if="selectedTags.length === 0" class="text-center text-gray-500 py-4">
-              No tags added. Click "Add Tag" to add one.
-            </div>
+            <div v-if="selectedTags.length === 0" class="text-center text-gray-500 py-4">No tags added. Click "Add Tag" to add one.</div>
 
             <ul v-else class="list-none p-0 space-y-2">
-              <li
-                v-for="(tag, index) in selectedTags"
-                :key="tag.tagId"
-                class="flex justify-between items-center p-3 border rounded"
-              >
+              <li v-for="(tag, index) in selectedTags" :key="tag.tagId" class="flex justify-between items-center p-3 border rounded">
                 <div class="flex items-center gap-4 flex-1">
                   <span class="font-medium min-w-[150px]">{{ tag.name }}</span>
                   <div class="flex items-center gap-2">
                     <label class="text-sm font-medium">Percentage:</label>
-                    <InputNumber
-                      v-model="selectedTags[index].percentage"
-                      :min="0"
-                      :max="100"
-                      suffix="%"
-                      class="w-24"
-                    />
+                    <InputNumber v-model="selectedTags[index].percentage" :min="0" :max="100" suffix="%" class="w-24" />
                   </div>
                 </div>
                 <Button severity="danger" text @click="removeTag(index)">
@@ -1103,13 +1050,7 @@
             </div>
             <div class="mb-4">
               <label class="block text-sm font-medium mb-2">Percentage</label>
-              <InputNumber
-                v-model="newTag.percentage"
-                :min="0"
-                :max="100"
-                suffix="%"
-                class="w-full"
-              />
+              <InputNumber v-model="newTag.percentage" :min="0" :max="100" suffix="%" class="w-full" />
             </div>
           </div>
           <template #footer>
@@ -1163,17 +1104,31 @@
           <p class="text-sm text-gray-500 mt-2">This will queue a background job to recalculate difficulty scores using the RunPod API.</p>
           <template #footer>
             <Button label="Cancel" severity="secondary" text @click="showRecomputeDifficultyDialog = false" />
-            <Button label="Recompute" @click="recomputeDifficulty(); showRecomputeDifficultyDialog = false" />
+            <Button
+              label="Recompute"
+              @click="
+                recomputeDifficulty();
+                showRecomputeDifficultyDialog = false;
+              "
+            />
           </template>
         </Dialog>
 
         <!-- Reaggregate Parent Difficulty Confirmation Dialog -->
         <Dialog v-model:visible="showReaggregateDifficultyDialog" header="Confirm Reaggregate Difficulty" :modal="true" class="w-full md:w-96">
           <p>Are you sure you want to reaggregate the difficulty for this deck from its children?</p>
-          <p class="text-sm text-gray-500 mt-2">This will recalculate the parent difficulty using the existing children's difficulty values without calling the external API.</p>
+          <p class="text-sm text-gray-500 mt-2">
+            This will recalculate the parent difficulty using the existing children's difficulty values without calling the external API.
+          </p>
           <template #footer>
             <Button label="Cancel" severity="secondary" text @click="showReaggregateDifficultyDialog = false" />
-            <Button label="Reaggregate" @click="reaggregateParentDifficulty(); showReaggregateDifficultyDialog = false" />
+            <Button
+              label="Reaggregate"
+              @click="
+                reaggregateParentDifficulty();
+                showReaggregateDifficultyDialog = false;
+              "
+            />
           </template>
         </Dialog>
 
@@ -1194,15 +1149,8 @@
             <div class="mb-4">
               <label class="block text-sm font-medium mb-2">Target Deck ID</label>
               <div class="flex gap-2">
-                <InputNumber
-                  v-model="newRelationship.targetDeckId"
-                  placeholder="Enter deck ID"
-                  class="flex-1"
-                  :use-grouping="false"
-                />
-                <Button @click="fetchDeckTitle" :loading="fetchingDeckTitle" :disabled="!newRelationship.targetDeckId">
-                  Verify
-                </Button>
+                <InputNumber v-model="newRelationship.targetDeckId" placeholder="Enter deck ID" class="flex-1" :use-grouping="false" />
+                <Button @click="fetchDeckTitle" :loading="fetchingDeckTitle" :disabled="!newRelationship.targetDeckId"> Verify </Button>
               </div>
               <div v-if="newRelationship.targetTitle" class="mt-2 p-2 bg-surface-100 dark:bg-surface-800 rounded">
                 Deck: <strong>{{ newRelationship.targetTitle }}</strong>
@@ -1211,7 +1159,11 @@
           </div>
           <template #footer>
             <Button label="Cancel" severity="secondary" text @click="showAddRelationshipDialog = false" />
-            <Button label="Add" @click="addRelationship" :disabled="!newRelationship.targetDeckId || !newRelationship.relationshipType || !newRelationship.targetTitle" />
+            <Button
+              label="Add"
+              @click="addRelationship"
+              :disabled="!newRelationship.targetDeckId || !newRelationship.relationshipType || !newRelationship.targetTitle"
+            />
           </template>
         </Dialog>
 
@@ -1272,94 +1224,89 @@
 
           <TransitionGroup name="subdeck-list" tag="div">
             <Card v-for="(subdeck, index) in subdecks" :key="subdeck.id" class="mb-4 subdeck-card">
-            <template #title>
-              <div class="flex flex-col gap-3 w-full">
-                <div class="flex items-center justify-between w-full">
-                  <div class="flex items-center gap-3">
-                    <div class="flex flex-col gap-1">
-                      <Button
-                        class="p-button-text p-button-sm h-6"
-                        :disabled="index === 0"
-                        @click="moveSubdeckUp(subdeck.id)"
-                        title="Move up"
-                      >
-                        <Icon name="material-symbols-light:arrow-upward" size="1.2em" />
-                      </Button>
-                      <Button
-                        class="p-button-text p-button-sm h-6"
-                        :disabled="index === subdecks.length - 1"
-                        @click="moveSubdeckDown(subdeck.id)"
-                        title="Move down"
-                      >
-                        <Icon name="material-symbols-light:arrow-downward" size="1.2em" />
-                      </Button>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span class="text-lg font-semibold text-muted-color min-w-8">#{{ index + 1 }}</span>
-                      <div class="flex flex-col">
-                        <label class="block text-xs font-medium mb-1">Position</label>
-                        <InputNumber
-                          :model-value="index + 1"
-                          :min="1"
-                          :max="subdecks.length"
-                          :step="1"
-                          class="w-16"
-                          :allow-empty="false"
-                          @update:model-value="(val) => moveSubdeckToPosition(subdeck.id, val)"
-                          title="Jump to position"
-                        />
+              <template #title>
+                <div class="flex flex-col gap-3 w-full">
+                  <div class="flex items-center justify-between w-full">
+                    <div class="flex items-center gap-3">
+                      <div class="flex flex-col gap-1">
+                        <Button class="p-button-text p-button-sm h-6" :disabled="index === 0" @click="moveSubdeckUp(subdeck.id)" title="Move up">
+                          <Icon name="material-symbols-light:arrow-upward" size="1.2em" />
+                        </Button>
+                        <Button
+                          class="p-button-text p-button-sm h-6"
+                          :disabled="index === subdecks.length - 1"
+                          @click="moveSubdeckDown(subdeck.id)"
+                          title="Move down"
+                        >
+                          <Icon name="material-symbols-light:arrow-downward" size="1.2em" />
+                        </Button>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-lg font-semibold text-muted-color min-w-8">#{{ index + 1 }}</span>
+                        <div class="flex flex-col">
+                          <label class="block text-xs font-medium mb-1">Position</label>
+                          <InputNumber
+                            :model-value="index + 1"
+                            :min="1"
+                            :max="subdecks.length"
+                            :step="1"
+                            class="w-16"
+                            :allow-empty="false"
+                            @update:model-value="(val) => moveSubdeckToPosition(subdeck.id, val)"
+                            title="Jump to position"
+                          />
+                        </div>
                       </div>
                     </div>
+                    <Button class="p-button-danger p-button-text" icon-class="text-2xl" @click="removeSubdeck(subdeck.id)">
+                      <Icon name="material-symbols-light:delete" size="1.5em" />
+                    </Button>
                   </div>
-                  <Button class="p-button-danger p-button-text" icon-class="text-2xl" @click="removeSubdeck(subdeck.id)">
-                    <Icon name="material-symbols-light:delete" size="1.5em" />
-                  </Button>
+                  <div class="flex flex-row gap-4">
+                    <div>
+                      <label class="block text-sm font-medium mb-1">Title</label>
+                      <InputText v-model="subdeck.originalTitle" class="w-96" />
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium mb-1">Difficulty Override</label>
+                      <InputNumber v-model="subdeck.difficultyOverride" class="w-32" :min-fraction-digits="1" />
+                    </div>
+                  </div>
                 </div>
-                <div class="flex flex-row gap-4">
-                  <div>
-                    <label class="block text-sm font-medium mb-1">Title</label>
-                    <InputText v-model="subdeck.originalTitle" class="w-96" />
-                  </div>
-                  <div>
-                    <label class="block text-sm font-medium mb-1">Difficulty Override</label>
-                    <InputNumber v-model="subdeck.difficultyOverride" class="w-32" :min-fraction-digits="1" />
-                  </div>
+              </template>
+              <template #content>
+                <div v-if="!subdeck.file && !subdeck.mediaSubdeckId">
+                  <FileUpload
+                    mode="advanced"
+                    :auto="true"
+                    choose-label="Select File"
+                    :multiple="false"
+                    class="w-full subdeck-file-upload"
+                    :custom-upload="true"
+                    :show-upload-button="false"
+                    :show-cancel-button="false"
+                    drag-drop-text="Select File or Drag and Drop Here"
+                    @select="(e) => handleSubdeckFileUpload(e, subdeck.id)"
+                  />
                 </div>
-              </div>
-            </template>
-            <template #content>
-              <div v-if="!subdeck.file && !subdeck.mediaSubdeckId">
-                <FileUpload
-                  mode="advanced"
-                  :auto="true"
-                  choose-label="Select File"
-                  :multiple="false"
-                  class="w-full subdeck-file-upload"
-                  :custom-upload="true"
-                  :show-upload-button="false"
-                  :show-cancel-button="false"
-                  drag-drop-text="Select File or Drag and Drop Here"
-                  @select="(e) => handleSubdeckFileUpload(e, subdeck.id)"
-                />
-              </div>
-              <div v-else-if="subdeck.file" class="flex items-center">
-                <span class="text-sm text-gray-600">{{ subdeck.file.name }}</span>
-              </div>
-              <div v-else-if="subdeck.mediaSubdeckId" class="flex items-center">
-                <FileUpload
-                  mode="advanced"
-                  :auto="true"
-                  choose-label="Replace current file"
-                  :multiple="false"
-                  class="w-full subdeck-file-upload ml-4"
-                  :custom-upload="true"
-                  :show-upload-button="false"
-                  :show-cancel-button="false"
-                  @select="(e) => handleSubdeckFileUpload(e, subdeck.id)"
-                />
-              </div>
-            </template>
-          </Card>
+                <div v-else-if="subdeck.file" class="flex items-center">
+                  <span class="text-sm text-gray-600">{{ subdeck.file.name }}</span>
+                </div>
+                <div v-else-if="subdeck.mediaSubdeckId" class="flex items-center">
+                  <FileUpload
+                    mode="advanced"
+                    :auto="true"
+                    choose-label="Replace current file"
+                    :multiple="false"
+                    class="w-full subdeck-file-upload ml-4"
+                    :custom-upload="true"
+                    :show-upload-button="false"
+                    :show-cancel-button="false"
+                    @select="(e) => handleSubdeckFileUpload(e, subdeck.id)"
+                  />
+                </div>
+              </template>
+            </Card>
           </TransitionGroup>
 
           <Card class="mb-4">

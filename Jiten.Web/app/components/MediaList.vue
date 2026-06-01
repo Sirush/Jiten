@@ -487,6 +487,7 @@
     router.replace({
       query: {
         ...route.query,
+        sortBy: sortBy.value,
         sortOrder: newValue,
       },
     });

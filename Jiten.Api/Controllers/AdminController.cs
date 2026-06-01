@@ -1505,6 +1505,38 @@ public partial class AdminController(
         return true;
     }
 
+    /// <summary>
+    /// Same-origin proxy for external images so the admin cover tools can read pixels on a canvas
+    /// without CORS tainting. Reuses the SSRF guard above.
+    /// </summary>
+    [HttpGet("proxy-image")]
+    public async Task<IActionResult> ProxyImage([FromQuery] string url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !IsValidExternalUrl(url))
+            return BadRequest("Invalid image URL. IP addresses and internal URLs are not allowed.");
+
+        try
+        {
+            using var response = await httpClient.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+
+            var contentType = response.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
+            if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                return BadRequest("URL does not point to an image.");
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            if (bytes.Length > 25 * 1024 * 1024)
+                return BadRequest("Image is too large.");
+
+            return File(bytes, contentType);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Failed to proxy image from {Url}", url);
+            return BadRequest($"Unable to fetch image: {ex.Message}");
+        }
+    }
+
     [HttpPost("difficulty-votes/recompute")]
     public IResult RecomputeDifficultyAdjustments()
     {
