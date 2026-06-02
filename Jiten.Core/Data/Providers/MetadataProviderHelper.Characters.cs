@@ -12,10 +12,10 @@ public static partial class MetadataProviderHelper
         var seen = new HashSet<string>();
         var entries = new List<DeckDictionaryEntry>();
 
-        void Add(string surface)
+        void Add(string surface, int minLength = 2)
         {
             var trimmed = surface.Trim();
-            if (trimmed.Length >= 2 && seen.Add(trimmed))
+            if (trimmed.Length >= minLength && seen.Add(trimmed))
                 entries.Add(new DeckDictionaryEntry { Surface = trimmed, EntryType = DeckDictionaryEntryType.Name });
         }
 
@@ -30,7 +30,16 @@ public static partial class MetadataProviderHelper
             if (concatenated.Length >= 2)
                 Add(concatenated);
 
-            if (trimmed.Contains('・'))
+            // An explicit space separator (e.g. VNDB "風見 司") is a trustworthy family/given split
+            // provided by the source, so single-char parts (e.g. 司, 蓮) are safe to add here.
+            if (native.Contains(' ') || native.Contains('　'))
+            {
+                var spaceParts = native.Split([' ', '　'], StringSplitOptions.RemoveEmptyEntries);
+                if (spaceParts.Length >= 2)
+                    foreach (var part in spaceParts)
+                        Add(part.Replace("・", "").Trim(), minLength: 1);
+            }
+            else if (trimmed.Contains('・'))
             {
                 Add(trimmed);
                 foreach (var part in trimmed.Split('・', StringSplitOptions.RemoveEmptyEntries))
@@ -42,7 +51,8 @@ public static partial class MetadataProviderHelper
             }
             else
             {
-                // Only try heuristic splitting when ・ didn't already provide the split
+                // No explicit separator — fall back to heuristic splitting. The split is inferred,
+                // not given, so keep the default 2-char minimum and don't emit a lone kanji.
                 var parts = SplitName(concatenated, firstHint, lastHint);
                 if (parts != null)
                 {
