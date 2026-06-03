@@ -55,6 +55,12 @@ export interface DeckDetail {
   subDecks: Deck[];
 }
 
+export interface SimilarDeck {
+  deck: Deck;
+  similarity: number;
+  similarityPercent: number;
+}
+
 export interface DeckVocabularyList {
   parentDeck: Deck | null;
   deck: Deck;

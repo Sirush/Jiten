@@ -131,6 +131,8 @@
         </div>
       </div>
       <!--      <div v-else class="pt-4">This deck has no subdecks</div>-->
+
+      <SimilarMediaSection :deck="response.data.mainDeck" />
     </div>
   </div>
 </template>

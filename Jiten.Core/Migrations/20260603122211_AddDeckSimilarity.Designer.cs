@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Jiten.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Jiten.Core.Migrations
 {
     [DbContext(typeof(JitenDbContext))]
-    partial class JitenDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260603122211_AddDeckSimilarity")]
+    partial class AddDeckSimilarity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -268,48 +271,6 @@ namespace Jiten.Core.Migrations
                     b.ToTable("DeckDifficulty", "jiten");
                 });
 
-            modelBuilder.Entity("Jiten.Core.Data.DeckEmbedding", b =>
-                {
-                    b.Property<int>("DeckId")
-                        .HasColumnType("integer");
-
-                    b.Property<byte[]>("Signature")
-                        .HasColumnType("bytea");
-
-                    b.Property<byte[]>("Vector")
-                        .IsRequired()
-                        .HasColumnType("bytea");
-
-                    b.HasKey("DeckId");
-
-                    b.ToTable("DeckEmbeddings", "jiten");
-                });
-
-            modelBuilder.Entity("Jiten.Core.Data.DeckEmbeddingSpace", b =>
-                {
-                    b.Property<int>("Id")
-                        .HasColumnType("integer");
-
-                    b.Property<byte[]>("Components")
-                        .IsRequired()
-                        .HasColumnType("bytea");
-
-                    b.Property<int>("Dimension")
-                        .HasColumnType("integer");
-
-                    b.Property<byte[]>("Idf")
-                        .IsRequired()
-                        .HasColumnType("bytea");
-
-                    b.Property<byte[]>("Mean")
-                        .IsRequired()
-                        .HasColumnType("bytea");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("DeckEmbeddingSpaces", "jiten");
-                });
-
             modelBuilder.Entity("Jiten.Core.Data.DeckGenre", b =>
                 {
                     b.Property<int>("DeckId")
@@ -366,6 +327,35 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_DeckRelationships_TargetDeckId");
 
                     b.ToTable("DeckRelationships", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DeckSimilarity", b =>
+                {
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SimilarDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SharedWordCount")
+                        .HasColumnType("integer");
+
+                    b.Property<float>("Similarity")
+                        .HasColumnType("real");
+
+                    b.PrimitiveCollection<int[]>("TopSharedWordIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int[]")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.HasKey("DeckId", "SimilarDeckId");
+
+                    b.HasIndex("DeckId", "Similarity")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_DeckSimilarities_DeckId_Similarity");
+
+                    b.ToTable("DeckSimilarities", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.DeckStats", b =>
@@ -1655,15 +1645,6 @@ namespace Jiten.Core.Migrations
                         .IsRequired();
 
                     b.Navigation("Deck");
-                });
-
-            modelBuilder.Entity("Jiten.Core.Data.DeckEmbedding", b =>
-                {
-                    b.HasOne("Jiten.Core.Data.Deck", null)
-                        .WithOne()
-                        .HasForeignKey("Jiten.Core.Data.DeckEmbedding", "DeckId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.DeckGenre", b =>

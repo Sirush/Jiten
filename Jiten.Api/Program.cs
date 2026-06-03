@@ -343,12 +343,14 @@ builder.Services.AddScoped<Microsoft.AspNetCore.Identity.UI.Services.IEmailSende
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
+builder.Services.AddSingleton<Jiten.Core.Services.DeckVectorService>();
 builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
 builder.Services.AddScoped<IDeckDownloadService, DeckDownloadService>();
 builder.Services.AddScoped<IDeckImportService, DeckImportService>();
 builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
 builder.Services.AddSingleton<IStudySessionService, StudySessionService>();
 builder.Services.AddSingleton<IPendingCoverageQueue, PendingCoverageQueue>();
+builder.Services.AddSingleton<IPendingEmbeddingQueue, PendingEmbeddingQueue>();
 builder.Services.AddSingleton<IUserActivityTracker, UserActivityTracker>();
 builder.Services.AddSingleton<IParseThrottleService, ParseThrottleService>();
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
@@ -359,6 +361,7 @@ builder.Services.AddScoped<Jiten.Core.Services.RequestActivityService>();
 builder.Services.AddScoped<Jiten.Core.Services.NotificationService>();
 builder.Services.AddHostedService<ParserWarmupService>();
 builder.Services.AddHostedService<WordFormSiblingCacheWarmupService>();
+builder.Services.AddHostedService<DeckVectorCacheWarmupService>();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -501,6 +504,7 @@ builder.Services.AddScoped<ReparseJob>();
 builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
+builder.Services.AddScoped<RecomputeVectorsJob>();
 
 builder.Services.AddHangfire(configuration =>
                                  configuration.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -622,6 +626,16 @@ if (!app.Environment.IsEnvironment("Testing"))
         "coverage-sweep",
         job => job.SweepPendingCoverageDecks(),
         "*/15 * * * *");
+
+    recurringJobs.AddOrUpdate<RecomputeVectorsJob>(
+        "recompute-deck-vectors",
+        job => job.Recompute(),
+        Cron.Daily(4));
+
+    recurringJobs.AddOrUpdate<RecomputeVectorsJob>(
+        "embed-pending-decks",
+        job => job.EmbedPending(),
+        "*/30 * * * *");
 }
 
 app.UseResponseCompression();

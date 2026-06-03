@@ -11,6 +11,7 @@ public class Program
 {
     static async Task Main(string[] args)
     {
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
         var cliContext = CliContext.Create();
 
         await Parser.Default.ParseArguments<CliOptions>(args)
@@ -310,6 +311,18 @@ public class Program
         if (options.CleanupNewCards)
         {
             await CleanupNewCards(context, options.DryRun);
+        }
+
+        // Deck vector similarity commands
+        if (options.ComputeVectors || options.SimilarTo != null)
+        {
+            var vectorCommands = new VectorCommands(context);
+
+            if (options.ComputeVectors)
+                await vectorCommands.ComputeVectors(options);
+
+            if (options.SimilarTo != null)
+                await vectorCommands.SimilarTo(options);
         }
     }
 

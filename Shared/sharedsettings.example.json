@@ -36,6 +36,7 @@
   "BunnyCdnStorageZone": "jiten",
   "CdnBaseUrl": "https://jiten.b-cdn.net",
   "DictionaryPath": "path/to/system_full.dic",
+  "FastTextModelPath": "path/to/cc.ja.300.bin",
   "JimakuApiKey" : "YourApiKey",
   "TmdbApiKey" : "YourApiKey",
   "IgdbClientId": "YourClientId",

@@ -12,6 +12,8 @@ public class JitenDbContext : DbContext
 
     public DbSet<Deck> Decks { get; set; }
     public DbSet<DeckWord> DeckWords { get; set; }
+    public DbSet<DeckEmbedding> DeckEmbeddings { get; set; }
+    public DbSet<DeckEmbeddingSpace> DeckEmbeddingSpaces { get; set; }
     public DbSet<DeckRawText> DeckRawTexts { get; set; }
     public DbSet<DeckTitle> DeckTitles { get; set; }
     public DbSet<DeckStats> DeckStats { get; set; }
@@ -174,6 +176,25 @@ public class JitenDbContext : DbContext
             entity.HasOne(dw => dw.Deck)
                   .WithMany(d => d.DeckWords)
                   .HasForeignKey(dw => dw.DeckId);
+        });
+
+        modelBuilder.Entity<DeckEmbedding>(entity =>
+        {
+            entity.ToTable("DeckEmbeddings", "jiten");
+            entity.HasKey(de => de.DeckId);
+            entity.Property(de => de.DeckId).ValueGeneratedNever();
+
+            entity.HasOne<Deck>()
+                  .WithOne()
+                  .HasForeignKey<DeckEmbedding>(de => de.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DeckEmbeddingSpace>(entity =>
+        {
+            entity.ToTable("DeckEmbeddingSpaces", "jiten");
+            entity.HasKey(de => de.Id);
+            entity.Property(de => de.Id).ValueGeneratedNever();
         });
 
         modelBuilder.Entity<DeckRawText>(entity =>

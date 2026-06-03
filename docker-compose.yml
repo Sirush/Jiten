@@ -54,6 +54,7 @@ services:
       - BunnyCdnStorageZone=${BUNNYCDN_STORAGE_ZONE:-}
       - CdnBaseUrl=${CDN_BASE_URL:-}
       - DictionaryPath=${DICTIONARY_PATH:-/path/to/system_full.dic}
+      - FastTextModelPath=${FASTTEXT_MODEL_PATH:-/app/uploads/models/cc.ja.300.bin}
       - JimakuApiKey=${JIMAKU_API_KEY:-}
       - TmdbApiKey=${TMDB_API_KEY:-}
       - DOTNET_ENVIRONMENT=${DOTNET_ENVIRONMENT:-}

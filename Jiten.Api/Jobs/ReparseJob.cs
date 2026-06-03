@@ -5,7 +5,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Jobs;
 
-public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackgroundJobClient backgroundJobs)
+public class ReparseJob(
+    IDbContextFactory<JitenDbContext> contextFactory,
+    IBackgroundJobClient backgroundJobs,
+    Jiten.Api.Services.IPendingEmbeddingQueue pendingEmbeddingQueue)
 {
     [Queue("reparse")]
     public async Task Reparse(int deckId)
@@ -101,6 +104,9 @@ public class ReparseJob(IDbContextFactory<JitenDbContext> contextFactory, IBackg
 
         QueueStatsComputationForDeckTree(deck);
         backgroundJobs.Enqueue<DifficultyComputationJob>(job => job.ComputeDeckDifficulty(deck.DeckId, false));
+
+        // Re-embed the affected parent deck for vocabulary similarity (periodic sweep batches these).
+        await pendingEmbeddingQueue.AddAsync(deck.ParentDeckId ?? deck.DeckId);
     }
 
     private void QueueStatsComputationForDeckTree(Deck deck)

@@ -237,4 +237,25 @@ public class CliOptions
 
     [Option(longName: "resume", Required = false, HelpText = "Skip items that already have results (e.g. decks with speech stats already computed).")]
     public bool Resume { get; set; }
+
+    [Option(longName: "compute-vectors", Required = false, HelpText = "Compute dense FastText deck vectors and store them in Postgres. Needs --ft-model or FastTextModelPath config.")]
+    public bool ComputeVectors { get; set; }
+
+    [Option(longName: "similar-to", Required = false, HelpText = "Debug: print the most similar decks to the given deck id (loads embeddings from Postgres).")]
+    public int? SimilarTo { get; set; }
+
+    [Option(longName: "similar-limit", Required = false, Default = 20, HelpText = "Number of results for --similar-to (default: 20).")]
+    public int SimilarLimit { get; set; }
+
+    [Option(longName: "ft-model", Required = false, HelpText = "Path to the fastText .bin model (e.g. cc.ja.300.bin) for building deck vectors. Falls back to FastTextModelPath in config.")]
+    public string? FtModel { get; set; }
+
+    [Option(longName: "explain", Required = false, HelpText = "With --similar-to: also print shared-vocabulary overlap per match (diagnostic for spurious similarity).")]
+    public bool Explain { get; set; }
+
+    [Option(longName: "overlap-floor", Required = false, HelpText = "Override the gated overlap floor for --explain probing (e.g. 0.05).")]
+    public float? OverlapFloor { get; set; }
+
+    [Option(longName: "min-shared", Required = false, HelpText = "Override the gated minimum shared-distinctive-word count for --explain probing.")]
+    public int? MinShared { get; set; }
 }

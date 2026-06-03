@@ -58,6 +58,19 @@ public static class PosMask
     public const uint AdverbGroup =
         (1u << (int)PartOfSpeech.Adverb) | (1u << (int)PartOfSpeech.AdverbTo);
 
+    /// <summary>
+    /// Content words that carry topic signal, used for deck vocabulary vectors.
+    /// Excludes function words (particles, auxiliaries, conjunctions), symbols, numerals,
+    /// bound morphemes (prefixes/suffixes) and proper names (which over-cluster same-franchise decks).
+    /// </summary>
+    public const uint ContentWord =
+        (1u << (int)PartOfSpeech.Noun) | (1u << (int)PartOfSpeech.Verb) |
+        (1u << (int)PartOfSpeech.IAdjective) | (1u << (int)PartOfSpeech.Adverb) |
+        (1u << (int)PartOfSpeech.NaAdjective) | (1u << (int)PartOfSpeech.CommonNoun) |
+        (1u << (int)PartOfSpeech.Expression) | (1u << (int)PartOfSpeech.NominalAdjective) |
+        (1u << (int)PartOfSpeech.PrenounAdjectival) | (1u << (int)PartOfSpeech.Counter) |
+        (1u << (int)PartOfSpeech.AdverbTo);
+
     public const uint VerbOrIAdj =
         (1u << (int)PartOfSpeech.Verb) | (1u << (int)PartOfSpeech.IAdjective);
 

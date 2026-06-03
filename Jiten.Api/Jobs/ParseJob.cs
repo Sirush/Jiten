@@ -12,7 +12,8 @@ namespace Jiten.Api.Jobs;
 public class ParseJob(
     IDbContextFactory<JitenDbContext> contextFactory,
     IBackgroundJobClient backgroundJobs,
-    IPendingCoverageQueue pendingCoverageQueue)
+    IPendingCoverageQueue pendingCoverageQueue,
+    IPendingEmbeddingQueue pendingEmbeddingQueue)
 {
     [Queue("parse")]
     public async Task Parse(Metadata metadata, MediaType deckType, bool storeRawText = false)
@@ -138,6 +139,9 @@ public class ParseJob(
 
         // Enqueue decks for the periodic coverage sweeper (coalesces per-user work)
         await QueueCoverageComputationForDeckTree(deck);
+
+        // Enqueue the parent deck for the periodic embedding sweeper (vocabulary similarity)
+        await pendingEmbeddingQueue.AddAsync(deck.DeckId);
 
         // Queue coverage statistics computation for main deck and all children
         QueueStatsComputationForDeckTree(deck);

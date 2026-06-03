@@ -16,7 +16,7 @@ RUN dotnet build "Jiten.Api/Jiten.Api.csproj" -c Release -o /app/build
 RUN dotnet publish "Jiten.Api/Jiten.Api.csproj" -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl libgomp1 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish .
 # Ensure the Shared directory exists in the final image

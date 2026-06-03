@@ -13,6 +13,7 @@ using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
+using Jiten.Core.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -41,7 +42,8 @@ public class MediaDeckController(
     IHttpClientFactory httpClientFactory,
     IDeckWordResolver deckWordResolver,
     IDeckDownloadService downloadService,
-    IBackgroundJobClient backgroundJobClient) : ControllerBase
+    IBackgroundJobClient backgroundJobClient,
+    Jiten.Core.Services.DeckVectorService deckVectorService) : ControllerBase
 {
     private record DeckIdWithCount(int DeckId, int TotalCount);
 
@@ -83,6 +85,82 @@ public class MediaDeckController(
         }
 
         return dtos;
+    }
+
+    /// <summary>
+    /// Returns decks most semantically similar to the given deck, based on precomputed FastText
+    /// embedding cosine similarity over content words.
+    /// </summary>
+    /// <param name="deckId">The deck to find similar media for.</param>
+    /// <param name="limit">Maximum number of results (default 10, max 100).</param>
+    /// <param name="mediaType">Optional media type filter.</param>
+    /// <returns>Ranked list of similar decks with similarity scores.</returns>
+    [HttpGet("get-similar-decks/{deckId:int}")]
+    [ResponseCache(Duration = 60 * 60, VaryByQueryKeys = ["limit", "mediaType"], VaryByHeader = "Authorization")]
+    [SwaggerOperation(Summary = "Get semantically-similar media decks")]
+    [ProducesResponseType(typeof(List<SimilarDeckDto>), StatusCodes.Status200OK)]
+    public async Task<List<SimilarDeckDto>> GetSimilarDecks(int deckId, [FromQuery] int limit = 10, [FromQuery] MediaType? mediaType = null)
+    {
+        limit = Math.Clamp(limit, 1, 100);
+
+        // Over-fetch when filtering by media type so the filter doesn't starve the result set.
+        // The service picks the right similarity strategy (short-regime gating vs pure cosine) itself.
+        var fetch = mediaType == null ? limit : Math.Min(limit * 8, 400);
+        var sims = await deckVectorService.FindSimilarForAsync(deckId, fetch);
+        if (sims.Count == 0)
+            return new List<SimilarDeckDto>();
+
+        var candidateIds = sims.Select(s => s.DeckId).ToList();
+
+        // Cheap projection: which candidates pass the media-type filter, without hydrating any graphs.
+        var matchingIds = await context.Decks.AsNoTracking()
+                                       .Where(d => candidateIds.Contains(d.DeckId) && (mediaType == null || d.MediaType == mediaType))
+                                       .Select(d => d.DeckId)
+                                       .ToHashSetAsync();
+
+        // Take the top `limit` survivors in similarity order, then hydrate only those decks.
+        var finalIds = new List<int>(limit);
+        foreach (var s in sims)
+        {
+            if (!matchingIds.Contains(s.DeckId))
+                continue;
+            finalIds.Add(s.DeckId);
+            if (finalIds.Count >= limit)
+                break;
+        }
+
+        if (finalIds.Count == 0)
+            return new List<SimilarDeckDto>();
+
+        var decks = await context.Decks.AsNoTracking()
+                                 .Where(d => finalIds.Contains(d.DeckId))
+                                 .Include(d => d.Links)
+                                 .Include(d => d.Titles)
+                                 .Include(d => d.DeckDifficulty)
+                                 .AsSplitQuery()
+                                 .ToDictionaryAsync(d => d.DeckId);
+
+        var similarityById = sims.ToDictionary(s => s.DeckId, s => s.Similarity);
+        var result = new List<SimilarDeckDto>(finalIds.Count);
+        foreach (var id in finalIds)
+        {
+            if (!decks.TryGetValue(id, out var deck))
+                continue;
+
+            result.Add(new SimilarDeckDto { Deck = new DeckDto(deck), Similarity = similarityById[id] });
+        }
+
+        // Decorate with the viewer's coverage so the frontend can render coverage borders.
+        // Per-user data must not be shared from the response cache.
+        if (currentUserService.IsAuthenticated)
+        {
+            Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+            var userId = currentUserService.UserId!;
+            var coverages = await UserCoverageChunkHelper.GetCoverage(userContext, userId, result.Select(r => r.Deck.DeckId).ToList());
+            coverages.ApplyTo(result.Select(r => r.Deck));
+        }
+
+        return result;
     }
 
     /// <summary>
