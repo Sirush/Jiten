@@ -19,7 +19,7 @@
   const HARD_MAX = 60;
   // "View more" stops once content similarity drops below this. Tune against real data
   // (CLI: --similar-to <id>); the baseline (INITIAL_COUNT) and HARD_MAX bound it either way.
-  const SIMILARITY_THRESHOLD = 65;
+  const SIMILARITY_THRESHOLD = 50;
   // Mirrors the backend gate (DeckVectorService.ShortRegimeUniqueWords): below this a deck is in the
   // short regime, so an empty result means "too short to compare" rather than a genuine no-match.
   const SHORT_REGIME_UNIQUE_WORDS = 1500;
