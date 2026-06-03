@@ -164,6 +164,34 @@ public class MediaDeckController(
     }
 
     /// <summary>
+    /// Returns the distinct media types present among a deck's most similar media, so the
+    /// frontend type filter can offer every type that actually has results — not just those
+    /// that happen to fall in the top unfiltered page.
+    /// </summary>
+    /// <param name="deckId">The deck to find similar media for.</param>
+    /// <returns>Distinct media types available in the similarity candidate pool.</returns>
+    [HttpGet("get-similar-deck-types/{deckId:int}")]
+    [ResponseCache(Duration = 60 * 60)]
+    [SwaggerOperation(Summary = "Get media types available among similar decks")]
+    [ProducesResponseType(typeof(List<MediaType>), StatusCodes.Status200OK)]
+    public async Task<List<MediaType>> GetSimilarDeckTypes(int deckId)
+    {
+        // Mirror the over-fetch cap in GetSimilarDecks: a type is selectable iff a filtered
+        // query could actually surface it, i.e. it appears within the same candidate pool.
+        const int candidatePool = 400;
+        var sims = await deckVectorService.FindSimilarForAsync(deckId, candidatePool);
+        if (sims.Count == 0)
+            return new List<MediaType>();
+
+        var candidateIds = sims.Select(s => s.DeckId).ToList();
+        return await context.Decks.AsNoTracking()
+                            .Where(d => candidateIds.Contains(d.DeckId))
+                            .Select(d => d.MediaType)
+                            .Distinct()
+                            .ToListAsync();
+    }
+
+    /// <summary>
     /// Returns lightweight media deck suggestions for autocomplete search.
     /// </summary>
     /// <param name="query">Search query (minimum 2 characters).</param>

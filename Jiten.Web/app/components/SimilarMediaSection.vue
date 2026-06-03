@@ -30,34 +30,33 @@
     { label: 'Difficulty', value: 'difficulty' },
   ];
 
-  const mediaTypeFilter = ref<MediaType | null>(null);
+  // Sentinel for "no filter". PrimeVue's Select treats a null model value as "no selection"
+  // (renders empty), so we use a real value the MediaType enum never uses (it starts at 1).
+  const ALL_TYPES = 0;
+  const mediaTypeFilter = ref<number>(ALL_TYPES);
   const visibleCount = ref(INITIAL_COUNT);
 
   // Reactive request: refetch from the backend (which over-fetches per type) when the filter changes.
   const { data, status } = await useApiFetch<SimilarDeck[]>(
     () => {
       const base = `media-deck/get-similar-decks/${props.deck.deckId}?limit=${HARD_MAX}`;
-      return mediaTypeFilter.value != null ? `${base}&mediaType=${mediaTypeFilter.value}` : base;
+      return mediaTypeFilter.value !== ALL_TYPES ? `${base}&mediaType=${mediaTypeFilter.value}` : base;
     },
     { revalidateOnClient: true, lazy: true, watch: [mediaTypeFilter] }
   );
 
-  // Media-type options are frozen from the first unfiltered load so the dropdown doesn't
-  // collapse once a type is selected (filtered results then contain only that one type).
-  const availableTypes = ref<MediaType[]>([]);
-  watch(
-    data,
-    (val) => {
-      if (mediaTypeFilter.value === null && val && val.length > 0) {
-        availableTypes.value = [...new Set(val.map((i) => i.deck.mediaType))].sort((a, b) => a - b);
-      }
-    },
-    { immediate: true }
+  // Available types come from a dedicated endpoint computed over the full candidate pool, not the
+  // top unfiltered page — otherwise types that only appear deeper in the ranking (but are still
+  // reachable via the per-type over-fetch) would be missing from the dropdown.
+  const { data: typesData, status: typesStatus } = await useApiFetch<MediaType[]>(
+    () => `media-deck/get-similar-deck-types/${props.deck.deckId}`,
+    { revalidateOnClient: true, lazy: true }
   );
+  const availableTypes = computed<MediaType[]>(() => [...(typesData.value ?? [])].sort((a, b) => a - b));
 
   const mediaTypeOptions = computed(() => [
-    { label: 'All types', value: null as MediaType | null },
-    ...availableTypes.value.map((t) => ({ label: getMediaTypeText(t), value: t as MediaType | null })),
+    { label: 'All types', value: ALL_TYPES },
+    ...availableTypes.value.map((t) => ({ label: getMediaTypeText(t), value: t as number })),
   ]);
 
   // Backend returns results content-similarity-desc. The revealable pool is every deck at or
@@ -100,7 +99,7 @@
 
 <template>
   <!-- Initial load only: a refetch on filter change keeps the section + dropdown in place. -->
-  <div v-if="status === 'pending' && availableTypes.length === 0" class="pt-4">
+  <div v-if="availableTypes.length === 0 && typesStatus !== 'success'" class="pt-4">
     <span class="font-bold">Similar Media</span>
     <div class="flex flex-row flex-wrap gap-4 justify-center pt-4">
       <Skeleton v-for="i in 7" :key="i" width="136px" height="192px" />
@@ -166,7 +165,7 @@
     </div>
   </div>
   <!-- Loaded with no results: explain rather than silently hide. -->
-  <div v-else-if="status === 'success'" class="pt-4">
+  <div v-else-if="typesStatus === 'success'" class="pt-4">
     <span class="font-bold">Similar Media</span>
     <p class="pt-2 text-sm text-gray-500 dark:text-gray-400">
       {{ deck.uniqueWordCount < SHORT_REGIME_UNIQUE_WORDS ? 'This title is too short to reliably find similar media.' : 'No similar media found.' }}
