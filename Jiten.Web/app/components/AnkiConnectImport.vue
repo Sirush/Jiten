@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, computed } from 'vue';
+  import { ref, computed, onMounted, onUnmounted } from 'vue';
   import { YankiConnect } from 'yanki-connect';
   import { useToast } from 'primevue/usetoast';
 
@@ -18,7 +18,62 @@
   let cantConnect = ref(false);
   let cardsIds: number[] = [];
 
+  const apiKey = ref('');
+
   const isLoading = ref(false);
+
+  const showSkippedDialog = ref(false);
+  const skippedWords = ref<string[]>([]);
+
+  const showErrorDialog = ref(false);
+  const errorMessage = ref('');
+  const errorDetail = ref('');
+  const errorCopied = ref(false);
+  const operationActive = ref(false);
+
+  const copyErrorDetails = async () => {
+    const text = [errorMessage.value, errorDetail.value].filter(Boolean).join('\n\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      errorCopied.value = true;
+      setTimeout(() => (errorCopied.value = false), 2000);
+    } catch {
+      errorCopied.value = false;
+    }
+  };
+
+  const reportError = (err: unknown, fallback = 'An unexpected error occurred.') => {
+    let message = extractApiError(err, '');
+    if (!message) {
+      if (err instanceof Error) message = err.message;
+      else if (typeof err === 'string') message = err;
+    }
+    errorMessage.value = message || fallback;
+    errorDetail.value = err instanceof Error && err.stack ? err.stack : '';
+    errorCopied.value = false;
+    showErrorDialog.value = true;
+    console.error(err);
+  };
+
+  // Safety net: surface any uncaught frontend error/rejection that occurs while an
+  // Anki operation is in flight, instead of letting it disappear into the console.
+  const handleWindowError = (event: ErrorEvent) => {
+    if (!operationActive.value || !event.error) return;
+    reportError(event.error);
+  };
+  const handleRejection = (event: PromiseRejectionEvent) => {
+    if (!operationActive.value) return;
+    reportError(event.reason);
+  };
+
+  onMounted(() => {
+    window.addEventListener('error', handleWindowError);
+    window.addEventListener('unhandledrejection', handleRejection);
+  });
+  onUnmounted(() => {
+    window.removeEventListener('error', handleWindowError);
+    window.removeEventListener('unhandledrejection', handleRejection);
+  });
 
   let reviewByCard: Map<number, Array<{ Rating: number; ReviewDateTime: Date; ReviewDuration: number }>> = new Map();
   let selectedFieldName = '';
@@ -29,9 +84,11 @@
   const stripRuby = (text: string) => text.replace(/\[.*?\]/g, '');
 
   async function ankiInvoke(action: string, params: Record<string, any> = {}): Promise<any> {
+    const body: Record<string, any> = { action, version: 6, params };
+    if (apiKey.value) body.key = apiKey.value;
     const res = await fetch('http://127.0.0.1:8765', {
       method: 'POST',
-      body: JSON.stringify({ action, version: 6, params }),
+      body: JSON.stringify(body),
     });
     const json = await res.json();
     if (json.error) throw new Error(json.error);
@@ -65,8 +122,9 @@
   );
 
   const Connect = async () => {
+    operationActive.value = true;
     try {
-      client = new YankiConnect();
+      client = new YankiConnect(apiKey.value ? { key: apiKey.value } : {});
       decks = await client.deck.deckNamesAndIds();
       deckEntries = Object.entries(decks);
       cantConnect.value = false;
@@ -82,6 +140,8 @@
     } catch (e) {
       cantConnect.value = true;
       console.log(e);
+    } finally {
+      operationActive.value = false;
     }
   };
 
@@ -90,13 +150,17 @@
     NextStep();
   };
 
+  type SkipStats = { suspended: number; newCard: number; missingField: number; emptyWord: number };
+
   // Helper to build a single card payload from Anki card info
-  const buildCardPayload = (card: any, fieldName: string) => {
-    if (card.queue === -1 || card.queue === 0) return null; // Skip suspended & new/forgotten
+  const buildCardPayload = (card: any, fieldName: string, stats?: SkipStats) => {
+    if (card.queue === -1) { if (stats) stats.suspended++; return null; } // suspended
+    if (card.queue === 0) { if (stats) stats.newCard++; return null; } // new/forgotten
 
     const field = card.fields[fieldName];
+    if (field === undefined && stats) stats.missingField++; // selected field absent on this note type
     const word = stripRuby(field?.value?.trim() || '');
-    if (!word) return null;
+    if (!word) { if (stats && field !== undefined) stats.emptyWord++; return null; }
 
     const reviews = reviewByCard.get(card.cardId) ?? [];
 
@@ -150,15 +214,27 @@
       }
 
       isLoading.value = true;
-      cardsIds = await client.card.findCards({ query: `did:${selectedDeck.value}` });
-      const previewCards = await fetchCardsInfo([cardsIds[0]]);
-      selectedField.value = 0;
-      if (previewCards && previewCards.length > 0) {
-        fields.value = Object.entries(previewCards[0].fields || {});
-      } else {
-        fields.value = [];
+      operationActive.value = true;
+      try {
+        // Search by deck name rather than `did:`, because `did:` matches the exact deck only.
+        // Anki's `deck:"Name"` is recursive, so selecting a parent also pulls in every subdeck.
+        const deckName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0];
+        const query = deckName ? `deck:"${deckName.replace(/["*_\\]/g, '\\$&')}"` : `did:${selectedDeck.value}`;
+        cardsIds = await client.card.findCards({ query });
+        const previewCards = await fetchCardsInfo([cardsIds[0]]);
+        selectedField.value = 0;
+        if (previewCards && previewCards.length > 0) {
+          fields.value = Object.entries(previewCards[0].fields || {});
+        } else {
+          fields.value = [];
+        }
+      } catch (e) {
+        reportError(e, 'Failed to load deck from Anki.');
+        currentStep.value = 1;
+      } finally {
+        isLoading.value = false;
+        operationActive.value = false;
       }
-      isLoading.value = false;
     }
 
     if (currentStep.value == 3) {
@@ -175,6 +251,7 @@
 
     if (currentStep.value == 4) {
       isLoading.value = true;
+      operationActive.value = true;
       fetchProgress.value = 0;
       uploadProgress.value = 0;
       importPhase.value = 'fetch';
@@ -182,31 +259,36 @@
 
       const allSkippedWords: string[] = [];
       let skippedCountNoReviews = 0;
+      const skipStats: SkipStats = { suspended: 0, newCard: 0, missingField: 0, emptyWord: 0 };
 
       try {
-        // Fetch reviews only if requested
+        // Fetch reviews only if requested. cardReviews filters on the exact deck only, so to cover
+        // subdecks we query the selected deck plus every descendant (Anki encodes hierarchy as
+        // "Parent::Child" deck names). This mirrors the recursive deck:"Name" card search above.
         reviewByCard = new Map();
         if (importReviewHistory.value) {
-          const deckName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0];
-          if (deckName) {
-            const reviews = await client.statistic.cardReviews({
-              deck: deckName,
-              startID: 1,
-            });
+          const selectedName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0];
+          if (selectedName) {
+            const deckNames = deckEntries
+              .map(([name]) => name)
+              .filter((name) => name === selectedName || name.startsWith(selectedName + '::'));
 
-            // Build map incrementally
-            for (const [reviewTime, cardID, _usn, buttonPressed, _newInterval, _previousInterval, _newFactor, reviewDuration, _reviewType] of reviews) {
-              const existing = reviewByCard.get(cardID) ?? [];
-              existing.push({
-                Rating: buttonPressed,
-                ReviewDateTime: new Date(reviewTime),
-                ReviewDuration: reviewDuration,
-              });
-              reviewByCard.set(cardID, existing);
+            for (const name of deckNames) {
+              const reviews = await client.statistic.cardReviews({ deck: name, startID: 1 });
+
+              for (const [reviewTime, cardID, _usn, buttonPressed, _newInterval, _previousInterval, _newFactor, reviewDuration, _reviewType] of reviews) {
+                const existing = reviewByCard.get(cardID) ?? [];
+                existing.push({
+                  Rating: buttonPressed,
+                  ReviewDateTime: new Date(reviewTime),
+                  ReviewDuration: reviewDuration,
+                });
+                reviewByCard.set(cardID, existing);
+              }
+
+              // Clear raw array immediately to help GC
+              reviews.length = 0;
             }
-
-            // Clear raw array immediately to help GC
-            reviews.length = 0;
 
             // Sort and limit to 10 most recent reviews per card
             for (const [key, arr] of reviewByCard.entries()) {
@@ -250,7 +332,7 @@
           const allPayloads: any[] = [];
           for (const chunkCards of allChunkCards) {
             for (const card of chunkCards || []) {
-              const payload = buildCardPayload(card, selectedFieldName);
+              const payload = buildCardPayload(card, selectedFieldName, skipStats);
               if (!payload) continue;
               if (seenWords.has(payload.Card.Word)) continue;
               seenWords.add(payload.Card.Word);
@@ -291,7 +373,7 @@
 
             const chunkPayload: any[] = [];
             for (const card of chunkCards || []) {
-              const payload = buildCardPayload(card, selectedFieldName);
+              const payload = buildCardPayload(card, selectedFieldName, skipStats);
               if (payload) chunkPayload.push(payload);
             }
 
@@ -335,7 +417,14 @@
           message += `${skippedCountNoReviews} card${skippedCountNoReviews === 1 ? '' : 's'} skipped (no reviews)`;
         }
         if (!message) {
-          message = 'No cards were imported';
+          // Nothing was imported: explain why by reporting how each card was filtered out.
+          console.log('AnkiConnect import: 0 cards imported. Skip breakdown:', skipStats, 'field:', selectedFieldName);
+          const reasons: string[] = [];
+          if (skipStats.missingField > 0) reasons.push(`${skipStats.missingField} missing the "${selectedFieldName}" field (different note type?)`);
+          if (skipStats.emptyWord > 0) reasons.push(`${skipStats.emptyWord} with an empty "${selectedFieldName}" field`);
+          if (skipStats.newCard > 0) reasons.push(`${skipStats.newCard} new/unstudied`);
+          if (skipStats.suspended > 0) reasons.push(`${skipStats.suspended} suspended`);
+          message = reasons.length > 0 ? `No cards were imported — ${reasons.join(', ')}.` : 'No cards were imported.';
         } else {
           message += '.';
         }
@@ -348,13 +437,8 @@
         });
 
         if (allSkippedWords.length > 0) {
-          console.log('Skipped words (not parsed):', allSkippedWords);
-          toast.add({
-            severity: 'warn',
-            summary: 'Some words not found',
-            detail: `${allSkippedWords.length} words could not be parsed or were not in the dictionary. Check console for list.`,
-            life: 10000,
-          });
+          skippedWords.value = allSkippedWords;
+          showSkippedDialog.value = true;
         }
 
         // Notify parent to refresh vocabulary counts
@@ -363,10 +447,10 @@
         // Clear review map to free memory
         reviewByCard = new Map();
       } catch (error) {
-        console.error('Error importing Anki data:', error);
-        toast.add({ severity: 'error', detail: extractApiError(error, 'Failed to import data.'), life: 5000 });
+        reportError(error, 'Failed to import data.');
       } finally {
         isLoading.value = false;
+        operationActive.value = false;
         currentStep.value = 1;
       }
     }
@@ -397,6 +481,21 @@
         <p>
           Add words directly from Anki using the <a href="https://ankiweb.net/shared/info/2055492159" rel="nofollow" target="_blank">Anki Connect plugin</a>.
         </p>
+        <div class="flex flex-col gap-1 p-4 pb-0 max-w-md">
+          <label for="ankiApiKey" class="text-sm text-surface-500">API key (optional)</label>
+          <InputText
+            v-model="apiKey"
+            inputId="ankiApiKey"
+            name="ankiApiKey"
+            autocomplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+            placeholder="Only if you set an apiKey in AnkiConnect"
+            class="w-full"
+            @keyup.enter="Connect()"
+          />
+          <small class="text-surface-500">Leave blank unless you configured an <code>apiKey</code> in AnkiConnect's config.</small>
+        </div>
         <div class="p-4">
           <Button label="Connect to Anki" @click="Connect()" />
         </div>
@@ -470,6 +569,55 @@
       </div>
     </template>
   </Card>
+
+  <Dialog
+    v-model:visible="showSkippedDialog"
+    modal
+    header="Some words could not be imported"
+    class="w-[95vw] sm:w-[90vw] md:w-[36rem]"
+  >
+    <div class="flex flex-col gap-3">
+      <Message severity="warn" :closable="false">
+        {{ skippedWords.length }} word{{ skippedWords.length === 1 ? '' : 's' }} could not be parsed or {{ skippedWords.length === 1 ? 'was' : 'were' }} not
+        found in the dictionary.
+      </Message>
+      <div class="max-h-[50vh] overflow-y-auto rounded border border-surface-200 dark:border-surface-700 p-3">
+        <ul class="flex flex-col gap-1">
+          <li v-for="(word, index) in skippedWords" :key="index" class="font-noto-sans">{{ word }}</li>
+        </ul>
+      </div>
+    </div>
+    <template #footer>
+      <Button label="Close" @click="showSkippedDialog = false" />
+    </template>
+  </Dialog>
+
+  <Dialog
+    v-model:visible="showErrorDialog"
+    modal
+    header="An error occurred during import"
+    class="w-[95vw] sm:w-[90vw] md:w-[36rem]"
+  >
+    <div class="flex flex-col gap-3">
+      <Message severity="error" :closable="false">{{ errorMessage }}</Message>
+      <p class="text-sm text-surface-500">Please report these details if you need assistance.</p>
+      <details v-if="errorDetail" class="text-sm">
+        <summary class="cursor-pointer select-none text-surface-500">Technical details</summary>
+        <pre
+          class="mt-2 max-h-[40vh] overflow-auto whitespace-pre-wrap break-words rounded border border-surface-200 dark:border-surface-700 p-3 text-xs"
+        >{{ errorDetail }}</pre>
+      </details>
+    </div>
+    <template #footer>
+      <Button
+        :label="errorCopied ? 'Copied' : 'Copy details'"
+        :icon="errorCopied ? 'pi pi-check' : 'pi pi-copy'"
+        :severity="errorCopied ? 'success' : 'secondary'"
+        @click="copyErrorDetails"
+      />
+      <Button label="Close" @click="showErrorDialog = false" />
+    </template>
+  </Dialog>
 </template>
 
 <style scoped></style>

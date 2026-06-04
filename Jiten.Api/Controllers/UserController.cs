@@ -833,7 +833,8 @@ public class UserController(
             return Results.Ok(new
                               {
                                   imported = 0, updated = 0, skipped = skippedCount, reviewLogs = 0,
-                                  skippedWords = skippedWords.Take(50).ToList()
+                                  skippedWords = skippedWords.Take(50).ToList(),
+                                  skippedWordsNoReviews = skippedWordsNoReviews.Take(50).ToList(), skippedCountNoReviews
                               });
         }
 
