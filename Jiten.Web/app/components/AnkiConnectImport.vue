@@ -83,6 +83,11 @@
 
   const stripRuby = (text: string) => text.replace(/\[.*?\]/g, '');
 
+  // A Date built from corrupt/out-of-range Anki fields can be Invalid (NaN time),
+  // and calling toISOString() on it throws and aborts the whole import. Guard every
+  // date we serialise so a single malformed card can't take down the batch.
+  const isValidDate = (d: Date | null | undefined): d is Date => !!d && !Number.isNaN(d.getTime());
+
   async function ankiInvoke(action: string, params: Record<string, any> = {}): Promise<any> {
     const body: Record<string, any> = { action, version: 6, params };
     if (apiKey.value) body.key = apiKey.value;
@@ -172,18 +177,23 @@
     const stability = card.interval > 0 ? card.interval : 0;
     const difficulty = Math.max(1, Math.min(10, 10 - (card.factor - 1300) / 170.0));
 
-    const lastReview = reviews.length > 0 ? reviews[0].ReviewDateTime : null;
+    const firstReview = reviews.length > 0 ? reviews[0].ReviewDateTime : null;
+    const lastReview = isValidDate(firstReview) ? firstReview : null;
 
-    let due: Date;
-    if (card.queue === 1 || card.queue === 3) {
+    let due: Date | null;
+    // Only intraday learning (queue 1) stores `due` as a Unix timestamp. Review (2) and
+    // interday day-learning (3) store it as a day-number relative to collection creation,
+    // which we can't convert here — so reconstruct their due from lastReview/mod + interval.
+    if (card.queue === 1) {
       due = new Date(card.due * 1000);
+    } else if (lastReview) {
+      due = new Date(lastReview.getTime() + card.interval * 86400000);
     } else {
-      if (lastReview) {
-        due = new Date(lastReview.getTime() + card.interval * 86400000);
-      } else {
-        due = new Date(card.mod * 1000 + card.interval * 86400000);
-      }
+      due = new Date(card.mod * 1000 + card.interval * 86400000);
     }
+    // Due is required server-side; if corrupt fields produced an invalid instant,
+    // fall back to the last review, then to now, rather than throwing.
+    if (!isValidDate(due)) due = lastReview ?? new Date();
 
     return {
       Card: {
@@ -196,11 +206,13 @@
         State: state,
         LastReview: lastReview?.toISOString(),
       },
-      ReviewLogs: reviews.map((r) => ({
-        Rating: r.Rating,
-        ReviewDateTime: r.ReviewDateTime.toISOString(),
-        ReviewDuration: r.ReviewDuration,
-      })),
+      ReviewLogs: reviews
+        .filter((r) => isValidDate(r.ReviewDateTime))
+        .map((r) => ({
+          Rating: r.Rating,
+          ReviewDateTime: r.ReviewDateTime.toISOString(),
+          ReviewDuration: r.ReviewDuration,
+        })),
     };
   };
 
