@@ -252,8 +252,16 @@
     }
   }
 
+  const backRef = ref<HTMLElement | null>(null);
+  const answerAnnouncement = ref('');
+
   watch(() => props.isFlipped, (flipped) => {
-    if (!flipped) return;
+    if (!flipped) {
+      answerAnnouncement.value = '';
+      return;
+    }
+    answerAnnouncement.value = 'Answer revealed';
+    nextTick(() => backRef.value?.focus({ preventScroll: true }));
     const playWord = srsStore.studySettings.autoPlayWord;
     const example = cardExample.value;
     const playSentence = srsStore.studySettings.autoPlaySentence && example?.sentenceId && !sentenceBlurred.value;
@@ -283,6 +291,9 @@
     <div
       class="relative bg-surface-0 dark:bg-transparent rounded-2xl shadow-lg dark:shadow-none border border-surface-200 dark:border-surface-700 p-6 md:p-8"
     >
+      <!-- Screen-reader announcement when the answer is revealed -->
+      <div class="sr-only" role="status" aria-live="polite">{{ answerAnnouncement }}</div>
+
       <!-- Top bar: frequency rank + menu -->
       <div class="flex justify-end items-center gap-2 min-h-[1.25rem]">
         <div v-if="isFlipped && card.frequencyRank > 0 && srsStore.studySettings.showFrequencyRank" class="text-xs text-gray-400">
@@ -437,14 +448,22 @@
           </span>
         </div>
 
-        <div v-if="!isFlipped" class="text-sm text-surface-400 dark:text-surface-300 mt-6">
+        <div v-if="!isFlipped" class="text-sm text-surface-500 dark:text-surface-300 mt-6">
           <span class="md:hidden">Tap to reveal</span>
           <span class="hidden md:inline">Click or press {{ displayKeyName(srsStore.studySettings.keybinds.flipCard) }} to reveal</span>
         </div>
       </div>
 
       <!-- Back (shown when flipped) -->
-      <div v-if="isFlipped" class="mt-6 pt-6 border-t border-surface-200 dark:border-surface-700">
+      <Transition name="reveal">
+      <div
+        v-if="isFlipped"
+        ref="backRef"
+        role="region"
+        aria-label="Answer"
+        tabindex="-1"
+        class="mt-6 pt-6 border-t border-surface-200 dark:border-surface-700 focus:outline-none"
+      >
         <!-- Definitions -->
         <div class="mb-4">
           <template v-if="wordData">
@@ -618,6 +637,7 @@
         </div>
 
       </div>
+      </Transition>
     </div>
   </div>
 </template>
@@ -633,6 +653,25 @@
   font-size: 0.35em !important;
   font-weight: 700;
   color: light-dark(var(--p-surface-700), var(--p-surface-400));
+}
+
+/* Reveal animation for the answer side (enter only, so card advance stays snappy). */
+.reveal-enter-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.reveal-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-enter-active {
+    transition: none;
+  }
+  .reveal-enter-from {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 </style>

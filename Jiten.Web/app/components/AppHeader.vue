@@ -109,6 +109,19 @@
     },
   ]);
 
+  // Due-card badge on the global "Study" link (enrolled users only — enrollment stays hidden pre-1.0).
+  // Same formula as SrsSubNav so the header and in-section counts always agree.
+  const totalDue = computed(() => {
+    const ds = srs.dueSummary;
+    if (!ds) return 0;
+    return Math.min(ds.reviewsDue, ds.reviewBudgetLeft) + ds.newCardsAvailable;
+  });
+  const dueBadge = computed(() => (totalDue.value > 999 ? '999+' : String(totalDue.value)));
+
+  watch(() => auth.isAuthenticated && srs.srsEnrolled, (ok) => {
+    if (ok && !srs.dueSummary) srs.fetchDueSummary();
+  }, { immediate: true });
+
   const toggleSettings = (event: boolean) => {
     settings.value.toggle(event);
   };
@@ -129,7 +142,10 @@
         <!-- Desktop nav -->
         <nav class="hidden md:flex items-center space-x-4">
           <nuxt-link to="/decks/media" :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'">Media</nuxt-link>
-          <nuxt-link v-if="auth.isAuthenticated && srs.srsEnrolled" to="/srs/decks" :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'">Study</nuxt-link>
+          <nuxt-link v-if="auth.isAuthenticated && srs.srsEnrolled" to="/srs/decks" class="inline-flex items-center gap-1.5" :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'">
+            Study
+            <span v-if="totalDue > 0" class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100">{{ dueBadge }}</span>
+          </nuxt-link>
           <nuxt-link v-if="auth.isAuthenticated" to="/ratings" :class="route.path === '/ratings' ? 'font-semibold !text-purple-200' : '!text-white'">Ratings</nuxt-link>
           <nuxt-link to="/other" :class="route.path === '/other' ? 'font-semibold !text-purple-200' : '!text-white'">Tools</nuxt-link>
           <nuxt-link to="/faq" :class="route.path === '/faq' ? 'font-semibold !text-purple-200' : '!text-white'">FAQ</nuxt-link>
@@ -144,7 +160,6 @@
             title="Local Settings"
             severity="secondary"
             @mouseover="showSettings($event)"
-            @mouseleave="onSettingsMouseLeave"
             @click="toggleSettings($event)"
           >
             <Icon name="material-symbols-light:settings" />
@@ -175,7 +190,10 @@
         <div class="bg-indigo-800 rounded-lg shadow-lg divide-y divide-indigo-700">
           <div class="flex flex-col py-2">
             <nuxt-link to="/decks/media" class="py-2 px-3" :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Media</nuxt-link>
-            <nuxt-link v-if="auth.isAuthenticated && srs.srsEnrolled" to="/srs/decks" class="py-2 px-3" :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'">Study</nuxt-link>
+            <nuxt-link v-if="auth.isAuthenticated && srs.srsEnrolled" to="/srs/decks" class="py-2 px-3 flex items-center gap-2" :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">
+              Study
+              <span v-if="totalDue > 0" class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100">{{ dueBadge }}</span>
+            </nuxt-link>
             <nuxt-link v-if="auth.isAuthenticated" to="/profile" class="py-2 px-3" :class="route.path.startsWith('/profile') ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Profile</nuxt-link>
             <nuxt-link v-if="auth.isAuthenticated" to="/ratings" class="py-2 px-3" :class="route.path === '/ratings' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Ratings</nuxt-link>
             <nuxt-link v-if="auth.isAuthenticated" to="/settings" class="py-2 px-3" :class="route.path === '/settings' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Settings</nuxt-link>

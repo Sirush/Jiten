@@ -64,6 +64,11 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
   const pressedKey = ref<string | null>(null);
   let pressedTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  // Dwell guard: ignore an auto-"Good" from the same Space/Enter that just revealed the card,
+  // so a double-tapped reveal can't silently grade Good.
+  const REVEAL_DWELL_MS = 350;
+  let revealedAt = 0;
+
   function flashKey(key: string) {
     pressedKey.value = key;
     if (pressedTimeout) clearTimeout(pressedTimeout);
@@ -103,8 +108,9 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
       e.preventDefault();
       if (!store.isFlipped) {
         flashKey(kb.flipCard);
+        revealedAt = e.timeStamp;
         store.revealCard();
-      } else {
+      } else if (e.timeStamp - revealedAt >= REVEAL_DWELL_MS) {
         const goodKey = is4Btn ? kb.grade3 : kb.grade2;
         flashKey(goodKey);
         callbacks.onGrade(FsrsRating.Good);

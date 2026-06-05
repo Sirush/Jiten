@@ -182,7 +182,13 @@ public static class PartOfSpeechExtension
         return pos.Select(p => p.ToPartOfSpeechSection()).ToList();
     }
 
-    public static PartOfSpeechSection ToPartOfSpeechSection(this string pos)
+    public static PartOfSpeechSection ToPartOfSpeechSection(this string pos) => ToPartOfSpeechSection(pos.AsSpan());
+
+    /// <summary>
+    /// Span overload — avoids allocating a string when parsing Sudachi output token-by-token
+    /// (hot path in <c>WordInfo</c>).
+    /// </summary>
+    public static PartOfSpeechSection ToPartOfSpeechSection(ReadOnlySpan<char> pos)
     {
         return pos switch
         {

@@ -318,149 +318,158 @@
 
       <!-- Card appearance -->
       <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Card appearance</h3>
-      <div>
-        <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card front</label>
-        <div class="flex flex-col gap-2">
-          <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.showCardStatus" input-id="showCardStatus" />
-            <label for="showCardStatus" class="text-sm cursor-pointer">
-              Show card learning status
-              <Tooltip content="Display the card status (New, Review, Again) at the top of the card." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-          </div>
-          <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.showFuriganaOnFront" input-id="showFuriganaOnFront" />
-            <label for="showFuriganaOnFront" class="text-sm cursor-pointer">
-              Show furigana
-              <Tooltip content="Display furigana (reading hints) above kanji on the card front." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-          </div>
-          <div v-if="form.showFuriganaOnFront" class="flex items-center gap-2 ml-6">
-            <ToggleSwitch v-model="form.furiganaOnFrontNewOnly" input-id="furiganaOnFrontNewOnly" />
-            <label for="furiganaOnFrontNewOnly" class="text-sm cursor-pointer">
-              New cards only
-              <Tooltip content="Only show furigana on cards you haven't seen before. Review cards will show plain kanji." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-          </div>
-          <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.showConfusableReadings" input-id="showConfusableReadings" />
-            <label for="showConfusableReadings" class="text-sm cursor-pointer">
-              Show confusable readings
-              <Tooltip
-                content="When a kanji has multiple dictionary entries with different readings (e.g. 音 → おと/おん), show the other readings to help avoid mix-ups."
-                placement="right"
-              >
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-          </div>
+      <div class="flex flex-col md:flex-row md:items-start md:gap-6">
+        <!-- Live preview (top on mobile, right on desktop) -->
+        <div class="mb-4 md:mb-0 md:order-2 md:w-80 lg:w-96 xl:w-[30rem] md:shrink-0 md:sticky md:top-4">
+          <SrsCardPreview :settings="form" />
         </div>
-      </div>
-
-      <div>
-        <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Example sentence</label>
-        <div class="flex flex-col gap-2">
+        <!-- Toggle groups -->
+        <div class="flex-1 min-w-0 md:order-1 flex flex-col gap-4">
           <div>
-            <label class="text-sm mb-1 block">
-              Position
-              <Tooltip
-                content="Show an example sentence from the media where the word appears.<br>**Hidden** — no sentence shown.<br>**Front** — sentence visible before you flip the card (sentence card).<br>**Back** — sentence shown only after you flip."
-                placement="right"
-              >
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-            <SelectButton
-              v-model="form.exampleSentencePosition"
-              :options="exampleSentenceOptions"
-              option-label="label"
-              option-value="value"
-              :allow-empty="false"
-            />
+            <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card front</label>
+            <div class="flex flex-col gap-2">
+              <div class="flex items-center gap-2">
+                <ToggleSwitch v-model="form.showCardStatus" input-id="showCardStatus" />
+                <label for="showCardStatus" class="text-sm cursor-pointer">
+                  Show card learning status
+                  <Tooltip content="Display the card status (New, Review, Again) at the top of the card." placement="right">
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+              </div>
+              <div class="flex items-center gap-2">
+                <ToggleSwitch v-model="form.showFuriganaOnFront" input-id="showFuriganaOnFront" />
+                <label for="showFuriganaOnFront" class="text-sm cursor-pointer">
+                  Show furigana
+                  <Tooltip content="Display furigana (reading hints) above kanji on the card front." placement="right">
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+              </div>
+              <div v-if="form.showFuriganaOnFront" class="flex items-center gap-2 ml-6">
+                <ToggleSwitch v-model="form.furiganaOnFrontNewOnly" input-id="furiganaOnFrontNewOnly" />
+                <label for="furiganaOnFrontNewOnly" class="text-sm cursor-pointer">
+                  New cards only
+                  <Tooltip content="Only show furigana on cards you haven't seen before. Review cards will show plain kanji." placement="right">
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+              </div>
+              <div class="flex items-center gap-2">
+                <ToggleSwitch v-model="form.showConfusableReadings" input-id="showConfusableReadings" />
+                <label for="showConfusableReadings" class="text-sm cursor-pointer">
+                  Show confusable readings
+                  <Tooltip
+                    content="When a kanji has multiple dictionary entries with different readings (e.g. 音 → おと/おん), show the other readings to help avoid mix-ups."
+                    placement="right"
+                  >
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+              </div>
+            </div>
           </div>
-          <div v-if="form.exampleSentencePosition !== 'Hidden'" class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.blurExampleSentence" input-id="blurExampleSentence" />
-            <label for="blurExampleSentence" class="text-sm cursor-pointer">
-              Blur until clicked
-              <Tooltip content="Example sentence is blurred by default. Click it to reveal." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-          </div>
-          <div v-if="form.exampleSentencePosition !== 'Hidden'">
-            <label class="text-sm mb-1 block">
-              Sorting
-              <Tooltip
-                content="**Random** — a random example sentence each time.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences."
-                placement="right"
-              >
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-            <SelectButton
-              v-model="form.exampleSentenceSorting"
-              :options="exampleSentenceSortingOptions"
-              option-label="label"
-              option-value="value"
-              :allow-empty="false"
-            />
-          </div>
-        </div>
-      </div>
 
-      <div>
-        <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card back</label>
-        <div class="flex flex-col gap-2">
-          <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.showPitchAccent" input-id="showPitchAccent" />
-            <label for="showPitchAccent" class="text-sm cursor-pointer">
-              Pitch accent
-              <Tooltip content="Show the pitch accent pattern on the card back." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
+          <div>
+            <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Example sentence</label>
+            <div class="flex flex-col gap-2">
+              <div>
+                <label class="text-sm mb-1 block">
+                  Position
+                  <Tooltip
+                    content="Show an example sentence from the media where the word appears.<br>**Hidden** — no sentence shown.<br>**Front** — sentence visible before you flip the card (sentence card).<br>**Back** — sentence shown only after you flip."
+                    placement="right"
+                  >
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+                <SelectButton
+                  v-model="form.exampleSentencePosition"
+                  :options="exampleSentenceOptions"
+                  option-label="label"
+                  option-value="value"
+                  :allow-empty="false"
+                />
+              </div>
+              <div v-if="form.exampleSentencePosition !== 'Hidden'" class="flex items-center gap-2">
+                <ToggleSwitch v-model="form.blurExampleSentence" input-id="blurExampleSentence" />
+                <label for="blurExampleSentence" class="text-sm cursor-pointer">
+                  Blur until clicked
+                  <Tooltip content="Example sentence is blurred by default. Click it to reveal." placement="right">
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+              </div>
+              <div v-if="form.exampleSentencePosition !== 'Hidden'">
+                <label class="text-sm mb-1 block">
+                  Sorting
+                  <Tooltip
+                    content="**Random** — a random example sentence each time.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences."
+                    placement="right"
+                  >
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+                <SelectButton
+                  v-model="form.exampleSentenceSorting"
+                  :options="exampleSentenceSortingOptions"
+                  option-label="label"
+                  option-value="value"
+                  :allow-empty="false"
+                />
+              </div>
+            </div>
           </div>
-          <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.showFrequencyRank" input-id="showFrequencyRank" />
-            <label for="showFrequencyRank" class="text-sm cursor-pointer">
-              Frequency rank
-              <Tooltip content="Show how common the word is in Japanese, based on overall word frequency data." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-          </div>
-          <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.showKanjiBreakdown" input-id="showKanjiBreakdown" />
-            <label for="showKanjiBreakdown" class="text-sm cursor-pointer">
-              Kanji breakdown
-              <Tooltip content="Show the individual kanji that make up the word along with their usual meaning." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-          </div>
-          <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.showWordComposition" input-id="showWordComposition" />
-            <label for="showWordComposition" class="text-sm cursor-pointer">
-              Word composition
-              <Tooltip content="Show the component words that compose this word." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
-          </div>
-          <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.showWordUsedIn" input-id="showWordUsedIn" />
-            <label for="showWordUsedIn" class="text-sm cursor-pointer">
-              Word used in
-              <Tooltip content="Show other words that contain this word." placement="right">
-                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-              </Tooltip>
-            </label>
+
+          <div>
+            <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card back</label>
+            <div class="flex flex-col gap-2">
+              <div class="flex items-center gap-2">
+                <ToggleSwitch v-model="form.showPitchAccent" input-id="showPitchAccent" />
+                <label for="showPitchAccent" class="text-sm cursor-pointer">
+                  Pitch accent
+                  <Tooltip content="Show the pitch accent pattern on the card back." placement="right">
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+              </div>
+              <div class="flex items-center gap-2">
+                <ToggleSwitch v-model="form.showFrequencyRank" input-id="showFrequencyRank" />
+                <label for="showFrequencyRank" class="text-sm cursor-pointer">
+                  Frequency rank
+                  <Tooltip content="Show how common the word is in Japanese, based on overall word frequency data." placement="right">
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+              </div>
+              <div class="flex items-center gap-2">
+                <ToggleSwitch v-model="form.showKanjiBreakdown" input-id="showKanjiBreakdown" />
+                <label for="showKanjiBreakdown" class="text-sm cursor-pointer">
+                  Kanji breakdown
+                  <Tooltip content="Show the individual kanji that make up the word along with their usual meaning." placement="right">
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+              </div>
+              <div class="flex items-center gap-2">
+                <ToggleSwitch v-model="form.showWordComposition" input-id="showWordComposition" />
+                <label for="showWordComposition" class="text-sm cursor-pointer">
+                  Word composition
+                  <Tooltip content="Show the component words that compose this word." placement="right">
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+              </div>
+              <div class="flex items-center gap-2">
+                <ToggleSwitch v-model="form.showWordUsedIn" input-id="showWordUsedIn" />
+                <label for="showWordUsedIn" class="text-sm cursor-pointer">
+                  Word used in
+                  <Tooltip content="Show other words that contain this word." placement="right">
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       </div>

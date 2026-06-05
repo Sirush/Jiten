@@ -177,6 +177,8 @@ export interface FsrsParametersResponse {
   parameters: string;
   isDefault: boolean;
   desiredRetention: number;
+  reviewCount: number;
+  minimumReviewsForOptimize: number;
 }
 
 export interface SrsRecomputeBatchResponse {
@@ -784,6 +786,8 @@ export interface StudyDeckDto {
   unseenCount: number;
   learningCount: number;
   reviewCount: number;
+  youngCount: number;
+  matureCount: number;
   masteredCount: number;
   blacklistedCount: number;
   suspendedCount: number;
@@ -956,6 +960,7 @@ export interface DueSummaryDto {
   reviewsDue: number;
   newCardsAvailable: number;
   reviewsToday: number;
+  newCardsToday: number;
   reviewBudgetLeft: number;
   nextReviewAt: string | null;
 }
@@ -984,6 +989,37 @@ export interface DeckStreakDto {
   isNewRecord: boolean;
   totalReviewDays: number;
   recentDays: { date: string; count: number }[];
+}
+
+export interface RetentionBucketDto {
+  total: number;
+  passed: number;
+  retention: number | null;
+}
+
+export interface RetentionWindowDto {
+  overall: RetentionBucketDto;
+  young: RetentionBucketDto;
+  mature: RetentionBucketDto;
+}
+
+export interface PeriodRetentionDto {
+  period: string;
+  overall: RetentionBucketDto;
+  young: RetentionBucketDto;
+  mature: RetentionBucketDto;
+}
+
+export interface RetentionResponseDto {
+  desiredRetention: number;
+  matureThresholdDays: number;
+  windows: {
+    last30: RetentionWindowDto;
+    last90: RetentionWindowDto;
+    all: RetentionWindowDto;
+  };
+  weekly: PeriodRetentionDto[];
+  monthly: PeriodRetentionDto[];
 }
 
 export interface StudyHeatmapResponse {

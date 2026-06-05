@@ -95,12 +95,12 @@ public class WordInfo
             return;
         }
 
-        PartOfSpeech = posSpan[..commaPositions[0]].ToString().ToPartOfSpeech();
-        PartOfSpeechSection1 = posSpan[(commaPositions[0] + 1)..commaPositions[1]].ToString().ToPartOfSpeechSection();
-        PartOfSpeechSection2 = posSpan[(commaPositions[1] + 1)..commaPositions[2]].ToString().ToPartOfSpeechSection();
-        PartOfSpeechSection3 = (commaCount >= 4
+        PartOfSpeech = PosMapper.FromAny(posSpan[..commaPositions[0]]);
+        PartOfSpeechSection1 = PartOfSpeechExtension.ToPartOfSpeechSection(posSpan[(commaPositions[0] + 1)..commaPositions[1]]);
+        PartOfSpeechSection2 = PartOfSpeechExtension.ToPartOfSpeechSection(posSpan[(commaPositions[1] + 1)..commaPositions[2]]);
+        PartOfSpeechSection3 = PartOfSpeechExtension.ToPartOfSpeechSection(commaCount >= 4
             ? posSpan[(commaPositions[2] + 1)..commaPositions[3]]
-            : posSpan[(commaPositions[2] + 1)..]).ToString().ToPartOfSpeechSection();
+            : posSpan[(commaPositions[2] + 1)..]);
 
         // Extract remaining fields
         NormalizedForm = span[(tabPositions[1] + 1)..tabPositions[2]].ToString();

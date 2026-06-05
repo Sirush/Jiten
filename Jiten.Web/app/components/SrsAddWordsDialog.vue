@@ -163,12 +163,7 @@
     fileExcludedWordIds.value = s;
   }
 
-  const fullTextOnlyExtensions = ['.epub', '.srt', '.ass', '.ssa', '.mokuro'];
-  const fileIsFullTextOnly = computed(() => {
-    if (!importFile.value) return false;
-    const ext = importFile.value.name.replace(/^.*\./, '.').toLowerCase();
-    return fullTextOnlyExtensions.includes(ext);
-  });
+  const fileIsFullTextOnly = computed(() => importFile.value ? isFullTextOnlyFile(importFile.value.name) : false);
 
   const dragging = ref(false);
 
@@ -399,11 +394,11 @@
                   <div class="text-sm text-gray-500 text-center">
                     <span class="font-medium text-purple-600 dark:text-purple-400">Choose a file</span> or drag and drop
                   </div>
-                  <div class="text-xs text-gray-400">.txt, .csv, .tsv, .epub, .srt, .ass, .mokuro</div>
+                  <div class="text-xs text-gray-400">{{ IMPORT_ACCEPT_EXTENSIONS.join(', ') }}</div>
                   <input
                     ref="fileInput"
                     type="file"
-                    accept=".txt,.csv,.tsv,.epub,.srt,.ass,.ssa,.mokuro"
+                    :accept="IMPORT_ACCEPT_ATTR"
                     class="hidden"
                     @change="onFileSelect"
                   />

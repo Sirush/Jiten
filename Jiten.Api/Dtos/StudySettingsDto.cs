@@ -55,7 +55,7 @@ public class StudySettingsDto
     public int NewCardsPerDay { get; set; } = 20;
 
     [JsonPropertyName("maxReviewsPerDay")]
-    public int MaxReviewsPerDay { get; set; } = 1000;
+    public int MaxReviewsPerDay { get; set; } = 200;
 
     [JsonPropertyName("batchSize")]
     public int BatchSize { get; set; } = 100;
@@ -97,7 +97,7 @@ public class StudySettingsDto
     public bool ShowWordUsedIn { get; set; } = true;
 
     [JsonPropertyName("showNextInterval")]
-    public bool ShowNextInterval { get; set; }
+    public bool ShowNextInterval { get; set; } = true;
 
     [JsonPropertyName("showKeybinds")]
     public bool ShowKeybinds { get; set; } = true;

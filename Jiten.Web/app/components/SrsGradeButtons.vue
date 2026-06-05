@@ -36,15 +36,15 @@
   }
 
   const buttons4 = computed(() => [
-    { rating: FsrsRating.Again, label: 'Again', key: props.keybinds.grade1, severity: 'danger' as const, swipe: '← swipe' },
-    { rating: FsrsRating.Hard, label: 'Hard', key: props.keybinds.grade2, severity: 'warn' as const, swipe: null },
-    { rating: FsrsRating.Good, label: 'Good', key: props.keybinds.grade3, severity: 'success' as const, swipe: 'swipe →' },
-    { rating: FsrsRating.Easy, label: 'Easy', key: props.keybinds.grade4, severity: 'info' as const, swipe: null },
+    { rating: FsrsRating.Again, label: 'Again', key: props.keybinds.grade1, severity: 'danger' as const, swipe: '← swipe', mono: 'mono-1' },
+    { rating: FsrsRating.Hard, label: 'Hard', key: props.keybinds.grade2, severity: 'warn' as const, swipe: null, mono: 'mono-2' },
+    { rating: FsrsRating.Good, label: 'Good', key: props.keybinds.grade3, severity: 'success' as const, swipe: 'swipe →', mono: 'mono-3' },
+    { rating: FsrsRating.Easy, label: 'Easy', key: props.keybinds.grade4, severity: 'info' as const, swipe: null, mono: 'mono-4' },
   ]);
 
   const buttons2 = computed(() => [
-    { rating: FsrsRating.Again, label: 'Again', key: props.keybinds.grade1, severity: 'danger' as const, swipe: '← swipe' },
-    { rating: FsrsRating.Good, label: 'Good', key: props.keybinds.grade2, severity: 'success' as const, swipe: 'swipe →' },
+    { rating: FsrsRating.Again, label: 'Again', key: props.keybinds.grade1, severity: 'danger' as const, swipe: '← swipe', mono: 'mono-1' },
+    { rating: FsrsRating.Good, label: 'Good', key: props.keybinds.grade2, severity: 'success' as const, swipe: 'swipe →', mono: 'mono-3' },
   ]);
 
   function formatInterval(seconds: number): string {
@@ -87,7 +87,7 @@
           <div class="flex flex-col items-center sm:flex-row sm:gap-0">
             <Icon name="material-symbols:undo" size="16" class="sm:hidden" />
             <span class="text-[10px] sm:text-sm sm:leading-normal">Undo</span>
-            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-60 hidden sm:inline">{{ displayKeyName(props.keybinds.undo) }}</span>
+            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-80 hidden sm:inline">{{ displayKeyName(props.keybinds.undo) }}</span>
           </div>
         </template>
       </Button>
@@ -104,7 +104,7 @@
       >
         <template #default>
           <span>Show Answer</span>
-          <span v-if="showKeybinds && !compact" class="keybind ml-2 text-xs opacity-60">{{ displayKeyName(props.keybinds.flipCard) }}</span>
+          <span v-if="showKeybinds && !compact" class="keybind ml-2 text-xs opacity-80">{{ displayKeyName(props.keybinds.flipCard) }}</span>
         </template>
       </Button>
       <button
@@ -127,15 +127,15 @@
         :disabled="props.disabled"
         :aria-label="`Grade: ${btn.label}`"
         class="grade-btn flex-1"
-        :class="[{ 'kb-pressed': props.pressedKey === btn.key }, compact ? 'min-h-[36px]' : 'min-h-[44px] md:min-h-[72px]']"
+        :class="[{ 'kb-pressed': props.pressedKey === btn.key }, props.monochrome ? btn.mono : '', compact ? 'min-h-[36px]' : 'min-h-[44px] md:min-h-[72px]']"
         @click="emit('grade', btn.rating)"
       >
         <template #default>
           <div class="flex flex-col items-center">
-            <span v-if="!compact && getIntervalForRating(btn.rating)" class="interval-hint text-[11px] opacity-50">{{ getIntervalForRating(btn.rating) }}</span>
+            <span v-if="!compact && getIntervalForRating(btn.rating)" class="interval-hint text-[11px] opacity-80">{{ getIntervalForRating(btn.rating) }}</span>
             <span>{{ btn.label }}</span>
-            <span v-if="showKeybinds && !compact" class="keybind text-xs opacity-60">{{ displayKeyName(btn.key) }}</span>
-            <span v-if="btn.swipe && props.showSwipeHints" class="swipe-hint text-[10px] opacity-50">{{ btn.swipe }}</span>
+            <span v-if="showKeybinds && !compact" class="keybind text-xs opacity-80">{{ displayKeyName(btn.key) }}</span>
+            <span v-if="btn.swipe && props.showSwipeHints" class="swipe-hint text-[10px] opacity-80">{{ btn.swipe }}</span>
           </div>
         </template>
       </Button>
@@ -165,7 +165,7 @@
           <div class="flex flex-col items-center sm:flex-row sm:gap-1.5">
             <Icon name="material-symbols:block" size="16" />
             <span class="text-[10px] sm:text-sm sm:leading-normal">Blacklist</span>
-            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-60 hidden sm:inline">{{ displayKeyName(props.keybinds.blacklist) }}</span>
+            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-80 hidden sm:inline">{{ displayKeyName(props.keybinds.blacklist) }}</span>
           </div>
         </template>
       </Button>
@@ -184,7 +184,7 @@
           <div class="flex flex-col items-center sm:flex-row sm:gap-1.5">
             <Icon name="material-symbols:star" size="16" />
             <span class="text-[10px] sm:text-sm sm:leading-normal">Master</span>
-            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-60 hidden sm:inline">{{ displayKeyName(props.keybinds.master) }}</span>
+            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-80 hidden sm:inline">{{ displayKeyName(props.keybinds.master) }}</span>
           </div>
         </template>
       </Button>
@@ -204,7 +204,7 @@
           <div class="flex flex-col items-center sm:flex-row sm:gap-1.5">
             <Icon name="material-symbols:undo" size="16" />
             <span class="text-[10px] sm:text-sm sm:leading-normal">Undo</span>
-            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-60 hidden sm:inline">{{ displayKeyName(props.keybinds.undo) }}</span>
+            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-80 hidden sm:inline">{{ displayKeyName(props.keybinds.undo) }}</span>
           </div>
         </template>
       </Button>
@@ -228,7 +228,7 @@
         <div class="flex flex-col gap-1 min-w-[140px]">
           <button
             :disabled="props.disabled"
-            class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left disabled:opacity-50"
+            class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left disabled:opacity-80"
             @click="emit('bury'); morePopover?.hide()"
           >
             <Icon name="material-symbols:visibility-off-outline" size="16" />
@@ -236,7 +236,7 @@
           </button>
           <button
             :disabled="props.disabled"
-            class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left disabled:opacity-50"
+            class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left disabled:opacity-80"
             @click="emit('suspend'); morePopover?.hide()"
           >
             <Icon name="material-symbols:pause-circle-outline" size="16" />
@@ -244,7 +244,7 @@
           </button>
           <button
             :disabled="props.disabled"
-            class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left disabled:opacity-50"
+            class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left disabled:opacity-80"
             @click="emit('forget', $event); morePopover?.hide()"
           >
             <Icon name="material-symbols:refresh" size="16" />
@@ -267,6 +267,21 @@
 .grade-btn.p-button {
   font-weight: 900 !important;
   border-width: 3px !important;
+}
+
+/* Monochrome theme: differentiate the grade buttons by fill/border instead of colour. */
+.grade-btn.mono-1.p-button {
+  background-color: light-dark(var(--p-surface-300), var(--p-surface-600)) !important;
+}
+.grade-btn.mono-2.p-button {
+  background-color: light-dark(var(--p-surface-100), var(--p-surface-800)) !important;
+}
+.grade-btn.mono-3.p-button {
+  background-color: transparent !important;
+}
+.grade-btn.mono-4.p-button {
+  background-color: transparent !important;
+  border-style: dashed !important;
 }
 
 .kb-pressed.p-button {

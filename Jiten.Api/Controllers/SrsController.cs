@@ -41,7 +41,7 @@ public class SrsController(
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
 
-        if (!debounceService.TryAcquire(userId, request.WordId, request.ReadingIndex))
+        if (!debounceService.TryAcquire("undo", userId, request.WordId, request.ReadingIndex))
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
         await using var transaction = await userContext.Database.BeginTransactionAsync();
@@ -146,7 +146,7 @@ public class SrsController(
                 return Results.Content(cached, "application/json");
         }
 
-        if (!debounceService.TryAcquire(userId, request.WordId, request.ReadingIndex))
+        if (!debounceService.TryAcquire("review", userId, request.WordId, request.ReadingIndex))
         {
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
         }
@@ -363,11 +363,15 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var isDefault = IsSettingsDefault(parameters, desiredRetention);
+        var reviewCount = await userContext.FsrsReviewLogs
+            .CountAsync(r => r.Card.UserId == userId);
         var response = new FsrsParametersResponse
         {
             Parameters = SerializeParametersCsv(parameters),
             IsDefault = isDefault,
-            DesiredRetention = desiredRetention
+            DesiredRetention = desiredRetention,
+            ReviewCount = reviewCount,
+            MinimumReviewsForOptimize = FsrsOptimizer.MinimumReviews
         };
 
         return Results.Ok(response);
@@ -594,7 +598,7 @@ public class SrsController(
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
 
-        if (!debounceService.TryAcquire(userId, request.WordId, request.ReadingIndex))
+        if (!debounceService.TryAcquire("state", userId, request.WordId, request.ReadingIndex))
         {
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
         }

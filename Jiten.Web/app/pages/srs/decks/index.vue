@@ -5,6 +5,7 @@
   import { DeckOrder, MediaType, StudyDeckType, type StudyDeckDto } from '~/types';
   import { Bar } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip as ChartTooltip } from 'chart.js';
+  import ChartDataLabels from 'chartjs-plugin-datalabels';
 
   ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip);
 
@@ -100,6 +101,10 @@
     return pct(deck.masteredCount + deck.reviewCount, deck.totalWords);
   }
 
+  function maturePct(deck: StudyDeckDto) {
+    return pct(deck.masteredCount + deck.matureCount, deck.totalWords);
+  }
+
   function combinedPct(deck: StudyDeckDto) {
     return pct(deck.masteredCount + deck.reviewCount + deck.learningCount, deck.totalWords);
   }
@@ -193,6 +198,15 @@
     return Math.min(ds.reviewsDue, ds.reviewBudgetLeft) + ds.newCardsAvailable;
   });
 
+  const goalReviewsDone = computed(() => srsStore.dueSummary?.reviewsToday ?? 0);
+  const goalReviewsTarget = computed(() => {
+    const ds = srsStore.dueSummary;
+    if (!ds) return 0;
+    return ds.reviewsToday + Math.min(ds.reviewsDue, ds.reviewBudgetLeft);
+  });
+  const goalNewDone = computed(() => srsStore.dueSummary?.newCardsToday ?? 0);
+  const goalNewTarget = computed(() => srsStore.studySettings.newCardsPerDay);
+
   const CELL = 10;
   const GAP = 2;
   const WEEKS = 12;
@@ -274,11 +288,14 @@
         return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
       }),
       datasets: [{
-        data: forecast.days.map(d => d.count),
+        // Zero days → null so chart.js draws no bar (minBarLength would otherwise stub them);
+        // non-zero days keep the minBarLength floor so a 1-review day stays visible next to a 180 spike.
+        data: forecast.days.map(d => d.count === 0 ? null : d.count),
         backgroundColor: forecast.days.map((_, i) =>
           i === 0 ? 'rgba(59, 130, 246, 0.8)' : 'rgba(168, 85, 247, 0.6)',
         ),
         borderRadius: 3,
+        minBarLength: 4,
       }],
     };
   });
@@ -286,10 +303,27 @@
   const forecastChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    // Headroom inside the canvas so the always-on label above the first bar isn't clipped.
+    layout: { padding: { top: 14 } },
+    // Hover/tap anywhere along a column reveals that day — no need to hit the thin bar.
+    interaction: { mode: 'index' as const, intersect: false },
     plugins: {
       legend: { display: false },
-      datalabels: { display: false },
+      // Always show the first (current) day's count so it's readable without hovering (mobile-friendly).
+      datalabels: {
+        display: (ctx: any) => ctx.dataIndex === 0,
+        anchor: 'end' as const,
+        align: 'end' as const,
+        offset: 0,
+        clamp: true,
+        clip: false,
+        color: 'rgb(59, 130, 246)',
+        font: { weight: 'bold' as const, size: 11 },
+        formatter: (value: number) => value,
+      },
       tooltip: {
+        mode: 'index' as const,
+        intersect: false,
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
         titleColor: '#fff',
         bodyColor: '#fff',
@@ -306,7 +340,7 @@
             return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
           },
           label: (context: any) => {
-            const count = context.raw as number;
+            const count = srsStore.reviewForecast30d?.days[context.dataIndex]?.count ?? 0;
             return `${count} review${count !== 1 ? 's' : ''}`;
           },
         },
@@ -319,6 +353,7 @@
       },
       y: {
         beginAtZero: true,
+        grace: '15%',
         grid: { color: 'rgba(0, 0, 0, 0.06)' },
         ticks: { precision: 0 },
       },
@@ -328,42 +363,15 @@
 
 <template>
   <div class="container mx-auto p-2 md:p-4">
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-6">
-      <h2 class="text-2xl font-bold">Study Decks</h2>
+    <SrsSubNav />
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
+      <h1 class="text-2xl font-bold">Study Decks</h1>
       <div class="flex gap-2">
-        <Button icon="pi pi-plus" label="Add Deck" class="!hidden sm:!inline-flex" @click="showAddDialog = true" />
-        <Button icon="pi pi-plus" class="sm:!hidden" @click="showAddDialog = true" />
-        <Button
-          v-if="srsStore.studyDecks.length > 0 || totalDue > 0"
-          icon="pi pi-play"
-          :label="!srsStore.dueSummary ? 'Study ...' : totalDue > 0 ? `Study (${totalDue})` : 'Study'"
-          :severity="totalDue > 0 ? 'success' : 'secondary'"
-          class="!hidden sm:!inline-flex"
-          @click="startStudy"
-        />
-        <Button
-          v-if="srsStore.studyDecks.length > 0 || totalDue > 0"
-          icon="pi pi-play"
-          :label="!srsStore.dueSummary ? '...' : totalDue > 0 ? String(totalDue) : undefined"
-          :severity="totalDue > 0 ? 'success' : 'secondary'"
-          class="sm:!hidden"
-          @click="startStudy"
-        />
         <Tooltip content="Refresh decks and due counts" placement="bottom">
           <Button icon="pi pi-refresh" severity="secondary" :loading="refreshing" @click="refresh" />
         </Tooltip>
-        <NuxtLink to="/settings/cards">
-          <Button icon="pi pi-list" class="sm:!hidden" severity="secondary" />
-          <Button icon="pi pi-list" label="My Cards" severity="secondary" class="!hidden sm:!inline-flex" />
-        </NuxtLink>
-        <NuxtLink to="/srs/history">
-          <Button icon="pi pi-history" class="sm:!hidden" severity="secondary" />
-          <Button icon="pi pi-history" label="History" severity="secondary" class="!hidden sm:!inline-flex" />
-        </NuxtLink>
-        <NuxtLink to="/settings/srs">
-          <Button icon="pi pi-cog" class="sm:!hidden" severity="secondary" />
-          <Button icon="pi pi-cog" label="Settings" severity="secondary" class="!hidden sm:!inline-flex" />
-        </NuxtLink>
+        <Button icon="pi pi-plus" label="Add Deck" class="!hidden sm:!inline-flex" @click="showAddDialog = true" />
+        <Button icon="pi pi-plus" class="sm:!hidden" @click="showAddDialog = true" />
       </div>
     </div>
 
@@ -372,10 +380,19 @@
       v-if="!srsStore.dueSummary"
       class="mb-6 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden"
     >
-      <div class="grid grid-cols-2 md:grid-cols-4 divide-x divide-surface-200 dark:divide-surface-700">
-        <div v-for="i in 4" :key="i" class="flex items-center justify-center gap-2 py-3 px-3">
-          <Skeleton width="2.5rem" height="2rem" />
-          <Skeleton width="3rem" height="0.75rem" />
+      <div class="flex flex-col md:flex-row">
+        <div class="flex items-center gap-3 py-3 px-4 border-b md:border-b-0 md:border-r border-surface-200 dark:border-surface-700">
+          <Skeleton shape="circle" width="96px" height="96px" />
+          <div class="flex flex-col gap-2">
+            <Skeleton width="4rem" height="0.75rem" />
+            <Skeleton width="3rem" height="0.75rem" />
+          </div>
+        </div>
+        <div class="grid grid-cols-3 divide-x divide-surface-200 dark:divide-surface-700 flex-1">
+          <div v-for="i in 3" :key="i" class="flex flex-col items-center justify-center gap-2 py-3 px-3">
+            <Skeleton width="2.5rem" height="2rem" />
+            <Skeleton width="3rem" height="0.75rem" />
+          </div>
         </div>
       </div>
     </div>
@@ -385,51 +402,52 @@
       v-else
       class="mb-6 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden"
     >
-      <div class="grid grid-cols-2 md:grid-cols-4 divide-x divide-surface-200 dark:divide-surface-700">
-        <button
-          class="flex items-center justify-center gap-2 py-3 px-3 transition-colors hover:bg-surface-50 dark:hover:bg-surface-800 border-b md:border-b-0 border-surface-200 dark:border-surface-700"
-          :class="srsStore.dueSummary.reviewsDue > 0 ? 'cursor-pointer' : 'opacity-50 cursor-default'"
-          @click="srsStore.dueSummary!.reviewsDue > 0 && startStudy()"
-        >
-          <span
-            class="text-2xl font-bold tabular-nums"
-            :class="srsStore.dueSummary.reviewsDue > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'"
-          >{{ srsStore.dueSummary.reviewsDue }}</span>
-          <span class="text-xs text-gray-500 dark:text-gray-400">Reviews</span>
-        </button>
-
-        <button
-          class="flex items-center justify-center gap-2 py-3 px-3 transition-colors hover:bg-surface-50 dark:hover:bg-surface-800 border-b md:border-b-0 border-surface-200 dark:border-surface-700"
-          :class="srsStore.dueSummary.newCardsAvailable > 0 ? 'cursor-pointer' : 'opacity-50 cursor-default'"
-          @click="srsStore.dueSummary!.newCardsAvailable > 0 && startStudy()"
-        >
-          <span
-            class="text-2xl font-bold tabular-nums"
-            :class="srsStore.dueSummary.newCardsAvailable > 0 ? 'text-green-400 dark:text-green-600' : 'text-gray-400 dark:text-gray-500'"
-          >{{ srsStore.dueSummary.newCardsAvailable }}</span>
-          <span class="text-xs text-gray-500 dark:text-gray-400">New</span>
-        </button>
-
-        <div class="flex items-center justify-center gap-2 py-3 px-3">
-          <span
-            class="text-2xl font-bold tabular-nums"
-            :class="srsStore.dueSummary.reviewsToday > 0 ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400 dark:text-gray-500'"
-          >{{ srsStore.dueSummary.reviewsToday }}</span>
-          <span class="text-xs text-gray-500 dark:text-gray-400">Done Today</span>
+      <div class="flex flex-col md:flex-row">
+        <!-- Today zone: progress ring -->
+        <div class="flex flex-col items-center md:items-start gap-1.5 py-3 px-4 border-b md:border-b-0 md:border-r border-surface-200 dark:border-surface-700">
+          <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-500">Today</span>
+          <GoalRing
+            :reviews-done="goalReviewsDone"
+            :reviews-target="goalReviewsTarget"
+            :new-done="goalNewDone"
+            :new-target="goalNewTarget"
+            :total-to-study="totalDue"
+          />
         </div>
 
-        <div class="flex items-center justify-center gap-2 py-3 px-3">
-          <template v-if="totalDue === 0 && nextReviewText">
-            <span class="text-base font-bold tabular-nums text-gray-600 dark:text-gray-300">{{ nextReviewText }}</span>
-            <span class="text-xs text-gray-500 dark:text-gray-400">Next Review</span>
-          </template>
-          <template v-else>
-            <span
-              class="text-2xl font-bold tabular-nums"
-              :class="totalDue > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-400 dark:text-gray-500'"
-            >{{ totalDue }}</span>
-            <span class="text-xs text-gray-500 dark:text-gray-400">Total</span>
-          </template>
+        <!-- Due now zone: remaining queue -->
+        <div class="flex-1 flex flex-col">
+          <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-500 px-3 pt-3">Due now</span>
+          <div class="grid grid-cols-3 divide-x divide-surface-200 dark:divide-surface-700 flex-1">
+            <button
+              class="flex flex-col items-center justify-center gap-0.5 py-3 px-3 transition-colors hover:bg-surface-50 dark:hover:bg-surface-800"
+              :class="srsStore.dueSummary.reviewsDue > 0 ? 'cursor-pointer' : 'opacity-50 cursor-default'"
+              @click="srsStore.dueSummary!.reviewsDue > 0 && startStudy()"
+            >
+              <span
+                class="text-2xl font-bold tabular-nums"
+                :class="srsStore.dueSummary.reviewsDue > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'"
+              >{{ srsStore.dueSummary.reviewsDue }}</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">Reviews</span>
+            </button>
+
+            <button
+              class="flex flex-col items-center justify-center gap-0.5 py-3 px-3 transition-colors hover:bg-surface-50 dark:hover:bg-surface-800"
+              :class="srsStore.dueSummary.newCardsAvailable > 0 ? 'cursor-pointer' : 'opacity-50 cursor-default'"
+              @click="srsStore.dueSummary!.newCardsAvailable > 0 && startStudy()"
+            >
+              <span
+                class="text-2xl font-bold tabular-nums"
+                :class="srsStore.dueSummary.newCardsAvailable > 0 ? 'text-green-400 dark:text-green-600' : 'text-gray-400 dark:text-gray-500'"
+              >{{ srsStore.dueSummary.newCardsAvailable }}</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">New</span>
+            </button>
+
+            <div class="flex flex-col items-center justify-center gap-0.5 py-3 px-3">
+              <span class="text-base font-bold tabular-nums text-gray-600 dark:text-gray-300">{{ nextReviewText ?? '—' }}</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">Next review</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -495,11 +513,16 @@
             </div>
           </div>
           <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">Upcoming reviews</div>
-          <div :style="{ height: `${7 * (CELL + GAP) - GAP}px` }">
-            <Bar :data="forecastChartData" :options="forecastChartOptions" />
+          <div :style="{ height: `${7 * (CELL + GAP) - GAP + 24}px` }">
+            <Bar :data="forecastChartData" :options="forecastChartOptions" :plugins="[ChartDataLabels]" />
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Measured retention -->
+    <div v-if="srsStore.studySettings.showReviewActivity && srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0" class="mb-6">
+      <SrsRetentionPanel />
     </div>
 
     <!-- Deck Skeletons -->
@@ -636,8 +659,9 @@
                 </div>
                 <div v-if="deck.totalWords > 0" class="mt-2">
                   <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
-                    <div class="absolute bg-purple-500/40 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
-                    <div class="absolute bg-purple-500 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                    <div class="absolute bg-purple-500/30 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
+                    <div class="absolute bg-purple-500/60 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                    <div class="absolute bg-purple-600 h-6 rounded-lg transition-all duration-700" :style="{ width: maturePct(deck) + '%' }" />
                     <span class="absolute inset-0 flex items-center pl-2 text-xs font-bold z-10 text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]">
                       {{ knownPct(deck) }}%
                     </span>
@@ -645,7 +669,8 @@
                   <div class="flex gap-3 mt-1 text-xs text-gray-500 flex-wrap">
                     <span>{{ deck.unseenCount }} unknown</span>
                     <span class="text-purple-400">{{ deck.learningCount }} learning</span>
-                    <span class="text-purple-600">{{ deck.reviewCount + deck.masteredCount }} known</span>
+                    <span class="text-purple-500">{{ deck.youngCount }} young</span>
+                    <span class="text-purple-700 dark:text-purple-300">{{ deck.matureCount + deck.masteredCount }} mature</span>
                     <span v-if="deck.dueReviewCount > 0" class="text-blue-500 font-semibold">{{ deck.dueReviewCount }} due</span>
                   </div>
                   <div v-if="deck.warning" class="text-xs text-yellow-500 mt-1">{{ deck.warning }}</div>
@@ -818,8 +843,9 @@
                 </div>
                 <div v-if="deck.totalWords > 0" class="mt-2">
                   <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
-                    <div class="absolute bg-purple-500/40 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
-                    <div class="absolute bg-purple-500 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                    <div class="absolute bg-purple-500/30 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
+                    <div class="absolute bg-purple-500/60 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                    <div class="absolute bg-purple-600 h-6 rounded-lg transition-all duration-700" :style="{ width: maturePct(deck) + '%' }" />
                     <span class="absolute inset-0 flex items-center pl-2 text-xs font-bold z-10 text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]">
                       {{ knownPct(deck) }}%
                     </span>
@@ -827,7 +853,8 @@
                   <div class="flex gap-3 mt-1 text-xs text-gray-500 flex-wrap">
                     <span>{{ deck.unseenCount }} unseen</span>
                     <span class="text-purple-400">{{ deck.learningCount }} learning</span>
-                    <span class="text-purple-600">{{ deck.reviewCount + deck.masteredCount }} known</span>
+                    <span class="text-purple-500">{{ deck.youngCount }} young</span>
+                    <span class="text-purple-700 dark:text-purple-300">{{ deck.matureCount + deck.masteredCount }} mature</span>
                     <span v-if="deck.dueReviewCount > 0" class="text-blue-500 font-semibold">{{ deck.dueReviewCount }} due</span>
                   </div>
                   <div v-if="deck.warning" class="text-xs text-yellow-500 mt-1">{{ deck.warning }}</div>

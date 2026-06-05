@@ -30,6 +30,22 @@ export interface HardestCard {
   avgDuration: number;
 }
 
+interface PendingReview {
+  cardKey: string;
+  card: StudyCardDto;
+  rating: FsrsRating;
+  reviewEntry: SessionReview;
+  reinsertedAgainCard: StudyCardDto | null;
+  epoch: number;
+  deltas: {
+    counted: boolean;
+    wasNew: boolean;
+    correct: boolean;
+    gradeKey: 'again' | 'hard' | 'good' | 'easy';
+    clearedGrade: 'hard' | 'good' | 'easy' | null;
+  };
+}
+
 interface UndoSnapshot {
   card: StudyCardDto;
   type: 'grade' | 'blacklist' | 'master' | 'forget' | 'suspend' | 'bury';
@@ -66,7 +82,7 @@ export const useSrsStore = defineStore('srs', () => {
   const settingsLoaded = ref(false);
   const studySettings = ref<StudySettingsDto>({
     newCardsPerDay: 20,
-    maxReviewsPerDay: 1000,
+    maxReviewsPerDay: 200,
     batchSize: 100,
     gradingButtons: 4,
     interleaving: 'Mixed',
@@ -80,7 +96,7 @@ export const useSrsStore = defineStore('srs', () => {
     showKanjiBreakdown: true,
     showWordComposition: true,
     showWordUsedIn: true,
-    showNextInterval: false,
+    showNextInterval: true,
     showKeybinds: true,
     showElapsedTime: true,
     enableSwipeGesture: true,
@@ -115,13 +131,21 @@ export const useSrsStore = defineStore('srs', () => {
   const reviewsToday = ref(0);
   const againCardKeys = ref(new Set<string>());
   const clearedGrades = ref<('hard' | 'good' | 'easy' | 'action')[]>([]);
-  const undoState = ref<UndoSnapshot | null>(null);
+
+  const MAX_UNDO_DEPTH = 100;
+  const undoStack = ref<UndoSnapshot[]>([]);
   const sessionReviews = ref<SessionReview[]>([]);
   const sessionLeeches = ref<LeechCard[]>([]);
   const cardShownAt = ref<number | null>(null);
   const thinkingDuration = ref<number | undefined>(undefined);
   const isBusy = ref(false);
   const fetchError = ref<string | null>(null);
+  // Surfaced to the study page so it can toast when an optimistic review failed to persist.
+  const lastReviewError = ref<{ wordText: string } | null>(null);
+  // In-flight background review requests, keyed by card. Lets undo wait for the right one.
+  const inFlightReviews = new Map<string, Promise<void>>();
+  // Bumped whenever the session is reset, so late background results from an old session are ignored.
+  let sessionEpoch = 0;
   const dueSummary = ref<DueSummaryDto | null>(null);
   const deckStreak = ref<DeckStreakDto | null>(null);
   const reviewForecast30d = ref<ReviewForecast30dDto | null>(null);
@@ -144,7 +168,7 @@ export const useSrsStore = defineStore('srs', () => {
     sessionDirty.value = true;
   }
 
-  const canUndo = computed(() => undoState.value !== null);
+  const canUndo = computed(() => undoStack.value.length > 0);
 
   const currentCard = computed(() =>
     currentCardIndex.value < currentBatch.value.length
@@ -211,7 +235,7 @@ export const useSrsStore = defineStore('srs', () => {
   });
 
   function takeSnapshot(card: StudyCardDto, type: UndoSnapshot['type'], rating?: FsrsRating) {
-    undoState.value = {
+    const snapshot: UndoSnapshot = {
       card,
       type,
       rating,
@@ -223,6 +247,9 @@ export const useSrsStore = defineStore('srs', () => {
       leeches: [...sessionLeeches.value],
       stats: JSON.parse(JSON.stringify(sessionStats.value)),
     };
+    const stack = [...undoStack.value, snapshot];
+    if (stack.length > MAX_UNDO_DEPTH) stack.shift();
+    undoStack.value = stack;
   }
 
   let fetchStudyDecksPromise: Promise<void> | null = null;
@@ -478,7 +505,9 @@ export const useSrsStore = defineStore('srs', () => {
       preWrapUpBatch.value = [];
       againCardKeys.value = new Set();
       clearedGrades.value = [];
-      undoState.value = null;
+      undoStack.value = [];
+      inFlightReviews.clear();
+      sessionEpoch++;
       exampleCache.value = new Map();
       examplePrefetchedUpTo.value = -1;
       sessionDirty.value = false;
@@ -590,133 +619,215 @@ export const useSrsStore = defineStore('srs', () => {
     thinkingDuration.value = cardShownAt.value ? Date.now() - cardShownAt.value : undefined;
   }
 
-  async function gradeCard(rating: FsrsRating): Promise<boolean> {
+  // Optimistic grading: the UI advances synchronously and the /srs/review request is sent in the
+  // background. isFlipped flips to false immediately, which also acts as the per-card guard against a
+  // double grade (every grade trigger requires isFlipped). isBusy is only consulted (not set) so that
+  // a slower serialized action — quickAction/undo — can still block grading, but consecutive grades
+  // never block each other on the network.
+  function gradeCard(rating: FsrsRating): boolean {
     const card = currentCard.value;
-    if (!card || isBusy.value) return true;
-    isBusy.value = true;
+    if (!card || isBusy.value || !isFlipped.value) return true;
 
-    try {
-      takeSnapshot(card, 'grade', rating);
+    takeSnapshot(card, 'grade', rating);
 
-      const AFK_THRESHOLD = 60_000;
-      const reviewDuration = thinkingDuration.value !== undefined
-        ? Math.min(thinkingDuration.value, AFK_THRESHOLD) : undefined;
+    const AFK_THRESHOLD = 60_000;
+    const reviewDuration = thinkingDuration.value !== undefined
+      ? Math.min(thinkingDuration.value, AFK_THRESHOLD) : undefined;
 
-      const clientRequestId = crypto.randomUUID();
-      const body = {
-        wordId: card.wordId,
-        readingIndex: card.readingIndex,
-        rating,
-        reviewDuration,
-        sessionId: sessionId.value,
-        clientRequestId,
-      };
+    const cardKey = `${card.wordId}-${card.readingIndex}`;
+    const isRepeat = againCardKeys.value.has(cardKey);
+    const kanaReading = card.readings.find(r => r.formType === 1)?.text ?? card.wordTextPlain;
 
-      let reviewResult: any;
-      try {
-        reviewResult = await $api('srs/review', { method: 'POST', body });
-      } catch (firstError: any) {
-        if (firstError?.status !== 429) {
-          try {
-            reviewResult = await $api('srs/review', { method: 'POST', body });
-          } catch (retryError: any) {
-            if (retryError?.status !== 429) throw retryError;
-          }
-        }
+    const reviewEntry: SessionReview = {
+      wordId: card.wordId,
+      readingIndex: card.readingIndex,
+      wordText: card.wordTextPlain,
+      reading: kanaReading,
+      rating,
+      duration: reviewDuration,
+    };
+    sessionReviews.value = [...sessionReviews.value, reviewEntry];
+
+    // Stats — record the exact deltas so a failed background sync can revert just this card.
+    const counted = studySettings.value.countFailedReviews || !isRepeat;
+    const wasNew = card.isNewCard && !isRepeat;
+    const correct = rating >= FsrsRating.Good;
+    const gradeKey: 'again' | 'hard' | 'good' | 'easy' =
+      rating === FsrsRating.Again ? 'again'
+        : rating === FsrsRating.Hard ? 'hard'
+          : rating === FsrsRating.Easy ? 'easy' : 'good';
+    if (counted) sessionStats.value.cardsReviewed++;
+    if (wasNew) sessionStats.value.newCardsLearned++;
+    if (correct) sessionStats.value.correctCount++;
+    sessionStats.value.gradeCounts[gradeKey]++;
+
+    prefetchSessionSummary();
+
+    // Optimistic queue mutation — assume the review succeeds and the card is not a fresh leech.
+    // Leech suspension and the freshly-computed interval preview are reconciled when the request lands.
+    let reinsertedAgainCard: StudyCardDto | null = null;
+    let clearedGrade: 'hard' | 'good' | 'easy' | null = null;
+    if (rating === FsrsRating.Again) {
+      const newSet = new Set(againCardKeys.value);
+      newSet.add(cardKey);
+      againCardKeys.value = newSet;
+
+      const batch = [...currentBatch.value];
+      batch.splice(currentCardIndex.value, 1);
+      const remaining = batch.length - currentCardIndex.value;
+      const offset = remaining <= 0 ? 0 : Math.min(Math.floor(Math.random() * 6) + 5, remaining);
+      const reinsertedCard = { ...card };
+      batch.splice(currentCardIndex.value + offset, 0, reinsertedCard);
+      reinsertedAgainCard = reinsertedCard;
+      currentBatch.value = batch;
+    } else {
+      if (isRepeat) {
+        const newSet = new Set(againCardKeys.value);
+        newSet.delete(cardKey);
+        againCardKeys.value = newSet;
       }
-
-      const kanaReading = card.readings.find(r => r.formType === 1)?.text ?? card.wordTextPlain;
-      sessionReviews.value = [...sessionReviews.value, {
-        wordId: card.wordId,
-        readingIndex: card.readingIndex,
-        wordText: card.wordTextPlain,
-        reading: kanaReading,
-        rating,
-        duration: reviewDuration,
-      }];
-
-      const cardKey = `${card.wordId}-${card.readingIndex}`;
-      const isRepeat = againCardKeys.value.has(cardKey);
-
-      const shouldCount = studySettings.value.countFailedReviews || !isRepeat;
-      if (shouldCount) sessionStats.value.cardsReviewed++;
-      if (card.isNewCard && !isRepeat) sessionStats.value.newCardsLearned++;
-      if (rating >= FsrsRating.Good) sessionStats.value.correctCount++;
-      if (rating === FsrsRating.Again) sessionStats.value.gradeCounts.again++;
-      else if (rating === FsrsRating.Hard) sessionStats.value.gradeCounts.hard++;
-      else if (rating === FsrsRating.Good) sessionStats.value.gradeCounts.good++;
-      else if (rating === FsrsRating.Easy) sessionStats.value.gradeCounts.easy++;
-
-      prefetchSessionSummary();
-
-      if (reviewResult?.leechDetected || reviewResult?.leechSuspended) {
-        lastLeechEvent.value = { detected: true, suspended: !!reviewResult.leechSuspended };
-        const leechKey = `${card.wordId}-${card.readingIndex}`;
-        if (!sessionLeeches.value.some(l => `${l.wordId}-${l.readingIndex}` === leechKey)) {
-          const kana = card.readings.find(r => r.formType === 1)?.text ?? card.wordTextPlain;
-          sessionLeeches.value = [...sessionLeeches.value, {
-            wordId: card.wordId,
-            readingIndex: card.readingIndex,
-            wordText: card.wordTextPlain,
-            reading: kana,
-            suspended: !!reviewResult.leechSuspended,
-          }];
-        }
-      } else {
-        lastLeechEvent.value = null;
-      }
-
-      if (rating === FsrsRating.Again) {
-        if (reviewResult?.leechSuspended) {
-          const batch = [...currentBatch.value];
-          batch.splice(currentCardIndex.value, 1);
-          currentBatch.value = batch;
-          clearedGrades.value = [...clearedGrades.value, 'action'];
-        } else {
-          const newSet = new Set(againCardKeys.value);
-          newSet.add(cardKey);
-          againCardKeys.value = newSet;
-
-          const batch = [...currentBatch.value];
-          batch.splice(currentCardIndex.value, 1);
-          const remaining = batch.length - currentCardIndex.value;
-          const offset = remaining <= 0 ? 0 : Math.min(Math.floor(Math.random() * 6) + 5, remaining);
-          const reinsertedCard = { ...card };
-          if (reviewResult?.intervalPreview) reinsertedCard.intervalPreview = reviewResult.intervalPreview;
-          batch.splice(currentCardIndex.value + offset, 0, reinsertedCard);
-          currentBatch.value = batch;
-        }
-      } else {
-        if (isRepeat) {
-          const newSet = new Set(againCardKeys.value);
-          newSet.delete(cardKey);
-          againCardKeys.value = newSet;
-        }
-        const grade = rating === FsrsRating.Hard ? 'hard' : rating === FsrsRating.Easy ? 'easy' : 'good';
-        clearedGrades.value = [...clearedGrades.value, grade];
-        currentCardIndex.value++;
-      }
-
-      ensurePrefetched();
-
-      isFlipped.value = false;
-      cardShownAt.value = Date.now();
-
-      if (currentCardIndex.value >= currentBatch.value.length) {
-        if (isWrappingUp.value) {
-          isSessionComplete.value = true;
-        } else {
-          await fetchBatch();
-        }
-      }
-      return true;
-    } catch (error) {
-      undoState.value = null;
-      console.error('Failed to grade card:', error);
-      return false;
-    } finally {
-      isBusy.value = false;
+      clearedGrade = rating === FsrsRating.Hard ? 'hard' : rating === FsrsRating.Easy ? 'easy' : 'good';
+      clearedGrades.value = [...clearedGrades.value, clearedGrade];
+      currentCardIndex.value++;
     }
+
+    ensurePrefetched();
+    isFlipped.value = false;
+    cardShownAt.value = Date.now();
+
+    const body = {
+      wordId: card.wordId,
+      readingIndex: card.readingIndex,
+      rating,
+      reviewDuration,
+      sessionId: sessionId.value,
+      clientRequestId: crypto.randomUUID(),
+    };
+    const ctx: PendingReview = {
+      cardKey,
+      card,
+      rating,
+      reviewEntry,
+      reinsertedAgainCard,
+      epoch: sessionEpoch,
+      deltas: { counted, wasNew, correct, gradeKey, clearedGrade },
+    };
+    const promise = submitReview(body, ctx);
+    inFlightReviews.set(cardKey, promise);
+    promise.finally(() => {
+      if (inFlightReviews.get(cardKey) === promise) inFlightReviews.delete(cardKey);
+    });
+
+    if (currentCardIndex.value >= currentBatch.value.length) {
+      if (isWrappingUp.value) {
+        isSessionComplete.value = true;
+      } else {
+        fetchBatch();
+      }
+    }
+    return true;
+  }
+
+  async function submitReview(body: any, ctx: PendingReview): Promise<void> {
+    let reviewResult: any;
+    let failed = false;
+    try {
+      reviewResult = await $api('srs/review', { method: 'POST', body });
+    } catch (firstError: any) {
+      // 429 is the server-side debounce treating the request as a duplicate — i.e. already accepted.
+      if (firstError?.status !== 429) {
+        try {
+          reviewResult = await $api('srs/review', { method: 'POST', body });
+        } catch (retryError: any) {
+          if (retryError?.status !== 429) failed = true;
+        }
+      }
+    }
+
+    if (ctx.epoch !== sessionEpoch) return; // session was reset; drop this late result
+
+    if (failed) {
+      console.error('Failed to persist review for', ctx.cardKey);
+      handleReviewFailure(ctx);
+    } else {
+      applyReviewResult(reviewResult, ctx);
+    }
+  }
+
+  // Reconcile the server response with the optimistic state once the review lands.
+  function applyReviewResult(reviewResult: any, ctx: PendingReview): void {
+    if (reviewResult?.leechDetected || reviewResult?.leechSuspended) {
+      lastLeechEvent.value = { detected: true, suspended: !!reviewResult.leechSuspended };
+      if (!sessionLeeches.value.some(l => `${l.wordId}-${l.readingIndex}` === ctx.cardKey)) {
+        sessionLeeches.value = [...sessionLeeches.value, {
+          wordId: ctx.card.wordId,
+          readingIndex: ctx.card.readingIndex,
+          wordText: ctx.card.wordTextPlain,
+          reading: ctx.reviewEntry.reading,
+          suspended: !!reviewResult.leechSuspended,
+        }];
+      }
+    }
+
+    if (ctx.rating === FsrsRating.Again && ctx.reinsertedAgainCard) {
+      if (reviewResult?.leechSuspended) {
+        // The card was suspended server-side — pull the optimistically re-queued copy back out.
+        const idx = currentBatch.value.indexOf(ctx.reinsertedAgainCard);
+        if (idx >= 0) {
+          const batch = [...currentBatch.value];
+          batch.splice(idx, 1);
+          currentBatch.value = batch;
+        }
+        const newSet = new Set(againCardKeys.value);
+        newSet.delete(ctx.cardKey);
+        againCardKeys.value = newSet;
+        clearedGrades.value = [...clearedGrades.value, 'action'];
+
+        if (currentCardIndex.value >= currentBatch.value.length) {
+          if (isWrappingUp.value) isSessionComplete.value = true;
+          else fetchBatch();
+        }
+      } else if (reviewResult?.intervalPreview) {
+        // Patch the freshly-scheduled interval onto the re-queued card (deep-reactive via the ref).
+        ctx.reinsertedAgainCard.intervalPreview = reviewResult.intervalPreview;
+      }
+    }
+  }
+
+  // A review failed to persist (after one retry). Revert just this card's optimistic effects and
+  // re-queue it so the user grades it again, without disturbing later cards already graded.
+  function handleReviewFailure(ctx: PendingReview): void {
+    const s = sessionStats.value;
+    if (ctx.deltas.counted) s.cardsReviewed = Math.max(0, s.cardsReviewed - 1);
+    if (ctx.deltas.wasNew) s.newCardsLearned = Math.max(0, s.newCardsLearned - 1);
+    if (ctx.deltas.correct) s.correctCount = Math.max(0, s.correctCount - 1);
+    s.gradeCounts[ctx.deltas.gradeKey] = Math.max(0, s.gradeCounts[ctx.deltas.gradeKey] - 1);
+
+    sessionReviews.value = sessionReviews.value.filter(r => r !== ctx.reviewEntry);
+
+    if (ctx.deltas.clearedGrade) {
+      const i = clearedGrades.value.indexOf(ctx.deltas.clearedGrade);
+      if (i >= 0) {
+        const arr = [...clearedGrades.value];
+        arr.splice(i, 1);
+        clearedGrades.value = arr;
+      }
+    }
+
+    // "Again" cards are already back in the queue; only non-Again cards need re-queuing.
+    if (ctx.rating !== FsrsRating.Again) {
+      const batch = [...currentBatch.value];
+      const remaining = batch.length - currentCardIndex.value;
+      const offset = remaining <= 0 ? 0 : Math.min(Math.floor(Math.random() * 6) + 5, remaining);
+      batch.splice(currentCardIndex.value + offset, 0, { ...ctx.card });
+      currentBatch.value = batch;
+      isSessionComplete.value = false;
+    }
+
+    // The re-queue shifts indices, so snapshots taken after this card can no longer be trusted.
+    undoStack.value = [];
+
+    lastReviewError.value = { wordText: ctx.card.wordTextPlain };
   }
 
   async function quickAction(action: 'blacklist' | 'master' | 'forget' | 'suspend' | 'bury'): Promise<boolean> {
@@ -733,8 +844,10 @@ export const useSrsStore = defineStore('srs', () => {
     };
 
     try {
+      // Forget permanently deletes the card and its review logs server-side — there is no restore
+      // path, so it can't be undone. Clear the stack rather than offer a misleading undo past it.
       if (action !== 'forget') takeSnapshot(card, action);
-      else undoState.value = null;
+      else undoStack.value = [];
 
       await $api('srs/set-vocabulary-state', {
         method: 'POST',
@@ -761,7 +874,8 @@ export const useSrsStore = defineStore('srs', () => {
         }
       }
     } catch (error) {
-      undoState.value = null;
+      // The action failed before mutating local state — drop the snapshot we optimistically pushed.
+      undoStack.value = undoStack.value.slice(0, -1);
       console.error('Failed to set vocabulary state:', error);
       return false;
     } finally {
@@ -786,12 +900,17 @@ export const useSrsStore = defineStore('srs', () => {
   }
 
   async function undoLastAction(): Promise<boolean> {
-    const snap = undoState.value;
+    const snap = undoStack.value[undoStack.value.length - 1];
     if (!snap || isBusy.value) return true;
     isBusy.value = true;
 
     try {
       if (snap.type === 'grade') {
+        // Make sure the (possibly still in-flight) review for this card has landed before undoing it.
+        const key = `${snap.card.wordId}-${snap.card.readingIndex}`;
+        await inFlightReviews.get(key)?.catch(() => {});
+        // If that review failed, it already reverted itself and cleared the stack — nothing to undo.
+        if (undoStack.value[undoStack.value.length - 1] !== snap) return true;
         await $api('srs/undo-review', {
           method: 'POST',
           body: { wordId: snap.card.wordId, readingIndex: snap.card.readingIndex },
@@ -827,7 +946,7 @@ export const useSrsStore = defineStore('srs', () => {
       isFlipped.value = true;
       cardShownAt.value = Date.now();
       isSessionComplete.value = false;
-      undoState.value = null;
+      undoStack.value = undoStack.value.slice(0, -1);
       return true;
     } catch (error) {
       console.error('Failed to undo:', error);
@@ -916,9 +1035,12 @@ export const useSrsStore = defineStore('srs', () => {
     sessionReviews.value = [];
     sessionLeeches.value = [];
     sessionStats.value = { cardsReviewed: 0, newCardsLearned: 0, correctCount: 0, startTime: null, gradeCounts: { again: 0, hard: 0, good: 0, easy: 0 } };
-    undoState.value = null;
+    undoStack.value = [];
     isBusy.value = false;
     fetchError.value = null;
+    lastReviewError.value = null;
+    inFlightReviews.clear();
+    sessionEpoch++;
     exampleCache.value = new Map();
     examplePrefetchedUpTo.value = -1;
     sessionDirty.value = false;
@@ -959,6 +1081,7 @@ export const useSrsStore = defineStore('srs', () => {
     hardestCards,
     isBusy,
     fetchError,
+    lastReviewError,
     dueSummary,
     deckStreak,
     reviewForecast30d,

@@ -155,7 +155,13 @@ public static class PosMapper
     /// <summary>
     /// Converts a Sudachi POS string (Japanese) to PartOfSpeech enum.
     /// </summary>
-    public static PartOfSpeech FromSudachi(string sudachiPos)
+    public static PartOfSpeech FromSudachi(string sudachiPos) => FromSudachi(sudachiPos.AsSpan());
+
+    /// <summary>
+    /// Span overload of <see cref="FromSudachi(string)"/> — avoids allocating a string when
+    /// parsing Sudachi output token-by-token (hot path in <c>WordInfo</c>).
+    /// </summary>
+    public static PartOfSpeech FromSudachi(ReadOnlySpan<char> sudachiPos)
     {
         return sudachiPos switch
         {
@@ -190,9 +196,15 @@ public static class PosMapper
     /// <summary>
     /// Converts a JMDict POS tag to PartOfSpeech enum.
     /// </summary>
-    public static PartOfSpeech FromJmDict(string jmDictTag)
+    public static PartOfSpeech FromJmDict(string jmDictTag) => FromJmDict(jmDictTag.AsSpan());
+
+    /// <summary>
+    /// Span overload of <see cref="FromJmDict(string)"/>.
+    /// </summary>
+    public static PartOfSpeech FromJmDict(ReadOnlySpan<char> jmDictTag)
     {
-        if (jmDictTag.StartsWith('v') && jmDictTag is not "vulg" and not "vet" and not "vidg")
+        if (jmDictTag.Length > 0 && jmDictTag[0] == 'v'
+            && !jmDictTag.SequenceEqual("vulg") && !jmDictTag.SequenceEqual("vet") && !jmDictTag.SequenceEqual("vidg"))
             return PartOfSpeech.Verb;
 
         // JMnedict sometimes uses name-* tags (e.g., name-person/name-place) depending on import/source.
@@ -234,7 +246,12 @@ public static class PosMapper
     /// Converts any POS string (Sudachi or JMDict) to PartOfSpeech enum.
     /// This is the unified conversion method that tries both systems.
     /// </summary>
-    public static PartOfSpeech FromAny(string pos)
+    public static PartOfSpeech FromAny(string pos) => FromAny(pos.AsSpan());
+
+    /// <summary>
+    /// Span overload of <see cref="FromAny(string)"/>.
+    /// </summary>
+    public static PartOfSpeech FromAny(ReadOnlySpan<char> pos)
     {
         // Try Sudachi first (Japanese strings)
         var result = FromSudachi(pos);

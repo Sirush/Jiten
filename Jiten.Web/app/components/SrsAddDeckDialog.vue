@@ -255,13 +255,7 @@
     importExcludedWordIds.value = s;
   }
 
-  const fullTextOnlyExtensions = ['.epub', '.srt', '.ass', '.ssa'];
-
-  const importIsFullTextOnly = computed(() => {
-    if (!importFile.value) return false;
-    const ext = importFile.value.name.replace(/^.*\./, '.').toLowerCase();
-    return fullTextOnlyExtensions.includes(ext);
-  });
+  const importIsFullTextOnly = computed(() => importFile.value ? isFullTextOnlyFile(importFile.value.name) : false);
 
   function onImportFileSelect(event: any) {
     const files = event.target?.files || event.files;
@@ -756,7 +750,7 @@
           <label class="block text-sm font-medium mb-2">Import from file <span class="text-gray-400">(optional)</span></label>
           <input
             type="file"
-            accept=".txt,.csv,.tsv,.epub,.srt,.ass,.ssa"
+            :accept="IMPORT_ACCEPT_ATTR"
             class="block w-full text-sm text-gray-500
               file:mr-4 file:py-2 file:px-4
               file:rounded file:border-0
@@ -767,7 +761,7 @@
             @change="onImportFileSelect"
           />
           <p class="text-xs text-gray-400 mt-1">
-            Supports .txt, .csv, .tsv, .epub, .srt, .ass
+            Supports {{ IMPORT_ACCEPT_EXTENSIONS.join(', ') }}
           </p>
         </div>
 

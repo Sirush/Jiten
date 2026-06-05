@@ -188,13 +188,13 @@
 
 <template>
   <div class="container mx-auto p-2 md:p-4">
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-      <div class="flex items-center gap-3">
-        <NuxtLink to="/srs/decks">
-          <Button icon="pi pi-arrow-left" severity="secondary" text />
-        </NuxtLink>
-        <h2 class="text-2xl font-bold">{{ deckName }}</h2>
-        <span v-if="totalItems > 0" class="text-sm text-gray-500">{{ totalItems }} words</span>
+    <SrsSubNav />
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
+      <div class="flex items-center gap-2 min-w-0">
+        <NuxtLink to="/srs/decks" class="text-sm text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 whitespace-nowrap">‹ Decks</NuxtLink>
+        <span class="text-surface-300 dark:text-surface-600">·</span>
+        <h1 class="text-2xl font-bold truncate">{{ deckName }}</h1>
+        <span v-if="totalItems > 0" class="text-sm text-gray-500 whitespace-nowrap">{{ totalItems }} words</span>
       </div>
       <div v-if="isStaticDeck" class="flex gap-2">
         <Button icon="pi pi-plus" label="Add Words" @click="showAddDialog = true" class="!hidden sm:!inline-flex" />

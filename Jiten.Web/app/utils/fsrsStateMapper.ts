@@ -2,6 +2,7 @@ import { FsrsState } from '~/types';
 
 export function getFsrsStateName(state: FsrsState): string {
   switch (state) {
+    case FsrsState.New: return 'New';
     case FsrsState.Learning: return 'Learning';
     case FsrsState.Review: return 'Review';
     case FsrsState.Relearning: return 'Relearning';
@@ -14,6 +15,7 @@ export function getFsrsStateName(state: FsrsState): string {
 
 export function getFsrsStateSeverity(state: FsrsState): string {
   switch (state) {
+    case FsrsState.New: return 'info';
     case FsrsState.Learning: return 'warn';
     case FsrsState.Review: return 'success';
     case FsrsState.Relearning: return 'warn';

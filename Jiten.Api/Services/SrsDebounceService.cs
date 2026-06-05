@@ -11,9 +11,9 @@ public class SrsDebounceService : ISrsDebounceService
     private DateTime _lastCleanup = DateTime.UtcNow;
     private readonly Lock _cleanupLock = new();
 
-    public bool TryAcquire(string userId, int wordId, byte readingIndex)
+    public bool TryAcquire(string operation, string userId, int wordId, byte readingIndex)
     {
-        var key = $"{userId}:{wordId}:{readingIndex}";
+        var key = $"{operation}:{userId}:{wordId}:{readingIndex}";
         var now = DateTime.UtcNow;
 
         CleanupIfNeeded(now);

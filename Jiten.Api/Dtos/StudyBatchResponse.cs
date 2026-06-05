@@ -132,6 +132,8 @@ public class StudyDeckDto
     public int UnseenCount { get; set; }
     public int LearningCount { get; set; }
     public int ReviewCount { get; set; }
+    public int YoungCount { get; set; }
+    public int MatureCount { get; set; }
     public int MasteredCount { get; set; }
     public int BlacklistedCount { get; set; }
     public int SuspendedCount { get; set; }

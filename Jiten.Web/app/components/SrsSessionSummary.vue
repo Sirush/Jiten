@@ -65,10 +65,11 @@
     return again + hard + good + easy;
   });
 
-  const accuracy = computed(() => {
+  // Pass rate = anything but Again recalled, matching the heatmap and the retention metric.
+  // Includes new-card first grades, so it reads higher than measured true retention by design.
+  const passRate = computed(() => {
     if (totalReviews.value === 0) return 0;
-    const { good, easy } = props.gradeCounts;
-    return Math.round(((good + easy) / totalReviews.value) * 100);
+    return Math.round(((totalReviews.value - props.gradeCounts.again) / totalReviews.value) * 100);
   });
 
   const isAllCaughtUp = computed(() => {
@@ -175,8 +176,8 @@
         <div class="text-sm text-gray-500">New Cards</div>
       </div>
       <div class="text-center">
-        <div class="text-3xl font-bold text-blue-600 dark:text-blue-400">{{ accuracy }}%</div>
-        <div class="text-sm text-gray-500">Accuracy</div>
+        <div class="text-3xl font-bold text-blue-600 dark:text-blue-400">{{ passRate }}%</div>
+        <div class="text-sm text-gray-500" title="Cards recalled (anything but Again), including new cards">Pass rate</div>
       </div>
       <div class="text-center">
         <div class="text-3xl font-bold text-purple-600 dark:text-purple-400">{{ duration }}</div>

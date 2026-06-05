@@ -7,23 +7,17 @@
   });
 
   useHead({ title: 'SRS Settings' });
-
-  const router = useRouter();
-  const backLink = computed(() => {
-    const prev = router.options.history.state?.back as string | undefined;
-    return prev?.startsWith('/srs') ? '/srs/decks' : '/settings';
-  });
 </script>
 
 <template>
-  <div class="container mx-auto p-2 md:p-4 flex flex-col gap-4">
-    <div class="flex items-center gap-2">
-      <NuxtLink :to="backLink">
-        <Button icon="pi pi-arrow-left" severity="secondary" text rounded />
-      </NuxtLink>
+  <div class="container mx-auto p-2 md:p-4">
+    <SrsSubNav />
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
       <h1 class="text-2xl font-bold">SRS Settings</h1>
     </div>
-    <SettingsSrsStudy />
-    <SettingsFsrsParameters />
+    <div class="flex flex-col gap-4">
+      <SettingsSrsStudy />
+      <SettingsFsrsParameters />
+    </div>
   </div>
 </template>

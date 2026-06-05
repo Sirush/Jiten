@@ -21,6 +21,11 @@
   const optimiseError = ref<string | null>(null);
   const rescheduleAfterOptimise = ref(true);
   const showBreakdown = ref(false);
+  const showAdvanced = ref(false);
+  const reviewCount = ref(0);
+  const minimumReviews = ref(50);
+
+  const canOptimise = computed(() => reviewCount.value >= minimumReviews.value);
 
   const parsedState = computed(() => {
     const raw = parametersCsv.value.trim();
@@ -110,6 +115,8 @@
       }
       isDefault.value = result.isDefault;
       desiredRetention.value = result.desiredRetention ?? defaultDesiredRetention;
+      reviewCount.value = result.reviewCount ?? 0;
+      minimumReviews.value = result.minimumReviewsForOptimize ?? 50;
     } catch {
       toast.add({
         severity: 'error',
@@ -215,6 +222,26 @@
     }
   };
 
+  const confirmRecomputeSchedule = () => {
+    confirm.require({
+      message:
+        'This will recompute the schedule for all your cards using your current parameters. Depending on your history, this could result in a large number of immediate reviews. Are you sure you want to proceed?',
+      header: 'Reschedule all cards',
+      icon: 'pi pi-exclamation-triangle',
+      rejectProps: {
+        label: 'Cancel',
+        severity: 'secondary',
+        outlined: true,
+      },
+      acceptProps: {
+        label: 'Reschedule',
+      },
+      accept: async () => {
+        await recomputeSchedule();
+      },
+    });
+  };
+
   const recomputeSchedule = async () => {
     try {
       isRecomputing.value = true;
@@ -305,30 +332,51 @@
       <div class="mb-4">
         <h4 class="text-md font-semibold mb-1">Desired retention</h4>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">Target recall rate (0–1). For example, 0.9 = 90% retention.</p>
-        <InputNumber v-model="desiredRetention" class="w-full md:w-40" :min="0.01" :max="0.99" :step="0.01" :min-fraction-digits="2" :max-fraction-digits="4" />
+        <div class="flex flex-wrap items-center gap-2">
+          <InputNumber v-model="desiredRetention" class="w-40" input-class="w-40" :min="0.01" :max="0.99" :step="0.01" :min-fraction-digits="2" :max-fraction-digits="4" />
+          <Button label="Save" :loading="isSaving" :disabled="!!formError || isLoading || isRecomputing || isResetting" @click="saveParameters" />
+        </div>
+        <Message v-if="retentionError" key="retention-error" severity="error" :closable="false" class="mt-2">
+          {{ retentionError }}
+        </Message>
       </div>
 
       <div class="mb-5">
         <h4 class="text-md font-semibold mb-1">Optimise parameters</h4>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">
-          Analyse your review history to find the optimal FSRS parameters for your memory patterns. At least 50 reviews are required. The more reviews you have, the more accurate the optimisation will be.
+          Analyse your review history to find the optimal FSRS parameters for your memory patterns. <br /> The more reviews you have, the more accurate the optimisation will be. It is recommended to optimise every time your number of review doubles.
+          <br />You currently have {{reviewCount}} reviews.
         </p>
         <div class="flex items-center gap-2 mb-2">
-          <Checkbox v-model="rescheduleAfterOptimise" inputId="rescheduleAfterOptimise" :binary="true" />
+          <Checkbox v-model="rescheduleAfterOptimise" inputId="rescheduleAfterOptimise" :binary="true" :disabled="!canOptimise" />
           <label for="rescheduleAfterOptimise" class="text-sm cursor-pointer">Also reschedule all my cards after optimisation</label>
         </div>
         <Button
-          label="Optimise"
+          :label="canOptimise ? 'Optimise' : `Available after ${minimumReviews} reviews`"
           icon="pi pi-sparkles"
           :loading="isOptimising"
-          :disabled="isLoading || isSaving || isRecomputing || isResetting"
+          :disabled="!canOptimise || isLoading || isSaving || isRecomputing || isResetting"
           @click="confirmOptimise"
         />
+        <p v-if="!canOptimise && !isLoading" class="text-sm text-surface-500 mt-2">
+          You have {{ reviewCount }} of {{ minimumReviews }} reviews needed. Keep studying to unlock optimisation.
+        </p>
         <Message v-if="optimiseError" key="optimise-error" severity="error" :closable="false" class="mt-2">
           {{ optimiseError }}
         </Message>
       </div>
 
+      <div class="border-t border-surface-200 dark:border-surface-700 pt-4">
+        <button
+          class="flex items-center gap-2 text-sm font-medium text-surface-700 dark:text-surface-200 cursor-pointer"
+          @click="showAdvanced = !showAdvanced"
+        >
+          <i :class="showAdvanced ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" class="text-xs" />
+          Advanced: edit raw parameters
+        </button>
+      </div>
+
+      <div v-if="showAdvanced" class="mt-4">
       <h4 class="text-md font-semibold mb-1">FSRS Parameters</h4>
       <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">21 comma-separated numbers that control FSRS scheduling. These are set automatically when you optimise, but you can also edit them manually.</p>
       <Textarea v-model="parametersCsv" class="w-full" rows="3" placeholder="0.2172, 1.1771, 3.2602, ..." @update:modelValue="hasUserEdited = true" />
@@ -397,12 +445,13 @@
           @click="confirmResetParameters"
         />
       </div>
+      </div>
       <div class="mt-4">
         <h4 class="text-md font-semibold mb-1">Reschedule</h4>
         <p class="text-sm text-amber-600 dark:text-amber-400 mb-2">
           Warning: Be careful with this setting, as it could result in an overwhelming number of immediate reviews.
         </p>
-        <Button label="Reschedule all cards" :loading="isRecomputing" :disabled="isLoading || isSaving" @click="recomputeSchedule" />
+        <Button label="Reschedule all cards" :loading="isRecomputing" :disabled="isLoading || isSaving" @click="confirmRecomputeSchedule" />
       </div>
     </template>
   </Card>

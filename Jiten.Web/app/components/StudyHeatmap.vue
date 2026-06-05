@@ -141,13 +141,13 @@
   function showTooltip(event: MouseEvent | TouchEvent, day: DayCell) {
     if (day.count === -1) return;
     const dateStr = formatDisplayDate(day.date);
-    const accuracy = day.count > 0 ? Math.round((day.correct / day.count) * 100) : 0;
+    const passRate = day.count > 0 ? Math.round((day.correct / day.count) * 100) : 0;
     const point = 'touches' in event ? event.touches[0] : event;
     tooltip.value = {
       visible: true,
       text: day.count === 0
         ? `${dateStr}: No reviews`
-        : `${dateStr}: ${day.count} reviews (${accuracy}% accuracy)`,
+        : `${dateStr}: ${day.count} reviews (${passRate}% pass rate)`,
       x: point.clientX,
       y: point.clientY,
     };
