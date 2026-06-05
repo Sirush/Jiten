@@ -1111,16 +1111,16 @@ export interface CorpusSnippet {
 
 export interface CorpusMediaBreakdown {
   mediaType: MediaType;
-  hits: number;
   deckCount: number;
   totalCharacters: number;
+  occurrences: number;
   hitsPerMillion: number;
   percentage: number;
 }
 
 export interface CorpusTrendPoint {
   year: number;
-  matchingChars: number;
+  occurrences: number;
   totalCharsInYear: number;
   percentage: number;
 }
@@ -1129,7 +1129,6 @@ export interface CorpusDifficultyBucket {
   bucketMin: number;
   bucketMax: number;
   deckCount: number;
-  hits: number;
 }
 
 export interface CorpusTopDeck {
@@ -1143,7 +1142,7 @@ export interface CorpusTopDeck {
 
 export interface CorpusTermResult {
   term: string;
-  totalHits: number;
+  totalOccurrences: number;
   matchingDecks: number;
   hitsPerMillion: number;
   snippets: CorpusSnippet[];

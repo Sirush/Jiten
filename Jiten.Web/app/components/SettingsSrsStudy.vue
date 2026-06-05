@@ -318,9 +318,9 @@
 
       <!-- Card appearance -->
       <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Card appearance</h3>
-      <div class="flex flex-col md:flex-row md:items-start md:gap-6">
-        <!-- Live preview (top on mobile, right on desktop) -->
-        <div class="mb-4 md:mb-0 md:order-2 md:w-80 lg:w-96 xl:w-[30rem] md:shrink-0 md:sticky md:top-4">
+      <div :class="props.inline ? 'flex flex-col gap-4' : 'flex flex-col md:flex-row md:items-start md:gap-6'">
+        <!-- Live preview (top on mobile, right on desktop). In the narrow inline dialog it stays full-width on top. -->
+        <div :class="props.inline ? 'mb-2' : 'mb-4 md:mb-0 md:order-2 md:w-80 lg:w-96 xl:w-[30rem] md:shrink-0 md:sticky md:top-4'">
           <SrsCardPreview :settings="form" />
         </div>
         <!-- Toggle groups -->

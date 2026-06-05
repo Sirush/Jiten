@@ -335,6 +335,14 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("RequiresAdmin", policy => policy.RequireRole(nameof(UserRole.Administrator)));
+
+    // Corpus analysis tools: restricted to users with the Researcher rate-limit tier (or higher),
+    // plus administrators. Tier is carried in the "rate_limit_tier" claim by both the JWT and the
+    // API-key auth handlers.
+    options.AddPolicy("RequiresResearcher", policy => policy.RequireAssertion(ctx =>
+        ctx.User.IsInRole(nameof(UserRole.Administrator)) ||
+        ctx.User.HasClaim("rate_limit_tier", nameof(RateLimitTier.Researcher)) ||
+        ctx.User.HasClaim("rate_limit_tier", nameof(RateLimitTier.Unlimited))));
 });
 
 builder.Services.AddScoped<TokenService>();
