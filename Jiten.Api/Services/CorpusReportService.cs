@@ -33,8 +33,11 @@ public static class CorpusReportService
         sb.AppendLine("<header>");
         sb.AppendLine("<h1>Jiten Corpus Analysis Report</h1>");
         sb.AppendLine($"<p class=\"meta\">Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC</p>");
-        sb.AppendLine($"<p class=\"meta\">Corpus: {data.CorpusStats.DecksWithRawText:N0} decks with raw text · {data.CorpusStats.TotalCharacters:N0} total characters · {data.CorpusStats.TotalDecks:N0} decks total</p>");
-        sb.AppendLine($"<p class=\"meta\">Terms: {E(string.Join(" · ", request.Terms))}{(request.UseRegex ? " (regex)" : "")}</p>");
+        var scopeLabel = data.FilteredScope.HasFilters ? "Filtered scope" : "Searchable corpus";
+        sb.AppendLine($"<p class=\"meta\">{scopeLabel}: {data.FilteredScope.Decks:N0} decks · {data.FilteredScope.Works:N0} works · {data.FilteredScope.Characters:N0} characters</p>");
+        if (data.FilteredScope.HasFilters)
+            sb.AppendLine($"<p class=\"meta\">Narrowed by filters (year / difficulty / media type) from {data.CorpusStats.DecksWithRawText:N0} decks · {data.CorpusStats.TotalWorks:N0} works · {data.CorpusStats.TotalCharacters:N0} characters total — all stats are relative to this scope.</p>");
+        sb.AppendLine($"<p class=\"meta\">Terms: {E(string.Join(" · ", request.Terms))}</p>");
 
         if (request.MediaTypes is { Count: > 0 })
             sb.AppendLine($"<p class=\"meta\">Media filter: {string.Join(", ", request.MediaTypes)}</p>");
@@ -49,18 +52,33 @@ public static class CorpusReportService
         {
             sb.AppendLine("<section>");
             sb.AppendLine("<h2>Comparison Overview</h2>");
-            sb.AppendLine("<table><thead><tr><th>Term</th><th>Matching Decks</th><th>Occurrences</th><th>Occ/M Chars</th><th>Avg Dialogue %</th></tr></thead><tbody>");
+            sb.AppendLine("<table><thead><tr><th>Term</th><th>Matching Decks</th><th>Occurrences</th><th>Occ/M Chars</th><th>Works (range)</th><th>Dispersion</th><th>Avg Dialogue %</th></tr></thead><tbody>");
             foreach (var r in data.Results)
-                sb.AppendLine($"<tr><td><strong>{E(r.Term)}</strong></td><td>{r.MatchingDecks:N0}</td><td>{r.TotalOccurrences:N0}</td><td>{r.HitsPerMillion:N1}</td><td>{r.DialogueWeightedAvg:N1}%</td></tr>");
+                sb.AppendLine($"<tr><td><strong>{E(r.Term)}</strong></td><td>{r.MatchingDecks:N0}</td><td>{r.TotalOccurrences:N0}</td><td>{r.HitsPerMillion:N1}</td><td>{r.WorksMatched:N0} ({r.WorkRangePercentage:N1}%)</td><td>{r.Dispersion:N2}</td><td>{r.DialogueWeightedAvg:N1}%</td></tr>");
             sb.AppendLine("</tbody></table>");
+            sb.AppendLine("<p class=\"note\"><strong>Matching Decks</strong> counts every individual deck, including sub-decks (each chapter / episode / volume). <strong>Works (range)</strong> collapses those to their parent title, so a term in all chapters of one novel counts as many decks but a single work — the % is the share of all works in the corpus.</p>");
+            sb.AppendLine("<p class=\"note\"><strong>Dispersion</strong> (Gries' Deviation of Proportions) measures how evenly the term is spread across media types relative to each register's size: <strong>0</strong> = used in proportion everywhere, <strong>1</strong> = concentrated in a single register (e.g. only in subtitles or only in novels).</p>");
 
             if (coOccurrences.Count > 0)
             {
+                var matchingDecksByTerm = data.Results
+                    .GroupBy(r => r.Term)
+                    .ToDictionary(g => g.Key, g => g.First().MatchingDecks);
+
                 sb.AppendLine("<h3>Co-occurrence (shared decks)</h3>");
-                sb.AppendLine("<table><thead><tr><th>Term A</th><th>Term B</th><th>Shared Decks</th></tr></thead><tbody>");
+                sb.AppendLine("<table><thead><tr><th>Term A</th><th>Term B</th><th>Shared Decks</th><th>Overlap %</th><th>Jaccard %</th></tr></thead><tbody>");
                 foreach (var co in coOccurrences)
-                    sb.AppendLine($"<tr><td>{E(co.TermA)}</td><td>{E(co.TermB)}</td><td>{co.SharedDecks:N0}</td></tr>");
+                {
+                    var a = matchingDecksByTerm.GetValueOrDefault(co.TermA);
+                    var b = matchingDecksByTerm.GetValueOrDefault(co.TermB);
+                    var min = Math.Min(a, b);
+                    var union = a + b - co.SharedDecks;
+                    var overlap = min > 0 ? co.SharedDecks * 100.0 / min : 0;
+                    var jaccard = union > 0 ? co.SharedDecks * 100.0 / union : 0;
+                    sb.AppendLine($"<tr><td>{E(co.TermA)}</td><td>{E(co.TermB)}</td><td>{co.SharedDecks:N0}</td><td>{overlap:N1}%</td><td>{jaccard:N1}%</td></tr>");
+                }
                 sb.AppendLine("</tbody></table>");
+                sb.AppendLine("<p class=\"note\"><strong>Shared Decks</strong> is the number of decks containing both terms (deck-level, like Matching Decks). <strong>Overlap %</strong> = shared ÷ the rarer term's decks — \"what share of the less common term's decks also contain the other\" (reaches 100% if one term's decks are a subset of the other's). <strong>Jaccard %</strong> = shared ÷ decks containing either term — symmetric, but pulled low when one term is far more common.</p>");
             }
 
             sb.AppendLine("</section>");
@@ -75,7 +93,7 @@ public static class CorpusReportService
         {
             sb.AppendLine("<section class=\"term-section\">");
             sb.AppendLine($"<h2>{E(result.Term)}</h2>");
-            sb.AppendLine($"<p>{result.MatchingDecks:N0} matching decks · {result.TotalOccurrences:N0} occurrences · {result.HitsPerMillion:N1} occ/M chars · Avg dialogue: {result.DialogueWeightedAvg:N1}%</p>");
+            sb.AppendLine($"<p>{result.TotalOccurrences:N0} occurrences · {result.HitsPerMillion:N1} occ/M chars · in {result.WorksMatched:N0}/{result.WorksTotal:N0} works ({result.WorkRangePercentage:N1}%) · dispersion {result.Dispersion:N2} · Avg dialogue: {result.DialogueWeightedAvg:N1}%</p>");
 
             RenderMediaChart(sb, result, ref chartId);
             RenderDifficultyChart(sb, result, ref chartId);
@@ -252,6 +270,8 @@ public static class CorpusReportService
         h2 { font-size: 1.3rem; color: #bd93f9; margin: 1.5rem 0 0.5rem; }
         h3 { font-size: 1.05rem; color: #50fa7b; margin: 1.2rem 0 0.5rem; }
         .meta { font-size: 0.85rem; color: #888; }
+        .note { font-size: 0.8rem; color: #888; margin: -0.5rem 0 1rem; max-width: 900px; }
+        .note strong { color: #aaa; }
         section { margin-bottom: 2rem; }
         .term-section { border: 1px solid #333; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; background: #16213e; }
         .chart-container { max-width: 800px; margin: 0.5rem 0 1.5rem; }

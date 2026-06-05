@@ -10,7 +10,6 @@ public class CorpusSearchRequest
     public float? MaxDifficulty { get; set; }
     public int? MinReleaseYear { get; set; }
     public int? MaxReleaseYear { get; set; }
-    public bool UseRegex { get; set; }
     public int MaxSnippets { get; set; } = 50;
 }
 
@@ -18,6 +17,20 @@ public class CorpusSearchResponse
 {
     public List<CorpusTermResult> Results { get; set; } = [];
     public CorpusStats CorpusStats { get; set; } = new();
+    /// <summary>Searchable decks/works/characters matching the active filters (year, difficulty, media type).</summary>
+    public CorpusFilteredScope FilteredScope { get; set; } = new();
+}
+
+/// <summary>
+/// The slice of the searchable corpus (decks with raw text) that the request's filters
+/// (media type, difficulty, release year) select — the denominator the terms are searched within.
+/// </summary>
+public class CorpusFilteredScope
+{
+    public bool HasFilters { get; set; }
+    public int Decks { get; set; }
+    public int Works { get; set; }
+    public long Characters { get; set; }
 }
 
 public class CorpusTermResult
@@ -26,6 +39,16 @@ public class CorpusTermResult
     public int MatchingDecks { get; set; }
     public long TotalOccurrences { get; set; }
     public double HitsPerMillion { get; set; }
+
+    /// <summary>Distinct works (top-level series, collapsing sub-decks) containing the term.</summary>
+    public int WorksMatched { get; set; }
+    /// <summary>Total distinct works in the searchable corpus.</summary>
+    public int WorksTotal { get; set; }
+    /// <summary>WorksMatched as a percentage of WorksTotal — corpus range / document frequency.</summary>
+    public double WorkRangePercentage { get; set; }
+    /// <summary>Gries' Deviation of Proportions across media types: 0 = perfectly even spread, ~1 = concentrated in one register.</summary>
+    public double Dispersion { get; set; }
+
     public List<CorpusSnippet> Snippets { get; set; } = [];
     public List<CorpusMediaBreakdown> MediaBreakdown { get; set; } = [];
     public List<CorpusTrendPoint> Trends { get; set; } = [];
@@ -47,8 +70,11 @@ public class CorpusTopDeck
 public class CorpusSnippet
 {
     public required string Html { get; set; }
+    /// <summary>Plain-text version of the context (no highlight markup), for copyable citations / export.</summary>
+    public required string Text { get; set; }
     public int DeckId { get; set; }
     public required string DeckTitle { get; set; }
+    public string? ParentTitle { get; set; }
     public MediaType MediaType { get; set; }
     public float Difficulty { get; set; }
     public int ReleaseYear { get; set; }
@@ -84,6 +110,8 @@ public class CorpusStats
     public int TotalDecks { get; set; }
     public long TotalCharacters { get; set; }
     public int DecksWithRawText { get; set; }
+    /// <summary>Distinct works (top-level series) in the whole searchable corpus.</summary>
+    public int TotalWorks { get; set; }
 }
 
 public class CorpusCoOccurrence

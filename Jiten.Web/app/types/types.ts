@@ -1,4 +1,20 @@
-import { type ComparisonOutcome, type DeckRelationshipType, type DeckStatus, type FsrsRating, type FsrsState, type Genre, type KnownState, type LinkType, type MediaType, type MediaTypeGroup, type NotificationType, type ReadingType, type RequestAction, type RequestStatus, type WordSetStateType } from '~/types';
+import {
+  type ComparisonOutcome,
+  type DeckRelationshipType,
+  type DeckStatus,
+  type FsrsRating,
+  type FsrsState,
+  type Genre,
+  type KnownState,
+  type LinkType,
+  type MediaType,
+  type MediaTypeGroup,
+  type NotificationType,
+  type ReadingType,
+  type RequestAction,
+  type RequestStatus,
+  type WordSetStateType,
+} from '~/types';
 
 export interface Deck {
   deckId: number;
@@ -689,71 +705,71 @@ export interface NotificationDto {
 }
 
 export interface DifficultyVoteDto {
-  id: number
-  deckA: DeckSummaryDto
-  deckB: DeckSummaryDto
-  outcome: ComparisonOutcome
-  createdAt: string
+  id: number;
+  deckA: DeckSummaryDto;
+  deckB: DeckSummaryDto;
+  outcome: ComparisonOutcome;
+  createdAt: string;
 }
 
 export interface DifficultyRatingDto {
-  id: number
-  deckId: number
-  deckTitle: string
-  romajiTitle?: string
-  englishTitle?: string
-  coverUrl: string | null
-  mediaType: MediaType
-  rating: number
-  createdAt: string
+  id: number;
+  deckId: number;
+  deckTitle: string;
+  romajiTitle?: string;
+  englishTitle?: string;
+  coverUrl: string | null;
+  mediaType: MediaType;
+  rating: number;
+  createdAt: string;
 }
 
 export interface DeckSummaryDto {
-  id: number
-  title: string
-  romajiTitle?: string
-  englishTitle?: string
-  coverUrl: string
-  difficulty: number
-  mediaType: MediaType
+  id: number;
+  title: string;
+  romajiTitle?: string;
+  englishTitle?: string;
+  coverUrl: string;
+  difficulty: number;
+  mediaType: MediaType;
 }
 
 export interface ComparisonSuggestionDto {
-  deckA: DeckSummaryDto
-  deckB: DeckSummaryDto
+  deckA: DeckSummaryDto;
+  deckB: DeckSummaryDto;
 }
 
 export interface VotingStatsDto {
-  totalComparisons: number
-  totalRatings: number
-  percentile: number | null
+  totalComparisons: number;
+  totalRatings: number;
+  percentile: number | null;
 }
 
 export interface CompletedDecksResponse {
-  decks: DeckSummaryDto[]
-  votedPairs: number[][]
+  decks: DeckSummaryDto[];
+  votedPairs: number[][];
 }
 
 export interface BlacklistedDeckDto {
-  deckId: number
-  title: string
-  romajiTitle?: string
-  englishTitle?: string
-  coverUrl: string | null
-  mediaType: MediaType
-  createdAt: string
+  deckId: number;
+  title: string;
+  romajiTitle?: string;
+  englishTitle?: string;
+  coverUrl: string | null;
+  mediaType: MediaType;
+  createdAt: string;
 }
 
 export interface DifficultyRankGroupDto {
-  id: number
-  sortIndex: number
-  decks: DeckSummaryDto[]
+  id: number;
+  sortIndex: number;
+  decks: DeckSummaryDto[];
 }
 
 export interface DifficultyRankingSectionDto {
-  group: MediaTypeGroup
-  groups: DifficultyRankGroupDto[]
-  unranked: DeckSummaryDto[]
+  group: MediaTypeGroup;
+  groups: DifficultyRankGroupDto[];
+  unranked: DeckSummaryDto[];
 }
 
 // SRS Study types
@@ -1102,8 +1118,10 @@ export interface UpdateStudyDeckRequest {
 
 export interface CorpusSnippet {
   html: string;
+  text: string;
   deckId: number;
   deckTitle: string;
+  parentTitle: string | null;
   mediaType: MediaType;
   difficulty: number;
   releaseYear: number;
@@ -1145,6 +1163,10 @@ export interface CorpusTermResult {
   totalOccurrences: number;
   matchingDecks: number;
   hitsPerMillion: number;
+  worksMatched: number;
+  worksTotal: number;
+  workRangePercentage: number;
+  dispersion: number;
   snippets: CorpusSnippet[];
   mediaBreakdown: CorpusMediaBreakdown[];
   trends: CorpusTrendPoint[];
@@ -1157,11 +1179,20 @@ export interface CorpusStats {
   totalDecks: number;
   totalCharacters: number;
   decksWithRawText: number;
+  totalWorks: number;
+}
+
+export interface CorpusFilteredScope {
+  hasFilters: boolean;
+  decks: number;
+  works: number;
+  characters: number;
 }
 
 export interface CorpusSearchResponse {
   results: CorpusTermResult[];
   corpusStats: CorpusStats;
+  filteredScope: CorpusFilteredScope;
 }
 
 export interface CorpusCoOccurrence {
