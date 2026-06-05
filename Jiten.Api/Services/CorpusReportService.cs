@@ -246,7 +246,8 @@ public static class CorpusReportService
         for (int i = 0; i < result.Snippets.Count; i++)
         {
             var s = result.Snippets[i];
-            sb.AppendLine($"<tr><td>{i + 1}</td><td class=\"snippet\">{s.Html}</td><td>{E(s.DeckTitle)}</td><td>{s.MediaType}</td><td>{s.Difficulty:F1}</td><td>{s.ReleaseYear}</td></tr>");
+            var source = string.IsNullOrEmpty(s.ParentTitle) ? E(s.DeckTitle) : $"{E(s.ParentTitle)} — {E(s.DeckTitle)}";
+            sb.AppendLine($"<tr><td>{i + 1}</td><td class=\"snippet\">{s.Html}</td><td>{source}</td><td>{s.MediaType}</td><td>{s.Difficulty:F1}</td><td>{s.ReleaseYear}</td></tr>");
         }
 
         sb.AppendLine("</tbody></table>");
