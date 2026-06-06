@@ -14,9 +14,16 @@ const name = ref((authStore.googleRegistrationData?.name as string) || (route.qu
 const picture = ref((authStore.googleRegistrationData?.picture as string) || (route.query.picture as string) || '');
 
 // Form data
+const USERNAME_MIN = 3;
+const USERNAME_MAX = 30;
 const username = ref('');
 const acceptedTerms = ref(false);
 const acceptedEmailConsent = ref(false);
+
+// Keep only characters Identity allows, then cap to the server limit
+function sanitizeUsername(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, USERNAME_MAX);
+}
 
 // UI state
 const isCheckingUsername = ref(false);
@@ -30,9 +37,9 @@ onMounted(() => {
     return;
   }
 
-  // Generate suggested username from email or name
-  const suggested = email.value.split('@')[0] || name.value.toLowerCase().replace(/\s+/g, '');
-  username.value = suggested;
+  // Generate suggested username from email or name, stripping punctuation and capping length
+  const raw = email.value.split('@')[0] || name.value.toLowerCase().replace(/\s+/g, '');
+  username.value = sanitizeUsername(raw);
   checkUsername();
 });
 
@@ -40,15 +47,17 @@ onMounted(() => {
 let usernameCheckTimeout: NodeJS.Timeout;
 watch(username, (newUsername) => {
   clearTimeout(usernameCheckTimeout);
-  if (newUsername.length >= 3) {
+  if (newUsername.length > USERNAME_MAX) {
+    usernameError.value = `Username must be at most ${USERNAME_MAX} characters`;
+  } else if (newUsername.length >= USERNAME_MIN) {
     usernameCheckTimeout = setTimeout(checkUsername, 500);
   } else {
-    usernameError.value = newUsername.length > 0 ? 'Username must be at least 3 characters' : '';
+    usernameError.value = newUsername.length > 0 ? `Username must be at least ${USERNAME_MIN} characters` : '';
   }
 });
 
 async function checkUsername() {
-  if (username.value.length < 3) return;
+  if (username.value.length < USERNAME_MIN) return;
 
   isCheckingUsername.value = true;
   usernameError.value = '';
@@ -63,7 +72,8 @@ async function checkUsername() {
 }
 
 const canProceedToStep2 = computed(() => {
-  return username.value.length >= 3 &&
+  return username.value.length >= USERNAME_MIN &&
+    username.value.length <= USERNAME_MAX &&
     !usernameError.value;
 });
 
@@ -122,6 +132,7 @@ async function completeRegistration() {
             id="username"
             v-model="username"
             type="text"
+            :maxlength="USERNAME_MAX"
             :class="[
               'w-full p-3 rounded-md border-2 transition-colors',
               usernameError ? 'border-red-600' : 'border-gray-300'

@@ -4,7 +4,7 @@ namespace Jiten.Api.Dtos.Requests;
 
 public class RegisterRequest
 {
-    [Required, MaxLength(20)]
+    [Required, MaxLength(30)]
     public required string Username { get; set; }
 
     [Required, EmailAddress, MaxLength(100)]

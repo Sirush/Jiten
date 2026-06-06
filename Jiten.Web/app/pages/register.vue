@@ -34,13 +34,13 @@
       return false;
     }
 
-    if (username.length < 2) {
-      usernameError.value = 'Username must be at least 2 characters';
+    if (username.length < 3) {
+      usernameError.value = 'Username must be at least 3 characters';
       return false;
     }
 
-    if (username.length > 20) {
-      usernameError.value = 'Username must be at most 20 characters';
+    if (username.length > 30) {
+      usernameError.value = 'Username must be at most 30 characters';
       return false;
     }
 
@@ -148,7 +148,7 @@
       <form @submit.prevent="handleRegister" class="flex flex-col gap-6 pt-4">
         <div class="w-full">
           <FloatLabel>
-            <InputText id="username" v-model.trim="form.username" required class="w-full" @blur="validateUsername" @focus="usernameError = null" />
+            <InputText id="username" v-model.trim="form.username" required maxlength="30" class="w-full" @blur="validateUsername" @focus="usernameError = null" />
             <label for="username">Username</label>
           </FloatLabel>
           <small v-if="usernameError" class="text-red-500">{{ usernameError }}</small>

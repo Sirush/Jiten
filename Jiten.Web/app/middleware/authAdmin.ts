@@ -14,7 +14,10 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     const hasValidToken = await authStore.ensureValidToken();
 
     if (!hasValidToken) {
-      if (import.meta.server && authStore.refreshToken) {
+      // Transient refresh failure (API down during a deploy) still leaves the refresh
+      // token in place — only a definitive 400/401/403 clears it. Keep the session rather
+      // than bouncing to /login over a brief outage. Applies on client and server.
+      if (authStore.refreshToken) {
         return;
       }
       authStore.clearAuthData();
@@ -27,7 +30,13 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     if (!authStore.user) {
       try {
         await authStore.fetchCurrentUser();
-      } catch {
+      } catch (err: any) {
+        // Only a 401 means the token was rejected; a transient 5xx/network error must not
+        // destroy the session. Keep the valid token and render.
+        const status = err?.status ?? err?.statusCode ?? err?.response?.status;
+        if (status !== 401) {
+          return;
+        }
         authStore.clearAuthData();
         return navigateTo({
           path: '/login',
@@ -43,7 +52,8 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
       });
     }
   } catch (error) {
-    if (import.meta.server && authStore.refreshToken) {
+    // Don't tear down the session over a transient error while a refresh token survives.
+    if (authStore.refreshToken) {
       return;
     }
     authStore.clearAuthData();

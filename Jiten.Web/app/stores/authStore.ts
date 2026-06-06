@@ -212,14 +212,20 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (err: any) {
       console.error('Token refresh failed:', err);
 
-      tabSyncManager?.broadcast('TOKEN_REFRESH_FAILED', {
-        timestamp: Date.now()
-      });
+      // Only a definitive auth rejection from the server means the tokens are dead.
+      // /auth/refresh returns 400 (or 401/403 defensively) when the refresh token is
+      // genuinely invalid/expired/used/revoked. Network errors, timeouts and 5xx
+      // (502/503/504 — e.g. the API restarting during a deploy) are transient: keep the
+      // tokens so the user can retry once the API is back instead of being logged out by
+      // a brief blip. Applies on both client and server.
+      const status = err?.status ?? err?.statusCode ?? err?.response?.status;
+      const isAuthRejection = status === 400 || status === 401 || status === 403;
 
-      // On SSR, only preserve tokens if the API was unreachable (network error).
-      // If the server responded (4xx/5xx), the tokens are genuinely invalid.
-      const isNetworkError = import.meta.server && !err.status && !err.statusCode;
-      if (!isNetworkError) {
+      if (isAuthRejection) {
+        // Only tell other tabs to drop their session on a real rejection.
+        tabSyncManager?.broadcast('TOKEN_REFRESH_FAILED', {
+          timestamp: Date.now()
+        });
         clearAuthData();
       }
       return false;

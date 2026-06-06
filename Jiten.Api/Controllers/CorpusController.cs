@@ -107,9 +107,12 @@ public class CorpusController(
 
     // corpus/<sanitised-word>_<randomid>.html. Strips characters unsafe for storage paths / URLs
     // while keeping kana/kanji intact, and caps length to keep the filename reasonable.
+    // Path traversal is not possible: '/', '\\', '.' and '%' are removed, so a "../" segment (or its
+    // percent-encoded form) can never be formed — the word is always a single, slash-free path
+    // component confined to the corpus/ folder, and the GUID suffix prevents overwriting other files.
     private static string BuildPublishFileName(string term)
     {
-        const string unsafeChars = "/\\?#%&:*\"<>| ";
+        const string unsafeChars = "/\\.?#%&:*\"<>| ";
         var safe = new string(term.Where(c => !char.IsControl(c) && !unsafeChars.Contains(c)).ToArray());
         if (safe.Length > 40) safe = safe[..40];
         if (string.IsNullOrEmpty(safe)) safe = "corpus";

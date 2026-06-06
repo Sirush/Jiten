@@ -54,7 +54,10 @@ export default defineNuxtPlugin((nuxtApp) => {
             }
           }
 
-          if (!isAuthEndpoint) {
+          // Only bounce to /login when the refresh was definitively rejected (it cleared
+          // the tokens). A transient failure (API down during a deploy) leaves the refresh
+          // token in place — keep the user where they are and let it retry.
+          if (!isAuthEndpoint && !authStore.refreshToken) {
             await nuxtApp.runWithContext(() => {
               const router = useRouter();
               const currentRoute = router.currentRoute.value.path;

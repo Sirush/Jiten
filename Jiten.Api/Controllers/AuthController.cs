@@ -90,8 +90,8 @@ public class AuthController : ControllerBase
         if (emailExists != null) return Conflict(new { message = "Email already registered." });
 
 
-        if (userName.Length is < 2 or > 20)
-            return BadRequest(new { message = "Username must be between 2 and 20 characters." });
+        if (userName.Length is < 3 or > 30)
+            return BadRequest(new { message = "Username must be between 3 and 30 characters." });
 
         var user = new User
                    {
@@ -202,6 +202,13 @@ public class AuthController : ControllerBase
         return Ok(tokens);
     }
 
+    // A refresh token is rotated (marked used) the moment it is redeemed. If the 200
+    // response is lost in transit — e.g. the connection drops while the API is restarting
+    // during a deploy — the client still holds the old token and will retry with it.
+    // Within this grace window that retry is treated as benign and issues a fresh pair
+    // instead of logging the user out. Reuse outside the window is treated as invalid.
+    private static readonly TimeSpan RefreshReuseGraceWindow = TimeSpan.FromSeconds(60);
+
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest model)
     {
@@ -209,48 +216,61 @@ public class AuthController : ControllerBase
 
         var principal = _tokenService.GetPrincipalFromExpiredToken(model.AccessToken);
 
-        string? userId;
-        string? jti;
-        RefreshToken? oldRefreshToken;
-
+        // When the access token is parseable, the refresh token must be bound to its jti.
+        // When it isn't (corrupted/rotated key), the 64-byte refresh token secret is the
+        // sole credential and we skip the jti binding.
+        string? jti = null;
         if (principal != null)
         {
-            userId = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(userId)) return BadRequest(new { message = "Invalid token claims." });
+            var principalUserId = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(principalUserId)) return BadRequest(new { message = "Invalid token claims." });
 
             jti = principal.Claims.FirstOrDefault(c => c.Type == System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
             if (string.IsNullOrEmpty(jti)) return BadRequest(new { message = "Invalid token claims." });
+        }
 
-            oldRefreshToken = await _context.RefreshTokens
-                .FirstOrDefaultAsync(rt => rt.Token == model.RefreshToken && rt.UserId == userId);
+        var oldRefreshToken = await _context.RefreshTokens
+            .FirstOrDefaultAsync(rt => rt.Token == model.RefreshToken);
 
-            if (oldRefreshToken == null || oldRefreshToken.JwtId != jti || oldRefreshToken.IsUsed || oldRefreshToken.IsRevoked || oldRefreshToken.ExpiryDate < DateTime.UtcNow)
+        // Hard failures: unknown token, not bound to the presented access token, revoked, or expired.
+        if (oldRefreshToken == null
+            || (jti != null && oldRefreshToken.JwtId != jti)
+            || oldRefreshToken.IsRevoked
+            || oldRefreshToken.ExpiryDate < DateTime.UtcNow)
+        {
+            if (oldRefreshToken is { IsRevoked: true })
             {
-                if (oldRefreshToken != null && (oldRefreshToken.IsUsed || oldRefreshToken.IsRevoked))
-                {
-                    _context.RefreshTokens.Remove(oldRefreshToken);
-                    await _context.SaveChangesAsync();
-                }
+                _context.RefreshTokens.Remove(oldRefreshToken);
+                await _context.SaveChangesAsync();
+            }
+            return BadRequest(new { message = "Invalid or expired refresh token." });
+        }
+
+        // Already-used token: allow it only inside the grace window (benign lost-response
+        // retry). Outside the window it is a stale/replayed token — remove it and reject.
+        if (oldRefreshToken.IsUsed)
+        {
+            var usedRecently = oldRefreshToken.UsedAt.HasValue
+                               && oldRefreshToken.UsedAt.Value >= DateTime.UtcNow - RefreshReuseGraceWindow;
+            if (!usedRecently)
+            {
+                _context.RefreshTokens.Remove(oldRefreshToken);
+                await _context.SaveChangesAsync();
                 return BadRequest(new { message = "Invalid or expired refresh token." });
             }
         }
-        else
-        {
-            // Access token unparseable (corrupted/rotated key) — look up refresh token directly
-            oldRefreshToken = await _context.RefreshTokens
-                .FirstOrDefaultAsync(rt => rt.Token == model.RefreshToken && !rt.IsUsed && !rt.IsRevoked && rt.ExpiryDate >= DateTime.UtcNow);
 
-            if (oldRefreshToken == null)
-                return BadRequest(new { message = "Invalid or expired refresh token." });
-
-            userId = oldRefreshToken.UserId;
-        }
-
-        var user = await _userManager.FindByIdAsync(userId);
+        var user = await _userManager.FindByIdAsync(oldRefreshToken.UserId);
         if (user == null) return BadRequest(new { message = "User not found." });
 
-        oldRefreshToken.IsUsed = true;
-        _context.RefreshTokens.Update(oldRefreshToken);
+        // Mark used on first redemption only; keep the original UsedAt so retries within the
+        // window don't slide it forward.
+        if (!oldRefreshToken.IsUsed)
+        {
+            oldRefreshToken.IsUsed = true;
+            oldRefreshToken.UsedAt = DateTime.UtcNow;
+            _context.RefreshTokens.Update(oldRefreshToken);
+        }
 
         var newTokens = await _tokenService.GenerateTokens(user);
 
@@ -473,9 +493,9 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Username is required" });
         }
 
-        if (username.Length < 3 || username.Length > 20)
+        if (username.Length < 3 || username.Length > 30)
         {
-            return BadRequest(new { message = "Username must be between 3 and 20 characters" });
+            return BadRequest(new { message = "Username must be between 3 and 30 characters" });
         }
 
         var userExists = await _userManager.FindByNameAsync(username);

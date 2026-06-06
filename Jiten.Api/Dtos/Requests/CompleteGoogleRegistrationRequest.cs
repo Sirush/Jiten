@@ -4,7 +4,7 @@ namespace Jiten.Api.Dtos.Requests;
 
 public class CompleteGoogleRegistrationRequest
 {
-    [Required, MaxLength(20)]
+    [Required, MaxLength(30)]
     public required string Username { get; set; }
 
     public required string TempToken { get; set; }
