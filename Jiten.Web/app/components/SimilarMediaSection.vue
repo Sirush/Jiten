@@ -4,6 +4,7 @@
   import Skeleton from 'primevue/skeleton';
   import { useApiFetch } from '~/composables/useApiFetch';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { useJitenStore } from '~/stores/jitenStore';
 
   const props = defineProps<{
     deck: Deck;
@@ -33,7 +34,18 @@
   // Sentinel for "no filter". PrimeVue's Select treats a null model value as "no selection"
   // (renders empty), so we use a real value the MediaType enum never uses (it starts at 1).
   const ALL_TYPES = 0;
-  const mediaTypeFilter = ref<number>(ALL_TYPES);
+  // A non-zero pinned type is a saved default that follows the user across media pages
+  // (persisted in a cookie via jitenStore). 0 = no saved default, so the filter starts at All types.
+  const jitenStore = useJitenStore();
+  const mediaTypeFilter = ref<number>(jitenStore.similarMediaPinnedType);
+  // "Locked" means the current selection IS the saved default. Changing the type is a temporary
+  // per-page override that leaves the saved default untouched, so the lock visually opens but the
+  // cookie keeps the original type — the next page re-seeds from it.
+  const isLocked = computed(() => jitenStore.similarMediaPinnedType !== ALL_TYPES && mediaTypeFilter.value === jitenStore.similarMediaPinnedType);
+
+  function toggleLock() {
+    jitenStore.similarMediaPinnedType = isLocked.value ? ALL_TYPES : mediaTypeFilter.value;
+  }
   const visibleCount = ref(INITIAL_COUNT);
 
   // Reactive request: refetch from the backend (which over-fetches per type) when the filter changes.
@@ -48,16 +60,21 @@
   // Available types come from a dedicated endpoint computed over the full candidate pool, not the
   // top unfiltered page — otherwise types that only appear deeper in the ranking (but are still
   // reachable via the per-type over-fetch) would be missing from the dropdown.
-  const { data: typesData, status: typesStatus } = await useApiFetch<MediaType[]>(
-    () => `media-deck/get-similar-deck-types/${props.deck.deckId}`,
-    { revalidateOnClient: true, lazy: true }
-  );
+  const { data: typesData, status: typesStatus } = await useApiFetch<MediaType[]>(() => `media-deck/get-similar-deck-types/${props.deck.deckId}`, {
+    revalidateOnClient: true,
+    lazy: true,
+  });
   const availableTypes = computed<MediaType[]>(() => [...(typesData.value ?? [])].sort((a, b) => a - b));
 
-  const mediaTypeOptions = computed(() => [
-    { label: 'All types', value: ALL_TYPES },
-    ...availableTypes.value.map((t) => ({ label: getMediaTypeText(t), value: t as number })),
-  ]);
+  const mediaTypeOptions = computed(() => {
+    const opts = [{ label: 'All types', value: ALL_TYPES }, ...availableTypes.value.map((t) => ({ label: getMediaTypeText(t), value: t as number }))];
+    // A locked type may not exist in this deck's candidate pool; include it anyway so the Select
+    // shows its label (the empty-state message explains there are no matches) instead of a blank.
+    if (mediaTypeFilter.value !== ALL_TYPES && !opts.some((o) => o.value === mediaTypeFilter.value)) {
+      opts.push({ label: getMediaTypeText(mediaTypeFilter.value as MediaType), value: mediaTypeFilter.value });
+    }
+    return opts;
+  });
 
   // Backend returns results content-similarity-desc. The revealable pool is every deck at or
   // above the threshold, but never fewer than INITIAL_COUNT and never more than HARD_MAX — so
@@ -100,7 +117,7 @@
 <template>
   <!-- Initial load only: a refetch on filter change keeps the section + dropdown in place. -->
   <div v-if="availableTypes.length === 0 && typesStatus !== 'success'" class="pt-4">
-    <span class="font-bold">Similar Media</span>
+    <h2 class="font-bold">Similar Media</h2>
     <div class="flex flex-row flex-wrap gap-4 justify-center pt-4">
       <Skeleton v-for="i in 7" :key="i" width="136px" height="192px" />
     </div>
@@ -108,7 +125,7 @@
   <div v-else-if="availableTypes.length > 0" class="pt-4">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
       <div class="flex flex-wrap items-baseline gap-x-2">
-        <span class="font-bold">Similar Media</span>
+        <h2 class="font-bold">Similar Media</h2>
         <span class="text-xs text-gray-500 dark:text-gray-400">
           <span class="rounded bg-primary px-1 py-0.5 font-bold text-primary-contrast">xx%</span>
           = content similarity
@@ -124,6 +141,17 @@
           size="small"
           class="text-sm"
         />
+        <Button
+          v-if="mediaTypeOptions.length > 2"
+          :icon="isLocked ? 'pi pi-lock' : 'pi pi-lock-open'"
+          text
+          rounded
+          size="small"
+          :severity="isLocked ? 'primary' : 'secondary'"
+          :title="isLocked ? 'Default media type locked — click to unlock' : 'Lock this media type as the default'"
+          :aria-label="isLocked ? 'Unlock default media type' : 'Lock default media type'"
+          @click="toggleLock"
+        />
         <SelectButton
           v-model="sortMode"
           :options="modeOptions"
@@ -135,10 +163,14 @@
       </div>
     </div>
 
-    <div v-if="status === 'pending'" class="flex flex-row flex-wrap gap-4 justify-center pt-4">
-      <Skeleton v-for="i in 7" :key="i" width="136px" height="192px" />
-    </div>
-    <div v-else-if="displayed.length > 0" class="flex flex-row flex-wrap gap-4 justify-center pt-4">
+    <!-- Keep the existing grid mounted during a filter refetch (useFetch retains old data while
+         pending) so the section height stays put — just dim it. Skeletons are only for the first
+         load, when there is nothing to show yet. -->
+    <div
+      v-if="displayed.length > 0"
+      class="flex flex-row flex-wrap gap-4 justify-center pt-4 transition-opacity"
+      :class="{ 'pointer-events-none opacity-50': status === 'pending' }"
+    >
       <div v-for="item in displayed" :key="item.deck.deckId" class="flex w-34 flex-col items-center gap-1">
         <div class="relative">
           <span
@@ -157,6 +189,9 @@
           {{ localiseTitle(item.deck) }}
         </NuxtLink>
       </div>
+    </div>
+    <div v-else-if="status === 'pending'" class="flex flex-row flex-wrap gap-4 justify-center pt-4">
+      <Skeleton v-for="i in 7" :key="i" width="136px" height="192px" />
     </div>
     <div v-else class="pt-4 text-center text-sm text-gray-500 dark:text-gray-400">No similar media of this type.</div>
 

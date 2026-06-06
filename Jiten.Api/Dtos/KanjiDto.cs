@@ -38,6 +38,7 @@ public class KanjiListDto
     public List<string> Meanings { get; set; } = [];
     public short StrokeCount { get; set; }
     public short? JlptLevel { get; set; }
+    public short? Grade { get; set; }
     public int? FrequencyRank { get; set; }
 }
 

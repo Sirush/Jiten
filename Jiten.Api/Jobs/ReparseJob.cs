@@ -8,10 +8,17 @@ namespace Jiten.Api.Jobs;
 public class ReparseJob(
     IDbContextFactory<JitenDbContext> contextFactory,
     IBackgroundJobClient backgroundJobs,
-    Jiten.Api.Services.IPendingEmbeddingQueue pendingEmbeddingQueue)
+    Jiten.Api.Services.IPendingEmbeddingQueue pendingEmbeddingQueue,
+    Jiten.Api.Services.IIndexNowService indexNow)
 {
+    // Single-deck reparse: notifies IndexNow. Kept as a 1-arg overload so in-flight Hangfire jobs
+    // serialized before this change still resolve.
     [Queue("reparse")]
-    public async Task Reparse(int deckId)
+    public Task Reparse(int deckId) => Reparse(deckId, notifyIndexNow: true);
+
+    // Bulk reparse endpoints pass notifyIndexNow: false — never mass-submit the catalogue to IndexNow.
+    [Queue("reparse")]
+    public async Task Reparse(int deckId, bool notifyIndexNow)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
 
@@ -107,6 +114,10 @@ public class ReparseJob(
 
         // Re-embed the affected parent deck for vocabulary similarity (periodic sweep batches these).
         await pendingEmbeddingQueue.AddAsync(deck.ParentDeckId ?? deck.DeckId);
+
+        // Notify IndexNow of the top-level deck page (skipped for bulk reparses to respect Bing's quota).
+        if (notifyIndexNow)
+            await indexNow.SubmitDeckAsync(deck.ParentDeckId ?? deck.DeckId);
     }
 
     private void QueueStatsComputationForDeckTree(Deck deck)

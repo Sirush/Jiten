@@ -14,6 +14,16 @@ Disallow: /settings/*
 Disallow: /google-registration
 Disallow: /profile
 Disallow: /profile/*
+Disallow: /srs
+Disallow: /srs/*
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /notifications
+Disallow: /parse
+Disallow: /reader
+Disallow: /requests/new
+Disallow: /ratings/history
 Allow: /decks/media/*/detail
 Allow: /decks/media/list/*
 

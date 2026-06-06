@@ -13,6 +13,7 @@ useHead({ title: 'Media Requests - Jiten' });
 
 const { requests, totalCount, isLoading, fetchRequests, toggleUpvote, subscribe, unsubscribe, fetchMyQuota } = useMediaRequests();
 
+const authStore = useAuthStore();
 const quota = ref<{ activeCount: number; limit: number } | null>(null);
 const toast = useToast();
 const router = useRouter();
@@ -363,6 +364,10 @@ onMounted(() => loadRequests());
                         <span v-if="request.uploadCount > 0" class="flex items-center gap-1">
                           <i class="pi pi-paperclip text-xs" />
                           {{ request.uploadCount }}
+                        </span>
+                        <span v-if="request.requesterName && authStore.isAdmin" class="flex items-center gap-1">
+                          <i class="pi pi-user text-xs" />
+                          {{ request.requesterName }}
                         </span>
                         <span>{{ formatTimeAgo(request.createdAt) }}</span>
                         <span v-if="request.completedAt" class="hidden md:flex items-center gap-1">

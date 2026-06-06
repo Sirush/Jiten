@@ -1,5 +1,20 @@
 <script setup lang="ts">
   import type { Kanji, WordSummary } from '~/types';
+  import { type KanjiScale, kanjiScaleMembership } from '~/data/kanjiGroupings';
+
+  type BadgeSeverity = 'primary' | 'info' | 'secondary' | 'success' | 'warn' | 'danger' | 'contrast';
+
+  const scaleSeverities: Record<KanjiScale, BadgeSeverity> = {
+    jlpt: 'info',
+    grade: 'secondary',
+    kanken: 'success',
+    wanikani: 'warn',
+    rtk: 'danger',
+    klc: 'primary',
+    tmw: 'contrast',
+  };
+
+  const allScales: KanjiScale[] = ['jlpt', 'grade', 'kanken', 'wanikani', 'rtk', 'klc', 'tmw'];
 
   const route = useRoute();
   const { $api } = useNuxtApp();
@@ -12,17 +27,11 @@
 
   const { data: kanji, status } = useApiFetch<Kanji>(() => `kanji/${encodeURIComponent(character.value)}`);
 
-  const jlptText = computed(() => {
-    if (!kanji.value?.jlptLevel) return null;
-    return `N${kanji.value.jlptLevel}`;
-  });
-
-  const gradeText = computed(() => {
-    if (!kanji.value?.grade) return null;
-    if (kanji.value.grade <= 6) return `Grade ${kanji.value.grade}`;
-    if (kanji.value.grade === 8) return 'Secondary';
-    return `Grade ${kanji.value.grade}`;
-  });
+  const scaleBadges = computed(() =>
+    allScales
+      .map(scale => ({ severity: scaleSeverities[scale], text: kanjiScaleMembership(character.value, scale, kanji.value?.grade) }))
+      .filter((b): b is { severity: BadgeSeverity; text: string } => b.text != null)
+  );
 
   const expandedReading = ref<string | null>(null);
   const allReadingWords = ref<WordSummary[] | null>(null);
@@ -132,10 +141,7 @@
         <!-- Metadata badges -->
         <div class="flex flex-wrap justify-center gap-2 mb-4">
           <Tag v-if="kanji.frequencyRank" severity="primary"> Jiten frequency #{{ kanji.frequencyRank }} </Tag>
-          <Tag v-if="jlptText" severity="info"> JLPT {{ jlptText }} </Tag>
-          <Tag v-if="gradeText" severity="secondary">
-            {{ gradeText }}
-          </Tag>
+          <Tag v-for="badge in scaleBadges" :key="badge.text" :severity="badge.severity"> {{ badge.text }} </Tag>
           <Tag severity="contrast"> {{ kanji.strokeCount }} strokes </Tag>
         </div>
       </div>

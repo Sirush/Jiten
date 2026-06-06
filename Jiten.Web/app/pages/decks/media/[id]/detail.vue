@@ -49,6 +49,19 @@
     }
   };
 
+  const jumpToSimilar = () => {
+    // Update the URL hash so the position is shareable, without a full route navigation.
+    history.pushState(null, '', '#similar-media');
+    document.getElementById('similar-media')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // Honour a shared link that already points at the anchor (#similar-media in the URL on load).
+  onMounted(() => {
+    if (window.location.hash === '#similar-media') {
+      nextTick(() => document.getElementById('similar-media')?.scrollIntoView({ block: 'start' }));
+    }
+  });
+
   const updateParentStatus = (parentDeckId: number, status: import('~/types').DeckStatus) => {
     if (response.value?.data?.mainDeck && response.value.data.mainDeck.deckId === parentDeckId) {
       response.value = { ...response.value, data: { ...response.value.data, mainDeck: { ...response.value.data.mainDeck, status } } };
@@ -73,20 +86,39 @@
     return cover && cover !== 'nocover.jpg' ? cover : undefined;
   });
 
-  useHead(() => {
-    return {
-      title: `${title.value} - Detail`,
-      meta: [
-        {
-          name: 'description',
-          content: `Anki deck, vocabulary list and statistics for ${title.value} (${response.value?.data?.mainDeck?.originalTitle ?? ''}).`,
-        },
-      ],
-      link: coverUrl.value
-        ? [{ rel: 'preload', as: 'image', href: coverUrl.value, fetchpriority: 'high' }]
-        : [],
-    };
+  const mainDeck = computed(() => response.value?.data?.mainDeck);
+  const parentDeck = computed(() => response.value?.data?.parentDeck);
+
+  const metaDescription = computed(() => {
+    const d = mainDeck.value;
+    if (!d) return '';
+    const type = getMediaTypeText(d.mediaType);
+    const chars = d.characterCount ? d.characterCount.toLocaleString() : '';
+    const words = d.uniqueWordCount ? d.uniqueWordCount.toLocaleString() : '';
+    return `Frequency-ordered vocabulary list and downloadable Anki deck for ${title.value}`
+      + ` (${d.originalTitle ?? ''}), a Japanese ${type}`
+      + (chars ? ` with ${chars} characters and ${words} unique words` : '')
+      + `. Difficulty, kanji and word statistics on Jiten.`;
   });
+
+  useSeoMeta({
+    title: () => `${title.value} Vocabulary List & Anki Deck`,
+    description: metaDescription,
+    ogTitle: () => `${title.value} — Japanese Vocabulary List & Anki Deck`,
+    ogDescription: metaDescription,
+    ogType: 'article',
+    twitterTitle: () => `${title.value} — Vocabulary List & Anki Deck`,
+    twitterDescription: metaDescription,
+  });
+
+  useHead(() => ({
+    link: coverUrl.value
+      ? [{ rel: 'preload', as: 'image', href: coverUrl.value, fetchpriority: 'high' }]
+      : [],
+  }));
+
+  const pageUrl = computed(() => `https://jiten.moe/decks/media/${deckId.value}/detail`);
+  useDeckSchema(mainDeck, pageUrl, parentDeck);
 
   defineOgImageComponent('MediaDeckCardOgImage', { deckId: deckId });
 </script>
@@ -101,7 +133,8 @@
       </Card>
     </div>
     <div v-else-if="response?.data?.mainDeck">
-      <MediaDeckCard :deck="response.data.mainDeck" hide-detail-button @update:deck="updateMainDeck" />
+      <DeckBreadcrumb :deck="response.data.mainDeck" :parent-deck="response.data.parentDeck" class="mb-2" />
+      <MediaDeckCard :deck="response.data.mainDeck" title-tag="h1" hide-detail-button @update:deck="updateMainDeck" />
 
       <div v-if="response.data.parentDeck != null" class="pt-4">
         This deck belongs to
@@ -111,7 +144,12 @@
       </div>
 
       <div v-if="response.data.subDecks.length > 0" class="pt-4">
-        <span class="font-bold">Subdecks</span>
+        <div class="flex items-baseline justify-between gap-4">
+          <h2 class="font-bold">Subdecks</h2>
+          <a href="#similar-media" class="text-primary text-sm cursor-pointer" @click.prevent="jumpToSimilar">
+            Jump to similar media ↓
+          </a>
+        </div>
         <div v-if="previousLink != null || nextLink != null" class="flex flex-col md:flex-row justify-between">
           <div class="flex gap-8 pl-2">
             <NuxtLink :to="previousLink" :class="previousLink == null ? 'text-gray-500 pointer-events-none' : ''">
@@ -127,12 +165,14 @@
           </div>
         </div>
         <div class="flex flex-row flex-wrap gap-2 justify-center pt-4">
-          <MediaDeckCard v-for="deck in response.data.subDecks" :key="deck.deckId" :deck="deck" :is-compact="true" @update:deck="updateSubDeck" @parent-status-changed="updateParentStatus" />
+          <MediaDeckCard v-for="deck in response.data.subDecks" :key="deck.deckId" :deck="deck" title-tag="h3" :is-compact="true" @update:deck="updateSubDeck" @parent-status-changed="updateParentStatus" />
         </div>
       </div>
       <!--      <div v-else class="pt-4">This deck has no subdecks</div>-->
 
-      <SimilarMediaSection :deck="response.data.mainDeck" />
+      <div id="similar-media" class="scroll-mt-4">
+        <SimilarMediaSection :deck="response.data.mainDeck" />
+      </div>
     </div>
   </div>
 </template>

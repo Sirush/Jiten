@@ -238,6 +238,24 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                                                                      ));
     }
 
+    /// <summary>
+    /// Returns kanji characters that appear in at least <see cref="MinWordsForSitemap"/> distinct words,
+    /// for sitemap generation. Filtering out rarely-used kanji avoids indexing thin pages.
+    /// </summary>
+    [HttpGet("sitemap-characters")]
+    [SwaggerOperation(Summary = "Get kanji characters for sitemap generation")]
+    [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
+    [ResponseCache(Duration = 60 * 60 * 24)]
+    public async Task<List<string>> GetSitemapCharacters()
+    {
+        const int MinWordsForSitemap = 10;
+        return await context.WordKanjis.AsNoTracking()
+                            .GroupBy(wk => wk.KanjiCharacter)
+                            .Where(g => g.Select(wk => wk.WordId).Distinct().Count() >= MinWordsForSitemap)
+                            .Select(g => g.Key)
+                            .ToListAsync();
+    }
+
     private class WordRankResult
     {
         public int WordId { get; set; }

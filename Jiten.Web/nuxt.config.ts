@@ -73,6 +73,7 @@ export default defineNuxtConfig({
     },
   },
   modules: [
+    '@nuxt/eslint',
     '@primevue/nuxt-module',
     '@nuxt/icon',
     '@pinia/nuxt',
@@ -132,7 +133,17 @@ export default defineNuxtConfig({
   },
   site: {
     url: 'https://jiten.moe',
-    name: 'Vocabulary lists and anki decks for all your Japanese media',
+    name: 'Jiten',
+    description: 'Vocabulary lists and Anki decks for all your Japanese media.',
+  },
+  schemaOrg: {
+    identity: {
+      type: 'Organization',
+      name: 'Jiten',
+      url: 'https://jiten.moe',
+      logo: 'https://jiten.moe/web-app-manifest-512x512.png',
+      sameAs: ['https://github.com/Sirush/Jiten'],
+    },
   },
   ogImage: {
     fonts: [

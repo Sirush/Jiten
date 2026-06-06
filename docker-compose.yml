@@ -6,6 +6,7 @@ services:
       args:
         PG_VERSION: 17
     image: jiten/postgres-pgroonga:17
+    shm_size: 1gb
     environment:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_USER: ${DB_USER}
@@ -77,6 +78,8 @@ services:
       - RunPod__ApiKey=${RUNPOD_API_KEY:-}
       - RunPod__NovelsEndpointId=${RUNPOD_NOVELS_ENDPOINT_ID:-}
       - RunPod__ShowsEndpointId=${RUNPOD_SHOWS_ENDPOINT_ID:-}
+      - IndexNow__Key=${INDEXNOW_KEY:-}
+      - IndexNow__SiteUrl=${INDEXNOW_SITE_URL:-https://jiten.moe}
       - VoicevoxUrl=${VOICEVOX_URL:-http://voicevox:50021}
     volumes:
       - ./Shared:/app/Shared:ro

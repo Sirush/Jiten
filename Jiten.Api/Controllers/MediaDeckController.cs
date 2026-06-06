@@ -67,6 +67,21 @@ public class MediaDeckController(
     }
 
     /// <summary>
+    /// Returns top-level media decks with the fields needed for sitemap entries (lastmod + cover image).
+    /// </summary>
+    [HttpGet("get-media-decks-sitemap")]
+    [ResponseCache(Duration = 60 * 60)]
+    [SwaggerOperation(Summary = "Get top-level media decks for sitemap generation")]
+    [ProducesResponseType(typeof(List<MediaDeckSitemapEntry>), StatusCodes.Status200OK)]
+    public async Task<List<MediaDeckSitemapEntry>> GetMediaDecksForSitemap()
+    {
+        return await context.Decks.AsNoTracking()
+                            .Where(d => d.ParentDeckId == null)
+                            .Select(d => new MediaDeckSitemapEntry(d.DeckId, d.LastUpdate, d.CoverName))
+                            .ToListAsync();
+    }
+
+    /// <summary>
     /// Returns the deck dto of all parent media decks.
     /// </summary>
     /// <returns>List of decks with titles and ids.</returns>
@@ -2187,3 +2202,6 @@ public class MediaDeckController(
         return await context.Database.SqlQuery<int>(sql).ToListAsync();
     }
 }
+
+/// <summary>Minimal projection of a top-level deck for sitemap generation.</summary>
+public record MediaDeckSitemapEntry(int Id, DateTimeOffset LastUpdate, string CoverName);

@@ -16,6 +16,7 @@
     isCompact?: boolean;
     hideControl?: boolean;
     hideDetailButton?: boolean;
+    titleTag?: string;
   }>();
 
   const emit = defineEmits<{
@@ -48,6 +49,24 @@
   const isAudioVisual = computed(() =>
     [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio].includes(props.deck.mediaType)
   );
+
+  // Descriptive text used when sharing the deck to social platforms / the native share sheet.
+  const shareTitle = computed(() => `${localiseTitle(props.deck)} — Japanese vocabulary list, stats & Anki deck · Jiten`);
+
+  // Title variants not already shown as the heading, deduped. `ja` marks the original (Japanese)
+  // title so it can be wrapped in lang="ja". Aliases are surfaced via JSON-LD alternateName, not here.
+  const alternateTitles = computed<{ text: string; ja: boolean }[]>(() => {
+    const d = props.deck;
+    const shown = localiseTitle(d);
+    const list: { text: string; ja: boolean }[] = [];
+    const push = (text: string | undefined | null, ja: boolean) => {
+      if (text && text !== shown && !list.some(e => e.text === text)) list.push({ text, ja });
+    };
+    push(d.originalTitle, true);
+    push(d.romajiTitle, false);
+    push(d.englishTitle, false);
+    return list;
+  });
 
   const formattedSpeechDuration = computed(() => {
     if (props.deck.speechDuration <= 0) return '';
@@ -286,9 +305,9 @@
 
     <Card class="p-2" :style="{ outline: borderColor }">
       <template #title>
-        <div class="flex justify-between items-start">
-          <span class="break-words min-w-0">{{ localiseTitle(deck) }}</span>
-          <div class="flex flex-row items-center gap-1 h-6">
+        <div class="flex flex-col gap-1 md:flex-row md:justify-between md:items-start">
+          <component :is="titleTag || 'span'" class="break-words min-w-0 order-last md:order-none">{{ localiseTitle(deck) }}</component>
+          <div class="flex flex-row items-center gap-1 h-6 shrink-0 self-end md:self-auto">
             <div v-if="authStore.isAuthenticated" class="flex items-center gap-2">
               <i v-if="deck.isFavourite" class="pi pi-star-fill text-yellow-500 text-lg" />
               <i v-if="deck.isIgnored" class="pi pi-eye-slash text-gray-800 dark:text-gray-300 text-lg" />
@@ -296,6 +315,7 @@
                 {{ getDeckStatusText(deck.status) }}
               </span>
             </div>
+            <ShareButton v-if="!isCompact" :path="`/decks/media/${deck.deckId}/detail`" :title="shareTitle" />
             <Tooltip content="View stats">
               <router-link
                 :to="`/decks/media/${deck.deckId}/stats`"
@@ -312,7 +332,21 @@
           </div>
         </div>
       </template>
-      <template v-if="!isCompact" #subtitle>{{ getMediaTypeText(deck.mediaType) }}</template>
+      <template v-if="!isCompact" #subtitle>
+        <span class="flex items-baseline gap-1 min-w-0 text-sm pl-0.5">
+          <span class="font-semibold whitespace-nowrap">{{ getMediaTypeText(deck.mediaType) }}</span>
+          <template v-if="alternateTitles.length && !store.hideAlternativeTitles">
+            <span class="text-gray-400 dark:text-gray-500">·</span>
+            <!-- Full text stays in the DOM (truncate only clips visually) so it remains crawlable. -->
+            <span class="min-w-0 flex-1 truncate md:overflow-visible md:whitespace-normal md:break-words">
+              <template v-for="(t, i) in alternateTitles" :key="i">
+                <span v-if="i > 0" class="mx-1 text-gray-400 dark:text-gray-500">·</span>
+                <span :lang="t.ja ? 'ja' : undefined">{{ t.text }}</span>
+              </template>
+            </span>
+          </template>
+        </span>
+      </template>
       <template #content>
         <div class="flex-gap-6">
           <div class="flex-1 max-w-full overflow-hidden">

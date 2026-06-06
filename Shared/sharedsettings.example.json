@@ -47,5 +47,9 @@
     "ApiKey": "your-api-key",
     "NovelsEndpointId": "endpoint-id-for-novels",
     "ShowsEndpointId": "endpoint-id-for-shows"
+  },
+  "IndexNow": {
+    "Key": "",
+    "SiteUrl": "https://jiten.moe"
   }
 }

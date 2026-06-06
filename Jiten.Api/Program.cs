@@ -355,6 +355,7 @@ builder.Services.AddSingleton<Jiten.Core.Services.DeckVectorService>();
 builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
 builder.Services.AddScoped<IDeckDownloadService, DeckDownloadService>();
 builder.Services.AddScoped<IDeckImportService, DeckImportService>();
+builder.Services.AddScoped<IIndexNowService, IndexNowService>();
 builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
 builder.Services.AddSingleton<IStudySessionService, StudySessionService>();
 builder.Services.AddSingleton<IPendingCoverageQueue, PendingCoverageQueue>();

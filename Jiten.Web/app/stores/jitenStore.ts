@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { type DifficultyDisplayStyle, DifficultyValueDisplayStyle, ThemeMode, TitleLanguage } from '~/types';
+import type { KanjiScalePref } from '~/data/kanjiGroupings';
 
 const YEAR = 60 * 60 * 24 * 365;
 
@@ -36,9 +37,12 @@ export const useJitenStore = defineStore('jiten', () => {
   const hideRelations = createCookieState<boolean>('hide-relations', false);
   const hideDescriptions = createCookieState<boolean>('hide-descriptions', false);
   const hideExternalRating = createCookieState<boolean>('hide-external-rating', false);
+  const hideAlternativeTitles = createCookieState<boolean>('hide-alternative-titles', false);
   const quickMasterVocabulary = createCookieState<boolean>('quick-master-vocabulary', false);
   const ttsVoice = createCookieState<'female' | 'female2' | 'male' | 'male2' | 'asmr' | 'system'>('tts-voice', 'female');
   const difficultyDisplayStyle = createCookieState<DifficultyDisplayStyle>('difficulty-display-style', 0);
+  const kanjiScale = createCookieState<KanjiScalePref>('kanji-scale', 'jlpt');
+  const similarMediaPinnedType = createCookieState<number>('similar-media-pinned-type', 0);
 
   const difficultyValueDisplayStyleCookie = useCookie<DifficultyValueDisplayStyle>('jiten-difficulty-value-display-style', {
     default: () => DifficultyValueDisplayStyle.ZeroToFive,
@@ -57,7 +61,6 @@ export const useJitenStore = defineStore('jiten', () => {
   watch(difficultyValueDisplayStyle, (newValue) => {
     difficultyValueDisplayStyleCookie.value = newValue;
   });
-
 
   const getKnownWordIds = (): number[] => {
     if (import.meta.client) {
@@ -110,10 +113,13 @@ export const useJitenStore = defineStore('jiten', () => {
     hideRelations,
     hideDescriptions,
     hideExternalRating,
+    hideAlternativeTitles,
     quickMasterVocabulary,
     ttsVoice,
     difficultyDisplayStyle,
     difficultyValueDisplayStyle,
+    kanjiScale,
+    similarMediaPinnedType,
     coverageVersion,
     bumpCoverageVersion,
   };

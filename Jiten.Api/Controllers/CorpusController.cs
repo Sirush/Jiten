@@ -58,6 +58,33 @@ public class CorpusController(
         )
         """;
 
+    // Splits a raw term box into its positive phrase and any "-exclusion" tokens. A standalone,
+    // whitespace-delimited token prefixed with '-' (also fullwidth '－' or minus sign '−') is an
+    // exclusion: occurrences of the positive that are part of that longer phrase are subtracted, so
+    // "ヘアアクセ -ヘアアクセサリー" counts ヘアアクセ but not the ヘアアクセ inside ヘアアクセサリー.
+    // Only exclusions that actually contain the positive as a substring are kept (subtraction is
+    // meaningless otherwise), and nested exclusions are reduced to their minimal forms so a hit that
+    // sits inside several nested phrases is only subtracted once.
+    private static (string positive, List<string> excludes) ParseTerm(string raw)
+    {
+        var tokens = raw.Split([' ', '\t', '　'], StringSplitOptions.RemoveEmptyEntries);
+        var positives = new List<string>();
+        var excludes = new List<string>();
+        foreach (var t in tokens)
+        {
+            if (t.Length > 1 && t[0] is '-' or '−' or '－')
+                excludes.Add(t[1..]);
+            else
+                positives.Add(t);
+        }
+
+        var positive = positives.Count > 0 ? string.Join(" ", positives) : raw.Trim();
+
+        var valid = excludes.Where(e => e != positive && e.Contains(positive)).Distinct().ToList();
+        var minimal = valid.Where(e => !valid.Any(o => o != e && e.Contains(o))).ToList();
+        return (positive, minimal);
+    }
+
     private static async Task DisableSeqScan(NpgsqlConnection conn)
     {
         // Session-level (NOT "SET LOCAL", which is a no-op outside an explicit transaction).
@@ -105,7 +132,7 @@ public class CorpusController(
             coOccurrences = await GetCoOccurrences(request.Terms, request);
 
         var html = CorpusReportService.GenerateReport(searchResponse, coOccurrences, request);
-        var fileName = BuildPublishFileName(request.Terms[0]);
+        var fileName = BuildPublishFileName(ParseTerm(request.Terms[0]).positive);
 
         var url = await cdnService.UploadFile(System.Text.Encoding.UTF8.GetBytes(html), fileName);
         return Ok(new { url });
@@ -298,15 +325,23 @@ public class CorpusController(
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
+        var (positive, excludes) = ParseTerm(term);
         var filterClauses = BuildFilterClauses(request);
 
-        var snippets = await GetSnippets(conn, term, filterClauses, request);
-        logger.LogDebug("[Corpus] '{Term}' snippets: {Ms}ms", term, sw.ElapsedMilliseconds);
+        // Single pass over the matching decks: returns per-deck occurrence counts (less any excluded
+        // phrases) + metadata (no raw text). Everything below is aggregated in-process, avoiding
+        // repeated text scans.
+        var rows = await GetTermDecks(conn, positive, excludes, filterClauses);
+        logger.LogDebug("[Corpus] '{Term}' rows: {Ms}ms ({Count} decks)", positive, sw.ElapsedMilliseconds, rows.Count);
 
-        // Single pass over the matching decks: returns per-deck occurrence counts + metadata (no
-        // raw text). Everything below is aggregated in-process, avoiding repeated text scans.
-        var rows = await GetTermDecks(conn, term, filterClauses);
-        logger.LogDebug("[Corpus] '{Term}' rows: {Ms}ms ({Count} decks)", term, sw.ElapsedMilliseconds, rows.Count);
+        // Concordance. Without exclusions, a blind LIMIT window over the term's matches is fine and
+        // fast. With exclusions, the term is usually a substring of a far more common form, so we
+        // draw snippets only from the decks that actually retain a standalone occurrence (rows with
+        // cleaned occ > 0) — otherwise the common excluded form crowds the citations out.
+        var snippets = excludes.Count == 0
+            ? await GetSnippets(conn, positive, filterClauses, request)
+            : await GetSnippetsForExcludedTerm(conn, positive, excludes, rows, request);
+        logger.LogDebug("[Corpus] '{Term}' snippets: {Ms}ms", positive, sw.ElapsedMilliseconds);
 
         var totalDecks = rows.Count;
         var totalOccurrences = rows.Sum(r => (long)r.Occ);
@@ -385,7 +420,8 @@ public class CorpusController(
 
         return new CorpusTermResult
         {
-            Term = term,
+            Term = positive,
+            ExcludedTerms = excludes,
             MatchingDecks = totalDecks,
             TotalOccurrences = totalOccurrences,
             HitsPerMillion = corpusChars > 0 ? totalOccurrences / (corpusChars / 1_000_000.0) : 0,
@@ -428,11 +464,34 @@ public class CorpusController(
         float DialoguePercentage, int? Year, string Title, string? ParentTitle, int Occ);
 
     private async Task<List<TermDeckRow>> GetTermDecks(
-        System.Data.Common.DbConnection conn, string term,
+        System.Data.Common.DbConnection conn, string term, List<string> excludes,
         (string sql, List<NpgsqlParameter> parameters) filters)
     {
+        // For each excluded phrase, count its occurrences per deck — restricted to the decks the
+        // positive term already matched, so the extra index probes only touch the filtered set. The
+        // cleaned occurrence is the positive count minus each exclusion's count (floored at 0); a
+        // deck only survives if the term still occurs outside the exclusions.
+        var negCtes = new System.Text.StringBuilder();
+        var negJoins = new System.Text.StringBuilder();
+        var subtractions = new System.Text.StringBuilder();
+        for (int i = 0; i < excludes.Count; i++)
+        {
+            negCtes.Append($"""
+                , neg{i} AS MATERIALIZED (
+                    SELECT drt."DeckId", pgroonga_score(drt.tableoid, drt.ctid)::int AS occ
+                    FROM jiten."DeckRawTexts" drt
+                    WHERE drt."DeckId" IN (SELECT "DeckId" FROM matched)
+                      AND {CleanRawText} {Match} @neg{i}
+                )
+                """);
+            negJoins.Append($"\nLEFT JOIN neg{i} n{i} ON n{i}.\"DeckId\" = m.\"DeckId\"");
+            subtractions.Append($" - COALESCE(n{i}.occ, 0)");
+        }
+
+        var cleanOcc = $"GREATEST(m.occ{subtractions}, 0)";
+
         var sql = $"""
-            {MatchedCte}
+            {MatchedCte}{negCtes}
             SELECT
                 d."DeckId",
                 COALESCE(d."ParentDeckId", d."DeckId") AS work_id,
@@ -443,11 +502,11 @@ public class CorpusController(
                 {WorkYear} AS yr,
                 COALESCE(d."OriginalTitle", 'Unknown') AS title,
                 p."OriginalTitle" AS parent_title,
-                m.occ
-            FROM matched m
+                {cleanOcc} AS occ
+            FROM matched m{negJoins}
             JOIN jiten."Decks" d ON d."DeckId" = m."DeckId"
             LEFT JOIN jiten."Decks" p ON p."DeckId" = d."ParentDeckId"
-            WHERE m.occ > 0
+            WHERE {cleanOcc} > 0
             {filters.sql}
             """;
 
@@ -455,6 +514,8 @@ public class CorpusController(
         cmd.CommandText = sql;
         cmd.CommandTimeout = 120;
         cmd.Parameters.Add(new NpgsqlParameter("@term", term));
+        for (int i = 0; i < excludes.Count; i++)
+            cmd.Parameters.Add(new NpgsqlParameter($"@neg{i}", excludes[i]));
         foreach (var p in filters.parameters)
             cmd.Parameters.Add(CloneParameter(p));
 
@@ -558,16 +619,117 @@ public class CorpusController(
     private static string StripHtml(string html) =>
         System.Net.WebUtility.HtmlDecode(HtmlTagRegex.Replace(html, ""));
 
+    // True if the term still occurs in the snippet after every excluded phrase is removed — i.e. the
+    // snippet contains a standalone match, not merely the term as part of an excluded longer word.
+    private static bool TermSurvivesExclusions(string text, string term, List<string> excludes)
+    {
+        foreach (var e in excludes)
+            text = text.Replace(e, "");
+        return text.Contains(term);
+    }
+
+    // Concordance for a search with exclusions. Candidate decks are exactly the ones that retain a
+    // standalone occurrence (cleaned occ > 0), taken from the rows already computed for the term and
+    // ordered by that count — so the common excluded form can never starve the citation list via a
+    // blind LIMIT window. Per deck we scan every snippet fragment pgroonga returns (not just the
+    // first) and keep the first one in which the term survives the exclusions, then reduce to one
+    // citation per work.
+    private async Task<List<CorpusSnippet>> GetSnippetsForExcludedTerm(
+        System.Data.Common.DbConnection conn, string term, List<string> excludes,
+        List<TermDeckRow> rows, CorpusSearchRequest request)
+    {
+        var candidateDeckIds = rows
+            .OrderByDescending(r => r.Occ)
+            .Take(Math.Min(Math.Max(request.MaxSnippets * 10, 200), 1000))
+            .Select(r => r.DeckId)
+            .ToArray();
+        if (candidateDeckIds.Length == 0) return [];
+
+        var sql = $"""
+            SELECT
+                pgroonga_snippet_html({CleanRawText}, ARRAY[@term], 160) AS snippets,
+                d."DeckId",
+                COALESCE(d."ParentDeckId", d."DeckId") AS work_id,
+                COALESCE(d."OriginalTitle", 'Unknown') AS "DeckTitle",
+                p."OriginalTitle" AS parent_title,
+                d."MediaType",
+                d."Difficulty",
+                COALESCE({WorkYear}, 0) AS "ReleaseYear"
+            FROM jiten."DeckRawTexts" drt
+            JOIN jiten."Decks" d ON d."DeckId" = drt."DeckId"
+            LEFT JOIN jiten."Decks" p ON p."DeckId" = d."ParentDeckId"
+            WHERE drt."DeckId" = ANY(@deckIds)
+              AND {CleanRawText} {Match} @term
+            ORDER BY array_position(@deckIds, drt."DeckId")
+            """;
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.CommandTimeout = 120;
+        cmd.Parameters.Add(new NpgsqlParameter("@term", term));
+        cmd.Parameters.Add(new NpgsqlParameter("@deckIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+            { Value = candidateDeckIds });
+
+        var snippets = new List<CorpusSnippet>();
+        var seenWorks = new HashSet<int>();
+        var seenText = new HashSet<string>();
+
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var fragments = reader.GetFieldValue<string[]>(0);
+
+            string? html = null, text = null;
+            foreach (var frag in fragments)
+            {
+                var fragText = StripHtml(frag);
+                if (!TermSurvivesExclusions(fragText, term, excludes)) continue;
+                html = frag;
+                text = fragText;
+                break;
+            }
+            if (html == null) continue;                      // no standalone fragment in this deck
+
+            var workId = reader.GetInt32(2);
+            if (!seenWorks.Add(workId)) continue;            // one citation per work
+            if (!seenText.Add(text!.Trim())) continue;       // drop identical lines across works
+
+            snippets.Add(new CorpusSnippet
+            {
+                Html = html,
+                Text = text!,
+                DeckId = reader.GetInt32(1),
+                DeckTitle = reader.GetString(3),
+                ParentTitle = reader.IsDBNull(4) ? null : reader.GetString(4),
+                MediaType = (MediaType)reader.GetInt32(5),
+                Difficulty = reader.GetFloat(6),
+                ReleaseYear = reader.GetInt32(7)
+            });
+
+            if (snippets.Count >= request.MaxSnippets) break;
+        }
+
+        return snippets;
+    }
+
     private async Task<List<CorpusCoOccurrence>> GetCoOccurrences(
         List<string> terms, CorpusSearchRequest request)
     {
         var connString = config.GetConnectionString("JitenDatabase")!;
         var filters = BuildFilterClauses(request);
 
+        // Co-occurrence is deck-level (does the deck contain both terms), so it matches on the
+        // positive phrase only; "-exclusion" syntax is ignored here.
+        var positives = terms.Select(t => ParseTerm(t).positive).ToList();
+
+        // Skip pairs that share the same positive (e.g. "ヘアアクセ" vs "ヘアアクセ -ヘアアクセサリー", which
+        // co-occurrence ignores the exclusion of): a term co-occurs with itself in 100% of its decks,
+        // which is a meaningless row.
         var pairs = new List<(int i, int j)>();
-        for (int i = 0; i < terms.Count; i++)
-            for (int j = i + 1; j < terms.Count; j++)
-                pairs.Add((i, j));
+        for (int i = 0; i < positives.Count; i++)
+            for (int j = i + 1; j < positives.Count; j++)
+                if (positives[i] != positives[j])
+                    pairs.Add((i, j));
 
         var tasks = pairs.Select(async pair =>
         {
@@ -592,16 +754,16 @@ public class CorpusController(
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = sql;
             cmd.CommandTimeout = 60;
-            cmd.Parameters.Add(new NpgsqlParameter("@termA", terms[pair.i]));
-            cmd.Parameters.Add(new NpgsqlParameter("@termB", terms[pair.j]));
+            cmd.Parameters.Add(new NpgsqlParameter("@termA", positives[pair.i]));
+            cmd.Parameters.Add(new NpgsqlParameter("@termB", positives[pair.j]));
             foreach (var p in filters.parameters)
                 cmd.Parameters.Add(CloneParameter(p));
 
             var count = (int)(await cmd.ExecuteScalarAsync())!;
             return new CorpusCoOccurrence
             {
-                TermA = terms[pair.i],
-                TermB = terms[pair.j],
+                TermA = positives[pair.i],
+                TermB = positives[pair.j],
                 SharedDecks = count
             };
         });

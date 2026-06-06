@@ -109,6 +109,32 @@
     if (activeTermIndex.value >= terms.value.length) activeTermIndex.value = Math.max(0, terms.value.length - 1);
   }
 
+  // Mirrors the backend ParseTerm: a space-separated token prefixed with -/−/－ is an exclusion.
+  // Only exclusions containing the positive (and not nested inside another exclusion) actually
+  // apply; the rest are reported as ignored so the hint matches what the server will do.
+  function parseTerm(raw: string): { positive: string; excludes: string[]; ignored: string[] } {
+    const tokens = raw.split(/\s+/).filter((t) => t.length > 0);
+    const positives: string[] = [];
+    const rawExcludes: string[] = [];
+    for (const t of tokens) {
+      if (t.length > 1 && /^[-−－]/.test(t)) rawExcludes.push(t.slice(1));
+      else positives.push(t);
+    }
+    const positive = positives.length > 0 ? positives.join(' ') : raw.trim();
+    const valid = [...new Set(rawExcludes.filter((e) => e !== positive && e.includes(positive)))];
+    const excludes = valid.filter((e) => !valid.some((o) => o !== e && e.includes(o)));
+    const ignored = [...new Set(rawExcludes.filter((e) => !excludes.includes(e)))];
+    return { positive, excludes, ignored };
+  }
+
+  const termParses = computed(() => terms.value.map((t) => parseTerm(t)));
+
+  // Display label for a result: appends "−excluded" so two terms sharing the same positive
+  // (e.g. ヘアアクセ vs ヘアアクセ −ヘアアクセサリー) are distinguishable in tabs, charts and legends.
+  function termLabel(r: CorpusTermResult): string {
+    return r.excludedTerms?.length ? `${r.term} −${r.excludedTerms.join(', ')}` : r.term;
+  }
+
   function buildRequest() {
     const validTerms = terms.value.filter((t) => t.trim().length > 0);
     return {
@@ -314,7 +340,7 @@
       labels: trends.map((t) => t.year.toString()),
       datasets: [
         {
-          label: activeResult.value.term,
+          label: termLabel(activeResult.value),
           data: trends.map((t) => +t.percentage.toFixed(2)),
           borderColor: '#ff79c6',
           backgroundColor: 'rgba(255,121,198,0.15)',
@@ -339,7 +365,7 @@
     const datasets = searchResponse.value.results.map((r, i) => {
       const yearMap = new Map(r.trends.map((t) => [t.year.toString(), t.percentage]));
       return {
-        label: r.term,
+        label: termLabel(r),
         data: labels.map((y) => +(yearMap.get(y) ?? 0).toFixed(2)),
         borderColor: chartColors[i % chartColors.length],
         backgroundColor: 'transparent',
@@ -514,8 +540,13 @@
           characters anywhere in the text, e.g. <code>について</code>, <code>かもしれない</code>.
         </li>
         <li>
-          <strong>No operators:</strong> spaces, <code>AND</code>/<code>OR</code>, <code>*</code>, <code>"…"</code>, regex and SQL <code>%</code> are matched
-          literally, not interpreted — so don't use them.
+          <strong>No operators:</strong> <code>AND</code>/<code>OR</code>, <code>*</code>, <code>"…"</code>, regex and SQL <code>%</code> are matched
+          literally, not interpreted — so don't use them. (Spaces are special only for exclusions, below.)
+        </li>
+        <li>
+          <strong>Exclusions (<code>-</code>):</strong> append a space-separated <code>-phrase</code> to subtract occurrences where the term only appears as part
+          of that longer phrase, e.g. <code>ヘアアクセ -ヘアアクセサリー</code> counts ヘアアクセ but not the ヘアアクセ inside ヘアアクセサリー. The excluded phrase
+          <strong>must contain the term</strong> as a substring; you can add several (<code>雨 -梅雨 -雨具</code>). Matching, counts and citations are all corrected.
         </li>
         <li>
           Latin letters, digits and symbols are tokenised <strong>separately</strong> from kana/kanji, and 1-character queries are imprecise (bigrams need ≥2
@@ -545,15 +576,26 @@
           <div class="flex flex-col gap-2">
             <label class="text-xs font-medium text-surface-500">Search terms (up to 15)</label>
             <span class="text-xs text-surface-400">Quickly add a new term by typing or pasting with these separators <code>,</code> <code>;</code> <code>；</code> <code>/</code></span>
-            <div v-for="(_, i) in terms" :key="i" class="flex items-center gap-2">
-              <InputText
-                :ref="(el) => setTermRef(el, i)"
-                v-model="terms[i]"
-                :placeholder="`Term ${i + 1}`"
-                class="w-full max-w-md"
-                @keydown.enter="search"
-              />
-              <Button v-if="terms.length > 1" icon="pi pi-times" severity="danger" text rounded size="small" @click="removeTerm(i)" />
+            <span class="text-xs text-surface-400"
+              >Exclude a longer form with the minus operator <code>-</code></span
+            >
+            <div v-for="(_, i) in terms" :key="i" class="flex flex-col gap-0.5">
+              <div class="flex items-center gap-2">
+                <InputText
+                  :ref="(el) => setTermRef(el, i)"
+                  v-model="terms[i]"
+                  :placeholder="`Term ${i + 1}`"
+                  class="w-full max-w-md"
+                  @keydown.enter="search"
+                />
+                <Button v-if="terms.length > 1" icon="pi pi-times" severity="danger" text rounded size="small" @click="removeTerm(i)" />
+              </div>
+              <span v-if="termParses[i]?.excludes.length" class="pl-1 text-xs text-surface-400">
+                excluding <span class="font-medium text-surface-500 dark:text-surface-300">{{ termParses[i].excludes.join(', ') }}</span>
+              </span>
+              <span v-if="termParses[i]?.ignored.length" class="pl-1 text-xs text-amber-600 dark:text-amber-500">
+                ignored (must contain “{{ termParses[i].positive }}”): {{ termParses[i].ignored.join(', ') }}
+              </span>
             </div>
             <div>
               <Button v-if="terms.length < 15" label="Add term" icon="pi pi-plus" severity="secondary" size="small" @click="addTerm" />
@@ -676,6 +718,7 @@
             <Column header="Term">
               <template #body="{ data, index }">
                 <a class="cursor-pointer font-bold text-primary-400 hover:underline" @click="activeTermIndex = index">{{ data.term }}</a>
+                <span v-if="data.excludedTerms?.length" class="ml-1 text-xs text-surface-400">−{{ data.excludedTerms.join(', ') }}</span>
               </template>
             </Column>
             <Column field="matchingDecks" header="Matching Decks" />
@@ -683,7 +726,7 @@
               <template #body="{ data }">{{ data.totalOccurrences.toLocaleString() }} ({{ occurrenceShare(data.totalOccurrences).toFixed(1) }}%)</template>
             </Column>
             <Column header="Occ/M chars">
-              <template #body="{ data }">{{ data.hitsPerMillion.toFixed(1) }}</template>
+              <template #body="{ data }">{{ data.hitsPerMillion.toFixed(2) }}</template>
             </Column>
             <Column header="Works (range)">
               <template #body="{ data }">{{ data.worksMatched.toLocaleString() }} ({{ data.workRangePercentage.toFixed(1) }}%)</template>
@@ -736,7 +779,7 @@
         <Button
           v-for="(r, i) in orderedResults"
           :key="i"
-          :label="r.term"
+          :label="termLabel(r)"
           :severity="activeTermIndex === i ? undefined : 'secondary'"
           size="small"
           @click="activeTermIndex = i"
@@ -755,9 +798,14 @@
 
       <template v-if="!isAllView && activeResult">
         <Card class="mb-4">
-          <template #title>{{ activeResult.term }}</template>
+          <template #title>
+            {{ activeResult.term }}
+            <span v-if="activeResult.excludedTerms?.length" class="text-base font-normal text-surface-400"
+              >· excluding {{ activeResult.excludedTerms.join(', ') }}</span
+            >
+          </template>
           <template #subtitle>
-            {{ activeResult.totalOccurrences.toLocaleString() }} occurrences · {{ activeResult.hitsPerMillion.toFixed(1) }} occ/M chars · in
+            {{ activeResult.totalOccurrences.toLocaleString() }} occurrences · {{ activeResult.hitsPerMillion.toFixed(2) }} occ/M chars · in
             {{ activeResult.worksMatched.toLocaleString() }}/{{ activeResult.worksTotal.toLocaleString() }} works ({{
               activeResult.workRangePercentage.toFixed(1)
             }}%) · dispersion {{ activeResult.dispersion.toFixed(2) }} · Avg dialogue: {{ activeResult.dialogueWeightedAvg.toFixed(1) }}%
@@ -803,7 +851,7 @@
                 <template #body="{ data }">{{ data.occurrences.toLocaleString() }}</template>
               </Column>
               <Column header="Per M chars" style="width: 7rem">
-                <template #body="{ data }">{{ data.perMillion.toFixed(1) }}</template>
+                <template #body="{ data }">{{ data.perMillion.toFixed(2) }}</template>
               </Column>
             </DataTable>
           </template>

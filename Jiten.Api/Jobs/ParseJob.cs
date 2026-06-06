@@ -13,7 +13,8 @@ public class ParseJob(
     IDbContextFactory<JitenDbContext> contextFactory,
     IBackgroundJobClient backgroundJobs,
     IPendingCoverageQueue pendingCoverageQueue,
-    IPendingEmbeddingQueue pendingEmbeddingQueue)
+    IPendingEmbeddingQueue pendingEmbeddingQueue,
+    IIndexNowService indexNow)
 {
     [Queue("parse")]
     public async Task Parse(Metadata metadata, MediaType deckType, bool storeRawText = false)
@@ -149,6 +150,9 @@ public class ParseJob(
         // Queue difficulty computation (job handles children internally)
         backgroundJobs.Enqueue<DifficultyComputationJob>(
             job => job.ComputeDeckDifficulty(deck.DeckId, true));
+
+        // Notify IndexNow of the new (top-level) deck page so Bing can index it quickly.
+        await indexNow.SubmitDeckAsync(deck.DeckId);
     }
 
     /// <summary>

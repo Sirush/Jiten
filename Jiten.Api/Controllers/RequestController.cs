@@ -142,6 +142,20 @@ public partial class RequestController(
                 .ToDictionaryAsync(d => d.DeckId, d => d.OriginalTitle)
             : new Dictionary<int, string>();
 
+        var isAdmin = User.IsInRole("Administrator");
+        Dictionary<string, string?> requesterNames = new();
+        if (isAdmin)
+        {
+            var requesterIds = requests.Select(r => r.RequesterId).Distinct().ToList();
+            if (requesterIds.Count > 0)
+            {
+                requesterNames = await userContext.Users.AsNoTracking()
+                    .Where(u => requesterIds.Contains(u.Id))
+                    .Select(u => new { u.Id, u.UserName })
+                    .ToDictionaryAsync(u => u.Id, u => u.UserName);
+            }
+        }
+
         var upvoteSet = new HashSet<int>(userUpvotes);
         var subSet = new HashSet<int>(userSubscriptions);
 
@@ -165,6 +179,7 @@ public partial class RequestController(
             HasUserUpvoted = upvoteSet.Contains(r.Id),
             IsSubscribed = subSet.Contains(r.Id),
             IsOwnRequest = r.RequesterId == userId,
+            RequesterName = isAdmin ? requesterNames.GetValueOrDefault(r.RequesterId) : null,
             CreatedAt = r.CreatedAt,
             CompletedAt = r.CompletedAt
         }).ToList();

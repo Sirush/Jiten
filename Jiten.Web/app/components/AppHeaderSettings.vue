@@ -2,6 +2,7 @@
   import { storeToRefs } from 'pinia';
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
+  import { kanjiScaleOptions } from '~/data/kanjiGroupings';
 
   const store = useJitenStore();
   const {
@@ -15,11 +16,13 @@
     hideRelations,
     hideDescriptions,
     hideExternalRating,
+    hideAlternativeTitles,
     quickMasterVocabulary,
     displayAdminFunctions,
     readingSpeed,
     difficultyDisplayStyle,
     difficultyValueDisplayStyle,
+    kanjiScale,
     ttsVoice,
   } = storeToRefs(store);
   const auth = useAuthStore();
@@ -196,6 +199,11 @@
         <label for="hideExternalRating" class="text-sm cursor-pointer">Hide external ratings</label>
       </div>
 
+      <div class="flex items-center gap-2 py-1">
+        <Checkbox v-model="hideAlternativeTitles" input-id="hideAlternativeTitles" name="hideAlternativeTitles" :binary="true" />
+        <label for="hideAlternativeTitles" class="text-sm cursor-pointer">Hide alternative titles</label>
+      </div>
+
       <div v-if="auth.isAuthenticated && auth.isAdmin" class="flex items-center gap-2 py-1">
         <Checkbox v-model="displayAdminFunctions" input-id="displayAdminFunctions" name="adminFunctions" :binary="true" />
         <label for="displayAdminFunctions" class="text-sm cursor-pointer">Display admin functions</label>
@@ -229,6 +237,20 @@
           @hide="isSettingsInteracted = false"
         />
         <label for="difficultyValueDisplayStyle">Difficulty Value Style</label>
+      </FloatLabel>
+
+      <FloatLabel variant="on" class="">
+        <Select
+          v-model="kanjiScale"
+          :options="kanjiScaleOptions"
+          option-label="label"
+          option-value="value"
+          placeholder="Kanji breakdown scale"
+          input-id="kanjiScale"
+          @show="isSettingsInteracted = true"
+          @hide="isSettingsInteracted = false"
+        />
+        <label for="kanjiScale">Kanji breakdown scale</label>
       </FloatLabel>
     </div>
   </Popover>

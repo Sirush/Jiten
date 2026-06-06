@@ -103,12 +103,12 @@
 
 <template>
   <div class="flex flex-col gap-4">
-    <div>
-      Coverage Statistics for
-      <NuxtLink :to="`/decks/media/${deckId}/detail`">
-        {{ title }}
-      </NuxtLink>
-    </div>
+    <DeckBreadcrumb
+      v-if="deckResponse?.data?.mainDeck"
+      :deck="deckResponse.data.mainDeck"
+      :parent-deck="deckResponse.data.parentDeck"
+      current="Statistics"
+    />
 
     <!-- Coverage Section -->
     <Card v-if="statsStatus === 'pending' || curveStatus === 'pending'" class="p-2">

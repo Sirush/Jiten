@@ -4,10 +4,90 @@ import { wanikaniGroups } from './wanikani';
 import { rtkGroups } from './rtk';
 import { klcGroups } from './klc';
 import { tmwGroups } from './tmw';
+import { jlptGroups } from './jlpt';
 
 export interface KanjiGroup {
   name: string;
   kanji: KanjiGridItem[];
+}
+
+// KANJIDIC's <jlpt> tag is the obsolete 4-level scale (no N5). Derive the modern
+// N5–N1 level from the Tanos-based jlptGroups lists instead of the DB field.
+const jlptCharToLevel = (() => {
+  const map = new Map<string, number>();
+  for (const g of jlptGroups) {
+    const level = Number(g.name.slice(1));
+    for (const ch of g.characters) {
+      if (!map.has(ch)) map.set(ch, level);
+    }
+  }
+  return map;
+})();
+
+export function jlptLevelForKanji(character: string): number | null {
+  return jlptCharToLevel.get(character) ?? null;
+}
+
+export function jlptLabelForKanji(character: string): string | null {
+  const level = jlptCharToLevel.get(character);
+  return level ? `N${level}` : null;
+}
+
+export type KanjiScale = 'jlpt' | 'grade' | 'kanken' | 'wanikani' | 'rtk' | 'klc' | 'tmw';
+export type KanjiScalePref = KanjiScale | 'none';
+
+export const kanjiScaleOptions: { label: string; value: KanjiScalePref }[] = [
+  { label: 'JLPT', value: 'jlpt' },
+  { label: 'Jouyou Grade', value: 'grade' },
+  { label: 'Kanken', value: 'kanken' },
+  { label: 'WaniKani', value: 'wanikani' },
+  { label: 'RTK', value: 'rtk' },
+  { label: 'KLC', value: 'klc' },
+  { label: 'TMW', value: 'tmw' },
+  { label: 'None', value: 'none' },
+];
+
+const scaleGroups: Record<Exclude<KanjiScale, 'grade'>, { name: string; characters: string }[]> = {
+  jlpt: jlptGroups,
+  kanken: kankenGroups,
+  wanikani: wanikaniGroups,
+  rtk: rtkGroups,
+  klc: klcGroups,
+  tmw: tmwGroups,
+};
+
+const scalePrefix: Record<KanjiScale, string> = {
+  jlpt: 'JLPT', grade: 'Grade', kanken: 'Kanken', wanikani: 'WaniKani', rtk: 'RTK', klc: 'KLC', tmw: 'TMW',
+};
+
+const scaleCharMaps = new Map<Exclude<KanjiScale, 'grade'>, Map<string, string>>();
+
+function charToGroupName(scale: Exclude<KanjiScale, 'grade'>, character: string): string | null {
+  let map = scaleCharMaps.get(scale);
+  if (!map) {
+    map = new Map<string, string>();
+    for (const g of scaleGroups[scale]) {
+      for (const ch of g.characters) {
+        if (!map.has(ch)) map.set(ch, g.name);
+      }
+    }
+    scaleCharMaps.set(scale, map);
+  }
+  return map.get(character) ?? null;
+}
+
+// Short badge label for a kanji on a given scale (e.g. "JLPT N5", "Kanken Level 10",
+// "WaniKani Level 2", "KLC Volume 1", "TMW Student", "Grade 1"). Returns null if the
+// kanji is not part of that list.
+export function kanjiScaleMembership(character: string, scale: KanjiScale, grade?: number | null): string | null {
+  if (scale === 'grade') {
+    if (!grade) return null;
+    return gradeNames[grade] ?? `Grade ${grade}`;
+  }
+  const name = charToGroupName(scale, character);
+  if (name == null) return null;
+  if (scale === 'rtk') return scalePrefix.rtk; // single list — group name isn't informative
+  return `${scalePrefix[scale]} ${name.replace(/\s*Kanji$/, '')}`;
 }
 
 export type DisplayType = 'none' | 'jlpt' | 'grade' | 'frequency' | 'strokeCount' | 'kanken' | 'wanikani' | 'rtk' | 'klc' | 'tmw';
@@ -25,7 +105,6 @@ export const displayTypeOptions: { label: string; value: DisplayType }[] = [
   { label: 'TMW (TheMoeWay)', value: 'tmw' },
 ];
 
-const jlptNames: Record<number, string> = { 5: 'N5', 4: 'N4', 3: 'N3', 2: 'N2', 1: 'N1' };
 const gradeNames: Record<number, string> = {
   1: 'Grade 1', 2: 'Grade 2', 3: 'Grade 3', 4: 'Grade 4',
   5: 'Grade 5', 6: 'Grade 6', 8: 'Secondary', 9: 'Jinmeiyou', 10: 'Jinmeiyou (variant)',
@@ -98,7 +177,7 @@ export function groupKanji(kanji: KanjiGridItem[], displayType: DisplayType): Ka
   }
 
   if (displayType === 'jlpt') {
-    return groupByProperty(kanji, k => k.jlptLevel, jlptNames, [5, 4, 3, 2, 1], 'Non-JLPT');
+    return groupByExternalData(kanji, jlptGroups, 'Non-JLPT');
   }
 
   if (displayType === 'grade') {

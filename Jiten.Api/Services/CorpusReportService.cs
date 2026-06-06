@@ -62,7 +62,9 @@ public static class CorpusReportService
             foreach (var r in results)
             {
                 var share = totalOccurrences > 0 ? r.TotalOccurrences * 100.0 / totalOccurrences : 0;
-                sb.AppendLine($"<tr><td><strong>{E(r.Term)}</strong></td><td>{r.MatchingDecks:N0}</td><td>{r.TotalOccurrences:N0} ({share:N1}%)</td><td>{r.HitsPerMillion:N1}</td><td>{r.WorksMatched:N0} ({r.WorkRangePercentage:N1}%)</td><td>{r.Dispersion:N2}</td><td>{r.DialogueWeightedAvg:N1}%</td></tr>");
+                var termCell = $"<strong>{E(r.Term)}</strong>"
+                    + (r.ExcludedTerms.Count > 0 ? $" <span class=\"meta\">−{E(JoinExcluded(r))}</span>" : "");
+                sb.AppendLine($"<tr><td>{termCell}</td><td>{r.MatchingDecks:N0}</td><td>{r.TotalOccurrences:N0} ({share:N1}%)</td><td>{r.HitsPerMillion:N2}</td><td>{r.WorksMatched:N0} ({r.WorkRangePercentage:N1}%)</td><td>{r.Dispersion:N2}</td><td>{r.DialogueWeightedAvg:N1}%</td></tr>");
             }
             sb.AppendLine("</tbody></table>");
             sb.AppendLine("<p class=\"note\"><strong>Matching Decks</strong> counts every individual deck, including sub-decks (each chapter / episode / volume). <strong>Works (range)</strong> collapses those to their parent title, so a term in all chapters of one novel counts as many decks but a single work — the % is the share of all works in the corpus.</p>");
@@ -102,7 +104,9 @@ public static class CorpusReportService
         {
             sb.AppendLine("<section class=\"term-section\">");
             sb.AppendLine($"<h2>{E(result.Term)}</h2>");
-            sb.AppendLine($"<p>{result.TotalOccurrences:N0} occurrences · {result.HitsPerMillion:N1} occ/M chars · in {result.WorksMatched:N0}/{result.WorksTotal:N0} works ({result.WorkRangePercentage:N1}%) · dispersion {result.Dispersion:N2} · Avg dialogue: {result.DialogueWeightedAvg:N1}%</p>");
+            if (result.ExcludedTerms.Count > 0)
+                sb.AppendLine($"<p class=\"meta\">excluding {E(JoinExcluded(result))}</p>");
+            sb.AppendLine($"<p>{result.TotalOccurrences:N0} occurrences · {result.HitsPerMillion:N2} occ/M chars · in {result.WorksMatched:N0}/{result.WorksTotal:N0} works ({result.WorkRangePercentage:N1}%) · dispersion {result.Dispersion:N2} · Avg dialogue: {result.DialogueWeightedAvg:N1}%</p>");
 
             RenderMediaChart(sb, result, ref chartId);
             RenderDifficultyChart(sb, result, ref chartId);
@@ -198,8 +202,11 @@ public static class CorpusReportService
             var yearMap = results[i].Trends.ToDictionary(t => t.Year, t => t.Percentage);
             var values = JsNumArray(allYears.Select(y => yearMap.GetValueOrDefault(y, 0)));
             var color = ChartColors[i % ChartColors.Length];
+            var label = results[i].ExcludedTerms.Count > 0
+                ? $"{results[i].Term} −{JoinExcluded(results[i])}"
+                : results[i].Term;
             if (i > 0) datasetsJs.Append(',');
-            datasetsJs.Append($"{{ label: '{E(results[i].Term)}', data: {values}, borderColor: '{color}', backgroundColor: 'transparent', fill: false, tension: 0.3, pointRadius: 3, pointBackgroundColor: '{color}' }}");
+            datasetsJs.Append($"{{ label: '{E(label)}', data: {values}, borderColor: '{color}', backgroundColor: 'transparent', fill: false, tension: 0.3, pointRadius: 3, pointBackgroundColor: '{color}' }}");
         }
         datasetsJs.Append(']');
 
@@ -263,6 +270,8 @@ public static class CorpusReportService
     }
 
     private static string E(string s) => HttpUtility.HtmlEncode(s);
+
+    private static string JoinExcluded(CorpusTermResult r) => string.Join(", ", r.ExcludedTerms);
 
     private static string JsArray(IEnumerable<string> items) =>
         "[" + string.Join(",", items.Select(i => $"'{JsEscape(i)}'")) + "]";

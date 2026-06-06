@@ -495,6 +495,7 @@ export interface KanjiList {
   meanings: string[];
   strokeCount: number;
   jlptLevel: number | null;
+  grade: number | null;
   frequencyRank: number | null;
 }
 
@@ -1160,6 +1161,7 @@ export interface CorpusTopDeck {
 
 export interface CorpusTermResult {
   term: string;
+  excludedTerms: string[];
   totalOccurrences: number;
   matchingDecks: number;
   hitsPerMillion: number;

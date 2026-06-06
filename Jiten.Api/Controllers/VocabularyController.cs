@@ -245,6 +245,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                 Meanings = k.Meanings,
                 StrokeCount = k.StrokeCount,
                 JlptLevel = k.JlptLevel,
+                Grade = k.Grade,
                 FrequencyRank = k.FrequencyRank
             })
             .ToList();

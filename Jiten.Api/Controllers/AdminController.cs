@@ -691,7 +691,8 @@ public partial class AdminController(
         int count = 0;
         foreach (var deck in mediaToReparse)
         {
-            backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId));
+            // Bulk reparse: don't notify IndexNow (would exceed Bing's daily quota / look like spam).
+            backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId, false));
             count++;
         }
 
@@ -712,7 +713,8 @@ public partial class AdminController(
         int count = 0;
         foreach (var deck in decksToReparse)
         {
-            backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId));
+            // Bulk reparse: don't notify IndexNow (would exceed Bing's daily quota / look like spam).
+            backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId, false));
             count++;
         }
 
@@ -734,7 +736,8 @@ public partial class AdminController(
         int count = 0;
         foreach (var deck in decksToReparse)
         {
-            backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId));
+            // Bulk reparse: don't notify IndexNow (would exceed Bing's daily quota / look like spam).
+            backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId, false));
             count++;
         }
 

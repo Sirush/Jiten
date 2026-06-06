@@ -98,10 +98,6 @@
 
   const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
 
-  const deckId = computed(() => {
-    return response.value?.data?.deck?.deckId;
-  });
-
   const title = computed(() => {
     if (!response.value?.data) {
       return '';
@@ -131,12 +127,12 @@
 
 <template>
   <div class="flex flex-col gap-2">
-    <div>
-      Vocabulary for
-      <NuxtLink :to="`/decks/media/${deckId}/detail`">
-        {{ title }}
-      </NuxtLink>
-    </div>
+    <DeckBreadcrumb
+      v-if="response?.data?.deck"
+      :deck="response.data.deck"
+      :parent-deck="response.data.parentDeck"
+      current="Vocabulary"
+    />
     <VocabularyFilters
       v-model:sort-by="sortBy"
       v-model:sort-descending="sortDescending"

@@ -281,7 +281,7 @@
   border-bottom: 1px solid var(--p-surface-200);
 }
 
-:root.p-dark .kanji-group-header {
+:root.dark-mode .kanji-group-header {
   border-bottom-color: var(--p-surface-700);
 }
 
@@ -291,7 +291,7 @@
   color: var(--p-surface-800);
 }
 
-:root.p-dark .kanji-group-title {
+:root.dark-mode .kanji-group-title {
   color: var(--p-surface-100);
 }
 

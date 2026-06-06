@@ -2,6 +2,9 @@
   useSeoMeta({
     title: 'Jiten',
     description: 'Vocabulary lists and anki decks for all your Japanese media.',
+    ogSiteName: 'Jiten',
+    ogType: 'website',
+    twitterCard: 'summary_large_image',
   });
 
   useHead({

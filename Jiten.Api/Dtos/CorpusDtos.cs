@@ -38,6 +38,9 @@ public class CorpusFilteredScope
 public class CorpusTermResult
 {
     public required string Term { get; set; }
+    /// <summary>Phrase forms subtracted from this term's matches (from "-exclusion" syntax in the term box),
+    /// e.g. ヘアアクセ excluding ヘアアクセサリー. Each contains the term as a substring.</summary>
+    public List<string> ExcludedTerms { get; set; } = [];
     public int MatchingDecks { get; set; }
     public long TotalOccurrences { get; set; }
     public double HitsPerMillion { get; set; }
