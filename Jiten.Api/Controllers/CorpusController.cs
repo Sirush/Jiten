@@ -40,6 +40,12 @@ public class CorpusController(
     private const string WorkReleaseDate =
         """COALESCE((SELECT w."ReleaseDate" FROM jiten."Decks" w WHERE w."DeckId" = d."ParentDeckId"), d."ReleaseDate")""";
 
+    // Release year of a deck's work: the parent's year for a sub-deck (which carries a default/empty
+    // date), else the deck's own. Yields NULL when unknown. Requires the parent deck joined as `p`.
+    // Used so sub-decks report their work's year in the snippet table, export and temporal trends.
+    private const string WorkYear =
+        """CASE WHEN COALESCE(p."ReleaseDate", d."ReleaseDate") > '0001-01-01' AND isfinite(COALESCE(p."ReleaseDate", d."ReleaseDate")) THEN EXTRACT(YEAR FROM COALESCE(p."ReleaseDate", d."ReleaseDate"))::int END""";
+
     // Matched CTE: DeckId + per-deck occurrence count via pgroonga_score, which Groonga computes as
     // term frequency (occurrence count) straight from the index — no heap text reads, so it stays
     // fast even for very common terms. Because the index is on jiten.strip_furigana("RawText"), the
@@ -123,8 +129,8 @@ public class CorpusController(
     [HttpPost("co-occurrences")]
     public async Task<IActionResult> CorpusCoOccurrences([FromBody] CorpusSearchRequest request)
     {
-        if (request.Terms is not { Count: >= 2 and <= 10 })
-            return BadRequest("Provide 2-10 terms for co-occurrence analysis.");
+        if (request.Terms is not { Count: >= 2 and <= 15 })
+            return BadRequest("Provide 2-15 terms for co-occurrence analysis.");
 
         var coOccurrences = await GetCoOccurrences(request.Terms, request);
         return Ok(coOccurrences);
@@ -416,8 +422,7 @@ public class CorpusController(
                 d."CharacterCount",
                 d."Difficulty",
                 d."DialoguePercentage",
-                CASE WHEN d."ReleaseDate" > '0001-01-01' AND isfinite(d."ReleaseDate")
-                     THEN EXTRACT(YEAR FROM d."ReleaseDate")::int ELSE NULL END AS yr,
+                {WorkYear} AS yr,
                 COALESCE(d."OriginalTitle", 'Unknown') AS title,
                 p."OriginalTitle" AS parent_title,
                 m.occ
@@ -473,7 +478,7 @@ public class CorpusController(
                 p."OriginalTitle" AS parent_title,
                 d."MediaType",
                 d."Difficulty",
-                CASE WHEN d."ReleaseDate" IS NOT NULL AND isfinite(d."ReleaseDate") THEN EXTRACT(YEAR FROM d."ReleaseDate")::int ELSE 0 END AS "ReleaseYear"
+                COALESCE({WorkYear}, 0) AS "ReleaseYear"
             FROM jiten."DeckRawTexts" drt
             JOIN jiten."Decks" d ON d."DeckId" = drt."DeckId"
             LEFT JOIN jiten."Decks" p ON p."DeckId" = d."ParentDeckId"
@@ -588,8 +593,8 @@ public class CorpusController(
 
     private IActionResult? ValidateCorpusRequest(CorpusSearchRequest request)
     {
-        if (request.Terms is not { Count: > 0 and <= 10 })
-            return BadRequest("Provide 1-10 search terms.");
+        if (request.Terms is not { Count: > 0 and <= 15 })
+            return BadRequest("Provide 1-15 search terms.");
         if (request.Terms.Any(t => string.IsNullOrWhiteSpace(t) || t.Length > 200))
             return BadRequest("Each term must be 1-200 characters.");
         request.MaxSnippets = Math.Clamp(request.MaxSnippets, 1, 50);

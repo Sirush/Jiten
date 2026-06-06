@@ -37,7 +37,14 @@ export default defineNuxtPlugin((nuxtApp) => {
         const needsAuthHeader = url.includes('/auth/me') || url.includes('/auth/revoke-token');
         const shouldAttemptRefresh = !isAuthEndpoint || needsAuthHeader;
 
-        if (shouldAttemptRefresh && !authStore.isRefreshing) {
+        // Always go through refreshAccessToken() — do NOT short-circuit on
+        // authStore.isRefreshing. When several requests fire concurrently (e.g. the
+        // corpus page's parallel search + co-occurrences) they all 401 at once; the
+        // first starts a refresh and the rest would otherwise see isRefreshing===true,
+        // skip the retry and surface a spurious 401. refreshAccessToken() already
+        // dedupes in-flight refreshes (it waits for the running one and reports whether
+        // a valid token now exists), so the losers wait and then retry successfully.
+        if (shouldAttemptRefresh) {
           const refreshSuccess = await authStore.refreshAccessToken();
 
           if (refreshSuccess) {

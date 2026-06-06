@@ -16,6 +16,11 @@ public static class CorpusReportService
         List<CorpusCoOccurrence> coOccurrences,
         CorpusSearchRequest request)
     {
+        // Mirror the dashboard ordering: when enabled, list terms by descending occurrence count.
+        var results = request.SortByOccurrence
+            ? data.Results.OrderByDescending(r => r.TotalOccurrences).ToList()
+            : data.Results;
+
         var sb = new StringBuilder();
         sb.AppendLine("<!DOCTYPE html>");
         sb.AppendLine("<html lang=\"en\">");
@@ -48,20 +53,24 @@ public static class CorpusReportService
 
         sb.AppendLine("</header>");
 
-        if (data.Results.Count > 1)
+        if (results.Count > 1)
         {
             sb.AppendLine("<section>");
             sb.AppendLine("<h2>Comparison Overview</h2>");
             sb.AppendLine("<table><thead><tr><th>Term</th><th>Matching Decks</th><th>Occurrences</th><th>Occ/M Chars</th><th>Works (range)</th><th>Dispersion</th><th>Avg Dialogue %</th></tr></thead><tbody>");
-            foreach (var r in data.Results)
-                sb.AppendLine($"<tr><td><strong>{E(r.Term)}</strong></td><td>{r.MatchingDecks:N0}</td><td>{r.TotalOccurrences:N0}</td><td>{r.HitsPerMillion:N1}</td><td>{r.WorksMatched:N0} ({r.WorkRangePercentage:N1}%)</td><td>{r.Dispersion:N2}</td><td>{r.DialogueWeightedAvg:N1}%</td></tr>");
+            var totalOccurrences = results.Sum(r => r.TotalOccurrences);
+            foreach (var r in results)
+            {
+                var share = totalOccurrences > 0 ? r.TotalOccurrences * 100.0 / totalOccurrences : 0;
+                sb.AppendLine($"<tr><td><strong>{E(r.Term)}</strong></td><td>{r.MatchingDecks:N0}</td><td>{r.TotalOccurrences:N0} ({share:N1}%)</td><td>{r.HitsPerMillion:N1}</td><td>{r.WorksMatched:N0} ({r.WorkRangePercentage:N1}%)</td><td>{r.Dispersion:N2}</td><td>{r.DialogueWeightedAvg:N1}%</td></tr>");
+            }
             sb.AppendLine("</tbody></table>");
             sb.AppendLine("<p class=\"note\"><strong>Matching Decks</strong> counts every individual deck, including sub-decks (each chapter / episode / volume). <strong>Works (range)</strong> collapses those to their parent title, so a term in all chapters of one novel counts as many decks but a single work — the % is the share of all works in the corpus.</p>");
             sb.AppendLine("<p class=\"note\"><strong>Dispersion</strong> (Gries' Deviation of Proportions) measures how evenly the term is spread across media types relative to each register's size: <strong>0</strong> = used in proportion everywhere, <strong>1</strong> = concentrated in a single register (e.g. only in subtitles or only in novels).</p>");
 
             if (coOccurrences.Count > 0)
             {
-                var matchingDecksByTerm = data.Results
+                var matchingDecksByTerm = results
                     .GroupBy(r => r.Term)
                     .ToDictionary(g => g.Key, g => g.First().MatchingDecks);
 
@@ -86,10 +95,10 @@ public static class CorpusReportService
 
         var chartId = 0;
 
-        if (data.Results.Count > 1)
-            RenderCombinedTrendChart(sb, data.Results, ref chartId);
+        if (results.Count > 1)
+            RenderCombinedTrendChart(sb, results, ref chartId);
 
-        foreach (var result in data.Results)
+        foreach (var result in results)
         {
             sb.AppendLine("<section class=\"term-section\">");
             sb.AppendLine($"<h2>{E(result.Term)}</h2>");

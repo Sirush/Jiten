@@ -8,6 +8,7 @@
   import ProgressSpinner from 'primevue/progressspinner';
   import DataTable from 'primevue/datatable';
   import Column from 'primevue/column';
+  import Checkbox from 'primevue/checkbox';
   import { Bar, Line } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
   import { MediaType } from '~/types/enums';
@@ -42,6 +43,7 @@
   const minYear = ref<number | null>(null);
   const maxYear = ref<number | null>(null);
   const maxSnippets = ref(50);
+  const sortByOccurrence = ref(true);
   const loading = ref(false);
   const exporting = ref(false);
   const publishing = ref(false);
@@ -59,7 +61,7 @@
   const chartColors = ['#bd93f9', '#50fa7b', '#ff79c6', '#8be9fd', '#f1fa8c'];
 
   const termInputs = ref<any[]>([]);
-  const TERM_SEPARATORS = /[,;/]/;
+  const TERM_SEPARATORS = /[,;/；]/;
 
   function setTermRef(el: any, i: number) {
     if (el) termInputs.value[i] = el;
@@ -79,7 +81,7 @@
         terms.value[i] = parts[0];
 
         let insertAt = i + 1;
-        for (let k = 1; k < parts.length && terms.value.length < 10; k++) {
+        for (let k = 1; k < parts.length && terms.value.length < 15; k++) {
           terms.value.splice(insertAt, 0, parts[k]);
           insertAt++;
         }
@@ -98,7 +100,7 @@
   );
 
   function addTerm() {
-    if (terms.value.length < 10) terms.value.push('');
+    if (terms.value.length < 15) terms.value.push('');
   }
 
   function removeTerm(index: number) {
@@ -117,6 +119,7 @@
       minReleaseYear: minYear.value ?? undefined,
       maxReleaseYear: maxYear.value ?? undefined,
       maxSnippets: maxSnippets.value,
+      sortByOccurrence: sortByOccurrence.value,
     };
   }
 
@@ -196,9 +199,17 @@
     });
   }
 
+  // Results as displayed: ordered by descending occurrence count when the checkbox is on.
+  // activeTermIndex and the comparison table / tabs all index into this same ordered list.
+  const orderedResults = computed(() => {
+    const results = searchResponse.value?.results ?? [];
+    if (!sortByOccurrence.value) return results;
+    return [...results].sort((a, b) => b.totalOccurrences - a.totalOccurrences);
+  });
+
   const activeResult = computed(() => {
     if (!searchResponse.value) return null;
-    return searchResponse.value.results[activeTermIndex.value] ?? null;
+    return orderedResults.value[activeTermIndex.value] ?? null;
   });
 
   const defaultBarOptions = {
@@ -406,6 +417,16 @@
 
   const comparisonCopied = ref(false);
 
+  // Total occurrences across all searched terms — denominator for each term's share %.
+  const totalOccurrencesAllTerms = computed(() =>
+    (searchResponse.value?.results ?? []).reduce((sum, r) => sum + r.totalOccurrences, 0),
+  );
+
+  function occurrenceShare(occurrences: number): number {
+    const total = totalOccurrencesAllTerms.value;
+    return total > 0 ? (occurrences / total) * 100 : 0;
+  }
+
   const matchingDecksByTerm = computed(() => {
     const map = new Map<string, number>();
     for (const r of searchResponse.value?.results ?? []) map.set(r.term, r.matchingDecks);
@@ -431,7 +452,7 @@
   // Markdown table for pasting into JMdict-style comment sections.
   // "Share %" is each term's portion of the combined occurrences across all terms.
   function copyComparison() {
-    const results = searchResponse.value?.results;
+    const results = orderedResults.value;
     if (!results || results.length === 0) return;
 
     const totalOcc = results.reduce((sum, r) => sum + r.totalOccurrences, 0);
@@ -501,7 +522,7 @@
           chars).
         </li>
         <li>
-          <strong>Not lemmatised</strong> — inflected forms are separate strings (食べた ≠ 食べる). Enter each form you care about as its own term (up to 10) to
+          <strong>Not lemmatised</strong> — inflected forms are separate strings (食べた ≠ 食べる). Enter each form you care about as its own term (up to 15) to
           count and compare them side by side, e.g. <code>食べた</code> · <code>食べて</code> · <code>食べます</code>.
         </li>
         <li>Inline furigana <code>{漢字'かんじ}</code> is stripped before matching: searching <code>漢字</code> matches and the reading is ignored.</li>
@@ -522,8 +543,8 @@
       <template #content>
         <div class="flex flex-col gap-5">
           <div class="flex flex-col gap-2">
-            <label class="text-xs font-medium text-surface-500">Search terms (up to 10)</label>
-            <span class="text-xs text-surface-400">Quickly add a new term by typing or pasting with these separators <code>,</code> <code>;</code> <code>/</code></span>
+            <label class="text-xs font-medium text-surface-500">Search terms (up to 15)</label>
+            <span class="text-xs text-surface-400">Quickly add a new term by typing or pasting with these separators <code>,</code> <code>;</code> <code>；</code> <code>/</code></span>
             <div v-for="(_, i) in terms" :key="i" class="flex items-center gap-2">
               <InputText
                 :ref="(el) => setTermRef(el, i)"
@@ -535,7 +556,7 @@
               <Button v-if="terms.length > 1" icon="pi pi-times" severity="danger" text rounded size="small" @click="removeTerm(i)" />
             </div>
             <div>
-              <Button v-if="terms.length < 10" label="Add term" icon="pi pi-plus" severity="secondary" size="small" @click="addTerm" />
+              <Button v-if="terms.length < 15" label="Add term" icon="pi pi-plus" severity="secondary" size="small" @click="addTerm" />
             </div>
           </div>
 
@@ -567,17 +588,25 @@
             </div>
           </div>
 
-          <div class="flex flex-wrap gap-2 border-t border-surface-200 pt-4 dark:border-surface-700">
-            <Button label="Search" icon="pi pi-search" :loading="loading" @click="search" />
-            <Button label="Export HTML" icon="pi pi-download" severity="secondary" :loading="exporting" :disabled="!searchResponse" @click="exportHtml" />
-            <Button
-              label="Publish & get link"
-              icon="pi pi-cloud-upload"
-              severity="secondary"
-              :loading="publishing"
-              :disabled="!searchResponse"
-              @click="publishReport"
-            />
+          <div class="flex flex-col gap-3 border-t border-surface-200 pt-4 dark:border-surface-700">
+            <div class="flex items-center gap-2">
+              <Checkbox v-model="sortByOccurrence" input-id="sortByOccurrence" :binary="true" />
+              <label for="sortByOccurrence" class="cursor-pointer text-sm text-surface-600 dark:text-surface-300"
+                >Order results by occurrence count</label
+              >
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <Button label="Search" icon="pi pi-search" :loading="loading" @click="search" />
+              <Button label="Export HTML" icon="pi pi-download" severity="secondary" :loading="exporting" :disabled="!searchResponse" @click="exportHtml" />
+              <Button
+                label="Publish & get link"
+                icon="pi pi-cloud-upload"
+                severity="secondary"
+                :loading="publishing"
+                :disabled="!searchResponse"
+                @click="publishReport"
+              />
+            </div>
           </div>
 
           <div
@@ -643,7 +672,7 @@
           </div>
         </template>
         <template #content>
-          <DataTable :value="searchResponse.results" size="small" striped-rows>
+          <DataTable :value="orderedResults" size="small" striped-rows>
             <Column header="Term">
               <template #body="{ data, index }">
                 <a class="cursor-pointer font-bold text-primary-400 hover:underline" @click="activeTermIndex = index">{{ data.term }}</a>
@@ -651,7 +680,7 @@
             </Column>
             <Column field="matchingDecks" header="Matching Decks" />
             <Column header="Occurrences">
-              <template #body="{ data }">{{ data.totalOccurrences.toLocaleString() }}</template>
+              <template #body="{ data }">{{ data.totalOccurrences.toLocaleString() }} ({{ occurrenceShare(data.totalOccurrences).toFixed(1) }}%)</template>
             </Column>
             <Column header="Occ/M chars">
               <template #body="{ data }">{{ data.hitsPerMillion.toFixed(1) }}</template>
@@ -705,7 +734,7 @@
       <div v-if="searchResponse.results.length > 1" class="mb-4 flex gap-2">
         <Button label="All" :severity="activeTermIndex === -1 ? undefined : 'secondary'" size="small" @click="activeTermIndex = -1" />
         <Button
-          v-for="(r, i) in searchResponse.results"
+          v-for="(r, i) in orderedResults"
           :key="i"
           :label="r.term"
           :severity="activeTermIndex === i ? undefined : 'secondary'"

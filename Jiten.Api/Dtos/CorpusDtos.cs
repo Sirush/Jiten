@@ -11,6 +11,8 @@ public class CorpusSearchRequest
     public int? MinReleaseYear { get; set; }
     public int? MaxReleaseYear { get; set; }
     public int MaxSnippets { get; set; } = 50;
+    /// <summary>Order the per-term results by descending occurrence count in the response and HTML export.</summary>
+    public bool SortByOccurrence { get; set; } = true;
 }
 
 public class CorpusSearchResponse
