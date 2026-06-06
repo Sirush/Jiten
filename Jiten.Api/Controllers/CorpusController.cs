@@ -198,7 +198,7 @@ public class CorpusController(
         await using (var conn = new NpgsqlConnection(connString))
         {
             await conn.OpenAsync();
-            yearTotals = await GetYearTotals(conn);
+            yearTotals = await GetYearTotals(conn, request);
             mediaTotals = await GetMediaTotals(conn, request);
             worksTotal = await GetWorksTotal(conn, request);
         }
@@ -213,18 +213,36 @@ public class CorpusController(
         return (await Task.WhenAll(tasks)).ToList();
     }
 
-    private static async Task<Dictionary<int, long>> GetYearTotals(System.Data.Common.DbConnection conn)
+    // Total characters per release year — the denominator for the per-million temporal trend. Two
+    // things must mirror the numerator (GetTermDecks) exactly or the trend line is wrong:
+    //   1. Year attribution uses WorkYear (the parent's date), so a serialised work's sub-decks —
+    //      which carry a default/empty date of their own — count toward the work's year. Grouping by
+    //      the deck's own date instead silently drops every chapter/episode/volume from the
+    //      denominator while their occurrences still land in the numerator, inflating that year
+    //      (most visibly the oldest year, where the surviving denominator is already tiny).
+    //   2. The request filters are applied, so a filtered search (e.g. Novels only) divides
+    //      novel-only occurrences by novel-only characters — matching GetMediaTotals/GetWorksTotal.
+    private async Task<Dictionary<int, long>> GetYearTotals(System.Data.Common.DbConnection conn, CorpusSearchRequest request)
     {
+        var filters = BuildFilterClauses(request);
         var dict = new Dictionary<int, long>();
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT EXTRACT(YEAR FROM d."ReleaseDate")::int AS yr, SUM(d."CharacterCount")::bigint AS total_chars
-            FROM jiten."Decks" d
-            JOIN jiten."DeckRawTexts" drt ON drt."DeckId" = d."DeckId"
-            WHERE d."ReleaseDate" > '0001-01-01' AND isfinite(d."ReleaseDate")
-            GROUP BY EXTRACT(YEAR FROM d."ReleaseDate")
+        cmd.CommandText = $"""
+            SELECT yr, SUM(chars)::bigint AS total_chars
+            FROM (
+                SELECT {WorkYear} AS yr, d."CharacterCount" AS chars
+                FROM jiten."Decks" d
+                JOIN jiten."DeckRawTexts" drt ON drt."DeckId" = d."DeckId"
+                LEFT JOIN jiten."Decks" p ON p."DeckId" = d."ParentDeckId"
+                WHERE 1=1
+                {filters.sql}
+            ) sub
+            WHERE yr IS NOT NULL
+            GROUP BY yr
             """;
         cmd.CommandTimeout = 30;
+        foreach (var p in filters.parameters)
+            cmd.Parameters.Add(CloneParameter(p));
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
             dict[reader.GetInt32(0)] = reader.GetInt64(1);

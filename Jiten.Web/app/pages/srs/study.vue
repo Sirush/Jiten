@@ -26,6 +26,7 @@
   });
 
   const showSettingsDialog = ref(false);
+  const settingsRef = ref<{ saveState: 'idle' | 'saving' | 'saved' | 'error'; save: () => void } | null>(null);
   const showProgressTooltip = ref(false);
 
   function dismissProgressTooltip() { showProgressTooltip.value = false; }
@@ -650,7 +651,13 @@
     </div>
 
     <Dialog v-model:visible="showSettingsDialog" header="Study Settings" :modal="true" class="w-full md:w-[36rem]">
-      <SettingsSrsStudy v-if="showSettingsDialog" inline />
+      <SettingsSrsStudy v-if="showSettingsDialog" ref="settingsRef" inline />
+      <template #footer>
+        <div class="flex items-center justify-end w-full gap-2">
+          <SrsSaveStatus class="mr-auto" :state="settingsRef?.saveState ?? 'idle'" @retry="() => settingsRef?.save()" />
+          <Button label="Close" severity="secondary" @click="showSettingsDialog = false" />
+        </div>
+      </template>
     </Dialog>
 
     <SrsStudyMoreDialog

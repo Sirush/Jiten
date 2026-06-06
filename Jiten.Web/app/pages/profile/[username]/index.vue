@@ -227,7 +227,7 @@
         <div v-if="selectedAccomplishment" class="grid grid-cols-2 md:grid-cols-3 gap-4">
           <Card class="text-center">
             <template #content>
-              <div class="text-3xl font-bold tabular-nums text-purple-600 dark:text-purple-400">
+              <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
                 {{ formatNumber(selectedAccomplishment.completedDeckCount) }}
               </div>
               <div class="text-sm text-gray-500 mt-1">Completed</div>
@@ -236,7 +236,7 @@
 
           <Card class="text-center">
             <template #content>
-              <div class="text-3xl font-bold tabular-nums text-purple-600 dark:text-purple-400">
+              <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
                 {{ formatNumber(selectedAccomplishment.totalCharacterCount) }}
               </div>
               <div class="text-sm text-gray-500 mt-1">Characters</div>
@@ -245,7 +245,7 @@
 
           <Card class="text-center">
             <template #content>
-              <div class="text-3xl font-bold tabular-nums text-purple-600 dark:text-purple-400">
+              <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
                 {{ formatNumber(selectedAccomplishment.totalWordCount) }}
               </div>
               <div class="text-sm text-gray-500 mt-1">Words</div>
@@ -254,7 +254,7 @@
 
           <Card class="text-center">
             <template #content>
-              <div class="text-3xl font-bold tabular-nums text-purple-600 dark:text-purple-400">
+              <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
                 {{ formatNumber(selectedAccomplishment.uniqueWordCount) }}
               </div>
               <div class="text-sm text-gray-500 mt-1">Unique Words</div>
@@ -263,7 +263,7 @@
 
           <Card class="text-center">
             <template #content>
-              <div class="text-3xl font-bold tabular-nums text-purple-600 dark:text-purple-400">
+              <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
                 {{ formatNumber(selectedAccomplishment.uniqueWordUsedOnceCount) }}
               </div>
               <div class="text-sm text-gray-500 mt-1">1-Occurrence Words</div>
@@ -272,7 +272,7 @@
 
           <Card class="text-center">
             <template #content>
-              <div class="text-3xl font-bold tabular-nums text-purple-600 dark:text-purple-400">
+              <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
                 {{ formatNumber(selectedAccomplishment.uniqueKanjiCount) }}
               </div>
               <div class="text-sm text-gray-500 mt-1">Unique Kanji</div>

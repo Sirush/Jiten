@@ -139,7 +139,7 @@
             :key="i"
             class="flex items-center gap-3 text-sm py-3 px-4 hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors"
           >
-            <span class="text-surface-500 min-w-[150px]">{{ formatDateTime(review.reviewDateTime) }}</span>
+            <span class="text-surface-500 min-w-0 sm:min-w-[150px]">{{ formatDateTime(review.reviewDateTime) }}</span>
             <span class="px-2 py-0.5 rounded text-xs font-medium min-w-[48px] text-center" :class="ratingColor(review.rating)">
               {{ ratingLabel(review.rating) }}
             </span>

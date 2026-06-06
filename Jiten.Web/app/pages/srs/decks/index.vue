@@ -425,7 +425,7 @@
               @click="srsStore.dueSummary!.reviewsDue > 0 && startStudy()"
             >
               <span
-                class="text-2xl font-bold tabular-nums"
+                class="text-[clamp(0.95rem,5vw,1.5rem)] font-bold tabular-nums"
                 :class="srsStore.dueSummary.reviewsDue > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'"
               >{{ srsStore.dueSummary.reviewsDue }}</span>
               <span class="text-xs text-gray-500 dark:text-gray-400">Reviews</span>
@@ -437,7 +437,7 @@
               @click="srsStore.dueSummary!.newCardsAvailable > 0 && startStudy()"
             >
               <span
-                class="text-2xl font-bold tabular-nums"
+                class="text-[clamp(0.95rem,5vw,1.5rem)] font-bold tabular-nums"
                 :class="srsStore.dueSummary.newCardsAvailable > 0 ? 'text-green-400 dark:text-green-600' : 'text-gray-400 dark:text-gray-500'"
               >{{ srsStore.dueSummary.newCardsAvailable }}</span>
               <span class="text-xs text-gray-500 dark:text-gray-400">New</span>

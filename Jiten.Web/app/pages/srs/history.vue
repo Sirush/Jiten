@@ -76,7 +76,7 @@
           :key="i"
           class="flex items-center gap-2 text-sm py-2 px-3 hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors"
         >
-          <span class="text-surface-500 text-sm shrink-0">{{ formatDateTime(review.reviewDateTime) }}</span>
+          <span class="text-surface-500 text-sm min-w-0">{{ formatDateTime(review.reviewDateTime) }}</span>
           <NuxtLink
             :to="`/vocabulary/${review.wordId}/${review.readingIndex}/reviews`"
             class="font-medium text-sm text-primary hover:underline truncate"

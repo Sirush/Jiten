@@ -245,7 +245,7 @@
       >
         <div class="text-xs text-gray-500 mb-1">{{ tile.label }}</div>
         <div
-          class="text-2xl font-bold tabular-nums"
+          class="text-[clamp(0.95rem,5vw,1.5rem)] font-bold tabular-nums"
           :class="tile.key === 'overall' ? overallColor : 'text-gray-800 dark:text-gray-100'"
         >
           <template v-if="pct(tile.bucket) != null">{{ pct(tile.bucket) }}%</template>

@@ -10,7 +10,7 @@
   const toast = useToast();
 
   const form = reactive({ ...srsStore.studySettings });
-  const saving = ref(false);
+  const saveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const loaded = ref(false);
 
   onMounted(async () => {
@@ -18,6 +18,9 @@
     Object.assign(form, srsStore.studySettings);
     form.keybinds = { ...srsStore.studySettings.keybinds };
     if (!form.timezone) applyDetectedTimezone();
+    // Let the hydration mutations flush through the deep watcher (still guarded by loaded=false)
+    // before arming auto-save, otherwise the initial Object.assign triggers a spurious save.
+    await nextTick();
     loaded.value = true;
     tickInterval = setInterval(() => {
       nowMinute.value = Date.now();
@@ -89,7 +92,11 @@
 
   const nowMinute = ref(Date.now());
   let tickInterval: ReturnType<typeof setInterval>;
-  onUnmounted(() => clearInterval(tickInterval));
+  onUnmounted(() => {
+    clearInterval(tickInterval);
+    clearTimeout(saveTimer);
+    clearTimeout(savedClearTimer);
+  });
 
   const dayStartOptions = computed(() => {
     void nowMinute.value;
@@ -151,17 +158,48 @@
     Object.assign(form.keybinds, DEFAULT_KEYBINDS);
   }
 
-  async function save() {
-    saving.value = true;
+  // A keybind conflict means an ambiguous binding; hold off saving until the user resolves it.
+  const hasKeybindConflict = computed(() => [...gradeEntries.value, ...actionEntries].some(([key]) => checkConflict(key, form.keybinds[key]) !== null));
+
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  let savedClearTimer: ReturnType<typeof setTimeout> | undefined;
+
+  async function persist() {
+    clearTimeout(saveTimer);
+    saveState.value = 'saving';
     try {
       await srsStore.updateSettings({ ...form, keybinds: { ...form.keybinds } });
-      toast.add({ severity: 'success', summary: 'Study settings saved', life: 2000 });
+      saveState.value = 'saved';
+      clearTimeout(savedClearTimer);
+      savedClearTimer = setTimeout(() => {
+        if (saveState.value === 'saved') saveState.value = 'idle';
+      }, 2500);
     } catch {
+      saveState.value = 'error';
       toast.add({ severity: 'error', summary: 'Failed to save settings', life: 3000 });
-    } finally {
-      saving.value = false;
     }
   }
+
+  // Manual flush — used by the status pill's "retry" affordance.
+  function save() {
+    void persist();
+  }
+
+  watch(
+    form,
+    () => {
+      if (!loaded.value) return;
+      clearTimeout(saveTimer);
+      if (hasKeybindConflict.value) {
+        saveState.value = 'idle';
+        return;
+      }
+      saveTimer = setTimeout(() => {
+        if (!hasKeybindConflict.value) void persist();
+      }, 700);
+    },
+    { deep: true }
+  );
 
   const CardWrapper = defineComponent({
     props: { card: Boolean },
@@ -175,10 +213,25 @@
       };
     },
   });
+
+  // Exposed so the inline study-session Dialog can mirror save status in its footer.
+  defineExpose({ saveState, save });
 </script>
 
 <template>
   <CardWrapper :card="!props.inline">
+    <!-- Standalone: a sticky chip rides along the top-right inside the panel, staying visible
+         through the long form. Inline (study Dialog): status lives in the Dialog footer instead. -->
+    <div v-if="!props.inline" class="sticky top-2 z-20 h-0 pointer-events-none">
+      <Transition name="save-chip">
+        <div
+          v-if="saveState !== 'idle'"
+          class="pointer-events-auto absolute right-0 top-0 flex w-max items-center rounded-full border border-surface-200 bg-surface-0 px-3 py-2 shadow-lg dark:border-surface-700 dark:bg-surface-900"
+        >
+          <SrsSaveStatus :state="saveState" @retry="save" />
+        </div>
+      </Transition>
+    </div>
     <div v-if="!loaded" class="flex justify-center py-4">
       <ProgressSpinner style="width: 24px; height: 24px" />
     </div>
@@ -673,8 +726,18 @@
           </label>
         </div>
       </div>
-
-      <Button label="Save" :loading="saving" class="w-full md:w-auto" @click="save" />
     </div>
   </CardWrapper>
 </template>
+
+<style scoped>
+  .save-chip-enter-active,
+  .save-chip-leave-active {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .save-chip-enter-from,
+  .save-chip-leave-to {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+</style>

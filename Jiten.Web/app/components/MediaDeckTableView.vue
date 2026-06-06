@@ -42,15 +42,15 @@
 <template>
   <Card :pt="{ body: { style: 'padding: 0.5rem' } }" :style="{ border: borderColor }">
     <template #content>
-      <div class="flex flex-row items-center">
+      <div class="flex flex-row flex-wrap items-center gap-y-2">
         <!-- Title and Media Type -->
-        <div class="flex-grow">
+        <div class="flex-grow min-w-0 basis-full sm:basis-auto">
           <div class="font-bold truncate max-w-100" :title="localiseTitle(deck)">{{ localiseTitle(deck) }}</div>
           <div class="text-xs text-gray-500">{{ getMediaTypeText(deck.mediaType) }}</div>
         </div>
 
         <!-- Key Stats -->
-        <div class="flex gap-3 mx-3">
+        <div class="flex flex-wrap gap-3 mx-0 sm:mx-3">
           <div v-if="isAudioVisual && deck.speechDuration > 0" class="flex flex-col items-center w-20">
             <div class="text-xs text-gray-600 dark:text-gray-300">Duration</div>
             <div class="font-medium tabular-nums">{{ formattedSpeechDuration }}</div>
