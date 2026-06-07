@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, DueSummaryDto, DeckStreakDto, ReviewForecast30dDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto, SessionStreakDto, ReviewForecastDto } from '~/types';
 import { FsrsRating } from '~/types';
 import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
+import { useAuthStore } from '~/stores/authStore';
 
 interface SessionReview {
   wordId: number;
@@ -10,6 +11,37 @@ interface SessionReview {
   reading: string;
   rating: FsrsRating;
   duration: number | undefined;
+}
+
+// In-progress session cache (localStorage) so a mobile tab killed in the background can resume
+// where it left off. Bumped if the persisted shape changes.
+const SESSION_CACHE_VERSION = 1;
+const SESSION_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2h, matches the server srs:session TTL
+
+interface PersistedSession {
+  version: number;
+  savedAt: number;
+  sessionId: string | null;
+  currentBatch: StudyCardDto[];
+  currentCardIndex: number;
+  againCardKeys: string[];
+  clearedGrades: ('hard' | 'good' | 'easy' | 'action')[];
+  sessionReviews: SessionReview[];
+  sessionLeeches: LeechCard[];
+  sessionStats: {
+    cardsReviewed: number;
+    newCardsLearned: number;
+    correctCount: number;
+    startTime: number | null;
+    gradeCounts: { again: number; hard: number; good: number; easy: number };
+  };
+  newCardsRemaining: number;
+  reviewsRemaining: number;
+  newCardsToday: number;
+  reviewsToday: number;
+  studyMoreParams: StudyMoreParams | null;
+  isWrappingUp: boolean;
+  preWrapUpBatch: StudyCardDto[];
 }
 
 export interface LeechCard {
@@ -1022,7 +1054,118 @@ export const useSrsStore = defineStore('srs', () => {
     refreshOverview();
   }
 
+  function sessionCacheKey(): string {
+    const auth = useAuthStore();
+    const uid = auth.user?.id ?? auth.user?.email ?? 'anon';
+    return `srs-session:v${SESSION_CACHE_VERSION}:${uid}`;
+  }
+
+  // Snapshot the in-memory working set to localStorage. Grades are already persisted server-side
+  // per-card, so this only needs to restore the ungraded queue, cursor and session display state.
+  // Excludes undoStack (each snapshot copies the whole batch → huge), in-flight promises and the
+  // example cache (re-prefetched on restore).
+  function persistSession() {
+    if (!import.meta.client) return;
+    if (currentBatch.value.length === 0 || isSessionComplete.value) return;
+    try {
+      const blob = {
+        version: SESSION_CACHE_VERSION,
+        savedAt: Date.now(),
+        sessionId: sessionId.value,
+        currentBatch: currentBatch.value,
+        currentCardIndex: currentCardIndex.value,
+        againCardKeys: Array.from(againCardKeys.value),
+        clearedGrades: clearedGrades.value,
+        sessionReviews: sessionReviews.value,
+        sessionLeeches: sessionLeeches.value,
+        sessionStats: {
+          ...sessionStats.value,
+          startTime: sessionStats.value.startTime ? sessionStats.value.startTime.getTime() : null,
+        },
+        newCardsRemaining: newCardsRemaining.value,
+        reviewsRemaining: reviewsRemaining.value,
+        newCardsToday: newCardsToday.value,
+        reviewsToday: reviewsToday.value,
+        studyMoreParams: studyMoreParams.value,
+        isWrappingUp: isWrappingUp.value,
+        preWrapUpBatch: preWrapUpBatch.value,
+      };
+      localStorage.setItem(sessionCacheKey(), JSON.stringify(blob));
+    } catch {
+      // Quota / private-mode failures are non-fatal — the session just won't be resumable.
+    }
+  }
+
+  function clearPersistedSession() {
+    if (!import.meta.client) return;
+    try {
+      localStorage.removeItem(sessionCacheKey());
+    } catch { /* ignore */ }
+  }
+
+  // Restore a cached session if one is present, fresh and still has ungraded cards. Returns true
+  // if the session was restored (caller should skip the initial fetchBatch).
+  async function tryRestoreSession(): Promise<boolean> {
+    if (!import.meta.client) return false;
+    let blob: PersistedSession;
+    try {
+      const raw = localStorage.getItem(sessionCacheKey());
+      if (!raw) return false;
+      blob = JSON.parse(raw) as PersistedSession;
+    } catch {
+      return false;
+    }
+
+    const valid = blob
+      && blob.version === SESSION_CACHE_VERSION
+      && typeof blob.savedAt === 'number'
+      && Date.now() - blob.savedAt <= SESSION_CACHE_TTL_MS
+      && Array.isArray(blob.currentBatch)
+      && blob.currentBatch.length > 0
+      && blob.currentCardIndex < blob.currentBatch.length;
+
+    if (!valid) {
+      clearPersistedSession();
+      return false;
+    }
+
+    sessionId.value = blob.sessionId ?? null;
+    currentBatch.value = blob.currentBatch;
+    currentCardIndex.value = blob.currentCardIndex;
+    againCardKeys.value = new Set(blob.againCardKeys ?? []);
+    clearedGrades.value = blob.clearedGrades ?? [];
+    sessionReviews.value = blob.sessionReviews ?? [];
+    sessionLeeches.value = blob.sessionLeeches ?? [];
+    sessionStats.value = {
+      cardsReviewed: blob.sessionStats?.cardsReviewed ?? 0,
+      newCardsLearned: blob.sessionStats?.newCardsLearned ?? 0,
+      correctCount: blob.sessionStats?.correctCount ?? 0,
+      startTime: blob.sessionStats?.startTime ? new Date(blob.sessionStats.startTime) : new Date(),
+      gradeCounts: blob.sessionStats?.gradeCounts ?? { again: 0, hard: 0, good: 0, easy: 0 },
+    };
+    newCardsRemaining.value = blob.newCardsRemaining ?? 0;
+    reviewsRemaining.value = blob.reviewsRemaining ?? 0;
+    newCardsToday.value = blob.newCardsToday ?? 0;
+    reviewsToday.value = blob.reviewsToday ?? 0;
+    studyMoreParams.value = blob.studyMoreParams ?? null;
+    isWrappingUp.value = blob.isWrappingUp ?? false;
+    preWrapUpBatch.value = blob.preWrapUpBatch ?? [];
+
+    isSessionComplete.value = false;
+    isFlipped.value = false;
+    isLoading.value = false;
+    undoStack.value = [];
+    inFlightReviews.clear();
+    sessionDirty.value = false;
+    cardShownAt.value = Date.now();
+    sessionEpoch++;
+
+    await prefetchExamples(currentCardIndex.value, 4);
+    return true;
+  }
+
   function clearSessionState() {
+    clearPersistedSession();
     sessionId.value = null;
     currentBatch.value = [];
     currentCardIndex.value = 0;
@@ -1128,5 +1271,8 @@ export const useSrsStore = defineStore('srs', () => {
     resetSession,
     sessionStreak,
     sessionForecast,
+    persistSession,
+    tryRestoreSession,
+    clearPersistedSession,
   };
 });

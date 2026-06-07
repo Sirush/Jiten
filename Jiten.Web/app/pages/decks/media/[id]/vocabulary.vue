@@ -98,6 +98,12 @@
 
   const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
 
+  // Stream entries in over a few frames instead of mounting all ~100 at once.
+  const { visibleItems: visibleWords } = useProgressiveList(
+    computed(() => response.value?.data?.words ?? []),
+    { initial: 20, batch: 12, keyOf: (w) => `${w.wordId}-${w.mainReading.readingIndex}` },
+  );
+
   const title = computed(() => {
     if (!response.value?.data) {
       return '';
@@ -145,7 +151,7 @@
       :show-display-filter="auth.isAuthenticated"
     />
     <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
-    <VocabularyList :words="response?.data?.words ?? []" :status="status" :error="error" empty-message="Try adjusting your search or filters">
+    <VocabularyList :words="visibleWords" :status="status" :error="error" empty-message="Try adjusting your search or filters">
       <template #error="{ error: err }">
         <div>Error: {{ err }}</div>
       </template>

@@ -839,7 +839,7 @@
               </Column>
               <Column header="Source">
                 <template #body="{ data }">
-                  <NuxtLink :to="`/media/${data.deckId}`" class="text-primary-400 hover:underline">
+                  <NuxtLink :to="`/decks/media/${data.deckId}/detail`" class="text-primary-400 hover:underline">
                     <template v-if="data.parentTitle">{{ data.parentTitle }} — </template>{{ data.title }}
                   </NuxtLink>
                 </template>
@@ -905,7 +905,7 @@
               </Column>
               <Column header="Source">
                 <template #body="{ data }">
-                  <NuxtLink :to="`/media/${data.deckId}`" class="text-primary-400 hover:underline">
+                  <NuxtLink :to="`/decks/media/${data.deckId}/detail`" class="text-primary-400 hover:underline">
                     <template v-if="data.parentTitle">{{ data.parentTitle }} — </template>{{ data.deckTitle }}
                   </NuxtLink>
                 </template>

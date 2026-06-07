@@ -4,12 +4,14 @@
   import type { StudyMoreParams } from '~/types';
   import { useStudyKeyboard } from '~/composables/useStudyKeyboard';
   import { useSwipeGesture } from '~/composables/useSwipeGesture';
+  import { useSrsSessionCache } from '~/composables/useSrsSessionCache';
   import { useToast } from 'primevue/usetoast';
 
   definePageMeta({ middleware: ['auth'] });
   useHead({ title: 'Study' });
 
   const srsStore = useSrsStore();
+  useSrsSessionCache();
   const router = useRouter();
   const confirm = useConfirm();
   const toast = useToast();
@@ -220,7 +222,8 @@
   onMounted(async () => {
     loading.value = true;
     await srsStore.fetchSettings();
-    await srsStore.fetchBatch();
+    const restored = await srsStore.tryRestoreSession();
+    if (!restored) await srsStore.fetchBatch();
     srsStore.fetchDueSummary();
     loading.value = false;
     if (!srsStore.isSessionComplete && srsStore.currentCard) startElapsedTimer();

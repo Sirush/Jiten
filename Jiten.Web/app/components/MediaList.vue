@@ -566,6 +566,12 @@
 
   const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
 
+  // Stream cards in over a few frames instead of mounting the whole page at once.
+  const { visibleItems: visibleDecks } = useProgressiveList(
+    computed(() => response.value?.data ?? []),
+    { initial: 6, batch: 4, keyOf: (d) => d.deckId },
+  );
+
   const jitenStore = useJitenStore();
   watch(() => jitenStore.coverageVersion, () => {
     refreshMediaList();
@@ -715,17 +721,17 @@
 
         <!-- Card View -->
         <div v-else-if="displayStyle === DisplayStyle.Card" class="flex flex-col gap-2">
-          <MediaDeckCard v-for="deck in response.data" :key="deck.deckId" :deck="deck" @update:deck="updateDeckInList" />
+          <MediaDeckCard v-for="deck in visibleDecks" :key="deck.deckId" :deck="deck" @update:deck="updateDeckInList" />
         </div>
 
         <!-- Compact View -->
         <div v-else-if="displayStyle === DisplayStyle.Compact" class="flex flex-wrap gap-4 justify-center">
-          <MediaDeckCompactView v-for="deck in response.data" :key="deck.id" :deck="deck" />
+          <MediaDeckCompactView v-for="deck in visibleDecks" :key="deck.id" :deck="deck" />
         </div>
 
         <!-- Table View -->
         <div v-else-if="displayStyle === DisplayStyle.Table" class="flex flex-col gap-0.5">
-          <MediaDeckTableView v-for="deck in response.data" :key="deck.id" :deck="deck" />
+          <MediaDeckTableView v-for="deck in visibleDecks" :key="deck.id" :deck="deck" />
         </div>
       </div>
       <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-next="true" />
