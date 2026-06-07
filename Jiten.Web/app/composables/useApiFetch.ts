@@ -4,6 +4,8 @@ import type { AsyncDataRequestStatus, UseFetchOptions } from '#app';
 function revalidateOnClientAfterSsr(
   authStore: ReturnType<typeof useAuthStore>,
   execute: (opts?: any) => Promise<void>,
+  data: Ref<unknown>,
+  error: Ref<Error | null | undefined>,
 ): void {
   if (!import.meta.client || !authStore.isAuthenticated) return;
 
@@ -11,7 +13,15 @@ function revalidateOnClientAfterSsr(
   if (!nuxtApp.isHydrating) return;
 
   authStore.ensureValidToken().then((valid) => {
-    if (valid) execute();
+    if (!valid) return;
+    execute().then(() => {
+      // Background revalidation of already-rendered SSR data. If it fails (e.g. the
+      // API is mid-deploy) but we still hold the server-rendered payload, keep showing
+      // the stale page instead of flipping the UI into an error state.
+      if (error.value && data.value != null) {
+        error.value = undefined;
+      }
+    });
   });
 }
 
@@ -82,12 +92,21 @@ function buildFetchOptions(
     headers.set('Authorization', `Bearer ${authStore.accessToken}`);
   }
 
+  // Auto-retry transient failures (network blips, API restarting during a deploy) so a
+  // brief outage self-heals silently. Only for idempotent reads — never replay a mutation.
+  // 401 is intentionally excluded; it's handled by the token-refresh flow below.
+  const method = (opts?.method ?? 'GET').toString().toUpperCase();
+  const isIdempotent = method === 'GET' || method === 'HEAD';
+
   return {
     ...opts,
     headers,
     key: opts?.key ?? uniqueKey,
     server: opts?.server ?? true,
     lazy: opts?.lazy ?? false,
+    retry: opts?.retry ?? (isIdempotent ? 2 : 0),
+    retryDelay: opts?.retryDelay ?? 500,
+    retryStatusCodes: opts?.retryStatusCodes ?? [408, 425, 429, 500, 502, 503, 504],
     async onRequest({ options }: any) {
       await tokenCheckPromise;
       if (authStore.accessToken) {
@@ -119,7 +138,7 @@ export function useApiFetch<T>(
   setup401ErrorHandler(error, execute, request, authStore);
 
   if (revalidateOnClient) {
-    revalidateOnClientAfterSsr(authStore, execute);
+    revalidateOnClientAfterSsr(authStore, execute, data, error);
   }
 
   return { data, status, error, refresh, execute };
@@ -143,7 +162,7 @@ export  function useApiFetchPaginated<T>(
   setup401ErrorHandler(error, execute, request, authStore);
 
   if (revalidateOnClient) {
-    revalidateOnClientAfterSsr(authStore, execute);
+    revalidateOnClientAfterSsr(authStore, execute, data, error);
   }
 
   return {

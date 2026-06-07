@@ -89,40 +89,23 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=Host(`api.jiten.moe`)"
       - "traefik.http.services.api.loadbalancer.server.port=8080"
+      - "traefik.http.routers.api.middlewares=jiten-errors"
 
-  web:
-    build:
-      context: ./Jiten.Web
-      dockerfile: Dockerfile
-      args:
-        - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID=${UMAMI_ANALYTICS_WEBSITE_ID:-}
-        - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_HOST_URL=${UMAMI_ANALYTICS_HOST_URL:-https://umami.jiten.moe}
-        - NUXT_PUBLIC_BASE_URL=${API_BASE_URL:-https://api.jiten.moe}
-        - NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-        - NUXT_PUBLIC_RECAPTCHA_V2_SITE_KEY=${GOOGLE_RECAPTCHA_V2_SITE_KEY:-}
+  # Serves a branded "we'll be right back" page whenever a router has no healthy
+  # backend (e.g. a container being recreated during a deploy). Traefik's errors
+  # middleware intercepts 502/503/504 and returns this static page with the original
+  # status code, instead of Coolify/Traefik's generic "no available server" screen.
+  error-pages:
+    image: nginx:alpine
     restart: unless-stopped
-    depends_on:
-      api:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3001').then(r => {if(!r.ok) throw r; process.exit(0)}).catch(() => process.exit(1))"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    environment:
-      - NUXT_PUBLIC_BASE_URL=${API_BASE_URL:-https://api.jiten.moe}
-      - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID=${UMAMI_ANALYTICS_WEBSITE_ID:-}
-      - NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_HOST_URL=${UMAMI_ANALYTICS_HOST_URL:-https://umami.jiten.moe}
-      - NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - NUXT_PUBLIC_RECAPTCHA_V2_SITE_KEY=${GOOGLE_RECAPTCHA_V2_SITE_KEY:-}
+    volumes:
+      - ./error-pages:/usr/share/nginx/html:ro
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.web.rule=Host(`jiten.moe`)"
+      - "traefik.http.services.error-pages.loadbalancer.server.port=80"
+      - "traefik.http.middlewares.jiten-errors.errors.status=502-504"
+      - "traefik.http.middlewares.jiten-errors.errors.service=error-pages"
+      - "traefik.http.middlewares.jiten-errors.errors.query=/503.html"
 
   umami:
     image: ghcr.io/umami-software/umami:3.1

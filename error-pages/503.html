@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, noarchive" />
+    <meta name="description" content="Jiten is temporarily offline for a brief update and will be back shortly." />
+    <title>Jiten is updating</title>
+    <link rel="icon" type="image/svg+xml" href="https://jiten.moe/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #000000;
+        --bg-accent: rgba(192, 132, 252, 0.05);
+        --card: #131316;
+        --text: #f4f4f5;
+        --muted: #9aa1ad;
+        --accent: #c084fc;
+        --accent-soft: rgba(192, 132, 252, 0.14);
+        --bar: #312e81;
+        --border: #242428;
+        --shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        background:
+          radial-gradient(120% 90% at 50% -10%, var(--bg-accent), transparent 60%),
+          var(--bg);
+        color: var(--text);
+        font-family: "Noto Sans JP", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        -webkit-font-smoothing: antialiased;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        max-width: 27rem;
+        width: 100%;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+      }
+      .bar {
+        background: var(--bar);
+        padding: 1rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+      .wordmark {
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #ffffff;
+        letter-spacing: -0.01em;
+      }
+      .wordmark .beta {
+        color: #f87171;
+        font-size: 0.6rem;
+        font-weight: 700;
+        vertical-align: super;
+        margin-left: 0.15rem;
+        text-transform: lowercase;
+      }
+      .body {
+        padding: 2rem 1.75rem 1.75rem;
+        text-align: center;
+      }
+      .dots {
+        display: flex;
+        gap: 0.4rem;
+        justify-content: center;
+        margin: 0.25rem 0 1.4rem;
+      }
+      .dots span {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--accent);
+        opacity: 0.35;
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      .dots span:nth-child(2) { animation-delay: 0.18s; }
+      .dots span:nth-child(3) { animation-delay: 0.36s; }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.3; transform: scale(0.85); }
+        40% { opacity: 1; transform: scale(1); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .dots span { animation: none; opacity: 0.7; }
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 0.6rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      p {
+        color: var(--muted);
+        margin: 0;
+        line-height: 1.6;
+        font-size: 0.95rem;
+      }
+      .status {
+        margin-top: 1.5rem;
+        padding-top: 1.1rem;
+        border-top: 1px solid var(--border);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.82rem;
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .status .pip {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 0 var(--accent-soft);
+        animation: blink 1.6s ease-in-out infinite;
+      }
+      @keyframes blink {
+        0%, 100% { box-shadow: 0 0 0 0 var(--accent-soft); }
+        50% { box-shadow: 0 0 0 6px transparent; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card" role="status" aria-live="polite">
+      <div class="bar">
+        <span class="wordmark">Jiten<span class="beta">beta</span></span>
+      </div>
+      <div class="body">
+        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <h1>Just a moment</h1>
+        <p>Jiten is rolling out an update. It will be back online shortly, and this page will take you there as soon as it is ready.</p>
+        <div class="status"><span class="pip" aria-hidden="true"></span>Reconnecting</div>
+      </div>
+    </main>
+    <script>
+      (function () {
+        var delay = 3000;
+        var max = 8000;
+        function check() {
+          fetch(location.href, { method: 'HEAD', cache: 'no-store' })
+            .then(function (r) {
+              if (r.ok) { location.reload(); return; }
+              schedule();
+            })
+            .catch(schedule);
+        }
+        function schedule() {
+          delay = Math.min(delay + 1000, max);
+          setTimeout(check, delay);
+        }
+        setTimeout(check, delay);
+      })();
+    </script>
+  </body>
+</html>

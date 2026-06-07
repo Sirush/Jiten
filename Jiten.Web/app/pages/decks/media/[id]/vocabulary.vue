@@ -134,11 +134,11 @@
 <template>
   <div class="flex flex-col gap-2">
     <DeckBreadcrumb
-      v-if="response?.data?.deck"
-      :deck="response.data.deck"
-      :parent-deck="response.data.parentDeck"
+      :deck="response?.data?.deck"
+      :parent-deck="response?.data?.parentDeck"
       current="Vocabulary"
     />
+    <h1 v-if="title" class="text-2xl font-bold">{{ title }} - Vocabulary List</h1>
     <VocabularyFilters
       v-model:sort-by="sortBy"
       v-model:sort-descending="sortDescending"

@@ -93,12 +93,19 @@
     const d = mainDeck.value;
     if (!d) return '';
     const type = getMediaTypeText(d.mediaType);
+    const orig = d.originalTitle ? ` (${d.originalTitle})` : '';
     const chars = d.characterCount ? d.characterCount.toLocaleString() : '';
     const words = d.uniqueWordCount ? d.uniqueWordCount.toLocaleString() : '';
-    return `Frequency-ordered vocabulary list and downloadable Anki deck for ${title.value}`
-      + ` (${d.originalTitle ?? ''}), a Japanese ${type}`
-      + (chars ? ` with ${chars} characters and ${words} unique words` : '')
-      + `. Difficulty, kanji and word statistics on Jiten.`;
+    const stats = chars ? ` - ${chars} chars, ${words} unique words` : '';
+    const tail = ' Difficulty, kanji & word stats on Jiten.';
+    // Keep the description within ~160 chars (search engines truncate beyond this).
+    // Drop the stats clause first, then hard-clamp the title at a word boundary.
+    const build = (s: string) => `Vocabulary list & free Anki deck for ${title.value}${orig}, a Japanese ${type}${s}.${tail}`;
+    const full = build(stats);
+    if (full.length <= 160) return full;
+    const trimmed = build('');
+    if (trimmed.length <= 160) return trimmed;
+    return build('').slice(0, 157).replace(/\s+\S*$/, '') + '…';
   });
 
   useSeoMeta({
@@ -125,6 +132,7 @@
 
 <template>
   <div>
+    <DeckBreadcrumb :deck="response?.data?.mainDeck" :parent-deck="response?.data?.parentDeck" class="mb-2" />
     <div v-if="status === 'pending'" class="flex flex-col gap-4">
       <Card v-for="i in 5" :key="i" class="p-2">
         <template #content>
@@ -133,7 +141,6 @@
       </Card>
     </div>
     <div v-else-if="response?.data?.mainDeck">
-      <DeckBreadcrumb :deck="response.data.mainDeck" :parent-deck="response.data.parentDeck" class="mb-2" />
       <MediaDeckCard :deck="response.data.mainDeck" title-tag="h1" hide-detail-button @update:deck="updateMainDeck" />
 
       <div v-if="response.data.parentDeck != null" class="pt-4">

@@ -50,6 +50,10 @@
     [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio].includes(props.deck.mediaType)
   );
 
+  const hasChildren = computed(() => props.deck.childrenDeckCount > 0);
+  const childrenLabel = computed(() => getChildrenCountText(props.deck.mediaType));
+  const showChildrenLink = computed(() => hasChildren.value && !props.hideDetailButton);
+
   // Descriptive text used when sharing the deck to social platforms / the native share sheet.
   const shareTitle = computed(() => `${localiseTitle(props.deck)} — Japanese vocabulary list, stats & Anki deck · Jiten`);
 
@@ -456,8 +460,19 @@
                       <span class="tabular-nums font-semibold">{{ deck.dialoguePercentage.toFixed(1) }}%</span>
                     </div>
 
-                    <div v-if="deck.childrenDeckCount != 0" class="flex justify-between flex-wrap stat-row">
-                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">{{ getChildrenCountText(deck.mediaType) }}</span>
+                    <router-link
+                      v-if="showChildrenLink"
+                      :to="`/decks/media/${deck.deckId}/detail`"
+                      class="flex justify-between flex-wrap stat-row group cursor-pointer no-underline"
+                    >
+                      <span class="text-primary-600 dark:text-primary-400 truncate pr-2 font-normal underline-offset-2 group-hover:underline">{{ childrenLabel }}</span>
+                      <span class="tabular-nums font-semibold whitespace-nowrap text-primary-600 dark:text-primary-400">
+                        {{ deck.childrenDeckCount.toLocaleString() }}
+                        <i class="pi pi-arrow-right text-xs ml-0.5 transition-transform group-hover:translate-x-0.5" />
+                      </span>
+                    </router-link>
+                    <div v-else-if="deck.childrenDeckCount != 0" class="flex justify-between flex-wrap stat-row">
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">{{ childrenLabel }}</span>
                       <span class="tabular-nums font-semibold">{{ deck.childrenDeckCount.toLocaleString() }}</span>
                     </div>
 

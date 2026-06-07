@@ -1377,22 +1377,24 @@ public class UserController(
 
         foreach (var card in cards)
         {
-            if (knownStates[(card.WordId, card.ReadingIndex)].Contains(KnownState.Mastered))
+            var states = knownStates[(card.WordId, card.ReadingIndex)];
+
+            if (exportMastered && states.Contains(KnownState.Mastered))
             {
                 masteredCards.Add(card);
             }
 
-            if (knownStates[(card.WordId, card.ReadingIndex)].Contains(KnownState.Blacklisted))
+            if (exportBlacklisted && states.Contains(KnownState.Blacklisted))
             {
                 blacklistedCards.Add(card);
             }
 
-            if (knownStates[(card.WordId, card.ReadingIndex)].Contains(KnownState.Mature))
+            if (exportMature && states.Contains(KnownState.Mature))
             {
                 matureCards.Add(card);
             }
 
-            if (knownStates[(card.WordId, card.ReadingIndex)].Contains(KnownState.Young))
+            if (exportYoung && states.Contains(KnownState.Young))
             {
                 youngCards.Add(card);
             }

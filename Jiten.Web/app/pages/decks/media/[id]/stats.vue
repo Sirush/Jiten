@@ -104,11 +104,12 @@
 <template>
   <div class="flex flex-col gap-4">
     <DeckBreadcrumb
-      v-if="deckResponse?.data?.mainDeck"
-      :deck="deckResponse.data.mainDeck"
-      :parent-deck="deckResponse.data.parentDeck"
+      :deck="deckResponse?.data?.mainDeck"
+      :parent-deck="deckResponse?.data?.parentDeck"
       current="Statistics"
     />
+
+    <h1 v-if="title" class="text-2xl font-bold">{{ title }} - Statistics</h1>
 
     <!-- Coverage Section -->
     <Card v-if="statsStatus === 'pending' || curveStatus === 'pending'" class="p-2">

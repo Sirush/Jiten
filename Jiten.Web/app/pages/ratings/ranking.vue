@@ -23,6 +23,243 @@ const dragOver = ref<{ kind: 'group'; groupId: number } | { kind: 'gap'; index: 
 
 const expandedGroups = ref(new Set<number>());
 
+const isExporting = ref(false);
+
+const LIGHT_PALETTE = { bg: '#ffffff', card: '#f4f5f7', text: '#1f2937', sub: '#6b7280', foot: '#9ca3af', brand: '#9333ea' };
+const DARK_PALETTE = { bg: '#18181b', card: '#27272a', text: '#e5e7eb', sub: '#a1a1aa', foot: '#71717a', brand: '#c084fc' };
+
+const NOCOVER = '/img/nocover.jpg';
+const coverBitmapCache = new Map<string, ImageBitmap | null>();
+let logoBitmap: ImageBitmap | null | undefined;
+
+// Fetch via CORS + decode through a blob so the export canvas is never tainted.
+async function loadBitmap(url: string): Promise<ImageBitmap | null> {
+  if (coverBitmapCache.has(url)) return coverBitmapCache.get(url)!;
+  let bmp: ImageBitmap | null = null;
+  try {
+    const resp = await fetch(url, { mode: 'cors' });
+    bmp = await createImageBitmap(await resp.blob());
+  } catch {
+    bmp = null;
+  }
+  coverBitmapCache.set(url, bmp);
+  return bmp;
+}
+
+// Draw bmp into (x,y,w,h) with object-fit: cover, clipped to a rounded rect.
+function drawCover(ctx: CanvasRenderingContext2D, bmp: ImageBitmap | null, x: number, y: number, w: number, h: number, fallback: string) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 4);
+  ctx.clip();
+  if (bmp) {
+    const scale = Math.max(w / bmp.width, h / bmp.height);
+    const sw = w / scale;
+    const sh = h / scale;
+    ctx.drawImage(bmp, (bmp.width - sw) / 2, (bmp.height - sh) / 2, sw, sh, x, y, w, h);
+  } else {
+    ctx.fillStyle = fallback;
+    ctx.fillRect(x, y, w, h);
+  }
+  ctx.restore();
+}
+
+function drawTriangle(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, dir: 'up' | 'down') {
+  ctx.beginPath();
+  if (dir === 'up') {
+    ctx.moveTo(cx, cy - size);
+    ctx.lineTo(cx - size, cy + size);
+    ctx.lineTo(cx + size, cy + size);
+  } else {
+    ctx.moveTo(cx, cy + size);
+    ctx.lineTo(cx - size, cy - size);
+    ctx.lineTo(cx + size, cy - size);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function fitText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string {
+  if (ctx.measureText(text).width <= maxW) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (ctx.measureText(text.slice(0, mid) + '…').width <= maxW) lo = mid;
+    else hi = mid - 1;
+  }
+  return text.slice(0, lo) + '…';
+}
+
+const activeGroupText = computed(() => (activeGroup.value !== null ? getMediaTypeGroupText(activeGroup.value) : ''));
+
+// Layout constants (CSS px; the canvas is scaled by SCALE for crispness).
+const SCALE = 2;
+const W = 640;
+const PAD = 28;
+const INNER = W - PAD * 2;
+const ROW_H = 46;
+const ROW_GAP = 8;
+const RANK_PAD = 12;
+const RANK_GAP = 10;
+const NUM_W = 34;
+const COVER_W = 32;
+
+async function exportPng() {
+  if (displayGroups.value.length === 0) return;
+  const pal = document.documentElement.classList.contains('dark-mode') ? DARK_PALETTE : LIGHT_PALETTE;
+  isExporting.value = true;
+  try {
+    const groups = displayGroups.value;
+    const decks = groups.flatMap(g => g.decks);
+
+    const [bitmaps] = await Promise.all([
+      Promise.all(decks.map(d => loadBitmap(d.coverUrl || NOCOVER))),
+      document.fonts.ready,
+    ]);
+    if (logoBitmap === undefined) logoBitmap = await loadBitmap('/favicon-96x96.png');
+    const bmpByDeck = new Map(decks.map((d, i) => [d.id, bitmaps[i]]));
+
+    const headerH = 54;
+    const axisH = 22;
+    const footH = 28;
+    const rankHeights = groups.map(g => RANK_PAD * 2 + g.decks.length * ROW_H + (g.decks.length - 1) * ROW_GAP);
+    const ranksH = rankHeights.reduce((a, b) => a + b, 0) + (groups.length - 1) * RANK_GAP;
+    const H = PAD + headerH + axisH + ranksH + axisH + footH + PAD;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W * SCALE;
+    canvas.height = Math.ceil(H) * SCALE;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(SCALE, SCALE);
+    ctx.textBaseline = 'alphabetic';
+    ctx.imageSmoothingQuality = 'high';
+    const FONT = '"Noto Sans JP", sans-serif';
+    const ls = (v: number) => {
+      (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${v}px`;
+    };
+
+    ctx.fillStyle = pal.bg;
+    ctx.fillRect(0, 0, W, H);
+
+    let y = PAD;
+
+    // Header: title + subtitle (left), logo + brand (right)
+    ctx.fillStyle = pal.text;
+    ctx.font = `800 26px ${FONT}`;
+    ctx.fillText('Difficulty Ranking', PAD, y + 24);
+    ctx.fillStyle = pal.sub;
+    ctx.font = `500 15px ${FONT}`;
+    ctx.fillText(activeGroupText.value, PAD, y + 46);
+
+    ctx.font = `800 16px ${FONT}`;
+    const brand = 'jiten.moe';
+    const brandW = ctx.measureText(brand).width;
+    const logoSize = 22;
+    const logoGap = 8;
+    const brandRight = W - PAD;
+    if (logoBitmap) drawCover(ctx, logoBitmap, brandRight - brandW - logoGap - logoSize, y + 4, logoSize, logoSize, pal.brand);
+    ctx.fillStyle = pal.brand;
+    ctx.textAlign = 'right';
+    ctx.fillText(brand, brandRight, y + 20);
+    ctx.textAlign = 'left';
+    y += headerH;
+
+    // Hardest axis (red end)
+    ctx.font = `700 12px ${FONT}`;
+    ctx.fillStyle = rankColor(0, groups.length);
+    drawTriangle(ctx, PAD + 4, y + 8, 4, 'up');
+    ls(1.2);
+    ctx.fillText('HARDEST', PAD + 14, y + 13);
+    ls(0);
+    y += axisH;
+
+    // Rank blocks
+    groups.forEach((group, index) => {
+      const rh = rankHeights[index];
+      const color = rankColor(index, groups.length);
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(PAD, y, INNER, rh, 8);
+      ctx.fillStyle = pal.card;
+      ctx.fill();
+      ctx.clip(); // accent bar follows the rounded corners
+      ctx.fillStyle = color;
+      ctx.fillRect(PAD, y, 4, rh);
+      ctx.restore();
+
+      ctx.fillStyle = color;
+      ctx.font = `800 20px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(String(index + 1), PAD + 4 + NUM_W / 2, y + rh / 2 + 7);
+      ctx.textAlign = 'left';
+
+      const rowX = PAD + NUM_W + 4;
+      let ry = y + RANK_PAD;
+      for (const deck of group.decks) {
+        drawCover(ctx, bmpByDeck.get(deck.id) ?? null, rowX, ry, COVER_W, ROW_H, pal.sub);
+        ctx.fillStyle = pal.text;
+        ctx.font = `500 15px ${FONT}`;
+        const tx = rowX + COVER_W + 10;
+        ctx.fillText(fitText(ctx, deckTitle(deck), W - PAD - tx), tx, ry + ROW_H / 2 + 5);
+        ry += ROW_H + ROW_GAP;
+      }
+      y += rh + RANK_GAP;
+    });
+    y -= RANK_GAP;
+
+    // Easiest axis (green end, right-aligned)
+    ctx.font = `700 12px ${FONT}`;
+    ctx.fillStyle = rankColor(groups.length - 1, groups.length);
+    drawTriangle(ctx, W - PAD - 4, y + 12, 4, 'down');
+    ls(1.2);
+    ctx.textAlign = 'right';
+    ctx.fillText('EASIEST', W - PAD - 14, y + 15);
+    ctx.textAlign = 'left';
+    ls(0);
+
+    ctx.fillStyle = pal.foot;
+    ctx.font = `400 12px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('Generated on jiten.moe', W / 2, y + axisH + 16);
+    ctx.textAlign = 'left';
+
+    const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
+    if (!blob) throw new Error('Export produced an empty image');
+
+    const slug = activeGroupText.value.toLowerCase().replace(/\s+/g, '-') || 'media';
+    const fileName = `jiten-ranking-${slug}.png`;
+    const file = new File([blob], fileName, { type: 'image/png' });
+
+    // Share sheet on mobile (desktops also expose Web Share but can't save from it), download elsewhere.
+    const ua = navigator.userAgent;
+    const isMobile =
+      (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile ??
+      (/Android|iPhone|iPod/i.test(ua) || (/iPad|Macintosh/i.test(ua) && navigator.maxTouchPoints > 1));
+
+    if (isMobile && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'Difficulty Ranking' });
+        return;
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return; // user dismissed the sheet
+        // any other failure falls through to the download path
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = url;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) {
+    console.error('Failed to export ranking image', e);
+  } finally {
+    isExporting.value = false;
+  }
+}
+
 const displayGroups = computed(() => {
   if (!activeSection.value) return [];
   return [...activeSection.value.groups].reverse();
@@ -277,7 +514,7 @@ onUnmounted(cancelDrag);
     </div>
 
     <div v-else>
-      <div class="flex flex-wrap gap-2 mb-4">
+      <div class="flex flex-wrap items-center gap-2 mb-4">
         <Button
           v-for="section in sections"
           :key="section.group"
@@ -285,6 +522,16 @@ onUnmounted(cancelDrag);
           size="small"
           :severity="section.group === activeGroup ? 'primary' : 'secondary'"
           @click="activeGroup = section.group"
+        />
+        <Button
+          icon="pi pi-download"
+          label="Export as image"
+          size="small"
+          severity="secondary"
+          class="ml-auto"
+          :loading="isExporting"
+          :disabled="!activeSection || displayGroups.length === 0"
+          @click="exportPng"
         />
       </div>
 

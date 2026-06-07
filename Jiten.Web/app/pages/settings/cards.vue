@@ -558,7 +558,9 @@
       <!-- Select all row -->
       <div class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500">
         <Checkbox :model-value="allOnPageSelected" :binary="true" @change="toggleSelectAll" />
-        <span class="text-xs">{{ filteredCards.length }} card{{ filteredCards.length !== 1 ? 's' : '' }}</span>
+        <span class="text-xs cursor-pointer select-none" @click="toggleSelectAll">
+          {{ selectedCards.length > 0 ? `${selectedCards.length} selected` : `Select page (${paginatedCards.length})` }}
+        </span>
       </div>
 
       <div
