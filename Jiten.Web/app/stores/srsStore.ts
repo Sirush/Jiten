@@ -183,7 +183,8 @@ export const useSrsStore = defineStore('srs', () => {
   const reviewForecast30d = ref<ReviewForecast30dDto | null>(null);
   const studyMoreParams = ref<StudyMoreParams | null>(null);
   const exampleCache = ref(new Map<string, StudyExampleSentenceDto | null>());
-  const examplePrefetchedUpTo = ref(-1);
+  const inFlightExampleKeys = new Set<string>();
+  const EXAMPLE_PREFETCH_AHEAD = 4;
   const sessionDirty = ref(false);
   const sessionStreak = ref<SessionStreakDto | null>(null);
   const sessionForecast = ref<ReviewForecastDto | null>(null);
@@ -541,7 +542,7 @@ export const useSrsStore = defineStore('srs', () => {
       inFlightReviews.clear();
       sessionEpoch++;
       exampleCache.value = new Map();
-      examplePrefetchedUpTo.value = -1;
+      inFlightExampleKeys.clear();
       sessionDirty.value = false;
     }
 
@@ -588,7 +589,7 @@ export const useSrsStore = defineStore('srs', () => {
 
       // Prefetch example sentences for first 4 cards (await so the first card has its example ready)
       if (currentBatch.value.length > 0)
-        await prefetchExamples(currentCardIndex.value, 4);
+        await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
     } catch (error) {
       console.error('Failed to fetch study batch:', error);
       fetchError.value = 'Failed to load cards. Please try again.';
@@ -606,45 +607,52 @@ export const useSrsStore = defineStore('srs', () => {
   }
 
   async function prefetchExamples(fromIndex: number, count: number) {
-    const end = Math.min(fromIndex + count, currentBatch.value.length);
+    const start = Math.max(0, fromIndex);
+    const end = Math.min(start + count, currentBatch.value.length);
     const pairs: { wordId: number; readingIndex: number }[] = [];
 
-    for (let i = fromIndex; i < end; i++) {
+    for (let i = start; i < end; i++) {
       const c = currentBatch.value[i];
-      if (!exampleCache.value.has(cardExampleKey(c)))
+      const key = cardExampleKey(c);
+      if (!exampleCache.value.has(key) && !inFlightExampleKeys.has(key))
         pairs.push({ wordId: c.wordId, readingIndex: c.readingIndex });
     }
 
-    if (pairs.length === 0) {
-      examplePrefetchedUpTo.value = Math.max(examplePrefetchedUpTo.value, end - 1);
-      return;
-    }
+    if (pairs.length === 0) return;
 
+    const keys = pairs.map(p => `${p.wordId}-${p.readingIndex}`);
+    keys.forEach(k => inFlightExampleKeys.add(k));
     try {
-      const response = await $api<CardExamplesResponse>('srs/card-examples', {
-        method: 'POST',
-        body: { pairs },
-      });
+      let response: CardExamplesResponse | null = null;
+      for (let attempt = 0; attempt < 3 && !response; attempt++) {
+        try {
+          response = await $api<CardExamplesResponse>('srs/card-examples', {
+            method: 'POST',
+            body: { pairs },
+          });
+        } catch {
+          if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+        }
+      }
+      if (!response) return;
 
       const newCache = new Map(exampleCache.value);
-      for (const p of pairs) {
-        const key = `${p.wordId}-${p.readingIndex}`;
+      for (const key of keys) {
         newCache.set(key, response.examples[key] ?? null);
       }
       exampleCache.value = newCache;
-      examplePrefetchedUpTo.value = Math.max(examplePrefetchedUpTo.value, end - 1);
-    } catch {
-      // Non-blocking — examples just won't show
+    } finally {
+      keys.forEach(k => inFlightExampleKeys.delete(k));
     }
   }
 
   function ensurePrefetched() {
-    const ahead = 3;
-    const needed = currentCardIndex.value + ahead;
-    if (needed > examplePrefetchedUpTo.value) {
-      prefetchExamples(examplePrefetchedUpTo.value + 1, needed - examplePrefetchedUpTo.value);
-    }
+    prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
   }
+
+  watch(currentCard, (card) => {
+    if (card) ensurePrefetched();
+  });
 
   function revealCard() {
     isFlipped.value = true;
@@ -1160,7 +1168,7 @@ export const useSrsStore = defineStore('srs', () => {
     cardShownAt.value = Date.now();
     sessionEpoch++;
 
-    await prefetchExamples(currentCardIndex.value, 4);
+    await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
     return true;
   }
 
@@ -1185,7 +1193,7 @@ export const useSrsStore = defineStore('srs', () => {
     inFlightReviews.clear();
     sessionEpoch++;
     exampleCache.value = new Map();
-    examplePrefetchedUpTo.value = -1;
+    inFlightExampleKeys.clear();
     sessionDirty.value = false;
     sessionStreak.value = null;
     sessionForecast.value = null;

@@ -1,6 +1,5 @@
 User-agent: *
 Disallow: /decks/media/*/vocabulary
-Disallow: /decks/media/*/stats
 Disallow: /decks/media
 Disallow: /decks/media/
 Disallow: /dashboard
@@ -26,5 +25,6 @@ Disallow: /requests/new
 Disallow: /ratings/history
 Allow: /decks/media/*/detail
 Allow: /decks/media/list/*
+Allow: /decks/media/*/stats
 
 Sitemap: https://jiten.moe/sitemap.xml

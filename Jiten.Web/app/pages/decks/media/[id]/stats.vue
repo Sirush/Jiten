@@ -49,6 +49,8 @@
     return title;
   });
 
+  useRobotsRule({ noindex: true, follow: true });
+
   useHead(() => ({
     title: `${title.value} - Coverage Statistics`,
     meta: [

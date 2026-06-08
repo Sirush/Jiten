@@ -1912,10 +1912,11 @@ public class StudyController(
                     FormType = (int)f.FormType
                 }).ToList() ?? new(),
                 Definitions = word?.Definitions
+                    .Where(d => d.EnglishMeanings.Count > 0)
                     .OrderBy(d => d.SenseIndex)
-                    .Select(d => new StudyDefinitionDto
+                    .Select((d, i) => new StudyDefinitionDto
                     {
-                        Index = d.SenseIndex,
+                        Index = i + 1,
                         Meanings = d.EnglishMeanings.ToArray(),
                         PartsOfSpeech = d.PartsOfSpeech.ToHumanReadablePartsOfSpeech().ToArray()
                     }).ToList() ?? new(),
