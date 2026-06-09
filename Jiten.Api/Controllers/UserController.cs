@@ -402,12 +402,14 @@ public class UserController(
                                              .ToDictionaryAsync(c => (c.WordId, (int)c.ReadingIndex));
 
         var existingCardIds = existingCards.Values.Select(c => c.CardId).ToList();
-        var existingLogTimestamps = await userContext.FsrsReviewLogs
-                                                     .AsNoTracking()
-                                                     .Where(l => existingCardIds.Contains(l.CardId))
-                                                     .Select(l => new { l.CardId, l.ReviewDateTime })
-                                                     .ToListAsync();
-        var existingLogSet = existingLogTimestamps.Select(l => (l.CardId, l.ReviewDateTime)).ToHashSet();
+        // Tracked so we can update the rating of already-imported reviews on reimport (e.g. after a grade-mapping change),
+        // instead of skipping them on a duplicate timestamp.
+        var existingLogs = await userContext.FsrsReviewLogs
+                                            .Where(l => existingCardIds.Contains(l.CardId))
+                                            .ToListAsync();
+        var existingLogMap = new Dictionary<(long CardId, DateTime ReviewDateTime), FsrsReviewLog>();
+        foreach (var log in existingLogs)
+            existingLogMap[(log.CardId, log.ReviewDateTime)] = log;
 
         var settings = await userContext.UserFsrsSettings.AsNoTracking()
                                         .FirstOrDefaultAsync(s => s.UserId == userId);
@@ -420,6 +422,7 @@ public class UserController(
         var pendingLogKeys = new HashSet<(int WordId, int ReadingIndex, DateTime ReviewDateTime)>();
         var cardsToReplay = new List<FsrsCard>();
         int skipped = 0;
+        int updatedLogs = 0;
 
         foreach (var jpdbCard in request.Cards)
         {
@@ -467,8 +470,16 @@ public class UserController(
                 var reviewDt = DateTimeOffset.FromUnixTimeSeconds(review.Timestamp).UtcDateTime;
                 var rating = MapJpdbGrade(review.Grade)!.Value;
 
-                if (card.CardId > 0 && existingLogSet.Contains((card.CardId, reviewDt)))
+                if (card.CardId > 0 && existingLogMap.TryGetValue((card.CardId, reviewDt), out var existingLog))
+                {
+                    if (existingLog.Rating != rating)
+                    {
+                        existingLog.Rating = rating;
+                        updatedLogs++;
+                    }
+
                     continue;
+                }
 
                 var pendingKey = (wordId, (int)readingIndex, reviewDt);
                 if (!pendingLogKeys.Add(pendingKey))
@@ -513,6 +524,10 @@ public class UserController(
             await userContext.FsrsReviewLogs.AddRangeAsync(logsToAdd);
             await userContext.SaveChangesAsync();
         }
+
+        // Flush rating updates to existing logs so the AsNoTracking replay below reads them (no-op if already saved above)
+        if (updatedLogs > 0)
+            await userContext.SaveChangesAsync();
 
         // Replay all reviews for affected cards to compute state
         var replayCardIds = cardsToReplay.Where(c => c.CardId > 0).Select(c => c.CardId).ToList();
@@ -560,15 +575,15 @@ public class UserController(
         await userContext.SaveChangesAsync();
         backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
 
-        logger.LogInformation("User imported JPDB reviews: UserId={UserId}, Cards={Cards}, Reviews={Reviews}, Skipped={Skipped}",
-                              userId, cardsToReplay.Count, logsToAdd.Count, skipped);
-        return Results.Ok(new { cardsProcessed = cardsToReplay.Count, reviewsImported = logsToAdd.Count, skipped });
+        logger.LogInformation("User imported JPDB reviews: UserId={UserId}, Cards={Cards}, Reviews={Reviews}, Updated={Updated}, Skipped={Skipped}",
+                              userId, cardsToReplay.Count, logsToAdd.Count, updatedLogs, skipped);
+        return Results.Ok(new { cardsProcessed = cardsToReplay.Count, reviewsImported = logsToAdd.Count, reviewsUpdated = updatedLogs, skipped });
     }
 
     private static FsrsRating? MapJpdbGrade(string grade) => grade switch
     {
-        "nothing" or "unknown" or "fail" => FsrsRating.Again,
-        "something" or "hard" => FsrsRating.Hard,
+        "nothing" or "unknown" or "fail" or "something" => FsrsRating.Again,
+        "hard" => FsrsRating.Hard,
         "okay" or "pass" => FsrsRating.Good,
         "easy" or "known" => FsrsRating.Easy,
         _ => null
