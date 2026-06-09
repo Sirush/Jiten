@@ -20,6 +20,7 @@ public class ReaderController(
     IDbContextFactory<JitenDbContext> contextFactory,
     ICurrentUserService currentUserService,
     IParseThrottleService parseThrottle,
+    IStudyDeckMembershipService deckMembership,
     ILogger<ReaderController> logger) : ControllerBase
 {
     [HttpPost("ping")]
@@ -154,8 +155,9 @@ public class ReaderController(
         var readerForms = await WordFormHelper.LoadWordForms(context, wordIds);
         var readerFormFreqs = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
 
-        var knownStates = await currentUserService.GetKnownWordsState(
-            parsedParagraphs.SelectMany(p => p.Select(dw => (dw.WordId, dw.ReadingIndex))).Distinct().ToList());
+        var distinctKeys = parsedParagraphs.SelectMany(p => p.Select(dw => (dw.WordId, dw.ReadingIndex))).Distinct().ToList();
+        var knownStates = await currentUserService.GetKnownWordsState(distinctKeys);
+        var deckMembershipMap = await deckMembership.GetDeckMembership(distinctKeys);
 
         for (var i = 0; i < parsedParagraphs.Count; i++)
         {
@@ -176,6 +178,7 @@ public class ReaderController(
                                });
                     var jmdictWord = jmdictWords[word.WordId];
                     knownStates.TryGetValue((word.WordId, word.ReadingIndex), out var knownState);
+                    deckMembershipMap.TryGetValue((word.WordId, word.ReadingIndex), out var studyDeckIds);
                     var rdrForm = readerForms.GetValueOrDefault((word.WordId, (short)word.ReadingIndex));
                     var rdrFormFreq = readerFormFreqs.GetValueOrDefault((word.WordId, (short)word.ReadingIndex));
                     var readerWord = new ReaderWord()
@@ -189,6 +192,7 @@ public class ReaderController(
                                          FrequencyRank = rdrFormFreq?.FrequencyRank ?? 0,
                                          KnownState = knownState ?? [KnownState.New],
                                          PitchAccents = jmdictWord.PitchAccents ?? new(),
+                                         StudyDeckIds = studyDeckIds ?? new(),
                                      };
                     allWords.Add(readerWord);
 
@@ -211,6 +215,7 @@ public class ReaderController(
     {
         var keys = request.Words.Select(w => (w[0], (byte)w[1])).ToList();
         var knownStates = await currentUserService.GetKnownWordsState(keys);
+        var deckMembershipMap = await deckMembership.GetDeckMembership(keys);
 
         var result = request.Words.Select(w =>
                                               knownStates.TryGetValue((w[0], (byte)w[1]), out var state)
@@ -218,6 +223,12 @@ public class ReaderController(
                                                   : [0]
                                          ).ToList();
 
-        return Results.Ok(new { result = result });
+        var decks = request.Words.Select(w =>
+                                             deckMembershipMap.TryGetValue((w[0], (byte)w[1]), out var deckIds)
+                                                 ? deckIds
+                                                 : new List<int>()
+                                        ).ToList();
+
+        return Results.Ok(new { result = result, decks = decks });
     }
 }

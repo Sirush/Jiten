@@ -517,7 +517,7 @@
         <Icon name="material-symbols:list-alt" size="28" class="text-green-500 shrink-0" />
         <div>
           <div class="font-semibold">Word List</div>
-          <div class="text-sm text-gray-500">Create a custom word list or import from file.</div>
+          <div class="text-sm text-gray-500">Create a custom word list or import from file. Also used for mining with Jiten Reader.</div>
         </div>
       </button>
     </div>

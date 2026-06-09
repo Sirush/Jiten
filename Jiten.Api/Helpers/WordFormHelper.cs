@@ -9,19 +9,20 @@ namespace Jiten.Api.Helpers;
 public static class WordFormHelper
 {
     /// <summary>
-    /// Returns true if the card at (wordId, readingIndex) is a redundant kana form,
-    /// meaning it's a kana reading AND at least one kanji reading for the same word
-    /// exists in <paramref name="cardKeysByWord"/>.
+    /// Returns true if the card at (wordId, readingIndex) is redundant, meaning some other reading
+    /// index for the same word that dominates it (a known kanji form it is a kana-degradation of, or a
+    /// script-variant sibling) is present in <paramref name="cardKeysByWord"/>.
     /// </summary>
     public static bool IsRedundantKanaCard(
         IWordFormSiblingCache cache, int wordId, byte readingIndex,
         Dictionary<int, List<byte>> cardKeysByWord)
     {
-        if (cache.GetKanjiIndexesForKana(wordId, readingIndex) == null)
+        var dominators = cache.GetKanjiIndexesForKana(wordId, readingIndex);
+        if (dominators == null)
             return false;
         if (!cardKeysByWord.TryGetValue(wordId, out var siblings))
             return false;
-        return siblings.Any(ri => cache.GetKanaIndexesForKanji(wordId, ri) != null);
+        return siblings.Any(ri => dominators.Contains(ri));
     }
 
     public static Dictionary<int, List<byte>> GroupCardKeysByWord(

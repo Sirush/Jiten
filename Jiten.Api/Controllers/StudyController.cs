@@ -30,6 +30,7 @@ public class StudyController(
     ICurrentUserService currentUserService,
     IHttpContextAccessor httpContextAccessor,
     IDeckWordResolver deckWordResolver,
+    IStudyDeckMembershipService deckMembership,
     IDeckDownloadService downloadService,
     IDeckImportService importService,
     IWordFormSiblingCache wordFormCache,
@@ -459,6 +460,7 @@ public class StudyController(
 
         await userContext.SaveChangesAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
+        await deckMembership.Invalidate(userId, studyDeck.UserStudyDeckId);
 
         return Results.Ok(new { success = true });
     }
@@ -477,6 +479,7 @@ public class StudyController(
         userContext.UserStudyDecks.Remove(studyDeck);
         await userContext.SaveChangesAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
+        await deckMembership.Invalidate(userId, studyDeck.UserStudyDeckId);
 
         logger.LogInformation("User removed study deck: UserStudyDeckId={UserStudyDeckId}", studyDeck.UserStudyDeckId);
         return Results.Ok(new { success = true });

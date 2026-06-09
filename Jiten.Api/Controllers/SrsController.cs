@@ -251,6 +251,136 @@ public class SrsController(
         return Results.Json(resultObj);
     }
 
+    /// <summary>
+    /// Review multiple words at once using the FSRS scheduler. Used by the reader extension's
+    /// "review everything on screen" action.
+    /// </summary>
+    /// <param name="request">A request containing the words to review and their ratings.</param>
+    /// <returns>Per-card new states and the list of words suspended as leeches.</returns>
+    [HttpPost("batch-review")]
+    [SwaggerOperation(Summary = "Batch review FSRS cards",
+                      Description = "Rate (review) multiple words at once using the FSRS scheduler, in a single transaction.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> BatchReview(SrsBatchReviewRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        if (request.Reviews.Count == 0)
+            return Results.BadRequest("No reviews provided.");
+        if (request.Reviews.Count > 500)
+            return Results.BadRequest("Maximum of 500 reviews per batch.");
+
+        // Dedupe by (WordId, ReadingIndex), keeping the last rating for each word.
+        var deduped = new Dictionary<(int WordId, byte ReadingIndex), FsrsRating>();
+        foreach (var item in request.Reviews)
+        {
+            if (!Enum.IsDefined(item.Rating))
+                return Results.BadRequest($"Invalid rating: {(int)item.Rating}. Must be 1 (Again), 2 (Hard), 3 (Good), or 4 (Easy).");
+
+            deduped[(item.WordId, item.ReadingIndex)] = item.Rating;
+        }
+
+        var now = DateTime.UtcNow;
+
+        var userSettings = await LoadUserSettings(userId);
+        var parameters = GetParameters(userSettings);
+        var desiredRetention = GetDesiredRetention(userSettings);
+        var studySettings = GetStudySettings(userSettings);
+        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters);
+
+        await using var transaction = await userContext.Database.BeginTransactionAsync();
+
+        var wordIds = deduped.Keys.Select(k => k.WordId).Distinct().ToList();
+        var existingCards = await userContext.FsrsCards
+            .Where(c => c.UserId == userId && wordIds.Contains(c.WordId))
+            .ToListAsync();
+        var existingMap = existingCards.ToDictionary(c => (c.WordId, c.ReadingIndex));
+
+        var results = new List<object>(deduped.Count);
+        var leechSuspended = new List<int>();
+        // New cards must be inserted before their review logs can reference a CardId.
+        var pendingNewLogs = new List<(FsrsCard Card, FsrsReviewLog Log)>();
+
+        foreach (var (key, rating) in deduped)
+        {
+            existingMap.TryGetValue(key, out var card);
+            var isNew = card == null;
+            card ??= new FsrsCard(userId, key.WordId, key.ReadingIndex);
+
+            var previousState = card.State;
+            var cardAndLog = scheduler.ReviewCard(card, rating, now);
+
+            var isLapse = previousState == FsrsState.Review && rating == FsrsRating.Again;
+            if (isLapse)
+            {
+                cardAndLog.UpdatedCard.Lapses = card.Lapses + 1;
+
+                var threshold = studySettings.LeechThreshold;
+                if (threshold > 0)
+                {
+                    var lapseCount = cardAndLog.UpdatedCard.Lapses;
+                    var halfThreshold = Math.Max(threshold / 2, 1);
+                    if (lapseCount == threshold || (lapseCount > threshold && (lapseCount - threshold) % halfThreshold == 0))
+                    {
+                        if (studySettings.LeechAction == LeechAction.Suspend)
+                        {
+                            cardAndLog.UpdatedCard.State = FsrsState.Suspended;
+                            leechSuspended.Add(key.WordId);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                cardAndLog.UpdatedCard.Lapses = card.Lapses;
+            }
+
+            if (isNew)
+            {
+                await userContext.FsrsCards.AddAsync(cardAndLog.UpdatedCard);
+                pendingNewLogs.Add((cardAndLog.UpdatedCard, cardAndLog.ReviewLog));
+            }
+            else
+            {
+                userContext.Entry(card).CurrentValues.SetValues(cardAndLog.UpdatedCard);
+                cardAndLog.ReviewLog.CardId = card.CardId;
+                await userContext.FsrsReviewLogs.AddAsync(cardAndLog.ReviewLog);
+            }
+
+            results.Add(new { wordId = key.WordId, readingIndex = key.ReadingIndex, newState = (int)cardAndLog.UpdatedCard.State });
+        }
+
+        // Persist new cards first so EF assigns their CardIds, then attach their logs.
+        if (pendingNewLogs.Count > 0)
+        {
+            await userContext.SaveChangesAsync();
+            foreach (var (card, log) in pendingNewLogs)
+            {
+                log.CardId = card.CardId;
+                await userContext.FsrsReviewLogs.AddAsync(log);
+            }
+        }
+
+        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        await userContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
+
+        logger.LogInformation("User batch-reviewed {Count} SRS cards ({Suspended} suspended as leeches).",
+                              deduped.Count, leechSuspended.Count);
+
+        return Results.Json(new
+        {
+            success = true,
+            processed = deduped.Count,
+            leechSuspended,
+            results
+        });
+    }
+
     [HttpGet("review-history/{wordId}/{readingIndex}")]
     [SwaggerOperation(Summary = "Get review history for a word")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -1346,7 +1476,9 @@ public class SrsController(
 
 
     [HttpPost("reader-study-decks")]
-    [SwaggerOperation(Summary = "Get user's static word list decks for the reader extension")]
+    [SwaggerOperation(Summary = "Get user's study decks for the reader extension",
+                      Description = "Returns all the user's study decks with their type. The extension uses the type to "
+                                    + "classify deck membership and to offer only static word-list decks for manual adding.")]
     public async Task<IResult> GetReaderStudyDecks()
     {
         var userId = currentUserService.UserId;
@@ -1354,9 +1486,9 @@ public class SrsController(
 
         var decks = await userContext.UserStudyDecks
             .AsNoTracking()
-            .Where(sd => sd.UserId == userId && sd.DeckType == StudyDeckType.StaticWordList)
+            .Where(sd => sd.UserId == userId && sd.IsActive)
             .OrderBy(sd => sd.SortOrder)
-            .Select(sd => new { sd.UserStudyDeckId, sd.Name })
+            .Select(sd => new { sd.UserStudyDeckId, sd.Name, DeckType = (int)sd.DeckType })
             .ToListAsync();
 
         return Results.Ok(decks);

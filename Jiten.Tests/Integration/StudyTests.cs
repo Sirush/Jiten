@@ -395,6 +395,47 @@ public class StudyTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task KnownWordsState_KanjiKnown_PartialKanjiAndKanaRedundant_NotDifferentKanji()
+    {
+        await EnsureSeedDataWithPartialKanjiForms();
+
+        // Know the full kanji form 落ち着ける (readingIndex=0).
+        var addRequest = new HttpRequestMessage(HttpMethod.Post, "/api/user/vocabulary/add/200/0")
+            .WithUser(TestUsers.UserA);
+        var addResponse = await _client.SendAsync(addRequest);
+        addResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var amountRequest = new HttpRequestMessage(HttpMethod.Get, "/api/user/vocabulary/known-ids/amount")
+            .WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(amountRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        // Exactly 落ちつける (着→つ) and おちつける (full kana) — NOT 落ち付ける / 落着ける / 落付ける.
+        body.GetProperty("redundantForms").GetInt32().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task KnownWordsState_KanjiKnown_SearchOnlyKatakanaIsRedundant()
+    {
+        await EnsureSeedDataWithSearchOnlyKatakana();
+
+        // Know the kanji form 君 (readingIndex=0).
+        var addRequest = new HttpRequestMessage(HttpMethod.Post, "/api/user/vocabulary/add/300/0")
+            .WithUser(TestUsers.UserA);
+        (await _client.SendAsync(addRequest)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var amountRequest = new HttpRequestMessage(HttpMethod.Get, "/api/user/vocabulary/known-ids/amount")
+            .WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(amountRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        // Both きみ and the search-only キミ are redundant once 君 is known.
+        body.GetProperty("redundantForms").GetInt32().Should().Be(2);
+    }
+
+    [Fact]
     public async Task KnownWordAmount_IncludesRedundantForms()
     {
         await EnsureSeedDataWithKanjiForms();
@@ -849,6 +890,53 @@ public class StudyTests(JitenWebApplicationFactory factory)
         await jitenDb.SaveChangesAsync();
 
         // Reload the WordFormSiblingCache so it picks up the new forms
+        var cache = scope.ServiceProvider.GetRequiredService<IWordFormSiblingCache>();
+        cache.Reload();
+    }
+
+    private async Task EnsureSeedDataWithPartialKanjiForms()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+
+        if (await jitenDb.WordForms.AnyAsync(wf => wf.WordId == 200))
+            return;
+
+        jitenDb.JMDictWords.Add(new JmDictWord { WordId = 200, PartsOfSpeech = ["verb"] });
+        await jitenDb.SaveChangesAsync();
+
+        jitenDb.Definitions.Add(new JmDictDefinition { WordId = 200, SenseIndex = 0, EnglishMeanings = ["to calm down"], PartsOfSpeech = ["verb"] });
+        // readingIndex=0 is the full kanji form; the explicit ruby drives degradation enumeration.
+        jitenDb.WordForms.Add(new JmDictWordForm { WordId = 200, ReadingIndex = 0, Text = "落ち着ける", RubyText = "落[お]ち着[つ]ける", FormType = JmDictFormType.KanjiForm });
+        jitenDb.WordForms.Add(new JmDictWordForm { WordId = 200, ReadingIndex = 1, Text = "落ちつける", RubyText = "落ちつける", FormType = JmDictFormType.KanjiForm });
+        jitenDb.WordForms.Add(new JmDictWordForm { WordId = 200, ReadingIndex = 2, Text = "おちつける", RubyText = "おちつける", FormType = JmDictFormType.KanaForm });
+        jitenDb.WordForms.Add(new JmDictWordForm { WordId = 200, ReadingIndex = 3, Text = "落ち付ける", RubyText = "落ち付ける", FormType = JmDictFormType.KanjiForm });
+        jitenDb.WordForms.Add(new JmDictWordForm { WordId = 200, ReadingIndex = 4, Text = "落着ける", RubyText = "落着ける", FormType = JmDictFormType.KanjiForm });
+        jitenDb.WordForms.Add(new JmDictWordForm { WordId = 200, ReadingIndex = 5, Text = "落付ける", RubyText = "落付ける", FormType = JmDictFormType.KanjiForm });
+        await jitenDb.SaveChangesAsync();
+
+        var cache = scope.ServiceProvider.GetRequiredService<IWordFormSiblingCache>();
+        cache.Reload();
+    }
+
+    private async Task EnsureSeedDataWithSearchOnlyKatakana()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+
+        if (await jitenDb.WordForms.AnyAsync(wf => wf.WordId == 300))
+            return;
+
+        jitenDb.JMDictWords.Add(new JmDictWord { WordId = 300, PartsOfSpeech = ["pronoun"] });
+        await jitenDb.SaveChangesAsync();
+
+        jitenDb.Definitions.Add(new JmDictDefinition { WordId = 300, SenseIndex = 0, EnglishMeanings = ["you"], PartsOfSpeech = ["pronoun"] });
+        jitenDb.WordForms.Add(new JmDictWordForm { WordId = 300, ReadingIndex = 0, Text = "君", RubyText = "君[きみ]", FormType = JmDictFormType.KanjiForm });
+        jitenDb.WordForms.Add(new JmDictWordForm { WordId = 300, ReadingIndex = 1, Text = "きみ", RubyText = "きみ", FormType = JmDictFormType.KanaForm });
+        // Search-only katakana variant — must still be marked redundant when 君 is known.
+        jitenDb.WordForms.Add(new JmDictWordForm { WordId = 300, ReadingIndex = 2, Text = "キミ", RubyText = "キミ", FormType = JmDictFormType.KanaForm, IsSearchOnly = true });
+        await jitenDb.SaveChangesAsync();
+
         var cache = scope.ServiceProvider.GetRequiredService<IWordFormSiblingCache>();
         cache.Reload();
     }

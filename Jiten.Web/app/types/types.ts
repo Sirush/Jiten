@@ -632,12 +632,14 @@ export interface MediaRequestDto {
 export interface MediaRequestCommentDto {
   id: number;
   text?: string;
-  role: 'Requester' | 'Contributor';
+  role: 'Requester' | 'Contributor' | 'Admin';
   isOwnComment: boolean;
+  isAdminComment?: boolean;
   userName?: string;
   upload?: MediaRequestUploadDto;
   createdAt: string;
   updatedAt?: string;
+  adminComments?: MediaRequestCommentDto[];
 }
 
 export interface MediaRequestUploadDto {

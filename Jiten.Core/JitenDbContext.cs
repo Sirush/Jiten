@@ -759,6 +759,7 @@ public class JitenDbContext : DbContext
             entity.Property(c => c.Id).ValueGeneratedOnAdd();
             entity.Property(c => c.UserId).IsRequired().HasMaxLength(36);
             entity.Property(c => c.Text).HasMaxLength(500);
+            entity.Property(c => c.ParentCommentId);
             entity.Property(c => c.CreatedAt).IsRequired();
             entity.Property(c => c.UpdatedAt);
 
@@ -767,10 +768,17 @@ public class JitenDbContext : DbContext
                   .HasForeignKey(c => c.MediaRequestId)
                   .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasOne(c => c.ParentComment)
+                  .WithMany(c => c.AdminComments)
+                  .HasForeignKey(c => c.ParentCommentId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
             entity.HasIndex(c => c.MediaRequestId)
                   .HasDatabaseName("IX_MediaRequestComment_MediaRequestId");
             entity.HasIndex(c => c.UserId)
                   .HasDatabaseName("IX_MediaRequestComment_UserId");
+            entity.HasIndex(c => c.ParentCommentId)
+                  .HasDatabaseName("IX_MediaRequestComment_ParentCommentId");
         });
 
         modelBuilder.Entity<MediaRequestUpload>(entity =>

@@ -14,4 +14,5 @@ public class ReaderWord
     public List<string> MeaningsPartOfSpeech { get; set; } = new();
     public List<KnownState> KnownState { get; set; } = new();
     public List<int> PitchAccents { get; set; } = new();
+    public List<int> StudyDeckIds { get; set; } = new();
 }

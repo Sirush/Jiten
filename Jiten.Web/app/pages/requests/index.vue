@@ -4,6 +4,7 @@ import type { MediaRequestDto } from '~/types/types';
 import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
 import { getLinkTypeText } from '~/utils/linkTypeMapper';
+import type { RequestFacets } from '~/composables/useMediaRequests';
 
 definePageMeta({
   middleware: ['auth'],
@@ -11,7 +12,12 @@ definePageMeta({
 
 useHead({ title: 'Media Requests - Jiten' });
 
-const { requests, totalCount, isLoading, fetchRequests, toggleUpvote, subscribe, unsubscribe, fetchMyQuota } = useMediaRequests();
+const { requests, totalCount, isLoading, fetchRequests, toggleUpvote, subscribe, unsubscribe, fetchMyQuota, fetchFacets } = useMediaRequests();
+const facets = ref<RequestFacets | null>(null);
+
+function withCount(label: string, count: number | undefined) {
+  return count === undefined ? label : `${label} (${count})`;
+}
 
 const authStore = useAuthStore();
 const quota = ref<{ activeCount: number; limit: number } | null>(null);
@@ -41,20 +47,23 @@ const selectedStatus = ref<RequestStatus | undefined>(parseStatusFromQuery());
 const sortBy = ref(parseSortFromQuery());
 const offset = ref(parseOffsetFromQuery());
 
-const mediaTypeOptions = [
-  { label: 'All', value: undefined },
+const mediaTypeOptions = computed(() => [
+  { label: withCount('All', facets.value?.mediaTypeTotal), value: undefined },
   ...Object.values(MediaType)
     .filter(v => typeof v === 'number')
-    .map(v => ({ label: getMediaTypeText(v as MediaType), value: v as MediaType })),
-];
+    .map(v => ({
+      label: withCount(getMediaTypeText(v as MediaType), facets.value ? facets.value.mediaTypes[String(v)] ?? 0 : undefined),
+      value: v as MediaType,
+    })),
+]);
 
-const statusOptions = [
-  { label: 'All', value: undefined },
-  { label: 'Open', value: RequestStatus.Open },
-  { label: 'In Progress', value: RequestStatus.InProgress },
-  { label: 'Completed', value: RequestStatus.Completed },
-  { label: 'Rejected', value: RequestStatus.Rejected },
-];
+const statusOptions = computed(() => [
+  { label: withCount('All', facets.value?.statusTotal), value: undefined },
+  { label: withCount('Open', facets.value ? facets.value.statuses[String(RequestStatus.Open)] ?? 0 : undefined), value: RequestStatus.Open },
+  { label: withCount('In Progress', facets.value ? facets.value.statuses[String(RequestStatus.InProgress)] ?? 0 : undefined), value: RequestStatus.InProgress },
+  { label: withCount('Completed', facets.value ? facets.value.statuses[String(RequestStatus.Completed)] ?? 0 : undefined), value: RequestStatus.Completed },
+  { label: withCount('Rejected', facets.value ? facets.value.statuses[String(RequestStatus.Rejected)] ?? 0 : undefined), value: RequestStatus.Rejected },
+]);
 
 const sortOptions = [
   { label: 'Most Voted', value: 'votes' },
@@ -62,11 +71,11 @@ const sortOptions = [
   { label: 'Last Completed', value: 'completed' },
 ];
 
-const attachmentOptions = [
-  { label: 'All', value: undefined },
-  { label: 'Has Attachments', value: 'yes' },
-  { label: 'No Attachments', value: 'no' },
-];
+const attachmentOptions = computed(() => [
+  { label: withCount('All', facets.value?.attachmentTotal), value: undefined },
+  { label: withCount('Has Attachments', facets.value?.attachmentsYes), value: 'yes' },
+  { label: withCount('No Attachments', facets.value?.attachmentsNo), value: 'no' },
+]);
 
 function parseAttachmentsFromQuery() {
   const v = route.query.attachments;
@@ -129,6 +138,18 @@ async function loadRequests() {
   }
 }
 
+async function loadFacets() {
+  const result = await fetchFacets({
+    mediaType: selectedMediaType.value,
+    status: selectedStatus.value,
+    mine: isMine.value || undefined,
+    contributed: isContributed.value || undefined,
+    search: debouncedSearch.value.trim() || undefined,
+    attachments: selectedAttachments.value,
+  });
+  if (result) facets.value = result;
+}
+
 watch(activeTab, () => {
   searchQuery.value = '';
   debouncedSearch.value = '';
@@ -143,6 +164,7 @@ watch(selectedStatus, (status) => {
 watch([selectedMediaType, selectedStatus, sortBy, activeTab, debouncedSearch, selectedAttachments], () => {
   offset.value = 0;
   loadRequests();
+  loadFacets();
   if (activeTab.value === 1) {
     fetchMyQuota().then(q => { quota.value = q; });
   }
@@ -212,7 +234,10 @@ function onPageChange(event: { first: number }) {
   offset.value = event.first;
 }
 
-onMounted(() => loadRequests());
+onMounted(() => {
+  loadRequests();
+  loadFacets();
+});
 </script>
 
 <template>
@@ -251,6 +276,7 @@ onMounted(() => loadRequests());
           optionLabel="label"
           optionValue="value"
           placeholder="Media Type"
+          scrollHeight="24rem"
           class="w-40"
         />
       </div>

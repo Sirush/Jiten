@@ -1,3 +1,4 @@
+using Jiten.Api.Helpers;
 using Jiten.Core;
 using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
@@ -38,52 +39,56 @@ public class WordFormSiblingCache : IWordFormSiblingCache
 
         var groups = context.WordForms
             .AsNoTracking()
-            .Where(wf => !wf.IsSearchOnly)
-            .Select(wf => new { wf.WordId, wf.ReadingIndex, wf.FormType })
+            .Select(wf => new { wf.WordId, wf.ReadingIndex, wf.Text, wf.RubyText, wf.FormType })
             .ToList()
             .GroupBy(wf => wf.WordId);
 
         foreach (var group in groups)
         {
-            var kanjiIndexes = group
-                .Where(wf => wf.FormType == JmDictFormType.KanjiForm)
-                .Select(wf => (byte)wf.ReadingIndex)
-                .ToArray();
-            var kanaIndexes = group
-                .Where(wf => wf.FormType == JmDictFormType.KanaForm)
-                .Select(wf => (byte)wf.ReadingIndex)
-                .ToArray();
-
-            if (kanjiIndexes.Length > 0 && kanaIndexes.Length > 0)
-            {
-                result[group.Key] = new WordFormInfo
+            var forms = group
+                .Select(wf => new JmDictWordForm
                 {
-                    KanjiReadingIndexes = kanjiIndexes,
-                    KanaReadingIndexes = kanaIndexes
-                };
-            }
+                    WordId = wf.WordId,
+                    ReadingIndex = wf.ReadingIndex,
+                    Text = wf.Text,
+                    RubyText = wf.RubyText,
+                    FormType = wf.FormType
+                })
+                .ToList();
+
+            RubyTextHelper.EnrichForms(forms);
+
+            var edges = RedundancyGraphHelper.BuildEdges(forms);
+            if (edges.Count == 0)
+                continue;
+
+            result[group.Key] = new WordFormInfo
+            {
+                RedundantBySource = edges
+                    .GroupBy(e => e.Source)
+                    .ToDictionary(g => g.Key, g => g.Select(e => e.Target).Distinct().ToArray()),
+                SourcesByRedundant = edges
+                    .GroupBy(e => e.Target)
+                    .ToDictionary(g => g.Key, g => g.Select(e => e.Source).Distinct().ToArray())
+            };
         }
 
         _wordForms = result;
-        _logger.LogInformation("WordFormSiblingCache loaded {Count} words with both kanji and kana forms", result.Count);
+        _logger.LogInformation("WordFormSiblingCache loaded redundancy graph for {Count} words", result.Count);
     }
 
-    public byte[]? GetKanaIndexesForKanji(int wordId, byte kanjiReadingIndex)
+    public byte[]? GetKanaIndexesForKanji(int wordId, byte readingIndex)
     {
         if (!_wordForms.TryGetValue(wordId, out var info))
             return null;
-        if (!info.KanjiReadingIndexes.Contains(kanjiReadingIndex))
-            return null;
-        return info.KanaReadingIndexes;
+        return info.RedundantBySource.GetValueOrDefault(readingIndex);
     }
 
-    public byte[]? GetKanjiIndexesForKana(int wordId, byte kanaReadingIndex)
+    public byte[]? GetKanjiIndexesForKana(int wordId, byte readingIndex)
     {
         if (!_wordForms.TryGetValue(wordId, out var info))
             return null;
-        if (!info.KanaReadingIndexes.Contains(kanaReadingIndex))
-            return null;
-        return info.KanjiReadingIndexes;
+        return info.SourcesByRedundant.GetValueOrDefault(readingIndex);
     }
 
     public WordFormInfo? GetWordFormInfo(int wordId)

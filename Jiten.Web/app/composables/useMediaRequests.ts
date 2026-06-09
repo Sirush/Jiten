@@ -1,6 +1,16 @@
 import type { MediaRequestDto, MediaRequestCommentDto, DuplicateCheckResultDto, PaginatedResponse, RequestActivityLogDto, RequestUserSummaryDto, MediaRequestUploadAdminDto } from '~/types/types';
 import { type MediaType, type RequestAction, type RequestStatus } from '~/types';
 
+export interface RequestFacets {
+  mediaTypes: Record<string, number>;
+  mediaTypeTotal: number;
+  statuses: Record<string, number>;
+  statusTotal: number;
+  attachmentsYes: number;
+  attachmentsNo: number;
+  attachmentTotal: number;
+}
+
 export function useMediaRequests() {
   const { $api } = useNuxtApp();
 
@@ -170,6 +180,20 @@ export function useMediaRequests() {
     }
   };
 
+  const addAdminComment = async (requestId: number, commentId: number, text: string): Promise<boolean> => {
+    error.value = null;
+    try {
+      await $api(`requests/${requestId}/comments/${commentId}/admin-comment`, {
+        method: 'POST',
+        body: { text },
+      });
+      return true;
+    } catch (e) {
+      error.value = e as Error;
+      return false;
+    }
+  };
+
   const editRequestDescription = async (id: number, description?: string, externalUrl?: string): Promise<boolean> => {
     error.value = null;
     try {
@@ -306,6 +330,30 @@ export function useMediaRequests() {
     }
   };
 
+  const fetchFacets = async (params: {
+    mediaType?: MediaType;
+    status?: RequestStatus;
+    mine?: boolean;
+    contributed?: boolean;
+    search?: string;
+    attachments?: string;
+  } = {}): Promise<RequestFacets | null> => {
+    try {
+      return await $api<RequestFacets>('requests/facets', {
+        query: {
+          mediaType: params.mediaType,
+          status: params.status,
+          mine: params.mine || undefined,
+          contributed: params.contributed || undefined,
+          search: params.search || undefined,
+          attachments: params.attachments || undefined,
+        },
+      });
+    } catch {
+      return null;
+    }
+  };
+
   const fetchMyQuota = async (): Promise<{ activeCount: number; limit: number }> => {
     try {
       return await $api<{ activeCount: number; limit: number }>('requests/my-quota') ?? { activeCount: 0, limit: 20 };
@@ -329,6 +377,7 @@ export function useMediaRequests() {
     fetchComments,
     addComment,
     editComment,
+    addAdminComment,
     editRequestDescription,
     deleteUpload,
     reviewUpload,
@@ -340,5 +389,6 @@ export function useMediaRequests() {
     fetchGlobalActivityLog,
     fetchUserSummary,
     fetchMyQuota,
+    fetchFacets,
   };
 }

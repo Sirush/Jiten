@@ -24,7 +24,7 @@ const localiseTitle = useLocaliseTitle();
 
 const requestId = computed(() => Number(route.params.id));
 const {
-  fetchRequest, toggleUpvote, subscribe, unsubscribe, fetchComments, addComment, editComment,
+  fetchRequest, toggleUpvote, subscribe, unsubscribe, fetchComments, addComment, editComment, addAdminComment,
   editRequestDescription, deleteRequest, updateStatus, editRequest, deleteUpload, reviewUpload,
   getUploadDownloadUrl, error: apiError,
 } = useMediaRequests();
@@ -100,6 +100,11 @@ const mediaTypeOptions = Object.entries(MediaType)
 const editingCommentId = ref<number | null>(null);
 const editCommentText = ref('');
 const isSavingComment = ref(false);
+
+// Admin note composer (per parent comment)
+const adminNoteForId = ref<number | null>(null);
+const adminNoteText = ref('');
+const isSavingAdminNote = ref(false);
 
 // Description editing (by requester)
 const isEditingDescription = ref(false);
@@ -356,6 +361,34 @@ async function handleSaveComment() {
   } else {
     const detail = extractApiError(apiError.value, 'Failed to update comment.');
     toast.add({ severity: 'error', summary: 'Failed to update comment', detail, life: 6000 });
+  }
+}
+
+function startAdminNote(commentId: number) {
+  adminNoteForId.value = commentId;
+  adminNoteText.value = '';
+}
+
+function cancelAdminNote() {
+  adminNoteForId.value = null;
+  adminNoteText.value = '';
+}
+
+async function handleSaveAdminNote() {
+  if (!request.value || adminNoteForId.value === null) return;
+  const trimmed = adminNoteText.value.trim();
+  if (!trimmed) return;
+  isSavingAdminNote.value = true;
+  const success = await addAdminComment(request.value.id, adminNoteForId.value, trimmed);
+  isSavingAdminNote.value = false;
+  if (success) {
+    adminNoteForId.value = null;
+    adminNoteText.value = '';
+    comments.value = await fetchComments(request.value.id);
+    toast.add({ severity: 'success', summary: 'Admin note added', life: 3000 });
+  } else {
+    const detail = extractApiError(apiError.value, 'Failed to add admin note.');
+    toast.add({ severity: 'error', summary: 'Failed to add admin note', detail, life: 6000 });
   }
 }
 
@@ -802,6 +835,64 @@ onMounted(() => loadData());
                   </span>
                 </template>
               </div>
+
+              <!-- Admin notes attached to this comment -->
+              <div
+                v-for="note in comment.adminComments"
+                :key="note.id"
+                class="mt-2 p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20"
+              >
+                <div class="flex items-center gap-2 mb-1">
+                  <Tag value="Admin" severity="danger" class="text-xs" />
+                  <span v-if="note.userName && authStore.isAdmin" class="text-xs font-medium">{{ note.userName }}</span>
+                  <span v-if="note.isOwnComment" class="text-xs text-muted-color italic">You</span>
+                  <span class="text-xs text-muted-color ml-auto">
+                    <span v-if="note.updatedAt" class="italic mr-1">(edited)</span>
+                    {{ formatTimeAgo(note.createdAt) }}
+                  </span>
+                  <Button
+                    v-if="authStore.isAdmin && note.isOwnComment && editingCommentId !== note.id"
+                    icon="pi pi-pencil"
+                    severity="secondary"
+                    text
+                    size="small"
+                    rounded
+                    class="!p-1"
+                    @click="startEditComment(note)"
+                  />
+                </div>
+                <template v-if="editingCommentId === note.id">
+                  <Textarea v-model="editCommentText" rows="2" class="w-full text-sm" :maxlength="500" />
+                  <div class="flex items-center gap-2 mt-1">
+                    <small class="text-muted-color">{{ editCommentText.length }}/500</small>
+                    <Button label="Save" icon="pi pi-check" size="small" :loading="isSavingComment" :disabled="!editCommentText.trim()" @click="handleSaveComment" />
+                    <Button label="Cancel" severity="secondary" size="small" @click="cancelEditComment" />
+                  </div>
+                </template>
+                <p v-else class="text-sm whitespace-pre-wrap">{{ note.text }}</p>
+              </div>
+
+              <!-- Admin: add a note to this comment -->
+              <template v-if="authStore.isAdmin">
+                <div v-if="adminNoteForId === comment.id" class="mt-2">
+                  <Textarea v-model="adminNoteText" rows="2" placeholder="Add an admin note..." class="w-full text-sm" :maxlength="500" />
+                  <div class="flex items-center gap-2 mt-1">
+                    <small class="text-muted-color">{{ adminNoteText.length }}/500</small>
+                    <Button label="Save note" icon="pi pi-check" severity="danger" size="small" :loading="isSavingAdminNote" :disabled="!adminNoteText.trim()" @click="handleSaveAdminNote" />
+                    <Button label="Cancel" severity="secondary" size="small" @click="cancelAdminNote" />
+                  </div>
+                </div>
+                <Button
+                  v-else
+                  icon="pi pi-shield"
+                  label="Add admin note"
+                  severity="danger"
+                  text
+                  size="small"
+                  class="!p-1 mt-2"
+                  @click="startAdminNote(comment.id)"
+                />
+              </template>
             </div>
           </div>
 

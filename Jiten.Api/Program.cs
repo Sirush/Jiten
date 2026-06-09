@@ -353,6 +353,7 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
 builder.Services.AddSingleton<Jiten.Core.Services.DeckVectorService>();
 builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
+builder.Services.AddScoped<IStudyDeckMembershipService, StudyDeckMembershipService>();
 builder.Services.AddScoped<IDeckDownloadService, DeckDownloadService>();
 builder.Services.AddScoped<IDeckImportService, DeckImportService>();
 builder.Services.AddScoped<IIndexNowService, IndexNowService>();

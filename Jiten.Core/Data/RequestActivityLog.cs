@@ -25,6 +25,7 @@ public enum RequestAction
 
     CommentAdded = 20,
     CommentEdited = 21,
+    AdminCommentAdded = 22,
 
     FileUploaded = 30,
     FileDeletedByAdmin = 31,

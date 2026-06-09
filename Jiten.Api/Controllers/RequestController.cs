@@ -187,6 +187,84 @@ public partial class RequestController(
         return Results.Ok(new PaginatedResponse<List<MediaRequestDto>>(dtos, totalCount, limit, offset));
     }
 
+    [HttpGet("facets")]
+    public async Task<IResult> GetRequestFacets(
+        [FromQuery] MediaType? mediaType = null,
+        [FromQuery] MediaRequestStatus? status = null,
+        [FromQuery] bool mine = false,
+        [FromQuery] bool contributed = false,
+        [FromQuery] string? search = null,
+        [FromQuery] string? attachments = null)
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        // Shared scope (tab + search) applied to every facet.
+        IQueryable<MediaRequest> BaseQuery()
+        {
+            var q = context.MediaRequests.AsNoTracking().AsQueryable();
+            if (mine)
+                q = q.Where(r => r.RequesterId == userId);
+            else if (contributed)
+            {
+                var contributedRequestIds = context.MediaRequestComments
+                    .Where(c => c.UserId == userId)
+                    .Where(c => context.MediaRequestUploads.Any(u => u.MediaRequestCommentId == c.Id && !u.FileDeleted))
+                    .Select(c => c.MediaRequestId)
+                    .Distinct();
+                q = q.Where(r => contributedRequestIds.Contains(r.Id) && r.RequesterId != userId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var escaped = search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+                q = q.Where(r => EF.Functions.ILike(r.Title, $"%{escaped}%", "\\"));
+            }
+
+            return q;
+        }
+
+        // Each facet's counts reflect the OTHER active filters but ignore its own selection,
+        // so picking a value never zeroes out the rest of that dimension.
+        IQueryable<MediaRequest> WithMediaType(IQueryable<MediaRequest> q) =>
+            mediaType.HasValue ? q.Where(r => r.MediaType == mediaType.Value) : q;
+        IQueryable<MediaRequest> WithStatus(IQueryable<MediaRequest> q) =>
+            status.HasValue ? q.Where(r => r.Status == status.Value) : q;
+        IQueryable<MediaRequest> WithAttachments(IQueryable<MediaRequest> q) =>
+            attachments == "yes"
+                ? q.Where(r => context.MediaRequestUploads.Any(u => u.MediaRequestId == r.Id && !u.FileDeleted))
+                : attachments == "no"
+                    ? q.Where(r => !context.MediaRequestUploads.Any(u => u.MediaRequestId == r.Id && !u.FileDeleted))
+                    : q;
+
+        var mediaTypeCounts = await WithAttachments(WithStatus(BaseQuery()))
+            .GroupBy(r => r.MediaType)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var statusCounts = await WithAttachments(WithMediaType(BaseQuery()))
+            .GroupBy(r => r.Status)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var attachmentBase = WithStatus(WithMediaType(BaseQuery()));
+        var attachmentTotal = await attachmentBase.CountAsync();
+        var attachmentsYes = await attachmentBase
+            .CountAsync(r => context.MediaRequestUploads.Any(u => u.MediaRequestId == r.Id && !u.FileDeleted));
+
+        return Results.Ok(new
+        {
+            mediaTypes = mediaTypeCounts.ToDictionary(x => (int)x.Key, x => x.Count),
+            mediaTypeTotal = mediaTypeCounts.Sum(x => x.Count),
+            statuses = statusCounts.ToDictionary(x => (int)x.Key, x => x.Count),
+            statusTotal = statusCounts.Sum(x => x.Count),
+            attachmentsYes,
+            attachmentsNo = attachmentTotal - attachmentsYes,
+            attachmentTotal,
+        });
+    }
+
     [HttpGet("{id:int}")]
     public async Task<IResult> GetRequest(int id)
     {
@@ -762,15 +840,17 @@ public partial class RequestController(
         if (request == null)
             return Results.NotFound("Request not found");
 
-        if (request.Status != MediaRequestStatus.Open && request.Status != MediaRequestStatus.InProgress)
-            return Results.BadRequest("Comments cannot be edited on completed or rejected requests.");
-
         var comment = await context.MediaRequestComments.FirstOrDefaultAsync(c => c.Id == commentId && c.MediaRequestId == id);
         if (comment == null)
             return Results.NotFound("Comment not found");
 
         if (comment.UserId != userId)
             return Results.Forbid();
+
+        // Admin comments can be edited regardless of request status; normal comments only on open/in-progress.
+        if (comment.ParentCommentId == null &&
+            request.Status != MediaRequestStatus.Open && request.Status != MediaRequestStatus.InProgress)
+            return Results.BadRequest("Comments cannot be edited on completed or rejected requests.");
 
         comment.Text = trimmedText;
         comment.UpdatedAt = DateTime.UtcNow;
@@ -783,6 +863,69 @@ public partial class RequestController(
         await context.SaveChangesAsync();
 
         return Results.Ok(new { success = true });
+    }
+
+    [HttpPost("{id:int}/comments/{commentId:int}/admin-comment")]
+    [Authorize("RequiresAdmin")]
+    public async Task<IResult> AddAdminComment(int id, int commentId, [FromBody] AddMediaRequestCommentRequest model)
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        var trimmedText = model.Text?.Trim();
+        if (string.IsNullOrEmpty(trimmedText))
+            return Results.BadRequest("Comment text must not be empty.");
+        if (trimmedText.Length > MaxCommentLength)
+            return Results.BadRequest($"Comment text must not exceed {MaxCommentLength} characters.");
+
+        var request = await context.MediaRequests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null)
+            return Results.NotFound("Request not found");
+
+        var parent = await context.MediaRequestComments.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == commentId && c.MediaRequestId == id);
+        if (parent == null)
+            return Results.NotFound("Comment not found");
+        if (parent.ParentCommentId != null)
+            return Results.BadRequest("Cannot add an admin comment to another admin comment.");
+
+        var comment = new MediaRequestComment
+        {
+            MediaRequestId = id,
+            UserId = userId,
+            Text = trimmedText,
+            ParentCommentId = commentId
+        };
+
+        context.MediaRequestComments.Add(comment);
+        await context.SaveChangesAsync();
+
+        var textPreview = trimmedText.Length > 100 ? trimmedText[..100] + "..." : trimmedText;
+        activityService.LogWithoutSave(id, userId, RequestAction.AdminCommentAdded,
+            JsonSerializer.Serialize(new { commentId = comment.Id, parentCommentId = commentId, textPreview }),
+            ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString());
+
+        await context.SaveChangesAsync();
+
+        try
+        {
+            if (parent.UserId != userId)
+            {
+                await notificationService.Notify(
+                    parent.UserId,
+                    NotificationType.RequestAdminComment,
+                    "An admin replied to your comment",
+                    $"An admin commented on your comment on \"{request.Title}\".",
+                    $"/requests/{id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send admin comment notification for request {Id}", id);
+        }
+
+        return Results.Ok(new { id = comment.Id });
     }
 
     [HttpPut("{id:int}/edit-description")]
@@ -870,19 +1013,19 @@ public partial class RequestController(
             }
         }
 
-        var dtos = comments.Select(c =>
+        MediaRequestCommentDto BuildDto(MediaRequestComment c)
         {
-            var hasUpload = c.Upload != null;
-            var role = c.UserId == request.RequesterId ? "Requester" : "Contributor";
+            var isAdminComment = c.ParentCommentId != null;
+            var role = isAdminComment ? "Admin" : (c.UserId == request.RequesterId ? "Requester" : "Contributor");
 
             MediaRequestUploadDto? uploadDto = null;
-            if (hasUpload)
+            if (c.Upload != null)
             {
                 if (isAdmin)
                 {
                     uploadDto = new MediaRequestUploadAdminDto
                     {
-                        Id = c.Upload!.Id,
+                        Id = c.Upload.Id,
                         FileName = c.Upload.FileName,
                         FileSize = c.Upload.FileSize,
                         OriginalFileCount = c.Upload.OriginalFileCount,
@@ -897,7 +1040,7 @@ public partial class RequestController(
                 {
                     uploadDto = new MediaRequestUploadDto
                     {
-                        Id = c.Upload!.Id,
+                        Id = c.Upload.Id,
                         FileName = c.Upload.FileName,
                         FileSize = c.Upload.FileSize,
                         OriginalFileCount = c.Upload.OriginalFileCount,
@@ -912,12 +1055,29 @@ public partial class RequestController(
                 Text = c.Text,
                 Role = role,
                 IsOwnComment = c.UserId == userId,
+                IsAdminComment = isAdminComment,
                 UserName = isAdmin ? userNames.GetValueOrDefault(c.UserId) : null,
                 Upload = uploadDto,
                 CreatedAt = c.CreatedAt,
                 UpdatedAt = c.UpdatedAt
             };
-        }).ToList();
+        }
+
+        var repliesByParent = comments
+            .Where(c => c.ParentCommentId != null)
+            .GroupBy(c => c.ParentCommentId!.Value)
+            .ToDictionary(g => g.Key, g => g.OrderBy(c => c.CreatedAt).ToList());
+
+        var dtos = comments
+            .Where(c => c.ParentCommentId == null)
+            .Select(c =>
+            {
+                var dto = BuildDto(c);
+                if (repliesByParent.TryGetValue(c.Id, out var replies))
+                    dto.AdminComments = replies.Select(BuildDto).ToList();
+                return dto;
+            })
+            .ToList();
 
         return Results.Ok(dtos);
     }
