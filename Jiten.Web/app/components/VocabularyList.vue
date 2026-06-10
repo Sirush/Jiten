@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import type { Word } from '~/types/types';
   import type { AsyncDataRequestStatus } from '#app';
+  import { LazyHydrateVocabularyEntry } from '~/utils/lazyHydratedComponents';
 
   const props = defineProps<{
     words: Word[];
@@ -38,14 +39,19 @@
     <p v-if="emptyMessage" class="text-sm text-surface-400">{{ emptyMessage }}</p>
   </div>
 
+  <!-- LazyHydrate defers per-entry hydration until scrolled into view;
+       content-visibility skips layout/paint for offscreen entries. The first
+       viewport-worth of entries renders normally so the page paints at its real
+       size immediately (no first-frame shift from the intrinsic-size estimate). -->
   <div v-else class="flex flex-col gap-2">
-    <VocabularyEntry
-      v-for="word in words"
+    <LazyHydrateVocabularyEntry
+      v-for="(word, index) in words"
       :key="`${word.wordId}-${word.mainReading.readingIndex}`"
       :word="word"
       :is-compact="true"
       :removable="removable"
       :removing="removingKey === `${word.wordId}-${word.mainReading.readingIndex}`"
+      :class="index >= 8 ? '[content-visibility:auto] [contain-intrinsic-size:auto_8rem]' : ''"
       @remove="emit('remove', word)"
     />
   </div>

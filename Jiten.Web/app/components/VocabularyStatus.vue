@@ -21,6 +21,8 @@
 
   const knownStates = ref([...(props.knownStatesOverride ?? props.word.knownStates ?? [])]);
   const op = ref();
+  const opActivated = ref(false);
+  const deckOpActivated = ref(false);
   const addingToDeck = ref<number | null>(null);
 
   watch([() => props.knownStatesOverride, () => props.word.knownStates], ([override, wordStates]) => {
@@ -86,10 +88,16 @@
   const onPlusClick = async (e: MouseEvent) => {
     if (e.ctrlKey) blacklistWord();
     else if (e.shiftKey || quickMasterVocabulary.value) masterWord();
-    else op.value?.toggle(e);
+    else {
+      opActivated.value = true;
+      await nextTick();
+      op.value?.toggle(e);
+    }
   };
 
   const onDeckMenuClick = async (e: MouseEvent) => {
+    deckOpActivated.value = true;
+    await nextTick();
     deckOp.value?.toggle(e);
     if (srsStore.studyDecks.length === 0) {
       loadingDecks.value = true;
@@ -137,7 +145,7 @@
             <Button icon="pi pi-plus" size="small" text severity="success" @click="onPlusClick" />
           </Tooltip>
         </template>
-        <Popover ref="op" :pt="{ content: { class: 'p-1' } }">
+        <Popover v-if="opActivated" ref="op" :pt="{ content: { class: 'p-1' } }">
           <div class="flex flex-col">
             <button class="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer" @click="masterWord">
               <i class="pi pi-check w-4 text-center" /><span>Master</span>
@@ -148,7 +156,7 @@
           </div>
         </Popover>
         <Button icon="pi pi-ellipsis-h" size="small" text severity="secondary" @click="onDeckMenuClick" />
-        <Popover ref="deckOp" :pt="{ content: { class: 'p-1' } }">
+        <Popover v-if="deckOpActivated" ref="deckOp" :pt="{ content: { class: 'p-1' } }">
           <div class="flex flex-col">
             <span class="px-3 py-1 text-xs font-semibold text-surface-400 uppercase tracking-wide">Add to deck</span>
             <div v-if="loadingDecks" class="flex justify-center py-2">

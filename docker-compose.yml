@@ -42,7 +42,7 @@ services:
       retries: 10
       start_period: 30s
     environment:
-      - ConnectionStrings__JitenDatabase=Host=${DB_HOST:-postgres};Database=${DB_NAME:-jiten};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-password};Timeout=300;CommandTimeout=300
+      - ConnectionStrings__JitenDatabase=Host=${DB_HOST:-postgres};Database=${DB_NAME:-jiten};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-password};Timeout=300;CommandTimeout=300;Maximum Pool Size=150
       - ConnectionStrings__Redis=redis:${REDIS_PORT:-6379}
       - JwtSettings__Secret=${JWT_SECRET:-VERY_STRONG_KEY_AT_LEAST_32_CHARS}
       - JwtSettings__Issuer=${JWT_ISSUER:-https://api.jiten.moe}

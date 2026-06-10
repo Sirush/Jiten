@@ -5,8 +5,7 @@
   import { storeToRefs } from 'pinia';
   import { getDeckStatusText } from '~/utils/deckStatusMapper';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
-  import MediaDeckCompactView from '~/components/MediaDeckCompactView.vue';
-  import MediaDeckTableView from '~/components/MediaDeckTableView.vue';
+  import { LazyHydrateMediaDeckCard, LazyHydrateMediaDeckCompactView, LazyHydrateMediaDeckTableView } from '~/utils/lazyHydratedComponents';
 
   const route = useRoute();
   const { $api } = useNuxtApp();
@@ -180,17 +179,24 @@
         <template v-if="activeGroup">
           <!-- Card view -->
           <div v-if="displayStyle === DisplayStyle.Card" class="flex flex-col gap-2">
-            <MediaDeckCard v-for="deck in activeGroup.decks" :key="deck.deckId" :deck="deck" @update:deck="updateDeckInList" />
+            <LazyHydrateMediaDeckCard
+              v-for="(deck, index) in activeGroup.decks"
+              :key="deck.deckId"
+              :deck="deck"
+              :lazy-cover="index >= 3"
+              :class="index >= 3 ? '[content-visibility:auto] [contain-intrinsic-size:auto_30rem] p-1 -m-1' : ''"
+              @update:deck="updateDeckInList"
+            />
           </div>
 
           <!-- Compact view -->
           <div v-else-if="displayStyle === DisplayStyle.Compact" class="flex flex-wrap gap-4 justify-center">
-            <MediaDeckCompactView v-for="deck in activeGroup.decks" :key="deck.deckId" :deck="deck" />
+            <LazyHydrateMediaDeckCompactView v-for="(deck, index) in activeGroup.decks" :key="deck.deckId" :deck="deck" :lazy-cover="index >= 12" />
           </div>
 
           <!-- Table view -->
           <div v-else-if="displayStyle === DisplayStyle.Table" class="flex flex-col gap-0.5">
-            <MediaDeckTableView v-for="deck in activeGroup.decks" :key="deck.deckId" :deck="deck" />
+            <LazyHydrateMediaDeckTableView v-for="(deck, index) in activeGroup.decks" :key="deck.deckId" :deck="deck" :lazy-render="index >= 12" />
           </div>
         </template>
       </template>

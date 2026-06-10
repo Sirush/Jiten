@@ -1,7 +1,6 @@
 <script setup lang="ts">
   import { type Deck, MediaType } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
-  import MediaDeckDownloadDialog from '~/components/MediaDeckDownloadDialog.vue';
   import Card from 'primevue/card';
   import { useAuthStore } from '~/stores/authStore';
   import { useJitenStore } from '~/stores/jitenStore';
@@ -12,6 +11,9 @@
 
   const props = defineProps<{
     deck: Deck;
+    // Set by list views for below-the-fold rows; lets the browser skip
+    // layout/paint until the row nears the viewport.
+    lazyRender?: boolean;
   }>();
 
   const showDownloadDialog = ref(false);
@@ -40,7 +42,7 @@
 </script>
 
 <template>
-  <Card :pt="{ body: { style: 'padding: 0.5rem' } }" :style="{ border: borderColor }">
+  <Card :class="lazyRender ? '[content-visibility:auto] [contain-intrinsic-size:auto_4rem]' : ''" :pt="{ body: { style: 'padding: 0.5rem' } }" :style="{ border: borderColor }">
     <template #content>
       <div class="flex flex-row flex-wrap items-center gap-y-2">
         <!-- Title and Media Type -->
@@ -104,7 +106,7 @@
     </template>
   </Card>
 
-  <MediaDeckDownloadDialog :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
+  <LazyMediaDeckDownloadDialog v-if="showDownloadDialog" :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
 </template>
 
 <style scoped></style>

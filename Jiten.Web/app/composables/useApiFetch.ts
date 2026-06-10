@@ -1,9 +1,19 @@
 import type { PaginatedResponse } from '~/types/types';
 import type { AsyncDataRequestStatus, UseFetchOptions } from '#app';
 
+function unwrapQuery(query: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!query) return undefined;
+  const plain: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(query)) {
+    plain[key] = unref(value);
+  }
+  return plain;
+}
+
 function revalidateOnClientAfterSsr(
   authStore: ReturnType<typeof useAuthStore>,
-  execute: (opts?: any) => Promise<void>,
+  request: string | (() => string),
+  query: Record<string, unknown> | undefined,
   data: Ref<unknown>,
   error: Ref<Error | null | undefined>,
 ): void {
@@ -12,16 +22,29 @@ function revalidateOnClientAfterSsr(
   const nuxtApp = useNuxtApp();
   if (!nuxtApp.isHydrating) return;
 
-  authStore.ensureValidToken().then((valid) => {
+  authStore.ensureValidToken().then(async (valid) => {
     if (!valid) return;
-    execute().then(() => {
-      // Background revalidation of already-rendered SSR data. If it fails (e.g. the
-      // API is mid-deploy) but we still hold the server-rendered payload, keep showing
-      // the stale page instead of flipping the UI into an error state.
+    try {
+      // Out-of-band $api fetch instead of execute(): execute() flips status back to
+      // 'pending' (re-showing skeletons over already-rendered SSR content) and always
+      // replaces data with fresh object identities, which re-renders every list item
+      // and cancels any pending lazy hydration. SSR requests carry the auth cookie,
+      // so the revalidated payload is usually byte-identical — only replace when not.
+      const api = nuxtApp.$api as (url: string, opts?: { query?: Record<string, unknown> }) => Promise<unknown>;
+      const url = typeof request === 'function' ? request() : request;
+      const fresh = await api(url, { query: unwrapQuery(query) });
+      if (JSON.stringify(fresh) !== JSON.stringify(data.value)) {
+        data.value = fresh;
+      }
+      // We hold a successfully fetched payload — clear any stale SSR error state.
       if (error.value && data.value != null) {
         error.value = undefined;
       }
-    });
+    } catch {
+      // Background revalidation of already-rendered SSR data. If it fails (e.g. the
+      // API is mid-deploy) but we still hold the server-rendered payload, keep showing
+      // the stale page instead of flipping the UI into an error state.
+    }
   });
 }
 
@@ -138,7 +161,7 @@ export function useApiFetch<T>(
   setup401ErrorHandler(error, execute, request, authStore);
 
   if (revalidateOnClient) {
-    revalidateOnClientAfterSsr(authStore, execute, data, error);
+    revalidateOnClientAfterSsr(authStore, request, fetchOpts.query, data, error);
   }
 
   return { data, status, error, refresh, execute };
@@ -162,7 +185,7 @@ export  function useApiFetchPaginated<T>(
   setup401ErrorHandler(error, execute, request, authStore);
 
   if (revalidateOnClient) {
-    revalidateOnClientAfterSsr(authStore, execute, data, error);
+    revalidateOnClientAfterSsr(authStore, request, fetchOpts.query, data, error);
   }
 
   return {

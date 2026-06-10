@@ -2,7 +2,6 @@
   import type { Word } from '~/types';
   import Card from 'primevue/card';
   import Button from 'primevue/button';
-  import VocabularyDefinitions from '~/components/VocabularyDefinitions.vue';
   import { useJitenStore } from '~/stores/jitenStore';
   import VocabularyStatus from '~/components/VocabularyStatus.vue';
 
@@ -55,12 +54,7 @@
     </template>
     <template #subtitle />
     <template #content>
-      <ClientOnly>
-        <VocabularyDictionaryDefinitions :resolved-groups="resolvedGroups" :is-compact="isCompact" :current-reading-index="word.mainReading.readingIndex" :readings="word.alternativeReadings" />
-        <template #fallback>
-          <VocabularyDefinitions :definitions="word.definitions" :is-compact="isCompact" :current-reading-index="word.mainReading.readingIndex" :readings="word.alternativeReadings" />
-        </template>
-      </ClientOnly>
+      <VocabularyDictionaryDefinitions :resolved-groups="resolvedGroups" :is-compact="isCompact" :current-reading-index="word.mainReading.readingIndex" :readings="word.alternativeReadings" />
     </template>
   </Card>
 </template>

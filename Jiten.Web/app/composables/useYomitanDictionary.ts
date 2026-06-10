@@ -288,6 +288,9 @@ function buildJmDictMeta(settings: JmDictSettings): DictionaryMeta {
 
 const dictionaries = ref<DictionaryMeta[]>([]);
 let _metaDbPromise: Promise<IDBDatabase> | null = null;
+// Shared across all component instances so a page mounting many entries only
+// triggers a single IndexedDB read. Mutations refresh it via refreshDictionaries().
+let _dictionariesLoadPromise: Promise<DictionaryMeta[]> | null = null;
 const _dictDbCache = new Map<string, Promise<IDBDatabase>>();
 
 function getMetaDb(): Promise<IDBDatabase> {
@@ -307,19 +310,28 @@ function getDictDb(id: string): Promise<IDBDatabase> {
 // --- Composable ---
 
 export function useYomitanDictionary() {
-  async function loadDictionaries(): Promise<DictionaryMeta[]> {
-    const db = await getMetaDb();
-    const tx = db.transaction('dictionaries', 'readonly');
-    const store = tx.objectStore('dictionaries');
-    const customDicts: DictionaryMeta[] = await idbRequest(store.getAll());
+  // Re-reads dictionary metadata from IndexedDB, replacing the shared cache.
+  function refreshDictionaries(): Promise<DictionaryMeta[]> {
+    _dictionariesLoadPromise = (async () => {
+      const db = await getMetaDb();
+      const tx = db.transaction('dictionaries', 'readonly');
+      const store = tx.objectStore('dictionaries');
+      const customDicts: DictionaryMeta[] = await idbRequest(store.getAll());
 
-    const jmDictSettings = getJmDictSettings();
-    const jmDictMeta = buildJmDictMeta(jmDictSettings);
+      const jmDictSettings = getJmDictSettings();
+      const jmDictMeta = buildJmDictMeta(jmDictSettings);
 
-    const all = [...customDicts, jmDictMeta];
-    all.sort((a, b) => a.priority - b.priority);
-    dictionaries.value = all;
-    return all;
+      const all = [...customDicts, jmDictMeta];
+      all.sort((a, b) => a.priority - b.priority);
+      dictionaries.value = all;
+      return all;
+    })();
+    return _dictionariesLoadPromise;
+  }
+
+  // Ensure-loaded: concurrent and repeat callers share one IndexedDB read.
+  function loadDictionaries(): Promise<DictionaryMeta[]> {
+    return _dictionariesLoadPromise ?? refreshDictionaries();
   }
 
   async function importDictionary(
@@ -400,7 +412,7 @@ export function useYomitanDictionary() {
     metaTx.objectStore('dictionaries').put(meta);
     await idbTransaction(metaTx);
 
-    await loadDictionaries();
+    await refreshDictionaries();
     return meta;
   }
 
@@ -419,7 +431,7 @@ export function useYomitanDictionary() {
     }
     indexedDB.deleteDatabase(dictDbName(id));
 
-    await loadDictionaries();
+    await refreshDictionaries();
   }
 
   async function updateDictionary(id: string, updates: Partial<Pick<DictionaryMeta, 'priority' | 'mode' | 'name'>>): Promise<void> {
@@ -428,7 +440,7 @@ export function useYomitanDictionary() {
       if (updates.priority !== undefined) settings.priority = updates.priority;
       if (updates.mode !== undefined) settings.mode = updates.mode;
       saveJmDictSettings(settings);
-      await loadDictionaries();
+      await refreshDictionaries();
       return;
     }
 
@@ -440,7 +452,7 @@ export function useYomitanDictionary() {
     Object.assign(existing, updates);
     store.put(existing);
     await idbTransaction(tx);
-    await loadDictionaries();
+    await refreshDictionaries();
   }
 
   async function swapPriority(idA: string, idB: string): Promise<void> {
@@ -477,7 +489,7 @@ export function useYomitanDictionary() {
     }
 
     await idbTransaction(tx);
-    await loadDictionaries();
+    await refreshDictionaries();
   }
 
   async function lookupWord(

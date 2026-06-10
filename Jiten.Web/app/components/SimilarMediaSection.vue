@@ -179,7 +179,7 @@
           >
             {{ item.similarityPercent }}%
           </span>
-          <MediaDeckCompactView :deck="item.deck" />
+          <MediaDeckCompactView :deck="item.deck" lazy-cover />
         </div>
         <NuxtLink
           :to="`/decks/media/${item.deck.deckId}/detail`"

@@ -39,14 +39,17 @@
     return `only applies to ${names}`;
   }
 
+  const samePartsOfSpeech = (a: string[] | null | undefined, b: string[] | null | undefined) =>
+    a === b || (a != null && b != null && a.length === b.length && a.every((v, i) => v === b[i]));
+
   const definitionsWithPartsOfSpeech = computed(() => {
     if (!Array.isArray(props.definitions)) {
       return [];
     }
-    let previousPartOfSpeech = null;
+    let previousPartOfSpeech: string[] | null = null;
 
     return props.definitions.map((definition) => {
-      const isDifferentPartOfSpeech = JSON.stringify(previousPartOfSpeech) !== JSON.stringify(definition.partsOfSpeech);
+      const isDifferentPartOfSpeech = !samePartsOfSpeech(previousPartOfSpeech, definition.partsOfSpeech);
       previousPartOfSpeech = definition.partsOfSpeech;
       return {
         ...definition,

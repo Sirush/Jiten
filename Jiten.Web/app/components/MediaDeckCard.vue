@@ -17,6 +17,9 @@
     hideControl?: boolean;
     hideDetailButton?: boolean;
     titleTag?: string;
+    // Set by list views for below-the-fold cards so their covers don't compete
+    // with the LCP image. Defaults to eager (single-card pages).
+    lazyCover?: boolean;
   }>();
 
   const emit = defineEmits<{
@@ -84,8 +87,14 @@
     return `${hours}h ${minutes}min`;
   });
 
-  const toggleMenu = (event: Event) => {
-    menu.value.toggle(event);
+  // Menu is mounted lazily on first open — lists render many cards and most
+  // menus are never opened.
+  const menuActivated = ref(false);
+
+  const toggleMenu = async (event: Event) => {
+    menuActivated.value = true;
+    await nextTick();
+    menu.value?.toggle(event);
   };
 
   const { toggleFavourite, toggleIgnore: _toggleIgnore, cancelIgnore: _cancelIgnore, setStatus } = useDeckPreference(
@@ -360,7 +369,9 @@
                   :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
                   :alt="deck.originalTitle"
                   class="h-48 w-34 min-w-34 object-cover"
-                  fetchpriority="high"
+                  :fetchpriority="lazyCover ? undefined : 'high'"
+                  :loading="lazyCover ? 'lazy' : 'eager'"
+                  decoding="async"
                   width="136"
                   height="192"
                 />
@@ -623,7 +634,7 @@
     <LazySrsAddDeckDialog v-if="showStudyDeckDialog" :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
     <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" @update:visible="showIssueDialog = $event" :deck="deck" />
 
-    <TieredMenu v-if="authStore.isAuthenticated" ref="menu" :model="menuItems" popup />
+    <TieredMenu v-if="authStore.isAuthenticated && menuActivated" ref="menu" :model="menuItems" popup />
 
     <Dialog v-if="showCompletionDialog" v-model:visible="showCompletionDialog" modal header="Rate Difficulty" class="w-full" style="max-width: 40rem" :closable="true">
       <div class="flex flex-col gap-6">

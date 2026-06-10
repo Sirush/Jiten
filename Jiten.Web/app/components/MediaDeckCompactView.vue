@@ -2,12 +2,18 @@
   import { ref } from 'vue';
 
   const openOverlayDeckId = ref<number | null>(null);
+
+  // One shared document listener for all tiles (a grid renders ~100 of them),
+  // attached while at least one tile is mounted.
+  let overlayListenerUsers = 0;
+  const closeOverlayOnDocumentClick = () => {
+    openOverlayDeckId.value = null;
+  };
 </script>
 
 <script setup lang="ts">
   import { type Deck, MediaType } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
-  import MediaDeckDownloadDialog from '~/components/MediaDeckDownloadDialog.vue';
   import Card from 'primevue/card';
   import { useAuthStore } from '~/stores/authStore';
   import { useJitenStore } from '~/stores/jitenStore';
@@ -18,6 +24,7 @@
 
   const props = defineProps<{
     deck: Deck;
+    lazyCover?: boolean;
   }>();
 
   const showDownloadDialog = ref(false);
@@ -48,12 +55,12 @@
     }
   }
 
-  function closeOverlay() {
-    openOverlayDeckId.value = null;
-  }
-
-  onMounted(() => document.addEventListener('click', closeOverlay));
-  onUnmounted(() => document.removeEventListener('click', closeOverlay));
+  onMounted(() => {
+    if (overlayListenerUsers++ === 0) document.addEventListener('click', closeOverlayOnDocumentClick);
+  });
+  onUnmounted(() => {
+    if (--overlayListenerUsers === 0) document.removeEventListener('click', closeOverlayOnDocumentClick);
+  });
 
   const borderColor = computed(() => {
     if (!authStore.isAuthenticated || store.hideCoverageBorders || (props.deck.coverage == 0 && props.deck.uniqueCoverage == 0))
@@ -63,7 +70,9 @@
 </script>
 
 <template>
-  <div class="relative group h-48 w-34">
+  <!-- content-visibility lets the browser skip layout/paint for offscreen tiles;
+       the tile is fixed-size so the intrinsic size is exact (w-34 x h-48). -->
+  <div class="relative group h-48 w-34 [content-visibility:auto] [contain-intrinsic-size:8.5rem_12rem]">
     <div class="h-48 w-34 overflow-hidden rounded-md border hover:shadow-md transition-shadow duration-200"   :style="{ 'border': borderColor }">
       <div class="relative h-full" @click.stop="toggleOverlay">
         <!-- Cover image -->
@@ -71,6 +80,10 @@
           :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
           :alt="deck.originalTitle"
           class="w-full h-full object-cover"
+          :loading="lazyCover ? 'lazy' : 'eager'"
+          decoding="async"
+          width="136"
+          height="192"
         />
 
         <!-- Title overlay at bottom -->
@@ -139,7 +152,7 @@
     </div>
   </div>
 
-  <MediaDeckDownloadDialog :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
+  <LazyMediaDeckDownloadDialog v-if="showDownloadDialog" :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
 </template>
 
 <style scoped></style>
