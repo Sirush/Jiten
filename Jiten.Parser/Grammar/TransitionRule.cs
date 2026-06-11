@@ -28,6 +28,7 @@ internal enum MatchCondition
     PrevIsVerbAuxIAdjOrSfp,      // Prev.PartOfSpeech is Verb, Auxiliary, IAdjective, or sentence-ending particle
     PrevIsAuxiliary,             // Prev.PartOfSpeech is Auxiliary
     PrevIsAuxiliaryOrParticle,   // Prev.PartOfSpeech is Auxiliary or Particle
+    IsNotEmphaticSfp,            // Current.Text is not the emphatic ぞ/ぜ (they never merge)
     PrevIsNumericOrNoun, // Prev.PartOfSpeech is Numeral, Noun, CommonNoun, Pronoun, or Name
     PrevExists,          // Prev != null
     IsSentenceEndingParticle, // PartOfSpeech == Particle && Section == SentenceEndingParticle
@@ -114,6 +115,9 @@ internal enum ScoringCondition
     NextIsNaAdj,
     PrevIsToParticle,
     CandidateIsNotName,
+    CandidateHasVolitionalChain,
+    NextIsVolitionalToVerb,
+    CandidateIsInfinitiveOrImperative,
 }
 
 internal sealed record ScoringRule(

@@ -1,6 +1,7 @@
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Parser.Data;
+using Jiten.Parser.Diagnostics;
 using Jiten.Parser.Scoring;
 
 namespace Jiten.Parser.Resegmentation;
@@ -15,7 +16,8 @@ internal static class ResegmentationEngine
         Dictionary<string, List<int>> lookups,
         Dictionary<int, int> frequencyRanks,
         Dictionary<int, JmDictWordMeta> wordMeta,
-        HashSet<string>? protectedSurfaces = null)
+        HashSet<string>? protectedSurfaces = null,
+        ParserDiagnostics? diagnostics = null)
     {
         var pending = new List<(SentenceInfo sentence, UncertainSpan span, SpanPath path, PartOfSpeech? prevPos, PartOfSpeech? nextPos)>();
 
@@ -39,14 +41,26 @@ internal static class ResegmentationEngine
                 else
                 {
                     path = ResegmentationScorer.FindBestPath(span.Text, lookups, frequencyRanks);
-                    if (path == null || !path.IsComplete(span.Text.Length) || path.Segments.Count <= 1)
+                    var rejection = path switch
+                    {
+                        null => "no path found",
+                        _ when !path.IsComplete(span.Text.Length) => "path incomplete",
+                        _ when path.Segments.Count <= 1 => "single segment",
+                        _ when path.Segments.Count > (span.Text.Length + 1) / 2 => "too fragmented",
+                        _ when HasBadSingleKana(path, span.Text) => "single-kana segment",
+                        _ when HasShortPureNameSegment(path, wordMeta) => "short pure-name segment",
+                        _ when ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text) < 0 => "negative path score",
+                        _ => null
+                    };
+                    if (rejection != null)
+                    {
+                        if (path != null)
+                            diagnostics?.LogParserEvent(
+                                "Resegmentation.UncertainSpan", "rejected", [span.Text],
+                                path.Segments.Select(s => span.Text.Substring(s.StartChar, s.Length)).ToArray(),
+                                rejection);
                         continue;
-                    if (path.Segments.Count > (span.Text.Length + 1) / 2)
-                        continue;
-                    if (HasBadSingleHiragana(path, span.Text))
-                        continue;
-                    if (ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text) < 0)
-                        continue;
+                    }
                 }
 
                 var prevPos = span.WordIndex > 0 ? sentence.Words[span.WordIndex - 1].word.PartOfSpeech : (PartOfSpeech?)null;
@@ -72,7 +86,8 @@ internal static class ResegmentationEngine
             var posScore  = ResegmentationScorer.ScorePosTransitions(path, wordPosByWordId, prevPos, nextPos, frequencyRanks);
             if (freqScore + posScore < MinAcceptScore)
                 continue;
-            ReplaceSpan(sentence, span, path, frequencyRanks, wordMeta);
+            ReplaceSpan(sentence, span, path, frequencyRanks, wordMeta,
+                        "Resegmentation.UncertainSpan", freqScore, posScore, diagnostics);
         }
     }
 
@@ -81,7 +96,8 @@ internal static class ResegmentationEngine
         Dictionary<string, List<int>> lookups,
         Dictionary<int, int> frequencyRanks,
         Dictionary<(int sentenceIndex, int wordIndex), int?> marginMap,
-        Dictionary<int, JmDictWordMeta> wordMeta)
+        Dictionary<int, JmDictWordMeta> wordMeta,
+        ParserDiagnostics? diagnostics = null)
     {
         var pending = new List<(SentenceInfo sentence, UncertainSpan span, SpanPath path, PartOfSpeech? prevPos, PartOfSpeech? nextPos)>();
 
@@ -109,7 +125,9 @@ internal static class ResegmentationEngine
                     continue;
                 if (path.Segments.Count > (word.Text.Length + 1) / 2)
                     continue;
-                if (HasBadSingleHiragana(path, word.Text))
+                if (HasBadSingleKana(path, word.Text))
+                    continue;
+                if (HasShortPureNameSegment(path, wordMeta))
                     continue;
                 if (ResegmentationScorer.ScorePath(path, frequencyRanks, word.Text) < MinAcceptScoreConfidence)
                     continue;
@@ -144,7 +162,8 @@ internal static class ResegmentationEngine
             var posScore  = ResegmentationScorer.ScorePosTransitions(path, wordPosByWordId, prevPos, nextPos, frequencyRanks);
             if (freqScore + posScore < MinAcceptScoreConfidence)
                 continue;
-            ReplaceSpan(sentence, span, path, frequencyRanks, wordMeta);
+            ReplaceSpan(sentence, span, path, frequencyRanks, wordMeta,
+                        "Resegmentation.LowConfidence", freqScore, posScore, diagnostics);
             anyApplied = true;
         }
 
@@ -177,13 +196,49 @@ internal static class ResegmentationEngine
         return null;
     }
 
-    private static bool HasBadSingleHiragana(SpanPath path, string text)
+    // A short segment whose every candidate is a pure JMnedict name entry is not evidence of a
+    // word boundary — it shreds OOV names into coincidental fragments (ファルマ → ファ+ルマ "Ruma").
+    // Long pure-name segments stay allowed: fused name sequences legitimately resegment through
+    // them (ラムシャーリー → ラム+シャーリー, 南アルプス市 → 南アルプス+市).
+    private static bool HasShortPureNameSegment(SpanPath path, Dictionary<int, JmDictWordMeta> wordMeta)
     {
         foreach (var s in path.Segments)
         {
-            if (s.Length != 1 || !IsHiragana(text[s.StartChar]))
+            if (s.Length > 2)
+                continue;
+
+            // Only actual name entries (name-fem, surname, place...) count as fragments;
+            // JMnedict "unclass" entries cover legitimate slang like ダサ despite mapping to Name.
+            bool anyName = false, allNameLike = true;
+            foreach (var id in s.WordIds)
+            {
+                if (!wordMeta.TryGetValue(id, out var meta)) continue;
+                if (meta.IsTrueName)
+                    anyName = true;
+                if (meta.Pos.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown)))
+                {
+                    allNameLike = false;
+                    break;
+                }
+            }
+            if (anyName && allNameLike) return true;
+        }
+        return false;
+    }
+
+    // Single-kana segments are noise matches (high-frequency entries like 部/リ/ン win on
+    // frequency score and shred OOV katakana names, e.g. ゴブリンスレイヤー → ゴ+ブ+リ+ン+スレイヤー).
+    // Exceptions: honorific お/ご at the start, and katakana-styled particles anywhere
+    // (オマエガ → オマエ+ガ, ナニガ悪イ → ナニ+ガ+悪イ).
+    private static bool HasBadSingleKana(SpanPath path, string text)
+    {
+        foreach (var s in path.Segments)
+        {
+            if (s.Length != 1 || !IsKana(text[s.StartChar]))
                 continue;
             if (s.StartChar == 0 && text[s.StartChar] is 'お' or 'ご')
+                continue;
+            if (ResegmentationScorer.IsKatakanaParticleChar(text[s.StartChar]))
                 continue;
             return true;
         }
@@ -195,7 +250,8 @@ internal static class ResegmentationEngine
     private static bool IsHiragana(char c) => JapaneseTextHelper.IsHiragana(c);
 
     private static void ReplaceSpan(SentenceInfo sentence, UncertainSpan span, SpanPath path,
-        Dictionary<int, int> frequencyRanks, Dictionary<int, JmDictWordMeta> wordMeta)
+        Dictionary<int, int> frequencyRanks, Dictionary<int, JmDictWordMeta> wordMeta,
+        string source, int freqScore, int posScore, ParserDiagnostics? diagnostics)
     {
         if (path.Segments.Count == 0
             || path.Segments[0].StartChar != 0
@@ -226,6 +282,12 @@ internal static class ResegmentationEngine
             };
             return (replacement, span.Position + seg.StartChar, seg.Length);
         }).ToList();
+
+        diagnostics?.LogParserEvent(
+            source, "split",
+            [span.Text],
+            replacements.Select(r => $"{r.Item1.Text} (wordId={r.Item1.PreMatchedWordId})").ToArray(),
+            $"freqScore={freqScore}, posScore={posScore}");
 
         sentence.Words.RemoveAt(span.WordIndex);
         sentence.Words.InsertRange(span.WordIndex, replacements);

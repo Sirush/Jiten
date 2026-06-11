@@ -19,6 +19,7 @@ public partial class MorphologicalAnalyser
     [
         Stage(TokenStageGroup.Split, SplitOovGarbageTokens, TokenFeatures.OovGarbage),
         Stage(TokenStageGroup.Split, SplitCompoundAuxiliaryVerbs),
+        Stage(TokenStageGroup.Split, SplitUnresolvableCompoundVerbs),
         Stage(TokenStageGroup.Split, SplitTatteParticle, TokenFeatures.TextTatte),
         Stage(TokenStageGroup.Split, SplitTanSuffix, TokenFeatures.TextTanSuffix),
         Stage(TokenStageGroup.Split, SplitTawakeNoun, TokenFeatures.TextTawake),
@@ -75,6 +76,9 @@ public partial class MorphologicalAnalyser
             sw?.Restart();
             var prev = wordInfos;
             wordInfos = TrackStage(stage, wordInfos, diagnostics);
+
+            if (Environment.GetEnvironmentVariable("JITEN_STAGE_DEBUG") is { Length: > 0 })
+                Console.WriteLine($"[stage] {stage.Name}: {string.Join("|", wordInfos.Select(w => w.Text))}");
 
             if (!ReferenceEquals(prev, wordInfos))
                 features = TokenFeatureScanner.Scan(wordInfos);

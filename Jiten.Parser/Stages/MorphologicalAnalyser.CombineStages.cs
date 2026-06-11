@@ -11,7 +11,7 @@ public partial class MorphologicalAnalyser
     {
         if (wordInfos.Count < 2) return wordInfos;
 
-        var result = new List<WordInfo>(wordInfos.Count);
+        List<WordInfo>? result = null;
         IReadOnlyList<DeconjugationForm> CachedDeconjugate(string hiragana) => PipelineCachedDeconjugate(hiragana);
 
         for (int i = 0; i < wordInfos.Count; i++)
@@ -28,11 +28,13 @@ public partial class MorphologicalAnalyser
 
             if (!isBase)
             {
-                result.Add(word);
+                result?.Add(word);
                 continue;
             }
 
-            var currentWord = new WordInfo(word);
+            var currentWord = word;
+            bool isCopy = false;
+            int baseIndex = i;
 
             var currentDictForm = currentWord.DictionaryForm;
             var currentNormForm = currentWord.NormalizedForm;
@@ -79,6 +81,8 @@ public partial class MorphologicalAnalyser
 
                     if (ContainsText(stealForms, stealTarget))
                     {
+                        if (result == null) result = CopyAccumulatorUpTo(wordInfos, baseIndex);
+                        if (!isCopy) { currentWord = new WordInfo(currentWord); isCopy = true; }
                         currentWord.Text = stealCandidate;
                         currentWord.Reading += WanaKana.ToKatakana("そう");
                         if (currentPOS == PartOfSpeech.Noun)
@@ -118,6 +122,8 @@ public partial class MorphologicalAnalyser
 
                     if (ContainsText(stealForms, stealTarget))
                     {
+                        if (result == null) result = CopyAccumulatorUpTo(wordInfos, baseIndex);
+                        if (!isCopy) { currentWord = new WordInfo(currentWord); isCopy = true; }
                         currentWord.Text = stealCandidate;
                         currentWord.EndOffset = nextWord.EndOffset;
                         currentWord.Reading += nextWord.Reading;
@@ -247,6 +253,8 @@ public partial class MorphologicalAnalyser
 
                 if (merged)
                 {
+                    if (result == null) result = CopyAccumulatorUpTo(wordInfos, baseIndex);
+                    if (!isCopy) { currentWord = new WordInfo(currentWord); isCopy = true; }
                     currentWord.Text = currentWord.Text + nextWord.Text;
                     currentWord.EndOffset = nextWord.EndOffset;
                     currentWord.Reading += nextWord.Reading;
@@ -264,10 +272,10 @@ public partial class MorphologicalAnalyser
                 }
             }
 
-            result.Add(currentWord);
+            result?.Add(currentWord);
         }
 
-        return result;
+        return result ?? wordInfos;
     }
 
     private static bool ContainsText(IReadOnlyList<DeconjugationForm> forms, string target)
@@ -334,6 +342,13 @@ public partial class MorphologicalAnalyser
         // って before ん/んだ/んです is quotative, not te-form
         if (nextWord.Text == "って" && i + 2 < wordInfos.Count &&
             wordInfos[i + 2].Text is "ん" or "んだ" or "んです")
+            return true;
+
+        // って re-cut as quotative (DictionaryForm って, vs て for a real te-particle) stays split
+        // when followed by a quote-taking verb (かな+って+思ったら). Otherwise allow the re-merge —
+        // an auxiliary continuation (つか+って+ください, かな+って+いる) proves the re-cut wrong.
+        if (nextWord is { Text: "って", DictionaryForm: "って" } && i + 2 < wordInfos.Count &&
+            wordInfos[i + 2].DictionaryForm is "思う" or "言う" or "聞く" or "考える" or "感じる")
             return true;
 
         if (currentWord.Text.EndsWith("ん") && nextWord.Text is "だ" or "です")
@@ -468,8 +483,9 @@ public partial class MorphologicalAnalyser
         if (wordInfos.Count < 2)
             return wordInfos;
 
-        List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
-        var currentWord = new WordInfo(wordInfos[0]);
+        List<WordInfo>? newList = null;
+        WordInfo currentWord = wordInfos[0];
+
         for (int i = 1; i < wordInfos.Count; i++)
         {
             var nextWord = wordInfos[i];
@@ -478,6 +494,7 @@ public partial class MorphologicalAnalyser
                  currentWord.HasPartOfSpeechSection(PartOfSpeechSection.Numeral)) &&
                 AmountCombinations.Combinations.Contains((currentWord.Text, nextWord.Text)))
             {
+                if (newList == null) { newList = CopyAccumulatorUpTo(wordInfos, i - 1); }
                 var text = currentWord.Text + nextWord.Text;
                 var startOff = currentWord.StartOffset;
                 currentWord = new WordInfo(nextWord);
@@ -488,13 +505,13 @@ public partial class MorphologicalAnalyser
             }
             else
             {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
+                newList?.Add(currentWord);
+                currentWord = nextWord;
             }
         }
 
+        if (newList == null) return wordInfos;
         newList.Add(currentWord);
-
         return newList;
     }
 
@@ -503,27 +520,32 @@ public partial class MorphologicalAnalyser
         if (wordInfos.Count < 2)
             return wordInfos;
 
-        List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
-        var currentWord = new WordInfo(wordInfos[0]);
+        List<WordInfo>? newList = null;
+        WordInfo currentWord = wordInfos[0];
+        bool isCopy = false;
+
         for (int i = 1; i < wordInfos.Count; i++)
         {
             WordInfo nextWord = wordInfos[i];
 
             if (currentWord.Text.EndsWith("っ") && nextWord.Text.StartsWith("て"))
             {
+                if (newList == null) { newList = CopyAccumulatorUpTo(wordInfos, i - 1); }
+                if (!isCopy) { currentWord = new WordInfo(currentWord); isCopy = true; }
                 currentWord.Text += nextWord.Text;
                 currentWord.EndOffset = nextWord.EndOffset;
                 currentWord.Reading += nextWord.Reading;
             }
             else
             {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
+                newList?.Add(currentWord);
+                currentWord = nextWord;
+                isCopy = false;
             }
         }
 
+        if (newList == null) return wordInfos;
         newList.Add(currentWord);
-
         return newList;
     }
 
@@ -1009,9 +1031,15 @@ public partial class MorphologicalAnalyser
 
             if (SpecialCases2Dict.TryGetValue(currentWord.Text, out var sc2List))
             {
+                // す+べき stays split after a suru-noun — す attaches left instead (満足す|べき)
+                bool suBekiBlocked = currentWord.Text == "す" && i > 0 &&
+                    (wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
+                     wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun));
+
                 bool matched = false;
                 foreach (var sc in sc2List)
                 {
+                    if (sc.Second == "べき" && suBekiBlocked) continue;
                     if (nextWord.Text == sc.Second)
                     {
                         newList ??= CopyUpTo(wordInfos, i);

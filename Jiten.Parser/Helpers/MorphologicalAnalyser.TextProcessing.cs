@@ -25,6 +25,9 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(?<!が)はやる")]
     private static partial Regex HayaruWithoutGaRegex();
 
+    [GeneratedRegex(@"(?<!あ)やつれ")]
+    private static partial Regex YatsureRegex();
+
     [GeneratedRegex(@"(外|家)出(ない|なかった|なく)")]
     private static partial Regex DeNaiCompoundRegex();
 
@@ -52,22 +55,28 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"どし(?=[たてよ])")]
     private static partial Regex ColloquialDoshiRegex();
 
-    // ー followed by っ/ッ after hiragana is always emphatic/expressive, never semantically meaningful.
-    // e.g., けどーっ → けど, 写るーっ → 写る
-    [GeneratedRegex(@"(?<=[぀-ゟ])ー+[っッ]+")]
+    // ー followed by っ/っ after hiragana is emphatic/expressive (けどーっ → けど, 写るーっ → 写る)
+    // EXCEPT before と, where ーっ is part of a mimetic adverb (ぼーっと, じーっと, ずーっと).
+    [GeneratedRegex(@"(?<=[぀-ゟ])ー+[っッ]+(?!と)")]
     private static partial Regex EmphLongVowelSokuonRegex();
 
+    // Comma-separated stutter fragment attached to the word it stutters: ぼ、ぼく / ぼっ、ぼぼ僕 / ば、ばっか.
+    // The fragment must not be preceded by kana or kanji: stutters follow punctuation/quotes/start,
+    // while a preceding word means a real particle (今は、はっきり) or repetition (ええ、ええ).
+    [GeneratedRegex(@"(?<![ぁ-んァ-ヶー一-龯々])([ぁ-んァ-ヶ])[っッ]?[、,，]\s*(?=\1)")]
+    private static partial Regex StutterFragmentRegex();
 
-    // 3+ identical kana with optional break chars (っ/ッ/、/comma/space) between reps.
-    // No Japanese word has 3+ identical kana — this is always stuttering or sound effects.
+    // 4+ identical kana with optional っ/ッ/space between reps — spam/sound effects (ぼぼぼぼぼ).
+    // Runs of exactly 3 are left alone: they occur in real words and across word boundaries
+    // (落ち着いた+たたずまい, とっとと); short stutters are handled with context by MisparseGates.
     // Range ぁ-んァ-ヶ excludes ー (U+30FC) which is handled by MultipleLongVowelRegex.
-    [GeneratedRegex(@"([ぁ-んァ-ヶ])([\s、,，っッ]*\1){2,}")]
+    [GeneratedRegex(@"([ぁ-んァ-ヶ])([\sっッ]*\1){3,}")]
     private static partial Regex StutteringRunRegex();
 
     // 3+ identical digraph mora (じょじょじょ, ちゅちゅちゅ, しょしょしょ, etc.)
     // Small kana (ぁぃぅぇぉっゃゅょゎ / ァィゥェォッャュョヮ) cannot start a mora,
     // so (normal kana + small kana) captures exactly one digraph mora.
-    [GeneratedRegex(@"([ぁ-んァ-ヶ][ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ])([\s、,，っッ]*\1){2,}")]
+    [GeneratedRegex(@"([ぁ-んァ-ヶ][ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ])([\sっッ]*\1){2,}")]
     private static partial Regex StutteringDigraphRunRegex();
 
     private void PreprocessText(ref string text, bool preserveStopToken, out int rawContentCharCount)
@@ -102,6 +111,7 @@ public partial class MorphologicalAnalyser
         text = EmphLongVowelKanjiHiraganaRegex().Replace(text, "");
         text = EmphLongVowelSokuonRegex().Replace(text, "");
 
+        text = StutterFragmentRegex().Replace(text, "");
         text = StutteringDigraphRunRegex().Replace(text, "");
         text = StutteringRunRegex().Replace(text, "");
 
@@ -124,6 +134,8 @@ public partial class MorphologicalAnalyser
             .Replace("はたまたま", $"は{_stopToken}たまたま")
             .Replace("悶え苦しむ", $"悶え{_stopToken}苦しむ")
             .Replace("悶え苦しん", $"悶え{_stopToken}苦しん")
+            // すぐそこ (user_dic) must not eat the すぐ of もうすぐ
+            .Replace("もうすぐそこ", $"もうすぐ{_stopToken}そこ")
             ;
 
         text = text.Replace('頚', '頸');
@@ -132,6 +144,15 @@ public partial class MorphologicalAnalyser
 
         text = DeNaiCompoundRegex().Replace(text, $"$1{_stopToken}出$2");
         text = text.Replace("届出さ", $"届{_stopToken}出さ");
+        // Sudachi's archaic 射出す(いだす) eats the noun 射出 before される/して
+        text = text.Replace("射出さ", $"射出{_stopToken}さ");
+        text = text.Replace("射出し", $"射出{_stopToken}し");
+        // Boundary anchors so connection costs can't drag these user_dic entries apart:
+        // や+連れて行く must not eat やつれ (操れ=あやつれ excluded), 小木+曽って must not eat
+        // 小木曽, 耳にする+する must not eat するすると
+        text = YatsureRegex().Replace(text, $"{_stopToken}やつれ");
+        text = text.Replace("小木曽", $"小木曽{_stopToken}");
+        text = text.Replace("するすると", $"{_stopToken}するすると");
         text = text.Replace("ぶっち切", "ぶち切");
         text = text.Replace("ぶっ壊れ", $"ぶっ{_stopToken}壊れ");
         text = EmphaticTsuRegex().Replace(text, $"{_stopToken}$1");

@@ -149,6 +149,16 @@ public class Program
             await diagnosticCommands.ParseDeckTest(options);
         }
 
+        if (options.MineMargins != null)
+        {
+            await diagnosticCommands.MineMargins(options);
+        }
+
+        if (options.AuditUserDic != null)
+        {
+            await diagnosticCommands.AuditUserDic(options);
+        }
+
         if (options.RunParserTests)
         {
             await diagnosticCommands.RunParserTests(options);
@@ -182,6 +192,11 @@ public class Program
         if (options.ScanConfidence)
         {
             await diagnosticCommands.ScanConfidence(options);
+        }
+
+        if (options.AuditConjugations)
+        {
+            await diagnosticCommands.AuditConjugations(options);
         }
 
         // Dictionary commands

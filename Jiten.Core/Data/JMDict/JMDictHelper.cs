@@ -423,6 +423,29 @@ public static class JmDictHelper
         }
     }
 
+    /// Word-level observed corpus frequencies (probabilities summing to ~1). Only words with data.
+    public static async Task<Dictionary<int, double>> LoadWordObservedFrequencies(JitenDbContext context)
+    {
+        var conn = (NpgsqlConnection)context.Database.GetDbConnection();
+        var shouldClose = conn.State == ConnectionState.Closed;
+        if (shouldClose) await conn.OpenAsync();
+        try
+        {
+            await using var cmd = new NpgsqlCommand(
+                """SELECT "WordId", "ObservedFrequency" FROM jmdict."WordFrequencies" WHERE "ObservedFrequency" > 0 """, conn);
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            var result = new Dictionary<int, double>();
+            while (await reader.ReadAsync())
+                result[reader.GetInt32(0)] = reader.GetDouble(1);
+            return result;
+        }
+        finally
+        {
+            if (shouldClose) await conn.CloseAsync();
+        }
+    }
+
     public static async Task<HashSet<int>> LoadNameOnlyWordIds(JitenDbContext context)
     {
         // Filter entirely in Postgres — avoids transferring all PartsOfSpeech text[] arrays to C#.

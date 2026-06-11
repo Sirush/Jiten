@@ -1,3 +1,4 @@
+using Jiten.Core.Data;
 using Jiten.Parser.Diagnostics;
 
 namespace Jiten.Parser.Scoring;
@@ -22,6 +23,18 @@ internal static class FormCandidateSelector
         if (context.IsKanaSurface)
             allCandidates.RemoveAll(c =>
                 KanaScoringHelpers.IsKanaSurfaceWithNoMatchingReading(context, c.Word, c.Form.Text));
+
+        // A pure-katakana surface with a script-exact non-name
+        // candidate must not fall through to hiragana-fold matches of words attested only in
+        // kanji/hiragana (フル must stay フル, not 降る — even in rederivation pools).
+        if (KanaScoringHelpers.IsPureKatakanaToken(context.Surface)
+            && allCandidates.Any(c => c.Form.Text == context.Surface
+                && c.Word.CachedPOS.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown))))
+        {
+            allCandidates.RemoveAll(c =>
+                c.Form.Text != context.Surface
+                && !c.Word.Forms.Any(f => KanaScoringHelpers.ContainsKatakana(f.Text)));
+        }
 
         if (allCandidates.Count == 0)
             return new CandidateSelectionResult(null, null);
@@ -51,6 +64,12 @@ internal static class FormCandidateSelector
                 best = candidate;
             }
         }
+
+        if (best != null)
+            best = WordFrequencyPriors.Apply(best, allCandidates, context) ?? best;
+
+        if (best != null)
+            best = ApplyKanjiHomographPriorityCap(best, allCandidates, context) ?? best;
 
         // Compute margin via linear scan for the second-best alternate (different WordId).
         // Filter out POS-incompatible runners-up so their -15 penalty doesn't produce a false low margin.
@@ -156,6 +175,52 @@ internal static class FormCandidateSelector
         }
 
         return best;
+    }
+
+    /// Sudachi's lexeme reading earns ReadingMatchScore (+70) for whichever homograph entry the
+    /// lattice happened to carry. When that entry has no JMDict priority while a same-surface
+    /// rival is ichi/news-prioritized and lost ONLY because of the reading bonus, prefer the
+    /// prioritized entry — 歩兵 must be ほへい (news1), not the shogi pawn ふひょう, just because
+    /// Sudachi's lexicon says フヒョウ; 間中 must be "during" (news1), not まなか "half a ken".
+    /// Kana surfaces are owned by WordFrequencyPriors; both-prioritized homographs (一日, 方)
+    /// stay with the reading evidence.
+    internal static FormCandidate? ApplyKanjiHomographPriorityCap(
+        FormCandidate best,
+        List<FormCandidate> allCandidates,
+        FormScoringContext context)
+    {
+        if (context.IsKanaSurface) return null;
+        if (best.ReadingMatchScore <= 0) return null;
+        if (best.EntryPriorityScore > 0) return null;
+        if (context.Surface != best.Form.Text) return null;
+        if (best.DeconjForm?.Process is { Count: > 0 }) return null;
+
+        int bestEffective = ScoringPolicy.EffectiveScore(best);
+
+        FormCandidate? rival = null;
+        int rivalEffective = int.MinValue;
+        foreach (var c in allCandidates)
+        {
+            if (c.Word.WordId == best.Word.WordId) continue;
+            if (c.Form.Text != context.Surface) continue;
+            if (c.EntryPriorityScore <= 0) continue;
+            if (c.ReadingMatchScore > 0) continue;
+            if (c.DeconjForm?.Process is { Count: > 0 }) continue;
+            if (c.IsPosIncompatibleDirectSurface && !best.IsPosIncompatibleDirectSurface) continue;
+            // JMDict entry priorities are form-level and often land on the wrong homograph
+            // (里(り) carries ichi1, 汝(うぬ) carries news2). Only flip when the furigana corpus
+            // doesn't side with Sudachi's choice (里=さと is heavily glossed; ほへい vs ふひょう isn't).
+            if (c.RubyPriorsScore < best.RubyPriorsScore) continue;
+
+            int effective = ScoringPolicy.EffectiveScore(c);
+            if (effective + best.ReadingMatchScore >= bestEffective && effective > rivalEffective)
+            {
+                rival = c;
+                rivalEffective = effective;
+            }
+        }
+
+        return rival;
     }
 
     private static bool HasPreferredConjugation(FormCandidate candidate, FormCandidate current)

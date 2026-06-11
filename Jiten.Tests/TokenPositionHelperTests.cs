@@ -149,6 +149,23 @@ public class TokenPositionHelperTests
     }
 
     [Fact]
+    public void ReversePreprocessing_KubiVariantKanji()
+    {
+        // PreprocessText normalizes 頚 → 頸; the token must still map onto variant-kanji source
+        var (pos, len) = TokenPositionHelper.FindTokenInSource("切断された頚動脈から", "頸動脈", 0);
+        pos.Should().Be(5);
+        len.Should().Be(3);
+    }
+
+    [Fact]
+    public void ReversePreprocessing_KubiStandardFormStillWorks()
+    {
+        var (pos, len) = TokenPositionHelper.FindTokenInSource("切断された頸動脈から", "頸動脈", 0);
+        pos.Should().Be(5);
+        len.Should().Be(3);
+    }
+
+    [Fact]
     public void FuzzyMatch_SkipsEllipsis()
     {
         var (pos, len) = TokenPositionHelper.FindTokenInSource("襲撃……されて", "襲撃されて", 0);

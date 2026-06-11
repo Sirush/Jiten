@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Unicode;
@@ -78,6 +79,7 @@ public class DiagnosticCommands(CliContext context)
             FormScoring = diagnostics.Results,
             AdjacentScoring = diagnostics.AdjacentScoring,
             DroppedTokens = diagnostics.DroppedTokens,
+            ParserEvents = diagnostics.ParserEvents,
             TransitionViolations = diagnostics.TransitionViolations
         };
 
@@ -234,6 +236,242 @@ public class DiagnosticCommands(CliContext context)
 
         return Task.CompletedTask;
     }
+
+    public async Task MineMargins(CliOptions options)
+    {
+        var input = options.MineMargins!;
+        if (input.StartsWith("@"))
+            input = input[1..];
+
+        if (File.Exists(input))
+        {
+            await MineMarginsFromFile(input, options);
+            return;
+        }
+
+        Console.WriteLine($"Mining margins (band=[{options.MarginMin},{options.MarginThreshold}), limit={options.MarginLimit}, {input.Length:N0} chars)...");
+        var sw = Stopwatch.StartNew();
+        var findings = MarginMiner.MineText(input, options.MarginThreshold, options.MarginLimit, options.MarginMin,
+                                            (done, total) => Console.WriteLine($"  {done}/{total} sentences..."));
+        sw.Stop();
+
+        Console.WriteLine($"Found {findings.Count} distinct ambiguity types in {sw.Elapsed.TotalSeconds:F1}s");
+        Console.WriteLine();
+        PrintTopFindings(findings);
+
+        if (!string.IsNullOrEmpty(options.ParseTestOutput))
+        {
+            await File.WriteAllTextAsync(options.ParseTestOutput, JsonSerializer.Serialize(findings, MarginJsonOptions));
+            Console.WriteLine($"Findings written to {options.ParseTestOutput}");
+        }
+    }
+
+    private static readonly JsonSerializerOptions MarginJsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+    };
+
+    public async Task AuditUserDic(CliOptions options)
+    {
+        var input = options.AuditUserDic!;
+        if (input.StartsWith("@"))
+            input = input[1..];
+
+        var xmlPath = options.UserDicXmlPath
+                      ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "user_dic.xml");
+        if (!File.Exists(xmlPath))
+        {
+            Console.WriteLine($"user_dic.xml not found: {xmlPath} (use --user-dic-xml)");
+            return;
+        }
+
+        var session = new UserDicAuditor.Session(xmlPath);
+        var sw = Stopwatch.StartNew();
+
+        if (File.Exists(input))
+        {
+            const int ReportIntervalSeconds = 15;
+            const int SaveIntervalSeconds = 60;
+
+            var totalBytes = new FileInfo(input).Length;
+            var outputPath = !string.IsNullOrEmpty(options.ParseTestOutput)
+                ? options.ParseTestOutput
+                : input + ".userdic-audit.json";
+            Console.WriteLine($"Auditing user dictionary against {input} ({totalBytes / 1048576.0:N0} MB), " +
+                              $"snapshots to {outputPath} every {SaveIntervalSeconds}s");
+
+            var lastReport = TimeSpan.Zero;
+            var lastSave = TimeSpan.Zero;
+
+            await using var stream = new FileStream(input, FileMode.Open, FileAccess.Read, FileShare.Read,
+                                                    1 << 20, FileOptions.SequentialScan);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1 << 20);
+
+            foreach (var sentence in MarginMiner.EnumerateSentences(reader))
+            {
+                session.Process(sentence);
+
+                if (session.SentencesSeen % 512 != 0)
+                    continue;
+
+                var elapsed = sw.Elapsed;
+                if ((elapsed - lastReport).TotalSeconds >= ReportIntervalSeconds)
+                {
+                    lastReport = elapsed;
+                    var mbPerSec = stream.Position / 1048576.0 / Math.Max(1, elapsed.TotalSeconds);
+                    Console.WriteLine($"[{100.0 * stream.Position / totalBytes,5:F1}%] {mbPerSec:F2} MB/s | " +
+                                      $"{session.SentencesSeen:N0} sentences | {session.Captures:N0} captures | " +
+                                      $"{session.DistinctEntries:N0} entries flagged");
+                }
+                if ((elapsed - lastSave).TotalSeconds >= SaveIntervalSeconds)
+                {
+                    lastSave = elapsed;
+                    await SaveAuditSnapshot(outputPath, session, options.MarginLimit, complete: false);
+                }
+            }
+
+            await SaveAuditSnapshot(outputPath, session, options.MarginLimit, complete: true);
+            Console.WriteLine($"Done in {sw.Elapsed:hh\\:mm\\:ss}, results in {outputPath}");
+        }
+        else
+        {
+            foreach (var sentence in MarginMiner.EnumerateSentences(new StringReader(input)))
+                session.Process(sentence);
+
+            if (!string.IsNullOrEmpty(options.ParseTestOutput))
+                await SaveAuditSnapshot(options.ParseTestOutput, session, options.MarginLimit, complete: true);
+        }
+
+        Console.WriteLine($"{session.SentencesTokenized:N0} sentences, {session.Captures:N0} boundary-crossing captures, " +
+                          $"{session.DistinctEntries:N0} distinct entries");
+        foreach (var f in session.Snapshot(Math.Min(options.MarginLimit, 50)))
+            Console.WriteLine($"[x{f.Occurrences}] {f.Entry}  crosses: {f.CrossedTokens}   " +
+                              $"with: {Truncate(f.WithDic, 30)}  without: {Truncate(f.WithoutDic, 30)}");
+    }
+
+    private static async Task SaveAuditSnapshot(string outputPath, UserDicAuditor.Session session, int limit, bool complete)
+    {
+        var snapshot = new
+        {
+            Status = new
+            {
+                Complete = complete,
+                session.SentencesSeen,
+                session.SentencesTokenized,
+                session.DuplicatesSkipped,
+                session.TokenizeErrors,
+                session.Captures,
+                session.SpacedSentencesCollapsed,
+                session.DistinctEntries
+            },
+            Findings = session.Snapshot(limit)
+        };
+        var tempPath = outputPath + ".tmp";
+        await File.WriteAllTextAsync(tempPath, JsonSerializer.Serialize(snapshot, MarginJsonOptions));
+        File.Move(tempPath, outputPath, overwrite: true);
+    }
+
+    private async Task MineMarginsFromFile(string path, CliOptions options)
+    {
+        const int ReportIntervalSeconds = 15;
+        const int SaveIntervalSeconds = 60;
+
+        var totalBytes = new FileInfo(path).Length;
+        var outputPath = !string.IsNullOrEmpty(options.ParseTestOutput) ? options.ParseTestOutput : path + ".margins.json";
+
+        Console.WriteLine($"Mining margins from {path} ({totalBytes / 1048576.0:N0} MB, band=[{options.MarginMin},{options.MarginThreshold}), limit={options.MarginLimit})");
+        Console.WriteLine($"Streaming pass; snapshot saved to {outputPath} every {SaveIntervalSeconds}s");
+
+        var session = new MarginMiner.Session(options.MarginThreshold, options.MarginMin);
+        var sw = Stopwatch.StartNew();
+        var lastReport = TimeSpan.Zero;
+        var lastSave = TimeSpan.Zero;
+
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                                                1 << 20, FileOptions.SequentialScan);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1 << 20);
+
+        foreach (var sentence in MarginMiner.EnumerateSentences(reader))
+        {
+            session.Process(sentence);
+
+            if (session.SentencesSeen % 512 != 0)
+                continue;
+
+            var elapsed = sw.Elapsed;
+            if ((elapsed - lastReport).TotalSeconds >= ReportIntervalSeconds)
+            {
+                lastReport = elapsed;
+                ReportMiningProgress(session, stream.Position, totalBytes, elapsed);
+            }
+            if ((elapsed - lastSave).TotalSeconds >= SaveIntervalSeconds)
+            {
+                lastSave = elapsed;
+                await SaveMiningSnapshot(outputPath, session, options.MarginLimit, stream.Position, totalBytes, complete: false);
+            }
+        }
+
+        sw.Stop();
+        ReportMiningProgress(session, totalBytes, totalBytes, sw.Elapsed);
+        await SaveMiningSnapshot(outputPath, session, options.MarginLimit, totalBytes, totalBytes, complete: true);
+
+        var findings = session.Snapshot(options.MarginLimit);
+        Console.WriteLine();
+        Console.WriteLine($"Done in {sw.Elapsed:hh\\:mm\\:ss}: {findings.Count} ambiguity types reported " +
+                          $"({session.DistinctTypes:N0} retained, {session.TypesPruned:N0} rare ones pruned), final results in {outputPath}");
+        Console.WriteLine();
+        PrintTopFindings(findings);
+    }
+
+    private static void ReportMiningProgress(MarginMiner.Session session, long bytesRead, long totalBytes, TimeSpan elapsed)
+    {
+        var mbPerSec = bytesRead / 1048576.0 / Math.Max(1, elapsed.TotalSeconds);
+        var eta = bytesRead > 0 ? TimeSpan.FromSeconds((totalBytes - bytesRead) / 1048576.0 / Math.Max(0.001, mbPerSec)) : TimeSpan.Zero;
+        Console.WriteLine($"[{100.0 * bytesRead / totalBytes,5:F1}%] {bytesRead / 1048576.0:N0}/{totalBytes / 1048576.0:N0} MB | " +
+                          $"{mbPerSec:F2} MB/s | ETA {eta:hh\\:mm\\:ss} | " +
+                          $"{session.SentencesSeen:N0} sentences ({session.DuplicatesSkipped:N0} dupes, {session.TokenizeErrors:N0} errors) | " +
+                          $"{session.DistinctTypes:N0} types");
+    }
+
+    private async Task SaveMiningSnapshot(string outputPath, MarginMiner.Session session, int limit,
+                                          long bytesRead, long totalBytes, bool complete)
+    {
+        var snapshot = new
+        {
+            Status = new
+            {
+                Complete = complete,
+                PercentComplete = Math.Round(100.0 * bytesRead / totalBytes, 1),
+                session.SentencesSeen,
+                session.SentencesTokenized,
+                session.DuplicatesSkipped,
+                session.TokenizeErrors,
+                session.DistinctTypes,
+                session.TypesPruned,
+                session.DedupResets,
+                session.SpacedSentencesCollapsed
+            },
+            Findings = session.Snapshot(limit)
+        };
+
+        // write-then-rename so a kill mid-save never corrupts the snapshot
+        var tempPath = outputPath + ".tmp";
+        await File.WriteAllTextAsync(tempPath, JsonSerializer.Serialize(snapshot, MarginJsonOptions));
+        File.Move(tempPath, outputPath, overwrite: true);
+    }
+
+    private static void PrintTopFindings(List<MarginMiner.MarginFinding> findings)
+    {
+        foreach (var f in findings.Take(50))
+        {
+            Console.WriteLine($"[x{f.Occurrences}, margin {f.MinMargin}] {f.AmbiguousSpan}   e.g. {Truncate(f.Segmentation, 70)}");
+        }
+        if (findings.Count > 50)
+            Console.WriteLine($"... ({findings.Count - 50} more in the JSON output)");
+    }
+
+    private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";
 
     public async Task RunParserTests(CliOptions options)
     {
@@ -484,6 +722,112 @@ public class DiagnosticCommands(CliContext context)
             Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
         };
         var json = JsonSerializer.Serialize(events, jsonOptions);
+
+        if (!string.IsNullOrEmpty(options.ParseTestOutput))
+        {
+            await File.WriteAllTextAsync(options.ParseTestOutput, json);
+            Console.WriteLine($"Results written to {options.ParseTestOutput}");
+        }
+        else
+        {
+            Console.WriteLine(json);
+        }
+    }
+
+    /// Every merged/conjugated token must carry a deconjugation chain.
+    /// Flags tokens whose OriginalText matches none of the resolved word's forms (i.e. the
+    /// surface is inflected or beam-merged) while Conjugations is empty — each hit is a
+    /// subsidiary-verb merge with no deconjugator.json counterpart (e.g. ~て下さる before fix).
+    public async Task AuditConjugations(CliOptions options)
+    {
+        if (string.IsNullOrEmpty(options.Input))
+        {
+            Console.WriteLine("--audit-conjugations requires --input <corpus.txt>");
+            return;
+        }
+
+        if (!File.Exists(options.Input))
+        {
+            Console.WriteLine($"File not found: {options.Input}");
+            return;
+        }
+
+        var lines = await File.ReadAllLinesAsync(options.Input);
+        Console.WriteLine($"Auditing {lines.Length} lines...");
+
+        // (wordId, originalText) → (count, example sentence)
+        var suspects = new Dictionary<(int WordId, string Surface), (int Count, string Example)>();
+        int totalTokens = 0;
+
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            var words = await Jiten.Parser.Parser.ParseText(context.ContextFactory, line);
+            foreach (var word in words)
+            {
+                totalTokens++;
+                if (word.Conjugations is { Count: > 0 }) continue;
+                if (string.IsNullOrEmpty(word.OriginalText) || word.OriginalText.Length < 2) continue;
+
+                var key = (word.WordId, word.OriginalText);
+                suspects[key] = suspects.TryGetValue(key, out var prev)
+                    ? (prev.Count + word.Occurrences, prev.Example)
+                    : (word.Occurrences, line);
+            }
+        }
+
+        // Resolve forms in one batch and keep only tokens whose surface matches no form
+        // (raw or kana-fold) — those are merged/inflected surfaces missing their chain.
+        var wordIds = suspects.Keys.Select(k => k.WordId).Distinct().ToList();
+        var formsByWord = new Dictionary<int, List<string>>();
+        await using (var ctx = await context.ContextFactory.CreateDbContextAsync())
+        {
+            var rows = await ctx.JMDictWords.AsNoTracking()
+                                .Where(w => wordIds.Contains(w.WordId))
+                                .Select(w => new { w.WordId, Forms = w.Forms.Select(f => f.Text).ToList() })
+                                .ToListAsync();
+            foreach (var row in rows)
+                formsByWord[row.WordId] = row.Forms;
+        }
+
+        static string Fold(string s) => KanaNormalizer.Normalize(WanaKana.ToHiragana(s));
+
+        var findings = suspects
+                       .Where(kv =>
+                       {
+                           if (!formsByWord.TryGetValue(kv.Key.WordId, out var forms)) return true;
+                           var surface = kv.Key.Surface;
+                           var surfaceFold = Fold(surface);
+                           bool matches = forms.Any(f => f == surface || Fold(f) == surfaceFold);
+                           // Form + な/に attachments (na-adjectives/adverbs) are not missing chains
+                           if (!matches && surface.Length > 1 && (surface[^1] == 'な' || surface[^1] == 'に'))
+                           {
+                               var stripped = surface[..^1];
+                               var strippedFold = Fold(stripped);
+                               matches = forms.Any(f => f == stripped || Fold(f) == strippedFold);
+                           }
+                           return !matches;
+                       })
+                       .OrderByDescending(kv => kv.Value.Count)
+                       .Select(kv => new
+                       {
+                           surface = kv.Key.Surface,
+                           wordId = kv.Key.WordId,
+                           occurrences = kv.Value.Count,
+                           example = kv.Value.Example,
+                           forms = formsByWord.GetValueOrDefault(kv.Key.WordId)
+                       })
+                       .ToList();
+
+        Console.WriteLine($"Scanned {totalTokens} tokens; {findings.Count} merged-surface tokens with empty Conjugations.");
+
+        var jsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        };
+        var json = JsonSerializer.Serialize(findings, jsonOptions);
 
         if (!string.IsNullOrEmpty(options.ParseTestOutput))
         {

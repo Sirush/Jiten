@@ -78,6 +78,12 @@ public partial class MorphologicalAnalyser
     private static readonly HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
     [
         ("じゃ", "ない", PartOfSpeech.Expression),
+        ("だ", "ろう", PartOfSpeech.Auxiliary), // Sudachi shreds そりゃそうだろう into …だ|ろう(蝋)
+        ("す", "べき", PartOfSpeech.Expression), // classical す + べき → すべき 1006200 (とすべき戦術)
+        ("なさ", "すぎる", PartOfSpeech.Verb), // なさ[ない]+すぎる → ない via さすぎる excess deconj
+        ("なさ", "すぎ", PartOfSpeech.Verb),
+        ("近", "すぎ", PartOfSpeech.Verb), // adjective stem + すぎ → 近い via excess deconj
+        ("近", "すぎる", PartOfSpeech.Verb),
         ("だ", "けど", PartOfSpeech.Conjunction),
         ("だ", "が", PartOfSpeech.Conjunction),
         ("で", "さえ", PartOfSpeech.Expression),
@@ -198,8 +204,16 @@ public partial class MorphologicalAnalyser
         ("いつまで", "も", PartOfSpeech.Adverb),
         ("だから", "こそ", PartOfSpeech.Expression),
         ("では", "あるまい", PartOfSpeech.Expression),
-        ("より", "も", PartOfSpeech.Expression),
         ("に", "於いて", PartOfSpeech.Expression),
+        // user_dic にせよ only wins the lattice after なる; recombine the に+せよ(為る命令形) cut
+        // that Sudachi produces after other verbs (振られるにせよ, 成就するにせよ)
+        ("に", "せよ", PartOfSpeech.Expression),
+        // Sudachi splits colloquial どっか/どっから as どっ(代名詞)+particle
+        ("どっ", "か", PartOfSpeech.Adverb),
+        ("どっ", "から", PartOfSpeech.Adverb),
+        // CombineTte builds ちゃってぇ with the expressive small-vowel tail; merged back onto なん,
+        // the lookup's small-kana strip resolves なんちゃって (matched via CombineFinal, post-tte)
+        ("なん", "ちゃってぇ", PartOfSpeech.Expression),
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];

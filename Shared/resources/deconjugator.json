@@ -592,6 +592,14 @@
   },
   {
     "type": "stdrule",
+    "dec_end": ["い"],
+    "con_end": ["さすぎる"],
+    "dec_tag": ["adj-i"],
+    "con_tag": ["v1"],
+    "detail": "excess"
+  },
+  {
+    "type": "stdrule",
     "dec_end": [""],
     "con_end": ["そう"],
     "dec_tag": ["stem-adj-base"],
@@ -1101,6 +1109,30 @@
     "dec_tag": ["stem-te"],
     "con_tag": ["v5u"],
     "detail": "finish/completely/end up"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["くださる"],
+    "dec_tag": ["stem-te"],
+    "con_tag": ["v5aru"],
+    "detail": "honorific receive"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["下さる"],
+    "dec_tag": ["stem-te"],
+    "con_tag": ["v5aru"],
+    "detail": "honorific receive"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["ずにいる"],
+    "dec_tag": ["stem-mizenkei"],
+    "con_tag": ["v1"],
+    "detail": "remain without doing"
   },
   {
     "type": "stdrule",

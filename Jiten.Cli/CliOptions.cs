@@ -145,6 +145,25 @@ public class CliOptions
     [Option(longName: "parse-test-output", Required = false, HelpText = "Output file path for parse-test diagnostics. Defaults to stdout.")]
     public string? ParseTestOutput { get; set; }
 
+    [Option(longName: "mine-margins", Required = false, HelpText = "Mine low-margin (uncertain segmentation) spans from a text file (or literal text). Uses Sudachi lattice margins; no DB needed. Files are streamed (multi-GB ok) with progress reports and incremental snapshots to --parse-test-output (default: <input>.margins.json).")]
+    public string? MineMargins { get; set; }
+
+    [Option(longName: "margin-threshold", Required = false, Default = 5000, HelpText = "Margin upper bound for --mine-margins; tokens below this are reported (lattice cost units).")]
+    public int MarginThreshold { get; set; }
+
+    [Option(longName: "margin-min", Required = false, Default = 0, HelpText = "Margin lower bound for --mine-margins; use 1 to exclude exact ties (compound-vs-parts).")]
+    public int MarginMin { get; set; }
+
+    [Option(longName: "margin-limit", Required = false, Default = 200, HelpText = "Maximum number of findings reported by --mine-margins.")]
+    public int MarginLimit { get; set; }
+
+    [Option(longName: "audit-user-dic", Required = false,
+            HelpText = "Find user dictionary entries that capture across word boundaries by diffing tokenization with/without the user dic over a text file (or literal text). Streamed; findings to --parse-test-output (default: <input>.userdic-audit.json). Reuses --margin-limit for the report size.")]
+    public string? AuditUserDic { get; set; }
+
+    [Option(longName: "user-dic-xml", Required = false, HelpText = "Path to user_dic.xml for --audit-user-dic (default: resources/user_dic.xml next to the binary).")]
+    public string? UserDicXmlPath { get; set; }
+
     [Option(longName: "run-parser-tests", Required = false, HelpText = "Run all parser tests with diagnostics and fix suggestions.")]
     public bool RunParserTests { get; set; }
 
@@ -201,6 +220,10 @@ public class CliOptions
 
     [Option(longName: "scan-confidence", Required = false, HelpText = "Scan a corpus file for low-confidence token resolutions. Requires --input.")]
     public bool ScanConfidence { get; set; }
+
+    [Option(longName: "audit-conjugations", Required = false,
+            HelpText = "Scan a corpus file for merged/conjugated tokens whose Conjugations chain is empty (S-G invariant). Requires --input.")]
+    public bool AuditConjugations { get; set; }
 
     [Option(longName: "input", Required = false, HelpText = "Input corpus file path (used with --scan-confidence).")]
     public string? Input { get; set; }

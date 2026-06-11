@@ -25,6 +25,17 @@ public class WordInfo
     public bool IsMergedInflection { get; set; }
     public int? ResolvedWordId { get; set; }
 
+    /// Set when Sudachi originally tagged this pure-kana token as an interjection/filler.
+    /// POS-relaxed lookup fallbacks must not let such exclamations match kanji-backed words
+    /// through their reading keys (イエーイ → 遺影/家居). Survives the POS rewrites that the
+    /// ProcessWord escalation chain performs.
+    public bool IsKanaExclamation { get; set; }
+
+    /// Sudachi lattice segmentation margin: extra cost of the cheapest competing lattice path
+    /// crossing one of this token's boundaries (clamped to 99999 = no competitor).
+    /// Null when margin output was not requested. Low values = uncertain segmentation.
+    public int? SudachiBoundaryMargin { get; set; }
+
     public WordInfo(){}
 
     public WordInfo(WordInfo other)
@@ -48,6 +59,8 @@ public class WordInfo
         WasReclassifiedFromSuffix = other.WasReclassifiedFromSuffix;
         IsMergedInflection = other.IsMergedInflection;
         ResolvedWordId = other.ResolvedWordId;
+        SudachiBoundaryMargin = other.SudachiBoundaryMargin;
+        IsKanaExclamation = other.IsKanaExclamation;
     }
 
     public WordInfo(string sudachiLine)
@@ -55,6 +68,15 @@ public class WordInfo
         // Parse tab-separated Sudachi output without Regex.Split
         // Format: Text\tPOS\tNormalizedForm\tDictionaryForm\tKatakanaReading\tPitchIndex\tSplits
         var span = sudachiLine.AsSpan();
+
+        // Optional trailing segmentation margin column ("\tM=<int>", emitted by FFI v3)
+        int marginIdx = sudachiLine.LastIndexOf("\tM=", StringComparison.Ordinal);
+        if (marginIdx >= 0 && int.TryParse(span[(marginIdx + 3)..], out int margin))
+        {
+            if (margin >= 0)
+                SudachiBoundaryMargin = margin;
+            span = span[..marginIdx];
+        }
 
         // Find first 6 tab positions
         Span<int> tabPositions = stackalloc int[6];

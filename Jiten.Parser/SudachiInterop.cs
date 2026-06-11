@@ -49,6 +49,20 @@ static class SudachiInterop
         OutputCallback callback,
         IntPtr userData);
 
+    // v3: adds emit_margins — when 1, each token line gains a trailing "\tM=<int>" segmentation
+    // margin column (extra cost of the cheapest competing lattice path crossing a token boundary)
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private unsafe delegate IntPtr ProcessTextCtxStreamUtf8V3Delegate(
+        IntPtr ctx,
+        byte* inputPtr,
+        nuint inputLen,
+        sbyte modeChar,
+        byte printAll,
+        byte wakati,
+        byte emitMargins,
+        OutputCallback callback,
+        IntPtr userData);
+
     // Static callback delegate instance to prevent GC during native calls
     private static readonly unsafe OutputCallback _outputCallback = OnSudachiOutput;
 
@@ -60,12 +74,14 @@ static class SudachiInterop
     private static CreateContextDelegate? _createContext;
     private static FreeContextDelegate? _freeContext;
     private static ProcessTextCtxStreamUtf8V2Delegate? _processTextCtxStreamV2;
+    private static ProcessTextCtxStreamUtf8V3Delegate? _processTextCtxStreamV3;
     private static CreateContextWithUserCsvDelegate? _createContextWithUserCsv;
 
     private static readonly IntPtr _libHandle;
 
     // Context management (lazy, reusable with periodic recycling to prevent native memory growth)
-    private static IntPtr _sudachiContext = IntPtr.Zero;
+    // Keyed by configPath so callers can alternate configs (e.g. with/without user dictionary)
+    private static readonly Dictionary<string, IntPtr> _sudachiContexts = new();
     private static long _contextCallCount;
     private const long ContextRecycleThreshold = 5_000;
 
@@ -82,6 +98,7 @@ static class SudachiInterop
     [ThreadStatic] private static int _leftoverLen;
     [ThreadStatic] private static List<WordInfo>? _wordInfos;
     [ThreadStatic] private static Exception? _cbError;
+    [ThreadStatic] private static StringBuilder? _rawCapture;
 
     // Precomputed lookup table for allowed characters (replaces expensive regex)
     private static readonly bool[] _allowedChars = BuildAllowedCharsTable();
@@ -233,6 +250,8 @@ static class SudachiInterop
             _createContext = Marshal.GetDelegateForFunctionPointer<CreateContextDelegate>(createCtxPtr);
         if (NativeLibrary.TryGetExport(_libHandle, "process_text_ctx_stream_utf8_ffi_v2", out IntPtr streamV2Ptr))
             _processTextCtxStreamV2 = Marshal.GetDelegateForFunctionPointer<ProcessTextCtxStreamUtf8V2Delegate>(streamV2Ptr);
+        if (NativeLibrary.TryGetExport(_libHandle, "process_text_ctx_stream_utf8_ffi_v3", out IntPtr streamV3Ptr))
+            _processTextCtxStreamV3 = Marshal.GetDelegateForFunctionPointer<ProcessTextCtxStreamUtf8V3Delegate>(streamV3Ptr);
         if (NativeLibrary.TryGetExport(_libHandle, "free_context_ffi", out IntPtr freeCtxPtr))
             _freeContext = Marshal.GetDelegateForFunctionPointer<FreeContextDelegate>(freeCtxPtr);
         if (NativeLibrary.TryGetExport(_libHandle, "create_context_with_user_csv_ffi", out IntPtr createCtxCsvPtr))
@@ -307,10 +326,30 @@ static class SudachiInterop
         char mode = 'C',
         bool printAll = true,
         bool wakati = false,
-        byte[]? userDictCsv = null)
+        byte[]? userDictCsv = null,
+        bool emitMargins = false)
     {
+        return ProcessTextStreaming(configPath, inputText, dictionaryPath, out _, captureRaw: false,
+                                    mode, printAll, wakati, userDictCsv, emitMargins);
+    }
+
+    public static List<WordInfo> ProcessTextStreaming(
+        string configPath,
+        string inputText,
+        string dictionaryPath,
+        out string? rawOutput,
+        bool captureRaw,
+        char mode = 'C',
+        bool printAll = true,
+        bool wakati = false,
+        byte[]? userDictCsv = null,
+        bool emitMargins = false)
+    {
+        rawOutput = null;
         if (_processTextCtxStreamV2 == null)
             throw new InvalidOperationException("Streaming FFI not available in this build");
+        if (emitMargins && _processTextCtxStreamV3 == null)
+            emitMargins = false; // old native library without margin support
 
         _processingSemaphore.Wait();
         try
@@ -329,7 +368,7 @@ static class SudachiInterop
                 if (HasNoJapaneseChars(inputText))
                     return new List<WordInfo>();
 
-                ResetCallbackState();
+                ResetCallbackState(captureRaw);
 
                 IntPtr ctx = GetOrCreateContext(configPath, dictionaryPath);
 
@@ -339,15 +378,26 @@ static class SudachiInterop
                 {
                     fixed (byte* inputPtr = inputBytes)
                     {
-                        IntPtr errPtr = _processTextCtxStreamV2(
-                            ctx,
-                            inputPtr,
-                            (nuint)inputBytes.Length,
-                            (sbyte)mode,
-                            (byte)(printAll ? 1 : 0),
-                            (byte)(wakati ? 1 : 0),
-                            _outputCallback,
-                            IntPtr.Zero);
+                        IntPtr errPtr = emitMargins
+                            ? _processTextCtxStreamV3!(
+                                ctx,
+                                inputPtr,
+                                (nuint)inputBytes.Length,
+                                (sbyte)mode,
+                                (byte)(printAll ? 1 : 0),
+                                (byte)(wakati ? 1 : 0),
+                                1,
+                                _outputCallback,
+                                IntPtr.Zero)
+                            : _processTextCtxStreamV2(
+                                ctx,
+                                inputPtr,
+                                (nuint)inputBytes.Length,
+                                (sbyte)mode,
+                                (byte)(printAll ? 1 : 0),
+                                (byte)(wakati ? 1 : 0),
+                                _outputCallback,
+                                IntPtr.Zero);
 
                         string err = Marshal.PtrToStringUTF8(errPtr) ?? "";
                         _freeString(errPtr);
@@ -366,6 +416,7 @@ static class SudachiInterop
                     string line = Encoding.UTF8.GetString(_leftover!, 0, _leftoverLen);
                     if (line != "EOS" && line.Length != 0)
                     {
+                        _rawCapture?.Append(line).Append('\n');
                         var wi = new WordInfo(line);
                         if (!wi.IsInvalid) _wordInfos!.Add(wi);
                     }
@@ -373,6 +424,9 @@ static class SudachiInterop
 
                 if (_cbError != null)
                     throw new InvalidOperationException("Sudachi streaming callback error", _cbError);
+
+                rawOutput = _rawCapture?.ToString();
+                _rawCapture = null;
 
                 var result = _wordInfos!;
                 _wordInfos = null;
@@ -391,11 +445,13 @@ static class SudachiInterop
 
     private static void RecycleContext()
     {
-        if (_sudachiContext != IntPtr.Zero && _freeContext != null)
+        if (_freeContext != null)
         {
-            _freeContext(_sudachiContext);
-            _sudachiContext = IntPtr.Zero;
+            foreach (var ctx in _sudachiContexts.Values)
+                if (ctx != IntPtr.Zero)
+                    _freeContext(ctx);
         }
+        _sudachiContexts.Clear();
     }
 
     private static bool CsvUnchanged(byte[]? a, byte[]? b)
@@ -407,8 +463,8 @@ static class SudachiInterop
 
     private static IntPtr GetOrCreateContext(string configPath, string dictionaryPath)
     {
-        if (_sudachiContext != IntPtr.Zero)
-            return _sudachiContext;
+        if (_sudachiContexts.TryGetValue(configPath, out var existing) && existing != IntPtr.Zero)
+            return existing;
 
         IntPtr errPtr;
         IntPtr ctx;
@@ -443,28 +499,25 @@ static class SudachiInterop
         if (!string.IsNullOrEmpty(err) || ctx == IntPtr.Zero)
             throw new InvalidOperationException(err.Length != 0 ? err : "Failed to create Sudachi context");
 
-        _sudachiContext = ctx;
-        return _sudachiContext;
+        _sudachiContexts[configPath] = ctx;
+        return ctx;
     }
 
     /// <summary>
-    /// Cleanup the Sudachi context. Call on application shutdown.
+    /// Cleanup the Sudachi contexts. Call on application shutdown.
     /// </summary>
     public static void Cleanup()
     {
-        if (_sudachiContext != IntPtr.Zero && _freeContext != null)
-        {
-            _freeContext(_sudachiContext);
-            _sudachiContext = IntPtr.Zero;
-        }
+        RecycleContext();
     }
 
-    private static void ResetCallbackState()
+    private static void ResetCallbackState(bool captureRaw = false)
     {
         _leftover ??= new byte[4096];
         _leftoverLen = 0;
         _wordInfos = new List<WordInfo>();
         _cbError = null;
+        _rawCapture = captureRaw ? new StringBuilder() : null;
     }
 
     private static unsafe void OnSudachiOutput(IntPtr _, byte* data, nuint len)
@@ -497,6 +550,7 @@ static class SudachiInterop
 
                 if (line != "EOS" && line.Length != 0)
                 {
+                    _rawCapture?.Append(line).Append('\n');
                     var wi = new WordInfo(line);
                     if (!wi.IsInvalid) _wordInfos!.Add(wi);
                 }

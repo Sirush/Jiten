@@ -10,6 +10,11 @@ internal static class ResegmentationScorer
     private const int MaxEdgesPerStart   = 10;
     private const int BeamWidth          = 16;
 
+    /// Katakana particles that legitimately appear as single-char segments in katakana-styled
+    /// text (オマエガ来イ, ナニガ悪イ). Other single kana are treated as shred noise.
+    internal static bool IsKatakanaParticleChar(char c) =>
+        c is 'ガ' or 'ヲ' or 'ニ' or 'ハ' or 'ヘ' or 'デ' or 'ト' or 'モ' or 'カ' or 'ノ';
+
     public static List<SpanTokenCandidate> BuildEdges(
         string spanText,
         int startPos,
@@ -20,6 +25,15 @@ internal static class ResegmentationScorer
 
         for (int len = maxLen; len >= 1 && result.Count < MaxEdgesPerStart; len--)
         {
+            // Single-kana edges crowd the beam with high-frequency noise entries (部/リ/ン...) and
+            // prune correct paths (ゴブリンスレイヤー → ゴ+ブ+リ+ン+スレイヤー). Allowed only where the
+            // engine's HasBadSingleKana gate accepts them: honorific お/ご at the start, or a
+            // katakana-styled particle (オマエガ → オマエ+ガ, ナニガ悪イ → ナニ+ガ+悪イ).
+            if (len == 1 && JapaneseTextHelper.IsKana(spanText[startPos])
+                         && !(startPos == 0 && spanText[startPos] is 'お' or 'ご')
+                         && !IsKatakanaParticleChar(spanText[startPos]))
+                continue;
+
             var slice = spanText.Substring(startPos, len);
             List<int>? wordIds = null;
 
@@ -60,12 +74,17 @@ internal static class ResegmentationScorer
         var beamByPos = new Dictionary<int, List<(int segCount, int lastLen, int partialScore, List<SpanTokenCandidate> segs)>>();
         beamByPos[0] = [(0, 0, 0, [])];
 
+        bool debug = Environment.GetEnvironmentVariable("JITEN_RESEG_DEBUG") != null;
+
         for (int pos = 0; pos < spanText.Length; pos++)
         {
             if (!beamByPos.TryGetValue(pos, out var states) || states.Count == 0)
                 continue;
 
             var edges = BuildEdges(spanText, pos, lookups);
+            if (debug)
+                Console.WriteLine($"[reseg] '{spanText}' pos={pos} states={states.Count} edges: " +
+                                  string.Join(", ", edges.Select(e => $"{spanText.Substring(e.StartChar, e.Length)}({e.WordIds.Count})")));
             if (edges.Count == 0)
                 continue;
 

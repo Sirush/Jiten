@@ -34,19 +34,27 @@ internal static class LookupCandidateCollector
     }
 
     /// Collects distinct word IDs from lookups by raw text, hiragana, and optionally kana-normalized and long-vowel-stripped variants.
+    /// `normalizedTierGate`, when set, filters ids found ONLY via the kana-normalized / long-vowel-stripped
+    /// tiers: those rewrites invent readings the author never wrote (いえー → いえい), so a hit there must be
+    /// a word plausibly written in kana, not a kanji word reached through its reading key (遺影).
     public static List<int> CollectIds(
         Dictionary<string, List<int>> lookups,
         string text,
         bool includeKanaNormalized = true,
-        bool includeLongVowelStripped = false)
+        bool includeLongVowelStripped = false,
+        Func<int, bool>? normalizedTierGate = null)
     {
         var seen = new HashSet<int>();
         var ids = new List<int>();
 
-        void AddRange(List<int> source)
+        void AddRange(List<int> source, bool gated = false)
         {
             foreach (var id in source)
+            {
+                if (gated && normalizedTierGate != null && !seen.Contains(id) && !normalizedTierGate(id))
+                    continue;
                 if (seen.Add(id)) ids.Add(id);
+            }
         }
 
         if (lookups.TryGetValue(text, out var direct)) AddRange(direct);
@@ -59,7 +67,7 @@ internal static class LookupCandidateCollector
         {
             var normalized = KanaNormalizer.Normalize(hiragana);
             if (normalized != hiragana && lookups.TryGetValue(normalized, out var normIds))
-                AddRange(normIds);
+                AddRange(normIds, gated: true);
         }
 
         if (includeLongVowelStripped && text.Contains('ー'))
@@ -72,7 +80,7 @@ internal static class LookupCandidateCollector
             {
                 var strippedHira = KanaConverter.ToHiragana(textStripped);
                 if (lookups.TryGetValue(strippedHira, out var stripIds))
-                    AddRange(stripIds);
+                    AddRange(stripIds, gated: true);
             }
         }
 

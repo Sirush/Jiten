@@ -75,16 +75,27 @@ CYRILLIC        1 1 0
 0x30FC..0x30FF  KATAKANA
 0x31F0..0x31FF  KATAKANA  # Small KU .. Small RO
 # 0x30FC          KATAKANA HIRAGANA  # ー
-0x30A1          NOOOVBOW # Small A
-0x30A3          NOOOVBOW # ...
-0x30A5          NOOOVBOW
-0x30A7          NOOOVBOW
-0x30A9          NOOOVBOW
-0x30E3          NOOOVBOW
-0x30E5          NOOOVBOW
-0x30E7          NOOOVBOW
-0x30EE          NOOOVBOW # Small Wa
+0x30A1          NOOOVBOW # Small A (ァ)
+0x30A3          NOOOVBOW # Small I (ィ)
+0x30A5          NOOOVBOW # Small U (ゥ)
+0x30A7          NOOOVBOW # Small E (ェ)
+0x30A9          NOOOVBOW # Small O (ォ)
+0x30C3          NOOOVBOW # Small Tsu (ッ)
+0x30E3          NOOOVBOW # Small Ya (ャ)
+0x30E5          NOOOVBOW # Small Yu (ュ)
+0x30E7          NOOOVBOW # Small Yo (ョ)
+0x30EE          NOOOVBOW # Small Wa (ヮ)
 0x30FC..0x30FE  NOOOVBOW # 'ー' 'ヽ' 'ヾ'
+# Small hiragana - prevent OOV words starting at these characters
+0x3041          NOOOVBOW # ぁ
+0x3043          NOOOVBOW # ぃ
+0x3045          NOOOVBOW # ぅ
+0x3047          NOOOVBOW # ぇ
+0x3049          NOOOVBOW # ぉ
+0x3063          NOOOVBOW # っ
+0x3083          NOOOVBOW # ゃ
+0x3085          NOOOVBOW # ゅ
+0x3087          NOOOVBOW # ょ
 
 # Half KATAKANA
 0xFF66..0xFF9D  KATAKANA

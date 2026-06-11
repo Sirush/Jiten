@@ -64,7 +64,8 @@ public static class TokenPositionHelper
             .Replace("とんでもない", "とんでもねえ")
             .Replace("しょうがない", "しょうがねえ")
             .Replace("にちがいない", "にちがいねえ")
-            .Replace("来い", "来イ");
+            .Replace("来い", "来イ")
+            .Replace('頸', '頚');
         if (result.EndsWith("さい"))
             result = string.Concat(result.AsSpan(0, result.Length - 2), "せぇ");
         return result;

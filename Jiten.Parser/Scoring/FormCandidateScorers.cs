@@ -460,6 +460,19 @@ internal static class PenaltyScorer
                         || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm)))
                     return false;
 
+                // Classical attributive き-forms (由々しき, 悪しき…) have the modern い-adjective
+                // (or its stem) as Sudachi's DictionaryForm. That lemma is a different JMDict
+                // entry, but the き-entry IS the canonical surface here — not a coincidental homograph.
+                if ((isAdnominal || posToCheck.Contains("adj-f"))
+                    && candidate.Form.Text.EndsWith('き'))
+                {
+                    var attributiveStem = candidate.Form.Text[..^1];
+                    if (context.DictionaryForm == attributiveStem
+                        || context.DictionaryForm == attributiveStem + "い"
+                        || context.NormalizedForm == attributiveStem + "い")
+                        return false;
+                }
+
                 // For non-inflectable words (e.g., plain nouns), still apply the penalty when Sudachi's
                 // DictionaryForm doesn't appear in this word's forms — it points to a different (inflectable) word.
                 // E.g., surface=答え, DictForm=答える: noun 答え shouldn't beat verb 答える via surface match.
@@ -880,6 +893,31 @@ internal static class KanaScoringHelpers
         }
 
         return false;
+    }
+
+    public static bool ContainsKatakana(string text)
+    {
+        foreach (char c in text)
+        {
+            if (c is >= 'ァ' and <= 'ヺ')
+                return true;
+        }
+
+        return false;
+    }
+
+    /// True when the token is written entirely in katakana (long-vowel marks and iteration marks allowed).
+    public static bool IsPureKatakanaToken(string text)
+    {
+        bool hasKatakana = false;
+        foreach (char c in text)
+        {
+            if (c is >= 'ァ' and <= 'ヺ') { hasKatakana = true; continue; }
+            if (c is 'ー' or 'ヽ' or 'ヾ' or '・') continue;
+            return false;
+        }
+
+        return hasKatakana;
     }
 
     public static bool HasFrequencyMarker(IReadOnlyList<string>? priorities, bool includeJiten = true)

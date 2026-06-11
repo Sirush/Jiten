@@ -1198,13 +1198,90 @@ public class FormSelectionTests
         // ３時 should be "3 o'clock" (1300520), not 三次 "third/tertiary" (1657930)
         yield return ["時刻は、午後３時３３分。", "３時", 1300520, (byte)0];
         yield return ["午前３時過ぎの街角は、まったく人の姿がない。", "３時", 1300520, (byte)0];
+
+        // て下さる chain deconjugates to 信じる (1359040), not 信ずる (1359070)
+        yield return ["お嬢様が私のことを信じて下さっていて", "信じて下さっていて", 1359040, (byte)0];
+        // ずにいる chain resolves to 気付く
+        yield return ["周囲の誰もがそれに気付かずにいた", "気付かずにいた", 1591330, (byte)1];
+        // め after a noun is the derogatory suffix 奴 (2089650), not 目
+        yield return ["そうして欲しいがな、畜生め", "め", 2089650, (byte)1];
+
+        // S-E script gate: pure-katakana surface with a direct katakana entry must not fold to
+        // a kanji/hiragana-only homograph (家紋 / 降る)
+        yield return ["カモン。", "カモン", 2806650, (byte)0];
+        // フル+に now merges into the lexicalized adverb フルに (2854949) — and must never be 降る
+        yield return ["五感をフルに活動する。", "フルに", 2854949, (byte)0];
+        // S-E lopsided-frequency override (≥10× word-level prior between surface-exact homographs)
+        yield return ["こちら側か、むこう側か", "むこう", 1277140, (byte)2];
+        yield return ["雪さん――主をカイロ代わりとはいかがなものかと", "カイロ", 1200640, (byte)2];
+        // ...but it must not flip context decisions: にもよる is 依る, not the more frequent homographs
+        yield return ["懐具合にもよるが", "よる", 1168660, (byte)4];
+        yield return ["あんまりそういうふうには見えないけどなー", "ふう", 1499730, (byte)1];
+        // NormalizedForm script-crossing guard: 屈し must not become 屈指 via Sudachi normalization
+        yield return ["だが絶望はない、屈しはしない、諦観など以っての外だ。", "屈し", 1246540, (byte)0];
+        // Classical attributive: 由々しき is its own entry (2423900), not a 由々しい conjugation
+        yield return ["由々しき事態だと思う。", "由々しき", 2423900, (byte)0];
+
+        // Classical す + べき merges to すべき (1006200) instead of dropping す…
+        yield return ["己の魂を代償とする、本来なら禁忌とすべき戦術だ。", "すべき", 1006200, (byte)1];
+        // …but after a suru-noun, す attaches left instead (満足す|べき policy)
+        yield return ["それほど、大切な――尊敬すべき方です、あなたは", "尊敬す", 1406400, (byte)0];
+        // なさ+すぎる merges and deconjugates to ない instead of dropping なさ
+        yield return ["こんな調査方法では、当てがなさすぎるでしょう。", "なさすぎる", 1529520, (byte)1];
+        // kanji adjective stem + すぎ → 近い, not the JMnedict name 近
+        yield return ["レイスはあまりにも近すぎ、私とお嬢様はあまりに密着しすぎていた。", "近すぎ", 1242130, (byte)0];
+        // volitional before とする outranks the seemingness reading (走り出す, not 走り出る)
+        yield return ["走り出そうとする。", "走り出そう", 1402480, (byte)0];
+
+        // elongated いえー resolves to いえ "no" (1583250), never to 遺影 via the いえい reading key
+        yield return ["「いえー、やめときます」", "いえー", 1583250, (byte)1];
+
+        // standalone ひと is 人, not the 一 bound-prefix entry Sudachi's lexeme suggests
+        yield return ["もう、しょうがないひと……ほんとう、に、しょうが、ない……", "ひと", 1580640, (byte)1];
+        // ま shred rejoins its following token instead of being deleted (ま+ねた → 真似る)
+        yield return ["１つまねたくらいでいい気になるな", "まねた", 1363760, (byte)1];
+        // Sudachi shreds kana 〜あう into あ+う interjections; rejoined as the reciprocal 合う
+        yield return ["微笑みあう私たち。", "あう", 1284430, (byte)1];
+        // すっ (adverb shred) fuses with the following verb when the combined word exists
+        yield return ["分かっているくせに、すっとぼける。", "すっとぼける", 2833343, (byte)4];
+        // 歩兵 is infantry (news1), not the shogi pawn Sudachi's フヒョウ lexeme suggests
+        yield return ["「第２５歩兵連隊にいたんだと」", "歩兵", 1514440, (byte)0];
+
+        // lexicalized adverbs: X的+に always merges; 無性に/意地でも are curated pairs
+        yield return ["反射的に首を傾けた。", "反射的に", 1480480, (byte)0];
+        yield return ["ただ、外界の環境によって狂うことを選んだあの男が無性に悲しかった。", "無性に", 1611900, (byte)0];
+        yield return ["意地でもここを出るぞ無名！", "意地でも", 2518220, (byte)0];
+
+        // し(為る連用形)+んだ is ungrammatical — kana しんだ is 死んだ
+        yield return ["きみをそだてたおとこもきみのなかまもすべてしんだ。", "しんだ", 1310730, (byte)1];
+        // trailing small vowel stripped: なんちゃってぇ still resolves to なんちゃって
+        yield return ["……なんちゃってぇ！", "なんちゃってぇ", 2202800, (byte)0];
+        // 連用形 directly after genitive の is impossible — 群れ is the noun, not 群れる
+        yield return ["窓から見えたのは。虚ろな瞳をした、子供たちの群れ、群れ、群れ――。", "群れ", 1247510, (byte)0];
+
+        // === user_dic / preprocess lattice fixes ===
+        // 射出される is the suru-noun, not Sudachi's archaic 射出す(いだす)
+        yield return ["わたしの体は、凄まじい勢いで射出された。", "射出", 1629190, (byte)0];
+        // 哂う is a rare-kanji form of 笑う; Sudachi previously dropped the OOV 哂
+        yield return ["強がって哂ったりもせず", "哂ったり", 1351360, (byte)2];
+        // 使い捨て must not be eaten by 捨てだし(手出し)
+        yield return ["防腐処理をしてないが、所詮使い捨てだしなぁ、ま、いいか", "使い捨て", 1597750, (byte)0];
+        // kana やつれる resolves to 窶れる, not や+連れて行く
+        yield return ["日に日にやつれていく母親を見ていられずに、キールは逃げた", "やつれていく", 1570210, (byte)1];
+        // が after conjunctive から can only start the kana verb がなる "to yell"
+        yield return ["ルダ、頼むからがなるな。", "がなる", 2101910, (byte)1];
+        // 一人ごちた is 独りごちる, not 一人+ごちる
+        yield return ["一人ごちた", "一人ごちた", 2056450, (byte)1];
+        // 間中 after a clause is あいだじゅう "during" (1215610), not まなか "half a ken"
+        yield return ["会話をしている間中、どうにか呼吸を整えられた", "間中", 1215610, (byte)0];
+
+        // ごうごう (adv-to) should match 轟々 (1593500, thundering/roaring), not go-go
+        // (moved from ShouldNotMatch, where the 4-element row crashed the 2-param test)
+        yield return ["ごうごうとエレベーターの音が五月蝿い。", "ごうごう", 1593500, (byte)2];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
     {
-        // ごうごう (adv-to) should match 轟々 (1593500, thundering/roaring), not go-go (1054120)
-        yield return ["ごうごうとエレベーターの音が五月蝿い。", "ごうごう", 1593500, (byte)2];
-
         // Kana surface ざと should not match kanji 里 — ざと is not a valid standalone reading
         yield return ["次第に周りからざわざと声が聞こえてくる。", "ざと"];
 
@@ -1217,6 +1294,15 @@ public class FormSelectionTests
 
         // いるか (dolphin) should not appear when か is embedded question particle
         yield return ["どうしてこんな所にいるかというと、それはまあ、ちょっとした話…。", "いるか"];
+
+        // うん+ま (filler speech) must not merge into ウンマ (JMnedict organization)
+        yield return ["「うんま、気にしなさんな」", "うんま"];
+        yield return ["「ああ、うんまあそんな所だな。」", "うんま"];
+        // katakana exclamations must not resolve to 遺影 through the いえい reading key
+        yield return ["「なんちゃってイエーイ」", "イエーイ"];
+        yield return ["レイの体が上下に赤く弾けて消えて、「イエイ！」", "イエイ"];
+        // hiragana onomatopoeia must not match the name ヒューン or mutate into 庇陰
+        yield return ["どひゅーんと、私を置き去りにして雪さんはヴァレリア様と共にこの場から逃れた。", "ひゅーん"];
     }
 
     [Theory]

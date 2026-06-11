@@ -25,10 +25,26 @@ public class ParserDiagnostics
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<DroppedTokenEntry>? DroppedTokens { get; private set; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ParserEventEntry>? ParserEvents { get; private set; }
+
+    private readonly object _eventLock = new();
+
     internal void LogDroppedToken(string text, PartOfSpeech pos, string reason)
     {
         DroppedTokens ??= [];
         DroppedTokens.Add(new DroppedTokenEntry(text, pos, reason));
+    }
+
+    /// Records Parser-level structural mutations (resegmentation splits, misparse filters, etc.)
+    /// that happen after the morphological token stages and are otherwise invisible in diagnostics.
+    internal void LogParserEvent(string source, string type, string[] inputTokens, string[]? outputTokens, string reason)
+    {
+        lock (_eventLock)
+        {
+            ParserEvents ??= [];
+            ParserEvents.Add(new ParserEventEntry(source, type, inputTokens, outputTokens, reason));
+        }
     }
 
     internal void LogTransitionViolation(string ruleId, in TokenWindow window)
@@ -55,6 +71,13 @@ public class ParserDiagnostics
     public IEnumerable<WordResult> GetLowConfidenceResults(int threshold = 15) =>
         Results.Where(r => r is not null && r.MarginToSecond.HasValue && r.MarginToSecond.Value < threshold);
 }
+
+public sealed record ParserEventEntry(
+    string Source,
+    string Type, // "split", "remove", "variant-resolved"
+    string[] InputTokens,
+    string[]? OutputTokens,
+    string Reason);
 
 public sealed record DroppedTokenEntry(
     string Text,
@@ -109,6 +132,11 @@ public class SudachiToken
     public string DictionaryForm { get; set; } = string.Empty;
     public string Reading { get; set; } = string.Empty;
     public string NormalizedForm { get; set; } = string.Empty;
+
+    /// Lattice segmentation margin (extra cost of cheapest competing path crossing a token
+    /// boundary; 99999 = no competitor). Null when margins were not requested/supported.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Margin { get; set; }
 }
 
 /// <summary>

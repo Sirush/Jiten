@@ -13,7 +13,8 @@ internal readonly record struct MisparseGateContext(
     WordInfo? Next,
     bool IsUsuallyKana,
     bool HasKanjiSpelling,
-    bool ReadingIsIchi);
+    bool ReadingIsIchi,
+    bool IsSentenceInitial = false);
 
 internal static class MisparseGates
 {
@@ -121,6 +122,12 @@ internal static class MisparseGates
         if (surface.Length > 2) return false;
 
         if (ExemptFromKanaGate.Contains(ctx.Token.PartOfSpeech)) return false;
+
+        // Sentence-initial two-kana interjections (ああ, ええ, おお) are legitimate words even
+        // when a kanji spelling exists (嗚呼). Mid-sentence ones stay gated: trailing elongation
+        // shreds (いきた+ああ) carry the same POS.
+        if (ctx.Token.PartOfSpeech == PartOfSpeech.Interjection && surface.Length >= 2
+            && ctx.IsSentenceInitial) return false;
 
         if (ctx.IsUsuallyKana) return false;
 

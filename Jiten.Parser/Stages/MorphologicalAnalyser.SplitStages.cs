@@ -102,6 +102,110 @@ public partial class MorphologicalAnalyser
         return changed ? result : wordInfos;
     }
 
+    private static readonly Dictionary<char, char> RenyokeiToGodanBase = new()
+    {
+        ['き'] = 'く', ['ぎ'] = 'ぐ', ['し'] = 'す', ['ち'] = 'つ', ['に'] = 'ぬ',
+        ['び'] = 'ぶ', ['み'] = 'む', ['り'] = 'る', ['い'] = 'う'
+    };
+
+    /// <summary>
+    /// Decomposes productive compound verbs that are not in JMDict (驚き戸惑う, 縫い止める,
+    /// 挑みかかる, 寝乱れる) into renyokei-stem verb + second verb, so both surface as vocabulary
+    /// instead of the whole token being dropped as unresolvable at lookup time.
+    /// Runs only when the full dictionary form has no JMDict entry; both parts must resolve.
+    /// </summary>
+    private List<WordInfo> SplitUnresolvableCompoundVerbs(List<WordInfo> wordInfos)
+    {
+        if (HasCompoundLookup == null || HasNonNameCompoundLookup == null)
+            return wordInfos;
+
+        List<WordInfo>? result = null;
+
+        for (int idx = 0; idx < wordInfos.Count; idx++)
+        {
+            var word = wordInfos[idx];
+            string dictForm = word.DictionaryForm;
+
+            if (word.PartOfSpeech != PartOfSpeech.Verb ||
+                string.IsNullOrEmpty(dictForm) || dictForm.Length < 4 ||
+                word.Text.Length < 2 ||
+                !word.Text.Any(c => c is >= '一' and <= '鿿'))
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            // Resolvable verbs are left for the normal lookup/deconjugation path.
+            // The surface check covers renyokei compounds that exist as nouns (買い支え).
+            if (HasCompoundLookup(dictForm) ||
+                (word.Text != dictForm && HasCompoundLookup(word.Text)) ||
+                (!string.IsNullOrEmpty(word.NormalizedForm) && word.NormalizedForm != dictForm &&
+                 HasCompoundLookup(word.NormalizedForm)))
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            (string prefixBase, int splitAt)? split = null;
+
+            // Prefer the longest stem (latest split point) so 縫い+止める beats 縫+い止める
+            for (int p = Math.Min(dictForm.Length - 2, word.Text.Length); p >= 1 && split == null; p--)
+            {
+                var prefix = dictForm[..p];
+                if (!word.Text.StartsWith(prefix, StringComparison.Ordinal))
+                    continue;
+
+                var suffixDict = dictForm[p..];
+                if (!HasNonNameCompoundLookup(suffixDict))
+                    continue;
+
+                // The stem must itself be a verb: ichidan (寝→寝る) or godan renyokei (驚き→驚く)
+                var ichidan = prefix + 'る';
+                if (HasNonNameCompoundLookup(ichidan))
+                {
+                    split = (ichidan, p);
+                    break;
+                }
+
+                if (RenyokeiToGodanBase.TryGetValue(prefix[^1], out var baseEnd))
+                {
+                    var godan = prefix[..^1] + baseEnd;
+                    if (HasNonNameCompoundLookup(godan))
+                        split = (godan, p);
+                }
+            }
+
+            if (split == null)
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            result ??= [..wordInfos[..idx]];
+
+            var (stemBase, at) = split.Value;
+            var stemSurface = word.Text[..at];
+            var tailSurface = word.Text[at..];
+
+            result.Add(new WordInfo
+            {
+                Text = stemSurface, DictionaryForm = stemBase, NormalizedForm = stemBase,
+                PartOfSpeech = PartOfSpeech.Verb, Reading = KanaConverter.ToHiragana(stemSurface),
+                StartOffset = word.StartOffset,
+                EndOffset = word.StartOffset >= 0 ? word.StartOffset + at : -1
+            });
+            result.Add(new WordInfo
+            {
+                Text = tailSurface, DictionaryForm = word.DictionaryForm[at..], NormalizedForm = word.DictionaryForm[at..],
+                PartOfSpeech = PartOfSpeech.Verb, Reading = KanaConverter.ToHiragana(tailSurface),
+                StartOffset = word.StartOffset >= 0 ? word.StartOffset + at : -1,
+                EndOffset = word.EndOffset
+            });
+        }
+
+        return result ?? wordInfos;
+    }
+
     /// <summary>
     /// Splits たん(suffix) + だ/です(auxiliary) into [prev+た] + ん + だ/です when the preceding token
     /// forms a valid verb past tense. Sudachi sometimes tokenizes たんだ as たん(suffix) + だ(auxiliary),
@@ -189,6 +293,34 @@ public partial class MorphologicalAnalyser
                     StartOffset = word.StartOffset, EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1 });
                 result.Add(new WordInfo { Text = "な", DictionaryForm = "な", NormalizedForm = "な", PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.SentenceEndingParticle, Reading = "な",
                     StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1, EndOffset = word.EndOffset });
+                continue;
+            }
+
+            // Split かって misparsed as the adverb かつて (historical kana surface) → か + って.
+            // かつて right after a verb is implausible; verb+か+って is the quotative question frame
+            // (飲むかってこと "the question of whether to drink").
+            if (i > 0 &&
+                word is { Text: "かって", PartOfSpeech: PartOfSpeech.Adverb, Reading: "カツテ" } &&
+                wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb)
+            {
+                result.Add(new WordInfo
+                {
+                    Text = "か", DictionaryForm = "か", NormalizedForm = "か",
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    PartOfSpeechSection1 = PartOfSpeechSection.SentenceEndingParticle,
+                    Reading = "カ",
+                    StartOffset = word.StartOffset,
+                    EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1
+                });
+                result.Add(new WordInfo
+                {
+                    Text = "って", DictionaryForm = "って", NormalizedForm = "って",
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    PartOfSpeechSection1 = PartOfSpeechSection.ConjunctionParticle,
+                    Reading = "ッテ",
+                    StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1,
+                    EndOffset = word.EndOffset
+                });
                 continue;
             }
 
