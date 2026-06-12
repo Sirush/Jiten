@@ -1523,6 +1523,68 @@ public class MorphologicalAnalyserTests
             new[] { "そい", "や", "小木曽", "って", "依緒", "と", "同じ", "クラス", "だ", "よ", "な" }];
         // 耳にする (user_dic expression) must not eat the onomatopoeia するすると
         yield return ["耳にするすると入り込んで", new[] { "耳", "に", "するする", "と", "入り込んで" }];
+
+        // === batch 3: quotative って guards ===
+        // いう/行く te-forms are protected from the mora-theft re-cut (ギシギシい+って before)
+        yield return ["なんか結界がギシギシいってますよぅ",
+            new[] { "なんか", "結界", "が", "ギシギシ", "いってます", "よぅ" }];
+        // たい + なって is quotative な+って, never なる te-form (たくなって would be)
+        yield return ["休みが欲しいな火薬のカス取りたいなって思った",
+            new[] { "休み", "が", "欲しい", "な", "火薬", "の", "カス", "取りたい", "な", "って", "思った" }];
+        // reduplicated interjection quoted by って must not be shredded into やれ+やれって
+        yield return ["フン、やれやれ…………ってコラ", new[] { "フン", "やれやれ", "って", "コラ" }];
+
+        // === batch 3: drop-gate rescues ===
+        // demonstrative ああ before a verb survives the short-kana gate
+        yield return ["何故なら、彼女がああなったのはお前の責任だ。",
+            new[] { "何故なら", "彼女", "が", "ああ", "なった", "の", "は", "お前", "の", "責任", "だ" }];
+        // prohibitive な after a plain-form verb survives mid-run-on
+        yield return ["肘で俺の脇をえぐるなくすぐったいこそばゆい痛いっ！",
+            new[] { "肘", "で", "俺", "の", "脇", "を", "えぐる", "な", "くすぐったい", "こそばゆい", "痛い" }];
+        // unresolvable noun+する merge decomposes instead of dropping whole
+        yield return ["突然大怪我して帰ってきて", new[] { "突然", "大怪我", "して", "帰ってきて" }];
+        // script-crossing emphatic small vowel: 黙れェッ shreds to 黙|れ|ェッ without the boundary
+        yield return ["黙れェッ！", new[] { "黙れ" }];
+        // unresolvable prefixed adjective decomposes instead of dropping whole
+        yield return ["薄赤い", new[] { "薄", "赤い" }];
+        // classical attributive き fused into the next noun by the lattice
+        yield return ["白き尾", new[] { "白き", "尾" }];
+
+        // === batch 3: beam gates ===
+        // a pronoun is never the noun stem of a suru-verb compound (私する)
+        yield return ["そんな表情、私してない", new[] { "そんな", "表情", "私", "してない" }];
+        yield return ["私……私しちゃった", new[] { "私", "私", "しちゃった" }];
+        // subsidiary verbs don't attach to adjective くて
+        yield return ["頭が良くてやりたい", new[] { "頭が良くて", "やりたい" }];
+
+        // === batch 3: lattice re-cuts ===
+        // 私大 (private university) loses to 私+大X when 大X is a real word
+        yield return ["私大金持ち", new[] { "私", "大金持ち" }];
+        // SpecialCases とか must not steal the か of かぶりを振る
+        yield return ["とかぶりを振った", new[] { "と", "かぶりを振った" }];
+        // Sudachi's 使いで (usability) must not steal the で of でもない
+        yield return ["魔法使いでもない", new[] { "魔法使い", "でもない" }];
+        // X史|上 re-cuts to X|史上, and 史上+初 merges into the JMDict entry
+        yield return ["人類史上初", new[] { "人類", "史上初" }];
+
+        // === batch 3: whitelist one-liners ===
+        yield return ["綺麗さっぱりとした気分で", new[] { "綺麗さっぱり", "と", "した", "気分", "で" }];
+        yield return ["持っているとはいえ、獣の速度", new[] { "持っている", "とはいえ", "獣", "の", "速度" }];
+        // とはいえ never continues into negation — とは言えない stays compositional
+        yield return ["正しいとは言えない", new[] { "正しい", "とは", "言えない" }];
+        yield return ["あいよ。", new[] { "あいよ" }];
+        yield return ["いいや。", new[] { "いいや" }];
+        // いいや is clause-initial only — 天気もいいや is いい + や
+        yield return ["天気もいいや", new[] { "天気", "も", "いい", "や" }];
+        yield return ["悔やんでも詮無きことです、お嬢様。", new[] { "悔やんで", "も", "詮無き", "こと", "です", "お嬢様" }];
+        yield return ["主従の誓いを破りかねなかったことも事実だった。",
+            new[] { "主従", "の", "誓い", "を", "破り", "かねなかった", "こと", "も", "事実", "だった" }];
+        yield return ["シドには気をつけたまえ。", new[] { "シド", "には", "気をつけ", "たまえ" }];
+
+        // 虫を殺す stays compositional — the "control one's temper" idiom is excluded
+        yield return ["大の虫を生かす為に小の虫を殺す。",
+            new[] { "大の", "虫", "を", "生かす", "為に", "小", "の", "虫", "を", "殺す" }];
+        yield return ["小の虫を殺し得る人物です", new[] { "小", "の", "虫", "を", "殺し", "得る", "人物", "です" }];
     }
 
     [Theory]

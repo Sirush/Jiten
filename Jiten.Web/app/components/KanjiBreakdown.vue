@@ -23,6 +23,18 @@
 
   const scaleLabel = (kanji: KanjiList) =>
     kanjiScale.value === 'none' ? null : kanjiScaleMembership(kanji.character, kanjiScale.value, kanji.grade);
+
+  // On touch devices the hover tooltip is unreachable, so the first tap reveals it
+  // and only a second tap follows the link.
+  const activeKanji = ref<string | null>(null);
+  const handleTileClick = (kanji: KanjiList, event: MouseEvent) => {
+    if (!kanji.meanings?.length) return;
+    if (!window.matchMedia('(hover: none)').matches) return;
+    if (activeKanji.value !== kanji.character) {
+      event.preventDefault();
+      activeKanji.value = kanji.character;
+    }
+  };
 </script>
 
 <template>
@@ -34,6 +46,7 @@
         :key="kanji.character"
         :to="`/kanji/${kanji.character}`"
         class="group relative inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 hover:border-primary-500 dark:hover:border-primary-400 hover:bg-surface-50 dark:hover:bg-surface-800 transition-all"
+        @click="handleTileClick(kanji, $event)"
       >
         <span class="text-2xl font-medium" lang="ja">{{ kanji.character }}</span>
         <div class="flex flex-col text-xs">
@@ -48,8 +61,11 @@
           </span>
         </div>
 
-        <!-- Tooltip with meanings on hover -->
-        <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-surface-800 dark:bg-surface-100 text-white dark:text-surface-900 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+        <!-- Tooltip with meanings: hover on desktop, tap-to-reveal on touch -->
+        <div
+          class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-surface-800 dark:bg-surface-100 text-white dark:text-surface-900 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10"
+          :class="{ 'opacity-100': activeKanji === kanji.character }"
+        >
           {{ kanji.meanings.slice(0, 3).join(', ') }}
           <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-surface-800 dark:border-t-surface-100"></div>
         </div>

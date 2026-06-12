@@ -38,12 +38,12 @@
     srsStore.studyDecks.filter(d => d.deckType === StudyDeckType.StaticWordList)
   );
 
-  const redundantTierLabel = computed(() => {
-    if (knownStates.value.includes(KnownState.Mastered)) return 'Mastered';
-    if (knownStates.value.includes(KnownState.Mature)) return 'Mature';
-    if (knownStates.value.includes(KnownState.Young)) return 'Young';
-    if (knownStates.value.includes(KnownState.Blacklisted)) return 'Blacklisted';
-    return '';
+  const redundantTooltip = computed(() => {
+    if (knownStates.value.includes(KnownState.Mastered)) return 'Known via another form of this word (Mastered)';
+    if (knownStates.value.includes(KnownState.Mature)) return 'Known via another form of this word (Mature)';
+    if (knownStates.value.includes(KnownState.Young)) return 'Known via another form of this word (Young)';
+    if (knownStates.value.includes(KnownState.Blacklisted)) return 'Known via another form of this word (Blacklisted)';
+    return 'Covered by another form of this word in your deck (not yet studied)';
   });
 
   const masterWord = async () => {
@@ -120,7 +120,7 @@
     <span class="inline-flex items-center gap-1">
       <template v-if="auth.isAuthenticated">
         <template v-if="isRedundant">
-          <Tooltip :content="`Known via kanji form (${redundantTierLabel})`">
+          <Tooltip :content="redundantTooltip">
             <span class="text-blue-500 dark:text-blue-300 cursor-default">Redundant</span>
           </Tooltip>
         </template>

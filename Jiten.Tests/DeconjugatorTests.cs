@@ -31,6 +31,9 @@ public class DeconjugatorTests
     [InlineData("わかんない", "わかる")]
     [InlineData("つまんない", "つまる")]
     [InlineData("すごくねえ", "すごい")]
+    [InlineData("でしょ", "です")]
+    [InlineData("でしょう", "です")]
+    [InlineData("行きまひょ", "行く")]
     // Na-adjective adnominal form (な is attributive, not casual request)
     [InlineData("和やかな", "和やか")]
     [InlineData("大切な", "大切")]

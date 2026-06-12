@@ -770,10 +770,12 @@ public class DiagnosticCommands(CliContext context)
                 if (word.Conjugations is { Count: > 0 }) continue;
                 if (string.IsNullOrEmpty(word.OriginalText) || word.OriginalText.Length < 2) continue;
 
+                // ParseText does not populate Occurrences (that happens in the deck path),
+                // so count each appearance as 1 to make the ranking meaningful.
                 var key = (word.WordId, word.OriginalText);
                 suspects[key] = suspects.TryGetValue(key, out var prev)
-                    ? (prev.Count + word.Occurrences, prev.Example)
-                    : (word.Occurrences, line);
+                    ? (prev.Count + Math.Max(1, word.Occurrences), prev.Example)
+                    : (Math.Max(1, word.Occurrences), line);
             }
         }
 
@@ -815,6 +817,9 @@ public class DiagnosticCommands(CliContext context)
                            surface = kv.Key.Surface,
                            wordId = kv.Key.WordId,
                            occurrences = kv.Value.Count,
+                           // "elongation" = surface is just a base form + a trailing long-vowel mark
+                           // (RepairVowelElongation gap, not a missing deconjugator rule); "gap" = genuine.
+                           category = kv.Key.Surface.EndsWith('ー') ? "elongation" : "gap",
                            example = kv.Value.Example,
                            forms = formsByWord.GetValueOrDefault(kv.Key.WordId)
                        })
@@ -838,6 +843,42 @@ public class DiagnosticCommands(CliContext context)
         {
             Console.WriteLine(json);
         }
+    }
+
+    /// Dumps every token's (WordId, ReadingIndex, Conjugations) for a corpus, one token per line,
+    /// for exact before/after diffing of output-identical refactors. Deterministic line order.
+    public async Task SnapshotTokens(CliOptions options)
+    {
+        if (string.IsNullOrEmpty(options.Input) || !File.Exists(options.Input))
+        {
+            Console.WriteLine("--snapshot-tokens requires an existing --input <corpus.txt>");
+            return;
+        }
+
+        var lines = await File.ReadAllLinesAsync(options.Input);
+        Console.WriteLine($"Snapshotting {lines.Length} lines...");
+
+        var sb = new StringBuilder();
+        int lineNo = 0, tokenCount = 0;
+        foreach (var line in lines)
+        {
+            lineNo++;
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            var words = await Jiten.Parser.Parser.ParseText(context.ContextFactory, line);
+            int idx = 0;
+            foreach (var w in words)
+            {
+                var conj = w.Conjugations is { Count: > 0 } ? string.Join(",", w.Conjugations) : "";
+                sb.Append(lineNo).Append('\t').Append(idx++).Append('\t')
+                  .Append(w.WordId).Append('\t').Append(w.ReadingIndex).Append('\t').Append(conj).Append('\n');
+                tokenCount++;
+            }
+        }
+
+        var outPath = string.IsNullOrEmpty(options.ParseTestOutput) ? "token_snapshot.tsv" : options.ParseTestOutput;
+        await File.WriteAllTextAsync(outPath, sb.ToString());
+        Console.WriteLine($"Wrote {tokenCount} tokens to {outPath}");
     }
 
     public async Task FlushRedisCache()

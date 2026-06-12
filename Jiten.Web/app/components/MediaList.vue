@@ -656,7 +656,7 @@
         <InputIcon>
           <Icon name="material-symbols:search-rounded" />
         </InputIcon>
-        <InputText v-model="titleFilter" type="text" placeholder="Search by title" class="w-full" />
+        <InputText v-model="titleFilter" type="text" placeholder="Search by title" aria-label="Search by title" class="w-full" />
         <InputIcon v-if="titleFilter" class="cursor-pointer" @click="titleFilter = null">
           <Icon name="material-symbols:close" />
         </InputIcon>

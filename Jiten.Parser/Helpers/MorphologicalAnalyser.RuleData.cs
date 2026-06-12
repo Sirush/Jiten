@@ -123,6 +123,7 @@ public partial class MorphologicalAnalyser
         ("にっ", "と", PartOfSpeech.Adverb),
         ("か", "な", PartOfSpeech.Particle),
         ("わ", "い", PartOfSpeech.Particle),
+        ("だ", "い", PartOfSpeech.Particle), // familiar question marker だい (思っただけだい！)
         ("よう", "です", PartOfSpeech.Expression),
         ("何も", "かも", PartOfSpeech.Expression),
         ("何と", "も", PartOfSpeech.Adverb),

@@ -92,7 +92,16 @@
           <i class="pi text-sm" :class="favourited ? 'pi-star-fill' : 'pi-star'" />
         </button>
       </div>
-      <div v-if="isNsfw && !isRevealed" class="absolute top-0 left-0 w-full h-full flex items-center justify-center cursor-pointer z-10" @click="handleReveal">
+      <div
+        v-if="isNsfw && !isRevealed"
+        class="absolute top-0 left-0 w-full h-full flex items-center justify-center cursor-pointer z-10"
+        role="button"
+        tabindex="0"
+        aria-label="Reveal potentially not safe for work text"
+        @click="handleReveal"
+        @keydown.enter="handleReveal"
+        @keydown.space.prevent="handleReveal"
+      >
         <div class="text-center px-3 py-2 bg-white/80 backdrop-blur-md border border-red-300 text-red-600 text-sm font-semibold rounded shadow">
           This text is potentially not safe for work. Click to reveal.
         </div>

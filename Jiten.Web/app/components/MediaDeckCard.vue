@@ -305,13 +305,13 @@
       <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md mx-4 shadow-xl">
         <p class="text-center text-gray-800 dark:text-gray-200 mb-4">This media will be ignored and no longer appear in search results.</p>
         <div class="text-center">
-          <a
-            href="#"
-            class="text-primary-500 hover:text-primary-700 dark:hover:text-primary-400 font-semibold underline-offset-2 hover:underline"
-            @click.prevent="cancelIgnore"
+          <button
+            type="button"
+            class="text-primary-500 hover:text-primary-700 dark:hover:text-primary-400 font-semibold underline-offset-2 hover:underline cursor-pointer"
+            @click="cancelIgnore"
           >
             Cancel
-          </a>
+          </button>
         </div>
       </div>
     </div>
@@ -367,7 +367,7 @@
               <div v-if="!isCompact" class="text-left text-sm md:text-center">
                 <img
                   :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
-                  :alt="deck.originalTitle"
+                  :alt="localiseTitle(deck)"
                   class="h-48 w-34 min-w-34 object-cover"
                   :fetchpriority="lazyCover ? undefined : 'high'"
                   :loading="lazyCover ? 'lazy' : 'eager'"
@@ -531,9 +531,9 @@
                 <div class="mt-2">
                   <div v-if="deck.description && !store.hideDescriptions" class="description-container" :class="{ expanded: isDescriptionExpanded }">
                     <p class="whitespace-pre-line mb-0 text-sm">{{ deck.description }}</p>
-                    <a v-if="deck.description.length > 50" href="#" class="text-primary-500 hover:text-primary-700 text-sm" @click.prevent="toggleDescription">
+                    <button v-if="deck.description.length > 50" type="button" class="text-primary-500 hover:text-primary-700 text-sm cursor-pointer" @click="toggleDescription">
                       {{ isDescriptionExpanded ? 'View less' : 'View more' }}
-                    </a>
+                    </button>
                   </div>
                 </div>
 

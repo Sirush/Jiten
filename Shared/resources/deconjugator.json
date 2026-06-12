@@ -743,6 +743,22 @@
     "detail": "(te form)"
   },
   {
+    "type": "rewriterule",
+    "dec_end": ["です"],
+    "con_end": ["でしょう"],
+    "dec_tag": ["exp"],
+    "con_tag": ["form-volition"],
+    "detail": "presumptive"
+  },
+  {
+    "type": "rewriterule",
+    "dec_end": ["です"],
+    "con_end": ["でしょ"],
+    "dec_tag": ["exp"],
+    "con_tag": ["form-volition"],
+    "detail": "presumptive"
+  },
+  {
     "type": "stdrule",
     "dec_end": [""],
     "con_end": ["ない"],
@@ -805,6 +821,22 @@
     "dec_tag": ["stem-mizenkei"],
     "con_tag": ["uninflectable"],
     "detail": "archaic negative"
+  },
+  {
+    "type": "onlyfinalrule",
+    "dec_end": [""],
+    "con_end": ["ぬじゃろう"],
+    "dec_tag": ["stem-mizenkei"],
+    "con_tag": ["uninflectable"],
+    "detail": "archaic negative presumptive"
+  },
+  {
+    "type": "onlyfinalrule",
+    "dec_end": [""],
+    "con_end": ["ぬだろう"],
+    "dec_tag": ["stem-mizenkei"],
+    "con_tag": ["uninflectable"],
+    "detail": "archaic negative presumptive"
   },
   {
     "type": "onlyfinalrule",
@@ -933,6 +965,14 @@
     "dec_tag": ["stem-ren"],
     "con_tag": ["uninflectable"],
     "detail": "polite volitional"
+  },
+  {
+    "type": "onlyfinalrule",
+    "dec_end": [""],
+    "con_end": ["まひょ"],
+    "dec_tag": ["stem-ren"],
+    "con_tag": ["uninflectable"],
+    "detail": "polite volitional (kansaiben)"
   },
   {
     "type": "onlyfinalrule",
@@ -1205,6 +1245,30 @@
     "dec_tag": ["stem-te"],
     "con_tag": ["v5u"],
     "detail": "have someone do"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["貰う"],
+    "dec_tag": ["stem-te"],
+    "con_tag": ["v5u"],
+    "detail": "have someone do"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["いただく"],
+    "dec_tag": ["stem-te"],
+    "con_tag": ["v5k"],
+    "detail": "have someone do (humble)"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": [""],
+    "con_end": ["頂く"],
+    "dec_tag": ["stem-te"],
+    "con_tag": ["v5k"],
+    "detail": "have someone do (humble)"
   },
   {
     "type": "stdrule",

@@ -38,7 +38,15 @@
       ? 'shadow-md ring-1 ring-purple-200 dark:ring-purple-900/50 border-purple-200 dark:border-purple-900/50'
       : 'shadow-sm hover:shadow-md border-gray-200 dark:border-gray-700'"
   >
-    <div class="cursor-pointer select-none" @click="expanded = !expanded">
+    <div
+      class="cursor-pointer select-none"
+      role="button"
+      tabindex="0"
+      :aria-expanded="expanded"
+      @click="expanded = !expanded"
+      @keydown.enter="expanded = !expanded"
+      @keydown.space.prevent="expanded = !expanded"
+    >
       <div class="flex items-center gap-3 px-4 pt-2.5">
         <div class="flex-1 min-w-0 flex items-center gap-3 flex-wrap">
           <span v-if="entry.primaryKanjiText" class="text-lg font-noto-sans font-medium" lang="ja" v-html="convertToRuby(entry.primaryKanjiText)" />
@@ -70,7 +78,7 @@
       <div class="flex justify-center pt-0.5 pb-1">
         <Icon
           name="material-symbols:keyboard-arrow-down"
-          class="text-gray-400 dark:text-gray-600 text-xl transition-transform duration-200"
+          class="text-gray-400 dark:text-gray-300 text-xl transition-transform duration-200"
           :class="expanded ? 'rotate-180' : ''"
         />
       </div>

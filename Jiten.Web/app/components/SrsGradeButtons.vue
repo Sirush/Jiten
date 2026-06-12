@@ -109,7 +109,7 @@
       </Button>
       <button
         v-if="compact"
-        class="px-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+        class="px-2 py-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
         aria-label="Expand bar"
         @click="emit('expand')"
       >
@@ -141,7 +141,7 @@
       </Button>
       <button
         v-if="compact"
-        class="px-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+        class="px-2 py-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
         aria-label="Expand bar"
         @click="emit('expand')"
       >

@@ -69,7 +69,10 @@ public partial class MorphologicalAnalyser
             if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.Dependant) &&
                 currentWord.PartOfSpeech == PartOfSpeech.Verb &&
                 nextWord.DictionaryForm != "おる" &&
-                nextWord.Text != currentWord.Text)
+                nextWord.Text != currentWord.Text &&
+                // くて is always an i-adjective te-form (verb te-forms are って/いて); dependant
+                // auxiliaries attach to verb te-forms only (頭が良くて + やりたい stays split)
+                !currentWord.Text.EndsWith("くて", StringComparison.Ordinal))
             {
                 if (newList == null) { newList = CopyAccumulatorUpTo(wordInfos, i - 1); }
                 if (!isCopy) { currentWord = new WordInfo(currentWord); isCopy = true; }
@@ -108,6 +111,7 @@ public partial class MorphologicalAnalyser
             if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
                 currentWord.PartOfSpeech == PartOfSpeech.Verb && !currentWord.Text.EndsWith("たり") &&
                 nextWord.Text != currentWord.Text &&
+                !currentWord.Text.EndsWith("くて", StringComparison.Ordinal) &&
                 !isClassicalWaRowTeForm &&
                 (nextWord.DictionaryForm is "しまう" or "こなす" or "いく" or "貰う" or "いる" or "ない" or "だす" ||
                  (nextWord.DictionaryForm == "得る" && HasCompoundLookup != null &&
@@ -216,6 +220,9 @@ public partial class MorphologicalAnalyser
                                               nextWord.Text.EndsWith("いて");
                 if ((currentWord.Text.EndsWith("て") || currentWord.Text.EndsWith("で")) &&
                     currentWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective &&
+                    // くて is a genuine i-adjective te-form — subsidiary verbs attach to verb
+                    // te-forms only (頭が良くて + やりたい stays split)
+                    !currentWord.Text.EndsWith("くて", StringComparison.Ordinal) &&
                     !isClassicalWaRowTeForm &&
                     nextWord.PartOfSpeech != PartOfSpeech.IAdjective)
                 {

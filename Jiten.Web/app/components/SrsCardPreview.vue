@@ -90,7 +90,16 @@
         </div>
 
         <!-- Front (always visible) -->
-        <div class="flex flex-col items-center" :class="{ 'cursor-pointer': !isFlipped }" @click="!isFlipped && (isFlipped = true)">
+        <div
+          class="flex flex-col items-center"
+          :class="{ 'cursor-pointer': !isFlipped }"
+          :role="!isFlipped ? 'button' : undefined"
+          :tabindex="!isFlipped ? 0 : undefined"
+          :aria-label="!isFlipped ? 'Reveal answer' : undefined"
+          @click="!isFlipped && (isFlipped = true)"
+          @keydown.enter="!isFlipped && (isFlipped = true)"
+          @keydown.space.prevent="!isFlipped && (isFlipped = true)"
+        >
           <div v-if="settings.showCardStatus" class="text-sm mb-3 uppercase tracking-wider text-surface-400 dark:text-surface-300">
             {{ SAMPLE.isNew ? 'New' : 'Review' }}
           </div>

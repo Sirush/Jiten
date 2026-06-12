@@ -78,7 +78,7 @@
         <!-- Cover image -->
         <img
           :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
-          :alt="deck.originalTitle"
+          :alt="localiseTitle(deck)"
           class="w-full h-full object-cover"
           :loading="lazyCover ? 'lazy' : 'eager'"
           decoding="async"

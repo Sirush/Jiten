@@ -111,21 +111,21 @@ async function completeRegistration() {
 </script>
 
 <template>
-  <Card class="max-w-[500px] mx-auto my-12 p-8 border border-gray-300 rounded-lg">
+  <Card class="max-w-[500px] mx-auto my-12 p-8 border border-gray-300 dark:border-gray-700 rounded-lg">
     <template #title>Complete Your Registration</template>
     <template #content>
       <!-- User Info Display -->
-      <div class="flex items-center mb-8 p-5 bg-gray-100 rounded-lg">
+      <div class="flex items-center mb-8 p-5 bg-gray-100 dark:bg-gray-800 rounded-lg">
         <img v-if="picture" :src="picture" :alt="name" class="w-[60px] h-[60px] rounded-full mr-4" />
         <div>
-          <h3 class="m-0 mb-1 text-gray-800">Welcome, {{ name }}!</h3>
-          <p class="m-0 text-gray-600 text-sm">{{ email }}</p>
+          <h3 class="m-0 mb-1 text-gray-800 dark:text-gray-200">Welcome, {{ name }}!</h3>
+          <p class="m-0 text-gray-600 dark:text-gray-400 text-sm">{{ email }}</p>
         </div>
       </div>
 
       <!-- Step 1: Username Selection -->
       <div v-if="step === 1" class="mb-5">
-        <h4 class="mb-5 text-gray-800">Choose a Username</h4>
+        <h4 class="mb-5 text-gray-800 dark:text-gray-200">Choose a Username</h4>
         <div class="mb-4">
           <FloatLabel for="username">Username:</FloatLabel>
           <InputText
@@ -135,7 +135,7 @@ async function completeRegistration() {
             :maxlength="USERNAME_MAX"
             :class="[
               'w-full p-3 rounded-md border-2 transition-colors',
-              usernameError ? 'border-red-600' : 'border-gray-300'
+              usernameError ? 'border-red-600' : 'border-gray-300 dark:border-gray-700'
             ]"
             placeholder="Enter your username"
           />
@@ -159,7 +159,7 @@ async function completeRegistration() {
 
       <!-- Step 2: Terms and Consent -->
       <div v-if="step === 2" class="mb-5">
-        <h4 class="mb-5 text-gray-800">Terms and Preferences</h4>
+        <h4 class="mb-5 text-gray-800 dark:text-gray-200">Terms and Preferences</h4>
 
         <div class="mb-6">
           <div class="flex items-start mb-4 gap-2">

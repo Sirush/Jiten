@@ -42,7 +42,7 @@ internal static class WordFrequencyPriors
         if (!frequencies.TryGetValue(best.Word.WordId, out double bestFrequency))
             return null;
 
-        if (IsInflectable(best.Word))
+        if (KanaScoringHelpers.IsInflectableVerbOrAdj(best.Word.PartsOfSpeech))
             return null;
 
         int bestEffective = ScoringPolicy.EffectiveScore(best);
@@ -64,7 +64,7 @@ internal static class WordFrequencyPriors
             // steal ふう from 風 across a 27-point gap).
             if (bestEffective - ScoringPolicy.EffectiveScore(candidate) > MaxScoreGap) continue;
 
-            if (IsInflectable(candidate.Word)) continue;
+            if (KanaScoringHelpers.IsInflectableVerbOrAdj(candidate.Word.PartsOfSpeech)) continue;
 
             // Bound morphemes (がち=勝ち suf, counters, particles…) owe their corpus frequency
             // to attached usage; it says nothing about a standalone token.
@@ -92,19 +92,6 @@ internal static class WordFrequencyPriors
         foreach (var p in word.PartsOfSpeech)
         {
             if (p is "suf" or "n-suf" or "pref" or "n-pref" or "aux" or "aux-v" or "aux-adj" or "prt" or "ctr")
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool IsInflectable(JmDictWord word)
-    {
-        foreach (var p in word.PartsOfSpeech)
-        {
-            if (p is "adj-i" or "adj-ix")
-                return true;
-            if (p.Length > 0 && p[0] == 'v' && p is not ("vulg" or "vet" or "vidg"))
                 return true;
         }
 

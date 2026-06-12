@@ -38,7 +38,8 @@ internal enum MatchCondition
     NextIsParticle,      // Next.PartOfSpeech == Particle
     IsSuffix,            // PartOfSpeech == Suffix
     IsStrictCaseMarkingParticle, // Particle with DictionaryForm in StrictCaseMarkingParticles (が/を/へ)
-    NextIsNotQuotative // Next token text does NOT start with quotative と (excludes embedded question patterns like かというと)
+    NextIsNotQuotative, // Next token text does NOT start with quotative と (excludes embedded question patterns like かというと)
+    PrevIsSfpValidHost // Prev is Auxiliary/Particle, or a plain-form Verb/IAdjective (prohibitive えぐるな, exclamatory 欲しいな)
 }
 
 internal sealed record TransitionRule(
@@ -118,6 +119,7 @@ internal enum ScoringCondition
     CandidateHasVolitionalChain,
     NextIsVolitionalToVerb,
     CandidateIsInfinitiveOrImperative,
+    NextIsNiParticle,
 }
 
 internal sealed record ScoringRule(

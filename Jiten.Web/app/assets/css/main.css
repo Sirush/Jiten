@@ -18,6 +18,10 @@
     border: 1px solid #e6e6e6;
 }
 
+.dark-mode .p-card {
+    border: 1px solid #2d2d2d;
+}
+
 a:not(.p-button) {
     @apply text-blue-500 hover:underline
 }

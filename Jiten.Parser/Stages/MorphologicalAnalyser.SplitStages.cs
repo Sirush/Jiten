@@ -206,6 +206,163 @@ public partial class MorphologicalAnalyser
         return result ?? wordInfos;
     }
 
+    // Productive adjective prefixes with their own JMDict entries (薄赤い → 薄+赤い).
+    private static readonly string[] AdjectivePrefixes = ["真っ", "薄", "真", "ほの", "ど", "超"];
+
+    /// <summary>
+    /// Splits unresolvable prefixed i-adjectives into prefix + base adjective (薄赤い → 薄+赤い).
+    /// Sudachi emits these as a single clean IAdjective token, but IAdjective is in the
+    /// resegmentation skip list, so without this the whole token is dropped at lookup time.
+    /// Resolvable compounds (薄暗い, 真っ白い) keep their own entries.
+    /// </summary>
+    private List<WordInfo> SplitUnresolvablePrefixedAdjectives(List<WordInfo> wordInfos)
+    {
+        if (HasCompoundLookup == null || HasNonNameCompoundLookup == null)
+            return wordInfos;
+
+        List<WordInfo>? result = null;
+
+        for (int idx = 0; idx < wordInfos.Count; idx++)
+        {
+            var word = wordInfos[idx];
+            string dictForm = word.DictionaryForm;
+
+            string? prefix = null;
+            if (word.PartOfSpeech == PartOfSpeech.IAdjective &&
+                !string.IsNullOrEmpty(dictForm) && dictForm.Length >= 3 &&
+                !HasCompoundLookup(dictForm) &&
+                (dictForm == word.Text || !HasCompoundLookup(word.Text)))
+            {
+                foreach (var p in AdjectivePrefixes)
+                {
+                    if (dictForm.StartsWith(p, StringComparison.Ordinal)
+                        && word.Text.StartsWith(p, StringComparison.Ordinal)
+                        && dictForm.Length - p.Length >= 2
+                        && HasNonNameCompoundLookup(dictForm[p.Length..]))
+                    {
+                        prefix = p;
+                        break;
+                    }
+                }
+            }
+
+            if (prefix == null)
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            result ??= [..wordInfos[..idx]];
+
+            result.Add(new WordInfo
+            {
+                Text = prefix, DictionaryForm = prefix, NormalizedForm = prefix,
+                PartOfSpeech = PartOfSpeech.Prefix, Reading = KanaConverter.ToHiragana(prefix),
+                StartOffset = word.StartOffset,
+                EndOffset = word.StartOffset >= 0 ? word.StartOffset + prefix.Length : -1
+            });
+            result.Add(new WordInfo
+            {
+                Text = word.Text[prefix.Length..],
+                DictionaryForm = word.DictionaryForm[prefix.Length..],
+                NormalizedForm = word.DictionaryForm[prefix.Length..],
+                PartOfSpeech = PartOfSpeech.IAdjective,
+                Reading = KanaConverter.ToHiragana(word.Text[prefix.Length..]),
+                StartOffset = word.StartOffset >= 0 ? word.StartOffset + prefix.Length : -1,
+                EndOffset = word.EndOffset
+            });
+        }
+
+        return result ?? wordInfos;
+    }
+
+    /// <summary>
+    /// Decomposes noun+する merges whose noun is not a suru-noun (no vs tag) and whose merged
+    /// surface is unresolvable: 大怪我して gets merged by the combine stages, but 大怪我する has
+    /// no JMDict entry and 大怪我 [n] has no vs tag, so the deconjugation path can't rescue it
+    /// and the whole token is dropped at lookup time. Splits back into noun + する-conjugation.
+    /// Genuine suru-nouns (密着した — 密着 [n,vs]) keep the merge: deconjugation resolves them
+    /// with the full chain. Runs after the combine stages that create these merges.
+    /// </summary>
+    private List<WordInfo> SplitUnresolvableSuruCompounds(List<WordInfo> wordInfos)
+    {
+        if (HasCompoundLookup == null || HasNonNameCompoundLookup == null || HasSuruVerbCompoundLookup == null)
+            return wordInfos;
+
+        List<WordInfo>? result = null;
+        var deconj = Deconjugator.Instance;
+
+        for (int idx = 0; idx < wordInfos.Count; idx++)
+        {
+            var word = wordInfos[idx];
+            string text = word.Text;
+
+            if (word.PartOfSpeech is not (PartOfSpeech.Verb or PartOfSpeech.Noun) ||
+                text.Length < 3 ||
+                !text.Any(c => c is >= '一' and <= '鿿'))
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            // Tokens whose surface has its own entry are left alone (買い支え-style).
+            if (HasCompoundLookup(text))
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            int splitAt = -1;
+            for (int p = text.Length - 1; p >= 2 && splitAt < 0; p--)
+            {
+                if (text[p] is not ('し' or 'さ' or 'す' or 'せ')) continue;
+
+                var prefix = text[..p];
+                if (!HasNonNameCompoundLookup(prefix)) continue;
+                // Suru-nouns resolve as one token with the conjugation chain — keep them merged.
+                if (HasSuruVerbCompoundLookup(prefix)) break;
+                // A dictForm that resolves on its own and is not just the noun stem means the
+                // deconjugation path can handle this token (思い出して → 思い出す): keep merged.
+                if (word.DictionaryForm != prefix && word.DictionaryForm != text
+                    && HasCompoundLookup(word.DictionaryForm)) break;
+
+                var tail = text[p..];
+                foreach (var f in deconj.Deconjugate(tail))
+                {
+                    if (f.Text == "する") { splitAt = p; break; }
+                }
+            }
+
+            if (splitAt < 0)
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            result ??= [..wordInfos[..idx]];
+
+            var nounSurface = text[..splitAt];
+            var suruSurface = text[splitAt..];
+
+            result.Add(new WordInfo
+            {
+                Text = nounSurface, DictionaryForm = nounSurface, NormalizedForm = nounSurface,
+                PartOfSpeech = PartOfSpeech.Noun, Reading = KanaConverter.ToHiragana(nounSurface),
+                StartOffset = word.StartOffset,
+                EndOffset = word.StartOffset >= 0 ? word.StartOffset + splitAt : -1
+            });
+            result.Add(new WordInfo
+            {
+                Text = suruSurface, DictionaryForm = "する", NormalizedForm = "する",
+                PartOfSpeech = PartOfSpeech.Verb, Reading = suruSurface,
+                StartOffset = word.StartOffset >= 0 ? word.StartOffset + splitAt : -1,
+                EndOffset = word.EndOffset
+            });
+        }
+
+        return result ?? wordInfos;
+    }
+
     /// <summary>
     /// Splits たん(suffix) + だ/です(auxiliary) into [prev+た] + ん + だ/です when the preceding token
     /// forms a valid verb past tense. Sudachi sometimes tokenizes たんだ as たん(suffix) + だ(auxiliary),

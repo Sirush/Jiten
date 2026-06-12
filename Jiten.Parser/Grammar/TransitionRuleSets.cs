@@ -92,6 +92,13 @@ internal static class TransitionRuleSets
             [ScoringCondition.NextIsNaConnector],
             30),
 
+        // Adverbial adj-na + に (露になった = あらわ, not dew; 変に, 楽に) must outweigh the
+        // noun-particle synergy (+40) the noun homograph gets from the same に.
+        new("na-adj-ni-adverbial-synergy",
+            [ScoringCondition.CandidateIsNaAdj],
+            [ScoringCondition.NextIsNiParticle],
+            65),
+
         new("adverb-verb-synergy",
             [ScoringCondition.CandidateIsAdverb],
             [ScoringCondition.NextIsVerbOrIAdj],
@@ -332,14 +339,15 @@ internal static class TransitionRuleSets
             OnViolation: ViolationAction.ReclassifyCurrentAsNoun),
 
         // Phase 4: sentence-final particles (よ/ね/な/ぞ/ぜ/わ) must be near clause end
-        // Exception: SFP after an auxiliary or particle (e.g. だな, はね) is valid
+        // Exception: SFP after an auxiliary/particle (だな, はね) or a plain-form verb/i-adj
+        // (prohibitive えぐるな, exclamatory 欲しいな — run-on speech has no punctuation) is valid.
         // Emphatic ぞ/ぜ are excluded: they never merge into a longer expression, and vocatives
         // follow them directly (出るぞ無名！) — merging would just delete the particle.
         new(
             Id: "sfp-must-be-near-clause-end",
             Severity: RuleSeverity.Hard,
             WhenToken: [MatchCondition.IsSentenceEndingParticle, MatchCondition.IsNotEmphaticSfp, MatchCondition.NextIsContentWord, MatchCondition.NextIsNotQuotative],
-            ValidIf: [MatchCondition.PrevIsAuxiliaryOrParticle],
+            ValidIf: [MatchCondition.PrevIsSfpValidHost],
             OnViolation: ViolationAction.MergeWithPrevious),
 
         // Phase 5a: prefix at sentence-end is almost always a misparse → reclassify as noun

@@ -199,6 +199,11 @@ public class Program
             await diagnosticCommands.AuditConjugations(options);
         }
 
+        if (options.SnapshotTokens)
+        {
+            await diagnosticCommands.SnapshotTokens(options);
+        }
+
         // Dictionary commands
         if (!string.IsNullOrEmpty(options.UserDicMassAdd))
         {

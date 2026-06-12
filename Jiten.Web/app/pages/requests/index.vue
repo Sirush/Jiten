@@ -12,7 +12,7 @@ definePageMeta({
 
 useHead({ title: 'Media Requests - Jiten' });
 
-const { requests, totalCount, isLoading, fetchRequests, toggleUpvote, subscribe, unsubscribe, fetchMyQuota, fetchFacets } = useMediaRequests();
+const { requests, totalCount, isLoading, fetchRequests, toggleUpvote, subscribe, unsubscribe, fetchMyQuota, fetchFacets, error: apiError } = useMediaRequests();
 const facets = ref<RequestFacets | null>(null);
 
 function withCount(label: string, count: number | undefined) {
@@ -186,6 +186,10 @@ watch([activeTab, selectedMediaType, selectedStatus, sortBy, offset, debouncedSe
   router.replace({ query });
 });
 
+function toastApiError(summary: string, fallback: string) {
+  toast.add({ severity: 'error', summary, detail: extractApiError(apiError.value, fallback), life: 6000 });
+}
+
 async function handleUpvote(request: MediaRequestDto) {
   const result = await toggleUpvote(request.id);
   if (result) {
@@ -194,6 +198,8 @@ async function handleUpvote(request: MediaRequestDto) {
     if (result.upvoted) {
       request.isSubscribed = true;
     }
+  } else {
+    toastApiError('Vote failed', 'Failed to update your vote. Please try again.');
   }
 }
 
@@ -201,9 +207,11 @@ async function handleSubscribe(request: MediaRequestDto) {
   if (request.isSubscribed) {
     const success = await unsubscribe(request.id);
     if (success) request.isSubscribed = false;
+    else toastApiError('Unsubscribe failed', 'Failed to unsubscribe. Please try again.');
   } else {
     const success = await subscribe(request.id);
     if (success) request.isSubscribed = true;
+    else toastApiError('Subscribe failed', 'Failed to subscribe. Please try again.');
   }
 }
 

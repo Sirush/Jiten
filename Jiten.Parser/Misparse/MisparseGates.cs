@@ -129,6 +129,11 @@ internal static class MisparseGates
         if (ctx.Token.PartOfSpeech == PartOfSpeech.Interjection && surface.Length >= 2
             && ctx.IsSentenceInitial) return false;
 
+        // Demonstrative ああ/こう/そう directly before a verb (ああなった, こう言う) is the
+        // "like that/this" adverb, not an elongation shred — shreds never precede a verb.
+        if (surface is "ああ" or "こう" or "そう" && ctx.Next?.PartOfSpeech == PartOfSpeech.Verb)
+            return false;
+
         if (ctx.IsUsuallyKana) return false;
 
         if (!ctx.HasKanjiSpelling) return false;

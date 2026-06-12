@@ -156,6 +156,16 @@ internal static class TransitionRuleEngine
                 MatchCondition.NextIsNotQuotative =>
                     w.Next == null || !w.Next.Text.StartsWith("という"),
 
+                // Valid hosts for a sentence-final particle: auxiliaries/particles (だな, はね) plus —
+                // for な only — plain-form verbs/i-adjectives (prohibitive えぐるな, exclamatory
+                // 欲しいな), which stay valid mid-sentence because run-on speech has no punctuation.
+                // Other SFPs keep the merge: ない+か must still form ないか.
+                MatchCondition.PrevIsSfpValidHost =>
+                    w.Prev?.PartOfSpeech is PartOfSpeech.Auxiliary or PartOfSpeech.Particle
+                    || (w.Current.Text == "な"
+                        && w.Prev is { PartOfSpeech: PartOfSpeech.Verb or PartOfSpeech.IAdjective }
+                        && w.Prev.Text == w.Prev.DictionaryForm),
+
                 _ => false
             };
             if (!ok) return false;
@@ -348,7 +358,11 @@ internal static class TransitionRuleEngine
                     ctx.NextText != null && TransitionRuleSets.CopulaForms.Contains(ctx.NextText),
 
                 ScoringCondition.NextIsNaConnector =>
-                    ctx.NextText is "な" or "に",
+                    ctx.NextText is "な",
+
+                // Adverbial に after an adj-na homograph (露に晒す = あらわ, not dew; 変に, 楽に).
+                ScoringCondition.NextIsNiParticle =>
+                    ctx.NextText == "に" && PosMask.Has(ctx.NextMask, PosMask.Particle),
 
                 ScoringCondition.NextIsVerbOrIAdj =>
                     ctx.HasNext && PosMask.Has(ctx.NextMask, PosMask.VerbOrIAdj),

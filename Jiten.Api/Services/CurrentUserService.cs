@@ -87,7 +87,12 @@ public class CurrentUserService(
 
                 if (bestKanjiCard != null)
                 {
+                    // Due belongs to the covering sibling's card; the redundant form itself has nothing to review.
+                    // Redundant is always paired with a tier state (New if the sibling was never reviewed).
                     var states = GetKnownStatesFromCard(bestKanjiCard);
+                    states.Remove(KnownState.Due);
+                    if (states.Count == 0)
+                        states.Add(KnownState.New);
                     states.Add(KnownState.Redundant);
                     return states;
                 }

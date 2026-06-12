@@ -181,6 +181,10 @@
         <SimilarMediaSection :deck="response.data.mainDeck" />
       </div>
     </div>
+    <div v-else class="text-center py-12 flex flex-col items-center gap-4">
+      <p class="text-surface-500">Failed to load this deck.</p>
+      <Button label="Retry" icon="pi pi-refresh" @click="refreshDetail()" />
+    </div>
   </div>
 </template>
 

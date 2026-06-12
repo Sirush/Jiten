@@ -225,6 +225,10 @@ public class CliOptions
             HelpText = "Scan a corpus file for merged/conjugated tokens whose Conjugations chain is empty (S-G invariant). Requires --input.")]
     public bool AuditConjugations { get; set; }
 
+    [Option(longName: "snapshot-tokens", Required = false,
+            HelpText = "Dump every token's (WordId,ReadingIndex,Conjugations) for a corpus to --parse-test-output, for before/after refactor diffing. Requires --input.")]
+    public bool SnapshotTokens { get; set; }
+
     [Option(longName: "input", Required = false, HelpText = "Input corpus file path (used with --scan-confidence).")]
     public string? Input { get; set; }
 

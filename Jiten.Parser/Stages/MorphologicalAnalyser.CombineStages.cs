@@ -351,6 +351,19 @@ public partial class MorphologicalAnalyser
             wordInfos[i + 2].DictionaryForm is "思う" or "言う" or "聞く" or "考える" or "感じる")
             return true;
 
+        // Benefactive auxiliaries after a te-form stay separate tokens (堪能させて|いただきます,
+        // 繕って|貰いて). The て+貰う/いただく deconjugator rules exist for chain display on tokens
+        // merged by the Dependant path (して貰いたい) — they must not widen this stage's merges.
+        if ((currentWord.Text.EndsWith("て") || currentWord.Text.EndsWith("で"))
+            && nextWord.DictionaryForm is "いただく" or "頂く" or "貰う")
+            return true;
+
+        // Te-form auxiliaries attach to VERB te-forms only; after an adjective くて the next
+        // verb starts its own clause (頭が良くて + やりたい, never 良い + [do-for-someone]).
+        if (currentPOS == PartOfSpeech.IAdjective && currentWord.Text.EndsWith("て")
+            && nextWord.PartOfSpeech == PartOfSpeech.Verb)
+            return true;
+
         if (currentWord.Text.EndsWith("ん") && nextWord.Text is "だ" or "です")
             return true;
         if (nextWord is { Text: "じゃ", DictionaryForm: "だ" })

@@ -60,6 +60,12 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(?<=[぀-ゟ])ー+[っッ]+(?!と)")]
     private static partial Regex EmphLongVowelSokuonRegex();
 
+    // Script-crossing emphatic small vowels: 黙れェッ！ / ヤダぁ！. A small vowel kana never
+    // follows the opposite script as part of a real word (digraphs like ファ/ティ are same-script),
+    // so the boundary is always real — Sudachi otherwise shreds 黙れェ into 黙|れ|ェ.
+    [GeneratedRegex(@"(?<=[ぁ-ゖ])([ァィゥェォ]+[っッ]?)|(?<=[ァ-ヴ])([ぁぃぅぇぉ]+[っッ]?)")]
+    private static partial Regex ScriptCrossingSmallVowelRegex();
+
     // Comma-separated stutter fragment attached to the word it stutters: ぼ、ぼく / ぼっ、ぼぼ僕 / ば、ばっか.
     // The fragment must not be preceded by kana or kanji: stutters follow punctuation/quotes/start,
     // while a preceding word means a real particle (今は、はっきり) or repetition (ええ、ええ).
@@ -110,6 +116,7 @@ public partial class MorphologicalAnalyser
         text = MultipleLongVowelRegex().Replace(text, "ー");
         text = EmphLongVowelKanjiHiraganaRegex().Replace(text, "");
         text = EmphLongVowelSokuonRegex().Replace(text, "");
+        text = ScriptCrossingSmallVowelRegex().Replace(text, $"{_stopToken}$1$2");
 
         text = StutterFragmentRegex().Replace(text, "");
         text = StutteringDigraphRunRegex().Replace(text, "");
@@ -151,6 +158,11 @@ public partial class MorphologicalAnalyser
         // や+連れて行く must not eat やつれ (操れ=あやつれ excluded), 小木+曽って must not eat
         // 小木曽, 耳にする+する must not eat するすると
         text = YatsureRegex().Replace(text, $"{_stopToken}やつれ");
+        // quotative と + かぶりを振る: SpecialCases とか otherwise steals the か (と|か|ぶり)
+        text = text.Replace("とかぶりを振", $"と{_stopToken}かぶりを振");
+        // Sudachi has 虫を殺す as one lattice token (the rare "control one's temper" idiom);
+        // fiction overwhelmingly means literal insect-killing — keep it compositional
+        text = text.Replace("虫を殺", $"虫を{_stopToken}殺");
         text = text.Replace("小木曽", $"小木曽{_stopToken}");
         text = text.Replace("するすると", $"{_stopToken}するすると");
         text = text.Replace("ぶっち切", "ぶち切");

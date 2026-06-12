@@ -374,6 +374,63 @@ public class StudyTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task KnownWordsState_KanjiDue_KanaRedundantWithoutDue()
+    {
+        await EnsureSeedDataWithKanjiForms();
+
+        // Kanji form has an overdue Review card (interval 9 days => Young)
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 100, 0,
+                state: FsrsState.Review,
+                due: DateTime.UtcNow.AddDays(-1),
+                lastReview: DateTime.UtcNow.AddDays(-10)));
+            await userDb.SaveChangesAsync();
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/reader/lookup-vocabulary")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { words = new[] { new[] { 100, 0 }, new[] { 100, 1 } } });
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var kanjiStates = body.GetProperty("result")[0].EnumerateArray().Select(s => (KnownState)s.GetInt32()).ToList();
+        var kanaStates = body.GetProperty("result")[1].EnumerateArray().Select(s => (KnownState)s.GetInt32()).ToList();
+
+        kanjiStates.Should().Contain(KnownState.Due, "the kanji form itself is reviewable and overdue");
+        kanaStates.Should().BeEquivalentTo([KnownState.Young, KnownState.Redundant],
+            "the redundant kana form carries the sibling's tier but is never due itself");
+    }
+
+    [Fact]
+    public async Task KnownWordsState_KanjiNeverReviewed_KanaRedundantWithNew()
+    {
+        await EnsureSeedDataWithKanjiForms();
+
+        // Kanji form has a card that was never reviewed (e.g. suspend-add / unblacklist override)
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 100, 0, state: FsrsState.Learning));
+            await userDb.SaveChangesAsync();
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/reader/lookup-vocabulary")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { words = new[] { new[] { 100, 1 } } });
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var kanaStates = body.GetProperty("result")[0].EnumerateArray().Select(s => (KnownState)s.GetInt32()).ToList();
+
+        kanaStates.Should().BeEquivalentTo([KnownState.New, KnownState.Redundant],
+            "a never-reviewed sibling covers the form but the word is not known yet");
+    }
+
+    [Fact]
     public async Task KnownWordsState_KanaKnown_KanjiDoesNotShowRedundant()
     {
         await EnsureSeedDataWithKanjiForms();

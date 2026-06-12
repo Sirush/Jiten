@@ -342,10 +342,38 @@ public partial class MorphologicalAnalyser
                 && KanaScoringHelpers.ContainsKanji(word.Text)
                 && IsIchidanStemEnding(word.Reading)
                 && i + 1 < wordInfos.Count
-                && wordInfos[i + 1].PartOfSpeech == PartOfSpeech.Verb)
+                && wordInfos[i + 1].PartOfSpeech == PartOfSpeech.Verb
+                // A suru-noun before できる is the potential pattern (真似+できない), not a
+                // continuative verb stem — keep the noun reading.
+                && !(wordInfos[i + 1].DictionaryForm is "できる" or "出来る"
+                     && HasSuruVerbCompoundLookup?.Invoke(word.Text) == true))
             {
                 word.PartOfSpeech = PartOfSpeech.Verb;
                 word.DictionaryForm = word.Text + "る";
+            }
+
+            // 露 directly before になる is あらわ "exposed" (服が露になった), not dew/Russia —
+            // Sudachi's ロ lexeme reading otherwise drags scoring to the wrong homograph.
+            if (word is { Text: "露", PartOfSpeech: PartOfSpeech.Noun }
+                && i + 2 < wordInfos.Count
+                && wordInfos[i + 1].Text == "に"
+                && wordInfos[i + 2].DictionaryForm is "なる" or "成る")
+            {
+                word.Reading = "アラワ";
+                word.NormalizedForm = "露わ";
+            }
+
+            // Clause-final あり after a に/と-ending token is the classical continuative of ある
+            // (私は貴女と共にあり――), not the noun 蟻. Real ant sentences continue with が/は/を,
+            // so the clause-final gate keeps them on the noun.
+            if (word is { Text: "あり", PartOfSpeech: PartOfSpeech.Noun }
+                && i > 0 && (wordInfos[i - 1].Text.EndsWith("に") || wordInfos[i - 1].Text.EndsWith("と"))
+                && (i + 1 >= wordInfos.Count
+                    || wordInfos[i + 1].PartOfSpeech is PartOfSpeech.SupplementarySymbol
+                        or PartOfSpeech.Symbol or PartOfSpeech.BlankSpace))
+            {
+                word.PartOfSpeech = PartOfSpeech.Verb;
+                word.DictionaryForm = "ある";
             }
 
             // 捩* (モジ*) → ネジ* — standalone 捩る is almost always ねじる (to twist);

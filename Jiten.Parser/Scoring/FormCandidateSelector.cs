@@ -65,11 +65,7 @@ internal static class FormCandidateSelector
             }
         }
 
-        if (best != null)
-            best = WordFrequencyPriors.Apply(best, allCandidates, context) ?? best;
-
-        if (best != null)
-            best = ApplyKanjiHomographPriorityCap(best, allCandidates, context) ?? best;
+        best = RefineBest(best, allCandidates, context);
 
         // Compute margin via linear scan for the second-best alternate (different WordId).
         // Filter out POS-incompatible runners-up so their -15 penalty doesn't produce a false low margin.
@@ -145,6 +141,43 @@ internal static class FormCandidateSelector
         }
 
         return new CandidateSelectionResult(best, margin);
+    }
+
+    /// Applies the post-selection refinement passes in order (frequency priors → kanji-homograph
+    /// priority cap → archaic exact-surface rescue). Each pass returns null when it does not
+    /// apply, so the previous best is kept. No-op when best is null.
+    public static FormCandidate? RefineBest(
+        FormCandidate? best, List<FormCandidate> allCandidates, FormScoringContext context)
+    {
+        if (best == null) return null;
+        best = WordFrequencyPriors.Apply(best, allCandidates, context) ?? best;
+        best = ApplyKanjiHomographPriorityCap(best, allCandidates, context) ?? best;
+        best = ApplyArchaicExactSurfaceRescue(best, allCandidates, context) ?? best;
+        return best;
+    }
+
+    /// An archaic word written exactly as its surface (人にあらざる) is self-evidently
+    /// intended — but its −350 penalty buries it below junk fallbacks. Rescue it only when
+    /// nothing else scores above the junk band, so real alternatives (聞ける → potential of
+    /// 聞く) keep winning. Returns the rescued candidate or null when no rescue applies.
+    public static FormCandidate? ApplyArchaicExactSurfaceRescue(
+        FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
+    {
+        if (best.Word.IsFullyArchaic || ScoringPolicy.EffectiveScore(best) >= 100
+            || context.Surface.Length < 3)
+            return null;
+
+        FormCandidate? archExact = null;
+        foreach (var c in allCandidates)
+        {
+            if (c.Word.IsFullyArchaic && c.SurfaceMatchScore >= 300
+                && (archExact == null || c.TotalScore > archExact.TotalScore))
+                archExact = c;
+        }
+
+        return archExact != null && archExact.TotalScore + 300 > ScoringPolicy.EffectiveScore(best)
+            ? archExact
+            : null;
     }
 
     /// Selects the best candidate using pre-scored candidates + a per-candidate bonus function.

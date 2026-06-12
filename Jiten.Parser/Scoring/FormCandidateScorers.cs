@@ -83,8 +83,7 @@ internal static class WordPriorityScorer
         // E.g. 無し has adj-ku (archaic) BUT also n — modern usage still valid, skip penalty.
         // "suf"/"pref" are sub-categorisations, not primary word classes — a word can be
         // simultaneously archaic (v2a-s) and a suffix, so they must not exempt it from the penalty.
-        var readingPos = candidate.CachedReadingPos;
-        IEnumerable<string> posToCheck = readingPos.Count > 0 ? readingPos : word.PartsOfSpeech;
+        var posToCheck = candidate.EffectivePos;
         if (posToCheck.Any(archaicPosTypes.Contains)
             && !posToCheck.Any(p => p is "n" or "n-adv" or "n-t" or "n-pref" or "n-suf"
                                      or "v1" or "v1-s"
@@ -389,8 +388,7 @@ internal static class LemmaScorer
                 // E.g. 背負っていた deconj→背負ってる (exp "conceited") instead of 背負う ("carry").
                 bool dictFormConflicts = !string.IsNullOrEmpty(context.DictionaryForm)
                     && context.DictionaryForm != context.Surface
-                    && !word.Forms.Any(f => f.Text == context.DictionaryForm
-                        || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm));
+                    && !KanaScoringHelpers.WordHasFormEquivalentTo(word, context.DictionaryForm);
 
                 if (!dictFormConflicts || KanaScoringHelpers.HasFrequencyMarker(word.Priorities))
                     score += (int)(100 * lemmaScale);
@@ -408,8 +406,7 @@ internal static class PenaltyScorer
         FormScoringContext context,
         ref int surfaceMatchScore)
     {
-        bool surfaceMatchesFormDirectly = context.Surface == candidate.Form.Text
-            || KanaScoringHelpers.IsPureKanaScriptDifference(context.Surface, candidate.Form.Text);
+        bool surfaceMatchesFormDirectly = KanaScoringHelpers.SurfaceEquivalentTo(context.Surface, candidate.Form.Text);
 
         if (!string.IsNullOrEmpty(context.DictionaryForm)
             && context.DictionaryForm != context.Surface
@@ -418,11 +415,8 @@ internal static class PenaltyScorer
         {
             // Non-inflectable words (adj-pn, etc.) cannot be conjugated forms,
             // so the penalty should not apply (e.g. 亡き is adj-pn, not a conjugation of 亡い)
-            var readingPos = candidate.CachedReadingPos;
-            IEnumerable<string> posToCheck = readingPos.Count > 0 ? readingPos : candidate.Word.PartsOfSpeech;
-            bool isInflectable = posToCheck.Any(p =>
-                p is "adj-i" or "adj-ix"
-                || (p.StartsWith('v') && p is not "vulg" and not "vet" and not "vidg"));
+            var posToCheck = candidate.EffectivePos;
+            bool isInflectable = KanaScoringHelpers.IsInflectableVerbOrAdj(posToCheck);
 
             if (!isInflectable)
             {
@@ -456,8 +450,7 @@ internal static class PenaltyScorer
                 // word's own forms. If DictForm points to a completely different word
                 // (e.g. させる→する), fall through to the nounHasDictForm check below.
                 bool isAdnominal = posToCheck.Any(p => p is "adj-pn" or "adj-t");
-                if (isAdnominal && candidate.Word.Forms.Any(f => f.Text == context.DictionaryForm
-                        || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm)))
+                if (isAdnominal && KanaScoringHelpers.WordHasFormEquivalentTo(candidate.Word, context.DictionaryForm))
                     return false;
 
                 // Classical attributive き-forms (由々しき, 悪しき…) have the modern い-adjective
@@ -476,8 +469,7 @@ internal static class PenaltyScorer
                 // For non-inflectable words (e.g., plain nouns), still apply the penalty when Sudachi's
                 // DictionaryForm doesn't appear in this word's forms — it points to a different (inflectable) word.
                 // E.g., surface=答え, DictForm=答える: noun 答え shouldn't beat verb 答える via surface match.
-                bool nounHasDictForm = candidate.Word.Forms.Any(f => f.Text == context.DictionaryForm
-                    || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm));
+                bool nounHasDictForm = KanaScoringHelpers.WordHasFormEquivalentTo(candidate.Word, context.DictionaryForm);
                 if (!nounHasDictForm)
                 {
                     // Interjections (e.g. やった "hooray!") can never be conjugated verb forms.
@@ -543,8 +535,7 @@ internal static class PenaltyScorer
             // Inflectable words whose forms include DictionaryForm (e.g. 食べ from 食べる)
             // get a softer penalty; truly unrelated words (e.g. 一転 matching いってん when
             // DictionaryForm=いう) get the full -300 to cancel the coincidental surface match.
-            bool inflectableHasDictForm = candidate.Word.Forms.Any(f => f.Text == context.DictionaryForm
-                || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm));
+            bool inflectableHasDictForm = KanaScoringHelpers.WordHasFormEquivalentTo(candidate.Word, context.DictionaryForm);
             surfaceMatchScore -= inflectableHasDictForm ? 200 : 300;
             return true;
         }
@@ -557,16 +548,14 @@ internal static class PenaltyScorer
         FormScoringContext context,
         ref int surfaceMatchScore)
     {
-        bool expressionSurfaceMatchesForm = context.Surface == candidate.Form.Text
-            || KanaScoringHelpers.IsPureKanaScriptDifference(context.Surface, candidate.Form.Text);
+        bool expressionSurfaceMatchesForm = KanaScoringHelpers.SurfaceEquivalentTo(context.Surface, candidate.Form.Text);
 
         if (string.IsNullOrEmpty(context.DictionaryForm)
             || context.DictionaryForm == context.Surface
             || !expressionSurfaceMatchesForm)
             return false;
 
-        var readingPos = candidate.CachedReadingPos;
-        IEnumerable<string> posToCheck = readingPos.Count > 0 ? readingPos : candidate.Word.PartsOfSpeech;
+        var posToCheck = candidate.EffectivePos;
         bool isExpression = posToCheck.Any(p => p is "exp" or "on-mim");
         if (!isExpression)
             return false;
@@ -575,8 +564,7 @@ internal static class PenaltyScorer
         if (hasFreqMarker)
             return false;
 
-        bool dictFormMatchesWord = candidate.Word.Forms.Any(f => f.Text == context.DictionaryForm
-            || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm));
+        bool dictFormMatchesWord = KanaScoringHelpers.WordHasFormEquivalentTo(candidate.Word, context.DictionaryForm);
         if (!dictFormMatchesWord)
         {
             // If DictionaryForm is a strict prefix of the surface, the expression likely derives
@@ -612,19 +600,12 @@ internal static class ScriptScorer
         int scriptScore = scale[Math.Min(prefixLen, scale.Length - 1)];
 
         // Ichidan stem bonus — suppress when Sudachi identifies a different verb.
-        var ichidanReadingPos = candidate.CachedReadingPos;
-        IEnumerable<string> ichidanPosToCheck = ichidanReadingPos.Count > 0 ? ichidanReadingPos : word.PartsOfSpeech;
         if (form.Text.Length > 2
             && form.Text[^1] == 'る'
-            && ichidanPosToCheck.Any(p => p is "v1" or "v1-s")
+            && candidate.EffectivePos.Any(p => p is "v1" or "v1-s")
             && surface.StartsWith(form.Text[..^1], StringComparison.Ordinal))
         {
-            bool dictFormConflicts = context.DictionaryForm is not null
-                                     && context.DictionaryForm != surface
-                                     && !word.Forms.Any(f => f.Text == context.DictionaryForm
-                                         || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm));
-
-            if (!dictFormConflicts)
+            if (!KanaScoringHelpers.DictFormPointsToDifferentWord(context, word))
             {
                 int stemLen = form.Text.Length - 1;
                 scriptScore += Math.Min(15, stemLen * 5);
@@ -634,11 +615,7 @@ internal static class ScriptScorer
         // When Sudachi identifies a DictionaryForm that doesn't belong to this word,
         // the prefix overlap with the conjugated surface is coincidental
         // (e.g. noun 気づかれ matching the passive form of verb 気づく). Cap the script score.
-        if (scriptScore > 15
-            && context.DictionaryForm is not null
-            && context.DictionaryForm != context.Surface
-            && !word.Forms.Any(f => f.Text == context.DictionaryForm
-                || KanaScoringHelpers.IsPureKanaScriptDifference(f.Text, context.DictionaryForm)))
+        if (scriptScore > 15 && KanaScoringHelpers.DictFormPointsToDifferentWord(context, word))
         {
             scriptScore = Math.Min(scriptScore, 15);
         }
@@ -785,17 +762,8 @@ internal static class ReadingScorer
 
             if (readingMatchScore > 0 && archaicPosTypes is { Count: > 0 })
             {
-                var readingPos = candidate.CachedReadingPos;
-                if (readingPos.Count > 0)
-                {
-                    foreach (var p in readingPos)
-                        if (archaicPosTypes.Contains(p)) { readingMatchScore /= 2; break; }
-                }
-                else
-                {
-                    foreach (var p in word.PartsOfSpeech)
-                        if (archaicPosTypes.Contains(p)) { readingMatchScore /= 2; break; }
-                }
+                foreach (var p in candidate.EffectivePos)
+                    if (archaicPosTypes.Contains(p)) { readingMatchScore /= 2; break; }
             }
         }
 
@@ -850,6 +818,42 @@ internal static class KanaScoringHelpers
             if (diff is not 0x60 and not -0x60) return false;
         }
         return true;
+    }
+
+    /// True when the word has a form equal to <paramref name="text"/>, treating hiragana/katakana
+    /// script-only differences as equal. Centralises the
+    /// `Forms.Any(f => f.Text == X || IsPureKanaScriptDifference(f.Text, X))` predicate.
+    public static bool WordHasFormEquivalentTo(JmDictWord word, string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        foreach (var f in word.Forms)
+            if (f.Text == text || IsPureKanaScriptDifference(f.Text, text))
+                return true;
+        return false;
+    }
+
+    /// True when Sudachi's DictionaryForm is a real lemma that is NOT one of this word's own forms
+    /// (i.e. the surface overlap is coincidental — the DictForm points to a different entry).
+    public static bool DictFormPointsToDifferentWord(FormScoringContext context, JmDictWord word) =>
+        context.DictionaryForm is not null
+        && context.DictionaryForm != context.Surface
+        && !WordHasFormEquivalentTo(word, context.DictionaryForm);
+
+    /// True when the surface equals the form text, treating hiragana/katakana script-only
+    /// differences as equal.
+    public static bool SurfaceEquivalentTo(string surface, string formText) =>
+        surface == formText || IsPureKanaScriptDifference(surface, formText);
+
+    /// True when any POS marks the word as an inflectable verb or i-adjective
+    /// (excludes the non-verbal "v*" tags vulg/vet/vidg).
+    public static bool IsInflectableVerbOrAdj(IEnumerable<string> pos)
+    {
+        foreach (var p in pos)
+        {
+            if (p is "adj-i" or "adj-ix") return true;
+            if (p.Length > 0 && p[0] == 'v' && p is not ("vulg" or "vet" or "vidg")) return true;
+        }
+        return false;
     }
 
     public static int GetCommonPrefixLen(string s1, string s2)

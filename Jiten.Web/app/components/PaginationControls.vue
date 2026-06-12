@@ -21,12 +21,13 @@
 <template>
   <div class="flex justify-between flex-col md:flex-row">
     <div class="flex gap-8 pl-2">
-      <NuxtLink :to="previousLink" :class="previousLink == null ? 'text-gray-500! pointer-events-none' : ''" no-rel>
+      <NuxtLink :to="previousLink" :class="previousLink == null ? 'text-gray-500! pointer-events-none' : ''" :aria-disabled="previousLink == null ? 'true' : undefined" no-rel>
         Previous
       </NuxtLink>
       <NuxtLink
         :to="nextLink"
         :class="nextLink == null ? 'text-gray-500! pointer-events-none' : ''"
+        :aria-disabled="nextLink == null ? 'true' : undefined"
         no-rel
         @click="scrollToTopOnNext ? scrollToTop() : undefined"
       >

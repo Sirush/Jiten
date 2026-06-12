@@ -978,6 +978,144 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            // Sudachi lattice picks 私大 (private university) over 私+大X
+            // (私大金持ち, 私大好き). Re-cut when 大+next is a real word.
+            if (w1.Text == "私大" && i + 1 < wordInfos.Count
+                && wordInfos[i + 1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.NaAdjective
+                && HasNonNameCompoundLookup?.Invoke("大" + wordInfos[i + 1].Text) == true)
+            {
+                var nextW = wordInfos[i + 1];
+                newList.Add(new WordInfo
+                {
+                    Text = "私", DictionaryForm = "私", NormalizedForm = "私",
+                    PartOfSpeech = PartOfSpeech.Pronoun, Reading = "ワタシ",
+                    StartOffset = w1.StartOffset, EndOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1
+                });
+                newList.Add(new WordInfo(nextW)
+                {
+                    Text = "大" + nextW.Text,
+                    DictionaryForm = "大" + nextW.DictionaryForm,
+                    NormalizedForm = "大" + nextW.NormalizedForm,
+                    Reading = "ダイ" + nextW.Reading,
+                    StartOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1
+                });
+                i += 2;
+                continue;
+            }
+
+            // X史|上 → X|史上: 史上 (ichi1) binds tighter than the 史 suffix (人類史上初).
+            // 史上+初 then merges into 史上初 via the expression whitelist.
+            if (w1.PartOfSpeech == PartOfSpeech.Noun && w1.Text.Length >= 3 && w1.Text.EndsWith("史")
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1] is { Text: "上", PartOfSpeech: PartOfSpeech.Suffix }
+                && HasNonNameCompoundLookup?.Invoke(w1.Text[..^1]) == true)
+            {
+                var up = wordInfos[i + 1];
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = w1.Text[..^1], DictionaryForm = w1.Text[..^1], NormalizedForm = w1.Text[..^1],
+                    EndOffset = w1.EndOffset >= 0 ? w1.EndOffset - 1 : -1
+                });
+                newList.Add(new WordInfo
+                {
+                    Text = "史上", DictionaryForm = "史上", NormalizedForm = "史上",
+                    PartOfSpeech = PartOfSpeech.Noun, Reading = "シジョウ",
+                    StartOffset = w1.EndOffset >= 0 ? w1.EndOffset - 1 : -1, EndOffset = up.EndOffset
+                });
+                i += 2;
+                continue;
+            }
+
+            // Sudachi's 使いで (usability) steals the で: 魔法|使いで|も|ない → 魔法使い|でもない.
+            // Only fires when the previous noun + stem is a real word (魔法使い).
+            if (w1.PartOfSpeech == PartOfSpeech.Noun && w1.Text.Length >= 3 && w1.Text.EndsWith("で")
+                && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "も"
+                && newList.Count > 0 && newList[^1].PartOfSpeech == PartOfSpeech.Noun
+                && HasNonNameCompoundLookup?.Invoke(newList[^1].Text + w1.Text[..^1]) == true)
+            {
+                var prevNoun = newList[^1];
+                newList[^1] = new WordInfo(prevNoun)
+                {
+                    Text = prevNoun.Text + w1.Text[..^1],
+                    DictionaryForm = prevNoun.Text + w1.Text[..^1],
+                    NormalizedForm = prevNoun.Text + w1.Text[..^1],
+                    EndOffset = w1.EndOffset >= 0 ? w1.EndOffset - 1 : -1
+                };
+                bool naiFollows = i + 2 < wordInfos.Count && wordInfos[i + 2].Text == "ない";
+                newList.Add(new WordInfo
+                {
+                    Text = naiFollows ? "でもない" : "でも",
+                    DictionaryForm = naiFollows ? "でもない" : "でも",
+                    NormalizedForm = naiFollows ? "でもない" : "でも",
+                    PartOfSpeech = naiFollows ? PartOfSpeech.Expression : PartOfSpeech.Conjunction,
+                    Reading = naiFollows ? "デモナイ" : "デモ",
+                    StartOffset = w1.EndOffset >= 0 ? w1.EndOffset - 1 : -1,
+                    EndOffset = naiFollows ? wordInfos[i + 2].EndOffset : wordInfos[i + 1].EndOffset
+                });
+                i += naiFollows ? 3 : 2;
+                continue;
+            }
+
+            // Classical attributive 無き after a noun merges when the noun+無い adjective exists
+            // (詮|無き → 詮無き → 詮無い via the attributive-き deconj rule).
+            if (w1.PartOfSpeech == PartOfSpeech.Noun && i + 1 < wordInfos.Count
+                && wordInfos[i + 1] is { Text: "無き" }
+                && HasNonNameCompoundLookup?.Invoke(w1.Text + "無い") == true)
+            {
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = w1.Text + "無き",
+                    DictionaryForm = w1.Text + "無い",
+                    NormalizedForm = w1.Text + "無い",
+                    PartOfSpeech = PartOfSpeech.IAdjective,
+                    Reading = w1.Reading + "ナキ",
+                    EndOffset = wordInfos[i + 1].EndOffset
+                });
+                i += 2;
+                continue;
+            }
+
+            // Suffix かねる + negative = the lexicalized かねない "quite capable of" (破りかねない,
+            // 破りかねなかった). Sudachi's df=かねる makes the gate exact (金 is impossible here).
+            if (w1 is { PartOfSpeech: PartOfSpeech.Suffix, DictionaryForm: "かねる" } && w1.Text == "かね"
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1].Text is "ない" or "なかっ")
+            {
+                bool hasTa = wordInfos[i + 1].Text == "なかっ" && i + 2 < wordInfos.Count && wordInfos[i + 2].Text == "た";
+                string negText = hasTa ? "なかった" : wordInfos[i + 1].Text;
+                if (negText != "なかっ")
+                {
+                    var lastTok = hasTa ? wordInfos[i + 2] : wordInfos[i + 1];
+                    newList.Add(new WordInfo
+                    {
+                        Text = "かね" + negText,
+                        DictionaryForm = "かねない",
+                        NormalizedForm = "かねない",
+                        PartOfSpeech = PartOfSpeech.Expression,
+                        Reading = "カネ" + (hasTa ? "ナカッタ" : "ナイ"),
+                        StartOffset = w1.StartOffset, EndOffset = lastTok.EndOffset
+                    });
+                    i += hasTa ? 3 : 2;
+                    continue;
+                }
+            }
+
+            // Imperative たまえ after a renyokei verb: 気をつけ|た|まえ → 気をつけ + たまえ
+            // (×た前 is ungrammatical — "before X-ing" is る前/の前).
+            if (w1 is { Text: "た", PartOfSpeech: PartOfSpeech.Auxiliary } && i + 1 < wordInfos.Count
+                && wordInfos[i + 1] is { Text: "まえ", PartOfSpeech: PartOfSpeech.Noun }
+                && newList.Count > 0 && newList[^1].PartOfSpeech == PartOfSpeech.Verb)
+            {
+                newList.Add(new WordInfo
+                {
+                    Text = "たまえ", DictionaryForm = "たまえ", NormalizedForm = "たまえ",
+                    PartOfSpeech = PartOfSpeech.Suffix, Reading = "タマエ",
+                    StartOffset = w1.StartOffset, EndOffset = wordInfos[i + 1].EndOffset
+                });
+                i += 2;
+                continue;
+            }
+
             // Sudachi produces こか (verb こく 未然形) from mis-segmenting e.g.
             // とこかも → と+こか+も. Redistribute: prev+"こ" | "か"+next when both are known words.
             if (w1 is { Text: "こか", DictionaryForm: "こく", PartOfSpeech: PartOfSpeech.Verb }
@@ -1712,9 +1850,9 @@ public partial class MorphologicalAnalyser
                         (wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
                          wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun));
 
-                    // か+い stays split when the い is the 居る stem claimed by a following
+                    // か+い / だ+い stay split when the い is the 居る stem claimed by a following
                     // auxiliary (聞こえているのか|いない|のか) — merging would steal the verb stem.
-                    bool kaIBlocked = w1.Text == "か" && i + 2 < wordInfos.Count
+                    bool kaIBlocked = w1.Text is "か" or "だ" && i + 2 < wordInfos.Count
                         && w2.DictionaryForm is "居る" or "いる"
                         && wordInfos[i + 2].Text is "ない" or "なかった" or "ます" or "た" or "て";
 
@@ -2118,6 +2256,10 @@ public partial class MorphologicalAnalyser
     private static readonly HashSet<string> CommonTeFormVerbs =
         ["なる", "する", "やる", "いる", "ある", "くる", "できる", "おる", "みる", "しまう"];
 
+    // Te-forms of these are いって — the stolen い may only reattach to the previous token when
+    // that actually produces a JMDict word (悪|いっ|て → 悪い ✓, ギシギシ|いっ|て → ギシギシい ✗).
+    private static readonly HashSet<string> IuIkuDictForms = ["いう", "言う", "いく", "行く"];
+
     // Clause-final shapes that can precede sentence-final かな. Nouns and case particles
     // (に/と) are deliberately excluded so どうにかなって/なんとかなって/夢かなって keep
     // their te-form-of-なる/かなう reading.
@@ -2250,11 +2392,12 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            // Prohibitive/exclamatory な quoted by って: 言うな|って, すごいな|って, そうだな|って.
-            // Terminal form + なる te-form is ungrammatical, so this re-cut is safe.
+            // Prohibitive/exclamatory な quoted by って: 言うな|って, すごいな|って, そうだな|って,
+            // 取りたいな|って. Terminal form + なる te-form is ungrammatical, so this re-cut is safe
+            // (たい/ない + なる would be たくなって/なくなって, never たいなって/ないなって).
             if (thief.Text == "なっ" && prev != null
                 && ((prev.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective && prev.Text == prev.DictionaryForm)
-                    || (prev.PartOfSpeech == PartOfSpeech.Auxiliary && prev.Text is "だ" or "た" or "です" or "ます")))
+                    || (prev.PartOfSpeech == PartOfSpeech.Auxiliary && prev.Text is "だ" or "た" or "です" or "ます" or "たい" or "ない")))
             {
                 result.Add(new WordInfo
                 {
@@ -2350,6 +2493,12 @@ public partial class MorphologicalAnalyser
                     {
                         if (f.Process.Count == 1) { hasRealDeconjStep = true; break; }
                     }
+                    // いっ+て is usually 言って/行って mid-verb: only steal the い when the
+                    // reattachment makes a real word (悪い), not a deconj-shaped fragment
+                    // (ギシギシい would "deconjugate" too).
+                    if (hasRealDeconjStep && IuIkuDictForms.Contains(thief.DictionaryForm)
+                        && HasNonNameCompoundLookup?.Invoke(merged) != true)
+                        hasRealDeconjStep = false;
                     if (hasRealDeconjStep)
                     {
                         shouldRepair = true;
@@ -2395,6 +2544,19 @@ public partial class MorphologicalAnalyser
                         EndOffset = thief.EndOffset >= 0 ? thief.EndOffset - 1 : -1
                     };
                 }
+                // Reduplicated interjection quoted by って: やれ|やれっ|て → やれやれ + って.
+                // Without this the stripped copy is dropped as a kana stutter downstream.
+                else if (prev != null && prev.Text == stripped
+                         && (HasNonNameCompoundLookup ?? HasCompoundLookup)?.Invoke(prev.Text + stripped) == true)
+                {
+                    result[^1] = new WordInfo(prev)
+                    {
+                        Text = prev.Text + stripped,
+                        DictionaryForm = prev.Text + stripped,
+                        NormalizedForm = prev.Text + stripped,
+                        EndOffset = thief.EndOffset >= 0 ? thief.EndOffset - 1 : -1
+                    };
+                }
                 else
                 {
                     result.Add(new WordInfo(thief)
@@ -2414,6 +2576,59 @@ public partial class MorphologicalAnalyser
         }
 
         return changed ? result : wordInfos;
+    }
+
+    /// <summary>
+    /// Classical attributive き fused into the following noun by the lattice: 白|き尾 → 白き|尾.
+    /// Fires when the previous token is a bare kanji noun whose stem+い is a JMDict i-adjective,
+    /// the current OOV-ish noun starts with き, and the remainder resolves on its own. The
+    /// re-attached Xき form deconjugates through the existing "classical attributive" rule.
+    /// </summary>
+    private List<WordInfo> RepairClassicalKiAdjective(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2 || HasNonNameCompoundLookup == null || HasCompoundLookup == null)
+            return wordInfos;
+
+        List<WordInfo>? result = null;
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var current = wordInfos[i];
+            var prev = i > 0 ? (result != null ? result[^1] : wordInfos[i - 1]) : null;
+
+            if (prev == null
+                || current.PartOfSpeech != PartOfSpeech.Noun
+                || current.Text.Length < 2 || current.Text[0] != 'き'
+                || prev.PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.NaAdjective)
+                || prev.Text.Length is < 1 or > 2
+                || !prev.Text.All(c => c is >= '一' and <= '鿿')
+                || HasCompoundLookup(current.Text)
+                || !HasNonNameCompoundLookup(prev.Text + "い")
+                || !HasNonNameCompoundLookup(current.Text[1..]))
+            {
+                result?.Add(current);
+                continue;
+            }
+
+            result ??= [..wordInfos[..i]];
+            result[^1] = new WordInfo(prev)
+            {
+                Text = prev.Text + 'き',
+                DictionaryForm = prev.Text + "い",
+                NormalizedForm = prev.Text + "い",
+                PartOfSpeech = PartOfSpeech.IAdjective,
+                EndOffset = prev.EndOffset >= 0 ? prev.EndOffset + 1 : -1
+            };
+            result.Add(new WordInfo(current)
+            {
+                Text = current.Text[1..],
+                DictionaryForm = current.Text[1..],
+                NormalizedForm = current.Text[1..],
+                StartOffset = current.StartOffset >= 0 ? current.StartOffset + 1 : -1
+            });
+        }
+
+        return result ?? wordInfos;
     }
 
     private List<WordInfo> RecombineHiraganaTokens(List<WordInfo> wordInfos)

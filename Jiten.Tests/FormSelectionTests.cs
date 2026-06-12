@@ -1278,6 +1278,64 @@ public class FormSelectionTests
         // ごうごう (adv-to) should match 轟々 (1593500, thundering/roaring), not go-go
         // (moved from ShouldNotMatch, where the 4-element row crashed the 2-param test)
         yield return ["ごうごうとエレベーターの音が五月蝿い。", "ごうごう", 1593500, (byte)2];
+
+        // === drop-gate rescues and quotative guards ===
+        // ギシギシいってます = 言う te-form + ます, not the ぎしぎし adverb eating い
+        yield return ["なんか結界がギシギシいってますよぅ", "いってます", 1587040, (byte)3];
+        // reduplicated interjection rescue
+        yield return ["フン、やれやれ…………ってコラ", "やれやれ", 1013000, (byte)0];
+        // ああ before a verb is the demonstrative/interjection, not a dropped shred
+        yield return ["何故なら、彼女がああなったのはお前の責任だ。", "ああ", 1565440, (byte)7];
+        // emphatic ェッ must not destroy the imperative
+        yield return ["黙れェッ！", "黙れ", 1534930, (byte)0];
+        // prefixed adjective decomposition
+        yield return ["薄赤い", "赤い", 1383240, (byte)0];
+        // noun+する decomposition for non-vs nouns
+        yield return ["突然大怪我して帰ってきて", "大怪我", 2078830, (byte)0];
+        // classical attributive き → base adjective
+        yield return ["白き尾", "白き", 1474910, (byte)0];
+
+        // === benefactive/presumptive chain gaps ===
+        // kanji て貰う now deconjugates: する + [te-morau, want], not a chainless partial match
+        yield return ["して貰いたいこと", "して貰いたい", 1157170, (byte)1];
+        // Sudachi df=立てる homograph rejected; deconj finds 役に立つ with the full chain
+        yield return ["少しは我々の役に立って貰わんとな", "役に立って貰わん", 1537980, (byte)0];
+        // ぬじゃろう = archaic negative presumptive of 行く
+        yield return ["という訳にもいかぬじゃろう", "いかぬじゃろう", 1578850, (byte)2];
+        // kanji 頂きたい stays a separate token after the te-form (benefactive boundary policy)
+        yield return ["頼んで頂きたいことがある", "頂きたい", 1587290, (byte)0];
+
+        // === colloquial gemination collapse (ばっか/バッカ = 馬鹿) ===
+        // katakana バッカ as a noun is 馬鹿, not 麦価 "price of wheat" or the ばかり particle
+        yield return ["バッカおまえ見りゃ分かるじゃん", "バッカ", 1601260, (byte)4];
+        // ばっかな (Sudachi df=ばか) is 馬鹿+な, not 幕下 "military camp"
+        yield return ["貴族ってのはあんなのばっかなのか", "ばっかな", 1601260, (byte)4];
+        // genuine ばかり-particle uses stay untouched (regression guards for the collapse)
+        yield return ["あれ、来たばっかなのに", "ばっか", 2857403, (byte)0];
+        yield return ["生クリームばっかでどうすんのよ！", "ばっか", 2857403, (byte)0];
+
+        // === whitelist entries resolve to the right words ===
+        yield return ["持っているとはいえ、獣の速度", "とはいえ", 2037320, (byte)1];
+        yield return ["あいよ。", "あいよ", 2835730, (byte)1];
+        yield return ["いいや。", "いいや", 2857379, (byte)0];
+        yield return ["ちょっと疲れて休みが欲しいな火薬のカス取りたいなって思っただけだい！", "だい", 2097680, (byte)0];
+        yield return ["悔やんでも詮無きことです、お嬢様。", "詮無き", 1824270, (byte)0];
+        yield return ["主従の誓いを破りかねなかったことも事実だった。", "かねなかった", 1922120, (byte)1];
+        yield return ["シドには気をつけたまえ。", "たまえ", 2134420, (byte)1];
+
+        // === scoring fixes ===
+        // exact-surface archaic expression beats junk fallbacks (was buried by the −350 arch penalty)
+        yield return ["人にあらざる咆哮。", "あらざる", 2854344, (byte)3];
+        // 露になった = あらわ "exposed", not dew (1560070) or Russia (1147330)
+        yield return ["密着した服が露になった。", "露", 1560080, (byte)0];
+        // clause-final あり after と共に is the ある continuative, not 蟻
+        yield return ["私はいつでも貴女と共にあり――そして", "あり", 1296400, (byte)2];
+
+        // === batch 3 (T-H): beam gates ===
+        // suru-noun before できる keeps the noun reading (not 真似る's continuative stem)
+        yield return ["それでもこのテンションだけは真似できないよ", "真似", 1363740, (byte)0];
+        // 私してない = 私 + する, never 私する (わたくしする)
+        yield return ["そんな表情、私してない", "してない", 1157170, (byte)1];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
