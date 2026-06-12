@@ -22,6 +22,40 @@ public class DeckCommands(CliContext context)
         "翻译", "校对", "片源", "◎", "m"
     ];
 
+    public async Task BackfillVndbAnimeRelations(CliOptions options)
+    {
+        await using var db = await context.ContextFactory.CreateDbContextAsync();
+
+        var vnDecks = await db.Decks
+            .Where(d => d.MediaType == MediaType.VisualNovel)
+            .SelectMany(d => d.Links.Where(l => l.LinkType == LinkType.Vndb).Select(l => new { d.DeckId, l.Url }))
+            .ToListAsync();
+
+        Console.WriteLine($"Found {vnDecks.Count} VN decks with a VNDB link.");
+
+        int processed = 0, matched = 0;
+        foreach (var vn in vnDecks)
+        {
+            var url = vn.Url.TrimEnd('/');
+            var vndbId = url.Substring(url.LastIndexOf('/') + 1);
+
+            var relations = MetadataProviderHelper.GetVndbAnimeRelations(vndbId);
+            if (relations.Count > 0)
+            {
+                await MetadataProviderHelper.ProcessRelations(db, vn.DeckId, relations);
+                matched++;
+                if (options.Verbose)
+                    Console.WriteLine($"  {vndbId}: {relations.Count} anime MAL id(s) processed.");
+            }
+
+            processed++;
+            if (processed % 500 == 0)
+                Console.WriteLine($"Processed {processed}/{vnDecks.Count}...");
+        }
+
+        Console.WriteLine($"Done. Scanned {processed} VN decks; {matched} had VNDB anime adaptations in the map.");
+    }
+
     public async Task BackfillSpeechStats(CliOptions options)
     {
         if (options.DeckType == null || !Enum.TryParse(options.DeckType, out MediaType deckType))

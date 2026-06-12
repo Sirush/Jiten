@@ -150,6 +150,17 @@ public class StudySettingsDto
     [JsonPropertyName("dayBoundaryScheduling")]
     public bool DayBoundaryScheduling { get; set; }
 
+    [JsonPropertyName("loadBalancing")]
+    public bool LoadBalancing { get; set; } = true;
+
+    /// <summary>
+    /// Per-weekday load preference ("Easy Days"), 7 weights indexed by <see cref="DayOfWeek"/>
+    /// (0 = Sunday … 6 = Saturday), each in [0, 1]: 1 = normal, 0.5 = reduced, 0 = avoid. Null or all-1.0
+    /// means the feature is off. Only takes effect while <see cref="LoadBalancing"/> is enabled.
+    /// </summary>
+    [JsonPropertyName("easyDays")]
+    public double[]? EasyDays { get; set; }
+
     [JsonPropertyName("leechThreshold")]
     public int LeechThreshold { get; set; } = 8;
 

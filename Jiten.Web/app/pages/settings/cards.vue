@@ -33,6 +33,10 @@
   const forgetNeedsAck = computed(() => forgetCount.value > FORGET_ACK_THRESHOLD);
   const actionsOpenFor = ref<string | null>(null);
   const expandedCards = ref(new Set<string>());
+
+  // Add to word list
+  const addToListVisible = ref(false);
+  const addToListCards = ref<{ wordId: number; readingIndex: number }[]>([]);
   const page = ref(1);
   const pageSize = 50;
 
@@ -305,6 +309,8 @@
       actions.push({ label: 'Blacklist', icon: 'pi pi-ban', action: () => setVocabularyState(card, 'blacklist-add') });
     }
 
+    actions.push({ label: 'Add to list', icon: 'pi pi-list', action: () => openAddToList([card]) });
+
     actions.push({
       label: 'Forget',
       icon: 'pi pi-trash',
@@ -313,6 +319,15 @@
     });
 
     return actions;
+  }
+
+  function openAddToList(cards: FsrsCardWithWordDto[]) {
+    addToListCards.value = cards.map((c) => ({ wordId: c.wordId, readingIndex: c.readingIndex }));
+    addToListVisible.value = true;
+  }
+
+  function onAddedToList() {
+    if (addToListCards.value.length > 1) selectedIds.value.clear();
   }
 
   function confirmForget(card: FsrsCardWithWordDto) {
@@ -715,6 +730,23 @@
           </div>
           <div class="flex gap-2 flex-wrap justify-end">
             <Button
+              icon="pi pi-list"
+              label="Add to list"
+              size="small"
+              severity="secondary"
+              :loading="bulkLoading"
+              class="!hidden sm:!inline-flex"
+              @click="openAddToList(selectedCards)"
+            />
+            <Button
+              icon="pi pi-list"
+              size="small"
+              severity="secondary"
+              :loading="bulkLoading"
+              class="sm:!hidden"
+              @click="openAddToList(selectedCards)"
+            />
+            <Button
               icon="pi pi-check-circle"
               label="Master"
               size="small"
@@ -828,6 +860,9 @@
         />
       </template>
     </Dialog>
+
+    <!-- Add to word list -->
+    <SrsAddToListDialog v-model:visible="addToListVisible" :cards="addToListCards" @added="onAddedToList" />
   </div>
 </template>
 

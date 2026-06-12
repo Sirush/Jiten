@@ -20,7 +20,6 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /notifications
 Disallow: /parse
-Disallow: /reader
 Disallow: /requests/new
 Disallow: /ratings/history
 Allow: /decks/media/*/detail

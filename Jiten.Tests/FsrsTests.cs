@@ -304,6 +304,178 @@ public class FsrsTests
         Assert.True(intervals.All(i => i == intervals.First()));
     }
 
+    private static readonly DateTime BalancerAnchor = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void LoadBalancing_FlatLoad_ReturnsUnfuzzedCentre()
+    {
+        // With an empty calendar every day in the window is equally loaded, so the balancer must fall
+        // back to the un-fuzzed interval (the window centre) — no early/late bias.
+        var balancer = new DictionaryFsrsLoadBalancer();
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer);
+
+        Assert.Equal(30, result.Days);
+    }
+
+    [Fact]
+    public void LoadBalancing_PicksLeastLoadedDayWithinWindow()
+    {
+        // Interval 30 → fuzz window [27, 33]. Load every day except 33; the balancer must choose 33.
+        var balancer = new DictionaryFsrsLoadBalancer();
+        for (var day = 27; day <= 32; day++)
+            for (var n = 0; n < 5; n++)
+                balancer.Register(BalancerAnchor.AddDays(day));
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer);
+
+        Assert.Equal(33, result.Days);
+    }
+
+    [Fact]
+    public void LoadBalancing_NeverLeavesFuzzWindow()
+    {
+        // Even when the whole window is uniformly loaded, the choice stays inside [27, 33].
+        var balancer = new DictionaryFsrsLoadBalancer();
+        for (var day = 27; day <= 33; day++)
+            balancer.Register(BalancerAnchor.AddDays(day));
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer);
+
+        Assert.InRange(result.Days, 27, 33);
+    }
+
+    [Fact]
+    public void LoadBalancing_RegistersChosenDay()
+    {
+        var balancer = new DictionaryFsrsLoadBalancer();
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer);
+
+        // The placement must be recorded so later cards in the same batch balance around it.
+        Assert.Equal(1, balancer.GetLoad(BalancerAnchor.AddDays(result.Days)));
+    }
+
+    [Fact]
+    public void LoadBalancing_SharedBalancer_FlattensRepeatedIdenticalIntervals()
+    {
+        // 20 cards with the same 30-day interval reviewed at the same time would all pile onto one day
+        // under naive scheduling. Sharing one balancer spreads them evenly across the [27, 33] window.
+        var balancer = new DictionaryFsrsLoadBalancer();
+        var perDay = new Dictionary<int, int>();
+
+        for (var i = 0; i < 20; i++)
+        {
+            var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer);
+            Assert.InRange(result.Days, 27, 33);
+            perDay[result.Days] = perDay.GetValueOrDefault(result.Days) + 1;
+        }
+
+        // All 7 days used, and no day carries more than ceil(20 / 7) = 3 cards.
+        Assert.Equal(7, perDay.Count);
+        Assert.True(perDay.Values.All(count => count <= 3), "Load was not evenly distributed across the window.");
+    }
+
+    [Fact]
+    public void LoadBalancing_NullBalancer_FallsBackToRandomFuzz()
+    {
+        // Without a balancer the result must land uniformly within the fuzz window [27, 33].
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500);
+
+        Assert.InRange(result.Days, 27, 33);
+    }
+
+    private static double[] WeekendEasyDays()
+    {
+        // Avoid Saturday (index 6) and Sunday (index 0); all weekdays normal.
+        var weights = new[] { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+        weights[(int)DayOfWeek.Saturday] = 0.0;
+        weights[(int)DayOfWeek.Sunday] = 0.0;
+        return weights;
+    }
+
+    [Fact]
+    public void EasyDays_From_InactiveCases_ReturnNull()
+    {
+        Assert.Null(EasyDaysPolicy.From(null, 0));
+        Assert.Null(EasyDaysPolicy.From(new[] { 1.0, 1.0, 1.0 }, 0));                 // wrong length
+        Assert.Null(EasyDaysPolicy.From(new[] { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 }, 0)); // all normal
+        Assert.NotNull(EasyDaysPolicy.From(WeekendEasyDays(), 0));
+    }
+
+    [Fact]
+    public void EasyDays_SteersOffReducedWeekday_WithinWindow()
+    {
+        // Empty calendar, weekends avoided. The chosen due date must fall on a weekday and stay in window.
+        var balancer = new DictionaryFsrsLoadBalancer();
+        var easyDays = EasyDaysPolicy.From(WeekendEasyDays(), 0);
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer, easyDays);
+
+        var chosenWeekday = BalancerAnchor.AddDays(result.Days).DayOfWeek;
+        Assert.InRange(result.Days, 27, 33);
+        Assert.NotEqual(DayOfWeek.Saturday, chosenWeekday);
+        Assert.NotEqual(DayOfWeek.Sunday, chosenWeekday);
+    }
+
+    [Fact]
+    public void EasyDays_AllDaysAvoided_FallsBackToCentre()
+    {
+        // When every day in the window is "avoid", there is no preferable day, so it behaves like plain
+        // balancing on a flat calendar: pick the un-fuzzed centre.
+        var balancer = new DictionaryFsrsLoadBalancer();
+        var allAvoid = EasyDaysPolicy.From(new[] { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 }, 0);
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer, allAvoid);
+
+        Assert.Equal(30, result.Days);
+    }
+
+    [Fact]
+    public void EasyDays_CombinesWithLoad_AvoidsBothBusyAndReducedDays()
+    {
+        // A heavily-loaded weekday plus avoided weekends: the pick must be a weekday that is not the loaded
+        // one — load and weekday preference compose.
+        var balancer = new DictionaryFsrsLoadBalancer();
+        var easyDays = EasyDaysPolicy.From(WeekendEasyDays(), 0)!;
+
+        // Find a weekday in the window and pile load on it.
+        var loadedDay = -1;
+        for (var days = 27; days <= 33; days++)
+        {
+            var weekday = BalancerAnchor.AddDays(days).DayOfWeek;
+            if (weekday != DayOfWeek.Saturday && weekday != DayOfWeek.Sunday)
+            {
+                loadedDay = days;
+                break;
+            }
+        }
+        for (var n = 0; n < 50; n++)
+            balancer.Register(BalancerAnchor.AddDays(loadedDay));
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer, easyDays);
+
+        var chosenWeekday = BalancerAnchor.AddDays(result.Days).DayOfWeek;
+        Assert.NotEqual(loadedDay, result.Days);
+        Assert.NotEqual(DayOfWeek.Saturday, chosenWeekday);
+        Assert.NotEqual(DayOfWeek.Sunday, chosenWeekday);
+    }
+
+    [Fact]
+    public void EasyDays_OffsetShiftsWeekdayClassification()
+    {
+        // A large positive offset can roll a UTC weekday into the next local day; the policy must classify
+        // by local weekday, not UTC.
+        var utcDue = new DateTime(2026, 1, 3, 20, 0, 0, DateTimeKind.Utc); // Saturday 20:00 UTC
+
+        // +8h rolls this into Sunday 04:00 local; weight must be read for the local weekday (Sunday).
+        var sundayReduced = new[] { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+        sundayReduced[(int)DayOfWeek.Sunday] = 0.2;
+        var policy = new EasyDaysPolicy(sundayReduced, 8);
+
+        Assert.Equal(0.2, policy.Weight(utcDue)); // local Sunday, not UTC Saturday
+    }
+
     private List<int> GenerateReviewIntervals(bool enableFuzzing, int iterations)
     {
         var intervals = new List<int>();

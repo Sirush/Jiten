@@ -542,7 +542,7 @@
                 <div v-if="deck.genres?.length || deck.tags?.length || deck.relationships?.length" class="mt-4 space-y-2">
                   <GenreTagDisplay v-if="!store.hideGenres && deck.genres?.length" :genres="deck.genres" label="Genres" />
                   <GenreTagDisplay v-if="!store.hideTags && deck.tags?.length" :tags="deck.tags" label="Tags" />
-                  <RelatedMediaDisplay v-if="!store.hideRelations && deck.relationships?.length" :relationships="deck.relationships" />
+                  <RelatedMediaDisplay v-if="!store.hideRelations && deck.relationships?.length" :relationships="deck.relationships" :deck-id="deck.deckId" />
                 </div>
 
                 <div v-if="sortedLinks.length" class="mt-4 flex flex-col md:flex-row gap-4">

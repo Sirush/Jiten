@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Moq;
 using StackExchange.Redis;
 using ApiProgram = Program;
@@ -22,11 +23,16 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
     private SqliteConnection _jitenConnection = null!;
     private SqliteConnection _userConnection = null!;
 
+    /// <summary>The recording email stub registered for IEmailService/IEmailSender. Singleton, so reads are reliable.</summary>
+    public RecordingEmailService Emails => Services.GetRequiredService<RecordingEmailService>();
+
     public JitenWebApplicationFactory()
     {
         Environment.SetEnvironmentVariable("JwtSettings__Secret", "ThisIsATestSecretKeyThatIsLongEnoughForHS256!");
         Environment.SetEnvironmentVariable("JwtSettings__Issuer", "TestIssuer");
         Environment.SetEnvironmentVariable("JwtSettings__Audience", "TestAudience");
+        Environment.SetEnvironmentVariable("JwtSettings__AccessTokenExpirationMinutes", "15");
+        Environment.SetEnvironmentVariable("JwtSettings__RefreshTokenExpirationDays", "30");
         Environment.SetEnvironmentVariable("ConnectionStrings__JitenDatabase", "DataSource=:memory:");
         Environment.SetEnvironmentVariable("ConnectionStrings__Redis", "localhost:6379");
         Environment.SetEnvironmentVariable("StaticFilesPath", Path.GetTempPath());
@@ -77,10 +83,25 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
             services.AddDbContextFactory<UserDbContext>(options =>
                 options.UseSqlite(_userConnection), ServiceLifetime.Scoped);
 
-            // Replace auth
+            // Replace auth. The test handler runs under the default test scheme (header-based identity for
+            // most tests) AND under the JWT bearer scheme name, so controllers that restrict to
+            // JwtBearerDefaults.AuthenticationScheme ("Bearer") resolve to it. In bearer mode the handler
+            // validates real tokens issued by /api/auth, enabling genuine refresh/revocation flows.
+            // The production AddJwtBearer/ApiKey/Smart scheme registrations are configured via
+            // IConfigureOptions<AuthenticationOptions>; clear them so re-registering "Bearer" doesn't collide.
             services.RemoveAll<IAuthenticationSchemeProvider>();
+            services.RemoveAll<IConfigureOptions<AuthenticationOptions>>();
+            services.RemoveAll<IPostConfigureOptions<AuthenticationOptions>>();
             services.AddAuthentication(TestAuthHandler.SchemeName)
-                .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
+                .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { })
+                .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(
+                    Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme, _ => { })
+                // SignInManager.PasswordSignInAsync (used by /api/auth/login) signs into the Identity cookie
+                // scheme; clearing the auth-options configs above dropped it, so re-register it. The cookie
+                // itself is unused (we authenticate with JWTs) but the scheme must exist for sign-in to work.
+                .AddCookie(Microsoft.AspNetCore.Identity.IdentityConstants.ApplicationScheme)
+                .AddCookie(Microsoft.AspNetCore.Identity.IdentityConstants.ExternalScheme)
+                .AddCookie(Microsoft.AspNetCore.Identity.IdentityConstants.TwoFactorUserIdScheme);
 
             services.AddAuthorizationBuilder()
                 .SetDefaultPolicy(new AuthorizationPolicyBuilder(TestAuthHandler.SchemeName)
@@ -102,6 +123,19 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
             services.RemoveAll<ICdnService>();
             services.AddSingleton<StubCdnService>();
             services.AddSingleton<ICdnService>(sp => sp.GetRequiredService<StubCdnService>());
+
+            // Replace email (EmailService talks to SMTP) with a recording stub. It implements both the
+            // IEmailService used by AccountController and the IEmailSender used by AuthController.
+            services.RemoveAll<Jiten.Api.Services.IEmailService>();
+            services.RemoveAll<Microsoft.AspNetCore.Identity.UI.Services.IEmailSender>();
+            services.AddSingleton<RecordingEmailService>();
+            services.AddSingleton<Jiten.Api.Services.IEmailService>(sp => sp.GetRequiredService<RecordingEmailService>());
+            services.AddSingleton<Microsoft.AspNetCore.Identity.UI.Services.IEmailSender>(sp =>
+                sp.GetRequiredService<RecordingEmailService>());
+
+            // Stub outbound HTTP for the default client so reCAPTCHA siteverify never hits the network.
+            services.AddHttpClient(string.Empty)
+                .ConfigurePrimaryHttpMessageHandler(() => new StubRecaptchaHandler());
         });
     }
 

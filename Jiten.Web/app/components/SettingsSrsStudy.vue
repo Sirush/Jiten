@@ -17,6 +17,7 @@
     await srsStore.fetchSettings(true);
     Object.assign(form, srsStore.studySettings);
     form.keybinds = { ...srsStore.studySettings.keybinds };
+    syncEasyFromForm();
     if (!form.timezone) applyDetectedTimezone();
     // Let the hydration mutations flush through the deep watcher (still guarded by loaded=false)
     // before arming auto-save, otherwise the initial Object.assign triggers a spurious save.
@@ -65,6 +66,107 @@
     { label: 'Easiest', value: 'EasiestFirst' },
     { label: 'Hardest', value: 'HardestFirst' },
   ];
+
+  // Easy Days: per-weekday load weights, index 0=Sunday…6=Saturday, each in [0,1].
+  const easyModeOptions = [
+    { label: 'Lighter weekends', value: 'weekends' },
+    { label: 'Custom per day', value: 'custom' },
+  ];
+  const weekendLevelOptions = [
+    { label: 'Reduced', value: 0.5 },
+    { label: 'Minimum', value: 0 },
+  ];
+  const easyLevelOptions = [
+    { label: 'Normal', value: 1 },
+    { label: 'Reduced', value: 0.5 },
+    { label: 'Minimum', value: 0 },
+  ];
+  // Display order Monday→Sunday; idx is the DayOfWeek index used by easyDays / the backend.
+  const weekdayRows = [
+    { idx: 1, label: 'Monday' },
+    { idx: 2, label: 'Tuesday' },
+    { idx: 3, label: 'Wednesday' },
+    { idx: 4, label: 'Thursday' },
+    { idx: 5, label: 'Friday' },
+    { idx: 6, label: 'Saturday' },
+    { idx: 0, label: 'Sunday' },
+  ];
+
+  const easyEnabled = ref(false);
+  const easyMode = ref<'weekends' | 'custom'>('weekends');
+  const weekendLevel = ref(0.5);
+  const customDays = ref<number[]>([1, 1, 1, 1, 1, 1, 1]);
+  // Per-day grid is rolled up by default (to save space); expanded only when the user actively switches in.
+  const customExpanded = ref(false);
+
+  const customSummary = computed(() => {
+    const labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const reduced: string[] = [];
+    const minimum: string[] = [];
+    customDays.value.forEach((w, i) => {
+      if (w === 0) minimum.push(labels[i]!);
+      else if (w < 1) reduced.push(labels[i]!);
+    });
+    if (!reduced.length && !minimum.length) return 'all days normal';
+    const parts: string[] = [];
+    if (reduced.length) parts.push(`${reduced.join(', ')} reduced`);
+    if (minimum.length) parts.push(`${minimum.join(', ')} minimum`);
+    return parts.join(' · ');
+  });
+
+  // Auto-expand the grid when the user switches into custom mode (or re-enables while already custom);
+  // both watches are loaded-guarded so loading an existing custom config keeps it rolled up.
+  watch(easyMode, (mode) => {
+    if (loaded.value && mode === 'custom') customExpanded.value = true;
+  });
+  watch(easyEnabled, (on) => {
+    if (loaded.value && on && easyMode.value === 'custom') customExpanded.value = true;
+  });
+
+  // Derive the UI controls from the stored weekday weights on load.
+  function syncEasyFromForm() {
+    customExpanded.value = false; // existing config loads rolled up
+    const ed = form.easyDays;
+    if (!ed || ed.length !== 7) {
+      easyEnabled.value = false;
+      easyMode.value = 'weekends';
+      weekendLevel.value = 0.5;
+      customDays.value = [1, 1, 1, 1, 1, 1, 1];
+      return;
+    }
+    easyEnabled.value = true;
+    customDays.value = [...ed];
+    const weekdaysNormal = ed[1] === 1 && ed[2] === 1 && ed[3] === 1 && ed[4] === 1 && ed[5] === 1;
+    const weekendReduced = ed[0] === ed[6] && ed[0]! < 1;
+    if (weekdaysNormal && weekendReduced) {
+      easyMode.value = 'weekends';
+      weekendLevel.value = ed[0]!;
+    } else {
+      easyMode.value = 'custom';
+    }
+  }
+
+  // Push the UI controls back into the stored weekday weights (drives auto-save via the form watcher).
+  function applyEasyToForm() {
+    if (!easyEnabled.value) {
+      form.easyDays = null;
+      return;
+    }
+    if (easyMode.value === 'weekends') {
+      const w = weekendLevel.value;
+      form.easyDays = [w, 1, 1, 1, 1, 1, w]; // Sunday…Saturday
+    } else {
+      form.easyDays = [...customDays.value];
+    }
+  }
+
+  watch(
+    [easyEnabled, easyMode, weekendLevel, customDays],
+    () => {
+      if (loaded.value) applyEasyToForm();
+    },
+    { deep: true }
+  );
 
   function getUtcOffsetMinutes(zone: string, date?: Date): number {
     const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', hour12: false, timeZoneName: 'shortOffset' }).formatToParts(
@@ -365,6 +467,76 @@
             <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
           </Tooltip>
         </label>
+      </div>
+
+      <Divider />
+
+      <!-- Review scheduling -->
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Review scheduling</h3>
+      <p class="text-sm text-surface-500 -mt-1 mb-1">
+        Reviews are automatically balanced — each card is placed on the least-busy day within its normal scheduling window, smoothing out spike days
+        without affecting memory or retention.
+      </p>
+
+      <div class="flex items-center gap-2">
+        <ToggleSwitch v-model="easyEnabled" input-id="easyDaysEnabled" />
+        <label for="easyDaysEnabled" class="text-sm cursor-pointer">
+          Easy days
+          <Tooltip
+            content="Get fewer reviews on the days you pick. Cards shift to nearby days instead, so your overall workload stays the same."
+            placement="top"
+          >
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+      </div>
+
+      <div v-if="easyEnabled" class="flex flex-col gap-3 ml-6">
+        <SelectButton
+          v-model="easyMode"
+          :options="easyModeOptions"
+          option-label="label"
+          option-value="value"
+          :allow-empty="false"
+          class="flex-wrap"
+        />
+
+        <div v-if="easyMode === 'weekends'" class="min-w-0">
+          <label class="block text-sm font-medium mb-1">
+            Weekend load
+            <Tooltip content="How much to reduce reviews on Saturday and Sunday. Reduced ≈ half the usual load; Minimum avoids them whenever possible." placement="top">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+          <SelectButton v-model="weekendLevel" :options="weekendLevelOptions" option-label="label" option-value="value" :allow-empty="false" />
+        </div>
+
+        <div v-else class="flex flex-col gap-2">
+          <button
+            type="button"
+            class="flex items-center gap-2 w-fit text-sm font-medium cursor-pointer hover:text-primary-500"
+            @click="customExpanded = !customExpanded"
+          >
+            <i :class="['pi text-xs', customExpanded ? 'pi-chevron-down' : 'pi-chevron-right']" />
+            <span>Per-day levels</span>
+            <span v-if="!customExpanded" class="font-normal text-surface-500">— {{ customSummary }}</span>
+          </button>
+          <div v-if="customExpanded" class="flex flex-col gap-2">
+            <p class="text-xs text-surface-500">Normal — full load · Reduced — about half · Minimum — avoid when possible.</p>
+            <div v-for="day in weekdayRows" :key="day.idx" class="flex items-center justify-between gap-3">
+              <span class="text-sm w-24 shrink-0">{{ day.label }}</span>
+              <SelectButton
+                v-model="customDays[day.idx]"
+                :options="easyLevelOptions"
+                option-label="label"
+                option-value="value"
+                :allow-empty="false"
+                size="small"
+                class="flex-wrap justify-end"
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       <Divider />

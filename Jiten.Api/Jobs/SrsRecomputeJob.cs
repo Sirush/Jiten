@@ -1,5 +1,6 @@
 using Hangfire;
 using Jiten.Api.Dtos;
+using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.FSRS;
 using Microsoft.EntityFrameworkCore;
@@ -13,13 +14,17 @@ public class SrsRecomputeJob(
     private const int BatchSize = 500;
 
     [Queue("default")]
-    public async Task RecomputeUserSrs(string userId, double[] parameters, double desiredRetention)
+    public async Task RecomputeUserSrs(string userId, double[] parameters, double desiredRetention, bool loadBalance = true,
+                                       EasyDaysPolicy? easyDays = null)
     {
+        // Single-shot recompute: one in-memory balancer accumulates across all batches, so every card is
+        // placed against the freshly-rebalanced schedule built so far (online greedy balancing).
+        var balancer = loadBalance ? new DictionaryFsrsLoadBalancer() : null;
         var lastCardId = 0L;
 
         while (true)
         {
-            var result = await RecomputeUserSrsBatch(userId, parameters, desiredRetention, lastCardId, BatchSize);
+            var result = await RecomputeUserSrsBatch(userId, parameters, desiredRetention, lastCardId, BatchSize, loadBalance, balancer, easyDays);
             if (result.Processed == 0 || result.Done)
             {
                 break;
@@ -31,10 +36,33 @@ public class SrsRecomputeJob(
         logger.LogInformation("Recomputed FSRS scheduling for user {UserId}", userId);
     }
 
-    public async Task<SrsRecomputeBatchResponse> RecomputeUserSrsBatch(string userId, double[] parameters, double desiredRetention, long lastCardId, int batchSize)
+    /// <param name="sharedBalancer">
+    /// When provided (single-shot loop), used and accumulated across batches. When null and
+    /// <paramref name="loadBalance"/> is true (stateless client-driven batches), a fresh balancer is seeded
+    /// from the user's current schedule in the database — which already reflects prior batches' saved
+    /// placements — so balancing still works across independent HTTP calls.
+    /// </param>
+    public async Task<SrsRecomputeBatchResponse> RecomputeUserSrsBatch(string userId, double[] parameters, double desiredRetention,
+                                                                       long lastCardId, int batchSize, bool loadBalance = true,
+                                                                       IFsrsLoadBalancer? sharedBalancer = null,
+                                                                       EasyDaysPolicy? easyDays = null)
     {
         await using var userContext = await userContextFactory.CreateDbContextAsync();
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters);
+
+        IFsrsLoadBalancer? balancer = null;
+        if (loadBalance)
+        {
+            balancer = sharedBalancer ?? await FsrsLoadBalancerSeeder.SeedAsync(userContext, userId);
+        }
+
+        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters,
+                                          loadBalancer: balancer, easyDays: easyDays);
+        // Replay scheduler for historical reviews: their due dates are superseded by the next review,
+        // so fuzzing/balancing them would only register phantom load in the balancer's histogram.
+        // Stability/difficulty depend solely on log timestamps, so skipping fuzz changes nothing else
+        // and makes the replay deterministic.
+        var replayScheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters,
+                                                enableFuzzing: false);
 
         var total = await userContext.FsrsCards.CountAsync(card => card.UserId == userId);
         var cards = await userContext.FsrsCards
@@ -78,10 +106,17 @@ public class SrsRecomputeJob(
 
             var tempCard = new FsrsCard(card.UserId, card.WordId, card.ReadingIndex);
             var lapses = 0;
-            foreach (var log in cardLogs)
+            for (var i = 0; i < cardLogs.Count; i++)
             {
+                var log = cardLogs[i];
+                // Only the last review produces a due date that survives, and terminal-state cards
+                // (Mastered/Blacklisted/Suspended) never come due at all — everything else replays
+                // without fuzz so it doesn't compete for calendar days.
+                var isSurvivingPlacement = i == cardLogs.Count - 1 && overrideState == null;
+                var activeScheduler = isSurvivingPlacement ? scheduler : replayScheduler;
+
                 var prevState = tempCard.State;
-                var review = scheduler.ReviewCard(tempCard, log.Rating, log.ReviewDateTime, log.ReviewDuration);
+                var review = activeScheduler.ReviewCard(tempCard, log.Rating, log.ReviewDateTime, log.ReviewDuration);
                 if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
                     lapses++;
                 tempCard = review.UpdatedCard;

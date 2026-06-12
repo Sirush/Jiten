@@ -160,7 +160,11 @@ public class SrsController(
         var userSettings = await LoadUserSettings(userId);
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters);
+        var studySettings = GetStudySettings(userSettings);
+        var loadBalancer = await BuildLoadBalancer(userId, studySettings.LoadBalancing);
+        var easyDays = BuildEasyDaysPolicy(studySettings);
+        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters,
+                                          loadBalancer: loadBalancer, easyDays: easyDays);
         if (card == null)
         {
             card = new FsrsCard(userId, request.WordId, request.ReadingIndex);
@@ -177,7 +181,6 @@ public class SrsController(
         {
             cardAndLog.UpdatedCard.Lapses = card.Lapses + 1;
 
-            var studySettings = GetStudySettings(userSettings);
             var threshold = studySettings.LeechThreshold;
 
             if (threshold > 0)
@@ -289,7 +292,10 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var studySettings = GetStudySettings(userSettings);
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters);
+        var loadBalancer = await BuildLoadBalancer(userId, studySettings.LoadBalancing);
+        var easyDays = BuildEasyDaysPolicy(studySettings);
+        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters,
+                                          loadBalancer: loadBalancer, easyDays: easyDays);
 
         await using var transaction = await userContext.Database.BeginTransactionAsync();
 
@@ -652,7 +658,11 @@ public class SrsController(
         await userContext.SaveChangesAsync();
 
         if (reschedule)
-            await recomputeJob.RecomputeUserSrs(userId, result.Parameters, desiredRetention);
+        {
+            var studySettings = GetStudySettings(settings);
+            await recomputeJob.RecomputeUserSrs(userId, result.Parameters, desiredRetention,
+                                                studySettings.LoadBalancing, BuildEasyDaysPolicy(studySettings));
+        }
         await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new
@@ -682,7 +692,9 @@ public class SrsController(
         var userSettings = await LoadUserSettings(userId);
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
-        await recomputeJob.RecomputeUserSrs(userId, parameters, desiredRetention);
+        var studySettings = GetStudySettings(userSettings);
+        await recomputeJob.RecomputeUserSrs(userId, parameters, desiredRetention,
+                                            studySettings.LoadBalancing, BuildEasyDaysPolicy(studySettings));
         await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { success = true });
@@ -710,7 +722,9 @@ public class SrsController(
         var userSettings = await LoadUserSettings(userId);
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
-        var result = await recomputeJob.RecomputeUserSrsBatch(userId, parameters, desiredRetention, lastCardId, batchSize);
+        var studySettings = GetStudySettings(userSettings);
+        var result = await recomputeJob.RecomputeUserSrsBatch(userId, parameters, desiredRetention, lastCardId, batchSize,
+                                                              studySettings.LoadBalancing, null, BuildEasyDaysPolicy(studySettings));
         await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(result);
@@ -1472,6 +1486,35 @@ public class SrsController(
             catch (JsonException) { }
         }
         return new StudySettingsDto();
+    }
+
+    /// <summary>
+    /// Builds a load balancer seeded from the user's currently-scheduled review load, so freshly fuzzed
+    /// due dates settle on the least-busy day within their fuzz window. Returns null when load balancing
+    /// is disabled, leaving the scheduler on plain random fuzz.
+    /// </summary>
+    private async Task<IFsrsLoadBalancer?> BuildLoadBalancer(string userId, bool enabled)
+    {
+        if (!enabled) return null;
+        return await FsrsLoadBalancerSeeder.SeedAsync(userContext, userId);
+    }
+
+    /// <summary>
+    /// Builds the Easy-Days weekday preference from the user's settings, or returns null when it is off or
+    /// load balancing is disabled (Easy Days is a refinement of load balancing and needs it enabled).
+    /// </summary>
+    private static EasyDaysPolicy? BuildEasyDaysPolicy(StudySettingsDto studySettings)
+    {
+        if (!studySettings.LoadBalancing) return null;
+        return EasyDaysPolicy.From(studySettings.EasyDays, ResolveOffsetHours(DateTime.UtcNow, studySettings.Timezone));
+    }
+
+    private static double ResolveOffsetHours(DateTime utcNow, string? timezone)
+    {
+        if (string.IsNullOrEmpty(timezone)) return 0;
+        try { return TimeZoneInfo.FindSystemTimeZoneById(timezone).GetUtcOffset(utcNow).TotalHours; }
+        catch (TimeZoneNotFoundException) { return 0; }
+        catch (InvalidTimeZoneException) { return 0; }
     }
 
 

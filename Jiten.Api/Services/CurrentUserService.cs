@@ -65,7 +65,21 @@ public class CurrentUserService(
             var hasWordSetState = setDerivedStates.TryGetValue((k.WordId, k.ReadingIndex), out var setState);
 
             if (fsrsCardDict.TryGetValue(k, out var card))
-                return GetKnownStatesFromCard(card);
+            {
+                var cardStates = GetKnownStatesFromCard(card);
+
+                // A terminal word-set membership (Blacklisted/Mastered) must never present as Due:
+                // a stale scheduled Due on the card is suppressed in favour of the parked state.
+                if (cardStates.Contains(KnownState.Due) && hasWordSetState &&
+                    setState is WordSetStateType.Blacklisted or WordSetStateType.Mastered)
+                {
+                    return setState == WordSetStateType.Blacklisted
+                        ? [KnownState.Blacklisted]
+                        : [KnownState.Mastered];
+                }
+
+                return cardStates;
+            }
 
             if (hasWordSetState)
             {
@@ -114,19 +128,26 @@ public class CurrentUserService(
 
     private static List<KnownState> GetKnownStatesFromCard(FsrsCard card)
     {
-        List<KnownState> knownState = new();
         switch (card.State)
         {
             case FsrsState.Mastered:
-                knownState.Add(KnownState.Mastered);
-                break;
+                return [KnownState.Mastered];
             case FsrsState.Blacklisted:
-                knownState.Add(KnownState.Blacklisted);
-                break;
+                return [KnownState.Blacklisted];
         }
 
-        if (knownState.Count > 0)
-            return knownState;
+        // Suspended cards are parked: they keep their tier (so they still count toward coverage),
+        // but must never present as Due/Overdue — mirroring how Redundant strips Due.
+        if (card.State == FsrsState.Suspended)
+        {
+            if (card.LastReview == null)
+                return [KnownState.Suspended];
+
+            var suspendedInterval = (card.Due - card.LastReview.Value).TotalDays;
+            return [suspendedInterval < 21 ? KnownState.Young : KnownState.Mature, KnownState.Suspended];
+        }
+
+        List<KnownState> knownState = new();
 
         if (card.LastReview == null)
         {

@@ -45,15 +45,23 @@
   const { data: response, refresh: refreshInfo } = useApiFetch<Word>(infoUrl, { watch: false });
   const { data: mediaFrequency, status: mediaFreqStatus, refresh: refreshMediaFrequency } = useApiFetch<Record<string, number>>(mediaFreqUrl, { lazy: true, watch: false });
   const { data: fetchedKnownStates, refresh: refreshKnownStates } = useApiFetch<KnownState[]>(knownStateUrl, { lazy: true, watch: false });
-  const knownStatesOverride = computed(() => fetchedKnownStates.value ?? response.value?.knownStates ?? undefined);
+
+  const word = ref<Word | null | undefined>(response.value);
+  watch(response, (value) => {
+    if (value && value.mainReading.readingIndex === currentReadingIndex.value) {
+      word.value = value;
+    }
+  });
+
+  const knownStatesOverride = computed(() => fetchedKnownStates.value ?? word.value?.knownStates ?? undefined);
 
   const { resolvedGroups } = useDictionaryDefinitions(
-    computed(() => response.value?.mainReading?.text),
-    computed(() => response.value?.definitions),
+    computed(() => word.value?.mainReading?.text),
+    computed(() => word.value?.definitions),
   );
 
   const sortedReadings = computed(() => {
-    return response.value?.alternativeReadings.sort((a, b) => b.frequencyPercentage - a.frequencyPercentage) || [];
+    return word.value?.alternativeReadings.sort((a, b) => b.frequencyPercentage - a.frequencyPercentage) || [];
   });
 
   const mediaAmountUrl = 'media-deck/decks-count';
@@ -81,16 +89,20 @@
   };
 
   const isTransitioning = ref(false);
+  let switchSeq = 0;
 
   const switchReadingOrWord = async () => {
+    const seq = ++switchSeq;
     isTransitioning.value = true;
-    await Promise.all([refreshInfo(), refreshKnownStates()]);
-    isTransitioning.value = false;
 
+    await Promise.all([refreshInfo(), refreshKnownStates(), refreshMediaFrequency()]);
+
+    if (seq !== switchSeq) return;
+
+    isTransitioning.value = false;
     selectedMediaType.value = null;
     mediaAccordionValue.value = '0';
 
-    refreshMediaFrequency();
     loadCustomSentences();
 
     exampleSentences.value = [];
@@ -118,7 +130,7 @@
   );
 
   watch(
-    () => response.value?.mainReading.text,
+    () => word.value?.mainReading.text,
     (newText) => {
       emit('mainReadingTextChanged', newText);
     },
@@ -252,8 +264,8 @@
 </script>
 
 <template>
-  <Card class="p-4" :class="{ 'opacity-60': isTransitioning }">
-    <template v-if="response" #content>
+  <Card class="p-4 transition-opacity duration-300 ease-in-out" :class="{ 'opacity-60': isTransitioning }">
+    <template v-if="word" #content>
       <div class="flex flex-col justify-between md:flex-row">
         <div class="flex flex-col gap-4 max-w-2xl">
           <div class="flex justify-between">
@@ -261,15 +273,15 @@
               <div v-if="conjugationString != null" class="text-gray-500 text-xs font-noto-sans">(Conjugation: {{ conjugationString }})</div>
               <div class="flex items-center gap-2">
                 <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`">
-                  <div class="text-3xl font-noto-sans" lang="ja" v-html="convertToRuby(response.mainReading.text)" />
+                  <div class="text-3xl font-noto-sans" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
                 </NuxtLink>
-                <div v-if="!showRedirect" class="text-3xl font-noto-sans" lang="ja" v-html="convertToRuby(response.mainReading.text)" />
-                <TtsButton :text="stripRubyMarkup(response.mainReading.text)" :word-id="wordId" :reading-index="currentReadingIndex" size="md" />
+                <div v-if="!showRedirect" class="text-3xl font-noto-sans" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
+                <TtsButton :text="stripRubyMarkup(word.mainReading.text)" :word-id="wordId" :reading-index="currentReadingIndex" size="md" />
               </div>
             </div>
             <div class="flex flex-col md:flex-row items-end md:hidden">
-              <div class="text-gray-500 dark:text-gray-300 text-right">Rank #{{ response.mainReading.frequencyRank.toLocaleString() }}</div>
-              <VocabularyStatus :word="response" :known-states-override="knownStatesOverride" />
+              <div class="text-gray-500 dark:text-gray-300 text-right">Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}</div>
+              <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" />
             </div>
           </div>
 
@@ -277,9 +289,9 @@
             <h1 class="text-gray-500 dark:text-gray-300 text-sm">Meanings</h1>
             <div class="pl-2">
               <ClientOnly>
-                <VocabularyDictionaryDefinitions :resolved-groups="resolvedGroups" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="response.alternativeReadings" />
+                <VocabularyDictionaryDefinitions :resolved-groups="resolvedGroups" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" />
                 <template #fallback>
-                  <VocabularyDefinitions :definitions="response.definitions" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="response.alternativeReadings" />
+                  <VocabularyDefinitions :definitions="word.definitions" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" />
                 </template>
               </ClientOnly>
             </div>
@@ -300,12 +312,12 @@
           </div>
 
           <ClientOnly>
-            <div v-if="response.pitchAccents && response.pitchAccents.length > 0" :key="`pitch-${wordId}-${currentReadingIndex}`">
+            <div v-if="word.pitchAccents && word.pitchAccents.length > 0" :key="`pitch-${wordId}-${currentReadingIndex}`">
               <h1 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm">Pitch accents</h1>
               <div class="pl-2 flex flex-row flex-wrap gap-8">
-                <span v-for="pitchAccent in response.pitchAccents" :key="pitchAccent">
+                <span v-for="pitchAccent in word.pitchAccents" :key="pitchAccent">
                   <div>
-                    <LazyPitchDiagram :reading="response.mainReading.text" :pitch-accent="pitchAccent" />
+                    <LazyPitchDiagram :reading="word.mainReading.text" :pitch-accent="pitchAccent" />
                   </div>
                 </span>
               </div>
@@ -317,15 +329,15 @@
 
         <div class="md:min-w-64">
           <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">
-            <VocabularyStatus :word="response" :known-states-override="knownStatesOverride" />
-            Rank #{{ response.mainReading.frequencyRank }}
+            <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" />
+            Rank #{{ word.mainReading.frequencyRank }}
           </div>
           <div class="md:text-right pt-4 cursor-pointer" @click="selectMediaType(null)">
-            Appears in <b>{{ response.mainReading.usedInMediaAmount }} media</b>
-            ({{ totalMediaCount > 0 ? ((response.mainReading.usedInMediaAmount / totalMediaCount) * 100).toFixed(0) : '0' }}%)
+            Appears in <b>{{ word.mainReading.usedInMediaAmount }} media</b>
+            ({{ totalMediaCount > 0 ? ((word.mainReading.usedInMediaAmount / totalMediaCount) * 100).toFixed(0) : '0' }}%)
           </div>
           <ClientOnly>
-            <div v-if="mediaFreqStatus === 'pending' && response.mainReading.usedInMediaAmount > 0" class="space-y-2 mt-2">
+            <div v-if="mediaFreqStatus === 'pending' && !mediaFrequency && word.mainReading.usedInMediaAmount > 0" class="space-y-2 mt-2">
               <div v-for="i in 3" :key="i" class="h-4 w-48 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
             </div>
             <table v-else-if="mediaFrequency && Object.keys(mediaFrequency).length > 0">
@@ -351,16 +363,16 @@
         </div>
       </div>
 
-      <WordComposition v-if="response?.composedOf?.length" :components="response.composedOf" />
+      <WordComposition v-if="word?.composedOf?.length" :components="word.composedOf" />
 
       <WordUsedIn
-        v-if="response?.usedInTotal"
-        :key="`usedin-${response.wordId}-${currentReadingIndex}`"
-        :word-id="response.wordId"
+        v-if="word?.usedInTotal"
+        :key="`usedin-${word.wordId}-${currentReadingIndex}`"
+        :word-id="word.wordId"
         :reading-index="currentReadingIndex"
-        :initial-items="response.usedIn ?? []"
-        :total="response.usedInTotal"
-        :highlight="response.mainReading.text"
+        :initial-items="word.usedIn ?? []"
+        :total="word.usedInTotal"
+        :highlight="word.mainReading.text"
       />
 
       <ClientOnly>
@@ -440,15 +452,15 @@
         </div>
       </ClientOnly>
 
-      <Accordion v-if="response.mainReading.usedInMediaAmount > 0" :value="mediaAccordionValue" lazy>
+      <Accordion v-if="word.mainReading.usedInMediaAmount > 0" :value="mediaAccordionValue" lazy>
         <AccordionPanel value="1">
           <AccordionHeader>
             <div class="cursor-pointer">
-              View the <b>{{ response.mainReading.usedInMediaAmount }}</b> media it appears in
+              View the <b>{{ word.mainReading.usedInMediaAmount }}</b> media it appears in
             </div>
           </AccordionHeader>
           <AccordionContent>
-            <MediaList :word="response" :default-media-type="selectedMediaType" />
+            <MediaList :word="word" :default-media-type="selectedMediaType" />
           </AccordionContent>
         </AccordionPanel>
       </Accordion>

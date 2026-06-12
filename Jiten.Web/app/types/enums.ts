@@ -121,7 +121,8 @@ export enum KnownState {
   Blacklisted = 3,
   Due = 4,
   Mastered = 5,
-  Redundant = 6
+  Redundant = 6,
+  Suspended = 7
 }
 
 export enum DifficultyDisplayStyle {

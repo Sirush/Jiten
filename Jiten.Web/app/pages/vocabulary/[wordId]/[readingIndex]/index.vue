@@ -3,11 +3,15 @@
   import { stripRuby } from '~/utils/stripRuby';
   import type { Word } from '~/types/types';
 
+  definePageMeta({
+    key: (route) => `vocab-${route.params.wordId}`,
+  });
+
   const route = useRoute();
   const router = useRouter();
 
-  const wordId = ref(Number(route.params.wordId) || 0);
-  const readingIndex = ref(Number(route.params.readingIndex) || 0);
+  const wordId = computed(() => Number(route.params.wordId) || 0);
+  const readingIndex = computed(() => Number(route.params.readingIndex) || 0);
 
   const initialUrl = `vocabulary/${wordId.value}/${readingIndex.value}/info`;
   const { data: wordData } = await useApiFetch<Word>(initialUrl, {
@@ -26,13 +30,8 @@
   });
 
   const onReadingSelected = (newIndex: number) => {
-    readingIndex.value = newIndex;
-    router.replace(
-      {
-        path: `/vocabulary/${wordId.value}/${readingIndex.value}`,
-      },
-      false
-    );
+
+    router.replace({ path: `/vocabulary/${wordId.value}/${newIndex}` });
   };
 
   useHead(() => {

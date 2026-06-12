@@ -10,7 +10,10 @@
   import Column from 'primevue/column';
   import { useToast } from 'primevue/usetoast';
   import { DeckRelationshipType, LinkType } from '~/types';
-  import type { Deck, DeckDetail, DeckRelationship, Link, MediaType, Tag, Genre } from '~/types';
+  import type { Deck, DeckDetail, DeckRelationship, Link, MediaType, MediaSuggestion, Tag, Genre } from '~/types';
+  import { debounce } from 'perfect-debounce';
+  import AutoComplete from 'primevue/autocomplete';
+  import PrimeTag from 'primevue/tag';
   import { getMediaTypeText, getChildrenCountText } from '~/utils/mediaTypeMapper';
   import { getLinkTypeText } from '~/utils/linkTypeMapper';
   import { getAllGenres } from '~/utils/genreMapper';
@@ -34,6 +37,7 @@
   const selectedMediaType = ref<MediaType | null>(null);
   const toast = useToast();
   const { $api } = useNuxtApp();
+  const localiseTitle = useLocaliseTitle();
 
   function showToast(severity: 'success' | 'info' | 'warn' | 'error', summary: string, detail: string = '') {
     toast.add({ severity, summary, detail, life: 3000 });
@@ -103,33 +107,45 @@
   const newRelationship = ref<{
     targetDeckId: number | null;
     targetTitle: string;
-    relationshipType: DeckRelationshipType | null;
-  }>({ targetDeckId: null, targetTitle: '', relationshipType: null });
-  const fetchingDeckTitle = ref(false);
+    role: RelationshipRoleOption | null;
+  }>({ targetDeckId: null, targetTitle: '', role: null });
+  const targetDeckSelection = ref<MediaSuggestion | string | null>(null);
+  const deckSuggestions = ref<MediaSuggestion[]>([]);
   const showRecomputeDifficultyDialog = ref(false);
   const showReaggregateDifficultyDialog = ref(false);
 
-  const relationshipTypeOptions = [
-    { label: 'Sequel', value: DeckRelationshipType.Sequel },
-    { label: 'Fandisc', value: DeckRelationshipType.Fandisc },
-    { label: 'Spinoff', value: DeckRelationshipType.Spinoff },
-    { label: 'Side Story', value: DeckRelationshipType.SideStory },
-    { label: 'Adaptation', value: DeckRelationshipType.Adaptation },
-    { label: 'Alternative', value: DeckRelationshipType.Alternative },
+  // Options are phrased from the TARGET deck's perspective: picking "Sequel" means the
+  // target you select is THIS deck's sequel. Each maps to a canonical primary edge plus
+  // whether the stored edge points from the target back to this deck (flip).
+  type RelationshipRoleOption = { label: string; primaryType: DeckRelationshipType; flip: boolean };
+  const relationshipRoleOptions: RelationshipRoleOption[] = [
+    { label: 'Sequel', primaryType: DeckRelationshipType.Sequel, flip: true },
+    { label: 'Prequel', primaryType: DeckRelationshipType.Sequel, flip: false },
+    { label: 'Adaptation', primaryType: DeckRelationshipType.Adaptation, flip: false },
+    { label: 'Source material', primaryType: DeckRelationshipType.Adaptation, flip: true },
+    { label: 'Fandisc', primaryType: DeckRelationshipType.Fandisc, flip: true },
+    { label: 'Main release', primaryType: DeckRelationshipType.Fandisc, flip: false },
+    { label: 'Spinoff', primaryType: DeckRelationshipType.Spinoff, flip: true },
+    { label: 'Parent series', primaryType: DeckRelationshipType.Spinoff, flip: false },
+    { label: 'Side story', primaryType: DeckRelationshipType.SideStory, flip: true },
+    { label: 'Main story', primaryType: DeckRelationshipType.SideStory, flip: false },
+    { label: 'Alternative', primaryType: DeckRelationshipType.Alternative, flip: false },
   ];
 
+  // Labels for a relationship already in the list, keyed by its type from THIS deck's
+  // perspective (the value the API returns). Describes what the target deck is.
   const relationshipTypeLabels: Record<DeckRelationshipType, string> = {
-    [DeckRelationshipType.Prequel]: 'Prequel',
-    [DeckRelationshipType.Sequel]: 'Sequel',
-    [DeckRelationshipType.Fandisc]: 'Fandisc',
-    [DeckRelationshipType.Spinoff]: 'Spinoff',
-    [DeckRelationshipType.SideStory]: 'Side Story',
+    [DeckRelationshipType.Sequel]: 'Prequel',
+    [DeckRelationshipType.Prequel]: 'Sequel',
+    [DeckRelationshipType.Fandisc]: 'Main release',
+    [DeckRelationshipType.HasFandisc]: 'Fandisc',
+    [DeckRelationshipType.Spinoff]: 'Parent series',
+    [DeckRelationshipType.HasSpinoff]: 'Spinoff',
+    [DeckRelationshipType.SideStory]: 'Main story',
+    [DeckRelationshipType.HasSideStory]: 'Side story',
     [DeckRelationshipType.Adaptation]: 'Adaptation',
+    [DeckRelationshipType.SourceMaterial]: 'Source material',
     [DeckRelationshipType.Alternative]: 'Alternative',
-    [DeckRelationshipType.HasFandisc]: 'Has Fandisc',
-    [DeckRelationshipType.HasSpinoff]: 'Has Spinoff',
-    [DeckRelationshipType.HasSideStory]: 'Has Side Story',
-    [DeckRelationshipType.SourceMaterial]: 'Source Material',
   };
 
   const newSubdeckUploaderRef = ref<InstanceType<typeof FileUpload> | null>(null);
@@ -349,37 +365,59 @@
   }
 
   // Relationship functions
-  async function fetchDeckTitle() {
-    if (!newRelationship.value.targetDeckId) {
-      showToast('warn', 'Validation', 'Please enter a deck ID');
-      return;
-    }
-
-    if (newRelationship.value.targetDeckId === parseInt(mediaId as string)) {
-      showToast('warn', 'Validation', 'Cannot add a relationship to itself');
-      newRelationship.value.targetTitle = '';
-      return;
-    }
-
-    fetchingDeckTitle.value = true;
+  const searchDecks = debounce(async (query: string) => {
     try {
-      const result = await $api<{ mainDeck: { originalTitle: string } }>(`admin/deck/${newRelationship.value.targetDeckId}`);
-      newRelationship.value.targetTitle = result.mainDeck.originalTitle;
-    } catch (error) {
-      showToast('error', 'Error', 'Deck not found');
-      newRelationship.value.targetTitle = '';
-    } finally {
-      fetchingDeckTitle.value = false;
+      const res = await $api<{ suggestions: MediaSuggestion[] }>('media-deck/search-suggestions', { query: { query, limit: 10 } });
+      deckSuggestions.value = res.suggestions ?? [];
+    } catch {
+      deckSuggestions.value = [];
     }
+  }, 300);
+
+  function onDeckComplete(event: { query: string }) {
+    if (event.query && event.query.length >= 2) searchDecks(event.query);
+    else deckSuggestions.value = [];
   }
 
+  function getDeckLabel(item: MediaSuggestion | string): string {
+    if (typeof item === 'string') return item;
+    return `${localiseTitle(item)} (ID: ${item.deckId})`;
+  }
+
+  watch(targetDeckSelection, (val) => {
+    if (val && typeof val === 'object') {
+      if (val.deckId === parseInt(mediaId as string)) {
+        showToast('warn', 'Validation', 'Cannot add a relationship to itself');
+        targetDeckSelection.value = null;
+        return;
+      }
+      newRelationship.value.targetDeckId = val.deckId;
+      newRelationship.value.targetTitle = localiseTitle(val);
+    } else {
+      newRelationship.value.targetDeckId = null;
+      newRelationship.value.targetTitle = '';
+    }
+  });
+
+  // Plain-English confirmation of the relationship being added, from the target's perspective.
+  const relationshipPreview = computed(() => {
+    const role = newRelationship.value.role;
+    const target = newRelationship.value.targetTitle;
+    if (!role || !target) return '';
+    const thisTitle = originalTitle.value || 'this deck';
+    if (role.label === 'Alternative') return `${target} will be an alternative version of ${thisTitle}.`;
+    return `${target} will be the ${role.label.toLowerCase()} of ${thisTitle}.`;
+  });
+
   function openAddRelationshipDialog() {
-    newRelationship.value = { targetDeckId: null, targetTitle: '', relationshipType: null };
+    newRelationship.value = { targetDeckId: null, targetTitle: '', role: null };
+    targetDeckSelection.value = null;
+    deckSuggestions.value = [];
     showAddRelationshipDialog.value = true;
   }
 
   function addRelationship() {
-    if (!newRelationship.value.targetDeckId || !newRelationship.value.relationshipType) {
+    if (!newRelationship.value.targetDeckId || !newRelationship.value.role) {
       showToast('warn', 'Validation', 'Please select a deck and relationship type');
       return;
     }
@@ -389,8 +427,12 @@
       return;
     }
 
+    const { primaryType, flip } = newRelationship.value.role;
+    // Store the type from THIS deck's perspective so the list label matches the public site.
+    const displayType = flip ? getInverseRelationshipType(primaryType) : primaryType;
+
     const exists = relationships.value.some(
-      (r) => r.targetDeckId === newRelationship.value.targetDeckId && r.relationshipType === newRelationship.value.relationshipType
+      (r) => r.targetDeckId === newRelationship.value.targetDeckId && r.relationshipType === displayType
     );
     if (exists) {
       showToast('warn', 'Duplicate', 'This relationship already exists');
@@ -400,8 +442,8 @@
     relationships.value.push({
       targetDeckId: newRelationship.value.targetDeckId,
       targetTitle: newRelationship.value.targetTitle,
-      relationshipType: newRelationship.value.relationshipType,
-      isInverse: false,
+      relationshipType: displayType,
+      isInverse: flip,
     });
     showAddRelationshipDialog.value = false;
   }
@@ -412,6 +454,34 @@
 
   function getRelationshipTypeLabel(type: DeckRelationshipType): string {
     return relationshipTypeLabels[type] ?? 'Unknown';
+  }
+
+  // Mirrors DeckRelationship.GetInverse on the backend.
+  function getInverseRelationshipType(type: DeckRelationshipType): DeckRelationshipType {
+    switch (type) {
+      case DeckRelationshipType.Sequel:
+        return DeckRelationshipType.Prequel;
+      case DeckRelationshipType.Prequel:
+        return DeckRelationshipType.Sequel;
+      case DeckRelationshipType.Fandisc:
+        return DeckRelationshipType.HasFandisc;
+      case DeckRelationshipType.HasFandisc:
+        return DeckRelationshipType.Fandisc;
+      case DeckRelationshipType.Spinoff:
+        return DeckRelationshipType.HasSpinoff;
+      case DeckRelationshipType.HasSpinoff:
+        return DeckRelationshipType.Spinoff;
+      case DeckRelationshipType.SideStory:
+        return DeckRelationshipType.HasSideStory;
+      case DeckRelationshipType.HasSideStory:
+        return DeckRelationshipType.SideStory;
+      case DeckRelationshipType.Adaptation:
+        return DeckRelationshipType.SourceMaterial;
+      case DeckRelationshipType.SourceMaterial:
+        return DeckRelationshipType.Adaptation;
+      default:
+        return type; // Alternative is symmetric
+    }
   }
 
   function moveSubdeckToPosition(id: number, targetPosition: number | null) {
@@ -661,11 +731,17 @@
         formData.append(`tags[${index}].percentage`, tag.percentage.toString());
       });
 
-      // Add relationships (only direct, not inverse - inverse are computed from other deck's data)
-      const directRelationships = relationships.value.filter((r) => !r.isInverse);
-      directRelationships.forEach((rel, index) => {
-        formData.append(`relationships[${index}].targetDeckId`, rel.targetDeckId.toString());
-        formData.append(`relationships[${index}].relationshipType`, rel.relationshipType.toString());
+      // Add relationships as canonical primary edges. A relationship may point from this
+      // deck to the target (direct) or from the target back to this deck (inverse); the
+      // backend reconciles edges in either direction.
+      const currentDeckId = parseInt(mediaId as string);
+      relationships.value.forEach((rel, index) => {
+        const sourceDeckId = rel.isInverse ? rel.targetDeckId : currentDeckId;
+        const targetDeckId = rel.isInverse ? currentDeckId : rel.targetDeckId;
+        const primaryType = rel.isInverse ? getInverseRelationshipType(rel.relationshipType) : rel.relationshipType;
+        formData.append(`relationships[${index}].sourceDeckId`, sourceDeckId.toString());
+        formData.append(`relationships[${index}].targetDeckId`, targetDeckId.toString());
+        formData.append(`relationships[${index}].relationshipType`, primaryType.toString());
       });
 
       if (subdecks.value.length > 0) {
@@ -1080,19 +1156,16 @@
                 v-for="(rel, index) in relationships"
                 :key="`${rel.targetDeckId}-${rel.relationshipType}-${rel.isInverse}`"
                 class="flex justify-between items-center p-3 border rounded"
-                :class="{ 'opacity-75': rel.isInverse }"
               >
                 <div>
                   <span class="font-medium">{{ getRelationshipTypeLabel(rel.relationshipType) }}:</span>
                   <NuxtLink :to="`/decks/media/${rel.targetDeckId}/detail`" class="ml-2 text-primary hover:underline">
                     {{ rel.targetTitle }}
                   </NuxtLink>
-                  <span v-if="rel.isInverse" class="ml-2 text-xs text-gray-500">(inverse)</span>
                 </div>
-                <Button v-if="!rel.isInverse" severity="danger" text @click="removeRelationship(index)">
+                <Button severity="danger" text @click="removeRelationship(index)">
                   <Icon name="material-symbols-light:delete" size="1.5em" />
                 </Button>
-                <span v-else class="text-xs text-gray-400 italic">Edit on target deck</span>
               </li>
             </ul>
           </template>
@@ -1136,25 +1209,48 @@
         <Dialog v-model:visible="showAddRelationshipDialog" header="Add Relationship" :modal="true" class="w-full md:w-1/2">
           <div class="p-fluid">
             <div class="mb-4">
-              <label class="block text-sm font-medium mb-2">Relationship Type</label>
+              <label class="block text-sm font-medium mb-2">The target deck is this deck's…</label>
               <Select
-                v-model="newRelationship.relationshipType"
-                :options="relationshipTypeOptions"
+                v-model="newRelationship.role"
+                :options="relationshipRoleOptions"
                 option-label="label"
-                option-value="value"
                 placeholder="Select relationship type"
                 class="w-full"
               />
+              <p class="mt-1 text-xs text-gray-500">
+                Pick what the target is, relative to this deck. E.g. "Sequel" = the target deck is the sequel of this one.
+              </p>
             </div>
             <div class="mb-4">
-              <label class="block text-sm font-medium mb-2">Target Deck ID</label>
-              <div class="flex gap-2">
-                <InputNumber v-model="newRelationship.targetDeckId" placeholder="Enter deck ID" class="flex-1" :use-grouping="false" />
-                <Button @click="fetchDeckTitle" :loading="fetchingDeckTitle" :disabled="!newRelationship.targetDeckId"> Verify </Button>
-              </div>
-              <div v-if="newRelationship.targetTitle" class="mt-2 p-2 bg-surface-100 dark:bg-surface-800 rounded">
-                Deck: <strong>{{ newRelationship.targetTitle }}</strong>
-              </div>
+              <label class="block text-sm font-medium mb-2">Target Deck</label>
+              <AutoComplete
+                v-model="targetDeckSelection"
+                :suggestions="deckSuggestions"
+                :option-label="getDeckLabel"
+                placeholder="Search a deck by name…"
+                class="w-full"
+                input-class="w-full"
+                @complete="onDeckComplete"
+              >
+                <template #option="{ option }">
+                  <div class="flex items-center gap-2">
+                    <img
+                      :src="option.coverName && option.coverName !== 'nocover.jpg' ? option.coverName : '/img/nocover.jpg'"
+                      :alt="getDeckLabel(option)"
+                      class="h-10 w-7 object-cover rounded shrink-0"
+                    >
+                    <span class="truncate text-sm">{{ getDeckLabel(option) }}</span>
+                    <PrimeTag :value="getMediaTypeText(option.mediaType)" severity="secondary" class="shrink-0 text-xs" />
+                  </div>
+                </template>
+              </AutoComplete>
+            </div>
+
+            <div
+              v-if="relationshipPreview"
+              class="mb-2 p-3 rounded bg-surface-100 dark:bg-surface-800 text-sm border-l-4 border-primary"
+            >
+              {{ relationshipPreview }}
             </div>
           </div>
           <template #footer>
@@ -1162,7 +1258,7 @@
             <Button
               label="Add"
               @click="addRelationship"
-              :disabled="!newRelationship.targetDeckId || !newRelationship.relationshipType || !newRelationship.targetTitle"
+              :disabled="!newRelationship.targetDeckId || !newRelationship.role || !newRelationship.targetTitle"
             />
           </template>
         </Dialog>

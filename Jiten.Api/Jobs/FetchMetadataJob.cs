@@ -181,6 +181,13 @@ public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, 
                 await MetadataProviderHelper.ProcessRelations(context, deckId, metadata.Relations);
             }
 
+            // VNDB anime adaptations (from the database dump, matched to anime decks by MAL id)
+            var animeRelations = MetadataProviderHelper.GetVndbAnimeRelations(id);
+            if (animeRelations.Count > 0)
+            {
+                await MetadataProviderHelper.ProcessRelations(context, deckId, animeRelations);
+            }
+
             await context.SaveChangesAsync();
         }
         finally

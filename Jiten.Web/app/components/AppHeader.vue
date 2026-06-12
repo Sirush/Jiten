@@ -11,10 +11,7 @@
 
   const toast = useToast();
   const store = useJitenStore();
-  const {
-    displayAdminFunctions,
-    themeMode,
-  } = storeToRefs(store);
+  const { displayAdminFunctions, themeMode } = storeToRefs(store);
   const auth = useAuthStore();
   const srs = useSrsStore();
 
@@ -32,8 +29,7 @@
   );
 
   function applyTheme(mode: ThemeMode) {
-    const shouldBeDark = mode === ThemeMode.Dark
-      || (mode === ThemeMode.Auto && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const shouldBeDark = mode === ThemeMode.Dark || (mode === ThemeMode.Auto && window.matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.classList.toggle('dark-mode', shouldBeDark);
   }
 
@@ -76,14 +72,20 @@
   });
 
   const { startPolling, stopPolling } = useNotifications();
-  watch(() => auth.isAuthenticated, (isAuth) => {
-    if (isAuth) startPolling();
-    else stopPolling();
-  }, { immediate: true });
+  watch(
+    () => auth.isAuthenticated,
+    (isAuth) => {
+      if (isAuth) startPolling();
+      else stopPolling();
+    },
+    { immediate: true }
+  );
   onUnmounted(() => stopPolling());
 
   const settings = ref();
   const userMenu = ref();
+
+  const userInitial = computed(() => auth.user?.userName?.trim()?.slice(0, 2)?.toUpperCase() || '');
 
   const userMenuItems = computed(() => [
     {
@@ -92,7 +94,7 @@
       route: '/profile',
     },
     {
-      label: 'User Settings',
+      label: 'Settings',
       icon: 'pi pi-cog',
       route: '/settings',
     },
@@ -118,9 +120,13 @@
   });
   const dueBadge = computed(() => (totalDue.value > 999 ? '999+' : String(totalDue.value)));
 
-  watch(() => auth.isAuthenticated && srs.srsEnrolled, (ok) => {
-    if (ok && !srs.dueSummary) srs.fetchDueSummary();
-  }, { immediate: true });
+  watch(
+    () => auth.isAuthenticated && srs.srsEnrolled,
+    (ok) => {
+      if (ok && !srs.dueSummary) srs.fetchDueSummary();
+    },
+    { immediate: true }
+  );
 
   const toggleSettings = (event: boolean) => {
     settings.value.toggle(event);
@@ -142,33 +148,59 @@
         <!-- Desktop nav -->
         <nav class="hidden md:flex items-center space-x-4">
           <nuxt-link to="/decks/media" :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'">Media</nuxt-link>
-          <nuxt-link v-if="auth.isAuthenticated && srs.srsEnrolled" to="/srs/decks" class="inline-flex items-center gap-1.5" :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'">
+          <nuxt-link
+            v-if="auth.isAuthenticated && srs.srsEnrolled"
+            to="/srs/decks"
+            class="inline-flex items-center gap-1.5"
+            :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'"
+          >
             Study
-            <span v-if="totalDue > 0" class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100">{{ dueBadge }}</span>
+            <span
+              v-if="totalDue > 0"
+              class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100"
+              >{{ dueBadge }}</span
+            >
           </nuxt-link>
-          <nuxt-link v-if="auth.isAuthenticated" to="/ratings" :class="route.path === '/ratings' ? 'font-semibold !text-purple-200' : '!text-white'">Ratings</nuxt-link>
+          <nuxt-link v-if="auth.isAuthenticated" to="/ratings" :class="route.path === '/ratings' ? 'font-semibold !text-purple-200' : '!text-white'"
+            >Ratings</nuxt-link
+          >
           <nuxt-link to="/other" :class="route.path === '/other' ? 'font-semibold !text-purple-200' : '!text-white'">Tools</nuxt-link>
           <nuxt-link to="/faq" :class="route.path === '/faq' ? 'font-semibold !text-purple-200' : '!text-white'">FAQ</nuxt-link>
-          <nuxt-link v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions" to="/Dashboard" :class="route.path === '/Dashboard' ? 'font-semibold !text-purple-200' : '!text-white'">Dashboard</nuxt-link>
-          <nuxt-link v-if="!auth.isAuthenticated" to="/login" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'">Login</nuxt-link>
-          <Button v-if="auth.isAuthenticated" severity="secondary" @click="userMenu.toggle($event)" aria-label="User menu">
-            <Icon name="material-symbols:person" />
-          </Button>
-          <NotificationBell v-if="auth.isAuthenticated" />
-          <Button
-            type="button"
-            title="Local Settings"
-            severity="secondary"
-            @mouseover="showSettings($event)"
-            @click="toggleSettings($event)"
+          <nuxt-link
+            v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions"
+            to="/Dashboard"
+            :class="route.path === '/Dashboard' ? 'font-semibold !text-purple-200' : '!text-white'"
+            >Dashboard</nuxt-link
           >
+          <nuxt-link v-if="!auth.isAuthenticated" to="/login" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'"
+            >Login</nuxt-link
+          >
+          <button
+            v-if="auth.isAuthenticated"
+            type="button"
+            class="inline-flex items-center gap-0.5 p-1 rounded-full text-white cursor-pointer hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-white"
+            aria-label="User menu"
+            aria-haspopup="true"
+            @click="userMenu.toggle($event)"
+          >
+            <span
+              v-if="userInitial"
+              class="flex items-center justify-center w-8 h-8 rounded-full bg-purple-200 text-indigo-900 text-xs font-bold tracking-tight"
+              >{{ userInitial }}</span
+            >
+            <span v-else class="flex items-center justify-center w-8 h-8 rounded-full bg-purple-200 text-indigo-900">
+              <Icon name="material-symbols:person" />
+            </span>
+            <Icon name="material-symbols:keyboard-arrow-down" size="16" />
+          </button>
+          <NotificationBell v-if="auth.isAuthenticated" />
+          <Button type="button" title="Display Settings" severity="secondary" @mouseover="showSettings($event)" @click="toggleSettings($event)">
             <Icon name="material-symbols-light:settings" />
           </Button>
 
-          <Button :label="themeLabel" severity="secondary" @click="cycleTheme()">
+          <Button text :title="`Theme: ${themeLabel}`" :aria-label="`Theme: ${themeLabel}`" class="!text-white hover:!bg-indigo-800" @click="cycleTheme()">
             <Icon :name="themeIcon" />
           </Button>
-
         </nav>
 
         <!-- Mobile: bell + hamburger -->
@@ -189,16 +221,73 @@
       <div v-if="mobileMenuOpen" class="md:hidden mx-auto max-w-6xl px-4 pb-4">
         <div class="bg-indigo-800 rounded-lg shadow-lg divide-y divide-indigo-700">
           <div class="flex flex-col py-2">
-            <nuxt-link to="/decks/media" class="py-2 px-3" :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Media</nuxt-link>
-            <nuxt-link v-if="auth.isAuthenticated && srs.srsEnrolled" to="/srs/decks" class="py-2 px-3 flex items-center gap-2" :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">
+            <nuxt-link
+              to="/decks/media"
+              class="py-2 px-3"
+              :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >Media</nuxt-link
+            >
+            <nuxt-link
+              v-if="auth.isAuthenticated && srs.srsEnrolled"
+              to="/srs/decks"
+              class="py-2 px-3 flex items-center gap-2"
+              :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+            >
               Study
-              <span v-if="totalDue > 0" class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100">{{ dueBadge }}</span>
+              <span
+                v-if="totalDue > 0"
+                class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100"
+                >{{ dueBadge }}</span
+              >
             </nuxt-link>
-            <nuxt-link v-if="auth.isAuthenticated" to="/profile" class="py-2 px-3" :class="route.path.startsWith('/profile') ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Profile</nuxt-link>
-            <nuxt-link v-if="auth.isAuthenticated" to="/ratings" class="py-2 px-3" :class="route.path === '/ratings' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Ratings</nuxt-link>
-            <nuxt-link v-if="auth.isAuthenticated" to="/settings" class="py-2 px-3" :class="route.path === '/settings' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Settings</nuxt-link>
-            <nuxt-link to="/other" class="py-2 px-3" :class="route.path === '/other' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Tools</nuxt-link>
-            <nuxt-link to="/faq" class="py-2 px-3" :class="route.path === '/faq' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">FAQ</nuxt-link>
+            <nuxt-link
+              v-if="auth.isAuthenticated"
+              to="/profile"
+              class="py-2 px-3"
+              :class="route.path.startsWith('/profile') ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >Profile</nuxt-link
+            >
+            <nuxt-link
+              v-if="auth.isAuthenticated"
+              to="/ratings"
+              class="py-2 px-3"
+              :class="route.path === '/ratings' ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >Ratings</nuxt-link
+            >
+            <nuxt-link
+              v-if="auth.isAuthenticated"
+              to="/settings/account"
+              class="py-2 px-3"
+              :class="route.path === '/settings/account' ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >Account Settings</nuxt-link
+            >
+            <nuxt-link
+              v-if="auth.isAuthenticated"
+              to="/settings"
+              class="py-2 px-3"
+              :class="route.path === '/settings' ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >Settings</nuxt-link
+            >
+            <nuxt-link
+              to="/other"
+              class="py-2 px-3"
+              :class="route.path === '/other' ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >Tools</nuxt-link
+            >
+            <nuxt-link
+              to="/faq"
+              class="py-2 px-3"
+              :class="route.path === '/faq' ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >FAQ</nuxt-link
+            >
             <nuxt-link
               v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions"
               to="/Dashboard"
@@ -211,19 +300,23 @@
               v-if="auth.isAuthenticated"
               href="#"
               class="py-2 px-3 !text-white cursor-pointer"
-              @click.prevent="auth.logout(); mobileMenuOpen = false"
+              @click.prevent="
+                auth.logout();
+                mobileMenuOpen = false;
+              "
               >Logout</a
             >
-            <nuxt-link v-else to="/login" class="py-2 px-3" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'" @click="mobileMenuOpen = false">Login</nuxt-link>
+            <nuxt-link
+              v-else
+              to="/login"
+              class="py-2 px-3"
+              :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >Login</nuxt-link
+            >
           </div>
           <div class="flex items-center gap-3 py-3 px-3">
-            <Button
-              type="button"
-              label="Settings"
-              severity="secondary"
-              class="w-full justify-center"
-              @click="toggleSettings($event)"
-            >
+            <Button type="button" label="Display" severity="secondary" class="w-full justify-center" @click="toggleSettings($event)">
               <Icon name="material-symbols-light:settings" />
             </Button>
             <Button :label="themeLabel" severity="secondary" class="w-full justify-center" @click="cycleTheme()">

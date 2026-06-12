@@ -2087,6 +2087,16 @@ public class StudyController(
             catch (TimeZoneNotFoundException) { request.Timezone = null; }
         }
 
+        // Easy Days: must be 7 weekday weights in [0, 1]; drop anything malformed.
+        if (request.EasyDays != null)
+        {
+            if (request.EasyDays.Length != 7)
+                request.EasyDays = null;
+            else
+                for (var i = 0; i < 7; i++)
+                    request.EasyDays[i] = Math.Clamp(request.EasyDays[i], 0.0, 1.0);
+        }
+
         var fsrsSettings = await userContext.UserFsrsSettings
             .FirstOrDefaultAsync(s => s.UserId == userId);
 
@@ -2603,11 +2613,13 @@ public class StudyController(
     }
 
     [HttpGet("review-forecast-30d")]
-    [SwaggerOperation(Summary = "Get 30-day review forecast bucketed by user-local day")]
-    public async Task<IResult> GetReviewForecast30d()
+    [SwaggerOperation(Summary = "Get review forecast bucketed by user-local day (default 30 days, optional days param clamped to [7, 365])")]
+    public async Task<IResult> GetReviewForecast30d([FromQuery] int days = 30)
     {
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
+
+        var dayCount = Math.Clamp(days, 7, 365);
 
         var now = DateTime.UtcNow;
         var settings = await LoadStudySettings(userId);
@@ -2615,7 +2627,7 @@ public class StudyController(
 
         var localToday = now.AddHours(offsetHours).Date;
         var windowStartUtc = localToday.AddHours(-offsetHours);
-        var windowEndUtc = localToday.AddDays(30).AddHours(-offsetHours);
+        var windowEndUtc = localToday.AddDays(dayCount).AddHours(-offsetHours);
 
         var baseQuery = userContext.FsrsCards
             .AsNoTracking()
@@ -2626,7 +2638,7 @@ public class StudyController(
                         && c.State != FsrsState.Suspended
                         && c.Due <= windowEndUtc);
 
-        var counts = new int[30];
+        var counts = new int[dayCount];
 
         if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
         {
@@ -2638,7 +2650,7 @@ public class StudyController(
             {
                 if (!filter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex))) continue;
                 var dayIndex = c.Due <= windowStartUtc ? 0 : (int)(c.Due.AddHours(offsetHours).Date - localToday).TotalDays;
-                if (dayIndex >= 0 && dayIndex < 30) counts[dayIndex]++;
+                if (dayIndex >= 0 && dayIndex < dayCount) counts[dayIndex]++;
             }
         }
         else
@@ -2647,15 +2659,15 @@ public class StudyController(
             foreach (var due in dues)
             {
                 var dayIndex = due <= windowStartUtc ? 0 : (int)(due.AddHours(offsetHours).Date - localToday).TotalDays;
-                if (dayIndex >= 0 && dayIndex < 30) counts[dayIndex]++;
+                if (dayIndex >= 0 && dayIndex < dayCount) counts[dayIndex]++;
             }
         }
 
-        var days = new object[30];
-        for (var i = 0; i < 30; i++)
-            days[i] = new { date = localToday.AddDays(i).ToString("yyyy-MM-dd"), count = counts[i] };
+        var days_ = new object[dayCount];
+        for (var i = 0; i < dayCount; i++)
+            days_[i] = new { date = localToday.AddDays(i).ToString("yyyy-MM-dd"), count = counts[i] };
 
-        return Results.Ok(new { days });
+        return Results.Ok(new { days = days_ });
     }
 
     [HttpGet("deck-streak")]
@@ -2773,11 +2785,12 @@ public class StudyController(
         var rawLogs = await userContext.FsrsReviewLogs
             .AsNoTracking()
             .Where(l => userCardIds.Contains(l.CardId))
-            .Select(l => new { l.CardId, l.ReviewDateTime, IsAgain = l.Rating == FsrsRating.Again })
+            .Select(l => new { l.CardId, l.ReviewDateTime, l.Rating, l.ReviewDuration })
             .ToListAsync();
 
         var result = RetentionCalculator.Compute(
-            rawLogs.Select(l => new RetentionCalculator.ReviewEntry(l.CardId, l.ReviewDateTime, l.IsAgain)),
+            rawLogs.Select(l => new RetentionCalculator.ReviewEntry(
+                l.CardId, l.ReviewDateTime, l.Rating == FsrsRating.Again, (int)l.Rating, l.ReviewDuration)),
             offsetHours,
             now);
 
@@ -2793,6 +2806,33 @@ public class StudyController(
             },
             weekly = result.Weekly.Select(MapPeriod),
             monthly = result.Monthly.Select(MapPeriod),
+            answerButtons = new
+            {
+                last30 = MapAnswerButtons(result.AnswerButtons.Last30),
+                last90 = MapAnswerButtons(result.AnswerButtons.Last90),
+                all = MapAnswerButtons(result.AnswerButtons.All),
+            },
+            hourly = new
+            {
+                last30 = MapHourly(result.Hourly.Last30),
+                last90 = MapHourly(result.Hourly.Last90),
+                all = MapHourly(result.Hourly.All),
+            },
+            reviewTime = new
+            {
+                // Bucket labels are window-invariant, so they live once at the top level.
+                bucketLabels = ReviewTimeBucketLabels,
+                last30 = MapReviewTime(result.ReviewTime.Last30),
+                last90 = MapReviewTime(result.ReviewTime.Last90),
+                all = MapReviewTime(result.ReviewTime.All),
+            },
+            today = new
+            {
+                reviews = result.Today.Reviews,
+                passRate = result.Today.PassRate,
+                minutes = result.Today.Minutes,
+                newCards = result.Today.NewCards,
+            },
         });
     }
 
@@ -2817,6 +2857,161 @@ public class StudyController(
         passed = b.Passed,
         retention = b.Retention,
     };
+
+    private static readonly string[] ReviewTimeBucketLabels =
+        ["<1s", "1–2s", "2–3s", "3–5s", "5–8s", "8–12s", "12–20s", "20–30s", "30–60s", "60s+"];
+
+    private static object MapAnswerButtons(RetentionCalculator.AnswerButtons a) => new
+    {
+        learning = a.Learning,
+        young = a.Young,
+        mature = a.Mature,
+    };
+
+    private static object MapHourly(IReadOnlyList<RetentionCalculator.HourlyBucket> hourly) =>
+        hourly.Select(h => new { count = h.Count, passRate = h.PassRate });
+
+    private static object MapReviewTime(RetentionCalculator.ReviewTimeStats rt) => new
+    {
+        buckets = rt.Buckets,
+        averageSeconds = rt.AverageSeconds,
+        totalHours = rt.TotalHours,
+        count = rt.Count,
+    };
+
+    // Stability histogram edges in days: <1, 1–3, 3–7, 7–14, 14–30, 30–60, 60–90, 90–180, 180–365, ≥365.
+    private static readonly double[] StabilityEdgesDays = [1, 3, 7, 14, 30, 60, 90, 180, 365];
+
+    [HttpGet("card-stats")]
+    [SwaggerOperation(Summary = "Get card state counts plus difficulty / stability / retrievability histograms for the SRS stats page")]
+    public async Task<IResult> GetCardStats()
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var userSettings = await userContext.UserFsrsSettings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.UserId == userId);
+        var fsrsParams = userSettings?.Parameters is { Length: > 0 } p ? p : FsrsConstants.DefaultParameters;
+        var desiredRetention = userSettings?.DesiredRetention is double dr and > 0 and < 1 ? dr : FsrsConstants.DefaultDesiredRetention;
+        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: fsrsParams, enableFuzzing: false);
+
+        var now = DateTime.UtcNow;
+
+        var cards = await userContext.FsrsCards
+            .AsNoTracking()
+            .Where(c => c.UserId == userId)
+            .Select(c => new { c.State, c.Stability, c.Difficulty, c.Due, c.LastReview })
+            .ToListAsync();
+
+        int newCount = 0, learning = 0, relearning = 0, young = 0, mature = 0, suspended = 0, mastered = 0, blacklisted = 0;
+
+        var difficultyValues = new List<double>();
+        var stabilityValues = new List<double>();
+        var difficultyBuckets = new int[20];
+        var stabilityBuckets = new int[StabilityEdgesDays.Length + 1];
+
+        var retrievabilityBuckets = new int[20];
+        var retrievabilityValues = new List<double>();
+        double retrievabilitySum = 0;
+        int masteredCount = 0;
+
+        foreach (var c in cards)
+        {
+            switch (c.State)
+            {
+                case FsrsState.New: newCount++; break;
+                case FsrsState.Learning: learning++; break;
+                case FsrsState.Relearning: relearning++; break;
+                case FsrsState.Suspended: suspended++; break;
+                case FsrsState.Mastered: mastered++; masteredCount++; break;
+                case FsrsState.Blacklisted: blacklisted++; break;
+                case FsrsState.Review:
+                    var intervalDays = c.LastReview is { } lr ? (c.Due - lr).TotalDays : 0;
+                    if (intervalDays >= RetentionCalculator.MatureThresholdDays) mature++;
+                    else young++;
+                    break;
+            }
+
+            if (c.Difficulty is { } d)
+            {
+                difficultyValues.Add(d);
+                var pct = Math.Clamp((d - 1) / 9 * 100, 0, 100);
+                var idx = Math.Min((int)(pct / 5), 19);
+                difficultyBuckets[idx]++;
+            }
+
+            if (c.Stability is { } s)
+            {
+                stabilityValues.Add(s);
+                var bucket = StabilityEdgesDays.Length;
+                for (var i = 0; i < StabilityEdgesDays.Length; i++)
+                {
+                    if (s < StabilityEdgesDays[i]) { bucket = i; break; }
+                }
+                stabilityBuckets[bucket]++;
+            }
+
+            if (c.Stability is { } stab && c.LastReview is { } last
+                && c.State is FsrsState.Review or FsrsState.Relearning)
+            {
+                var card = new FsrsCard { State = c.State, Stability = stab, LastReview = last, Due = c.Due };
+                var r = scheduler.GetCardRetrievability(card, now);
+                retrievabilityValues.Add(r);
+                retrievabilitySum += r;
+                var pct = Math.Clamp(r * 100, 0, 100);
+                var idx = Math.Min((int)(pct / 5), 19);
+                retrievabilityBuckets[idx]++;
+            }
+        }
+
+        var total = cards.Count;
+
+        return Results.Ok(new
+        {
+            stateCounts = new
+            {
+                @new = newCount,
+                learning,
+                relearning,
+                young,
+                mature,
+                suspended,
+                mastered,
+                blacklisted,
+                total,
+            },
+            difficulty = new
+            {
+                buckets = difficultyBuckets,
+                medianPct = Median(difficultyValues) is { } md ? (double?)Math.Clamp((md - 1) / 9 * 100, 0, 100) : null,
+                count = difficultyValues.Count,
+            },
+            stability = new
+            {
+                buckets = stabilityBuckets,
+                bucketLabels = new[] { "<1d", "1–3d", "3–7d", "1–2w", "2–4w", "1–2mo", "2–3mo", "3–6mo", "6–12mo", "1y+" },
+                medianDays = Median(stabilityValues),
+                count = stabilityValues.Count,
+            },
+            retrievability = new
+            {
+                buckets = retrievabilityBuckets,
+                averagePct = retrievabilityValues.Count > 0 ? (double?)(retrievabilitySum / retrievabilityValues.Count * 100) : null,
+                estimatedKnowledge = (int)Math.Round(retrievabilitySum),
+                count = retrievabilityValues.Count,
+                masteredCount,
+            },
+        });
+    }
+
+    private static double? Median(List<double> values)
+    {
+        if (values.Count == 0) return null;
+        values.Sort();
+        var mid = values.Count / 2;
+        return values.Count % 2 == 1 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+    }
 
     private static (int currentStreak, int longestStreak) ComputeStreaks(List<DateTime> sortedDatesDesc, DateTime today)
     {

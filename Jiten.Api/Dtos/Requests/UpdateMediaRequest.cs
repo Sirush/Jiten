@@ -43,6 +43,11 @@ public class UpdateMediaRequestTag
 
 public class UpdateMediaRequestRelationship
 {
+    /// <summary>
+    /// Source deck of the canonical primary edge. May be the deck being edited or the related deck
+    /// (when the related deck is the "earlier"/source side). Defaults to the edited deck when omitted.
+    /// </summary>
+    public int SourceDeckId { get; set; }
     public int TargetDeckId { get; set; }
     public DeckRelationshipType RelationshipType { get; set; }
 }

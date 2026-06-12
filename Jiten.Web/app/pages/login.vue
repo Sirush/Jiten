@@ -5,12 +5,46 @@
 
   const runtimeConfig = useRuntimeConfig();
   const googleSignInEnabled = !!runtimeConfig.public.googleSignInClientId;
+  const recaptchaEnabled = !!runtimeConfig.public.recaptcha?.v2SiteKey;
 
   const GoogleSignInButtonComponent = googleSignInEnabled ? resolveComponent('GoogleSignInButton') : null;
+  const RecaptchaCheckboxComponent = recaptchaEnabled ? resolveComponent('RecaptchaCheckbox') : null;
 
   const authStore = useAuthStore();
   const router = useRouter();
   const route = useRoute();
+  const { $api } = useNuxtApp();
+
+  if (recaptchaEnabled) {
+    useRecaptchaProvider();
+  }
+
+  const recaptchaResponse = ref();
+  const resendLoading = ref(false);
+  const resendMessage = ref<string | null>(null);
+
+  const emailNotConfirmed = computed(() => !!authStore.error && authStore.error.toLowerCase().includes('email not confirmed'));
+  const resendEmailValid = computed(() => credentials.usernameOrEmail.includes('@'));
+
+  async function resendConfirmation() {
+    resendMessage.value = null;
+    if (recaptchaEnabled && !recaptchaResponse.value) {
+      resendMessage.value = 'Please complete the reCAPTCHA.';
+      return;
+    }
+    resendLoading.value = true;
+    try {
+      const result = await $api<{ message: string }>('/account/resend-confirmation', {
+        method: 'POST',
+        body: { email: credentials.usernameOrEmail, recaptchaResponse: recaptchaResponse.value || '' },
+      });
+      resendMessage.value = result?.message || 'If your email address is registered and not yet confirmed, a new confirmation link has been sent.';
+    } catch {
+      resendMessage.value = 'If your email address is registered and not yet confirmed, a new confirmation link has been sent.';
+    } finally {
+      resendLoading.value = false;
+    }
+  }
 
   const credentials = reactive<LoginRequest>({
     usernameOrEmail: '',
@@ -89,6 +123,16 @@
       </form>
 
       <p v-if="authStore.error" class="error-message">{{ authStore.error }}</p>
+
+      <div v-if="emailNotConfirmed" class="resend-block">
+        <p v-if="resendEmailValid" class="resend-hint">Didn't get the confirmation email? Resend it to {{ credentials.usernameOrEmail }}.</p>
+        <p v-else class="resend-hint">Didn't get the confirmation email? Enter your email address above to resend it.</p>
+        <component v-if="RecaptchaCheckboxComponent" :is="RecaptchaCheckboxComponent" v-model="recaptchaResponse" class="my-2" />
+        <Button type="button" severity="secondary" :disabled="resendLoading || !resendEmailValid" @click="resendConfirmation">
+          {{ resendLoading ? 'Sending...' : 'Resend confirmation email' }}
+        </Button>
+        <p v-if="resendMessage" class="info-message">{{ resendMessage }}</p>
+      </div>
     </template>
   </Card>
 </template>
@@ -120,5 +164,19 @@
   .error-message {
     color: red;
     margin-top: 10px;
+  }
+
+  .resend-block {
+    margin-top: 12px;
+  }
+
+  .resend-hint {
+    font-size: 0.875rem;
+    margin-bottom: 8px;
+  }
+
+  .info-message {
+    color: #27ae60;
+    margin-top: 8px;
   }
 </style>

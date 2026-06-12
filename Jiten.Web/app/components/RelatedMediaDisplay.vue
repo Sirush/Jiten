@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type ComponentPublicInstance } from 'vue';
 import Tag from 'primevue/tag';
 import { type DeckRelationship, DeckRelationshipType } from '~/types';
 
 interface Props {
   relationships: DeckRelationship[];
+  /** When set, appends an always-visible "View franchise" tag linking to the franchise page. */
+  deckId?: number;
   minVisibleItems?: number;
   buttonBuffer?: number;
   gapSize?: number;
@@ -53,6 +55,7 @@ function getRelationshipTypeLabel(type: DeckRelationshipType): string {
 const expanded = ref(false);
 const containerRef = ref<HTMLElement | null>(null);
 const labelRef = ref<HTMLElement | null>(null);
+const franchiseRef = ref<ComponentPublicInstance | HTMLElement | null>(null);
 const itemRefs = ref<HTMLElement[]>([]);
 const visibleCount = ref<number>(20); // Default to a high number initially
 const isCalculating = ref(false);
@@ -88,7 +91,12 @@ const calculateVisibleCount = async () => {
   const containerWidth = containerRef.value.getBoundingClientRect().width;
   const labelWidth = labelRef.value.getBoundingClientRect().width;
 
-  let accumulatedWidth = labelWidth + 4; // Label + margin
+  // The "View franchise" tag is always visible, so reserve its width up front like the label.
+  const fr = franchiseRef.value;
+  const franchiseEl = fr instanceof HTMLElement ? fr : (fr?.$el as HTMLElement | undefined);
+  const franchiseWidth = franchiseEl?.getBoundingClientRect().width ?? 0;
+
+  let accumulatedWidth = labelWidth + 4 + (franchiseWidth > 0 ? franchiseWidth + props.gapSize : 0); // Label + margin
   let count = 0;
 
   for (let i = 0; i < itemRefs.value.length; i++) {
@@ -179,5 +187,14 @@ const toggleExpanded = () => {
         <i :class="['pi text-[10px]', expanded ? 'pi-chevron-up' : 'pi-chevron-down']"></i>
       </span>
     </Tag>
+
+    <NuxtLink
+      v-if="deckId != null"
+      ref="franchiseRef"
+      :to="`/decks/media/${deckId}/franchise`"
+      class="px-2 py-0.5 rounded-full text-xs whitespace-nowrap border border-primary text-primary font-medium hover:bg-primary/10 transition-colors"
+    >
+      View franchise →
+    </NuxtLink>
   </div>
 </template>

@@ -256,6 +256,47 @@ public class StudyTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task StudySettings_LoadBalancingAndEasyDays_RoundTripAndNormalize()
+    {
+        // Defaults: load balancing on, easy days off.
+        var defaults = await (await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-settings").WithUser(TestUsers.UserB)))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        defaults.GetProperty("loadBalancing").GetBoolean().Should().BeTrue();
+        defaults.GetProperty("easyDays").ValueKind.Should().Be(JsonValueKind.Null);
+
+        // Round-trip a weekend preset.
+        await _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
+            .WithUser(TestUsers.UserB)
+            .WithJsonContent(new { loadBalancing = false, easyDays = new[] { 0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5 } }));
+        var after = await (await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-settings").WithUser(TestUsers.UserB)))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        after.GetProperty("loadBalancing").GetBoolean().Should().BeFalse();
+        after.GetProperty("easyDays").EnumerateArray().Select(x => x.GetDouble())
+             .Should().Equal(0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5);
+
+        // Wrong length is dropped to null.
+        await _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
+            .WithUser(TestUsers.UserB)
+            .WithJsonContent(new { easyDays = new[] { 0.5, 1.0, 1.0 } }));
+        var bad = await (await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-settings").WithUser(TestUsers.UserB)))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        bad.GetProperty("easyDays").ValueKind.Should().Be(JsonValueKind.Null);
+
+        // Out-of-range weights are clamped to [0, 1].
+        await _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
+            .WithUser(TestUsers.UserB)
+            .WithJsonContent(new { easyDays = new[] { -3.0, 2.0, 1.0, 1.0, 1.0, 1.0, 0.5 } }));
+        var clamped = await (await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-settings").WithUser(TestUsers.UserB)))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        clamped.GetProperty("easyDays").EnumerateArray().Select(x => x.GetDouble())
+               .Should().Equal(0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5);
+    }
+
+    [Fact]
     public async Task StudyBatch_RespectsNewCardLimit()
     {
         // Set limit to 2
@@ -402,6 +443,37 @@ public class StudyTests(JitenWebApplicationFactory factory)
         kanjiStates.Should().Contain(KnownState.Due, "the kanji form itself is reviewable and overdue");
         kanaStates.Should().BeEquivalentTo([KnownState.Young, KnownState.Redundant],
             "the redundant kana form carries the sibling's tier but is never due itself");
+    }
+
+    [Fact]
+    public async Task KnownWordsState_SuspendedCard_CarriesTierWithoutDue()
+    {
+        await EnsureSeedDataWithKanjiForms();
+
+        // A suspended card whose stored Due is already in the past previously leaked KnownState.Due.
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 100, 0,
+                state: FsrsState.Suspended,
+                stability: 9, difficulty: 5,
+                due: DateTime.UtcNow.AddDays(-1),
+                lastReview: DateTime.UtcNow.AddDays(-5)));
+            await userDb.SaveChangesAsync();
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/reader/lookup-vocabulary")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { words = new[] { new[] { 100, 0 } } });
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var states = body.GetProperty("result")[0].EnumerateArray().Select(s => (KnownState)s.GetInt32()).ToList();
+
+        states.Should().Contain(KnownState.Suspended, "a suspended card must surface the Suspended state");
+        states.Should().NotContain(KnownState.Due, "a suspended card is parked and must never present as Due");
+        states.Should().Contain(KnownState.Young, "interval < 21 days keeps the Young tier for coverage");
     }
 
     [Fact]
@@ -1703,5 +1775,218 @@ public class StudyTests(JitenWebApplicationFactory factory)
             .WithJsonContent(new { wordId = 1, readingIndex = 0, rating = 3, sessionId, clientRequestId = Guid.NewGuid().ToString("N") });
         var response = await _client.SendAsync(request);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    // ── SRS stats page: card-stats + retention extensions + forecast days param ──
+
+    [Fact]
+    public async Task CardStats_Anonymous_Returns401()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/srs/card-stats");
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task CardStats_EmptyUser_ReturnsZeroedResponse()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/srs/card-stats")
+            .WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("stateCounts").GetProperty("total").GetInt32().Should().Be(0);
+        body.GetProperty("difficulty").GetProperty("count").GetInt32().Should().Be(0);
+        body.GetProperty("difficulty").GetProperty("medianPct").ValueKind.Should().Be(JsonValueKind.Null);
+        body.GetProperty("stability").GetProperty("count").GetInt32().Should().Be(0);
+        body.GetProperty("stability").GetProperty("medianDays").ValueKind.Should().Be(JsonValueKind.Null);
+        body.GetProperty("retrievability").GetProperty("count").GetInt32().Should().Be(0);
+        body.GetProperty("retrievability").GetProperty("averagePct").ValueKind.Should().Be(JsonValueKind.Null);
+        body.GetProperty("retrievability").GetProperty("estimatedKnowledge").GetInt32().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CardStats_SeededCards_ReturnsCorrectStateCountsAndBuckets()
+    {
+        var now = DateTime.UtcNow;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            // New
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 1, 0, state: FsrsState.New));
+            // Learning (no stability)
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 2, 0, state: FsrsState.Learning));
+            // Young review: interval 9 days
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 3, 0,
+                state: FsrsState.Review, stability: 9, difficulty: 5,
+                due: now.AddDays(8), lastReview: now.AddDays(-1)));
+            // Mature review: interval 40 days
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 4, 0,
+                state: FsrsState.Review, stability: 200, difficulty: 8,
+                due: now.AddDays(30), lastReview: now.AddDays(-10)));
+            // Relearning (counts for retrievability)
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 5, 0,
+                state: FsrsState.Relearning, stability: 2, difficulty: 9,
+                due: now.AddDays(1), lastReview: now.AddDays(-1)));
+            // Mastered / Suspended / Blacklisted
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 6, 0, state: FsrsState.Mastered, stability: 100, difficulty: 3));
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 7, 0,
+                state: FsrsState.Suspended, stability: 50, difficulty: 4, lastReview: now.AddDays(-5)));
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 8, 0, state: FsrsState.Blacklisted));
+            await userDb.SaveChangesAsync();
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/srs/card-stats")
+            .WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var sc = body.GetProperty("stateCounts");
+        sc.GetProperty("new").GetInt32().Should().Be(1);
+        sc.GetProperty("learning").GetInt32().Should().Be(1);
+        sc.GetProperty("relearning").GetInt32().Should().Be(1);
+        sc.GetProperty("young").GetInt32().Should().Be(1);
+        sc.GetProperty("mature").GetInt32().Should().Be(1);
+        sc.GetProperty("suspended").GetInt32().Should().Be(1);
+        sc.GetProperty("mastered").GetInt32().Should().Be(1);
+        sc.GetProperty("blacklisted").GetInt32().Should().Be(1);
+        sc.GetProperty("total").GetInt32().Should().Be(8);
+
+        // Difficulty: cards 3,4,5,6,7 have difficulty → count 5, buckets sum 5.
+        var diff = body.GetProperty("difficulty");
+        diff.GetProperty("count").GetInt32().Should().Be(5);
+        diff.GetProperty("buckets").EnumerateArray().Sum(b => b.GetInt32()).Should().Be(5);
+        diff.GetProperty("medianPct").ValueKind.Should().NotBe(JsonValueKind.Null);
+
+        // Stability: cards 3,4,5,6,7 have stability → count 5, buckets sum 5.
+        var stab = body.GetProperty("stability");
+        stab.GetProperty("count").GetInt32().Should().Be(5);
+        stab.GetProperty("buckets").EnumerateArray().Sum(b => b.GetInt32()).Should().Be(5);
+        stab.GetProperty("bucketLabels").GetArrayLength().Should().Be(10);
+
+        // Retrievability: only Review/Relearning with stability+lastReview → cards 3,4,5 → count 3.
+        var retr = body.GetProperty("retrievability");
+        retr.GetProperty("count").GetInt32().Should().Be(3);
+        retr.GetProperty("buckets").EnumerateArray().Sum(b => b.GetInt32()).Should().Be(3);
+        retr.GetProperty("masteredCount").GetInt32().Should().Be(1);
+        retr.GetProperty("averagePct").ValueKind.Should().NotBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Retention_ContainsLegacyAndNewBlocks()
+    {
+        await EnsureSeedData();
+
+        // Build a small review history with durations on a single card across days.
+        var now = DateTime.UtcNow;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var card = new FsrsCard(TestUsers.UserA, 1, 0, state: FsrsState.Review,
+                stability: 10, difficulty: 5, due: now.AddDays(5), lastReview: now.AddDays(-2));
+            userDb.FsrsCards.Add(card);
+            await userDb.SaveChangesAsync();
+
+            userDb.FsrsReviewLogs.Add(new FsrsReviewLog(card.CardId, FsrsRating.Good, now.AddDays(-10), 3000));
+            userDb.FsrsReviewLogs.Add(new FsrsReviewLog(card.CardId, FsrsRating.Good, now.AddDays(-5), 4000));
+            userDb.FsrsReviewLogs.Add(new FsrsReviewLog(card.CardId, FsrsRating.Again, now.AddDays(-2), 8000));
+
+            // A second card with an old log (45 days) to exercise the window boundaries:
+            // it should appear in last90 + all but not last30.
+            var oldCard = new FsrsCard(TestUsers.UserA, 2, 0, state: FsrsState.Review,
+                stability: 10, difficulty: 5, due: now.AddDays(5), lastReview: now.AddDays(-2));
+            userDb.FsrsCards.Add(oldCard);
+            await userDb.SaveChangesAsync();
+            userDb.FsrsReviewLogs.Add(new FsrsReviewLog(oldCard.CardId, FsrsRating.Good, now.AddDays(-45), 5000));
+            await userDb.SaveChangesAsync();
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/srs/retention")
+            .WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        // Legacy fields still present.
+        body.TryGetProperty("desiredRetention", out _).Should().BeTrue();
+        body.TryGetProperty("matureThresholdDays", out _).Should().BeTrue();
+        body.GetProperty("windows").TryGetProperty("last30", out _).Should().BeTrue();
+        body.TryGetProperty("weekly", out _).Should().BeTrue();
+        body.TryGetProperty("monthly", out _).Should().BeTrue();
+
+        // answerButtons is now windowed; each window has the four-element category arrays.
+        var ab = body.GetProperty("answerButtons");
+        foreach (var win in new[] { "last30", "last90", "all" })
+        {
+            var w = ab.GetProperty(win);
+            w.GetProperty("learning").GetArrayLength().Should().Be(4);
+            w.GetProperty("young").GetArrayLength().Should().Be(4);
+            w.GetProperty("mature").GetArrayLength().Should().Be(4);
+        }
+
+        static int AbTotal(JsonElement w) =>
+            w.GetProperty("learning").EnumerateArray().Sum(x => x.GetInt32())
+            + w.GetProperty("young").EnumerateArray().Sum(x => x.GetInt32())
+            + w.GetProperty("mature").EnumerateArray().Sum(x => x.GetInt32());
+
+        // all-time = 4 rated logs; last90 = 4 (45d old log included); last30 = 3 (45d log excluded).
+        AbTotal(ab.GetProperty("all")).Should().Be(4);
+        AbTotal(ab.GetProperty("last90")).Should().Be(4);
+        AbTotal(ab.GetProperty("last30")).Should().Be(3);
+
+        // hourly is windowed; each window is a 24-entry array.
+        var hourly = body.GetProperty("hourly");
+        hourly.GetProperty("last30").GetArrayLength().Should().Be(24);
+        hourly.GetProperty("last90").GetArrayLength().Should().Be(24);
+        hourly.GetProperty("all").GetArrayLength().Should().Be(24);
+
+        // reviewTime: bucketLabels live once at the top level; each window has buckets/count.
+        var rt = body.GetProperty("reviewTime");
+        rt.GetProperty("bucketLabels").GetArrayLength().Should().Be(10);
+        rt.GetProperty("all").GetProperty("count").GetInt32().Should().Be(4);
+        rt.GetProperty("last90").GetProperty("count").GetInt32().Should().Be(4);
+        rt.GetProperty("last30").GetProperty("count").GetInt32().Should().Be(3);
+        rt.GetProperty("all").GetProperty("buckets").EnumerateArray().Sum(x => x.GetInt32()).Should().Be(4);
+
+        body.GetProperty("today").TryGetProperty("reviews", out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Retention_Anonymous_Returns401()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/srs/retention");
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ReviewForecast_DaysParam_RespectedAndClamped()
+    {
+        // Default 30.
+        var def = new HttpRequestMessage(HttpMethod.Get, "/api/srs/review-forecast-30d")
+            .WithUser(TestUsers.UserA);
+        var defBody = await (await _client.SendAsync(def)).Content.ReadFromJsonAsync<JsonElement>();
+        defBody.GetProperty("days").GetArrayLength().Should().Be(30);
+
+        // Explicit 90.
+        var d90 = new HttpRequestMessage(HttpMethod.Get, "/api/srs/review-forecast-30d?days=90")
+            .WithUser(TestUsers.UserA);
+        var b90 = await (await _client.SendAsync(d90)).Content.ReadFromJsonAsync<JsonElement>();
+        b90.GetProperty("days").GetArrayLength().Should().Be(90);
+
+        // Below floor → clamped to 7.
+        var low = new HttpRequestMessage(HttpMethod.Get, "/api/srs/review-forecast-30d?days=1")
+            .WithUser(TestUsers.UserA);
+        var bLow = await (await _client.SendAsync(low)).Content.ReadFromJsonAsync<JsonElement>();
+        bLow.GetProperty("days").GetArrayLength().Should().Be(7);
+
+        // Above ceiling → clamped to 365.
+        var high = new HttpRequestMessage(HttpMethod.Get, "/api/srs/review-forecast-30d?days=9999")
+            .WithUser(TestUsers.UserA);
+        var bHigh = await (await _client.SendAsync(high)).Content.ReadFromJsonAsync<JsonElement>();
+        bHigh.GetProperty("days").GetArrayLength().Should().Be(365);
     }
 }

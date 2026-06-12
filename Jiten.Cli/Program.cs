@@ -128,6 +128,11 @@ public class Program
             await deckCommands.BackfillSpeechStatsFromJimaku(options);
         }
 
+        if (options.BackfillVndbAnimeRelations)
+        {
+            await deckCommands.BackfillVndbAnimeRelations(options);
+        }
+
         if (options.ComputeFrequencies)
         {
             await JitenHelper.ComputeFrequencies(context.ContextFactory);

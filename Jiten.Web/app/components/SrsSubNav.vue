@@ -12,6 +12,7 @@
   const tabs = [
     { label: 'Decks', to: '/srs/decks', match: (p: string) => p.startsWith('/srs/decks') },
     { label: 'Cards', to: '/settings/cards', match: (p: string) => p === '/settings/cards' },
+    { label: 'Stats', to: '/srs/stats', match: (p: string) => p.startsWith('/srs/stats') },
     { label: 'History', to: '/srs/history', match: (p: string) => p.startsWith('/srs/history') },
     { label: 'Settings', to: '/settings/srs', match: (p: string) => p === '/settings/srs' },
   ];
@@ -41,9 +42,11 @@
         :key="tab.to"
         :to="tab.to"
         class="px-2.5 sm:px-3 py-2 text-sm whitespace-nowrap border-b-2 transition-colors"
-        :class="tab.match(route.path)
-          ? 'border-primary-500 font-semibold !text-primary-600 dark:!text-primary-400'
-          : 'border-transparent !text-surface-500 dark:!text-surface-400 hover:!text-surface-700 dark:hover:!text-surface-200'"
+        :class="
+          tab.match(route.path)
+            ? 'border-primary-500 font-semibold !text-primary-600 dark:!text-primary-400'
+            : 'border-transparent !text-surface-500 dark:!text-surface-400 hover:!text-surface-700 dark:hover:!text-surface-200'
+        "
       >
         {{ tab.label }}
       </NuxtLink>

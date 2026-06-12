@@ -207,6 +207,123 @@ public class MediaDeckController(
     }
 
     /// <summary>
+    /// Returns the full connected component of related media around a deck (sequels, adaptations,
+    /// spin-offs, etc.), traversed across <see cref="DeckRelationship"/> edges ignoring direction.
+    /// </summary>
+    /// <param name="deckId">The deck whose franchise to expand.</param>
+    /// <returns>Franchise nodes + edges; <c>truncated</c> is true if the node cap stopped expansion.</returns>
+    [HttpGet("{deckId:int}/franchise")]
+    [ResponseCache(Duration = 3600, VaryByHeader = "Authorization")]
+    [AllowAnonymous]
+    [SwaggerOperation(Summary = "Get the franchise graph for a media deck")]
+    [ProducesResponseType(typeof(FranchiseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<FranchiseDto>> GetFranchise(int deckId)
+    {
+        const int nodeCap = 100;
+
+        if (!await context.Decks.AsNoTracking().AnyAsync(d => d.DeckId == deckId))
+            return NotFound();
+
+        // BFS over relationship edges, treating them as undirected. Each frontier round pulls every
+        // edge touching a frontier node in a single query; visited guards against revisiting nodes
+        // (Alternative webs form legitimate cycles). The same physical edge can surface from either
+        // endpoint, so edges are de-duplicated by (Source, Target, Type).
+        var visited = new HashSet<int> { deckId };
+        var frontier = new List<int> { deckId };
+        var edges = new Dictionary<(int, int, DeckRelationshipType), FranchiseEdgeDto>();
+        var truncated = false;
+
+        while (frontier.Count > 0 && !truncated)
+        {
+            var batch = await context.DeckRelationships.AsNoTracking()
+                                     .Where(r => frontier.Contains(r.SourceDeckId) || frontier.Contains(r.TargetDeckId))
+                                     .ToListAsync();
+
+            var nextFrontier = new List<int>();
+            foreach (var r in batch)
+            {
+                edges.TryAdd((r.SourceDeckId, r.TargetDeckId, r.RelationshipType), new FranchiseEdgeDto
+                {
+                    SourceDeckId = r.SourceDeckId,
+                    TargetDeckId = r.TargetDeckId,
+                    RelationshipType = r.RelationshipType
+                });
+
+                foreach (var neighbour in new[] { r.SourceDeckId, r.TargetDeckId })
+                {
+                    if (visited.Contains(neighbour))
+                        continue;
+
+                    if (visited.Count >= nodeCap)
+                    {
+                        truncated = true;
+                        break;
+                    }
+
+                    visited.Add(neighbour);
+                    nextFrontier.Add(neighbour);
+                }
+
+                if (truncated)
+                    break;
+            }
+
+            frontier = nextFrontier;
+        }
+
+        // Drop any edge that points at a node we never admitted (only possible once truncated).
+        var nodeIds = visited;
+        var keptEdges = edges.Values
+                             .Where(e => nodeIds.Contains(e.SourceDeckId) && nodeIds.Contains(e.TargetDeckId))
+                             .ToList();
+
+        var nodeIdList = nodeIds.ToList();
+        var childCounts = await context.Decks.AsNoTracking()
+                                       .Where(d => d.ParentDeckId != null && nodeIdList.Contains(d.ParentDeckId.Value))
+                                       .GroupBy(d => d.ParentDeckId!.Value)
+                                       .Select(g => new { ParentId = g.Key, Count = g.Count() })
+                                       .ToDictionaryAsync(x => x.ParentId, x => x.Count);
+
+        var decks = await context.Decks.AsNoTracking()
+                                 .Where(d => nodeIdList.Contains(d.DeckId))
+                                 .Include(d => d.DeckDifficulty)
+                                 .ToListAsync();
+
+        var nodes = decks.Select(d => new FranchiseNodeDto
+        {
+            DeckId = d.DeckId,
+            OriginalTitle = d.OriginalTitle,
+            RomajiTitle = d.RomajiTitle ?? "",
+            EnglishTitle = d.EnglishTitle ?? "",
+            CoverName = d.CoverName,
+            MediaType = d.MediaType,
+            ReleaseDate = d.ReleaseDate.ToDateTime(new TimeOnly()),
+            Difficulty = DifficultyMapper.MapDeck(d),
+            DifficultyRaw = DifficultyMapper.GetAdjustedDifficulty(d),
+            CharacterCount = d.CharacterCount,
+            WordCount = d.WordCount,
+            ChildrenDeckCount = childCounts.GetValueOrDefault(d.DeckId)
+        }).ToList();
+
+        // Decorate with the viewer's coverage so the frontend can render coverage borders.
+        // Per-user data must not be shared from the response cache (mirrors GetSimilarDecks).
+        if (currentUserService.IsAuthenticated)
+        {
+            Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+            var userId = currentUserService.UserId!;
+            var coverages = await UserCoverageChunkHelper.GetCoverage(userContext, userId, nodeIdList);
+            foreach (var node in nodes)
+            {
+                if (coverages.MatureCoverage.TryGetValue(node.DeckId, out var c)) node.Coverage = c;
+                if (coverages.MatureUniqueCoverage.TryGetValue(node.DeckId, out var uc)) node.UniqueCoverage = uc;
+            }
+        }
+
+        return new FranchiseDto { Nodes = nodes, Edges = keptEdges, Truncated = truncated };
+    }
+
+    /// <summary>
     /// Returns lightweight media deck suggestions for autocomplete search.
     /// </summary>
     /// <param name="query">Search query (minimum 2 characters).</param>

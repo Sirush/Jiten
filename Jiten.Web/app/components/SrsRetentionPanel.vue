@@ -1,24 +1,26 @@
 <script setup lang="ts">
   import { Line } from 'vue-chartjs';
-  import {
-    Chart as ChartJS,
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    LineElement,
-    Tooltip,
-    Legend,
-    type ChartOptions,
-    type ChartData,
-  } from 'chart.js';
+  import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, type ChartOptions, type ChartData } from 'chart.js';
   import type { RetentionResponseDto, RetentionWindowDto, RetentionBucketDto, PeriodRetentionDto } from '~/types';
 
   ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
   const { $api } = useNuxtApp();
 
-  const isLoading = ref(true);
-  const data = ref<RetentionResponseDto | null>(null);
+  // When `data` is provided by a parent (e.g. the stats page) we never self-fetch,
+  // keeping the panel a drop-in that the parent can load once and share.
+  const props = defineProps<{
+    data?: RetentionResponseDto | null;
+    loading?: boolean;
+  }>();
+
+  const selfData = ref<RetentionResponseDto | null>(null);
+  const selfLoading = ref(true);
+  const provided = computed(() => props.data !== undefined);
+
+  const data = computed<RetentionResponseDto | null>(() => (provided.value ? (props.data ?? null) : selfData.value));
+  const isLoading = computed(() => (provided.value ? (props.loading ?? false) : selfLoading.value));
+
   type WindowKey = 'last30' | 'last90' | 'all';
   const windowKey = ref<WindowKey>('last30');
 
@@ -29,12 +31,13 @@
   ];
 
   onMounted(async () => {
+    if (provided.value) return;
     try {
-      data.value = await $api<RetentionResponseDto>('srs/retention');
+      selfData.value = await $api<RetentionResponseDto>('srs/retention');
     } catch {
-      data.value = null;
+      selfData.value = null;
     } finally {
-      isLoading.value = false;
+      selfLoading.value = false;
     }
   });
 
@@ -44,8 +47,7 @@
   const matureThreshold = computed(() => data.value?.matureThresholdDays ?? 21);
   const targetPct = computed(() => (data.value ? Math.round(data.value.desiredRetention * 100) : 90));
 
-  const activeWindow = computed<RetentionWindowDto | null>(() =>
-    data.value ? data.value.windows[windowKey.value] : null);
+  const activeWindow = computed<RetentionWindowDto | null>(() => (data.value ? data.value.windows[windowKey.value] : null));
 
   function pct(b: RetentionBucketDto | undefined): number | null {
     if (!b || b.total === 0 || b.retention == null) return null;
@@ -172,8 +174,7 @@
             if (v == null) return `${ctx.dataset.label}: —`;
             if (ctx.dataset.label?.startsWith('Target')) return `${ctx.dataset.label}`;
             const row = series.value[ctx.dataIndex];
-            const bucket = ctx.dataset.label === 'Overall' ? row?.overall
-              : ctx.dataset.label === 'Young' ? row?.young : row?.mature;
+            const bucket = ctx.dataset.label === 'Overall' ? row?.overall : ctx.dataset.label === 'Young' ? row?.young : row?.mature;
             const n = bucket?.total ?? 0;
             return `${ctx.dataset.label}: ${v}% (${n} reviews)`;
           },
@@ -200,10 +201,7 @@
     </div>
   </div>
 
-  <div
-    v-else-if="hasData"
-    class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4"
-  >
+  <div v-else-if="hasData" class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4">
     <!-- Header + window selector -->
     <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
       <div class="flex items-center gap-2">
@@ -212,11 +210,13 @@
         <span
           v-if="targetDelta != null"
           class="text-xs px-1.5 py-0.5 rounded-full"
-          :class="targetDelta >= 0
-            ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
-            : targetDelta >= -5
-              ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
-              : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'"
+          :class="
+            targetDelta >= 0
+              ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
+              : targetDelta >= -5
+                ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+          "
         >
           {{ targetDelta >= 0 ? 'On target' : `${targetDelta}% vs target` }}
         </span>
@@ -226,9 +226,11 @@
           v-for="opt in windowOptions"
           :key="opt.key"
           class="px-2.5 py-1 rounded-md transition-colors"
-          :class="windowKey === opt.key
-            ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
-            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+          :class="
+            windowKey === opt.key
+              ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
+              : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+          "
           @click="windowKey = opt.key"
         >
           {{ opt.label }}
@@ -272,9 +274,11 @@
               v-for="opt in rangeOptions"
               :key="opt.key"
               class="px-2 py-0.5 rounded-md transition-colors"
-              :class="range === opt.key
-                ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
-                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+              :class="
+                range === opt.key
+                  ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              "
               @click="range = opt.key"
             >
               {{ opt.label }}
@@ -282,12 +286,17 @@
           </div>
           <div class="flex rounded-lg bg-surface-100 dark:bg-surface-800 p-0.5 text-xs">
             <button
-              v-for="opt in [{ key: 'week', label: 'Weekly' }, { key: 'month', label: 'Monthly' }] as const"
+              v-for="opt in [
+                { key: 'week', label: 'Weekly' },
+                { key: 'month', label: 'Monthly' },
+              ] as const"
               :key="opt.key"
               class="px-2 py-0.5 rounded-md transition-colors"
-              :class="granularity === opt.key
-                ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
-                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+              :class="
+                granularity === opt.key
+                  ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              "
               @click="granularity = opt.key"
             >
               {{ opt.label }}

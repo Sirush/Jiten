@@ -145,6 +145,8 @@ export const useSrsStore = defineStore('srs', () => {
     timezone: 'Europe/London',
     showConfusableReadings: true,
     dayBoundaryScheduling: false,
+    loadBalancing: true,
+    easyDays: null,
     leechThreshold: 8,
     leechAction: 'Suspend',
     keybinds: { ...DEFAULT_KEYBINDS },
@@ -441,6 +443,15 @@ export const useSrsStore = defineStore('srs', () => {
       body: { wordId, readingIndex, occurrences },
     });
     refreshOverview();
+  }
+
+  async function addDeckWordsBatch(deckId: number, words: { wordId: number; readingIndex: number; occurrences?: number }[]) {
+    const result = await $api<{ added: number; updated: number }>(`srs/study-decks/${deckId}/words/batch`, {
+      method: 'POST',
+      body: { words: words.map(w => ({ wordId: w.wordId, readingIndex: w.readingIndex, occurrences: w.occurrences ?? 1 })) },
+    });
+    refreshOverview();
+    return result;
   }
 
   async function removeDeckWord(deckId: number, wordId: number, readingIndex: number) {
@@ -1249,6 +1260,7 @@ export const useSrsStore = defineStore('srs', () => {
     updateStudyDeck,
     removeStudyDeck,
     addDeckWord,
+    addDeckWordsBatch,
     removeDeckWord,
     updateDeckWordOccurrences,
     importPreview,

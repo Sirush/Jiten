@@ -74,9 +74,9 @@ public class DeckDto
         UniqueKanjiCount = deck.UniqueKanjiCount;
         UniqueKanjiUsedOnceCount = deck.UniqueKanjiUsedOnceCount;
         DifficultyAlgorithmic = deck.GetDifficulty();
-        var adjusted = GetAdjustedDifficulty(deck);
+        var adjusted = DifficultyMapper.GetAdjustedDifficulty(deck);
         DifficultyRaw = adjusted;
-        Difficulty = MapDifficulty(adjusted);
+        Difficulty = DifficultyMapper.MapDifficulty(adjusted);
         DifficultyOverride = deck.DifficultyOverride;
         SentenceCount = deck.SentenceCount;
         SpeechDuration = deck.SpeechDuration;
@@ -122,9 +122,9 @@ public class DeckDto
         UniqueKanjiCount = deck.UniqueKanjiCount;
         UniqueKanjiUsedOnceCount = deck.UniqueKanjiUsedOnceCount;
         DifficultyAlgorithmic = deck.GetDifficulty();
-        var adjusted = GetAdjustedDifficulty(deck);
+        var adjusted = DifficultyMapper.GetAdjustedDifficulty(deck);
         DifficultyRaw = adjusted;
-        Difficulty = MapDifficulty(adjusted);
+        Difficulty = DifficultyMapper.MapDifficulty(adjusted);
         DifficultyOverride = deck.DifficultyOverride;
         SentenceCount = deck.SentenceCount;
         SpeechDuration = deck.SpeechDuration;
@@ -159,36 +159,6 @@ public class DeckDto
         UserAdjustment = dd.UserAdjustment;
     }
 
-    private float GetAdjustedDifficulty(Deck deck)
-    {
-        var baseDifficulty = deck.GetDifficulty();
-        var adjustment = deck.DeckDifficulty?.UserAdjustment ?? 0;
-        return (float)(baseDifficulty + (float)adjustment);
-    }
-
-    /// <summary>
-    /// Remap the difficulty to an int while taking into account the biases of the model
-    /// This is subject to change with a different training
-    /// </summary>
-    private int MapDifficulty(float difficulty)
-    {
-        if (difficulty < 1.01)
-            return 0;
-
-        if (difficulty < 2.01)
-            return 1;
-
-        if (difficulty < 3.01)
-            return 2;
-
-        if (difficulty < 4.01)
-            return 3;
-
-        if (difficulty < 4.95)
-            return 4;
-
-        return 5;
-    }
 }
 
 public class DeckRelationshipDto

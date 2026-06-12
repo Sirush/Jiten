@@ -262,6 +262,9 @@ public class CliOptions
     [Option(longName: "backfill-speech-stats-jimaku", Required = false, HelpText = "Backfill speech stats from Jimaku API. Requires --deck-type.")]
     public bool BackfillSpeechStatsJimaku { get; set; }
 
+    [Option(longName: "backfill-vndb-anime-relations", Required = false, HelpText = "Create VN -> anime Adaptation relationships from Shared/resources/vndb_anime_mal.json, matching anime decks by MAL id. Regenerate the map with scripts/build_vndb_anime_mal.py.")]
+    public bool BackfillVndbAnimeRelations { get; set; }
+
     [Option(longName: "resume", Required = false, HelpText = "Skip items that already have results (e.g. decks with speech stats already computed).")]
     public bool Resume { get; set; }
 

@@ -329,6 +329,7 @@ public partial class AdminController(
                                   .ThenInclude(dt => dt.Tag)
                                   .Include(d => d.DictionaryEntries)
                                   .Include(d => d.RelationshipsAsSource)
+                                  .Include(d => d.RelationshipsAsTarget)
                                   .FirstOrDefaultAsync(d => d.DeckId == model.DeckId);
 
         if (deck == null)
@@ -552,60 +553,51 @@ public partial class AdminController(
             }
         }
 
-        // Update relationships
-        if (model.Relationships != null && model.Relationships.Any())
+        // Update relationships. Edges are stored as canonical primary edges (type 1-6) and may have
+        // this deck as either source or target, so we reconcile both directions. The frontend sends
+        // every edge touching this deck; anything missing from the payload is removed.
+        if (model.Relationships != null)
         {
-            // Filter out inverse relationships from the input (only accept direct/primary relationships)
-            var primaryRelationships = model.Relationships
+            var currentDeckId = deck.DeckId;
+
+            var inputEdges = model.Relationships
                 .Where(r => DeckRelationship.IsPrimaryRelationship(r.RelationshipType))
+                // A missing/zero source means a legacy payload; treat the edited deck as the source.
+                .Select(r => (SourceDeckId: r.SourceDeckId == 0 ? currentDeckId : r.SourceDeckId, r.TargetDeckId, r.RelationshipType))
+                .Where(r => (r.SourceDeckId == currentDeckId || r.TargetDeckId == currentDeckId) && r.SourceDeckId != r.TargetDeckId)
+                .Distinct()
                 .ToList();
 
-            var existingRelationships = deck.RelationshipsAsSource.ToList();
-            var newRelationshipKeys = primaryRelationships
-                .Select(r => (r.TargetDeckId, r.RelationshipType))
-                .ToHashSet();
+            var inputKeys = inputEdges.ToHashSet();
 
-            // Remove relationships no longer present
-            foreach (var existing in existingRelationships)
+            var existingEdges = deck.RelationshipsAsSource
+                .Concat(deck.RelationshipsAsTarget)
+                .ToList();
+
+            // Remove edges no longer present in the payload
+            foreach (var existing in existingEdges)
             {
-                if (!newRelationshipKeys.Contains((existing.TargetDeckId, existing.RelationshipType)))
-                {
+                if (!inputKeys.Contains((existing.SourceDeckId, existing.TargetDeckId, existing.RelationshipType)))
                     dbContext.DeckRelationships.Remove(existing);
-                }
             }
 
-            // Add new relationships
-            var existingKeys = existingRelationships
-                .Select(r => (r.TargetDeckId, r.RelationshipType))
+            // Add edges not already stored
+            var existingKeys = existingEdges
+                .Select(e => (e.SourceDeckId, e.TargetDeckId, e.RelationshipType))
                 .ToHashSet();
 
-            foreach (var rel in primaryRelationships)
+            foreach (var edge in inputEdges)
             {
-                if (existingKeys.Contains((rel.TargetDeckId, rel.RelationshipType)))
+                if (existingKeys.Contains(edge))
                     continue;
 
-                // Check if the inverse relationship already exists
-                var inverseType = DeckRelationship.GetInverse(rel.RelationshipType);
-                var inverseExists = await dbContext.DeckRelationships.AnyAsync(r =>
-                    r.SourceDeckId == rel.TargetDeckId &&
-                    r.TargetDeckId == deck.DeckId &&
-                    r.RelationshipType == inverseType);
-
-                if (inverseExists)
-                    continue;
-
-                deck.RelationshipsAsSource.Add(new DeckRelationship
+                dbContext.DeckRelationships.Add(new DeckRelationship
                 {
-                    SourceDeckId = deck.DeckId,
-                    TargetDeckId = rel.TargetDeckId,
-                    RelationshipType = rel.RelationshipType
+                    SourceDeckId = edge.SourceDeckId,
+                    TargetDeckId = edge.TargetDeckId,
+                    RelationshipType = edge.RelationshipType
                 });
             }
-        }
-        else if (model.Relationships != null)
-        {
-            // Clear all if empty list provided
-            dbContext.RemoveRange(deck.RelationshipsAsSource);
         }
 
         deck.LastUpdate = DateTime.UtcNow;

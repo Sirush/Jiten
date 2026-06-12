@@ -348,6 +348,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddSingleton<ApiKeyService>();
 builder.Services.AddScoped<Microsoft.AspNetCore.Identity.UI.Services.IEmailSender, Jiten.Api.Services.EmailService>();
+builder.Services.AddScoped<Jiten.Api.Services.IEmailService, Jiten.Api.Services.EmailService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
@@ -688,7 +689,12 @@ app.UseResponseCaching();
 
 app.UseAuthentication();
 
-app.UseRateLimiter();
+// Rate limiting is IP-partitioned; the integration test suite drives many auth-policy endpoints from a
+// single loopback IP, so skip the limiter under the Testing environment (matches other Testing guards).
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseRateLimiter();
+}
 
 app.UseStaticFiles();
 

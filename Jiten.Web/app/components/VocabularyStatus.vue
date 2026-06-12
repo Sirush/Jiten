@@ -33,6 +33,7 @@
 
   const isBlacklisted = computed(() => knownStates.value.includes(KnownState.Blacklisted));
   const isRedundant = computed(() => knownStates.value.includes(KnownState.Redundant));
+  const isSuspended = computed(() => knownStates.value.includes(KnownState.Suspended));
 
   const staticDecks = computed(() =>
     srsStore.studyDecks.filter(d => d.deckType === StudyDeckType.StaticWordList)
@@ -123,6 +124,12 @@
           <Tooltip :content="redundantTooltip">
             <span class="text-blue-500 dark:text-blue-300 cursor-default">Redundant</span>
           </Tooltip>
+        </template>
+        <template v-else-if="isSuspended">
+          <Tooltip content="Paused — retains its scheduling but is not due for review">
+            <span class="text-gray-600 dark:text-gray-300 cursor-default">Suspended</span>
+          </Tooltip>
+          <Button icon="pi pi-minus" size="small" text severity="danger" @click="removeWord" />
         </template>
         <template v-else-if="knownStates.includes(KnownState.Mature)">
           <span class="text-green-600 dark:text-green-300">Mature</span>

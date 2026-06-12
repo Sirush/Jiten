@@ -67,8 +67,7 @@
         try {
           await srsStore.removeStudyDeck(id);
           toast.add({ severity: 'info', summary: 'Deck removed', life: 2000 });
-        }
-        catch {
+        } catch {
           toast.add({ severity: 'error', summary: 'Failed to remove deck', life: 3000 });
         }
       },
@@ -117,10 +116,12 @@
     const active = srsStore.activeDecks;
     if (srsStore.studySettings.newCardGathering === 'TopDeck') {
       for (const d of active) {
-        if (d.unseenCount > 0) { ids.add(d.userStudyDeckId); break; }
+        if (d.unseenCount > 0) {
+          ids.add(d.userStudyDeckId);
+          break;
+        }
       }
-    }
-    else {
+    } else {
       for (const d of active) {
         if (d.unseenCount > 0) ids.add(d.userStudyDeckId);
       }
@@ -130,11 +131,9 @@
 
   const deckUsage = computed(() => srsStore.studyDecks.length);
   const staticWordUsage = computed(() =>
-    srsStore.studyDecks
-      .filter(d => d.deckType === StudyDeckType.StaticWordList)
-      .reduce((sum, d) => sum + d.totalWords, 0),
+    srsStore.studyDecks.filter((d) => d.deckType === StudyDeckType.StaticWordList).reduce((sum, d) => sum + d.totalWords, 0)
   );
-  const hasStaticDecks = computed(() => srsStore.studyDecks.some(d => d.deckType === StudyDeckType.StaticWordList));
+  const hasStaticDecks = computed(() => srsStore.studyDecks.some((d) => d.deckType === StudyDeckType.StaticWordList));
 
   function usageColor(current: number, max: number) {
     const ratio = current / max;
@@ -143,7 +142,11 @@
     return 'text-gray-500 dark:text-gray-400';
   }
 
-  const { dragIndex: activeDragIndex, dropIndex: activeDropIndex, handlePointerDown: activePointerDown } = useTouchReorder({
+  const {
+    dragIndex: activeDragIndex,
+    dropIndex: activeDropIndex,
+    handlePointerDown: activePointerDown,
+  } = useTouchReorder({
     containerRef: activeDeckListRef,
     onReorder(from, to) {
       const decks = [...srsStore.activeDecks];
@@ -153,7 +156,11 @@
     },
   });
 
-  const { dragIndex: inactiveDragIndex, dropIndex: inactiveDropIndex, handlePointerDown: inactivePointerDown } = useTouchReorder({
+  const {
+    dragIndex: inactiveDragIndex,
+    dropIndex: inactiveDropIndex,
+    handlePointerDown: inactivePointerDown,
+  } = useTouchReorder({
     containerRef: inactiveDeckListRef,
     onReorder(from, to) {
       const decks = [...srsStore.inactiveDecks];
@@ -287,16 +294,16 @@
         const date = new Date(d.date + 'T00:00:00');
         return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
       }),
-      datasets: [{
-        // Zero days → null so chart.js draws no bar (minBarLength would otherwise stub them);
-        // non-zero days keep the minBarLength floor so a 1-review day stays visible next to a 180 spike.
-        data: forecast.days.map(d => d.count === 0 ? null : d.count),
-        backgroundColor: forecast.days.map((_, i) =>
-          i === 0 ? 'rgba(59, 130, 246, 0.8)' : 'rgba(168, 85, 247, 0.6)',
-        ),
-        borderRadius: 3,
-        minBarLength: 4,
-      }],
+      datasets: [
+        {
+          // Zero days → null so chart.js draws no bar (minBarLength would otherwise stub them);
+          // non-zero days keep the minBarLength floor so a 1-review day stays visible next to a 180 spike.
+          data: forecast.days.map((d) => (d.count === 0 ? null : d.count)),
+          backgroundColor: forecast.days.map((_, i) => (i === 0 ? 'rgba(59, 130, 246, 0.8)' : 'rgba(168, 85, 247, 0.6)')),
+          borderRadius: 3,
+          minBarLength: 4,
+        },
+      ],
     };
   });
 
@@ -398,10 +405,7 @@
     </div>
 
     <!-- Due Summary Banner -->
-    <div
-      v-else
-      class="mb-6 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden"
-    >
+    <div v-else class="mb-6 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden">
       <div class="flex flex-col md:flex-row">
         <!-- Today zone: progress ring -->
         <div class="flex flex-col items-center md:items-start gap-1.5 py-3 px-4 border-b md:border-b-0 md:border-r border-surface-200 dark:border-surface-700">
@@ -427,7 +431,8 @@
               <span
                 class="text-[clamp(0.95rem,5vw,1.5rem)] font-bold tabular-nums"
                 :class="srsStore.dueSummary.reviewsDue > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'"
-              >{{ srsStore.dueSummary.reviewsDue }}</span>
+                >{{ srsStore.dueSummary.reviewsDue }}</span
+              >
               <span class="text-xs text-gray-500 dark:text-gray-400">Reviews</span>
             </button>
 
@@ -439,7 +444,8 @@
               <span
                 class="text-[clamp(0.95rem,5vw,1.5rem)] font-bold tabular-nums"
                 :class="srsStore.dueSummary.newCardsAvailable > 0 ? 'text-green-400 dark:text-green-600' : 'text-gray-400 dark:text-gray-500'"
-              >{{ srsStore.dueSummary.newCardsAvailable }}</span>
+                >{{ srsStore.dueSummary.newCardsAvailable }}</span
+              >
               <span class="text-xs text-gray-500 dark:text-gray-400">New</span>
             </button>
 
@@ -454,7 +460,10 @@
 
     <!-- Streak & Mini Heatmap -->
     <div
-      v-if="(srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0) || (srsStore.studySettings.showReviewForecast && forecastChartData && srsStore.reviewForecast30d?.days.some(d => d.count > 0))"
+      v-if="
+        (srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0) ||
+        (srsStore.studySettings.showReviewForecast && forecastChartData && srsStore.reviewForecast30d?.days.some((d) => d.count > 0))
+      "
       class="mb-6 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4"
     >
       <div class="flex flex-col md:flex-row gap-4">
@@ -467,9 +476,7 @@
               <span class="text-xl font-bold tabular-nums">{{ srsStore.deckStreak.currentStreak }}</span>
               <span class="text-sm text-gray-500">day streak</span>
             </div>
-            <div v-if="srsStore.deckStreak.isNewRecord && srsStore.deckStreak.currentStreak > 1" class="text-xs font-semibold text-orange-500">
-              New record!
-            </div>
+            <div v-if="srsStore.deckStreak.isNewRecord && srsStore.deckStreak.currentStreak > 1" class="text-xs font-semibold text-orange-500">New record!</div>
             <div class="text-sm text-gray-500">
               Longest: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ srsStore.deckStreak.longestStreak }}</span>
             </div>
@@ -501,7 +508,7 @@
 
         <!-- Right: forecast totals + chart -->
         <div
-          v-if="srsStore.studySettings.showReviewForecast && forecastChartData && srsStore.reviewForecast30d?.days.some(d => d.count > 0)"
+          v-if="srsStore.studySettings.showReviewForecast && forecastChartData && srsStore.reviewForecast30d?.days.some((d) => d.count > 0)"
           class="w-full md:w-1/2 flex-shrink-0 min-w-0 flex flex-col gap-3"
         >
           <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
@@ -520,9 +527,23 @@
       </div>
     </div>
 
-    <!-- Measured retention -->
+    <!-- Stats link-tile -->
     <div v-if="srsStore.studySettings.showReviewActivity && srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0" class="mb-6">
-      <SrsRetentionPanel />
+      <NuxtLink
+        to="/srs/stats"
+        class="flex items-center justify-between gap-3 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4 transition-colors hover:bg-surface-50 dark:hover:bg-surface-800"
+      >
+        <div class="flex items-center gap-3 min-w-0">
+          <Icon name="material-symbols:bar-chart-4-bars" size="1.5rem" class="text-primary-500 flex-shrink-0" />
+          <div class="min-w-0">
+            <div class="font-semibold">Stats</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">Retention, difficulty, stability, forecast and more</div>
+          </div>
+        </div>
+        <span class="flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 flex-shrink-0">
+          View <Icon name="material-symbols:arrow-forward-rounded" size="1.1rem" />
+        </span>
+      </NuxtLink>
     </div>
 
     <!-- Deck Skeletons -->
@@ -557,13 +578,18 @@
     <template v-else-if="srsStore.studyDecks.length > 0">
       <!-- Usage -->
       <div class="flex items-center gap-1 mb-3 text-xs">
-        <Tooltip content="Current usage of your study deck limits.<br>Word counts are from word list decks only.<br>These limits are subject to change." placement="bottom">
+        <Tooltip
+          content="Current usage of your study deck limits.<br>Word counts are from word list decks only.<br>These limits are subject to change."
+          placement="bottom"
+        >
           <div class="flex items-center gap-3">
             <span :class="usageColor(deckUsage, 50)">
-              <span class="font-semibold tabular-nums">{{ deckUsage }}</span><span class="opacity-60">/50 decks</span>
+              <span class="font-semibold tabular-nums">{{ deckUsage }}</span
+              ><span class="opacity-60">/50 decks</span>
             </span>
             <span v-if="hasStaticDecks" :class="usageColor(staticWordUsage, 200_000)">
-              <span class="font-semibold tabular-nums">{{ staticWordUsage.toLocaleString() }}</span><span class="opacity-60">/200K custom words</span>
+              <span class="font-semibold tabular-nums">{{ staticWordUsage.toLocaleString() }}</span
+              ><span class="opacity-60">/200K custom words</span>
             </span>
           </div>
         </Tooltip>
@@ -571,7 +597,9 @@
 
       <!-- Active Decks -->
       <div v-if="srsStore.activeDecks.length > 0">
-        <h3 v-if="srsStore.inactiveDecks.length > 0" class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Active Decks</h3>
+        <h3 v-if="srsStore.inactiveDecks.length > 0" class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+          Active Decks
+        </h3>
         <div ref="activeDeckListRef" class="flex flex-col gap-3">
           <div
             v-for="(deck, index) in srsStore.activeDecks"
@@ -682,59 +710,23 @@
             <div class="flex gap-1 flex-shrink-0 items-center justify-end sm:justify-start">
               <div v-if="srsStore.activeDecks.length > 1" class="flex flex-col">
                 <Tooltip content="Move up" placement="top">
-                  <Button
-                    icon="pi pi-chevron-up"
-                    text
-                    size="small"
-                    :disabled="index === 0"
-                    @click="moveActiveDeck(index, -1)"
-                  />
+                  <Button icon="pi pi-chevron-up" text size="small" :disabled="index === 0" @click="moveActiveDeck(index, -1)" />
                 </Tooltip>
                 <Tooltip content="Move down" placement="top">
-                  <Button
-                    icon="pi pi-chevron-down"
-                    text
-                    size="small"
-                    :disabled="index === srsStore.activeDecks.length - 1"
-                    @click="moveActiveDeck(index, 1)"
-                  />
+                  <Button icon="pi pi-chevron-down" text size="small" :disabled="index === srsStore.activeDecks.length - 1" @click="moveActiveDeck(index, 1)" />
                 </Tooltip>
               </div>
               <Tooltip content="Deactivate" placement="top">
-                <Button
-                  icon="pi pi-pause"
-                  severity="secondary"
-                  text
-                  size="small"
-                  @click="srsStore.toggleDeckActive(deck.userStudyDeckId)"
-                />
+                <Button icon="pi pi-pause" severity="secondary" text size="small" @click="srsStore.toggleDeckActive(deck.userStudyDeckId)" />
               </Tooltip>
               <Tooltip content="Vocabulary" placement="top">
-                <Button
-                  icon="pi pi-eye"
-                  severity="secondary"
-                  text
-                  size="small"
-                  @click="router.push(`/srs/decks/${deck.userStudyDeckId}/vocabulary`)"
-                />
+                <Button icon="pi pi-eye" severity="secondary" text size="small" @click="router.push(`/srs/decks/${deck.userStudyDeckId}/vocabulary`)" />
               </Tooltip>
               <Tooltip content="Edit" placement="top">
-                <Button
-                  icon="pi pi-pencil"
-                  severity="secondary"
-                  text
-                  size="small"
-                  @click="openEdit(deck)"
-                />
+                <Button icon="pi pi-pencil" severity="secondary" text size="small" @click="openEdit(deck)" />
               </Tooltip>
               <Tooltip content="Download" placement="top">
-                <Button
-                  icon="pi pi-download"
-                  severity="secondary"
-                  text
-                  size="small"
-                  @click="openDownload(deck)"
-                />
+                <Button icon="pi pi-download" severity="secondary" text size="small" @click="openDownload(deck)" />
               </Tooltip>
               <Tooltip content="Remove" placement="top">
                 <Button
@@ -866,13 +858,7 @@
             <div class="flex gap-1 flex-shrink-0 items-center justify-end sm:justify-start">
               <div v-if="srsStore.inactiveDecks.length > 1" class="flex flex-col">
                 <Tooltip content="Move up" placement="top">
-                  <Button
-                    icon="pi pi-chevron-up"
-                    text
-                    size="small"
-                    :disabled="index === 0"
-                    @click="moveInactiveDeck(index, -1)"
-                  />
+                  <Button icon="pi pi-chevron-up" text size="small" :disabled="index === 0" @click="moveInactiveDeck(index, -1)" />
                 </Tooltip>
                 <Tooltip content="Move down" placement="top">
                   <Button
@@ -885,40 +871,16 @@
                 </Tooltip>
               </div>
               <Tooltip content="Activate" placement="top">
-                <Button
-                  icon="pi pi-play"
-                  severity="success"
-                  text
-                  size="small"
-                  @click="srsStore.toggleDeckActive(deck.userStudyDeckId)"
-                />
+                <Button icon="pi pi-play" severity="success" text size="small" @click="srsStore.toggleDeckActive(deck.userStudyDeckId)" />
               </Tooltip>
               <Tooltip content="Vocabulary" placement="top">
-                <Button
-                  icon="pi pi-eye"
-                  severity="secondary"
-                  text
-                  size="small"
-                  @click="router.push(`/srs/decks/${deck.userStudyDeckId}/vocabulary`)"
-                />
+                <Button icon="pi pi-eye" severity="secondary" text size="small" @click="router.push(`/srs/decks/${deck.userStudyDeckId}/vocabulary`)" />
               </Tooltip>
               <Tooltip content="Edit" placement="top">
-                <Button
-                  icon="pi pi-pencil"
-                  severity="secondary"
-                  text
-                  size="small"
-                  @click="openEdit(deck)"
-                />
+                <Button icon="pi pi-pencil" severity="secondary" text size="small" @click="openEdit(deck)" />
               </Tooltip>
               <Tooltip content="Download" placement="top">
-                <Button
-                  icon="pi pi-download"
-                  severity="secondary"
-                  text
-                  size="small"
-                  @click="openDownload(deck)"
-                />
+                <Button icon="pi pi-download" severity="secondary" text size="small" @click="openDownload(deck)" />
               </Tooltip>
               <Tooltip content="Remove" placement="top">
                 <Button
