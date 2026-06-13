@@ -1,6 +1,21 @@
 import type { PaginatedResponse } from '~/types/types';
 import type { AsyncDataRequestStatus, UseFetchOptions } from '#app';
 
+// Public shape of the fetch wrappers. These intentionally do NOT block on the request
+// (so client-side navigation renders immediately and pages can show their own skeletons).
+// `ready` resolves once the underlying fetch settles — await it only where a synchronous
+// snapshot of the data is needed right after setup (e.g. server-side OG image props), so
+// eager reads aren't empty. Note: `await useApiFetch(...)` itself is a no-op (the returned
+// object is not a promise); use `ready` when you must wait.
+type ApiFetchResult<T> = {
+  data: Ref<T | null | undefined>;
+  status: Ref<AsyncDataRequestStatus>;
+  error: Ref<Error | null | undefined>;
+  refresh: (opts?: any) => Promise<void>;
+  execute: (opts?: any) => Promise<void>;
+  ready: Promise<void>;
+};
+
 function unwrapQuery(query: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
   if (!query) return undefined;
   const plain: Record<string, unknown> = {};
@@ -142,59 +157,61 @@ function buildFetchOptions(
 export function useApiFetch<T>(
   request: string | (() => string),
   opts?: any
-): {
-  data: Ref<T | null | undefined>;
-  status: Ref<AsyncDataRequestStatus>;
-  error: Ref<Error | null | undefined>;
-  refresh: (opts?: any) => Promise<void>;
-  execute: (opts?: any) => Promise<void>;
-} {
+): ApiFetchResult<T> {
   const { revalidateOnClient, ...fetchOpts } = opts ?? {};
   const authStore = useAuthStore();
   const options = buildFetchOptions(fetchOpts, authStore, request);
 
-  const { data, status, error, refresh, execute } = useFetch<T>(request, {
+  const result = useFetch<T>(request, {
     baseURL: useRuntimeConfig().public.baseURL,
     ...options
   });
 
-  setup401ErrorHandler(error, execute, request, authStore);
+  setup401ErrorHandler(result.error, result.execute, request, authStore);
 
   if (revalidateOnClient) {
-    revalidateOnClientAfterSsr(authStore, request, fetchOpts.query, data, error);
+    revalidateOnClientAfterSsr(authStore, request, fetchOpts.query, result.data, result.error);
   }
 
-  return { data, status, error, refresh, execute };
+  return {
+    data: result.data,
+    status: result.status,
+    error: result.error,
+    refresh: result.refresh,
+    execute: result.execute,
+    ready: Promise.resolve(result).then(() => undefined, () => undefined),
+  } as unknown as ApiFetchResult<T>;
 }
 
 export  function useApiFetchPaginated<T>(
   request: string | (() => string),
   opts?: any
-)  {
+): ApiFetchResult<PaginatedResponse<T>>  {
   const { revalidateOnClient, ...fetchOpts } = opts ?? {};
   const config = useRuntimeConfig();
   const authStore = useAuthStore();
   const options = buildFetchOptions(fetchOpts, authStore, request);
 
-  const { data, status, error, refresh, execute } = useFetch<PaginatedResponse<T>>(request, {
+  const result = useFetch<PaginatedResponse<T>>(request, {
     baseURL: config.public.baseURL,
     ...options,
     deep: false,
   });
 
-  setup401ErrorHandler(error, execute, request, authStore);
+  setup401ErrorHandler(result.error, result.execute, request, authStore);
 
   if (revalidateOnClient) {
-    revalidateOnClientAfterSsr(authStore, request, fetchOpts.query, data, error);
+    revalidateOnClientAfterSsr(authStore, request, fetchOpts.query, result.data, result.error);
   }
 
   return {
-    data,
-    status,
-    error,
-    refresh,
-    execute,
-  };
+    data: result.data,
+    status: result.status,
+    error: result.error,
+    refresh: result.refresh,
+    execute: result.execute,
+    ready: Promise.resolve(result).then(() => undefined, () => undefined),
+  } as unknown as ApiFetchResult<PaginatedResponse<T>>;
 }
 
 // Helper function to generate a safe key from request parameter
