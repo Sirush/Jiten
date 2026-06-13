@@ -706,19 +706,28 @@ public class UserController(
             skippedCountNoReviews++;
         }
 
-        var combinedText = string.Join(Environment.NewLine, uniqueWords);
-        var parsedWords = request.ParseWords
-            ? await Parser.Parser.ParseText(contextFactory, combinedText)
-            : await Parser.Parser.GetWordsDirectLookup(contextFactory, uniqueWords);
-
-        // Create lookup: original text → (WordId, ReadingIndex)
-        var wordLookup = new Dictionary<string, (int WordId, byte ReadingIndex)>();
-        foreach (var parsed in parsedWords)
+        // Resolve to (WordId, ReadingIndex), keyed by (surface, reading). The optional reading lets
+        // us disambiguate cards that share a surface but have different readings — without it they
+        // would collapse to a single resolution. ParseWords (conjugated) path stays surface-only.
+        var wordLookup = new Dictionary<(string Word, string Reading), (int WordId, byte ReadingIndex)>();
+        if (request.ParseWords)
         {
-            if (!wordLookup.ContainsKey(parsed.OriginalText))
-            {
-                wordLookup[parsed.OriginalText] = (parsed.WordId, parsed.ReadingIndex);
-            }
+            var combinedText = string.Join(Environment.NewLine, uniqueWords);
+            var parsedWords = await Parser.Parser.ParseText(contextFactory, combinedText);
+            foreach (var parsed in parsedWords)
+                wordLookup.TryAdd((parsed.OriginalText, ""), (parsed.WordId, parsed.ReadingIndex));
+        }
+        else
+        {
+            var uniquePairs = request.Cards
+                                     .Where(c => !string.IsNullOrWhiteSpace(c.Card.Word))
+                                     .Select(c => (Word: c.Card.Word.Trim(), Reading: c.Card.Reading?.Trim() ?? ""))
+                                     .Distinct()
+                                     .ToList();
+
+            var resolved = await Parser.Parser.GetWordsDirectLookupByReading(contextFactory, uniquePairs);
+            foreach (var kv in resolved)
+                wordLookup[kv.Key] = (kv.Value.WordId, kv.Value.ReadingIndex);
         }
 
         // Step 2: Get existing cards
@@ -751,8 +760,11 @@ public class UserController(
                 continue;
             }
 
-            // Lookup parsed word
-            if (!wordLookup.TryGetValue(word, out var wordInfo))
+            // Lookup by (surface, reading); fall back to the surface-only resolution (e.g. the
+            // ParseWords path, or when the reading didn't resolve) before giving up.
+            var reading = wrapper.Card.Reading?.Trim() ?? "";
+            if (!wordLookup.TryGetValue((word, reading), out var wordInfo)
+                && (reading.Length == 0 || !wordLookup.TryGetValue((word, ""), out wordInfo)))
             {
                 skippedWords.Add(word);
                 skippedCount++;

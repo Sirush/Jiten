@@ -26,6 +26,17 @@
   // Beyond this, pairs stop repelling. Without a cutoff, the summed long-range push from the
   // whole cluster stretches degree-1 chains (sequel runs) absurdly far from the centre.
   const REPULSION_CUTOFF = 520; // ~2x rest length
+  // Cluster forces: nodes in the same detected community are drawn to their shared centroid
+  // (tightens each sub-series into a blob), and community centroids repel each other (opens gaps
+  // between blobs). Together these make clusters far more legible than springs+repulsion alone.
+  const COHESION = 0.045; // pull toward own community centroid
+  const COMMUNITY_SEP = 460; // min distance between community centroids
+  const COMMUNITY_SEP_FORCE = 0.04; // how hard overlapping communities push apart
+  // Elastic drag physics: while dragging we run a LIVE springs-only sim (no repulsion / gravity /
+  // clustering, which would shove the whole graph). The dragged node is pinned to the cursor; its
+  // neighbours follow on springs and overshoot/settle. Damping < 1 gives the bouncy VNDB-like feel.
+  const DRAG_SPRING = 0.08; // follow stiffness
+  const DRAG_DAMPING = 0.88; // velocity retained per step — higher = bouncier/longer settle
   const MIN_ZOOM = 0.4;
   const MAX_ZOOM = 2.5;
   const CARD_W = 112; // px at scale 1 (w-28)
@@ -55,20 +66,59 @@
     return h / 0xffffffff; // [0,1)
   }
 
-  // BFS graph distance from a root deck over the (undirected) edges, normalised to [0,1].
-  function computeDepths(rootId: number): Map<number, number> {
+  // Undirected adjacency list, shared by depth BFS and community detection.
+  const adjacency = computed<Map<number, number[]>>(() => {
     const adj = new Map<number, number[]>();
     for (const n of props.franchise.nodes) adj.set(n.deckId, []);
     for (const e of edges.value) {
       adj.get(e.sourceDeckId)?.push(e.targetDeckId);
       adj.get(e.targetDeckId)?.push(e.sourceDeckId);
     }
-    const dist = new Map<number, number>();
-    const queue: number[] = [];
-    if (adj.has(rootId)) {
-      dist.set(rootId, 0);
-      queue.push(rootId);
+    return adj;
+  });
+
+  // Community detection via label propagation. Deterministic: nodes processed in ascending id
+  // order, ties broken by smallest label. Independent of the focused root — clusters are a
+  // structural property of the franchise graph, so we compute them once.
+  const communities = computed<Map<number, number>>(() => {
+    const adj = adjacency.value;
+    const ids = props.franchise.nodes.map((n) => n.deckId).sort((a, b) => a - b);
+    const label = new Map<number, number>();
+    for (const id of ids) label.set(id, id);
+    for (let pass = 0; pass < 12; pass++) {
+      let changed = false;
+      for (const id of ids) {
+        const counts = new Map<number, number>();
+        for (const nb of adj.get(id) ?? []) {
+          const l = label.get(nb)!;
+          counts.set(l, (counts.get(l) ?? 0) + 1);
+        }
+        if (!counts.size) continue;
+        let best = label.get(id)!;
+        let bestCount = -1;
+        for (const [l, c] of [...counts].sort((a, b) => a[0] - b[0])) {
+          if (c > bestCount) {
+            bestCount = c;
+            best = l;
+          }
+        }
+        if (best !== label.get(id)) {
+          label.set(id, best);
+          changed = true;
+        }
+      }
+      if (!changed) break;
     }
+    return label;
+  });
+
+  // Raw BFS hop distance from a root deck over the (undirected) edges. Unreachable nodes are absent.
+  function hopDistancesFrom(rootId: number): Map<number, number> {
+    const adj = adjacency.value;
+    const dist = new Map<number, number>();
+    if (!adj.has(rootId)) return dist;
+    dist.set(rootId, 0);
+    const queue: number[] = [rootId];
     let head = 0;
     while (head < queue.length) {
       const cur = queue[head++]!;
@@ -80,6 +130,12 @@
         }
       }
     }
+    return dist;
+  }
+
+  // BFS graph distance from a root deck, normalised to [0,1] for depth projection.
+  function computeDepths(rootId: number): Map<number, number> {
+    const dist = hopDistancesFrom(rootId);
     let maxD = 0;
     for (const d of dist.values()) maxD = Math.max(maxD, d);
     const out = new Map<number, number>();
@@ -117,9 +173,10 @@
     });
   }
 
-  // ---- Force simulation: always run to convergence SYNCHRONOUSLY (a few ms for n <= 100),
-  // never animated live — the user sees only settled layouts, morphed between via animateToLayout.
-  function tickOnce(ns: SimNode[], alpha: number, pinnedId: number) {
+  // ---- Force simulation. Used two ways: SYNCHRONOUSLY to convergence for settled layouts
+  // (focus / first paint), and LIVE per-frame during an elastic node drag. `pins` holds nodes
+  // force-held at a fixed position each tick (focused node at origin, dragged node at cursor).
+  function tickOnce(ns: SimNode[], alpha: number, pins: Map<number, { x: number; y: number }>) {
     const count = ns.length;
     const byId = new Map<number, SimNode>();
     for (const s of ns) byId.set(s.id, s);
@@ -167,6 +224,47 @@
       }
     }
 
+    // Community clustering: pull each node toward its community centroid, and push community
+    // centroids apart so the blobs separate instead of overlapping into one cloud.
+    const comm = communities.value;
+    if (comm.size) {
+      const sum = new Map<number, { x: number; y: number; n: number }>();
+      for (const s of ns) {
+        const l = comm.get(s.id);
+        if (l == null) continue;
+        const e = sum.get(l) ?? { x: 0, y: 0, n: 0 };
+        e.x += s.x;
+        e.y += s.y;
+        e.n += 1;
+        sum.set(l, e);
+      }
+      const cent = new Map<number, { x: number; y: number }>();
+      for (const [l, e] of sum) cent.set(l, { x: e.x / e.n, y: e.y / e.n });
+
+      for (const s of ns) {
+        const l = comm.get(s.id);
+        const c = l == null ? null : cent.get(l);
+        if (!c) continue;
+        s.vx += (c.x - s.x) * COHESION * alpha;
+        s.vy += (c.y - s.y) * COHESION * alpha;
+      }
+
+      // Each node feels a push away from foreign community centroids that are too close.
+      for (const s of ns) {
+        const own = comm.get(s.id);
+        for (const [l, c] of cent) {
+          if (l === own) continue;
+          const dx = s.x - c.x;
+          const dy = s.y - c.y;
+          const d = Math.hypot(dx, dy) || 0.001;
+          if (d >= COMMUNITY_SEP) continue;
+          const f = (COMMUNITY_SEP - d) * COMMUNITY_SEP_FORCE * alpha;
+          s.vx += (dx / d) * f;
+          s.vy += (dy / d) * f;
+        }
+      }
+    }
+
     // Centring gravity (linear pull, so stragglers far out feel it strongly) + damping integration.
     for (const s of ns) {
       s.vx += -s.x * 0.005 * alpha;
@@ -177,20 +275,22 @@
       s.y += s.vy;
     }
 
-    // The pinned (focused) node owns the origin: the rest of the graph arranges around it.
-    const pinned = byId.get(pinnedId);
-    if (pinned) {
-      pinned.x = 0;
-      pinned.y = 0;
-      pinned.vx = 0;
-      pinned.vy = 0;
+    // Pinned nodes are force-held: the focused node owns the origin; a dragged node tracks the cursor.
+    for (const [pid, pos] of pins) {
+      const pn = byId.get(pid);
+      if (!pn) continue;
+      pn.x = pos.x;
+      pn.y = pos.y;
+      pn.vx = 0;
+      pn.vy = 0;
     }
   }
 
   function settle(ns: SimNode[], pinnedId: number) {
+    const pins = new Map([[pinnedId, { x: 0, y: 0 }]]);
     let alpha = 1;
     for (let t = 0; t < 600 && alpha > 0.003; t++) {
-      tickOnce(ns, alpha, pinnedId);
+      tickOnce(ns, alpha, pins);
       alpha *= 0.985;
     }
   }
@@ -200,6 +300,7 @@
   let layoutAnimId: number | null = null;
 
   function animateToLayout(targets: Map<number, { x: number; y: number; z: number }>, animate: boolean) {
+    stopNodeDrag(); // a focus re-layout supersedes any in-flight drag settle
     if (layoutAnimId != null) cancelAnimationFrame(layoutAnimId);
     const apply = () => {
       for (const s of simNodes.value) {
@@ -398,19 +499,12 @@
     popoverStyle.value = { left: `${left}px`, top: `${top}px`, width: `${popWidth}px` };
   }
 
-  // Focus = ego re-layout: depths recomputed from the focused node, which gets pinned at the
-  // origin; a copy of the graph is settled synchronously and the visible layout morphs onto it.
+  // Focus = ego re-layout: the focused node is pinned at the origin and the graph settles around
+  // it. Seed from buildSim(id) (deterministic, history-independent) rather than current positions —
+  // otherwise the settled layout depends on click order and the same node lands in different spots.
   function focusNode(id: number, animate = true) {
     activeNode.value = id;
-    const depths = computeDepths(id);
-    const clone: SimNode[] = simNodes.value.map((s) => ({
-      id: s.id,
-      x: s.x,
-      y: s.y,
-      vx: 0,
-      vy: 0,
-      z: s.id === id ? 0 : Math.min(1, Math.max(0, (depths.get(s.id) ?? 1) + zJitterOf(s.id))),
-    }));
+    const clone = buildSim(id);
     settle(clone, id);
     const targets = new Map(clone.map((c) => [c.id, { x: c.x, y: c.y, z: c.z }]));
     animateToLayout(targets, animate);
@@ -507,6 +601,162 @@
     applyZoom(zoom.value * factor, e.clientX, e.clientY);
   }
 
+  // ---- Per-node elastic drag (live springs-only sim) ----
+  // The dragged node is pinned to the cursor; neighbours follow on edge springs (with momentum +
+  // damping → bounce), and the focused node stays anchored at the origin. No repulsion/gravity/
+  // clustering runs, so the rest of the graph only ripples gently instead of being shoved around.
+  // A drag past the threshold suppresses the focus click; on release the sim settles, then stops.
+  let nodeDrag: {
+    startX: number;
+    startY: number;
+    nodeX: number;
+    nodeY: number;
+    scale: number;
+    pin: { x: number; y: number }; // dragged node's live target (world coords)
+    pins: Map<number, { x: number; y: number }>; // force-held nodes (dragged + focused)
+    working: SimNode[]; // persistent across frames so velocity/momentum carries over
+    restLengths: Map<number, number>; // per-edge length at drag start → layout begins at equilibrium
+    releasing: boolean; // pointer up — keep ticking until kinetic energy decays, then stop
+  } | null = null;
+  let nodeDragMoved = false;
+  let nodeDragRaf: number | null = null;
+
+  // One drag physics step: edge springs + damping, then re-pin held nodes. No other forces.
+  // Springs rest at each edge's drag-start length, so an untouched layout exerts zero force —
+  // only edges stretched by the cursor pull back. (Using REST_LENGTH here would collapse the whole
+  // graph inward, since the settled layout sits far wider than the bare spring rest length.)
+  function dragSpringStep(ns: SimNode[], pins: Map<number, { x: number; y: number }>, restLengths: Map<number, number>) {
+    const byId = new Map<number, SimNode>();
+    for (const s of ns) byId.set(s.id, s);
+    edges.value.forEach((e, i) => {
+      const a = byId.get(e.sourceDeckId);
+      const b = byId.get(e.targetDeckId);
+      if (!a || !b) return;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 0.001;
+      const force = (dist - (restLengths.get(i) ?? REST_LENGTH)) * DRAG_SPRING;
+      const ux = dx / dist;
+      const uy = dy / dist;
+      a.vx += ux * force;
+      a.vy += uy * force;
+      b.vx -= ux * force;
+      b.vy -= uy * force;
+    });
+    for (const s of ns) {
+      s.vx *= DRAG_DAMPING;
+      s.vy *= DRAG_DAMPING;
+      s.x += s.vx;
+      s.y += s.vy;
+    }
+    for (const [pid, pos] of pins) {
+      const pn = byId.get(pid);
+      if (!pn) continue;
+      pn.x = pos.x;
+      pn.y = pos.y;
+      pn.vx = 0;
+      pn.vy = 0;
+    }
+  }
+
+  function nodeDragTick() {
+    const d = nodeDrag;
+    if (!d) return;
+    for (let k = 0; k < 2; k++) dragSpringStep(d.working, d.pins, d.restLengths);
+    const byId = new Map(d.working.map((w) => [w.id, w]));
+    for (const s of simNodes.value) {
+      const w = byId.get(s.id);
+      if (w) {
+        s.x = w.x;
+        s.y = w.y;
+      }
+    }
+    simNodes.value = [...simNodes.value];
+    if (d.releasing) {
+      let energy = 0;
+      for (const s of d.working) energy = Math.max(energy, Math.abs(s.vx) + Math.abs(s.vy));
+      if (energy < 0.3) {
+        stopNodeDrag();
+        return;
+      }
+    }
+    nodeDragRaf = requestAnimationFrame(nodeDragTick);
+  }
+
+  function stopNodeDrag() {
+    nodeDrag = null;
+    if (nodeDragRaf != null) {
+      cancelAnimationFrame(nodeDragRaf);
+      nodeDragRaf = null;
+    }
+  }
+
+  function onNodePointerDown(e: PointerEvent, p: ProjectedNode) {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    stopNodeDrag();
+    nodeDragMoved = false;
+    const pin = { x: p.sim.x, y: p.sim.y };
+    const pins = new Map<number, { x: number; y: number }>();
+    if (activeNode.value != null && activeNode.value !== p.node.deckId) pins.set(activeNode.value, { x: 0, y: 0 });
+    pins.set(p.node.deckId, pin);
+    // Freeze each edge's current length as its spring rest length → the layout starts at equilibrium.
+    const posById = new Map(simNodes.value.map((s) => [s.id, s]));
+    const restLengths = new Map<number, number>();
+    edges.value.forEach((edge, i) => {
+      const a = posById.get(edge.sourceDeckId);
+      const b = posById.get(edge.targetDeckId);
+      if (a && b) restLengths.set(i, Math.hypot(b.x - a.x, b.y - a.y));
+    });
+    nodeDrag = {
+      startX: e.clientX,
+      startY: e.clientY,
+      nodeX: p.sim.x,
+      nodeY: p.sim.y,
+      scale: p.scale || 1,
+      pin,
+      pins,
+      working: simNodes.value.map((s) => ({ ...s })),
+      restLengths,
+      releasing: false,
+    };
+  }
+
+  function onNodePointerMove(e: PointerEvent) {
+    // pointermove also fires on hover — once released (settling) or absent, ignore it, otherwise the
+    // node chases the cursor during the post-release settle.
+    if (!nodeDrag || nodeDrag.releasing) return;
+    const dx = e.clientX - nodeDrag.startX;
+    const dy = e.clientY - nodeDrag.startY;
+    if (!nodeDragMoved && Math.abs(dx) + Math.abs(dy) > 5) nodeDragMoved = true;
+    if (!nodeDragMoved) return;
+    // Screen delta → world delta divides by the node's on-screen scale (depth factor * zoom).
+    nodeDrag.pin.x = nodeDrag.nodeX + dx / nodeDrag.scale;
+    nodeDrag.pin.y = nodeDrag.nodeY + dy / nodeDrag.scale;
+    if (nodeDragRaf == null) nodeDragRaf = requestAnimationFrame(nodeDragTick);
+  }
+
+  function onNodePointerUp(e: PointerEvent) {
+    if (nodeDrag) (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+    // Never moved → plain click: drop the drag so onNodeClick can focus.
+    if (!nodeDrag || nodeDragRaf == null) {
+      stopNodeDrag();
+      return;
+    }
+    // Let neighbours settle from their current velocity, then the loop stops itself.
+    nodeDrag.releasing = true;
+  }
+
+  // Click focuses — unless it was the tail of a drag (or a keyboard activation, which never drags).
+  function onNodeClick(p: ProjectedNode) {
+    if (nodeDragMoved) {
+      nodeDragMoved = false;
+      return;
+    }
+    flashNode.value = null;
+    focusNode(p.node.deckId);
+  }
+
   // ---- Escape to clear, outside-tap handled by background pointerdown ----
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') clearFocus();
@@ -542,6 +792,7 @@
   onBeforeUnmount(() => {
     resizeObserver?.disconnect();
     if (layoutAnimId != null) cancelAnimationFrame(layoutAnimId);
+    stopNodeDrag();
     if (flashTimer != null) clearTimeout(flashTimer);
     if (import.meta.client) window.removeEventListener('keydown', onKeydown);
   });
@@ -609,7 +860,7 @@
         v-for="p in projected"
         :key="p.node.deckId"
         type="button"
-        class="franchise-card absolute flex w-28 flex-col rounded-md border bg-surface-0 text-left transition-[border-color,opacity] dark:bg-surface-900"
+        class="franchise-card absolute flex w-28 cursor-grab flex-col rounded-md border bg-surface-0 text-left transition-[border-color,opacity] active:cursor-grabbing dark:bg-surface-900"
         :class="[
           isCurrent(p.node.deckId) ? 'border-primary ring-2 ring-primary' : 'border-surface-200 dark:border-surface-700 hover:border-primary',
           flashNode === p.node.deckId ? 'ring-2 ring-amber-400 dark:ring-amber-300' : '',
@@ -624,7 +875,11 @@
           outline: nodeOutline(p.node),
           outlineOffset: '-2px',
         }"
-        @click.stop="flashNode = null; focusNode(p.node.deckId)"
+        @pointerdown.stop="onNodePointerDown($event, p)"
+        @pointermove="onNodePointerMove($event)"
+        @pointerup="onNodePointerUp($event)"
+        @pointercancel="onNodePointerUp($event)"
+        @click.stop="onNodeClick(p)"
       >
         <img
           :src="coverSrc(p.node)"
@@ -644,9 +899,9 @@
           <span class="line-clamp-2 text-xs font-medium leading-tight" :title="localiseTitle(p.node)">
             {{ localiseTitle(p.node) }}
           </span>
-          <div class="flex items-center justify-between gap-1 text-[11px]">
-            <span class="text-gray-500 dark:text-gray-400">{{ releaseYear(p.node) ?? '?' }}</span>
-            <DifficultyDisplay v-if="p.node.difficulty >= 0" :difficulty="p.node.difficulty" :difficulty-raw="p.node.difficultyRaw" class="text-[11px]" />
+          <div class="flex items-center justify-between gap-1 text-[10px]">
+            <span class="shrink-0 text-gray-500 dark:text-gray-400">{{ releaseYear(p.node) ?? '?' }}</span>
+            <DifficultyDisplay v-if="p.node.difficulty >= 0" :difficulty="p.node.difficulty" :difficulty-raw="p.node.difficultyRaw" class="truncate text-[10px]" />
           </div>
         </div>
       </button>

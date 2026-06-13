@@ -77,11 +77,22 @@
 
   let reviewByCard: Map<number, Array<{ Rating: number; ReviewDateTime: Date; ReviewDuration: number }>> = new Map();
   let selectedFieldName = '';
+  let selectedReadingFieldName = '';
   let supportsFieldsFilter = false;
 
   const cardsInfoFields = ['cardId', 'due', 'queue', 'type', 'interval', 'factor', 'reps', 'lapses', 'mod', 'flags', 'fields', 'modelName', 'deckName'];
 
   const stripRuby = (text: string) => text.replace(/\[.*?\]/g, '');
+
+  // Converts an Anki furigana field to its full kana reading. For `下[くだ]さる` the base text
+  // before each bracket is dropped and the bracket content kept, leaving plain kana untouched:
+  // `下[くだ]さる` → `くださる`. A field that is already full kana is returned as-is (spaces stripped).
+  const furiganaToReading = (text: string) =>
+    text
+      .replace(/&nbsp;/g, ' ')
+      .replace(/([^[\]\s]+)\[([^[\]]*)\]/g, '$2')
+      .replace(/\s+/g, '')
+      .trim();
 
   // A Date built from corrupt/out-of-range Anki fields can be Invalid (NaN time),
   // and calling toISOString() on it throws and aborts the whole import. Guard every
@@ -114,6 +125,7 @@
 
   const selectedDeck = ref<number>(0);
   const selectedField = ref<number>(0);
+  const selectedReadingField = ref<number>(-1);
   const fields = ref<Array<[string, { order: number; value: string }]>>([]);
   const overwriteExisting = ref(false);
   const parseWords = ref(false);
@@ -125,6 +137,17 @@
       value: idx,
     }))
   );
+
+  // Reading-field options add an explicit "None" entry (the reading is optional) and preview the
+  // extracted reading rather than the bracket-stripped surface, so a furigana field like
+  // `下[くだ]さる` previews as `くださる` — the reading we actually keep.
+  const readingFieldsOptions = computed(() => [
+    { label: 'None (optional)', value: -1 },
+    ...(fields.value || []).map((entry, idx) => ({
+      label: entry[0] + (entry[1].value ? ` (${furiganaToReading(entry[1].value).substring(0, 20)})` : ''),
+      value: idx,
+    })),
+  ]);
 
   const Connect = async () => {
     operationActive.value = true;
@@ -158,7 +181,7 @@
   type SkipStats = { suspended: number; newCard: number; missingField: number; emptyWord: number };
 
   // Helper to build a single card payload from Anki card info
-  const buildCardPayload = (card: any, fieldName: string, stats?: SkipStats) => {
+  const buildCardPayload = (card: any, fieldName: string, readingFieldName: string, stats?: SkipStats) => {
     if (card.queue === -1) { if (stats) stats.suspended++; return null; } // suspended
     if (card.queue === 0) { if (stats) stats.newCard++; return null; } // new/forgotten
 
@@ -166,6 +189,13 @@
     if (field === undefined && stats) stats.missingField++; // selected field absent on this note type
     const word = stripRuby(field?.value?.trim() || '');
     if (!word) { if (stats && field !== undefined) stats.emptyWord++; return null; }
+
+    // Optional reading field, used server-side to disambiguate same-surface words.
+    let reading = '';
+    if (readingFieldName) {
+      const readingField = card.fields[readingFieldName];
+      reading = furiganaToReading(readingField?.value?.trim() || '');
+    }
 
     const reviews = reviewByCard.get(card.cardId) ?? [];
 
@@ -198,6 +228,7 @@
     return {
       Card: {
         Word: word,
+        Reading: reading || undefined,
         Stability: stability,
         Difficulty: difficulty,
         Reps: card.reps,
@@ -233,10 +264,22 @@
         const deckName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0];
         const query = deckName ? `deck:"${deckName.replace(/["*_\\]/g, '\\$&')}"` : `did:${selectedDeck.value}`;
         cardsIds = await client.card.findCards({ query });
-        const previewCards = await fetchCardsInfo([cardsIds[0]]);
+        // Sample several cards rather than just the first: a field (e.g. ExpressionReading) may be
+        // empty on the first card while populated on others, which would leave it without a preview.
+        const previewCards = await fetchCardsInfo(cardsIds.slice(0, 20));
         selectedField.value = 0;
+        selectedReadingField.value = -1;
         if (previewCards && previewCards.length > 0) {
-          fields.value = Object.entries(previewCards[0].fields || {});
+          // Merge across the sample: keep each field's first non-empty value so every field shows a preview.
+          const merged = new Map<string, { order: number; value: string }>();
+          for (const c of previewCards) {
+            for (const [name, info] of Object.entries(c.fields || {}) as Array<[string, { order: number; value: string }]>) {
+              const existing = merged.get(name);
+              if (!existing) merged.set(name, { order: info.order, value: info.value || '' });
+              else if (!existing.value && info.value) existing.value = info.value;
+            }
+          }
+          fields.value = [...merged.entries()].sort((a, b) => a[1].order - b[1].order);
         } else {
           fields.value = [];
         }
@@ -258,6 +301,8 @@
         currentStep.value--;
         return;
       }
+      const readingFieldEntry = selectedReadingField.value >= 0 ? fields.value[selectedReadingField.value] : undefined;
+      selectedReadingFieldName = readingFieldEntry ? readingFieldEntry[0] : '';
       // No API calls - all heavy work is deferred to Step 4
     }
 
@@ -344,10 +389,12 @@
           const allPayloads: any[] = [];
           for (const chunkCards of allChunkCards) {
             for (const card of chunkCards || []) {
-              const payload = buildCardPayload(card, selectedFieldName, skipStats);
+              const payload = buildCardPayload(card, selectedFieldName, selectedReadingFieldName, skipStats);
               if (!payload) continue;
-              if (seenWords.has(payload.Card.Word)) continue;
-              seenWords.add(payload.Card.Word);
+              // Dedup by surface + reading so homographs with different readings both survive.
+              const dedupKey = payload.Card.Word + ' ' + (payload.Card.Reading || '');
+              if (seenWords.has(dedupKey)) continue;
+              seenWords.add(dedupKey);
               allPayloads.push(payload);
             }
           }
@@ -385,7 +432,7 @@
 
             const chunkPayload: any[] = [];
             for (const card of chunkCards || []) {
-              const payload = buildCardPayload(card, selectedFieldName, skipStats);
+              const payload = buildCardPayload(card, selectedFieldName, selectedReadingFieldName, skipStats);
               if (payload) chunkPayload.push(payload);
             }
 
@@ -531,6 +578,9 @@
         <div v-else>
           <p>Select the correct field containing the words WITHOUT furigana</p>
           <Select v-model="selectedField" :options="fieldsOptions" optionLabel="label" optionValue="value" placeholder="Select a field" class="w-full" />
+          <p class="mt-4">Optional: select a reading field to disambiguate words that share the same spelling but have different readings.</p>
+          <p class="text-sm text-surface-500 mb-1">Full kana or furigana (e.g. <span class="font-noto-sans">下[くだ]さる</span>) both work. The most common word matching the reading is used; if none match, the most common word is kept.</p>
+          <Select v-model="selectedReadingField" :options="readingFieldsOptions" optionLabel="label" optionValue="value" placeholder="None (optional)" class="w-full" />
           <div class="flex flex-row gap-2 p-4">
             <Button label="Back" :disabled="!selectedDeck" @click="PreviousStep()" />
             <Button label="Next" @click="NextStep()" />

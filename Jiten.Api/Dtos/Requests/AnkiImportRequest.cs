@@ -18,6 +18,12 @@ public class AnkiCardWrapper
 public class AnkiCardImport
 {
     public required string Word { get; set; }
+
+    /// <summary>
+    /// Optional reading (full kana) used to disambiguate when several dictionary words share the
+    /// same surface but have different readings. Already furigana-stripped by the client.
+    /// </summary>
+    public string? Reading { get; set; }
     public double? Stability { get; set; }
     public double? Difficulty { get; set; }
     public int Reps { get; set; } = 0;

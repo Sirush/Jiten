@@ -2355,14 +2355,63 @@ namespace Jiten.Parser
         {
             await EnsureInitializedAsync(contextFactory);
 
-            List<DeckWord> matchedWords = new();
+            var (candidates, formFrequencies) = await ResolveDirectLookupCandidates(words);
 
-            // Phase 1: resolve all words to their candidate matches
-            var wordCandidates = new List<(string word, List<(JmDictWord match, int readingIndex)> matches)>();
-            var allCandidateWordIds = new HashSet<int>();
-
+            var matchedWords = new List<DeckWord>();
             foreach (var word in words)
             {
+                if (!candidates.TryGetValue(word, out var matches)) continue;
+                var best = PickBestDirectLookupMatch(matches, formFrequencies, readingHint: null);
+                if (best == null) continue;
+                matchedWords.Add(BuildDirectLookupWord(word, best.Value));
+            }
+
+            return ExcludeFinalMisparses(matchedWords);
+        }
+
+        /// <summary>
+        /// Direct lookup variant keyed by (surface, reading). When a reading is supplied it is used
+        /// to pick, among the words sharing that surface, the most common one whose kana reading
+        /// matches; if none match (or no reading is given) it falls back to the most common word for
+        /// the surface. This lets imports disambiguate homographs with different readings.
+        /// </summary>
+        public static async Task<Dictionary<(string Word, string Reading), DeckWord>> GetWordsDirectLookupByReading(
+            IDbContextFactory<JitenDbContext> contextFactory, List<(string Word, string Reading)> pairs)
+        {
+            await EnsureInitializedAsync(contextFactory);
+
+            var (candidates, formFrequencies) = await ResolveDirectLookupCandidates(pairs.Select(p => p.Word));
+
+            var result = new Dictionary<(string Word, string Reading), DeckWord>();
+            foreach (var (word, reading) in pairs)
+            {
+                var key = (word, reading ?? "");
+                if (result.ContainsKey(key)) continue;
+                if (!candidates.TryGetValue(word, out var matches)) continue;
+
+                var best = PickBestDirectLookupMatch(matches, formFrequencies, reading);
+                if (best == null) continue;
+                if (ExcludedMisparses.Contains((best.Value.match.WordId, (byte)best.Value.readingIndex))) continue;
+
+                result[key] = BuildDirectLookupWord(word, best.Value);
+            }
+
+            return result;
+        }
+
+        // Resolves each distinct surface to its candidate (word, readingIndex) matches and batch-fetches
+        // the form frequencies for every candidate. Shared by the list- and reading-keyed lookups.
+        private static async Task<(Dictionary<string, List<(JmDictWord match, int readingIndex)>> candidates,
+                                   Dictionary<(int, short), JmDictWordFormFrequency> frequencies)>
+            ResolveDirectLookupCandidates(IEnumerable<string> surfaces)
+        {
+            var candidates = new Dictionary<string, List<(JmDictWord match, int readingIndex)>>();
+            var allCandidateWordIds = new HashSet<int>();
+
+            foreach (var word in surfaces)
+            {
+                if (candidates.ContainsKey(word)) continue;
+
                 var wordInHiragana = KanaConverter.ToHiragana(word, convertLongVowelMark: false);
                 var wordNormalized = KanaNormalizer.Normalize(wordInHiragana);
 
@@ -2370,13 +2419,12 @@ namespace Jiten.Parser
                     continue;
 
                 var wordCache = await JmDictCache.GetWordsAsync(matchesIds);
-                PriorityOverrides.ApplyAll(wordCache.Values);
-
                 if (wordCache == null || wordCache.Count == 0)
                     continue;
 
-                List<(JmDictWord match, int readingIndex)> matchesWithReading = new();
+                PriorityOverrides.ApplyAll(wordCache.Values);
 
+                List<(JmDictWord match, int readingIndex)> matchesWithReading = new();
                 foreach (var id in matchesIds)
                 {
                     if (!wordCache.TryGetValue(id, out var match)) continue;
@@ -2388,12 +2436,11 @@ namespace Jiten.Parser
                 if (matchesWithReading.Count == 0)
                     continue;
 
-                wordCandidates.Add((word, matchesWithReading));
+                candidates[word] = matchesWithReading;
                 foreach (var m in matchesWithReading)
                     allCandidateWordIds.Add(m.match.WordId);
             }
 
-            // Phase 2: single batched frequency query
             Dictionary<(int, short), JmDictWordFormFrequency> formFrequencies = new();
             if (allCandidateWordIds.Count > 0)
             {
@@ -2404,28 +2451,48 @@ namespace Jiten.Parser
                                                .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex));
             }
 
-            // Phase 3: pick best match per word using the pre-fetched frequencies
-            foreach (var (word, matchesWithReading) in wordCandidates)
-            {
-                var best = matchesWithReading
-                           .OrderBy(m =>
-                           {
-                               var key = (m.match.WordId, (short)m.readingIndex);
-                               if (formFrequencies.TryGetValue(key, out var wff))
-                                   return wff.FrequencyRank;
-                               return int.MaxValue;
-                           })
-                           .First();
+            return (candidates, formFrequencies);
+        }
 
-                matchedWords.Add(new DeckWord
-                                 {
-                                     WordId = best.match.WordId, ReadingIndex = (byte)best.readingIndex, OriginalText = word,
-                                     SudachiReading = GetKatakanaReading(best.match, (byte)best.readingIndex)
-                                 });
+        // Picks the best (word, readingIndex) match by frequency rank. When a reading hint is given,
+        // candidates are restricted to words that have a kana reading equal to it, so homographs read
+        // differently (e.g. 花 = はな vs あや, distinct words) resolve to distinct cards. The reading
+        // only selects the word — the surface form's ReadingIndex is kept so the stored value stays
+        // consistent with how the rest of the system indexes that surface. If no candidate has the
+        // reading, all candidates are considered (i.e. just the most common word for the surface).
+        private static (JmDictWord match, int readingIndex)? PickBestDirectLookupMatch(
+            List<(JmDictWord match, int readingIndex)> matches,
+            Dictionary<(int, short), JmDictWordFormFrequency> formFrequencies,
+            string? readingHint)
+        {
+            if (matches.Count == 0)
+                return null;
+
+            int FreqRank((JmDictWord match, int readingIndex) m) =>
+                formFrequencies.TryGetValue((m.match.WordId, (short)m.readingIndex), out var wff) ? wff.FrequencyRank : int.MaxValue;
+
+            if (!string.IsNullOrWhiteSpace(readingHint))
+            {
+                var hintHira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(readingHint, convertLongVowelMark: false));
+                var byReading = matches.Where(m => WordHasKanaReading(m.match, hintHira)).ToList();
+                if (byReading.Count > 0)
+                    return byReading.OrderBy(FreqRank).First();
             }
 
-            return ExcludeFinalMisparses(matchedWords);
+            return matches.OrderBy(FreqRank).First();
         }
+
+        // True if the word has a kana reading equal (normalised hiragana) to the hint.
+        private static bool WordHasKanaReading(JmDictWord word, string hintHira) =>
+            word.Forms.Any(f => f.FormType == JmDictFormType.KanaForm &&
+                                KanaNormalizer.Normalize(KanaConverter.ToHiragana(f.Text, convertLongVowelMark: false)) == hintHira);
+
+        private static DeckWord BuildDirectLookupWord(string word, (JmDictWord match, int readingIndex) best) =>
+            new DeckWord
+            {
+                WordId = best.match.WordId, ReadingIndex = (byte)best.readingIndex, OriginalText = word,
+                SudachiReading = GetKatakanaReading(best.match, (byte)best.readingIndex)
+            };
 
         private static string GetKatakanaReading(JmDictWord word, byte readingIndex)
         {
