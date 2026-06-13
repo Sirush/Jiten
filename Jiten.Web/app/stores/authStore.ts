@@ -6,6 +6,10 @@ import { TabSyncManager } from '~/utils/tabSync';
 import { CookieMonitor } from '~/utils/cookieMonitor';
 import { useSrsStore } from '~/stores/srsStore';
 
+const dbg = (...args: unknown[]) => {
+  if (import.meta.dev) console.log(...args);
+};
+
 export const useAuthStore = defineStore('auth', () => {
   const tokenCookie = useCookie('token', {
     watch: true,
@@ -52,7 +56,7 @@ export const useAuthStore = defineStore('auth', () => {
     // Listen for token updates from other tabs
     tabSyncManager.on('TOKEN_REFRESHED', (payload) => {
       if (payload.accessToken && payload.refreshToken) {
-        console.log('Token refreshed in another tab, syncing...');
+        dbg('Token refreshed in another tab, syncing...');
         setTokens(payload.accessToken, payload.refreshToken);
         isRefreshing.value = false;
         refreshingTabId.value = null;
@@ -61,14 +65,14 @@ export const useAuthStore = defineStore('auth', () => {
 
     // Listen for refresh started events
     tabSyncManager.on('TOKEN_REFRESH_STARTED', (payload) => {
-      console.log('Another tab started refreshing...');
+      dbg('Another tab started refreshing...');
       isRefreshing.value = true;
       refreshingTabId.value = payload.tabId;
     });
 
     // Listen for refresh failures
     tabSyncManager.on('TOKEN_REFRESH_FAILED', () => {
-      console.log('Token refresh failed in another tab');
+      dbg('Token refresh failed in another tab');
       clearAuthData();
       isRefreshing.value = false;
       refreshingTabId.value = null;
@@ -76,7 +80,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     // Listen for logout events
     tabSyncManager.on('LOGOUT', () => {
-      console.log('User logged out in another tab');
+      dbg('User logged out in another tab');
       clearAuthData();
       const router = useRouter();
       router.push('/login');
@@ -84,7 +88,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     // Monitor cookie changes (fallback mechanism)
     cookieMonitor.onChange(({ token, refreshToken }) => {
-      console.log('Cookie changed in another tab');
+      dbg('Cookie changed in another tab');
 
       // Only update if we're not currently refreshing
       if (!isRefreshing.value) {
@@ -135,7 +139,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function refreshAccessToken(): Promise<boolean> {
     // Check if another tab is already refreshing
     if (isRefreshing.value && refreshingTabId.value !== tabSyncManager?.tabId) {
-      console.log('Another tab is refreshing, waiting...');
+      dbg('Another tab is refreshing, waiting...');
       // Wait for the other tab to complete (max 10 seconds)
       const startTime = Date.now();
       while (isRefreshing.value && Date.now() - startTime < 10000) {
@@ -147,7 +151,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     // Check if this tab is already refreshing
     if (isRefreshing.value && refreshingTabId.value === tabSyncManager?.tabId) {
-      console.log('This tab is already refreshing, waiting...');
+      dbg('This tab is already refreshing, waiting...');
       while (isRefreshing.value) {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
@@ -159,7 +163,7 @@ export const useAuthStore = defineStore('auth', () => {
     const currentCookieToken = tokenCookie.value;
 
     if (currentCookieRefToken && currentCookieRefToken !== refreshToken.value) {
-      console.log('Detected fresh token in cookies (Race condition avoided). Syncing state...');
+      dbg('Detected fresh token in cookies (Race condition avoided). Syncing state...');
 
       // Update local state to match the cookie
       accessToken.value = currentCookieToken;
@@ -170,7 +174,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     if (!refreshToken.value) {
-      console.log('No refresh token available');
+      dbg('No refresh token available');
       clearAuthData();
       return false;
     }
@@ -185,7 +189,7 @@ export const useAuthStore = defineStore('auth', () => {
     });
 
     try {
-      console.log('Attempting to refresh token...');
+      dbg('Attempting to refresh token...');
       const data = await $api<TokenResponse>('/auth/refresh', {
         method: 'POST',
         body: {
@@ -204,7 +208,7 @@ export const useAuthStore = defineStore('auth', () => {
           timestamp: Date.now()
         });
 
-        console.log('Token refreshed successfully');
+        dbg('Token refreshed successfully');
         return true;
       } else {
         throw new Error('Invalid refresh response');
@@ -249,17 +253,17 @@ export const useAuthStore = defineStore('auth', () => {
 
     // If no access token at all
     if (!accessToken.value) {
-      // console.log('No access token available');
+      // dbg('No access token available');
       return false;
     }
 
     // If access token is expired or about to expire
     if (isTokenExpired(accessToken.value)) {
-      console.log('Access token expired, attempting to refresh...');
+      dbg('Access token expired, attempting to refresh...');
       return await refreshAccessToken();
     }
 
-    // console.log('Access token is valid');
+    // dbg('Access token is valid');
     return true;
   }
 
@@ -398,7 +402,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function initializeAuth() {
-    console.log('Initializing auth...');
+    dbg('Initializing auth...');
 
     if (tokenCookie.value) {
       accessToken.value = tokenCookie.value;
@@ -409,7 +413,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     if (accessToken.value) {
       if (isTokenExpired(accessToken.value)) {
-        console.log('Token expired on init, refreshing...');
+        dbg('Token expired on init, refreshing...');
         refreshAccessToken().then((success) => {
           if (success) {
             fetchCurrentUser().catch(() => {});
@@ -417,12 +421,12 @@ export const useAuthStore = defineStore('auth', () => {
           }
         });
       } else {
-        console.log('Token valid on init, fetching user...');
+        dbg('Token valid on init, fetching user...');
         fetchCurrentUser().catch(() => {});
         onLoginSuccess();
       }
     } else {
-      console.log('No token on init');
+      dbg('No token on init');
     }
   }
 
