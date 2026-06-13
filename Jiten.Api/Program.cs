@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -374,10 +375,27 @@ builder.Services.AddHostedService<ParserWarmupService>();
 builder.Services.AddHostedService<WordFormSiblingCacheWarmupService>();
 builder.Services.AddHostedService<DeckVectorCacheWarmupService>();
 
+// Shared secret sent by the Nuxt SSR server (X-Internal-Ssr-Key) so first-party server
+// rendering is exempt from the per-IP anonymous rate limit. Without this, every anonymous
+// SSR request lands in one partition (the SSR host's IP as seen past the reverse proxy) and
+// saturates the limit, leaving logged-out pages and OG images data-less. Empty disables it.
+var ssrBypassKey = builder.Configuration["SsrBypassKey"];
+var ssrBypassKeyBytes = string.IsNullOrEmpty(ssrBypassKey) ? null : Encoding.UTF8.GetBytes(ssrBypassKey);
+
+bool IsTrustedSsr(HttpContext ctx)
+{
+    if (ssrBypassKeyBytes == null) return false;
+    if (!ctx.Request.Headers.TryGetValue("X-Internal-Ssr-Key", out var provided)) return false;
+    return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(provided.ToString()), ssrBypassKeyBytes);
+}
+
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("fixed", context =>
     {
+        if (IsTrustedSsr(context))
+            return RateLimitPartition.GetNoLimiter("ssr-internal");
+
         var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var tier = context.User.FindFirst("rate_limit_tier")?.Value ?? "Default";
 
@@ -401,6 +419,9 @@ builder.Services.AddRateLimiter(options =>
 
     options.AddPolicy("download", context =>
     {
+        if (IsTrustedSsr(context))
+            return RateLimitPartition.GetNoLimiter("ssr-internal");
+
         var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var tier = context.User.FindFirst("rate_limit_tier")?.Value ?? "Default";
 

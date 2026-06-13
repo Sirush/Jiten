@@ -60,6 +60,9 @@ export default defineNuxtConfig({
     inlineStyles: false,
   },
   runtimeConfig: {
+    // Server-only: shared secret sent on SSR-originated API calls so the API can exempt
+    // first-party server rendering from the per-IP anonymous rate limit. Empty in dev.
+    ssrBypassKey: process.env.NUXT_SSR_BYPASS_KEY || '',
     public: {
       baseURL: 'https://localhost:7299/api/',
       googleSignInClientId: process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID || '',

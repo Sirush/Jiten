@@ -49,6 +49,9 @@ services:
       - JwtSettings__Audience=${JWT_AUDIENCE:-https://jiten.moe}
       - JwtSettings__AccessTokenExpirationMinutes=${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:-15}
       - JwtSettings__RefreshTokenExpirationDays=${JWT_REFRESH_TOKEN_EXPIRATION_DAYS:-30}
+      # Shared secret that exempts first-party SSR (the Nuxt web app) from the per-IP rate
+      # limit. MUST match NUXT_SSR_BYPASS_KEY on the web application. Empty = bypass disabled.
+      - SsrBypassKey=${SSR_BYPASS_KEY:-}
       - StaticFilesPath=${STATIC_FILES_PATH:-/app/uploads}
       - UseBunnyCdn=${USE_BUNNYCDN:-false}
       - BunnyCdnSecret=${BUNNYCDN_SECRET:-}
