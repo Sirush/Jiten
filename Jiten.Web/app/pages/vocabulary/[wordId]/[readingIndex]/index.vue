@@ -46,9 +46,13 @@
   });
 
   if (import.meta.server) {
+    const w = wordData.value;
     defineOgImageComponent('VocabularyWordOgImage', {
-      wordId: String(wordId.value),
-      readingIndex: String(readingIndex.value),
+      text: w?.mainReading?.text ?? '',
+      frequencyRank: w?.mainReading?.frequencyRank,
+      partsOfSpeech: w?.partsOfSpeech,
+      meanings: w?.definitions?.[0]?.meanings,
+      usedInMediaAmount: w?.mainReading?.usedInMediaAmount,
     });
   }
 </script>

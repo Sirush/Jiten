@@ -580,7 +580,7 @@ public class MorphologicalAnalyserTests
         yield return ["学生さんだって", new[] { "学生", "さん", "だって" }];
         yield return ["ちょっと休憩ーなんて言って", new[] { "ちょっと", "休憩", "なんて", "言って" }];
         yield return ["なんて女だって思われる", new[] { "なんて", "女", "だって", "思われる" }];
-        yield return ["絶対に戻らなきゃいけない", new[] { "絶対", "に", "戻らなきゃ", "いけない" }];
+        yield return ["絶対に戻らなきゃいけない", new[] { "絶対に", "戻らなきゃ", "いけない" }];
         yield return ["とてもいい品が買えました", new[] { "とても", "いい", "品", "が", "買えました" }];
         // JMDict compound noun tests (Mode B refactor)
         // Single JMDict entries - should remain as one token
@@ -1585,6 +1585,46 @@ public class MorphologicalAnalyserTests
         yield return ["大の虫を生かす為に小の虫を殺す。",
             new[] { "大の", "虫", "を", "生かす", "為に", "小", "の", "虫", "を", "殺す" }];
         yield return ["小の虫を殺し得る人物です", new[] { "小", "の", "虫", "を", "殺し", "得る", "人物", "です" }];
+
+        // === batch 4: quotative って / colloquial ねぇ / lexicalized adverbs ===
+        // それっ(interjection homograph)+て re-cut as pronoun それ + quotative って
+        yield return ["そ、それって国家保安省の――", new[] { "それ", "って", "国家", "保安", "省", "の" }];
+        // clause-initial いいか、= Listen! (2555520); 絶対に stays one adverb token
+        yield return ["いいか、絶対に無茶はするなよ。",
+            new[] { "いいか", "絶対に", "無茶", "は", "する", "な", "よ" }];
+        // genuine question いいか never merges
+        yield return ["行っていいか分からない", new[] { "行って", "いい", "か", "分からない" }];
+        // colloquial negative expression: ろくでもねぇ → ろくでもない (2538840)
+        yield return ["......ったく、ろくでもねぇ状況だ", new[] { "ったく", "ろくでもねぇ", "状況", "だ" }];
+        // re-cut quotative って before a noun must not re-merge (なくなったって was dropped entirely)
+        yield return ["いえ、こちらに向かう途中、連絡が取れなくなったって話です。",
+            new[] { "いえ", "こちら", "に", "向かう", "途中", "連絡が取れ", "なくなった", "って", "話", "です" }];
+        // しか may open an expression window: しかねぇ/しかない → 2026790
+        yield return ["やっぱり、このまま進むしかねぇ......!", new[] { "やっぱり", "このまま", "進む", "しかねぇ" }];
+        yield return ["やっぱり、このまま進むしかない", new[] { "やっぱり", "このまま", "進む", "しかない" }];
+        // がる never attaches to a pronoun: 何|がっ|て → 何 + が + って
+        yield return ["あぁ、何がって......?", new[] { "あぁ", "何", "が", "って" }];
+        // 絶対に merges in lattice contexts where Sudachi splits it (consistency with fused form)
+        yield return ["今だって、あたしを気遣うなんて、これまでのあんたなら絶対にしなかった",
+            new[] { "今", "だって", "あたし", "を", "気遣う", "なんて", "これまで", "の", "あんた", "なら", "絶対に", "しなかった" }];
+
+        // === batch 5: quote-initial interjection / OOV tails / elongation / prefix / name theft ===
+        // 信じる split by Sudachi as 信じ+るってことか; OOV-garbage tail re-cut, こと now a grammar token
+        yield return ["これが......これが、信じるってことか。",
+            new[] { "これ", "が", "これ", "が", "信じる", "って", "こと", "か" }];
+        // 山ほど is one lexicalized adverb (Noun+ほど with a JMDict entry)
+        yield return ["やることは山ほどある。", new[] { "やる", "こと", "は", "山ほど", "ある" }];
+        // interjection えっ must not fuse with the standalone adverb そう
+        yield return ["「えっそうだったの？」", new[] { "えっ", "そう", "だった", "の" }];
+        // interjection after a speaker tag + opening quote is utterance-initial → ああ kept, not gated
+        yield return ["【テオドール】「ああ......」", new[] { "テオドール", "ああ" }];
+        // small-vowel elongation れぇぇぇ stripped; れ reattaches to the auxiliary やがる imperative
+        yield return ["早く、ここに来やがれぇぇぇっ!", new[] { "早く", "ここ", "に", "来", "やがれ" }];
+        // katakana mora stolen by 連体詞 あの recut: カティ+アの → カティア + の
+        yield return ["カティアのように振る舞ったら", new[] { "カティア", "の", "ように", "振る舞ったら" }];
+        // 総 before a noun is the prefix (そう), recovered after 総本部 splits to 総 + 本部
+        yield return ["政治総本部と国家保安省が対立しているといっても",
+            new[] { "政治", "総", "本部", "と", "国家", "保安", "省", "が", "対立している", "といっても" }];
     }
 
     [Theory]

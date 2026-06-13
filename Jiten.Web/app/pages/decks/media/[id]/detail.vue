@@ -127,7 +127,23 @@
   const pageUrl = computed(() => `https://jiten.moe/decks/media/${deckId.value}/detail`);
   useDeckSchema(mainDeck, pageUrl, parentDeck);
 
-  defineOgImageComponent('MediaDeckCardOgImage', { deckId: deckId });
+
+  const d = mainDeck.value;
+  defineOgImageComponent('MediaDeckCardOgImage', {
+    title: d?.originalTitle ?? '',
+    mediaType: d?.mediaType,
+    coverName: d?.coverName,
+    characterCount: d?.characterCount,
+    wordCount: d?.wordCount,
+    uniqueWordCount: d?.uniqueWordCount,
+    uniqueKanjiCount: d?.uniqueKanjiCount,
+    uniqueKanjiUsedOnceCount: d?.uniqueKanjiUsedOnceCount,
+    averageSentenceLength: d?.averageSentenceLength,
+    hideAverageSentenceLength: d?.hideAverageSentenceLength,
+    dialoguePercentage: d?.dialoguePercentage,
+    hideDialoguePercentage: d?.hideDialoguePercentage,
+    difficulty: d?.difficulty,
+  });
 </script>
 
 <template>

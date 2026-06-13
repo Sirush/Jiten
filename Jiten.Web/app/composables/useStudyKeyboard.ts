@@ -15,6 +15,7 @@ export const DEFAULT_KEYBINDS: StudyKeybinds = {
   bury: 'h',
   undo: 'z',
   wrapUp: 'w',
+  pauseTimer: 'p',
 };
 
 export function displayKeyName(key: string): string {
@@ -54,6 +55,7 @@ export interface StudyKeyboardCallbacks {
   onBury: () => void;
   onUndo: () => void;
   onWrapUp: () => void;
+  onPauseTimer: () => void;
 }
 
 const RATINGS_4 = [FsrsRating.Again, FsrsRating.Hard, FsrsRating.Good, FsrsRating.Easy];
@@ -80,6 +82,8 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     if (store.isBusy) return;
+    // Timed-review "fail & learn" absorption window locks out grading while the answer is studied.
+    if (store.gradeLock) return;
 
     const kb = store.studySettings.keybinds ?? DEFAULT_KEYBINDS;
     const is4Btn = store.studySettings.gradingButtons === 4;
@@ -124,6 +128,12 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
       if (matchesKeybind(e, kb.master)) { flashKey(kb.master); callbacks.onMaster(); return; }
       if (matchesKeybind(e, kb.suspend)) { flashKey(kb.suspend); callbacks.onSuspend(); return; }
       if (matchesKeybind(e, kb.bury)) { flashKey(kb.bury); callbacks.onBury(); return; }
+    }
+
+    if (matchesKeybind(e, kb.pauseTimer)) {
+      flashKey(kb.pauseTimer);
+      callbacks.onPauseTimer();
+      return;
     }
 
     if (store.canUndo && matchesKeybind(e, kb.undo)) {

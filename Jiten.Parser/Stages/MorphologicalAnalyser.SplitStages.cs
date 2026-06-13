@@ -585,6 +585,7 @@ public partial class MorphologicalAnalyser
         ("って", "ッテ", PartOfSpeech.Particle, PartOfSpeechSection.AdverbialParticle),
         ("った", "ッタ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
         ("わけ", "ワケ", PartOfSpeech.Noun, PartOfSpeechSection.CommonNoun),
+        ("こと", "コト", PartOfSpeech.Noun, PartOfSpeechSection.CommonNoun),
         ("ない", "ナイ", PartOfSpeech.IAdjective, PartOfSpeechSection.PossibleDependant),
         ("から", "カラ", PartOfSpeech.Particle, PartOfSpeechSection.ConjunctionParticle),
         ("けど", "ケド", PartOfSpeech.Particle, PartOfSpeechSection.ConjunctionParticle),
@@ -737,7 +738,7 @@ public partial class MorphologicalAnalyser
                 if (grammarTokens.Count == 0) continue;
                 bool hasLeftoverNoun = grammarTokens.Any(t =>
                     t.PartOfSpeech == PartOfSpeech.Noun && t.PartOfSpeechSection1 == PartOfSpeechSection.CommonNoun &&
-                    t.Text != "わけ");
+                    t.Text is not ("わけ" or "こと"));
                 if (hasLeftoverNoun) continue;
 
                 result[^1] = new WordInfo

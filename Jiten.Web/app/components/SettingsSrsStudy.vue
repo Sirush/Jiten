@@ -17,6 +17,7 @@
     await srsStore.fetchSettings(true);
     Object.assign(form, srsStore.studySettings);
     form.keybinds = { ...srsStore.studySettings.keybinds };
+    form.timedReview = { ...srsStore.studySettings.timedReview };
     syncEasyFromForm();
     if (!form.timezone) applyDetectedTimezone();
     // Let the hydration mutations flush through the deep watcher (still guarded by loaded=false)
@@ -59,6 +60,17 @@
   const leechActionOptions = [
     { label: 'Suspend', value: 'Suspend' },
     { label: 'Notify only', value: 'NotifyOnly' },
+  ];
+
+  const revealActionOptions = [
+    { label: 'Reveal answer', value: 'Reveal' },
+    { label: 'Reveal + auto-fail', value: 'FailLearn' },
+    { label: 'Alert only', value: 'Nudge' },
+  ];
+
+  const answerActionOptions = [
+    { label: 'Soft fail', value: 'SoftFail' },
+    { label: 'Hard fail', value: 'HardFail' },
   ];
 
   const exampleSentenceSortingOptions = [
@@ -245,6 +257,7 @@
     ['suspend', 'Suspend'],
     ['undo', 'Undo'],
     ['wrapUp', 'Wrap up'],
+    ['pauseTimer', 'Pause/resume timer'],
   ];
 
   const gradeEntries = computed(() => (form.gradingButtons === 4 ? gradeLabels4 : gradeLabels2));
@@ -270,7 +283,7 @@
     clearTimeout(saveTimer);
     saveState.value = 'saving';
     try {
-      await srsStore.updateSettings({ ...form, keybinds: { ...form.keybinds } });
+      await srsStore.updateSettings({ ...form, keybinds: { ...form.keybinds }, timedReview: { ...form.timedReview } });
       saveState.value = 'saved';
       clearTimeout(savedClearTimer);
       savedClearTimer = setTimeout(() => {
@@ -474,8 +487,8 @@
       <!-- Review scheduling -->
       <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Review scheduling</h3>
       <p class="text-sm text-surface-500 -mt-1 mb-1">
-        Reviews are automatically balanced — each card is placed on the least-busy day within its normal scheduling window, smoothing out spike days
-        without affecting memory or retention.
+        Reviews are automatically balanced — each card is placed on the least-busy day within its normal scheduling window, smoothing out spike days without
+        affecting memory or retention.
       </p>
 
       <div class="flex items-center gap-2">
@@ -492,19 +505,15 @@
       </div>
 
       <div v-if="easyEnabled" class="flex flex-col gap-3 ml-6">
-        <SelectButton
-          v-model="easyMode"
-          :options="easyModeOptions"
-          option-label="label"
-          option-value="value"
-          :allow-empty="false"
-          class="flex-wrap"
-        />
+        <SelectButton v-model="easyMode" :options="easyModeOptions" option-label="label" option-value="value" :allow-empty="false" class="flex-wrap" />
 
         <div v-if="easyMode === 'weekends'" class="min-w-0">
           <label class="block text-sm font-medium mb-1">
             Weekend load
-            <Tooltip content="How much to reduce reviews on Saturday and Sunday. Reduced ≈ half the usual load; Minimum avoids them whenever possible." placement="top">
+            <Tooltip
+              content="How much to reduce reviews on Saturday and Sunday. Reduced ≈ half the usual load; Minimum avoids them whenever possible."
+              placement="top"
+            >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>
@@ -812,6 +821,135 @@
 
       <Divider />
 
+      <!-- Timed review -->
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Timed review</h3>
+      <p class="text-sm text-surface-500 -mt-1 mb-2">
+        Focus aid mode - each card counts down and can reveal or fail itself automatically. You can toggle it per session with the stopwatch icon on the study
+        screen and pause it with a keybind.
+      </p>
+      <div class="flex items-center gap-2">
+        <ToggleSwitch v-model="form.timedReview.enabled" input-id="timedEnabled" />
+        <label for="timedEnabled" class="text-sm cursor-pointer">
+          Start each session with timed review on
+          <Tooltip
+            content="Turns timed review on at the start of every session. You can still flip it on or off per session with the stopwatch icon."
+            placement="right"
+          >
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+      </div>
+      <div class="flex items-center gap-2">
+        <ToggleSwitch v-model="form.timedReview.showTimer" input-id="timedShowTimer" />
+        <label for="timedShowTimer" class="text-sm cursor-pointer">
+          Show the countdown bar
+          <Tooltip content="Show the depleting bar above the card. Turn off to run the timers invisibly — they still reveal, fail, and beep." placement="right">
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+      </div>
+      <div class="flex items-center gap-2">
+        <ToggleSwitch v-model="form.timedReview.skipNewCards" input-id="timedSkipNewCards" />
+        <label for="timedSkipNewCards" class="text-sm cursor-pointer">
+          Don't time new cards
+          <Tooltip
+            content="Skip the timer (front and back) on brand-new cards, so you can learn them at your own pace. Reviews are still timed."
+            placement="right"
+          >
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+      </div>
+
+      <div class="flex flex-col gap-4 mt-1">
+        <!-- Question-side timer -->
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.timedReview.revealEnabled" input-id="timedRevealEnabled" />
+          <label for="timedRevealEnabled" class="text-sm cursor-pointer">
+            Question timer
+            <Tooltip content="Counts down while the question is shown, before you reveal the answer." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div v-if="form.timedReview.revealEnabled" :class="props.inline ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'">
+          <div class="min-w-0">
+            <label class="block text-sm font-medium mb-1">Seconds before it fires</label>
+            <InputNumber v-model="form.timedReview.revealSeconds" :min="1" :max="600" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
+          </div>
+          <div class="min-w-0">
+            <label class="block text-sm font-medium mb-1">
+              When time runs out
+              <Tooltip
+                content="**Reveal answer** — flips the card.<br><b>Reveal + auto-fail</b> — flips, then fails using your answer-timer style<br><b>Alert only</b> — just plays a sound."
+                placement="top"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+            <SelectButton
+              v-model="form.timedReview.revealAction"
+              :options="revealActionOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+            />
+          </div>
+        </div>
+
+        <!-- Answer-side timer -->
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.timedReview.answerEnabled" input-id="timedAnswerEnabled" />
+          <label for="timedAnswerEnabled" class="text-sm cursor-pointer">
+            Answer timer
+            <Tooltip content="Counts down after the answer is shown, before you grade the card." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div v-if="form.timedReview.answerEnabled" :class="props.inline ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'">
+          <div class="min-w-0">
+            <label class="block text-sm font-medium mb-1">
+              Seconds before it fires
+              <Tooltip content="Set to 0 to fail instantly on reveal and skip the back entirely." placement="top">
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+            <InputNumber v-model="form.timedReview.answerSeconds" :min="0" :max="600" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
+          </div>
+          <div class="min-w-0">
+            <label class="block text-sm font-medium mb-1">
+              When time runs out
+              <Tooltip
+                content="**Soft fail** — highlights Again with a short grace countdown. You can press any other grade to override it.<br><b>Hard fail</b> — marks Again immediately and goes to the next card."
+                placement="top"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+            <SelectButton
+              v-model="form.timedReview.answerAction"
+              :options="answerActionOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.timedReview.alertSound" input-id="timedAlertSound" />
+          <label for="timedAlertSound" class="text-sm cursor-pointer">
+            Play an alert sound
+            <Tooltip content="A short beep when a timer runs out." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+      </div>
+
+      <Divider />
+
       <!-- Leeches -->
       <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Leeches</h3>
       <p class="text-sm text-surface-500 -mt-1 mb-2">
@@ -905,7 +1043,9 @@
 <style scoped>
   .save-chip-enter-active,
   .save-chip-leave-active {
-    transition: opacity 0.2s ease, transform 0.2s ease;
+    transition:
+      opacity 0.2s ease,
+      transform 0.2s ease;
   }
   .save-chip-enter-from,
   .save-chip-leave-to {

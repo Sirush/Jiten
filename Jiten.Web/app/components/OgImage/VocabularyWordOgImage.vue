@@ -1,58 +1,51 @@
 <script setup lang="ts">
-  import type { Word } from '~/types';
   import { stripRuby } from '~/utils/stripRuby';
 
   const props = defineProps<{
-    wordId: string;
-    readingIndex: string;
+    text?: string;
+    frequencyRank?: number;
+    partsOfSpeech?: string[];
+    meanings?: string[];
+    usedInMediaAmount?: number;
   }>();
-
-  const { data: word, status } = await useApiFetch<Word>(`vocabulary/${props.wordId}/${props.readingIndex}/info`);
 
   function extractReading(text: string): string {
     return text.replace(/([\u4E00-\u9FFF\uFF10-\uFF5A々]+)\[([\u3040-\u309F\u30A0-\u30FF]+)]/g, (_m, _k, f) => f);
   }
 
-  const wordText = computed(() => {
-    if (!word.value) return '';
-    return stripRuby(word.value.mainReading.text);
-  });
+  const wordText = computed(() => (props.text ? stripRuby(props.text) : ''));
 
   const readingText = computed(() => {
-    if (!word.value) return '';
-    const reading = extractReading(word.value.mainReading.text);
+    if (!props.text) return '';
+    const reading = extractReading(props.text);
     return reading !== wordText.value ? reading : '';
   });
 
   const rankText = computed(() => {
-    if (!word.value) return '';
-    return word.value.mainReading.frequencyRank === 0
-      ? 'Unranked'
-      : `Rank #${word.value.mainReading.frequencyRank.toLocaleString()}`;
+    if (props.frequencyRank == null) return '';
+    return props.frequencyRank === 0 ? 'Unranked' : `Rank #${props.frequencyRank.toLocaleString()}`;
   });
 
   const posText = computed(() => {
-    if (!word.value?.partsOfSpeech?.length) return '';
-    return word.value.partsOfSpeech.join(', ');
+    if (!props.partsOfSpeech?.length) return '';
+    return props.partsOfSpeech.join(', ');
   });
 
   const definitionText = computed(() => {
-    if (!word.value?.definitions?.length) return '';
-    const firstDef = word.value.definitions[0];
-    if (!firstDef?.meanings?.length) return '';
-    const text = firstDef.meanings.join('; ');
+    if (!props.meanings?.length) return '';
+    const text = props.meanings.join('; ');
     return text.length > 120 ? text.slice(0, 117) + '...' : text;
   });
 
   const mediaCountText = computed(() => {
-    if (!word.value) return '';
-    return `Appears in ${word.value.mainReading.usedInMediaAmount.toLocaleString()} media`;
+    if (props.usedInMediaAmount == null) return '';
+    return `Appears in ${props.usedInMediaAmount.toLocaleString()} media`;
   });
 </script>
 
 <template>
   <div
-    v-if="status !== 'pending' && word"
+    v-if="wordText"
     style="width: 1200px; height: 630px; display: flex; flex-direction: column; font-family: 'Noto Sans JP', sans-serif; background: white; border-left: 6px solid #9333ea; padding: 32px 48px; justify-content: center; gap: 24px;"
   >
     <div style="display: flex; justify-content: space-between; align-items: center;">

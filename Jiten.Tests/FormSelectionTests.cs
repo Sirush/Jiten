@@ -1336,6 +1336,9 @@ public class FormSelectionTests
         yield return ["それでもこのテンションだけは真似できないよ", "真似", 1363740, (byte)0];
         // 私してない = 私 + する, never 私する (わたくしする)
         yield return ["そんな表情、私してない", "してない", 1157170, (byte)1];
+
+        // 総 before a noun (総本部) is the prefix 総(そう) 1401470, not the counter 房総(ふさ) 1519300
+        yield return ["政治総本部と国家保安省が対立しているといっても", "総", 1401470, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

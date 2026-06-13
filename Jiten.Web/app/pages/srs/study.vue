@@ -3,6 +3,7 @@
   import { FsrsRating } from '~/types';
   import type { StudyMoreParams } from '~/types';
   import { useStudyKeyboard } from '~/composables/useStudyKeyboard';
+  import { useStudyTimer } from '~/composables/useStudyTimer';
   import { useSwipeGesture } from '~/composables/useSwipeGesture';
   import { useSrsSessionCache } from '~/composables/useSrsSessionCache';
   import { useToast } from 'primevue/usetoast';
@@ -192,7 +193,48 @@
     onBury: handleBury,
     onUndo: handleUndo,
     onWrapUp: handleWrapUp,
+    onPauseTimer: handlePauseTimer,
   });
+
+  // Timed review ("Speed Focus"). The stopwatch icon toggles it for the current tab session only,
+  // defaulting from the saved setting; sessionStorage keeps it through a refresh but a new session resets it.
+  const timedActive = ref(false);
+  function toggleTimed() {
+    timedActive.value = !timedActive.value;
+    sessionStorage.setItem('srs-timed-active', timedActive.value ? '1' : '0');
+  }
+  const {
+    phase: timerPhase,
+    fraction: timerFraction,
+    secondsLeft: timerSeconds,
+    armed: timerArmed,
+    armedLocked: timerLocked,
+    paused: timerPaused,
+    togglePause: toggleTimerPause,
+  } = useStudyTimer({
+    active: timedActive,
+    suspended: showSettingsDialog,
+    onReveal: handleFlip,
+    onGrade: handleGrade,
+  });
+  // Countdown bar colour: muted while paused; otherwise indigo → amber → red as it depletes (red while armed).
+  const timerBarClass = computed(() => {
+    if (timerPaused.value) return 'bg-surface-400 dark:bg-surface-500';
+    if (timerArmed.value) return 'bg-red-500';
+    const f = timerFraction.value;
+    if (f > 0.5) return 'bg-indigo-400';
+    if (f > 0.2) return 'bg-amber-400';
+    return 'bg-red-400';
+  });
+  // Whether the countdown bar should render (respects the "show countdown bar" setting).
+  const showTimerBar = computed(() =>
+    timedActive.value && srsStore.studySettings.timedReview.showTimer && timerPhase.value !== 'idle' && !!srsStore.currentCard
+  );
+  function handlePauseTimer() {
+    if (!timedActive.value) return;
+    const nowPaused = toggleTimerPause();
+    toast.add({ severity: 'info', summary: nowPaused ? 'Timer paused' : 'Timer resumed', life: 1500 });
+  }
 
   const elapsedSeconds = ref(0);
   let elapsedTimer: ReturnType<typeof setInterval> | null = null;
@@ -223,7 +265,20 @@
     loading.value = true;
     await srsStore.fetchSettings();
     const restored = await srsStore.tryRestoreSession();
-    if (!restored) await srsStore.fetchBatch();
+    if (!restored) {
+      // Fresh session: drop any stale manual override from a prior session in this tab.
+      sessionStorage.removeItem('srs-timed-active');
+      await srsStore.fetchBatch();
+    }
+    // Initialise the session timer toggle AFTER the first card is loaded, so flipping timed mode on
+    // starts the countdown on the card that's actually showing (not a not-yet-fetched null card).
+    if (restored) {
+      // Continuation (e.g. a page refresh mid-session): keep the per-session stopwatch toggle if one was set.
+      const storedTimed = sessionStorage.getItem('srs-timed-active');
+      timedActive.value = storedTimed != null ? storedTimed === '1' : srsStore.studySettings.timedReview.enabled;
+    } else {
+      timedActive.value = srsStore.studySettings.timedReview.enabled;
+    }
     srsStore.fetchDueSummary();
     loading.value = false;
     if (!srsStore.isSessionComplete && srsStore.currentCard) startElapsedTimer();
@@ -426,6 +481,20 @@
             >
               <Icon :name="theme.icon" size="18" />
             </button>
+            <Tooltip :content="!timedActive ? 'Timed review off — click to turn on' : (timerPaused ? 'Timed review paused — press P to resume' : 'Timed review on — click to turn off')">
+              <button
+                @click="toggleTimed()"
+                class="p-2 rounded-lg transition-colors"
+                :class="!timedActive
+                  ? 'bg-gray-200/60 dark:bg-gray-800/60 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                  : timerPaused
+                    ? 'bg-amber-500 text-white hover:bg-amber-600'
+                    : 'bg-indigo-500 text-white hover:bg-indigo-600'"
+                :aria-label="timedActive ? 'Turn off timed review' : 'Turn on timed review'"
+              >
+                <Icon :name="!timedActive ? 'material-symbols:timer-outline' : (timerPaused ? 'material-symbols:pause' : 'material-symbols:timer')" size="18" />
+              </button>
+            </Tooltip>
             <Tooltip :content="srsStore.isWrappingUp ? 'Cancel wrap-up' : 'Finish learning cards then end'">
               <button
                 @click="handleWrapUp()"
@@ -491,6 +560,19 @@
 
         <!-- Card -->
         <div class="w-full" :class="cardWidthClass">
+          <!-- Timed-review countdown bar (sits on top of the card while a timer runs) -->
+          <div
+            v-if="showTimerBar"
+            class="mb-2 h-1 rounded-full bg-surface-200 dark:bg-surface-700 overflow-hidden"
+            role="progressbar"
+            aria-label="Timed review countdown"
+          >
+            <div
+              class="h-full rounded-full ease-linear"
+              :class="[timerBarClass, timerArmed ? 'transition-none' : 'transition-[width] duration-100']"
+              :style="{ width: `${timerFraction * 100}%` }"
+            />
+          </div>
           <div
             v-if="srsStore.currentCard"
             ref="swipeCardRef"
@@ -553,7 +635,9 @@
             :interval-preview="srsStore.studySettings.showNextInterval ? srsStore.currentCard?.intervalPreview : undefined"
             :show-keybinds="srsStore.studySettings.showKeybinds"
             :show-swipe-hints="srsStore.studySettings.enableSwipeGesture"
-            :disabled="srsStore.isBusy"
+            :disabled="srsStore.isBusy || timerLocked"
+            :armed-again="timerArmed"
+            :armed-seconds="timerSeconds"
             :compact="compactBar"
             :pressed-key="pressedKey"
             @grade="handleGrade"

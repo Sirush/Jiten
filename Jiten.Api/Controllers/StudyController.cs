@@ -2670,6 +2670,276 @@ public class StudyController(
         return Results.Ok(new { days = days_ });
     }
 
+    // Retention grid for the workload curve. Spans 0.70-0.97 by default and is widened to always
+    // include the user's own desired retention, so an unusually low/high setting still sees the
+    // territory on both sides of its point rather than a clamped curve.
+    private const double WorkloadGridLow = 0.70;
+    private const double WorkloadGridHigh = 0.97;
+    private const int WorkloadGridPoints = 9;
+    // When the user's setting falls outside the default span we push the grid past it by this margin on
+    // both sides, so the anchor point sits inside the curve instead of on the clamped edge.
+    private const double WorkloadGridMargin = 0.03;
+    // Cap the simulated population (existing + injected new cards) so a huge collection can't make the
+    // endpoint slow; the result is scaled up by total/sampled. New-card inflow is clamped separately.
+    private const int WorkloadMaxSimCards = 8000;
+    private const int WorkloadMaxNewCardsPerDay = 200;
+    // Time model: per-maturity seconds/review are learned from the user's own review durations (ms, capped
+    // to drop AFK outliers), bucketed by inter-review gap exactly like RetentionCalculator. Below the
+    // per-bucket sample floor we fall back to the user's overall average, then to neutral defaults that
+    // encode the usual shape (mature recall fastest, first exposures slowest).
+    private const double WorkloadDefaultLearningSeconds = 8.0;
+    private const double WorkloadDefaultYoungSeconds = 6.0;
+    private const double WorkloadDefaultMatureSeconds = 4.0;
+    private const double WorkloadReviewSecondsCap = 60.0;
+    private const int WorkloadMinSamplesForSeconds = 30;
+    // Recommended-retention (CMRR-style) is only offered with a large enough real population, and is
+    // searched inside a sane band rather than over the whole grid.
+    private const int WorkloadMinCardsForRecommendation = 200;
+    private const double WorkloadRecommendLow = 0.80;
+    private const double WorkloadRecommendHigh = 0.97;
+
+    [HttpGet("workload-curve")]
+    [SwaggerOperation(Summary = "Simulate review workload (avg reviews generated per day) across a grid of desired-retention values",
+                      Description = "Forward-simulates the user's current card population (optionally plus future new-card inflow) under several desired-retention settings, so the UI can show the what-if cost of changing the desired retention.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IResult> GetWorkloadCurve(
+        [FromQuery] int horizonDays = 365,
+        [FromQuery] bool includeNewCards = false,
+        [FromQuery] bool respectStudyDecksOnly = true)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        horizonDays = Math.Clamp(horizonDays, 30, 730);
+
+        var userSettings = await userContext.UserFsrsSettings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.UserId == userId);
+        var fsrsParams = userSettings?.Parameters is { Length: > 0 } p ? p : FsrsConstants.DefaultParameters;
+        var baseRetention = userSettings?.DesiredRetention is double dr and > 0 and < 1 ? dr : FsrsConstants.DefaultDesiredRetention;
+
+        var studySettings = await LoadStudySettings(userId);
+        var now = DateTime.UtcNow;
+
+        var cardRows = await userContext.FsrsCards
+            .AsNoTracking()
+            .Where(c => c.UserId == userId
+                        && c.State != FsrsState.New
+                        && c.State != FsrsState.Blacklisted
+                        && c.State != FsrsState.Mastered
+                        && c.State != FsrsState.Suspended)
+            .Select(c => new { c.WordId, c.ReadingIndex, c.State, c.Step, c.Stability, c.Difficulty, c.Due, c.LastReview })
+            .ToListAsync();
+
+        if (respectStudyDecksOnly && studySettings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
+        {
+            var filter = await BuildDeckReviewFilter(userId, cardRows.Select(c => (c.WordId, c.ReadingIndex)).ToList());
+            cardRows = cardRows
+                .Where(c => filter.Contains(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)))
+                .ToList();
+        }
+
+        var seeds = new List<FsrsCard>(cardRows.Count);
+        foreach (var c in cardRows)
+        {
+            seeds.Add(new FsrsCard
+            {
+                State = c.State,
+                Step = c.Step,
+                Stability = c.Stability,
+                Difficulty = c.Difficulty,
+                Due = c.Due,
+                LastReview = c.LastReview,
+            });
+        }
+
+        if (includeNewCards && studySettings.NewCardsPerDay > 0)
+        {
+            var perDay = Math.Min(studySettings.NewCardsPerDay, WorkloadMaxNewCardsPerDay);
+            for (var day = 0; day < horizonDays; day++)
+            {
+                var due = now.AddDays(day);
+                for (var i = 0; i < perDay; i++)
+                {
+                    seeds.Add(new FsrsCard
+                    {
+                        State = FsrsState.Learning,
+                        Step = 0,
+                        Stability = null,
+                        Difficulty = null,
+                        Due = due,
+                        LastReview = null,
+                    });
+                }
+            }
+        }
+
+        // Sample once (shared across every retention point) so the multipliers compare like-for-like.
+        var total = seeds.Count;
+        var scale = 1.0;
+        if (total > WorkloadMaxSimCards)
+        {
+            var rng = new Random(20260612);
+            for (var i = 0; i < WorkloadMaxSimCards; i++)
+            {
+                var j = rng.Next(i, total);
+                (seeds[i], seeds[j]) = (seeds[j], seeds[i]);
+            }
+            seeds.RemoveRange(WorkloadMaxSimCards, total - WorkloadMaxSimCards);
+            scale = (double)total / WorkloadMaxSimCards;
+        }
+
+        // Per-maturity time model from the user's own review durations (data we already store).
+        var (learningSeconds, youngSeconds, matureSeconds) = await ComputeReviewSecondsModel(userId);
+
+        var retentions = BuildWorkloadRetentionGrid(baseRetention);
+        var projByRetention = new Dictionary<double, FsrsWorkloadSimulator.WorkloadProjection>();
+        foreach (var r in retentions)
+        {
+            var scheduler = new FsrsScheduler(desiredRetention: r, parameters: fsrsParams, enableFuzzing: false);
+            projByRetention[r] = FsrsWorkloadSimulator.Project(seeds, scheduler, horizonDays, now);
+        }
+
+        var sampledCount = seeds.Count;
+        // Scale review flows back up from the sampled population; recall is a population-independent average
+        // (mean per-card retrievability), so it reads as "share of your collection you'd recall on a day"
+        // and doesn't balloon when new-card inflow grows the population.
+        double ScaledReviewsPerDay(FsrsWorkloadSimulator.WorkloadProjection p) => p.ReviewsPerDay * scale;
+        double RecallFraction(FsrsWorkloadSimulator.WorkloadProjection p) => sampledCount > 0 ? p.Memorized / sampledCount : 0;
+        double MinutesPerDay(FsrsWorkloadSimulator.WorkloadProjection p) =>
+            (p.LearningPerDay * learningSeconds + p.YoungPerDay * youngSeconds + p.MaturePerDay * matureSeconds) * scale / 60.0;
+
+        var baseReviews = projByRetention.TryGetValue(baseRetention, out var bp) ? ScaledReviewsPerDay(bp) : 0;
+        var points = retentions
+            .Select(r =>
+            {
+                var proj = projByRetention[r];
+                return new
+                {
+                    retention = r,
+                    reviewsPerDay = Math.Round(ScaledReviewsPerDay(proj), 2),
+                    minutesPerDay = Math.Round(MinutesPerDay(proj), 1),
+                    recallPct = Math.Round(RecallFraction(proj) * 100, 1),
+                    multiplier = baseReviews > 0 ? Math.Round(ScaledReviewsPerDay(proj) / baseReviews, 3) : 1.0,
+                };
+            })
+            .ToArray();
+
+        // Recommended retention (CMRR-style): minimise study-time per memorized card, within a sane band,
+        // and only when the real population is large enough to trust the Monte-Carlo. Surfaced as a hint,
+        // never auto-applied.
+        double? recommendedRetention = null;
+        if (total >= WorkloadMinCardsForRecommendation)
+        {
+            var bestRatio = double.MaxValue;
+            foreach (var r in retentions)
+            {
+                if (r < WorkloadRecommendLow || r > WorkloadRecommendHigh) continue;
+                var proj = projByRetention[r];
+                var recall = RecallFraction(proj);
+                if (recall <= 0) continue;
+                var ratio = MinutesPerDay(proj) / recall;
+                if (ratio < bestRatio)
+                {
+                    bestRatio = ratio;
+                    recommendedRetention = r;
+                }
+            }
+        }
+
+        return Results.Ok(new
+        {
+            baseRetention,
+            horizonDays,
+            includeNewCards,
+            sampled = seeds.Count,
+            total,
+            learningSeconds = Math.Round(learningSeconds, 1),
+            youngSeconds = Math.Round(youngSeconds, 1),
+            matureSeconds = Math.Round(matureSeconds, 1),
+            recommendedRetention,
+            points,
+        });
+    }
+
+    /// <summary>
+    /// Learns average seconds-per-review, split by maturity (learning / young / mature), from the user's
+    /// own review-duration history. Maturity is taken from the inter-review gap exactly like
+    /// <see cref="RetentionCalculator"/>. A sparse bucket falls back to the user's overall average, and a
+    /// fresh user to neutral defaults, so the curve is always populated.
+    /// </summary>
+    private async Task<(double LearningSeconds, double YoungSeconds, double MatureSeconds)> ComputeReviewSecondsModel(string userId)
+    {
+        var userCardIds = userContext.FsrsCards.Where(c => c.UserId == userId).Select(c => c.CardId);
+        var rows = await userContext.FsrsReviewLogs
+            .AsNoTracking()
+            .Where(l => userCardIds.Contains(l.CardId) && l.ReviewDuration != null)
+            .Select(l => new { l.CardId, l.ReviewDateTime, l.ReviewDuration })
+            .ToListAsync();
+
+        double learnSum = 0, youngSum = 0, matureSum = 0;
+        int learnN = 0, youngN = 0, matureN = 0;
+        foreach (var cardGroup in rows.GroupBy(r => r.CardId))
+        {
+            DateTime? previous = null;
+            foreach (var entry in cardGroup.OrderBy(e => e.ReviewDateTime))
+            {
+                var s = Math.Min(entry.ReviewDuration!.Value / 1000.0, WorkloadReviewSecondsCap);
+                if (s > 0)
+                {
+                    // 0 = learning (first review or <1d gap), 1 = young, 2 = mature.
+                    int category;
+                    if (previous is not { } prev)
+                        category = 0;
+                    else
+                    {
+                        var gap = (entry.ReviewDateTime - prev).TotalDays;
+                        category = gap < 1 ? 0 : gap >= RetentionCalculator.MatureThresholdDays ? 2 : 1;
+                    }
+
+                    switch (category)
+                    {
+                        case 0: learnSum += s; learnN++; break;
+                        case 2: matureSum += s; matureN++; break;
+                        default: youngSum += s; youngN++; break;
+                    }
+                }
+
+                previous = entry.ReviewDateTime;
+            }
+        }
+
+        var totalN = learnN + youngN + matureN;
+        double? overall = totalN > 0 ? (learnSum + youngSum + matureSum) / totalN : null;
+        double Resolve(double sum, int n, double fallback) =>
+            n >= WorkloadMinSamplesForSeconds ? sum / n : overall ?? fallback;
+
+        return (
+            Resolve(learnSum, learnN, WorkloadDefaultLearningSeconds),
+            Resolve(youngSum, youngN, WorkloadDefaultYoungSeconds),
+            Resolve(matureSum, matureN, WorkloadDefaultMatureSeconds));
+    }
+
+    private static List<double> BuildWorkloadRetentionGrid(double baseRetention)
+    {
+        var low = Math.Min(WorkloadGridLow, baseRetention - WorkloadGridMargin);
+        var high = Math.Max(WorkloadGridHigh, baseRetention + WorkloadGridMargin);
+
+        var values = new SortedSet<double>();
+        for (var i = 0; i < WorkloadGridPoints; i++)
+        {
+            var r = low + (high - low) * i / (WorkloadGridPoints - 1);
+            values.Add(Math.Round(Math.Clamp(r, 0.5, 0.99), 2));
+        }
+
+        // The user's own retention is the 1x anchor and must be an exact point, even if it is not on the grid.
+        values.RemoveWhere(r => Math.Abs(r - baseRetention) < 0.005);
+        values.Add(baseRetention);
+
+        return values.ToList();
+    }
+
     [HttpGet("deck-streak")]
     [SwaggerOperation(Summary = "Get streak info and recent activity for the decks page")]
     public async Task<IResult> GetDeckStreak()

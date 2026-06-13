@@ -1,46 +1,38 @@
 <script setup lang="ts">
-  import type { Deck, DeckDetail } from '~/types';
-  import Card from 'primevue/card';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
-  import { useApiFetchPaginated } from '~/composables/useApiFetch';
+  import { MediaType } from '~/types/enums';
 
   const props = defineProps<{
-    deckId: string;
-    isCompact?: boolean;
+    title?: string;
+    mediaType?: MediaType;
+    coverName?: string;
+    characterCount?: number;
+    wordCount?: number;
+    uniqueWordCount?: number;
+    uniqueKanjiCount?: number;
+    uniqueKanjiUsedOnceCount?: number;
+    averageSentenceLength?: number;
+    hideAverageSentenceLength?: boolean;
+    dialoguePercentage?: number;
+    hideDialoguePercentage?: boolean;
+    difficulty?: number;
   }>();
-
-  const {
-    data: response,
-    status,
-    error,
-  } = await useApiFetchPaginated<DeckDetail[]>(`media-deck/${props.deckId}/detail`, {
-    query: {
-      offset: 0,
-    },
-  });
-
-  const deck = computed<Deck | undefined>(() => {
-    if (response.value?.data) {
-      return response.value.data.mainDeck;
-    }
-    return undefined;
-  });
 
   const statsItems = computed(() => {
     const items = [
-      { label: 'Character count:', value: deck.value?.characterCount?.toLocaleString() ?? 'N/A' },
-      { label: 'Words:', value: deck.value?.wordCount?.toLocaleString() ?? 'N/A' },
-      { label: 'Unique Words:', value: deck.value?.uniqueWordCount?.toLocaleString() ?? 'N/A' },
-      { label: 'Unique Kanji:', value: deck.value?.uniqueKanjiCount?.toLocaleString() ?? 'N/A' },
-      { label: 'Kanji (1-occurence):', value: deck.value?.uniqueKanjiUsedOnceCount?.toLocaleString() ?? 'N/A' },
+      { label: 'Character count:', value: props.characterCount?.toLocaleString() ?? 'N/A' },
+      { label: 'Words:', value: props.wordCount?.toLocaleString() ?? 'N/A' },
+      { label: 'Unique Words:', value: props.uniqueWordCount?.toLocaleString() ?? 'N/A' },
+      { label: 'Unique Kanji:', value: props.uniqueKanjiCount?.toLocaleString() ?? 'N/A' },
+      { label: 'Kanji (1-occurence):', value: props.uniqueKanjiUsedOnceCount?.toLocaleString() ?? 'N/A' },
     ];
 
-    if (deck.value?.averageSentenceLength !== 0 && !deck.value?.hideAverageSentenceLength) {
-      items.push({ label: 'Average sentence length:', value: deck.value?.averageSentenceLength.toFixed(1) ?? 'N/A' });
+    if (props.averageSentenceLength !== 0 && !props.hideAverageSentenceLength) {
+      items.push({ label: 'Average sentence length:', value: props.averageSentenceLength?.toFixed(1) ?? 'N/A' });
     }
 
-    if (!deck.value?.hideDialoguePercentage && deck.value?.dialoguePercentage != 0 && deck.value?.dialoguePercentage != 100) {
-      items.push({ label: 'Dialogue:', value: `${deck.value?.dialoguePercentage.toFixed(1)}%` });
+    if (!props.hideDialoguePercentage && props.dialoguePercentage != 0 && props.dialoguePercentage != 100) {
+      items.push({ label: 'Dialogue:', value: `${props.dialoguePercentage?.toFixed(1)}%` });
     }
 
     return items;
@@ -49,14 +41,14 @@
 
 <template>
   <div
-    v-if="status !== 'pending' && deck"
+    v-if="title"
     class="og-card-container bg-white text-black border border-gray-300 flex flex-row overflow-hidden"
     style="width: 1200px; height: 630px; padding: 32px; font-family: 'Noto Sans JP', sans-serif; align-items: flex-start"
   >
     <div class="flex-shrink-0 h-full" style="width: 340px; margin-right: 32px">
       <img
-        :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
-        :alt="deck.originalTitle"
+        :src="!coverName || coverName == 'nocover.jpg' ? '/img/nocover.jpg' : coverName"
+        :alt="title"
         class="object-cover rounded"
         style="height: 100%; width: 100%"
       />
@@ -64,11 +56,11 @@
 
     <div class="flex flex-col flex-grow">
       <h1 class="font-bold truncate" style="font-size: 2rem; margin-bottom: 8px; line-height: 1.2; ">
-        {{ deck.originalTitle.slice(0, 20) }}
+        {{ title.slice(0, 20) }}
       </h1>
 
       <span class="text-gray-600" style="font-size: 1.5rem; margin-bottom: 32px">
-        {{ getMediaTypeText(deck.mediaType) }}
+        {{ getMediaTypeText(mediaType ?? (0 as MediaType)) }}
       </span>
 
       <div class="flex-grow"></div>
@@ -90,7 +82,7 @@
         </div>
 
         <div
-          v-if="deck.difficulty != -1"
+          v-if="difficulty != null && difficulty != -1"
           class="flex justify-between mb-8 px-4 py-2 rounded-md"
           :style="{
             padding: '2px 2px',
@@ -99,12 +91,12 @@
           }"
         >
           <span class="text-gray-700">Difficulty:</span>
-          <span v-if="deck.difficulty == 0" class="font-mono text-green-700 dark:text-green-300"> ★☆☆☆☆ </span>
-          <span v-else-if="deck.difficulty == 1" class="font-mono text-green-500"> ★★☆☆☆ </span>
-          <span v-else-if="deck.difficulty == 2" class="font-mono text-cyan-500"> ★★★☆☆ </span>
-          <span v-else-if="deck.difficulty == 3" class="font-mono text-amber-600"> ★★★★☆ </span>
-          <span v-else-if="deck.difficulty == 4" class="font-mono text-orange-600"> ★★★★★ </span>
-          <span v-else-if="deck.difficulty == 5" class="font-mono text-red-600"> ★★★★★ </span>
+          <span v-if="difficulty == 0" class="font-mono text-green-700 dark:text-green-300"> ★☆☆☆☆ </span>
+          <span v-else-if="difficulty == 1" class="font-mono text-green-500"> ★★☆☆☆ </span>
+          <span v-else-if="difficulty == 2" class="font-mono text-cyan-500"> ★★★☆☆ </span>
+          <span v-else-if="difficulty == 3" class="font-mono text-amber-600"> ★★★★☆ </span>
+          <span v-else-if="difficulty == 4" class="font-mono text-orange-600"> ★★★★★ </span>
+          <span v-else-if="difficulty == 5" class="font-mono text-red-600"> ★★★★★ </span>
         </div>
       </div>
     </div>

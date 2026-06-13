@@ -233,6 +233,39 @@ export interface SrsRecomputeBatchResponse {
   done: boolean;
 }
 
+export interface FsrsHealthResponse {
+  totalReviews: number;
+  // [Again, Hard, Good, Easy]
+  ratingCounts: number[];
+  sameDayReviews: number;
+  minimumReviewsForOptimize: number;
+  meetsMinimum: boolean;
+  neverUsesHard: boolean;
+  neverUsesEasy: boolean;
+  likelyHardAsFail: boolean;
+}
+
+export interface WorkloadCurvePoint {
+  retention: number;
+  reviewsPerDay: number;
+  minutesPerDay: number;
+  recallPct: number;
+  multiplier: number;
+}
+
+export interface FsrsWorkloadCurveResponse {
+  baseRetention: number;
+  horizonDays: number;
+  includeNewCards: boolean;
+  sampled: number;
+  total: number;
+  learningSeconds: number;
+  youngSeconds: number;
+  matureSeconds: number;
+  recommendedRetention: number | null;
+  points: WorkloadCurvePoint[];
+}
+
 export interface MetadataRelation {
   externalId: string;
   linkType: number;
@@ -982,8 +1015,28 @@ export interface StudyExampleSourceDto {
 export type StudyInterleaving = 'Mixed' | 'NewFirst' | 'ReviewsFirst';
 export type StudyNewCardGathering = 'TopDeck' | 'RoundRobin' | 'CrossDeckFrequency';
 export type StudyReviewFrom = 'AllTracked' | 'StudyDecksOnly';
+// What the question-side timer does when it expires.
+// Reveal = flip to the answer; FailLearn = reveal + lock + auto-fail after a beat; Nudge = alert only.
+export type TimedRevealAction = 'Reveal' | 'FailLearn' | 'Nudge';
+// What the answer-side timer does when it expires.
+// SoftFail = arm Again with an overridable grace; HardFail = grade Again immediately.
+export type TimedAnswerAction = 'SoftFail' | 'HardFail';
 export type ExampleSentencePosition = 'Hidden' | 'Back' | 'Front';
 export type ExampleSentenceSorting = 'Random' | 'EasiestFirst' | 'HardestFirst';
+
+/** "Speed Focus" timed-review preferences. Behaviour is entirely client-side; the server round-trips it. */
+export interface TimedReviewSettings {
+  enabled: boolean;
+  showTimer: boolean;
+  skipNewCards: boolean;
+  revealEnabled: boolean;
+  revealSeconds: number;
+  revealAction: TimedRevealAction;
+  answerEnabled: boolean;
+  answerSeconds: number;
+  answerAction: TimedAnswerAction;
+  alertSound: boolean;
+}
 
 export interface StudyKeybinds {
   grade1: string;
@@ -998,6 +1051,7 @@ export interface StudyKeybinds {
   bury: string;
   undo: string;
   wrapUp: string;
+  pauseTimer: string;
 }
 
 export interface StudySettingsDto {
@@ -1039,6 +1093,7 @@ export interface StudySettingsDto {
   easyDays: number[] | null;
   leechThreshold: number;
   leechAction: LeechAction;
+  timedReview: TimedReviewSettings;
   keybinds: StudyKeybinds;
 }
 

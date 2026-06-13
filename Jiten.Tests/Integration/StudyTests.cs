@@ -1989,4 +1989,78 @@ public class StudyTests(JitenWebApplicationFactory factory)
         var bHigh = await (await _client.SendAsync(high)).Content.ReadFromJsonAsync<JsonElement>();
         bHigh.GetProperty("days").GetArrayLength().Should().Be(365);
     }
+
+    private async Task SeedReviewCards(int count)
+    {
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        for (var i = 0; i < count; i++)
+        {
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 1000 + i, 0,
+                state: FsrsState.Review,
+                stability: 10, difficulty: 5,
+                due: DateTime.UtcNow,
+                lastReview: DateTime.UtcNow.AddDays(-10)));
+        }
+        await userDb.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task WorkloadCurve_Unauthenticated_ReturnsUnauthorized()
+    {
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/srs/workload-curve"));
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task WorkloadCurve_ReturnsAnchoredMonotonicCurve()
+    {
+        await SeedReviewCards(40);
+
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/srs/workload-curve")
+            .WithUser(TestUsers.UserA));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var baseRetention = body.GetProperty("baseRetention").GetDouble();
+        baseRetention.Should().BeApproximately(0.9, 1e-9);
+
+        var points = body.GetProperty("points").EnumerateArray()
+            .Select(p => (Retention: p.GetProperty("retention").GetDouble(),
+                          ReviewsPerDay: p.GetProperty("reviewsPerDay").GetDouble(),
+                          Multiplier: p.GetProperty("multiplier").GetDouble()))
+            .ToList();
+
+        points.Should().HaveCountGreaterThan(3);
+        points.Should().BeInAscendingOrder(p => p.Retention);
+
+        // The user's own retention is the 1x anchor.
+        var anchor = points.Single(p => Math.Abs(p.Retention - baseRetention) < 1e-9);
+        anchor.Multiplier.Should().BeApproximately(1.0, 1e-9);
+
+        // Higher desired retention generates more reviews than lower.
+        points.First().ReviewsPerDay.Should().BeLessThan(points.Last().ReviewsPerDay);
+    }
+
+    [Fact]
+    public async Task WorkloadCurve_IncludeNewCards_RaisesWorkload()
+    {
+        await SeedReviewCards(20);
+
+        async Task<double> BaseReviewsPerDay(bool includeNewCards)
+        {
+            var msg = new HttpRequestMessage(HttpMethod.Get, $"/api/srs/workload-curve?includeNewCards={includeNewCards}")
+                .WithUser(TestUsers.UserA);
+            var body = await (await _client.SendAsync(msg)).Content.ReadFromJsonAsync<JsonElement>();
+            var baseRetention = body.GetProperty("baseRetention").GetDouble();
+            return body.GetProperty("points").EnumerateArray()
+                .Single(p => Math.Abs(p.GetProperty("retention").GetDouble() - baseRetention) < 1e-9)
+                .GetProperty("reviewsPerDay").GetDouble();
+        }
+
+        var without = await BaseReviewsPerDay(false);
+        var with = await BaseReviewsPerDay(true);
+
+        with.Should().BeGreaterThan(without, "future new-card inflow adds review demand on top of the current cards");
+    }
 }

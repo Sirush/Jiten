@@ -645,6 +645,36 @@ public partial class MorphologicalAnalyser
                 }
             }
 
+            // Pattern 5: small-vowel elongation fused onto a conjugation ending. Sudachi emits
+            // [kana][run of ≥2 identical small vowels] as one OOV noun: 来やがれぇぇぇ →
+            // 来 + やが + れぇぇぇ. Strip the elongation and reattach the leading kana to the
+            // preceding verb/auxiliary when it makes a real conjugation (やが+れ → やがれ = やがる
+            // imperative). A bare noun-tagged stem (移れぇぇぇ → 移 noun) fails the verb/aux gate
+            // and is left as-is.
+            if (prev.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary &&
+                current.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Interjection &&
+                IsTrailingSmallVowelRun(current.Text, out int coreLen))
+            {
+                var core = current.Text[..coreLen];
+                var candidate = NormalizeToHiragana(prev.Text + core);
+                var prevDictHiragana = NormalizeToHiragana(prev.DictionaryForm);
+                bool valid = candidate != prevDictHiragana && deconjugator.Deconjugate(candidate).Any(f =>
+                    f.Text == prevDictHiragana &&
+                    f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)));
+
+                if (valid)
+                {
+                    result[^1] = new WordInfo(prev)
+                    {
+                        Text = prev.Text + core,
+                        Reading = prev.Reading + WanaKanaShaapu.WanaKana.ToKatakana(core),
+                        EndOffset = current.StartOffset >= 0 ? current.StartOffset + coreLen : prev.EndOffset
+                    };
+                    changed = true;
+                    continue;
+                }
+            }
+
             result.Add(current);
         }
 
@@ -905,6 +935,45 @@ public partial class MorphologicalAnalyser
         {
             WordInfo w1 = wordInfos[i];
 
+            // Katakana mora stolen from a name by a following hiragana-dict prenominal: Sudachi
+            // cuts カティア|の as カティ|アの (アの = homograph of 連体詞 あの). A 連体詞 whose dict
+            // form is hiragana but whose surface starts with katakana means the leading mora
+            // belongs to the preceding katakana name — return it and emit the remainder (の) as a
+            // particle. (カティ+ア = カティア, kept as an OOV name token.)
+            if (w1.PartOfSpeech == PartOfSpeech.PrenounAdjectival
+                && w1.Text.Length >= 2
+                && IsKatakanaTextChar(w1.Text[0]) && w1.Text[0] != 'ー'
+                && w1.Text[1..].All(c => c is >= '぀' and <= 'ゟ')
+                && KanaConverter.ToHiragana(w1.Text) == w1.DictionaryForm
+                && newList.Count > 0
+                && newList[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.Name
+                && IsAllKatakanaText(newList[^1].Text))
+            {
+                var prev = newList[^1];
+                var stolen = w1.Text[0].ToString();
+                var remainder = w1.Text[1..];
+                var mergedText = prev.Text + stolen;
+                int mergedEndOffset = prev.EndOffset >= 0 ? prev.EndOffset + 1 : prev.EndOffset;
+                newList[^1] = new WordInfo(prev)
+                {
+                    Text = mergedText,
+                    DictionaryForm = mergedText,
+                    NormalizedForm = mergedText,
+                    Reading = prev.Reading + stolen,
+                    EndOffset = mergedEndOffset
+                };
+                newList.Add(new WordInfo
+                {
+                    Text = remainder, DictionaryForm = remainder, NormalizedForm = remainder,
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    Reading = WanaKanaShaapu.WanaKana.ToKatakana(remainder),
+                    StartOffset = mergedEndOffset,
+                    EndOffset = w1.EndOffset
+                });
+                i++;
+                continue;
+            }
+
             // Sudachi misclassifies katakana particle sequences as nouns (e.g. ノヨ → name 乃代).
             // Split into individual particles: ノ + ヨ, ノネ, ノサ, etc.
             if (w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.NaAdjective && w1.Text == "ノヨ")
@@ -912,6 +981,33 @@ public partial class MorphologicalAnalyser
                 newList.Add(new WordInfo { Text = "ノ", DictionaryForm = "の", NormalizedForm = "の", PartOfSpeech = PartOfSpeech.Particle, Reading = "ノ", StartOffset = w1.StartOffset, EndOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1 });
                 newList.Add(new WordInfo { Text = "ヨ", DictionaryForm = "よ", NormalizedForm = "よ", PartOfSpeech = PartOfSpeech.Particle, Reading = "ヨ", StartOffset = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1, EndOffset = w1.EndOffset });
                 i++;
+                continue;
+            }
+
+            // Clause-initial いいか、/いいか! is the "Listen!" interjection (JMDict 2555520), not
+            // adjective いい + question か. Gated on clause position AND a following 、/! so the
+            // genuine question reading keeps its split everywhere else (行っていいか分からない,
+            // standalone いいか?).
+            if (w1 is { Text: "いい", PartOfSpeech: PartOfSpeech.IAdjective }
+                && (newList.Count == 0 || newList[^1].PartOfSpeech is PartOfSpeech.SupplementarySymbol
+                    or PartOfSpeech.Symbol or PartOfSpeech.BlankSpace)
+                && i + 2 < wordInfos.Count
+                && wordInfos[i + 1] is { Text: "か", PartOfSpeech: PartOfSpeech.Particle }
+                && wordInfos[i + 2].Text is "、" or "!" or "！")
+            {
+                var ka = wordInfos[i + 1];
+                newList.Add(new WordInfo
+                {
+                    Text = "いいか",
+                    DictionaryForm = "いいか",
+                    NormalizedForm = "いいか",
+                    PartOfSpeech = PartOfSpeech.Expression,
+                    Reading = "イイカ",
+                    PreMatchedWordId = 2555520,
+                    StartOffset = w1.StartOffset,
+                    EndOffset = ka.EndOffset
+                });
+                i += 2;
                 continue;
             }
 
@@ -2250,6 +2346,25 @@ public partial class MorphologicalAnalyser
         return result;
     }
 
+    // A trailing run of ≥2 identical small vowels (ぇぇぇ, ぁぁ) is expressive elongation, not part
+    // of a word. Returns the length of the leading core (≥1) when such a run is present.
+    private static bool IsTrailingSmallVowelRun(string text, out int coreLen)
+    {
+        coreLen = text.Length;
+        const string smallVowels = "ぁぃぅぇぉ";
+        int i = text.Length - 1;
+        char runChar = '\0';
+        int runCount = 0;
+        while (i >= 0 && smallVowels.IndexOf(text[i]) >= 0 && (runCount == 0 || text[i] == runChar))
+        {
+            runChar = text[i];
+            runCount++;
+            i--;
+        }
+        coreLen = i + 1;
+        return runCount >= 2 && coreLen >= 1;
+    }
+
     private static readonly HashSet<string> CaseParticles =
         ["に", "を", "が", "へ", "で", "と", "は", "も", "か", "から", "より", "まで", "の"];
 
@@ -2259,6 +2374,10 @@ public partial class MorphologicalAnalyser
     // Te-forms of these are いって — the stolen い may only reattach to the previous token when
     // that actually produces a JMDict word (悪|いっ|て → 悪い ✓, ギシギシ|いっ|て → ギシギシい ✗).
     private static readonly HashSet<string> IuIkuDictForms = ["いう", "言う", "いく", "行く"];
+
+    // Demonstratives whose exclamation homograph (それっ!) Sudachi prefers before って;
+    // the stripped form is re-tagged Pronoun so lookup picks the everyday word.
+    private static readonly HashSet<string> QuotativeStrippedPronouns = ["それ", "これ", "あれ", "どれ"];
 
     // Clause-final shapes that can precede sentence-final かな. Nouns and case particles
     // (に/と) are deliberately excluded so どうにかなって/なんとかなって/夢かなって keep
@@ -2355,6 +2474,61 @@ public partial class MorphologicalAnalyser
                     StartOffset = fusedThief.StartOffset >= 0 ? fusedThief.StartOffset + 1 : -1,
                     EndOffset = fusedThief.EndOffset
                 });
+                changed = true;
+                continue;
+            }
+
+            // Interjection homograph stealing the っ of a quotative って: それっ|て → それ + って.
+            // Sudachi's own NormalizedForm vouches for the stripped form (それっ → それ), so the
+            // re-cut is safe; without it CombineTte glues the pair back into a bogus "te form"
+            // of the exclamation entry. Demonstrative strips are re-tagged Pronoun so the lookup
+            // matches それ/これ the word, not それ! the shout.
+            if (i + 1 < wordInfos.Count
+                && wordInfos[i].PartOfSpeech == PartOfSpeech.Interjection
+                && wordInfos[i].Text.Length >= 2
+                && wordInfos[i].Text[^1] == 'っ'
+                && wordInfos[i + 1].Text == "て"
+                && wordInfos[i].NormalizedForm == wordInfos[i].Text[..^1])
+            {
+                var interjThief = wordInfos[i];
+                var interjStripped = interjThief.Text[..^1];
+                result.Add(new WordInfo(interjThief)
+                {
+                    Text = interjStripped,
+                    DictionaryForm = interjStripped,
+                    NormalizedForm = interjStripped,
+                    PartOfSpeech = QuotativeStrippedPronouns.Contains(interjStripped)
+                        ? PartOfSpeech.Pronoun
+                        : interjThief.PartOfSpeech,
+                    EndOffset = interjThief.EndOffset >= 0 ? interjThief.EndOffset - 1 : -1
+                });
+                AddTte(interjThief, wordInfos[i + 1]);
+                i++;
+                changed = true;
+                continue;
+            }
+
+            // がる suffix misread before a quotative って: 何|がっ|て → 何 + が + って.
+            // がる attaches to adjective stems (怖がる), never to a pronoun, so after a pronoun
+            // the only grammatical cut is case-particle が + quotative って.
+            if (i + 1 < wordInfos.Count
+                && wordInfos[i] is { Text: "がっ", PartOfSpeech: PartOfSpeech.Suffix, DictionaryForm: "がる" }
+                && wordInfos[i + 1].Text == "て"
+                && result.Count > 0 && result[^1].PartOfSpeech == PartOfSpeech.Pronoun)
+            {
+                var gaThief = wordInfos[i];
+                result.Add(new WordInfo
+                {
+                    Text = "が",
+                    DictionaryForm = "が",
+                    NormalizedForm = "が",
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    Reading = "ガ",
+                    StartOffset = gaThief.StartOffset,
+                    EndOffset = gaThief.StartOffset >= 0 ? gaThief.StartOffset + 1 : -1
+                });
+                AddTte(gaThief, wordInfos[i + 1]);
+                i++;
                 changed = true;
                 continue;
             }
@@ -2693,6 +2867,15 @@ public partial class MorphologicalAnalyser
                     }
                 }
                 if (allSameInterjection) continue;
+
+                // An interjection followed by the standalone adverb そう (えっ+そう, あっ+そう =
+                // "huh — I see") is two utterance units. そう never fuses into a preceding
+                // interjection: neither the kana-noun key (えっそう) nor the colloquial verb
+                // deconjugation (えっそう→得る) is valid. ふん+ばったり (→踏ん張る -tari) is
+                // unaffected — its second token is ばったり, not そう.
+                if (wordInfos[i].PartOfSpeech == PartOfSpeech.Interjection
+                    && wordInfos[i + 1].Text == "そう")
+                    continue;
 
                 string combinedText = spanLen switch
                 {

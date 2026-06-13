@@ -149,6 +149,18 @@ export const useSrsStore = defineStore('srs', () => {
     easyDays: null,
     leechThreshold: 8,
     leechAction: 'Suspend',
+    timedReview: {
+      enabled: false,
+      showTimer: true,
+      skipNewCards: true,
+      revealEnabled: true,
+      revealSeconds: 8,
+      revealAction: 'Reveal',
+      answerEnabled: true,
+      answerSeconds: 4,
+      answerAction: 'SoftFail',
+      alertSound: true,
+    },
     keybinds: { ...DEFAULT_KEYBINDS },
   });
   const lastLeechEvent = ref<{ detected: boolean; suspended: boolean } | null>(null);
@@ -173,6 +185,9 @@ export const useSrsStore = defineStore('srs', () => {
   const cardShownAt = ref<number | null>(null);
   const thinkingDuration = ref<number | undefined>(undefined);
   const isBusy = ref(false);
+  // Set by the timed-review "fail & learn" absorption window: blocks all grading (mouse + keyboard)
+  // while the answer is shown for study, until the timer auto-fails the card.
+  const gradeLock = ref(false);
   const fetchError = ref<string | null>(null);
   // Surfaced to the study page so it can toast when an optimistic review failed to persist.
   const lastReviewError = ref<{ wordText: string } | null>(null);
@@ -677,7 +692,7 @@ export const useSrsStore = defineStore('srs', () => {
   // never block each other on the network.
   function gradeCard(rating: FsrsRating): boolean {
     const card = currentCard.value;
-    if (!card || isBusy.value || !isFlipped.value) return true;
+    if (!card || isBusy.value || !isFlipped.value || gradeLock.value) return true;
 
     takeSnapshot(card, 'grade', rating);
 
@@ -1242,6 +1257,7 @@ export const useSrsStore = defineStore('srs', () => {
     clearedGrades,
     hardestCards,
     isBusy,
+    gradeLock,
     fetchError,
     lastReviewError,
     dueSummary,

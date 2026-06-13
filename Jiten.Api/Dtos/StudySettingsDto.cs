@@ -48,6 +48,21 @@ public enum LeechAction
     NotifyOnly
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<TimedRevealAction>))]
+public enum TimedRevealAction
+{
+    Reveal,
+    FailLearn,
+    Nudge
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<TimedAnswerAction>))]
+public enum TimedAnswerAction
+{
+    SoftFail,
+    HardFail
+}
+
 [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
 public class StudySettingsDto
 {
@@ -167,8 +182,30 @@ public class StudySettingsDto
     [JsonPropertyName("leechAction")]
     public LeechAction LeechAction { get; set; } = LeechAction.NotifyOnly;
 
+    /// <summary>
+    /// "Speed Focus" timed-review preferences. Purely client-side behaviour — the server stores and
+    /// returns it inside the settings blob but takes no action on it.
+    /// </summary>
+    [JsonPropertyName("timedReview")]
+    public TimedReviewSettingsDto TimedReview { get; set; } = new();
+
     [JsonPropertyName("keybinds")]
     public StudyKeybindsDto Keybinds { get; set; } = new();
+}
+
+[JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
+public class TimedReviewSettingsDto
+{
+    [JsonPropertyName("enabled")] public bool Enabled { get; set; }
+    [JsonPropertyName("showTimer")] public bool ShowTimer { get; set; } = true;
+    [JsonPropertyName("skipNewCards")] public bool SkipNewCards { get; set; } = true;
+    [JsonPropertyName("revealEnabled")] public bool RevealEnabled { get; set; } = true;
+    [JsonPropertyName("revealSeconds")] public int RevealSeconds { get; set; } = 8;
+    [JsonPropertyName("revealAction")] public TimedRevealAction RevealAction { get; set; } = TimedRevealAction.Reveal;
+    [JsonPropertyName("answerEnabled")] public bool AnswerEnabled { get; set; } = true;
+    [JsonPropertyName("answerSeconds")] public int AnswerSeconds { get; set; } = 4;
+    [JsonPropertyName("answerAction")] public TimedAnswerAction AnswerAction { get; set; } = TimedAnswerAction.SoftFail;
+    [JsonPropertyName("alertSound")] public bool AlertSound { get; set; } = true;
 }
 
 [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
@@ -186,4 +223,5 @@ public class StudyKeybindsDto
     [JsonPropertyName("bury")] public string Bury { get; set; } = "h";
     [JsonPropertyName("undo")] public string Undo { get; set; } = "z";
     [JsonPropertyName("wrapUp")] public string WrapUp { get; set; } = "w";
+    [JsonPropertyName("pauseTimer")] public string PauseTimer { get; set; } = "p";
 }

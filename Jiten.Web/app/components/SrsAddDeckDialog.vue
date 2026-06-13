@@ -209,27 +209,6 @@
   const globalMaxFreq = ref<number | undefined>(10000);
   const globalPosFilter = ref<string[]>([]);
 
-  const posOptions = [
-    { label: 'Ichidan verb', value: 'v1' },
-    { label: 'Godan verb', value: 'v5' },
-    { label: 'Suru verb', value: 'vs' },
-    { label: 'Transitive verb', value: 'vt' },
-    { label: 'Intransitive verb', value: 'vi' },
-    { label: 'i-adjective', value: 'adj-i' },
-    { label: 'na-adjective', value: 'adj-na' },
-    { label: 'Noun', value: 'n' },
-    { label: 'Adverb', value: 'adv' },
-    { label: 'Expression', value: 'exp' },
-    { label: 'Particle', value: 'prt' },
-    { label: 'Auxiliary', value: 'aux' },
-    { label: 'Pronoun', value: 'pn' },
-    { label: 'Conjunction', value: 'conj' },
-    { label: 'Interjection', value: 'int' },
-    { label: 'Counter', value: 'ctr' },
-    { label: 'Suffix', value: 'suf' },
-    { label: 'Prefix', value: 'pref' },
-  ];
-
   // Static Word List fields
   const staticName = ref('');
   const staticDescription = ref('');
@@ -626,16 +605,7 @@
 
       <div class="mb-3">
         <label class="block text-sm font-medium mb-1">Only include parts of speech <span class="text-gray-400">(optional)</span></label>
-        <MultiSelect
-          v-model="mediaPosFilter"
-          :options="posOptions"
-          option-label="label"
-          option-value="value"
-          placeholder="All (no filter)"
-          class="w-full"
-          :max-selected-labels="3"
-          display="chip"
-        />
+        <PosFilterSelect v-model="mediaPosFilter" />
       </div>
 
       <div class="mb-3">
@@ -693,16 +663,7 @@
 
       <div class="mb-3">
         <label class="block text-sm font-medium mb-1">Only include parts of speech <span class="text-gray-400">(optional)</span></label>
-        <MultiSelect
-          v-model="globalPosFilter"
-          :options="posOptions"
-          option-label="label"
-          option-value="value"
-          placeholder="All (no filter)"
-          class="w-full"
-          :max-selected-labels="3"
-          display="chip"
-        />
+        <PosFilterSelect v-model="globalPosFilter" />
       </div>
 
       <div class="mb-3">

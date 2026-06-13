@@ -676,6 +676,123 @@ public class SrsController(
         });
     }
 
+    [HttpGet("settings/health")]
+    [SwaggerOperation(Summary = "FSRS review-history health check",
+                      Description = "Pre-optimize sanity report: review count, grade distribution, same-day reviews, "
+                                    + "imported-history breakdown, and grade-usage patterns that corrupt parameter training.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IResult> GetHealth()
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null)
+            return Results.Unauthorized();
+
+        // Loaded into memory (like the optimizer) so the same-day grouping stays provider-agnostic
+        // across Postgres and the SQLite integration harness.
+        var logs = await userContext.FsrsReviewLogs
+            .Where(r => r.Card.UserId == userId)
+            .OrderBy(r => r.CardId)
+            .ThenBy(r => r.ReviewDateTime)
+            .Select(r => new { r.CardId, r.Rating, r.ReviewDateTime })
+            .ToListAsync();
+
+        var total = logs.Count;
+        var ratingCounts = new int[4];
+        var sameDay = 0;
+        long prevCardId = -1;
+        var prevDay = default(DateTime);
+
+        foreach (var log in logs)
+        {
+            var idx = (int)log.Rating - 1;
+            if (idx >= 0 && idx < 4)
+                ratingCounts[idx]++;
+
+            var day = log.ReviewDateTime.Date;
+            if (log.CardId == prevCardId && day == prevDay)
+                sameDay++;
+            prevCardId = log.CardId;
+            prevDay = day;
+        }
+
+        var min = FsrsOptimizer.MinimumReviews;
+        var hard = ratingCounts[1];
+        var easy = ratingCounts[3];
+        var again = ratingCounts[0];
+
+        // "Hard as fail": only flag once there is enough graded history, when Hard is used heavily yet
+        // Again is used almost never — the tell-tale of a user pressing Hard for cards they actually failed.
+        var likelyHardAsFail = total >= min
+                               && hard >= total * 0.18
+                               && again <= total * 0.02;
+
+        var response = new FsrsHealthResponse
+        {
+            TotalReviews = total,
+            RatingCounts = ratingCounts,
+            SameDayReviews = sameDay,
+            MinimumReviewsForOptimize = min,
+            MeetsMinimum = total >= min,
+            NeverUsesHard = total >= min && hard == 0,
+            NeverUsesEasy = total >= min && easy == 0,
+            LikelyHardAsFail = likelyHardAsFail,
+        };
+
+        return Results.Ok(response);
+    }
+
+    [HttpPost("settings/remap-hard")]
+    [EnableRateLimiting("compute")]
+    [SwaggerOperation(Summary = "Remap historical Hard ratings to Again",
+                      Description = "Repair for the 'Hard means I failed' pattern: rewrites Hard reviews to Again "
+                                    + "(optionally within a date range) and reschedules so parameter training is not biased.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IResult> RemapHardReviews(RemapHardReviewsRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null)
+            return Results.Unauthorized();
+
+        var query = userContext.FsrsReviewLogs
+            .Where(r => r.Card.UserId == userId && r.Rating == FsrsRating.Hard);
+
+        if (request.From.HasValue)
+        {
+            var from = DateTime.SpecifyKind(request.From.Value, DateTimeKind.Utc);
+            query = query.Where(r => r.ReviewDateTime >= from);
+        }
+        if (request.To.HasValue)
+        {
+            var to = DateTime.SpecifyKind(request.To.Value, DateTimeKind.Utc);
+            query = query.Where(r => r.ReviewDateTime <= to);
+        }
+
+        var toRemap = await query.ToListAsync();
+        foreach (var log in toRemap)
+            log.Rating = FsrsRating.Again;
+
+        if (toRemap.Count > 0)
+            await userContext.SaveChangesAsync();
+
+        if (request.Reschedule && toRemap.Count > 0)
+        {
+            var userSettings = await LoadUserSettings(userId);
+            var parameters = GetParameters(userSettings);
+            var desiredRetention = GetDesiredRetention(userSettings);
+            var studySettings = GetStudySettings(userSettings);
+            await recomputeJob.RecomputeUserSrs(userId, parameters, desiredRetention,
+                                                studySettings.LoadBalancing, BuildEasyDaysPolicy(studySettings));
+        }
+        await sessionService.BumpStudyOverviewVersion(userId);
+
+        logger.LogInformation("User remapped Hard→Again reviews: UserId={UserId}, Count={Count}, Rescheduled={Rescheduled}",
+                              userId, toRemap.Count, request.Reschedule && toRemap.Count > 0);
+
+        return Results.Ok(new { remapped = toRemap.Count, rescheduled = request.Reschedule && toRemap.Count > 0 });
+    }
+
     [HttpPost("settings/recompute")]
     [SwaggerOperation(Summary = "Recompute FSRS scheduling",
                       Description = "Recompute scheduling for all cards using the stored settings (or defaults).")]

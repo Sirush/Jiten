@@ -351,6 +351,16 @@ public partial class MorphologicalAnalyser
             wordInfos[i + 2].DictionaryForm is "思う" or "言う" or "聞く" or "考える" or "感じる")
             return true;
 
+        // Re-cut って before a noun (なくなった+って+話), punctuation, or sentence end is the
+        // quotative/たって particle — a te-form continuation needs a verb/auxiliary after it.
+        // Re-merging makes an unresolvable blob (なくなったって has no deconjugation path) that
+        // would be dropped from output entirely.
+        if (nextWord is { Text: "って", DictionaryForm: "って" } &&
+            (i + 2 >= wordInfos.Count ||
+             wordInfos[i + 2].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                 or PartOfSpeech.SupplementarySymbol))
+            return true;
+
         // Benefactive auxiliaries after a te-form stay separate tokens (堪能させて|いただきます,
         // 繕って|貰いて). The て+貰う/いただく deconjugator rules exist for chain display on tokens
         // merged by the Dependant path (して貰いたい) — they must not widen this stage's merges.
@@ -814,7 +824,9 @@ public partial class MorphologicalAnalyser
             if ((wordInfos[i].PartOfSpeech == PartOfSpeech.Suffix || wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Suffix))
                 && (wordInfos[i].DictionaryForm == "っこ"
                     || wordInfos[i].DictionaryForm == "さ"
-                    || wordInfos[i].DictionaryForm == "がる"
+                    // がる only attaches to adjective stems (怖がる) — never to a pronoun host
+                    // (何|がって is case-particle が + quotative って, not 何がる)
+                    || (wordInfos[i].DictionaryForm == "がる" && currentWord.PartOfSpeech != PartOfSpeech.Pronoun)
                     || (wordInfos[i].DictionaryForm is "ぶり" or "振り" &&
                         currentWord.PartOfSpeech == PartOfSpeech.IAdjective &&
                         !currentWord.Text.EndsWith("い") && currentWord.DictionaryForm.EndsWith("い"))

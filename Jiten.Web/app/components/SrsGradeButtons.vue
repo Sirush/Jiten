@@ -15,6 +15,9 @@
     disabled?: boolean;
     pressedKey?: string | null;
     compact?: boolean;
+    // Timed review: the "Again" grade is armed (about to auto-fire); seconds left on the grace countdown.
+    armedAgain?: boolean;
+    armedSeconds?: number;
   }>();
 
   const emit = defineEmits<{
@@ -127,15 +130,21 @@
         :disabled="props.disabled"
         :aria-label="`Grade: ${btn.label}`"
         class="grade-btn flex-1"
-        :class="[{ 'kb-pressed': props.pressedKey === btn.key }, props.monochrome ? btn.mono : '', compact ? 'min-h-[36px]' : 'min-h-[44px] md:min-h-[72px]']"
+        :class="[{ 'kb-pressed': props.pressedKey === btn.key, 'armed-again': props.armedAgain && btn.rating === FsrsRating.Again }, props.monochrome ? btn.mono : '', compact ? 'min-h-[36px]' : 'min-h-[44px] md:min-h-[72px]']"
         @click="emit('grade', btn.rating)"
       >
         <template #default>
           <div class="flex flex-col items-center">
-            <span v-if="!compact && getIntervalForRating(btn.rating)" class="interval-hint text-[11px] opacity-80">{{ getIntervalForRating(btn.rating) }}</span>
-            <span>{{ btn.label }}</span>
-            <span v-if="showKeybinds && !compact" class="keybind text-xs opacity-80">{{ displayKeyName(btn.key) }}</span>
-            <span v-if="btn.swipe && props.showSwipeHints" class="swipe-hint text-[10px] opacity-80">{{ btn.swipe }}</span>
+            <template v-if="props.armedAgain && btn.rating === FsrsRating.Again">
+              <span class="font-black">{{ btn.label }}</span>
+              <span class="text-[11px] tabular-nums opacity-90">auto in {{ Math.max(0, props.armedSeconds ?? 0) }}s</span>
+            </template>
+            <template v-else>
+              <span v-if="!compact && getIntervalForRating(btn.rating)" class="interval-hint text-[11px] opacity-80">{{ getIntervalForRating(btn.rating) }}</span>
+              <span>{{ btn.label }}</span>
+              <span v-if="showKeybinds && !compact" class="keybind text-xs opacity-80">{{ displayKeyName(btn.key) }}</span>
+              <span v-if="btn.swipe && props.showSwipeHints" class="swipe-hint text-[10px] opacity-80">{{ btn.swipe }}</span>
+            </template>
           </div>
         </template>
       </Button>
@@ -288,6 +297,24 @@
   transform: scale(0.93);
   filter: brightness(0.85);
   transition: transform 0.08s ease-out, filter 0.08s ease-out;
+}
+
+/* Timed review: the "Again" button is armed and about to auto-fire — make it unmistakable. */
+.grade-btn.armed-again.p-button {
+  background-color: var(--p-red-500) !important;
+  border-color: var(--p-red-500) !important;
+  color: #fff !important;
+  opacity: 1 !important;
+  animation: armed-pulse 0.9s ease-in-out infinite;
+}
+@keyframes armed-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .grade-btn.armed-again.p-button {
+    animation: none;
+  }
 }
 
 .keybind {
