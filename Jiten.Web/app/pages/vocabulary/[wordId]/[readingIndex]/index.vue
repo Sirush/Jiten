@@ -47,13 +47,18 @@
 
   if (import.meta.server) {
     const w = wordData.value;
-    defineOgImageComponent('VocabularyWordOgImage', {
-      text: w?.mainReading?.text ?? '',
-      frequencyRank: w?.mainReading?.frequencyRank,
-      partsOfSpeech: w?.partsOfSpeech,
-      meanings: w?.definitions?.[0]?.meanings,
-      usedInMediaAmount: w?.mainReading?.usedInMediaAmount,
-    });
+    defineOgImageComponent(
+      'VocabularyWordOgImage',
+      {
+        text: w?.mainReading?.text ?? '',
+        frequencyRank: w?.mainReading?.frequencyRank,
+        partsOfSpeech: w?.partsOfSpeech,
+        meanings: w?.definitions?.[0]?.meanings,
+        usedInMediaAmount: w?.mainReading?.usedInMediaAmount,
+      },
+      // Never cache a placeholder render if the SSR data fetch failed (e.g. transient rate limit).
+      w ? {} : { cacheMaxAgeSeconds: 0 },
+    );
   }
 </script>
 

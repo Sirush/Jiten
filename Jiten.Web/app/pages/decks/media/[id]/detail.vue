@@ -129,21 +129,27 @@
 
 
   const d = mainDeck.value;
-  defineOgImageComponent('MediaDeckCardOgImage', {
-    title: d?.originalTitle ?? '',
-    mediaType: d?.mediaType,
-    coverName: d?.coverName,
-    characterCount: d?.characterCount,
-    wordCount: d?.wordCount,
-    uniqueWordCount: d?.uniqueWordCount,
-    uniqueKanjiCount: d?.uniqueKanjiCount,
-    uniqueKanjiUsedOnceCount: d?.uniqueKanjiUsedOnceCount,
-    averageSentenceLength: d?.averageSentenceLength,
-    hideAverageSentenceLength: d?.hideAverageSentenceLength,
-    dialoguePercentage: d?.dialoguePercentage,
-    hideDialoguePercentage: d?.hideDialoguePercentage,
-    difficulty: d?.difficulty,
-  });
+  defineOgImageComponent(
+    'MediaDeckCardOgImage',
+    {
+      title: d ? (d.originalTitle?.trim() || localiseTitle(d)) : '',
+      mediaType: d?.mediaType,
+      coverName: d?.coverName,
+      characterCount: d?.characterCount,
+      wordCount: d?.wordCount,
+      uniqueWordCount: d?.uniqueWordCount,
+      uniqueKanjiCount: d?.uniqueKanjiCount,
+      uniqueKanjiUsedOnceCount: d?.uniqueKanjiUsedOnceCount,
+      averageSentenceLength: d?.averageSentenceLength,
+      hideAverageSentenceLength: d?.hideAverageSentenceLength,
+      dialoguePercentage: d?.dialoguePercentage,
+      hideDialoguePercentage: d?.hideDialoguePercentage,
+      difficulty: d?.difficulty,
+    },
+    // Never cache a placeholder: if the SSR data fetch failed (e.g. transient rate limit)
+    // the card renders "Loading…" — don't bake that into the multi-day CDN cache.
+    d ? {} : { cacheMaxAgeSeconds: 0 },
+  );
 </script>
 
 <template>
