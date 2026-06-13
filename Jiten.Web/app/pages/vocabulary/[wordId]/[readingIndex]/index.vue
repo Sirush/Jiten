@@ -14,7 +14,7 @@
   const readingIndex = computed(() => Number(route.params.readingIndex) || 0);
 
   const initialUrl = `vocabulary/${wordId.value}/${readingIndex.value}/info`;
-  const { data: wordData } = await useApiFetch<Word>(initialUrl, {
+  const { data: wordData, ready: wordReady } = await useApiFetch<Word>(initialUrl, {
     key: `page-vocab-title-${wordId.value}-${readingIndex.value}`,
   });
 
@@ -46,6 +46,9 @@
   });
 
   if (import.meta.server) {
+    // Wait for the fetch to settle so the eager snapshot isn't empty (the wrapper's `await`
+    // above doesn't block on the request).
+    await wordReady;
     const w = wordData.value;
     defineOgImageComponent(
       'VocabularyWordOgImage',

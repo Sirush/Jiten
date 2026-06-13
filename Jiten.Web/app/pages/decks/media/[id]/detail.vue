@@ -17,6 +17,7 @@
     status,
     error,
     refresh: refreshDetail,
+    ready: detailReady,
   } = await useApiFetchPaginated<DeckDetail>(url.value, {
     revalidateOnClient: true,
     query: {
@@ -128,28 +129,33 @@
   useDeckSchema(mainDeck, pageUrl, parentDeck);
 
 
-  const d = mainDeck.value;
-  defineOgImageComponent(
-    'MediaDeckCardOgImage',
-    {
-      title: d ? (d.originalTitle?.trim() || localiseTitle(d)) : '',
-      mediaType: d?.mediaType,
-      coverName: d?.coverName,
-      characterCount: d?.characterCount,
-      wordCount: d?.wordCount,
-      uniqueWordCount: d?.uniqueWordCount,
-      uniqueKanjiCount: d?.uniqueKanjiCount,
-      uniqueKanjiUsedOnceCount: d?.uniqueKanjiUsedOnceCount,
-      averageSentenceLength: d?.averageSentenceLength,
-      hideAverageSentenceLength: d?.hideAverageSentenceLength,
-      dialoguePercentage: d?.dialoguePercentage,
-      hideDialoguePercentage: d?.hideDialoguePercentage,
-      difficulty: d?.difficulty,
-    },
-    // Never cache a placeholder: if the SSR data fetch failed (e.g. transient rate limit)
-    // the card renders "Loading…" — don't bake that into the multi-day CDN cache.
-    d ? {} : { cacheMaxAgeSeconds: 0 },
-  );
+  // OG images are server-rendered only. Wait for the fetch to settle so the eager prop
+  // snapshot below isn't empty (the wrapper's `await` above doesn't block on the request).
+  if (import.meta.server) {
+    await detailReady;
+    const d = mainDeck.value;
+    defineOgImageComponent(
+      'MediaDeckCardOgImage',
+      {
+        title: d ? (d.originalTitle?.trim() || localiseTitle(d)) : '',
+        mediaType: d?.mediaType,
+        coverName: d?.coverName,
+        characterCount: d?.characterCount,
+        wordCount: d?.wordCount,
+        uniqueWordCount: d?.uniqueWordCount,
+        uniqueKanjiCount: d?.uniqueKanjiCount,
+        uniqueKanjiUsedOnceCount: d?.uniqueKanjiUsedOnceCount,
+        averageSentenceLength: d?.averageSentenceLength,
+        hideAverageSentenceLength: d?.hideAverageSentenceLength,
+        dialoguePercentage: d?.dialoguePercentage,
+        hideDialoguePercentage: d?.hideDialoguePercentage,
+        difficulty: d?.difficulty,
+      },
+      // Never cache a placeholder: if the SSR data fetch failed (e.g. transient rate limit)
+      // the card renders "Loading…" — don't bake that into the multi-day CDN cache.
+      d ? {} : { cacheMaxAgeSeconds: 0 },
+    );
+  }
 </script>
 
 <template>
