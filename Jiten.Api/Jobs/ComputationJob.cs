@@ -480,23 +480,23 @@ public class ComputationJob(
         logger.LogInformation("Coverage: parent_ids materialized in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Step 3b: Mature hits — drive from _parent_ids (12K) into DeckWords via DeckId covering
-        // index, then memoized probe against _mature_known (755K). Disable seqscan to prevent the
-        // planner from choosing a full 187M-row sequential scan of DeckWords.
-        // join_collapse_limit = 1 forces the written FROM order: drive from _parent_ids (13K)
-        // through the DeckId covering index, then hash-join _mature_known last. Without this
-        // the planner flips to driving from _mature_known via (WordId,ReadingIndex) once that
-        // set grows, producing 80M random heap reads (~330s).
-        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = off;");
-        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL join_collapse_limit = 1;");
-        // random_page_cost is 1.1 globally (NVMe tuning in postgres-config/custom.conf). That prices the
-        // nested-loop probe of _mature_known/_fsrs_young into DeckWords as nearly free, so the planner
-        // abandons the intended hash join for the 80M-random-heap-read (~330s) plan — even for SMALL
-        // known-word sets, whose low row estimate makes the nested loop look cheapest (hence small users
-        // reproduce it deterministically). join_collapse_limit/enable_seqscan only constrain join ORDER
-        // and scan TYPE, not the join METHOD, so pin random_page_cost to the conservative default for
-        // the two hit-joins below. Reset before step 4 (see end of step 3c).
-        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL random_page_cost = 4;");
+        // Step 3b: Mature hits. With a freshly-vacuumed DeckWords visibility map, the planner's
+        // word-driven plan — drive from the known set through IX_DeckWords_WordId_ReadingIndex_IncDeckIdOcc
+        // as an INDEX-ONLY scan, then hash-join _parent_ids — is optimal for normal known-sets. The old
+        // hints (enable_seqscan=off + join_collapse_limit=1) were a workaround from when DeckWords' VM was
+        // stale (see step 3c); for a SMALL known-set they instead force a _mature_known×_parent_ids
+        // nested-loop cross product (e.g. 2.6K × 15K = 40M point probes, ~196s). Only for a very large
+        // known-set does the per-word probe volume make the parent-deck-driven scan + hash win — keep the
+        // hints there (this also preserves today's exact behaviour for those users). CRITICAL: the
+        // word-driven path needs DeckWords' visibility map kept fresh (autovacuum_vacuum_insert_* storage
+        // params on the table) or the index-only scan degrades to per-row heap fetches and is ~250x slower.
+        const int LargeKnownSetThreshold = 50_000;
+        var matureLargeSet = matureCount >= LargeKnownSetThreshold;
+        if (matureLargeSet)
+        {
+            await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = off;");
+            await userContext.Database.ExecuteSqlRawAsync("SET LOCAL join_collapse_limit = 1;");
+        }
         await userContext.Database.ExecuteSqlRawAsync("""
             CREATE TEMP TABLE _mature_hits ON COMMIT DROP AS
             SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
@@ -505,14 +505,17 @@ public class ComputationJob(
             JOIN _mature_known mk ON mk."WordId" = dw."WordId" AND mk."ReadingIndex" = dw."ReadingIndex"
             GROUP BY dw."DeckId";
             """);
-        logger.LogInformation("Coverage: mature_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
+        if (matureLargeSet)
+        {
+            await userContext.Database.ExecuteSqlRawAsync("SET LOCAL join_collapse_limit = 8;");
+            await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = on;");
+        }
+        logger.LogInformation("Coverage: mature_hits computed ({Path}, {Count} known) in {Elapsed}ms",
+                              matureLargeSet ? "parent-driven" : "word-driven", matureCount, sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Step 3c: Young hits — same _parent_ids → DeckId covering index path as mature.
-        // Driving from _fsrs_young (~1K rows) via (WordId,ReadingIndex) would be faster in theory,
-        // but requires a fully-vacuumed visibility map for Index Only Scan. With stale visibility
-        // the heap fetches are random I/O across the entire table (29M reads). The DeckId path
-        // has semi-sequential I/O patterns that tolerate stale visibility much better.
+        // Step 3c: Young hits. The young set is small (cards due within 21 days), so the word-driven
+        // index-only plan is always the right choice — no planner hints. Same VM-freshness caveat as 3b.
         await userContext.Database.ExecuteSqlRawAsync("""
             CREATE TEMP TABLE _young_hits ON COMMIT DROP AS
             SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
@@ -521,9 +524,6 @@ public class ComputationJob(
             JOIN _fsrs_young yk ON yk."WordId" = dw."WordId" AND yk."ReadingIndex" = dw."ReadingIndex"
             GROUP BY dw."DeckId";
             """);
-        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL join_collapse_limit = 8;");
-        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = on;");
-        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL random_page_cost = DEFAULT;");
         logger.LogInformation("Coverage: young_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
