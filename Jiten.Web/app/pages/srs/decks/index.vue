@@ -249,12 +249,25 @@
     return days;
   });
 
-  const miniMaxCount = computed(() => {
-    let max = 0;
-    for (const d of miniHeatmap.value) {
-      if (d.count > max) max = d.count;
-    }
-    return max || 1;
+
+
+  const miniThresholds = computed<[number, number, number]>(() => {
+    const counts = miniHeatmap.value
+      .map((d) => d.count)
+      .filter((c) => c > 0)
+      .sort((a, b) => a - b);
+    if (counts.length === 0) return [1, 2, 3];
+
+    const quantile = (q: number) => {
+      const pos = (counts.length - 1) * q;
+      const base = Math.floor(pos);
+      const rest = pos - base;
+      const lo = counts[base];
+      const hi = counts[base + 1] ?? lo;
+      return lo + (hi - lo) * rest;
+    };
+
+    return [quantile(0.25), quantile(0.5), quantile(0.75)];
   });
 
   const miniTooltip = ref({ visible: false, text: '', x: 0, y: 0 });
@@ -276,10 +289,10 @@
 
   function miniIntensity(count: number): string {
     if (count <= 0) return 'bg-surface-200 dark:bg-surface-700';
-    const ratio = count / miniMaxCount.value;
-    if (ratio <= 0.25) return 'bg-purple-200 dark:bg-purple-800';
-    if (ratio <= 0.5) return 'bg-purple-400 dark:bg-purple-600';
-    if (ratio <= 0.75) return 'bg-purple-500 dark:bg-purple-500';
+    const [t1, t2, t3] = miniThresholds.value;
+    if (count < t1) return 'bg-purple-200 dark:bg-purple-800';
+    if (count < t2) return 'bg-purple-400 dark:bg-purple-600';
+    if (count < t3) return 'bg-purple-500 dark:bg-purple-500';
     return 'bg-purple-700 dark:bg-purple-400';
   }
 
@@ -502,6 +515,15 @@
                 @mouseenter="showMiniTooltip($event, day)"
                 @mouseleave="hideMiniTooltip"
               />
+            </div>
+            <div class="flex items-center gap-1 mt-2 text-[11px] text-gray-400">
+              <span>Less</span>
+              <div class="rounded-sm bg-surface-200 dark:bg-surface-700" :style="{ width: `${CELL}px`, height: `${CELL}px` }" />
+              <div class="rounded-sm bg-purple-200 dark:bg-purple-800" :style="{ width: `${CELL}px`, height: `${CELL}px` }" />
+              <div class="rounded-sm bg-purple-400 dark:bg-purple-600" :style="{ width: `${CELL}px`, height: `${CELL}px` }" />
+              <div class="rounded-sm bg-purple-500 dark:bg-purple-500" :style="{ width: `${CELL}px`, height: `${CELL}px` }" />
+              <div class="rounded-sm bg-purple-700 dark:bg-purple-400" :style="{ width: `${CELL}px`, height: `${CELL}px` }" />
+              <span>More</span>
             </div>
           </div>
         </div>

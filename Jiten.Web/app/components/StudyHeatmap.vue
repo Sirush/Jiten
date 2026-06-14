@@ -107,23 +107,35 @@
     return labels;
   });
 
-  const maxCount = computed(() => {
-    if (!heatmapData.value) return 1;
-    let max = 0;
-    for (const day of heatmapData.value.days) {
-      if (day.reviewCount > max) max = day.reviewCount;
-    }
-    return max || 1;
+
+  const thresholds = computed<[number, number, number]>(() => {
+    if (!heatmapData.value) return [1, 2, 3];
+    const counts = heatmapData.value.days
+      .map((d) => d.reviewCount)
+      .filter((c) => c > 0)
+      .sort((a, b) => a - b);
+    if (counts.length === 0) return [1, 2, 3];
+
+    const quantile = (q: number) => {
+      const pos = (counts.length - 1) * q;
+      const base = Math.floor(pos);
+      const rest = pos - base;
+      const lo = counts[base];
+      const hi = counts[base + 1] ?? lo;
+      return lo + (hi - lo) * rest;
+    };
+
+    return [quantile(0.25), quantile(0.5), quantile(0.75)];
   });
 
   const gridWidth = computed(() => LABEL_WIDTH + weeks.value.length * CELL_STEP);
 
   function getIntensityClass(count: number): string {
     if (count <= 0) return 'bg-gray-100 dark:bg-gray-800';
-    const ratio = count / maxCount.value;
-    if (ratio <= 0.25) return 'bg-purple-200 dark:bg-purple-900/60';
-    if (ratio <= 0.5) return 'bg-purple-400 dark:bg-purple-700';
-    if (ratio <= 0.75) return 'bg-purple-500 dark:bg-purple-500';
+    const [t1, t2, t3] = thresholds.value;
+    if (count < t1) return 'bg-purple-200 dark:bg-purple-900/60';
+    if (count < t2) return 'bg-purple-400 dark:bg-purple-700';
+    if (count < t3) return 'bg-purple-500 dark:bg-purple-500';
     return 'bg-purple-700 dark:bg-purple-400';
   }
 
