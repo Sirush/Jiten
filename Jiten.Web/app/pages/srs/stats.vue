@@ -55,7 +55,7 @@
   const todayStats = computed(() => {
     const t = today.value;
     return [
-      { label: 'Reviews', value: t ? String(t.reviews) : '—' },
+      { label: 'Gradings', value: t ? String(t.reviews) : '—' },
       { label: 'Pass rate', value: t && t.passRate != null ? `${Math.round(t.passRate * 100)}%` : '—' },
       { label: 'Minutes', value: t ? String(t.minutes) : '—' },
       { label: 'New cards', value: t ? String(t.newCards) : '—' },
