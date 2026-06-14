@@ -100,6 +100,10 @@ internal static class TokenFeatureScanner
                 case "たんか" when w.PartOfSpeech == PartOfSpeech.Noun:
                     f |= TokenFeatures.TextTanka;
                     break;
+                // たか mis-tokenised as 鷹/高 when it's past た + question か (言い過ぎ|たか) — same repair stage
+                case "たか" when w.PartOfSpeech == PartOfSpeech.Noun:
+                    f |= TokenFeatures.TextTanka;
+                    break;
                 case "はさ" when w.PartOfSpeech == PartOfSpeech.Noun:
                     f |= TokenFeatures.TextHasa;
                     break;

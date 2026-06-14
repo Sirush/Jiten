@@ -15,6 +15,8 @@ internal static class PriorityOverrides
         1545300, // 妖怪 (ようかい, n) — ghost/yokai, beats 溶解 (dissolution) whose NormalizedForm bonus inflates its score
         1922120, // 兼ねない (かねない, exp/suf) — "might", standalone beats conjugated 兼ねる
         2579880, // コホン/こほん (int) — cough/ahem onomatopoeia, beats 古本 こほん (secondhand book)
+        1571330, // 舐る (ねぶる, uk, vt) — "to lick", beats 眠る's rare ねぶる reading (眠る's normal reading is ねむる)
+        1709300, // 数度 (すうど, n) — "several times", beats JMnedict surname 数度 すどう (Sudachi guesses the name reading)
     ];
 
     private static readonly HashSet<(int WordId, byte ReadingIndex)> FormLevelJitenIds =
