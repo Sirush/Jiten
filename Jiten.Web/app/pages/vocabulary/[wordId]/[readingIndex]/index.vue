@@ -25,7 +25,8 @@
   };
 
   const title = computed(() => {
-    if (mainReadingText.value) return stripRuby(mainReadingText.value);
+    const reading = mainReadingText.value || wordData.value?.mainReading?.text;
+    if (reading) return stripRuby(reading);
     return 'Word';
   });
 

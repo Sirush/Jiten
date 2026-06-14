@@ -33,12 +33,11 @@ public static class ConfusableReadingsHelper
             .Where(wf => pairWordIds.Contains(wf.WordId)
                       && wf.FormType == JmDictFormType.KanaForm
                       && !wf.IsSearchOnly)
-            .Select(wf => new { wf.WordId, wf.ReadingIndex, wf.Text })
+            .Select(wf => new { wf.WordId, wf.Text })
             .ToListAsync();
 
         var sourceReadings = sourceKanaForms
-            .Where(kf => pairReadingIndexes.Contains((kf.WordId, (byte)kf.ReadingIndex)))
-            .GroupBy(kf => (kf.WordId, (byte)kf.ReadingIndex))
+            .GroupBy(kf => kf.WordId)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Text).ToHashSet());
 
         var distinctTexts = kanjiTexts.Select(kt => kt.Text).Distinct().ToList();
@@ -115,7 +114,7 @@ public static class ConfusableReadingsHelper
         var result = new Dictionary<(int, byte), List<string>>();
         foreach (var (sourcePair, confIds) in sourceToConfusable)
         {
-            sourceReadings.TryGetValue(sourcePair, out var ownReadings);
+            sourceReadings.TryGetValue(sourcePair.Item1, out var ownReadings);
 
             var readings = confIds
                 .Where(validReadings.ContainsKey)
