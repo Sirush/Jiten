@@ -318,9 +318,8 @@
 
     <Card class="p-2" :style="{ outline: borderColor }">
       <template #title>
-        <div class="flex flex-col gap-1 md:flex-row md:justify-between md:items-start">
-          <component :is="titleTag || 'span'" class="break-words min-w-0 order-last md:order-none">{{ localiseTitle(deck) }}</component>
-          <div class="flex flex-row items-center gap-1 h-6 shrink-0 self-end md:self-auto">
+        <div class="overflow-hidden">
+          <div class="float-right flex flex-row items-center gap-1 h-6 shrink-0 ml-2">
             <div v-if="authStore.isAuthenticated" class="flex items-center gap-2">
               <i v-if="deck.isFavourite" class="pi pi-star-fill text-yellow-500 text-lg" />
               <i v-if="deck.isIgnored" class="pi pi-eye-slash text-gray-800 dark:text-gray-300 text-lg" />
@@ -343,6 +342,7 @@
               </button>
             </Tooltip>
           </div>
+          <component :is="titleTag || 'span'" class="break-words">{{ localiseTitle(deck) }}</component>
         </div>
       </template>
       <template v-if="!isCompact" #subtitle>
