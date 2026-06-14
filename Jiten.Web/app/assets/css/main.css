@@ -85,3 +85,28 @@ a:not(.p-button) {
 .dark-mode .pos-amber { background: rgb(120 53 15 / 0.3); color: rgb(252 211 77); }
 .dark-mode .pos-teal { background: rgb(17 94 89 / 0.3); color: rgb(94 234 212); }
 .dark-mode .pos-gray { background: rgb(55 65 81 / 0.3); color: rgb(156 163 175); }
+
+/* On phones the default PrimeVue toast keeps its fixed 25rem width anchored to a screen
+   edge, so on narrow viewports the opposite edge (and its text/icon) clips off-screen.
+   Pin every toast to full-width-with-gutters, respecting the safe-area insets. */
+@media (max-width: 480px) {
+    .p-toast {
+        width: auto !important;
+        max-width: none !important;
+        left: 0.75rem !important;
+        right: 0.75rem !important;
+        transform: none !important;
+    }
+
+    .p-toast-top-right,
+    .p-toast-top-left,
+    .p-toast-top-center {
+        top: calc(env(safe-area-inset-top, 0px) + 0.75rem) !important;
+    }
+
+    .p-toast-bottom-right,
+    .p-toast-bottom-left,
+    .p-toast-bottom-center {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem) !important;
+    }
+}
