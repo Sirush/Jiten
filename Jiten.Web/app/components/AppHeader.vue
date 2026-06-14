@@ -258,15 +258,7 @@
               @click="mobileMenuOpen = false"
               >Ratings</nuxt-link
             >
-            <nuxt-link
-              v-if="auth.isAuthenticated"
-              to="/settings/account"
-              class="py-2 px-3"
-              :class="route.path === '/settings/account' ? 'font-semibold !text-purple-200' : '!text-white'"
-              @click="mobileMenuOpen = false"
-              >Account Settings</nuxt-link
-            >
-            <nuxt-link
+              <nuxt-link
               v-if="auth.isAuthenticated"
               to="/settings"
               class="py-2 px-3"
