@@ -489,6 +489,14 @@ public class ComputationJob(
         // set grows, producing 80M random heap reads (~330s).
         await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = off;");
         await userContext.Database.ExecuteSqlRawAsync("SET LOCAL join_collapse_limit = 1;");
+        // random_page_cost is 1.1 globally (NVMe tuning in postgres-config/custom.conf). That prices the
+        // nested-loop probe of _mature_known/_fsrs_young into DeckWords as nearly free, so the planner
+        // abandons the intended hash join for the 80M-random-heap-read (~330s) plan — even for SMALL
+        // known-word sets, whose low row estimate makes the nested loop look cheapest (hence small users
+        // reproduce it deterministically). join_collapse_limit/enable_seqscan only constrain join ORDER
+        // and scan TYPE, not the join METHOD, so pin random_page_cost to the conservative default for
+        // the two hit-joins below. Reset before step 4 (see end of step 3c).
+        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL random_page_cost = 4;");
         await userContext.Database.ExecuteSqlRawAsync("""
             CREATE TEMP TABLE _mature_hits ON COMMIT DROP AS
             SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
@@ -515,6 +523,7 @@ public class ComputationJob(
             """);
         await userContext.Database.ExecuteSqlRawAsync("SET LOCAL join_collapse_limit = 8;");
         await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = on;");
+        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL random_page_cost = DEFAULT;");
         logger.LogInformation("Coverage: young_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
