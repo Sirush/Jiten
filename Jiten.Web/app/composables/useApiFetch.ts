@@ -142,7 +142,17 @@ function buildFetchOptions(
     key: opts?.key ?? uniqueKey,
     server: opts?.server ?? true,
     lazy: opts?.lazy ?? false,
-    retry: opts?.retry ?? (isIdempotent ? 2 : 0),
+    // Bound how long an SSR render may wait on the API. Without a timeout a slow API holds the
+    // inbound page connection (and an outbound socket) open indefinitely; under load these pile up
+    // until the web container hits its FD/connection ceiling and can no longer accept new connections
+    // — including the localhost /healthz probe — so Coolify marks it unhealthy and Traefik serves the
+    // 503 "no server available" page. A timeout degrades a single render (data stays null → the page's
+    // skeleton/fallback, e.g. a placeholder OG image) instead of taking the whole container down. No
+    // client timeout: the client shows skeletons and the user can wait or navigate away.
+    timeout: opts?.timeout ?? (import.meta.server ? 8000 : undefined),
+    // Never retry on the server — retries multiply held connections exactly when the API is already
+    // slow, accelerating the exhaustion above. The client still retries transient blips (deploys etc.).
+    retry: opts?.retry ?? (import.meta.server ? 0 : (isIdempotent ? 2 : 0)),
     retryDelay: opts?.retryDelay ?? 500,
     retryStatusCodes: opts?.retryStatusCodes ?? [408, 425, 429, 500, 502, 503, 504],
     async onRequest({ options }: any) {
