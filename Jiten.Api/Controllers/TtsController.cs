@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using Jiten.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +12,7 @@ namespace Jiten.Api.Controllers;
 [Route("api/tts")]
 [AllowAnonymous]
 [EnableRateLimiting("fixed")]
-public class TtsController(ITtsService ttsService) : ControllerBase
+public class TtsController(ITtsService ttsService, IConfiguration configuration) : ControllerBase
 {
     [HttpGet("word/{wordId:int}/{readingIndex:int}")]
     public async Task<IResult> GetWordAudio(int wordId, int readingIndex, [FromQuery] string voice = "female", CancellationToken ct = default)
@@ -18,7 +20,7 @@ public class TtsController(ITtsService ttsService) : ControllerBase
         var rateLimitKey = GetRateLimitKey();
         try
         {
-            var audio = await ttsService.GetWordAudioAsync(wordId, readingIndex, voice, rateLimitKey, ct);
+            var audio = await ttsService.GetWordAudioAsync(wordId, readingIndex, voice, rateLimitKey, ct, IsTrustedInternal());
             return Results.File(audio, "audio/opus");
         }
         catch (TtsTextNotFoundException)
@@ -100,6 +102,15 @@ public class TtsController(ITtsService ttsService) : ControllerBase
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return userId ?? GetClientIp(HttpContext);
+    }
+
+    private bool IsTrustedInternal()
+    {
+        var key = configuration["SsrBypassKey"];
+        if (string.IsNullOrEmpty(key)) return false;
+        if (!Request.Headers.TryGetValue("X-Internal-Ssr-Key", out var provided)) return false;
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(provided.ToString()), Encoding.UTF8.GetBytes(key));
     }
 
     private static string GetClientIp(HttpContext context)

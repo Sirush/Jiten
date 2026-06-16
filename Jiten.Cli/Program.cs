@@ -194,6 +194,12 @@ public class Program
             await diagnosticCommands.FlushRedisCache();
         }
 
+        if (options.WarmupTts > 0)
+        {
+            var ttsCommands = new TtsCommands(context);
+            await ttsCommands.WarmupWordTts(options.WarmupTts, options.WarmupTtsApiUrl, options.WarmupTtsConcurrency, options.WarmupTtsVoices);
+        }
+
         if (options.ScanConfidence)
         {
             await diagnosticCommands.ScanConfidence(options);

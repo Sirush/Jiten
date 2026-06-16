@@ -182,6 +182,18 @@ public class CliOptions
     [Option(longName: "flush-redis", Required = false, HelpText = "Flush the Redis cache (clears all cached parser results).")]
     public bool FlushRedis { get; set; }
 
+    [Option(longName: "warmup-tts", Required = false, HelpText = "Pre-generate and CDN-cache word TTS audio for the top N most frequent words across all voices (round-robin).")]
+    public int WarmupTts { get; set; }
+
+    [Option(longName: "warmup-tts-api-url", Required = false, HelpText = "Base API URL for TTS warmup (default: https://localhost:7299).")]
+    public string? WarmupTtsApiUrl { get; set; }
+
+    [Option(longName: "warmup-tts-concurrency", Required = false, HelpText = "Number of concurrent TTS warmup requests (default: 4).")]
+    public int WarmupTtsConcurrency { get; set; }
+
+    [Option(longName: "warmup-tts-voices", Required = false, HelpText = "Comma-separated voice keys to warm (default: all voices).")]
+    public string? WarmupTtsVoices { get; set; }
+
     [Option(longName: "create-wordset-from-pos", Required = false, HelpText = "Create a WordSet from words with specific Part of Speech.")]
     public bool CreateWordSetFromPos { get; set; }
 

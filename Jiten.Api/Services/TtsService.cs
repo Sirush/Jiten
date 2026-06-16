@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using Jiten.Core;
 using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
+using WanaKanaShaapu;
 
 namespace Jiten.Api.Services;
 
@@ -20,7 +21,7 @@ public class TtsTextNotFoundException : Exception;
 
 public interface ITtsService
 {
-    Task<byte[]> GetWordAudioAsync(int wordId, int readingIndex, string voice, string rateLimitKey, CancellationToken ct);
+    Task<byte[]> GetWordAudioAsync(int wordId, int readingIndex, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false);
     Task<byte[]> GetSentenceAudioAsync(int sentenceId, string voice, string rateLimitKey, CancellationToken ct);
     Task<byte[]> GetCustomSentenceAudioAsync(int userExampleSentenceId, string userId, string voice, string rateLimitKey, CancellationToken ct);
 }
@@ -49,7 +50,7 @@ public class TtsService(
     private readonly ConcurrentDictionary<string, Task<byte[]>> _inflight = new();
     private readonly string _cdnBaseUrl = configuration.GetValue<string>("CdnBaseUrl") ?? "";
 
-    public async Task<byte[]> GetWordAudioAsync(int wordId, int readingIndex, string voice, string rateLimitKey, CancellationToken ct)
+    public async Task<byte[]> GetWordAudioAsync(int wordId, int readingIndex, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false)
     {
         if (!Voices.ContainsKey(voice)) voice = "female";
 
@@ -76,8 +77,15 @@ public class TtsService(
 
         if (string.IsNullOrWhiteSpace(text)) throw new TtsTextNotFoundException();
 
+        // VOICEVOX/OpenJTalk runs its own morphological analysis on the input. A standalone
+        // hiragana reading such as は (葉) or はで (派手) gets classified as the topic particle
+        // and pronounced "wa". Katakana is never treated as a particle, so feed the reading as
+        // katakana to force the literal pronunciation. (The sentence path already uses Sudachi
+        // katakana readings, so it is unaffected.)
+        text = WanaKana.ToKatakana(text);
+
         var key = $"{voice}:w:{text}";
-        return await _inflight.GetOrAdd(key, _ => GenerateAsync(key, text, TtsType.Word, voice, rateLimitKey, ct));
+        return await _inflight.GetOrAdd(key, _ => GenerateAsync(key, text, TtsType.Word, voice, rateLimitKey, ct, bypassGenerationLimit));
     }
 
     public async Task<byte[]> GetSentenceAudioAsync(int sentenceId, string voice, string rateLimitKey, CancellationToken ct)
@@ -175,14 +183,14 @@ public class TtsService(
         }
     }
 
-    private async Task<byte[]> GenerateAsync(string key, string text, TtsType type, string voice, string rateLimitKey, CancellationToken ct)
+    private async Task<byte[]> GenerateAsync(string key, string text, TtsType type, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false)
     {
         try
         {
             var cached = await TryGetFromCdn(text, type, voice, ct);
             if (cached != null) return cached;
 
-            return await SynthesizeAndUpload(key, text, text, type, voice, rateLimitKey, ct);
+            return await SynthesizeAndUpload(key, text, text, type, voice, rateLimitKey, ct, bypassGenerationLimit);
         }
         finally
         {
@@ -208,13 +216,16 @@ public class TtsService(
         return null;
     }
 
-    private async Task<byte[]> SynthesizeAndUpload(string key, string ttsText, string storageText, TtsType type, string voice, string rateLimitKey, CancellationToken ct)
+    private async Task<byte[]> SynthesizeAndUpload(string key, string ttsText, string storageText, TtsType type, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false)
     {
-        var counter = GenCounters.GetOrAdd(rateLimitKey, _ => new GenerationCounter());
-        if (!counter.TryConsume())
+        if (!bypassGenerationLimit)
         {
-            logger.LogWarning("TTS generation rate limited: {RateLimitKey}", rateLimitKey);
-            throw new TtsGenerationLimitException();
+            var counter = GenCounters.GetOrAdd(rateLimitKey, _ => new GenerationCounter());
+            if (!counter.TryConsume())
+            {
+                logger.LogWarning("TTS generation rate limited: {RateLimitKey}", rateLimitKey);
+                throw new TtsGenerationLimitException();
+            }
         }
 
         logger.LogInformation("TTS generating: {Text} (voice={Voice}, type={Type})", ttsText, voice, type);
