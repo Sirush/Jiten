@@ -47,6 +47,36 @@ public class FormSelectionTests
         // Pure kana gairaigo: テレビ has only kana forms
         yield return ["テレビ", "テレビ", 1080510, (byte)0];
 
+        // 舐る (ねぶる, lick, uk) should beat 眠る's rare ねぶる reading (眠る's normal reading is ねむる)
+        yield return ["その部分を舌先で探りながら、丁寧にねぶっていく。", "ねぶっていく", 1571330, (byte)2];
+
+        // 数度 (すうど "several times") should beat the JMnedict surname 数度 (すどう)
+        yield return ["東ドイツに派遣されたのは昨年末で、それから数度、掃討任務に参加している。", "数度", 1709300, (byte)0];
+
+        // いける defaults to 行ける (go well); 生ける (arrange flowers) only with a flower object nearby.
+        // Kana surface いける resolves to each word's kana form (行ける ri1 / 生ける ri2), not the kanji.
+        yield return ["......いけると思います。", "いける", 1631370, (byte)1];
+        yield return ["花をいける", "いける", 1587190, (byte)2];
+
+        // katakana ツイてない is 付いてる/ツイてる "to be lucky" (1894260), not ついて "about" (1854750)
+        yield return ["“ツイてない”なんて言っちゃダメ", "ツイてない", 1894260, (byte)4];
+
+        // に対して in the full sentence (preceding clauses present) — mirrors について/にとって
+        yield return ["イングヒルトだけじゃない、これまで見捨ててきた衛士たち全員に対して、俺はそう言えるのか......。", "に対して", 1009800, (byte)0];
+
+        // 脳味噌がぶっ壊れた in the full sentence: が (case particle) and ぶっ (prefix) must both survive
+        yield return ["「同じ部隊の隊員なら、脳味噌がぶっ壊れた奴とでも運命を共にしろというのか!?――それこそ無駄死にだッ!」", "が", 2028930, (byte)0];
+        yield return ["「同じ部隊の隊員なら、脳味噌がぶっ壊れた奴とでも運命を共にしろというのか!?――それこそ無駄死にだッ!」", "ぶっ", 2698210, (byte)1];
+
+        // clause-initial よって、 is the conjunction 因って "therefore" (1605970), not 依る te-form (1168660).
+        // Full sentence (with 「) is the regression case: the leading quote+space made RepairQuotativeTte
+        // split よっ|て → よ|って before the fix.
+        yield return ["「よって、ここで慈悲の一撃を加える」", "よって", 1605970, (byte)5];
+
+        // 全機 → ぜんき "all aircraft" (2860335), not the まさき given name (5470930). A leading dash makes
+        // Sudachi pick the マサキ name reading, so the full sentence (with ――) is the regression case.
+        yield return ["――全機、跳躍開始!", "全機", 2860335, (byte)0];
+
         // 食べている should resolve to 食べる (1358280)
         yield return ["食べている", "食べている", 1358280, (byte)0];
 

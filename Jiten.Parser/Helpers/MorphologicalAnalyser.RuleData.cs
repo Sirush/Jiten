@@ -23,6 +23,8 @@ public partial class MorphologicalAnalyser
         ("いけす", "か", "ねー", PartOfSpeech.IAdjective),
         ("たら", "し", "たら", PartOfSpeech.Verb),
         ("どう", "あって", "も", PartOfSpeech.Expression),
+        // じゃない+か → じゃないか 2819990 (checked before SpecialCases2 じゃ+ない so the か is absorbed)
+        ("じゃ", "ない", "か", PartOfSpeech.Expression),
     ];
 
     private static readonly HashSet<string> AuxiliaryVerbs =
@@ -215,6 +217,10 @@ public partial class MorphologicalAnalyser
         // CombineTte builds ちゃってぇ with the expressive small-vowel tail; merged back onto なん,
         // the lookup's small-kana strip resolves なんちゃって (matched via CombineFinal, post-tte)
         ("なん", "ちゃってぇ", PartOfSpeech.Expression),
+        // Compound particles / expressions (parallel to に+ついて, に+とって, それ+じゃ above)
+        ("ばかり", "に", PartOfSpeech.Expression), // ばかりに 1010250 "(just) because"
+        ("それ", "では", PartOfSpeech.Conjunction), // それでは 1406050 "well then" (mirrors それじゃ)
+        ("に", "対して", PartOfSpeech.Expression), // に対して 1009800 (mirrors について/にとって)
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];

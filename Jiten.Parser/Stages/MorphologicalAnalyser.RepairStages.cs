@@ -15,6 +15,36 @@ public partial class MorphologicalAnalyser
         {
             var word = wordInfos[i];
 
+            // たか mis-tokenised as the noun 鷹/高 when it's actually past-tense た + question か
+            // (言い過ぎ|たか → 言い過ぎた|か, 飲み過ぎ|たか → 飲み過ぎた|か). Like the たんか repair below
+            // but without the ん. Gated on the preceding token + た forming a real verb past tense, so
+            // genuine 鷹/高 nouns (preceded by を/の, or with no verb stem before) are left alone.
+            if (word is { PartOfSpeech: PartOfSpeech.Noun, Text: "たか" } && result.Count > 0)
+            {
+                var prevTok = result[^1];
+                var pastForms = deconj.Deconjugate(NormalizeToHiragana(prevTok.Text + "た"));
+                bool validPast = pastForms.Any(f =>
+                    f.Process.Any(p => p == "past") &&
+                    f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)));
+                if (validPast)
+                {
+                    result[^1] = new WordInfo(prevTok)
+                    {
+                        Text = prevTok.Text + "た",
+                        PartOfSpeech = PartOfSpeech.Verb,
+                        EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : prevTok.EndOffset
+                    };
+                    result.Add(new WordInfo
+                    {
+                        Text = "か", DictionaryForm = "か", NormalizedForm = "か",
+                        PartOfSpeech = PartOfSpeech.Particle, Reading = "カ",
+                        StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1,
+                        EndOffset = word.EndOffset
+                    });
+                    continue;
+                }
+            }
+
             // Only process たんか noun tokens
             if (word.PartOfSpeech != PartOfSpeech.Noun || word.Text != "たんか")
             {
@@ -935,15 +965,42 @@ public partial class MorphologicalAnalyser
         {
             WordInfo w1 = wordInfos[i];
 
-            // Katakana mora stolen from a name by a following hiragana-dict prenominal: Sudachi
-            // cuts カティア|の as カティ|アの (アの = homograph of 連体詞 あの). A 連体詞 whose dict
-            // form is hiragana but whose surface starts with katakana means the leading mora
-            // belongs to the preceding katakana name — return it and emit the remainder (の) as a
-            // particle. (カティ+ア = カティア, kept as an OOV name token.)
+            // こんな/そんな/あんな/どんな + の: Sudachi cuts the 連体詞 as こん|なの (and the scorer then
+            // mismatches こん to 紺 "navy"). Re-cut to こんな + の when こんな etc. is a real word. Gated on
+            // the 連体詞 POS so the genuine noun reading (色は紺なの "it's navy") is left untouched.
             if (w1.PartOfSpeech == PartOfSpeech.PrenounAdjectival
+                && w1.Text is "こん" or "そん" or "あん" or "どん"
+                && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "なの"
+                && HasCompoundLookup != null && HasCompoundLookup(w1.Text + "な"))
+            {
+                var nano = wordInfos[i + 1];
+                int naEnd = nano.StartOffset >= 0 ? nano.StartOffset + 1 : w1.EndOffset;
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = w1.Text + "な", DictionaryForm = w1.Text + "な", NormalizedForm = w1.Text + "な",
+                    Reading = w1.Reading + "ナ", EndOffset = naEnd
+                });
+                newList.Add(new WordInfo
+                {
+                    Text = "の", DictionaryForm = "の", NormalizedForm = "の",
+                    PartOfSpeech = PartOfSpeech.Particle, Reading = "ノ",
+                    StartOffset = naEnd, EndOffset = nano.EndOffset
+                });
+                i += 2;
+                continue;
+            }
+
+            // Katakana mora stolen from a name by a following hiragana-dict token: Sudachi cuts
+            // カティア|の as カティ|アの (アの = 連体詞 あの) and カティア|と as カティ|アと (アと = 後 あと).
+            // A token whose dict form is hiragana but whose surface starts with a katakana mora, with
+            // a real particle (の/と/…) as the remainder, means that leading mora belongs to the
+            // preceding katakana name — return it and emit the remainder as a particle.
+            // (カティ+ア = カティア, kept as an OOV name token.)
+            if (w1.PartOfSpeech is PartOfSpeech.PrenounAdjectival or PartOfSpeech.Noun
                 && w1.Text.Length >= 2
                 && IsKatakanaTextChar(w1.Text[0]) && w1.Text[0] != 'ー'
                 && w1.Text[1..].All(c => c is >= '぀' and <= 'ゟ')
+                && CaseParticles.Contains(w1.Text[1..])
                 && KanaConverter.ToHiragana(w1.Text) == w1.DictionaryForm
                 && newList.Count > 0
                 && newList[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.Name
@@ -2369,7 +2426,7 @@ public partial class MorphologicalAnalyser
         ["に", "を", "が", "へ", "で", "と", "は", "も", "か", "から", "より", "まで", "の"];
 
     private static readonly HashSet<string> CommonTeFormVerbs =
-        ["なる", "する", "やる", "いる", "ある", "くる", "できる", "おる", "みる", "しまう"];
+        ["なる", "する", "やる", "いる", "ある", "くる", "できる", "おる", "みる", "しまう", "よる"];
 
     // Te-forms of these are いって — the stolen い may only reattach to the previous token when
     // that actually produces a JMDict word (悪|いっ|て → 悪い ✓, ギシギシ|いっ|て → ギシギシい ✗).
