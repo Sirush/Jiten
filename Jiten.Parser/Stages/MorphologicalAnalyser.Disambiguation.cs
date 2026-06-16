@@ -132,6 +132,12 @@ public partial class MorphologicalAnalyser
             if (word is { Text: "禍", Reading: "カ" })
                 word.Reading = "ワザワイ";
 
+            // 全機 (マサキ given-name reading) → ゼンキ "all aircraft/all units" — the common-noun reading.
+            // Sudachi picks the rare まさき name reading after a leading dash/symbol; the name then wins on
+            // ReadingMatchScore. Correcting the reading (cache key includes Reading) flips it back to 全機 ぜんき.
+            if (word is { Text: "全機", Reading: "マサキ" })
+                word.Reading = "ゼンキ";
+
             // 私 (シ) → ワタシ when standalone — シ reading only in compounds (私的, 私立, 私用)
             if (word is { Text: "私", Reading: "シ" })
             {
@@ -409,6 +415,42 @@ public partial class MorphologicalAnalyser
                 word.NormalizedForm = "行く";
             }
 
+            // いける (kana verb): default to 行ける (1631370 "to be good; go well") — the overwhelmingly
+            // common bare いける. Switch to 生ける (1587190 "to arrange flowers") only with a flower
+            // object nearby (花をいける). Sudachi gives dict=いける for all senses (生ける/活ける/埋ける/
+            // 行ける); the 花 object is the disambiguator.
+            if (word is { Text: "いける", DictionaryForm: "いける" })
+            {
+                var prevTok = i > 0 ? wordInfos[i - 1] : null;
+                var prev2Tok = i >= 2 ? wordInfos[i - 2] : null;
+                bool flowerContext =
+                    (prevTok != null && (prevTok.Text.Contains('花') || prevTok.Text.Contains('華')))
+                    || (prev2Tok != null && (prev2Tok.Text.Contains('花') || prev2Tok.Text.Contains('華')));
+                // Set DictionaryForm too, not just PreMatchedWordId: the DeckWord cache keys on
+                // (Text, POS, DictForm, Reading) and is context-blind, so both senses must produce
+                // distinct cache keys or whichever parses first in a deck wins for all いける.
+                word.PreMatchedWordId = flowerContext ? 1587190 : 1631370;
+                word.DictionaryForm = flowerContext ? "生ける" : "行ける";
+            }
+
+            // ツイてる/ツイてない/ツイてた (katakana ツイ + てる) is the colloquial 付いてる "to be lucky"
+            // (1894260, uk). The grammatical ついて "about" (1854750) is never written in katakana, so the
+            // katakana ツイ head is an unambiguous signal (mirrors the ノリ/セン/イキ katakana rules above).
+            if (word.Text.StartsWith("ツイて", StringComparison.Ordinal))
+            {
+                word.PreMatchedWordId = 1894260;
+                word.DictionaryForm = "ツイてる";
+                // The PreMatched path bypasses deconjugation, so the conjugation chain must be set
+                // explicitly or non-present forms render as the bare lemma (ツイてた = past, not ツイてる).
+                word.PreMatchedConjugations = word.Text["ツイて".Length..] switch
+                {
+                    "なかった" => ["negative", "past"],
+                    "ない" => ["negative"],
+                    "た" => ["past"],
+                    _ => word.PreMatchedConjugations
+                };
+            }
+
             // 弾ける: Sudachi gives dict=弾ける for both はじける (to burst) and the potential of
             // 弾く/ひく (to play). The reading disambiguates: ヒケ* = 弾く potential, ハジケ* = 弾ける.
             if (word.DictionaryForm == "弾ける" && word.Reading.StartsWith("ヒケ"))
@@ -435,6 +477,18 @@ public partial class MorphologicalAnalyser
                      && word.DictionaryForm == "来る" && word.Reading.StartsWith("キタ"))
             {
                 word.Reading = "ク" + word.Reading[2..];
+            }
+
+            // Clause-initial よって、 is the conjunction 因って "therefore" (1605970), not the te-form
+            // of 依る/因る "to depend on" (1168660). Mid-clause よって (場合によって) keeps the verb.
+            // Setting DictionaryForm too keeps the context-blind DeckWord cache from collapsing both.
+            if (word is { Text: "よって" } && word.DictionaryForm is "依る" or "因る" or "よる"
+                && (i == 0 || wordInfos[i - 1].PartOfSpeech is PartOfSpeech.SupplementarySymbol
+                    or PartOfSpeech.Symbol or PartOfSpeech.BlankSpace)
+                && i + 1 < wordInfos.Count && wordInfos[i + 1].Text is "、" or "，")
+            {
+                word.PreMatchedWordId = 1605970;
+                word.DictionaryForm = "よって";
             }
         }
 

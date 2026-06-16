@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using Jiten.Core;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -527,6 +529,118 @@ public class DiagnosticCommands(CliContext context)
             var json = JsonSerializer.Serialize(result, jsonOptions);
             await File.WriteAllTextAsync(options.ParseTestOutput, json);
             Console.WriteLine($"Full diagnostics written to {options.ParseTestOutput}");
+        }
+    }
+
+    public async Task RunConcurrencySmoke(CliOptions options)
+    {
+        var dir = options.ConcurrencySmoke!;
+        if (!Directory.Exists(dir))
+        {
+            Console.WriteLine($"Directory not found: {dir}");
+            return;
+        }
+
+        var files = Directory.GetFiles(dir, "*.txt").OrderBy(f => f, StringComparer.Ordinal).ToList();
+        if (files.Count == 0)
+        {
+            Console.WriteLine($"No .txt files found in: {dir}");
+            return;
+        }
+
+        var docs = new List<(string name, string text)>();
+        foreach (var f in files)
+            docs.Add((Path.GetFileName(f), await File.ReadAllTextAsync(f)));
+
+        static string Signature(List<DeckWord> result) =>
+            string.Join("|", result.Select(w => $"{w.WordId}:{w.ReadingIndex}:{w.OriginalText}"));
+
+        bool sequential = options.SmokeSequential;
+        Console.WriteLine($"=== Concurrency Smoke dump ({docs.Count} files, {(sequential ? "SEQUENTIAL" : "PARALLEL")}) ===");
+
+        var sigs = new ConcurrentDictionary<string, string>();
+        var sw = Stopwatch.StartNew();
+        if (sequential)
+        {
+            foreach (var (name, text) in docs)
+                sigs[name] = Signature(await Parser.Parser.ParseText(context.ContextFactory, text));
+        }
+        else
+        {
+            await Parallel.ForEachAsync(docs,
+                new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+                async (doc, _) => sigs[doc.name] = Signature(await Parser.Parser.ParseText(context.ContextFactory, doc.text)));
+        }
+        sw.Stop();
+
+        var output = string.Join("\n", docs.Select(d => $"{d.name}\t{sigs[d.name]}"));
+        var path = string.IsNullOrEmpty(options.ParseTestOutput) ? "concurrency-smoke.txt" : options.ParseTestOutput;
+        await File.WriteAllTextAsync(path, output);
+        Console.WriteLine($"Parsed {docs.Count} files in {sw.ElapsedMilliseconds}ms; signatures → {path}");
+    }
+
+    public async Task MeasureHints(CliOptions options)
+    {
+        var dir = options.MeasureHints!;
+        if (!Directory.Exists(dir))
+        {
+            Console.WriteLine($"Directory not found: {dir}");
+            return;
+        }
+
+        var epubs = Directory.GetFiles(dir, "*.epub").OrderBy(f => f, StringComparer.Ordinal).ToList();
+        if (epubs.Count == 0)
+        {
+            Console.WriteLine($"No .epub files found in: {dir}");
+            return;
+        }
+
+        var extractor = new EbookExtractor();
+        await Parser.Parser.ParseText(context.ContextFactory, "これはテストです。"); // JIT/runtime warmup
+
+        async Task<long> TimeMinAsync(string text, int runs)
+        {
+            long best = long.MaxValue;
+            for (int r = 0; r < runs; r++)
+            {
+                var sw = Stopwatch.StartNew();
+                await Parser.Parser.ParseText(context.ContextFactory, text);
+                sw.Stop();
+                best = Math.Min(best, sw.ElapsedMilliseconds);
+            }
+            return best;
+        }
+
+        Console.WriteLine("=== Furigana hint cost (FindMatchingHint) — with-hints vs clean delta ===");
+        Console.WriteLine("(both paths tokenize the same clean text; delta = hint extraction + FindMatchingHint 3x/token + FuriganaHintScorer)");
+        Console.WriteLine();
+
+        foreach (var epub in epubs)
+        {
+            var name = Path.GetFileName(epub);
+            string annotated;
+            try { annotated = await extractor.ExtractTextFromEbook(epub); }
+            catch (Exception e) { Console.WriteLine($"{name}: extract failed: {e.Message}"); continue; }
+
+            if (string.IsNullOrEmpty(annotated)) { Console.WriteLine($"{name}: empty extraction"); continue; }
+
+            var (clean, hints) = FuriganaHintExtractor.Extract(annotated);
+            var tokens = await Parser.Parser.ParseText(context.ContextFactory, clean); // also warms DeckWordCache for both paths
+
+            // Worst case: ruby on every kanji run (graded readers / children's books). Reading value is
+            // irrelevant to FindMatchingHint's scan cost — only the hint count/offsets matter.
+            var dense = System.Text.RegularExpressions.Regex.Replace(clean, "[一-鿿々]+", "{$0'か}");
+            var denseHints = FuriganaHintExtractor.Extract(dense).Hints.Length;
+
+            long noHintsMs = await TimeMinAsync(clean, 3);
+            long withHintsMs = await TimeMinAsync(annotated, 3);
+            long denseMs = await TimeMinAsync(dense, 3);
+
+            double hintsPerKToken = tokens.Count > 0 ? hints.Length / (tokens.Count / 1000.0) : 0;
+            Console.WriteLine($"{name}");
+            Console.WriteLine($"   chars={clean.Length:N0}  tokens={tokens.Count:N0}  real-hints={hints.Length:N0} ({hintsPerKToken:N0}/Ktoken)  dense-hints={denseHints:N0}");
+            Console.WriteLine($"   clean={noHintsMs:N0}ms  realHints={withHintsMs:N0}ms (Δ{withHintsMs - noHintsMs:+0;-0}ms)  denseHints={denseMs:N0}ms (Δ{denseMs - noHintsMs:+0;-0}ms, {(noHintsMs > 0 ? 100.0 * (denseMs - noHintsMs) / noHintsMs : 0):N0}%)");
+            Console.WriteLine();
         }
     }
 

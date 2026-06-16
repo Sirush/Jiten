@@ -717,7 +717,7 @@ namespace Jiten.Parser
                     return new DeckWord
                     {
                         WordId = word.WordId, OriginalText = surface, ReadingIndex = 0,
-                        Occurrences = occurrences, PartsOfSpeech = word.CachedPOS, Origin = word.Origin
+                        Occurrences = occurrences, PartsOfSpeech = [..word.CachedPOS], Origin = word.Origin
                     };
             }
 
@@ -976,16 +976,25 @@ namespace Jiten.Parser
 
             if (sw != null) { timings!.AdjacentScoringMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
-            // Sum occurrences while deduplicating by WordId and ReadingIndex
-            var processedWords = corrected
-                                 .GroupBy(x => new { x.WordId, x.ReadingIndex })
-                                 .Select(g =>
-                                 {
-                                     var first = g.First();
-                                     first.Occurrences = g.Count();
-                                     return first;
-                                 })
-                                 .ToArray();
+            // Sum occurrences while deduplicating by WordId and ReadingIndex (first-appearance order,
+            // first instance carries the total). Manual accumulation avoids GroupBy's anonymous-key allocation.
+            var dedup = new Dictionary<(int, byte), DeckWord>(corrected.Count);
+            var processedList = new List<DeckWord>(corrected.Count);
+            foreach (var x in corrected)
+            {
+                var key = (x.WordId, x.ReadingIndex);
+                if (dedup.TryGetValue(key, out var first))
+                {
+                    first.Occurrences++;
+                }
+                else
+                {
+                    x.Occurrences = 1;
+                    dedup[key] = x;
+                    processedList.Add(x);
+                }
+            }
+            var processedWords = processedList.ToArray();
 
             processedWords = ExcludeFinalMisparses(processedWords, diagnostics).ToArray();
 
@@ -1060,9 +1069,8 @@ namespace Jiten.Parser
         {
             if (batchCache == null)
             {
-                var words = await JmDictCache.GetWordsAsync(wordIds);
-                PriorityOverrides.ApplyAll(words.Values);
-                return words;
+                // PriorityOverrides are applied once at insert into the in-process JmDict cache.
+                return await JmDictCache.GetWordsAsync(wordIds);
             }
 
             var distinct = wordIds.Distinct().ToList();
@@ -1082,7 +1090,6 @@ namespace Jiten.Parser
                 var fetched = await JmDictCache.GetWordsAsync(needed);
                 foreach (var (id, word) in fetched)
                 {
-                    PriorityOverrides.Apply(word);
                     result[id] = word;
                     batchCache.TryAdd(id, word);
                 }
@@ -1233,16 +1240,22 @@ namespace Jiten.Parser
                             var wordCache = await GetWordsWithCache([preMatchedWordId], batchWordCache);
                             if (wordCache.TryGetValue(preMatchedWordId, out var preMatchedWord))
                             {
-                                var textForReadingLookup = !string.IsNullOrEmpty(wordData.wordInfo.DictionaryForm)
-                                    ? wordData.wordInfo.DictionaryForm
-                                    : wordData.wordInfo.Text;
-                                var readingIndex = GetBestReadingIndex(preMatchedWord, textForReadingLookup, wordData.wordInfo.Reading);
+                                // Prefer the surface for the reading-index lookup so a kana surface (いける)
+                                // resolves to the kana form, even when DictionaryForm was set to a kanji
+                                // homograph purely for cache-keying (disambiguated いける→生ける). Fall back
+                                // to DictionaryForm when the surface itself isn't one of the word's forms,
+                                // so conjugated surfaces (食べた→食べる) still resolve to the lemma's reading.
+                                var surface = wordData.wordInfo.Text;
+                                var readingIndex = GetBestReadingIndex(preMatchedWord, surface, wordData.wordInfo.Reading);
+                                if (readingIndex == 255 && !string.IsNullOrEmpty(wordData.wordInfo.DictionaryForm)
+                                    && wordData.wordInfo.DictionaryForm != surface)
+                                    readingIndex = GetBestReadingIndex(preMatchedWord, wordData.wordInfo.DictionaryForm, wordData.wordInfo.Reading);
                                 processedWord = new DeckWord
                                                 {
                                                     WordId = preMatchedWordId, ReadingIndex = readingIndex,
                                                     OriginalText = wordData.wordInfo.Text, Occurrences = wordData.occurrences,
                                                     Conjugations = wordData.wordInfo.PreMatchedConjugations ?? [],
-                                                    PartsOfSpeech = preMatchedWord.CachedPOS, Origin = preMatchedWord.Origin
+                                                    PartsOfSpeech = [..preMatchedWord.CachedPOS], Origin = preMatchedWord.Origin
                                                 };
                                 resolvedMargin = ScoringPolicy.HighConfidenceThreshold;
                                 break;
@@ -1379,7 +1392,7 @@ namespace Jiten.Parser
                                                 {
                                                     WordId = bestV1.WordId, OriginalText = wordData.wordInfo.Text,
                                                     ReadingIndex = stemReadingIndex, Occurrences = wordData.occurrences,
-                                                    Conjugations = ["continuative"], PartsOfSpeech = bestV1.CachedPOS,
+                                                    Conjugations = ["continuative"], PartsOfSpeech = [..bestV1.CachedPOS],
                                                     Origin = bestV1.Origin
                                                 }, (int?)null, (List<FormCandidate>?)null);
                                         }
@@ -2035,7 +2048,7 @@ namespace Jiten.Parser
                                     {
                                         WordId = bestPair.Word.WordId, OriginalText = wordData.wordInfo.Text,
                                         ReadingIndex = bestPair.ReadingIndex, Occurrences = wordData.occurrences,
-                                        PartsOfSpeech = bestPair.Word.CachedPOS, Origin = bestPair.Word.Origin
+                                        PartsOfSpeech = [..bestPair.Word.CachedPOS], Origin = bestPair.Word.Origin
                                     };
                 return (true, deckWord, margin, allFormCandidates);
             }
@@ -2306,7 +2319,7 @@ namespace Jiten.Parser
                                         bestPair.Word.PartsOfSpeech.Contains("adj-na")
                                             ? []
                                             : bestPair.DeconjForm?.Process.ToList() ?? [],
-                                    PartsOfSpeech = bestPair.Word.CachedPOS, Origin = bestPair.Word.Origin
+                                    PartsOfSpeech = [..bestPair.Word.CachedPOS], Origin = bestPair.Word.Origin
                                 };
 
             return (true, deckWord, margin, allFormCandidates);
@@ -2421,8 +2434,6 @@ namespace Jiten.Parser
                 var wordCache = await JmDictCache.GetWordsAsync(matchesIds);
                 if (wordCache == null || wordCache.Count == 0)
                     continue;
-
-                PriorityOverrides.ApplyAll(wordCache.Values);
 
                 List<(JmDictWord match, int readingIndex)> matchesWithReading = new();
                 foreach (var id in matchesIds)
@@ -4266,7 +4277,6 @@ namespace Jiten.Parser
 
             var wordIds = corrected.Select(w => w.WordId).Distinct();
             var wordData = await JmDictCache.GetWordsAsync(wordIds);
-            PriorityOverrides.ApplyAll(wordData.Values);
 
             var flatTokens = new List<WordInfo>();
             var sentenceInitial = new List<bool>();
@@ -4867,10 +4877,15 @@ namespace Jiten.Parser
             var cachedCandidates = new Dictionary<(int sentIdx, int tokIdx), List<FormCandidate>>();
             var rederiveCache = new Dictionary<(string, PartOfSpeech, string, string, bool, bool), RederivationHelper.RederiveState?>();
 
+            // Depends only on surface text (immutable across both passes) — compute once per sentence.
+            var isClassicalBySentence = new bool[sentencePairs.Count];
+            for (int si = 0; si < sentencePairs.Count; si++)
+                isClassicalBySentence[si] = IsClassicalSentence(sentencePairs[si]);
+
             for (int si = 0; si < sentencePairs.Count; si++)
             {
                 var sentenceWords = sentencePairs[si];
-                bool isArchaicPass1 = IsClassicalSentence(sentenceWords);
+                bool isArchaicPass1 = isClassicalBySentence[si];
                 for (int i = 0; i < sentenceWords.Count; i++)
                 {
                     var (currentInfo, currentResult, currentMargin) = sentenceWords[i];
@@ -4919,17 +4934,18 @@ namespace Jiten.Parser
                          nextResult?.PartsOfSpeech, nextInfo?.Text))
                         continue;
 
+                    // currentInfo is not mutated within this iteration, so the key is computed once here.
+                    var dedupKey = GetDedupKey(currentInfo);
+
                     if (candidateLookup != null && !hasHint)
                     {
-                        var key = GetDedupKey(currentInfo);
-                        if (candidateLookup.TryGetValue(key, out var fpCandidates))
+                        if (candidateLookup.TryGetValue(dedupKey, out var fpCandidates))
                         {
                             cachedCandidates[(si, i)] = fpCandidates;
                             continue;
                         }
                     }
 
-                    var dedupKey = GetDedupKey(currentInfo);
                     RederivationHelper.RederiveState? state;
                     if (!rederiveCache.TryGetValue(dedupKey, out state))
                     {
@@ -4950,7 +4966,6 @@ namespace Jiten.Parser
                 wordCache = allWordIds.Count > 0
                     ? await JmDictCache.GetWordsAsync(allWordIds)
                     : new Dictionary<int, JmDictWord>();
-                PriorityOverrides.ApplyAll(wordCache.Values);
             }
             catch
             {
@@ -4964,7 +4979,7 @@ namespace Jiten.Parser
             for (int si = 0; si < sentencePairs.Count; si++)
             {
                 var sentenceWords = sentencePairs[si];
-                bool isArchaicSentence = IsClassicalSentence(sentenceWords);
+                bool isArchaicSentence = isClassicalBySentence[si];
                 var resolvedResults = new DeckWord?[sentenceWords.Count];
                 for (int ri = 0; ri < sentenceWords.Count; ri++)
                     resolvedResults[ri] = sentenceWords[ri].result;
@@ -5166,7 +5181,7 @@ namespace Jiten.Parser
                                                     ? []
                                                     : newBest.DeconjForm?.Process.ToList() ??
                                                       (wordIdChanged ? [] : currentResult.Conjugations),
-                                            PartsOfSpeech = newBest.Word.CachedPOS, Origin = newBest.Word.Origin,
+                                            PartsOfSpeech = [..newBest.Word.CachedPOS], Origin = newBest.Word.Origin,
                                             SudachiReading = currentInfo.Reading, SudachiPartOfSpeech = currentInfo.PartOfSpeech
                                         };
                         currentInfo.ResolvedWordId = newBest.Word.WordId;

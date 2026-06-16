@@ -227,7 +227,7 @@
             unwatch();
             setTimeout(() => {
               if (`${props.card.wordId}-${props.card.readingIndex}` !== cardKey) return;
-              tts.speakSentence(example.sentenceId, example.text);
+              playExample(example);
             }, 150);
           }
         });
@@ -244,11 +244,17 @@
     return props.card.confusableReadings ?? [];
   });
 
+  function playExample(ex: NonNullable<typeof cardExample.value>) {
+    // Custom sentences are encoded with a negated UserExampleSentenceId (see BuildCustomStudyExample).
+    if (ex.isCustom) tts.speakCustomSentence(-ex.sentenceId, ex.text);
+    else tts.speakSentence(ex.sentenceId, ex.text);
+  }
+
   function revealExample() {
     exampleRevealed.value = true;
     const example = cardExample.value;
     if (srsStore.studySettings.autoPlaySentence && example?.sentenceId) {
-      tts.speakSentence(example.sentenceId, example.text);
+      playExample(example);
     }
   }
 
@@ -275,13 +281,13 @@
             unwatch();
             setTimeout(() => {
               if (`${props.card.wordId}-${props.card.readingIndex}` !== cardKey) return;
-              tts.speakSentence(example!.sentenceId, example!.text);
+              playExample(example!);
             }, 150);
           }
         });
       }
     } else if (playSentence) {
-      tts.speakSentence(example!.sentenceId, example!.text);
+      playExample(example!);
     }
   });
 </script>
@@ -374,7 +380,15 @@
           >
             <div class="flex items-start gap-2">
               <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" lang="ja" />
-              <TtsButton v-if="cardExample" :text="cardExample.text" :sentence-id="cardExample.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
+              <TtsButton
+                v-if="cardExample"
+                :text="cardExample.text"
+                :sentence-id="cardExample.isCustom ? undefined : cardExample.sentenceId"
+                :custom-sentence-id="cardExample.isCustom ? -cardExample.sentenceId : undefined"
+                type="sentence"
+                size="sm"
+                class="mt-0.5 shrink-0"
+              />
             </div>
           </blockquote>
           <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">
@@ -515,7 +529,15 @@
             >
               <div class="flex items-start gap-2">
                 <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" lang="ja" />
-                <TtsButton v-if="cardExample" :text="cardExample.text" :sentence-id="cardExample.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
+                <TtsButton
+                v-if="cardExample"
+                :text="cardExample.text"
+                :sentence-id="cardExample.isCustom ? undefined : cardExample.sentenceId"
+                :custom-sentence-id="cardExample.isCustom ? -cardExample.sentenceId : undefined"
+                type="sentence"
+                size="sm"
+                class="mt-0.5 shrink-0"
+              />
               </div>
             </blockquote>
             <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">

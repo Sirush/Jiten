@@ -182,6 +182,18 @@ public class CliOptions
     [Option(longName: "flush-redis", Required = false, HelpText = "Flush the Redis cache (clears all cached parser results).")]
     public bool FlushRedis { get; set; }
 
+    [Option(longName: "warmup-tts", Required = false, HelpText = "Pre-generate and CDN-cache word TTS audio for the top N most frequent words across all voices (round-robin).")]
+    public int WarmupTts { get; set; }
+
+    [Option(longName: "warmup-tts-api-url", Required = false, HelpText = "Base API URL for TTS warmup (default: https://localhost:7299).")]
+    public string? WarmupTtsApiUrl { get; set; }
+
+    [Option(longName: "warmup-tts-concurrency", Required = false, HelpText = "Number of concurrent TTS warmup requests (default: 4).")]
+    public int WarmupTtsConcurrency { get; set; }
+
+    [Option(longName: "warmup-tts-voices", Required = false, HelpText = "Comma-separated voice keys to warm (default: all voices).")]
+    public string? WarmupTtsVoices { get; set; }
+
     [Option(longName: "create-wordset-from-pos", Required = false, HelpText = "Create a WordSet from words with specific Part of Speech.")]
     public bool CreateWordSetFromPos { get; set; }
 
@@ -228,6 +240,17 @@ public class CliOptions
     [Option(longName: "snapshot-tokens", Required = false,
             HelpText = "Dump every token's (WordId,ReadingIndex,Conjugations) for a corpus to --parse-test-output, for before/after refactor diffing. Requires --input.")]
     public bool SnapshotTokens { get; set; }
+
+    [Option(longName: "concurrency-smoke", Required = false,
+            HelpText = "Parse all .txt files in the given directory and dump per-file (WordId:ReadingIndex:Text) signatures to --parse-test-output. Parses in parallel by default (concurrent cross-document stress on the shared JmDict cache); add --smoke-sequential for a single-threaded pass. Run twice cold (flush Redis between, fresh process each) and diff the outputs to prove parallel==sequential.")]
+    public string? ConcurrencySmoke { get; set; }
+
+    [Option(longName: "smoke-sequential", Required = false, HelpText = "Make --concurrency-smoke parse single-threaded instead of in parallel.")]
+    public bool SmokeSequential { get; set; }
+
+    [Option(longName: "measure-hints", Required = false,
+            HelpText = "For each .epub in the given directory, extract ruby-annotated text and measure the furigana-hint cost (FindMatchingHint) as the wall-clock delta between parsing with hints vs the hint-stripped clean text. Reports tokens, hint count, and per-file delta.")]
+    public string? MeasureHints { get; set; }
 
     [Option(longName: "input", Required = false, HelpText = "Input corpus file path (used with --scan-confidence).")]
     public string? Input { get; set; }

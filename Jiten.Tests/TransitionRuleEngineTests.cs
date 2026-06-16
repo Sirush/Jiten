@@ -56,7 +56,10 @@ public class TransitionRuleEngineTests
     private static (int bonus, List<string> rules) EvaluateSoftRules(ScoringWindow window)
     {
         var rules = new List<string>();
-        var bonus = TransitionRuleEngine.EvaluateSoftRules(window, rules);
+        var mask = TransitionRuleEngine.ComputeContextApplicableMask(
+            window.PrevMask, window.HasPrev, window.PrevText,
+            window.NextMask, window.HasNext, window.NextText);
+        var bonus = TransitionRuleEngine.EvaluateSoftRules(window, mask, rules);
         return (bonus, rules);
     }
 

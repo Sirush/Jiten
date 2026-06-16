@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 
@@ -5,6 +6,31 @@ namespace Jiten.Parser.Scoring;
 
 internal static class RubyPriorsScorer
 {
+    // No-context ScoreDetailed result depends only on (WordId, RubyReading, Surface, IsKanaSurface) —
+    // SudachiPOS enters only via the IsContentWord guard (cached entries are always content words).
+    // 2-generation bounded cache (mirrors KanaConverter), ~2x MaxGen0Entries resident.
+    private const int MaxGen0Entries = 50_000;
+    private static volatile ConcurrentDictionary<(int, string, string, bool), RubyScoreResult> _gen0 = new();
+    private static volatile ConcurrentDictionary<(int, string, string, bool), RubyScoreResult>? _gen1;
+    private static int _gen0Count;
+    private static int _rotating;
+
+    private static void RotateGenerations()
+    {
+        if (Interlocked.CompareExchange(ref _rotating, 1, 0) != 0)
+            return;
+        try
+        {
+            _gen1 = _gen0;
+            _gen0 = new ConcurrentDictionary<(int, string, string, bool), RubyScoreResult>();
+            Interlocked.Exchange(ref _gen0Count, 0);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _rotating, 0);
+        }
+    }
+
     private static bool IsContentWord(PartOfSpeech pos) =>
         pos is not (PartOfSpeech.Particle or PartOfSpeech.Auxiliary or PartOfSpeech.Conjunction
             or PartOfSpeech.Symbol or PartOfSpeech.SupplementarySymbol or PartOfSpeech.BlankSpace
@@ -45,6 +71,28 @@ internal static class RubyPriorsScorer
         var reading = candidate.RubyReading;
         if (reading == null) return default;
 
+        var key = (candidate.Word.WordId, reading, context.Surface, context.IsKanaSurface);
+        if (_gen0.TryGetValue(key, out var cached))
+            return cached;
+        var gen1 = _gen1;
+        if (gen1 != null && gen1.TryGetValue(key, out cached))
+        {
+            _gen0.TryAdd(key, cached);
+            return cached;
+        }
+
+        var result = ComputeNoContext(priors, candidate, context, reading);
+
+        if (_gen0.TryAdd(key, result))
+            if (Interlocked.Increment(ref _gen0Count) > MaxGen0Entries)
+                RotateGenerations();
+
+        return result;
+    }
+
+    private static RubyScoreResult ComputeNoContext(
+        RubyReadingPriors priors, FormCandidate candidate, FormScoringContext context, string reading)
+    {
         if (ShouldUseKanaReverse(candidate, context))
             return priors.ScoreKanaReverseDetailed(reading, candidate.Word, null, null);
 

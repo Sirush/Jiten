@@ -194,6 +194,12 @@ public class Program
             await diagnosticCommands.FlushRedisCache();
         }
 
+        if (options.WarmupTts > 0)
+        {
+            var ttsCommands = new TtsCommands(context);
+            await ttsCommands.WarmupWordTts(options.WarmupTts, options.WarmupTtsApiUrl, options.WarmupTtsConcurrency, options.WarmupTtsVoices);
+        }
+
         if (options.ScanConfidence)
         {
             await diagnosticCommands.ScanConfidence(options);
@@ -207,6 +213,16 @@ public class Program
         if (options.SnapshotTokens)
         {
             await diagnosticCommands.SnapshotTokens(options);
+        }
+
+        if (!string.IsNullOrEmpty(options.ConcurrencySmoke))
+        {
+            await diagnosticCommands.RunConcurrencySmoke(options);
+        }
+
+        if (!string.IsNullOrEmpty(options.MeasureHints))
+        {
+            await diagnosticCommands.MeasureHints(options);
         }
 
         // Dictionary commands
