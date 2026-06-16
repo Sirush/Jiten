@@ -6,6 +6,28 @@ namespace Jiten.Parser.Scoring;
 
 internal readonly record struct RubyScoreResult(int Score, int Support, string? Level);
 
+// Immutable readings table with precomputed Total/EffectiveK (n-gram dicts never change after load).
+internal sealed class ReadingTable
+{
+    public readonly Dictionary<string, int> Readings;
+    public readonly int Total;
+    public readonly int EffectiveK;
+
+    public ReadingTable(Dictionary<string, int> readings)
+    {
+        Readings = readings;
+        int total = 0;
+        foreach (var v in readings.Values) total += v;
+        Total = total;
+
+        int threshold = Math.Max(10, (int)(total * 0.02));
+        int count = 0;
+        foreach (var v in readings.Values)
+            if (v >= threshold) count++;
+        EffectiveK = Math.Max(count, 2);
+    }
+}
+
 internal sealed class RubyReadingPriors
 {
     private static readonly Lazy<RubyReadingPriors?> Instance =
@@ -15,14 +37,22 @@ internal sealed class RubyReadingPriors
 
     public static RubyReadingPriors? Current => Enabled ? Instance.Value : null;
 
-    private readonly Dictionary<string, Dictionary<string, int>> _unigrams;
-    private readonly Dictionary<(string, string), Dictionary<string, int>> _leftBigrams;
-    private readonly Dictionary<(string, string), Dictionary<string, int>> _rightBigrams;
-    private readonly Dictionary<(string, string), Dictionary<string, int>> _left2Bigrams;
-    private readonly Dictionary<(string, string), Dictionary<string, int>> _right2Bigrams;
-    private readonly Dictionary<(string, string, string), Dictionary<string, int>> _trigrams;
+    private readonly Dictionary<string, ReadingTable> _unigrams;
+    private readonly Dictionary<(string, string), ReadingTable> _leftBigrams;
+    private readonly Dictionary<(string, string), ReadingTable> _rightBigrams;
+    private readonly Dictionary<(string, string), ReadingTable> _left2Bigrams;
+    private readonly Dictionary<(string, string), ReadingTable> _right2Bigrams;
+    private readonly Dictionary<(string, string, string), ReadingTable> _trigrams;
 
     private readonly Dictionary<string, List<(string kanjiForm, int count)>> _reverseIndex;
+
+    private static Dictionary<TKey, ReadingTable> Wrap<TKey>(Dictionary<TKey, Dictionary<string, int>> src)
+        where TKey : notnull
+    {
+        var result = new Dictionary<TKey, ReadingTable>(src.Count);
+        foreach (var (k, v) in src) result[k] = new ReadingTable(v);
+        return result;
+    }
 
     private RubyReadingPriors(
         Dictionary<string, Dictionary<string, int>> unigrams,
@@ -32,17 +62,17 @@ internal sealed class RubyReadingPriors
         Dictionary<(string, string), Dictionary<string, int>> right2Bigrams,
         Dictionary<(string, string, string), Dictionary<string, int>> trigrams)
     {
-        _unigrams = unigrams;
-        _leftBigrams = leftBigrams;
-        _rightBigrams = rightBigrams;
-        _left2Bigrams = left2Bigrams;
-        _right2Bigrams = right2Bigrams;
-        _trigrams = trigrams;
+        _unigrams = Wrap(unigrams);
+        _leftBigrams = Wrap(leftBigrams);
+        _rightBigrams = Wrap(rightBigrams);
+        _left2Bigrams = Wrap(left2Bigrams);
+        _right2Bigrams = Wrap(right2Bigrams);
+        _trigrams = Wrap(trigrams);
 
         _reverseIndex = new Dictionary<string, List<(string, int)>>();
-        foreach (var (kanjiForm, readings) in _unigrams)
+        foreach (var (kanjiForm, table) in _unigrams)
         {
-            foreach (var (reading, count) in readings)
+            foreach (var (reading, count) in table.Readings)
             {
                 if (!_reverseIndex.TryGetValue(reading, out var list))
                 {
@@ -80,13 +110,12 @@ internal sealed class RubyReadingPriors
         string? left2Context = null, string? right2Context = null)
     {
         if (kanjiForm == null || reading == null) return default;
-        if (!_unigrams.TryGetValue(kanjiForm, out var uniReadings)) return default;
+        if (!_unigrams.TryGetValue(kanjiForm, out var uniTable)) return default;
 
-        int uniTotal = 0;
-        foreach (var c in uniReadings.Values) uniTotal += c;
+        int uniTotal = uniTable.Total;
         if (uniTotal < MinUnigramTotal) return default;
 
-        int effectiveK = EffectiveReadingCount(uniReadings, uniTotal);
+        int effectiveK = uniTable.EffectiveK;
         double uniformLogP = Math.Log(1.0 / effectiveK);
 
         if (leftContext != null && rightContext != null)
@@ -119,7 +148,7 @@ internal sealed class RubyReadingPriors
         if (bestSkipLogP.HasValue)
             return new RubyScoreResult(ComputeBonus(bestSkipLogP.Value, uniformLogP, bestSkipTotal), bestSkipTotal, bestSkipLevel);
 
-        double uniLogP = Math.Log((uniReadings.GetValueOrDefault(reading) + Alpha) / (uniTotal + Alpha * effectiveK));
+        double uniLogP = Math.Log((uniTable.Readings.GetValueOrDefault(reading) + Alpha) / (uniTotal + Alpha * effectiveK));
         return new RubyScoreResult(ComputeBonus(uniLogP, uniformLogP, uniTotal), uniTotal, "unigram");
     }
 
@@ -134,7 +163,7 @@ internal sealed class RubyReadingPriors
     }
 
     private void TryBigramExpanded(
-        Dictionary<(string, string), Dictionary<string, int>> table,
+        Dictionary<(string, string), ReadingTable> table,
         string? context, string kanjiForm, bool contextIsLeft,
         string reading, string level,
         ref double? bestLogP, ref int bestTotal, ref string? bestLevel)
@@ -194,47 +223,38 @@ internal sealed class RubyReadingPriors
         string leftCtx, string kanjiForm, string rightCtx,
         string reading, double uniformLogP, ref RubyScoreResult best)
     {
-        if (!_trigrams.TryGetValue((leftCtx, kanjiForm, rightCtx), out var triReadings))
+        if (!_trigrams.TryGetValue((leftCtx, kanjiForm, rightCtx), out var triTable))
             return;
-        int triTotal = Sum(triReadings);
+        int triTotal = triTable.Total;
         double triReliability = (double)triTotal / (triTotal + TrigramHalfLife);
         if (triTotal < MinTrigramTotal || triReliability < ReliabilityThresholdTri)
             return;
-        int triK = EffectiveReadingCount(triReadings, triTotal);
-        double logP = Math.Log((triReadings.GetValueOrDefault(reading) + Alpha) / (triTotal + Alpha * triK));
+        int triK = triTable.EffectiveK;
+        double logP = Math.Log((triTable.Readings.GetValueOrDefault(reading) + Alpha) / (triTotal + Alpha * triK));
         var score = ComputeBonus(logP, uniformLogP, triTotal);
         if (score > best.Score)
             best = new RubyScoreResult(score, triTotal, "trigram");
     }
 
-    private void TryBigram(Dictionary<(string, string), Dictionary<string, int>> table,
+    private void TryBigram(Dictionary<(string, string), ReadingTable> table,
         (string, string) key, string reading, string level,
         ref double? bestLogP, ref int bestTotal, ref string? bestLevel)
     {
         if (key.Item1 == null || key.Item2 == null) return;
-        if (!table.TryGetValue(key, out var readings)) return;
+        if (!table.TryGetValue(key, out var rt)) return;
 
-        int total = Sum(readings);
+        int total = rt.Total;
         double reliability = (double)total / (total + BigramHalfLife);
         if (total < MinBigramTotal || reliability < ReliabilityThresholdBi) return;
 
-        int k = EffectiveReadingCount(readings, total);
-        double logP = Math.Log((readings.GetValueOrDefault(reading) + Alpha) / (total + Alpha * k));
+        int k = rt.EffectiveK;
+        double logP = Math.Log((rt.Readings.GetValueOrDefault(reading) + Alpha) / (total + Alpha * k));
         if (!bestLogP.HasValue || reliability > (double)bestTotal / (bestTotal + BigramHalfLife))
         {
             bestLogP = logP;
             bestTotal = total;
             bestLevel = level;
         }
-    }
-
-    private static int EffectiveReadingCount(Dictionary<string, int> readings, int total)
-    {
-        int threshold = Math.Max(10, (int)(total * 0.02));
-        int count = 0;
-        foreach (var v in readings.Values)
-            if (v >= threshold) count++;
-        return Math.Max(count, 2);
     }
 
     private static int ComputeBonus(double logP, double uniformLogP, int totalCount)
@@ -244,13 +264,6 @@ internal sealed class RubyReadingPriors
         int effectiveMax = (int)(MaxBonus * supportScale);
         int effectiveMin = (int)(MaxPenalty * supportScale);
         return Math.Clamp((int)Math.Round(rawBonus), -effectiveMin, effectiveMax);
-    }
-
-    private static int Sum(Dictionary<string, int> dict)
-    {
-        int total = 0;
-        foreach (var v in dict.Values) total += v;
-        return total;
     }
 
     public int ScoreKanaReverse(string reading, JmDictWord word, string? leftContext, string? rightContext,

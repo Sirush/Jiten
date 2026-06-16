@@ -229,6 +229,17 @@ public class CliOptions
             HelpText = "Dump every token's (WordId,ReadingIndex,Conjugations) for a corpus to --parse-test-output, for before/after refactor diffing. Requires --input.")]
     public bool SnapshotTokens { get; set; }
 
+    [Option(longName: "concurrency-smoke", Required = false,
+            HelpText = "Parse all .txt files in the given directory and dump per-file (WordId:ReadingIndex:Text) signatures to --parse-test-output. Parses in parallel by default (concurrent cross-document stress on the shared JmDict cache); add --smoke-sequential for a single-threaded pass. Run twice cold (flush Redis between, fresh process each) and diff the outputs to prove parallel==sequential.")]
+    public string? ConcurrencySmoke { get; set; }
+
+    [Option(longName: "smoke-sequential", Required = false, HelpText = "Make --concurrency-smoke parse single-threaded instead of in parallel.")]
+    public bool SmokeSequential { get; set; }
+
+    [Option(longName: "measure-hints", Required = false,
+            HelpText = "For each .epub in the given directory, extract ruby-annotated text and measure the furigana-hint cost (FindMatchingHint) as the wall-clock delta between parsing with hints vs the hint-stripped clean text. Reports tokens, hint count, and per-file delta.")]
+    public string? MeasureHints { get; set; }
+
     [Option(longName: "input", Required = false, HelpText = "Input corpus file path (used with --scan-confidence).")]
     public string? Input { get; set; }
 

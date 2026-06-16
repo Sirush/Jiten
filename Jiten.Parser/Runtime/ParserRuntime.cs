@@ -48,7 +48,8 @@ internal sealed class ParserRuntime
         var runtimeSettings = ParserRuntimeSettings.Current;
 
         IDeckWordCache deckWordCache = new RedisDeckWordCache(runtimeSettings.Configuration);
-        IJmDictCache jmDictCache = new RedisJmDictCache(runtimeSettings.Configuration, contextFactory);
+        IJmDictCache jmDictCache = new InProcessJmDictCache(
+            new RedisJmDictCache(runtimeSettings.Configuration, contextFactory));
 
         var overallSw = Stopwatch.StartNew();
 

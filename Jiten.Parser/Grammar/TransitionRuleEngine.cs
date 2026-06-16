@@ -241,17 +241,48 @@ internal static class TransitionRuleEngine
         return new TokenWindow(prev, words[i].word, next, i, words.Count);
     }
 
-    internal static int EvaluateSoftRules(ScoringWindow window, List<string>? rulesMatched = null)
+    // The ContextMatch conditions of every soft rule reference only context fields (prev/next/sentence
+    // position), which are constant across all candidates of a token. So the set of context-applicable
+    // rules can be computed once per token and reused: bit r is set iff SoftRules[r].ContextMatch passes.
+    // The bitmask covers the first 64 rules; rules at index >= 64 fall back to live ContextMatch
+    // evaluation in EvaluateSoftRules (output-identical, just unoptimized), so adding rules is always
+    // safe — no silent overflow.
+    private const int MaskCapacity = 64;
+
+    internal static ulong ComputeContextApplicableMask(
+        uint prevMask, bool hasPrev, string? prevText,
+        uint nextMask, bool hasNext, string? nextText)
+    {
+        // Candidate fields are unused by ContextMatch conditions, so leave them at defaults.
+        var ctx = new ConditionContext(0, "", prevMask, hasPrev, prevText, nextMask, hasNext, nextText);
+        var rules = TransitionRuleSets.SoftRules;
+
+        ulong mask = 0;
+        int n = Math.Min(MaskCapacity, rules.Length);
+        for (int r = 0; r < n; r++)
+            if (MatchesAll(ctx, rules[r].ContextMatch))
+                mask |= 1UL << r;
+        return mask;
+    }
+
+    internal static int EvaluateSoftRules(ScoringWindow window, ulong contextApplicableMask, List<string>? rulesMatched = null)
     {
         int bonus = 0;
         var ctx = ConditionContext.FromScoringWindow(window);
+        var rules = TransitionRuleSets.SoftRules;
 
-        foreach (var rule in TransitionRuleSets.SoftRules)
+        for (int r = 0; r < rules.Length; r++)
         {
+            // Rules 0..63 use the precomputed mask; any beyond fall back to live evaluation.
+            bool contextApplicable = r < MaskCapacity
+                ? (contextApplicableMask & (1UL << r)) != 0
+                : MatchesAll(ctx, rules[r].ContextMatch);
+            if (!contextApplicable) continue;
+
+            var rule = rules[r];
             if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
                 continue;
             if (!MatchesAll(ctx, rule.CandidateMatch)) continue;
-            if (!MatchesAll(ctx, rule.ContextMatch)) continue;
 
             bonus += rule.Delta;
             rulesMatched?.Add(rule.Id);

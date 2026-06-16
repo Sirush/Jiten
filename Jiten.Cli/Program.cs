@@ -209,6 +209,16 @@ public class Program
             await diagnosticCommands.SnapshotTokens(options);
         }
 
+        if (!string.IsNullOrEmpty(options.ConcurrencySmoke))
+        {
+            await diagnosticCommands.RunConcurrencySmoke(options);
+        }
+
+        if (!string.IsNullOrEmpty(options.MeasureHints))
+        {
+            await diagnosticCommands.MeasureHints(options);
+        }
+
         // Dictionary commands
         if (!string.IsNullOrEmpty(options.UserDicMassAdd))
         {
