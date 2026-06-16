@@ -4,15 +4,18 @@
     wordId?: number;
     readingIndex?: number;
     sentenceId?: number;
+    customSentenceId?: number;
     size?: 'sm' | 'md';
     type?: TtsType;
   }>(), { size: 'sm', type: 'word' });
 
   const textRef = computed(() => props.text ?? '');
-  const { speakWord, speakSentence, speak, isSpeaking, isSupported, isLoading } = useTts(textRef, props.type);
+  const { speakWord, speakSentence, speakCustomSentence, speak, isSpeaking, isSupported, isLoading } = useTts(textRef, props.type);
 
   function handleClick() {
-    if (props.sentenceId) {
+    if (props.customSentenceId) {
+      speakCustomSentence(props.customSentenceId, props.text);
+    } else if (props.sentenceId) {
       speakSentence(props.sentenceId, props.text);
     } else if (props.wordId !== undefined && props.readingIndex !== undefined) {
       speakWord(props.wordId, props.readingIndex, props.text);

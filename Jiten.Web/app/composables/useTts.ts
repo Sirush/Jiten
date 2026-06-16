@@ -44,6 +44,7 @@ export type TtsType = 'word' | 'sentence';
 
 export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
   const store = useJitenStore();
+  const authStore = useAuthStore();
   const config = useRuntimeConfig();
 
   const resolvedText = computed(() => typeof text === 'string' ? text : text?.value ?? '');
@@ -73,6 +74,15 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
     }
   }
 
+  function speakCustomSentence(userExampleSentenceId: number, fallbackText?: string) {
+    if (isServerMode.value) {
+      const url = `${config.public.baseURL}tts/custom-sentence/${userExampleSentenceId}?voice=${store.ttsVoice}`;
+      playServer(fallbackText ?? `c${userExampleSentenceId}`, url, true);
+    } else {
+      speakBrowser(fallbackText ?? '');
+    }
+  }
+
   function speak(inputText?: string) {
     const t = inputText ?? resolvedText.value;
     if (!t) return;
@@ -92,7 +102,7 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
     speechSynthesis.speak(utterance);
   }
 
-  async function playServer(textKey: string, url: string) {
+  async function playServer(textKey: string, url: string, withAuth = false) {
     reset();
     const abort = new AbortController();
     activeAbort = abort;
@@ -100,7 +110,9 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
     loadingTimer = setTimeout(() => { activeState.value = 'loading'; }, 200);
 
     try {
-      const response = await fetch(url, { signal: abort.signal });
+      const headers: Record<string, string> = {};
+      if (withAuth && authStore.accessToken) headers.Authorization = `Bearer ${authStore.accessToken}`;
+      const response = await fetch(url, { signal: abort.signal, headers });
       if (!response.ok) throw new Error(`TTS failed: ${response.status}`);
       const blob = await response.blob();
       if (abort.signal.aborted) return;
@@ -119,5 +131,5 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
     }
   }
 
-  return { speak, speakWord, speakSentence, stop: reset, isSpeaking, isAnyPlaying, isSupported, isLoading };
+  return { speak, speakWord, speakSentence, speakCustomSentence, stop: reset, isSpeaking, isAnyPlaying, isSupported, isLoading };
 }

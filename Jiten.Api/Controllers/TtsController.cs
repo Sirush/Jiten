@@ -66,6 +66,36 @@ public class TtsController(ITtsService ttsService) : ControllerBase
         }
     }
 
+    [HttpGet("custom-sentence/{id:int}")]
+    public async Task<IResult> GetCustomSentenceAudio(int id, [FromQuery] string voice = "female", CancellationToken ct = default)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        var rateLimitKey = GetRateLimitKey();
+        try
+        {
+            var audio = await ttsService.GetCustomSentenceAudioAsync(id, userId, voice, rateLimitKey, ct);
+            return Results.File(audio, "audio/opus");
+        }
+        catch (TtsTextNotFoundException)
+        {
+            return Results.NotFound(new { error = "Sentence not found" });
+        }
+        catch (TtsGenerationLimitException)
+        {
+            return Results.StatusCode(429);
+        }
+        catch (HttpRequestException)
+        {
+            return Results.StatusCode(503);
+        }
+        catch (TaskCanceledException)
+        {
+            return Results.StatusCode(504);
+        }
+    }
+
     private string GetRateLimitKey()
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

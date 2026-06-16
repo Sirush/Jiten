@@ -22,6 +22,7 @@ public interface ITtsService
 {
     Task<byte[]> GetWordAudioAsync(int wordId, int readingIndex, string voice, string rateLimitKey, CancellationToken ct);
     Task<byte[]> GetSentenceAudioAsync(int sentenceId, string voice, string rateLimitKey, CancellationToken ct);
+    Task<byte[]> GetCustomSentenceAudioAsync(int userExampleSentenceId, string userId, string voice, string rateLimitKey, CancellationToken ct);
 }
 
 public class TtsService(
@@ -93,8 +94,34 @@ public class TtsService(
 
         if (text == null) throw new TtsTextNotFoundException();
 
+        return await SynthesizeSentenceText(text, voice, rateLimitKey, ct);
+    }
+
+    public async Task<byte[]> GetCustomSentenceAudioAsync(int userExampleSentenceId, string userId, string voice, string rateLimitKey, CancellationToken ct)
+    {
+        if (!Voices.ContainsKey(voice)) voice = "female";
+
+        using var scope = scopeFactory.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+        var text = await userDb.UserExampleSentences
+            .Where(s => s.UserExampleSentenceId == userExampleSentenceId && s.UserId == userId)
+            .Select(s => s.Text)
+            .FirstOrDefaultAsync(ct);
+
+        if (text == null) throw new TtsTextNotFoundException();
+
+        // Strip the **highlight** markers so the hash (and audio) matches the source example sentence.
+        text = text.Replace("**", "");
+        if (string.IsNullOrWhiteSpace(text)) throw new TtsTextNotFoundException();
+
+        return await SynthesizeSentenceText(text, voice, rateLimitKey, ct);
+    }
+
+    private Task<byte[]> SynthesizeSentenceText(string text, string voice, string rateLimitKey, CancellationToken ct)
+    {
         var key = $"{voice}:s:{text}";
-        return await _inflight.GetOrAdd(key, _ => GenerateSentenceAsync(key, text, voice, rateLimitKey, ct));
+        return _inflight.GetOrAdd(key, _ => GenerateSentenceAsync(key, text, voice, rateLimitKey, ct));
     }
 
     private async Task<string> GetSentenceWithReadings(string text)
