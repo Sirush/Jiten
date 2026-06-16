@@ -32,6 +32,7 @@ public partial class MorphologicalAnalyser
                     {
                         Text = prevTok.Text + "た",
                         PartOfSpeech = PartOfSpeech.Verb,
+                        Reading = string.IsNullOrEmpty(prevTok.Reading) ? prevTok.Reading : prevTok.Reading + "タ",
                         EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : prevTok.EndOffset
                     };
                     result.Add(new WordInfo

@@ -440,8 +440,15 @@ public partial class MorphologicalAnalyser
             {
                 word.PreMatchedWordId = 1894260;
                 word.DictionaryForm = "ツイてる";
-                if (word.Text.EndsWith("ない", StringComparison.Ordinal))
-                    word.PreMatchedConjugations = ["negative"];
+                // The PreMatched path bypasses deconjugation, so the conjugation chain must be set
+                // explicitly or non-present forms render as the bare lemma (ツイてた = past, not ツイてる).
+                word.PreMatchedConjugations = word.Text["ツイて".Length..] switch
+                {
+                    "なかった" => ["negative", "past"],
+                    "ない" => ["negative"],
+                    "た" => ["past"],
+                    _ => word.PreMatchedConjugations
+                };
             }
 
             // 弾ける: Sudachi gives dict=弾ける for both はじける (to burst) and the potential of
