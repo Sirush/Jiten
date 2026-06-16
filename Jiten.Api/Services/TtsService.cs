@@ -7,6 +7,7 @@ using Concentus;
 using Concentus.Enums;
 using Concentus.Oggfile;
 using System.Text.RegularExpressions;
+using Jiten.Api.Helpers;
 using Jiten.Core;
 using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
@@ -58,31 +59,39 @@ public class TtsService(
         var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
 
         var ri = (short)readingIndex;
-        var rubyText = await db.WordForms
-            .Where(f => f.WordId == wordId && f.ReadingIndex == ri)
+        var wordForms = await db.WordForms
+            .AsNoTracking()
+            .Where(f => f.WordId == wordId)
+            .ToListAsync(ct);
+
+        RubyTextHelper.EnrichForms(wordForms);
+
+        var rubyText = wordForms
+            .Where(f => f.ReadingIndex == ri)
             .OrderByDescending(f => f.FormType)
             .Select(f => f.RubyText)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefault();
 
-        var text = !string.IsNullOrEmpty(rubyText) ? StripRubyToKana(rubyText) : null;
 
-        if (string.IsNullOrWhiteSpace(text))
+        string? text = !string.IsNullOrEmpty(rubyText) ? RubyToTtsKana(rubyText) : null;
+
+        if (string.IsNullOrWhiteSpace(text) || ContainsKanji(text))
         {
-            text = await db.WordForms
-                .Where(f => f.WordId == wordId && f.FormType == JmDictFormType.KanaForm)
+            text = wordForms
+                .Where(f => f.FormType == JmDictFormType.KanaForm)
                 .OrderBy(f => f.ReadingIndex)
                 .Select(f => f.Text)
-                .FirstOrDefaultAsync(ct);
+                .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(text)) throw new TtsTextNotFoundException();
         }
 
-        if (string.IsNullOrWhiteSpace(text)) throw new TtsTextNotFoundException();
-
-        // VOICEVOX/OpenJTalk runs its own morphological analysis on the input. A standalone
-        // hiragana reading such as は (葉) or はで (派手) gets classified as the topic particle
-        // and pronounced "wa". Katakana is never treated as a particle, so feed the reading as
-        // katakana to force the literal pronunciation. (The sentence path already uses Sudachi
-        // katakana readings, so it is unaffected.)
-        text = WanaKana.ToKatakana(text);
+        // OpenJTalk mis-voices a LEADING は/へ/を as a topic/direction/object particle
+        // ("wa"/"e"/"o"), but at the head of an isolated word that kana is literal (はで→"hade",
+        // not "wade"; 葉→"ha"). Katakana is never treated as a particle, so promote only the
+        // leading kana. Interior は/へ/を stay hiragana so genuine particles keep their reading
+        // (詳しくは→"kuwashiku wa", ではない→"de wa nai").
+        text = FixLeadingParticleKana(text);
 
         var key = $"{voice}:w:{text}";
         return await _inflight.GetOrAdd(key, _ => GenerateAsync(key, text, TtsType.Word, voice, rateLimitKey, ct, bypassGenerationLimit));
@@ -388,8 +397,19 @@ public class TtsService(
 
     private static readonly Regex RubyPattern = new(@"[\u4E00-\u9FFF\uFF10-\uFF5A々]+\[([\u3040-\u309F\u30A0-\u30FF]+)\]", RegexOptions.Compiled);
 
-    private static string StripRubyToKana(string rubyText) =>
-        RubyPattern.Replace(rubyText, "$1");
+    // Replaces each kanji block with its furigana reading rendered in katakana, while leaving the
+    // literal kana around it (okurigana, particles) untouched. This pins kanji to their dictionary
+    // reading for TTS without forcing bare particles (は/へ/を) to their literal pronunciation.
+    private static string RubyToTtsKana(string rubyText) =>
+        RubyPattern.Replace(rubyText, m => WanaKana.ToKatakana(m.Groups[1].Value));
+
+    private static bool ContainsKanji(string text) =>
+        text.Any(c => (c >= '一' && c <= '鿿') || c == '々');
+
+    private static string FixLeadingParticleKana(string text) =>
+        text.Length > 0 && text[0] is 'は' or 'へ' or 'を'
+            ? WanaKana.ToKatakana(text[0].ToString()) + text[1..]
+            : text;
 
     private record VoiceConfig(string Speaker, string? Style, double SpeedScale = 1.0);
 
