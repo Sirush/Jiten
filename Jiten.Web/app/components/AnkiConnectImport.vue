@@ -69,6 +69,7 @@
   onMounted(() => {
     window.addEventListener('error', handleWindowError);
     window.addEventListener('unhandledrejection', handleRejection);
+    restoreImportSettings();
   });
   onUnmounted(() => {
     window.removeEventListener('error', handleWindowError);
@@ -131,6 +132,97 @@
   const parseWords = ref(false);
   const importReviewHistory = ref(true);
 
+  // --- Remembered import settings (device-local; issue #402) ---
+  // Persisted to localStorage. EVERYTHING is remembered PER DECK (keyed by deck id): the word/reading
+  // fields (stored by NAME, since the index into `fields` is rebuilt every time a deck loads) and the
+  // three option checkboxes — so different decks keep independent configs and never overwrite each
+  // other. A saved entry is matched to a deck by the EXACT same deck first (id map-key AND stored name
+  // both match), then by deck name alone as a backup (e.g. if Anki reassigned the id after a reinstall),
+  // in which case the entry is re-keyed to the deck's new id. A plain id match alone is not trusted, so a
+  // reused id can't apply another deck's config.
+  const IMPORT_SETTINGS_KEY = 'ankiconnect-import-settings';
+  const IMPORT_SETTINGS_VERSION = 1;
+
+  interface DeckSelection {
+    deckName: string;
+    fieldName: string;
+    readingFieldName: string; // '' = none
+    importReviewHistory: boolean;
+    overwriteExisting: boolean;
+    parseWords: boolean;
+  }
+
+  interface PersistedImportSettings {
+    version: number;
+    lastDeckId: number;
+    decks: Record<string, DeckSelection>; // keyed by deck id
+  }
+
+  // Defaults for a deck we haven't configured before (mirror the ref initial values above).
+  const DEFAULT_IMPORT_REVIEW_HISTORY = true;
+  const DEFAULT_OVERWRITE_EXISTING = false;
+  const DEFAULT_PARSE_WORDS = false;
+
+  // In-memory mirror of the persisted settings, mutated as the user makes choices and written back to
+  // localStorage. `lastLoadedDeckId` tracks which deck the list in `fields` belongs to, so a same-deck
+  // reload keeps the in-session selection while switching decks restores that deck's own saved config
+  // (or defaults for an unseen deck).
+  let savedSettings: PersistedImportSettings | null = null;
+  let lastLoadedDeckId = 0;
+
+  const restoreImportSettings = () => {
+    try {
+      const raw = localStorage.getItem(IMPORT_SETTINGS_KEY);
+      if (raw) {
+        const blob = JSON.parse(raw) as PersistedImportSettings;
+        if (blob && blob.version === IMPORT_SETTINGS_VERSION && blob.decks) savedSettings = blob;
+      }
+    } catch {
+      // Corrupt JSON / disabled storage is non-fatal — start with defaults.
+    }
+    // Always keep a usable in-memory object so later writes work even when nothing was stored. Per-deck
+    // fields + options are applied later, once a deck is chosen, in the step-2 block.
+    savedSettings ??= { version: IMPORT_SETTINGS_VERSION, lastDeckId: 0, decks: {} };
+  };
+
+  const writeSettings = () => {
+    if (!savedSettings) return;
+    try {
+      localStorage.setItem(IMPORT_SETTINGS_KEY, JSON.stringify(savedSettings));
+    } catch {
+      // Quota / private-mode failures are non-fatal.
+    }
+  };
+
+  // Record the current deck's full selection (fields by name + the three options) into the in-memory
+  // settings, keyed by deck id so each deck keeps its own choices and other decks stay untouched. Reads
+  // the live controls, so it works the moment the user picks — no dependency on advancing a step.
+  const captureDeckSelection = () => {
+    if (!savedSettings || !selectedDeck.value) return;
+    savedSettings.lastDeckId = selectedDeck.value;
+    const fieldName = fields.value[selectedField.value]?.[0];
+    if (!fieldName) return;
+    const deckName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0] ?? '';
+    const readingFieldName = selectedReadingField.value >= 0 ? fields.value[selectedReadingField.value]?.[0] ?? '' : '';
+    savedSettings.decks[selectedDeck.value] = {
+      deckName,
+      fieldName,
+      readingFieldName,
+      importReviewHistory: importReviewHistory.value,
+      overwriteExisting: overwriteExisting.value,
+      parseWords: parseWords.value,
+    };
+  };
+
+  const persistImportSettings = () => {
+    captureDeckSelection();
+    writeSettings();
+  };
+
+  // @change on the field/reading Selects and the option Checkboxes: persist this deck's selection
+  // immediately on a user change, so it survives any later navigation and never leaks into another deck.
+  const onSelectionChanged = () => persistImportSettings();
+
   const fieldsOptions = computed(() =>
     (fields.value || []).map((entry, idx) => ({
       label: entry[0] + (entry[1].value ? ` (${stripRuby(entry[1].value).substring(0, 20)})` : ''),
@@ -156,6 +248,16 @@
       decks = await client.deck.deckNamesAndIds();
       deckEntries = Object.entries(decks);
       cantConnect.value = false;
+
+      // Pre-select the last-used deck: by id first, then by its stored name as a backup (in case Anki
+      // reassigned the id). The step-2 restore re-validates id+name before applying any saved config.
+      if (savedSettings && savedSettings.lastDeckId) {
+        const lastName = savedSettings.decks[savedSettings.lastDeckId]?.deckName;
+        const match =
+          deckEntries.find(([_, id]) => id === savedSettings!.lastDeckId) ??
+          (lastName ? deckEntries.find(([name]) => name === lastName) : undefined);
+        if (match) selectedDeck.value = match[1];
+      }
 
       try {
         await ankiInvoke('cardsInfo', { cards: [], fields: cardsInfoFields });
@@ -267,6 +369,12 @@
         // Sample several cards rather than just the first: a field (e.g. ExpressionReading) may be
         // empty on the first card while populated on others, which would leave it without a preview.
         const previewCards = await fetchCardsInfo(cardsIds.slice(0, 20));
+        // Only a reload of the SAME deck keeps the in-session selection (e.g. clicking Back from the
+        // options step); switching to a different deck restores that deck's own saved selection below.
+        const sameDeckReload = selectedDeck.value === lastLoadedDeckId;
+        const prevFieldName = sameDeckReload ? fields.value[selectedField.value]?.[0] : undefined;
+        const prevReadingName = sameDeckReload && selectedReadingField.value >= 0 ? fields.value[selectedReadingField.value]?.[0] : '';
+
         selectedField.value = 0;
         selectedReadingField.value = -1;
         if (previewCards && previewCards.length > 0) {
@@ -282,6 +390,56 @@
           fields.value = [...merged.entries()].sort((a, b) => a[1].order - b[1].order);
         } else {
           fields.value = [];
+        }
+        lastLoadedDeckId = selectedDeck.value;
+
+        // Re-apply selections by NAME (the index was just rebuilt). A same-deck reload keeps the
+        // in-session selection. Switching to a different deck restores THAT deck's own saved config —
+        // fields AND options — but only when it is the EXACT same deck (entry keyed by this id AND the
+        // stored name matches); otherwise it starts from defaults so the previous deck can't leak in.
+        let wantFieldName = prevFieldName;
+        let wantReadingName = prevReadingName;
+        if (!sameDeckReload) {
+          importReviewHistory.value = DEFAULT_IMPORT_REVIEW_HISTORY;
+          overwriteExisting.value = DEFAULT_OVERWRITE_EXISTING;
+          parseWords.value = DEFAULT_PARSE_WORDS;
+          const loadedDeckName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0];
+          // Prefer the EXACT same deck (entry keyed by this id AND its stored name matches); fall back to
+          // matching by name alone if Anki reassigned the id. A plain id match alone is not trusted.
+          const byId = savedSettings?.decks[selectedDeck.value];
+          let saved: DeckSelection | undefined;
+          if (byId && byId.deckName === loadedDeckName) {
+            saved = byId;
+          } else if (loadedDeckName && savedSettings) {
+            const entry = Object.entries(savedSettings.decks).find(([, d]) => d.deckName === loadedDeckName);
+            if (entry) {
+              saved = entry[1];
+              // Anki reassigned the id (e.g. after a reinstall): migrate the entry to the deck's current
+              // id and drop the stale one, so later loads hit the exact id+name path and old ids don't pile up.
+              if (entry[0] !== String(selectedDeck.value)) {
+                delete savedSettings.decks[entry[0]];
+                savedSettings.decks[selectedDeck.value] = saved;
+                savedSettings.lastDeckId = selectedDeck.value;
+                writeSettings();
+              }
+            }
+          }
+          if (saved) {
+            wantFieldName = saved.fieldName;
+            wantReadingName = saved.readingFieldName;
+            importReviewHistory.value = saved.importReviewHistory;
+            overwriteExisting.value = saved.overwriteExisting;
+            parseWords.value = saved.parseWords;
+          }
+        }
+
+        if (wantFieldName) {
+          const wordIdx = fields.value.findIndex(([name]) => name === wantFieldName);
+          if (wordIdx >= 0) selectedField.value = wordIdx;
+        }
+        if (wantReadingName) {
+          const readingIdx = fields.value.findIndex(([name]) => name === wantReadingName);
+          if (readingIdx >= 0) selectedReadingField.value = readingIdx;
         }
       } catch (e) {
         reportError(e, 'Failed to load deck from Anki.');
@@ -303,10 +461,15 @@
       }
       const readingFieldEntry = selectedReadingField.value >= 0 ? fields.value[selectedReadingField.value] : undefined;
       selectedReadingFieldName = readingFieldEntry ? readingFieldEntry[0] : '';
+      // Save this deck's field mapping now, so switching between decks remembers each one even before
+      // an import is run (issue #402). Options are re-saved with their final values at step 4.
+      persistImportSettings();
       // No API calls - all heavy work is deferred to Step 4
     }
 
     if (currentStep.value == 4) {
+      // Remember these choices for next time (issue #402); saved even if the import later errors.
+      persistImportSettings();
       isLoading.value = true;
       operationActive.value = true;
       fetchProgress.value = 0;
@@ -577,10 +740,10 @@
         </div>
         <div v-else>
           <p>Select the correct field containing the words WITHOUT furigana</p>
-          <Select v-model="selectedField" :options="fieldsOptions" optionLabel="label" optionValue="value" placeholder="Select a field" class="w-full" />
+          <Select v-model="selectedField" :options="fieldsOptions" optionLabel="label" optionValue="value" placeholder="Select a field" class="w-full" @change="onSelectionChanged" />
           <p class="mt-4">Optional: select a reading field to disambiguate words that share the same spelling but have different readings.</p>
           <p class="text-sm text-surface-500 mb-1">Full kana or furigana (e.g. <span class="font-noto-sans">下[くだ]さる</span>) both work. The most common word matching the reading is used; if none match, the most common word is kept.</p>
-          <Select v-model="selectedReadingField" :options="readingFieldsOptions" optionLabel="label" optionValue="value" placeholder="None (optional)" class="w-full" />
+          <Select v-model="selectedReadingField" :options="readingFieldsOptions" optionLabel="label" optionValue="value" placeholder="None (optional)" class="w-full" @change="onSelectionChanged" />
           <div class="flex flex-row gap-2 p-4">
             <Button label="Back" :disabled="!selectedDeck" @click="PreviousStep()" />
             <Button label="Next" @click="NextStep()" />
@@ -596,19 +759,19 @@
         </p>
         <div class="flex flex-col gap-3 p-4">
           <div class="flex items-center gap-2">
-            <Checkbox v-model="importReviewHistory" inputId="importReviewHistory" :binary="true" />
+            <Checkbox v-model="importReviewHistory" inputId="importReviewHistory" :binary="true" @change="onSelectionChanged" />
             <label for="importReviewHistory" class="cursor-pointer">
               Import review history (uncheck for large decks with memory issues)
             </label>
           </div>
           <div class="flex items-center gap-2">
-            <Checkbox v-model="overwriteExisting" inputId="overwrite" :binary="true" />
+            <Checkbox v-model="overwriteExisting" inputId="overwrite" :binary="true" @change="onSelectionChanged" />
             <label for="overwrite" class="cursor-pointer">
               Overwrite existing cards (replace cards you already have with Anki versions, even if they are more recent)
             </label>
           </div>
           <div class="flex items-center gap-2">
-            <Checkbox v-model="parseWords" inputId="parseWords" :binary="true" />
+            <Checkbox v-model="parseWords" inputId="parseWords" :binary="true" @change="onSelectionChanged" />
             <label for="parseWords" class="cursor-pointer">
               Parse words instead of importing them directly (only use if you have conjugated verbs instead of the dictionary form, less accurate)
             </label>
