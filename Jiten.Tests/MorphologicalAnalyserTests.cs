@@ -39,6 +39,18 @@ public class MorphologicalAnalyserTests
 
     public static IEnumerable<object[]> SegmentationCases()
     {
+        // Compound particles / expressions that Sudachi splits — complete sentences as provided
+        yield return ["私が油断したばかりに......", new[] { "私", "が", "油断した", "ばかりに" }];
+        yield return ["......なかなか威勢のいいお仲間じゃないか", new[] { "なかなか", "威勢のいい", "お", "仲間", "じゃないか" }];
+        yield return ["しかし、それでは――", new[] { "しかし", "それでは" }];
+        // たか mis-tokenised as 鷹/高 — should be past た + question か
+        yield return ["......言い過ぎたか?", new[] { "言い過ぎた", "か" }];
+        // こんな 連体詞 cut as こん|なの (こん mismatched to 紺) — should be こんな + の
+        yield return ["こんなの、取っておく価値あるのか?", new[] { "こんな", "の", "取っておく", "価値", "ある", "の", "か" }];
+        // katakana name mora stolen by a following particle: カティア|と cut as カティ|アと (アと=後 あと)
+        yield return ["必ず、カティアとファム姉を助け出そう。",
+            new[] { "必ず", "カティア", "と", "ファム", "姉", "を", "助け出そう" }];
+
         yield return ["ご注文はうさぎですか", new[] { "ご注文", "は", "うさぎ", "ですか" }];
         yield return ["しませんか", new[] { "しません", "か" }];
         yield return ["ドンマイ", new[] { "ドンマイ" }];

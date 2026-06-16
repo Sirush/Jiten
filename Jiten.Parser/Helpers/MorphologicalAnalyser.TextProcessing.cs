@@ -166,8 +166,12 @@ public partial class MorphologicalAnalyser
         text = text.Replace("小木曽", $"小木曽{_stopToken}");
         text = text.Replace("するすると", $"{_stopToken}するすると");
         text = text.Replace("ぶっち切", "ぶち切");
-        text = text.Replace("ぶっ壊れ", $"ぶっ{_stopToken}壊れ");
         text = EmphaticTsuRegex().Replace(text, $"{_stopToken}$1");
+        // Split the intensifying prefix ぶっ from 壊れ AFTER EmphaticTsuRegex (脳味噌|が|ぶっ|壊れた).
+        // Doing it before would leave っ in front of the stop token (not the 壊 kanji), so EmphaticTsuRegex
+        // would cut ぶ|っ and Sudachi would merge the preceding が+ぶ→がぶ (then dropped as a kana name).
+        // ぶっ壊れる has no JMDict entry, so ぶっ (2698210) stays a standalone prefix + 壊れた.
+        text = text.Replace("ぶっ壊れ", $"{_stopToken}ぶっ{_stopToken}壊れ");
         text = BanCompoundTsuRegex().Replace(text, $"番{_stopToken}っ");
 
         text = text

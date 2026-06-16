@@ -1233,10 +1233,16 @@ namespace Jiten.Parser
                             var wordCache = await GetWordsWithCache([preMatchedWordId], batchWordCache);
                             if (wordCache.TryGetValue(preMatchedWordId, out var preMatchedWord))
                             {
-                                var textForReadingLookup = !string.IsNullOrEmpty(wordData.wordInfo.DictionaryForm)
-                                    ? wordData.wordInfo.DictionaryForm
-                                    : wordData.wordInfo.Text;
-                                var readingIndex = GetBestReadingIndex(preMatchedWord, textForReadingLookup, wordData.wordInfo.Reading);
+                                // Prefer the surface for the reading-index lookup so a kana surface (いける)
+                                // resolves to the kana form, even when DictionaryForm was set to a kanji
+                                // homograph purely for cache-keying (disambiguated いける→生ける). Fall back
+                                // to DictionaryForm when the surface itself isn't one of the word's forms,
+                                // so conjugated surfaces (食べた→食べる) still resolve to the lemma's reading.
+                                var surface = wordData.wordInfo.Text;
+                                var readingIndex = GetBestReadingIndex(preMatchedWord, surface, wordData.wordInfo.Reading);
+                                if (readingIndex == 255 && !string.IsNullOrEmpty(wordData.wordInfo.DictionaryForm)
+                                    && wordData.wordInfo.DictionaryForm != surface)
+                                    readingIndex = GetBestReadingIndex(preMatchedWord, wordData.wordInfo.DictionaryForm, wordData.wordInfo.Reading);
                                 processedWord = new DeckWord
                                                 {
                                                     WordId = preMatchedWordId, ReadingIndex = readingIndex,
