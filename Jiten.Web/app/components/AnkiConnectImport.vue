@@ -2,6 +2,7 @@
   import { ref, computed, onMounted, onUnmounted } from 'vue';
   import { YankiConnect } from 'yanki-connect';
   import { useToast } from 'primevue/usetoast';
+  import { useAnkiImportStore, defaultImportSelection } from '~/stores/ankiImportStore';
 
   const emit = defineEmits<{
     importComplete: [];
@@ -9,6 +10,7 @@
 
   const { $api } = useNuxtApp();
   const toast = useToast();
+  const ankiImportStore = useAnkiImportStore();
 
   let currentStep = ref(0);
 
@@ -69,7 +71,7 @@
   onMounted(() => {
     window.addEventListener('error', handleWindowError);
     window.addEventListener('unhandledrejection', handleRejection);
-    restoreImportSettings();
+    ankiImportStore.load();
   });
   onUnmounted(() => {
     window.removeEventListener('error', handleWindowError);
@@ -133,90 +135,26 @@
   const importReviewHistory = ref(true);
 
   // --- Remembered import settings (device-local; issue #402) ---
-  // Persisted to localStorage. EVERYTHING is remembered PER DECK (keyed by deck id): the word/reading
-  // fields (stored by NAME, since the index into `fields` is rebuilt every time a deck loads) and the
-  // three option checkboxes — so different decks keep independent configs and never overwrite each
-  // other. A saved entry is matched to a deck by the EXACT same deck first (id map-key AND stored name
-  // both match), then by deck name alone as a backup (e.g. if Anki reassigned the id after a reinstall),
-  // in which case the entry is re-keyed to the deck's new id. A plain id match alone is not trusted, so a
-  // reused id can't apply another deck's config.
-  const IMPORT_SETTINGS_KEY = 'ankiconnect-import-settings';
-  const IMPORT_SETTINGS_VERSION = 1;
 
-  interface DeckSelection {
-    deckName: string;
-    fieldName: string;
-    readingFieldName: string; // '' = none
-    importReviewHistory: boolean;
-    overwriteExisting: boolean;
-    parseWords: boolean;
-  }
+  // The deck list arrives as [name, id] pairs; the chosen deck's name is derived from its id.
+  const selectedDeckName = computed(() => deckEntries.find(([, id]) => id === selectedDeck.value)?.[0] ?? '');
 
-  interface PersistedImportSettings {
-    version: number;
-    lastDeckId: number;
-    decks: Record<string, DeckSelection>; // keyed by deck id
-  }
-
-  // Defaults for a deck we haven't configured before (mirror the ref initial values above).
-  const DEFAULT_IMPORT_REVIEW_HISTORY = true;
-  const DEFAULT_OVERWRITE_EXISTING = false;
-  const DEFAULT_PARSE_WORDS = false;
-
-  // In-memory mirror of the persisted settings, mutated as the user makes choices and written back to
-  // localStorage. `lastLoadedDeckId` tracks which deck the list in `fields` belongs to, so a same-deck
-  // reload keeps the in-session selection while switching decks restores that deck's own saved config
-  // (or defaults for an unseen deck).
-  let savedSettings: PersistedImportSettings | null = null;
   let lastLoadedDeckId = 0;
 
-  const restoreImportSettings = () => {
-    try {
-      const raw = localStorage.getItem(IMPORT_SETTINGS_KEY);
-      if (raw) {
-        const blob = JSON.parse(raw) as PersistedImportSettings;
-        if (blob && blob.version === IMPORT_SETTINGS_VERSION && blob.decks) savedSettings = blob;
-      }
-    } catch {
-      // Corrupt JSON / disabled storage is non-fatal — start with defaults.
-    }
-    // Always keep a usable in-memory object so later writes work even when nothing was stored. Per-deck
-    // fields + options are applied later, once a deck is chosen, in the step-2 block.
-    savedSettings ??= { version: IMPORT_SETTINGS_VERSION, lastDeckId: 0, decks: {} };
-  };
-
-  const writeSettings = () => {
-    if (!savedSettings) return;
-    try {
-      localStorage.setItem(IMPORT_SETTINGS_KEY, JSON.stringify(savedSettings));
-    } catch {
-      // Quota / private-mode failures are non-fatal.
-    }
-  };
-
-  // Record the current deck's full selection (fields by name + the three options) into the in-memory
-  // settings, keyed by deck id so each deck keeps its own choices and other decks stay untouched. Reads
-  // the live controls, so it works the moment the user picks — no dependency on advancing a step.
-  const captureDeckSelection = () => {
-    if (!savedSettings || !selectedDeck.value) return;
-    savedSettings.lastDeckId = selectedDeck.value;
+  const persistImportSettings = () => {
+    if (!selectedDeck.value) return;
     const fieldName = fields.value[selectedField.value]?.[0];
     if (!fieldName) return;
-    const deckName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0] ?? '';
+    const deckName = selectedDeckName.value;
     const readingFieldName = selectedReadingField.value >= 0 ? fields.value[selectedReadingField.value]?.[0] ?? '' : '';
-    savedSettings.decks[selectedDeck.value] = {
+    ankiImportStore.saveDeckSelection(selectedDeck.value, {
       deckName,
       fieldName,
       readingFieldName,
       importReviewHistory: importReviewHistory.value,
       overwriteExisting: overwriteExisting.value,
       parseWords: parseWords.value,
-    };
-  };
-
-  const persistImportSettings = () => {
-    captureDeckSelection();
-    writeSettings();
+    });
   };
 
   // @change on the field/reading Selects and the option Checkboxes: persist this deck's selection
@@ -249,15 +187,10 @@
       deckEntries = Object.entries(decks);
       cantConnect.value = false;
 
-      // Pre-select the last-used deck: by id first, then by its stored name as a backup (in case Anki
-      // reassigned the id). The step-2 restore re-validates id+name before applying any saved config.
-      if (savedSettings && savedSettings.lastDeckId) {
-        const lastName = savedSettings.decks[savedSettings.lastDeckId]?.deckName;
-        const match =
-          deckEntries.find(([_, id]) => id === savedSettings!.lastDeckId) ??
-          (lastName ? deckEntries.find(([name]) => name === lastName) : undefined);
-        if (match) selectedDeck.value = match[1];
-      }
+      // Pre-select the last-used deck (by id, then stored name as a backup). The step-2 restore
+      // re-validates id+name before applying any saved config.
+      const lastDeckId = ankiImportStore.findLastUsedDeckId(deckEntries);
+      if (lastDeckId) selectedDeck.value = lastDeckId;
 
       try {
         await ankiInvoke('cardsInfo', { cards: [], fields: cardsInfoFields });
@@ -363,7 +296,7 @@
       try {
         // Search by deck name rather than `did:`, because `did:` matches the exact deck only.
         // Anki's `deck:"Name"` is recursive, so selecting a parent also pulls in every subdeck.
-        const deckName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0];
+        const deckName = selectedDeckName.value;
         const query = deckName ? `deck:"${deckName.replace(/["*_\\]/g, '\\$&')}"` : `did:${selectedDeck.value}`;
         cardsIds = await client.card.findCards({ query });
         // Sample several cards rather than just the first: a field (e.g. ExpressionReading) may be
@@ -400,37 +333,12 @@
         let wantFieldName = prevFieldName;
         let wantReadingName = prevReadingName;
         if (!sameDeckReload) {
-          importReviewHistory.value = DEFAULT_IMPORT_REVIEW_HISTORY;
-          overwriteExisting.value = DEFAULT_OVERWRITE_EXISTING;
-          parseWords.value = DEFAULT_PARSE_WORDS;
-          const loadedDeckName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0];
-          // Prefer the EXACT same deck (entry keyed by this id AND its stored name matches); fall back to
-          // matching by name alone if Anki reassigned the id. A plain id match alone is not trusted.
-          const byId = savedSettings?.decks[selectedDeck.value];
-          let saved: DeckSelection | undefined;
-          if (byId && byId.deckName === loadedDeckName) {
-            saved = byId;
-          } else if (loadedDeckName && savedSettings) {
-            const entry = Object.entries(savedSettings.decks).find(([, d]) => d.deckName === loadedDeckName);
-            if (entry) {
-              saved = entry[1];
-              // Anki reassigned the id (e.g. after a reinstall): migrate the entry to the deck's current
-              // id and drop the stale one, so later loads hit the exact id+name path and old ids don't pile up.
-              if (entry[0] !== String(selectedDeck.value)) {
-                delete savedSettings.decks[entry[0]];
-                savedSettings.decks[selectedDeck.value] = saved;
-                savedSettings.lastDeckId = selectedDeck.value;
-                writeSettings();
-              }
-            }
-          }
-          if (saved) {
-            wantFieldName = saved.fieldName;
-            wantReadingName = saved.readingFieldName;
-            importReviewHistory.value = saved.importReviewHistory;
-            overwriteExisting.value = saved.overwriteExisting;
-            parseWords.value = saved.parseWords;
-          }
+          const saved = ankiImportStore.resolveDeckSelection(selectedDeck.value, selectedDeckName.value) ?? defaultImportSelection();
+          wantFieldName = saved.fieldName || undefined;
+          wantReadingName = saved.readingFieldName;
+          importReviewHistory.value = saved.importReviewHistory;
+          overwriteExisting.value = saved.overwriteExisting;
+          parseWords.value = saved.parseWords;
         }
 
         if (wantFieldName) {
@@ -487,7 +395,7 @@
         // "Parent::Child" deck names). This mirrors the recursive deck:"Name" card search above.
         reviewByCard = new Map();
         if (importReviewHistory.value) {
-          const selectedName = deckEntries.find(([_, id]) => id === selectedDeck.value)?.[0];
+          const selectedName = selectedDeckName.value;
           if (selectedName) {
             const deckNames = deckEntries
               .map(([name]) => name)
@@ -732,7 +640,7 @@
       </div>
       <div v-if="currentStep == 2">
         <p>
-          Selected deck: <b>{{ deckEntries.find((d) => d[1] === selectedDeck)?.[0] || '—' }}</b>
+          Selected deck: <b>{{ selectedDeckName || '—' }}</b>
         </p>
         <div v-if="isLoading">
           <ProgressSpinner style="width: 50px; height: 50px" stroke-width="8px" animation-duration=".5s" />
