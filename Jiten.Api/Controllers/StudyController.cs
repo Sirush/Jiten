@@ -1834,7 +1834,7 @@ public class StudyController(
         {
             StudyInterleaving.NewFirst => batch.OrderBy(c => !c.IsNew).ThenBy(c => c.CardId).ToList(),
             StudyInterleaving.ReviewsFirst => batch.OrderBy(c => c.IsNew).ThenBy(c => c.CardId).ToList(),
-            _ => InterleaveMixed(batch)
+            _ => InterleaveMixed(batch, limit)
         };
 
         ordered = ordered.Take(limit).ToList();
@@ -2139,7 +2139,7 @@ public class StudyController(
     }
 
     private static List<(int WordId, byte ReadingIndex, long CardId, bool IsNew, int State)> InterleaveMixed(
-        List<(int WordId, byte ReadingIndex, long CardId, bool IsNew, int State)> items)
+        List<(int WordId, byte ReadingIndex, long CardId, bool IsNew, int State)> items, int limit)
     {
         var reviews = items.Where(i => !i.IsNew).ToList();
         var newCards = items.Where(i => i.IsNew).ToList();
@@ -2147,17 +2147,24 @@ public class StudyController(
         if (newCards.Count == 0) return reviews;
         if (reviews.Count == 0) return newCards;
 
-        var result = new List<(int, byte, long, bool, int)>();
-        var ratio = Math.Max(1, reviews.Count / Math.Max(1, newCards.Count));
+        var total = reviews.Count + newCards.Count;
+        var newInWindow = Math.Clamp(
+            (int)Math.Round((double)limit * newCards.Count / total),
+            1,
+            Math.Min(newCards.Count, limit));
+        var reviewsInWindow = Math.Min(reviews.Count, Math.Max(0, limit - newInWindow));
+
+        var result = new List<(int, byte, long, bool, int)>(reviewsInWindow + newInWindow);
+        var ratio = Math.Max(1, reviewsInWindow / newInWindow);
         var ri = 0;
         var ni = 0;
 
-        while (ri < reviews.Count || ni < newCards.Count)
+        while (ri < reviewsInWindow || ni < newInWindow)
         {
-            for (var i = 0; i < ratio && ri < reviews.Count; i++)
+            for (var i = 0; i < ratio && ri < reviewsInWindow; i++)
                 result.Add(reviews[ri++]);
 
-            if (ni < newCards.Count)
+            if (ni < newInWindow)
                 result.Add(newCards[ni++]);
         }
 

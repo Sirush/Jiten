@@ -1213,6 +1213,63 @@ public class StudyTests(JitenWebApplicationFactory factory)
         hasReview.Should().BeTrue("mixed mode should include review cards");
     }
 
+    [Fact]
+    public async Task StudyBatch_Mixed_NewCardsSurfaceDespiteLargeReviewBacklog()
+    {
+        await EnsureSeedData();
+
+        var settings = new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new
+            {
+                newCardsPerDay = 1,
+                maxReviewsPerDay = 200,
+                gradingButtons = 4,
+                interleaving = "mixed",
+                reviewFrom = "allTracked"
+            });
+        await _client.SendAsync(settings);
+
+        // Words 1-5 (deck 1) are new-card candidates; build a large review backlog on
+        // unrelated words so reviews vastly outnumber the single new card. Before the fix
+        // the ratio (25:1) pushed the only new card past the limit=20 cut line every fetch.
+        var add = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckId = 1, downloadType = 1, order = 3, excludeKana = false });
+        await _client.SendAsync(add);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            for (var i = 1000; i < 1025; i++)
+            {
+                if (!await jitenDb.JMDictWords.AnyAsync(w => w.WordId == i))
+                {
+                    jitenDb.JMDictWords.Add(new JmDictWord { WordId = i, PartsOfSpeech = ["noun"] });
+                    jitenDb.Definitions.Add(new JmDictDefinition { WordId = i, SenseIndex = 0, EnglishMeanings = [$"meaning{i}"], PartsOfSpeech = ["noun"] });
+                    jitenDb.WordForms.Add(new JmDictWordForm { WordId = i, ReadingIndex = 0, Text = $"word{i}", RubyText = $"word{i}", FormType = JmDictFormType.KanaForm });
+                }
+                userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, i, 0,
+                    state: FsrsState.Review,
+                    due: DateTime.UtcNow.AddDays(-1),
+                    lastReview: DateTime.UtcNow.AddDays(-10)));
+            }
+            await jitenDb.SaveChangesAsync();
+            await userDb.SaveChangesAsync();
+        }
+
+        var batch = new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-batch?limit=20")
+            .WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(batch);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var cards = body.GetProperty("cards").EnumerateArray().ToList();
+
+        cards.Should().HaveCount(20);
+        cards.Should().Contain(c => c.GetProperty("isNewCard").GetBoolean(),
+            "Mixed must surface new cards within the shown batch even when the review backlog dwarfs the new-card budget");
+    }
+
     private async Task SetupInterleavingScenario(StudyInterleaving interleaving)
     {
         var settings = new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
