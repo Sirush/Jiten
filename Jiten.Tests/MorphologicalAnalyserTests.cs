@@ -326,6 +326,31 @@ public class MorphologicalAnalyserTests
             "てか最近ファン層は円盤すら買わないからそいつらから金とるってのは無謀",
             new[] { "てか", "最近", "ファン層", "は", "円盤", "すら", "買わない", "から", "そいつら", "から", "金", "とる", "ってのは", "無謀" }
         ];
+        // Quotative って where Sudachi strands the preceding verb's final mora onto an OOV って-blob
+        // (なる→な+るって) or an interjection (従→従+えっ+て): the verb must be rescued whole and って
+        // kept as a particle, never dropped as an unresolvable blob.
+        yield return ["貴方たちって民主主義を否定する", new[] { "貴方", "たち", "って", "民主主義", "を", "否定する" }];
+        yield return ["展開されているっていうのは", new[] { "展開されて", "いる", "っていう", "の", "は" }];
+        yield return ["ようにしてあるっていうだけでも", new[] { "ようにして", "ある", "っていう", "だけ", "でも" }];
+        yield return ["お嫁さんになるって約束した", new[] { "お嫁さん", "に", "なる", "って", "約束した" }];
+        yield return ["癇に障るってのはわかる", new[] { "癇に障る", "ってのは", "わかる" }];
+        yield return ["指示に従えってことか", new[] { "指示", "に", "従え", "って", "こと", "か" }];
+        yield return ["殴り合えってわけだな", new[] { "殴り合え", "って", "わけ", "だ", "な" }];
+        yield return ["寄ってくるっていう話", new[] { "寄って", "くる", "っていう", "話" }];
+        // Godan verbs whose final mora Sudachi strands onto the って thief (mis-tagged
+        // interjection/adverb/auxiliary): the verb must be reconstituted, not dropped.
+        yield return ["読むって約束した", new[] { "読む", "って", "約束した" }];
+        yield return ["泳ぐって言うの", new[] { "泳ぐ", "って", "言う", "の" }];
+        yield return ["話すってことか", new[] { "話す", "って", "こと", "か" }];
+        // って before a sentence-ending particle is the quotative, not a te-form (待つって blob).
+        yield return ["待つってさ", new[] { "待つ", "って", "さ" }];
+        yield return ["やめるってね", new[] { "やめる", "って", "ね" }];
+        // って + kana いう fuses into the relativiser っていう (= という), like ってのは.
+        yield return ["行くっていう話", new[] { "行く", "っていう", "話" }];
+        // Compound noun whose final kanji Sudachi steals into a verb te-form before って
+        // (自意識 → 自|意|識っ[識る]): de-verbed so the compound matcher reforms 自意識 and っていう clusters.
+        yield return ["自意識っていうのがない", new[] { "自意識", "っていう", "の", "が", "ない" }];
+        yield return ["認識っていう", new[] { "認識", "っていう" }];
         yield return ["とろいな", new[] { "とろい", "な" }];
         yield return ["なんでもかんでも", new[] { "なんでもかんでも" }];
         yield return ["しないかい", new[] { "しない", "かい" }];

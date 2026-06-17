@@ -589,6 +589,8 @@ public partial class MorphologicalAnalyser
         ("ない", "ナイ", PartOfSpeech.IAdjective, PartOfSpeechSection.PossibleDependant),
         ("から", "カラ", PartOfSpeech.Particle, PartOfSpeechSection.ConjunctionParticle),
         ("けど", "ケド", PartOfSpeech.Particle, PartOfSpeechSection.ConjunctionParticle),
+        ("だけ", "ダケ", PartOfSpeech.Particle, PartOfSpeechSection.AdverbialParticle),
+        ("でも", "デモ", PartOfSpeech.Particle, PartOfSpeechSection.AdverbialParticle),
         ("の", "ノ", PartOfSpeech.Particle, PartOfSpeechSection.CaseMarkingParticle),
         ("は", "ハ", PartOfSpeech.Particle, PartOfSpeechSection.BindingParticle),
         ("が", "ガ", PartOfSpeech.Particle, PartOfSpeechSection.CaseMarkingParticle),
@@ -600,6 +602,10 @@ public partial class MorphologicalAnalyser
         ("か", "カ", PartOfSpeech.Particle, PartOfSpeechSection.AdverbialParticle),
         ("だ", "ダ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
         ("な", "ナ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
+        ("ね", "ネ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
+        ("よ", "ヨ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
+        ("さ", "サ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
+        ("わ", "ワ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
         ("ん", "ン", PartOfSpeech.Particle, PartOfSpeechSection.Juntaijoushi),
         ("た", "タ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
     ];
@@ -611,9 +617,21 @@ public partial class MorphologicalAnalyser
         return text.Length > 0;
     }
 
+    private static bool DeconjugatesToVerb(string hiragana)
+    {
+        foreach (var f in Deconjugator.Instance.Deconjugate(hiragana))
+            foreach (var t in f.Tags)
+                if (t.StartsWith("v", StringComparison.Ordinal))
+                    return true;
+        return false;
+    }
+
     private static bool IsLikelyOovGarbage(WordInfo w)
     {
-        if (w.Text.Length < 4) return false;
+        // Length 3 admits the minimal stem-mora-theft blob (る+って → なる|って), where Sudachi
+        // strands the verb's final mora onto a bare quotative って. The split is still tightly
+        // gated downstream (prev+prefix must deconjugate to a real verb/adjective).
+        if (w.Text.Length < 3) return false;
         if (w.PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Interjection or PartOfSpeech.Filler))
             return false;
         if (!IsAllHiraganaSpan(w.Text.AsSpan())) return false;
@@ -626,31 +644,61 @@ public partial class MorphologicalAnalyser
         return false;
     }
 
-    private static List<WordInfo> TokenizeGrammarRemainder(string text, int startOffset)
+    private List<WordInfo> TokenizeGrammarRemainder(string text, int startOffset)
     {
         var tokens = new List<WordInfo>();
         int i = 0;
         while (i < text.Length)
         {
-            bool matched = false;
+            int markerLen = 0;
+            (string reading, PartOfSpeech pos, PartOfSpeechSection sec) marker = default;
             foreach (var (gram, reading, pos, sec) in GrammarTokenTable)
-            {
-                if (text.AsSpan(i).StartsWith(gram))
+                if (gram.Length > markerLen && text.AsSpan(i).StartsWith(gram))
+                    (markerLen, marker) = (gram.Length, (reading, pos, sec));
+
+            // Pull a trailing content VERB out of the cluster (って+いう, ってのは+わかる) instead of
+            // dumping it as one OOV noun that aborts the whole split. Restricted to dictionary-form
+            // verbs on purpose: matching arbitrary short tails mis-cuts grammatical clusters
+            // (のはだな → の|肌|な, ってんだ → って|んだ). The candidate must end in a う-row kana — the
+            // deconjugator alone over-generates (んだ/はだ both "deconjugate" to verb pasts).
+            int verbLen = 0;
+            if (HasNonNameCompoundLookup != null)
+                for (int len = Math.Min(text.Length - i, 6); len > markerLen && len >= 2; len--)
                 {
-                    tokens.Add(new WordInfo
-                    {
-                        Text = gram, DictionaryForm = gram, NormalizedForm = gram, Reading = reading,
-                        PartOfSpeech = pos, PartOfSpeechSection1 = sec,
-                        StartOffset = startOffset >= 0 ? startOffset + i : -1,
-                        EndOffset = startOffset >= 0 ? startOffset + i + gram.Length : -1
-                    });
-                    i += gram.Length;
-                    matched = true;
+                    var cand = text.Substring(i, len);
+                    if (cand[^1] is not ('う' or 'く' or 'ぐ' or 'す' or 'つ' or 'ぬ' or 'ぶ' or 'む' or 'る')) continue;
+                    if (!HasNonNameCompoundLookup(cand)) continue;
+                    if (!DeconjugatesToVerb(cand)) continue;
+                    verbLen = len;
                     break;
                 }
+
+            if (verbLen > 0)
+            {
+                var w = text.Substring(i, verbLen);
+                tokens.Add(new WordInfo
+                {
+                    Text = w, DictionaryForm = w, NormalizedForm = w,
+                    Reading = WanaKanaShaapu.WanaKana.ToKatakana(NormalizeToHiragana(w)),
+                    PartOfSpeech = PartOfSpeech.Verb,
+                    StartOffset = startOffset >= 0 ? startOffset + i : -1,
+                    EndOffset = startOffset >= 0 ? startOffset + i + verbLen : -1
+                });
+                i += verbLen;
+                continue;
             }
 
-            if (!matched) break;
+            if (markerLen == 0) break;
+
+            var gramText = text.Substring(i, markerLen);
+            tokens.Add(new WordInfo
+            {
+                Text = gramText, DictionaryForm = gramText, NormalizedForm = gramText, Reading = marker.reading,
+                PartOfSpeech = marker.pos, PartOfSpeechSection1 = marker.sec,
+                StartOffset = startOffset >= 0 ? startOffset + i : -1,
+                EndOffset = startOffset >= 0 ? startOffset + i + markerLen : -1
+            });
+            i += markerLen;
         }
 
         if (i < text.Length)
