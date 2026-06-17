@@ -93,8 +93,25 @@ public class TtsService(
         // (詳しくは→"kuwashiku wa", ではない→"de wa nai").
         text = FixLeadingParticleKana(text);
 
-        var key = $"{voice}:w:{text}";
-        return await _inflight.GetOrAdd(key, _ => GenerateAsync(key, text, TtsType.Word, voice, rateLimitKey, ct, bypassGenerationLimit));
+
+        int? pitchPosition = null;
+        var distinctReadings = wordForms
+            .Where(f => f.FormType == JmDictFormType.KanaForm)
+            .Select(f => WanaKana.ToHiragana(f.Text))
+            .Distinct()
+            .Count();
+        if (distinctReadings == 1)
+        {
+            var pitches = await db.JMDictWords.AsNoTracking()
+                .Where(w => w.WordId == wordId)
+                .Select(w => w.PitchAccents)
+                .FirstOrDefaultAsync(ct);
+            if (pitches is { Count: > 0 }) pitchPosition = pitches[0];
+        }
+
+        var storageText = pitchPosition.HasValue ? $"{text}|p{pitchPosition.Value}" : text;
+        var key = $"{voice}:w:{storageText}";
+        return await _inflight.GetOrAdd(key, _ => GenerateAsync(key, text, storageText, pitchPosition, TtsType.Word, voice, rateLimitKey, ct, bypassGenerationLimit));
     }
 
     public async Task<byte[]> GetSentenceAudioAsync(int sentenceId, string voice, string rateLimitKey, CancellationToken ct)
@@ -184,7 +201,7 @@ public class TtsService(
             if (cached != null) return cached;
 
             var ttsText = await GetSentenceWithReadings(rawText);
-            return await SynthesizeAndUpload(key, ttsText, rawText, TtsType.Sentence, voice, rateLimitKey, ct);
+            return await SynthesizeAndUpload(key, ttsText, rawText, null, TtsType.Sentence, voice, rateLimitKey, ct);
         }
         finally
         {
@@ -192,14 +209,14 @@ public class TtsService(
         }
     }
 
-    private async Task<byte[]> GenerateAsync(string key, string text, TtsType type, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false)
+    private async Task<byte[]> GenerateAsync(string key, string ttsText, string storageText, int? pitchPosition, TtsType type, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false)
     {
         try
         {
-            var cached = await TryGetFromCdn(text, type, voice, ct);
+            var cached = await TryGetFromCdn(storageText, type, voice, ct);
             if (cached != null) return cached;
 
-            return await SynthesizeAndUpload(key, text, text, type, voice, rateLimitKey, ct, bypassGenerationLimit);
+            return await SynthesizeAndUpload(key, ttsText, storageText, pitchPosition, type, voice, rateLimitKey, ct, bypassGenerationLimit);
         }
         finally
         {
@@ -225,7 +242,7 @@ public class TtsService(
         return null;
     }
 
-    private async Task<byte[]> SynthesizeAndUpload(string key, string ttsText, string storageText, TtsType type, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false)
+    private async Task<byte[]> SynthesizeAndUpload(string key, string ttsText, string storageText, int? pitchPosition, TtsType type, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false)
     {
         if (!bypassGenerationLimit)
         {
@@ -253,6 +270,11 @@ public class TtsService(
             queryDict["speedScale"] = JsonSerializer.SerializeToElement(config.SpeedScale);
         if (type == TtsType.Sentence)
             queryDict["intonationScale"] = JsonSerializer.SerializeToElement(1.5);
+        if (pitchPosition.HasValue)
+        {
+            try { await ApplyPitchAccent(vvClient, queryDict, pitchPosition.Value, speakerId, ct); }
+            catch (Exception ex) { logger.LogWarning(ex, "Pitch accent override failed, using default accent for {Text}", ttsText); }
+        }
         BoostVoicedConsonants(queryDict);
 
         var synthResp = await vvClient.PostAsJsonAsync($"/synthesis?speaker={speakerId}", queryDict, ct);
@@ -395,13 +417,47 @@ public class TtsService(
         queryDict["accent_phrases"] = JsonSerializer.SerializeToElement(phrases);
     }
 
+    private static async Task ApplyPitchAccent(HttpClient client, Dictionary<string, JsonElement> queryDict, int position, int speakerId, CancellationToken ct)
+    {
+        if (!queryDict.TryGetValue("accent_phrases", out var phrasesEl) || phrasesEl.ValueKind != JsonValueKind.Array) return;
+
+        var moras = new List<JsonElement>();
+        foreach (var phrase in phrasesEl.EnumerateArray())
+            if (phrase.TryGetProperty("moras", out var morasEl))
+                moras.AddRange(morasEl.EnumerateArray());
+
+        if (moras.Count == 0) return;
+        var accent = position <= 0 ? moras.Count : Math.Min(position, moras.Count);
+
+        var body = new[]
+        {
+            new Dictionary<string, object?>
+            {
+                ["moras"] = moras,
+                ["accent"] = accent,
+                ["pause_mora"] = null,
+                ["is_interrogative"] = false,
+            },
+        };
+
+        var resp = await client.PostAsJsonAsync($"/mora_pitch?speaker={speakerId}", body, ct);
+        resp.EnsureSuccessStatusCode();
+        queryDict["accent_phrases"] = await resp.Content.ReadFromJsonAsync<JsonElement>(ct);
+    }
+
     private static readonly Regex RubyPattern = new(@"[\u4E00-\u9FFF\uFF10-\uFF5A々]+\[([\u3040-\u309F\u30A0-\u30FF]+)\]", RegexOptions.Compiled);
 
-    // Replaces each kanji block with its furigana reading rendered in katakana, while leaving the
-    // literal kana around it (okurigana, particles) untouched. This pins kanji to their dictionary
-    // reading for TTS without forcing bare particles (は/へ/を) to their literal pronunciation.
+    // Replaces each kanji block with its furigana reading, leaving the literal kana around it
+    // (okurigana, particles) untouched. The reading is emitted as hiragana so OpenJTalk keeps its
+    // correct long-vowel handling (どう→"dō"); katakana ドウ would be read "do-u" with the moras
+    // split apart. The sole exception is a single-mora は/へ/を reading (e.g. 葉→は), which OpenJTalk
+    // would otherwise voice as a topic/direction/object particle — that one is promoted to katakana.
     private static string RubyToTtsKana(string rubyText) =>
-        RubyPattern.Replace(rubyText, m => WanaKana.ToKatakana(m.Groups[1].Value));
+        RubyPattern.Replace(rubyText, m =>
+        {
+            var reading = m.Groups[1].Value;
+            return reading is "は" or "へ" or "を" ? WanaKana.ToKatakana(reading) : reading;
+        });
 
     private static bool ContainsKanji(string text) =>
         text.Any(c => (c >= '一' && c <= '鿿') || c == '々');
