@@ -2504,6 +2504,17 @@ public partial class MorphologicalAnalyser
             });
         }
 
+        // A stranded-mora reattachment counts as a real verb when it is a dictionary-form godan/
+        // ichidan verb (in JMDict, う-row ending) or deconjugates one step to an imperative/
+        // volitional (従え → 従う). The う-row ending rejects noun fragments the deconjugator
+        // over-tags (はだ/んだ "deconjugate" to verb pasts but never end う-row).
+        bool IsVerbReattachment(string s) =>
+            (s.Length >= 2
+                && s[^1] is 'う' or 'く' or 'ぐ' or 'す' or 'つ' or 'ぬ' or 'ぶ' or 'む' or 'る'
+                && HasNonNameCompoundLookup?.Invoke(s) == true
+                && DeconjugatesToVerb(s))
+            || MergesToFinalForm(s);
+
         for (int i = 0; i < wordInfos.Count; i++)
         {
             // Fused variant of the katakana-mora theft: Sudachi emits a single Xって token
@@ -2586,6 +2597,127 @@ public partial class MorphologicalAnalyser
                     EndOffset = gaThief.StartOffset >= 0 ? gaThief.StartOffset + 1 : -1
                 });
                 AddTte(gaThief, wordInfos[i + 1]);
+                i++;
+                changed = true;
+                continue;
+            }
+
+            // Sudachi strands a verb's final mora on a thief token ending っ, mis-tagging the thief
+            // as an interjection/adverb/auxiliary/verb: 読|むっ|て, 泳|ぐっ|て, 行|くっ|て, 待|つっ|て,
+            // 話|すっ|て, 従|えっ|て. The thief's POS guess is noise — the reliable signal is that the
+            // stranded mora reattaches to the preceding stem to make a real verb, its dictionary form
+            // (読む) or a one-step imperative/volitional (従え, 殴り合え). Prefer folding a 連用形 stem +
+            // suffix (殴り+合) over the lone previous token. A genuine interjection (あっ|て) leaves no
+            // verb behind it and is left untouched.
+            if (i + 1 < wordInfos.Count
+                && wordInfos[i].Text.Length == 2
+                && wordInfos[i].Text[^1] == 'っ'
+                && wordInfos[i].Text[0] is >= 'ぁ' and <= 'ゖ'
+                && wordInfos[i + 1].Text == "て"
+                && wordInfos[i].PartOfSpeech is not (PartOfSpeech.Particle or PartOfSpeech.Pronoun)
+                && result.Count > 0)
+            {
+                var thiefMora = wordInfos[i].Text[0];
+
+                int stemBack = 0;
+                if (result.Count >= 2 && result[^1].PartOfSpeech == PartOfSpeech.Suffix
+                    && IsVerbReattachment(result[^2].Text + result[^1].Text + thiefMora))
+                    stemBack = 2;
+                else if (result[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                             or PartOfSpeech.Verb or PartOfSpeech.Prefix or PartOfSpeech.Suffix
+                         && IsVerbReattachment(result[^1].Text + thiefMora))
+                    stemBack = 1;
+
+                if (stemBack > 0)
+                {
+                    var moraThief = wordInfos[i];
+                    var stemHead = result[result.Count - stemBack];
+                    var verbText = "";
+                    for (int k = result.Count - stemBack; k < result.Count; k++) verbText += result[k].Text;
+                    verbText += thiefMora;
+                    result.RemoveRange(result.Count - stemBack, stemBack);
+                    result.Add(new WordInfo(stemHead)
+                    {
+                        Text = verbText,
+                        DictionaryForm = verbText,
+                        NormalizedForm = verbText,
+                        PartOfSpeech = PartOfSpeech.Verb,
+                        EndOffset = moraThief.StartOffset >= 0 ? moraThief.StartOffset + 1 : -1
+                    });
+                    AddTte(moraThief, wordInfos[i + 1]);
+                    i++;
+                    changed = true;
+                    continue;
+                }
+            }
+
+            // Sudachi splits a compound noun whose final kanji absorbs って's っ into a real-but-
+            // here-wrong verb te-form (自意識 → 自|意|識っ[識る], 認識 → 認|識っ; 識る "to know" is a
+            // genuine verb, just not the reading inside a noun compound). That reading breaks the
+            // noun run so the lookup's compound matcher can't reform 自意識. Hand the stolen っ back to
+            // って and re-tag the kanji as a noun, so the matcher reforms the compound and っていう
+            // clusters. Gated on the kanji plus its preceding kanji compound-part(s) — Noun/Suffix/
+            // Prefix, e.g. the 接尾辞 認 — forming a real JMDict compound noun. A genuine 識る takes a
+            // particle object (真実を識って), so its predecessor is never a bare kanji and it is left alone.
+            if (i + 1 < wordInfos.Count
+                && wordInfos[i] is { PartOfSpeech: PartOfSpeech.Verb }
+                && wordInfos[i].Text.Length == 2
+                && wordInfos[i].Text[^1] == 'っ'
+                && wordInfos[i].Text[0] is >= '一' and <= '鿿'
+                && wordInfos[i + 1].Text == "て"
+                && result.Count > 0
+                && result[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                    or PartOfSpeech.Suffix or PartOfSpeech.Prefix
+                && result[^1].Text[^1] is >= '一' and <= '鿿')
+            {
+                var kanjiThief = wordInfos[i];
+                var tailKanji = kanjiThief.Text[..^1];
+                bool formsNoun =
+                    HasNonNameCompoundLookup?.Invoke(result[^1].Text + tailKanji) == true
+                    || (result.Count >= 2
+                        && result[^2].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                            or PartOfSpeech.Suffix or PartOfSpeech.Prefix
+                        && result[^2].Text[^1] is >= '一' and <= '鿿'
+                        && HasNonNameCompoundLookup?.Invoke(result[^2].Text + result[^1].Text + tailKanji) == true);
+
+                if (formsNoun)
+                {
+                    result.Add(new WordInfo(kanjiThief)
+                    {
+                        Text = tailKanji,
+                        DictionaryForm = tailKanji,
+                        NormalizedForm = tailKanji,
+                        PartOfSpeech = PartOfSpeech.Noun,
+                        EndOffset = kanjiThief.StartOffset >= 0 ? kanjiThief.StartOffset + 1 : -1
+                    });
+                    AddTte(kanjiThief, wordInfos[i + 1]);
+                    i++;
+                    changed = true;
+                    continue;
+                }
+            }
+
+            // 達 (たち) mis-split by Sudachi as past-た + ちう-auxiliary before a quotative って:
+            // 貴方|た|ちっ|て → 貴方 + たち + って. A pronoun/noun cannot take the past auxiliary た,
+            // so this sequence is only ever the pluralising suffix 達 followed by quotative って.
+            if (i + 1 < wordInfos.Count
+                && wordInfos[i] is { Text: "ちっ", PartOfSpeech: PartOfSpeech.Auxiliary, DictionaryForm: "ちう" }
+                && wordInfos[i + 1].Text == "て"
+                && result.Count >= 2
+                && result[^1] is { Text: "た", PartOfSpeech: PartOfSpeech.Auxiliary }
+                && result[^2].PartOfSpeech is PartOfSpeech.Pronoun or PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
+            {
+                var chiThief = wordInfos[i];
+                result[^1] = new WordInfo(result[^1])
+                {
+                    Text = "たち",
+                    DictionaryForm = "たち",
+                    NormalizedForm = "達",
+                    Reading = "タチ",
+                    PartOfSpeech = PartOfSpeech.Suffix,
+                    EndOffset = chiThief.StartOffset >= 0 ? chiThief.StartOffset + 1 : -1
+                };
+                AddTte(chiThief, wordInfos[i + 1]);
                 i++;
                 changed = true;
                 continue;
@@ -2760,6 +2892,14 @@ public partial class MorphologicalAnalyser
                     {
                         var forms = deconj.Deconjugate(stripped);
                         shouldRepair = forms.Count > 0;
+                    }
+                    // A thief Sudachi mis-tags as an adverb but whose stripped form is itself a
+                    // dictionary verb is the same stem theft one mora wider (するっ|て → する + って,
+                    // from 勉強するっていう). The う-row gate in IsVerbReattachment rejects noun
+                    // homographs the deconjugator over-tags (ことっ → こと=事 stays a noun).
+                    else if (IsVerbReattachment(stripped))
+                    {
+                        shouldRepair = true;
                     }
                 }
             }
