@@ -15,5 +15,7 @@ services:
       - JimakuApiKey=${JIMAKU_API_KEY:-}
       - TmdbApiKey=${TMDB_API_KEY:-}
       - CdnBaseUrl=${CDN_BASE_URL:-}
+      # Must match SsrBypassKey on the API so warmup requests skip the 15/min generation limit.
+      - SsrBypassKey=${SSR_BYPASS_KEY:-}
     volumes:
       - /home/ubuntu/jiten:/files
