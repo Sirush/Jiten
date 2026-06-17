@@ -51,6 +51,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Combine, CombineAdverbialParticle, TokenFeatures.AdvParticle),
         Stage(TokenStageGroup.Combine, CombineVerbDependant),
         Stage(TokenStageGroup.Combine, CombineParticles),
+        Stage(TokenStageGroup.Combine, CombineQuotativeToIu),
         Stage(TokenStageGroup.Combine, CombineFinal),
         Stage(TokenStageGroup.Split, SplitUnresolvableSuruCompounds),
         Stage(TokenStageGroup.Repair, RepairTankaToTaNKa, TokenFeatures.TextTanka),

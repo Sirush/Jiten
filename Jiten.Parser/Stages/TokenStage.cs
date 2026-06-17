@@ -124,7 +124,7 @@ internal static class TokenFeatureScanner
                     break;
             }
 
-            if (w.Text.Length >= 4
+            if (w.Text.Length >= 3
                 && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Interjection or PartOfSpeech.Filler
                 && (f & TokenFeatures.OovGarbage) == 0)
             {

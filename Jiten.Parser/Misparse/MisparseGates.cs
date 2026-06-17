@@ -150,7 +150,10 @@ internal static class MisparseGates
 
     private static bool IsGrammaticalFollower(string text)
         => text is "が" or "を" or "に" or "は" or "の" or "で" or "と" or "へ"
-           or "から" or "まで" or "より" or "も" or "って" or "だ" or "です";
+               or "から" or "まで" or "より" or "も" or "って" or "だ" or "です"
+           // Quotative って-clusters (っていう, ってのは, …) justify a short-kana verb being quoted
+           // (してある+っていう), the same way a bare って does — they only differ by a later merge.
+           || text.StartsWith("って", StringComparison.Ordinal);
 
     public static (bool isUsuallyKana, bool hasKanjiSpelling, bool readingIsIchi) GetWordFlags(
         JmDictWord? word, byte readingIndex)

@@ -347,8 +347,11 @@ public partial class MorphologicalAnalyser
         // って re-cut as quotative (DictionaryForm って, vs て for a real te-particle) stays split
         // when followed by a quote-taking verb (かな+って+思ったら). Otherwise allow the re-merge —
         // an auxiliary continuation (つか+って+ください, かな+って+いる) proves the re-cut wrong.
+        // Both kanji and kana dictionary forms are listed: Sudachi tags 言う as the kana いう just as
+        // often (寄ってくる+って+いう → keep くる|って split, never くる+って glued into a blob).
         if (nextWord is { Text: "って", DictionaryForm: "って" } && i + 2 < wordInfos.Count &&
-            wordInfos[i + 2].DictionaryForm is "思う" or "言う" or "聞く" or "考える" or "感じる")
+            wordInfos[i + 2].DictionaryForm is "思う" or "おもう" or "言う" or "いう"
+                or "聞く" or "きく" or "考える" or "感じる")
             return true;
 
         // Re-cut って before a noun (なくなった+って+話), punctuation, or sentence end is the
@@ -359,6 +362,14 @@ public partial class MorphologicalAnalyser
             (i + 2 >= wordInfos.Count ||
              wordInfos[i + 2].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
                  or PartOfSpeech.SupplementarySymbol))
+            return true;
+
+        // Re-cut って before a sentence-ending particle (待つ+って+さ, 行く+って+よ/ね/わ) is the
+        // quotative — a te-form continuation needs a verb/auxiliary after it, never a final particle.
+        // Without this the verb re-absorbs って into an unresolvable blob (待つって).
+        if (nextWord is { Text: "って", DictionaryForm: "って" } && i + 2 < wordInfos.Count
+            && wordInfos[i + 2] is { PartOfSpeech: PartOfSpeech.Particle }
+            && wordInfos[i + 2].Text is "さ" or "よ" or "ね" or "わ" or "ぞ" or "ぜ")
             return true;
 
         // Benefactive auxiliaries after a te-form stay separate tokens (堪能させて|いただきます,
@@ -570,6 +581,46 @@ public partial class MorphologicalAnalyser
         if (newList == null) return wordInfos;
         newList.Add(currentWord);
         return newList;
+    }
+
+    // Quotative って + the kana verb いう fuse into the single relativiser っていう (= という,
+    // JMDict 2757880), matching how ってのは/たって already surface as one cluster. Restricted to the
+    // kana dictionary form いう: the kanji 言う is the lexical verb "to say" (だって|言う|人) and stays
+    // split. A conjugated いう (いって/いった) is a real verb form and is likewise left alone.
+    private List<WordInfo> CombineQuotativeToIu(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2)
+            return wordInfos;
+
+        List<WordInfo>? newList = null;
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+
+            if (i + 1 < wordInfos.Count
+                && word is { Text: "って", DictionaryForm: "って", PartOfSpeech: PartOfSpeech.Particle }
+                && wordInfos[i + 1] is { Text: "いう", DictionaryForm: "いう" })
+            {
+                newList ??= [..wordInfos[..i]];
+                var iu = wordInfos[i + 1];
+                newList.Add(new WordInfo(word)
+                {
+                    Text = "っていう",
+                    DictionaryForm = "っていう",
+                    NormalizedForm = "っていう",
+                    Reading = "ッテイウ",
+                    PartOfSpeech = PartOfSpeech.Conjunction,
+                    EndOffset = iu.EndOffset
+                });
+                i++;
+                continue;
+            }
+
+            newList?.Add(word);
+        }
+
+        return newList ?? wordInfos;
     }
 
     private List<WordInfo> CombineVerbDependant(List<WordInfo> wordInfos)
