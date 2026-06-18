@@ -1832,8 +1832,8 @@ public class StudyController(
         // ── Phase 5: Interleave and build response ──
         var ordered = settings.Interleaving switch
         {
-            StudyInterleaving.NewFirst => batch.OrderBy(c => !c.IsNew).ThenBy(c => c.CardId).ToList(),
-            StudyInterleaving.ReviewsFirst => batch.OrderBy(c => c.IsNew).ThenBy(c => c.CardId).ToList(),
+            StudyInterleaving.NewFirst => batch.OrderBy(c => !c.IsNew).ToList(),
+            StudyInterleaving.ReviewsFirst => batch.OrderBy(c => c.IsNew).ToList(),
             _ => InterleaveMixed(batch, limit)
         };
 
