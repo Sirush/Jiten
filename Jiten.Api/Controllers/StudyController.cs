@@ -2087,6 +2087,12 @@ public class StudyController(
             catch (TimeZoneNotFoundException) { request.Timezone = null; }
         }
 
+        // Write-in review: clamp the auto-advance delay, and never let every modality be off
+        // (an empty rotation would leave nothing to study) — fall back to standard cards.
+        request.WriteInReview.AutoAdvanceSeconds = Math.Clamp(request.WriteInReview.AutoAdvanceSeconds, 0.0, 60.0);
+        if (!request.WriteInReview.ModalitySrs && !request.WriteInReview.ModalityReading && !request.WriteInReview.ModalityMeaning)
+            request.WriteInReview.ModalitySrs = true;
+
         // Easy Days: must be 7 weekday weights in [0, 1]; drop anything malformed.
         if (request.EasyDays != null)
         {

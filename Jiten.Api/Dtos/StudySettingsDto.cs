@@ -63,6 +63,13 @@ public enum TimedAnswerAction
     HardFail
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<WriteInWrongBehavior>))]
+public enum WriteInWrongBehavior
+{
+    Reveal,
+    Retry
+}
+
 [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
 public class StudySettingsDto
 {
@@ -189,8 +196,52 @@ public class StudySettingsDto
     [JsonPropertyName("timedReview")]
     public TimedReviewSettingsDto TimedReview { get; set; } = new();
 
+    /// <summary>
+    /// "Write-in review" preferences. Purely client-side behaviour — the server stores and returns it
+    /// inside the settings blob but takes no action on it.
+    /// </summary>
+    [JsonPropertyName("writeInReview")]
+    public WriteInReviewSettingsDto WriteInReview { get; set; } = new();
+
     [JsonPropertyName("keybinds")]
     public StudyKeybindsDto Keybinds { get; set; } = new();
+}
+
+[JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
+public class WriteInReviewSettingsDto
+{
+    // Modality — which review styles are in the rotation. Defaults to standard cards only, so existing
+    // users see no change. When more than one is enabled, each card draws a style (see frontend mixer).
+    [JsonPropertyName("modalitySrs")] public bool ModalitySrs { get; set; } = true;
+    [JsonPropertyName("modalityReading")] public bool ModalityReading { get; set; }
+    [JsonPropertyName("modalityMeaning")] public bool ModalityMeaning { get; set; }
+
+    // false = input lives in the bottom bar (default); true = inline under the word inside the card.
+    [JsonPropertyName("inlineInput")] public bool InlineInput { get; set; }
+
+    [JsonPropertyName("wrongBehavior")] public WriteInWrongBehavior WrongBehavior { get; set; } = WriteInWrongBehavior.Reveal;
+
+    // Reading mode: convert romaji to kana as you type (wanakana IME).
+    [JsonPropertyName("romajiInput")] public bool RomajiInput { get; set; } = true;
+
+    // Meaning mode: show the reading (furigana) on the front. Off by default — hiding it tests
+    // reading recognition alongside the meaning. Turn on to show the reading and test meaning only.
+    [JsonPropertyName("meaningShowReading")] public bool MeaningShowReading { get; set; }
+
+    // Brand-new cards can't be recalled — skip write-in for them and just reveal.
+    [JsonPropertyName("skipNewCards")] public bool SkipNewCards { get; set; } = true;
+
+    // Auto-advance: after the answer is graded by the check, animate the suggested grade then commit it.
+    [JsonPropertyName("autoAdvance")] public bool AutoAdvance { get; set; }
+    [JsonPropertyName("autoAdvanceWrong")] public bool AutoAdvanceWrong { get; set; }
+    [JsonPropertyName("autoAdvanceSeconds")] public double AutoAdvanceSeconds { get; set; } = 2;
+
+    // Subtle correct/wrong chime (Web Audio, no asset).
+    [JsonPropertyName("sound")] public bool Sound { get; set; }
+
+    // Keep timed review running on write-in cards. Off by default — the question timer would auto-reveal
+    // before you finish typing. Standard cards are still timed normally regardless of this.
+    [JsonPropertyName("timed")] public bool Timed { get; set; }
 }
 
 [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]

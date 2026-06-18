@@ -86,6 +86,60 @@ a:not(.p-button) {
 .dark-mode .pos-teal { background: rgb(17 94 89 / 0.3); color: rgb(94 234 212); }
 .dark-mode .pos-gray { background: rgb(55 65 81 / 0.3); color: rgb(156 163 175); }
 
+.p-select-list-container, .p-select-overlay .p-virtualscroller { --scroll-shadow-bg: var(--p-select-overlay-background, var(--p-content-background)); }
+.p-multiselect-list-container, .p-multiselect-overlay .p-virtualscroller { --scroll-shadow-bg: var(--p-multiselect-overlay-background, var(--p-content-background)); }
+.p-autocomplete-list-container, .p-autocomplete-overlay .p-virtualscroller { --scroll-shadow-bg: var(--p-autocomplete-overlay-background, var(--p-content-background)); }
+.p-cascadeselect-list-container, .p-cascadeselect-overlay .p-virtualscroller { --scroll-shadow-bg: var(--p-cascadeselect-overlay-background, var(--p-content-background)); }
+
+.p-select-list-container, .p-select-overlay .p-virtualscroller,
+.p-multiselect-list-container, .p-multiselect-overlay .p-virtualscroller,
+.p-autocomplete-list-container, .p-autocomplete-overlay .p-virtualscroller,
+.p-cascadeselect-list-container, .p-cascadeselect-overlay .p-virtualscroller {
+    --scroll-chevron-up: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='18'%20height='11'%20viewBox='0%200%2018%2011'%3E%3Cpath%20d='M3%208l6-5%206%205'%20fill='none'%20stroke='%23808080'%20stroke-opacity='0.5'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
+    --scroll-chevron-down: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='18'%20height='11'%20viewBox='0%200%2018%2011'%3E%3Cpath%20d='M3%203l6%205%206-5'%20fill='none'%20stroke='%23808080'%20stroke-opacity='0.5'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
+    scrollbar-width: thin;
+    scrollbar-color: var(--p-primary-color) transparent;
+    background:
+        linear-gradient(var(--scroll-shadow-bg) 55%, transparent) top / 100% 2rem no-repeat local,
+        linear-gradient(transparent, var(--scroll-shadow-bg) 45%) bottom / 100% 2rem no-repeat local,
+        var(--scroll-chevron-up) 50% 0.4rem / 18px 11px no-repeat,
+        var(--scroll-chevron-down) 50% calc(100% - 0.4rem) / 18px 11px no-repeat;
+}
+
+.dark-mode .p-select-list-container, .dark-mode .p-select-overlay .p-virtualscroller,
+.dark-mode .p-multiselect-list-container, .dark-mode .p-multiselect-overlay .p-virtualscroller,
+.dark-mode .p-autocomplete-list-container, .dark-mode .p-autocomplete-overlay .p-virtualscroller,
+.dark-mode .p-cascadeselect-list-container, .dark-mode .p-cascadeselect-overlay .p-virtualscroller {
+    --scroll-chevron-up: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='18'%20height='11'%20viewBox='0%200%2018%2011'%3E%3Cpath%20d='M3%208l6-5%206%205'%20fill='none'%20stroke='%23ffffff'%20stroke-opacity='0.4'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
+    --scroll-chevron-down: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='18'%20height='11'%20viewBox='0%200%2018%2011'%3E%3Cpath%20d='M3%203l6%205%206-5'%20fill='none'%20stroke='%23ffffff'%20stroke-opacity='0.4'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.p-select-list-container::-webkit-scrollbar, .p-select-overlay .p-virtualscroller::-webkit-scrollbar,
+.p-multiselect-list-container::-webkit-scrollbar, .p-multiselect-overlay .p-virtualscroller::-webkit-scrollbar,
+.p-autocomplete-list-container::-webkit-scrollbar, .p-autocomplete-overlay .p-virtualscroller::-webkit-scrollbar,
+.p-cascadeselect-list-container::-webkit-scrollbar, .p-cascadeselect-overlay .p-virtualscroller::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    -webkit-appearance: none;
+}
+
+.p-select-list-container::-webkit-scrollbar-thumb, .p-select-overlay .p-virtualscroller::-webkit-scrollbar-thumb,
+.p-multiselect-list-container::-webkit-scrollbar-thumb, .p-multiselect-overlay .p-virtualscroller::-webkit-scrollbar-thumb,
+.p-autocomplete-list-container::-webkit-scrollbar-thumb, .p-autocomplete-overlay .p-virtualscroller::-webkit-scrollbar-thumb,
+.p-cascadeselect-list-container::-webkit-scrollbar-thumb, .p-cascadeselect-overlay .p-virtualscroller::-webkit-scrollbar-thumb {
+    background-color: var(--p-primary-color);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.p-select-list-container::-webkit-scrollbar-track, .p-select-overlay .p-virtualscroller::-webkit-scrollbar-track,
+.p-multiselect-list-container::-webkit-scrollbar-track, .p-multiselect-overlay .p-virtualscroller::-webkit-scrollbar-track,
+.p-autocomplete-list-container::-webkit-scrollbar-track, .p-autocomplete-overlay .p-virtualscroller::-webkit-scrollbar-track,
+.p-cascadeselect-list-container::-webkit-scrollbar-track, .p-cascadeselect-overlay .p-virtualscroller::-webkit-scrollbar-track {
+    background: transparent;
+}
+
 /* On phones the default PrimeVue toast keeps its fixed 25rem width anchored to a screen
    edge, so on narrow viewports the opposite edge (and its text/icon) clips off-screen.
    Pin every toast to full-width-with-gutters, respecting the safe-area insets. */

@@ -170,6 +170,7 @@
               option-value="value"
               placeholder="All statuses"
               class="w-full"
+              scroll-height="40vh"
               :max-selected-labels="3"
             />
           </div>

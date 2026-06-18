@@ -46,6 +46,7 @@
     "vue-chartjs": "5.3.3",
     "vue-recaptcha": "3.0.0-alpha.6",
     "vue-router": "5.0.6",
+    "wanakana": "^5.3.1",
     "yanki-connect": "3.2.4"
   },
   "devDependencies": {

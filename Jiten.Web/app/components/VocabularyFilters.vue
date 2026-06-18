@@ -91,7 +91,7 @@
           placeholder="display"
           input-id="display"
           class="w-full md:w-56"
-          scroll-height="30vh"
+          scroll-height="50vh"
         />
         <label for="display">Display</label>
       </FloatLabel>

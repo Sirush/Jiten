@@ -18,6 +18,7 @@
     Object.assign(form, srsStore.studySettings);
     form.keybinds = { ...srsStore.studySettings.keybinds };
     form.timedReview = { ...srsStore.studySettings.timedReview };
+    form.writeInReview = { ...srsStore.studySettings.writeInReview };
     syncEasyFromForm();
     if (!form.timezone) applyDetectedTimezone();
     // Let the hydration mutations flush through the deep watcher (still guarded by loaded=false)
@@ -71,6 +72,16 @@
   const answerActionOptions = [
     { label: 'Soft fail', value: 'SoftFail' },
     { label: 'Hard fail', value: 'HardFail' },
+  ];
+
+  const writeInPlacementOptions = [
+    { label: 'Bottom bar', value: false },
+    { label: 'Inline in card', value: true },
+  ];
+
+  const writeInWrongOptions = [
+    { label: 'Reveal answer', value: 'Reveal' },
+    { label: 'Shake & retry', value: 'Retry' },
   ];
 
   const exampleSentenceSortingOptions = [
@@ -283,7 +294,7 @@
     clearTimeout(saveTimer);
     saveState.value = 'saving';
     try {
-      await srsStore.updateSettings({ ...form, keybinds: { ...form.keybinds }, timedReview: { ...form.timedReview } });
+      await srsStore.updateSettings({ ...form, keybinds: { ...form.keybinds }, timedReview: { ...form.timedReview }, writeInReview: { ...form.writeInReview } });
       saveState.value = 'saved';
       clearTimeout(savedClearTimer);
       savedClearTimer = setTimeout(() => {
@@ -450,6 +461,162 @@
           </Tooltip>
         </label>
         <SelectButton v-model="form.reviewFrom" :options="reviewFromOptions" option-label="label" option-value="value" :allow-empty="false" class="flex-wrap" />
+      </div>
+
+      <Divider />
+
+      <!-- Modalities -->
+      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Modalities</h3>
+      <p class="text-sm text-surface-500 -mt-1 mb-1">
+        Choose how cards are reviewed. If you choose to have more than one modality active, each card will have a different one at random.
+      </p>
+
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center gap-2">
+          <Checkbox v-model="form.writeInReview.modalitySrs" :binary="true" input-id="writeInSrs" />
+          <label for="writeInSrs" class="text-sm cursor-pointer">
+            Standard cards
+            <Tooltip content="The classic flashcard: see the word, flip to reveal, grade your recall." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <Checkbox v-model="form.writeInReview.modalityReading" :binary="true" input-id="writeInReading" />
+          <label for="writeInReading" class="text-sm cursor-pointer">
+            Write-in reading
+            <Tooltip content="See the word with its reading hidden, then type the reading (romaji, kana, or kanji)." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div class="flex items-center gap-2">
+          <Checkbox v-model="form.writeInReview.modalityMeaning" :binary="true" input-id="writeInMeaning" />
+          <label for="writeInMeaning" class="text-sm cursor-pointer">
+            Write-in meaning
+            <Tooltip content="See the word, then type one content word from its definition (small words like 'the' or 'to' don't count)." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+      </div>
+
+      <div v-if="form.writeInReview.modalityReading || form.writeInReview.modalityMeaning" class="flex flex-col gap-4 mt-1">
+        <div>
+          <label class="block text-sm font-medium mb-1">
+            Input placement
+            <Tooltip content="**Bottom bar** — the input replaces the Show Answer bar at the bottom.<br>**Inline in card** — the input sits inside the card, under the word." placement="top">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+          <SelectButton
+            v-model="form.writeInReview.inlineInput"
+            :options="writeInPlacementOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">
+            When the answer is wrong
+            <Tooltip content="**Reveal answer** — flip to the answer and suggest Again.<br>**Shake & retry** — keep the input open so you can try again if you get it wrong." placement="top">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+          <SelectButton
+            v-model="form.writeInReview.wrongBehavior"
+            :options="writeInWrongOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+          />
+        </div>
+
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.writeInReview.autoAdvance" input-id="writeInAutoAdvance" />
+          <label for="writeInAutoAdvance" class="text-sm cursor-pointer">
+            Auto-advance after answering
+            <Tooltip content="The suggested grade will be submitted automatically after a delay. You can override by choosing a different grade." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div v-if="form.writeInReview.autoAdvance" class="ml-6 flex flex-col gap-3">
+          <div class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.writeInReview.autoAdvanceWrong" input-id="writeInAutoAdvanceWrong" />
+            <label for="writeInAutoAdvanceWrong" class="text-sm cursor-pointer">
+              Also auto-advance wrong answers
+              <Tooltip content="When off, only correct answers auto-advance; wrong answers wait for you to grade. When on, wrong answers will be graded Again after the delay." placement="right">
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
+          <div class="min-w-0 max-w-[16rem]">
+            <label class="block text-sm font-medium mb-1">Delay (seconds)</label>
+            <InputNumber
+              v-model="form.writeInReview.autoAdvanceSeconds"
+              :min="0"
+              :max="60"
+              :step="0.5"
+              :min-fraction-digits="0"
+              :max-fraction-digits="1"
+              :show-buttons="!props.inline"
+              class="w-full [&_input]:w-full"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.writeInReview.skipNewCards" input-id="writeInSkipNew" />
+          <label for="writeInSkipNew" class="text-sm cursor-pointer">
+            Disable for new cards
+            <Tooltip content="New cards you haven't learned yet just reveal normally (standard card) instead of asking you to type an answer." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+
+        <div v-if="form.writeInReview.modalityReading" class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.writeInReview.romajiInput" input-id="writeInRomaji" />
+          <label for="writeInRomaji" class="text-sm cursor-pointer">
+            Convert romaji to kana as you type
+            <Tooltip content="A built-in IME for the reading input: typing 'neko' becomes ねこ. Turn off to type kana directly." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+
+        <div v-if="form.writeInReview.modalityMeaning" class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.writeInReview.meaningShowReading" input-id="writeInMeaningReading" />
+          <label for="writeInMeaningReading" class="text-sm cursor-pointer">
+            Show the reading in meaning mode
+            <Tooltip content="Show the word's reading (furigana) on the front when typing the meaning, so only the meaning is tested. Turn off to hide it and test yourself on both at once." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.writeInReview.sound" input-id="writeInSound" />
+          <label for="writeInSound" class="text-sm cursor-pointer">
+            Play a sound on correct / wrong
+            <Tooltip content="A short chime when your answer is right, and a low tone when it's wrong." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.writeInReview.timed" input-id="writeInTimed" />
+          <label for="writeInTimed" class="text-sm cursor-pointer">
+            Keep timed review on write-in cards
+            <Tooltip content="Timed review is turned off on write-in cards by default. Standard cards are always timed normally." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
       </div>
 
       <Divider />

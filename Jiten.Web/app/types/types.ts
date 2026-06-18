@@ -400,6 +400,11 @@ export interface UserExampleSentenceDto {
   sortOrder: number;
 }
 
+export interface UserCustomMeaningDto {
+  wordId: number;
+  text: string;
+}
+
 export interface ExampleSentencesByDifficultyResponse {
   minDifficulty: number;
   maxDifficulty: number;
@@ -1038,6 +1043,27 @@ export interface TimedReviewSettings {
   alertSound: boolean;
 }
 
+// Write-in review: what happens when the typed answer is wrong.
+// Reveal = flip to the answer and suggest Again; Retry = shake the field and let the user try again or give up.
+export type WriteInWrongBehavior = 'Reveal' | 'Retry';
+
+/** "Write-in review" preferences. Behaviour is entirely client-side; the server round-trips it. */
+export interface WriteInReviewSettings {
+  modalitySrs: boolean;
+  modalityReading: boolean;
+  modalityMeaning: boolean;
+  inlineInput: boolean;
+  wrongBehavior: WriteInWrongBehavior;
+  romajiInput: boolean;
+  meaningShowReading: boolean;
+  skipNewCards: boolean;
+  autoAdvance: boolean;
+  autoAdvanceWrong: boolean;
+  autoAdvanceSeconds: number;
+  sound: boolean;
+  timed: boolean;
+}
+
 export interface StudyKeybinds {
   grade1: string;
   grade2: string;
@@ -1094,6 +1120,7 @@ export interface StudySettingsDto {
   leechThreshold: number;
   leechAction: LeechAction;
   timedReview: TimedReviewSettings;
+  writeInReview: WriteInReviewSettings;
   keybinds: StudyKeybinds;
 }
 
