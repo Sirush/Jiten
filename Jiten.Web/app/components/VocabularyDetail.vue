@@ -423,11 +423,11 @@
                   <NuxtLink :to="`/terms`" target="_blank" class="hover:underline text-primary-600"> terms of service.</NuxtLink>
                 </div>
                 <template v-if="customSentences.length > 0">
-                  <CustomExampleSentenceEntry v-for="sentence in customSentences" :key="`custom-${sentence.userExampleSentenceId}`" :sentence="sentence" />
+                  <CustomExampleSentenceEntry v-for="sentence in customSentences" :key="`custom-${sentence.userExampleSentenceId}`" :sentence="sentence" editable @changed="loadCustomSentences()" />
                   <div v-if="exampleSentences.length > 0" class="border-b border-surface-200 dark:border-surface-700 my-2" />
                 </template>
                 <template v-if="exampleSentences.length > 0">
-                  <ExampleSentenceEntry v-for="(exampleSentence, index) in exampleSentences" :key="index" :example-sentence="exampleSentence" :show-source="true" :word-id="props.wordId" :reading-index="currentReadingIndex" @favourited="loadCustomSentences()" />
+                  <ExampleSentenceEntry v-for="(exampleSentence, index) in exampleSentences" :key="index" :example-sentence="exampleSentence" :show-source="true" :word-id="props.wordId" :reading-index="currentReadingIndex" :at-limit="customSentences.length >= 3" @favourited="loadCustomSentences()" />
                 </template>
                 <template v-else-if="isLoadingExampleSentences">
                   <div v-for="i in 3" :key="i" class="flex flex-col mb-2">

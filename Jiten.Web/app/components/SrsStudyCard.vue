@@ -1,10 +1,12 @@
 <script setup lang="ts">
-  import type { ExampleSentence, ExampleSentencesByDifficultyResponse, StudyCardDto, Word } from '~/types';
+  import type { ExampleSentence, ExampleSentencesByDifficultyResponse, StudyCardDto, UserExampleSentenceDto, Word } from '~/types';
   import { useSrsStore } from '~/stores/srsStore';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { sanitiseHtml } from '~/utils/sanitiseHtml';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
+  import InlineSentenceEditor from '~/components/InlineSentenceEditor.vue';
+  import { useToast } from 'primevue/usetoast';
   import { displayKeyName } from '~/composables/useStudyKeyboard';
 
   const props = defineProps<{
@@ -41,6 +43,8 @@
   const { $api } = useNuxtApp();
   const localiseTitle = useLocaliseTitle();
   const convertToRuby = useConvertToRuby();
+  const authStore = useAuthStore();
+  const toast = useToast();
 
   const wordData = ref<Word | null>(null);
   const wordLoadFailed = ref(false);
@@ -129,9 +133,79 @@
   const exampleRevealed = ref(false);
   const occExpanded = ref(false);
 
+  // Favourite / inline-edit of the displayed example sentence.
+  const editingExample = ref(false);
+  const favouriting = ref(false);
+  const exampleIsCustom = computed(() => !!cardExample.value?.isCustom);
+  // Custom examples encode a negated UserExampleSentenceId in sentenceId (see BuildCustomStudyExample).
+  const exampleUserSentenceId = computed(() =>
+    cardExample.value?.isCustom ? -cardExample.value.sentenceId : null);
+
+  function buildMarkedText(ex: NonNullable<typeof cardExample.value>): string {
+    if (ex.isCustom && ex.customText) return ex.customText;
+    const { text, wordPosition, wordLength } = ex;
+    if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) return text;
+    const before = text.substring(0, wordPosition);
+    const word = text.substring(wordPosition, wordPosition + wordLength);
+    const after = text.substring(wordPosition + wordLength);
+    return `${before}**${word}**${after}`;
+  }
+
+  function buildSource(ex: NonNullable<typeof cardExample.value>): string {
+    if (ex.isCustom) return ex.customSource ?? '';
+    let source = '';
+    if (ex.sourceParent) source += localiseTitle(ex.sourceParent) + ' - ';
+    if (ex.sourceDeck) source += localiseTitle(ex.sourceDeck);
+    return source;
+  }
+
+  const editInitialText = computed(() => cardExample.value ? buildMarkedText(cardExample.value) : '');
+  const editInitialSource = computed(() => cardExample.value ? buildSource(cardExample.value) : '');
+
+  function applyCustomDto(dto: UserExampleSentenceDto) {
+    srsStore.setCardExample(props.card.wordId, props.card.readingIndex, {
+      sentenceId: -dto.userExampleSentenceId,
+      text: dto.text.replace(/\*\*/g, ''),
+      wordPosition: 0,
+      wordLength: 0,
+      isCustom: true,
+      customText: dto.text,
+      customSource: dto.source,
+    });
+  }
+
+  async function favouriteExample() {
+    const ex = cardExample.value;
+    if (!ex || ex.isCustom || favouriting.value) return;
+    favouriting.value = true;
+    try {
+      const dto = await $api<UserExampleSentenceDto>(
+        `user/example-sentences/${props.card.wordId}/${props.card.readingIndex}/favourite`,
+        { method: 'POST', body: { text: buildMarkedText(ex), source: buildSource(ex) || undefined } },
+      );
+      applyCustomDto(dto);
+      toast.add({ severity: 'success', summary: 'Saved as custom sentence', life: 2000 });
+    } catch {
+      toast.add({ severity: 'error', summary: 'Maximum of 3 custom sentences reached', life: 3000 });
+    } finally {
+      favouriting.value = false;
+    }
+  }
+
+  function onExampleSaved(dto: UserExampleSentenceDto) {
+    applyCustomDto(dto);
+    editingExample.value = false;
+  }
+
+  async function onExampleDeleted() {
+    editingExample.value = false;
+    await srsStore.refreshCardExample(props.card.wordId, props.card.readingIndex);
+  }
+
   watch(() => `${props.card.wordId}-${props.card.readingIndex}`, () => {
     exampleRevealed.value = false;
     occExpanded.value = false;
+    editingExample.value = false;
   });
 
   const extraSentences = ref<ExampleSentence[]>([]);
@@ -399,6 +473,18 @@
         </div>
         <!-- Example sentence on front -->
         <div v-if="srsStore.studySettings.exampleSentencePosition === 'Front' && exampleSentenceHtml" class="mt-4 w-full" @click.stop>
+          <InlineSentenceEditor
+            v-if="editingExample"
+            :word-id="card.wordId"
+            :reading-index="card.readingIndex"
+            :initial-text="editInitialText"
+            :initial-source="editInitialSource"
+            :user-sentence-id="exampleUserSentenceId"
+            @saved="onExampleSaved"
+            @deleted="onExampleDeleted"
+            @cancel="editingExample = false"
+          />
+          <template v-else>
           <blockquote
             class="relative inline-block border-l-4 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
             :class="[cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500', { 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }]"
@@ -406,15 +492,36 @@
           >
             <div class="flex items-start gap-2">
               <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" lang="ja" />
-              <TtsButton
-                v-if="cardExample"
-                :text="cardExample.text"
-                :sentence-id="cardExample.isCustom ? undefined : cardExample.sentenceId"
-                :custom-sentence-id="cardExample.isCustom ? -cardExample.sentenceId : undefined"
-                type="sentence"
-                size="sm"
-                class="mt-0.5 shrink-0"
-              />
+              <div class="flex items-center gap-1 mt-0.5 shrink-0">
+                <TtsButton
+                  v-if="cardExample"
+                  :text="cardExample.text"
+                  :sentence-id="cardExample.isCustom ? undefined : cardExample.sentenceId"
+                  :custom-sentence-id="cardExample.isCustom ? -cardExample.sentenceId : undefined"
+                  type="sentence"
+                  size="sm"
+                />
+                <button
+                  v-if="authStore.isAuthenticated && cardExample"
+                  class="inline-flex items-center justify-center transition-colors"
+                  :class="exampleIsCustom ? 'text-yellow-500' : 'text-surface-400 hover:text-yellow-500'"
+                  :disabled="exampleIsCustom || favouriting"
+                  :title="exampleIsCustom ? 'Saved as custom sentence' : 'Save as custom sentence'"
+                  @pointerdown.stop
+                  @click.stop="favouriteExample"
+                >
+                  <i class="pi text-sm" :class="exampleIsCustom ? 'pi-star-fill' : 'pi-star'" />
+                </button>
+                <button
+                  v-if="authStore.isAuthenticated && cardExample"
+                  class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
+                  title="Edit sentence"
+                  @pointerdown.stop
+                  @click.stop="editingExample = true"
+                >
+                  <i class="pi pi-pencil text-sm" />
+                </button>
+              </div>
             </div>
           </blockquote>
           <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">
@@ -475,6 +582,7 @@
               Load more
             </button>
           </div>
+          </template>
         </div>
 
         <!-- Confusable readings -->
@@ -547,7 +655,18 @@
 
         <!-- Example sentence (back) -->
         <div v-if="srsStore.studySettings.exampleSentencePosition === 'Back'" class="mb-4">
-          <template v-if="exampleSentenceHtml">
+          <InlineSentenceEditor
+            v-if="editingExample"
+            :word-id="card.wordId"
+            :reading-index="card.readingIndex"
+            :initial-text="editInitialText"
+            :initial-source="editInitialSource"
+            :user-sentence-id="exampleUserSentenceId"
+            @saved="onExampleSaved"
+            @deleted="onExampleDeleted"
+            @cancel="editingExample = false"
+          />
+          <template v-else-if="exampleSentenceHtml">
             <blockquote
               class="relative inline-block border-l-4 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
               :class="[cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500', { 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }]"
@@ -555,15 +674,36 @@
             >
               <div class="flex items-start gap-2">
                 <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" lang="ja" />
-                <TtsButton
-                v-if="cardExample"
-                :text="cardExample.text"
-                :sentence-id="cardExample.isCustom ? undefined : cardExample.sentenceId"
-                :custom-sentence-id="cardExample.isCustom ? -cardExample.sentenceId : undefined"
-                type="sentence"
-                size="sm"
-                class="mt-0.5 shrink-0"
-              />
+                <div class="flex items-center gap-1 mt-0.5 shrink-0">
+                  <TtsButton
+                    v-if="cardExample"
+                    :text="cardExample.text"
+                    :sentence-id="cardExample.isCustom ? undefined : cardExample.sentenceId"
+                    :custom-sentence-id="cardExample.isCustom ? -cardExample.sentenceId : undefined"
+                    type="sentence"
+                    size="sm"
+                  />
+                  <button
+                    v-if="authStore.isAuthenticated && cardExample"
+                    class="inline-flex items-center justify-center transition-colors"
+                    :class="exampleIsCustom ? 'text-yellow-500' : 'text-surface-400 hover:text-yellow-500'"
+                    :disabled="exampleIsCustom || favouriting"
+                    :title="exampleIsCustom ? 'Saved as custom sentence' : 'Save as custom sentence'"
+                    @pointerdown.stop
+                    @click.stop="favouriteExample"
+                  >
+                    <i class="pi text-sm" :class="exampleIsCustom ? 'pi-star-fill' : 'pi-star'" />
+                  </button>
+                  <button
+                    v-if="authStore.isAuthenticated && cardExample"
+                    class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors"
+                    title="Edit sentence"
+                    @pointerdown.stop
+                    @click.stop="editingExample = true"
+                  >
+                    <i class="pi pi-pencil text-sm" />
+                  </button>
+                </div>
               </div>
             </blockquote>
             <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">
@@ -596,6 +736,7 @@
           </template>
 
           <button
+            v-if="!editingExample"
             class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 mt-1 ml-1 flex items-center gap-1 cursor-pointer"
             @pointerdown.stop
             @click="toggleExtraSentences"
@@ -604,7 +745,7 @@
             {{ extraSentencesExpanded ? 'Hide extra sentences' : 'See more sentences' }}
           </button>
 
-          <div v-if="extraSentencesExpanded" class="mt-2 space-y-2">
+          <div v-if="extraSentencesExpanded && !editingExample" class="mt-2 space-y-2">
             <ExampleSentenceEntry
               v-for="(sentence, i) in extraSentences"
               :key="i"

@@ -647,6 +647,28 @@ export const useSrsStore = defineStore('srs', () => {
     return exampleCache.value.get(`${wordId}-${readingIndex}`);
   }
 
+  // Overwrite the cached example for a card (used after favouriting/editing a sentence in-session).
+  function setCardExample(wordId: number, readingIndex: number, example: StudyExampleSentenceDto | null) {
+    const newCache = new Map(exampleCache.value);
+    newCache.set(`${wordId}-${readingIndex}`, example);
+    exampleCache.value = newCache;
+  }
+
+  // Re-fetch a single card's example from the server (used after deleting a custom sentence so the
+  // corpus fallback reappears). Independent of the prefetch window so it works for any visible card.
+  async function refreshCardExample(wordId: number, readingIndex: number) {
+    const key = `${wordId}-${readingIndex}`;
+    try {
+      const response = await $api<CardExamplesResponse>('srs/card-examples', {
+        method: 'POST',
+        body: { pairs: [{ wordId, readingIndex }] },
+      });
+      setCardExample(wordId, readingIndex, response.examples[key] ?? null);
+    } catch {
+      // Keep the stale entry on failure.
+    }
+  }
+
   async function prefetchExamples(fromIndex: number, count: number) {
     const start = Math.max(0, fromIndex);
     const end = Math.min(start + count, currentBatch.value.length);
@@ -1302,6 +1324,8 @@ export const useSrsStore = defineStore('srs', () => {
     toggleDeckActive,
     studyMoreParams,
     getCardExample,
+    setCardExample,
+    refreshCardExample,
     fetchBatch,
     revealCard,
     gradeCard,

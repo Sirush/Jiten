@@ -1,19 +1,20 @@
 <script setup lang="ts">
   import type { ExampleSentence } from '~/types';
   import { computed, ref } from 'vue';
+  import { useToast } from 'primevue/usetoast';
 
   const props = defineProps<{
     exampleSentence: ExampleSentence;
     showSource?: boolean;
     wordId?: number;
     readingIndex?: number;
+    // The user already has the max number of custom sentences for this word — disable the create paths.
+    atLimit?: boolean;
   }>();
 
   const emit = defineEmits<{
     favourited: [];
   }>();
-
-  import { useToast } from 'primevue/usetoast';
 
   const { $api } = useNuxtApp();
   const authStore = useAuthStore();
@@ -49,6 +50,33 @@
     }
   };
 
+  const canEdit = computed(() => authStore.isAuthenticated && props.wordId != null && props.readingIndex != null);
+  const editing = ref(false);
+
+  const editInitialText = computed(() => {
+    const { text, wordPosition, wordLength } = props.exampleSentence;
+    if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) return text;
+    const before = text.substring(0, wordPosition);
+    const word = text.substring(wordPosition, wordPosition + wordLength);
+    const after = text.substring(wordPosition + wordLength);
+    return `${before}**${word}**${after}`;
+  });
+
+  const editInitialSource = computed(() => {
+    const { sourceDeckParent, sourceDeck } = props.exampleSentence;
+    let source = '';
+    if (sourceDeckParent) source += localiseTitle(sourceDeckParent) + ' - ';
+    if (sourceDeck) source += localiseTitle(sourceDeck);
+    return source;
+  });
+
+  // Editing a corpus sentence creates a new custom (favourite) sentence; reuse the favourite flow.
+  function onEdited() {
+    editing.value = false;
+    favourited.value = true;
+    emit('favourited');
+  }
+
   async function favouriteSentence() {
     if (props.wordId == null || props.readingIndex == null) return;
 
@@ -77,19 +105,41 @@
 
 <template>
   <div class="flex flex-col">
+    <InlineSentenceEditor
+      v-if="editing"
+      :word-id="wordId"
+      :reading-index="readingIndex"
+      :initial-text="editInitialText"
+      :initial-source="editInitialSource"
+      :user-sentence-id="null"
+      class="mb-2"
+      @saved="onEdited"
+      @cancel="editing = false"
+    />
+    <template v-else>
     <blockquote class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r shadow-sm overflow-hidden">
       <div class="flex items-start gap-2">
         <div v-html="formattedText" class="md:text-lg text-sm transition-filter duration-200 flex-1" lang="ja" :class="{ 'blur-sm': isNsfw && !isRevealed }" @click="handleReveal"></div>
         <TtsButton :text="exampleSentence.text" :sentence-id="exampleSentence.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
         <button
-          v-if="authStore.isAuthenticated && wordId != null && readingIndex != null"
+          v-if="canEdit"
           class="inline-flex items-center justify-center transition-colors mt-0.5 shrink-0"
-          :class="favourited ? 'text-yellow-500' : 'text-surface-400 hover:text-yellow-500'"
-          :disabled="favourited"
-          title="Save as custom sentence"
+          :class="favourited ? 'text-yellow-500' : atLimit ? 'text-surface-300 dark:text-surface-600 cursor-not-allowed' : 'text-surface-400 hover:text-yellow-500'"
+          :disabled="favourited || atLimit"
+          :title="atLimit ? 'Maximum of 3 custom sentences reached' : 'Save as custom sentence'"
           @click="favouriteSentence"
         >
           <i class="pi text-sm" :class="favourited ? 'pi-star-fill' : 'pi-star'" />
+        </button>
+        <button
+          v-if="canEdit"
+          class="inline-flex items-center justify-center transition-colors mt-0.5 shrink-0"
+          :class="atLimit ? 'text-surface-300 dark:text-surface-600 cursor-not-allowed' : 'text-surface-400 hover:text-primary-500 cursor-pointer'"
+          :disabled="atLimit"
+          :title="atLimit ? 'Maximum of 3 custom sentences reached' : 'Edit sentence'"
+          @click="editing = true"
+        >
+          <i class="pi pi-pencil text-sm" />
         </button>
       </div>
       <div
@@ -131,6 +181,7 @@
         ({{getMediaTypeText(exampleSentence.sourceDeck.mediaType)}})
       </div>
     </div>
+    </template>
   </div>
 </template>
 
