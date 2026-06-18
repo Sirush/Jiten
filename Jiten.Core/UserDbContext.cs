@@ -39,6 +39,7 @@ public class UserDbContext : IdentityDbContext<User>
     public DbSet<UserStudyDeck> UserStudyDecks { get; set; }
     public DbSet<UserStudyDeckWord> UserStudyDeckWords { get; set; }
     public DbSet<UserExampleSentence> UserExampleSentences { get; set; }
+    public DbSet<UserCustomMeaning> UserCustomMeanings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -364,6 +365,25 @@ public class UserDbContext : IdentityDbContext<User>
 
             entity.HasIndex(e => new { e.UserId, e.WordId, e.ReadingIndex })
                   .HasDatabaseName("IX_UserExampleSentence_UserId_WordId_ReadingIndex");
+        });
+
+        modelBuilder.Entity<UserCustomMeaning>(entity =>
+        {
+            entity.HasKey(e => e.UserCustomMeaningId);
+            if (isNpgsql)
+                entity.Property(e => e.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(e => e.Text).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql(isNpgsql ? "now() at time zone 'utc'" : "datetime('now')");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql(isNpgsql ? "now() at time zone 'utc'" : "datetime('now')");
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.UserId, e.WordId })
+                  .IsUnique()
+                  .HasDatabaseName("IX_UserCustomMeaning_UserId_WordId");
         });
 
         modelBuilder.Entity<UserWordSetState>(entity =>

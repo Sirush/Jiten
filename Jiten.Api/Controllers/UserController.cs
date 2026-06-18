@@ -3175,4 +3175,86 @@ public class UserController(
     }
 
     #endregion
+
+    #region Custom Meanings
+
+    private const int CustomMeaningMaxLength = 500;
+
+    [HttpGet("custom-meanings/{wordId}")]
+    public async Task<IResult> GetCustomMeaning(int wordId)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var meaning = await userContext.UserCustomMeanings
+            .AsNoTracking()
+            .Where(e => e.UserId == userId && e.WordId == wordId)
+            .Select(e => new UserCustomMeaningDto { WordId = e.WordId, Text = e.Text })
+            .FirstOrDefaultAsync();
+
+        return Results.Ok(meaning);
+    }
+
+    [HttpPut("custom-meanings/{wordId}")]
+    public async Task<IResult> UpsertCustomMeaning(int wordId, [FromBody] UpsertUserCustomMeaningRequest request)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var text = request.Text?.Trim() ?? "";
+        if (text.Length == 0) return Results.BadRequest("Meaning must not be empty.");
+        if (text.Length > CustomMeaningMaxLength) return Results.BadRequest($"Meaning must be {CustomMeaningMaxLength} characters or fewer.");
+
+        var meaning = await userContext.UserCustomMeanings
+            .FirstOrDefaultAsync(e => e.UserId == userId && e.WordId == wordId);
+
+        if (meaning == null)
+        {
+            meaning = new UserCustomMeaning { UserId = userId, WordId = wordId, Text = text };
+            userContext.UserCustomMeanings.Add(meaning);
+        }
+        else
+        {
+            meaning.Text = text;
+            meaning.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await userContext.SaveChangesAsync();
+
+        return Results.Ok(new UserCustomMeaningDto { WordId = meaning.WordId, Text = meaning.Text });
+    }
+
+    [HttpDelete("custom-meanings/{wordId}")]
+    public async Task<IResult> DeleteCustomMeaning(int wordId)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var meaning = await userContext.UserCustomMeanings
+            .FirstOrDefaultAsync(e => e.UserId == userId && e.WordId == wordId);
+        if (meaning == null) return Results.NotFound();
+
+        userContext.UserCustomMeanings.Remove(meaning);
+        await userContext.SaveChangesAsync();
+
+        return Results.Ok(new { deleted = true });
+    }
+
+    [HttpPost("custom-meanings/batch")]
+    public async Task<IResult> GetCustomMeaningsBatch([FromBody] List<int> wordIds)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+        if (wordIds is not { Count: > 0 and <= 50 }) return Results.BadRequest();
+
+        var distinct = wordIds.Distinct().ToList();
+        var meanings = await userContext.UserCustomMeanings
+            .AsNoTracking()
+            .Where(e => e.UserId == userId && distinct.Contains(e.WordId))
+            .ToDictionaryAsync(e => e.WordId, e => e.Text);
+
+        return Results.Ok(meanings);
+    }
+
+    #endregion
 }

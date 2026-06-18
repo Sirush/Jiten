@@ -651,6 +651,7 @@
               <span>Loading full entry…</span>
             </div>
           </template>
+          <CustomMeaning :word-id="card.wordId" editable class="mt-3" />
         </div>
 
         <!-- Example sentence (back) -->

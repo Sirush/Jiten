@@ -400,6 +400,11 @@ export interface UserExampleSentenceDto {
   sortOrder: number;
 }
 
+export interface UserCustomMeaningDto {
+  wordId: number;
+  text: string;
+}
+
 export interface ExampleSentencesByDifficultyResponse {
   minDifficulty: number;
   maxDifficulty: number;

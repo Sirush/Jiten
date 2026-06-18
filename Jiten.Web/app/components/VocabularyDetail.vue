@@ -294,6 +294,7 @@
                   <VocabularyDefinitions :definitions="word.definitions" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" />
                 </template>
               </ClientOnly>
+              <CustomMeaning :word-id="props.wordId" editable class="mt-2" />
             </div>
           </div>
 
