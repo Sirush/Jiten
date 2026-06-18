@@ -55,6 +55,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Combine, CombineFinal),
         Stage(TokenStageGroup.Split, SplitUnresolvableSuruCompounds),
         Stage(TokenStageGroup.Repair, RepairTankaToTaNKa, TokenFeatures.TextTanka),
+        Stage(TokenStageGroup.Repair, RepairTteNani),
 
         Stage(TokenStageGroup.Cleanup, FilterMisparse),
         Stage(TokenStageGroup.Disambiguation, FixReadingAmbiguity),

@@ -2483,6 +2483,61 @@ public partial class MorphologicalAnalyser
         return false;
     }
 
+    // Quotative って stealing the な of an interrogative なに(何): Sudachi reads ってなに as the colloquial
+    // tag ってな(=という) + に, or splits it って|な|に. The colloquial ってな only ever takes a noun head
+    // (ってな具合/ってな歌), never the bare particle に — so な+に right after って is always 何 (verified
+    // 4/4 in a 2.6 MB corpus, vs ってな+noun for the colloquial form). Recombine both shapes to って + なに.
+    private List<WordInfo> RepairTteNani(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2) return wordInfos;
+
+        List<WordInfo>? newList = null;
+
+        WordInfo Nani(WordInfo basis, int startOffset, int endOffset) => new(basis)
+        {
+            Text = "なに", DictionaryForm = "なに", NormalizedForm = "何", Reading = "ナニ",
+            PartOfSpeech = PartOfSpeech.Noun, PartOfSpeechSection1 = PartOfSpeechSection.None,
+            StartOffset = startOffset, EndOffset = endOffset
+        };
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            // Fused: ってな + に  ->  って + なに
+            if (wordInfos[i].Text == "ってな" && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "に")
+            {
+                newList ??= [..wordInfos[..i]];
+                var tteNa = wordInfos[i];
+                var ni = wordInfos[i + 1];
+                int mid = tteNa.StartOffset >= 0 ? tteNa.StartOffset + 2 : -1;
+                newList.Add(new WordInfo(tteNa)
+                {
+                    Text = "って", DictionaryForm = "って", NormalizedForm = "って", Reading = "ッテ",
+                    PartOfSpeech = PartOfSpeech.Particle, EndOffset = mid
+                });
+                newList.Add(Nani(ni, mid, ni.EndOffset));
+                i++;
+                continue;
+            }
+
+            // Split: って + な + に  ->  って + なに
+            if (wordInfos[i].Text == "って" && i + 2 < wordInfos.Count
+                && wordInfos[i + 1].Text == "な" && wordInfos[i + 2].Text == "に")
+            {
+                newList ??= [..wordInfos[..i]];
+                var na = wordInfos[i + 1];
+                var ni = wordInfos[i + 2];
+                newList.Add(wordInfos[i]);
+                newList.Add(Nani(na, na.StartOffset, ni.EndOffset));
+                i += 2;
+                continue;
+            }
+
+            newList?.Add(wordInfos[i]);
+        }
+
+        return newList ?? wordInfos;
+    }
+
     private List<WordInfo> RepairQuotativeTte(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2) return wordInfos;
@@ -2517,6 +2572,32 @@ public partial class MorphologicalAnalyser
 
         for (int i = 0; i < wordInfos.Count; i++)
         {
+            // Sudachi mis-splits the colloquial particle だって (誰だって, 将校だって) into だっ (mis-tagged
+            // as the verb だつ) + て after a noun/pronoun. The canonical だって handlers don't fire here —
+            // SplitTatteParticle ran earlier (Split group) and is gated on a single だって token — so
+            // reconstruct the particle, matching 誰だって → 誰 + だって(Particle). After a noun this is the
+            // inclusive/emphatic だって ("even"), never a stolen verb mora; left untouched it gets hijacked
+            // by the mora-theft block below into a fake verb 将校だ (→ 将校 + past).
+            if (i + 1 < wordInfos.Count
+                && wordInfos[i] is { Text: "だっ", DictionaryForm: "だつ" }
+                && wordInfos[i + 1].Text == "て"
+                && result.Count > 0
+                && result[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                    or PartOfSpeech.Pronoun or PartOfSpeech.Name or PartOfSpeech.Suffix)
+            {
+                var dattsu = wordInfos[i];
+                result.Add(new WordInfo(dattsu)
+                {
+                    Text = "だって", DictionaryForm = "だって", NormalizedForm = "だって", Reading = "ダッテ",
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    PartOfSpeechSection1 = PartOfSpeechSection.ConjunctionParticle,
+                    EndOffset = wordInfos[i + 1].EndOffset
+                });
+                i++;
+                changed = true;
+                continue;
+            }
+
             // Fused variant of the katakana-mora theft: Sudachi emits a single Xって token
             // (homograph of かつて) instead of Xっ|て: ケン|カって → ケンカ + って.
             if (wordInfos[i].Text.Length == 3 && wordInfos[i].Text[0] != 'ー' && IsKatakanaTextChar(wordInfos[i].Text[0])
@@ -2545,6 +2626,64 @@ public partial class MorphologicalAnalyser
                 });
                 changed = true;
                 continue;
+            }
+
+            // Katakana noun whose tail mora(s) a quotative って steals. Sudachi either strands them as a
+            // pseudo-verb mora (サナダ|ムシっ[ムシる]|て) or fuses them into an idiom token
+            // (エリ|アっての — ア+って+の matched to the idiom あっての). Both leave a leading katakana run K
+            // before っ; if prev + K is a real JMDict katakana word the split is spurious, so reattach K
+            // and hand って back. The lookup gate keeps genuine katakana verbs (サボってる) and complete
+            // words untouched (they never leave a katakana fragment as the previous token).
+            if (result.Count > 0 && IsAllKatakanaText(result[^1].Text) && HasNonNameCompoundLookup != null)
+            {
+                var cur = wordInfos[i].Text;
+                int kl = 0;
+                while (kl < cur.Length && IsKatakanaTextChar(cur[kl])) kl++;
+
+                if (kl >= 1 && kl < cur.Length && cur[kl] == 'っ'
+                    && HasNonNameCompoundLookup(result[^1].Text + cur[..kl]))
+                {
+                    var prevKata = result[^1];
+                    var kataWord = prevKata.Text + cur[..kl];
+                    var rest = cur[kl..];
+                    int kEnd = wordInfos[i].StartOffset >= 0 ? wordInfos[i].StartOffset + kl : -1;
+
+                    // Stranded mora: the て is the following token (サナダ|ムシっ|て).
+                    if (rest == "っ" && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "て")
+                    {
+                        result[^1] = new WordInfo(prevKata)
+                        {
+                            Text = kataWord, DictionaryForm = kataWord, NormalizedForm = kataWord,
+                            PartOfSpeech = PartOfSpeech.Noun, EndOffset = kEnd
+                        };
+                        AddTte(wordInfos[i], wordInfos[i + 1]);
+                        i++;
+                        changed = true;
+                        continue;
+                    }
+
+                    // Fused って with an optional grammatical tail (アっての → って + の).
+                    if (rest.StartsWith("って", StringComparison.Ordinal))
+                    {
+                        result[^1] = new WordInfo(prevKata)
+                        {
+                            Text = kataWord, DictionaryForm = kataWord, NormalizedForm = kataWord,
+                            PartOfSpeech = PartOfSpeech.Noun, EndOffset = kEnd
+                        };
+                        result.Add(new WordInfo(wordInfos[i])
+                        {
+                            Text = "って", DictionaryForm = "って", NormalizedForm = "って",
+                            PartOfSpeech = PartOfSpeech.Particle,
+                            StartOffset = kEnd,
+                            EndOffset = kEnd >= 0 ? kEnd + 2 : -1
+                        });
+                        var tail = rest[2..];
+                        if (tail.Length > 0)
+                            result.AddRange(TokenizeGrammarRemainder(tail, kEnd >= 0 ? kEnd + 2 : -1));
+                        changed = true;
+                        continue;
+                    }
+                }
             }
 
             // Interjection homograph stealing the っ of a quotative って: それっ|て → それ + って.
@@ -2613,6 +2752,7 @@ public partial class MorphologicalAnalyser
                 && wordInfos[i].Text.Length == 2
                 && wordInfos[i].Text[^1] == 'っ'
                 && wordInfos[i].Text[0] is >= 'ぁ' and <= 'ゖ'
+                && wordInfos[i].Text[0] != 'だ'   // copula だ is never a stranded verb-final mora (だって ≠ a verb)
                 && wordInfos[i + 1].Text == "て"
                 && wordInfos[i].PartOfSpeech is not (PartOfSpeech.Particle or PartOfSpeech.Pronoun)
                 && result.Count > 0)
@@ -2656,9 +2796,12 @@ public partial class MorphologicalAnalyser
             // genuine verb, just not the reading inside a noun compound). That reading breaks the
             // noun run so the lookup's compound matcher can't reform 自意識. Hand the stolen っ back to
             // って and re-tag the kanji as a noun, so the matcher reforms the compound and っていう
-            // clusters. Gated on the kanji plus its preceding kanji compound-part(s) — Noun/Suffix/
-            // Prefix, e.g. the 接尾辞 認 — forming a real JMDict compound noun. A genuine 識る takes a
-            // particle object (真実を識って), so its predecessor is never a bare kanji and it is left alone.
+            // clusters. Gated on the kanji plus its preceding kanji compound-part — Noun/Suffix/Prefix
+            // (the 接尾辞 認 in 認識), or an adjective/verb stem Sudachi mis-tags the compound's leading
+            // bare kanji as (若造 → 若[若い 形容詞]|造っ[造る 動詞]) — forming a real JMDict compound noun.
+            // The bare-kanji predecessor gate is what keeps the broadened POS safe: a genuine 若い/識る
+            // carries okurigana (若い, 識って) so its predecessor is never a lone kanji, and Parser.cs
+            // CombineNounCompounds already reforms an adj/verb-stem + noun compound (でかぶつ, 飛び道具).
             if (i + 1 < wordInfos.Count
                 && wordInfos[i] is { PartOfSpeech: PartOfSpeech.Verb }
                 && wordInfos[i].Text.Length == 2
@@ -2668,6 +2811,7 @@ public partial class MorphologicalAnalyser
                 && result.Count > 0
                 && result[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
                     or PartOfSpeech.Suffix or PartOfSpeech.Prefix
+                    or PartOfSpeech.IAdjective or PartOfSpeech.Verb
                 && result[^1].Text[^1] is >= '一' and <= '鿿')
             {
                 var kanjiThief = wordInfos[i];

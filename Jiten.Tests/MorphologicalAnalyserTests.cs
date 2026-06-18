@@ -351,6 +351,19 @@ public class MorphologicalAnalyserTests
         // (自意識 → 自|意|識っ[識る]): de-verbed so the compound matcher reforms 自意識 and っていう clusters.
         yield return ["自意識っていうのがない", new[] { "自意識", "っていう", "の", "が", "ない" }];
         yield return ["認識っていう", new[] { "認識", "っていう" }];
+        // Sudachi mis-tags a compound noun's leading bare kanji as an adjective stem and steals って's っ
+        // into the final kanji's verb te-form (若造 → 若[若い]|造っ[造る]): de-verbed so 若造 reforms + って splits.
+        yield return ["まだまだ若造ってことか", new[] { "まだまだ", "若造", "って", "こと", "か" }];
+        // Katakana noun whose tail mora(s) a quotative って steals: サナダムシ→サナダ|ムシっ[ムシる]|て,
+        // エリア→エリ|アっての[idiom あっての]. Reattach the katakana word and split って back out.
+        yield return ["サナダムシって食べれるの", new[] { "サナダムシ", "って", "食べれる", "の" }];
+        yield return ["天使エリアってのが", new[] { "天使", "エリア", "って", "の", "が" }];
+        // って stealing the な of interrogative なに(何): ってな|に (fused) and って|な|に (split) → って|なに.
+        yield return ["天使エリアってなに", new[] { "天使", "エリア", "って", "なに" }];
+        yield return ["これってなに", new[] { "これ", "って", "なに" }];
+        // だって mis-split by Sudachi as だっ(verb だつ)+て after a noun must rebuild the particle,
+        // never steal the copula だ into a fake verb (将校だ → 将校 + past).
+        yield return ["政治将校だっている", new[] { "政治", "将校", "だって", "いる" }];
         yield return ["とろいな", new[] { "とろい", "な" }];
         yield return ["なんでもかんでも", new[] { "なんでもかんでも" }];
         yield return ["しないかい", new[] { "しない", "かい" }];
