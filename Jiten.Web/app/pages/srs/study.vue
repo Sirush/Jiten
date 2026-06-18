@@ -196,6 +196,38 @@
     onPauseTimer: handlePauseTimer,
   });
 
+  // Write-in review: per-card modality, input/reveal phase, suggested grade and auto-advance.
+  const writeIn = useWriteInReview({ commitGrade: handleGrade, reveal: handleFlip });
+  const {
+    currentMode: writeInMode,
+    isWriteInCard,
+    isInputPhase: writeInInputPhase,
+    shake: writeInShake,
+    result: writeInResult,
+    gaveUp: writeInGaveUp,
+    message: writeInMessage,
+    suggestedRating: writeInSuggested,
+    autoAdvanceRating: writeInAutoRating,
+    autoAdvanceFraction: writeInAutoFraction,
+    submit: writeInSubmit,
+    giveUp: writeInGiveUp,
+    cancelAutoAdvance: cancelWriteInAuto,
+  } = writeIn;
+
+  const writeInPlacement = computed(() => (srsStore.studySettings.writeInReview.inlineInput ? 'inline' : 'bar'));
+  const frontFuriganaForCard = computed<'default' | 'hide' | 'show'>(() => {
+    if (writeInMode.value === 'reading') return 'hide';
+    if (writeInMode.value === 'meaning') return srsStore.studySettings.writeInReview.meaningShowReading ? 'show' : 'hide';
+    return 'default';
+  });
+  const writeInOutcome = computed<'correct' | 'wrong' | null>(() => {
+    // Only tint the headword reading for reading mode — in meaning mode the reading isn't what was tested.
+    if (!srsStore.isFlipped || writeInMode.value !== 'reading') return null;
+    if (writeInResult.value?.ok) return 'correct';
+    if (writeInResult.value || writeInGaveUp.value) return 'wrong';
+    return null;
+  });
+
   // Timed review ("Speed Focus"). The stopwatch icon toggles it for the current tab session only,
   // defaulting from the saved setting; sessionStorage keeps it through a refresh but a new session resets it.
   const timedActive = ref(false);
@@ -203,6 +235,11 @@
     timedActive.value = !timedActive.value;
     sessionStorage.setItem('srs-timed-active', timedActive.value ? '1' : '0');
   }
+  // Timed review is suppressed on write-in cards (the question timer would auto-reveal before you can
+  // type) unless the user opts to keep it on. Standard cards stay timed normally.
+  const effectiveTimedActive = computed(() =>
+    timedActive.value && (!isWriteInCard.value || srsStore.studySettings.writeInReview.timed)
+  );
   const {
     phase: timerPhase,
     fraction: timerFraction,
@@ -212,7 +249,7 @@
     paused: timerPaused,
     togglePause: toggleTimerPause,
   } = useStudyTimer({
-    active: timedActive,
+    active: effectiveTimedActive,
     suspended: showSettingsDialog,
     onReveal: handleFlip,
     onGrade: handleGrade,
@@ -228,7 +265,7 @@
   });
   // Whether the countdown bar should render (respects the "show countdown bar" setting).
   const showTimerBar = computed(() =>
-    timedActive.value && srsStore.studySettings.timedReview.showTimer && timerPhase.value !== 'idle' && !!srsStore.currentCard
+    effectiveTimedActive.value && srsStore.studySettings.timedReview.showTimer && timerPhase.value !== 'idle' && !!srsStore.currentCard
   );
   function handlePauseTimer() {
     if (!timedActive.value) return;
@@ -285,6 +322,7 @@
   });
 
   async function handleGrade(rating: FsrsRating) {
+    cancelWriteInAuto();
     const ok = await srsStore.gradeCard(rating);
     const wasDismissing = swipe.isDismissing.value;
     swipe.resetInstant();
@@ -614,8 +652,26 @@
             <SrsStudyCard
               :card="srsStore.currentCard"
               :is-flipped="srsStore.isFlipped"
+              :write-in-active="isWriteInCard"
+              :front-furigana="frontFuriganaForCard"
+              :write-in-outcome="writeInOutcome"
               @flip="handleFlip"
-            />
+            >
+              <template v-if="writeInPlacement === 'inline'" #writeInput>
+                <SrsWriteInInput
+                  :mode="writeInMode"
+                  placement="inline"
+                  :romaji-input="srsStore.studySettings.writeInReview.romajiInput"
+                  :wrong-behavior="srsStore.studySettings.writeInReview.wrongBehavior"
+                  :shake="writeInShake"
+                  :message="writeInMessage"
+                  :card-key="cardKey"
+                  :disabled="srsStore.isBusy"
+                  @submit="writeInSubmit"
+                  @give-up="writeInGiveUp"
+                />
+              </template>
+            </SrsStudyCard>
           </div>
           <div v-else class="flex justify-center py-8">
             <ProgressSpinner style="width: 32px; height: 32px" />
@@ -626,7 +682,29 @@
       <!-- Fixed bottom buttons -->
       <div ref="bottomBarRef" class="border-t border-surface-200 dark:border-surface-800 bg-surface-0 dark:bg-surface-900 fixed bottom-0 left-0 right-0 z-40 isolate" :class="compactBar ? 'px-3 pt-1.5 pb-2' : 'px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]'">
         <div class="w-full mx-auto" :class="cardWidthClass">
+          <SrsWriteInInput
+            v-if="writeInInputPhase && writeInPlacement === 'bar'"
+            :mode="writeInMode"
+            placement="bar"
+            :romaji-input="srsStore.studySettings.writeInReview.romajiInput"
+            :wrong-behavior="srsStore.studySettings.writeInReview.wrongBehavior"
+            :shake="writeInShake"
+            :message="writeInMessage"
+            :card-key="cardKey"
+            :disabled="srsStore.isBusy"
+            @submit="writeInSubmit"
+            @give-up="writeInGiveUp"
+          />
+          <!-- Inline placement: the input lives in the card, so the bar just guides the user. -->
+          <div
+            v-else-if="writeInInputPhase"
+            class="flex items-center justify-center gap-1 text-sm text-surface-400 dark:text-surface-500"
+            :class="compactBar ? 'min-h-[36px]' : 'min-h-[44px] md:min-h-[72px]'"
+          >
+            Type your answer in the card<span class="hidden md:inline"> · press Enter to check</span>
+          </div>
           <SrsGradeButtons
+            v-else
             :grading-buttons="srsStore.studySettings.gradingButtons"
             :is-flipped="srsStore.isFlipped"
             :can-undo="srsStore.canUndo"
@@ -638,6 +716,9 @@
             :disabled="srsStore.isBusy || timerLocked"
             :armed-again="timerArmed"
             :armed-seconds="timerSeconds"
+            :suggested-rating="writeInSuggested ?? undefined"
+            :auto-advance-rating="writeInAutoRating ?? undefined"
+            :auto-advance-fraction="writeInAutoFraction"
             :compact="compactBar"
             :pressed-key="pressedKey"
             @grade="handleGrade"

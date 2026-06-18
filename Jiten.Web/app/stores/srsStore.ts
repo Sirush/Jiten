@@ -161,6 +161,21 @@ export const useSrsStore = defineStore('srs', () => {
       answerAction: 'SoftFail',
       alertSound: true,
     },
+    writeInReview: {
+      modalitySrs: true,
+      modalityReading: false,
+      modalityMeaning: false,
+      inlineInput: false,
+      wrongBehavior: 'Reveal',
+      romajiInput: true,
+      meaningShowReading: false,
+      skipNewCards: true,
+      autoAdvance: false,
+      autoAdvanceWrong: false,
+      autoAdvanceSeconds: 2,
+      sound: false,
+      timed: false,
+    },
     keybinds: { ...DEFAULT_KEYBINDS },
   });
   const lastLeechEvent = ref<{ detected: boolean; suspended: boolean } | null>(null);

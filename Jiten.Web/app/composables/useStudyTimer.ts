@@ -1,12 +1,13 @@
-import type { Ref } from 'vue';
+import type { ComputedRef, Ref } from 'vue';
 import { FsrsRating } from '~/types';
 import { useSrsStore } from '~/stores/srsStore';
 
 export type TimerPhase = 'idle' | 'reveal' | 'answer' | 'armed';
 
 export interface StudyTimerCallbacks {
-  // Whether timed mode is on for this session (the stopwatch toggle).
-  active: Ref<boolean>;
+  // Whether timed mode is on for the current card (the stopwatch toggle, possibly gated per-card —
+  // e.g. suppressed on write-in cards).
+  active: Ref<boolean> | ComputedRef<boolean>;
   // When true, the countdown freezes (e.g. while the in-study settings dialog is open).
   suspended?: Ref<boolean>;
   // Reveal the current card (flip to the answer).

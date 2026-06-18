@@ -10,7 +10,27 @@
   const props = defineProps<{
     card: StudyCardDto;
     isFlipped: boolean;
+    // Write-in review: this card asks the user to type the answer. During the input phase the card
+    // front is not click-to-flip and shows the inline input (when inline placement is used).
+    writeInActive?: boolean;
+    // Furigana override for the front in write-in mode: 'hide' (reading mode), 'show' (meaning mode
+    // with reading shown), or 'default' (honour the user's furigana settings).
+    frontFurigana?: 'default' | 'hide' | 'show';
+    // After reveal, tint the headword reading green/red to echo whether the typed reading was correct.
+    writeInOutcome?: 'correct' | 'wrong' | null;
   }>();
+
+  // Write-in input phase: a write-in card that hasn't been revealed yet.
+  const inputPhase = computed(() => !!props.writeInActive && !props.isFlipped);
+
+  const showRubyOnFront = computed(() => {
+    if (props.isFlipped) return false;
+    const mode = props.frontFurigana ?? 'default';
+    if (mode === 'hide') return false;
+    if (mode === 'show') return true;
+    return srsStore.studySettings.showFuriganaOnFront
+      && (!srsStore.studySettings.furiganaOnFrontNewOnly || props.card.isNewCard);
+  });
 
   const srsStore = useSrsStore();
 
@@ -341,13 +361,13 @@
       <!-- Front (always visible) -->
       <div
         class="flex flex-col items-center"
-        :class="{ 'cursor-pointer min-h-[50vh]': !isFlipped }"
-        :role="!isFlipped ? 'button' : undefined"
-        :tabindex="!isFlipped ? 0 : undefined"
-        :aria-label="!isFlipped ? 'Reveal answer' : undefined"
-        @click="!isFlipped && emit('flip')"
-        @keydown.enter="!isFlipped && emit('flip')"
-        @keydown.space.prevent="!isFlipped && emit('flip')"
+        :class="{ 'cursor-pointer': !isFlipped && !inputPhase, 'min-h-[50vh]': !isFlipped }"
+        :role="!isFlipped && !inputPhase ? 'button' : undefined"
+        :tabindex="!isFlipped && !inputPhase ? 0 : undefined"
+        :aria-label="!isFlipped && !inputPhase ? 'Reveal answer' : undefined"
+        @click="!isFlipped && !inputPhase && emit('flip')"
+        @keydown.enter="!isFlipped && !inputPhase && emit('flip')"
+        @keydown.space.prevent="!isFlipped && !inputPhase && emit('flip')"
       >
         <div v-if="srsStore.studySettings.showCardStatus" class="text-sm mb-4 uppercase tracking-wider" :class="srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'text-red-400 dark:text-red-400' : 'text-surface-400 dark:text-surface-300'">
           {{ srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'Again' : card.isNewCard ? 'New' : 'Review' }}
@@ -355,7 +375,7 @@
         <!-- Plain text before flip, ruby text after flip -->
         <div class="flex items-center justify-center gap-3 mb-2">
           <div
-            v-if="!isFlipped && srsStore.studySettings.showFuriganaOnFront && (!srsStore.studySettings.furiganaOnFrontNewOnly || card.isNewCard)"
+            v-if="showRubyOnFront"
             class="text-4xl md:text-5xl text-center font-noto-sans head-word"
             lang="ja"
             v-html="convertToRuby(card.wordText || card.wordTextPlain, true)"
@@ -366,10 +386,16 @@
           <div
             v-else
             class="text-4xl md:text-5xl text-center font-noto-sans head-word"
+            :class="{ 'writein-correct': writeInOutcome === 'correct', 'writein-wrong': writeInOutcome === 'wrong' }"
             lang="ja"
             v-html="convertToRuby(wordData?.mainReading?.text || card.wordText || card.wordTextPlain, true)"
           />
           <TtsButton :text="headWordTtsText" :word-id="card.wordId" :reading-index="card.readingIndex" size="md" @click.stop />
+        </div>
+
+        <!-- Inline write-in input (sits directly under the word during the input phase) -->
+        <div v-if="inputPhase && $slots.writeInput" class="mt-5 w-full" @click.stop>
+          <slot name="writeInput" />
         </div>
         <!-- Example sentence on front -->
         <div v-if="srsStore.studySettings.exampleSentencePosition === 'Front' && exampleSentenceHtml" class="mt-4 w-full" @click.stop>
@@ -462,7 +488,7 @@
           </span>
         </div>
 
-        <div v-if="!isFlipped" class="text-sm text-surface-500 dark:text-surface-300 mt-6">
+        <div v-if="!isFlipped && !inputPhase" class="text-sm text-surface-500 dark:text-surface-300 mt-6">
           <span class="md:hidden">Tap to reveal</span>
           <span class="hidden md:inline">Click or press {{ displayKeyName(srsStore.studySettings.keybinds.flipCard) }} to reveal</span>
         </div>
@@ -675,6 +701,14 @@
   font-size: 0.35em !important;
   font-weight: 700;
   color: light-dark(var(--p-surface-700), var(--p-surface-400));
+}
+
+/* Write-in reveal: tint the furigana reading to echo whether the typed reading matched. */
+.head-word.writein-correct :deep(rt) {
+  color: var(--p-green-500);
+}
+.head-word.writein-wrong :deep(rt) {
+  color: var(--p-red-500);
 }
 
 /* Reveal animation for the answer side (enter only, so card advance stays snappy). */

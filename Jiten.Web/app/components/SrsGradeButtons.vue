@@ -18,6 +18,11 @@
     // Timed review: the "Again" grade is armed (about to auto-fire); seconds left on the grace countdown.
     armedAgain?: boolean;
     armedSeconds?: number;
+    // Write-in review: the grade the typed answer suggests (glow ring), and the optional auto-advance
+    // grade with its 0–1 fill progress.
+    suggestedRating?: FsrsRating;
+    autoAdvanceRating?: FsrsRating;
+    autoAdvanceFraction?: number;
   }>();
 
   const emit = defineEmits<{
@@ -130,11 +135,16 @@
         :disabled="props.disabled"
         :aria-label="`Grade: ${btn.label}`"
         class="grade-btn flex-1"
-        :class="[{ 'kb-pressed': props.pressedKey === btn.key, 'armed-again': props.armedAgain && btn.rating === FsrsRating.Again }, props.monochrome ? btn.mono : '', compact ? 'min-h-[36px]' : 'min-h-[44px] md:min-h-[72px]']"
+        :class="[{ 'kb-pressed': props.pressedKey === btn.key, 'armed-again': props.armedAgain && btn.rating === FsrsRating.Again, 'suggested': props.suggestedRating === btn.rating && !(props.armedAgain && btn.rating === FsrsRating.Again) }, props.monochrome ? btn.mono : '', compact ? 'min-h-[36px]' : 'min-h-[44px] md:min-h-[72px]']"
         @click="emit('grade', btn.rating)"
       >
         <template #default>
-          <div class="flex flex-col items-center">
+          <span
+            v-if="props.autoAdvanceRating === btn.rating"
+            class="auto-fill"
+            :style="{ width: `${Math.min(100, Math.max(0, (props.autoAdvanceFraction ?? 0) * 100))}%` }"
+          />
+          <div class="flex flex-col items-center relative z-10">
             <template v-if="props.armedAgain && btn.rating === FsrsRating.Again">
               <span class="font-black">{{ btn.label }}</span>
               <span class="text-[11px] tabular-nums opacity-90">auto in {{ Math.max(0, props.armedSeconds ?? 0) }}s</span>
@@ -276,6 +286,26 @@
 .grade-btn.p-button {
   font-weight: 900 !important;
   border-width: 3px !important;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Write-in: the suggested grade gets a glow + ring so the eye lands on it, without auto-committing. */
+.grade-btn.suggested.p-button {
+  border-width: 3.5px !important;
+  box-shadow: 0 8px 22px -8px currentColor, 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
+  transform: translateY(-2px);
+}
+
+/* Write-in auto-advance: a left-anchored fill that grows over the delay, then commits the grade. */
+.grade-btn .auto-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  background-color: color-mix(in srgb, currentColor 16%, transparent);
+  pointer-events: none;
 }
 
 /* Monochrome theme: differentiate the grade buttons by fill/border instead of colour. */
