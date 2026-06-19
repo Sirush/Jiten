@@ -373,6 +373,19 @@ public class MorphologicalAnalyserTests
         // だって mis-split by Sudachi as だっ(verb だつ)+て after a noun must rebuild the particle,
         // never steal the copula だ into a fake verb (将校だ → 将校 + past).
         yield return ["政治将校だっている", new[] { "政治", "将校", "だって", "いる" }];
+        // Sudachi fuses a compound's final kanji with って into a homograph verb te-form, stealing the
+        // boundary (結|果って[=果て]→結果, 偶|然って[=然て]→偶然): re-tag the lead kanji as a noun so the
+        // compound matcher reforms it and って splits back out.
+        yield return ["結果ってわけか", new[] { "結果", "って", "わけ", "か" }];
+        yield return ["こんな偶然ってあるの", new[] { "こんな", "偶然", "って", "ある", "の" }];
+        // Quotative って steals the final う mora off a kana interjection (ありがと|うっ|て): reattach the
+        // う and split って back out.
+        yield return ["ありがとうって言われた", new[] { "ありがとう", "って", "言われた" }];
+        // Question か + quotative って that Sudachi fuses into the adverb かつて after a predicate
+        // (じゃない+か+って): split back out so って separates and the か rejoins じゃない as じゃないか.
+        // A genuine かつて ("formerly") is left whole.
+        yield return ["じゃないかって思った", new[] { "じゃないか", "って", "思った" }];
+        yield return ["かつて栄えた街並み", new[] { "かつて", "栄えた", "街並み" }];
         yield return ["とろいな", new[] { "とろい", "な" }];
         yield return ["なんでもかんでも", new[] { "なんでもかんでも" }];
         yield return ["しないかい", new[] { "しない", "かい" }];

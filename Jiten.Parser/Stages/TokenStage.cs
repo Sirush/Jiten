@@ -86,10 +86,10 @@ internal static class TokenFeatureScanner
                 f |= TokenFeatures.LongVowelMark;
             if (text.Length > 0 && text[^1] == 'っ')
                 f |= TokenFeatures.EndsWithTsu;
-            // Fused katakana-mora theft (ケン|カって, エリ|アっての): a katakana-headed token carrying って,
-            // handled by RepairQuotativeTte alongside the two-token Xっ|て shape. Contains (not EndsWith)
-            // catches an idiom-fused tail too (アっての = ア+って+の, Sudachi-matched to あっての).
-            if (text.Length >= 3 && text[0] is >= 'ァ' and <= 'ヺ'
+            // Fused-mora theft where って rides inside a kanji/katakana-headed token (ケン|カって, エリ|アっての,
+            // 結|果って[果て], 偶|然って[然て]), handled by RepairQuotativeTte alongside the two-token Xっ|て shape.
+            // Contains (not EndsWith) catches an idiom-fused tail too (アっての = ア+って+の → あっての).
+            if (text.Length >= 3 && (text[0] is >= 'ァ' and <= 'ヺ' or >= '一' and <= '鿿')
                 && text.Contains("って", StringComparison.Ordinal))
                 f |= TokenFeatures.EndsWithTsu;
 

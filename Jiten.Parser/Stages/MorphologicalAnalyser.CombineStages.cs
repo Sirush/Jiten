@@ -1022,6 +1022,26 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            // A fused じゃない / ではない token directly followed by か → じゃないか expression. Sudachi usually
+            // splits では|ない|か (joined below), but when ない is already glued into a single じゃない token
+            // the か is left stranded; rejoin it so じゃないか stays one unit. Only the copula-negative
+            // expression merges — a verb's negative (しない か, 飲む か) keeps the question particle separate.
+            if (i + 1 < wordInfos.Count &&
+                currentWord.PartOfSpeech == PartOfSpeech.Expression &&
+                currentWord.DictionaryForm is "じゃない" or "ではない" &&
+                wordInfos[i + 1].Text == "か")
+            {
+                WordInfo combinedWord = new WordInfo(currentWord);
+                combinedWord.Text += "か";
+                combinedWord.EndOffset = wordInfos[i + 1].EndOffset;
+                combinedWord.Reading += wordInfos[i + 1].Reading;
+                combinedWord.DictionaryForm += "か";
+                newList.Add(combinedWord);
+                i += 2;
+                changed = true;
+                continue;
+            }
+
             if (i + 1 < wordInfos.Count)
             {
                 WordInfo nextWord = wordInfos[i + 1];

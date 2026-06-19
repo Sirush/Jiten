@@ -2629,6 +2629,46 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            // Sudachi fuses a compound's final kanji + って into a single homograph token — 結|果って[果て
+            // "end"], 偶|然って[然て] — the kanji analog of the katakana ケンカって fusion, so the compound
+            // can't reform and って is lost. Hand って back and re-tag the kanji as a noun so the matcher
+            // reforms 結果/偶然. Gated (like the de-verb branch) on prev + the lead kanji being a real JMDict
+            // compound; the lookup keeps a genuine adverb/noun ending って (its predecessor isn't a lone kanji)
+            // untouched.
+            if (wordInfos[i].Text.Length == 3
+                && wordInfos[i].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Adverb
+                && wordInfos[i].Text[0] is >= '一' and <= '鿿'
+                && wordInfos[i].Text.EndsWith("って", StringComparison.Ordinal)
+                && result.Count > 0
+                && result[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Adverb
+                    or PartOfSpeech.Suffix or PartOfSpeech.Prefix
+                && result[^1].Text[^1] is >= '一' and <= '鿿'
+                && HasNonNameCompoundLookup?.Invoke(result[^1].Text + wordInfos[i].Text[..1]) == true)
+            {
+                var fusedThief = wordInfos[i];
+                var tailKanji = fusedThief.Text[..1];
+                // Re-tag prev as a noun so the compound matcher reforms it — Sudachi mis-tags 偶 in 偶然 as
+                // an adverb. Suffix/Prefix are already compound-parts and kept as-is.
+                if (result[^1].PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                        or PartOfSpeech.Suffix or PartOfSpeech.Prefix))
+                    result[^1] = new WordInfo(result[^1]) { PartOfSpeech = PartOfSpeech.Noun };
+                result.Add(new WordInfo(fusedThief)
+                {
+                    Text = tailKanji, DictionaryForm = tailKanji, NormalizedForm = tailKanji,
+                    PartOfSpeech = PartOfSpeech.Noun,
+                    EndOffset = fusedThief.StartOffset >= 0 ? fusedThief.StartOffset + 1 : -1
+                });
+                result.Add(new WordInfo(fusedThief)
+                {
+                    Text = "って", DictionaryForm = "って", NormalizedForm = "って",
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    StartOffset = fusedThief.StartOffset >= 0 ? fusedThief.StartOffset + 1 : -1,
+                    EndOffset = fusedThief.EndOffset
+                });
+                changed = true;
+                continue;
+            }
+
             // Katakana noun whose tail mora(s) a quotative って steals. Sudachi either strands them as a
             // pseudo-verb mora (サナダ|ムシっ[ムシる]|て) or fuses them into an idiom token
             // (エリ|アっての — ア+って+の matched to the idiom あっての). Both leave a leading katakana run K
@@ -2790,6 +2830,32 @@ public partial class MorphologicalAnalyser
                     changed = true;
                     continue;
                 }
+            }
+
+            // A stranded mora that reattaches to a NON-verb word — ありがと|うっ|て → ありがとう (interjection),
+            // where the mora isn't a verb ending so the verb block above passes it by. Tight: only the
+            // interjection mora うっ (dict うっ, not the verb うつ that おはよう/そう already reform through),
+            // a hiragana-ending interjection/noun prev, and prev+う forming a real non-name JMDict word.
+            if (i + 1 < wordInfos.Count
+                && wordInfos[i] is { Text: "うっ", DictionaryForm: "うっ" }
+                && wordInfos[i + 1].Text == "て"
+                && result.Count > 0
+                && result[^1].PartOfSpeech is PartOfSpeech.Interjection or PartOfSpeech.Noun
+                    or PartOfSpeech.CommonNoun or PartOfSpeech.Filler
+                && result[^1].Text[^1] is >= 'ぁ' and <= 'ゖ'
+                && HasNonNameCompoundLookup?.Invoke(result[^1].Text + "う") == true)
+            {
+                var moraThief = wordInfos[i];
+                var reattached = result[^1].Text + "う";
+                result[^1] = new WordInfo(result[^1])
+                {
+                    Text = reattached, DictionaryForm = reattached, NormalizedForm = reattached,
+                    EndOffset = moraThief.StartOffset >= 0 ? moraThief.StartOffset + 1 : -1
+                };
+                AddTte(moraThief, wordInfos[i + 1]);
+                i++;
+                changed = true;
+                continue;
             }
 
             // Sudachi splits a compound noun whose final kanji absorbs って's っ into a real-but-
