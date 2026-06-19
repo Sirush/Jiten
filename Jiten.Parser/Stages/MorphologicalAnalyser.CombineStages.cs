@@ -617,11 +617,51 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            // A quotative って Sudachi glues onto a volitional predicate (しようって, 来ようって) instead of
+            // splitting also fails to form っていう before kana いう. Split って back off and cluster.
+            // Gated so the stem before って ends in a う-row kana (the volitional う) and is at least
+            // 2 chars — the length guard skips the bare うって Sudachi strands off some volitionals
+            // (やろ|うって), which this can't reattach. A te-form って leaves a bare stem ending in a
+            // kanji or あ/い-row char (黙って, 言って, 買って), never う-row, so a te-form is never
+            // mis-split; the copula だって (stem だ) is excluded for the same reason.
+            if (i + 1 < wordInfos.Count
+                && word.Text.Length > 3
+                && word.Text.EndsWith("って", StringComparison.Ordinal)
+                && wordInfos[i + 1] is { Text: "いう", DictionaryForm: "いう" }
+                && IsQuotativeTteStem(word.Text[..^2]))
+            {
+                newList ??= [..wordInfos[..i]];
+                var iu = wordInfos[i + 1];
+                var stem = word.Text[..^2];
+                int mid = word.EndOffset >= 0 ? word.EndOffset - 2 : -1;
+                newList.Add(new WordInfo(word)
+                {
+                    Text = stem, DictionaryForm = stem, NormalizedForm = stem, EndOffset = mid
+                });
+                newList.Add(new WordInfo(iu)
+                {
+                    Text = "っていう",
+                    DictionaryForm = "っていう",
+                    NormalizedForm = "っていう",
+                    Reading = "ッテイウ",
+                    PartOfSpeech = PartOfSpeech.Conjunction,
+                    StartOffset = mid,
+                    EndOffset = iu.EndOffset
+                });
+                i++;
+                continue;
+            }
+
             newList?.Add(word);
         }
 
         return newList ?? wordInfos;
     }
+
+    // A stem that a quotative って attaches to ends in a う-row kana (terminal verb / volitional).
+    // A te-form って leaves a bare stem ending elsewhere, so this never matches one.
+    private static bool IsQuotativeTteStem(string s) =>
+        s.Length > 0 && s[^1] is 'う' or 'く' or 'ぐ' or 'す' or 'つ' or 'ぬ' or 'ぶ' or 'む' or 'る';
 
     private List<WordInfo> CombineVerbDependant(List<WordInfo> wordInfos)
     {

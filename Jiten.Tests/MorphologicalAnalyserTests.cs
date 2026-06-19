@@ -347,6 +347,15 @@ public class MorphologicalAnalyserTests
         yield return ["やめるってね", new[] { "やめる", "って", "ね" }];
         // って + kana いう fuses into the relativiser っていう (= という), like ってのは.
         yield return ["行くっていう話", new[] { "行く", "っていう", "話" }];
+        // Quotative って Sudachi glues onto a volitional predicate before いう must split back out and
+        // cluster っていう (しようって|いう → しよう|っていう, 来ようって|いう → 来よう|っていう). A te-form って
+        // (黙って) must NOT.
+        yield return ["何をしようっていうんだ", new[] { "何", "を", "しよう", "っていう", "んだ" }];
+        yield return ["来ようっていう話", new[] { "来よう", "っていう", "話" }];
+        yield return ["黙っていう", new[] { "黙って", "いう" }];
+        // 遠 is a Sudachi suffix, so after なければ the lattice split 遠出 → 遠[suffix]|出はな[OOV]; a
+        // 遠出 user-dict entry keeps it whole (guards the user_dic.dic regen).
+        yield return ["事態がなければ遠出はないって話だ", new[] { "事態", "が", "なければ", "遠出", "は", "ない", "って", "話", "だ" }];
         // Compound noun whose final kanji Sudachi steals into a verb te-form before って
         // (自意識 → 自|意|識っ[識る]): de-verbed so the compound matcher reforms 自意識 and っていう clusters.
         yield return ["自意識っていうのがない", new[] { "自意識", "っていう", "の", "が", "ない" }];

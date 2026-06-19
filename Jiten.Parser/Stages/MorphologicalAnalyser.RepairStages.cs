@@ -2497,6 +2497,7 @@ public partial class MorphologicalAnalyser
         {
             Text = "なに", DictionaryForm = "なに", NormalizedForm = "何", Reading = "ナニ",
             PartOfSpeech = PartOfSpeech.Noun, PartOfSpeechSection1 = PartOfSpeechSection.None,
+            PreMatchedWordId = 1577100,
             StartOffset = startOffset, EndOffset = endOffset
         };
 
