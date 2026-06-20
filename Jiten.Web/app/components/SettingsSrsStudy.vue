@@ -398,6 +398,19 @@
       </div>
 
       <div class="flex items-center gap-2">
+        <ToggleSwitch v-model="form.pauseBetweenBatches" input-id="pauseBetweenBatches" />
+        <label for="pauseBetweenBatches" class="text-sm cursor-pointer">
+          Pause at the end of each batch
+          <Tooltip
+            content="When enabled, finishing a full batch shows a checkpoint so you can stop or keep going, instead of loading the next batch automatically."
+            placement="top"
+          >
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+      </div>
+
+      <div class="flex items-center gap-2">
         <ToggleSwitch v-model="form.countFailedReviews" input-id="countFailedReviews" />
         <label for="countFailedReviews" class="text-sm cursor-pointer">
           Count failed reviews toward daily limit

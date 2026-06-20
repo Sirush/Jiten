@@ -82,6 +82,9 @@ public class StudySettingsDto
     [JsonPropertyName("batchSize")]
     public int BatchSize { get; set; } = 100;
 
+    [JsonPropertyName("pauseBetweenBatches")]
+    public bool PauseBetweenBatches { get; set; } = true;
+
     [JsonPropertyName("gradingButtons")]
     public int GradingButtons { get; set; } = 4;
 
