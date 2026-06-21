@@ -386,6 +386,44 @@ public class MorphologicalAnalyserTests
         // A genuine かつて ("formerly") is left whole.
         yield return ["じゃないかって思った", new[] { "じゃないか", "って", "思った" }];
         yield return ["かつて栄えた街並み", new[] { "かつて", "栄えた", "街並み" }];
+        // Quotative って steals the 連用形 く of an i-adjective (Sudachi reads it as the verb 来る):
+        // すご|くっ[くる]|て → すごく + って, 早[Adverb]|くっ|て → 早く + って. A genuine 来る te-form never
+        // follows a bare i-adj stem, and 送る (おくって) keeps its hiragana お head out.
+        yield return ["すごくってさ", new[] { "すごく", "って", "さ" }];
+        yield return ["嬉しくってさ", new[] { "嬉しく", "って", "さ" }];
+        // Quotative って steals the tail mora of a noun/nominalised word into an OOV homograph token:
+        // 寒|さって[さて]→寒さ, 婆|さ|んって[んて]→婆さん, 繋|がりっ[Adverb]→繋がり. The mora reattaches via a
+        // JMDict lookup, so genuine te-forms (黙って) and the copula だって are left whole.
+        yield return ["繋がりってのが", new[] { "繋がり", "って", "の", "が" }];
+        yield return ["婆さんってどういうことよ", new[] { "婆さん", "って", "どういう", "こと", "よ" }];
+        // The same lookup reattach reforms お〜さん honorific compounds the lookback also covers:
+        // お|じい|さ|んって → おじいさん, お|ばあ|さ|んって → おばあさん.
+        yield return ["おじいさんって言った", new[] { "おじいさん", "って", "言った" }];
+        yield return ["おばあさんって呼んだ", new[] { "おばあさん", "って", "呼んだ" }];
+        // A trailing particle makes Sudachi split んって as んっ[Interjection]|て, which the verb-shape gate
+        // skips — the dedicated んっ handler reattaches ん so the same words still reform: 婆さん, おじいさん.
+        yield return ["婆さんってね", new[] { "婆さん", "って", "ね" }];
+        yield return ["おじいさんってね", new[] { "おじいさん", "って", "ね" }];
+        // Single-kana orphan guard: reattaching the stolen mora here would seal off the run and strand the
+        // lone kana ゆ (ゆ|にく|んっ|て), which the downstream stutter filter then deletes. The reattach is
+        // declined instead, so ゆ survives (ゆにく) rather than being dropped (にくん|って).
+        yield return ["ゆにくんって", new[] { "ゆにく", "んって" }];
+        // After a te-form, the いたって homograph is いた(past of いる) + quotative って, not the adverb
+        // いたって ("extremely"); the adverb (no preceding て-form) is left whole.
+        yield return ["待っていたっていうのに", new[] { "待っていた", "っていう", "のに" }];
+        yield return ["いたって元気です", new[] { "いたって", "元気", "です" }];
+        // Particle/suffix whose tail って Sudachi fuses into an OOV homograph: あんた|達って[達て]→達,
+        // と|かっ[買う]|て from とか+って→か. Gated tightly: にて, the adverb たって, and 飼って/勝手 are safe.
+        yield return ["あんた達ってさ", new[] { "あんた", "達", "って", "さ" }];
+        yield return ["りんごとかっていう話", new[] { "りんご", "とか", "っていう", "話" }];
+        // 〜って negative controls: the と-gated か split must not touch 飼ってる/勝手に, and にて stays literary.
+        yield return ["ペットを飼ってるんだ", new[] { "ペット", "を", "飼ってる", "んだ" }];
+        yield return ["勝手に決めるな", new[] { "勝手に", "決める", "な" }];
+        yield return ["会議室にて行う", new[] { "会議室", "にて", "行う" }];
+        // Broadened EndsWithTsu lets genuine fused って-adverbs into the reattach block; the JMDict lookup
+        // gate finds no stolen-mora reform, so they stay whole even mid-sentence after a content word.
+        yield return ["彼はかえって怒った", new[] { "彼", "は", "かえって", "怒った" }];
+        yield return ["今ではかつての面影もない", new[] { "今", "では", "かつて", "の", "面影", "も", "ない" }];
         yield return ["とろいな", new[] { "とろい", "な" }];
         yield return ["なんでもかんでも", new[] { "なんでもかんでも" }];
         yield return ["しないかい", new[] { "しない", "かい" }];
