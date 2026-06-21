@@ -453,12 +453,15 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            // Split かって misparsed as the adverb かつて (historical kana surface) → か + って.
-            // かつて right after a verb is implausible; verb+か+って is the quotative question frame
-            // (飲むかってこと "the question of whether to drink").
+            // Split かって misparsed as the adverb かつて (historical kana surface) → か + って. かつて right
+            // after a clause-final predicate is implausible; predicate+か+って is the quotative question
+            // frame (飲むかってこと, じゃないかって "(wondering) whether it isn't"). Gated on the predecessor
+            // being a verb / i-adjective / auxiliary / predicative expression (じゃない) so a genuine かつて
+            // (after a noun/topic, or clause-initial) is left alone.
             if (i > 0 &&
                 word is { Text: "かって", PartOfSpeech: PartOfSpeech.Adverb, Reading: "カツテ" } &&
-                wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb)
+                wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
+                    or PartOfSpeech.Auxiliary or PartOfSpeech.Expression)
             {
                 result.Add(new WordInfo
                 {
