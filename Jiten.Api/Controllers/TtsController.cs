@@ -21,7 +21,7 @@ public class TtsController(ITtsService ttsService, IConfiguration configuration)
         try
         {
             var audio = await ttsService.GetWordAudioAsync(wordId, readingIndex, voice, rateLimitKey, ct, IsTrustedInternal());
-            return Results.File(audio, "audio/opus");
+            return Results.File(audio, "audio/ogg");
         }
         catch (TtsTextNotFoundException)
         {
@@ -48,7 +48,7 @@ public class TtsController(ITtsService ttsService, IConfiguration configuration)
         try
         {
             var audio = await ttsService.GetSentenceAudioAsync(sentenceId, voice, rateLimitKey, ct);
-            return Results.File(audio, "audio/opus");
+            return Results.File(audio, "audio/ogg");
         }
         catch (TtsTextNotFoundException)
         {
@@ -78,7 +78,7 @@ public class TtsController(ITtsService ttsService, IConfiguration configuration)
         try
         {
             var audio = await ttsService.GetCustomSentenceAudioAsync(id, userId, voice, rateLimitKey, ct);
-            return Results.File(audio, "audio/opus");
+            return Results.File(audio, "audio/ogg");
         }
         catch (TtsTextNotFoundException)
         {
