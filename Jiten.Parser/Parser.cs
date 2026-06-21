@@ -3563,7 +3563,12 @@ namespace Jiten.Parser
                         // When an adjective stem or verb infinitive is followed by a noun-like token, try combining.
                         // Adjective: Sudachi splits kana compounds like でかぶつ into でか (形容詞) + ぶつ (接尾辞).
                         // Verb: Sudachi splits compounds like 飛び道具 into 飛び (動詞) + 道具 (名詞).
-                        if (word.PartOfSpeech is PartOfSpeech.IAdjective or PartOfSpeech.Verb &&
+                        // Lone kanji: Sudachi splits a kanji compound whose lead it mis-tags as a non-noun
+                        // (偶然 → 偶 タマ 副詞 | 然), often when a particle like って follows. A single mis-tagged
+                        // kanji + a noun-like token recompounds the same way — the JMDict lookup gates it, so only
+                        // real compounds reform.
+                        bool misparsedKanjiLead = word.Text.Length == 1 && JapaneseTextHelper.IsKanji(word.Text[0]);
+                        if ((word.PartOfSpeech is PartOfSpeech.IAdjective or PartOfSpeech.Verb || misparsedKanjiLead) &&
                             i + 1 < sentence.Words.Count &&
                             PosMapper.IsNounForCompounding(sentence.Words[i + 1].word.PartOfSpeech))
                         {
