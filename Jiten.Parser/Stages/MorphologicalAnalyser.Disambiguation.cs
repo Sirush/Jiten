@@ -16,6 +16,43 @@ public partial class MorphologicalAnalyser
             if (word.Text == "そう")
                 word.PartOfSpeech = PartOfSpeech.Adverb;
 
+            // なんなん is overwhelmingly the colloquial "what the hell?" exp (2871194), not the rare
+            // 喃々 "chatteringly" taru-adverb (2840433), which appears as 喃々と. Remap unless followed by と.
+            if (word.Text == "なんなん" && !(i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "と"))
+            {
+                word.PartOfSpeech = PartOfSpeech.Expression;
+                word.DictionaryForm = "なんなん";
+                word.PreMatchedWordId = 2871194;
+            }
+
+            // Katakana クズ is overwhelmingly 屑 "scum/trash" (1246510), not 葛 "arrowroot" (1208770);
+            // the kanji-frequency prior otherwise flips this kana surface to 葛.
+            if (word.Text == "クズ" && word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
+                word.PreMatchedWordId = 1246510;
+
+            // The contracted もんか after a predicate is the rhetorical "like hell / as if" particle (2130440),
+            // not the noun 門下 "disciple" (1724650, read もんか) — which follows の (剣の門下). Sudachi may keep
+            // もんか whole (あるもんか) or split it もん+か (踊らされる|もん|か, which JMDict would otherwise compound
+            // to 門下); fold the split shape first, then remap. Only the contracted もんか is touched — the
+            // uncontracted ものか/もの+か is genuinely ambiguous with the deliberative もの + か (どうしたものか =
+            // "what to do", 信用していいものか = "is it OK to…"), so that is left to normal scoring.
+            bool prevIsPredicate = i > 0
+                && wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.Auxiliary;
+            if (prevIsPredicate && word.Text == "もん"
+                && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "か")
+            {
+                word.Text = "もんか";
+                word.EndOffset = wordInfos[i + 1].EndOffset;
+                wordInfos.RemoveAt(i + 1);
+            }
+            if (prevIsPredicate && word.Text == "もんか")
+            {
+                word.PartOfSpeech = PartOfSpeech.Particle;
+                word.DictionaryForm = "ものか";
+                word.NormalizedForm = "ものか";
+                word.PreMatchedWordId = 2130440;
+            }
+
             if (word.Text == "おい")
                 word.PartOfSpeech = PartOfSpeech.Interjection;
 
@@ -46,6 +83,15 @@ public partial class MorphologicalAnalyser
             {
                 word.PartOfSpeech = PartOfSpeech.Expression;
                 word.DictionaryForm = word.Text;
+            }
+
+            // だっけ (recollection "was it?") collapses to だけ "only" (1007340) via Sudachi's dictform;
+            // pin the surface to the recollection ending だっけ (2131200).
+            if (word.Text == "だっけ")
+            {
+                word.PartOfSpeech = PartOfSpeech.Expression;
+                word.DictionaryForm = "だっけ";
+                word.PreMatchedWordId = 2131200;
             }
 
             if (word.Text == "だあ")

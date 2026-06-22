@@ -1252,10 +1252,14 @@ public class FormSelectionTests
         // Classical attributive: 由々しき is its own entry (2423900), not a 由々しい conjugation
         yield return ["由々しき事態だと思う。", "由々しき", 2423900, (byte)0];
 
-        // Classical す + べき merges to すべき (1006200) instead of dropping す…
+        // Classical す + べき merges to すべき (1006200) "should do" — including after a vs-noun:
+        // 尊敬すべき → 尊敬 + すべき, NOT 尊敬す (which mis-deconjugates as a bogus short-causative).
         yield return ["己の魂を代償とする、本来なら禁忌とすべき戦術だ。", "すべき", 1006200, (byte)1];
-        // …but after a suru-noun, す attaches left instead (満足す|べき policy)
-        yield return ["それほど、大切な――尊敬すべき方です、あなたは", "尊敬す", 1406400, (byte)0];
+        yield return ["それほど、大切な――尊敬すべき方です、あなたは", "尊敬", 1406400, (byte)0];
+        yield return ["それほど、大切な――尊敬すべき方です、あなたは", "すべき", 1006200, (byte)1];
+        // …but a real godan -す verb keeps [stem]す + べき (愛す/訳す are dictionary verbs)
+        yield return ["どのみち帰投すべき基地から離れる", "すべき", 1006200, (byte)1];
+        yield return ["訳すべき文章", "訳す", 1538350, (byte)0];
         // なさ+すぎる merges and deconjugates to ない instead of dropping なさ
         yield return ["こんな調査方法では、当てがなさすぎるでしょう。", "なさすぎる", 1529520, (byte)1];
         // kanji adjective stem + すぎ → 近い, not the JMnedict name 近
@@ -1369,6 +1373,71 @@ public class FormSelectionTests
 
         // 総 before a noun (総本部) is the prefix 総(そう) 1401470, not the counter 房総(ふさ) 1519300
         yield return ["政治総本部と国家保安省が対立しているといっても", "総", 1401470, (byte)0];
+
+        // --- misparse batch: TextProcessing forced-splits ---
+        yield return ["奴らの計画通りっていうことなのかよ", "計画通り", 2540150, (byte)0];
+        yield return ["すごいっしょ?", "っしょ", 2271410, (byte)0];
+        yield return ["ははーん、わかったぞ。", "ははん", 2096970, (byte)2];
+        yield return ["じゃあアヒルさんとかないと", "アヒル", 1191810, (byte)2];
+        yield return ["す、すみませんでしたッ!", "すみません", 1295060, (byte)1];
+
+        // --- misparse batch: imperative elongation (verb identity recovered) ---
+        yield return ["――今だ、撃てぇっ!", "撃て", 1253570, (byte)0];
+        yield return ["急げぇぇぇっっ!", "急げ", 1228650, (byte)0];
+        yield return ["突撃にィ、移れぇぇぇ!", "移れ", 1158210, (byte)0];
+        yield return ["少しはてめぇの頭で考えやがれぇっ!", "やがれ", 1012740, (byte)0];
+        yield return ["中隊気をつけぇッ!", "気をつけ", 1221860, (byte)0];
+
+        // --- misparse batch: SpecialCases2 / gates / deconjugator ---
+        yield return ["ただ今戻りました", "ただ今", 1538960, (byte)1];
+        yield return ["たしかにそうだ", "たしかに", 1205770, (byte)2];
+        yield return ["逃げ出してきたところで", "ところで", 1343110, (byte)1];
+        yield return ["使ったんだっけ", "だっけ", 2131200, (byte)0];
+        yield return ["ん、ああ、あたしは行くよ", "ああ", 1565440, (byte)7];
+        yield return ["少しはマシだったろ", "マシだったろ", 1611600, (byte)2];
+
+        // --- misparse batch: てる-contraction / demonstrative / 度に ---
+        yield return ["見られてるって思うと", "見られてる", 1259290, (byte)0];
+        yield return ["上での合意は取れてるって", "取れてる", 1326990, (byte)0];
+        yield return ["ねぇ、もうやめてよ、ああいうのは", "ああいう", 2085090, (byte)1];
+        yield return ["行う度に失われていく", "度に", 1007270, (byte)0];
+
+        // なんなん: colloquial "what the hell?" exp (2871194), not 喃々 "chatteringly" (2840433)
+        yield return ["この絵はなんなんだろうな。", "なんなん", 2871194, (byte)1];
+
+        // キス (kiss, 1041030 vs-noun) not 記す/きす "to write down" (1223140) — suru-noun identity beats homograph
+        yield return ["キスさせてくれ", "キスさせてくれ", 1041030, (byte)0];
+        yield return ["そのき、キスしてほしいです", "キスして", 1041030, (byte)0];
+
+        // クズ (katakana) → 屑 scum (1246510), not 葛 arrowroot (1208770) — full original context
+        yield return ["英雄になった、クズみたいな人間だって", "クズ", 1246510, (byte)2];
+        // もんか after a predicate → rhetorical particle (2130440), not 門下 disciple — both Sudachi shapes
+        yield return ["そんなことあるもんか", "もんか", 2130440, (byte)1];
+        yield return ["踊らされるもんか", "もんか", 2130440, (byte)1];
+
+        // verb-mora theft fused with って → reformed verb + って
+        yield return ["頑張れって言ってくれましたが", "頑張れ", 1217700, (byte)0];
+        yield return ["だ、だからダルマザメだってば", "ってば", 2130420, (byte)1];
+        // 連用形 noun + orphaned past → reformed compound verb
+        yield return ["なんて言い出したんだ", "言い出した", 1264080, (byte)0];
+        // hiragana ある → 有る/在る "to be" (1296400), not the katakana numeral アル (二, 2728160)
+        yield return ["掃討する必要があるってことだな", "ある", 1296400, (byte)2];
+        // pre-Sudachi forced-split boundary fixes
+        yield return ["こいつってば、本当に", "こいつ", 1579070, (byte)1];
+        yield return ["景気づけよ", "景気づけ", 2010780, (byte)1];
+        yield return ["汚れてなんかいないって", "いない", 1155180, (byte)1];
+        yield return ["繋がりってのがどれだけ", "繋がり", 1251870, (byte)0];
+        yield return ["見て見ぬフリをするつもりもない", "見て見ぬフリ", 1715760, (byte)0];
+        yield return ["わけにはいかないっていうだけだろ", "わけにはいかない", 2057580, (byte)3];
+
+        // --- misparse batch: user_dic ---
+        yield return ["錬金術師してたのに", "錬金術師", 1948900, (byte)0];
+        yield return ["......ッ!?おっさん......!?", "おっさん", 1001350, (byte)0];
+        // カティア recovered via the もし-katakana boundary + JMnedict lookup (no per-name user_dic entry)
+        yield return ["もしカティアを保護していなかったら", "カティア", 5022018, (byte)0];
+
+        // quotative って stealing a kanji compound noun's tail mora: 必|要っ|て → 必要 (1487660) + って
+        yield return ["強引な態度も必要ってことか", "必要", 1487660, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

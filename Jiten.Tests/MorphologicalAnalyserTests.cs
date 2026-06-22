@@ -755,7 +755,8 @@ public class MorphologicalAnalyserTests
         yield return ["行くっ", new[] { "行く" }];  // Verb + emphatic っ
         yield return ["止まらないっ！", new[] { "止まらない" }];  // With punctuation
         yield return ["だめっ、それは違う", new[] { "だめ", "それ", "は", "違う" }];  // Mid-sentence emphatic っ
-        yield return ["理解っ、しましたぁっ！", new[] { "理解", "しましたぁ" }];  // Kanji + emphatic っ — 理解 (rikai) not 理解る (wakaru)
+        // Kanji + emphatic っ — 理解 (rikai) not 理解る (wakaru). Trailing emphatic ぁっ is normalised away (しました).
+        yield return ["理解っ、しましたぁっ！", new[] { "理解", "しました" }];
         yield return ["ごめんなさいっごめんなさいっ次は我慢する", new[] { "ごめんなさい", "ごめんなさい", "次", "は", "我慢する" }];  // Emphatic っ before voiced kana (ご) and kanji (次)
         yield return ["するからっ", new[] { "する", "から" }];  // Emphatic っ at EOS after particle
         yield return ["我慢っ、する", new[] { "我慢", "する" }];  // Emphatic っ before punctuation (existing behavior)
@@ -1098,7 +1099,8 @@ public class MorphologicalAnalyserTests
         // === Pending: need user_dic.xml entries (Sudachi splits these incorrectly) ===
         // からかう: Sudachi splits as から(particle) + かう(verb)
         yield return ["俺のことからかうから信用ない", new[] { "俺", "の", "こと", "からかう", "から", "信用", "ない" }];
-        yield return ["満足すべき", new[] { "満足す", "べき" }];
+        // vs-only noun + すべき → 満足 + すべき ("should") — not the bogus short-causative 満足す
+        yield return ["満足すべき", new[] { "満足", "すべき" }];
         // 涎たらす: Sudachi splits たらしたら as たら(conditional) + したら
         yield return ["でも、涎たらしたら怒ります", new[] { "でも", "涎", "たらしたら", "怒ります" }];
         // ですー: Sudachi handles via prolonged sound lookup, original surface preserved
@@ -1325,6 +1327,8 @@ public class MorphologicalAnalyserTests
         yield return ["今は、はっきりと感じる", new[] { "今", "は", "はっきり", "と", "感じる" }];
         // は as genuine stutter should still be dropped
         yield return ["は、はい？", new[] { "はい" }];
+        // particle で after an Expression must not be dropped as a stutter just because できる starts with で
+        yield return ["自分ひとりでできることと", new[] { "自分ひとり", "で", "できる", "こと", "と" }];
         // repeated はい separated by ellipsis should NOT merge into はいはい (crawling)
         yield return ["はい……はい、分かりました。", new[] { "はい", "分かりました" }];
         // はい……おります must not fuse into はいおります (這い降りる)
@@ -1735,6 +1739,128 @@ public class MorphologicalAnalyserTests
         // 総 before a noun is the prefix (そう), recovered after 総本部 splits to 総 + 本部
         yield return ["政治総本部と国家保安省が対立しているといっても",
             new[] { "政治", "総", "本部", "と", "国家", "保安", "省", "が", "対立している", "といっても" }];
+
+        // --- misparse batch: TextProcessing forced-splits ---
+        // など + して…: ColloquialDoshiRegex must not fire on the ど of particle など (などして→などうして)
+        yield return ["野放しになどしておけるか", new[] { "野放し", "に", "など", "しておける", "か" }];
+        // すみ|ませんでした → すみません + でした
+        yield return ["す、すみませんでしたッ!", new[] { "すみません", "でした" }];
+        // この世+界 → この + 世界
+        yield return ["この世界って、地獄よりも酷い場所", new[] { "この", "世界", "って", "地獄", "より", "も", "酷い", "場所" }];
+        // 広がっ+ただけ phantom けっ verb → 広がった + だけ + って
+        yield return ["広がっただけって考えれば", new[] { "広がった", "だけ", "って", "考えれば" }];
+        // 計画+通+りって → 計画通り (compound) + っていう
+        yield return ["奴らの計画通りっていうことなのかよ", new[] { "奴ら", "の", "計画通り", "っていう", "こと", "な", "の", "か", "よ" }];
+        // じゃあ small-あ glued to katakana ア → じゃあ + アヒル
+        yield return ["じゃあアヒルさんとかないと", new[] { "じゃあ", "アヒル", "さん", "とか", "ない", "と" }];
+        // ははーん (は + はーん=ハーン khan) → ははん interjection
+        yield return ["ははーん、わかったぞ。", new[] { "ははん", "わかった", "ぞ" }];
+        // すご+いっしょ(一緒) → すごい + っしょ (colloquial でしょ)
+        yield return ["すごいっしょ?", new[] { "すごい", "っしょ" }];
+        // protect: い-adjective っしょ splits but bare 一緒 (いっしょ) does not
+        yield return ["いいっしょ", new[] { "いい", "っしょ" }];
+        yield return ["ずっといっしょに遊んだ", new[] { "ずっと", "いっしょに", "遊んだ" }];
+
+        // --- misparse batch: same-script small-vowel elongation on imperatives ---
+        yield return ["――今だ、撃てぇっ!", new[] { "今", "だ", "撃て" }];
+        yield return ["急げぇぇぇっっ!", new[] { "急げ" }];
+        yield return ["突撃にィ、移れぇぇぇ!", new[] { "突撃", "に", "移れ" }];
+        yield return ["少しはてめぇの頭で考えやがれぇっ!", new[] { "少し", "は", "てめぇ", "の", "頭", "で", "考え", "やがれ" }];
+        yield return ["総員、我に続けぇっ!", new[] { "総員", "我", "に", "続け" }];
+        yield return ["貴様なら――行けぇぇェッ!", new[] { "貴様", "なら", "行け" }];
+        yield return ["中隊気をつけぇッ!", new[] { "中隊", "気をつけ" }];
+        // protect: single small vowel NOT before っ+clause-end is emphatic, kept whole
+        yield return ["てめぇの頭", new[] { "てめぇ", "の", "頭" }];
+        yield return ["でっけぇ家だな", new[] { "でっけぇ", "家", "だ", "な" }];
+        yield return ["腹減って死にそうだ、食べてぇ", new[] { "腹", "減って", "死にそう", "だ", "食べてぇ" }];
+
+        // --- misparse batch: SpecialCases2 / gates / deconjugator ---
+        yield return ["ただ今戻りました", new[] { "ただ今", "戻りました" }];
+        yield return ["たしかにそうだ", new[] { "たしかに", "そう", "だ" }];
+        // 〜たところで (even if / at the point of) merges; locative 静かなところで stays split
+        yield return ["逃げ出してきたところで", new[] { "逃げ出してきた", "ところで" }];
+        yield return ["静かなところで話そう", new[] { "静かな", "ところ", "で", "話そう" }];
+        // だっけ (recollection) pinned to 2131200, not だけ "only"
+        yield return ["使ったんだっけ", new[] { "使った", "ん", "だっけ" }];
+        // genuine interjection ああ kept (not a stutter shred), だっけ
+        yield return ["ん、ああ、あたしは行くよ", new[] { "ん", "ああ", "あたし", "は", "行く", "よ" }];
+        // マシだったろ: contracted presumptive (だったろ), not a verb imperative
+        yield return ["少しはマシだったろ", new[] { "少し", "は", "マシだったろ" }];
+        // protect: ろ-presumptive must not steal the ichidan imperative
+        yield return ["食べろ", new[] { "食べろ" }];
+
+        // --- misparse batch: verb-mora theft fused with って (頑|張|れって → 頑張れ + って) ---
+        yield return ["頑張れって言ってくれましたが", new[] { "頑張れ", "って", "言ってくれました", "が" }];
+        // だってば after a nominal → だ + ってば (emphatic), not だって "even" + ば
+        yield return ["だ、だからダルマザメだってば", new[] { "だから", "ダルマザメ", "だ", "ってば" }];
+        // vs-only noun + すべき → [noun] + すべき (not the bogus short-causative 帰投す)
+        yield return ["帰投すべき基地", new[] { "帰投", "すべき", "基地" }];
+        // 連用形 noun + orphaned past た → reform the compound verb (言い出し+た → 言い出した)
+        yield return ["なんて言い出したんだ", new[] { "なんて", "言い出した", "んだ" }];
+        // protect: 連用形 noun + copula だ stays a noun (not reformed to a verb)
+        yield return ["それは行いだ", new[] { "それ", "は", "行い", "だ" }];
+
+        // --- misparse batch: pre-Sudachi forced-split boundary fixes for って/ったら mora-theft ---
+        yield return ["今のうちにってことなんだろうが", new[] { "今のうち", "に", "って", "こと", "なん", "だろう", "が" }];
+        yield return ["こいつってば、本当に", new[] { "こいつ", "ってば", "本当に" }];
+        yield return ["繋がりってのがどれだけ", new[] { "繋がり", "って", "の", "が", "どれだけ" }];
+        yield return ["お兄ちゃんったらデレデレ", new[] { "お兄ちゃん", "ったら", "デレデレ" }];
+        yield return ["汚れてなんかいないって", new[] { "汚れて", "なんか", "いない", "って" }];
+        yield return ["景気づけよ", new[] { "景気づけ", "よ" }];
+        // protect: にとって not split by にって rule; 景気づけよう (volitional) not split
+        yield return ["私にとって大事", new[] { "私", "にとって", "大事" }];
+        yield return ["景気づけようぜ", new[] { "景気", "づけよう", "ぜ" }];
+        // 見て見ぬフリ kept whole (user_dic) → expression + を + する, not 見る + フリをする
+        yield return ["見て見ぬフリをするつもりもない", new[] { "見て見ぬフリ", "を", "する", "つもり", "も", "ない" }];
+        // にいる → に + いる (居る), not the name にいる
+        yield return ["傍にいるってのに", new[] { "傍", "に", "いる", "って", "のに" }];
+        // particle stacking からは: は must not be dropped as a kana-stutter before 離れ (はなれ, same kana)
+        yield return ["どのみち帰投すべき基地からは離れ", new[] { "どのみち", "帰投", "すべき", "基地", "から", "は", "離れ" }];
+        // case particle を + quotative って: Sudachi fuses をって into a bogus verb; the boundary keeps こと+を+って
+        yield return ["どうしてあんなことをって思って", new[] { "どうして", "あんな", "こと", "を", "って", "思って" }];
+        // もん+か (Sudachi-split shape) after a verb → rhetorical もんか particle, not 門下 compound
+        yield return ["踊らされるもんか", new[] { "踊らされる", "もんか" }];
+        // っていう must not be absorbed left into the 〜ない expression
+        yield return ["わけにはいかないっていうだけだろ", new[] { "わけにはいかない", "っていう", "だけ", "だろ" }];
+
+        // --- misparse batch: ている-contraction てる shredded by following って ---
+        yield return ["見られてるって思うと", new[] { "見られてる", "って", "思う", "と" }];
+        yield return ["上での合意は取れてるって", new[] { "上", "で", "の", "合意", "は", "取れてる", "って" }];
+        yield return ["色々考えてるってことだから", new[] { "色々", "考えてる", "って", "こと", "だから" }];
+        yield return ["目を付けられてるって", new[] { "目を付けられてる", "って" }];
+        yield return ["中隊に留めてるってのは", new[] { "中隊", "に", "留めてる", "ってのは" }];
+        // protect: real 照る verb and 〜ってる that is not a て+stolen-る shred
+        yield return ["夏の日差しが照る", new[] { "夏", "の", "日差し", "が", "照る" }];
+        yield return ["頑張ってるって言われた", new[] { "頑張ってる", "って", "言われた" }];
+
+        // --- misparse batch: demonstrative+いう / それじゃない / 度に ---
+        yield return ["ねぇ、もうやめてよ、ああいうのは", new[] { "ねぇ", "もう", "やめて", "よ", "ああいう", "の", "は" }];
+        yield return ["それじゃない", new[] { "それ", "じゃない" }];
+        yield return ["行う度に失われていく", new[] { "行う", "度に", "失われていく" }];
+        // protect: それじゃ conjunction (not before negative), counter 二度に/一度に, kanji ああ言った
+        yield return ["それじゃ、行こう", new[] { "それじゃ", "行こう" }];
+        yield return ["二度に分けて飲む", new[] { "二度", "に", "分けて", "飲む" }];
+        yield return ["一度に全部", new[] { "一度", "に", "全部" }];
+
+        // --- misparse batch: user_dic (錬金術師, ビスワ湖, からかう) ---
+        yield return ["錬金術師してたのに", new[] { "錬金術師", "してた", "のに" }];
+        yield return ["南はビスワ湖を抱えている", new[] { "南", "は", "ビスワ湖", "を", "抱えている" }];
+        yield return ["もう少しからかわせてくれないのかしら", new[] { "もう", "少し", "からかわせてくれない", "の", "かしら" }];
+        // もし + katakana name: Sudachi glues もしカ (2133220) and steals the leading mora; the もし-boundary
+        // restores the name via lookup (no per-name user_dic entry). Generalises to any name after もし.
+        yield return ["もしカティアを保護していなかったら", new[] { "もし", "カティア", "を", "保護していなかったら" }];
+        yield return ["もしソフィアが来たら", new[] { "もし", "ソフィア", "が", "来たら" }];
+        // protect: もしも/もしか (hiragana-following) must NOT be split by the もし-katakana boundary
+        yield return ["もしも世界が終わるなら", new[] { "もしも", "世界", "が", "終わる", "なら" }];
+        yield return ["もしかして君は", new[] { "もしかして", "君", "は" }];
+
+        // --- misparse batch: quotative って stealing a kanji compound noun's tail mora ---
+        // 必|要っ[要る]|て → 必要 + って (and 重要/主要); the WordReattachRunLength lookup reforms the noun.
+        yield return ["強引な態度も必要ってことか", new[] { "強引な", "態度", "も", "必要", "って", "こと", "か" }];
+        yield return ["それは重要って話だ", new[] { "それ", "は", "重要", "って", "話", "だ" }];
+        // protect: genuine kanji te-form verbs must NOT reform a noun (prev+stripped is not a JMDict word)
+        yield return ["家に帰ってきた", new[] { "家", "に", "帰ってきた" }];
+        yield return ["資料を要ってない", new[] { "資料", "を", "要ってない" }];
     }
 
     [Theory]

@@ -160,6 +160,16 @@ public partial class MorphologicalAnalyser
                     (HasCompoundLookup == null || HasCompoundLookup(currentDictForm) ||
                      (currentNormForm != currentDictForm && HasCompoundLookup(currentNormForm)));
 
+                // A vs-only noun + す directly before べき/べし is the classical する+べき "should" expression
+                // (帰投すべき → 帰投 + すべき), NOT a verb: merging it yields a bogus short-causative reading
+                // (帰投す "make return"). Keep す standalone so it merges rightward into すべき. Real godan -す
+                // verbs (愛す, 訳す) keep merging here, since [stem]す is itself a dictionary verb.
+                if (scenarioAMatch && currentPOS == PartOfSpeech.Noun && nextWord.Text == "す"
+                    && i + 2 < wordInfos.Count
+                    && (wordInfos[i + 2].Text == "べき" || wordInfos[i + 2].DictionaryForm == "べし")
+                    && !(HasCompoundLookup?.Invoke(currentWord.Text + "す") == true))
+                    scenarioAMatch = false;
+
                 if (scenarioAMatch)
                 {
                     if (currentPOS == PartOfSpeech.NaAdjective)
@@ -1167,15 +1177,16 @@ public partial class MorphologicalAnalyser
 
             if (SpecialCases2Dict.TryGetValue(currentWord.Text, out var sc2List))
             {
-                // す+べき stays split after a suru-noun — す attaches left instead (満足す|べき)
-                bool suBekiBlocked = currentWord.Text == "す" && i > 0 &&
-                    (wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
-                     wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun));
+                // ところ+で → ところで (1343110: sentence-initial "by the way", or 〜たところで "even if").
+                // Mid-sentence after a non-past stem it is the locative ところ + で (静かなところで, 今のところで).
+                bool tokoroDeBlocked = currentWord.Text == "ところ" && i > 0 &&
+                    !(wordInfos[i - 1].Text.EndsWith("た", StringComparison.Ordinal) ||
+                      wordInfos[i - 1].Text.EndsWith("だ", StringComparison.Ordinal));
 
                 bool matched = false;
                 foreach (var sc in sc2List)
                 {
-                    if (sc.Second == "べき" && suBekiBlocked) continue;
+                    if (sc.Second == "で" && tokoroDeBlocked) continue;
                     if (nextWord.Text == sc.Second)
                     {
                         newList ??= CopyUpTo(wordInfos, i);

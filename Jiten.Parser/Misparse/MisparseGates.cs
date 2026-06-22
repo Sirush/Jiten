@@ -50,6 +50,11 @@ internal static class MisparseGates
         for (int i = 1; i < surface.Length; i++)
             if (surface[i] != first) return false;
 
+        // Genuine repeated-vowel interjections (ああ, ええ, おお, ささ) are Interjection-tagged and matched
+        // to interjection entries; the neighbour-vowel heuristics below over-fire when a following word
+        // coincidentally shares the vowel (ああ before あたし). Real stutter shreds (ぼぼ, なな) are Noun.
+        if (ctx.Token.PartOfSpeech == PartOfSpeech.Interjection) return false;
+
         // Common vocabulary — trust the match (パパ, ママ, もも, みみ, etc.)
         if (ctx.ReadingIsIchi || ctx.IsUsuallyKana) return false;
 
@@ -85,8 +90,13 @@ internal static class MisparseGates
         // Hiragana before a katakana word is not a stutter (e.g. は + ハードル)
         if (next.Text[0] >= 'ァ' && next.Text[0] <= 'ヴ') return false;
 
+        // A particle after a real word is the particle, not a stutter, even when the next word happens to
+        // start with the same kana (で before できる; は before 離れる; particle-stacking からは/には/では).
+        // Real stutters (ぼ before ぼく) follow punctuation/start, so their Prev is a symbol or null.
         if (ctx.Token.PartOfSpeech == PartOfSpeech.Particle && ctx.Prev is { PartOfSpeech: PartOfSpeech.Noun or PartOfSpeech.Verb
-            or PartOfSpeech.IAdjective or PartOfSpeech.NaAdjective or PartOfSpeech.Adverb or PartOfSpeech.Pronoun })
+            or PartOfSpeech.IAdjective or PartOfSpeech.NaAdjective or PartOfSpeech.Adverb or PartOfSpeech.Pronoun
+            or PartOfSpeech.Expression or PartOfSpeech.Suffix or PartOfSpeech.Counter or PartOfSpeech.Numeral
+            or PartOfSpeech.Particle })
             return false;
 
         string katakana = surface.Length == 1
@@ -123,11 +133,13 @@ internal static class MisparseGates
 
         if (ExemptFromKanaGate.Contains(ctx.Token.PartOfSpeech)) return false;
 
-        // Sentence-initial two-kana interjections (ああ, ええ, おお) are legitimate words even
-        // when a kanji spelling exists (嗚呼). Mid-sentence ones stay gated: trailing elongation
-        // shreds (いきた+ああ) carry the same POS.
+        // Sentence-initial OR post-punctuation two-kana interjections (ん、ああ、 / ええ、) are legitimate
+        // standalone utterances even when a kanji spelling exists (嗚呼). Mid-word elongation shreds
+        // (いきた+ああ) attach directly to a content word (Prev is a verb/noun) and stay gated.
         if (ctx.Token.PartOfSpeech == PartOfSpeech.Interjection && surface.Length >= 2
-            && ctx.IsSentenceInitial) return false;
+            && (ctx.IsSentenceInitial || ctx.Prev == null
+                || ctx.Prev.PartOfSpeech is PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol
+                    or PartOfSpeech.BlankSpace or PartOfSpeech.Interjection)) return false;
 
         // Demonstrative ああ/こう/そう directly before a verb (ああなった, こう言う) is the
         // "like that/this" adverb, not an elongation shred — shreds never precede a verb.
