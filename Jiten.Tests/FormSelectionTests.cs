@@ -47,6 +47,12 @@ public class FormSelectionTests
         // Pure kana gairaigo: テレビ has only kana forms
         yield return ["テレビ", "テレビ", 1080510, (byte)0];
 
+        // 気にしない before quotative って must resolve to the idiom 気にしない (2563780), not the
+        // にしな surname — the fork drops the user_dic 表現 node before って unless patched.
+        yield return ["気にしないって事", "気にしない", 2563780, (byte)0];
+        // 気にしなさんな (colloquial しなさるな) → lemma 気にする (1221680) via the user_dic entry.
+        yield return ["気にしなさんなって", "気にしなさんな", 1221680, (byte)0];
+
         // 舐る (ねぶる, lick, uk) should beat 眠る's rare ねぶる reading (眠る's normal reading is ねむる)
         yield return ["その部分を舌先で探りながら、丁寧にねぶっていく。", "ねぶっていく", 1571330, (byte)2];
 

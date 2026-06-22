@@ -1185,6 +1185,12 @@ public class MorphologicalAnalyserTests
         // しょうがねぇ colloquial — currently split as しょう+が+ねぇ
         yield return ["ったくしょうがねぇなぁ", new[] { "ったく", "しょうがねぇ", "なぁ" }];
         yield return ["しょうがねぇときってのがあらァ", new[] { "しょうがねぇ", "とき", "って", "の", "が", "ある" }];
+        // 気にしない+って: the fork's can_bow gate dropped the user_dic expression before the quotative
+        // って (sokuon っ), letting the にしな surname win (気/にしな/いって). Fork patch re-admits 表現
+        // user entries before って/っけ so the idiom segments whole.
+        yield return ["気にしないって事", new[] { "気にしない", "って", "事" }];
+        // 気にしなさんな (colloquial しなさるな imperative) — same にしな-surname collision; user_dic 表現 entry
+        yield return ["気にしなさんなって", new[] { "気にしなさんな", "って" }];
         // でしょう auxiliary — currently split as で+しょう, and ファ is also being eaten from ファルマ
         yield return ["あっ、何でしょうファルマ様",
             new[] { "あっ", "何", "でしょう", "ファルマ", "様" }];
@@ -1812,6 +1818,9 @@ public class MorphologicalAnalyserTests
         yield return ["見て見ぬフリをするつもりもない", new[] { "見て見ぬフリ", "を", "する", "つもり", "も", "ない" }];
         // にいる → に + いる (居る), not the name にいる
         yield return ["傍にいるってのに", new[] { "傍", "に", "いる", "って", "のに" }];
+        // さっきこの → さっき (adverb) + この, not the name さきこ (Sudachi sokuon-normalizes さっきこ→さきこ)
+        yield return ["さっきこの竹刀は新流のものだって言ってましたけど",
+            new[] { "さっき", "この", "竹刀", "は", "新", "流", "の", "もの", "だって", "言ってました", "けど" }];
         // particle stacking からは: は must not be dropped as a kana-stutter before 離れ (はなれ, same kana)
         yield return ["どのみち帰投すべき基地からは離れ", new[] { "どのみち", "帰投", "すべき", "基地", "から", "は", "離れ" }];
         // case particle を + quotative って: Sudachi fuses をって into a bogus verb; the boundary keeps こと+を+って

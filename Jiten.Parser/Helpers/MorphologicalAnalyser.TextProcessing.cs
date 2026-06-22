@@ -211,6 +211,7 @@ public partial class MorphologicalAnalyser
             .Replace("繋がりって", $"繋がり{_stopToken}って")             // 繋|が|り shredded by って → 繋がり + って
             .Replace("んったら", $"ん{_stopToken}ったら")                 // ちゃ|んっ|たら → ちゃん + ったら
             .Replace("にいる", $"に{_stopToken}いる")                     // にいる(name 5408860) → に + いる(居る)
+            .Replace("さっきこ", $"さっき{_stopToken}こ")                 // さっきこ→name さきこ(咲子) via sokuon-norm → さっき + こ(この/これ/ここ)
             .Replace("ないっていう", $"ない{_stopToken}っていう");         // って must not attach left into 〜ない expr
         text = TooriQuotativeRegex().Replace(text, _stopToken);
         text = VowelTailKatakanaBoundaryRegex().Replace(text, _stopToken);
