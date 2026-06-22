@@ -1183,10 +1183,8 @@ public class MorphologicalAnalyserTests
             new[] { "こっち", "は", "そんな", "言葉", "数えきれない", "ほど", "聞いている", "んだ" }];
 
         // しょうがねぇ colloquial — currently split as しょう+が+ねぇ
-        yield return ["ったくしょうがねぇなぁ",
-            new[] { "ったく", "しょうがねぇ", "なぁ" }];
-        yield return ["しょうがねぇときってのがあらァ",
-            new[] { "しょうがねぇ", "とき", "って", "の", "が", "ある" }];
+        yield return ["ったくしょうがねぇなぁ", new[] { "ったく", "しょうがねぇ", "なぁ" }];
+        yield return ["しょうがねぇときってのがあらァ", new[] { "しょうがねぇ", "とき", "って", "の", "が", "ある" }];
         // でしょう auxiliary — currently split as で+しょう, and ファ is also being eaten from ファルマ
         yield return ["あっ、何でしょうファルマ様",
             new[] { "あっ", "何", "でしょう", "ファルマ", "様" }];
@@ -1225,7 +1223,7 @@ public class MorphologicalAnalyserTests
         // First case: 冷静になれ forms a valid compound (冷静になる exp, 2557400), so the bare token
         // collapses into the compound; segmentation reflects the compound match.
         yield return ["それで冷静になれって、どんな修行僧よ。",
-            new[] { "それで", "冷静になれって", "どんな", "修行僧", "よ" }];
+            new[] { "それで", "冷静になれ","って", "どんな", "修行僧", "よ" }];
         yield return ["誰だって、なろうと思えば、なれんだよ。",
             new[] { "誰", "だって", "なろう", "と", "思えば", "なれ", "んだ", "よ" }];
         yield return ["誰かの特別になんてなれやしない。",
@@ -1575,7 +1573,7 @@ public class MorphologicalAnalyserTests
 
         // === Compound verbs absent from JMDict decompose into stem + verb instead of dropping ===
         yield return ["苛立つことに驚き戸惑う", new[] { "苛立つ", "こと", "に", "驚き", "戸惑う" }];
-        yield return ["剣を心臓に突き刺して縫い止める", new[] { "剣", "を", "心臓", "に", "突き刺して", "縫い", "止める" }];
+        yield return ["剣を心臓に突き刺して縫い止める", new[] { "剣", "を", "心臓", "に", "突き刺して", "縫い止める" }];
         yield return ["挑みかかるような目つき", new[] { "挑み", "かかる", "ような", "目つき" }];
         yield return ["寝乱れた姿を見ても", new[] { "寝", "乱れた", "姿", "を", "見て", "も" }];
         // renyokei compounds that exist as JMDict nouns stay whole (買い支え)

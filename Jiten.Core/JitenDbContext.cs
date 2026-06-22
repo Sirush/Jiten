@@ -23,6 +23,7 @@ public class JitenDbContext : DbContext
     public DbSet<JmDictWord> JMDictWords { get; set; }
     public DbSet<JmDictWordFrequency> JmDictWordFrequencies { get; set; }
     public DbSet<JmDictDefinition> Definitions { get; set; }
+    public DbSet<JmDictCrossReference> JmDictCrossReferences { get; set; }
     public DbSet<JmDictLookup> Lookups { get; set; }
     public DbSet<JmDictWordForm> WordForms { get; set; }
     public DbSet<JmDictWordFormFrequency> WordFormFrequencies { get; set; }
@@ -300,13 +301,32 @@ public class JitenDbContext : DbContext
             {
                 entity.Property(e => e.PartsOfSpeech).HasColumnType("text[]");
                 entity.Property(e => e.PitchAccents).HasColumnType("int[]").IsRequired(false);
+                entity.Property(e => e.LanguageSourcesJson).HasColumnType("jsonb").IsRequired(false);
+                entity.Property(e => e.EntryInfoJson).HasColumnType("jsonb").IsRequired(false);
             }
             else
             {
                 entity.Property(e => e.PitchAccents).IsRequired(false);
+                entity.Property(e => e.LanguageSourcesJson).IsRequired(false);
+                entity.Property(e => e.EntryInfoJson).IsRequired(false);
             }
 
             entity.Property(e => e.Origin).HasColumnType("int");
+        });
+
+        modelBuilder.Entity<JmDictCrossReference>(entity =>
+        {
+            entity.ToTable("CrossReferences", "jmdict");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.FromWordId).IsRequired();
+            entity.Property(e => e.Type).HasColumnType("int");
+            entity.Property(e => e.TargetDict).HasColumnType("int");
+            entity.Property(e => e.RawText).IsRequired();
+            entity.HasIndex(e => new { e.FromWordId, e.Type })
+                  .HasDatabaseName("IX_CrossReferences_FromWordId_Type");
+            entity.HasIndex(e => e.TargetWordId)
+                  .HasDatabaseName("IX_CrossReferences_TargetWordId");
         });
 
         modelBuilder.Entity<JmDictDefinition>(entity =>
@@ -320,17 +340,12 @@ public class JitenDbContext : DbContext
             {
                 entity.Property(e => e.PartsOfSpeech).HasColumnType("text[]");
                 entity.Property(e => e.EnglishMeanings).HasColumnType("text[]");
-                entity.Property(e => e.DutchMeanings).HasColumnType("text[]");
-                entity.Property(e => e.FrenchMeanings).HasColumnType("text[]");
-                entity.Property(e => e.GermanMeanings).HasColumnType("text[]");
-                entity.Property(e => e.SpanishMeanings).HasColumnType("text[]");
-                entity.Property(e => e.HungarianMeanings).HasColumnType("text[]");
-                entity.Property(e => e.RussianMeanings).HasColumnType("text[]");
-                entity.Property(e => e.SlovenianMeanings).HasColumnType("text[]");
                 entity.Property(e => e.Pos).HasColumnType("text[]").HasDefaultValueSql("'{}'");
                 entity.Property(e => e.Misc).HasColumnType("text[]").HasDefaultValueSql("'{}'");
                 entity.Property(e => e.Field).HasColumnType("text[]").HasDefaultValueSql("'{}'");
                 entity.Property(e => e.Dial).HasColumnType("text[]").HasDefaultValueSql("'{}'");
+                entity.Property(e => e.SenseInfo).HasColumnType("text[]").HasDefaultValueSql("'{}'");
+                entity.Property(e => e.GlossTypes).HasColumnType("text[]").HasDefaultValueSql("'{}'");
                 entity.Property(e => e.RestrictedToReadingIndices).HasColumnType("smallint[]").IsRequired(false);
             }
             else

@@ -79,6 +79,14 @@ public partial class MorphologicalAnalyser
             if (word is { Text: "山", PartOfSpeech: PartOfSpeech.Suffix })
                 word.PartOfSpeech = PartOfSpeech.Noun;
 
+            // 色 tagged as a suffix is the standalone noun いろ ("X-coloured": 敵色, 空色) unless it follows
+            // a numeral, where it is the counter しょく (三色). Compounds where 色 is read しょく (特色, 景色,
+            // 原色) are lexicalised and matched whole, so a lone suffix-色 outside counter context is いろ.
+            if (word is { Text: "色", PartOfSpeech: PartOfSpeech.Suffix } &&
+                !(i > 0 && (wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Numeral ||
+                            wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.Numeral))))
+                word.PartOfSpeech = PartOfSpeech.Noun;
+
             if (word is { Text: "だろう" or "だろ", PartOfSpeech: PartOfSpeech.Auxiliary })
             {
                 word.PartOfSpeech = PartOfSpeech.Expression;

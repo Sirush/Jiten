@@ -16,6 +16,23 @@ public static class JmDictHelper
     private static readonly Dictionary<string, string> _entities = new Dictionary<string, string>();
     private static readonly Dictionary<string, string> _entitiesReverse = new Dictionary<string, string>();
 
+    // Elements the sync parser recognises or deliberately defers; anything else surfaces in the unknown-element report.
+    private static readonly HashSet<string> _knownSyncElements = new()
+    {
+        "entry", "ent_seq", "k_ele", "keb", "ke_inf", "ke_pri",
+        "r_ele", "reb", "re_nokanji", "re_restr", "re_inf", "re_pri",
+        "lsource", "info", "sense",
+        "stagk", "stagr", "pos", "xref", "field", "misc", "s_inf", "dial", "gloss",
+        "example", "ex_srce", "ex_text", "ex_sent" // <example> deliberately deferred (media sentences are richer)
+    };
+    private static readonly Dictionary<string, int> _unknownSyncElements = new();
+
+    private static void NoteSyncElement(string name)
+    {
+        if (_knownSyncElements.Contains(name)) return;
+        _unknownSyncElements[name] = _unknownSyncElements.GetValueOrDefault(name) + 1;
+    }
+
     private static readonly Dictionary<string, string> _posDictionary = new()
                                                                         {
                                                                             { "bra", "Brazilian" }, { "hob", "Hokkaido-ben" },
@@ -1523,26 +1540,12 @@ public static class JmDictHelper
     private static bool DefinitionsEqual(JmDictDefinition def1, JmDictDefinition def2)
     {
         return def1.PartsOfSpeech.SequenceEqual(def2.PartsOfSpeech) &&
-               def1.EnglishMeanings.SequenceEqual(def2.EnglishMeanings) &&
-               def1.DutchMeanings.SequenceEqual(def2.DutchMeanings) &&
-               def1.FrenchMeanings.SequenceEqual(def2.FrenchMeanings) &&
-               def1.GermanMeanings.SequenceEqual(def2.GermanMeanings) &&
-               def1.SpanishMeanings.SequenceEqual(def2.SpanishMeanings) &&
-               def1.HungarianMeanings.SequenceEqual(def2.HungarianMeanings) &&
-               def1.RussianMeanings.SequenceEqual(def2.RussianMeanings) &&
-               def1.SlovenianMeanings.SequenceEqual(def2.SlovenianMeanings);
+               def1.EnglishMeanings.SequenceEqual(def2.EnglishMeanings);
     }
 
     private static bool MeaningsEqual(JmDictDefinition def1, JmDictDefinition def2)
     {
-        return def1.EnglishMeanings.SequenceEqual(def2.EnglishMeanings) &&
-               def1.DutchMeanings.SequenceEqual(def2.DutchMeanings) &&
-               def1.FrenchMeanings.SequenceEqual(def2.FrenchMeanings) &&
-               def1.GermanMeanings.SequenceEqual(def2.GermanMeanings) &&
-               def1.SpanishMeanings.SequenceEqual(def2.SpanishMeanings) &&
-               def1.HungarianMeanings.SequenceEqual(def2.HungarianMeanings) &&
-               def1.RussianMeanings.SequenceEqual(def2.RussianMeanings) &&
-               def1.SlovenianMeanings.SequenceEqual(def2.SlovenianMeanings);
+        return def1.EnglishMeanings.SequenceEqual(def2.EnglishMeanings);
     }
 
     private static async Task LoadEntities(string dtdPath, string? dictionaryXmlPath = null)
@@ -1762,14 +1765,7 @@ public static class JmDictHelper
                 definition.PartsOfSpeech.Add("name");
 
             // Add the definition only if it has translations
-            if (definition.EnglishMeanings.Count > 0 ||
-                definition.DutchMeanings.Count > 0 ||
-                definition.FrenchMeanings.Count > 0 ||
-                definition.GermanMeanings.Count > 0 ||
-                definition.SpanishMeanings.Count > 0 ||
-                definition.HungarianMeanings.Count > 0 ||
-                definition.RussianMeanings.Count > 0 ||
-                definition.SlovenianMeanings.Count > 0)
+            if (definition.EnglishMeanings.Count > 0)
             {
                 wordInfo.Definitions.Add(definition);
             }
@@ -1875,59 +1871,53 @@ public static class JmDictHelper
         {
             if (reader.NodeType == XmlNodeType.Element)
             {
-                if (reader.Name == "stagr")
+                switch (reader.Name)
                 {
-                    restrictions.Add(await reader.ReadElementContentAsStringAsync());
-                }
+                    case "stagr":
+                    case "stagk":
+                        restrictions.Add(await reader.ReadElementContentAsStringAsync());
+                        break;
 
-                // check the language attribute
-                if (reader is { Name: "gloss", HasAttributes: true })
-                {
-                    var attribute = reader.GetAttribute("xml:lang");
-                    switch (attribute)
+                    // English-only cutover: only <gloss xml:lang="eng"> (incl. DTD-default) is kept.
+                    case "gloss" when reader.HasAttributes:
                     {
-                        case "eng":
-                            sense.EnglishMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "dut":
-                            sense.DutchMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "fre":
-                            sense.FrenchMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "ger":
-                            sense.GermanMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "spa":
-                            sense.SpanishMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "hun":
-                            sense.HungarianMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "rus":
-                            sense.RussianMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "slv":
-                            sense.SlovenianMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        default:
-                            //sense.EnglishMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
+                        var lang = reader.GetAttribute("xml:lang");
+                        var gType = reader.GetAttribute("g_type");
+                        var text = await reader.ReadElementContentAsStringAsync();
+                        if (lang == "eng")
+                        {
+                            sense.EnglishMeanings.Add(text);
+                            sense.GlossTypes.Add(gType ?? "");
+                        }
+                        break;
                     }
-                }
 
-                if (reader.Name == "pos")
-                {
-                    var el = reader.ReadElementString();
+                    case "pos":
+                    {
+                        var el = ElToPos(reader.ReadElementString());
+                        sense.Pos.Add(el);
+                        sense.PartsOfSpeech.Add(el);
+                        break;
+                    }
 
-                    sense.PartsOfSpeech.Add(ElToPos(el));
-                }
+                    // misc stays dual-written into PartsOfSpeech (parser POS-matching reads "uk" etc.)
+                    case "misc":
+                    {
+                        var el = ElToPos(reader.ReadElementString());
+                        sense.Misc.Add(el);
+                        sense.PartsOfSpeech.Add(el);
+                        break;
+                    }
 
-                if (reader.Name == "misc")
-                {
-                    var el = reader.ReadElementString();
-
-                    sense.PartsOfSpeech.Add(ElToPos(el));
+                    case "field":
+                        sense.Field.Add(ElToPos(reader.ReadElementString()));
+                        break;
+                    case "dial":
+                        sense.Dial.Add(ElToPos(reader.ReadElementString()));
+                        break;
+                    case "s_inf":
+                        sense.SenseInfo.Add(await reader.ReadElementContentAsStringAsync());
+                        break;
                 }
             }
 
@@ -2017,11 +2007,22 @@ public static class JmDictHelper
             Console.WriteLine("=== DRY RUN MODE — no changes will be saved ===");
 
         Console.WriteLine("Parsing JMDict XML...");
-        var syncEntries = await ParseSyncEntries(dtdPath, dictionaryPath);
-        Console.WriteLine($"Parsed {syncEntries.Count} entries from XML.");
+        var parseResult = await ParseSyncEntries(dtdPath, dictionaryPath);
+        var syncEntries = parseResult.Entries;
+        Console.WriteLine($"Parsed {syncEntries.Count} entries from XML (created={parseResult.Created ?? "?"}, version={parseResult.Version ?? "?"}).");
 
         var syncEntriesById = syncEntries.ToDictionary(e => e.WordId);
         var xmlWordIds = new HashSet<int>(syncEntriesById.Keys);
+
+        // Aggregate NG-field stats from the parsed file (for reporting + xref resolution).
+        int xrefTotal = syncEntries.Sum(e => e.Senses.Sum(s => s.Xrefs.Count));
+        int xrefResolved = syncEntries.Sum(e => e.Senses.Sum(s =>
+            s.Xrefs.Count(x => x.Seq.HasValue && xmlWordIds.Contains(x.Seq.Value))));
+        int lsourceWords = syncEntries.Count(e => e.LanguageSources.Count > 0);
+        int waseiWords = syncEntries.Count(e => e.LanguageSources.Any(ls => ls.IsWasei));
+        int entryInfoWords = syncEntries.Count(e => e.EntryInfos.Count > 0);
+        Console.WriteLine($"NG fields: {xrefTotal} xrefs ({xrefResolved} resolvable), " +
+                          $"{lsourceWords} lsource words ({waseiWords} wasei), {entryInfoWords} info words.");
 
         // Load furigana dictionary
         Console.WriteLine("Loading furigana data...");
@@ -2044,6 +2045,9 @@ public static class JmDictHelper
         int lookupsCreated = 0;
         int unresolvedRestrictions = 0;
         int wordsWithDefChanges = 0;
+
+        // Dry-run backfill counters: words newly gaining a field that was previously absent.
+        int backfillMisc = 0, backfillField = 0, backfillDial = 0, backfillSenseInfo = 0, backfillGlossType = 0;
 
         // Dry-run change tracking
         var newWordEntries = dryRun ? new List<string>() : null;
@@ -2124,16 +2128,23 @@ public static class JmDictHelper
                         // Snapshot state for dry-run comparison
                         HashSet<string>? oldDefFingerprints = null;
                         HashSet<(JmDictFormType, string)>? oldActiveForms = null;
+                        bool oldHadMisc = false, oldHadField = false, oldHadDial = false, oldHadSenseInfo = false, oldHadGlossType = false;
                         if (dryRun)
                         {
                             oldDefFingerprints = dbWord.Definitions
                                 .Where(d => d.SenseIndex < 1000)
-                                .Select(d => $"{d.SenseIndex}|{string.Join(";", d.EnglishMeanings)}|{string.Join(",", d.Pos)}")
+                                .Select(DefFingerprint)
                                 .ToHashSet();
                             oldActiveForms = dbWord.Forms
                                 .Where(f => f.IsActiveInLatestSource)
                                 .Select(f => (f.FormType, f.Text))
                                 .ToHashSet();
+                            var oldDefs = dbWord.Definitions.Where(d => d.SenseIndex < 1000).ToList();
+                            oldHadMisc = oldDefs.Any(d => d.Misc.Count > 0);
+                            oldHadField = oldDefs.Any(d => d.Field.Count > 0);
+                            oldHadDial = oldDefs.Any(d => d.Dial.Count > 0);
+                            oldHadSenseInfo = oldDefs.Any(d => d.SenseInfo.Count > 0);
+                            oldHadGlossType = oldDefs.Any(d => d.GlossTypes.Any(g => g.Length > 0));
                         }
 
                         // UPDATE existing word
@@ -2168,15 +2179,20 @@ public static class JmDictHelper
                                 changes.Add($"  - Forms deactivated: {string.Join(", ", removedForms)}");
 
                             // Detect definition changes
-                            var newDefFingerprints = dbWord.Definitions
-                                .Where(d => d.SenseIndex < 1000)
-                                .Select(d => $"{d.SenseIndex}|{string.Join(";", d.EnglishMeanings)}|{string.Join(",", d.Pos)}")
-                                .ToHashSet();
+                            var newDefs = dbWord.Definitions.Where(d => d.SenseIndex < 1000).ToList();
+                            var newDefFingerprints = newDefs.Select(DefFingerprint).ToHashSet();
                             if (!oldDefFingerprints!.SetEquals(newDefFingerprints))
                             {
                                 changes.Add($"  ~ Definitions changed ({oldDefFingerprints.Count} -> {newDefFingerprints.Count} senses)");
                                 wordsWithDefChanges++;
                             }
+
+                            // Backfill detection: a field newly appearing where it was previously absent.
+                            if (!oldHadMisc && newDefs.Any(d => d.Misc.Count > 0)) backfillMisc++;
+                            if (!oldHadField && newDefs.Any(d => d.Field.Count > 0)) backfillField++;
+                            if (!oldHadDial && newDefs.Any(d => d.Dial.Count > 0)) backfillDial++;
+                            if (!oldHadSenseInfo && newDefs.Any(d => d.SenseInfo.Count > 0)) backfillSenseInfo++;
+                            if (!oldHadGlossType && newDefs.Any(d => d.GlossTypes.Any(g => g.Length > 0))) backfillGlossType++;
 
                             if (changes.Count > 0)
                             {
@@ -2354,6 +2370,12 @@ public static class JmDictHelper
             }
 
             await postContext.SaveChangesAsync();
+
+            // Rebuild cross-reference join table (truncate + insert from parsed xrefs)
+            await RebuildCrossReferences(contextFactory, syncEntries, xmlWordIds);
+
+            // Refresh the dictionary-version sentinel (WordId 9999999) from the file's own entry
+            await UpsertVersionSentinel(contextFactory, syncEntries, furiganaDict);
         }
 
         // Print statistics
@@ -2382,6 +2404,19 @@ public static class JmDictHelper
             report.AppendLine($"Forms to add:           {formsCreated}");
             report.AppendLine($"Forms to deactivate:    {formsDeactivated}");
             report.AppendLine($"Definition changes:     {wordsWithDefChanges} words affected");
+            report.AppendLine();
+            report.AppendLine("=== Field backfill (words newly gaining a previously-absent field) ===");
+            report.AppendLine($"misc:    {backfillMisc}");
+            report.AppendLine($"field:   {backfillField}");
+            report.AppendLine($"dial:    {backfillDial}");
+            report.AppendLine($"s_inf:   {backfillSenseInfo}");
+            report.AppendLine($"g_type:  {backfillGlossType}");
+            report.AppendLine($"xref:    {xrefTotal} parsed ({xrefResolved} resolved to a WordId, {xrefTotal - xrefResolved} unresolved)");
+            report.AppendLine($"lsource: {lsourceWords} words ({waseiWords} wasei)");
+            report.AppendLine($"info:    {entryInfoWords} words");
+            var sentinelGloss = syncEntries.FirstOrDefault(e => e.WordId == 9999999)?.Senses
+                .FirstOrDefault()?.EnglishMeanings.FirstOrDefault();
+            report.AppendLine($"Dictionary version sentinel (WordId 9999999): {sentinelGloss ?? "(not in file)"}");
             report.AppendLine();
 
             if (newWordEntries!.Count > 0)
@@ -2601,11 +2636,138 @@ public static class JmDictHelper
             }
         }
 
+        // Entry-level NG metadata (lsource etymology/wasei + <info> notes)
+        ApplyEntryMetadata(dbWord, entry);
+
         // Sync definitions (delete-and-recreate)
         var (defsDeleted, defsCreated, unresolvedCount) = SyncDefinitions(context, dbWord, entry, formMap);
 
         return new SyncWordResult(formsMatched, formsCreated, formsDeactivated,
             defsDeleted, defsCreated, lookupsCreated, unresolvedCount);
+    }
+
+    /// <summary>Stable fingerprint of a definition for dry-run change detection. Includes every
+    /// annotation field the sync rewrites, so backfills (misc/field/dial/s_inf/g_type) register as changes.</summary>
+    private static string DefFingerprint(JmDictDefinition d) =>
+        $"{d.SenseIndex}|{string.Join(";", d.EnglishMeanings)}|{string.Join(",", d.Pos)}" +
+        $"|{string.Join(",", d.Misc)}|{string.Join(",", d.Field)}|{string.Join(",", d.Dial)}" +
+        $"|{string.Join(";", d.SenseInfo)}|{string.Join(",", d.GlossTypes)}";
+
+    /// <summary>Truncates and rebuilds the xref join table from the parsed entries (two-pass: words are
+    /// all parsed in memory, so seq# targets resolve directly to WordIds).</summary>
+    private static async Task RebuildCrossReferences(IDbContextFactory<JitenDbContext> contextFactory,
+                                                     List<SyncEntry> syncEntries, HashSet<int> xmlWordIds)
+    {
+        Console.WriteLine("Rebuilding cross-references...");
+        await using (var truncateContext = await contextFactory.CreateDbContextAsync())
+        {
+            await truncateContext.Database.ExecuteSqlRawAsync(
+                """TRUNCATE TABLE jmdict."CrossReferences" RESTART IDENTITY""");
+        }
+
+        var rows = new List<JmDictCrossReference>();
+        foreach (var entry in syncEntries)
+        {
+            foreach (var sense in entry.Senses)
+            {
+                foreach (var x in sense.Xrefs)
+                {
+                    int? target = null;
+                    var dictKind = CrossReferenceDict.JMdict;
+                    if (x.Dict == "jmnedict")
+                    {
+                        dictKind = CrossReferenceDict.JMnedict;
+                        target = x.Seq; // JMnedict ids live in their own range; store as-is
+                    }
+                    else if (x.Seq.HasValue && xmlWordIds.Contains(x.Seq.Value))
+                    {
+                        target = x.Seq;
+                    }
+
+                    rows.Add(new JmDictCrossReference
+                    {
+                        FromWordId = entry.WordId,
+                        FromSenseIndex = sense.SenseIndex,
+                        Type = ParseXrefType(x.Type),
+                        TargetWordId = target,
+                        TargetDict = dictKind,
+                        TargetSenseIndex = x.Sno,
+                        TargetKanji = x.Xk,
+                        TargetReading = x.Xr,
+                        RawText = x.RawText
+                    });
+                }
+            }
+        }
+
+        const int batch = 10000;
+        for (int i = 0; i < rows.Count; i += batch)
+        {
+            await using var context = await contextFactory.CreateDbContextAsync();
+            context.JmDictCrossReferences.AddRange(rows.Skip(i).Take(batch));
+            await context.SaveChangesAsync();
+        }
+        Console.WriteLine($"  Wrote {rows.Count} cross-references.");
+    }
+
+    /// <summary>Imports JMdict's own WordId 9999999 sentinel entry verbatim from the file (keb ＪＭｄｉｃｔ,
+    /// gloss "Japanese-Multilingual Dictionary Project - Creation Date: …"). The normal batch loop skips it
+    /// (id ≥ 8000000), so it's handled here and refreshed on every sync. No lookups → kept out of search.</summary>
+    private static async Task UpsertVersionSentinel(IDbContextFactory<JitenDbContext> contextFactory,
+                                                    List<SyncEntry> syncEntries,
+                                                    Dictionary<string, List<JMDictFurigana>> furiganaDict)
+    {
+        const int sentinelId = 9999999;
+        var entry = syncEntries.FirstOrDefault(e => e.WordId == sentinelId);
+        if (entry == null)
+        {
+            Console.WriteLine($"  Version sentinel (WordId {sentinelId}) not present in source file — skipped.");
+            return;
+        }
+
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var existing = await context.JMDictWords
+            .Include(w => w.Definitions)
+            .Include(w => w.Forms)
+            .Include(w => w.Lookups)
+            .FirstOrDefaultAsync(w => w.WordId == sentinelId);
+
+        if (existing != null)
+        {
+            context.Definitions.RemoveRange(existing.Definitions);
+            context.Lookups.RemoveRange(existing.Lookups);
+            context.WordForms.RemoveRange(existing.Forms);
+            context.JMDictWords.Remove(existing);
+            await context.SaveChangesAsync();
+        }
+
+        var word = CreateNewWord(entry, furiganaDict);
+        word.Lookups.Clear(); // version marker, not a searchable vocab word
+        context.JMDictWords.Add(word);
+        await context.SaveChangesAsync();
+
+        var gloss = word.Definitions.FirstOrDefault()?.EnglishMeanings.FirstOrDefault() ?? "(no gloss)";
+        Console.WriteLine($"  Version sentinel (WordId {sentinelId}) set from file: {gloss}");
+    }
+
+    /// <summary>Maps entry-level NG metadata (lsource etymology/wasei, &lt;info&gt; notes) onto the word
+    /// and infers Gairaigo origin from lsource when the CSV left it Unknown.</summary>
+    private static void ApplyEntryMetadata(JmDictWord word, SyncEntry entry)
+    {
+        word.LanguageSources = entry.LanguageSources
+            .Select(ls => new JmDictLanguageSource
+            {
+                Lang = ls.Lang, Text = ls.Text, IsWasei = ls.IsWasei, IsPartial = ls.IsPartial
+            })
+            .ToList();
+
+        word.EntryInfo = entry.EntryInfos
+            .Select(i => new JmDictEntryInfo { Type = i.Type, Text = i.Text })
+            .ToList();
+
+        // CSV-sourced origin wins (wago/kango); only fill Gairaigo when lsource is present and origin is unknown.
+        if (entry.LanguageSources.Count > 0 && word.Origin == WordOrigin.Unknown)
+            word.Origin = WordOrigin.Gairaigo;
     }
 
     private static (int Deleted, int Created, int UnresolvedRestrictions) SyncDefinitions(
@@ -2680,17 +2842,12 @@ public static class JmDictHelper
                 Misc = sense.Misc,
                 Field = sense.Field,
                 Dial = sense.Dial,
+                SenseInfo = sense.SenseInfo,
+                GlossTypes = sense.GlossTypes,
                 RestrictedToReadingIndices = restrictedIndices,
                 IsActiveInLatestSource = true,
                 PartsOfSpeech = sense.Pos.Concat(sense.Misc).Distinct().ToList(),
-                EnglishMeanings = sense.EnglishMeanings,
-                DutchMeanings = sense.DutchMeanings,
-                FrenchMeanings = sense.FrenchMeanings,
-                GermanMeanings = sense.GermanMeanings,
-                SpanishMeanings = sense.SpanishMeanings,
-                HungarianMeanings = sense.HungarianMeanings,
-                RussianMeanings = sense.RussianMeanings,
-                SlovenianMeanings = sense.SlovenianMeanings
+                EnglishMeanings = sense.EnglishMeanings
             };
 
             dbWord.Definitions.Add(def);
@@ -2803,19 +2960,16 @@ public static class JmDictHelper
                 Misc = sense.Misc,
                 Field = sense.Field,
                 Dial = sense.Dial,
+                SenseInfo = sense.SenseInfo,
+                GlossTypes = sense.GlossTypes,
                 RestrictedToReadingIndices = restrictedIndices,
                 IsActiveInLatestSource = true,
                 PartsOfSpeech = sense.Pos.Concat(sense.Misc).Distinct().ToList(),
-                EnglishMeanings = sense.EnglishMeanings,
-                DutchMeanings = sense.DutchMeanings,
-                FrenchMeanings = sense.FrenchMeanings,
-                GermanMeanings = sense.GermanMeanings,
-                SpanishMeanings = sense.SpanishMeanings,
-                HungarianMeanings = sense.HungarianMeanings,
-                RussianMeanings = sense.RussianMeanings,
-                SlovenianMeanings = sense.SlovenianMeanings
+                EnglishMeanings = sense.EnglishMeanings
             });
         }
+
+        ApplyEntryMetadata(word, entry);
 
         // Merge per-form priorities into word-level, preserving non-form-derived tags
         var customPri = (word.Priorities ?? [])
@@ -2876,15 +3030,21 @@ public static class JmDictHelper
         return lookups;
     }
 
-    private static async Task<List<SyncEntry>> ParseSyncEntries(string dtdPath, string dictionaryPath)
+    internal static async Task<SyncParseResult> ParseSyncEntries(string dtdPath, string dictionaryPath)
     {
         await LoadEntities(dtdPath, dictionaryPath);
+        _unknownSyncElements.Clear();
 
         var readerSettings = new XmlReaderSettings { Async = true, DtdProcessing = DtdProcessing.Parse, MaxCharactersFromEntities = 0 };
         XmlReader reader = XmlReader.Create(dictionaryPath, readerSettings);
         await reader.MoveToContentAsync();
 
-        var entries = new List<SyncEntry>();
+        var result = new SyncParseResult
+        {
+            Created = reader.GetAttribute("created"),
+            Version = reader.GetAttribute("version")
+        };
+        var entries = result.Entries;
 
         while (await reader.ReadAsync())
         {
@@ -2909,8 +3069,17 @@ public static class JmDictHelper
                         case "r_ele":
                             entry.KanaForms.Add(await ParseSyncREle(reader));
                             break;
+                        case "lsource":
+                            entry.LanguageSources.Add(ReadLanguageSource(reader));
+                            break;
+                        case "info":
+                            entry.EntryInfos.Add(ReadEntryInfo(reader));
+                            break;
                         case "sense":
                             entry.Senses.Add(await ParseSyncSense(reader, senseIndex++));
+                            break;
+                        default:
+                            NoteSyncElement(reader.Name);
                             break;
                     }
                 }
@@ -2929,7 +3098,37 @@ public static class JmDictHelper
         }
 
         reader.Close();
-        return entries;
+
+        if (_unknownSyncElements.Count > 0)
+        {
+            Console.WriteLine("WARNING: unrecognized XML elements encountered (not imported):");
+            foreach (var kv in _unknownSyncElements.OrderByDescending(k => k.Value))
+                Console.WriteLine($"  <{kv.Key}> x{kv.Value}");
+        }
+
+        return result;
+    }
+
+    private static SyncLanguageSource ReadLanguageSource(XmlReader reader)
+    {
+        var lang = reader.GetAttribute("xml:lang") ?? "eng";
+        var lsType = reader.GetAttribute("ls_type");
+        var wasei = reader.GetAttribute("ls_wasei");
+        var text = reader.ReadElementString().Trim();
+        return new SyncLanguageSource
+        {
+            Lang = lang,
+            Text = text,
+            IsWasei = wasei == "y",
+            IsPartial = lsType == "part"
+        };
+    }
+
+    private static SyncEntryInfo ReadEntryInfo(XmlReader reader)
+    {
+        var type = reader.GetAttribute("inf_type") ?? "note";
+        var text = reader.ReadElementString().Trim();
+        return new SyncEntryInfo { Type = type, Text = text };
     }
 
     private static async Task<SyncForm> ParseSyncKEle(XmlReader reader)
@@ -3024,23 +3223,32 @@ public static class JmDictHelper
                     case "dial":
                         sense.Dial.Add(ElToPos(reader.ReadElementString()));
                         break;
+                    case "s_inf":
+                        sense.SenseInfo.Add(await reader.ReadElementContentAsStringAsync());
+                        break;
+                    case "xref":
+                    {
+                        var xref = ReadXref(reader);
+                        if (xref != null)
+                            sense.Xrefs.Add(xref);
+                        break;
+                    }
                     case "gloss" when reader.HasAttributes:
                     {
                         var lang = reader.GetAttribute("xml:lang");
+                        var gType = reader.GetAttribute("g_type");
                         var text = await reader.ReadElementContentAsStringAsync();
-                        switch (lang)
+                        // English-only cutover: non-English glosses are dropped.
+                        if (lang == "eng")
                         {
-                            case "eng": sense.EnglishMeanings.Add(text); break;
-                            case "dut": sense.DutchMeanings.Add(text); break;
-                            case "fre": sense.FrenchMeanings.Add(text); break;
-                            case "ger": sense.GermanMeanings.Add(text); break;
-                            case "spa": sense.SpanishMeanings.Add(text); break;
-                            case "hun": sense.HungarianMeanings.Add(text); break;
-                            case "rus": sense.RussianMeanings.Add(text); break;
-                            case "slv": sense.SlovenianMeanings.Add(text); break;
+                            sense.EnglishMeanings.Add(text);
+                            sense.GlossTypes.Add(gType ?? "");
                         }
                         break;
                     }
+                    default:
+                        NoteSyncElement(reader.Name);
+                        break;
                 }
             }
 
@@ -3050,6 +3258,37 @@ public static class JmDictHelper
 
         return sense;
     }
+
+    /// <summary>Reads a single &lt;xref&gt; element's attributes + display text into a SyncXref.</summary>
+    private static SyncXref? ReadXref(XmlReader reader)
+    {
+        var type = reader.GetAttribute("type") ?? "see";
+        var seqStr = reader.GetAttribute("seq");
+        var snoStr = reader.GetAttribute("sno");
+        var xk = reader.GetAttribute("xk");
+        var xr = reader.GetAttribute("xr");
+        var dict = reader.GetAttribute("dict");
+        var raw = reader.ReadElementString().Trim();
+
+        var xref = new SyncXref
+        {
+            Type = type,
+            Xk = string.IsNullOrEmpty(xk) ? null : xk,
+            Xr = string.IsNullOrEmpty(xr) ? null : xr,
+            Dict = string.IsNullOrEmpty(dict) ? null : dict,
+            RawText = raw
+        };
+        if (int.TryParse(seqStr, out var seq)) xref.Seq = seq;
+        if (short.TryParse(snoStr, out var sno)) xref.Sno = sno;
+        return xref;
+    }
+
+    private static CrossReferenceType ParseXrefType(string type) => type switch
+    {
+        "ant" => CrossReferenceType.Antonym,
+        "syn" => CrossReferenceType.Synonym,
+        _ => CrossReferenceType.SeeAlso
+    };
 
     public static async Task<bool> ImportPitchAccents(bool verbose, IDbContextFactory<JitenDbContext> contextFactory,
                                                       string pitchAcentsDirectoryPath)

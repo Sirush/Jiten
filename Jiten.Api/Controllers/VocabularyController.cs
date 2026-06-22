@@ -79,6 +79,10 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         if (word == null)
             return Results.NotFound();
 
+        var xrefs = await ctx1.JmDictCrossReferences.AsNoTracking()
+                              .Where(x => x.FromWordId == wordId)
+                              .ToListAsync();
+
         var wordForms = await wordFormsTask;
         var mainForm = wordForms.FirstOrDefault(wf => wf.ReadingIndex == readingIndex);
         if (mainForm == null)
@@ -101,11 +105,13 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         return Results.Ok(new WordDto
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
-                              Definitions = word.Definitions.ToDefinitionDtos(), PartsOfSpeech = word.PartsOfSpeech,
+                              Definitions = word.Definitions.ToDefinitionDtos(xrefs.ToXrefsBySense()), PartsOfSpeech = word.PartsOfSpeech,
                               PitchAccents = word.PitchAccents, KnownStates = await knownStatesTask,
                               ComposedOf = await composedOfTask,
                               UsedIn = usedInTask.Result.Items,
-                              UsedInTotal = usedInTask.Result.Total
+                              UsedInTotal = usedInTask.Result.Total,
+                              LanguageSources = word.LanguageSources.ToDto(),
+                              EntryInfo = word.EntryInfo.Count > 0 ? word.EntryInfo.Select(e => e.Text).ToList() : null
                           });
     }
 
@@ -139,6 +145,10 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         if (word == null)
             return Results.NotFound();
 
+        var xrefs = await ctx1.JmDictCrossReferences.AsNoTracking()
+                              .Where(x => x.FromWordId == wordId)
+                              .ToListAsync();
+
         var wordForms = await wordFormsTask;
         var mainForm = wordForms.FirstOrDefault(wf => wf.ReadingIndex == readingIndex);
         if (mainForm == null)
@@ -160,10 +170,12 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         return Results.Ok(new WordDto
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
-                              Definitions = word.Definitions.ToDefinitionDtos(), PartsOfSpeech = word.PartsOfSpeech,
+                              Definitions = word.Definitions.ToDefinitionDtos(xrefs.ToXrefsBySense()), PartsOfSpeech = word.PartsOfSpeech,
                               PitchAccents = word.PitchAccents, ComposedOf = await composedOfTask,
                               UsedIn = usedInTask.Result.Items,
-                              UsedInTotal = usedInTask.Result.Total
+                              UsedInTotal = usedInTask.Result.Total,
+                              LanguageSources = word.LanguageSources.ToDto(),
+                              EntryInfo = word.EntryInfo.Count > 0 ? word.EntryInfo.Select(e => e.Text).ToList() : null
                           });
     }
 

@@ -16,6 +16,20 @@ public class WordDto
     public List<WordSummaryDto>? ComposedOf { get; set; }
     public List<WordSummaryDto>? UsedIn { get; set; }
     public int UsedInTotal { get; set; }
+
+    /// <summary>lsource etymology / wasei entries (entry-level).</summary>
+    public List<LanguageSourceDto>? LanguageSources { get; set; }
+
+    /// <summary>Entry-level &lt;info&gt; notes.</summary>
+    public List<string>? EntryInfo { get; set; }
+}
+
+public class LanguageSourceDto
+{
+    public string Lang { get; set; } = "eng";
+    public string Text { get; set; } = "";
+    public bool IsWasei { get; set; }
+    public bool IsPartial { get; set; }
 }
 
 public class UsedInPageDto

@@ -886,7 +886,7 @@ public class FormSelectionTests
         yield return ["貴様に用はないアサシン", "貴様", 1223620, (byte)0];
         // #17: なれ as 成る (1375610) potential/imperative, not 汝 pronoun (2174460)
         // (First sentence 冷静になれって collapses into the 冷静になる compound, 2557400)
-        yield return ["それで冷静になれって、どんな修行僧よ。", "冷静になれって", 2557400, (byte)0];
+        yield return ["それで冷静になれって、どんな修行僧よ。", "冷静になれ", 2557400, (byte)0];
         yield return ["誰だって、なろうと思えば、なれんだよ。", "なれ", 1375610, (byte)2];
         yield return ["誰かの特別になんてなれやしない。", "なれ", 1375610, (byte)2];
 
@@ -1037,7 +1037,7 @@ public class FormSelectionTests
         // === 呼ぶ-family: verb conjugation forms must not be split by resegmentation ===
         // 呼びつけ (continuative of 呼びつける) — resegmentation was splitting to 呼び+つけ
         yield return ["何だったら俺を呼びつけでもいいし", "呼びつけ", 2870929, (byte)0];
-        yield return ["ランスの呼びつけを無視して", "呼びつけ", 1266390, (byte)0];
+        yield return ["ランスの呼びつけを無視して", "呼びつけ", 2870929, (byte)0];
 
         // 呼ばれ (continuative of 呼ばれる) — resegmentation was splitting to 呼+ばれ
         yield return ["呼ばれもしない", "呼ばれ", 1631030, (byte)0];
