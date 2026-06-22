@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Utils;
 using WanaKanaShaapu;
@@ -1005,7 +1006,7 @@ public partial class MorphologicalAnalyser
                 && KanaConverter.ToHiragana(w1.Text) == w1.DictionaryForm
                 && newList.Count > 0
                 && newList[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.Name
-                && IsAllKatakanaText(newList[^1].Text))
+                && JapaneseTextHelper.IsAllKatakana(newList[^1].Text))
             {
                 var prev = newList[^1];
                 var stolen = w1.Text[0].ToString();
@@ -1611,7 +1612,7 @@ public partial class MorphologicalAnalyser
                 // Colloquial 〜ておこう contraction: Sudachi splits [verb-stem] + と(particle) + こう(adverb)
                 // e.g., ためとこう = ためておこう (let's save/store for now)
                 if (w1.PartOfSpeech == PartOfSpeech.Noun
-                    && IsAllHiraganaSpan(w1.Text.AsSpan())
+                    && JapaneseTextHelper.IsAllHiragana(w1.Text)
                     && w2 is { Text: "と", PartOfSpeech: PartOfSpeech.Particle }
                     && w3 is { Text: "こう", PartOfSpeech: PartOfSpeech.Adverb }
                     && HasCompoundLookup != null)
@@ -2493,14 +2494,6 @@ public partial class MorphologicalAnalyser
 
     private static bool IsKatakanaTextChar(char c) => c is (>= 'ァ' and <= 'ヺ') or 'ー';
 
-    private static bool IsAllKatakanaText(string s)
-    {
-        if (s.Length == 0) return false;
-        foreach (var c in s)
-            if (!IsKatakanaTextChar(c)) return false;
-        return true;
-    }
-
     // True when text deconjugates in exactly one step to a clause-final conjugation
     // (imperative/volitional) of a real JMDict word. Stem/infinitive chains are rejected so
     // genuine te-forms (信じきって) never match while quotative re-cuts (信じろ+って) do.
@@ -2774,7 +2767,7 @@ public partial class MorphologicalAnalyser
             // before っ; if prev + K is a real JMDict katakana word the split is spurious, so reattach K
             // and hand って back. The lookup gate keeps genuine katakana verbs (サボってる) and complete
             // words untouched (they never leave a katakana fragment as the previous token).
-            if (result.Count > 0 && IsAllKatakanaText(result[^1].Text) && HasNonNameCompoundLookup != null)
+            if (result.Count > 0 && JapaneseTextHelper.IsAllKatakana(result[^1].Text) && HasNonNameCompoundLookup != null)
             {
                 var cur = wordInfos[i].Text;
                 int kl = 0;
@@ -3139,7 +3132,7 @@ public partial class MorphologicalAnalyser
             // A mid-katakana cut before って is never a real boundary, so shape alone suffices
             // (covers OOV names too).
             if (stripped.Length == 1 && stripped[0] != 'ー' && IsKatakanaTextChar(stripped[0])
-                && prev != null && IsAllKatakanaText(prev.Text))
+                && prev != null && JapaneseTextHelper.IsAllKatakana(prev.Text))
             {
                 var mergedKatakana = prev.Text + stripped;
                 result[^1] = new WordInfo(prev)
@@ -3451,7 +3444,7 @@ public partial class MorphologicalAnalyser
                 for (int j = i; j < i + spanLen; j++)
                 {
                     var w = wordInfos[j];
-                    if (!IsAllHiraganaSpan(w.Text) ||
+                    if (!JapaneseTextHelper.IsAllHiragana(w.Text) ||
                         PosMapper.IsInflectableBase(w.PartOfSpeech) ||
                         w.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary
                             or PartOfSpeech.Prefix or PartOfSpeech.Suffix or PartOfSpeech.NounSuffix

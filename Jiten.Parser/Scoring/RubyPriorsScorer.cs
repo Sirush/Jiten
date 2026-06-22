@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 
@@ -36,14 +37,6 @@ internal static class RubyPriorsScorer
             or PartOfSpeech.Symbol or PartOfSpeech.SupplementarySymbol or PartOfSpeech.BlankSpace
             or PartOfSpeech.Filler);
 
-    private static bool IsAllKatakana(string text)
-    {
-        foreach (var c in text)
-            if (c is not (>= 'ァ' and <= 'ヶ' or 'ー'))
-                return false;
-        return text.Length > 0;
-    }
-
     private static bool WordHasMatchingForm(JmDictWord word, string surface)
     {
         foreach (var form in word.Forms)
@@ -55,7 +48,7 @@ internal static class RubyPriorsScorer
     private static bool ShouldUseKanaReverse(FormCandidate candidate, FormScoringContext context)
     {
         if (!context.IsKanaSurface) return false;
-        if (!IsAllKatakana(context.Surface)) return true;
+        if (!JapaneseTextHelper.IsAllKatakana(context.Surface)) return true;
         return WordHasMatchingForm(candidate.Word, context.Surface);
     }
 

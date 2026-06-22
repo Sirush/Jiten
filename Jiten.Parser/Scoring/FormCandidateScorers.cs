@@ -290,7 +290,7 @@ internal static class SurfaceScorer
             // different word (ある verb vs アル=二 numeral; まま vs ママ "mom"), not a kana spelling variant —
             // give only a small bonus so the same-script (hiragana) match wins. The reverse direction
             // (katakana surface → hiragana/kanji kana form, e.g. gairaigo written in kana) keeps the bonus.
-            if (IsAllHiragana(surface) && IsAllKatakana(formText))
+            if (JapaneseTextHelper.IsAllHiragana(surface) && JapaneseTextHelper.IsAllKatakana(formText))
                 score += 40;
             else
                 score += KanaScoringHelpers.IsPureKanaScriptDifference(surface, formText) ? 280 : 120;
@@ -311,22 +311,6 @@ internal static class SurfaceScorer
         }
 
         return score;
-    }
-
-    private static bool IsAllHiragana(string s)
-    {
-        if (s.Length == 0) return false;
-        foreach (var c in s)
-            if (c is < 'ぁ' or > 'ゖ') return false;
-        return true;
-    }
-
-    private static bool IsAllKatakana(string s)
-    {
-        if (s.Length == 0) return false;
-        foreach (var c in s)
-            if (c is < 'ァ' or > 'ヿ') return false;
-        return true;
     }
 }
 

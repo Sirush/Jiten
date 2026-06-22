@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 using WanaKanaShaapu;
 
@@ -613,13 +614,6 @@ public partial class MorphologicalAnalyser
         ("た", "タ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
     ];
 
-    private static bool IsAllHiraganaSpan(ReadOnlySpan<char> text)
-    {
-        foreach (var c in text)
-            if (c is < '぀' or > 'ゟ') return false;
-        return text.Length > 0;
-    }
-
     private static bool DeconjugatesToVerb(string hiragana)
     {
         foreach (var f in Deconjugator.Instance.Deconjugate(hiragana))
@@ -637,7 +631,7 @@ public partial class MorphologicalAnalyser
         if (w.Text.Length < 3) return false;
         if (w.PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Interjection or PartOfSpeech.Filler))
             return false;
-        if (!IsAllHiraganaSpan(w.Text.AsSpan())) return false;
+        if (!JapaneseTextHelper.IsAllHiragana(w.Text)) return false;
         if (w.NormalizedForm != w.Text) return false;
 
         foreach (var marker in OovGrammarMarkers)

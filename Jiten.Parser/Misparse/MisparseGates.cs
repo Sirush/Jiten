@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using WanaKanaShaapu;
@@ -106,20 +107,13 @@ internal static class MisparseGates
         return next.Reading.StartsWith(katakana, StringComparison.Ordinal);
     }
 
-    private static bool IsAllKatakana(string text)
-    {
-        foreach (var c in text)
-            if (c is < '゠' or > 'ヿ') return false;
-        return text.Length > 0;
-    }
-
     private static bool IsShortKanaNameWithoutContext(in MisparseGateContext ctx)
     {
         if (!WanaKana.IsKana(ctx.Token.Text)) return false;
         if (ctx.Token.Text.Length > 2) return false;
         if (!ctx.SelectedWord.PartsOfSpeech.Contains(PartOfSpeech.Name)) return false;
         if (ctx.Token.IsPersonNameContext) return false;
-        if (IsAllKatakana(ctx.Token.Text)) return false;
+        if (JapaneseTextHelper.IsAllKatakana(ctx.Token.Text)) return false;
 
         return true;
     }
@@ -152,7 +146,7 @@ internal static class MisparseGates
 
         if (ctx.ReadingIsIchi) return false;
 
-        if (IsAllKatakana(surface)) return false;
+        if (JapaneseTextHelper.IsAllKatakana(surface)) return false;
 
         if (ctx.Next != null && IsGrammaticalFollower(ctx.Next.Text))
             return false;
