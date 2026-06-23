@@ -97,6 +97,19 @@ export function abbreviatePos(pos: string): string {
   return pos;
 }
 
+// Canonical display order — JMdict's per-sense POS order is editor-entered and inconsistent
+// (e.g. [adj-no, n] on one sense, [n, adj-no] on the next). Sort by position in the map above
+// (noun → adjective → adverb → verb → …) so it reads consistently and the POS header dedupes.
+const posOrderKeys = Object.keys(posAbbreviationMap).map((k) => k.toLowerCase());
+export function posSortKey(pos: string): number {
+  const i = posOrderKeys.indexOf(pos.toLowerCase());
+  return i === -1 ? posOrderKeys.length : i;
+}
+
+export function sortPos(pos: string[]): string[] {
+  return [...pos].sort((a, b) => posSortKey(a) - posSortKey(b));
+}
+
 const posTypeColors: Record<string, string> = {
   n: 'blue',
   v: 'green',

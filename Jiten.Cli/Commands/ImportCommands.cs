@@ -77,7 +77,9 @@ public class ImportCommands(CliContext context)
         }
 
         Console.WriteLine("Syncing JMNedict entries with database...");
-        await JmDictHelper.SyncMissingJMNedict(context.ContextFactory, options.XmlPath, options.SyncJMNedict!);
+        var reportPath = options.DryRun ? (options.Output ?? "jmnedict-sync-changes.txt") : null;
+        await JmDictHelper.SyncMissingJMNedict(context.ContextFactory, options.XmlPath, options.SyncJMNedict!,
+            options.DryRun, reportPath);
         Console.WriteLine("JMNedict sync complete.");
     }
 

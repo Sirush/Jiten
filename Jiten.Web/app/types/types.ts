@@ -177,6 +177,24 @@ export interface Word {
   composedOf?: WordSummary[];
   usedIn?: WordSummary[];
   usedInTotal?: number;
+  languageSources?: LanguageSource[];
+  entryInfo?: string[];
+}
+
+export interface LanguageSource {
+  lang: string;
+  text: string;
+  isWasei: boolean;
+  isPartial: boolean;
+}
+
+export interface CrossReference {
+  type: string; // see | ant | syn
+  targetWordId?: number;
+  targetText: string;
+  targetKanji?: string;
+  targetReading?: string;
+  targetSenseIndex?: number;
 }
 
 export interface UsedInPage {
@@ -203,6 +221,10 @@ export interface Definition {
   restrictedToReadingIndices?: number[];
   dial?: string[];
   field?: string[];
+  misc?: string[];
+  senseInfo?: string[];
+  glossTypes?: string[];
+  crossReferences?: CrossReference[];
 }
 
 export interface PaginatedResponse<T> {

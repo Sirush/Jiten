@@ -105,6 +105,10 @@ public partial class MorphologicalAnalyser
         ("誰", "も", PartOfSpeech.Expression),
         ("誰", "か", PartOfSpeech.Expression),
         ("すぐ", "に", PartOfSpeech.Adverb),
+        ("たしか", "に", PartOfSpeech.Adverb),
+        ("ただ", "今", PartOfSpeech.Adverb),
+        ("ところ", "で", PartOfSpeech.Conjunction),
+        ("度", "に", PartOfSpeech.Expression),
         ("なん", "か", PartOfSpeech.Particle),
         ("なん", "て", PartOfSpeech.Particle),
         ("だっ", "た", PartOfSpeech.Expression),
@@ -221,6 +225,8 @@ public partial class MorphologicalAnalyser
         ("ばかり", "に", PartOfSpeech.Expression), // ばかりに 1010250 "(just) because"
         ("それ", "では", PartOfSpeech.Conjunction), // それでは 1406050 "well then" (mirrors それじゃ)
         ("に", "対して", PartOfSpeech.Expression), // に対して 1009800 (mirrors について/にとって)
+        ("いい", "ぞ", PartOfSpeech.Interjection),
+        ("に", "よって", PartOfSpeech.Expression)
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];

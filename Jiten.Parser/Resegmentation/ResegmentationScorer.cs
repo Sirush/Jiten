@@ -64,7 +64,8 @@ internal static class ResegmentationScorer
         string spanText,
         Dictionary<string, List<int>> lookups,
         Dictionary<int, int>? frequencyRanks = null,
-        int beamWidth = BeamWidth)
+        int beamWidth = BeamWidth,
+        bool forbidFullSpanEdge = false)
     {
         if (spanText.Length == 0 || spanText.Length > MaxSpanLength)
             return null;
@@ -82,6 +83,10 @@ internal static class ResegmentationScorer
                 continue;
 
             var edges = BuildEdges(spanText, pos, lookups);
+            // Drop the trivial whole-span edge: for a name-only span it just re-finds the bad name,
+            // so only genuine multi-segment paths should remain.
+            if (forbidFullSpanEdge && pos == 0)
+                edges.RemoveAll(e => e.Length == spanText.Length);
             if (debug)
                 Console.WriteLine($"[reseg] '{spanText}' pos={pos} states={states.Count} edges: " +
                                   string.Join(", ", edges.Select(e => $"{spanText.Substring(e.StartChar, e.Length)}({e.WordIds.Count})")));

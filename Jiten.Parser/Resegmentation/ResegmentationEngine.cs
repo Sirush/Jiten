@@ -23,7 +23,7 @@ internal static class ResegmentationEngine
 
         foreach (var sentence in sentences)
         {
-            var spans = UncertaintyDetector.FindSpans(sentence, lookups, protectedSurfaces);
+            var spans = UncertaintyDetector.FindSpans(sentence, lookups, wordMeta, protectedSurfaces);
             if (spans.Count == 0) continue;
 
             foreach (var span in spans.OrderByDescending(s => s.WordIndex))
@@ -40,7 +40,8 @@ internal static class ResegmentationEngine
                 }
                 else
                 {
-                    path = ResegmentationScorer.FindBestPath(span.Text, lookups, frequencyRanks);
+                    path = ResegmentationScorer.FindBestPath(span.Text, lookups, frequencyRanks,
+                                                             forbidFullSpanEdge: span.NameOnly);
                     var rejection = path switch
                     {
                         null => "no path found",

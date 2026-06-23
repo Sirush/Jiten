@@ -52,7 +52,8 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"([ァ-ヴ]ンッ)(?=[ァ-ヴぁ-ゔ\p{IsCJKUnifiedIdeographs}])")]
     private static partial Regex KatakanaInterjectionTsuRegex();
 
-    [GeneratedRegex(@"どし(?=[たてよ])")]
+    // Guard: in particle など (本などして) the ど is the 2nd mora of など, not colloquial どし(た/て/よ).
+    [GeneratedRegex(@"(?<!な)どし(?=[たてよ])")]
     private static partial Regex ColloquialDoshiRegex();
 
     // ー followed by っ/っ after hiragana is emphatic/expressive (けどーっ → けど, 写るーっ → 写る)
@@ -65,6 +66,17 @@ public partial class MorphologicalAnalyser
     // so the boundary is always real — Sudachi otherwise shreds 黙れェ into 黙|れ|ェ.
     [GeneratedRegex(@"(?<=[ぁ-ゖ])([ァィゥェォ]+[っッ]?)|(?<=[ァ-ヴ])([ぁぃぅぇぉ]+[っッ]?)")]
     private static partial Regex ScriptCrossingSmallVowelRegex();
+
+    // Same-script hiragana small-vowel elongation that defeats Sudachi (撃てぇ→撃|てぇ, 急げぇぇ→急|げぇぇ,
+    // 移れぇぇ, 続けぇ, 行けぇぇ, 考えやがれぇ, 気をつけぇ). Two safe shapes (ぁぃぅぇぉ are vowel smalls, not the
+    // digraph smalls ゃゅょゎ, so neither touches きゃ/しょ/ちゅ):
+    //  (a) a RUN of ≥2 small vowels is unambiguous elongation — delete it.
+    [GeneratedRegex(@"(?<=[ぁ-ゖ])[ぁぃぅぇぉ]{2,}")]
+    private static partial Regex SameScriptSmallVowelRunRegex();
+    //  (b) a single small vowel right before っ/ッ at clause end is the shouted-imperative shape
+    //      (撃てぇっ!) — drop the small vowel, keep the sokuon. Protects てめぇの / すげぇ! / 食べてぇ / ねぇ.
+    [GeneratedRegex(@"(?<=[ぁ-ゖ])[ぁぃぅぇぉ]([っッ]+)(?=[\s\n]|$)")]
+    private static partial Regex ShoutedImperativeSmallVowelRegex();
 
     // Comma-separated stutter fragment attached to the word it stutters: ぼ、ぼく / ぼっ、ぼぼ僕 / ば、ばっか.
     // The fragment must not be preceded by kana or kanji: stutters follow punctuation/quotes/start,
@@ -84,6 +96,45 @@ public partial class MorphologicalAnalyser
     // so (normal kana + small kana) captures exactly one digraph mora.
     [GeneratedRegex(@"([ぁ-んァ-ヶ][ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ])([\sっッ]*\1){2,}")]
     private static partial Regex StutteringDigraphRunRegex();
+
+    // 〜通り/〜どおり directly before quotative って: keep the compound whole (計画通り|って) instead of
+    // letting って's gemination steal the り (計画+通+りって).
+    [GeneratedRegex(@"(?<=通り|どおり)(?=って)")]
+    private static partial Regex TooriQuotativeRegex();
+
+    // A trailing hiragana long vowel (じゃ+あ) glued onto a following katakana word: Sudachi shifts the
+    // boundary one char right (じゃ+あア→interjection ああ + ヒル), shredding アヒル. Re-assert the boundary.
+    [GeneratedRegex(@"(?<=[ぁ-ゖ][あぁ])(?=[ァ-ヴ])")]
+    private static partial Regex VowelTailKatakanaBoundaryRegex();
+
+    // もし (if/perhaps) directly before a katakana run: Sudachi prefers the spurious token もしカ (2133220)
+    // and steals the leading mora of an OOV katakana name (もしカ|ティア instead of もし|カティア), which the
+    // name lookup then can't resolve. もし never forms a compound with a following katakana, so force the
+    // boundary — this recovers ANY katakana name after もし, not one hardcoded entry. もしも/もしか/もしかして
+    // are followed by hiragana, so the katakana lookahead leaves them untouched.
+    [GeneratedRegex(@"もし(?=[ァ-ヴ])")]
+    private static partial Regex MoshiKatakanaBoundaryRegex();
+
+    // A case particle を/へ directly before a quotative って: Sudachi fuses them into a bogus verb token
+    // (あんなことを、って → こと + をって[Verb], which is then dropped). No Japanese word contains をって/へって,
+    // so forcing the boundary is always correct — generalises the literal にって split for the safe particles.
+    [GeneratedRegex(@"(?<=[をへ])(?=って)")]
+    private static partial Regex CaseParticleTteRegex();
+
+    // Colloquial っしょ (=でしょ) after an i-adjective (すごい|っしょ, いい|っしょ). ColloquialSshoRegex's
+    // (?<!い) guard protects 一緒 but also blocks adjective+っしょ; this branch splits when a hiragana
+    // precedes the final い, excluding と so 〜と一緒/ずっと一緒 stay whole.
+    [GeneratedRegex(@"(?<=[ぁ-ゖ]い)(?<!とい)っしょ[ーう]?(?=[\s\n]|$)")]
+    private static partial Regex IAdjSshoRegex();
+
+    // こいつ/そいつ/あいつ/どいつ + って: Sudachi shreds the つ into つっ (こい|つっ|て). Force the boundary
+    // so the pronoun stays whole and って is the particle (こいつ + ってば).
+    [GeneratedRegex(@"([こそあど]いつ)って")]
+    private static partial Regex DemonstrativePronounTteRegex();
+
+    // 景気づけよ → 景気づけ (景気付け 2010780) + よ; NOT the volitional 景気づけよう.
+    [GeneratedRegex(@"景気づけよ(?!う)")]
+    private static partial Regex KeikizukeYoRegex();
 
     private void PreprocessText(ref string text, bool preserveStopToken, out int rawContentCharCount)
     {
@@ -117,6 +168,8 @@ public partial class MorphologicalAnalyser
         text = EmphLongVowelKanjiHiraganaRegex().Replace(text, "");
         text = EmphLongVowelSokuonRegex().Replace(text, "");
         text = ScriptCrossingSmallVowelRegex().Replace(text, $"{_stopToken}$1$2");
+        text = SameScriptSmallVowelRunRegex().Replace(text, "");
+        text = ShoutedImperativeSmallVowelRegex().Replace(text, "$1");
 
         text = StutterFragmentRegex().Replace(text, "");
         text = StutteringDigraphRunRegex().Replace(text, "");
@@ -144,6 +197,28 @@ public partial class MorphologicalAnalyser
             // すぐそこ (user_dic) must not eat the すぐ of もうすぐ
             .Replace("もうすぐそこ", $"もうすぐ{_stopToken}そこ")
             ;
+
+        // Forced boundaries where Sudachi mis-cuts a colloquial/compound run.
+        // (すいませんでした is handled lexically by the existing user_dic すいません 表現 entry; すみません
+        //  needs the split because the kana string collides with the verb 済む — 済みませんでした.)
+        text = text
+            .Replace("すみませんでした", $"すみません{_stopToken}でした")  // すみ|ませんでした → すみません|でした (kana-only; verb 済 is kanji)
+            .Replace("この世界", $"この{_stopToken}世界")                  // この世+界 → この|世界
+            .Replace("だけって", $"だけ{_stopToken}って")                  // 広がっ+ただけ phantom けっ → だけ|って
+            .Replace("ははーん", "ははん")                                // は+はーん(ハーン khan) → ははん(2096970)
+            .Replace("にって", $"に{_stopToken}って")                     // にっ+てこ blob → に + って + こと
+            .Replace("なんかいな", $"なんか{_stopToken}いな")             // なんか+い stolen → なんか + いない
+            .Replace("繋がりって", $"繋がり{_stopToken}って")             // 繋|が|り shredded by って → 繋がり + って
+            .Replace("んったら", $"ん{_stopToken}ったら")                 // ちゃ|んっ|たら → ちゃん + ったら
+            .Replace("にいる", $"に{_stopToken}いる")                     // にいる(name 5408860) → に + いる(居る)
+            .Replace("さっきこ", $"さっき{_stopToken}こ")                 // さっきこ→name さきこ(咲子) via sokuon-norm → さっき + こ(この/これ/ここ)
+            .Replace("ないっていう", $"ない{_stopToken}っていう");         // って must not attach left into 〜ない expr
+        text = TooriQuotativeRegex().Replace(text, _stopToken);
+        text = VowelTailKatakanaBoundaryRegex().Replace(text, _stopToken);
+        text = MoshiKatakanaBoundaryRegex().Replace(text, $"もし{_stopToken}");
+        text = CaseParticleTteRegex().Replace(text, _stopToken);
+        text = DemonstrativePronounTteRegex().Replace(text, $"$1{_stopToken}って");
+        text = KeikizukeYoRegex().Replace(text, $"景気づけ{_stopToken}よ");
 
         text = text.Replace('頚', '頸');
 
@@ -204,6 +279,7 @@ public partial class MorphologicalAnalyser
         text = text.Replace("でもちょっと", $"でも{_stopToken}ちょっと");
         text = text.Replace("できんよう", $"できん{_stopToken}よう");
         text = ColloquialSshoRegex().Replace(text, $"{_stopToken}っしょ");
+        text = IAdjSshoRegex().Replace(text, $"{_stopToken}っしょ");
 
         text = ColloquialDoshiRegex().Replace(text, "どうし");
         text = ColloquialYuuRegex().Replace(text, "いう");

@@ -759,6 +759,14 @@
     "detail": "presumptive"
   },
   {
+    "type": "onlyfinalrule",
+    "dec_end": [""],
+    "con_end": ["ろ"],
+    "dec_tag": ["stem-past"],
+    "con_tag": ["form-volition"],
+    "detail": "presumptive"
+  },
+  {
     "type": "stdrule",
     "dec_end": [""],
     "con_end": ["ない"],

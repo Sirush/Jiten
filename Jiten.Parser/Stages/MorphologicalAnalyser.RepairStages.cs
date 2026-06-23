@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Utils;
 using WanaKanaShaapu;
@@ -1005,7 +1006,7 @@ public partial class MorphologicalAnalyser
                 && KanaConverter.ToHiragana(w1.Text) == w1.DictionaryForm
                 && newList.Count > 0
                 && newList[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.Name
-                && IsAllKatakanaText(newList[^1].Text))
+                && JapaneseTextHelper.IsAllKatakana(newList[^1].Text))
             {
                 var prev = newList[^1];
                 var stolen = w1.Text[0].ToString();
@@ -1611,7 +1612,7 @@ public partial class MorphologicalAnalyser
                 // Colloquial 〜ておこう contraction: Sudachi splits [verb-stem] + と(particle) + こう(adverb)
                 // e.g., ためとこう = ためておこう (let's save/store for now)
                 if (w1.PartOfSpeech == PartOfSpeech.Noun
-                    && IsAllHiraganaSpan(w1.Text.AsSpan())
+                    && JapaneseTextHelper.IsAllHiragana(w1.Text)
                     && w2 is { Text: "と", PartOfSpeech: PartOfSpeech.Particle }
                     && w3 is { Text: "こう", PartOfSpeech: PartOfSpeech.Adverb }
                     && HasCompoundLookup != null)
@@ -1979,7 +1980,8 @@ public partial class MorphologicalAnalyser
                 // Restrict to kana 言 — the kanji form 言って almost always means the literal verb
                 // "to say" (e.g. そう言ってありがたい), while そういう/そういった as "such/that kind of"
                 // is conventionally written in kana.
-                if (w1.PartOfSpeech == PartOfSpeech.Adverb &&
+                if ((w1.PartOfSpeech == PartOfSpeech.Adverb
+                        || (w1.PartOfSpeech == PartOfSpeech.Interjection && w1.Text is "ああ" or "あー")) &&
                     w1.Text is "そう" or "こう" or "ああ" or "どう"
                              or "そー" or "こー" or "あー" or "どー" &&
                     w2.DictionaryForm is "いう" or "言う"
@@ -1999,21 +2001,33 @@ public partial class MorphologicalAnalyser
                 bool found = false;
                 if (SpecialCases2Dict.TryGetValue(w1.Text, out var sc2Candidates))
                 {
-                    // す+べき stays split after a suru-noun — す attaches left instead (満足す|べき)
-                    bool suBekiBlocked = w1.Text == "す" && i > 0 &&
-                        (wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
-                         wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun));
-
                     // か+い / だ+い stay split when the い is the 居る stem claimed by a following
                     // auxiliary (聞こえているのか|いない|のか) — merging would steal the verb stem.
                     bool kaIBlocked = w1.Text is "か" or "だ" && i + 2 < wordInfos.Count
                         && w2.DictionaryForm is "居る" or "いる"
                         && wordInfos[i + 2].Text is "ない" or "なかった" or "ます" or "た" or "て";
 
+                    // ところ+で → ところで (1343110) only sentence-initially or after a past form (〜たところで);
+                    // mid-sentence after a non-past stem it is the locative ところ + で (静かなところで, 今のところで).
+                    bool tokoroDeBlocked = w1.Text == "ところ" && i > 0 &&
+                        !(wordInfos[i - 1].Text.EndsWith("た", StringComparison.Ordinal) ||
+                          wordInfos[i - 1].Text.EndsWith("だ", StringComparison.Ordinal));
+
+                    // それ+じゃ stays split before a negative (それじゃない = それ + じゃない), not the conjunction それじゃ.
+                    bool soreJaBlocked = w1.Text is "それ" or "そん" or "そい" && w2.Text == "じゃ"
+                        && i + 2 < wordInfos.Count && wordInfos[i + 2].Text is "ない" or "なかっ" or "なかった";
+
+                    // 度+に → 度に (たびに, "each time", 1007270) only after a verb attributive (行う度に);
+                    // after a numeral it is the counter 度 + に (二度に分けて).
+                    bool doNiBlocked = w1.Text == "度" && w2.Text == "に"
+                        && !(i > 0 && wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb);
+
                     foreach (var sc in sc2Candidates)
                     {
-                        if (sc.Second == "べき" && suBekiBlocked) continue;
                         if (sc.Second == "い" && kaIBlocked) continue;
+                        if (sc.Second == "で" && tokoroDeBlocked) continue;
+                        if (sc.Second == "じゃ" && soreJaBlocked) continue;
+                        if (sc.Second == "に" && doNiBlocked) continue;
                         if (w2.Text == sc.Second
                             && !(sc.Pos == PartOfSpeech.Verb && w1.PartOfSpeech == PartOfSpeech.Conjunction))
                         {
@@ -2194,6 +2208,38 @@ public partial class MorphologicalAnalyser
             {
                 result.Add(word);
                 continue;
+            }
+
+            // A bare 連用形 noun (言い出し 2827230) is really a compound verb's stem when an orphaned past/te
+            // auxiliary follows: swap its final 連用形 kana to the godan dict ending (言い出し→言い出す) and, if
+            // that's a JMDict verb, reform the WHOLE token as the verb, absorbing the た/て (言い出した). This
+            // differs from the noun-SPLIT below (言い+出す would be wrong here).
+            // Only た/て: after a 連用形 noun, だ/で is the copula (手伝いだ "it's help"), not a verb past.
+            if (word is { PartOfSpeech: PartOfSpeech.Auxiliary, Text: "た" or "て" }
+                && result[^1] is { PartOfSpeech: PartOfSpeech.Noun } renyoNoun
+                && renyoNoun.Text.Length >= 2 && renyoNoun.DictionaryForm == renyoNoun.Text)
+            {
+                char dictEnd = renyoNoun.Text[^1] switch
+                {
+                    'し' => 'す', 'り' => 'る', 'き' => 'く', 'ぎ' => 'ぐ', 'み' => 'む',
+                    'び' => 'ぶ', 'に' => 'ぬ', 'ち' => 'つ', 'い' => 'う', _ => '\0'
+                };
+                if (dictEnd != '\0')
+                {
+                    string verbDict = renyoNoun.Text[..^1] + dictEnd;
+                    if (verbDict.Any(c => c is >= '一' and <= '龯') && HasCompoundLookup(verbDict))
+                    {
+                        result[^1] = new WordInfo(renyoNoun)
+                        {
+                            Text = renyoNoun.Text + word.Text,
+                            DictionaryForm = verbDict, NormalizedForm = verbDict,
+                            PartOfSpeech = PartOfSpeech.Verb,
+                            EndOffset = word.EndOffset
+                        };
+                        changed = true;
+                        continue;
+                    }
+                }
             }
 
             // Lattice expression units ending in だ (そりゃそうだ) eat the だ of a following だろう,
@@ -2448,14 +2494,6 @@ public partial class MorphologicalAnalyser
 
     private static bool IsKatakanaTextChar(char c) => c is (>= 'ァ' and <= 'ヺ') or 'ー';
 
-    private static bool IsAllKatakanaText(string s)
-    {
-        if (s.Length == 0) return false;
-        foreach (var c in s)
-            if (!IsKatakanaTextChar(c)) return false;
-        return true;
-    }
-
     // True when text deconjugates in exactly one step to a clause-final conjugation
     // (imperative/volitional) of a real JMDict word. Stem/infinitive chains are rejected so
     // genuine te-forms (信じきって) never match while quotative re-cuts (信じろ+って) do.
@@ -2637,6 +2675,34 @@ public partial class MorphologicalAnalyser
 
         for (int i = 0; i < wordInfos.Count; i++)
         {
+            // だって (single Conjunction/Particle token) + ば after a nominal is the copula だ + emphatic
+            // ってば (2130420), not the "even/after all" conjunction だって (ダルマザメだってば → だ + ってば).
+            if (i + 1 < wordInfos.Count
+                && wordInfos[i].Text == "だって"
+                && wordInfos[i].PartOfSpeech is PartOfSpeech.Conjunction or PartOfSpeech.Particle
+                && wordInfos[i + 1].Text == "ば"
+                && result.Count > 0
+                && result[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                    or PartOfSpeech.Pronoun or PartOfSpeech.Name or PartOfSpeech.Suffix)
+            {
+                var datte = wordInfos[i];
+                int mid = datte.StartOffset >= 0 ? datte.StartOffset + 1 : -1;
+                result.Add(new WordInfo(datte)
+                {
+                    Text = "だ", DictionaryForm = "だ", NormalizedForm = "だ", Reading = "ダ",
+                    PartOfSpeech = PartOfSpeech.Auxiliary, EndOffset = mid
+                });
+                result.Add(new WordInfo(datte)
+                {
+                    Text = "ってば", DictionaryForm = "ってば", NormalizedForm = "ってば", Reading = "ッテバ",
+                    PartOfSpeech = PartOfSpeech.Particle, PreMatchedWordId = 2130420,
+                    StartOffset = mid, EndOffset = wordInfos[i + 1].EndOffset
+                });
+                i++;
+                changed = true;
+                continue;
+            }
+
             // Sudachi mis-splits the colloquial particle だって (誰だって, 将校だって) into だっ (mis-tagged
             // as the verb だつ) + て after a noun/pronoun. The canonical だって handlers don't fire here —
             // SplitTatteParticle ran earlier (Split group) and is gated on a single だって token — so
@@ -2701,7 +2767,7 @@ public partial class MorphologicalAnalyser
             // before っ; if prev + K is a real JMDict katakana word the split is spurious, so reattach K
             // and hand って back. The lookup gate keeps genuine katakana verbs (サボってる) and complete
             // words untouched (they never leave a katakana fragment as the previous token).
-            if (result.Count > 0 && IsAllKatakanaText(result[^1].Text) && HasNonNameCompoundLookup != null)
+            if (result.Count > 0 && JapaneseTextHelper.IsAllKatakana(result[^1].Text) && HasNonNameCompoundLookup != null)
             {
                 var cur = wordInfos[i].Text;
                 int kl = 0;
@@ -3066,7 +3132,7 @@ public partial class MorphologicalAnalyser
             // A mid-katakana cut before って is never a real boundary, so shape alone suffices
             // (covers OOV names too).
             if (stripped.Length == 1 && stripped[0] != 'ー' && IsKatakanaTextChar(stripped[0])
-                && prev != null && IsAllKatakanaText(prev.Text))
+                && prev != null && JapaneseTextHelper.IsAllKatakana(prev.Text))
             {
                 var mergedKatakana = prev.Text + stripped;
                 result[^1] = new WordInfo(prev)
@@ -3152,6 +3218,25 @@ public partial class MorphologicalAnalyser
                 if (runLen > 0)
                 {
                     MergeRunInto(runLen, stripped, thief.EndOffset >= 0 ? thief.EndOffset - 1 : -1);
+                    AddTte(thief, wordInfos[i + 1]);
+                    i++;
+                    changed = true;
+                    continue;
+                }
+            }
+
+            // Kanji-noun mora theft, same shape one script over: って steals the tail kanji's mora and
+            // Sudachi re-reads the stem as a verb (必|要っ[要る]|て → 必要 + って; 重|要っ|て → 重要 + って).
+            // The hiragana pair-shape above is gated to a non-Verb thief and an all-hiragana stripped, so a
+            // kanji stripped reforms here via the same lookback. The WordReattachRunLength lookup gate is
+            // what keeps genuine kanji te-forms out: 家に帰って leaves prev = に, and に+帰 is not a JMDict
+            // word, so nothing reattaches; it only fires when prev + stripped is a real non-name compound.
+            if (stripped.Any(c => c is >= '一' and <= '鿿'))
+            {
+                int kanjiRun = WordReattachRunLength(stripped);
+                if (kanjiRun > 0)
+                {
+                    MergeRunInto(kanjiRun, stripped, thief.EndOffset >= 0 ? thief.EndOffset - 1 : -1);
                     AddTte(thief, wordInfos[i + 1]);
                     i++;
                     changed = true;
@@ -3359,7 +3444,7 @@ public partial class MorphologicalAnalyser
                 for (int j = i; j < i + spanLen; j++)
                 {
                     var w = wordInfos[j];
-                    if (!IsAllHiraganaSpan(w.Text) ||
+                    if (!JapaneseTextHelper.IsAllHiragana(w.Text) ||
                         PosMapper.IsInflectableBase(w.PartOfSpeech) ||
                         w.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary
                             or PartOfSpeech.Prefix or PartOfSpeech.Suffix or PartOfSpeech.NounSuffix

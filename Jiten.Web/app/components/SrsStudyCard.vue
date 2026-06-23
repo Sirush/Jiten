@@ -90,6 +90,25 @@
 
   const currentReadingIndex = computed(() => props.card.readingIndex);
 
+  const LANG_NAMES: Record<string, string> = {
+    eng: 'English', por: 'Portuguese', dut: 'Dutch', fre: 'French', ger: 'German', ita: 'Italian',
+    spa: 'Spanish', rus: 'Russian', chi: 'Chinese', kor: 'Korean', lat: 'Latin', gre: 'Greek',
+    ara: 'Arabic', heb: 'Hebrew', san: 'Sanskrit', tha: 'Thai', vie: 'Vietnamese', tur: 'Turkish',
+    pol: 'Polish', swe: 'Swedish', nor: 'Norwegian', hun: 'Hungarian', haw: 'Hawaiian', afr: 'Afrikaans',
+  };
+  const hasWasei = computed(() => wordData.value?.languageSources?.some((s) => s.isWasei) ?? false);
+  const etymologyLine = computed(() => {
+    const sources = wordData.value?.languageSources;
+    if (!sources || sources.length === 0) return '';
+    const parts = sources
+      .map((s) => {
+        const name = LANG_NAMES[s.lang] ?? s.lang;
+        return s.text ? `${name} ${s.text}` : name;
+      })
+      .filter((p) => p.length > 0);
+    return parts.length > 0 ? `from ${parts.join(' + ')}` : '';
+  });
+
   const pitchReadingText = computed(() => {
     if (wordData.value) return wordData.value.mainReading.text;
     const kanaReading = props.card.readings.find(r => r.formType === 1);
@@ -612,6 +631,19 @@
         tabindex="-1"
         class="mt-6 pt-6 border-t border-surface-200 dark:border-surface-700 focus:outline-none"
       >
+        <!-- Etymology / wasei (from lsource) -->
+        <div
+          v-if="wordData && wordData.languageSources && wordData.languageSources.length"
+          class="mb-3 flex flex-wrap items-center justify-center gap-2"
+        >
+          <span
+            v-if="hasWasei"
+            class="inline-block rounded-full px-2 py-0.5 text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
+            title="Japanese-made — constructed in Japanese from foreign words, not a real foreign phrase"
+          >和製 wasei</span>
+          <span v-if="etymologyLine" class="text-sm text-gray-500 dark:text-gray-400">{{ etymologyLine }}</span>
+        </div>
+
         <!-- Definitions -->
         <div class="mb-4">
           <template v-if="wordData">

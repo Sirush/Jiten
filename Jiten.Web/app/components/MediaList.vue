@@ -109,7 +109,7 @@
     charCount:           { default: SortOrder.Ascending,  asc: 'Shortest first',       desc: 'Longest first' },
     dialoguePercentage:  { default: SortOrder.Descending, asc: 'Least dialogue',       desc: 'Most dialogue' },
     speechSpeed:         { default: SortOrder.Ascending,  asc: 'Slowest first',        desc: 'Fastest first' },
-    speechDuration:      { default: SortOrder.Ascending,  asc: 'Shortest first',       desc: 'Longest first' },
+    speechDuration:      { default: SortOrder.Descending, asc: 'Shortest first',       desc: 'Longest first' },
     occurrences:         { default: SortOrder.Descending, asc: 'Fewest first',         desc: 'Most first' },
     filter:              { default: SortOrder.Descending, asc: 'Least relevant',       desc: 'Most relevant' },
   };

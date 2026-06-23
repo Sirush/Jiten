@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
 
 namespace Jiten.Core.Data.JMDict;
 
@@ -13,6 +14,30 @@ public class JmDictWord
     public List<string>? Priorities { get; set; } = [];
     public WordOrigin Origin { get; set; } = WordOrigin.Unknown;
     public List<JmDictWordForm> Forms { get; set; } = [];
+
+    /// <summary>lsource etymology / wasei info, stored as jsonb. Empty list when none.</summary>
+    public string? LanguageSourcesJson { get; set; }
+
+    /// <summary>Entry-level &lt;info&gt; notes, stored as jsonb. Empty list when none.</summary>
+    public string? EntryInfoJson { get; set; }
+
+    [NotMapped]
+    public List<JmDictLanguageSource> LanguageSources
+    {
+        get => string.IsNullOrEmpty(LanguageSourcesJson)
+            ? new List<JmDictLanguageSource>()
+            : JsonSerializer.Deserialize<List<JmDictLanguageSource>>(LanguageSourcesJson) ?? new();
+        set => LanguageSourcesJson = value is { Count: > 0 } ? JsonSerializer.Serialize(value) : null;
+    }
+
+    [NotMapped]
+    public List<JmDictEntryInfo> EntryInfo
+    {
+        get => string.IsNullOrEmpty(EntryInfoJson)
+            ? new List<JmDictEntryInfo>()
+            : JsonSerializer.Deserialize<List<JmDictEntryInfo>>(EntryInfoJson) ?? new();
+        set => EntryInfoJson = value is { Count: > 0 } ? JsonSerializer.Serialize(value) : null;
+    }
 
     [NotMapped]
     private List<PartOfSpeech>? _cachedPartsOfSpeech;

@@ -1,4 +1,5 @@
 using Jiten.Core.Data;
+using Jiten.Core.Data.JMDict;
 using Jiten.Parser.Diagnostics;
 
 namespace Jiten.Parser.Scoring;
@@ -153,7 +154,88 @@ internal static class FormCandidateSelector
         best = WordFrequencyPriors.Apply(best, allCandidates, context) ?? best;
         best = ApplyKanjiHomographPriorityCap(best, allCandidates, context) ?? best;
         best = ApplyArchaicExactSurfaceRescue(best, allCandidates, context) ?? best;
+        best = ApplySentenceFinalInterjection(best, allCandidates, context) ?? best;
+        best = ApplyJitenMinorKanaReadingCap(best, allCandidates, context) ?? best;
+        best = ApplyContractedCopulaExactSurface(best, allCandidates, context) ?? best;
         return best;
+    }
+
+    /// A contracted copula surface (奢りじゃ悪い → じゃ = では) gets matched to the plain copula だ
+    /// (2089020) via its dictionary form, displaying じゃ as だ. When a dedicated entry matches the
+    /// surface directly and is itself a copula (じゃ 2851029), prefer it so the contracted form keeps
+    /// its own identity. Gated on the pick being the copula matched from a different surface, so
+    /// genuine だ tokens and non-copula homographs are untouched.
+    public static FormCandidate? ApplyContractedCopulaExactSurface(
+        FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
+    {
+        if (!context.IsKanaSurface) return null;
+        if (context.Surface == best.Form.Text) return null;                       // best matched a contracted form
+        if (!best.Word.PartsOfSpeech.Any(p => p is "cop")) return null;
+
+        foreach (var c in allCandidates)
+        {
+            if (c.Word.WordId == best.Word.WordId) continue;
+            if (context.Surface != c.Form.Text) continue;                         // exact surface
+            if (c.DeconjForm?.Process is { Count: > 0 }) continue;                // direct match
+            if (c.Word.PartsOfSpeech.Any(p => p is "cop"))
+                return c;
+        }
+
+        return null;
+    }
+
+    /// The jiten word-boost reflects a high-frequency KANJI word's corpus weight. When the pick is
+    /// that boost landing on one of the word's minor kana readings (終/竟/遂 → つい "never"), and a
+    /// dedicated pure-kana entry with public frequency evidence matches the same surface (つい adv
+    /// 1008030, ichi1), defer to the dedicated entry. Gated on a pure-kana competitor so kanji
+    /// homophone disambiguation (ようかい → 妖怪 over 溶解) is untouched.
+    public static FormCandidate? ApplyJitenMinorKanaReadingCap(
+        FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
+    {
+        if (!context.IsKanaSurface) return null;
+        if (best.DeconjForm?.Process is { Count: > 0 } || context.Surface != best.Form.Text) return null;
+        if (best.Word.Priorities?.Contains("jiten") != true) return null;
+        if (best.Form.FormType != JmDictFormType.KanaForm) return null;
+        if (best.Word.PartsOfSpeech.Any(p => p is "uk")) return null;
+        if (!best.Word.Forms.Any(f => f.FormType == JmDictFormType.KanjiForm)) return null;
+
+        foreach (var c in allCandidates)
+        {
+            if (c.Word.WordId == best.Word.WordId) continue;
+            if (c.DeconjForm?.Process is { Count: > 0 } || context.Surface != c.Form.Text) continue;
+            if (c.Word.Forms.Any(f => f.FormType == JmDictFormType.KanjiForm)) continue;  // pure-kana entry only
+            if (c.Word.CachedPOS.Contains(PartOfSpeech.Name)) continue;
+            if (!KanaScoringHelpers.HasFrequencyMarker(c.Word.Priorities, includeJiten: false)) continue;
+            return c;
+        }
+
+        return null;
+    }
+
+    /// A standalone interjection written exactly as a sentence-final token (来い "come!") is almost
+    /// always the lexicalised interjection, not the homographic verb imperative the deconjugator also
+    /// produces (来い ← 来る). Flip to the interjection only when (a) the sentence ends here, (b) the
+    /// current pick reached the surface by deconjugating a verb, and (c) an interjection entry matches
+    /// the surface directly — so 来い mid-sentence and non-homograph imperatives (食べろ) are untouched.
+    public static FormCandidate? ApplySentenceFinalInterjection(
+        FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
+    {
+        if (!context.IsSentenceFinal)
+            return null;
+        if (best.DeconjForm?.Process is not { Count: > 0 }
+            || !KanaScoringHelpers.IsInflectableVerbOrAdj(best.Word.PartsOfSpeech))
+            return null;
+
+        foreach (var candidate in allCandidates)
+        {
+            if (candidate.Word.WordId == best.Word.WordId) continue;
+            if (candidate.DeconjForm?.Process is { Count: > 0 }) continue;   // direct surface match only
+            if (context.Surface != candidate.Form.Text) continue;            // exact surface
+            if (candidate.Word.PartsOfSpeech.Any(p => p is "int"))
+                return candidate;
+        }
+
+        return null;
     }
 
     /// An archaic word written exactly as its surface (人にあらざる) is self-evidently

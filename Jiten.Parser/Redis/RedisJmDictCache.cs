@@ -332,16 +332,11 @@ public class RedisJmDictCache : IJmDictCache
         foreach (var def in word.Definitions)
         {
             def.EnglishMeanings.Clear();
-            def.DutchMeanings.Clear();
-            def.FrenchMeanings.Clear();
-            def.GermanMeanings.Clear();
-            def.SpanishMeanings.Clear();
-            def.HungarianMeanings.Clear();
-            def.RussianMeanings.Clear();
-            def.SlovenianMeanings.Clear();
             def.Pos.Clear();
             def.Field.Clear();
             def.Dial.Clear();
+            def.SenseInfo.Clear();
+            def.GlossTypes.Clear();
         }
     }
 

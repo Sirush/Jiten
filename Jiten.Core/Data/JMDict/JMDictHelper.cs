@@ -16,6 +16,23 @@ public static class JmDictHelper
     private static readonly Dictionary<string, string> _entities = new Dictionary<string, string>();
     private static readonly Dictionary<string, string> _entitiesReverse = new Dictionary<string, string>();
 
+    // Elements the sync parser recognises or deliberately defers; anything else surfaces in the unknown-element report.
+    private static readonly HashSet<string> _knownSyncElements = new()
+    {
+        "entry", "ent_seq", "k_ele", "keb", "ke_inf", "ke_pri",
+        "r_ele", "reb", "re_nokanji", "re_restr", "re_inf", "re_pri",
+        "lsource", "info", "sense",
+        "stagk", "stagr", "pos", "xref", "field", "misc", "s_inf", "dial", "gloss",
+        "example", "ex_srce", "ex_text", "ex_sent" // <example> deliberately deferred (media sentences are richer)
+    };
+    private static readonly Dictionary<string, int> _unknownSyncElements = new();
+
+    private static void NoteSyncElement(string name)
+    {
+        if (_knownSyncElements.Contains(name)) return;
+        _unknownSyncElements[name] = _unknownSyncElements.GetValueOrDefault(name) + 1;
+    }
+
     private static readonly Dictionary<string, string> _posDictionary = new()
                                                                         {
                                                                             { "bra", "Brazilian" }, { "hob", "Hokkaido-ben" },
@@ -941,44 +958,39 @@ public static class JmDictHelper
         return true;
     }
 
-    public static async Task<bool> SyncMissingJMNedict(IDbContextFactory<JitenDbContext> contextFactory, string dtdPath, string jmneDictPath)
+    /// <summary>
+    /// Delta-syncs JMnedict (proper names, WordId range 5,000,000–7,999,999) against the database.
+    /// Unlike the old additive sync, this rebuilds each merged name group's non-custom content from the
+    /// XML on every run (delete-recreate semantics mirroring <see cref="SyncExistingWord"/>), runs a
+    /// name-range soft-delete pass for retired names, and stamps a version sentinel (WordId 9999990).
+    /// Custom data is preserved: definitions with SenseIndex &gt;= 1000 and the "jiten" priority survive.
+    /// Forms are matched by (FormType, Text) and deactivated (never hard-deleted) so DeckWords that
+    /// reference (WordId, ReadingIndex) keep a stable index. The pass touches ONLY 5,000,000–7,999,999
+    /// rows tagged "name"; JMdict vocabulary (&lt; 5,000,000) and custom words (&gt;= 8,000,000) are
+    /// never read or modified.
+    /// </summary>
+    public static async Task<bool> SyncMissingJMNedict(IDbContextFactory<JitenDbContext> contextFactory, string dtdPath,
+                                                       string jmneDictPath, bool dryRun = false, string? reportPath = null)
     {
-        Console.WriteLine("Starting JMNedict sync...");
+        const int NameRangeStart = 5000000;
+        const int NameRangeEnd = 8000000;   // exclusive upper bound of the JMnedict WordId range
+        const int NameSentinelId = 9999990; // the file's own version-marker entry (custom range)
+
+        Console.WriteLine(dryRun ? "Starting JMNedict sync (DRY RUN — no writes)..." : "Starting JMNedict sync...");
 
         await LoadEntities(dtdPath, jmneDictPath);
 
         var readerSettings = new XmlReaderSettings() { Async = true, DtdProcessing = DtdProcessing.Parse, MaxCharactersFromEntities = 0 };
         XmlReader reader = XmlReader.Create(jmneDictPath, readerSettings);
-
         await reader.MoveToContentAsync();
 
-        await using var context = await contextFactory.CreateDbContextAsync();
-
-        // Load existing entries from database with all related data
-        Console.WriteLine("Loading existing JMDict entries from database...");
-        var existingEntries = await context.JMDictWords
-            .Include(w => w.Definitions)
-            .Include(w => w.Lookups)
-            .Include(w => w.Forms)
-            .ToListAsync();
-
-        var existingWordDict = existingEntries.ToDictionary(w => w.WordId);
-        Console.WriteLine($"Loaded {existingEntries.Count} existing entries");
-
-        // Statistics tracking
         int totalEntriesParsed = 0;
-        int newEntriesToInsert = 0;
-        int existingEntriesToUpdate = 0;
-        int entriesUnchanged = 0;
-        int readingsAdded = 0;
-        int definitionsAdded = 0;
-        int lookupsToRegenerate = 0;
+        string? nameVersionDate = null;
+        string? nameVersionGloss = null;
 
-        // PHASE 1: Parse XML and merge entries by kanji (before database comparison)
+        // PHASE 1: parse XML and merge entries by keb / first-reading (one JmDictWord per surface group)
         Dictionary<string, JmDictWord> mergedEntriesByKeb = new();
-        Dictionary<string, List<int>> kanjiToWordIds = new(); // Track all WordIds per kanji
-        List<JmDictWord> entriesToUpdate = new();
-        List<int> wordIdsNeedingLookupRegeneration = new();
+        Dictionary<string, List<int>> kanjiToWordIds = new(); // every member ent_seq per surface group
 
         Console.WriteLine("Parsing JMnedict XML file and merging entries by kanji...");
 
@@ -1028,6 +1040,25 @@ public static class JmDictHelper
 
                 foreach (var form in nameEntry.Forms)
                     form.Text = form.Text.Replace("ゎ", "わ").Replace("ヮ", "わ");
+
+                // The file's own version-marker entry (9999990) and anything in the custom range
+                // (>= 8000000) are not real names — capture the date, then keep them out of the merge.
+                if (nameEntry.WordId >= NameRangeEnd)
+                {
+                    if (nameEntry.WordId == NameSentinelId)
+                    {
+                        var meanings = nameEntry.Definitions.SelectMany(d => d.EnglishMeanings).ToList();
+                        // Keep the file's real gloss verbatim (e.g. "Japanese-Multilingual Named Entity
+                        // Dictionary Project - Creation Date: …"), mirroring the JMdict 9999999 sentinel.
+                        nameVersionGloss = meanings.FirstOrDefault();
+                        var dateMatch = meanings
+                            .Select(m => Regex.Match(m, @"Creation Date:\s*(\d{4}-\d{2}-\d{2})"))
+                            .FirstOrDefault(m => m.Success);
+                        if (dateMatch != null)
+                            nameVersionDate = dateMatch.Groups[1].Value;
+                    }
+                    break;
+                }
 
                 // Skip if entry has no readings (invalid)
                 if (nameEntry.Forms.Count == 0)
@@ -1079,294 +1110,504 @@ public static class JmDictHelper
 
         reader.Close();
 
-        Console.WriteLine($"Parsed {totalEntriesParsed} XML entries, merged into {mergedEntriesByKeb.Count} unique kanji groups");
+        Console.WriteLine($"Parsed {totalEntriesParsed} XML entries, merged into {mergedEntriesByKeb.Count} unique name groups");
+        if (nameVersionDate != null)
+            Console.WriteLine($"JMnedict creation date (from WordId {NameSentinelId}): {nameVersionDate}");
 
-        // PHASE 2: Compare merged entries with database (database-aware matching)
-        Console.WriteLine("Comparing merged entries with database...");
+        // PHASE 2: assign each merged group a canonical WordId, then rebuild against the database.
+        // Canonical choice (Step 0 decision — keep existing pins, determinism prospective only):
+        //   - if any member ent_seq already exists as a name row, reuse it (its pin → zero churn);
+        //   - otherwise the group is new → canonical = min(member ent_seq) (deterministic across runs).
+        Console.WriteLine("Resolving canonical WordIds for each name group...");
 
-        Dictionary<string, JmDictWord> newNamesByKeb = new();
+        HashSet<int> existingNameIds;
+        await using (var idContext = await contextFactory.CreateDbContextAsync())
+        {
+            existingNameIds = (await idContext.JMDictWords
+                    .AsNoTracking()
+                    .Where(w => w.WordId >= NameRangeStart && w.WordId < NameRangeEnd)
+                    .Select(w => w.WordId)
+                    .ToListAsync())
+                .ToHashSet();
+        }
+        Console.WriteLine($"Found {existingNameIds.Count} existing name rows in the database.");
 
+        var groupByCanonical = new Dictionary<int, JmDictWord>();
+        var liveWordIds = new HashSet<int>();
         foreach (var kvp in mergedEntriesByKeb)
         {
-            string kanji = kvp.Key;
-            JmDictWord mergedEntry = kvp.Value;
-            List<int> allWordIds = kanjiToWordIds[kanji];
+            var members = kanjiToWordIds[kvp.Key];
+            var membersInDb = members.Where(existingNameIds.Contains).ToList();
+            int canonical = membersInDb.Count > 0 ? membersInDb.Min() : members.Min();
+            // If two historical groups now collapse onto one canonical, the first wins; the loser drops
+            // out of liveWordIds and is soft-deleted below.
+            if (groupByCanonical.TryAdd(canonical, kvp.Value))
+                liveWordIds.Add(canonical);
+        }
 
-            // Find the FIRST WordId that exists in DB
-            JmDictWord? existingDbEntry = null;
-            foreach (int wordId in allWordIds)
+        var existingCanonicalIds = groupByCanonical.Keys.Where(existingNameIds.Contains).ToList();
+        var newCanonicalIds = groupByCanonical.Keys.Where(id => !existingNameIds.Contains(id)).ToList();
+        Console.WriteLine($"  {existingCanonicalIds.Count} groups map to existing rows, {newCanonicalIds.Count} are new.");
+
+        // Range-safety backstop: every canonical must sit inside the JMnedict range (guaranteed by
+        // construction — members are 5M-range ent_seqs and >= 8M entries were skipped during parse).
+        var outOfRange = groupByCanonical.Keys.Where(id => id < NameRangeStart || id >= NameRangeEnd).ToList();
+        if (outOfRange.Count > 0)
+        {
+            Console.WriteLine($"✗ ABORT: {outOfRange.Count} canonical WordIds fall outside " +
+                              $"[{NameRangeStart}, {NameRangeEnd}). First: {outOfRange[0]}.");
+            return false;
+        }
+
+        int wordsRebuilt = 0, wordsCreated = 0, wordsDeactivated = 0, wordsFailed = 0;
+        int formsMatched = 0, formsCreated = 0, formsDeactivated = 0;
+        int defsDeleted = 0, defsCreated = 0;
+
+        var newWordEntries = dryRun ? new List<string>() : null;
+        var updatedWordEntries = dryRun ? new List<string>() : null;
+        var deactivatedWordEntries = dryRun ? new List<string>() : null;
+
+        // Reset the Definitions identity sequence so the delete-recreate can't collide on DefinitionId.
+        if (!dryRun)
+        {
+            await using var seqContext = await contextFactory.CreateDbContextAsync();
+            await seqContext.Database.ExecuteSqlRawAsync(
+                """SELECT setval(pg_get_serial_sequence('jmdict."Definitions"', 'DefinitionId'), GREATEST((SELECT MAX("DefinitionId") FROM jmdict."Definitions"), 1))""");
+        }
+
+        const int batchSize = 5000;
+
+        // --- Rebuild existing name groups in batches (delete-recreate of non-custom content) ---
+        for (int batchStart = 0; batchStart < existingCanonicalIds.Count; batchStart += batchSize)
+        {
+            var batchIds = existingCanonicalIds.Skip(batchStart).Take(batchSize).ToList();
+
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var dbWords = await context.JMDictWords
+                .Include(w => w.Forms)
+                .Include(w => w.Definitions)
+                .Include(w => w.Lookups)
+                .Where(w => batchIds.Contains(w.WordId))
+                .ToListAsync();
+            var dbWordDict = dbWords.ToDictionary(w => w.WordId);
+
+            foreach (var canonical in batchIds)
             {
-                if (existingWordDict.TryGetValue(wordId, out existingDbEntry))
+                if (!dbWordDict.TryGetValue(canonical, out var dbWord)) { wordsFailed++; continue; }
+                var merged = groupByCanonical[canonical];
+                try
                 {
-                    // Found existing entry in DB - use this one!
-                    break;
+                    HashSet<string>? oldActiveForms = null;
+                    HashSet<string>? oldDefFps = null;
+                    if (dryRun)
+                    {
+                        oldActiveForms = dbWord.Forms.Where(f => f.IsActiveInLatestSource).Select(f => f.Text).ToHashSet();
+                        oldDefFps = dbWord.Definitions.Where(d => d.SenseIndex < 1000).Select(NameDefFingerprint).ToHashSet();
+                    }
+
+                    var r = RebuildExistingNameWord(context, dbWord, merged);
+                    formsMatched += r.FormsMatched;
+                    formsCreated += r.FormsCreated;
+                    formsDeactivated += r.FormsDeactivated;
+                    defsDeleted += r.DefsDeleted;
+                    defsCreated += r.DefsCreated;
+                    wordsRebuilt++;
+
+                    if (dryRun)
+                    {
+                        var changes = new List<string>();
+                        var added = dbWord.Forms.Where(f => f.IsActiveInLatestSource && !oldActiveForms!.Contains(f.Text)).Select(f => f.Text).ToList();
+                        if (added.Count > 0) changes.Add($"  + Forms added: {string.Join(", ", added)}");
+                        var removed = dbWord.Forms.Where(f => !f.IsActiveInLatestSource && oldActiveForms!.Contains(f.Text)).Select(f => f.Text).ToList();
+                        if (removed.Count > 0) changes.Add($"  - Forms deactivated: {string.Join(", ", removed)}");
+                        var newDefFps = dbWord.Definitions.Where(d => d.SenseIndex < 1000).Select(NameDefFingerprint).ToHashSet();
+                        if (!oldDefFps!.SetEquals(newDefFps)) changes.Add($"  ~ Definitions/name-types changed ({oldDefFps.Count} -> {newDefFps.Count} senses)");
+
+                        if (changes.Count > 0)
+                        {
+                            var sb = new StringBuilder();
+                            sb.AppendLine($"WordId {canonical} -- {dbWord.Forms.FirstOrDefault()?.Text ?? "?"}");
+                            foreach (var c in changes) sb.AppendLine(c);
+                            updatedWordEntries!.Add(sb.ToString());
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  Error rebuilding name WordId {canonical}: {ex.Message}");
+                    wordsFailed++;
                 }
             }
 
-            if (existingDbEntry != null)
+            if (!dryRun) await context.SaveChangesAsync();
+            context.ChangeTracker.Clear();
+            Console.WriteLine($"  Rebuilt {Math.Min(batchStart + batchSize, existingCanonicalIds.Count)}/{existingCanonicalIds.Count} existing name groups...");
+        }
+
+        // --- Insert new name groups in batches ---
+        for (int batchStart = 0; batchStart < newCanonicalIds.Count; batchStart += batchSize)
+        {
+            var batchIds = newCanonicalIds.Skip(batchStart).Take(batchSize).ToList();
+            await using var context = await contextFactory.CreateDbContextAsync();
+
+            if (!dryRun)
             {
-                // Update existing DB entry with merged readings
-                bool needsUpdate = false;
-                int formsBeforeCount = existingDbEntry.Forms.Count;
+                // Clear any orphaned lookups for these ids to avoid PK conflicts (mirror JMdict sync).
+                var orphaned = await context.Set<JmDictLookup>().Where(l => batchIds.Contains(l.WordId)).ToListAsync();
+                if (orphaned.Count > 0) context.Set<JmDictLookup>().RemoveRange(orphaned);
+            }
 
-                // Merge forms from all XML entries
-                foreach (var mergedForm in mergedEntry.Forms)
+            var toAdd = new List<JmDictWord>();
+            foreach (var canonical in batchIds)
+            {
+                try
                 {
-                    if (!existingDbEntry.Forms.Any(f => f.Text == mergedForm.Text))
-                    {
-                        existingDbEntry.Forms.Add(NewForm(
-                            existingDbEntry.WordId,
-                            existingDbEntry.Forms.Count,
-                            mergedForm.Text,
-                            mergedForm.FormType));
+                    var word = BuildNewNameWord(canonical, groupByCanonical[canonical]);
+                    if (word.Forms.Count == 0 || word.Definitions.Count == 0) { wordsFailed++; continue; }
+                    formsCreated += word.Forms.Count;
+                    defsCreated += word.Definitions.Count;
+                    wordsCreated++;
+                    toAdd.Add(word);
 
-                        needsUpdate = true;
-                        readingsAdded++;
+                    if (dryRun)
+                    {
+                        var sb = new StringBuilder();
+                        sb.AppendLine($"WordId {canonical} -- {word.Forms.First().Text}");
+                        sb.AppendLine($"  Forms: {string.Join(", ", word.Forms.Select(f => f.Text))}");
+                        sb.AppendLine($"  Name types: {string.Join(", ", word.PartsOfSpeech)}");
+                        newWordEntries!.Add(sb.ToString());
                     }
                 }
-
-                // Merge priorities
-                if (mergedEntry.Priorities != null && mergedEntry.Priorities.Count > 0)
+                catch (Exception ex)
                 {
-                    existingDbEntry.Priorities ??= new List<string>();
-                    foreach (var priority in mergedEntry.Priorities)
-                    {
-                        if (!existingDbEntry.Priorities.Contains(priority))
-                        {
-                            existingDbEntry.Priorities.Add(priority);
-                            needsUpdate = true;
-                        }
-                    }
+                    Console.WriteLine($"  Error building new name WordId {canonical}: {ex.Message}");
+                    wordsFailed++;
                 }
+            }
 
-                // Merge definitions
-                foreach (var xmlDef in mergedEntry.Definitions)
+            if (!dryRun && toAdd.Count > 0)
+            {
+                context.JMDictWords.AddRange(toAdd);
+                await context.SaveChangesAsync();
+            }
+            context.ChangeTracker.Clear();
+            Console.WriteLine($"  Inserted {Math.Min(batchStart + batchSize, newCanonicalIds.Count)}/{newCanonicalIds.Count} new name groups...");
+        }
+
+        // --- Soft-delete pass: names in the DB no longer present upstream ---
+        // HARD INVARIANT (range isolation): the query is bounded to 5M-8M AND tagged "name", so JMdict
+        // vocabulary (< 5M) and custom words (>= 8M, incl. the 9999990 sentinel) can never be touched.
+        Console.WriteLine("Running soft-delete pass for retired names...");
+        await using (var deactivateContext = await contextFactory.CreateDbContextAsync())
+        {
+            var toDeactivate = await deactivateContext.JMDictWords
+                .Include(w => w.Forms)
+                .Include(w => w.Definitions)
+                .Where(w => w.WordId >= NameRangeStart && w.WordId < NameRangeEnd
+                            && w.Priorities!.Contains("name")
+                            && !liveWordIds.Contains(w.WordId))
+                .ToListAsync();
+
+            foreach (var word in toDeactivate)
+            {
+                if (!dryRun)
                 {
-                    var existingDefWithSameMeanings = existingDbEntry.Definitions.FirstOrDefault(d => MeaningsEqual(d, xmlDef));
-
-                    if (existingDefWithSameMeanings != null)
-                    {
-                        // Merge POS tags if meanings are identical
-                        var posBeforeCount = existingDefWithSameMeanings.PartsOfSpeech.Count;
-                        foreach (var pos in xmlDef.PartsOfSpeech)
-                        {
-                            if (!existingDefWithSameMeanings.PartsOfSpeech.Contains(pos))
-                            {
-                                existingDefWithSameMeanings.PartsOfSpeech.Add(pos);
-                                needsUpdate = true;
-                            }
-                        }
-                    }
-                    else if (!existingDbEntry.Definitions.Any(d => DefinitionsEqual(d, xmlDef)))
-                    {
-                        // Add new definition if meanings are different
-                        existingDbEntry.Definitions.Add(xmlDef);
-                        needsUpdate = true;
-                        definitionsAdded++;
-                    }
+                    foreach (var form in word.Forms) form.IsActiveInLatestSource = false;
+                    foreach (var def in word.Definitions.Where(d => d.SenseIndex < 1000)) def.IsActiveInLatestSource = false;
                 }
-
-                if (needsUpdate)
+                wordsDeactivated++;
+                if (dryRun)
                 {
-                    if (!entriesToUpdate.Contains(existingDbEntry))
-                        entriesToUpdate.Add(existingDbEntry);
-
-                    // If forms were added, mark for lookup regeneration
-                    if (existingDbEntry.Forms.Count > formsBeforeCount)
-                    {
-                        if (!wordIdsNeedingLookupRegeneration.Contains(existingDbEntry.WordId))
-                            wordIdsNeedingLookupRegeneration.Add(existingDbEntry.WordId);
-                    }
-
-                    existingEntriesToUpdate++;
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"WordId {word.WordId} -- {word.Forms.FirstOrDefault()?.Text ?? "?"}");
+                    sb.AppendLine($"  Forms: {string.Join(", ", word.Forms.Select(f => f.Text))}");
+                    deactivatedWordEntries!.Add(sb.ToString());
                 }
-                else
+            }
+
+            if (!dryRun && toDeactivate.Count > 0) await deactivateContext.SaveChangesAsync();
+            Console.WriteLine($"  {(dryRun ? "Would deactivate" : "Deactivated")} {toDeactivate.Count} retired names.");
+        }
+
+        // --- Re-apply custom touch-ups (stored as custom data so future rebuilds preserve them) ---
+        if (!dryRun)
+        {
+            await using var customContext = await contextFactory.CreateDbContextAsync();
+
+            var customPriority = await customContext.JMDictWords.FirstOrDefaultAsync(w => w.WordId == 5060001);
+            if (customPriority != null)
+            {
+                customPriority.Priorities ??= new List<string>();
+                if (!customPriority.Priorities.Contains("jiten")) customPriority.Priorities.Add("jiten");
+            }
+            else { Console.WriteLine("  Warning: custom priority WordId 5060001 not found."); }
+
+            var stationStreet = await customContext.JMDictWords
+                .Include(w => w.Definitions)
+                .FirstOrDefaultAsync(w => w.WordId == 5141615);
+            if (stationStreet != null)
+            {
+                if (!stationStreet.PartsOfSpeech.Contains("n")) stationStreet.PartsOfSpeech.Add("n");
+                // Store as a custom sense (SenseIndex >= 1000) so the delete-recreate keeps it on later syncs.
+                if (!stationStreet.Definitions.Any(d => d.EnglishMeanings.Contains("street in front of station")))
                 {
-                    entriesUnchanged++;
+                    stationStreet.Definitions.Add(new JmDictDefinition
+                    {
+                        WordId = 5141615, SenseIndex = 1000,
+                        PartsOfSpeech = ["n"], EnglishMeanings = ["street in front of station"],
+                        IsActiveInLatestSource = true
+                    });
                 }
+            }
+            else { Console.WriteLine("  Warning: custom definition WordId 5141615 not found."); }
+
+            await customContext.SaveChangesAsync();
+
+            // Version sentinel (WordId 9999990) — import the file's own marker, stripped of lookups.
+            await UpsertNameVersionSentinel(contextFactory, nameVersionGloss, nameVersionDate);
+        }
+
+        // --- Report / stats ---
+        if (dryRun)
+        {
+            int outRangeTotal = groupByCanonical.Keys.Count(id => id < NameRangeStart || id >= NameRangeEnd);
+
+            Console.WriteLine();
+            Console.WriteLine("=== JMNedict Sync Dry Run Complete ===");
+            Console.WriteLine($"Name groups: {wordsRebuilt} rebuilt, {wordsCreated} new, {wordsDeactivated} to deactivate, {wordsFailed} failed");
+            Console.WriteLine($"  Rebuilt groups with visible changes: {updatedWordEntries!.Count}");
+            Console.WriteLine($"Forms: {formsMatched} matched, {formsCreated} to add, {formsDeactivated} to deactivate");
+
+            reportPath ??= "jmnedict-sync-changes.txt";
+            var report = new StringBuilder();
+            report.AppendLine("JMNedict Sync -- Dry Run Report");
+            report.AppendLine($"Source: {totalEntriesParsed} entries parsed, {mergedEntriesByKeb.Count} merged name groups");
+            report.AppendLine($"JMnedict version (WordId {NameSentinelId}): {nameVersionDate ?? "(not in file)"}");
+            report.AppendLine();
+            report.AppendLine("=== Summary ===");
+            report.AppendLine($"New name groups:        {wordsCreated}");
+            report.AppendLine($"Rebuilt (with changes): {updatedWordEntries.Count}");
+            report.AppendLine($"Deactivated names:      {wordsDeactivated}");
+            report.AppendLine($"Forms to add:           {formsCreated}");
+            report.AppendLine($"Forms to deactivate:    {formsDeactivated}");
+            report.AppendLine();
+            report.AppendLine("=== Range safety (HARD INVARIANT) ===");
+            report.AppendLine($"Canonical WordIds outside [{NameRangeStart}, {NameRangeEnd}): {outRangeTotal}");
+            report.AppendLine($"All rebuilds/inserts/deactivations confined to 5,000,000-7,999,999, tagged \"name\": " +
+                              $"{(outRangeTotal == 0 ? "CONFIRMED" : "*** VIOLATION ***")}");
+            report.AppendLine("JMdict vocabulary (< 5,000,000) and custom words (>= 8,000,000): untouched by construction (query-bounded).");
+            report.AppendLine();
+
+            void Dump(string title, List<string> items)
+            {
+                if (items.Count == 0) return;
+                report.AppendLine($"=== {title} ({items.Count}) ===");
+                report.AppendLine();
+                for (int i = 0; i < items.Count; i++) { report.Append($"[{i + 1}] {items[i]}"); report.AppendLine(); }
+            }
+            Dump("New Name Groups", newWordEntries!);
+            Dump("Updated Name Groups", updatedWordEntries);
+            Dump("Deactivated Names", deactivatedWordEntries!);
+
+            await File.WriteAllTextAsync(reportPath, report.ToString());
+            Console.WriteLine($"\nReport written to: {reportPath}");
+        }
+        else
+        {
+            Console.WriteLine();
+            Console.WriteLine("=== JMNedict Sync Complete ===");
+            Console.WriteLine($"Name groups: {wordsRebuilt} rebuilt, {wordsCreated} created, {wordsDeactivated} deactivated, {wordsFailed} failed");
+            Console.WriteLine($"Forms: {formsMatched} matched, {formsCreated} created, {formsDeactivated} deactivated");
+            Console.WriteLine($"Definitions: {defsDeleted} deleted, {defsCreated} created");
+            Console.WriteLine($"JMnedict version sentinel (WordId {NameSentinelId}): {nameVersionDate ?? "(not in file)"}");
+            Console.WriteLine("=================================\n");
+        }
+
+        return true;
+    }
+
+    private record NameRebuildResult(int FormsMatched, int FormsCreated, int FormsDeactivated, int DefsDeleted, int DefsCreated);
+
+    /// <summary>Per-name fingerprint for dry-run change detection: sorted name-types + ordered glosses.</summary>
+    private static string NameDefFingerprint(JmDictDefinition d) =>
+        $"{string.Join(",", d.PartsOfSpeech.OrderBy(p => p, StringComparer.Ordinal))}|{string.Join(";", d.EnglishMeanings)}";
+
+    private static string NameRubyFor(string text, string? firstKana) =>
+        text.Length == 1 && WanaKana.IsKanji(text) && firstKana != null ? $"{text}[{firstKana}]" : text;
+
+    /// <summary>Rebuilds an existing name word's non-custom content from its merged XML group.
+    /// Forms are matched by (FormType, Text) and deactivated (never hard-deleted) to keep ReadingIndex
+    /// stable for DeckWord references; definitions/lookups are delete-recreated; custom senses
+    /// (SenseIndex &gt;= 1000) and the "jiten" priority are preserved.</summary>
+    private static NameRebuildResult RebuildExistingNameWord(JitenDbContext context, JmDictWord dbWord, JmDictWord merged)
+    {
+        int formsMatched = 0, formsCreated = 0, formsDeactivated = 0;
+        var firstKana = merged.Forms.FirstOrDefault(f => WanaKana.IsKana(f.Text))?.Text;
+
+        var formMap = new Dictionary<(JmDictFormType, string), JmDictWordForm>();
+        short maxIndex = -1;
+        foreach (var f in dbWord.Forms)
+        {
+            formMap[(f.FormType, f.Text)] = f;
+            if (f.ReadingIndex > maxIndex) maxIndex = f.ReadingIndex;
+        }
+
+        var mergedKeys = new HashSet<(JmDictFormType, string)>();
+        foreach (var mf in merged.Forms)
+        {
+            var key = (mf.FormType, mf.Text);
+            mergedKeys.Add(key);
+            if (formMap.TryGetValue(key, out var dbForm))
+            {
+                dbForm.IsActiveInLatestSource = true;
+                dbForm.RubyText = NameRubyFor(mf.Text, firstKana);
+                formsMatched++;
             }
             else
             {
-                // None of the WordIds exist in DB - add as new entry
-                newNamesByKeb[kanji] = mergedEntry;
+                if (maxIndex >= 255) continue;
+                maxIndex++;
+                var nf = new JmDictWordForm
+                {
+                    WordId = dbWord.WordId, ReadingIndex = maxIndex, Text = mf.Text,
+                    RubyText = NameRubyFor(mf.Text, firstKana), FormType = mf.FormType,
+                    IsActiveInLatestSource = true
+                };
+                dbWord.Forms.Add(nf);
+                formMap[key] = nf;
+                formsCreated++;
             }
         }
 
-        newEntriesToInsert = newNamesByKeb.Count;
-
-        Console.WriteLine($"\n=== JMnedict Sync Statistics ===");
-        Console.WriteLine($"Total entries parsed from XML: {totalEntriesParsed}");
-        Console.WriteLine($"Existing entries in database: {existingEntries.Count}");
-        Console.WriteLine($"\nCategorisation:");
-        Console.WriteLine($"  New entries to insert: {newEntriesToInsert}");
-        Console.WriteLine($"  Existing entries to update: {existingEntriesToUpdate}");
-        Console.WriteLine($"  Entries unchanged: {entriesUnchanged}");
-        Console.WriteLine($"\nChanges detected:");
-        Console.WriteLine($"  Total readings added: {readingsAdded}");
-        Console.WriteLine($"  Total definitions added: {definitionsAdded}");
-        Console.WriteLine($"  Lookups to regenerate: {wordIdsNeedingLookupRegeneration.Count}");
-
-        // Process new entries (same post-processing as ImportJMNedict)
-        List<JmDictWord> nameWords = newNamesByKeb.Values.ToList();
-
-        if (nameWords.Count > 0)
+        foreach (var f in dbWord.Forms)
         {
-            Console.WriteLine($"\nProcessing {nameWords.Count} new entries...");
-
-            foreach (var nameWord in nameWords)
+            if (f.IsActiveInLatestSource && !mergedKeys.Contains((f.FormType, f.Text)))
             {
-                // Create lookups for searching
-                List<JmDictLookup> lookups = new();
-                var addedLookupKeys = new HashSet<string>();
-
-                for (var i = 0; i < nameWord.Forms.Count; i++)
-                {
-                    var form = nameWord.Forms[i];
-                    string r = form.Text;
-                    var lookupKey = WanaKana.ToHiragana(r.Replace("ゎ", "わ").Replace("ヮ", "わ"),
-                                                        new DefaultOptions() { ConvertLongVowelMark = false });
-                    var lookupKeyWithoutLongVowelMark = WanaKana.ToHiragana(r.Replace("ゎ", "わ").Replace("ヮ", "わ"));
-
-                    if (addedLookupKeys.Add(lookupKey))
-                    {
-                        lookups.Add(new JmDictLookup { WordId = nameWord.WordId, LookupKey = lookupKey });
-                    }
-
-                    if (lookupKeyWithoutLongVowelMark != lookupKey &&
-                        addedLookupKeys.Add(lookupKeyWithoutLongVowelMark))
-                    {
-                        lookups.Add(new JmDictLookup { WordId = nameWord.WordId, LookupKey = lookupKeyWithoutLongVowelMark });
-                    }
-
-                    if (WanaKana.IsKatakana(r) && addedLookupKeys.Add(r))
-                        lookups.Add(new JmDictLookup { WordId = nameWord.WordId, LookupKey = r });
-
-                    if (r.Length == 1 && WanaKana.IsKanji(r))
-                    {
-                        var kanaForm = nameWord.Forms.FirstOrDefault(f => WanaKana.IsKana(f.Text));
-                        form.RubyText = kanaForm != null ? $"{r}[{kanaForm.Text}]" : r;
-                    }
-                    else
-                    {
-                        form.RubyText = r;
-                    }
-                }
-
-                // Set parts of speech from definitions (name types)
-                nameWord.PartsOfSpeech = nameWord.Definitions.SelectMany(d => d.PartsOfSpeech).Distinct().ToList();
-                nameWord.Lookups = lookups;
-
-                // Add "name" priority to indicate it's from JMNedict
-                if (nameWord.Priorities == null)
-                    nameWord.Priorities = new List<string>();
-                nameWord.Priorities.Add("name");
-            }
-
-            // Validate new entries before insertion
-            int beforeValidation = nameWords.Count;
-            nameWords = nameWords.Where(w =>
-                w.Forms.Count > 0 &&
-                w.Definitions.Count > 0
-            ).ToList();
-            int invalidEntries = beforeValidation - nameWords.Count;
-
-            if (invalidEntries > 0)
-            {
-                Console.WriteLine($"Filtered out {invalidEntries} invalid new entries");
+                f.IsActiveInLatestSource = false;
+                formsDeactivated++;
             }
         }
 
-        // Process updated entries - regenerate furigana and lookups
-        if (entriesToUpdate.Count > 0)
+        // Lookups: delete-recreate from all forms (active + inactive), mirroring SyncExistingWord.
+        context.Set<JmDictLookup>().RemoveRange(dbWord.Lookups);
+        dbWord.Lookups.Clear();
+        var lookupKeys = new HashSet<string>();
+        foreach (var f in dbWord.Forms)
+            foreach (var lk in GenerateLookupsForForm(dbWord.WordId, f.Text))
+                if (lookupKeys.Add(lk.LookupKey)) dbWord.Lookups.Add(lk);
+
+        // Definitions: keep custom (SenseIndex >= 1000); delete-recreate non-custom from the XML group.
+        var toRemove = dbWord.Definitions.Where(d => d.SenseIndex < 1000).ToList();
+        context.Definitions.RemoveRange(toRemove);
+        foreach (var d in toRemove) dbWord.Definitions.Remove(d);
+        int defsDeleted = toRemove.Count, defsCreated = 0;
+        short senseIndex = 0;
+        foreach (var md in merged.Definitions)
         {
-            Console.WriteLine($"\nProcessing {entriesToUpdate.Count} updated entries...");
-
-            foreach (var word in entriesToUpdate)
+            dbWord.Definitions.Add(new JmDictDefinition
             {
-                // Regenerate furigana for all forms
-                foreach (var form in word.Forms)
-                {
-                    string r = form.Text;
-                    if (r.Length == 1 && WanaKana.IsKanji(r))
-                    {
-                        var kanaForm = word.Forms.FirstOrDefault(f => WanaKana.IsKana(f.Text));
-                        form.RubyText = kanaForm != null ? $"{r}[{kanaForm.Text}]" : r;
-                    }
-                    else
-                    {
-                        form.RubyText = r;
-                    }
-                }
-
-                // Update PartsOfSpeech from definitions
-                word.PartsOfSpeech = word.Definitions.SelectMany(d => d.PartsOfSpeech).Distinct().ToList();
-
-                // Regenerate lookups if forms were added
-                if (wordIdsNeedingLookupRegeneration.Contains(word.WordId))
-                {
-                    // Remove old lookups
-                    context.Lookups.RemoveRange(word.Lookups);
-
-                    // Generate new lookups
-                    List<JmDictLookup> lookups = new();
-                    var addedKeys = new HashSet<string>();
-                    foreach (var form in word.Forms)
-                    {
-                        string r = form.Text;
-                        var lookupKey = WanaKana.ToHiragana(r.Replace("ゎ", "わ").Replace("ヮ", "わ"),
-                                                            new DefaultOptions() { ConvertLongVowelMark = false });
-                        var lookupKeyWithoutLongVowelMark = WanaKana.ToHiragana(r.Replace("ゎ", "わ").Replace("ヮ", "わ"));
-
-                        if (addedKeys.Add(lookupKey))
-                        {
-                            lookups.Add(new JmDictLookup { WordId = word.WordId, LookupKey = lookupKey });
-                        }
-
-                        if (lookupKeyWithoutLongVowelMark != lookupKey &&
-                            addedKeys.Add(lookupKeyWithoutLongVowelMark))
-                        {
-                            lookups.Add(new JmDictLookup { WordId = word.WordId, LookupKey = lookupKeyWithoutLongVowelMark });
-                        }
-
-                        if (WanaKana.IsKatakana(r) && addedKeys.Add(r))
-                            lookups.Add(new JmDictLookup { WordId = word.WordId, LookupKey = r });
-                    }
-
-                    word.Lookups = lookups;
-                    lookupsToRegenerate++;
-                }
-            }
+                WordId = dbWord.WordId, SenseIndex = senseIndex++,
+                PartsOfSpeech = md.PartsOfSpeech.ToList(),
+                EnglishMeanings = md.EnglishMeanings.ToList(),
+                IsActiveInLatestSource = true
+            });
+            defsCreated++;
         }
 
-        // Save all changes to database
-        try
+        dbWord.PartsOfSpeech = dbWord.Definitions.SelectMany(d => d.PartsOfSpeech).Distinct().ToList();
+        var priorities = (merged.Priorities ?? new List<string>()).ToList();
+        if (!priorities.Contains("name")) priorities.Add("name");
+        if (dbWord.Priorities != null && dbWord.Priorities.Contains("jiten") && !priorities.Contains("jiten"))
+            priorities.Add("jiten");
+        dbWord.Priorities = priorities;
+
+        return new NameRebuildResult(formsMatched, formsCreated, formsDeactivated, defsDeleted, defsCreated);
+    }
+
+    /// <summary>Builds a brand-new name word from its merged XML group, under the chosen canonical WordId.</summary>
+    private static JmDictWord BuildNewNameWord(int wordId, JmDictWord merged)
+    {
+        var firstKana = merged.Forms.FirstOrDefault(f => WanaKana.IsKana(f.Text))?.Text;
+        var word = new JmDictWord { WordId = wordId };
+
+        short idx = 0;
+        foreach (var mf in merged.Forms)
         {
-            Console.WriteLine($"\nSaving changes to database...");
-
-            if (nameWords.Count > 0)
+            word.Forms.Add(new JmDictWordForm
             {
-                context.JMDictWords.AddRange(nameWords);
-            }
+                WordId = wordId, ReadingIndex = idx++, Text = mf.Text,
+                RubyText = NameRubyFor(mf.Text, firstKana), FormType = mf.FormType,
+                IsActiveInLatestSource = true
+            });
+        }
 
+        short senseIndex = 0;
+        foreach (var md in merged.Definitions)
+        {
+            word.Definitions.Add(new JmDictDefinition
+            {
+                WordId = wordId, SenseIndex = senseIndex++,
+                PartsOfSpeech = md.PartsOfSpeech.ToList(),
+                EnglishMeanings = md.EnglishMeanings.ToList(),
+                IsActiveInLatestSource = true
+            });
+        }
+
+        var lookupKeys = new HashSet<string>();
+        foreach (var f in word.Forms)
+            foreach (var lk in GenerateLookupsForForm(wordId, f.Text))
+                if (lookupKeys.Add(lk.LookupKey)) word.Lookups.Add(lk);
+
+        word.PartsOfSpeech = word.Definitions.SelectMany(d => d.PartsOfSpeech).Distinct().ToList();
+        var priorities = (merged.Priorities ?? new List<string>()).ToList();
+        if (!priorities.Contains("name")) priorities.Add("name");
+        word.Priorities = priorities;
+
+        return word;
+    }
+
+    /// <summary>Imports JMnedict's own WordId 9999990 marker entry (keb ＪＭｎｅｄｉｃｔ) as a version
+    /// sentinel, stripped of lookups so it stays out of search/parser. Custom range → skipped by every
+    /// batch / soft-delete pass; refreshed on each non-dry-run sync.</summary>
+    private static async Task UpsertNameVersionSentinel(IDbContextFactory<JitenDbContext> contextFactory,
+                                                        string? fileGloss, string? date)
+    {
+        const int sentinelId = 9999990;
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        var existing = await context.JMDictWords
+            .Include(w => w.Definitions).Include(w => w.Forms).Include(w => w.Lookups)
+            .FirstOrDefaultAsync(w => w.WordId == sentinelId);
+        if (existing != null)
+        {
+            context.Definitions.RemoveRange(existing.Definitions);
+            context.Lookups.RemoveRange(existing.Lookups);
+            context.WordForms.RemoveRange(existing.Forms);
+            context.JMDictWords.Remove(existing);
             await context.SaveChangesAsync();
-
-            Console.WriteLine($"\n✓ Sync completed successfully!");
-            Console.WriteLine($"\nFinal statistics:");
-            Console.WriteLine($"  New entries inserted: {nameWords.Count}");
-            Console.WriteLine($"  Existing entries updated: {entriesToUpdate.Count}");
-            Console.WriteLine($"  Readings added: {readingsAdded}");
-            Console.WriteLine($"  Definitions added: {definitionsAdded}");
-            Console.WriteLine($"  Lookups regenerated: {lookupsToRegenerate}");
-            Console.WriteLine($"=================================\n");
-
-            return true;
         }
-        catch (Exception ex)
+
+        // Store the file's real gloss verbatim (matches the JMdict 9999999 sentinel); fall back to a
+        // synthesized marker only if the file entry carried no trans_det.
+        var gloss = fileGloss ?? $"JMnedict — loaded {date ?? "unknown date"}";
+        var word = new JmDictWord
         {
-            Console.WriteLine($"\n✗ Error saving to database: {ex.Message}");
-            Console.WriteLine($"Stack trace: {ex.StackTrace}");
-            return false;
-        }
+            WordId = sentinelId,
+            PartsOfSpeech = ["name"],
+            Priorities = ["name"],
+            Forms = { NewForm(sentinelId, 0, "ＪＭｎｅｄｉｃｔ", JmDictFormType.KanjiForm) },
+            Definitions =
+            {
+                new JmDictDefinition
+                {
+                    WordId = sentinelId, SenseIndex = 0,
+                    PartsOfSpeech = ["name"], EnglishMeanings = [gloss], IsActiveInLatestSource = true
+                }
+            }
+        };
+        context.JMDictWords.Add(word);
+        await context.SaveChangesAsync();
+        Console.WriteLine($"  Version sentinel (WordId {sentinelId}) set: {gloss}");
     }
 
     public static async Task CompareJMDicts(string dtdPath, string dictionaryPathOld, string dictionaryPathNew)
@@ -1523,26 +1764,12 @@ public static class JmDictHelper
     private static bool DefinitionsEqual(JmDictDefinition def1, JmDictDefinition def2)
     {
         return def1.PartsOfSpeech.SequenceEqual(def2.PartsOfSpeech) &&
-               def1.EnglishMeanings.SequenceEqual(def2.EnglishMeanings) &&
-               def1.DutchMeanings.SequenceEqual(def2.DutchMeanings) &&
-               def1.FrenchMeanings.SequenceEqual(def2.FrenchMeanings) &&
-               def1.GermanMeanings.SequenceEqual(def2.GermanMeanings) &&
-               def1.SpanishMeanings.SequenceEqual(def2.SpanishMeanings) &&
-               def1.HungarianMeanings.SequenceEqual(def2.HungarianMeanings) &&
-               def1.RussianMeanings.SequenceEqual(def2.RussianMeanings) &&
-               def1.SlovenianMeanings.SequenceEqual(def2.SlovenianMeanings);
+               def1.EnglishMeanings.SequenceEqual(def2.EnglishMeanings);
     }
 
     private static bool MeaningsEqual(JmDictDefinition def1, JmDictDefinition def2)
     {
-        return def1.EnglishMeanings.SequenceEqual(def2.EnglishMeanings) &&
-               def1.DutchMeanings.SequenceEqual(def2.DutchMeanings) &&
-               def1.FrenchMeanings.SequenceEqual(def2.FrenchMeanings) &&
-               def1.GermanMeanings.SequenceEqual(def2.GermanMeanings) &&
-               def1.SpanishMeanings.SequenceEqual(def2.SpanishMeanings) &&
-               def1.HungarianMeanings.SequenceEqual(def2.HungarianMeanings) &&
-               def1.RussianMeanings.SequenceEqual(def2.RussianMeanings) &&
-               def1.SlovenianMeanings.SequenceEqual(def2.SlovenianMeanings);
+        return def1.EnglishMeanings.SequenceEqual(def2.EnglishMeanings);
     }
 
     private static async Task LoadEntities(string dtdPath, string? dictionaryXmlPath = null)
@@ -1762,14 +1989,7 @@ public static class JmDictHelper
                 definition.PartsOfSpeech.Add("name");
 
             // Add the definition only if it has translations
-            if (definition.EnglishMeanings.Count > 0 ||
-                definition.DutchMeanings.Count > 0 ||
-                definition.FrenchMeanings.Count > 0 ||
-                definition.GermanMeanings.Count > 0 ||
-                definition.SpanishMeanings.Count > 0 ||
-                definition.HungarianMeanings.Count > 0 ||
-                definition.RussianMeanings.Count > 0 ||
-                definition.SlovenianMeanings.Count > 0)
+            if (definition.EnglishMeanings.Count > 0)
             {
                 wordInfo.Definitions.Add(definition);
             }
@@ -1875,59 +2095,53 @@ public static class JmDictHelper
         {
             if (reader.NodeType == XmlNodeType.Element)
             {
-                if (reader.Name == "stagr")
+                switch (reader.Name)
                 {
-                    restrictions.Add(await reader.ReadElementContentAsStringAsync());
-                }
+                    case "stagr":
+                    case "stagk":
+                        restrictions.Add(await reader.ReadElementContentAsStringAsync());
+                        break;
 
-                // check the language attribute
-                if (reader is { Name: "gloss", HasAttributes: true })
-                {
-                    var attribute = reader.GetAttribute("xml:lang");
-                    switch (attribute)
+                    // English-only cutover: only <gloss xml:lang="eng"> (incl. DTD-default) is kept.
+                    case "gloss" when reader.HasAttributes:
                     {
-                        case "eng":
-                            sense.EnglishMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "dut":
-                            sense.DutchMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "fre":
-                            sense.FrenchMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "ger":
-                            sense.GermanMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "spa":
-                            sense.SpanishMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "hun":
-                            sense.HungarianMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "rus":
-                            sense.RussianMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        case "slv":
-                            sense.SlovenianMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
-                        default:
-                            //sense.EnglishMeanings.Add(await reader.ReadElementContentAsStringAsync());
-                            break;
+                        var lang = reader.GetAttribute("xml:lang");
+                        var gType = reader.GetAttribute("g_type");
+                        var text = await reader.ReadElementContentAsStringAsync();
+                        if (lang == "eng")
+                        {
+                            sense.EnglishMeanings.Add(text);
+                            sense.GlossTypes.Add(gType ?? "");
+                        }
+                        break;
                     }
-                }
 
-                if (reader.Name == "pos")
-                {
-                    var el = reader.ReadElementString();
+                    case "pos":
+                    {
+                        var el = ElToPos(reader.ReadElementString());
+                        sense.Pos.Add(el);
+                        sense.PartsOfSpeech.Add(el);
+                        break;
+                    }
 
-                    sense.PartsOfSpeech.Add(ElToPos(el));
-                }
+                    // misc stays dual-written into PartsOfSpeech (parser POS-matching reads "uk" etc.)
+                    case "misc":
+                    {
+                        var el = ElToPos(reader.ReadElementString());
+                        sense.Misc.Add(el);
+                        sense.PartsOfSpeech.Add(el);
+                        break;
+                    }
 
-                if (reader.Name == "misc")
-                {
-                    var el = reader.ReadElementString();
-
-                    sense.PartsOfSpeech.Add(ElToPos(el));
+                    case "field":
+                        sense.Field.Add(ElToPos(reader.ReadElementString()));
+                        break;
+                    case "dial":
+                        sense.Dial.Add(ElToPos(reader.ReadElementString()));
+                        break;
+                    case "s_inf":
+                        sense.SenseInfo.Add(await reader.ReadElementContentAsStringAsync());
+                        break;
                 }
             }
 
@@ -2017,11 +2231,22 @@ public static class JmDictHelper
             Console.WriteLine("=== DRY RUN MODE — no changes will be saved ===");
 
         Console.WriteLine("Parsing JMDict XML...");
-        var syncEntries = await ParseSyncEntries(dtdPath, dictionaryPath);
-        Console.WriteLine($"Parsed {syncEntries.Count} entries from XML.");
+        var parseResult = await ParseSyncEntries(dtdPath, dictionaryPath);
+        var syncEntries = parseResult.Entries;
+        Console.WriteLine($"Parsed {syncEntries.Count} entries from XML (created={parseResult.Created ?? "?"}, version={parseResult.Version ?? "?"}).");
 
         var syncEntriesById = syncEntries.ToDictionary(e => e.WordId);
         var xmlWordIds = new HashSet<int>(syncEntriesById.Keys);
+
+        // Aggregate NG-field stats from the parsed file (for reporting + xref resolution).
+        int xrefTotal = syncEntries.Sum(e => e.Senses.Sum(s => s.Xrefs.Count));
+        int xrefResolved = syncEntries.Sum(e => e.Senses.Sum(s =>
+            s.Xrefs.Count(x => x.Seq.HasValue && xmlWordIds.Contains(x.Seq.Value))));
+        int lsourceWords = syncEntries.Count(e => e.LanguageSources.Count > 0);
+        int waseiWords = syncEntries.Count(e => e.LanguageSources.Any(ls => ls.IsWasei));
+        int entryInfoWords = syncEntries.Count(e => e.EntryInfos.Count > 0);
+        Console.WriteLine($"NG fields: {xrefTotal} xrefs ({xrefResolved} resolvable), " +
+                          $"{lsourceWords} lsource words ({waseiWords} wasei), {entryInfoWords} info words.");
 
         // Load furigana dictionary
         Console.WriteLine("Loading furigana data...");
@@ -2044,6 +2269,9 @@ public static class JmDictHelper
         int lookupsCreated = 0;
         int unresolvedRestrictions = 0;
         int wordsWithDefChanges = 0;
+
+        // Dry-run backfill counters: words newly gaining a field that was previously absent.
+        int backfillMisc = 0, backfillField = 0, backfillDial = 0, backfillSenseInfo = 0, backfillGlossType = 0;
 
         // Dry-run change tracking
         var newWordEntries = dryRun ? new List<string>() : null;
@@ -2124,16 +2352,23 @@ public static class JmDictHelper
                         // Snapshot state for dry-run comparison
                         HashSet<string>? oldDefFingerprints = null;
                         HashSet<(JmDictFormType, string)>? oldActiveForms = null;
+                        bool oldHadMisc = false, oldHadField = false, oldHadDial = false, oldHadSenseInfo = false, oldHadGlossType = false;
                         if (dryRun)
                         {
                             oldDefFingerprints = dbWord.Definitions
                                 .Where(d => d.SenseIndex < 1000)
-                                .Select(d => $"{d.SenseIndex}|{string.Join(";", d.EnglishMeanings)}|{string.Join(",", d.Pos)}")
+                                .Select(DefFingerprint)
                                 .ToHashSet();
                             oldActiveForms = dbWord.Forms
                                 .Where(f => f.IsActiveInLatestSource)
                                 .Select(f => (f.FormType, f.Text))
                                 .ToHashSet();
+                            var oldDefs = dbWord.Definitions.Where(d => d.SenseIndex < 1000).ToList();
+                            oldHadMisc = oldDefs.Any(d => d.Misc.Count > 0);
+                            oldHadField = oldDefs.Any(d => d.Field.Count > 0);
+                            oldHadDial = oldDefs.Any(d => d.Dial.Count > 0);
+                            oldHadSenseInfo = oldDefs.Any(d => d.SenseInfo.Count > 0);
+                            oldHadGlossType = oldDefs.Any(d => d.GlossTypes.Any(g => g.Length > 0));
                         }
 
                         // UPDATE existing word
@@ -2168,15 +2403,20 @@ public static class JmDictHelper
                                 changes.Add($"  - Forms deactivated: {string.Join(", ", removedForms)}");
 
                             // Detect definition changes
-                            var newDefFingerprints = dbWord.Definitions
-                                .Where(d => d.SenseIndex < 1000)
-                                .Select(d => $"{d.SenseIndex}|{string.Join(";", d.EnglishMeanings)}|{string.Join(",", d.Pos)}")
-                                .ToHashSet();
+                            var newDefs = dbWord.Definitions.Where(d => d.SenseIndex < 1000).ToList();
+                            var newDefFingerprints = newDefs.Select(DefFingerprint).ToHashSet();
                             if (!oldDefFingerprints!.SetEquals(newDefFingerprints))
                             {
                                 changes.Add($"  ~ Definitions changed ({oldDefFingerprints.Count} -> {newDefFingerprints.Count} senses)");
                                 wordsWithDefChanges++;
                             }
+
+                            // Backfill detection: a field newly appearing where it was previously absent.
+                            if (!oldHadMisc && newDefs.Any(d => d.Misc.Count > 0)) backfillMisc++;
+                            if (!oldHadField && newDefs.Any(d => d.Field.Count > 0)) backfillField++;
+                            if (!oldHadDial && newDefs.Any(d => d.Dial.Count > 0)) backfillDial++;
+                            if (!oldHadSenseInfo && newDefs.Any(d => d.SenseInfo.Count > 0)) backfillSenseInfo++;
+                            if (!oldHadGlossType && newDefs.Any(d => d.GlossTypes.Any(g => g.Length > 0))) backfillGlossType++;
 
                             if (changes.Count > 0)
                             {
@@ -2354,6 +2594,12 @@ public static class JmDictHelper
             }
 
             await postContext.SaveChangesAsync();
+
+            // Rebuild cross-reference join table (truncate + insert from parsed xrefs)
+            await RebuildCrossReferences(contextFactory, syncEntries, xmlWordIds);
+
+            // Refresh the dictionary-version sentinel (WordId 9999999) from the file's own entry
+            await UpsertVersionSentinel(contextFactory, syncEntries, furiganaDict);
         }
 
         // Print statistics
@@ -2382,6 +2628,19 @@ public static class JmDictHelper
             report.AppendLine($"Forms to add:           {formsCreated}");
             report.AppendLine($"Forms to deactivate:    {formsDeactivated}");
             report.AppendLine($"Definition changes:     {wordsWithDefChanges} words affected");
+            report.AppendLine();
+            report.AppendLine("=== Field backfill (words newly gaining a previously-absent field) ===");
+            report.AppendLine($"misc:    {backfillMisc}");
+            report.AppendLine($"field:   {backfillField}");
+            report.AppendLine($"dial:    {backfillDial}");
+            report.AppendLine($"s_inf:   {backfillSenseInfo}");
+            report.AppendLine($"g_type:  {backfillGlossType}");
+            report.AppendLine($"xref:    {xrefTotal} parsed ({xrefResolved} resolved to a WordId, {xrefTotal - xrefResolved} unresolved)");
+            report.AppendLine($"lsource: {lsourceWords} words ({waseiWords} wasei)");
+            report.AppendLine($"info:    {entryInfoWords} words");
+            var sentinelGloss = syncEntries.FirstOrDefault(e => e.WordId == 9999999)?.Senses
+                .FirstOrDefault()?.EnglishMeanings.FirstOrDefault();
+            report.AppendLine($"Dictionary version sentinel (WordId 9999999): {sentinelGloss ?? "(not in file)"}");
             report.AppendLine();
 
             if (newWordEntries!.Count > 0)
@@ -2601,11 +2860,138 @@ public static class JmDictHelper
             }
         }
 
+        // Entry-level NG metadata (lsource etymology/wasei + <info> notes)
+        ApplyEntryMetadata(dbWord, entry);
+
         // Sync definitions (delete-and-recreate)
         var (defsDeleted, defsCreated, unresolvedCount) = SyncDefinitions(context, dbWord, entry, formMap);
 
         return new SyncWordResult(formsMatched, formsCreated, formsDeactivated,
             defsDeleted, defsCreated, lookupsCreated, unresolvedCount);
+    }
+
+    /// <summary>Stable fingerprint of a definition for dry-run change detection. Includes every
+    /// annotation field the sync rewrites, so backfills (misc/field/dial/s_inf/g_type) register as changes.</summary>
+    private static string DefFingerprint(JmDictDefinition d) =>
+        $"{d.SenseIndex}|{string.Join(";", d.EnglishMeanings)}|{string.Join(",", d.Pos)}" +
+        $"|{string.Join(",", d.Misc)}|{string.Join(",", d.Field)}|{string.Join(",", d.Dial)}" +
+        $"|{string.Join(";", d.SenseInfo)}|{string.Join(",", d.GlossTypes)}";
+
+    /// <summary>Truncates and rebuilds the xref join table from the parsed entries (two-pass: words are
+    /// all parsed in memory, so seq# targets resolve directly to WordIds).</summary>
+    private static async Task RebuildCrossReferences(IDbContextFactory<JitenDbContext> contextFactory,
+                                                     List<SyncEntry> syncEntries, HashSet<int> xmlWordIds)
+    {
+        Console.WriteLine("Rebuilding cross-references...");
+        await using (var truncateContext = await contextFactory.CreateDbContextAsync())
+        {
+            await truncateContext.Database.ExecuteSqlRawAsync(
+                """TRUNCATE TABLE jmdict."CrossReferences" RESTART IDENTITY""");
+        }
+
+        var rows = new List<JmDictCrossReference>();
+        foreach (var entry in syncEntries)
+        {
+            foreach (var sense in entry.Senses)
+            {
+                foreach (var x in sense.Xrefs)
+                {
+                    int? target = null;
+                    var dictKind = CrossReferenceDict.JMdict;
+                    if (x.Dict == "jmnedict")
+                    {
+                        dictKind = CrossReferenceDict.JMnedict;
+                        target = x.Seq; // JMnedict ids live in their own range; store as-is
+                    }
+                    else if (x.Seq.HasValue && xmlWordIds.Contains(x.Seq.Value))
+                    {
+                        target = x.Seq;
+                    }
+
+                    rows.Add(new JmDictCrossReference
+                    {
+                        FromWordId = entry.WordId,
+                        FromSenseIndex = sense.SenseIndex,
+                        Type = ParseXrefType(x.Type),
+                        TargetWordId = target,
+                        TargetDict = dictKind,
+                        TargetSenseIndex = x.Sno,
+                        TargetKanji = x.Xk,
+                        TargetReading = x.Xr,
+                        RawText = x.RawText
+                    });
+                }
+            }
+        }
+
+        const int batch = 10000;
+        for (int i = 0; i < rows.Count; i += batch)
+        {
+            await using var context = await contextFactory.CreateDbContextAsync();
+            context.JmDictCrossReferences.AddRange(rows.Skip(i).Take(batch));
+            await context.SaveChangesAsync();
+        }
+        Console.WriteLine($"  Wrote {rows.Count} cross-references.");
+    }
+
+    /// <summary>Imports JMdict's own WordId 9999999 sentinel entry verbatim from the file (keb ＪＭｄｉｃｔ,
+    /// gloss "Japanese-Multilingual Dictionary Project - Creation Date: …"). The normal batch loop skips it
+    /// (id ≥ 8000000), so it's handled here and refreshed on every sync. No lookups → kept out of search.</summary>
+    private static async Task UpsertVersionSentinel(IDbContextFactory<JitenDbContext> contextFactory,
+                                                    List<SyncEntry> syncEntries,
+                                                    Dictionary<string, List<JMDictFurigana>> furiganaDict)
+    {
+        const int sentinelId = 9999999;
+        var entry = syncEntries.FirstOrDefault(e => e.WordId == sentinelId);
+        if (entry == null)
+        {
+            Console.WriteLine($"  Version sentinel (WordId {sentinelId}) not present in source file — skipped.");
+            return;
+        }
+
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var existing = await context.JMDictWords
+            .Include(w => w.Definitions)
+            .Include(w => w.Forms)
+            .Include(w => w.Lookups)
+            .FirstOrDefaultAsync(w => w.WordId == sentinelId);
+
+        if (existing != null)
+        {
+            context.Definitions.RemoveRange(existing.Definitions);
+            context.Lookups.RemoveRange(existing.Lookups);
+            context.WordForms.RemoveRange(existing.Forms);
+            context.JMDictWords.Remove(existing);
+            await context.SaveChangesAsync();
+        }
+
+        var word = CreateNewWord(entry, furiganaDict);
+        word.Lookups.Clear(); // version marker, not a searchable vocab word
+        context.JMDictWords.Add(word);
+        await context.SaveChangesAsync();
+
+        var gloss = word.Definitions.FirstOrDefault()?.EnglishMeanings.FirstOrDefault() ?? "(no gloss)";
+        Console.WriteLine($"  Version sentinel (WordId {sentinelId}) set from file: {gloss}");
+    }
+
+    /// <summary>Maps entry-level NG metadata (lsource etymology/wasei, &lt;info&gt; notes) onto the word
+    /// and infers Gairaigo origin from lsource when the CSV left it Unknown.</summary>
+    private static void ApplyEntryMetadata(JmDictWord word, SyncEntry entry)
+    {
+        word.LanguageSources = entry.LanguageSources
+            .Select(ls => new JmDictLanguageSource
+            {
+                Lang = ls.Lang, Text = ls.Text, IsWasei = ls.IsWasei, IsPartial = ls.IsPartial
+            })
+            .ToList();
+
+        word.EntryInfo = entry.EntryInfos
+            .Select(i => new JmDictEntryInfo { Type = i.Type, Text = i.Text })
+            .ToList();
+
+        // CSV-sourced origin wins (wago/kango); only fill Gairaigo when lsource is present and origin is unknown.
+        if (entry.LanguageSources.Count > 0 && word.Origin == WordOrigin.Unknown)
+            word.Origin = WordOrigin.Gairaigo;
     }
 
     private static (int Deleted, int Created, int UnresolvedRestrictions) SyncDefinitions(
@@ -2680,17 +3066,12 @@ public static class JmDictHelper
                 Misc = sense.Misc,
                 Field = sense.Field,
                 Dial = sense.Dial,
+                SenseInfo = sense.SenseInfo,
+                GlossTypes = sense.GlossTypes,
                 RestrictedToReadingIndices = restrictedIndices,
                 IsActiveInLatestSource = true,
                 PartsOfSpeech = sense.Pos.Concat(sense.Misc).Distinct().ToList(),
-                EnglishMeanings = sense.EnglishMeanings,
-                DutchMeanings = sense.DutchMeanings,
-                FrenchMeanings = sense.FrenchMeanings,
-                GermanMeanings = sense.GermanMeanings,
-                SpanishMeanings = sense.SpanishMeanings,
-                HungarianMeanings = sense.HungarianMeanings,
-                RussianMeanings = sense.RussianMeanings,
-                SlovenianMeanings = sense.SlovenianMeanings
+                EnglishMeanings = sense.EnglishMeanings
             };
 
             dbWord.Definitions.Add(def);
@@ -2803,19 +3184,16 @@ public static class JmDictHelper
                 Misc = sense.Misc,
                 Field = sense.Field,
                 Dial = sense.Dial,
+                SenseInfo = sense.SenseInfo,
+                GlossTypes = sense.GlossTypes,
                 RestrictedToReadingIndices = restrictedIndices,
                 IsActiveInLatestSource = true,
                 PartsOfSpeech = sense.Pos.Concat(sense.Misc).Distinct().ToList(),
-                EnglishMeanings = sense.EnglishMeanings,
-                DutchMeanings = sense.DutchMeanings,
-                FrenchMeanings = sense.FrenchMeanings,
-                GermanMeanings = sense.GermanMeanings,
-                SpanishMeanings = sense.SpanishMeanings,
-                HungarianMeanings = sense.HungarianMeanings,
-                RussianMeanings = sense.RussianMeanings,
-                SlovenianMeanings = sense.SlovenianMeanings
+                EnglishMeanings = sense.EnglishMeanings
             });
         }
+
+        ApplyEntryMetadata(word, entry);
 
         // Merge per-form priorities into word-level, preserving non-form-derived tags
         var customPri = (word.Priorities ?? [])
@@ -2876,15 +3254,21 @@ public static class JmDictHelper
         return lookups;
     }
 
-    private static async Task<List<SyncEntry>> ParseSyncEntries(string dtdPath, string dictionaryPath)
+    internal static async Task<SyncParseResult> ParseSyncEntries(string dtdPath, string dictionaryPath)
     {
         await LoadEntities(dtdPath, dictionaryPath);
+        _unknownSyncElements.Clear();
 
         var readerSettings = new XmlReaderSettings { Async = true, DtdProcessing = DtdProcessing.Parse, MaxCharactersFromEntities = 0 };
         XmlReader reader = XmlReader.Create(dictionaryPath, readerSettings);
         await reader.MoveToContentAsync();
 
-        var entries = new List<SyncEntry>();
+        var result = new SyncParseResult
+        {
+            Created = reader.GetAttribute("created"),
+            Version = reader.GetAttribute("version")
+        };
+        var entries = result.Entries;
 
         while (await reader.ReadAsync())
         {
@@ -2909,8 +3293,17 @@ public static class JmDictHelper
                         case "r_ele":
                             entry.KanaForms.Add(await ParseSyncREle(reader));
                             break;
+                        case "lsource":
+                            entry.LanguageSources.Add(ReadLanguageSource(reader));
+                            break;
+                        case "info":
+                            entry.EntryInfos.Add(ReadEntryInfo(reader));
+                            break;
                         case "sense":
                             entry.Senses.Add(await ParseSyncSense(reader, senseIndex++));
+                            break;
+                        default:
+                            NoteSyncElement(reader.Name);
                             break;
                     }
                 }
@@ -2929,7 +3322,37 @@ public static class JmDictHelper
         }
 
         reader.Close();
-        return entries;
+
+        if (_unknownSyncElements.Count > 0)
+        {
+            Console.WriteLine("WARNING: unrecognized XML elements encountered (not imported):");
+            foreach (var kv in _unknownSyncElements.OrderByDescending(k => k.Value))
+                Console.WriteLine($"  <{kv.Key}> x{kv.Value}");
+        }
+
+        return result;
+    }
+
+    private static SyncLanguageSource ReadLanguageSource(XmlReader reader)
+    {
+        var lang = reader.GetAttribute("xml:lang") ?? "eng";
+        var lsType = reader.GetAttribute("ls_type");
+        var wasei = reader.GetAttribute("ls_wasei");
+        var text = reader.ReadElementString().Trim();
+        return new SyncLanguageSource
+        {
+            Lang = lang,
+            Text = text,
+            IsWasei = wasei == "y",
+            IsPartial = lsType == "part"
+        };
+    }
+
+    private static SyncEntryInfo ReadEntryInfo(XmlReader reader)
+    {
+        var type = reader.GetAttribute("inf_type") ?? "note";
+        var text = reader.ReadElementString().Trim();
+        return new SyncEntryInfo { Type = type, Text = text };
     }
 
     private static async Task<SyncForm> ParseSyncKEle(XmlReader reader)
@@ -3024,23 +3447,32 @@ public static class JmDictHelper
                     case "dial":
                         sense.Dial.Add(ElToPos(reader.ReadElementString()));
                         break;
+                    case "s_inf":
+                        sense.SenseInfo.Add(await reader.ReadElementContentAsStringAsync());
+                        break;
+                    case "xref":
+                    {
+                        var xref = ReadXref(reader);
+                        if (xref != null)
+                            sense.Xrefs.Add(xref);
+                        break;
+                    }
                     case "gloss" when reader.HasAttributes:
                     {
                         var lang = reader.GetAttribute("xml:lang");
+                        var gType = reader.GetAttribute("g_type");
                         var text = await reader.ReadElementContentAsStringAsync();
-                        switch (lang)
+                        // English-only cutover: non-English glosses are dropped.
+                        if (lang == "eng")
                         {
-                            case "eng": sense.EnglishMeanings.Add(text); break;
-                            case "dut": sense.DutchMeanings.Add(text); break;
-                            case "fre": sense.FrenchMeanings.Add(text); break;
-                            case "ger": sense.GermanMeanings.Add(text); break;
-                            case "spa": sense.SpanishMeanings.Add(text); break;
-                            case "hun": sense.HungarianMeanings.Add(text); break;
-                            case "rus": sense.RussianMeanings.Add(text); break;
-                            case "slv": sense.SlovenianMeanings.Add(text); break;
+                            sense.EnglishMeanings.Add(text);
+                            sense.GlossTypes.Add(gType ?? "");
                         }
                         break;
                     }
+                    default:
+                        NoteSyncElement(reader.Name);
+                        break;
                 }
             }
 
@@ -3050,6 +3482,37 @@ public static class JmDictHelper
 
         return sense;
     }
+
+    /// <summary>Reads a single &lt;xref&gt; element's attributes + display text into a SyncXref.</summary>
+    private static SyncXref? ReadXref(XmlReader reader)
+    {
+        var type = reader.GetAttribute("type") ?? "see";
+        var seqStr = reader.GetAttribute("seq");
+        var snoStr = reader.GetAttribute("sno");
+        var xk = reader.GetAttribute("xk");
+        var xr = reader.GetAttribute("xr");
+        var dict = reader.GetAttribute("dict");
+        var raw = reader.ReadElementString().Trim();
+
+        var xref = new SyncXref
+        {
+            Type = type,
+            Xk = string.IsNullOrEmpty(xk) ? null : xk,
+            Xr = string.IsNullOrEmpty(xr) ? null : xr,
+            Dict = string.IsNullOrEmpty(dict) ? null : dict,
+            RawText = raw
+        };
+        if (int.TryParse(seqStr, out var seq)) xref.Seq = seq;
+        if (short.TryParse(snoStr, out var sno)) xref.Sno = sno;
+        return xref;
+    }
+
+    private static CrossReferenceType ParseXrefType(string type) => type switch
+    {
+        "ant" => CrossReferenceType.Antonym,
+        "syn" => CrossReferenceType.Synonym,
+        _ => CrossReferenceType.SeeAlso
+    };
 
     public static async Task<bool> ImportPitchAccents(bool verbose, IDbContextFactory<JitenDbContext> contextFactory,
                                                       string pitchAcentsDirectoryPath)

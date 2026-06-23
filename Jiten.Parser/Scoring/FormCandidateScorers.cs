@@ -54,7 +54,8 @@ internal static class FormCandidateScorer
 internal static class WordPriorityScorer
 {
     private static readonly HashSet<string> SentenceFinalParticleSurfaces =
-        new() { "ね", "よ", "ぞ", "わ", "な", "さ", "か", "の", "かな", "かしら", "よね", "わよ", "わね", "のよ", "のね" };
+        new() { "ね", "よ", "ぞ", "わ", "な", "さ", "か", "の", "かな", "かしら", "よね", "わよ", "わね", "のよ", "のね",
+                "もんか" };
 
     public static int Score(FormCandidate candidate, bool isNameContext, bool isArchaicSentence, IReadOnlySet<string> archaicPosTypes, bool isSentenceInitial = false, bool isSentenceFinal = false)
     {
@@ -285,7 +286,14 @@ internal static class SurfaceScorer
         }
         else if (context.SurfaceHiragana == candidate.FormTextHiragana)
         {
-            score += KanaScoringHelpers.IsPureKanaScriptDifference(surface, formText) ? 280 : 120;
+            // A hiragana surface matching a PURE-KATAKANA form is a coincidental cross-script fold to a
+            // different word (ある verb vs アル=二 numeral; まま vs ママ "mom"), not a kana spelling variant —
+            // give only a small bonus so the same-script (hiragana) match wins. The reverse direction
+            // (katakana surface → hiragana/kanji kana form, e.g. gairaigo written in kana) keeps the bonus.
+            if (JapaneseTextHelper.IsAllHiragana(surface) && JapaneseTextHelper.IsAllKatakana(formText))
+                score += 40;
+            else
+                score += KanaScoringHelpers.IsPureKanaScriptDifference(surface, formText) ? 280 : 120;
         }
         else
         {
@@ -992,7 +1000,13 @@ internal static class PosAffinityScorer
                 p is "v1" or "v1-s" or "vs-c" or "vs-i" or "vs-s"
                 or "v5a" or "v5b" or "v5g" or "v5k" or "v5k-s"
                 or "v5m" or "v5n" or "v5r" or "v5r-i" or "v5s" or "v5t"
-                or "v5u" or "v5u-s" or "v5uru" or "vk" or "vz" or "aux-v"))
+                or "v5u" or "v5u-s" or "v5uru" or "vk" or "vz" or "aux-v")
+            // Exempt the genuine <noun>する verb: when the deconjugated dictionary form is exactly
+            // this candidate's form + する (きす + する == きすする), the noun IS the correct stem, not a
+            // kana-reading homograph verb (記す/きす). Without this キスさせてくれ resolves to 記す.
+            && !(context.DictionaryFormHiragana is { Length: > 2 } dfh
+                 && dfh.EndsWith("する", StringComparison.Ordinal)
+                 && candidate.FormTextHiragana + "する" == dfh))
         {
             score -= 60;
         }

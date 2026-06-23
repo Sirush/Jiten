@@ -64,6 +64,29 @@
     return word.value?.alternativeReadings.sort((a, b) => b.frequencyPercentage - a.frequencyPercentage) || [];
   });
 
+  const LANG_NAMES: Record<string, string> = {
+    eng: 'English', por: 'Portuguese', dut: 'Dutch', fre: 'French', ger: 'German', ita: 'Italian',
+    spa: 'Spanish', rus: 'Russian', chi: 'Chinese', kor: 'Korean', lat: 'Latin', gre: 'Greek',
+    ara: 'Arabic', heb: 'Hebrew', san: 'Sanskrit', tha: 'Thai', vie: 'Vietnamese', tur: 'Turkish',
+    pol: 'Polish', swe: 'Swedish', nor: 'Norwegian', hun: 'Hungarian', haw: 'Hawaiian', afr: 'Afrikaans',
+  };
+  const langName = (code: string) => LANG_NAMES[code] ?? code;
+
+  const hasWasei = computed(() => word.value?.languageSources?.some((s) => s.isWasei) ?? false);
+
+  const etymologyLine = computed(() => {
+    const sources = word.value?.languageSources;
+    if (!sources || sources.length === 0) return '';
+    const parts = sources
+      .map((s) => {
+        const name = langName(s.lang);
+        return s.text ? `${name} ${s.text}` : name;
+      })
+      .filter((p) => p.length > 0);
+    if (parts.length === 0) return '';
+    return `from ${parts.join(' + ')}`;
+  });
+
   const mediaAmountUrl = 'media-deck/decks-count';
   const { data: mediaAmountResponse } = useApiFetch<Record<MediaType, number>>(mediaAmountUrl);
 
@@ -282,6 +305,18 @@
             <div class="flex flex-col md:flex-row items-end md:hidden">
               <div class="text-gray-500 dark:text-gray-300 text-right">Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}</div>
               <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" />
+            </div>
+          </div>
+
+          <div v-if="(word.languageSources && word.languageSources.length > 0) || (word.entryInfo && word.entryInfo.length > 0)" class="flex flex-wrap items-center gap-2">
+            <span
+              v-if="hasWasei"
+              class="inline-block rounded-full px-2 py-0.5 text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
+              title="Japanese-made — constructed in Japanese from foreign words, not a real foreign phrase"
+            >和製 wasei</span>
+            <span v-if="etymologyLine" class="text-sm text-gray-500 dark:text-gray-400">{{ etymologyLine }}</span>
+            <div v-for="(note, i) in word.entryInfo" :key="'ei' + i" class="w-full text-sm italic text-gray-500 dark:text-gray-400">
+              {{ note }}
             </div>
           </div>
 

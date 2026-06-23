@@ -14,6 +14,27 @@ public static class JapaneseTextHelper
     public static bool IsHiragana(char c) =>
         c is >= '\u3040' and <= '\u309F';
 
+    public static bool IsKatakana(char c) =>
+        c is >= '\u30A0' and <= '\u30FF';
+
+    /// <summary>Non-empty string whose every char is hiragana. Allocation-free.</summary>
+    public static bool IsAllHiragana(ReadOnlySpan<char> s)
+    {
+        if (s.IsEmpty) return false;
+        foreach (var c in s)
+            if (!IsHiragana(c)) return false;
+        return true;
+    }
+
+    /// <summary>Non-empty string whose every char is katakana. Allocation-free.</summary>
+    public static bool IsAllKatakana(ReadOnlySpan<char> s)
+    {
+        if (s.IsEmpty) return false;
+        foreach (var c in s)
+            if (!IsKatakana(c)) return false;
+        return true;
+    }
+
     public static bool IsKanji(char c) =>
         c is (>= '一' and <= '鿿') or (>= '㐀' and <= '䶿') or (>= '豈' and <= '﫿');
 
