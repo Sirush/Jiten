@@ -88,7 +88,8 @@ namespace Jiten.Parser
             (1324950, 1), (1949190, 1), (1344210, 1), (2029730, 0), (5612068, 1), (1370270,3), (1581200,2), (1332670,2), (1150090,1),
             (1533340,3), (5050910,0), (2406530,0), (1243650,2), (1158500,1), (2759530,0),
             (1689970,3), (5257597,0), (1446210, 2), (2416380,1), (1244220,1),
-            (1578010,2), (2028930,1), (2028930,2)
+            (1578010,2), (2028930,1), (2028930,2), (1579350, 6), (2821500, 3),
+            (1592150, 2), (1467040, 6), (1311350, 1), (1175280, 1), (1578150, 4)
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -4898,6 +4899,7 @@ namespace Jiten.Parser
 
                     WordInfo? nextInfo = i < sentenceWords.Count - 1 ? sentenceWords[i + 1].word : null;
                     bool nextIsCopula = nextInfo != null && TransitionRuleSets.CopulaForms.Contains(nextInfo.Text);
+                    bool nextIsForwardAnchor = nextInfo != null && TransitionRuleSets.ForwardAnchorSurfaces.Contains(nextInfo.Text);
 
                     var cachedHint = FindMatchingHint(relocatedHints, currentInfo);
                     bool hasHint = cachedHint != null;
@@ -4917,10 +4919,16 @@ namespace Jiten.Parser
                          || IsInfinitiveResult(prevResult)
                          || prevResult?.PartsOfSpeech.Any(p => PosMask.Has(PosMask.NounLike, PosMask.Bit(p))) == true);
 
-                    if (!isArchaicPass1 && !nextIsCopula && !hasHint && !infinitiveAfterNominal
+                    // A sentence-final verb result may be a lexicalised interjection homograph the
+                    // first pass can't see (来い ← 来る vs. 来い "come!"); keep it rescorable so the
+                    // sentence-final interjection override can run even on a confident first pass.
+                    bool sentenceFinalVerb = i == sentenceWords.Count - 1
+                        && currentResult.PartsOfSpeech.Any(p => p is PartOfSpeech.Verb);
+
+                    if (!isArchaicPass1 && !nextIsCopula && !nextIsForwardAnchor && !hasHint && !infinitiveAfterNominal && !sentenceFinalVerb
                         && ScoringPolicy.IsHighConfidence(currentMargin)) continue;
 
-                    bool forceRederive = hasHint || ScoringPolicy.IsLowConfidence(currentMargin);
+                    bool forceRederive = hasHint || nextIsForwardAnchor || ScoringPolicy.IsLowConfidence(currentMargin);
 
                     if (!forceRederive)
                         for (int k = Math.Max(0, i - 3); k < i; k++)
@@ -4991,7 +4999,7 @@ namespace Jiten.Parser
 
                 for (int i = 0; i < sentenceWords.Count; i++)
                 {
-                    var (currentInfo, currentResult, _) = sentenceWords[i];
+                    var (currentInfo, currentResult, currentMargin) = sentenceWords[i];
                     globalPos++;
 
                     if (currentResult == null)
@@ -5047,6 +5055,23 @@ namespace Jiten.Parser
                         sudachiPOS: currentInfo.PartOfSpeech,
                         isSudachiPossibleDependant: currentInfo.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant));
 
+                    // Sentence-final interjection override (来い → int 2742070, not the 来る imperative).
+                    // Only this pass knows the token is sentence-final, so force the refine path to run
+                    // even without an adjacency bonus when the override would flip the pick.
+                    var sfInterjCurrent = scoringContext.IsSentenceFinal
+                        ? candidates.FirstOrDefault(c => c.Word.WordId == currentResult.WordId
+                                                         && c.ReadingIndex == currentResult.ReadingIndex)
+                        : null;
+                    bool interjectionFlip = sfInterjCurrent != null
+                        && FormCandidateSelector.ApplySentenceFinalInterjection(sfInterjCurrent, candidates, scoringContext) != null;
+
+                    // A high-confidence sentence-final verb only reaches pass 2 because of the
+                    // interjection exemption above; it must NOT receive a general adjacency flip
+                    // (行けよ → 行ける), only the interjection override.
+                    bool onlyInterjectionAllowed = scoringContext.IsSentenceFinal
+                        && ScoringPolicy.IsHighConfidence(currentMargin)
+                        && currentResult.PartsOfSpeech.Any(p => p is PartOfSpeech.Verb);
+
                     bool anyNonZeroBonus = false;
                     var bonusCache = new Dictionary<FormCandidate, (int bonus, List<string>? rules, int rubyBonus)>();
 
@@ -5059,6 +5084,20 @@ namespace Jiten.Parser
                         {
                             collocMap ??= new Dictionary<int, int>();
                             collocMap[cv.TargetWordId] = collocMap.GetValueOrDefault(cv.TargetWordId) + cv.Bonus;
+                        }
+                    }
+
+                    // Forward-anchor disambiguation: the immediately following surface (前/後 etc.)
+                    // selects a homograph reading the priority scorer would otherwise miss.
+                    if (nextInfo != null)
+                    {
+                        foreach (var (targetWordId, anchor) in TransitionRuleSets.ForwardAnchorBoosts)
+                        {
+                            if (Array.IndexOf(anchor.NextAnchors, nextInfo.Text) >= 0)
+                            {
+                                collocMap ??= new Dictionary<int, int>();
+                                collocMap[targetWordId] = collocMap.GetValueOrDefault(targetWordId) + anchor.Bonus;
+                            }
                         }
                     }
 
@@ -5112,7 +5151,7 @@ namespace Jiten.Parser
                                            phase2Best.ReadingIndex != currentResult.ReadingIndex);
                     }
 
-                    if (!anyNonZeroBonus)
+                    if (!interjectionFlip && (!anyNonZeroBonus || onlyInterjectionAllowed))
                     {
                         currentInfo.ResolvedWordId = currentResult.WordId;
                         corrected.Add(currentResult);

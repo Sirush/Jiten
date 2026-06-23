@@ -108,9 +108,13 @@
   }
 
   // The raw display text carries a trailing "[N]" sense marker (ダウン[1]); strip it — the sense
-  // number is shown separately as a small superscript.
+  // number is shown separately as a small superscript. It also carries the reading as a furigana/ruby
+  // in parentheses (良い(よい)); strip that too so only the headword shows.
   function xrefBaseText(x: CrossReference): string {
-    return x.targetText.replace(/\s*\[\d+\]\s*$/, '');
+    return x.targetText
+      .replace(/\s*\[\d+\]\s*$/, '')
+      .replace(/[(（][^)）]*[)）]\s*$/, '')
+      .trim();
   }
 
   function groupedXrefs(definition: Definition): { type: string; label: string; items: NonNullable<Definition['crossReferences']> }[] {

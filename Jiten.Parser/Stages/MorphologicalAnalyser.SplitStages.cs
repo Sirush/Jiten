@@ -582,6 +582,113 @@ public partial class MorphologicalAnalyser
         return result;
     }
 
+    /// <summary>
+    /// Sudachi lexicalises どうして (adverb 如何して) even when it is the してた (している) contraction:
+    /// どうしてた = どう + して + (い)た. The "why/how" adverb cannot take a directly-following past た,
+    /// so どうして immediately before た is re-cut to どう (adverb) + し (する) + て (てる), which the
+    /// inflection combiner reforms into してた. Gated on the directly-following た so genuine どうして
+    /// (どうして来たの, どうしてですか) is untouched.
+    /// </summary>
+    private static List<WordInfo> SplitDoushiteContraction(List<WordInfo> wordInfos)
+    {
+        var result = new List<WordInfo>(wordInfos.Count + 2);
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+
+            if (word is { Text: "どうして", PartOfSpeech: PartOfSpeech.Adverb }
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1] is { Text: "た", PartOfSpeech: PartOfSpeech.Auxiliary }
+                && word.StartOffset >= 0)
+            {
+                int s = word.StartOffset;
+                result.Add(new WordInfo
+                {
+                    Text = "どう", DictionaryForm = "どう", NormalizedForm = "どう",
+                    PartOfSpeech = PartOfSpeech.Adverb, Reading = "ドウ",
+                    StartOffset = s, EndOffset = s + 2
+                });
+                result.Add(new WordInfo
+                {
+                    Text = "し", DictionaryForm = "する", NormalizedForm = "為る",
+                    PartOfSpeech = PartOfSpeech.Verb, Reading = "シ",
+                    StartOffset = s + 2, EndOffset = s + 3
+                });
+                result.Add(new WordInfo
+                {
+                    Text = "て", DictionaryForm = "てる", NormalizedForm = "てる",
+                    PartOfSpeech = PartOfSpeech.Auxiliary, Reading = "テ",
+                    StartOffset = s + 3, EndOffset = s + 4
+                });
+                continue;
+            }
+
+            result.Add(word);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// V-連用形 + も + する emphatic negative (かすりもしない, 見もしません): after a verb stem Sudachi
+    /// often lexicalises the も + し sequence as the adverb もし (若し "if"). The conditional adverb
+    /// cannot follow a 連用形, so re-cut もし → も (binding particle) + し (する), letting the downstream
+    /// combiner reform しません/しませんでした. Gated on a preceding inflected verb and a following
+    /// する-negation/polite continuation so a genuine もし is left intact.
+    /// </summary>
+    private static List<WordInfo> SplitEmphaticMoSuru(List<WordInfo> wordInfos)
+    {
+        var result = new List<WordInfo>(wordInfos.Count + 1);
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+
+            if (word is { Text: "もし", PartOfSpeech: PartOfSpeech.Adverb }
+                && i > 0
+                && wordInfos[i - 1] is { PartOfSpeech: PartOfSpeech.Verb } prev
+                && prev.Text != prev.DictionaryForm
+                && i + 1 < wordInfos.Count
+                && IsSuruNegationOrPoliteContinuation(wordInfos[i + 1].Text)
+                && word.StartOffset >= 0)
+            {
+                int s = word.StartOffset;
+                result.Add(new WordInfo
+                {
+                    Text = "も", DictionaryForm = "も", NormalizedForm = "も",
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    PartOfSpeechSection1 = PartOfSpeechSection.BindingParticle,
+                    Reading = "モ", StartOffset = s, EndOffset = s + 1
+                });
+                // Bare し (する 連用形). Pin the word id: free scoring mismatches the surface homograph
+                // 四 (し "four"), and the parser keeps しません/ませんでした as separate suffix tokens anyway.
+                result.Add(new WordInfo
+                {
+                    Text = "し", DictionaryForm = "する", NormalizedForm = "為る",
+                    PartOfSpeech = PartOfSpeech.Verb, Reading = "シ",
+                    PreMatchedWordId = 1157170,
+                    StartOffset = s + 1, EndOffset = s + 2
+                });
+                continue;
+            }
+
+            result.Add(word);
+        }
+
+        return result;
+    }
+
+    private static bool IsSuruNegationOrPoliteContinuation(string text) =>
+        text.StartsWith("ませ", StringComparison.Ordinal)
+        || text.StartsWith("まし", StringComparison.Ordinal)
+        || text.StartsWith("ます", StringComparison.Ordinal)
+        || text.StartsWith("ない", StringComparison.Ordinal)
+        || text.StartsWith("なかっ", StringComparison.Ordinal)
+        || text.StartsWith("なく", StringComparison.Ordinal)
+        || text.StartsWith("ねえ", StringComparison.Ordinal)
+        || text.StartsWith("ねぇ", StringComparison.Ordinal);
+
     private static readonly string[] OovGrammarMarkers = ["って", "った", "のは", "のが", "のに", "ので", "んだ", "んで", "わけ", "ない"];
 
     private static readonly (string text, string reading, PartOfSpeech pos, PartOfSpeechSection sec)[] GrammarTokenTable =
@@ -604,6 +711,10 @@ public partial class MorphologicalAnalyser
         ("を", "ヲ", PartOfSpeech.Particle, PartOfSpeechSection.CaseMarkingParticle),
         ("と", "ト", PartOfSpeech.Particle, PartOfSpeechSection.CaseMarkingParticle),
         ("か", "カ", PartOfSpeech.Particle, PartOfSpeechSection.AdverbialParticle),
+        // だろう/だろ before だ — the longest-match loop keeps the tentative copula whole so the
+        // trailing ろ/ろう is not stranded as a leftover noun that aborts the split (…ってことだろ).
+        ("だろう", "ダロウ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
+        ("だろ", "ダロ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
         ("だ", "ダ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
         ("な", "ナ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
         ("ね", "ネ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),

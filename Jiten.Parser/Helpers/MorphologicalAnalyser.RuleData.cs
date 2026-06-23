@@ -225,6 +225,8 @@ public partial class MorphologicalAnalyser
         ("ばかり", "に", PartOfSpeech.Expression), // ばかりに 1010250 "(just) because"
         ("それ", "では", PartOfSpeech.Conjunction), // それでは 1406050 "well then" (mirrors それじゃ)
         ("に", "対して", PartOfSpeech.Expression), // に対して 1009800 (mirrors について/にとって)
+        ("いい", "ぞ", PartOfSpeech.Interjection),
+        ("に", "よって", PartOfSpeech.Expression)
     ];
 
     private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];

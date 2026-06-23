@@ -14,4 +14,9 @@ internal sealed class UncertainSpan
     public string Text   { get; init; } = "";
     public int Position  { get; init; }
     public int Length    { get; init; }
+
+    /// Flagged only because the whole-span token resolves exclusively to JMnedict name entries
+    /// (一ッ岳/ひとつだけ). The trivial full-span "split" just re-finds that name, so it must be
+    /// excluded — only a genuine multi-segment path (一つ + だけ) is a real resegmentation.
+    public bool NameOnly { get; init; }
 }

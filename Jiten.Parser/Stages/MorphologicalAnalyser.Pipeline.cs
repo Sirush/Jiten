@@ -24,6 +24,8 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Split, SplitTatteParticle, TokenFeatures.TextTatte),
         Stage(TokenStageGroup.Split, SplitTanSuffix, TokenFeatures.TextTanSuffix),
         Stage(TokenStageGroup.Split, SplitTawakeNoun, TokenFeatures.TextTawake),
+        Stage(TokenStageGroup.Split, SplitDoushiteContraction),
+        Stage(TokenStageGroup.Split, SplitEmphaticMoSuru),
 
         Stage(TokenStageGroup.Repair, RepairHasaNoun, TokenFeatures.TextHasa),
         Stage(TokenStageGroup.Repair, RepairNTokenisation),

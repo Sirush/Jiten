@@ -1023,7 +1023,8 @@ public class MorphologicalAnalyserTests
 
         // たわけ should split into た+わけ after verb contexts, not match 戯け
         yield return ["術があるったわけではない", new[] { "術", "が", "あるった", "わけではない" }];
-        yield return ["どうしてたわけ", new[] { "どうして", "わけ" }];
+        // どうしてた = どう + してた (してた contraction); the old segmentation dropped the past た.
+        yield return ["どうしてたわけ", new[] { "どう", "してた", "わけ" }];
         yield return ["チクッたわけじゃない", new[] { "チクッ", "わけじゃない" }];
 
         // Legitimate たわけ (戯け) should be preserved
@@ -1868,6 +1869,19 @@ public class MorphologicalAnalyserTests
         // protect: genuine kanji te-form verbs must NOT reform a noun (prev+stripped is not a JMDict word)
         yield return ["家に帰ってきた", new[] { "家", "に", "帰ってきた" }];
         yield return ["資料を要ってない", new[] { "資料", "を", "要ってない" }];
+        // どうして (lexicalised adverb 如何して) directly before past た is the してた (している) contraction,
+        // not the "why" adverb — re-cut どうして → どう + してた.
+        yield return ["お兄ちゃんはどうしてたの", new[] { "お兄ちゃん", "は", "どう", "してた", "の" }];
+        // V-連用形 + も + する emphatic negative: after the opening 「, Sudachi lexicalises も+し as the
+        // adverb もし (若し) (without the quote it splits も+し and the かすりもしない idiom resolves);
+        // re-cut もし → も (particle) + し (する). ませんでした stays a separate polite-negative suffix token.
+        yield return ["「かすりもしませんでした」", new[] { "かすり", "も", "し", "ませんでした" }];
+        // After 「 Sudachi fuses ひとつだけ into one OOV that only matches the place-name 一ッ岳;
+        // an all-hiragana name-only token is resegmented into the common-word run 一つ + だけ.
+        yield return ["「ひとつだけ…」", new[] { "ひとつ", "だけ" }];
+        // Sudachi strands 続ける's final る onto an OOV blob るってことだろ; the verb is reformed and the
+        // blob split — だろ must be a known grammar token or the trailing ろ aborts the whole split.
+        yield return ["続けるってことだろ", new[] { "続ける", "って", "こと", "だろ" }];
     }
 
     [Theory]

@@ -47,6 +47,15 @@ public class FormSelectionTests
         // Pure kana gairaigo: テレビ has only kana forms
         yield return ["テレビ", "テレビ", 1080510, (byte)0];
 
+        // 一分 before 前/後 is the time reading いっぷん (one minute, 1166290 RI1), not the
+        // news-ranked いちぶ (one tenth, 1166270) the priority scorer defaults to.
+        yield return ["一分前の会話を再開した", "一分", 1166290, (byte)1];
+        yield return ["約一分後におじさんが戻ってきた", "一分", 1166290, (byte)1];
+
+        // 挿入る: 挿入 is a する-verb (vs/vt), so the trailing る is not a conjugation —
+        // the noun 挿入 (1399840) is emitted and る is dropped, never fused into a verb.
+        yield return ["彼女の中に挿入る", "挿入", 1399840, (byte)0];
+
         // 気にしない before quotative って must resolve to the idiom 気にしない (2563780), not the
         // にしな surname — the fork drops the user_dic 表現 node before って unless patched.
         yield return ["気にしないって事", "気にしない", 2563780, (byte)0];
@@ -1444,6 +1453,13 @@ public class FormSelectionTests
 
         // quotative って stealing a kanji compound noun's tail mora: 必|要っ|て → 必要 (1487660) + って
         yield return ["強引な態度も必要ってことか", "必要", 1487660, (byte)0];
+        // Sentence-final 来い is the interjection 来い (2742070 "come!"), not the 来る verb imperative.
+        yield return ["今すぐ我々とともに来い", "来い", 2742070, (byte)0];
+        // つい is the common adverb つい (1008030 "just now"), not the kana reading of 終/遂 (2720360),
+        // whose jiten boost must not transfer to its minor kana form.
+        yield return ["ついあれこれ見ているうちに夢中になってしまって", "つい", 1008030, (byte)0];
+        // 奢りじゃ悪い: じゃ (では contraction) is the dedicated じゃ copula (2851029), not the plain だ (2089020).
+        yield return ["全部あんたの奢りじゃ悪いだろ", "じゃ", 2851029, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
@@ -1469,6 +1485,9 @@ public class FormSelectionTests
         yield return ["レイの体が上下に赤く弾けて消えて、「イエイ！」", "イエイ"];
         // hiragana onomatopoeia must not match the name ヒューン or mutate into 庇陰
         yield return ["どひゅーんと、私を置き去りにして雪さんはヴァレリア様と共にこの場から逃れた。", "ひゅーん"];
+
+        // 挿入る must not fuse into a single verb token (挿入 is a する-verb, る is no conjugation)
+        yield return ["彼女の中に挿入る", "挿入る"];
     }
 
     [Theory]

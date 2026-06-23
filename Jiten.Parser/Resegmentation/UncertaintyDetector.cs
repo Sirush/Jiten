@@ -1,4 +1,6 @@
+using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Parser.Data;
 using Jiten.Parser.Resolution;
 
 namespace Jiten.Parser.Resegmentation;
@@ -16,6 +18,7 @@ internal static class UncertaintyDetector
     ];
 
     public static List<UncertainSpan> FindSpans(SentenceInfo sentence, Dictionary<string, List<int>> lookups,
+        Dictionary<int, JmDictWordMeta>? wordMeta = null,
         HashSet<string>? protectedSurfaces = null)
     {
         var result = new List<UncertainSpan>();
@@ -36,14 +39,28 @@ internal static class UncertaintyDetector
             // Multi-character kanji numerals (五十七, 六十一) are OOV in Sudachi and often
             // only match name entries in JMDict. Flag them for resegmentation so the scorer
             // can evaluate splits like 五十+七 which resolve to real numeral entries.
+            bool nameOnly = false;
             bool isCompoundNumeral = word.PartOfSpeechSection1 == PartOfSpeechSection.Numeral && word.Text.Length > 1;
             if (!isCompoundNumeral)
             {
-                if (HasMatch(word.Text, lookups))
-                    continue;
-                if (word.DictionaryForm != word.Text && !string.IsNullOrEmpty(word.DictionaryForm) &&
-                    HasMatch(word.DictionaryForm, lookups))
-                    continue;
+                bool textMatch = HasMatch(word.Text, lookups);
+                bool dictMatch = word.DictionaryForm != word.Text && !string.IsNullOrEmpty(word.DictionaryForm) &&
+                                 HasMatch(word.DictionaryForm, lookups);
+                if (textMatch || dictMatch)
+                {
+                    // Resolved by lookup → normally skip. Exception: an all-hiragana token whose every
+                    // lookup match is a pure JMnedict name entry (一ッ岳/ひとつだけ) is almost always a
+                    // misparsed common-word run; keep it eligible so the scorer can try 一つ+だけ. The
+                    // acceptance-path guards (HasShortPureNameSegment / negative score) still reject
+                    // genuine name fragmentation.
+                    bool pureNameOnly = wordMeta != null
+                        && JapaneseTextHelper.IsAllHiragana(word.Text)
+                        && IsPureNameOnlyMatch(word.Text, lookups, wordMeta)
+                        && (!dictMatch || IsPureNameOnlyMatch(word.DictionaryForm, lookups, wordMeta));
+                    if (!pureNameOnly)
+                        continue;
+                    nameOnly = true;
+                }
             }
 
             result.Add(new UncertainSpan
@@ -51,7 +68,8 @@ internal static class UncertaintyDetector
                 WordIndex = i,
                 Text      = word.Text,
                 Position  = position,
-                Length    = length
+                Length    = length,
+                NameOnly  = nameOnly
             });
         }
 
@@ -78,6 +96,38 @@ internal static class UncertaintyDetector
         }
         catch { }
         return false;
+    }
+
+    // True when every lookup match for `text` is a pure JMnedict name entry and there is no
+    // verb/adjective-derived match — i.e. the only thing keeping the token "resolved" is a name.
+    private static bool IsPureNameOnlyMatch(string text, Dictionary<string, List<int>> lookups,
+        Dictionary<int, JmDictWordMeta> wordMeta)
+    {
+        string hira;
+        try { hira = KanaConverter.ToNormalizedHiragana(text); }
+        catch { hira = text; }
+
+        if (HasGodanDictFormMatch(text, lookups) || (hira != text && HasGodanDictFormMatch(hira, lookups)))
+            return false;
+        if (HasIchidanDictFormMatch(text, lookups) || (hira != text && HasIchidanDictFormMatch(hira, lookups)))
+            return false;
+        if (HasAdjSaNominalizationMatch(text, lookups) || (hira != text && HasAdjSaNominalizationMatch(hira, lookups)))
+            return false;
+
+        bool any = false;
+        foreach (var key in hira != text ? new[] { text, hira } : new[] { text })
+        {
+            if (!lookups.TryGetValue(key, out var ids)) continue;
+            foreach (var id in ids)
+            {
+                any = true;
+                if (!wordMeta.TryGetValue(id, out var meta)) return false;
+                if (!meta.IsTrueName) return false;
+                if (meta.Pos.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown))) return false;
+            }
+        }
+
+        return any;
     }
 
     private static bool HasGodanDictFormMatch(string text, Dictionary<string, List<int>> lookups)

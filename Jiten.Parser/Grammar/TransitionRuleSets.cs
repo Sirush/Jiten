@@ -75,6 +75,21 @@ internal static class TransitionRuleSets
         { 1371260, (1229610, 30) }, // 水 → 汲む (to draw water), not 組む
     };
 
+    // Forward-anchor homograph disambiguation: when the immediately following token's surface
+    // is one of the anchor strings, the target wordId candidate is boosted to beat a
+    // higher-priority homograph that the scorer would otherwise pick.
+    // (targetWordId) → (anchor surfaces, bonus)
+    internal static readonly Dictionary<int, (string[] NextAnchors, int Bonus)> ForwardAnchorBoosts = new()
+    {
+        // 一分前 / 一分後 = いっぷん (one minute, 1166290), not the news-ranked いちぶ (one tenth, 1166270)
+        { 1166290, (["前", "後"], 40) },
+    };
+
+    // Flattened set of every anchor surface, used by the pass-2 prefilter to keep an
+    // otherwise-confident token rescorable when a forward anchor could flip its homograph.
+    internal static readonly HashSet<string> ForwardAnchorSurfaces =
+        ForwardAnchorBoosts.Values.SelectMany(a => a.NextAnchors).ToHashSet();
+
     internal static readonly ScoringRule[] SoftRules =
     [
         new("noun-particle-synergy",
