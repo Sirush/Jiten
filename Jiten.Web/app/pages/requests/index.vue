@@ -259,7 +259,7 @@ onMounted(() => {
       />
     </div>
 
-    <Tabs v-model:value="activeTab">
+    <Tabs v-model:value="activeTab" :show-navigators="false">
       <TabList>
         <Tab :value="0">All Requests</Tab>
         <Tab :value="1">My Requests</Tab>

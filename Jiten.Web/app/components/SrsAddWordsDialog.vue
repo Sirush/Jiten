@@ -258,7 +258,7 @@
     }"
   >
     <div class="flex flex-col flex-1 overflow-hidden">
-      <Tabs v-model:value="activeTab" class="flex flex-col flex-1 overflow-hidden">
+      <Tabs v-model:value="activeTab" :show-navigators="false" class="flex flex-col flex-1 overflow-hidden">
         <TabList>
           <Tab value="search">Search</Tab>
           <Tab value="paste">Text</Tab>

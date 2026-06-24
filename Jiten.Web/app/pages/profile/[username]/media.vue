@@ -143,7 +143,7 @@
       </div>
 
       <template v-else>
-        <Tabs v-model:value="selectedTab">
+        <Tabs v-model:value="selectedTab" :show-navigators="false">
           <TabList class="flex-wrap">
             <Tab v-for="g in groups" :key="g.status" :value="g.status.toString()">
               {{ g.label }}

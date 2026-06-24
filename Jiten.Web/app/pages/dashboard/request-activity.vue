@@ -134,7 +134,7 @@ onMounted(() => loadActivityLog());
       <h1 class="text-3xl font-bold">Request Activity</h1>
     </div>
 
-    <Tabs v-model:value="activeTab">
+    <Tabs v-model:value="activeTab" :show-navigators="false">
       <TabList>
         <Tab :value="0">Activity Log</Tab>
         <Tab :value="1">User Summary</Tab>

@@ -215,7 +215,7 @@ onMounted(() => loadComparisons());
       </NuxtLink>
     </div>
 
-    <Tabs v-model:value="activeTab">
+    <Tabs v-model:value="activeTab" :show-navigators="false">
       <TabList>
         <Tab :value="0">Comparisons</Tab>
         <Tab :value="1">Ratings</Tab>
