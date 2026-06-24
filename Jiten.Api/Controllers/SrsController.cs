@@ -1166,13 +1166,21 @@ public class SrsController(
         var inferred = await ComputeInferredPairs(userId, request.Direction);
         if (inferred == null) return Results.BadRequest($"Invalid direction: {request.Direction}");
 
-        var total = inferred.Count;
+        var (items, counts) = await CategorizeAndFilter(
+            userId, inferred, request.ShowNew, request.ShowLearning, request.ShowMature);
+
+        var total = items.Count;
         var limit = Math.Clamp(request.Limit, 1, 100);
         var offset = Math.Max(0, request.Offset);
-        var page = inferred.Skip(offset).Take(limit).ToList();
+        var page = items.Skip(offset).Take(limit).ToList();
 
-        var dtos = await HydrateInferredPairs(userId, page);
-        return Results.Ok(new PaginatedResponse<List<MassActionCardDto>>(dtos, total, limit, offset));
+        var dtos = await HydrateInferredPairs(userId, page.Select(p => (p.WordId, p.ReadingIndex)).ToList());
+        var catByPair = page.ToDictionary(p => (p.WordId, p.ReadingIndex), p => p.Category);
+        foreach (var d in dtos)
+            d.Category = catByPair.GetValueOrDefault((d.WordId, d.ReadingIndex));
+
+        return Results.Ok(new CompositionInferencePreviewResponse(
+            dtos, total, limit, offset, counts.New, counts.Learning, counts.Mature));
     }
 
     [HttpPost("composition-inference/execute")]
@@ -1203,7 +1211,9 @@ public class SrsController(
         {
             var inferred = await ComputeInferredPairs(userId, request.Direction);
             if (inferred == null) return Results.BadRequest($"Invalid direction: {request.Direction}");
-            pairs = inferred;
+            var (items, _) = await CategorizeAndFilter(
+                userId, inferred, request.ShowNew, request.ShowLearning, request.ShowMature);
+            pairs = items.Select(x => (x.WordId, x.ReadingIndex)).ToList();
         }
 
         if (pairs.Count == 0) return Results.Json(new { success = true, affectedCount = 0 });
@@ -1313,6 +1323,69 @@ public class SrsController(
         }
 
         return null;
+    }
+
+    private async Task<(List<(int WordId, byte ReadingIndex, string Category)> Items, (int New, int Learning, int Mature) Counts)>
+        CategorizeAndFilter(string userId, List<(int WordId, byte ReadingIndex)> pairs,
+                            bool showNew, bool showLearning, bool showMature)
+    {
+        if (pairs.Count == 0)
+            return (new List<(int, byte, string)>(), (0, 0, 0));
+
+        var wordIds = pairs.Select(p => p.WordId).Distinct().ToList();
+        var cards = await userContext.FsrsCards
+            .Where(c => c.UserId == userId && wordIds.Contains(c.WordId))
+            .Select(c => new { c.WordId, c.ReadingIndex, c.State, c.Due, c.LastReview })
+            .ToListAsync();
+        var cardDict = cards.ToDictionary(c => (c.WordId, c.ReadingIndex));
+
+        var threshold = TimeSpan.FromDays(21);
+
+        string Categorize((int WordId, byte ReadingIndex) p)
+        {
+            if (!cardDict.TryGetValue(p, out var c) || c.State == FsrsState.New)
+                return "new";
+            if (c.State == FsrsState.Review && c.LastReview != null && c.Due - c.LastReview.Value >= threshold)
+                return "mature";
+            return "learning";
+        }
+
+        var categorized = pairs
+            .Select(p => (p.WordId, p.ReadingIndex, Category: Categorize(p)))
+            .ToList();
+
+        var counts = (
+            New: categorized.Count(x => x.Category == "new"),
+            Learning: categorized.Count(x => x.Category == "learning"),
+            Mature: categorized.Count(x => x.Category == "mature")
+        );
+
+        var allowed = new HashSet<string>();
+        if (showNew) allowed.Add("new");
+        if (showLearning) allowed.Add("learning");
+        if (showMature) allowed.Add("mature");
+
+        var filtered = categorized.Where(x => allowed.Contains(x.Category)).ToList();
+        if (filtered.Count == 0)
+            return (new List<(int, byte, string)>(), counts);
+
+        var filteredWordIds = filtered.Select(x => x.WordId).Distinct().ToList();
+        var freqDict = await WordFormHelper.LoadWordFormFrequencies(context, filteredWordIds);
+
+        var items = filtered
+            .Select(x =>
+            {
+                var rank = freqDict.GetValueOrDefault((x.WordId, (short)x.ReadingIndex))?.FrequencyRank ?? 0;
+                return (x.WordId, x.ReadingIndex, x.Category, Rank: rank);
+            })
+            .OrderBy(x => x.Rank <= 0)
+            .ThenBy(x => x.Rank)
+            .ThenBy(x => x.WordId)
+            .ThenBy(x => x.ReadingIndex)
+            .Select(x => (x.WordId, x.ReadingIndex, x.Category))
+            .ToList();
+
+        return (items, counts);
     }
 
     private async Task<(HashSet<(int WordId, byte ReadingIndex)> Known, HashSet<(int WordId, byte ReadingIndex)> Blocked)>

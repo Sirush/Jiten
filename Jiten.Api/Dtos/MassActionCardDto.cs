@@ -12,4 +12,9 @@ public class MassActionCardDto
     public FsrsState State { get; set; }
     public DateTime Due { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// Composition-inference maturity bucket: "new", "learning" or "mature". Null for other endpoints.
+    /// </summary>
+    public string? Category { get; set; }
 }
