@@ -282,7 +282,7 @@
 
   <Popover ref="popover" class="w-full max-w-3xl">
     <div class="flex flex-col gap-4 p-3 min-w-[280px]">
-      <Tabs value="filters">
+      <Tabs value="filters" :show-navigators="false">
         <TabList>
           <Tab value="filters">Filters</Tab>
           <Tab value="genres">Genres</Tab>

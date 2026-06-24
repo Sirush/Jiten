@@ -1064,6 +1064,24 @@ namespace Jiten.Parser
                    .ToList();
         }
 
+        /// <summary>
+        /// Returns the raw Sudachi Mode A (no-userdic) morphemes for each input text, WITHOUT JMDict
+        /// resolution or the recombination pipeline (morphemesOnly short-circuits before RunPipeline).
+        /// Each inner list is one input text's morphemes, carrying surface (Text), DictionaryForm,
+        /// PartOfSpeech and Reading. Used by composition backfill to segment a compound into morphemes.
+        /// </summary>
+        public static async Task<List<List<WordInfo>>> GetMorphemesBatch(
+            IDbContextFactory<JitenDbContext> contextFactory, List<string> texts)
+        {
+            await EnsureInitializedAsync(contextFactory);
+            // morphemesOnly skips RunPipeline, so the Has*CompoundLookup delegates are never invoked.
+            var analyser = new MorphologicalAnalyser();
+            var batches = await analyser.ParseBatch(texts, morphemesOnly: true);
+            return batches
+                   .Select(sentences => sentences.SelectMany(s => s.Words).Select(w => w.word).ToList())
+                   .ToList();
+        }
+
         private static async Task<Dictionary<int, JmDictWord>> GetWordsWithCache(
             IEnumerable<int> wordIds,
             ConcurrentDictionary<int, JmDictWord>? batchCache)

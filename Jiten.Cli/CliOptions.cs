@@ -112,6 +112,12 @@ public class CliOptions
     [Option(longName: "split-type", Required = false, Default = "CB", HelpText = "SudachiDict split type to ingest (C, B, CB). Default CB.")]
     public string SplitType { get; set; } = "CB";
 
+    [Option(longName: "cleanup-compositions", Required = false, HelpText = "Delete name-parent, particle-component and all-single-char WordCompositions (idempotent/rerunnable). Combine with --dry-run to preview counts.")]
+    public bool CleanupCompositions { get; set; }
+
+    [Option(longName: "backfill-compositions", Required = false, HelpText = "Fill WordCompositions for compounds with no rows via Sudachi Mode A + sense resolver (idempotent/rerunnable). Combine with --dry-run for a sampled coverage report.")]
+    public bool BackfillCompositions { get; set; }
+
     [Option(longName: "sync-jmnedict", Required = false, HelpText = "Sync missing JMNedict entries and update partial entries with missing readings/definitions.")]
     public string? SyncJMNedict { get; set; }
 
