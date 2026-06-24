@@ -132,6 +132,9 @@
     studyTheme.value = id;
     localStorage.setItem('srs-study-theme', id);
   }
+  function selectStudyTheme(id: string) {
+    if (studyThemes.some(t => t.id === id)) setStudyTheme(id as StudyThemeId);
+  }
 
   const compactBar = ref(false);
   onMounted(() => {
@@ -507,18 +510,6 @@
             <div v-if="srsStore.studySettings.showElapsedTime" class="text-[11px] tabular-nums text-surface-400 dark:text-surface-500 -mt-0.5">{{ elapsedDisplay }}</div>
           </div>
           <div class="flex items-center gap-1 justify-end">
-            <button
-              v-for="theme in studyThemes"
-              :key="theme.id"
-              @click="setStudyTheme(theme.id)"
-              class="md:hidden p-2 rounded-lg transition-colors cursor-pointer"
-              :class="studyTheme === theme.id
-                ? 'bg-indigo-500 text-white'
-                : 'bg-gray-200/60 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-700'"
-              :aria-label="theme.id + ' theme'"
-            >
-              <Icon :name="theme.icon" size="18" />
-            </button>
             <Tooltip :content="!timedActive ? 'Timed review off — click to turn on' : (timerPaused ? 'Timed review paused — press P to resume' : 'Timed review on — click to turn off')">
               <button
                 @click="toggleTimed()"
@@ -721,6 +712,8 @@
             :auto-advance-fraction="writeInAutoFraction"
             :compact="compactBar"
             :pressed-key="pressedKey"
+            :themes="studyThemes"
+            :active-theme="studyTheme"
             @grade="handleGrade"
             @flip="handleFlip"
             @blacklist="handleBlacklist"
@@ -731,6 +724,7 @@
             @undo="handleUndo"
             @settings="showSettingsDialog = true"
             @expand="toggleCompactBar"
+            @set-theme="selectStudyTheme"
           />
           <div v-if="!compactBar" class="mt-1 hidden md:flex items-center justify-center gap-2 text-xs text-gray-400">
             <div class="flex gap-0.5">

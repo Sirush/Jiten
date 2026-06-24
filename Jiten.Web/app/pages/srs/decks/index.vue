@@ -633,11 +633,11 @@
               'border-l-3 border-l-green-300 dark:border-l-green-700': newCardDeckIds.has(deck.userStudyDeckId),
             }"
           >
-            <div class="flex items-center gap-4 flex-1 min-w-0">
+            <div class="flow-root sm:flex sm:items-center sm:gap-4 flex-1 min-w-0">
               <!-- Drag handle -->
               <div
                 v-if="srsStore.activeDecks.length > 1"
-                class="flex-shrink-0 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                class="hidden sm:block flex-shrink-0 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 style="touch-action: none"
                 @pointerdown="activePointerDown($event, index)"
               >
@@ -648,7 +648,7 @@
               <NuxtLink
                 v-if="deck.deckType === StudyDeckType.MediaDeck && deck.deckId"
                 :to="`/decks/media/${deck.deckId}/detail`"
-                class="w-16 h-20 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700"
+                class="w-12 h-16 sm:w-16 sm:h-20 float-left mr-3 mb-1 sm:float-none sm:mr-0 sm:mb-0 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700"
               >
                 <img
                   v-if="getCoverUrl(deck.coverName) || getCoverUrl(deck.parentCoverName)"
@@ -660,7 +660,7 @@
                   <Icon name="material-symbols:book-2" size="24" />
                 </div>
               </NuxtLink>
-              <div v-else class="w-16 h-20 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700">
+              <div v-else class="w-12 h-16 sm:w-16 sm:h-20 float-left mr-3 mb-1 sm:float-none sm:mr-0 sm:mb-0 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700">
                 <div v-if="deck.deckType === StudyDeckType.GlobalDynamic" class="w-full h-full flex items-center justify-center text-blue-400">
                   <Icon name="material-symbols:language" size="28" />
                 </div>
@@ -707,7 +707,7 @@
                   <span v-if="deck.description"> · {{ deck.description }}</span>
                   <span v-if="newCardDeckIds.has(deck.userStudyDeckId)" class="text-green-400 dark:text-green-600 font-medium"> · New cards from here</span>
                 </div>
-                <div v-if="deck.totalWords > 0" class="mt-2">
+                <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">
                   <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
                     <div class="absolute bg-purple-500/30 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
                     <div class="absolute bg-purple-500/60 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
@@ -782,11 +782,11 @@
               'border-purple-400 dark:border-purple-500': inactiveDropIndex === index && inactiveDragIndex !== index,
             }"
           >
-            <div class="flex items-center gap-4 flex-1 min-w-0">
+            <div class="flow-root sm:flex sm:items-center sm:gap-4 flex-1 min-w-0">
               <!-- Drag handle -->
               <div
                 v-if="srsStore.inactiveDecks.length > 1"
-                class="flex-shrink-0 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                class="hidden sm:block flex-shrink-0 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 style="touch-action: none"
                 @pointerdown="inactivePointerDown($event, index)"
               >
@@ -797,7 +797,7 @@
               <NuxtLink
                 v-if="deck.deckType === StudyDeckType.MediaDeck && deck.deckId"
                 :to="`/decks/media/${deck.deckId}/detail`"
-                class="w-16 h-20 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700"
+                class="w-12 h-16 sm:w-16 sm:h-20 float-left mr-3 mb-1 sm:float-none sm:mr-0 sm:mb-0 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700"
               >
                 <img
                   v-if="getCoverUrl(deck.coverName) || getCoverUrl(deck.parentCoverName)"
@@ -809,7 +809,7 @@
                   <Icon name="material-symbols:book-2" size="24" />
                 </div>
               </NuxtLink>
-              <div v-else class="w-16 h-20 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700">
+              <div v-else class="w-12 h-16 sm:w-16 sm:h-20 float-left mr-3 mb-1 sm:float-none sm:mr-0 sm:mb-0 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700">
                 <div v-if="deck.deckType === StudyDeckType.GlobalDynamic" class="w-full h-full flex items-center justify-center text-blue-400">
                   <Icon name="material-symbols:language" size="28" />
                 </div>
@@ -855,7 +855,7 @@
                   <span v-if="orderLabels[deck.order]"> · {{ orderLabels[deck.order] }}</span>
                   <span v-if="deck.description"> · {{ deck.description }}</span>
                 </div>
-                <div v-if="deck.totalWords > 0" class="mt-2">
+                <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">
                   <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
                     <div class="absolute bg-purple-500/30 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
                     <div class="absolute bg-purple-500/60 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />

@@ -23,6 +23,9 @@
     suggestedRating?: FsrsRating;
     autoAdvanceRating?: FsrsRating;
     autoAdvanceFraction?: number;
+    // Study card theme picker (surfaced in the mobile "More" menu).
+    themes?: ReadonlyArray<{ id: string; icon: string }>;
+    activeTheme?: string;
   }>();
 
   const emit = defineEmits<{
@@ -36,6 +39,7 @@
     undo: [];
     settings: [];
     expand: [];
+    setTheme: [id: string];
   }>();
 
   const morePopover = ref();
@@ -269,6 +273,24 @@
             <Icon name="material-symbols:refresh" size="16" />
             Forget
           </button>
+          <div v-if="themes && themes.length" class="md:hidden flex items-center gap-2 px-3 py-2 text-sm">
+            <Icon name="material-symbols:palette-outline" size="16" />
+            <span>Theme</span>
+            <div class="ml-auto flex gap-1">
+              <button
+                v-for="t in themes"
+                :key="t.id"
+                class="p-1 rounded transition-colors cursor-pointer"
+                :class="activeTheme === t.id
+                  ? 'bg-indigo-500 text-white'
+                  : 'bg-surface-200 dark:bg-surface-700 text-surface-500 dark:text-surface-400 hover:bg-surface-300 dark:hover:bg-surface-600'"
+                :aria-label="t.id + ' theme'"
+                @click="emit('setTheme', t.id)"
+              >
+                <Icon :name="t.icon" size="16" />
+              </button>
+            </div>
+          </div>
           <button
             class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left md:hidden"
             @click="emit('settings'); morePopover?.hide()"
