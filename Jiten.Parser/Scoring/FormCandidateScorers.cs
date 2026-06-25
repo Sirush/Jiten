@@ -461,6 +461,17 @@ internal static class PenaltyScorer
                 if (isAdnominal && KanaScoringHelpers.WordHasFormEquivalentTo(candidate.Word, context.DictionaryForm))
                     return false;
 
+                // Honorific/auxiliary suffix entries (給え/たまえ [suf] "please", attached to a
+                // verb 連用形: 入りたまえ, 食べたまえ) carry a verb DictionaryForm from Sudachi
+                // (たまえ → 給う) because Sudachi analyses them as the imperative of the base verb.
+                // But the suffix entry's own kana form IS the surface, and Sudachi flags the token
+                // 非自立可能 (a bound, dependent reading) — exactly the auxiliary usage. The exact
+                // surface match is intended, not a coincidental homograph, so skip the penalty.
+                bool isBoundSuffix = posToCheck.Any(p => p is "suf")
+                                     && !posToCheck.Any(p => p is "n" or "n-adv" or "n-t");
+                if (isBoundSuffix && context.IsSudachiPossibleDependant)
+                    return false;
+
                 // Classical attributive き-forms (由々しき, 悪しき…) have the modern い-adjective
                 // (or its stem) as Sudachi's DictionaryForm. That lemma is a different JMDict
                 // entry, but the き-entry IS the canonical surface here — not a coincidental homograph.
@@ -790,7 +801,34 @@ internal static class ReadingScorer
             readingMatchScore = 0;
         }
 
+        // Sudachi normalizes a bare all-kanji surface to an okurigana-bearing lemma
+        // (改 → 改め/アラタメ, 答 → 答え/こたえ). Its chosen reading then belongs to that fuller
+        // form and can't legitimately attach to the bare kanji, yet it earns the okurigana
+        // homograph +70 while penalizing the exact-surface on-reading entry (改 かい) by -70.
+        // When the surface carries no kana but NormalizedForm = surface + kana, the reading is
+        // not trustworthy evidence — neutralize it so surface match and ruby priors decide.
+        if (readingMatchScore != 0 && SudachiNormalizedBareKanjiToOkurigana(context))
+            readingMatchScore = 0;
+
         return readingMatchScore;
+    }
+
+    private static bool SudachiNormalizedBareKanjiToOkurigana(FormScoringContext context)
+    {
+        if (context.IsKanaSurface) return false;
+        var surface = context.Surface;
+        var normalized = context.NormalizedForm;
+        if (string.IsNullOrEmpty(surface) || string.IsNullOrEmpty(normalized)) return false;
+        if (normalized.Length <= surface.Length) return false;
+        if (!normalized.StartsWith(surface, StringComparison.Ordinal)) return false;
+
+        foreach (var c in surface)
+            if (!JapaneseTextHelper.IsKanji(c)) return false;
+
+        for (int i = surface.Length; i < normalized.Length; i++)
+            if (!JapaneseTextHelper.IsHiragana(normalized[i])) return false;
+
+        return true;
     }
 }
 

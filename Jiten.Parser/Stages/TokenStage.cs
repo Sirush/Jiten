@@ -122,6 +122,9 @@ internal static class TokenFeatureScanner
                 case "かって" when w.PartOfSpeech == PartOfSpeech.Adverb:
                     f |= TokenFeatures.TextTatte;
                     break;
+                case "いたって" when w.PartOfSpeech == PartOfSpeech.Adverb:
+                    f |= TokenFeatures.TextTatte;
+                    break;
                 case "らん":
                     f |= TokenFeatures.TextRan;
                     break;

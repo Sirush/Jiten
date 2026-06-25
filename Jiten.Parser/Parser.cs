@@ -88,8 +88,8 @@ namespace Jiten.Parser
             (1324950, 1), (1949190, 1), (1344210, 1), (2029730, 0), (5612068, 1), (1370270,3), (1581200,2), (1332670,2), (1150090,1),
             (1533340,3), (5050910,0), (2406530,0), (1243650,2), (1158500,1), (2759530,0),
             (1689970,3), (5257597,0), (1446210, 2), (2416380,1), (1244220,1),
-            (1578010,2), (2028930,1), (2028930,2), (1579350, 6), (2821500, 3),
-            (1592150, 2), (1467040, 6), (1311350, 1), (1175280, 1), (1578150, 4)
+            (1578010,2), (2028930,1), (2028930,2), (1579350, 6), (2821500, 2), (2821500, 3),
+            (1592150, 2), (1467040, 6), (1311350, 1), (1175280, 1), (1578150, 4), (2029650, 0)
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -247,7 +247,8 @@ namespace Jiten.Parser
             IReadOnlyList<(WordInfo word, DeckWord? result, int? margin)> sentenceWords)
             => sentenceWords.Any(w => ClassicalMarkerSurfaces.Contains(w.word.Text));
 
-        private static readonly HashSet<string> PersonHonorifics = ["さん", "ちゃん", "くん", "たん", "氏", "様", "殿", "先生", "課長", "部長"];
+        private static readonly HashSet<string> PersonHonorifics =
+            [..TransitionRuleSets.HonorificSuffixes, "たん", "先生", "課長", "部長", "姉さん", "兄さん"];
 
         private static readonly HashSet<string> HonorificExclusions =
         [
@@ -1265,10 +1266,18 @@ namespace Jiten.Parser
                                 // to DictionaryForm when the surface itself isn't one of the word's forms,
                                 // so conjugated surfaces (食べた→食べる) still resolve to the lemma's reading.
                                 var surface = wordData.wordInfo.Text;
-                                var readingIndex = GetBestReadingIndex(preMatchedWord, surface, wordData.wordInfo.Reading);
-                                if (readingIndex == 255 && !string.IsNullOrEmpty(wordData.wordInfo.DictionaryForm)
-                                    && wordData.wordInfo.DictionaryForm != surface)
-                                    readingIndex = GetBestReadingIndex(preMatchedWord, wordData.wordInfo.DictionaryForm, wordData.wordInfo.Reading);
+                                byte readingIndex;
+                                if (wordData.wordInfo.PreMatchedReadingIndex.HasValue)
+                                {
+                                    readingIndex = wordData.wordInfo.PreMatchedReadingIndex.Value;
+                                }
+                                else
+                                {
+                                    readingIndex = GetBestReadingIndex(preMatchedWord, surface, wordData.wordInfo.Reading);
+                                    if (readingIndex == 255 && !string.IsNullOrEmpty(wordData.wordInfo.DictionaryForm)
+                                        && wordData.wordInfo.DictionaryForm != surface)
+                                        readingIndex = GetBestReadingIndex(preMatchedWord, wordData.wordInfo.DictionaryForm, wordData.wordInfo.Reading);
+                                }
                                 processedWord = new DeckWord
                                                 {
                                                     WordId = preMatchedWordId, ReadingIndex = readingIndex,
@@ -3783,6 +3792,12 @@ namespace Jiten.Parser
                         result.Add((combinedWord, position, combinedLength));
                         i += bestMatch;
                     }
+                    else if (TryCombineNounVerbStemCompound(sentence.Words, i, word, length, out var nounVerbWord,
+                                                            out var nounVerbLength))
+                    {
+                        result.Add((nounVerbWord, position, nounVerbLength));
+                        i += 2;
+                    }
                     else
                     {
                         result.Add(sentence.Words[i]);
@@ -3794,6 +3809,46 @@ namespace Jiten.Parser
             }
         }
 
+        /// <summary>
+        /// Recombines a noun followed by a verb 連用形 (infinitive) into a single nominalised compound when
+        /// the surface concatenation is a non-name JMDict noun entry. This is the mirror of the verb-lead case
+        /// (飛び道具 → 飛び|道具): Sudachi splits 連用形 nominalizations like 目眩まし → 目 (名詞) | 眩まし (動詞),
+        /// 気晴らし → 気 | 晴らし. The verb must be terminal (not followed by an auxiliary or another verb) so a
+        /// real predicate such as 朝起き|た is left intact, and the JMDict entry must include a noun POS.
+        /// </summary>
+        private static bool TryCombineNounVerbStemCompound(List<(WordInfo word, int position, int length)> words, int i,
+                                                           WordInfo word, int length,
+                                                           out WordInfo combinedWord, out int combinedLength)
+        {
+            combinedWord = null!;
+            combinedLength = 0;
+
+            if (i + 1 >= words.Count || words[i + 1].word.PartOfSpeech != PartOfSpeech.Verb)
+                return false;
+
+            // Terminal 連用形 guard: a following auxiliary or verb means the stem is a real predicate (朝起き|た).
+            if (i + 2 < words.Count &&
+                words[i + 2].word.PartOfSpeech is PartOfSpeech.Auxiliary or PartOfSpeech.Verb)
+                return false;
+
+            var nextWord = words[i + 1].word;
+            var combinedText = word.Text + nextWord.Text;
+            if (!_lookups.TryGetValue(combinedText, out var ids) || ids.Count == 0 ||
+                ids.All(id => _nameOnlyWordIds.Contains(id)) ||
+                !ids.Any(id => WordMeta.TryGetValue(id, out var meta) && meta.Pos.Any(PosMapper.IsNounForCompounding)))
+                return false;
+
+            combinedLength = length + words[i + 1].length;
+            combinedWord = new WordInfo(word)
+                           {
+                               Text = combinedText, DictionaryForm = combinedText, PartOfSpeech = PartOfSpeech.Noun,
+                               NormalizedForm = combinedText,
+                               Reading = KanaConverter.ToHiragana(word.Reading + nextWord.Reading, convertLongVowelMark: false),
+                               PreMatchedWordId = null
+                           };
+            return true;
+        }
+
         private static readonly HashSet<string> ExpressionExclusions =
             ["このように", "そのように", "あのように", "どのように", "のように",
              "この様に", "その様に", "あの様に", "どの様に", "の様に",
@@ -3803,7 +3858,10 @@ namespace Jiten.Parser
              "それが", "それは", "これが", "これは", "あれが", "あれは",
              // the "control one's temper" idiom is rare — fiction overwhelmingly means
              // literal insect-killing (小の虫を殺す, 入る虫を殺し)
-             "虫を殺す", "むしをころす", "虫を殺し", "むしをころし"];
+             "虫を殺す", "むしをころす", "虫を殺し", "むしをころし",
+             // 事を好む ("revel in trouble/discord") is vanishingly rare; こと is almost
+             // always the nominalizer (関与することを好まない, 命令されることを好まぬ)
+             "ことを好む", "事を好む", "ことをこのむ"];
 
         /// <summary>
         /// 2-token sequences combined into one expression. Curated: JMDict has entries for many
@@ -4061,8 +4119,28 @@ namespace Jiten.Parser
                                     }
                                 }
                             }
-
+                            // 〜なくなる is the inchoative ("become") form of an adj-i ない-expression
+                            // (元も子もない → 元も子もなくなる). Sudachi lexicalises なくなる as its own verb
+                            // (無くなる, DictForm == Text), so it never enters the completion above; reconstruct
+                            // the ない tail explicitly and re-check the expression lookup.
+                            else if (lastWord.PartOfSpeech == PartOfSpeech.Verb && lastWord.DictionaryForm == "なくなる")
+                            {
+                                var naiCandidate = ConcatTokenTexts(sentence.Words, i, windowSize - 1) + "ない";
+                                if (IsExpressionLookupMatch(naiCandidate))
+                                {
+                                    matched = true;
+                                    combinedText = naiCandidate;
+                                }
+                            }
                         }
+
+                        // Apply exclusions here too: the dict-form/deconjugation completion paths
+                        // above rebuild combinedText (好まない → ことを好む) without re-checking,
+                        // so the surface-path check at the top misses conjugated forms.
+                        if (matched
+                            && (ExpressionExclusions.Contains(combinedText!)
+                                || ExpressionExclusions.Contains(KanaConverter.ToHiragana(combinedText!, convertLongVowelMark: false))))
+                            continue;
 
                         // Reject merges that behead the neighbourhood (様に言わせれば eating a name's
                         // honorific; そりゃそうだ leaving だろう's ろう stranded)
@@ -4193,8 +4271,6 @@ namespace Jiten.Parser
             }
         }
 
-        private static readonly HashSet<string> HonorificSuffixTexts = ["様", "さん", "くん", "ちゃん", "殿", "氏"];
-
         /// <summary>
         /// Rejects expression merges that steal a token from its real neighbour:
         /// an honorific belonging to the preceding name (ヴァレリア様|に言わせれば), or a window
@@ -4205,7 +4281,7 @@ namespace Jiten.Parser
             List<(WordInfo word, int position, int length)> words, int start, int windowSize)
         {
             var first = words[start].word;
-            if (start > 0 && HonorificSuffixTexts.Contains(first.Text)
+            if (start > 0 && TransitionRuleSets.HonorificSuffixes.Contains(first.Text)
                 && words[start - 1].word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Pronoun)
                 return true;
 
@@ -4670,7 +4746,7 @@ namespace Jiten.Parser
                     continue;
                 // An honorific belonging to a preceding name must not open an expression window
                 // (ヴァレリア様|に言わせれば must not become 様|に言わせれば → ように言う)
-                if (startIndex > 0 && HonorificSuffixTexts.Contains(firstWord.Text)
+                if (startIndex > 0 && TransitionRuleSets.HonorificSuffixes.Contains(firstWord.Text)
                     && wordInfos[startIndex - 1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
                         or PartOfSpeech.Pronoun or PartOfSpeech.Name)
                     continue;

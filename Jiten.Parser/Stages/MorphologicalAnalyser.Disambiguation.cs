@@ -87,6 +87,68 @@ public partial class MorphologicalAnalyser
                             wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.Numeral))))
                 word.PartOfSpeech = PartOfSpeech.Noun;
 
+            // Sudachi tags いつ as 名詞,数詞 (the rare 五/いつ "five" reading) when a counter-like token
+            // follows (いつ重…, いつ匹…), but as 代名詞 elsewhere. Standalone いつ is virtually always the
+            // pronoun 何時 "when" (1188760) — the numeral reading only lives in fixed compounds (五日/いつか,
+            // 五つ/いつつ), which Sudachi tokenises whole. Reclassify so it resolves to 何時 instead of the
+            // numeral 五, which is otherwise picked and then dropped as a short-kana misparse.
+            if (word is { Text: "いつ", PartOfSpeech: PartOfSpeech.Noun }
+                && word.PartOfSpeechSection1 == PartOfSpeechSection.Numeral)
+                word.PartOfSpeech = PartOfSpeech.Pronoun;
+
+            // 重 that Sudachi tags as a standalone 助数詞 counter (え, "-fold") directly before a noun is
+            // really the じゅう "heavy" n-prefix (重光線 "heavy beam", 重工業, 重戦車). Real え/じゅう counter
+            // uses (二重, 八重桜, 三重県, 五重の塔) never reach here: Sudachi keeps them as one compound token
+            // or reads 重 as the noun じゅう — only the heavy-prefix-before-noun pattern surfaces as a lone
+            // Counter-え 重. Pin to 2108240 (重/じゅう, n-pref + ctr), which the え reading never reaches.
+            if (word is { Text: "重", PartOfSpeech: PartOfSpeech.Counter } &&
+                i + 1 < wordInfos.Count &&
+                wordInfos[i + 1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
+            {
+                word.PartOfSpeech = PartOfSpeech.Prefix;
+                word.Reading = "ジュウ";
+                word.DictionaryForm = "重";
+                word.NormalizedForm = "重";
+                word.PreMatchedWordId = 2108240;
+            }
+
+            // Ordinal 目 written in kana め (３機め, ２回め, ５つめ) is the ordinal suffix 目 (1604890,
+            // "-th"), not the derogatory/humble 奴/め (2089650). Sudachi tags kana め as 接尾辞,名詞的,
+            // routing it through the pure-suffix candidate filter that drops noun/suffix hybrids like 目,
+            // and the bare-kana め→目 form (RI2) is otherwise an ExcludedMisparses entry. Pin it to the
+            // canonical 目 form (RI0) when a counter/counter-possible token preceded by a number sits
+            // directly before it. The derogatory 奴/め (守銭奴め, 馬鹿め) follows plain nouns, never a counter.
+            if (word is { Text: "め", PartOfSpeech: PartOfSpeech.Suffix } && i > 0)
+            {
+                static bool StartsWithNumber(string t) =>
+                    t.Length > 0 && (char.IsDigit(t[0]) || "一二三四五六七八九十百千万〇零".Contains(t[0]));
+                static bool IsNumeral(WordInfo w) =>
+                    w.PartOfSpeech == PartOfSpeech.Numeral ||
+                    w.HasPartOfSpeechSection(PartOfSpeechSection.Numeral) ||
+                    w.HasPartOfSpeechSection(PartOfSpeechSection.Amount) ||
+                    StartsWithNumber(w.Text);
+
+                var prevCtr = wordInfos[i - 1];
+                bool prevIsCounterLike = prevCtr.PartOfSpeech is PartOfSpeech.Counter ||
+                                         prevCtr.HasPartOfSpeechSection(PartOfSpeechSection.Counter) ||
+                                         prevCtr.HasPartOfSpeechSection(PartOfSpeechSection.PossibleCounterWord);
+                // The number can be fused into the counter by CombineAmounts (２回 め, ５人 め, 三つ め),
+                // where Sudachi often drops the counter POS tag, or sit as a separate preceding token
+                // (３ 機 め). A noun-ish token that begins with a number is the fused amount; otherwise
+                // require an explicit counter token preceded by a number. Names (一郎め) keep their Name
+                // POS and plain nouns (馬鹿め, 守銭奴め) carry no number, so the derogatory 奴/め is safe.
+                bool fusedAmount = prevCtr.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Counter or PartOfSpeech.Numeral
+                                   && StartsWithNumber(prevCtr.Text) && prevCtr.Text.Length > 1;
+                bool counterAfterNumber = prevIsCounterLike && i > 1 && IsNumeral(wordInfos[i - 2]);
+                if (fusedAmount || counterAfterNumber)
+                {
+                    word.DictionaryForm = "目";
+                    word.NormalizedForm = "目";
+                    word.PreMatchedWordId = 1604890;
+                    word.PreMatchedReadingIndex = 0;
+                }
+            }
+
             if (word is { Text: "だろう" or "だろ", PartOfSpeech: PartOfSpeech.Auxiliary })
             {
                 word.PartOfSpeech = PartOfSpeech.Expression;

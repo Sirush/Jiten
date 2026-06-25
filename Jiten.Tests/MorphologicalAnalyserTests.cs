@@ -41,6 +41,8 @@ public class MorphologicalAnalyserTests
     {
         // Compound particles / expressions that Sudachi splits — complete sentences as provided
         yield return ["私が油断したばかりに......", new[] { "私", "が", "油断した", "ばかりに" }];
+        // 元も子もない (adj-i idiom) in its 〜なくなる inchoative form — Sudachi splits 元|も|子|も|なくなる
+        yield return ["それじゃ元も子もなくなるぞ", new[] { "それじゃ", "元も子もなくなる", "ぞ" }];
         yield return ["......なかなか威勢のいいお仲間じゃないか", new[] { "なかなか", "威勢のいい", "お", "仲間", "じゃないか" }];
         yield return ["しかし、それでは――", new[] { "しかし", "それでは" }];
         // たか mis-tokenised as 鷹/高 — should be past た + question か
@@ -111,6 +113,8 @@ public class MorphologicalAnalyserTests
         yield return ["誰かいなくなった", new[] { "誰か", "いなくなった" }];
         yield return ["思い出すな", new[] { "思い出す", "な" }];
         yield return ["かなって思ったら", new[] { "かな", "って", "思ったら" }];
+        yield return ["出世を望んでいたって言っていた", new[] { "出世", "を", "望んでいた", "って", "言っていた" }];
+        yield return ["考えるってこれ以上", new[] { "考える", "って", "これ以上" }];
         yield return ["法律にかなっているさま", new[] { "法律", "に", "かなっている", "さま" }];
         yield return ["こんなもんでいいかな", new[] { "こんな", "もん", "で", "いい", "かな" }];
         yield return ["ことすら難しい", new[] { "こと", "すら", "難しい" }];
@@ -281,6 +285,10 @@ public class MorphologicalAnalyserTests
         yield return ["君がいないと淋しい", new[] { "君", "が", "いない", "と", "淋しい" }];
         yield return ["思いきって", new[] { "思いきって" }];
         yield return ["思いきっている", new[] { "思いきっている" }];
+        // 信じ/疲れ split by Sudachi as stem + きっ; the kana 連用形 te-stem of the compound verb's
+        // 切る must not be re-cut into a quotative って (信じき|って) — 信じ切る/疲れ切る are JMDict entries.
+        yield return ["信じきっている", new[] { "信じきっている" }];
+        yield return ["疲れきっている", new[] { "疲れきっている" }];
         yield return ["大事になります", new[] { "大事", "に", "なります" }];
         yield return ["元気にします", new[] { "元気", "に", "します" }];
         yield return ["ご迷惑おかけしてすみません", new[] { "ご迷惑", "おかけして", "すみません" }];
@@ -760,6 +768,9 @@ public class MorphologicalAnalyserTests
         yield return ["ごめんなさいっごめんなさいっ次は我慢する", new[] { "ごめんなさい", "ごめんなさい", "次", "は", "我慢する" }];  // Emphatic っ before voiced kana (ご) and kanji (次)
         yield return ["するからっ", new[] { "する", "から" }];  // Emphatic っ at EOS after particle
         yield return ["我慢っ、する", new[] { "我慢", "する" }];  // Emphatic っ before punctuation (existing behavior)
+        // Ellipsis between a word and a trailing emphatic っ (了解……っ): the ellipsis hides the っ from
+        // EmphaticTsuRegex, so without normalisation Sudachi mis-splits 了解 into 了(name)+解っ(分かる).
+        yield return ["りょ、了解……っ", new[] { "了解" }];
         yield return ["しょうがないな", new[] { "しょうがない", "な" }];
         yield return ["この手紙を書いた", new[] { "この", "手紙", "を", "書いた" }];
         // Emphatic ぶっち → ぶち normalisation (colloquial gemination)
@@ -1294,6 +1305,9 @@ public class MorphologicalAnalyserTests
         // === 飛び道具 should be 1 word, not 飛び+道具 ===
         yield return ["俺に飛び道具は効かんぞ", new[] { "俺", "に", "飛び道具", "は", "効かん", "ぞ" }];
 
+        // === 目眩まし should be 1 word (noun + 連用形 nominalization), not 目+眩まし ===
+        yield return ["目眩ましのせいで", new[] { "目眩まし", "のせいで" }];
+
         // === ゴブリン should be 1 word, not ゴ+ブ+ン ===
         yield return ["ゴブリンスレイヤー", new[] { "ゴブリン", "スレイヤー" }];
 
@@ -1344,6 +1358,11 @@ public class MorphologicalAnalyserTests
         yield return ["ランスの呼びつけを無視して", new[] { "ランス", "の", "呼びつけ", "を", "無視して" }];
         yield return ["もしもセキュリティを呼ばれでもしたら", new[] { "もしも", "セキュリティ", "を", "呼ばれ", "でも", "したら" }];
         yield return ["何だったら俺を呼びつけでもいいし", new[] { "何", "だったら", "俺", "を", "呼びつけ", "でも", "いい", "し" }];
+
+        // Trailing ellipsis run must not perturb segmentation: a 2+ … run flips Sudachi's lattice so
+        // ら attaches forward into an OOV noun らって instead of backward into the たら conditional.
+        // Collapsing the run to a single … (preprocess) routes it back to the correct あったら/って path.
+        yield return ["もしものことがあったらって……", new[] { "もしものこと", "が", "あったら", "って" }];
 
         // Long vowel mark inside verb: 呼ーぼう → 呼ぼう (volitional of 呼ぶ)
         yield return ["フィルチを呼ーぼう", new[] { "フィルチ", "を", "呼ぼう" }];
@@ -1668,6 +1687,8 @@ public class MorphologicalAnalyserTests
         yield return ["薄赤い", new[] { "薄", "赤い" }];
         // classical attributive き fused into the next noun by the lattice
         yield return ["白き尾", new[] { "白き", "尾" }];
+        // kanji prefix + classical き-adjective: 故 + 無き → 故無き (故無い, "without a reason")
+        yield return ["故無き", new[] { "故無き" }];
 
         // === batch 3: beam gates ===
         // a pronoun is never the noun stem of a suru-verb compound (私する)
@@ -1752,6 +1773,8 @@ public class MorphologicalAnalyserTests
         yield return ["す、すみませんでしたッ!", new[] { "すみません", "でした" }];
         // この世+界 → この + 世界
         yield return ["この世界って、地獄よりも酷い場所", new[] { "この", "世界", "って", "地獄", "より", "も", "酷い", "場所" }];
+        // 前大(surname Maeo)+戦 → 前 + 大戦
+        yield return ["私は前大戦でソ連軍の捕虜", new[] { "私", "は", "前", "大戦", "で", "ソ連軍", "の", "捕虜" }];
         // 広がっ+ただけ phantom けっ verb → 広がった + だけ + って
         yield return ["広がっただけって考えれば", new[] { "広がった", "だけ", "って", "考えれば" }];
         // 計画+通+りって → 計画通り (compound) + っていう
@@ -1785,6 +1808,8 @@ public class MorphologicalAnalyserTests
         // 〜たところで (even if / at the point of) merges; locative 静かなところで stays split
         yield return ["逃げ出してきたところで", new[] { "逃げ出してきた", "ところで" }];
         yield return ["静かなところで話そう", new[] { "静かな", "ところ", "で", "話そう" }];
+        // 静かね: final ね makes Sudachi mis-split 静か into 静(名詞)+か(終助詞); 形状詞可能 noun + か rejoins
+        yield return ["本当に静かね", new[] { "本当に", "静か", "ね" }];
         // だっけ (recollection) pinned to 2131200, not だけ "only"
         yield return ["使ったんだっけ", new[] { "使った", "ん", "だっけ" }];
         // genuine interjection ああ kept (not a stutter shred), だっけ

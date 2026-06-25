@@ -992,6 +992,30 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            // 形状詞可能 noun + か mis-split by Sudachi: a sentence-final particle (静かね) makes the
+            // lattice re-cut a な-adjective ending in か (静か) into 静(名詞,形状詞可能)+か(終助詞).
+            // Rejoin when the noun carries the 形状詞可能 tag and surface+か is a real (non-name) word —
+            // the lookup gate keeps genuine "noun + question particle か" sequences untouched.
+            if (w1.PartOfSpeech == PartOfSpeech.Noun
+                && w1.HasPartOfSpeechSection(PartOfSpeechSection.PossibleNaAdjective)
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1] is { DictionaryForm: "か", PartOfSpeech: PartOfSpeech.Particle }
+                && (HasNonNameCompoundLookup ?? HasCompoundLookup)?.Invoke(w1.Text + "か") == true)
+            {
+                var ka = wordInfos[i + 1];
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = w1.Text + "か",
+                    DictionaryForm = w1.Text + "か",
+                    NormalizedForm = w1.Text + "か",
+                    PartOfSpeech = PartOfSpeech.NaAdjective,
+                    Reading = string.Empty,
+                    EndOffset = ka.EndOffset
+                });
+                i += 2;
+                continue;
+            }
+
             // Katakana mora stolen from a name by a following hiragana-dict token: Sudachi cuts
             // カティア|の as カティ|アの (アの = 連体詞 あの) and カティア|と as カティ|アと (アと = 後 あと).
             // A token whose dict form is hiragana but whose surface starts with a katakana mora, with
@@ -3273,6 +3297,15 @@ public partial class MorphologicalAnalyser
                     // (ギシギシい would "deconjugate" too).
                     if (hasRealDeconjStep && IuIkuDictForms.Contains(thief.DictionaryForm)
                         && HasNonNameCompoundLookup?.Invoke(merged) != true)
+                        hasRealDeconjStep = false;
+                    // きっ etc. is the 促音便 te-stem of an auxiliary compound verb (信じ|きっ|て =
+                    // 信じきって, the te-form of 信じ切る). When Sudachi splits the stem off (it keeps
+                    // 思いきっ whole but shreds 信じ/疲れ), the stranded mora belongs to the compound
+                    // verb きる/切る, not to prev — so prev + thief's dictionary form is a real JMDict
+                    // compound. Leave the sequence intact for CombineInflections/CombineCompounds to
+                    // reform 信じきる, rather than mis-cutting a quotative って off a fake 信じき stem.
+                    if (hasRealDeconjStep && thief.PartOfSpeech == PartOfSpeech.Verb
+                        && HasCompoundLookup?.Invoke(prev.Text + thief.DictionaryForm) == true)
                         hasRealDeconjStep = false;
                     if (hasRealDeconjStep)
                     {

@@ -454,6 +454,29 @@ public partial class MorphologicalAnalyser
                         continue;
                     }
 
+                    // Classical/inflected i-adjective: the conjugated surface isn't a dictionary
+                    // entry but the modern dictionary form of the compound is (故 + 無き → 故無い
+                    // 2112310). Keep IAdjective so the deconjugator reaches the 連体形 → adj-i.
+                    if (nextWord.PartOfSpeech == PartOfSpeech.IAdjective
+                        && !string.IsNullOrEmpty(nextWord.NormalizedForm)
+                        && nextWord.NormalizedForm != nextWord.Text)
+                    {
+                        var normalizedCombined = currentWord.Text + nextWord.NormalizedForm;
+                        if (!PrefixCombineExclusions.Contains(normalizedCombined)
+                            && HasCompoundLookup(normalizedCombined))
+                        {
+                            var prefixStart = currentWord.StartOffset;
+                            currentWord = new WordInfo(nextWord);
+                            currentWord.Text = combinedText;
+                            currentWord.DictionaryForm = normalizedCombined;
+                            currentWord.NormalizedForm = normalizedCombined;
+                            currentWord.StartOffset = prefixStart;
+                            newList.Add(currentWord);
+                            i += 2;
+                            continue;
+                        }
+                    }
+
                     // Reading-based compound: Sudachi's reading may differ from the surface for
                     // colloquial/contracted forms (e.g., 古 + くせー reading=クサイ → 古くさい).
                     if (!string.IsNullOrEmpty(nextWord.Reading))
