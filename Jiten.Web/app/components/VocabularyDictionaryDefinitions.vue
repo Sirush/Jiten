@@ -40,7 +40,7 @@
 
   <!-- Multiple groups: tabbed view -->
   <template v-else-if="!isCompact && hasMultipleGroups">
-    <Tabs v-model:value="activeTab">
+    <Tabs v-model:value="activeTab" :show-navigators="false">
       <TabList class="dict-tabs">
         <Tab v-for="group in resolvedGroups" :key="group.dictionaryId" :value="group.dictionaryId">
           {{ group.dictionaryName }}

@@ -34,6 +34,9 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(?<=.[\p{IsHiragana}\p{IsCJKUnifiedIdeographs}])(?<!うわ)([っッ])(?![かきくけこがぎぐげござじずぜぞさしすせそたちつてとだぢづでどぱぴぷぺぽばびぶべぼカキクケコガギグゲゴザジズゼゾサシスセソタチツテトダヂヅデドパピプペポバビブベボ\p{IsCJKUnifiedIdeographs}])")]
     private static partial Regex EmphaticTsuRegex();
 
+    [GeneratedRegex(@"(?<=[\p{IsHiragana}\p{IsCJKUnifiedIdeographs}])…+(?=[っッ](?![かきくけこがぎぐげござじずぜぞさしすせそたちつてとだぢづでどぱぴぷぺぽばびぶべぼカキクケコガギグゲゴザジズゼゾサシスセソタチツテトダヂヅデドパピプペポバビブベボ\p{IsCJKUnifiedIdeographs}]))")]
+    private static partial Regex EllipsisBeforeEmphaticTsuRegex();
+
     [GeneratedRegex(@"ホント(バカ|ダメ|マジ|クソ|アホ)")]
     private static partial Regex HontoKatakanaRegex();
 
@@ -48,6 +51,9 @@ public partial class MorphologicalAnalyser
 
     [GeneratedRegex(@"(?<=[\p{IsHiragana}\p{IsKatakana}\p{IsCJKUnifiedIdeographs}]{2})…+(?=[^\r\n…])")]
     private static partial Regex MidSentenceEllipsisRegex();
+
+    [GeneratedRegex(@"…{2,}")]
+    private static partial Regex EllipsisRunRegex();
 
     [GeneratedRegex(@"([ァ-ヴ]ンッ)(?=[ァ-ヴぁ-ゔ\p{IsCJKUnifiedIdeographs}])")]
     private static partial Regex KatakanaInterjectionTsuRegex();
@@ -241,6 +247,7 @@ public partial class MorphologicalAnalyser
         text = text.Replace("小木曽", $"小木曽{_stopToken}");
         text = text.Replace("するすると", $"{_stopToken}するすると");
         text = text.Replace("ぶっち切", "ぶち切");
+        text = EllipsisBeforeEmphaticTsuRegex().Replace(text, "");
         text = EmphaticTsuRegex().Replace(text, $"{_stopToken}$1");
         // Split the intensifying prefix ぶっ from 壊れ AFTER EmphaticTsuRegex (脳味噌|が|ぶっ|壊れた).
         // Doing it before would leave っ in front of the stop token (not the 壊 kanji), so EmphaticTsuRegex
@@ -262,6 +269,8 @@ public partial class MorphologicalAnalyser
         text = text
             .Replace("バカバカ", $"バカ{_stopToken}バカ")
             .Replace("事大", $"事{_stopToken}大")
+            // 前大戦: Sudachi cuts 前大(surname Maeo)+戦 → force 前 + 大戦
+            .Replace("前大戦", $"前{_stopToken}大戦")
             .Replace("人魚姫", $"人魚{_stopToken}姫")
             .Replace("日間", $"日{_stopToken}間")
             .Replace("何本", $"何{_stopToken}本")
@@ -284,6 +293,7 @@ public partial class MorphologicalAnalyser
         text = ColloquialDoshiRegex().Replace(text, "どうし");
         text = ColloquialYuuRegex().Replace(text, "いう");
 
+        text = EllipsisRunRegex().Replace(text, "…");
         text = MidSentenceEllipsisRegex().Replace(text, "");
         text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");
     }

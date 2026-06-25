@@ -35,6 +35,27 @@ public static class JapaneseTextHelper
         return true;
     }
 
+    /// <summary>
+    /// Converts katakana characters to their hiragana equivalents, leaving all other characters
+    /// (kanji, ASCII, hiragana, the long-vowel mark, etc.) untouched. Allocation-free when the
+    /// input contains no katakana.
+    /// </summary>
+    public static string KatakanaToHiragana(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+
+        var hasKatakana = false;
+        foreach (var c in s)
+            if (c is >= 'ァ' and <= 'ヶ') { hasKatakana = true; break; }
+
+        if (!hasKatakana) return s;
+
+        var buffer = new StringBuilder(s.Length);
+        foreach (var c in s)
+            buffer.Append(c is >= 'ァ' and <= 'ヶ' ? (char)(c - 0x60) : c);
+        return buffer.ToString();
+    }
+
     public static bool IsKanji(char c) =>
         c is (>= '一' and <= '鿿') or (>= '㐀' and <= '䶿') or (>= '豈' and <= '﫿');
 

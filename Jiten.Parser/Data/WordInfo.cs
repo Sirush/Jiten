@@ -18,6 +18,7 @@ public class WordInfo
     public bool IsInvalid { get; set; }
     public bool IsPersonNameContext { get; set; }
     public int? PreMatchedWordId { get; set; }
+    public byte? PreMatchedReadingIndex { get; set; }
     public List<string>? PreMatchedConjugations { get; set; }
     public List<int>? PreMatchedCandidateWordIds { get; set; }
     public bool IsImperative { get; set; }
@@ -53,6 +54,7 @@ public class WordInfo
         IsInvalid = other.IsInvalid;
         IsPersonNameContext = other.IsPersonNameContext;
         PreMatchedWordId = other.PreMatchedWordId;
+        PreMatchedReadingIndex = other.PreMatchedReadingIndex;
         PreMatchedConjugations = other.PreMatchedConjugations?.ToList();
         PreMatchedCandidateWordIds = other.PreMatchedCandidateWordIds?.ToList();
         IsImperative = other.IsImperative;

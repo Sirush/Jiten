@@ -215,7 +215,7 @@
       </div>
 
       <template v-else>
-        <Tabs v-model:value="selectedTab">
+        <Tabs v-model:value="selectedTab" :show-navigators="false">
           <TabList class="flex-wrap">
             <Tab v-for="tab in availableTabs" :key="tab.value" :value="tab.value">
               {{ tab.label }}

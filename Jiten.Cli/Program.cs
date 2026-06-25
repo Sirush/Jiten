@@ -250,6 +250,18 @@ public class Program
             return;
         }
 
+        if (options.CleanupCompositions)
+        {
+            await importCommands.CleanupCompositions(options);
+            return;
+        }
+
+        if (options.BackfillCompositions)
+        {
+            await importCommands.BackfillCompositions(options);
+            return;
+        }
+
         // WordSet commands
         if (options.CreateWordSetFromPos)
         {

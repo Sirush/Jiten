@@ -17,6 +17,7 @@
     mainDefinition: string | null;
     frequencyRank: number;
     state: FsrsState;
+    category: 'new' | 'learning' | 'mature';
   }
 
   const directionOptions = [
@@ -41,17 +42,37 @@
   const showPreview = ref(false);
   const bulkLoading = ref(false);
 
+  const showNew = ref(true);
+  const showLearning = ref(false);
+  const showMature = ref(false);
+  const counts = ref({ new: 0, learning: 0, mature: 0 });
+  const anyFilterOn = computed(() => showNew.value || showLearning.value || showMature.value);
+
   const directionDescription = computed(
     () => directionOptions.find((o) => o.value === direction.value)?.description ?? '',
   );
 
   async function loadChunk(offset: number, limit: number) {
     try {
-      const data = await $api<{ data: InferredCard[]; totalItems: number }>('srs/composition-inference/preview', {
+      const data = await $api<{
+        data: InferredCard[];
+        totalItems: number;
+        newCount: number;
+        learningCount: number;
+        matureCount: number;
+      }>('srs/composition-inference/preview', {
         method: 'POST',
-        body: { direction: direction.value, offset, limit },
+        body: {
+          direction: direction.value,
+          offset,
+          limit,
+          showNew: showNew.value,
+          showLearning: showLearning.value,
+          showMature: showMature.value,
+        },
       });
       totalCount.value = data.totalItems;
+      counts.value = { new: data.newCount, learning: data.learningCount, mature: data.matureCount };
       const cards = [...allCards.value];
       if (cards.length !== data.totalItems) cards.length = data.totalItems;
       for (let i = 0; i < data.data.length; i++) cards[offset + i] = data.data[i];
@@ -63,16 +84,22 @@
 
   async function preview() {
     previewLoading.value = true;
-    loadedChunks.value = new Set([0]);
-    try {
-      await loadChunk(0, CHUNK_SIZE);
-      showPreview.value = true;
-    } finally {
-      previewLoading.value = false;
-    }
+    await reloadFirst();
+    showPreview.value = true;
+    previewLoading.value = false;
   }
 
-  function onLazyLoad(event: any) {
+  async function reloadFirst() {
+    allCards.value = [];
+    loadedChunks.value = new Set([0]);
+    if (!anyFilterOn.value) {
+      totalCount.value = 0;
+      return;
+    }
+    await loadChunk(0, CHUNK_SIZE);
+  }
+
+  function onLazyLoad(event: { first: number; last: number }) {
     const { first, last } = event;
     const startChunk = Math.floor(first / CHUNK_SIZE);
     const endChunk = Math.floor((last - 1) / CHUNK_SIZE);
@@ -123,7 +150,13 @@
     try {
       const result = await $api<{ affectedCount: number }>('srs/composition-inference/execute', {
         method: 'POST',
-        body: { direction: direction.value, targetState: target },
+        body: {
+          direction: direction.value,
+          targetState: target,
+          showNew: showNew.value,
+          showLearning: showLearning.value,
+          showMature: showMature.value,
+        },
       });
       toast.add({
         severity: 'success',
@@ -137,6 +170,15 @@
       toast.add({ severity: 'error', summary: 'Bulk action failed', detail: extractApiError(e, 'Could not apply bulk action.'), life: 5000 });
     } finally {
       bulkLoading.value = false;
+    }
+  }
+
+  function categoryTag(card: InferredCard): { value: string; severity: string } {
+    switch (card.category) {
+      case 'new': return { value: 'New', severity: 'secondary' };
+      case 'learning': return { value: 'Learning', severity: 'info' };
+      case 'mature': return { value: 'Mature', severity: 'success' };
+      default: return stateLabel(card.state);
     }
   }
 
@@ -155,7 +197,13 @@
   watch(direction, () => {
     allCards.value = [];
     totalCount.value = 0;
+    counts.value = { new: 0, learning: 0, mature: 0 };
     loadedChunks.value = new Set();
+    if (showPreview.value) reloadFirst();
+  });
+
+  watch([showNew, showLearning, showMature], () => {
+    if (showPreview.value) reloadFirst();
   });
 </script>
 
@@ -196,8 +244,31 @@
       >
         <p class="text-sm text-muted-color mb-3 italic">{{ directionDescription }}</p>
 
-        <div v-if="totalCount === 0" class="text-sm text-muted-color italic py-4 text-center">
-          No words found for this direction.
+        <div class="flex flex-wrap items-center gap-4 mb-3">
+          <span class="text-sm font-medium">Show:</span>
+          <div class="flex items-center gap-2">
+            <Checkbox v-model="showNew" input-id="ci-new" binary />
+            <label for="ci-new" class="text-sm cursor-pointer">New <span class="text-muted-color">({{ counts.new.toLocaleString() }})</span></label>
+          </div>
+          <div class="flex items-center gap-2">
+            <Checkbox v-model="showLearning" input-id="ci-learning" binary />
+            <label for="ci-learning" class="text-sm cursor-pointer">Learning <span class="text-muted-color">({{ counts.learning.toLocaleString() }})</span></label>
+          </div>
+          <div class="flex items-center gap-2">
+            <Checkbox v-model="showMature" input-id="ci-mature" binary />
+            <label for="ci-mature" class="text-sm cursor-pointer">Mature <span class="text-muted-color">({{ counts.mature.toLocaleString() }})</span></label>
+          </div>
+        </div>
+        <p class="text-xs text-muted-color mb-3">
+          Sorted by frequency (most common first). <strong>Mature</strong> words are already known via SRS —
+          mastering them resets their review schedule, so they're hidden by default.
+        </p>
+
+        <div v-if="!anyFilterOn" class="text-sm text-muted-color italic py-4 text-center">
+          Select at least one category to show.
+        </div>
+        <div v-else-if="totalCount === 0" class="text-sm text-muted-color italic py-4 text-center">
+          No words found for the selected categories.
         </div>
 
         <DataTable
@@ -245,7 +316,7 @@
           <Column header="Status" style="width: 110px">
             <template #body="{ data: card }">
               <template v-if="card">
-                <Tag v-bind="stateLabel(card.state)" />
+                <Tag v-bind="categoryTag(card)" />
               </template>
               <Skeleton v-else width="4rem" height="1.2rem" />
             </template>

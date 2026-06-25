@@ -485,6 +485,41 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
+            // Split いたって misparsed as the adverb 至って ("extremely") → い (居る) + た (past) + って
+            // (quotative). 至って never follows a て-form connective particle; right after て/で the surface
+            // いたって is the ている-past + quotative frame (望んで+いた+って, 見ていたって). Gated on the
+            // predecessor being a て/で 接続助詞 so a genuine 至って (clause-initial, after は/noun) is left alone.
+            if (i > 0 &&
+                word is { Text: "いたって", PartOfSpeech: PartOfSpeech.Adverb, Reading: "イタッテ" } &&
+                wordInfos[i - 1] is { PartOfSpeech: PartOfSpeech.Particle, Text: "て" or "で" } prevTe &&
+                prevTe.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle))
+            {
+                result.Add(new WordInfo
+                {
+                    Text = "い", DictionaryForm = "いる", NormalizedForm = "居る",
+                    PartOfSpeech = PartOfSpeech.Verb, Reading = "イ",
+                    StartOffset = word.StartOffset,
+                    EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1
+                });
+                result.Add(new WordInfo
+                {
+                    Text = "た", DictionaryForm = "た", NormalizedForm = "た",
+                    PartOfSpeech = PartOfSpeech.Auxiliary, Reading = "タ",
+                    StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1,
+                    EndOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1
+                });
+                result.Add(new WordInfo
+                {
+                    Text = "って", DictionaryForm = "って", NormalizedForm = "って",
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    PartOfSpeechSection1 = PartOfSpeechSection.ConjunctionParticle,
+                    Reading = "ッテ",
+                    StartOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1,
+                    EndOffset = word.EndOffset
+                });
+                continue;
+            }
+
             // Check if this is たって/だって as a conjunctive particle following a verb
             if (i > 0 &&
                 word.PartOfSpeech == PartOfSpeech.Particle &&
@@ -697,6 +732,16 @@ public partial class MorphologicalAnalyser
         ("った", "ッタ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
         ("わけ", "ワケ", PartOfSpeech.Noun, PartOfSpeechSection.CommonNoun),
         ("こと", "コト", PartOfSpeech.Noun, PartOfSpeechSection.CommonNoun),
+        // こそあど demonstratives tokenised as Pronoun (not CommonNoun) so a leftover これ/それ/…
+        // after a quotative って doesn't trip the hasLeftoverNoun guard that aborts the OOV split
+        // (考える|って|これ from the るってこれ blob).
+        ("これ", "コレ", PartOfSpeech.Pronoun, PartOfSpeechSection.Pronoun),
+        ("それ", "ソレ", PartOfSpeech.Pronoun, PartOfSpeechSection.Pronoun),
+        ("あれ", "アレ", PartOfSpeech.Pronoun, PartOfSpeechSection.Pronoun),
+        ("どれ", "ドレ", PartOfSpeech.Pronoun, PartOfSpeechSection.Pronoun),
+        ("ここ", "ココ", PartOfSpeech.Pronoun, PartOfSpeechSection.Pronoun),
+        ("そこ", "ソコ", PartOfSpeech.Pronoun, PartOfSpeechSection.Pronoun),
+        ("どこ", "ドコ", PartOfSpeech.Pronoun, PartOfSpeechSection.Pronoun),
         ("ない", "ナイ", PartOfSpeech.IAdjective, PartOfSpeechSection.PossibleDependant),
         ("から", "カラ", PartOfSpeech.Particle, PartOfSpeechSection.ConjunctionParticle),
         ("けど", "ケド", PartOfSpeech.Particle, PartOfSpeechSection.ConjunctionParticle),

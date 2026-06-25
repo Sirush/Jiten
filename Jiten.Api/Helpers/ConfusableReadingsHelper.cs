@@ -38,7 +38,7 @@ public static class ConfusableReadingsHelper
 
         var sourceReadings = sourceKanaForms
             .GroupBy(kf => kf.WordId)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.Text).ToHashSet());
+            .ToDictionary(g => g.Key, g => g.Select(x => JapaneseTextHelper.KatakanaToHiragana(x.Text)).ToHashSet());
 
         var distinctTexts = kanjiTexts.Select(kt => kt.Text).Distinct().ToList();
         var textToSourcePairs = kanjiTexts
@@ -119,7 +119,7 @@ public static class ConfusableReadingsHelper
             var readings = confIds
                 .Where(validReadings.ContainsKey)
                 .Select(id => (reading: validReadings[id], rank: freqByWord.GetValueOrDefault(id, int.MaxValue)))
-                .Where(x => ownReadings == null || !ownReadings.Contains(x.reading))
+                .Where(x => ownReadings == null || !ownReadings.Contains(JapaneseTextHelper.KatakanaToHiragana(x.reading)))
                 .OrderBy(x => x.rank)
                 .Select(x => x.reading)
                 .ToList();

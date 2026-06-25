@@ -74,8 +74,9 @@ public class TtsService(
 
 
         string? text = !string.IsNullOrEmpty(rubyText) ? RubyToTtsKana(rubyText) : null;
+        var usedRuby = !string.IsNullOrWhiteSpace(text) && !ContainsKanji(text);
 
-        if (string.IsNullOrWhiteSpace(text) || ContainsKanji(text))
+        if (!usedRuby)
         {
             text = wordForms
                 .Where(f => f.FormType == JmDictFormType.KanaForm)
@@ -92,6 +93,19 @@ public class TtsService(
         // leading kana. Interior は/へ/を stay hiragana so genuine particles keep their reading
         // (詳しくは→"kuwashiku wa", ではない→"de wa nai").
         text = FixLeadingParticleKana(text);
+
+        var readingKana = WanaKana.ToHiragana(text ?? "");
+        var matchingKanjiRubies = wordForms
+            .Where(f => f.FormType == JmDictFormType.KanjiForm && !string.IsNullOrEmpty(f.RubyText) && f.RubyText.Contains('['))
+            .Where(f => WanaKana.ToHiragana(RubyPattern.Replace(f.RubyText, m => m.Groups[1].Value)) == readingKana)
+            .Select(f => f.RubyText!)
+            .ToList();
+        var hasLiteralHa = matchingKanjiRubies.Any(r => r.Contains('は') && !RubyPattern.Replace(r, "").Contains('は'));
+        var hasParticleHa = matchingKanjiRubies.Any(r => RubyPattern.Replace(r, "").Contains('は'));
+
+        var fixInteriorHa = !string.IsNullOrEmpty(text)
+                            && text.Contains('は') && !text.Contains('わ')
+                            && hasLiteralHa && !hasParticleHa;
 
 
         int? pitchPosition = null;
@@ -110,8 +124,9 @@ public class TtsService(
         }
 
         var storageText = pitchPosition.HasValue ? $"{text}|p{pitchPosition.Value}" : text;
+        if (fixInteriorHa) storageText += "|h"; // distinct cache key: audio differs though the text string does not
         var key = $"{voice}:w:{storageText}";
-        return await _inflight.GetOrAdd(key, _ => GenerateAsync(key, text, storageText, pitchPosition, TtsType.Word, voice, rateLimitKey, ct, bypassGenerationLimit));
+        return await _inflight.GetOrAdd(key, _ => GenerateAsync(key, text, storageText, pitchPosition, TtsType.Word, voice, rateLimitKey, ct, bypassGenerationLimit, fixInteriorHa));
     }
 
     public async Task<byte[]> GetSentenceAudioAsync(int sentenceId, string voice, string rateLimitKey, CancellationToken ct)
@@ -209,14 +224,14 @@ public class TtsService(
         }
     }
 
-    private async Task<byte[]> GenerateAsync(string key, string ttsText, string storageText, int? pitchPosition, TtsType type, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false)
+    private async Task<byte[]> GenerateAsync(string key, string ttsText, string storageText, int? pitchPosition, TtsType type, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false, bool fixInteriorHa = false)
     {
         try
         {
             var cached = await TryGetFromCdn(storageText, type, voice, ct);
             if (cached != null) return cached;
 
-            return await SynthesizeAndUpload(key, ttsText, storageText, pitchPosition, type, voice, rateLimitKey, ct, bypassGenerationLimit);
+            return await SynthesizeAndUpload(key, ttsText, storageText, pitchPosition, type, voice, rateLimitKey, ct, bypassGenerationLimit, fixInteriorHa);
         }
         finally
         {
@@ -242,7 +257,7 @@ public class TtsService(
         return null;
     }
 
-    private async Task<byte[]> SynthesizeAndUpload(string key, string ttsText, string storageText, int? pitchPosition, TtsType type, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false)
+    private async Task<byte[]> SynthesizeAndUpload(string key, string ttsText, string storageText, int? pitchPosition, TtsType type, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false, bool fixInteriorHa = false)
     {
         if (!bypassGenerationLimit)
         {
@@ -270,6 +285,8 @@ public class TtsService(
             queryDict["speedScale"] = JsonSerializer.SerializeToElement(config.SpeedScale);
         if (type == TtsType.Sentence)
             queryDict["intonationScale"] = JsonSerializer.SerializeToElement(1.5);
+        if (fixInteriorHa)
+            FixInteriorHaMoras(queryDict);
         if (pitchPosition.HasValue)
         {
             try { await ApplyPitchAccent(vvClient, queryDict, pitchPosition.Value, speakerId, ct); }
@@ -409,6 +426,36 @@ public class TtsService(
                 var currentLength = mora.TryGetValue("consonant_length", out var clEl) ? clEl.GetDouble() : 0;
                 mora["consonant_length"] = JsonSerializer.SerializeToElement(
                     Math.Max(currentLength * VoicedBoostFactor, VoicedMinLength));
+            }
+
+            phrase["moras"] = JsonSerializer.SerializeToElement(moras);
+        }
+
+        queryDict["accent_phrases"] = JsonSerializer.SerializeToElement(phrases);
+    }
+
+    // Rewrites every "wa" mora (ワ, consonant "w") to "ha" (ハ, consonant "h") in the audio query.
+    // Caller guarantees this query came from a reading whose は is a literal kanji reading and that
+    // contains no genuine わ, so any ワ mora can only be an interior は that OpenJTalk wrongly voiced
+    // as the topic particle. Editing the mora in place keeps the
+    // accent/length/pitch VOICEVOX assigned to the natural hiragana, so the prosody is unchanged.
+    private static void FixInteriorHaMoras(Dictionary<string, JsonElement> queryDict)
+    {
+        if (!queryDict.TryGetValue("accent_phrases", out var phrasesEl)) return;
+        var phrases = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(phrasesEl.GetRawText());
+        if (phrases == null) return;
+
+        foreach (var phrase in phrases)
+        {
+            if (!phrase.TryGetValue("moras", out var morasEl)) continue;
+            var moras = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(morasEl.GetRawText());
+            if (moras == null) continue;
+
+            foreach (var mora in moras)
+            {
+                if (!mora.TryGetValue("text", out var tEl) || tEl.ValueKind != JsonValueKind.String || tEl.GetString() != "ワ") continue;
+                mora["text"] = JsonSerializer.SerializeToElement("ハ");
+                mora["consonant"] = JsonSerializer.SerializeToElement("h");
             }
 
             phrase["moras"] = JsonSerializer.SerializeToElement(moras);

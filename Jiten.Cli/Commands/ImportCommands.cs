@@ -54,6 +54,16 @@ public class ImportCommands(CliContext context)
             options.DryRun);
     }
 
+    public async Task CleanupCompositions(CliOptions options)
+    {
+        await CompositionCleaner.Cleanup(context.ContextFactory, options.DryRun);
+    }
+
+    public async Task BackfillCompositions(CliOptions options)
+    {
+        await CompositionBackfill.Backfill(context.ContextFactory, options.DryRun, dryRunSample: 12000);
+    }
+
     public async Task ImportPitchAccents(CliOptions options)
     {
         Console.WriteLine("Importing pitch accents...");

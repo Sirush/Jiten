@@ -52,9 +52,20 @@ public class FormSelectionTests
         yield return ["一分前の会話を再開した", "一分", 1166290, (byte)1];
         yield return ["約一分後におじさんが戻ってきた", "一分", 1166290, (byte)1];
 
+        // 改 standalone before と呼ぶ is the on-reading かい (2019230), a noun/title — not the
+        // okurigana suffix 改め/あらため (2035080). Sudachi normalizes the bare kanji 改 to the
+        // 改め lemma (reading アラタメ); that reading must not earn the homograph the +70 bonus.
+        yield return ["改とでも呼ぶべきか", "改", 2019230, (byte)0];
+
         // 挿入る: 挿入 is a する-verb (vs/vt), so the trailing る is not a conjugation —
         // the noun 挿入 (1399840) is emitted and る is dropped, never fused into a verb.
         yield return ["彼女の中に挿入る", "挿入", 1399840, (byte)0];
+
+        // 入りたまえ: after a verb 連用形, たまえ is the honorific imperative suffix 給え/たまえ
+        // ([suf] "please …", 2134420), not the imperative of the verb 給う (たまう, 1230220).
+        // Sudachi lemmatizes たまえ → 給う (非自立可能), so the suffix entry's exact surface match
+        // must not be crushed by the conjugated-identity penalty.
+        yield return ["入りたまえ", "たまえ", 2134420, (byte)1];
 
         // 気にしない before quotative って must resolve to the idiom 気にしない (2563780), not the
         // にしな surname — the fork drops the user_dic 表現 node before って unless patched.
@@ -91,6 +102,26 @@ public class FormSelectionTests
         // 全機 → ぜんき "all aircraft" (2860335), not the まさき given name (5470930). A leading dash makes
         // Sudachi pick the マサキ name reading, so the full sentence (with ――) is the regression case.
         yield return ["――全機、跳躍開始!", "全機", 2860335, (byte)0];
+
+        // 重 before a noun (and not after a number) is the じゅう "heavy" n-prefix (2108240, 重光線
+        // "heavy beam"), not the え counter (1335730, "-fold"). Sudachi tags it as a 助数詞 counter.
+        yield return ["いつ重光線級から撃たれる", "重", 2108240, (byte)0];
+        // …and once 重 stops being a counter, いつ resolves to 何時 "when" (1188760) instead of being
+        // locked to the numeral 五/いつ (1268060) and then dropped as a short-kana misparse.
+        yield return ["いつ重光線級から撃たれる", "いつ", 1188760, (byte)1];
+
+        // Ordinal 目 written in kana め after a number+counter (３機め "the 3rd unit") is the ordinal
+        // suffix 目 (1604890, "-th") pinned to the canonical 目 form (RI0) — not the derogatory 奴/め
+        // (2089650). Sudachi tags kana め as 接尾辞, which routes it through the pure-suffix filter that
+        // drops noun/suffix hybrids like 目, and the bare kana め→目 form (RI2) is an ExcludedMisparse.
+        yield return ["３機め……！", "め", 1604890, (byte)0];
+        yield return ["２回めの正直だ", "め", 1604890, (byte)0];
+        // …but the derogatory/humble 奴/め (2089650) after a plain noun must stay the 奴 suffix (RI1).
+        yield return ["守銭奴め", "め", 2089650, (byte)1];
+
+        // 故 (kanji prefix) + 無き (classical attributive of 無い) fuse into 故無き, the 文語 form of
+        // 故無い "without a reason" (2112310). Without the merge it splits 故|無き.
+        yield return ["故無き", "故無き", 2112310, (byte)0];
 
         // 食べている should resolve to 食べる (1358280)
         yield return ["食べている", "食べている", 1358280, (byte)0];
