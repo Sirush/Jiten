@@ -56,6 +56,8 @@ public static class JitenHelper
 
             if (existingDeck != null)
             {
+                deck.DeckId = existingDeck.DeckId;
+
                 if (!update || (update && existingDeck.LastUpdate >= deck.LastUpdate))
                 {
                     Console.WriteLine($"[{DateTime.UtcNow:O}] Deck {deck.OriginalTitle} already exists, no update flag or deck not changed, skipping.");

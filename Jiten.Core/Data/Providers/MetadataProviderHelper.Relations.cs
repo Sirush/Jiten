@@ -8,7 +8,7 @@ public static partial class MetadataProviderHelper
 {
     public static async Task ProcessRelations(JitenDbContext context, int deckId, List<MetadataRelation> relations)
     {
-        if (relations.Count == 0)
+        if (relations.Count == 0 || deckId <= 0)
             return;
 
         foreach (var relation in relations)
