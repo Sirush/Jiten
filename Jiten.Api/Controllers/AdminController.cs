@@ -906,6 +906,37 @@ public partial class AdminController(
         return Ok(new { Message = "Queued difficulty reaggregation", DeckId = deckId });
     }
 
+    /// <summary>
+    /// Backstop sweep: find leaf decks that have raw text but no computed difficulty (e.g. children left at 0 by a
+    /// transient RunPod failure) and re-enqueue them, then schedule re-aggregation for any affected parents.
+    /// </summary>
+    [HttpPost("recompute-missing-difficulties")]
+    public async Task<IActionResult> RecomputeMissingDifficulties()
+    {
+        var missing = await dbContext.Decks
+            .Where(d => d.RawText != null && d.DeckDifficulty == null && !d.Children.Any())
+            .Select(d => new { d.DeckId, d.ParentDeckId })
+            .ToListAsync();
+
+        foreach (var m in missing)
+            backgroundJobs.Enqueue<DifficultyComputationJob>(
+                job => job.ComputeDeckDifficulty(m.DeckId, false));
+
+        var parentIds = missing
+            .Where(m => m.ParentDeckId != null)
+            .Select(m => m.ParentDeckId!.Value)
+            .Distinct()
+            .ToList();
+
+        foreach (var parentId in parentIds)
+            backgroundJobs.Schedule<DifficultyComputationJob>(
+                job => job.ReaggregateParentDifficulty(parentId), TimeSpan.FromMinutes(45));
+
+        logger.LogInformation("Admin queued {Count} missing-difficulty recomputations across {ParentCount} parents",
+            missing.Count, parentIds.Count);
+        return Ok(new { Message = $"Queued {missing.Count} missing-difficulty recomputations", Count = missing.Count, AffectedParents = parentIds.Count });
+    }
+
     [HttpGet("issues")]
     public async Task<IActionResult> GetIssues()
     {
