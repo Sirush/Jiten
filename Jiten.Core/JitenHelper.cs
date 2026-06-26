@@ -13,9 +13,38 @@ public static class JitenHelper
 {
     // Cap concurrent PostgreSQL COPY operations to reduce server pressure/timeouts
     private static readonly SemaphoreSlim CopySemaphore = new SemaphoreSlim(6);
+
+    private static string? StripNul(string? value) =>
+        value != null && value.Contains('\0') ? value.Replace("\0", "") : value;
+
+    private static void SanitizeDeckStrings(Deck deck)
+    {
+        deck.OriginalTitle = StripNul(deck.OriginalTitle) ?? deck.OriginalTitle;
+        deck.RomajiTitle = StripNul(deck.RomajiTitle);
+        deck.EnglishTitle = StripNul(deck.EnglishTitle);
+        deck.Description = StripNul(deck.Description);
+
+        foreach (var title in deck.Titles)
+            title.Title = StripNul(title.Title) ?? title.Title;
+
+        foreach (var link in deck.Links)
+            link.Url = StripNul(link.Url) ?? link.Url;
+
+        if (deck.RawText != null)
+            deck.RawText.RawText = StripNul(deck.RawText.RawText) ?? deck.RawText.RawText;
+
+        if (deck.ExampleSentences != null)
+            foreach (var sentence in deck.ExampleSentences)
+                sentence.Text = StripNul(sentence.Text) ?? sentence.Text;
+
+        foreach (var child in deck.Children)
+            SanitizeDeckStrings(child);
+    }
+
     public static async Task InsertDeck(IDbContextFactory<JitenDbContext> contextFactory, Deck deck, byte[] cover, bool update = false)
     {
         var totalTimer = Stopwatch.StartNew();
+        SanitizeDeckStrings(deck);
         Console.WriteLine($"[{DateTime.UtcNow:O}] Inserting deck {deck.OriginalTitle}...");
 
         byte[]? optimizedCoverBytes = null;
@@ -204,7 +233,10 @@ public static class JitenHelper
                 /* ignore */
             }
 
-            Console.WriteLine($"[{DateTime.UtcNow:O}] Error inserting deck: {ex.Message}");
+            var detail = ex.Message;
+            for (var inner = ex.InnerException; inner != null; inner = inner.InnerException)
+                detail += $"\n  -> {inner.GetType().Name}: {inner.Message}";
+            Console.WriteLine($"[{DateTime.UtcNow:O}] Error inserting deck: {detail}");
             return;
         }
     }

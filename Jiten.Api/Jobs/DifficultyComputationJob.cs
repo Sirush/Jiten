@@ -10,6 +10,7 @@ public class DifficultyComputationJob(
     IDbContextFactory<JitenDbContext> contextFactory,
     IHttpClientFactory httpClientFactory,
     IConfiguration configuration,
+    IBackgroundJobClient backgroundJobs,
     ILogger<DifficultyComputationJob> logger)
 {
     private record DifficultyResponse(
@@ -128,6 +129,7 @@ public class DifficultyComputationJob(
             parent.DeckId, children.Count, forceRecompute);
 
         var computedCount = 0;
+        var failedChildren = new List<int>();
         foreach (var child in children)
         {
             if (!forceRecompute && child.DeckDifficulty != null)
@@ -151,7 +153,10 @@ public class DifficultyComputationJob(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to compute difficulty for child deck {DeckId}, skipping", child.DeckId);
+                // Usually a transient RunPod worker failure (e.g. CUDA "no kernel image"). Re-enqueue the child
+                // below as its own job so it inherits the per-deck delayed-retry policy and lands on a fresh worker.
+                logger.LogError(ex, "Failed to compute difficulty for child deck {DeckId}, will re-enqueue", child.DeckId);
+                failedChildren.Add(child.DeckId);
             }
         }
 
@@ -162,8 +167,22 @@ public class DifficultyComputationJob(
             .OrderBy(d => d.DeckOrder)
             .ToListAsync();
 
-        // Aggregate parent difficulty from children
+        // Aggregate parent difficulty from whatever succeeded so the parent is never blocked by a few failures
         await AggregateParentDifficulty(context, parent, childrenWithDifficulty);
+
+        // Self-heal stragglers: re-enqueue each failed child (leaf → 3× delayed retry) and schedule a single
+        // delayed re-aggregation so the parent picks up the recovered children once their retries complete.
+        if (failedChildren.Count > 0)
+        {
+            logger.LogWarning("Re-enqueueing {Count} failed children for parent {ParentId}: {ChildIds}",
+                failedChildren.Count, parent.DeckId, string.Join(",", failedChildren));
+
+            foreach (var childId in failedChildren)
+                backgroundJobs.Enqueue<DifficultyComputationJob>(j => j.ComputeDeckDifficulty(childId, false));
+
+            backgroundJobs.Schedule<DifficultyComputationJob>(
+                j => j.ReaggregateParentDifficulty(parent.DeckId), TimeSpan.FromMinutes(45));
+        }
     }
 
     private async Task ComputeSingleDeckDifficulty(JitenDbContext context, Deck deck)
