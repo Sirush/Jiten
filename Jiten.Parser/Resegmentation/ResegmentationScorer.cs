@@ -196,12 +196,17 @@ internal static class ResegmentationScorer
         score -= 15 * path.Segments.Count;
 
         bool noWeakSingleCharSegments = true;
+        // A leftover single Latin char is shred noise only when the whole span is Latin — an acronym
+        // split into Latin fragments (ＤＡＴＡ → Ｄ + ＡＴＡ drops the Ｄ). A single Latin letter prefixing a
+        // real word (Ｂ + メロ) is a valid extraction and must keep the clean-split bonus.
+        bool spanAllLatin = spanText != null && JapaneseTextHelper.IsAllLatin(spanText);
         foreach (var seg in path.Segments)
         {
             totalLength += seg.Length;
             if (seg.Length < 2)
             {
-                if (spanText == null || JapaneseTextHelper.IsKana(spanText[seg.StartChar]))
+                if (spanText == null || JapaneseTextHelper.IsKana(spanText[seg.StartChar])
+                                     || (spanAllLatin && JapaneseTextHelper.IsLatinLetter(spanText[seg.StartChar])))
                 {
                     if (!(seg.StartChar == 0 && spanText != null && spanText[seg.StartChar] is 'お' or 'ご'))
                         noWeakSingleCharSegments = false;

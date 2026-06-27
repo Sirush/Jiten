@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data.JMDict;
 
 namespace Jiten.Parser.Scoring;
@@ -47,6 +48,14 @@ internal static class FormCandidateFactory
 
             candidates.Add(new FormCandidate(word, form, (byte)form.ReadingIndex, targetHiragana, deconjForm));
         }
+
+        // A Latin surface (ＭＡＯ, ＤＭＴ, ＢＬＴ) must not match a Japanese kanji word through a coincidental
+        // kana reading (ＭＡＯ→まお→苧 "ramie"). Reject all candidates for any word that has a real CJK-kanji
+        // form, so the token stays an unmatched Latin label; genuine Latin loanwords (ＣＤ, ＴＶ) have only
+        // Latin/kana forms and are unaffected.
+        if (candidates.Count > 0 && surface != null && JapaneseTextHelper.IsAllLatin(surface)
+            && word.Forms.Any(f => KanaScoringHelpers.ContainsKanji(f.Text)))
+            return [];
 
         // Per-word hard filters: drop search-only/obsolete forms only if non-search-only/non-obsolete alternatives exist
         if (candidates.Count <= 1)

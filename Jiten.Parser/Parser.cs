@@ -4965,6 +4965,24 @@ namespace Jiten.Parser
             return result;
         }
 
+        /// <summary>
+        /// Drops candidates a kana surface cannot legitimately resolve to during the adjacent rescore.
+        /// Currently: pure-kana なくなる is 無くなる "to cease" or the 〜なくなる negative auxiliary, never
+        /// 亡くなる "to die" (authors spell that in kanji), so 亡くなる (1518540) is removed and can't flip a
+        /// correctly first-passed 無くなる. Surface-gated to all-hiragana なくな… tokens, so compounds
+        /// (耐え切れなくなった) and kanji 亡くなる/亡くなって are untouched.
+        /// </summary>
+        private static List<FormCandidate>? DropImpossibleKanaReadingCandidates(List<FormCandidate>? candidates, WordInfo word)
+        {
+            if (candidates is not { Count: > 0 })
+                return candidates;
+
+            if (word.Text.StartsWith("なくな", StringComparison.Ordinal) && Jiten.Core.JapaneseTextHelper.IsAllHiragana(word.Text))
+                return candidates.Where(c => c.Word.WordId != 1518540).ToList();
+
+            return candidates;
+        }
+
         private static async Task<List<DeckWord>> ApplyAdjacentScoringCore(
             List<List<(WordInfo word, DeckWord? result, int? margin)>> sentencePairs,
             Dictionary<(string, PartOfSpeech, string, string, bool, bool), List<FormCandidate>>? candidateLookup = null,
@@ -5116,6 +5134,9 @@ namespace Jiten.Parser
                     {
                         candidates = RederivationHelper.BuildCandidatesFromWords(state, wordCache, skipPosFilter: tokenHasHint);
                     }
+
+                    // A kana surface can't resolve to a kanji-only homograph (kana なくなる ≠ 亡くなる).
+                    candidates = DropImpossibleKanaReadingCandidates(candidates, currentInfo);
 
                     if (candidates == null || candidates.Count == 0)
                     {

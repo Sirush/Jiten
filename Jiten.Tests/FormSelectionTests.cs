@@ -1491,6 +1491,13 @@ public class FormSelectionTests
         yield return ["ついあれこれ見ているうちに夢中になってしまって", "つい", 1008030, (byte)0];
         // 奢りじゃ悪い: じゃ (では contraction) is the dedicated じゃ copula (2851029), not the plain だ (2089020).
         yield return ["全部あんたの奢りじゃ悪いだろ", "じゃ", 2851029, (byte)0];
+
+        // Kana なくなる is 無くなる "to cease" (1529550, kana RI 2), never 亡くなる "to die" (1518540, kanji-spelled).
+        yield return ["呼吸が出来なくなった。", "なくなった", 1529550, (byte)2];
+
+        // Fullwidth-Latin loanword ＤＡＴＡ resolves whole to データ (1081190) via its normalized form;
+        // the resegmentation must not shred it into Ｄ + ＡＴＡ.
+        yield return ["ＤＡＴＡ１を再生する。", "ＤＡＴＡ", 1081190, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
@@ -1501,6 +1508,9 @@ public class FormSelectionTests
         // あん in moans/exclamations should not match 案 (1154770)
         yield return ["んぅっ、あん、あぁっ", "あん"];
         yield return ["ミレーニアさんあんやだぁふぐぐぐぐぐ…。", "あん"];
+
+        // Fullwidth-Latin ＭＡＯ must not match the kanji word 苧 "ramie" through its reading まお.
+        yield return ["ＭＡＯ阻害剤について", "ＭＡＯ"];
 
         // Positive 資格がある must not match as a combined compound at all (no JMDict entry exists).
         yield return ["お前はまだ継承者としての資格がある", "資格がある"];

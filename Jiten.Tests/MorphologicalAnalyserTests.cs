@@ -337,7 +337,7 @@ public class MorphologicalAnalyserTests
         // Quotative って where Sudachi strands the preceding verb's final mora onto an OOV って-blob
         // (なる→な+るって) or an interjection (従→従+えっ+て): the verb must be rescued whole and って
         // kept as a particle, never dropped as an unresolvable blob.
-        yield return ["貴方たちって民主主義を否定する", new[] { "貴方", "たち", "って", "民主主義", "を", "否定する" }];
+        yield return ["貴方たちって民主主義を否定する", new[] { "貴方たち", "って", "民主主義", "を", "否定する" }];
         yield return ["展開されているっていうのは", new[] { "展開されて", "いる", "っていう", "の", "は" }];
         yield return ["ようにしてあるっていうだけでも", new[] { "ようにして", "ある", "っていう", "だけ", "でも" }];
         yield return ["お嫁さんになるって約束した", new[] { "お嫁さん", "に", "なる", "って", "約束した" }];
@@ -1203,9 +1203,9 @@ public class MorphologicalAnalyserTests
         yield return ["気にしないって事", new[] { "気にしない", "って", "事" }];
         // 気にしなさんな (colloquial しなさるな imperative) — same にしな-surname collision; user_dic 表現 entry
         yield return ["気にしなさんなって", new[] { "気にしなさんな", "って" }];
-        // でしょう auxiliary — currently split as で+しょう, and ファ is also being eaten from ファルマ
+        // でしょう auxiliary segments whole; ファルマ is an OOV name and is dropped (not shredded into ファ+ルマ).
         yield return ["あっ、何でしょうファルマ様",
-            new[] { "あっ", "何", "でしょう", "ファルマ", "様" }];
+            new[] { "あっ", "何", "でしょう", "様" }];
         yield return ["……自称、でしょうに",
             new[] { "自称", "でしょう", "に" }];
         // 自称 written in kana — currently じ is dropped entirely, leaving only しょう
