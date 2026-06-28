@@ -20,6 +20,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Split, SplitOovGarbageTokens, TokenFeatures.OovGarbage),
         Stage(TokenStageGroup.Split, SplitCompoundAuxiliaryVerbs),
         Stage(TokenStageGroup.Split, SplitUnresolvableCompoundVerbs),
+        Stage(TokenStageGroup.Split, SplitUnresolvableRenyokeiNounCompounds),
         Stage(TokenStageGroup.Split, SplitUnresolvablePrefixedAdjectives),
         Stage(TokenStageGroup.Split, SplitTatteParticle, TokenFeatures.TextTatte),
         Stage(TokenStageGroup.Split, SplitTanSuffix, TokenFeatures.TextTanSuffix),
@@ -36,6 +37,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Repair, RepairQuotativeTte, TokenFeatures.EndsWithTsu),
 
         Stage(TokenStageGroup.Repair, RecombineHiraganaTokens),
+        Stage(TokenStageGroup.Repair, CollapseReduplicatedMimetic),
         Stage(TokenStageGroup.Repair, RepairClassicalKiAdjective),
 
         Stage(TokenStageGroup.Combine, CombinePrefixes, TokenFeatures.Prefix),

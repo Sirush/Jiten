@@ -1210,6 +1210,18 @@ public class FormSelectionTests
         // 着なきゃ should resolve to 着る (to wear, 1423000), not suffix ぎ + ない
         yield return ["本当にこれ着なきゃダメ", "着なきゃ", 1423000, (byte)0];
 
+        // Misparse fixes (batch): form/WordId expectations
+        yield return ["かあ", "かあ", 2028970, (byte)0];                          // か particle, not noun カア (caw)
+        yield return ["問題アリアリですよ", "アリアリ", 2007200, (byte)2];        // ありあり, not ariary currency
+        yield return ["そうそうだったね", "そうそう", 1006640, (byte)1];          // interjection, not 錚々
+        yield return ["とてもいとおしい", "いとおしい", 2007340, (byte)1];        // 愛おしい, not 射通す (pierce)
+        yield return ["恐れることなかれ", "なかれ", 1535750, (byte)5];           // 勿れ, not 無い
+        yield return ["三つ目", "目", 1604890, (byte)0];                          // ordinal suffix, not 三つ目 noun
+        yield return ["二つ目", "二つ目", 1625070, (byte)0];                      // kept: ordinal entry "second (in a series)"
+        yield return ["ごろごろごろ", "ごろごろごろ", 1005020, (byte)1];          // over-repeated mimetic → ごろごろ, no conjugation
+        yield return ["キスをしたり", "したり", 1157170, (byte)1];               // する, not interjection したり
+        yield return ["どのようなものか", "もの", 1502390, (byte)1];             // nominal もの + か, not rhetorical ものか
+
         // 長かった should resolve to 長い (long, 1429750), not 列長 compound + 方
         yield return ["列長かった？", "長かった", 1429750, (byte)0];
 

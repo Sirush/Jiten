@@ -70,6 +70,9 @@ public partial class MorphologicalAnalyser
                 currentWord.PartOfSpeech == PartOfSpeech.Verb &&
                 nextWord.DictionaryForm != "おる" &&
                 nextWord.Text != currentWord.Text &&
+                // A bare interjection is never a verb-dependent auxiliary: 持って + あ (mis-split 当たれ)
+                // must not fuse into 持ってあ.
+                nextWord.PartOfSpeech != PartOfSpeech.Interjection &&
                 // くて is always an i-adjective te-form (verb te-forms are って/いて); dependant
                 // auxiliaries attach to verb te-forms only (頭が良くて + やりたい stays split)
                 !currentWord.Text.EndsWith("くて", StringComparison.Ordinal))

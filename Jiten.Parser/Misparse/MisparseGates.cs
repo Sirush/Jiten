@@ -84,6 +84,12 @@ internal static class MisparseGates
         string surface = ctx.Token.Text;
         if (surface.Length > 3 || !WanaKana.IsKana(surface)) return false;
 
+        // An emphatic interjection token ending in っ/ー (くそっ, あー) that is repeated for effect
+        // (くそっくそっ…) is deliberate, not a sub-word stutter shred, so it is kept. Plain response
+        // interjections (はい) lack the っ/ー and are still de-duplicated (the repeat is dropped).
+        if (ctx.Token.PartOfSpeech == PartOfSpeech.Interjection
+            && (surface.EndsWith('っ') || surface.EndsWith('ッ') || surface.EndsWith('ー'))) return false;
+
         if (ctx.ReadingIsIchi || ctx.IsUsuallyKana) return false;
 
         if (ctx.Next is not { Reading.Length: > 0, Text.Length: > 0 } next) return false;

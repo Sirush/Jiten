@@ -142,6 +142,21 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"景気づけよ(?!う)")]
     private static partial Regex KeikizukeYoRegex();
 
+    // ここ/そこ/あそこ/どこ + って: Sudachi shreds the demonstrative (あそこって → あ|そ|こっ|て). Force the
+    // boundary so the place pronoun stays whole and って is the particle. Mirrors DemonstrativePronounTteRegex.
+    [GeneratedRegex(@"(ここ|そこ|あそこ|どこ)って")]
+    private static partial Regex DemonstrativePlaceTteRegex();
+
+    // pronoun + plural ら + って: Sudachi OOV-swallows らって… (キミ|らってやっぱり). Force the boundary
+    // before って after a pronoun's plural ら so ら stays the suffix and って the particle.
+    [GeneratedRegex(@"(?<=(?:キミ|きみ|君|僕|ぼく|俺|おれ|お前|おまえ|あいつ|こいつ|そいつ|あなた|彼|彼女|私|わたし|あたし|うち)ら)(?=って)")]
+    private static partial Regex PronounRaTteRegex();
+
+    // Colloquial copula っす (=です) after an i-adjective (いい|っす, うまい|っす): split so っす resolves
+    // to the copula 2269410 instead of being swallowed into a noun (いいっすか → 交喙/イスカ bird).
+    [GeneratedRegex(@"(?<=[ぁ-ゖ]い)(?<!とい)っす(?=[かよねぞ]|[\s\n]|$)")]
+    private static partial Regex IAdjSsuRegex();
+
     private void PreprocessText(ref string text, bool preserveStopToken, out int rawContentCharCount)
     {
         text = text.Replace("<", " ").Replace(">", " ").Replace("〝", " ").Replace("〟", " ");
@@ -187,6 +202,9 @@ public partial class MorphologicalAnalyser
         text = HayameWithoutWoRegex().Replace(text, $"は{_stopToken}やめ");
         text = text.Replace("もやる", $"も{_stopToken}やる");
         text = HayaruWithoutGaRegex().Replace(text, $"は{_stopToken}やる");
+        // やるって: quotative って fragments the verb やる into や+る. Keep やる whole (run after the
+        // はやる split so 流行る is unaffected).
+        text = text.Replace("やるって", $"やる{_stopToken}って");
         text = text
             .Replace("ええんや", $"ええ{_stopToken}んや")
             .Replace("べや", $"べ{_stopToken}や")
@@ -224,6 +242,8 @@ public partial class MorphologicalAnalyser
         text = MoshiKatakanaBoundaryRegex().Replace(text, $"もし{_stopToken}");
         text = CaseParticleTteRegex().Replace(text, _stopToken);
         text = DemonstrativePronounTteRegex().Replace(text, $"$1{_stopToken}って");
+        text = DemonstrativePlaceTteRegex().Replace(text, $"$1{_stopToken}って");
+        text = PronounRaTteRegex().Replace(text, _stopToken);
         text = KeikizukeYoRegex().Replace(text, $"景気づけ{_stopToken}よ");
 
         text = text.Replace('頚', '頸');
@@ -289,6 +309,7 @@ public partial class MorphologicalAnalyser
         text = text.Replace("できんよう", $"できん{_stopToken}よう");
         text = ColloquialSshoRegex().Replace(text, $"{_stopToken}っしょ");
         text = IAdjSshoRegex().Replace(text, $"{_stopToken}っしょ");
+        text = IAdjSsuRegex().Replace(text, $"{_stopToken}っす");
 
         text = ColloquialDoshiRegex().Replace(text, "どうし");
         text = ColloquialYuuRegex().Replace(text, "いう");

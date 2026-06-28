@@ -734,7 +734,7 @@ namespace Jiten.Parser
 
             var (cleanText, furiganaHints) = FuriganaHintExtractor.Extract(text);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId };
             var (sentences, cleanedOriginal) = await parser.ParseWithCleanedOriginal(cleanText, preserveStopToken: preserveStopToken, diagnostics: diagnostics);
 
             // ComputeTokenOffsets strips \r\n — relocate against the same coordinate space
@@ -867,7 +867,7 @@ namespace Jiten.Parser
             timer.Start();
 
             // Batch morphological analysis
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId };
             var cleanedOriginals = new List<string>();
             var rawCharCounts = new List<int>();
             var batchedSentences = await parser.ParseBatch(cleanTexts, diagnostics: diagnostics, timings: timings, userDictCsv: userDictCsv, cleanedOriginals: cleanedOriginals, rawContentCharCounts: rawCharCounts);
@@ -1050,7 +1050,7 @@ namespace Jiten.Parser
         {
             await EnsureInitializedAsync(contextFactory);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId };
             var sentences = await parser.Parse(text, morphemesOnly: true, diagnostics: diagnostics);
             var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
 
@@ -3389,6 +3389,31 @@ namespace Jiten.Parser
         private static bool HasPrioritizedMeta(int id) =>
             WordMeta.TryGetValue(id, out var meta) && meta.GetPriorityScore(true) > 0;
 
+        // The first non-name word id for a surface (kana-normalised fallback), or null. Used to pin a
+        // synthesised token (e.g. the collapsed ごろごろごろ) to its dictionary entry without re-segmentation.
+        private static int? GetNonNameCompoundId(string text)
+        {
+            static int? Find(string key)
+            {
+                if (!_lookups.TryGetValue(key, out var ids) || ids.Count == 0) return null;
+                foreach (var id in ids)
+                    if (!_nameOnlyWordIds.Contains(id)) return id;
+                return null;
+            }
+
+            var direct = Find(text);
+            if (direct != null) return direct;
+            try
+            {
+                var hira = KanaConverter.ToNormalizedHiragana(text);
+                if (hira != text) return Find(hira);
+            }
+            catch
+            {
+            }
+            return null;
+        }
+
         private static bool HasNonNameLookup(string text)
         {
             if (_lookups.TryGetValue(text, out var ids) && ids.Count > 0
@@ -3641,6 +3666,15 @@ namespace Jiten.Parser
                                                     (w is { PartOfSpeech: PartOfSpeech.Particle, Text: "の" } ||
                                                      IsNameConnectorSymbol(w));
                             if (!isNoun && !isInnerConnector)
+                            {
+                                allValid = false;
+                                break;
+                            }
+
+                            // A 目 pinned as the ordinal suffix (三つ目/四つ目 → number + 目-th) must not be
+                            // re-absorbed into the noun 三つ目 "three-eyed being". (一つ目/二つ目 keep their
+                            // own ordinal entries and are never pinned, so they don't reach here.)
+                            if (j > 0 && w.PreMatchedWordId == 1604890)
                             {
                                 allValid = false;
                                 break;
@@ -3997,8 +4031,23 @@ namespace Jiten.Parser
                                     && sentence.Words[i + 2].word.Text is "ない" or "ません" or "ん" or "なかった";
                                 // いいや = "nope" only clause-initially; 天気もいいや is いい+や.
                                 bool blockedNonInitial = pairText == "いいや" && i > 0;
+                                // The rhetorical ものか/もんか "as if!" attaches to a plain-form predicate,
+                                // possibly across a comma (負ける、ものか). After an adnominal/nominal head it is
+                                // nominal もの + question か (どのようなものか = "what kind of thing"), so only
+                                // combine when the nearest non-symbol token before もの is a predicate.
+                                bool blockedMonoKa = false;
+                                if (pairText is "ものか" or "もんか")
+                                {
+                                    int p = i - 1;
+                                    while (p >= 0 && sentence.Words[p].word.PartOfSpeech
+                                           is PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol
+                                              or PartOfSpeech.BlankSpace)
+                                        p--;
+                                    blockedMonoKa = !(p >= 0 && sentence.Words[p].word.PartOfSpeech
+                                        is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.Auxiliary);
+                                }
 
-                                if (!blockedByNegation && !blockedNonInitial
+                                if (!blockedByNegation && !blockedNonInitial && !blockedMonoKa
                                     && !IsExpressionBoundaryTheft(sentence.Words, i, 2))
                                 {
                                     bestMatch = 2;

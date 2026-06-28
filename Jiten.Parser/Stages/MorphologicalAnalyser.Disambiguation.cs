@@ -204,6 +204,77 @@ public partial class MorphologicalAnalyser
             // so resegmentation would split it into 頚+木
             if (word.Text == "頚木")
                 word.PreMatchedWordId = 1831840;
+
+            // かあ is the drawn-out question particle か (Sudachi tags it 助詞 and normalises to か),
+            // not the noun カア "cawing of a crow" (2076470) that the surface match otherwise wins.
+            if (word is { Text: "かあ", PartOfSpeech: PartOfSpeech.Particle })
+            {
+                word.DictionaryForm = "か";
+                word.NormalizedForm = "か";
+                word.PreMatchedWordId = 2028970;
+            }
+
+            // したり after a case particle (を/が) is する + the listing ～たり (キスをしたり), not the
+            // triumphant interjection したり "bless me!" (1631980) — an interjection never follows a
+            // case particle. The whole-surface interjection wins outside the form scorer, so pin する;
+            // PreMatchedConjugations carries the ～たり chain the pin would otherwise drop.
+            if (word.Text == "したり" && i > 0 && wordInfos[i - 1].Text is "を" or "が")
+            {
+                word.PartOfSpeech = PartOfSpeech.Verb;
+                word.DictionaryForm = "する";
+                word.NormalizedForm = "為る";
+                word.PreMatchedWordId = 1157170;
+                word.PreMatchedReadingIndex = 1;
+                word.PreMatchedConjugations = ["tari", "(unstressed infinitive)"];
+            }
+
+            // アリアリ in katakana → ありあり "vividly/plainly" (2007200, the adverb Sudachi normalises
+            // to), not the gairaigo currency ariary (2868726). Mirrors the ノリ/セン katakana rules.
+            if (word.Text == "アリアリ")
+                word.PreMatchedWordId = 2007200;
+
+            // Kana そうそう → the interjection/adverb "that's right; indeed" (1006640), not 錚々
+            // "eminent" (1845890). Exception: before たる/たり it is the taru-adjective 錚々たる
+            // (錚々たる顔ぶれ "distinguished lineup"), so leave that to normal scoring.
+            if (word.Text == "そうそう"
+                && !(i + 1 < wordInfos.Count && wordInfos[i + 1].Text is "たる" or "たり"))
+                word.PreMatchedWordId = 1006640;
+
+            // いとおしい (kana) is the adj-i 愛おしい "beloved" (2007340) — the only entry for this kana
+            // surface. Sudachi instead tags it as the archaic verb 射通す/いとおす "to pierce" (1846380).
+            if (word.Text == "いとおしい" && word.DictionaryForm is "いとおす" or "射通す")
+            {
+                word.PartOfSpeech = PartOfSpeech.IAdjective;
+                word.DictionaryForm = "いとおしい";
+                word.NormalizedForm = "愛おしい";
+                word.PreMatchedWordId = 2007340;
+            }
+
+            // なかれ is the classical negative imperative 勿れ "do not" (1535750), not the adj-i 無い/なし
+            // (1529520) that Sudachi's dictform routes it to (恐れることなかれ).
+            if (word is { Text: "なかれ" } && word.DictionaryForm is "ない" or "なし" or "無い")
+            {
+                word.PartOfSpeech = PartOfSpeech.Suffix;
+                word.DictionaryForm = "なかれ";
+                word.NormalizedForm = "なかれ";
+                word.PreMatchedWordId = 1535750;
+            }
+
+            // Ordinal 目 (kanji) after a numeric 〜つ counter (三つ目) is the ordinal suffix 目 "-th"
+            // (1604890), not the noun 三つ目 "three-eyed being" (2871573) that resolution would otherwise
+            // compound. Scoped to the つ-counter; 番目/回目/個目 resolve correctly already. 一つ目/二つ目
+            // (一二/１２) are exempt: they have their own ordinal entries "first/second (in a series)".
+            if (word is { Text: "目", PartOfSpeech: PartOfSpeech.Suffix } && i > 0
+                && wordInfos[i - 1].Text.EndsWith("つ", StringComparison.Ordinal)
+                && wordInfos[i - 1].Text.Length > 1
+                && wordInfos[i - 1].Text[0] is not ('一' or '二' or '１' or '２')
+                && (char.IsDigit(wordInfos[i - 1].Text[0]) || "一二三四五六七八九十百千".Contains(wordInfos[i - 1].Text[0])))
+            {
+                word.DictionaryForm = "目";
+                word.NormalizedForm = "目";
+                word.PreMatchedWordId = 1604890;
+                word.PreMatchedReadingIndex = 0;
+            }
         }
 
         return wordInfos;

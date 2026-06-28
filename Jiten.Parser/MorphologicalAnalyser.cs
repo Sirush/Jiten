@@ -13,6 +13,7 @@ public partial class MorphologicalAnalyser
     public Func<string, bool>? HasPrioritizedNonNameCompoundLookup { get; set; }
     public Func<string, bool>? HasKanaAppropriateCompoundLookup { get; set; }
     public Func<string, bool>? HasSuruVerbCompoundLookup { get; set; }
+    public Func<string, int?>? GetNonNameCompoundWordId { get; set; }
 
     private Dictionary<string, IReadOnlyList<DeconjugationForm>>? _pipelineDeconjCache;
     private Dictionary<string, IReadOnlyList<DeconjugationForm>>.AlternateLookup<ReadOnlySpan<char>> _pipelineDeconjCacheAlt;

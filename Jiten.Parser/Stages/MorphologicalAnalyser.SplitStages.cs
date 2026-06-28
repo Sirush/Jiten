@@ -207,6 +207,88 @@ public partial class MorphologicalAnalyser
         return result ?? wordInfos;
     }
 
+    // A 連用形 surface → its dictionary verb if one exists in JMDict (撃ち→撃つ, 食べ→食べる).
+    private string? RenyokeiSurfaceToVerb(string s)
+    {
+        if (s.Length < 2 || HasNonNameCompoundLookup == null) return null;
+        var ichidan = s + 'る';
+        if (HasNonNameCompoundLookup(ichidan)) return ichidan;
+        if (RenyokeiToGodanBase.TryGetValue(s[^1], out var baseEnd))
+        {
+            var godan = s[..^1] + baseEnd;
+            if (HasNonNameCompoundLookup(godan)) return godan;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Decomposes a productive 連用形 V+V compound that Sudachi tags as a single Noun and that has no
+    /// JMDict entry (撃ち漏らし → 撃つ + 漏らす, 殴り倒し → 殴る + 倒す), so both verbs surface as vocabulary
+    /// instead of the whole token being dropped as unresolvable at lookup. Both halves must resolve
+    /// to real verbs, which keeps non-compound nouns from being split apart.
+    /// </summary>
+    private List<WordInfo> SplitUnresolvableRenyokeiNounCompounds(List<WordInfo> wordInfos)
+    {
+        if (HasCompoundLookup == null || HasNonNameCompoundLookup == null)
+            return wordInfos;
+
+        List<WordInfo>? result = null;
+
+        for (int idx = 0; idx < wordInfos.Count; idx++)
+        {
+            var word = wordInfos[idx];
+
+            if (word.PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.CommonNoun) ||
+                word.Text.Length < 3 ||
+                !word.Text.Any(c => c is >= '一' and <= '鿿') ||
+                HasCompoundLookup(word.Text) ||
+                (!string.IsNullOrEmpty(word.NormalizedForm) && word.NormalizedForm != word.Text &&
+                 HasCompoundLookup(word.NormalizedForm)))
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            (int at, string leftBase, string rightBase)? split = null;
+            // Longest left stem first so 撃ち|漏らし wins over a shorter coincidental cut.
+            for (int p = word.Text.Length - 1; p >= 2 && split == null; p--)
+            {
+                var leftBase = RenyokeiSurfaceToVerb(word.Text[..p]);
+                if (leftBase == null) continue;
+                var rightBase = RenyokeiSurfaceToVerb(word.Text[p..]);
+                if (rightBase == null) continue;
+                split = (p, leftBase, rightBase);
+            }
+
+            if (split == null)
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            result ??= [..wordInfos[..idx]];
+            var (at, lBase, rBase) = split.Value;
+            var leftSurface = word.Text[..at];
+            var rightSurface = word.Text[at..];
+            result.Add(new WordInfo
+            {
+                Text = leftSurface, DictionaryForm = lBase, NormalizedForm = lBase,
+                PartOfSpeech = PartOfSpeech.Verb, Reading = KanaConverter.ToHiragana(leftSurface),
+                StartOffset = word.StartOffset,
+                EndOffset = word.StartOffset >= 0 ? word.StartOffset + at : -1
+            });
+            result.Add(new WordInfo
+            {
+                Text = rightSurface, DictionaryForm = rBase, NormalizedForm = rBase,
+                PartOfSpeech = PartOfSpeech.Verb, Reading = KanaConverter.ToHiragana(rightSurface),
+                StartOffset = word.StartOffset >= 0 ? word.StartOffset + at : -1,
+                EndOffset = word.EndOffset
+            });
+        }
+
+        return result ?? wordInfos;
+    }
+
     // Productive adjective prefixes with their own JMDict entries (薄赤い → 薄+赤い).
     private static readonly string[] AdjectivePrefixes = ["真っ", "薄", "真", "ほの", "ど", "超"];
 

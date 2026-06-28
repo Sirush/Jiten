@@ -1463,8 +1463,30 @@ public class MorphologicalAnalyserTests
         // 用事 should not be swallowed into 私用 + 事
         yield return ["すみません私用事ができました", new[] { "すみません", "私", "用事", "が", "できました" }];
 
-        // 着なきゃ should be one token (着る + contracted conditional)
-        yield return ["本当にこれ着なきゃダメ", new[] { "本当", "に", "これ", "着なきゃ", "ダメ" }];
+        // 着なきゃ should be one token (着る + contracted conditional); 本当に is the adverb (1611580)
+        yield return ["本当にこれ着なきゃダメ", new[] { "本当に", "これ", "着なきゃ", "ダメ" }];
+
+        // Misparse fixes (batch): segmentation expectations
+        yield return ["ごろごろごろ", new[] { "ごろごろごろ" }];                    // over-repeated mimetic (Sudachi: ごろごろ+ごろ) → one occurrence
+        yield return ["ぐるぐるぐる", new[] { "ぐるぐるぐる" }];                    // ...(Sudachi: one ぐるぐるぐる token) → one occurrence
+        yield return ["ざわざわざわ", new[] { "ざわざわざわ" }];                    // ...(previously dropped entirely) → one occurrence
+        yield return ["化け物どもめ", new[] { "化け物", "ども", "め" }];            // ど+もめ → ども+め
+        yield return ["部下達", new[] { "部下", "達" }];                            // 部+下達 → 部下+達
+        yield return ["――やらせないッ", new[] { "やらせない" }];                   // causative-stem noun + ない merge
+        yield return ["気が行って", new[] { "気", "が", "行って" }];                // が行 theft prevented
+        yield return ["美しくも", new[] { "美しく", "も" }];                        // 〜くも adverbial split
+        yield return ["三つ目", new[] { "三つ", "目" }];                            // 三つ目 (three-eyed) → number + ordinal 目
+        yield return ["四つ目", new[] { "四つ", "目" }];                            // 四つ目 (four-eyed) → number + ordinal 目
+        yield return ["一つ目", new[] { "一つ目" }];                                // kept: ordinal entry "first (in a series)"
+        yield return ["二つ目", new[] { "二つ目" }];                                // kept: ordinal entry "second (in a series)"
+        yield return ["おまえはやるって", new[] { "おまえ", "は", "やる", "って" }]; // やる kept whole before って
+        yield return ["警戒を持ってあたれ", new[] { "警戒", "を", "持って", "あたれ" }]; // あ+たれ → あたれ
+        yield return ["あそこってけっこう遠いじゃない", new[] { "あそこ", "って", "けっこう", "遠い", "じゃない" }];
+        yield return ["呼んでいいっすか", new[] { "呼んで", "いい", "っす", "か" }]; // っす copula
+        yield return ["キミらってやっぱり", new[] { "キミら", "って", "やっぱり" }]; // ら+って split
+        yield return ["撃ち漏らしを処分する", new[] { "撃ち", "漏らし", "を", "処分する" }]; // V+V compound split
+        yield return ["炙り出すために", new[] { "炙り出す", "ために" }];            // ため+に → ために
+        yield return ["くそっくそっくそ", new[] { "くそっ", "くそっ", "くそ" }];    // repeated interjection kept
 
         // 長かった should be one token (長い past), not split from 列長 compound
         yield return ["列長かった？", new[] { "列", "長かった" }];
