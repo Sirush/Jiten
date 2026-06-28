@@ -214,8 +214,6 @@ export const useAuthStore = defineStore('auth', () => {
         throw new Error('Invalid refresh response');
       }
     } catch (err: any) {
-      console.error('Token refresh failed:', err);
-
       // Only a definitive auth rejection from the server means the tokens are dead.
       // /auth/refresh returns 400 (or 401/403 defensively) when the refresh token is
       // genuinely invalid/expired/used/revoked. Network errors, timeouts and 5xx
@@ -224,6 +222,15 @@ export const useAuthStore = defineStore('auth', () => {
       // a brief blip. Applies on both client and server.
       const status = err?.status ?? err?.statusCode ?? err?.response?.status;
       const isAuthRejection = status === 400 || status === 401 || status === 403;
+
+      // A rejection is expected whenever a returning visitor carries a stale refresh
+      // token (very common during SSR) — log it quietly to avoid spamming server logs
+      // with full FetchError stacks. Only surface genuinely unexpected/transient failures.
+      if (isAuthRejection) {
+        dbg('Token refresh rejected (stale/invalid refresh token):', status);
+      } else {
+        console.warn('Token refresh failed (transient):', status ?? err?.message ?? err);
+      }
 
       if (isAuthRejection) {
         // Only tell other tabs to drop their session on a real rejection.
