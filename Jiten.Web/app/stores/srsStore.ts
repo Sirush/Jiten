@@ -111,11 +111,18 @@ export const useSrsStore = defineStore('srs', () => {
   const isSessionComplete = ref(false);
   const isWrappingUp = ref(false);
   const preWrapUpBatch = ref<StudyCardDto[]>([]);
+  // Drives the "batch complete" checkpoint popup: set when a full batch is exhausted and the
+  // pause-between-batches setting is on, instead of transparently fetching the next batch.
+  const batchComplete = ref(false);
+  // Whether the last fetch returned a full batch (so more cards likely remain). A short batch means
+  // the queue is drained, so the boundary should complete the session rather than offer a checkpoint.
+  const lastBatchFull = ref(false);
   const settingsLoaded = ref(false);
   const studySettings = ref<StudySettingsDto>({
     newCardsPerDay: 20,
     maxReviewsPerDay: 200,
     batchSize: 100,
+    pauseBetweenBatches: true,
     gradingButtons: 4,
     interleaving: 'Mixed',
     newCardGathering: 'TopDeck',
@@ -577,6 +584,8 @@ export const useSrsStore = defineStore('srs', () => {
       isSessionComplete.value = false;
       isWrappingUp.value = false;
       preWrapUpBatch.value = [];
+      batchComplete.value = false;
+      lastBatchFull.value = false;
       againCardKeys.value = new Set();
       clearedGrades.value = [];
       undoStack.value = [];
@@ -617,6 +626,8 @@ export const useSrsStore = defineStore('srs', () => {
         currentCardIndex.value = 0;
         isSessionComplete.value = false;
       }
+      // A full batch implies more cards likely remain; a short one means the queue is drained.
+      lastBatchFull.value = response.cards.length >= effectiveLimit;
       isFlipped.value = false;
       cardShownAt.value = Date.now();
       newCardsRemaining.value = response.newCardsRemaining;
@@ -637,6 +648,33 @@ export const useSrsStore = defineStore('srs', () => {
     } finally {
       isLoading.value = false;
     }
+  }
+
+  // Decide what happens when the loaded queue runs out: finish a wrap-up, pause at a full-batch
+  // checkpoint (when the setting is on), or transparently fetch the next batch as before.
+  function onBatchExhausted() {
+    if (isWrappingUp.value) {
+      isSessionComplete.value = true;
+      return;
+    }
+    if (studySettings.value.pauseBetweenBatches && lastBatchFull.value) {
+      batchComplete.value = true;
+    } else {
+      fetchBatch();
+    }
+  }
+
+  // "Continue" from the batch-complete checkpoint: load the next batch. An empty result falls through
+  // to isSessionComplete via fetchBatch's refetch branch, so an over-optimistic lastBatchFull is safe.
+  async function continueBatch() {
+    batchComplete.value = false;
+    await fetchBatch();
+  }
+
+  // "End Session" from the batch-complete checkpoint: go straight to the session summary.
+  function endSessionFromBatch() {
+    batchComplete.value = false;
+    isSessionComplete.value = true;
   }
 
   function cardExampleKey(c: StudyCardDto) {
@@ -821,13 +859,7 @@ export const useSrsStore = defineStore('srs', () => {
       if (inFlightReviews.get(cardKey) === promise) inFlightReviews.delete(cardKey);
     });
 
-    if (currentCardIndex.value >= currentBatch.value.length) {
-      if (isWrappingUp.value) {
-        isSessionComplete.value = true;
-      } else {
-        fetchBatch();
-      }
-    }
+    if (currentCardIndex.value >= currentBatch.value.length) onBatchExhausted();
     return true;
   }
 
@@ -886,10 +918,7 @@ export const useSrsStore = defineStore('srs', () => {
         againCardKeys.value = newSet;
         clearedGrades.value = [...clearedGrades.value, 'action'];
 
-        if (currentCardIndex.value >= currentBatch.value.length) {
-          if (isWrappingUp.value) isSessionComplete.value = true;
-          else fetchBatch();
-        }
+        if (currentCardIndex.value >= currentBatch.value.length) onBatchExhausted();
       } else if (reviewResult?.intervalPreview) {
         // Patch the freshly-scheduled interval onto the re-queued card (deep-reactive via the ref).
         ctx.reinsertedAgainCard.intervalPreview = reviewResult.intervalPreview;
@@ -969,13 +998,7 @@ export const useSrsStore = defineStore('srs', () => {
 
       ensurePrefetched();
 
-      if (currentCardIndex.value >= currentBatch.value.length) {
-        if (isWrappingUp.value) {
-          isSessionComplete.value = true;
-        } else {
-          await fetchBatch();
-        }
-      }
+      if (currentCardIndex.value >= currentBatch.value.length) onBatchExhausted();
     } catch (error) {
       // The action failed before mutating local state — drop the snapshot we optimistically pushed.
       undoStack.value = undoStack.value.slice(0, -1);
@@ -1223,6 +1246,8 @@ export const useSrsStore = defineStore('srs', () => {
     preWrapUpBatch.value = blob.preWrapUpBatch ?? [];
 
     isSessionComplete.value = false;
+    batchComplete.value = false;
+    lastBatchFull.value = false;
     isFlipped.value = false;
     isLoading.value = false;
     undoStack.value = [];
@@ -1244,6 +1269,8 @@ export const useSrsStore = defineStore('srs', () => {
     isSessionComplete.value = false;
     isWrappingUp.value = false;
     preWrapUpBatch.value = [];
+    batchComplete.value = false;
+    lastBatchFull.value = false;
     againCardKeys.value = new Set();
     clearedGrades.value = [];
     sessionReviews.value = [];
@@ -1283,6 +1310,9 @@ export const useSrsStore = defineStore('srs', () => {
     isLoading,
     isSessionComplete,
     isWrappingUp,
+    batchComplete,
+    continueBatch,
+    endSessionFromBatch,
     studySettings,
     sessionStats,
     newCardsRemaining,

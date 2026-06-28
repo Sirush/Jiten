@@ -1106,6 +1106,7 @@ export interface StudySettingsDto {
   newCardsPerDay: number;
   maxReviewsPerDay: number;
   batchSize: number;
+  pauseBetweenBatches: boolean;
   gradingButtons: number;
   interleaving: StudyInterleaving;
   newCardGathering: StudyNewCardGathering;

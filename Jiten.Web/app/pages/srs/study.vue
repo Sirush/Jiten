@@ -395,6 +395,14 @@
     else srsStore.wrapUp();
   }
 
+  // Batch-complete checkpoint: load the next batch, or end the session (→ summary).
+  async function handleContinueBatch() {
+    await srsStore.continueBatch();
+  }
+  function handleEndSession() {
+    srsStore.endSessionFromBatch();
+  }
+
   async function exitStudy() {
     stopElapsedTimer();
     await router.push('/srs/decks');
@@ -772,6 +780,18 @@
         </div>
       </div>
     </template>
+
+    <!-- Batch-complete checkpoint (shorter sibling of the session-complete card) -->
+    <div v-else-if="srsStore.batchComplete" class="flex-1 flex items-center justify-center px-2">
+      <div class="flex flex-col items-center text-center p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-lg max-w-md mx-auto w-full">
+        <div class="text-2xl font-bold mb-2">Batch complete</div>
+        <p class="text-gray-500 dark:text-gray-400 mb-6">You have completed the current batch! Would you like to stop here?</p>
+        <div class="flex gap-3 w-full">
+          <Button label="Continue" severity="secondary" class="flex-1" @click="handleContinueBatch" />
+          <Button label="End Session" class="flex-1" @click="handleEndSession" />
+        </div>
+      </div>
+    </div>
 
     <!-- No cards available -->
     <div v-else class="flex-1 flex items-center justify-center px-2">
