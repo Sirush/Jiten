@@ -96,16 +96,20 @@
     return total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
   }
 
+  function effectiveTotal(deck: StudyDeckDto) {
+    return Math.max(0, deck.totalWords - deck.blacklistedCount);
+  }
+
   function knownPct(deck: StudyDeckDto) {
-    return pct(deck.masteredCount + deck.reviewCount, deck.totalWords);
+    return pct(deck.masteredCount + deck.reviewCount, effectiveTotal(deck));
   }
 
   function maturePct(deck: StudyDeckDto) {
-    return pct(deck.masteredCount + deck.matureCount, deck.totalWords);
+    return pct(deck.masteredCount + deck.matureCount, effectiveTotal(deck));
   }
 
   function combinedPct(deck: StudyDeckDto) {
-    return pct(deck.masteredCount + deck.reviewCount + deck.learningCount, deck.totalWords);
+    return pct(deck.masteredCount + deck.reviewCount + deck.learningCount, effectiveTotal(deck));
   }
 
   const newCardDeckIds = computed(() => {
@@ -708,19 +712,27 @@
                   <span v-if="newCardDeckIds.has(deck.userStudyDeckId)" class="text-green-400 dark:text-green-600 font-medium"> · New cards from here</span>
                 </div>
                 <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">
-                  <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
-                    <div class="absolute bg-purple-500/30 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
-                    <div class="absolute bg-purple-500/60 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
-                    <div class="absolute bg-purple-600 h-6 rounded-lg transition-all duration-700" :style="{ width: maturePct(deck) + '%' }" />
-                    <span class="absolute inset-0 flex items-center pl-2 text-xs font-bold z-10 text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]">
-                      {{ knownPct(deck) }}%
-                    </span>
-                  </div>
+                  <Tooltip
+                    :content="`${maturePct(deck)}% mature (well-retained)<br>${knownPct(deck)}% known (young + mature)`"
+                    placement="top"
+                  >
+                    <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
+                      <div class="absolute bg-purple-500/30 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
+                      <div class="absolute bg-purple-500/60 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                      <div class="absolute bg-purple-600 h-6 rounded-lg transition-all duration-700" :style="{ width: maturePct(deck) + '%' }" />
+                      <span class="absolute inset-0 flex items-center justify-between px-2 z-10 pointer-events-none">
+                        <span class="text-xs font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]">{{ maturePct(deck) }}% mature</span>
+                        <span class="text-[10px] font-semibold text-white/90 bg-black/25 rounded px-1 py-0.5 leading-none">{{ knownPct(deck) }}% known</span>
+                      </span>
+                    </div>
+                  </Tooltip>
                   <div class="flex gap-3 mt-1 text-xs text-gray-500 flex-wrap">
                     <span>{{ deck.unseenCount }} unknown</span>
                     <span class="text-purple-400">{{ deck.learningCount }} learning</span>
                     <span class="text-purple-500">{{ deck.youngCount }} young</span>
                     <span class="text-purple-700 dark:text-purple-300">{{ deck.matureCount + deck.masteredCount }} mature</span>
+                    <span v-if="deck.suspendedCount > 0" class="text-amber-500">{{ deck.suspendedCount }} suspended</span>
+                    <span v-if="deck.blacklistedCount > 0" class="text-gray-400 dark:text-gray-500">{{ deck.blacklistedCount }} blacklisted</span>
                     <span v-if="deck.dueReviewCount > 0" class="text-blue-500 font-semibold">{{ deck.dueReviewCount }} due</span>
                   </div>
                   <div v-if="deck.warning" class="text-xs text-yellow-500 mt-1">{{ deck.warning }}</div>
@@ -856,19 +868,27 @@
                   <span v-if="deck.description"> · {{ deck.description }}</span>
                 </div>
                 <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">
-                  <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
-                    <div class="absolute bg-purple-500/30 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
-                    <div class="absolute bg-purple-500/60 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
-                    <div class="absolute bg-purple-600 h-6 rounded-lg transition-all duration-700" :style="{ width: maturePct(deck) + '%' }" />
-                    <span class="absolute inset-0 flex items-center pl-2 text-xs font-bold z-10 text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]">
-                      {{ knownPct(deck) }}%
-                    </span>
-                  </div>
+                  <Tooltip
+                    :content="`${maturePct(deck)}% mature (well-retained)<br>${knownPct(deck)}% known (young + mature)`"
+                    placement="top"
+                  >
+                    <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
+                      <div class="absolute bg-purple-500/30 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
+                      <div class="absolute bg-purple-500/60 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                      <div class="absolute bg-purple-600 h-6 rounded-lg transition-all duration-700" :style="{ width: maturePct(deck) + '%' }" />
+                      <span class="absolute inset-0 flex items-center justify-between px-2 z-10 pointer-events-none">
+                        <span class="text-xs font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]">{{ maturePct(deck) }}% mature</span>
+                        <span class="text-[10px] font-semibold text-white/90 bg-black/25 rounded px-1 py-0.5 leading-none">{{ knownPct(deck) }}% known</span>
+                      </span>
+                    </div>
+                  </Tooltip>
                   <div class="flex gap-3 mt-1 text-xs text-gray-500 flex-wrap">
-                    <span>{{ deck.unseenCount }} unseen</span>
+                    <span>{{ deck.unseenCount }} unknown</span>
                     <span class="text-purple-400">{{ deck.learningCount }} learning</span>
                     <span class="text-purple-500">{{ deck.youngCount }} young</span>
                     <span class="text-purple-700 dark:text-purple-300">{{ deck.matureCount + deck.masteredCount }} mature</span>
+                    <span v-if="deck.suspendedCount > 0" class="text-amber-500">{{ deck.suspendedCount }} suspended</span>
+                    <span v-if="deck.blacklistedCount > 0" class="text-gray-400 dark:text-gray-500">{{ deck.blacklistedCount }} blacklisted</span>
                     <span v-if="deck.dueReviewCount > 0" class="text-blue-500 font-semibold">{{ deck.dueReviewCount }} due</span>
                   </div>
                   <div v-if="deck.warning" class="text-xs text-yellow-500 mt-1">{{ deck.warning }}</div>
