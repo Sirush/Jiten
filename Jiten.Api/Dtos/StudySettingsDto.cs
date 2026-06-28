@@ -82,6 +82,9 @@ public class StudySettingsDto
     [JsonPropertyName("batchSize")]
     public int BatchSize { get; set; } = 100;
 
+    [JsonPropertyName("pauseBetweenBatches")]
+    public bool PauseBetweenBatches { get; set; } = true;
+
     [JsonPropertyName("gradingButtons")]
     public int GradingButtons { get; set; } = 4;
 
@@ -251,10 +254,10 @@ public class TimedReviewSettingsDto
     [JsonPropertyName("showTimer")] public bool ShowTimer { get; set; } = true;
     [JsonPropertyName("skipNewCards")] public bool SkipNewCards { get; set; } = true;
     [JsonPropertyName("revealEnabled")] public bool RevealEnabled { get; set; } = true;
-    [JsonPropertyName("revealSeconds")] public int RevealSeconds { get; set; } = 8;
+    [JsonPropertyName("revealSeconds")] public double RevealSeconds { get; set; } = 8;
     [JsonPropertyName("revealAction")] public TimedRevealAction RevealAction { get; set; } = TimedRevealAction.Reveal;
     [JsonPropertyName("answerEnabled")] public bool AnswerEnabled { get; set; } = true;
-    [JsonPropertyName("answerSeconds")] public int AnswerSeconds { get; set; } = 4;
+    [JsonPropertyName("answerSeconds")] public double AnswerSeconds { get; set; } = 4;
     [JsonPropertyName("answerAction")] public TimedAnswerAction AnswerAction { get; set; } = TimedAnswerAction.SoftFail;
     [JsonPropertyName("alertSound")] public bool AlertSound { get; set; } = true;
 }

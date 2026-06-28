@@ -308,12 +308,16 @@ export function useStudyTimer(cb: StudyTimerCallbacks) {
 
   // --- Watchers -----------------------------------------------------------------------------------
   // One watcher drives every phase transition: it fires whenever the shown card (cardShownAt, bumped
-  // on each fresh card and after every grade) OR its face (isFlipped) changes. A single array watcher
-  // is used deliberately — two separate watchers miss the auto-hard-fail case, where the same tick
-  // flips isFlipped true→false (net-unchanged, so an isFlipped watcher never fires) while cardShownAt
-  // advances. The only transition we must NOT restart on is a fail-learn forced reveal, which flips
-  // the card without advancing it and must keep its "Again" arm.
-  watch([() => store.cardShownAt, () => store.isFlipped], ([shownAt], [prevShownAt]) => {
+  // on each fresh card and after every grade), its face (isFlipped), or its identity (currentCard)
+  // changes. A single array watcher is used deliberately — two separate watchers miss the
+  // auto-hard-fail case, where the same tick flips isFlipped true→false (net-unchanged, so an
+  // isFlipped watcher never fires) while cardShownAt advances. currentCard is watched too so the
+  // first card of a new batch restarts: finishing a batch parks the cursor past the end
+  // (currentCard → null, idle) and the next batch's first card arrives asynchronously from
+  // fetchBatch; keying off the card's identity catches that null → card refill reliably. The only
+  // transition we must NOT restart on is a fail-learn forced reveal, which flips the card without
+  // advancing it (cardShownAt and currentCard both unchanged) and must keep its "Again" arm.
+  watch([() => store.cardShownAt, () => store.isFlipped, () => store.currentCard], ([shownAt], [prevShownAt]) => {
     if (phase.value === 'armed' && shownAt === prevShownAt) return; // fail-learn forced reveal → keep arm
     startPhase();
   });

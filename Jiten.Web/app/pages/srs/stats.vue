@@ -68,14 +68,13 @@
     const s = stateCounts.value;
     if (!s) return [];
     return [
-      { key: 'new', label: 'New', count: s.new, color: 'text-blue-600 dark:text-blue-400' },
       { key: 'learning', label: 'Learning', count: s.learning, color: 'text-orange-600 dark:text-orange-400' },
       { key: 'relearning', label: 'Relearning', count: s.relearning, color: 'text-red-600 dark:text-red-400' },
-      { key: 'young', label: 'Young', count: s.young, color: 'text-purple-600 dark:text-purple-400' },
-      { key: 'mature', label: 'Mature', count: s.mature, color: 'text-green-600 dark:text-green-400' },
-      { key: 'suspended', label: 'Suspended', count: s.suspended, color: 'text-gray-500 dark:text-gray-400' },
-      { key: 'mastered', label: 'Mastered', count: s.mastered, color: 'text-amber-600 dark:text-amber-400' },
-      { key: 'blacklisted', label: 'Blacklisted', count: s.blacklisted, color: 'text-gray-500 dark:text-gray-400' },
+      { key: 'young', label: 'Young', count: s.young, color: 'text-yellow-600 dark:text-yellow-300' },
+      { key: 'mature', label: 'Mature', count: s.mature, color: 'text-green-600 dark:text-green-300' },
+      { key: 'mastered', label: 'Mastered', count: s.mastered, color: 'text-green-600 dark:text-green-300' },
+      { key: 'suspended', label: 'Suspended', count: s.suspended, color: 'text-gray-600 dark:text-gray-300' },
+      { key: 'blacklisted', label: 'Blacklisted', count: s.blacklisted, color: 'text-gray-600 dark:text-gray-300' },
     ];
   });
   const hasStates = computed(() => (stateCounts.value?.total ?? 0) > 0);
@@ -85,12 +84,11 @@
     const s = stateCounts.value;
     if (!s) return [];
     const segs = [
-      { key: 'new', count: s.new, color: 'bg-blue-500' },
       { key: 'learning', count: s.learning, color: 'bg-orange-500' },
       { key: 'relearning', count: s.relearning, color: 'bg-red-500' },
-      { key: 'young', count: s.young, color: 'bg-purple-500' },
+      { key: 'young', count: s.young, color: 'bg-yellow-500' },
       { key: 'mature', count: s.mature, color: 'bg-green-500' },
-      { key: 'mastered', count: s.mastered, color: 'bg-amber-500' },
+      { key: 'mastered', count: s.mastered, color: 'bg-green-700' },
     ].filter((seg) => seg.count > 0);
     const sum = segs.reduce((acc, seg) => acc + seg.count, 0) || 1;
     return segs.map((seg) => ({ ...seg, pct: (seg.count / sum) * 100 }));
@@ -444,7 +442,7 @@
       <div v-if="loadingStats" class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4">
         <div class="h-5 w-40 rounded bg-surface-200 dark:bg-surface-700 animate-pulse mb-4" />
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div v-for="i in 8" :key="i" class="h-16 rounded-lg bg-surface-100 dark:bg-surface-800 animate-pulse" />
+          <div v-for="i in 7" :key="i" class="h-16 rounded-lg bg-surface-100 dark:bg-surface-800 animate-pulse" />
         </div>
       </div>
       <div v-else class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4">

@@ -76,6 +76,7 @@ public static class ConfusableReadingsHelper
         await using var ctx3 = await factory.CreateDbContextAsync();
         await using var ctx4 = await factory.CreateDbContextAsync();
         await using var ctx5 = await factory.CreateDbContextAsync();
+        await using var ctx6 = await factory.CreateDbContextAsync();
 
         var wordsTask = ctx3.JMDictWords.AsNoTracking()
             .Where(w => confusableIds.Contains(w.WordId) && w.Priorities.Contains("name"))
@@ -92,33 +93,52 @@ public static class ConfusableReadingsHelper
             .Select(wff => new { wff.WordId, wff.ReadingIndex, wff.FrequencyRank })
             .ToListAsync();
 
-        await Task.WhenAll(wordsTask, formsTask, freqsTask);
+        var kanjiFormsTask = ctx6.WordForms.AsNoTracking()
+            .Where(wf => confusableIds.Contains(wf.WordId)
+                      && wf.FormType == JmDictFormType.KanjiForm
+                      && distinctTexts.Contains(wf.Text))
+            .Select(wf => new { wf.WordId, wf.ReadingIndex, wf.Text })
+            .ToListAsync();
+
+        await Task.WhenAll(wordsTask, formsTask, freqsTask, kanjiFormsTask);
 
         var nameWordIds = (await wordsTask).ToHashSet();
         var forms = await formsTask;
         var freqs = await freqsTask;
+        var kanjiForms = await kanjiFormsTask;
 
         var freqPairs = freqs.Select(f => (f.WordId, f.ReadingIndex)).ToHashSet();
         var freqByWord = new Dictionary<int, int>();
         foreach (var f in freqs)
             freqByWord.TryAdd(f.WordId, f.FrequencyRank);
 
-        var validReadings = new Dictionary<int, string>();
-        foreach (var form in forms)
+
+        var usedKanjiByWordText = new HashSet<(int, string)>();
+        foreach (var kf in kanjiForms)
+            if (freqPairs.Contains((kf.WordId, kf.ReadingIndex)))
+                usedKanjiByWordText.Add((kf.WordId, kf.Text));
+
+        var kanaByWord = new Dictionary<int, string>();
+        foreach (var form in forms.OrderBy(f => f.ReadingIndex))
         {
             if (nameWordIds.Contains(form.WordId)) continue;
-            if (!freqPairs.Contains((form.WordId, form.ReadingIndex))) continue;
-            validReadings.TryAdd(form.WordId, form.Text);
+            kanaByWord.TryAdd(form.WordId, form.Text);
         }
+
+        var sourcePairToText = new Dictionary<(int, byte), string>();
+        foreach (var (text, pairs) in textToSourcePairs)
+            foreach (var p in pairs)
+                sourcePairToText[p] = text;
 
         var result = new Dictionary<(int, byte), List<string>>();
         foreach (var (sourcePair, confIds) in sourceToConfusable)
         {
             sourceReadings.TryGetValue(sourcePair.Item1, out var ownReadings);
+            if (!sourcePairToText.TryGetValue(sourcePair, out var sourceText)) continue;
 
             var readings = confIds
-                .Where(validReadings.ContainsKey)
-                .Select(id => (reading: validReadings[id], rank: freqByWord.GetValueOrDefault(id, int.MaxValue)))
+                .Where(id => kanaByWord.ContainsKey(id) && usedKanjiByWordText.Contains((id, sourceText)))
+                .Select(id => (reading: kanaByWord[id], rank: freqByWord.GetValueOrDefault(id, int.MaxValue)))
                 .Where(x => ownReadings == null || !ownReadings.Contains(JapaneseTextHelper.KatakanaToHiragana(x.reading)))
                 .OrderBy(x => x.rank)
                 .Select(x => x.reading)

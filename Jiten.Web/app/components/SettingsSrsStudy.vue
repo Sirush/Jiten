@@ -398,6 +398,19 @@
       </div>
 
       <div class="flex items-center gap-2">
+        <ToggleSwitch v-model="form.pauseBetweenBatches" input-id="pauseBetweenBatches" />
+        <label for="pauseBetweenBatches" class="text-sm cursor-pointer">
+          Pause at the end of each batch
+          <Tooltip
+            content="When enabled, finishing a full batch shows a checkpoint so you can stop or keep going, instead of loading the next batch automatically."
+            placement="top"
+          >
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+          </Tooltip>
+        </label>
+      </div>
+
+      <div class="flex items-center gap-2">
         <ToggleSwitch v-model="form.countFailedReviews" input-id="countFailedReviews" />
         <label for="countFailedReviews" class="text-sm cursor-pointer">
           Count failed reviews toward daily limit
@@ -1042,7 +1055,7 @@
         <div v-if="form.timedReview.revealEnabled" :class="props.inline ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'">
           <div class="min-w-0">
             <label class="block text-sm font-medium mb-1">Seconds before it fires</label>
-            <InputNumber v-model="form.timedReview.revealSeconds" :min="1" :max="600" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
+            <InputNumber v-model="form.timedReview.revealSeconds" :min="1" :max="600" :step="0.5" :max-fraction-digits="1" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
           </div>
           <div class="min-w-0">
             <label class="block text-sm font-medium mb-1">
@@ -1082,7 +1095,7 @@
                 <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
               </Tooltip>
             </label>
-            <InputNumber v-model="form.timedReview.answerSeconds" :min="0" :max="600" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
+            <InputNumber v-model="form.timedReview.answerSeconds" :min="0" :max="600" :step="0.5" :max-fraction-digits="1" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
           </div>
           <div class="min-w-0">
             <label class="block text-sm font-medium mb-1">
