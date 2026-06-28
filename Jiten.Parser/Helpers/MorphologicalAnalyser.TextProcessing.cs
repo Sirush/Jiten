@@ -133,19 +133,15 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(?<=[ぁ-ゖ]い)(?<!とい)っしょ[ーう]?(?=[\s\n]|$)")]
     private static partial Regex IAdjSshoRegex();
 
-    // こいつ/そいつ/あいつ/どいつ + って: Sudachi shreds the つ into つっ (こい|つっ|て). Force the boundary
-    // so the pronoun stays whole and って is the particle (こいつ + ってば).
-    [GeneratedRegex(@"([こそあど]いつ)って")]
+    // こいつ/そいつ/あいつ/どいつ and place pronouns ここ/そこ/あそこ/どこ + って: Sudachi shreds the
+    // demonstrative (こい|つっ|て; あそこって → あ|そ|こっ|て). Force the boundary so the pronoun stays
+    // whole and って is the particle (こいつ + ってば).
+    [GeneratedRegex(@"([こそあど]いつ|ここ|そこ|あそこ|どこ)って")]
     private static partial Regex DemonstrativePronounTteRegex();
 
     // 景気づけよ → 景気づけ (景気付け 2010780) + よ; NOT the volitional 景気づけよう.
     [GeneratedRegex(@"景気づけよ(?!う)")]
     private static partial Regex KeikizukeYoRegex();
-
-    // ここ/そこ/あそこ/どこ + って: Sudachi shreds the demonstrative (あそこって → あ|そ|こっ|て). Force the
-    // boundary so the place pronoun stays whole and って is the particle. Mirrors DemonstrativePronounTteRegex.
-    [GeneratedRegex(@"(ここ|そこ|あそこ|どこ)って")]
-    private static partial Regex DemonstrativePlaceTteRegex();
 
     // pronoun + plural ら + って: Sudachi OOV-swallows らって… (キミ|らってやっぱり). Force the boundary
     // before って after a pronoun's plural ら so ら stays the suffix and って the particle.
@@ -242,7 +238,6 @@ public partial class MorphologicalAnalyser
         text = MoshiKatakanaBoundaryRegex().Replace(text, $"もし{_stopToken}");
         text = CaseParticleTteRegex().Replace(text, _stopToken);
         text = DemonstrativePronounTteRegex().Replace(text, $"$1{_stopToken}って");
-        text = DemonstrativePlaceTteRegex().Replace(text, $"$1{_stopToken}って");
         text = PronounRaTteRegex().Replace(text, _stopToken);
         text = KeikizukeYoRegex().Replace(text, $"景気づけ{_stopToken}よ");
 
