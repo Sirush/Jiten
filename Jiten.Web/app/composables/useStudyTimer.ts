@@ -318,6 +318,16 @@ export function useStudyTimer(cb: StudyTimerCallbacks) {
     startPhase();
   });
 
+  // Restart the countdown when a card reappears after the queue drained. Finishing a batch advances
+  // the cursor past the end (currentCard → null, timer parked at idle); the next batch's first card
+  // then arrives asynchronously from fetchBatch. The cardShownAt/isFlipped watcher above does not
+  // restart across that null → card refill, so without this the first card of each new batch is left
+  // with no timer. Keying off the current card's identity catches the reappearance the timestamp
+  // watcher misses. (Mirrors scheduleAutoRestart, which backstops the same gap after auto-grades.)
+  watch(() => store.currentCard, (card, prev) => {
+    if (card && !prev && phase.value === 'idle') startPhase();
+  });
+
   watch(cb.active, (on) => {
     if (!on) manualPaused.value = false; // a fresh activation shouldn't inherit a stale pause
     startPhase();
