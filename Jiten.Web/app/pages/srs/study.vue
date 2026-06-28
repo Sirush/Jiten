@@ -321,7 +321,7 @@
     }
     srsStore.fetchDueSummary();
     loading.value = false;
-    if (!srsStore.isSessionComplete && srsStore.currentCard) startElapsedTimer();
+    if (!srsStore.isSessionComplete && (srsStore.currentCard || restored)) startElapsedTimer();
   });
 
   async function handleGrade(rating: FsrsRating) {
@@ -781,14 +781,18 @@
       </div>
     </template>
 
-    <!-- Batch-complete checkpoint (shorter sibling of the session-complete card) -->
-    <div v-else-if="srsStore.batchComplete" class="flex-1 flex items-center justify-center px-2">
+    <!-- Batch-complete checkpoint  -->
+    <div
+      v-else-if="srsStore.batchComplete"
+      class="flex-1 flex flex-col items-center justify-end sm:justify-center px-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-0"
+    >
       <div class="flex flex-col items-center text-center p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-lg max-w-md mx-auto w-full">
         <div class="text-2xl font-bold mb-2">Batch complete</div>
         <p class="text-gray-500 dark:text-gray-400 mb-6">You have completed the current batch! Would you like to stop here?</p>
+        <!-- Continue is the emphasised default action (right + wider); End Session is the quieter escape. -->
         <div class="flex gap-3 w-full">
-          <Button label="Continue" severity="secondary" class="flex-1" @click="handleContinueBatch" />
-          <Button label="End Session" class="flex-1" @click="handleEndSession" />
+          <Button label="End Session" severity="secondary" size="large" class="flex-1" @click="handleEndSession" />
+          <Button label="Continue" icon="pi pi-arrow-right" icon-pos="right" size="large" class="flex-[2]" @click="handleContinueBatch" />
         </div>
       </div>
     </div>

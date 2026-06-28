@@ -42,6 +42,12 @@ interface PersistedSession {
   studyMoreParams: StudyMoreParams | null;
   isWrappingUp: boolean;
   preWrapUpBatch: StudyCardDto[];
+  moreCardsLikely?: boolean;
+}
+
+interface PrefetchedBatch {
+  response: StudyBatchResponse;
+  effectiveLimit: number;
 }
 
 export interface LeechCard {
@@ -114,9 +120,10 @@ export const useSrsStore = defineStore('srs', () => {
   // Drives the "batch complete" checkpoint popup: set when a full batch is exhausted and the
   // pause-between-batches setting is on, instead of transparently fetching the next batch.
   const batchComplete = ref(false);
-  // Whether the last fetch returned a full batch (so more cards likely remain). A short batch means
-  // the queue is drained, so the boundary should complete the session rather than offer a checkpoint.
-  const lastBatchFull = ref(false);
+  // Whether the last fetch looked like there are more cards to pull after it: a full batch AND the
+  // server still reporting reviews/new cards beyond it. A short batch, or one that drained the queue,
+  // means the boundary should complete the session rather than offer a checkpoint.
+  const moreCardsLikely = ref(false);
   const settingsLoaded = ref(false);
   const studySettings = ref<StudySettingsDto>({
     newCardsPerDay: 20,
@@ -217,6 +224,9 @@ export const useSrsStore = defineStore('srs', () => {
   const inFlightReviews = new Map<string, Promise<void>>();
   // Bumped whenever the session is reset, so late background results from an old session are ignored.
   let sessionEpoch = 0;
+  // Next batch primed in the background while parked at the batch checkpoint, so Continue is instant.
+  // Tagged with the session epoch it was fetched under; a stale tag means the session was reset.
+  let prefetchedBatch: { epoch: number; promise: Promise<PrefetchedBatch | null> } | null = null;
   const dueSummary = ref<DueSummaryDto | null>(null);
   const deckStreak = ref<DeckStreakDto | null>(null);
   const reviewForecast30d = ref<ReviewForecast30dDto | null>(null);
@@ -585,7 +595,7 @@ export const useSrsStore = defineStore('srs', () => {
       isWrappingUp.value = false;
       preWrapUpBatch.value = [];
       batchComplete.value = false;
-      lastBatchFull.value = false;
+      moreCardsLikely.value = false;
       againCardKeys.value = new Set();
       clearedGrades.value = [];
       undoStack.value = [];
@@ -597,46 +607,10 @@ export const useSrsStore = defineStore('srs', () => {
     }
 
     isLoading.value = true;
-    const isRefetch = sessionStats.value.cardsReviewed > 0;
     try {
       const effectiveLimit = limit ?? studySettings.value.batchSize;
-      const params = new URLSearchParams({ limit: String(effectiveLimit) });
-      if (sessionId.value) params.append('sessionId', sessionId.value);
-      const sm = studyMoreParams.value;
-      if (sm) {
-        if (sm.extraNewCards) {
-          const remaining = Math.max(0, sm.extraNewCards - sessionStats.value.newCardsLearned);
-          if (remaining > 0) params.append('extraNewCards', String(remaining));
-        }
-        if (sm.extraReviews) {
-          const remaining = Math.max(0, sm.extraReviews - sessionStats.value.cardsReviewed);
-          if (remaining > 0) params.append('extraReviews', String(remaining));
-        }
-        if (sm.aheadMinutes) params.append('aheadMinutes', String(sm.aheadMinutes));
-        if (sm.mistakeDays) params.append('mistakeDays', String(sm.mistakeDays));
-      }
-      const response = await $api<StudyBatchResponse>(`srs/study-batch?${params}`);
-      sessionId.value = response.sessionId;
-      if (isRefetch && response.cards.length > 0) {
-        currentBatch.value = [...currentBatch.value, ...response.cards];
-      } else if (isRefetch && response.cards.length === 0) {
-        isSessionComplete.value = true;
-      } else {
-        currentBatch.value = response.cards;
-        currentCardIndex.value = 0;
-        isSessionComplete.value = false;
-      }
-      // A full batch implies more cards likely remain; a short one means the queue is drained.
-      lastBatchFull.value = response.cards.length >= effectiveLimit;
-      isFlipped.value = false;
-      cardShownAt.value = Date.now();
-      newCardsRemaining.value = response.newCardsRemaining;
-      reviewsRemaining.value = response.reviewsRemaining;
-      newCardsToday.value = response.newCardsToday;
-      reviewsToday.value = response.reviewsToday;
-      if (!sessionStats.value.startTime) {
-        sessionStats.value.startTime = new Date();
-      }
+      const response = await requestBatch(effectiveLimit);
+      applyBatchResponse(response, effectiveLimit);
       fetchError.value = null;
 
       // Prefetch example sentences for first 4 cards (await so the first card has its example ready)
@@ -650,6 +624,57 @@ export const useSrsStore = defineStore('srs', () => {
     }
   }
 
+  // Build and send the study-batch request from current session state, without mutating anything.
+  // Shared by fetchBatch and the checkpoint background prefetch.
+  function requestBatch(effectiveLimit: number): Promise<StudyBatchResponse> {
+    const params = new URLSearchParams({ limit: String(effectiveLimit) });
+    if (sessionId.value) params.append('sessionId', sessionId.value);
+    const sm = studyMoreParams.value;
+    if (sm) {
+      if (sm.extraNewCards) {
+        const remaining = Math.max(0, sm.extraNewCards - sessionStats.value.newCardsLearned);
+        if (remaining > 0) params.append('extraNewCards', String(remaining));
+      }
+      if (sm.extraReviews) {
+        const remaining = Math.max(0, sm.extraReviews - sessionStats.value.cardsReviewed);
+        if (remaining > 0) params.append('extraReviews', String(remaining));
+      }
+      if (sm.aheadMinutes) params.append('aheadMinutes', String(sm.aheadMinutes));
+      if (sm.mistakeDays) params.append('mistakeDays', String(sm.mistakeDays));
+    }
+    return $api<StudyBatchResponse>(`srs/study-batch?${params}`);
+  }
+
+  // Fold a fetched batch into session state (append on refetch, else replace). Pure of network I/O so
+  // it can be reused to apply a response that was prefetched in the background.
+  function applyBatchResponse(response: StudyBatchResponse, effectiveLimit: number) {
+    const isRefetch = sessionStats.value.cardsReviewed > 0;
+    sessionId.value = response.sessionId;
+    if (isRefetch && response.cards.length > 0) {
+      currentBatch.value = [...currentBatch.value, ...response.cards];
+    } else if (isRefetch && response.cards.length === 0) {
+      isSessionComplete.value = true;
+    } else {
+      currentBatch.value = response.cards;
+      currentCardIndex.value = 0;
+      isSessionComplete.value = false;
+    }
+    // A full batch alone can't tell "more batches remain" from "this was the last full batch", so
+    // also require the server to report cards still waiting beyond it. Avoids a checkpoint whose
+    // "Continue" immediately dead-ends into the session summary.
+    moreCardsLikely.value =
+      response.cards.length >= effectiveLimit && (response.reviewsRemaining > 0 || response.newCardsRemaining > 0);
+    isFlipped.value = false;
+    cardShownAt.value = Date.now();
+    newCardsRemaining.value = response.newCardsRemaining;
+    reviewsRemaining.value = response.reviewsRemaining;
+    newCardsToday.value = response.newCardsToday;
+    reviewsToday.value = response.reviewsToday;
+    if (!sessionStats.value.startTime) {
+      sessionStats.value.startTime = new Date();
+    }
+  }
+
   // Decide what happens when the loaded queue runs out: finish a wrap-up, pause at a full-batch
   // checkpoint (when the setting is on), or transparently fetch the next batch as before.
   function onBatchExhausted() {
@@ -657,23 +682,58 @@ export const useSrsStore = defineStore('srs', () => {
       isSessionComplete.value = true;
       return;
     }
-    if (studySettings.value.pauseBetweenBatches && lastBatchFull.value) {
+    if (studySettings.value.pauseBetweenBatches && moreCardsLikely.value) {
       batchComplete.value = true;
+      prefetchNextBatch();
     } else {
       fetchBatch();
     }
   }
 
-  // "Continue" from the batch-complete checkpoint: load the next batch. An empty result falls through
-  // to isSessionComplete via fetchBatch's refetch branch, so an over-optimistic lastBatchFull is safe.
+  // While parked at the checkpoint, fetch the next batch in the background so Continue is instant.
+  // study-batch is stateless server-side (it doesn't consume cards), so discarding this on End Session
+  // costs only one request. Tagged with the session epoch so a reset invalidates it.
+  function prefetchNextBatch() {
+    const epoch = sessionEpoch;
+    const effectiveLimit = studySettings.value.batchSize;
+    const promise = requestBatch(effectiveLimit)
+      .then((response): PrefetchedBatch => ({ response, effectiveLimit }))
+      .catch(() => null);
+    prefetchedBatch = { epoch, promise };
+  }
+
+  // "Continue" from the batch-complete checkpoint: apply the background-prefetched batch if it's still
+  // valid for this session, otherwise fetch normally. An empty result falls through to isSessionComplete
+  // via the refetch branch, so an over-optimistic moreCardsLikely is safe.
   async function continueBatch() {
     batchComplete.value = false;
+    const buffered = prefetchedBatch;
+    prefetchedBatch = null;
+
+    if (buffered && buffered.epoch === sessionEpoch) {
+      isLoading.value = true;
+      let result: PrefetchedBatch | null = null;
+      try {
+        result = await buffered.promise;
+      } finally {
+        isLoading.value = false;
+      }
+      if (result) {
+        applyBatchResponse(result.response, result.effectiveLimit);
+        fetchError.value = null;
+        if (currentBatch.value.length > 0)
+          await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
+        return;
+      }
+    }
+
     await fetchBatch();
   }
 
   // "End Session" from the batch-complete checkpoint: go straight to the session summary.
   function endSessionFromBatch() {
     batchComplete.value = false;
+    prefetchedBatch = null;
     isSessionComplete.value = true;
   }
 
@@ -1183,6 +1243,7 @@ export const useSrsStore = defineStore('srs', () => {
         studyMoreParams: studyMoreParams.value,
         isWrappingUp: isWrappingUp.value,
         preWrapUpBatch: preWrapUpBatch.value,
+        moreCardsLikely: moreCardsLikely.value,
       };
       localStorage.setItem(sessionCacheKey(), JSON.stringify(blob));
     } catch {
@@ -1216,7 +1277,9 @@ export const useSrsStore = defineStore('srs', () => {
       && Date.now() - blob.savedAt <= SESSION_CACHE_TTL_MS
       && Array.isArray(blob.currentBatch)
       && blob.currentBatch.length > 0
-      && blob.currentCardIndex < blob.currentBatch.length;
+      // `<=` (not `<`) so a session parked at the batch checkpoint — cursor exactly past the end —
+      // still restores; onBatchExhausted() below re-derives the checkpoint instead of losing progress.
+      && blob.currentCardIndex <= blob.currentBatch.length;
 
     if (!valid) {
       clearPersistedSession();
@@ -1247,7 +1310,7 @@ export const useSrsStore = defineStore('srs', () => {
 
     isSessionComplete.value = false;
     batchComplete.value = false;
-    lastBatchFull.value = false;
+    moreCardsLikely.value = blob.moreCardsLikely ?? false;
     isFlipped.value = false;
     isLoading.value = false;
     undoStack.value = [];
@@ -1256,7 +1319,14 @@ export const useSrsStore = defineStore('srs', () => {
     cardShownAt.value = Date.now();
     sessionEpoch++;
 
-    await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
+    // A blob saved while parked at the batch checkpoint persists an exhausted batch (cursor past the
+    // end). Re-derive the boundary so the checkpoint (or transparent fetch) comes back, instead of
+    // falling through to the terminal "all caught up" screen with no way to pull the next batch.
+    if (currentBatch.value.length > 0 && currentCardIndex.value >= currentBatch.value.length) {
+      onBatchExhausted();
+    } else {
+      await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
+    }
     return true;
   }
 
@@ -1270,7 +1340,7 @@ export const useSrsStore = defineStore('srs', () => {
     isWrappingUp.value = false;
     preWrapUpBatch.value = [];
     batchComplete.value = false;
-    lastBatchFull.value = false;
+    moreCardsLikely.value = false;
     againCardKeys.value = new Set();
     clearedGrades.value = [];
     sessionReviews.value = [];
