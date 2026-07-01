@@ -408,6 +408,71 @@ public class AccountTests(JitenWebApplicationFactory factory)
         (await GetNewsletter()).Should().BeFalse();
     }
 
+    // ---- register username validation ----
+
+    private Task<HttpResponseMessage> RegisterAsync(string username, string email) =>
+        _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/auth/register")
+            .WithJsonContent(new
+            {
+                username,
+                email,
+                password = DefaultPassword,
+                recaptchaResponse = "test",
+                tosAccepted = true,
+                receiveNewsletter = false
+            }));
+
+    [Theory]
+    [InlineData("valid_user1", "reg_valid@test.dev")]
+    [InlineData("tony@aol.com", "reg_email_uname@test.dev")] // email-style usernames are allowed
+    [InlineData("Benjamin_", "reg_trailing@test.dev")]       // trailing separator is allowed
+    [InlineData("ab", "reg_two_char@test.dev")]              // 2-char names are allowed
+    public async Task Register_ValidUsername_Returns200_AndCreatesUser(string username, string email)
+    {
+        await EnsureUserRoleAsync(); // role seeding is skipped in the Testing environment
+
+        var response = await RegisterAsync(username, email);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        using var scope = factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+        (await userManager.FindByNameAsync(username)).Should().NotBeNull();
+    }
+
+    private async Task EnsureUserRoleAsync()
+    {
+        using var scope = factory.Services.CreateScope();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var roleName = nameof(UserRole.User);
+        if (!await roleManager.RoleExistsAsync(roleName))
+            await roleManager.CreateAsync(new IdentityRole(roleName));
+    }
+
+    [Theory]
+    [InlineData("a")]                  // too short (min 2)
+    [InlineData("たなか")]              // non-latin (Japanese)
+    [InlineData("user name")]          // space (disallowed char)
+    [InlineData("user#name")]          // '#' disallowed
+    [InlineData("___")]                // no letter or digit
+    [InlineData("...")]                // no letter or digit
+    [InlineData("ааа")]                // Cyrillic look-alikes
+    public async Task Register_InvalidUsername_Returns400_AndCreatesNoUser(string username)
+    {
+        var response = await RegisterAsync(username, "reg_invalid@test.dev");
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, await response.Content.ReadAsStringAsync());
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        (await userDb.Users.AnyAsync(u => u.Email == "reg_invalid@test.dev")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Register_TooLongUsername_Returns400()
+    {
+        var response = await RegisterAsync(new string('a', 31), "reg_long@test.dev");
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, await response.Content.ReadAsStringAsync());
+    }
+
     // ---- revoke-token keepCurrent ----
 
     [Fact]
