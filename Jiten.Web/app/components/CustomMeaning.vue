@@ -20,6 +20,7 @@
   const draft = ref('');
   const saving = ref(false);
   const deleting = ref(false);
+  const confirmingDelete = ref(false);
 
   const canSave = computed(() => {
     const t = draft.value.trim();
@@ -43,18 +44,22 @@
     }
   }
 
-  watch(() => props.wordId, () => {
-    meaning.value = null;
-    loaded.value = false;
-    editing.value = false;
-    load();
-  });
+  watch(
+    () => props.wordId,
+    () => {
+      meaning.value = null;
+      loaded.value = false;
+      editing.value = false;
+      load();
+    }
+  );
 
   onMounted(load);
 
   function startEditing() {
     draft.value = meaning.value ?? '';
     editing.value = true;
+    confirmingDelete.value = false;
   }
 
   async function save() {
@@ -78,6 +83,7 @@
       await $api(`user/custom-meanings/${props.wordId}`, { method: 'DELETE' });
       meaning.value = null;
       editing.value = false;
+      confirmingDelete.value = false;
     } finally {
       deleting.value = false;
     }
@@ -116,40 +122,30 @@
           <label class="text-xs text-surface-400 block mb-1">Preview</label>
           <div class="border-l-4 border-primary-500 pl-3 py-2 bg-primary-50 dark:bg-primary-950/40 rounded-r text-sm break-words" v-html="draftPreview" />
         </div>
-        <div class="flex gap-2 justify-end">
-          <Button
-            v-if="meaning != null"
-            severity="danger"
-            text
-            size="small"
-            icon="pi pi-trash"
-            label="Delete"
-            :loading="deleting"
-            @click="remove"
-          />
-          <Button text size="small" label="Cancel" @click="editing = false" />
-          <Button
-            size="small"
-            icon="pi pi-check"
-            label="Save"
-            :loading="saving"
-            :disabled="!canSave"
-            @click="save"
-          />
+        <div class="flex gap-2 justify-end items-center">
+          <template v-if="meaning != null">
+            <template v-if="confirmingDelete">
+              <span class="text-xs text-surface-500 mr-auto">Delete this note?</span>
+              <Button severity="danger" size="small" icon="pi pi-trash" label="Delete" :loading="deleting" @click="remove" />
+              <Button text size="small" label="Keep" :disabled="deleting" @click="confirmingDelete = false" />
+            </template>
+            <Button v-else severity="danger" text size="small" icon="pi pi-trash" label="Delete" @click="confirmingDelete = true" />
+          </template>
+          <template v-if="!confirmingDelete">
+            <Button text size="small" label="Cancel" @click="editing = false" />
+            <Button size="small" icon="pi pi-check" label="Save" :loading="saving" :disabled="!canSave" @click="save" />
+          </template>
         </div>
       </div>
 
       <!-- Display -->
       <template v-else>
-        <div
-          v-if="meaning != null"
-          class="group relative border-l-4 border-primary-500 pl-3 pr-2 py-2 bg-primary-50 dark:bg-primary-950/40 rounded-r"
-        >
+        <div v-if="meaning != null" class="group relative border-l-4 border-primary-500 pl-3 pr-2 py-2 bg-primary-50 dark:bg-primary-950/40 rounded-r">
           <div class="flex items-start gap-2">
             <span class="text-xs tracking-wide text-primary-600 dark:text-primary-400 font-semibold mt-0.5">Notes</span>
             <button
               v-if="editable"
-              class="ml-auto inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors shrink-0 cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+              class="ml-auto inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors shrink-0 cursor-pointer"
               title="Edit your notes"
               @click.stop="startEditing"
               @pointerdown.stop
