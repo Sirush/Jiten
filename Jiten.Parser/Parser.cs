@@ -734,7 +734,7 @@ namespace Jiten.Parser
 
             var (cleanText, furiganaHints) = FuriganaHintExtractor.Extract(text);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank };
             var (sentences, cleanedOriginal) = await parser.ParseWithCleanedOriginal(cleanText, preserveStopToken: preserveStopToken, diagnostics: diagnostics);
 
             // ComputeTokenOffsets strips \r\n — relocate against the same coordinate space
@@ -867,7 +867,7 @@ namespace Jiten.Parser
             timer.Start();
 
             // Batch morphological analysis
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank };
             var cleanedOriginals = new List<string>();
             var rawCharCounts = new List<int>();
             var batchedSentences = await parser.ParseBatch(cleanTexts, diagnostics: diagnostics, timings: timings, userDictCsv: userDictCsv, cleanedOriginals: cleanedOriginals, rawContentCharCounts: rawCharCounts);
@@ -1050,7 +1050,7 @@ namespace Jiten.Parser
         {
             await EnsureInitializedAsync(contextFactory);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank };
             var sentences = await parser.Parse(text, morphemesOnly: true, diagnostics: diagnostics);
             var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
 
@@ -1277,6 +1277,18 @@ namespace Jiten.Parser
                                     if (readingIndex == 255 && !string.IsNullOrEmpty(wordData.wordInfo.DictionaryForm)
                                         && wordData.wordInfo.DictionaryForm != surface)
                                         readingIndex = GetBestReadingIndex(preMatchedWord, wordData.wordInfo.DictionaryForm, wordData.wordInfo.Reading);
+                                    // A compound pinned with a kana/mixed surface (憎みあって) or a mixed-script dictionary
+                                    // form (憎みあう) can match none of the entry's written forms; try the normalized form
+                                    // (憎み合う, which is the real headword), then fall back to the primary reading so a
+                                    // resolved WordId never carries the 255 sentinel index into known-state/pitch lookups.
+                                    // Not when (WordId, 0) is an excluded misparse pair — the fallback must not turn a
+                                    // pinned word into one that the exclusion filter then silently drops.
+                                    if (readingIndex == 255 && !string.IsNullOrEmpty(wordData.wordInfo.NormalizedForm)
+                                        && wordData.wordInfo.NormalizedForm != surface
+                                        && wordData.wordInfo.NormalizedForm != wordData.wordInfo.DictionaryForm)
+                                        readingIndex = GetBestReadingIndex(preMatchedWord, wordData.wordInfo.NormalizedForm, wordData.wordInfo.Reading);
+                                    if (readingIndex == 255 && !ExcludedMisparses.Contains((preMatchedWordId, (byte)0)))
+                                        readingIndex = 0;
                                 }
                                 processedWord = new DeckWord
                                                 {
@@ -3080,7 +3092,10 @@ namespace Jiten.Parser
                                         !(nextIsLongVowel && word.Text.Length == 1 && WanaKana.IsKana(word.Text)) &&
                                         !word.Text.EndsWith("ー");
 
-                    bool isSingleKanaStutter = !nextIsLongVowel && word.Text.Length == 1 && WanaKana.IsKana(word.Text);
+                    // A pinned token is a repair stage's explicit word decision, never stutter noise
+                    // (親ソ splits to 親 + ソ with ソ pinned to the Soviet-Union abbreviation).
+                    bool isSingleKanaStutter = !nextIsLongVowel && word.Text.Length == 1 && WanaKana.IsKana(word.Text)
+                                               && word.PreMatchedWordId == null;
                     if (shouldFilter ||
                         word.PartOfSpeech == PartOfSpeech.Noun && !nextIsLongVowel && (
                             isSingleKanaStutter ||
@@ -3407,6 +3422,36 @@ namespace Jiten.Parser
             {
                 var hira = KanaConverter.ToNormalizedHiragana(text);
                 if (hira != text) return Find(hira);
+            }
+            catch
+            {
+            }
+            return null;
+        }
+
+        // The best (lowest) frequency rank of any non-name word with this written form,
+        // or null when no such word is ranked at all.
+        private static int? GetBestNonNameFrequencyRank(string text)
+        {
+            static int? Best(string key)
+            {
+                if (!_lookups.TryGetValue(key, out var ids) || ids.Count == 0) return null;
+                int? best = null;
+                foreach (var id in ids)
+                {
+                    if (_nameOnlyWordIds.Contains(id)) continue;
+                    if (_wordFrequencyRanks.TryGetValue(id, out var rank) && (best == null || rank < best))
+                        best = rank;
+                }
+                return best;
+            }
+
+            var direct = Best(text);
+            if (direct != null) return direct;
+            try
+            {
+                var hira = KanaConverter.ToNormalizedHiragana(text);
+                if (hira != text) return Best(hira);
             }
             catch
             {

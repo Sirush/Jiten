@@ -108,6 +108,9 @@ public partial class MorphologicalAnalyser
         ("誰", "か", PartOfSpeech.Expression),
         ("すぐ", "に", PartOfSpeech.Adverb),
         ("たしか", "に", PartOfSpeech.Adverb),
+        ("確か", "に", PartOfSpeech.Adverb), // 確かに 1205770 — kanji variant of the たしか row above
+        ("どう", "こう", PartOfSpeech.Adverb), // どうこう 2670710 ("this or that / one thing or another")
+        ("何で", "も", PartOfSpeech.Adverb), // 何でも 1611030 ("anything / whatever")
         ("ただ", "今", PartOfSpeech.Adverb),
         ("ところ", "で", PartOfSpeech.Conjunction),
         ("度", "に", PartOfSpeech.Expression),

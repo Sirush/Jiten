@@ -52,8 +52,12 @@ internal static class FormCandidateFactory
         // A Latin surface (ＭＡＯ, ＤＭＴ, ＢＬＴ) must not match a Japanese kanji word through a coincidental
         // kana reading (ＭＡＯ→まお→苧 "ramie"). Reject all candidates for any word that has a real CJK-kanji
         // form; with no other candidate the token then resolves to nothing and is dropped at lookup
-        // (unresolved) — preferred over mis-tagging it as the kanji word. Genuine Latin loanwords
-        // (ＣＤ, ＴＶ) have only Latin/kana forms and are unaffected.
+        // (unresolved) — preferred over mis-tagging it as the kanji word. Genuine Latin loanwords (ＣＤ, ＴＶ)
+        // survive because ContainsKanji tests for real CJK-ideograph codepoints: their headwords are Latin
+        // letters plus katakana readings, and the Latin headword — though JMDict files it in a kanji-form slot —
+        // holds no actual kanji, so Forms.Any(ContainsKanji) is false. The rare entry that pairs a Latin form
+        // with a true kanji form (ｗ ↔ 笑/藁) does lose its kanji candidate here, but those surfaces are lone
+        // Latin letters that fail lookup anyway, so no real loanword is dropped.
         if (candidates.Count > 0 && surface != null && JapaneseTextHelper.IsAllLatin(surface)
             && word.Forms.Any(f => KanaScoringHelpers.ContainsKanji(f.Text)))
             return [];

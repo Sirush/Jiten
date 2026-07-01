@@ -1838,6 +1838,40 @@ public class MorphologicalAnalyserTests
         yield return ["ん、ああ、あたしは行くよ", new[] { "ん", "ああ", "あたし", "は", "行く", "よ" }];
         // マシだったろ: contracted presumptive (だったろ), not a verb imperative
         yield return ["少しはマシだったろ", new[] { "少し", "は", "マシだったろ" }];
+
+        // --- SpecialCases2 combines: 確かに / どうこう / 何でも / あるある ---
+        yield return ["性能は確かにいい", new[] { "性能", "は", "確かに", "いい" }];     // 確か+に → 確かに (kanji)
+        yield return ["どうこう言うな", new[] { "どうこう言う", "な" }];                 // どう+こう → どうこう(言う) idiom
+        yield return ["田中さんがどうこうっていうの", new[] { "田中", "さん", "が", "どうこう", "っていう", "の" }]; // standalone どうこう
+        yield return ["いいや　何でも", new[] { "いいや", "何でも" }];                  // 何で+も → 何でも
+        yield return ["あるあるだね", new[] { "あるある", "だ", "ね" }];                // あるある expression, not ある+ある
+        // 夢見て + これ: a demonstrative pronoun must not be absorbed as a te-form subsidiary verb…
+        yield return ["夢見て……これが本当に正しい", new[] { "夢見て", "これ", "が", "本当に", "正しい" }];
+        // …but これ as the ら抜き potential stem of 来る must still attach (これ + ない/なかった)
+        yield return ["まさか戻ってこれなかったとは", new[] { "まさか", "戻ってこれ", "なかった", "とは" }];
+        yield return ["もう外には出てこれない", new[] { "もう", "外", "には", "出てこれない" }];
+        // 前-rebind (kun-reading, non-priority compounds only): お|前山 → お前+山; ゼン-compounds and
+        // priority kun-compounds (前髪, 前置き) stay whole
+        yield return ["だってお前山に行ったら", new[] { "だって", "お前", "山", "に", "行ったら" }];
+        yield return ["この前山に入ったら", new[] { "この前", "山", "に", "入ったら" }];
+        yield return ["この前後のことは", new[] { "この", "前後", "の", "こと", "は" }];   // ゼン-compound stays whole
+        yield return ["前世の記憶", new[] { "前世", "の", "記憶" }];
+        yield return ["この前髪、切ろうかな", new[] { "この", "前髪", "切ろう", "かな" }]; // priority compound keeps 前
+        yield return ["この前置きは長いな", new[] { "この", "前置き", "は", "長い", "な" }];
+        // 親-prefix OOV split (親 pro-prefix + ソ Soviet-Union abbreviation); real 親-compounds stay whole
+        yield return ["今以上に親ソ傾向が", new[] { "今", "以上", "に", "親", "ソ", "傾向", "が" }];
+        yield return ["親友と親指", new[] { "親友", "と", "親指" }];
+        // i-adj + quotative って must split (硬いって → 硬い + って), never a bogus adjective "te form"
+        yield return ["【アネット】「だから、硬いって……」", new[] { "アネット", "だから", "硬い", "って" }];
+        // Xあっての idiom: あって is existential ある, never the reciprocal 合う
+        yield return ["命あっての物種だ", new[] { "命あっての物種", "だ" }];
+        // OOV blob retokenise: colloquial hiragana runs re-segment instead of dropping whole
+        yield return ["益荒男募るってもんじゃねえのかよ", new[] { "益荒男", "募る", "って", "もん", "じゃねえ", "の", "かよ" }];
+        yield return ["それっぽくいってみようや", new[] { "それっぽく", "いってみよう", "や" }];
+        // ら抜き potential これる attaches whole
+        yield return ["もう外には出てこれるよ", new[] { "もう", "外", "には", "出てこれる", "よ" }];
+        // 何で+も combine must not touch 何で+もっと
+        yield return ["何でもっと早く言わなかったんだよ", new[] { "何で", "もっと", "早く", "言わなかった", "んだ", "よ" }];
         // protect: ろ-presumptive must not steal the ichidan imperative
         yield return ["食べろ", new[] { "食べろ" }];
 

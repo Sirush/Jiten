@@ -184,6 +184,10 @@ public partial class MorphologicalAnalyser
         text = MultipleLongVowelRegex().Replace(text, "ー");
         text = EmphLongVowelKanjiHiraganaRegex().Replace(text, "");
         text = EmphLongVowelSokuonRegex().Replace(text, "");
+        // があらァ: rough-speech elongated ある (金ならあらぁ). Must run before the script-crossing
+        // small-vowel split detaches the ァ and strands あら as the interjection. The が keeps the
+        // exclamation あらぁ untouched.
+        text = text.Replace("があらァ", "がある").Replace("があらぁ", "がある");
         text = ScriptCrossingSmallVowelRegex().Replace(text, $"{_stopToken}$1$2");
         text = SameScriptSmallVowelRunRegex().Replace(text, "");
         text = ShoutedImperativeSmallVowelRegex().Replace(text, "$1");
@@ -201,6 +205,9 @@ public partial class MorphologicalAnalyser
         // やるって: quotative って fragments the verb やる into や+る. Keep やる whole (run after the
         // はやる split so 流行る is unaffected).
         text = text.Replace("やるって", $"やる{_stopToken}って");
+        // なんとなくって: the って is quotative after the adverb なんとなく — without the split the tail
+        // re-analyses as なんと + なくって (the ない te-form).
+        text = text.Replace("なんとなくって", $"なんとなく{_stopToken}って");
         text = text
             .Replace("ええんや", $"ええ{_stopToken}んや")
             .Replace("べや", $"べ{_stopToken}や")

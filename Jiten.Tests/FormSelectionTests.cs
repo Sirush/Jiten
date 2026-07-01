@@ -1454,6 +1454,38 @@ public class FormSelectionTests
         yield return ["ん、ああ、あたしは行くよ", "ああ", 1565440, (byte)7];
         yield return ["少しはマシだったろ", "マシだったろ", 1611600, (byte)2];
 
+        // --- SpecialCases2 combines: 確かに / どうこう / 何でも / あるある ---
+        yield return ["性能は確かにいい", "確かに", 1205770, (byte)0];   // 確か+に kanji variant
+        yield return ["田中さんがどうこうっていうの", "どうこう", 2670710, (byte)0]; // どう+こう → どうこう
+        yield return ["いいや　何でも", "何でも", 1611030, (byte)0];     // 何で+も → 何でも
+        yield return ["あるあるだね", "あるある", 2150380, (byte)0];     // reduplicated あるある expression, not ある
+        // --- FilterMisparse homograph/reading remaps ---
+        yield return ["ツバを飲む音", "ツバ", 1408410, (byte)1];          // 唾 saliva, not 鍔 sword-guard
+        yield return ["……ったく、あんたって子は", "あんた", 1979920, (byte)1]; // pronoun, not 編む past
+        yield return ["武装警察軍の方々、聞こえますか", "方々", 1584100, (byte)0]; // の方々 → かたがた, not ほうぼう
+        yield return ["何がだい？", "だい", 2097680, (byte)0];           // clause-final question particle, not 代
+        // --- compound-verb / re-cut / colloquial repairs ---
+        yield return ["分かたれて、憎みあって……警戒しあう", "憎みあって", 2093060, (byte)0];  // kana 〜合う reciprocal → 憎み合う (reading 0 = kanji spelling)
+        yield return ["それで早退きしたんだって", "した", 1157170, (byte)1];   // する past, not 湑む "pour out every drop"
+        yield return ["それで早退きしたんだって", "んだ", 2849387, (byte)1];   // explanatory んだ survives as its own word
+        yield return ["あんたの力が貸りたい。", "貸りたい", 1323560, (byte)1];    // 貸りる (=借りる), Sudachi mis-tags 貸 as noun
+        yield return ["あ、ありがてぇ……！！", "ありがてぇ", 1541560, (byte)2];   // colloquial ありがたい (ai→ee)
+        yield return ["神の恵みあっての勝利だった", "あって", 1296400, (byte)2];  // Xあっての idiom stays ある, not 合う
+        yield return ["この前髪、切ろうかな", "前髪", 1393880, (byte)0];        // priority 前-compound keeps its own reading
+        yield return ["この前置きは長いな", "前置き", 1393630, (byte)0];        // priority 前-compound keeps its own reading
+        yield return ["嬉しくって嬉しくって仕方ない", "嬉しくって", 1219510, (byte)0]; // geminated 〜くって = i-adj te-form
+        yield return ["食欲がなくってさ", "なくって", 1529520, (byte)1];         // なくって = ない te-form, not ない+quotative
+        yield return ["だからなんとなくって感じだ", "なんとなく", 1599730, (byte)2]; // adverb kept whole before quotative って
+        yield return ["今以上に親ソ傾向が強くなるのは避けたい。", "ソ", 2853158, (byte)1]; // pinned ソ survives the stutter filter
+        yield return ["益荒男募るってもんじゃねえのかよ", "募る", 1514800, (byte)0];  // 名詞+る re-cut feeds the blob retokeniser
+        yield return ["それっぽくいってみようや", "それっぽく", 2104990, (byte)0];    // そ+れ re-cut + blob retokenise
+        yield return ["働かせておいて、私の分がないって？", "ない", 1529520, (byte)1]; // が+ない regroup, not 我鳴る
+        yield return ["そうかいそうかい。", "かい", 2017770, (byte)0];              // かいそうか re-cut, not 階層化
+        yield return ["ここまで完璧に互いの手を読みあっていた彼らだが", "あっていた", 1284430, (byte)1]; // renyokei+あって → 合う
+        yield return ["夢や望みあっても叶わない", "あって", 1296400, (byte)2];       // Xあっても idiom stays ある
+        yield return ["だってお前山に行ったら", "お前", 1002290, (byte)0];          // rebound お前 resolves
+        yield return ["この前山に入ったら", "この前", 2216900, (byte)0];            // rebound この前 resolves
+
         // --- misparse batch: てる-contraction / demonstrative / 度に ---
         yield return ["見られてるって思うと", "見られてる", 1259290, (byte)0];
         yield return ["上での合意は取れてるって", "取れてる", 1326990, (byte)0];

@@ -221,13 +221,23 @@ public partial class MorphologicalAnalyser
 
                 bool isClassicalWaRowTeForm = nextWord.DictionaryForm.EndsWith("う") &&
                                               nextWord.Text.EndsWith("いて");
+                // A demonstrative is never a te-form subsidiary verb: 夢見て + これ must not fuse
+                // into 夢見てこれ (これ spuriously deconjugates to a subsidiary-verb form). Gate on the
+                // demonstrative dict-form, not POS Pronoun — こん (来ん) is also POS Pronoun but is a
+                // genuine 来る negative that must still attach (出て+こん → 出てこん). Exception: これ
+                // followed by an inflection continuation (ない/た/ます/ん/ず) is the ら抜き potential stem
+                // of 来る (戻って|これ|なかった → 戻ってこれなかった), not the pronoun, and must still attach.
+                bool isDemonstrative = nextWord.DictionaryForm is "これ" or "それ" or "あれ" or "どれ";
+                bool koreIsPotentialStem = nextWord.DictionaryForm == "これ" && i + 2 < wordInfos.Count
+                    && wordInfos[i + 2].DictionaryForm is "ない" or "無い" or "た" or "ます" or "ん" or "ぬ" or "ず" or "る";
                 if ((currentWord.Text.EndsWith("て") || currentWord.Text.EndsWith("で")) &&
                     currentWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective &&
                     // くて is a genuine i-adjective te-form — subsidiary verbs attach to verb
                     // te-forms only (頭が良くて + やりたい stays split)
                     !currentWord.Text.EndsWith("くて", StringComparison.Ordinal) &&
                     !isClassicalWaRowTeForm &&
-                    nextWord.PartOfSpeech != PartOfSpeech.IAdjective)
+                    nextWord.PartOfSpeech != PartOfSpeech.IAdjective &&
+                    (!isDemonstrative || koreIsPotentialStem))
                 {
                     bool isKnownSubsidiary = false;
 

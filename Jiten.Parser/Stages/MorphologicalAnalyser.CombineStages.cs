@@ -825,6 +825,9 @@ public partial class MorphologicalAnalyser
                     previousWord.PartOfSpeech != PartOfSpeech.Verb ||
                     previousWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
                     VerbDictFormExistsInLookup(previousWord.DictionaryForm, previousWord.NormalizedForm, Deconj))
+                // A pinned auxiliary is a repair stage's explicit decision that this token is its own
+                // vocabulary item (した+んだ) — absorbing it would erase that word from the output.
+                && currentWord.PreMatchedWordId == null
                 && currentWord.Text != "な"
                 && currentWord.Text != "に"
                 && (currentWord.DictionaryForm != "です" ||

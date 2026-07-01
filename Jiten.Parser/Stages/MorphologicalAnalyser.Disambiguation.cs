@@ -30,6 +30,123 @@ public partial class MorphologicalAnalyser
             if (word.Text == "クズ" && word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
                 word.PreMatchedWordId = 1246510;
 
+            // Reduplicated あるある as a single token is the colloquial "I can relate / that's so true"
+            // expression (2150380), not the existence verb ある (1296400) it otherwise resolves to as
+            // a doubled stem. (Two separate ある tokens never reach here as one あるある surface.)
+            if (word.Text is "あるある" or "アルアル")
+            {
+                word.PartOfSpeech = PartOfSpeech.Interjection;
+                word.DictionaryForm = "あるある";
+                word.NormalizedForm = "あるある";
+                word.PreMatchedWordId = 2150380;
+            }
+
+            // Katakana ツバ is overwhelmingly 唾 "saliva" (1408410), not 鍔 "sword guard" (1433790) that
+            // the kanji-frequency prior otherwise picks (ツバを飲む = to swallow saliva). Skip in an explicit
+            // sword context (刀/剣/太刀/刃 + の + ツバ), where 鍔 is meant.
+            if (word.Text == "ツバ" && word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && !(i >= 2 && wordInfos[i - 1].Text == "の"
+                     && wordInfos[i - 2].Text is "刀" or "剣" or "太刀" or "刃"))
+                word.PreMatchedWordId = 1408410;
+
+            // 事 that Sudachi reads ゴト after a noun or verb stem is the suffix ごと "matter of"
+            // (2613010, お祝い事/頼まれ事), not the standalone noun こと (1313580) — whose JMDict priority
+            // otherwise outweighs the reading evidence via the suffix-vs-noun POS penalty.
+            if (word is { Text: "事", Reading: "ゴト" } && i > 0
+                && wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Verb)
+                word.PreMatchedWordId = 2613010;
+
+            // あんた is the colloquial pronoun "you" (1979920); Sudachi sometimes tags it as the past of
+            // 編む (あんた+って → 編む). The pronoun never collides with a real あんた verb form (編む past is
+            // あんだ), so always pin the pronoun.
+            if (word.Text == "あんた")
+            {
+                word.PartOfSpeech = PartOfSpeech.Pronoun;
+                word.DictionaryForm = "あんた";
+                word.PreMatchedWordId = 1979920;
+            }
+
+            // 方々 after の is the honorific "people" かたがた (1584100), not the adverb ほうぼう "here and
+            // there" (1584105) the close kanji-frequency prior otherwise picks (軍の方々, あの方々). Bare 方々
+            // (走り回る方々) is left as ほうぼう, as is 方々 taken as を + a movement verb (町の方々を歩き回った) —
+            // people are addressed or spoken to, places are moved through.
+            bool movementFollows = i + 2 < wordInfos.Count && wordInfos[i + 1].Text == "を"
+                && (wordInfos[i + 2].DictionaryForm is "歩く" or "巡る" or "旅する" or "走る" or "駆ける"
+                    || wordInfos[i + 2].DictionaryForm.EndsWith("回る", StringComparison.Ordinal));
+            if (word.Text == "方々" && i > 0 && wordInfos[i - 1].Text == "の" && !movementFollows)
+                word.PreMatchedWordId = 1584100;
+
+            // Clause-final だい (何がだい, そうだい) is the familiar question particle "is it?" (2097680),
+            // not the noun 代 "charge/price" (1982860); Sudachi tags it Prefix. Remap only at clause end.
+            if (word.Text == "だい" && word.PartOfSpeech == PartOfSpeech.Prefix
+                && (i + 1 >= wordInfos.Count
+                    || wordInfos[i + 1].PartOfSpeech is PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol))
+            {
+                word.PartOfSpeech = PartOfSpeech.Particle;
+                word.DictionaryForm = "だい";
+                word.PreMatchedWordId = 2097680;
+            }
+
+            // A kana-spelled reciprocal 〜合う verb (憎みあって, normalized 憎み合う) can't match its kanji-合
+            // entry via the normal deconjugation path and drops. Pin it to the 〜合う compound so it resolves
+            // as one token instead of vanishing (Sudachi keeps the reciprocal whole: 憎みあっ|て). Skip when
+            // any deconjugation of the surface reaches a lookup entry (つきあって→つきあう, わかりあえる→
+            // わかりあう) — those resolve through the normal path, which picks the right form (a potential
+            // keeps its potential chain) and preserves scoring margins; the pin is only for would-drop
+            // surfaces.
+            if (word.PartOfSpeech == PartOfSpeech.Verb && !word.Text.Contains('合')
+                && !string.IsNullOrEmpty(word.NormalizedForm)
+                && word.NormalizedForm.EndsWith("合う", StringComparison.Ordinal)
+                && word.NormalizedForm.Length >= 3
+                && !KanaSurfaceResolvesViaLookup(word)
+                && GetNonNameCompoundWordId?.Invoke(word.NormalizedForm) is { } reciprocalAuId)
+            {
+                word.PreMatchedWordId = reciprocalAuId;
+                word.PreMatchedConjugations = PinnedConjugationProcess(word.Text, word.DictionaryForm);
+            }
+
+            // あって/あっていた directly after a verb 連用形 (読み/取り), tagged as ある (有る/在る), is the
+            // reciprocal 合う (1284430, 読み合って) — ある only follows a て-form, never a bare 連用形. Re-pin here
+            // (after the って re-cut has already run) so the reciprocal reading wins without triggering the
+            // っ+て mora-theft that mangles it if done early. 読みがあって keeps ある (the が breaks adjacency),
+            // as does あって followed by の/も/こそ — those are the existential idiom frames Xあっての/Xあっても/
+            // Xあってこそ ("thanks to / even with X": 命あっての物種, 望みあっても), where the deverbal noun
+            // before あって is genuinely a noun, not a 連用形.
+            if (word.PartOfSpeech == PartOfSpeech.Verb && word.NormalizedForm is "有る" or "在る"
+                && word.Text.StartsWith("あっ", StringComparison.Ordinal)
+                && !(i + 1 < wordInfos.Count && wordInfos[i + 1].Text is "の" or "も" or "こそ")
+                && i > 0 && wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && RenyokeiSurfaceToVerb(wordInfos[i - 1].Text) != null)
+            {
+                word.DictionaryForm = "あう";
+                word.NormalizedForm = "合う";
+                word.PreMatchedWordId = 1284430;
+                word.PreMatchedConjugations = PinnedConjugationProcess(word.Text, word.DictionaryForm);
+            }
+
+            // An i-adjective that swallowed a quotative って (硬い+って → 硬いって, mis-deconjugated by
+            // CombineInflections as a bogus "te form") must be re-split: the only adjective inflection ending
+            // in って is the geminated emphatic te-form 〜くって (嬉しくって, よくって) — excluded via the く check —
+            // so everywhere else the って is the quotative particle (2086960). The adjective itself stays whole.
+            if (word.PartOfSpeech == PartOfSpeech.IAdjective && word.Text.Length >= 4
+                && word.Text.EndsWith("って", StringComparison.Ordinal)
+                && word.Text[^3] != 'く'
+                && HasNonNameCompoundLookup?.Invoke(word.Text[..^2]) == true)
+            {
+                int mid = word.EndOffset >= 0 ? word.EndOffset - 2 : -1;
+                var tte = new WordInfo(word)
+                {
+                    Text = "って", DictionaryForm = "って", NormalizedForm = "って", Reading = "ッテ",
+                    PartOfSpeech = PartOfSpeech.Particle, PreMatchedWordId = 2086960,
+                    StartOffset = mid, EndOffset = word.EndOffset
+                };
+                word.Text = word.Text[..^2];
+                word.EndOffset = mid;
+                if (word.Reading.EndsWith("ッテ", StringComparison.Ordinal))
+                    word.Reading = word.Reading[..^2];
+                wordInfos.Insert(i + 1, tte);
+            }
+
             // The contracted もんか after a predicate is the rhetorical "like hell / as if" particle (2130440),
             // not the noun 門下 "disciple" (1724650, read もんか) — which follows の (剣の門下). Sudachi may keep
             // もんか whole (あるもんか) or split it もん+か (踊らされる|もん|か, which JMDict would otherwise compound
@@ -278,6 +395,47 @@ public partial class MorphologicalAnalyser
         }
 
         return wordInfos;
+    }
+
+    // True when the token's surface can reach a JMDict lookup entry without a pin: its dictionary
+    // form, its kana surface, or any deconjugated form of the surface is a lookup key. Such tokens
+    // resolve through the normal scoring path, so a pin would only degrade them.
+    private bool KanaSurfaceResolvesViaLookup(WordInfo word)
+    {
+        if (HasNonNameCompoundLookup == null)
+            return false;
+        if (!string.IsNullOrEmpty(word.DictionaryForm) && HasNonNameCompoundLookup(word.DictionaryForm))
+            return true;
+
+        var hira = NormalizeToHiragana(word.Text);
+        if (HasNonNameCompoundLookup(hira))
+            return true;
+        foreach (var form in PipelineCachedDeconjugate(hira))
+        {
+            if (form.Text.Length >= 3 && HasNonNameCompoundLookup(form.Text))
+                return true;
+        }
+
+        return false;
+    }
+
+    // Recovers the conjugation chain for a pinned inflected surface — PreMatchedWordId bypasses the
+    // deconjugation-based resolution that normally fills Conjugations, so without this every pin emits
+    // a bare lemma. Null when the surface already is the dictionary form or no deconjugation reaches it.
+    private List<string>? PinnedConjugationProcess(string surface, string dictionaryForm)
+    {
+        var hiraSurface = NormalizeToHiragana(surface);
+        var hiraDict = NormalizeToHiragana(dictionaryForm);
+        if (hiraSurface == hiraDict)
+            return null;
+
+        foreach (var form in PipelineCachedDeconjugate(hiraSurface))
+        {
+            if (form.Text == hiraDict)
+                return form.Process.ToList();
+        }
+
+        return null;
     }
 
     /// <summary>

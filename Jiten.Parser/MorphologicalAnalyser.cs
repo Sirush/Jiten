@@ -14,6 +14,15 @@ public partial class MorphologicalAnalyser
     public Func<string, bool>? HasKanaAppropriateCompoundLookup { get; set; }
     public Func<string, bool>? HasSuruVerbCompoundLookup { get; set; }
     public Func<string, int?>? GetNonNameCompoundWordId { get; set; }
+    public Func<string, int?>? GetNonNameCompoundFrequencyRank { get; set; }
+
+    // Captured per Parse call for RetokeniseOovBlobs; an instance must not serve two parses with
+    // different Sudachi configs concurrently (all production paths construct one instance per parse).
+    private string? _sudachiConfigPath;
+    private string? _sudachiDicPath;
+    private char _sudachiMode = 'B';
+    private byte[]? _sudachiUserDictCsv;
+    private bool _retokeniseOovDisabled;
 
     private Dictionary<string, IReadOnlyList<DeconjugationForm>>? _pipelineDeconjCache;
     private Dictionary<string, IReadOnlyList<DeconjugationForm>>.AlternateLookup<ReadOnlySpan<char>> _pipelineDeconjCacheAlt;
@@ -160,6 +169,13 @@ public partial class MorphologicalAnalyser
 
         var sudachiStopwatch = diagnostics != null ? Stopwatch.StartNew() : null;
         var mode = morphemesOnly ? 'A' : 'B';
+
+        // Capture the Sudachi handle so a late stage can re-tokenise an OOV kana mega-blob in isolation
+        // (Sudachi only blobs it because of surrounding-lattice context; alone it segments cleanly).
+        _sudachiConfigPath = configPath;
+        _sudachiDicPath = dic;
+        _sudachiMode = mode;
+        _sudachiUserDictCsv = userDictCsv;
 
         List<WordInfo> allWordInfos;
 

@@ -32,6 +32,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Repair, RepairNTokenisation),
         Stage(TokenStageGroup.Repair, RepairVowelElongation),
         Stage(TokenStageGroup.Repair, ProcessSpecialCases),
+        Stage(TokenStageGroup.Repair, RetokeniseOovBlobs),
         Stage(TokenStageGroup.Repair, RepairColloquialNegativeNee, TokenFeatures.Interjection),
         Stage(TokenStageGroup.Repair, RepairColloquialRanNai, TokenFeatures.TextRan),
         Stage(TokenStageGroup.Repair, RepairQuotativeTte, TokenFeatures.EndsWithTsu),
