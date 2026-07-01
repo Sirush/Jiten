@@ -5,6 +5,7 @@ using System.Text.Json;
 using Google.Apis.Auth;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
+using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.Authentication;
@@ -85,15 +86,15 @@ public class AuthController : ControllerBase
         var userName = model.Username.Trim();
         var email = model.Email.Trim();
 
+        var usernameError = UsernameValidator.Validate(userName);
+        if (usernameError != null)
+            return BadRequest(new { message = usernameError });
+
         var userExists = await _userManager.FindByNameAsync(userName);
         if (userExists != null) return Conflict(new { message = "Username already exists." });
 
         var emailExists = await _userManager.FindByEmailAsync(email);
         if (emailExists != null) return Conflict(new { message = "Email already registered." });
-
-
-        if (userName.Length is < 3 or > 30)
-            return BadRequest(new { message = "Username must be between 3 and 30 characters." });
 
         var user = new User
                    {
@@ -512,24 +513,14 @@ public class AuthController : ControllerBase
 
         var username = request.Username.Trim();
 
-        if (string.IsNullOrWhiteSpace(username))
+        var usernameError = UsernameValidator.Validate(username);
+        if (usernameError != null)
         {
-            return BadRequest(new { message = "Username is required" });
-        }
-
-        if (username.Length < 3 || username.Length > 30)
-        {
-            return BadRequest(new { message = "Username must be between 3 and 30 characters" });
+            return BadRequest(new { message = usernameError });
         }
 
         var userExists = await _userManager.FindByNameAsync(username);
         if (userExists != null) return Conflict(new { message = "Username already exists." });
-
-        var usernameExists = await _userManager.Users.AnyAsync(u => u.UserName == request.Username);
-        if (usernameExists)
-        {
-            return BadRequest(new { message = "Username is already taken" });
-        }
 
         var emailExists = await _userManager.Users.AnyAsync(u => u.Email == registrationData!.Email);
         if (emailExists)
@@ -540,7 +531,7 @@ public class AuthController : ControllerBase
         // Create the user
         var user = new User
                    {
-                       UserName = request.Username, Email = registrationData.Email, EmailConfirmed = true, TosAcceptedAt = DateTime.UtcNow,
+                       UserName = username, Email = registrationData!.Email, EmailConfirmed = true, TosAcceptedAt = DateTime.UtcNow,
                        ReceivesNewsletter = request.ReceiveNewsletter
                    };
 

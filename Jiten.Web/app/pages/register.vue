@@ -34,8 +34,8 @@
       return false;
     }
 
-    if (username.length < 3) {
-      usernameError.value = 'Username must be at least 3 characters';
+    if (username.length < 2) {
+      usernameError.value = 'Username must be at least 2 characters';
       return false;
     }
 
@@ -44,8 +44,13 @@
       return false;
     }
 
-    if (username.includes(' ')) {
-      usernameError.value = 'Username cannot contain spaces';
+    if (!/^[A-Za-z0-9._@+-]+$/.test(username)) {
+      usernameError.value = 'Username can only contain Latin letters, digits and the characters . _ - @ +';
+      return false;
+    }
+
+    if (!/[A-Za-z0-9]/.test(username)) {
+      usernameError.value = 'Username must contain at least one letter or digit';
       return false;
     }
 
