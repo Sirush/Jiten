@@ -1197,6 +1197,7 @@ public class MorphologicalAnalyserTests
         // しょうがねぇ colloquial — currently split as しょう+が+ねぇ
         yield return ["ったくしょうがねぇなぁ", new[] { "ったく", "しょうがねぇ", "なぁ" }];
         yield return ["しょうがねぇときってのがあらァ", new[] { "しょうがねぇ", "とき", "って", "の", "が", "ある" }];
+        yield return ["金ならあらぁ", new[] { "金", "なら", "ある" }]; // elongated ある behind なら, same rough-speech frame as があらァ
         // 気にしない+って: the fork's can_bow gate dropped the user_dic expression before the quotative
         // って (sokuon っ), letting the にしな surname win (気/にしな/いって). Fork patch re-admits 表現
         // user entries before って/っけ so the idiom segments whole.
@@ -1470,6 +1471,8 @@ public class MorphologicalAnalyserTests
         yield return ["ごろごろごろ", new[] { "ごろごろごろ" }];                    // over-repeated mimetic (Sudachi: ごろごろ+ごろ) → one occurrence
         yield return ["ぐるぐるぐる", new[] { "ぐるぐるぐる" }];                    // ...(Sudachi: one ぐるぐるぐる token) → one occurrence
         yield return ["ざわざわざわ", new[] { "ざわざわざわ" }];                    // ...(previously dropped entirely) → one occurrence
+        yield return ["ゴロゴロゴロと鳴った", new[] { "ゴロゴロゴロ", "と", "鳴った" }]; // katakana run collapses via the kana-normalised lookup
+        yield return ["はいはいはい、わかったよ", new[] { "はい", "わかった", "よ" }]; // interjection run is not 這い這い; repeats dedup to one はい
         yield return ["化け物どもめ", new[] { "化け物", "ども", "め" }];            // ど+もめ → ども+め
         yield return ["部下達", new[] { "部下", "達" }];                            // 部+下達 → 部下+達
         yield return ["――やらせないッ", new[] { "やらせない" }];                   // causative-stem noun + ない merge
@@ -1483,6 +1486,8 @@ public class MorphologicalAnalyserTests
         yield return ["警戒を持ってあたれ", new[] { "警戒", "を", "持って", "あたれ" }]; // あ+たれ → あたれ
         yield return ["あそこってけっこう遠いじゃない", new[] { "あそこ", "って", "けっこう", "遠い", "じゃない" }];
         yield return ["呼んでいいっすか", new[] { "呼んで", "いい", "っす", "か" }]; // っす copula
+        yield return ["呼んでいいっすけど", new[] { "呼んで", "いい", "っす", "けど" }]; // っす before a connective
+        yield return ["いいっすわ", new[] { "いい", "っす", "わ" }];                // っす before final particle わ
         yield return ["キミらってやっぱり", new[] { "キミら", "って", "やっぱり" }]; // ら+って split
         yield return ["撃ち漏らしを処分する", new[] { "撃ち", "漏らし", "を", "処分する" }]; // V+V compound split
         yield return ["炙り出すために", new[] { "炙り出す", "ために" }];            // ため+に → ために
@@ -1841,7 +1846,7 @@ public class MorphologicalAnalyserTests
 
         // --- SpecialCases2 combines: 確かに / どうこう / 何でも / あるある ---
         yield return ["性能は確かにいい", new[] { "性能", "は", "確かに", "いい" }];     // 確か+に → 確かに (kanji)
-        yield return ["どうこう言うな", new[] { "どうこう言う", "な" }];                 // どう+こう → どうこう(言う) idiom
+        yield return ["どうこう言うな", new[] { "どうこう言う", "な" }];                 // Sudachi keeps どうこう言う whole (own entry); the combine is tested by 田中さんがどうこう
         yield return ["田中さんがどうこうっていうの", new[] { "田中", "さん", "が", "どうこう", "っていう", "の" }]; // standalone どうこう
         yield return ["いいや　何でも", new[] { "いいや", "何でも" }];                  // 何で+も → 何でも
         yield return ["あるあるだね", new[] { "あるある", "だ", "ね" }];                // あるある expression, not ある+ある
@@ -1858,6 +1863,7 @@ public class MorphologicalAnalyserTests
         yield return ["前世の記憶", new[] { "前世", "の", "記憶" }];
         yield return ["この前髪、切ろうかな", new[] { "この", "前髪", "切ろう", "かな" }]; // priority compound keeps 前
         yield return ["この前置きは長いな", new[] { "この", "前置き", "は", "長い", "な" }];
+        yield return ["この前掛けを外した", new[] { "この", "前掛け", "を", "外した" }]; // deverbal 前+V-stem compound keeps 前
         // 親-prefix OOV split (親 pro-prefix + ソ Soviet-Union abbreviation); real 親-compounds stay whole
         yield return ["今以上に親ソ傾向が", new[] { "今", "以上", "に", "親", "ソ", "傾向", "が" }];
         yield return ["親友と親指", new[] { "親友", "と", "親指" }];

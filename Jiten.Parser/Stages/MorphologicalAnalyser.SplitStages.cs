@@ -270,17 +270,20 @@ public partial class MorphologicalAnalyser
             var (at, lBase, rBase) = split.Value;
             var leftSurface = word.Text[..at];
             var rightSurface = word.Text[at..];
+            // The halves' readings can't be recovered from the blob's reading (kanji reading lengths
+            // vary), so leave them empty — the reading scorer skips empty readings, while a surface
+            // copied into Reading would register as a mismatch against every kana form.
             result.Add(new WordInfo
             {
                 Text = leftSurface, DictionaryForm = lBase, NormalizedForm = lBase,
-                PartOfSpeech = PartOfSpeech.Verb, Reading = KanaConverter.ToHiragana(leftSurface),
+                PartOfSpeech = PartOfSpeech.Verb, Reading = "",
                 StartOffset = word.StartOffset,
                 EndOffset = word.StartOffset >= 0 ? word.StartOffset + at : -1
             });
             result.Add(new WordInfo
             {
                 Text = rightSurface, DictionaryForm = rBase, NormalizedForm = rBase,
-                PartOfSpeech = PartOfSpeech.Verb, Reading = KanaConverter.ToHiragana(rightSurface),
+                PartOfSpeech = PartOfSpeech.Verb, Reading = "",
                 StartOffset = word.StartOffset >= 0 ? word.StartOffset + at : -1,
                 EndOffset = word.EndOffset
             });

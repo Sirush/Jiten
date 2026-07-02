@@ -999,13 +999,19 @@ public partial class MorphologicalAnalyser
             {
                 int j = i + 1;
                 int unitCount = first.Text.Length / 2;
+                bool allInterjections = first.PartOfSpeech == PartOfSpeech.Interjection;
                 while (j < wordInfos.Count && IsRepetitionOf(wordInfos[j].Text, unit))
                 {
                     unitCount += wordInfos[j].Text.Length / 2;
+                    allInterjections &= wordInfos[j].PartOfSpeech == PartOfSpeech.Interjection;
                     j++;
                 }
 
-                if (unitCount >= 3 && GetNonNameCompoundWordId(unit + unit) is { } twoXId)
+                // A run of repeated interjection tokens (はい|はい|はい, まあ|まあ|まあ) is deliberate emphatic
+                // speech, not a mimetic — and its 2× surface can be an unrelated word (はいはい → 這い這い
+                // "crawling"). Genuine mimetics reach here as Adverb/Noun tokens, so leave interjection runs
+                // to resolve token-by-token.
+                if (unitCount >= 3 && !allInterjections && GetNonNameCompoundWordId(unit + unit) is { } twoXId)
                 {
                     result ??= [..wordInfos[..i]];
                     string text = "", reading = "";
@@ -1086,9 +1092,10 @@ public partial class MorphologicalAnalyser
                         retok = SudachiInterop.ProcessTextStreaming(_sudachiConfigPath, w.Text, _sudachiDicPath,
                                                                     mode: _sudachiMode, userDictCsv: _sudachiUserDictCsv);
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         // Keep this blob and stop retokenising for the rest of the parse.
+                        Console.WriteLine($"[Warning] RetokeniseOovBlobs: Sudachi FFI failed on '{w.Text}', disabling retokenisation for this parse: {ex.Message}");
                         _retokeniseOovDisabled = true;
                         result?.Add(w);
                         for (int j = i + 1; j < wordInfos.Count; j++)
@@ -1367,12 +1374,10 @@ public partial class MorphologicalAnalyser
             }
 
             // 〜つ目 that Sudachi keeps as one token (四つ目) is number + つ + the ordinal suffix 目 "-th"
-            // (1604890), not the noun "four-eyed". Split so it matches the split 三つ目. 一つ目/二つ目 (一二/１２)
-            // are exempt: they have their own ordinal entries ("first/second (in a series)", 1160910/1625070).
+            // (1604890), not the noun "four-eyed". Split so it matches the split 三つ目.
             if (w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
                 && w1.Text.Length >= 3 && w1.Text.EndsWith("つ目", StringComparison.Ordinal)
-                && w1.Text[0] is not ('一' or '二' or '１' or '２')
-                && (char.IsDigit(w1.Text[0]) || "一二三四五六七八九十百千".Contains(w1.Text[0])))
+                && TakesOrdinalMeAfterTsu(w1.Text[0]))
             {
                 var numPart = w1.Text[..^1];   // 四つ
                 int mid = w1.StartOffset >= 0 ? w1.StartOffset + numPart.Length : -1;
@@ -1446,6 +1451,8 @@ public partial class MorphologicalAnalyser
             // この|前髪 is a correct Sudachi split, not a theft; only compounds nobody actually uses (前山)
             // exist because Sudachi stole 前 from the preceding word. JMDict priority tags can't make this
             // call (前山's homograph ぜんざん carries news-frequency tags), so gate on frequency rank.
+            // A rest that is a verb 連用形 (掛け, 置き, 払い) marks a genuine deverbal 前+V-stem compound
+            // (前掛け "apron") rather than a theft — those stay whole even when unranked (この|前掛け).
             if (w1.Text.Length >= 2 && w1.Text[0] == '前'
                 && w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
                 && !w1.Reading.StartsWith("ゼン", StringComparison.Ordinal)
@@ -1453,7 +1460,8 @@ public partial class MorphologicalAnalyser
                 && GetNonNameCompoundFrequencyRank(w1.Text) is not < 40000
                 && newList.Count > 0
                 && HasNonNameCompoundLookup?.Invoke(newList[^1].Text + "前") == true
-                && HasNonNameCompoundLookup?.Invoke(w1.Text[1..]) == true)
+                && HasNonNameCompoundLookup?.Invoke(w1.Text[1..]) == true
+                && RenyokeiSurfaceToVerb(w1.Text[1..]) == null)
             {
                 var prev = newList[^1];
                 string rest = w1.Text[1..];
@@ -3215,8 +3223,7 @@ public partial class MorphologicalAnalyser
                 // An auxiliary stem in the run is a verb/polite ending (ませ+ん = ません), not a stolen noun
                 // mora — leave it to RepairN/CombineAuxiliary, so わかってませんって is not mis-merged through ません.
                 // The case particle が never belongs inside a reattached noun: stop so が + 行って is not glued
-                // into the kana-row noun が行 (気が行って) and the verb keeps its mora. (Other particle texts —
-                // the nominaliser ん in 婆さん, the と of とき — are genuine word-internal morae, so only が.)
+                // into the kana-row noun が行 (気が行って) and the verb keeps its mora.
                 if (result[^k].PartOfSpeech == PartOfSpeech.Auxiliary
                     || result[^k] is { PartOfSpeech: PartOfSpeech.Particle, Text: "が" }) break;
                 var t = result[^k].Text;

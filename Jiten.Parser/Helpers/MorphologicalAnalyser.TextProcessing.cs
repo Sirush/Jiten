@@ -148,9 +148,16 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(?<=(?:キミ|きみ|君|僕|ぼく|俺|おれ|お前|おまえ|あいつ|こいつ|そいつ|あなた|彼|彼女|私|わたし|あたし|うち)ら)(?=って)")]
     private static partial Regex PronounRaTteRegex();
 
+    // Rough-speech elongated ある after a particle (覚えがあらァ, 金ならあらぁ → がある/ならある).
+    [GeneratedRegex(@"(が|なら)あら[ァぁ]")]
+    private static partial Regex ElongatedAruRegex();
+
     // Colloquial copula っす (=です) after an i-adjective (いい|っす, うまい|っす): split so っす resolves
-    // to the copula 2269410 instead of being swallowed into a noun (いいっすか → 交喙/イスカ bird).
-    [GeneratedRegex(@"(?<=[ぁ-ゖ]い)(?<!とい)っす(?=[かよねぞ]|[\s\n]|$)")]
+    // to the copula 2269410 instead of being swallowed into a noun (いいっすか → 交喙/イスカ bird,
+    // いいっすわ → すわ). Gated on what can follow the copula — a sentence-final particle (か/よ/ね/ぞ/な/
+    // わ/ぜ/さ), a connective (けど/し/もん/から/が), punctuation, or clause end — so っす mid-word stays
+    // untouched.
+    [GeneratedRegex(@"(?<=[ぁ-ゖ]い)(?<!とい)っす(?=[かよねぞなわぜさ、。！？…」]|けど|し|もん|から|が|[\s\n]|$)")]
     private static partial Regex IAdjSsuRegex();
 
     private void PreprocessText(ref string text, bool preserveStopToken, out int rawContentCharCount)
@@ -184,10 +191,10 @@ public partial class MorphologicalAnalyser
         text = MultipleLongVowelRegex().Replace(text, "ー");
         text = EmphLongVowelKanjiHiraganaRegex().Replace(text, "");
         text = EmphLongVowelSokuonRegex().Replace(text, "");
-        // があらァ: rough-speech elongated ある (金ならあらぁ). Must run before the script-crossing
-        // small-vowel split detaches the ァ and strands あら as the interjection. The が keeps the
-        // exclamation あらぁ untouched.
-        text = text.Replace("があらァ", "がある").Replace("があらぁ", "がある");
+        // が/ならあらァ: rough-speech elongated ある (覚えがあらァ, 金ならあらぁ). Must run before the
+        // script-crossing small-vowel split detaches the ァ and strands あら as the interjection. The
+        // preceding particle keeps the clause-initial exclamation あらぁ untouched.
+        text = ElongatedAruRegex().Replace(text, "$1ある");
         text = ScriptCrossingSmallVowelRegex().Replace(text, $"{_stopToken}$1$2");
         text = SameScriptSmallVowelRunRegex().Replace(text, "");
         text = ShoutedImperativeSmallVowelRegex().Replace(text, "$1");

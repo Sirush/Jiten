@@ -1219,6 +1219,8 @@ public class FormSelectionTests
         yield return ["三つ目", "目", 1604890, (byte)0];                          // ordinal suffix, not 三つ目 noun
         yield return ["二つ目", "二つ目", 1625070, (byte)0];                      // kept: ordinal entry "second (in a series)"
         yield return ["ごろごろごろ", "ごろごろごろ", 1005020, (byte)1];          // over-repeated mimetic → ごろごろ, no conjugation
+        yield return ["ゴロゴロゴロと鳴った", "ゴロゴロゴロ", 1005020, (byte)0];  // katakana run → same entry via kana-normalised lookup
+        yield return ["はいはいはい、わかったよ", "はい", 1010080, (byte)0];      // interjection run → はい, not 這い這い "crawling"
         yield return ["キスをしたり", "したり", 1157170, (byte)1];               // する, not interjection したり
         yield return ["どのようなものか", "もの", 1502390, (byte)1];             // nominal もの + か, not rhetorical ものか
 
@@ -1459,10 +1461,15 @@ public class FormSelectionTests
         yield return ["田中さんがどうこうっていうの", "どうこう", 2670710, (byte)0]; // どう+こう → どうこう
         yield return ["いいや　何でも", "何でも", 1611030, (byte)0];     // 何で+も → 何でも
         yield return ["あるあるだね", "あるある", 2150380, (byte)0];     // reduplicated あるある expression, not ある
+        yield return ["それアルアルだね", "アルアル", 2150380, (byte)0]; // katakana variant of the あるある pin
         // --- FilterMisparse homograph/reading remaps ---
         yield return ["ツバを飲む音", "ツバ", 1408410, (byte)1];          // 唾 saliva, not 鍔 sword-guard
+        yield return ["帽子のツバをつまんだ", "ツバ", 1433790, (byte)2];  // hat brim is 鍔 — the saliva pin skips hat context
+        yield return ["刀のツバに触れた", "ツバ", 1433790, (byte)2];      // sword context → 鍔, not saliva
         yield return ["……ったく、あんたって子は", "あんた", 1979920, (byte)1]; // pronoun, not 編む past
         yield return ["武装警察軍の方々、聞こえますか", "方々", 1584100, (byte)0]; // の方々 → かたがた, not ほうぼう
+        yield return ["町の方々に散らばった", "方々", 1584105, (byte)0];  // movement frame → ほうぼう, not かたがた
+        yield return ["町の方々を歩き回った", "方々", 1584105, (byte)0];  // movement frame → ほうぼう, not かたがた
         yield return ["何がだい？", "だい", 2097680, (byte)0];           // clause-final question particle, not 代
         // --- compound-verb / re-cut / colloquial repairs ---
         yield return ["分かたれて、憎みあって……警戒しあう", "憎みあって", 2093060, (byte)0];  // kana 〜合う reciprocal → 憎み合う (reading 0 = kanji spelling)
@@ -1473,6 +1480,7 @@ public class FormSelectionTests
         yield return ["神の恵みあっての勝利だった", "あって", 1296400, (byte)2];  // Xあっての idiom stays ある, not 合う
         yield return ["この前髪、切ろうかな", "前髪", 1393880, (byte)0];        // priority 前-compound keeps its own reading
         yield return ["この前置きは長いな", "前置き", 1393630, (byte)0];        // priority 前-compound keeps its own reading
+        yield return ["この前掛けを外した", "前掛け", 1392720, (byte)0];        // unranked deverbal 前+V-stem compound stays whole
         yield return ["嬉しくって嬉しくって仕方ない", "嬉しくって", 1219510, (byte)0]; // geminated 〜くって = i-adj te-form
         yield return ["食欲がなくってさ", "なくって", 1529520, (byte)1];         // なくって = ない te-form, not ない+quotative
         yield return ["だからなんとなくって感じだ", "なんとなく", 1599730, (byte)2]; // adverb kept whole before quotative って
@@ -1483,6 +1491,8 @@ public class FormSelectionTests
         yield return ["そうかいそうかい。", "かい", 2017770, (byte)0];              // かいそうか re-cut, not 階層化
         yield return ["ここまで完璧に互いの手を読みあっていた彼らだが", "あっていた", 1284430, (byte)1]; // renyokei+あって → 合う
         yield return ["夢や望みあっても叶わない", "あって", 1296400, (byte)2];       // Xあっても idiom stays ある
+        yield return ["努力の実りあって合格した", "あって", 1296400, (byte)2];       // deverbal-noun あって idiom stays ある
+        yield return ["呼んでいいっすけど", "っす", 2269410, (byte)0];              // っす copula before けど
         yield return ["だってお前山に行ったら", "お前", 1002290, (byte)0];          // rebound お前 resolves
         yield return ["この前山に入ったら", "この前", 2216900, (byte)0];            // rebound この前 resolves
 

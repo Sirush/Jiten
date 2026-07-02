@@ -574,7 +574,7 @@ namespace Jiten.Parser
             var uniqueWords = new List<(WordInfo wordInfo, int occurrences)>();
             var wordCount =
                 new Dictionary<(string text, PartOfSpeech pos, string dictionaryForm, string reading, bool isPersonNameContext, bool
-                    isNameLikeSudachiNoun),
+                    isNameLikeSudachiNoun, int? preMatchedWordId),
                     int>();
 
             foreach (var word in wordInfos)
@@ -582,7 +582,7 @@ namespace Jiten.Parser
                 var isNameLikeSudachiNoun = PosMapper.IsNameLikeSudachiNoun(word.PartOfSpeech, word.PartOfSpeechSection1,
                                                                             word.PartOfSpeechSection2, word.PartOfSpeechSection3);
                 var key = (word.Text, word.PartOfSpeech, word.DictionaryForm, word.Reading, word.IsPersonNameContext,
-                           isNameLikeSudachiNoun);
+                           isNameLikeSudachiNoun, word.PreMatchedWordId);
 
                 if (!wordCount.TryAdd(key, 1))
                 {
@@ -599,7 +599,8 @@ namespace Jiten.Parser
                 var wi = uniqueWords[i].wordInfo;
                 var isNameLikeSudachiNoun = PosMapper.IsNameLikeSudachiNoun(wi.PartOfSpeech, wi.PartOfSpeechSection1,
                                                                             wi.PartOfSpeechSection2, wi.PartOfSpeechSection3);
-                var key = (wi.Text, wi.PartOfSpeech, wi.DictionaryForm, wi.Reading, wi.IsPersonNameContext, isNameLikeSudachiNoun);
+                var key = (wi.Text, wi.PartOfSpeech, wi.DictionaryForm, wi.Reading, wi.IsPersonNameContext, isNameLikeSudachiNoun,
+                           wi.PreMatchedWordId);
                 uniqueWords[i] = (uniqueWords[i].wordInfo, wordCount[key]);
             }
 
@@ -633,6 +634,10 @@ namespace Jiten.Parser
                             var textWithoutBar = wi.Text.TrimEnd('ー');
                             if (textWithoutBar.Length > 0 && textWithoutBar.All(char.IsDigit) ||
                                 (textWithoutBar.Length == 1 && textWithoutBar.IsAsciiOrFullWidthLetter()))
+                                continue;
+
+                            // Pinned tokens bypass the cache entirely — see the read/write gates below.
+                            if (wi.PreMatchedWordId != null || wi.PreMatchedCandidateWordIds != null)
                                 continue;
 
                             var isNameLike = PosMapper.IsNameLikeSudachiNoun(wi.PartOfSpeech, wi.PartOfSpeechSection1,
@@ -752,7 +757,7 @@ namespace Jiten.Parser
             var processedWithMargins = await ProcessWordsInBatches(wordsWithOccurrences, Deconjugator.Instance, diagnostics: diagnostics);
 
             var marginMap = BuildMarginMap(sentences, processedWithMargins);
-            var candidateLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool), List<FormCandidate>>();
+            var candidateLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), List<FormCandidate>>();
 
             if (ResegmentationEngine.TryResegmentLowConfidenceTokens(sentences, _lookups, _wordFrequencyRanks, marginMap,
                                                                     WordMeta, diagnostics))
@@ -760,7 +765,7 @@ namespace Jiten.Parser
                 diagnostics?.Results.Clear();
 
                 // Build lookup from old results so we can reuse them
-                var oldResultLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool), (DeckWord? word, int? margin)>();
+                var oldResultLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), (DeckWord? word, int? margin)>();
                 for (int i = 0; i < wordInfos.Count; i++)
                 {
                     var key = GetDedupKey(wordInfos[i]);
@@ -930,8 +935,8 @@ namespace Jiten.Parser
             var allProcessedWithMargins = await ProcessWordsInBatches(uniqueWords, deconjugator, dictionaryEntriesBySurface: dictionaryEntriesBySurface);
 
             // Build lookup by direct 1:1 index mapping
-            var resultLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool), (DeckWord? word, int? margin)>();
-            var candidateLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool), List<FormCandidate>>();
+            var resultLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), (DeckWord? word, int? margin)>();
+            var candidateLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), List<FormCandidate>>();
             for (int i = 0; i < uniqueWords.Count; i++)
             {
                 var key = GetDedupKey(uniqueWords[i].wordInfo);
@@ -1200,7 +1205,13 @@ namespace Jiten.Parser
                                                     isNameLikeSudachiNoun
                                                    );
 
-                if (UseCache && diagnostics == null)
+                // The cache key carries no pin context, so a token pinned by a context-dependent repair
+                // (帽子のツバ→鍔 vs ツバを飲む→唾 share the same key) must not read or write shared entries —
+                // a pin resolves via a single word fetch anyway.
+                bool hasPin = wordData.wordInfo.PreMatchedWordId != null
+                              || wordData.wordInfo.PreMatchedCandidateWordIds != null;
+
+                if (UseCache && diagnostics == null && !hasPin)
                 {
                     try
                     {
@@ -1728,7 +1739,7 @@ namespace Jiten.Parser
                     ? firstPassCandidates
                     : null;
 
-                if (!UseCache)
+                if (!UseCache || hasPin)
                     return ProcessWordResult.FromResolved(processedWord, margin: resolvedMargin, firstPassCandidates: candidatesToKeep);
 
                 var cacheWord = new DeckWord
@@ -3404,24 +3415,16 @@ namespace Jiten.Parser
         private static bool HasPrioritizedMeta(int id) =>
             WordMeta.TryGetValue(id, out var meta) && meta.GetPriorityScore(true) > 0;
 
-        // The first non-name word id for a surface (kana-normalised fallback), or null. Used to pin a
-        // synthesised token (e.g. the collapsed ごろごろごろ) to its dictionary entry without re-segmentation.
-        private static int? GetNonNameCompoundId(string text)
+        // Applies a lookup-keyed query to the surface, falling back to its normalised-hiragana key
+        // (katakana ゴロゴロ → ごろごろ) when the direct key yields nothing.
+        private static int? LookupWithKanaFallback(string text, Func<string, int?> query)
         {
-            static int? Find(string key)
-            {
-                if (!_lookups.TryGetValue(key, out var ids) || ids.Count == 0) return null;
-                foreach (var id in ids)
-                    if (!_nameOnlyWordIds.Contains(id)) return id;
-                return null;
-            }
-
-            var direct = Find(text);
+            var direct = query(text);
             if (direct != null) return direct;
             try
             {
                 var hira = KanaConverter.ToNormalizedHiragana(text);
-                if (hira != text) return Find(hira);
+                if (hira != text) return query(hira);
             }
             catch
             {
@@ -3429,11 +3432,21 @@ namespace Jiten.Parser
             return null;
         }
 
+        // The first non-name word id for a surface (kana-normalised fallback), or null. Used to pin a
+        // synthesised token (e.g. the collapsed ごろごろごろ) to its dictionary entry without re-segmentation.
+        private static int? GetNonNameCompoundId(string text) =>
+            LookupWithKanaFallback(text, static key =>
+            {
+                if (!_lookups.TryGetValue(key, out var ids) || ids.Count == 0) return null;
+                foreach (var id in ids)
+                    if (!_nameOnlyWordIds.Contains(id)) return id;
+                return null;
+            });
+
         // The best (lowest) frequency rank of any non-name word with this written form,
         // or null when no such word is ranked at all.
-        private static int? GetBestNonNameFrequencyRank(string text)
-        {
-            static int? Best(string key)
+        private static int? GetBestNonNameFrequencyRank(string text) =>
+            LookupWithKanaFallback(text, static key =>
             {
                 if (!_lookups.TryGetValue(key, out var ids) || ids.Count == 0) return null;
                 int? best = null;
@@ -3444,20 +3457,7 @@ namespace Jiten.Parser
                         best = rank;
                 }
                 return best;
-            }
-
-            var direct = Best(text);
-            if (direct != null) return direct;
-            try
-            {
-                var hira = KanaConverter.ToNormalizedHiragana(text);
-                if (hira != text) return Best(hira);
-            }
-            catch
-            {
-            }
-            return null;
-        }
+            });
 
         private static bool HasNonNameLookup(string text)
         {
@@ -4971,15 +4971,18 @@ namespace Jiten.Parser
 
         #region Adjacent-word scoring
 
-        private static (string text, PartOfSpeech pos, string dictionaryForm, string reading, bool isPersonNameContext, bool isNameLike)
+        // PreMatchedWordId is part of the key: two same-surface tokens pinned to different words by a
+        // context-dependent repair (帽子のツバ→鍔 vs ツバを飲む→唾) must not share one resolution.
+        private static (string text, PartOfSpeech pos, string dictionaryForm, string reading, bool isPersonNameContext, bool isNameLike, int? preMatchedWordId)
             GetDedupKey(WordInfo wi) =>
             (wi.Text, wi.PartOfSpeech, wi.DictionaryForm, wi.Reading, wi.IsPersonNameContext,
              PosMapper.IsNameLikeSudachiNoun(wi.PartOfSpeech, wi.PartOfSpeechSection1,
-                                             wi.PartOfSpeechSection2, wi.PartOfSpeechSection3));
+                                             wi.PartOfSpeechSection2, wi.PartOfSpeechSection3),
+             wi.PreMatchedWordId);
 
         private static (DeckWord? word, int? margin) LookupResult(
             WordInfo wi,
-            Dictionary<(string, PartOfSpeech, string, string, bool, bool), (DeckWord? word, int? margin)> resultLookup)
+            Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), (DeckWord? word, int? margin)> resultLookup)
         {
             var key = GetDedupKey(wi);
             resultLookup.TryGetValue(key, out var result);
@@ -5010,7 +5013,7 @@ namespace Jiten.Parser
         private static async Task<List<DeckWord>> ApplyAdjacentScoring(
             List<SentenceInfo> sentences,
             List<(DeckWord? word, int? margin, List<FormCandidate>? candidates)> processedResults,
-            Dictionary<(string, PartOfSpeech, string, string, bool, bool), List<FormCandidate>>? candidateLookup = null,
+            Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), List<FormCandidate>>? candidateLookup = null,
             ParserDiagnostics? diagnostics = null,
             FuriganaHint[]? relocatedHints = null)
         {
@@ -5026,8 +5029,8 @@ namespace Jiten.Parser
 
         private static async Task<List<DeckWord>> ApplyAdjacentScoring(
             List<SentenceInfo> sentences,
-            Dictionary<(string, PartOfSpeech, string, string, bool, bool), (DeckWord? word, int? margin)> resultLookup,
-            Dictionary<(string, PartOfSpeech, string, string, bool, bool), List<FormCandidate>>? candidateLookup = null,
+            Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), (DeckWord? word, int? margin)> resultLookup,
+            Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), List<FormCandidate>>? candidateLookup = null,
             ParserDiagnostics? diagnostics = null,
             FuriganaHint[]? relocatedHints = null)
         {
@@ -5071,7 +5074,7 @@ namespace Jiten.Parser
             if (candidates is not { Count: > 0 })
                 return candidates;
 
-            if (word.Text.StartsWith("なくな", StringComparison.Ordinal) && Jiten.Core.JapaneseTextHelper.IsAllHiragana(word.Text))
+            if (word.Text.StartsWith("なくな", StringComparison.Ordinal) && JapaneseTextHelper.IsAllHiragana(word.Text))
                 return candidates.Where(c => c.Word.WordId != 1518540).ToList();
 
             return candidates;
@@ -5079,7 +5082,7 @@ namespace Jiten.Parser
 
         private static async Task<List<DeckWord>> ApplyAdjacentScoringCore(
             List<List<(WordInfo word, DeckWord? result, int? margin)>> sentencePairs,
-            Dictionary<(string, PartOfSpeech, string, string, bool, bool), List<FormCandidate>>? candidateLookup = null,
+            Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), List<FormCandidate>>? candidateLookup = null,
             ParserDiagnostics? diagnostics = null,
             FuriganaHint[]? relocatedHints = null)
         {
@@ -5087,7 +5090,7 @@ namespace Jiten.Parser
             var allWordIds = new HashSet<int>();
             var rederiveStates = new Dictionary<(int sentIdx, int tokIdx), RederivationHelper.RederiveState>();
             var cachedCandidates = new Dictionary<(int sentIdx, int tokIdx), List<FormCandidate>>();
-            var rederiveCache = new Dictionary<(string, PartOfSpeech, string, string, bool, bool), RederivationHelper.RederiveState?>();
+            var rederiveCache = new Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), RederivationHelper.RederiveState?>();
 
             // Depends only on surface text (immutable across both passes) — compute once per sentence.
             var isClassicalBySentence = new bool[sentencePairs.Count];
@@ -5479,7 +5482,7 @@ namespace Jiten.Parser
 
         private static Dictionary<(int sentenceIndex, int wordIndex), int?> BuildMarginMapFromLookup(
             List<SentenceInfo> sentences,
-            Dictionary<(string, PartOfSpeech, string, string, bool, bool), (DeckWord? word, int? margin)> resultLookup)
+            Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), (DeckWord? word, int? margin)> resultLookup)
         {
             var map = new Dictionary<(int, int), int?>();
             for (int si = 0; si < sentences.Count; si++)
