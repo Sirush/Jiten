@@ -1545,6 +1545,10 @@ public class FormSelectionTests
         yield return ["ついあれこれ見ているうちに夢中になってしまって", "つい", 1008030, (byte)0];
         // 奢りじゃ悪い: じゃ (では contraction) is the dedicated じゃ copula (2851029), not the plain だ (2089020).
         yield return ["全部あんたの奢りじゃ悪いだろ", "じゃ", 2851029, (byte)0];
+        // 奢り resolves via the user_dic おごり entry, not a homograph.
+        yield return ["全部あんたの奢りじゃ悪いだろ", "奢り", 2060630, (byte)0];
+        // 事実+上達 must stay Sudachi's cut — the X|Y達 rebind is for single-char fragments (部|下達) only.
+        yield return ["剣術は事実上達していた", "上達していた", 1353850, (byte)0];
 
         // Kana なくなる is 無くなる "to cease" (1529550, kana RI 2), never 亡くなる "to die" (1518540, kanji-spelled).
         yield return ["呼吸が出来なくなった。", "なくなった", 1529550, (byte)2];

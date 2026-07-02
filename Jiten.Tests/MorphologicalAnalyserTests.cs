@@ -1475,6 +1475,9 @@ public class MorphologicalAnalyserTests
         yield return ["はいはいはい、わかったよ", new[] { "はい", "わかった", "よ" }]; // interjection run is not 這い這い; repeats dedup to one はい
         yield return ["化け物どもめ", new[] { "化け物", "ども", "め" }];            // ど+もめ → ども+め
         yield return ["部下達", new[] { "部下", "達" }];                            // 部+下達 → 部下+達
+        yield return ["剣術は事実上達していた", new[] { "剣術", "は", "事実", "上達していた" }]; // multi-char X: no rebind
+        yield return ["親米派の政治家", new[] { "親米", "派", "の", "政治家" }];    // real JMDict pro-compound never reaches the 親-split
+        yield return ["そうかいそうかい。", new[] { "そう", "かい", "そう", "かい" }]; // かいそうか re-cut segmentation
         yield return ["――やらせないッ", new[] { "やらせない" }];                   // causative-stem noun + ない merge
         yield return ["気が行って", new[] { "気", "が", "行って" }];                // が行 theft prevented
         yield return ["美しくも", new[] { "美しく", "も" }];                        // 〜くも adverbial split

@@ -1421,11 +1421,17 @@ public partial class MorphologicalAnalyser
 
             // X | Y達 → XY | 達: the pluralising suffix 達 binds looser than the compound XY, so Sudachi's
             // 部|下達 (下達 = a separate noun) becomes 部下|達 when X + Y-without-達 is a real compound.
+            // The theft leaves a single-char fragment X (部) — a multi-char X next to a Y達 noun is two
+            // genuine words (事実|上達していた) and must stay Sudachi's cut. The rebound compound must also
+            // be in common use (部下, frequency rank < 40000) so a coincidental 1-char+Y lookup key can't
+            // trigger a rebind on its own.
             if (w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && w1.Text.Length == 1
                 && i + 1 < wordInfos.Count
                 && wordInfos[i + 1] is { PartOfSpeech: PartOfSpeech.Noun or PartOfSpeech.CommonNoun } w2tachi
                 && w2tachi.Text.Length >= 2 && w2tachi.Text.EndsWith("達", StringComparison.Ordinal)
-                && HasNonNameCompoundLookup?.Invoke(w1.Text + w2tachi.Text[..^1]) == true)
+                && HasNonNameCompoundLookup?.Invoke(w1.Text + w2tachi.Text[..^1]) == true
+                && GetNonNameCompoundFrequencyRank?.Invoke(w1.Text + w2tachi.Text[..^1]) is < 40000)
             {
                 var compound = w1.Text + w2tachi.Text[..^1];
                 int mid = w2tachi.EndOffset >= 0 ? w2tachi.EndOffset - 1 : -1;
