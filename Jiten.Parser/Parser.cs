@@ -89,7 +89,9 @@ namespace Jiten.Parser
             (1533340,3), (5050910,0), (2406530,0), (1243650,2), (1158500,1), (2759530,0),
             (1689970,3), (5257597,0), (1446210, 2), (2416380,1), (1244220,1),
             (1578010,2), (2028930,1), (2028930,2), (1579350, 6), (2821500, 2), (2821500, 3),
-            (1592150, 2), (1467040, 6), (1311350, 1), (1175280, 1), (1578150, 4), (2029650, 0)
+            (1592150, 2), (1467040, 6), (1311350, 1), (1175280, 1), (1578150, 4), (2029650, 0),
+            // 案 spelled あん: the plan/idea sense is written in kanji; a bare kana あん is a grunt
+            (1154770, 1)
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -3633,7 +3635,8 @@ namespace Jiten.Parser
             }
         }
 
-        private static readonly HashSet<string> NounCompoundExclusions = ["おつもり", "ものたち"];
+        // 雪の下: the botanical ユキノシタ must not swallow prose 雪+の+下 "under the snow".
+        private static readonly HashSet<string> NounCompoundExclusions = ["おつもり", "ものたち", "雪の下"];
 
         // ・/＝ between noun tokens (ハーヴェイ・カイテル, サン＝テグジュペリ): Sudachi emits the
         // separator as its own SupplementarySymbol token, so dictionary compounds containing it can
@@ -4474,6 +4477,11 @@ namespace Jiten.Parser
 
             var flatTokens = new List<WordInfo>();
             var sentenceInitial = new List<bool>();
+            // Raw symbol text (quotes, punctuation, sokuon shards) skipped in the gap before each
+            // token, so gates can see the frame a token sits in. Whitespace is transparent inside
+            // a gap; a sentence boundary is recorded as a hard gap.
+            var symbolsBefore = new List<string>();
+            string pendingSymbols = "";
             foreach (var sentence in sentences)
             {
                 bool first = true;
@@ -4488,49 +4496,140 @@ namespace Jiten.Parser
                     {
                         if (word.Text.Length > 0 && OpeningQuoteChars.Contains(word.Text[^1]))
                             afterOpeningQuote = true;
+                        pendingSymbols += word.Text;
                         continue;
                     }
                     if (word.PartOfSpeech == PartOfSpeech.BlankSpace)
                     {
                         flatTokens.Add(word);
                         sentenceInitial.Add(first || afterOpeningQuote);
+                        symbolsBefore.Add(pendingSymbols);
                         continue;
                     }
                     flatTokens.Add(word);
                     sentenceInitial.Add(first || afterOpeningQuote);
+                    symbolsBefore.Add(pendingSymbols);
+                    pendingSymbols = "";
                     first = false;
                     afterOpeningQuote = false;
                 }
+                pendingSymbols += "\n";
             }
+            string trailingSymbols = pendingSymbols;
 
-            var result = new List<DeckWord>(corrected.Count);
+            var droppedByGate = new Dictionary<int, string>();
             int ci = 0;
 
-            for (int i = 0; i < flatTokens.Count && ci < corrected.Count; i++)
+            MisparseDecision EvaluateAt(int i, DeckWord deckWord)
             {
                 var token = flatTokens[i];
-                if (token.ResolvedWordId == null) continue;
+                wordData.TryGetValue(deckWord.WordId, out var jmWord);
+                var (isUk, hasKanji, readingIsIchi, attestsForm) = MisparseGates.GetWordFlags(
+                    jmWord, deckWord.ReadingIndex,
+                    deckWord.OriginalText.Length > 0 ? deckWord.OriginalText : token.Text);
+
+                // Empty-text remnants (cleaned split markers) are transparent as neighbours; their
+                // symbol gaps still count toward the frame.
+                int pi = i - 1;
+                while (pi >= 0 && flatTokens[pi].Text.Length == 0) pi--;
+                var prev = pi >= 0 ? flatTokens[pi] : null;
+
+                int ni = i + 1;
+                string symAfter = "";
+                while (ni < flatTokens.Count)
+                {
+                    symAfter += symbolsBefore[ni];
+                    if (flatTokens[ni].Text.Length > 0) break;
+                    ni++;
+                }
+                if (ni >= flatTokens.Count) symAfter += trailingSymbols;
+                var next = ni < flatTokens.Count ? flatTokens[ni] : null;
+
+                // A stutter-dedup drop removes a REPEAT of a real word (はいはい, わーいわーい) —
+                // its surviving twin is vocabulary, not burst material.
+                bool prevDropped = pi >= 0 && droppedByGate.TryGetValue(pi, out var prevGate)
+                                   && prevGate != "kana-stutter-before-word";
+                bool nextDropped = ni < flatTokens.Count && droppedByGate.TryGetValue(ni, out var nextGate)
+                                   && nextGate != "kana-stutter-before-word";
+
+                // A token flanked by kana scraps — unresolved, or already discarded by a gate — is
+                // part of one shredded blob (ざ|くぅ, ず|がんっ); when the reassembled blob is not a
+                // dictionary word, no fragment of it is one either. Shreds of one word are
+                // contiguous: a symbol in the gap (って、くっさ) separates utterance elements, so
+                // no blob spans it. A pure-vowel scrap after a verb/adjective is that word's own
+                // expressive elongation (わかる|う), not a blob.
+                bool prevIsShard = (MisparseGates.IsKanaShardNeighbour(prev) || prevDropped)
+                                   && symbolsBefore[i].Length == 0;
+                bool nextIsShard = (MisparseGates.IsKanaShardNeighbour(next) || nextDropped)
+                                   && symAfter.Length == 0;
+                if (nextIsShard && next != null
+                    && token.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
+                    && next.Text.All(c => "あいうえおぁぃぅぇぉーっッ".Contains(c)))
+                    nextIsShard = false;
+                bool blobUnattested = false;
+                if (prevIsShard || nextIsShard)
+                {
+                    string blob = (prevIsShard ? prev!.Text : "")
+                                  + (deckWord.OriginalText.Length > 0 ? deckWord.OriginalText : token.Text)
+                                  + (nextIsShard ? next!.Text : "");
+                    blobUnattested = !_lookups.ContainsKey(blob);
+                }
+
+                var ctx = new MisparseGateContext(token, deckWord, prev, next, isUk, hasKanji, readingIsIchi,
+                    sentenceInitial[i],
+                    symbolsBefore[i],
+                    symAfter,
+                    attestsForm,
+                    blobUnattested,
+                    prevDropped,
+                    nextDropped);
+
+                return MisparseGates.Evaluate(in ctx);
+            }
+
+            var kept = new List<(int flatIdx, DeckWord word)>(corrected.Count);
+            for (int i = 0; i < flatTokens.Count && ci < corrected.Count; i++)
+            {
+                if (flatTokens[i].ResolvedWordId == null) continue;
 
                 var deckWord = corrected[ci++];
-
-                wordData.TryGetValue(deckWord.WordId, out var jmWord);
-                var (isUk, hasKanji, readingIsIchi) = MisparseGates.GetWordFlags(jmWord, deckWord.ReadingIndex);
-
-                var prev = i > 0 ? flatTokens[i - 1] : null;
-                var next = i < flatTokens.Count - 1 ? flatTokens[i + 1] : null;
-                var ctx = new MisparseGateContext(token, deckWord, prev, next, isUk, hasKanji, readingIsIchi,
-                    sentenceInitial[i]);
-
-                var decision = MisparseGates.Evaluate(in ctx);
+                var decision = EvaluateAt(i, deckWord);
                 if (decision.IsMisparsed)
                 {
-                    diagnostics?.LogDroppedToken(token.Text, token.PartOfSpeech,
+                    droppedByGate[i] = decision.GateId ?? "";
+                    diagnostics?.LogDroppedToken(flatTokens[i].Text, flatTokens[i].PartOfSpeech,
                         $"misparsed:{decision.GateId}");
                     continue;
                 }
 
-                result.Add(deckWord);
+                kept.Add((i, deckWord));
             }
+
+            // A drop can expose its neighbour as another shard of the same burst (ず|がんっ: がん
+            // falls first, then ず has no anchor left) — re-evaluate survivors adjacent to drops
+            // until stable.
+            for (int pass = 0; pass < 3; pass++)
+            {
+                bool changed = false;
+                for (int k = kept.Count - 1; k >= 0; k--)
+                {
+                    var (i, deckWord) = kept[k];
+                    var decision = EvaluateAt(i, deckWord);
+                    if (decision.IsMisparsed)
+                    {
+                        droppedByGate[i] = decision.GateId ?? "";
+                        diagnostics?.LogDroppedToken(flatTokens[i].Text, flatTokens[i].PartOfSpeech,
+                            $"misparsed:{decision.GateId}");
+                        kept.RemoveAt(k);
+                        changed = true;
+                    }
+                }
+                if (!changed) break;
+            }
+
+            var result = new List<DeckWord>(corrected.Count);
+            foreach (var (_, deckWord) in kept)
+                result.Add(deckWord);
 
             while (ci < corrected.Count)
                 result.Add(corrected[ci++]);

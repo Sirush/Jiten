@@ -832,6 +832,11 @@ public class FormSelectionTests
         // や (Kansai copula) should resolve to particle/copula (2028960), not 矢 arrow (1537760)
         yield return ["ウソやで", "や", 2028960, (byte)0];
 
+        // Kana した as a noun after genitive の is locational 下 (1184140), not the homograph 舌;
+        // verbal した after の (彼のしたこと) keeps resolving to する via its verb POS.
+        yield return ["机のしたに隠れた。", "した", 1184140, (byte)1];
+        yield return ["彼のしたことは正しい。", "した", 1157170, (byte)1];
+
         // Orphaned suffix 店 (テン) should resolve to standalone noun みせ (1582120), not suffix てん (1582125)
         yield return ["昔こういう店でバイトしようとしたことがあって", "店", 1582120, (byte)0];
 
@@ -1210,11 +1215,11 @@ public class FormSelectionTests
         // 着なきゃ should resolve to 着る (to wear, 1423000), not suffix ぎ + ない
         yield return ["本当にこれ着なきゃダメ", "着なきゃ", 1423000, (byte)0];
 
-        // Misparse fixes (batch): form/WordId expectations
+        // Homograph and reading disambiguation cases
         yield return ["かあ", "かあ", 2028970, (byte)0];                          // か particle, not noun カア (caw)
         yield return ["問題アリアリですよ", "アリアリ", 2007200, (byte)2];        // ありあり, not ariary currency
         yield return ["そうそうだったね", "そうそう", 1006640, (byte)1];          // interjection, not 錚々
-        yield return ["とてもいとおしい", "いとおしい", 2007340, (byte)1];        // 愛おしい, not 射通す (pierce)
+        yield return ["とてもいとおしい", "いとおしい", 2007340, (byte)1];        // 愛おしい, not 射通す (いとおす — its renyoukei いとおし shares the stem)
         yield return ["恐れることなかれ", "なかれ", 1535750, (byte)5];           // 勿れ, not 無い
         yield return ["三つ目", "目", 1604890, (byte)0];                          // ordinal suffix, not 三つ目 noun
         yield return ["二つ目", "二つ目", 1625070, (byte)0];                      // kept: ordinal entry "second (in a series)"
@@ -1556,6 +1561,70 @@ public class FormSelectionTests
         // Fullwidth-Latin loanword ＤＡＴＡ resolves whole to データ (1081190) via its normalized form;
         // the resegmentation must not shred it into Ｄ + ＡＴＡ.
         yield return ["ＤＡＴＡ１を再生する。", "ＤＡＴＡ", 1081190, (byte)0];
+
+        // うっす is the colloquial greeting (おいっす family), not 臼/薄 reached through the
+        // Sudachi-normalised うす dictionary form
+        yield return ["「うっす！」", "うっす", 2262630, (byte)1];
+
+        // Potential of 思い出す stays the verb, not the noun 思い出 + せる
+        yield return ["胸に走る激痛も思い出せる。", "思い出せる", 1309260, (byte)0];
+        // Completion-auxiliary compound resolves to the JMDict entry
+        yield return ["彼は逃げ切った。", "逃げ切った", 1850600, (byte)0];
+        // Katakana spelling of a conjugated i-adjective resolves via hiragana deconjugation
+        yield return ["なんか、それって、オカシクナイ？", "オカシクナイ", 1190860, (byte)3];
+
+        // Colloquial-contraction homographs: the casual-writing reading beats the literal one
+        yield return ["「合い言葉は、カミモホトケモテンシモナシ」", "ナシ", 1529560, (byte)1]; // 無し, not 梨
+        yield return ["「記憶ナシ男で頼む」", "ナシ", 1529560, (byte)1];
+        yield return ["他にも、定番のカンパンなども見つけた。", "カンパン", 1209690, (byte)1]; // 乾パン, not 肝斑
+        yield return ["女生徒はそのまま仁王立ちし、そう力説した。", "し", 1157170, (byte)1]; // する, not 詩
+        yield return ["天井が落ちきった。", "きった", 1384830, (byte)0]; // 切る completion aux, not 来る
+        yield return ["「少し時間をくれ…」", "くれ", 1269130, (byte)1]; // くれる imperative, not 暮れ
+        yield return ["「なんかあるんだろーな。いいぜ、気にすんな」", "だろー", 1928670, (byte)0]; // だろう, not たる
+        yield return ["「つーのは冗談で、松下五段が肉うどんの肉をくれるそうだ」", "つー", 1922760, (byte)1]; // という
+        yield return ["ガルデモのメンバーならば、あるいはと思ったが、当たりだったのか！？", "ならば", 1009470, (byte)1];
+        yield return ["ゆに「ねえ、それよりメガネー。ぼくのメガネー」", "ねえ", 2029080, (byte)2]; // hey, not dialectal ない
+        yield return ["「ありゃ？　どこいった？」", "いった", 1578850, (byte)0]; // 行く after a place word
+        yield return ["「時間が経てば治るのよ。ようは死なないの」", "ようは", 1914670, (byte)1]; // 要は, not 様+は
+
+        // Homograph wrong-reading: context selects the reading (kanji is shared)
+        yield return ["どれだけ時間が経っただろう、１分ぐらいか。", "１分", 1166290, (byte)0]; // いっぷん, not いちぶ
+        yield return ["「後もう少しで…って、クソ坊主、どうした！？」", "後", 1269320, (byte)0]; // あと, not ご
+        yield return ["「だから、消えた。次の生を迎えるために」", "生", 2088240, (byte)0]; // せい, not なま
+        yield return ["俺は二度、素振りをした後、バッターボックスに入る。", "素振り", 1749550, (byte)0]; // すぶり, not そぶり
+        yield return ["黛「日本国憲法第２７条１項：すべて国民は、勤労の権利を有し、義務を負う」", "項", 1282980, (byte)0]; // こう, not うなじ
+        yield return ["内海は弾かれたように立ち上がると、部屋を飛び出す。", "弾かれた", 1419360, (byte)0]; // はじく, not ひく
+        yield return ["「何体目だよ…くっそ…」", "体", 1409150, (byte)0]; // counter たい, not からだ
+        yield return ["浴槽の縁に腰掛け、その水面をボーっと眺める。", "縁", 1177500, (byte)0]; // ふち, not えん
+        yield return ["「ま、真面目に授業受け続けたら、天使の思惑通り消えちまうんだけどな」", "通り", 1432930, (byte)0]; // どおり suffix
+        yield return ["寒気を覚える。", "寒気", 1210410, (byte)0]; // さむけ, not かんき
+
+        // Verb/adjective surfaces matched to standalone-noun/連体詞 homographs
+        yield return ["意識が飛んだ。", "飛んだ", 1429700, (byte)0]; // 飛ぶ past, not とんだ 連体詞
+        yield return ["「うわっ、痛ぇぇぇーーー！！」", "痛", 1432680, (byte)0]; // clipped 痛い, not -algia
+        yield return ["「暗っ！」", "暗", 1154330, (byte)0]; // clipped 暗い
+        yield return ["皿をその横に置き、てきぱきと野菜を並べた。", "置き", 1421850, (byte)0]; // 置く 連用形, not おき interval
+        yield return ["強がってみせる。", "強がって", 1928800, (byte)0]; // 強がる
+        yield return ["「先に行け！」", "行け", 1578850, (byte)0]; // 行く imperative, not 行ける
+        yield return ["それなら、前を向いて進むのが正しいはずだ。", "向いて", 1277080, (byte)0]; // 向く, not 剥く
+        yield return ["俺は立華宛の手紙を思い出す。", "宛", 1448820, (byte)1]; // 宛て suffix
+        yield return ["「やべぇ！　後ろからも来やがるぜ！！」", "来", 1547720, (byte)0]; // 来る stem before やがる
+
+        // Shouted stretches resolve to their base word, not phonetic-coincidence homographs
+        yield return ["「そして、俺を許してくれええぇぇーーーー！！」", "くれえ", 1269130, (byte)1]; // くれる, not くらい
+        yield return ["「ここは俺に任せて、日向、お前は先に行けぇーー！！」", "行けー", 1578850, (byte)0]; // 行く imperative
+        yield return ["「せんぱーーーい！」", "せんぱい", 1388410, (byte)1]; // 先輩
+        yield return ["「嘘つけぇー！　言うまで脇をこしょこしょするぞー！」", "嘘つけー", 1984790, (byte)0]; // the 嘘つけ interjection
+
+        // Adversarial counterparts of the homograph pins: the other reading must survive
+        yield return ["強がりを言うな。", "強がり", 1236110, (byte)0]; // the noun 強がり "bluff", not 強い via the がる chain
+        yield return ["強がりながら笑った。", "強がりながら", 1236070, (byte)0]; // verbal use merges and keeps the がる chain
+        yield return ["リンゴとナシを買った。", "ナシ", 1549860, (byte)3]; // と-coordination keeps the pear
+        yield return ["コンサートでピアノが弾かれた。", "弾かれた", 1419370, (byte)0]; // music keeps ひく
+        yield return ["「俺のバンドでいくらでも弾かせてやるぞっ…て」", "弾かせてやる", 1419370, (byte)0]; // causative = play
+        yield return ["ピアノはもう弾かない。", "弾かない", 1419370, (byte)0]; // negative = play
+        yield return ["自力で飛んだ。", "飛んだ", 1429700, (byte)0]; // 飛ぶ past after で
+        yield return ["麻雀に負けて札を渡した。", "札", 1298960, (byte)0]; // banknote: no card verb
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

@@ -1,5 +1,6 @@
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Parser.Data;
 
 namespace Jiten.Parser.Resegmentation;
 
@@ -60,12 +61,43 @@ internal static class ResegmentationScorer
         return result;
     }
 
+    // A compound decomposes into nominal material: a segment whose every match is a bare verb
+    // (スク→空く) is never a component, and suffix/particle/auxiliary-only matches (ディ, whose
+    // only entry is the suffix デー "day") can only close a span, prefix-only matches only open one.
+    private static bool IsPlausibleSegment(SpanTokenCandidate edge,
+        Dictionary<int, JmDictWordMeta> wordMeta, bool isFirst, bool isFinal)
+    {
+        foreach (var id in edge.WordIds)
+        {
+            if (!wordMeta.TryGetValue(id, out var meta)) return true;
+            foreach (var p in meta.Pos)
+            {
+                switch (p)
+                {
+                    case PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.NaAdjective
+                        or PartOfSpeech.Adverb or PartOfSpeech.Pronoun or PartOfSpeech.Name
+                        or PartOfSpeech.Counter or PartOfSpeech.Numeral or PartOfSpeech.IAdjective
+                        or PartOfSpeech.Expression or PartOfSpeech.Interjection:
+                        return true;
+                    case PartOfSpeech.Suffix or PartOfSpeech.NounSuffix or PartOfSpeech.Particle
+                        or PartOfSpeech.Auxiliary when isFinal:
+                        return true;
+                    case PartOfSpeech.Prefix when isFirst:
+                        return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     public static SpanPath? FindBestPath(
         string spanText,
         Dictionary<string, List<int>> lookups,
         Dictionary<int, int>? frequencyRanks = null,
         int beamWidth = BeamWidth,
-        bool forbidFullSpanEdge = false)
+        bool forbidFullSpanEdge = false,
+        Dictionary<int, JmDictWordMeta>? wordMeta = null)
     {
         if (spanText.Length == 0 || spanText.Length > MaxSpanLength)
             return null;
@@ -74,6 +106,8 @@ internal static class ResegmentationScorer
         // partialScore = sum of per-segment frequency bonuses minus 15 per segment (matches ScorePath's additive terms)
         var beamByPos = new Dictionary<int, List<(int segCount, int lastLen, int partialScore, List<SpanTokenCandidate> segs)>>();
         beamByPos[0] = [(0, 0, 0, [])];
+
+        bool filterKatakanaFragments = wordMeta != null && JapaneseTextHelper.IsAllKatakana(spanText);
 
         bool debug = Environment.GetEnvironmentVariable("JITEN_RESEG_DEBUG") != null;
 
@@ -87,6 +121,15 @@ internal static class ResegmentationScorer
             // so only genuine multi-segment paths should remain.
             if (forbidFullSpanEdge && pos == 0)
                 edges.RemoveAll(e => e.Length == spanText.Length);
+            // Scoped to short fragments of pure-katakana spans: that is where a hiragana-normalised
+            // lookup invents verb/suffix readings for word fragments (テラバイトディスク → ディ|スク).
+            // Kanji-bearing or hiragana spans (elongated verbs, katakana-styled sentences with
+            // particles) resegment through grammar tokens legitimately.
+            if (filterKatakanaFragments)
+                edges.RemoveAll(e => e.Length <= 2 && e.Length < spanText.Length
+                                     && !(e.Length == 1 && IsKatakanaParticleChar(spanText[e.StartChar]))
+                                     && !IsPlausibleSegment(e, wordMeta!, pos == 0,
+                                         pos + e.Length == spanText.Length));
             if (debug)
                 Console.WriteLine($"[reseg] '{spanText}' pos={pos} states={states.Count} edges: " +
                                   string.Join(", ", edges.Select(e => $"{spanText.Substring(e.StartChar, e.Length)}({e.WordIds.Count})")));

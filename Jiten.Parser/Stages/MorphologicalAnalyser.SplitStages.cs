@@ -109,6 +109,16 @@ public partial class MorphologicalAnalyser
         ['び'] = 'ぶ', ['み'] = 'む', ['り'] = 'る', ['い'] = 'う'
     };
 
+    private bool DeconjugatesToForm(string surface, string targetForm)
+    {
+        string target = KanaNormalizer.Normalize(KanaConverter.ToHiragana(targetForm));
+        string hira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(surface));
+        foreach (var f in PipelineCachedDeconjugate(hira))
+            if (f.Text == target)
+                return true;
+        return false;
+    }
+
     /// <summary>
     /// Decomposes productive compound verbs that are not in JMDict (驚き戸惑う, 縫い止める,
     /// 挑みかかる, 寝乱れる) into renyokei-stem verb + second verb, so both surface as vocabulary
@@ -409,8 +419,17 @@ public partial class MorphologicalAnalyser
                 if (HasSuruVerbCompoundLookup(prefix)) break;
                 // A dictForm that resolves on its own and is not just the noun stem means the
                 // deconjugation path can handle this token (思い出して → 思い出す): keep merged.
+                // Sudachi lemmatises a potential as its own lexeme (思い出せる with DictionaryForm=
+                // 思い出せる) and puts the base verb in NormalizedForm (思い出す) — check both.
                 if (word.DictionaryForm != prefix && word.DictionaryForm != text
                     && HasCompoundLookup(word.DictionaryForm)) break;
+                // The NormalizedForm route must be reachable: the surface has to actually
+                // deconjugate to it (思い出せる → 思い出す does; a doubled-し merge like
+                // 話ししません claims 話す but cannot, and must fall through to the split).
+                if (!string.IsNullOrEmpty(word.NormalizedForm)
+                    && word.NormalizedForm != prefix && word.NormalizedForm != text
+                    && HasCompoundLookup(word.NormalizedForm)
+                    && DeconjugatesToForm(text, word.NormalizedForm)) break;
 
                 var tail = text[p..];
                 foreach (var f in deconj.Deconjugate(tail))

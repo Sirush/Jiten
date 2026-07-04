@@ -977,6 +977,107 @@ public partial class MorphologicalAnalyser
         return false;
     }
 
+    /// Sudachi's lattice sometimes lets a following word steal the first mora of あいつ, reading the
+    /// あ as an interjection (あ|いつも幹部だから). A genuine interjection あ is set off by punctuation
+    /// (あ、いつも), which tokenises the pause separately — so a bare interjection あ directly against いつも is
+    /// the pronoun; re-cut to あいつ + も.
+    private List<WordInfo> RepairInterjectionPronounTheft(List<WordInfo> wordInfos)
+    {
+        List<WordInfo>? result = null;
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+            if (word is { Text: "あ", PartOfSpeech: PartOfSpeech.Interjection }
+                && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "いつも")
+            {
+                var next = wordInfos[i + 1];
+                result ??= [..wordInfos[..i]];
+                result.Add(new WordInfo(word)
+                {
+                    Text = "あいつ", DictionaryForm = "あいつ", NormalizedForm = "あいつ",
+                    Reading = "アイツ", PartOfSpeech = PartOfSpeech.Pronoun,
+                    EndOffset = word.StartOffset >= 0 ? word.StartOffset + 3 : -1
+                });
+                result.Add(new WordInfo(next)
+                {
+                    Text = "も", DictionaryForm = "も", NormalizedForm = "も",
+                    Reading = "モ", PartOfSpeech = PartOfSpeech.Particle,
+                    StartOffset = next.StartOffset >= 0 ? next.StartOffset + 2 : -1
+                });
+                i++;
+                continue;
+            }
+
+            result?.Add(word);
+        }
+
+        return result ?? wordInfos;
+    }
+
+    /// さっき loses its き to a following pronoun in the lattice (さっきみごと → さっ|きみ|ごと).
+    /// The fragment さっ (the clipped first morae of さっき) never legitimately precedes きみ; give the き back — さっき plus the remainder,
+    /// which re-attaches to the following token when that forms a word (み+ごと → みごと,
+    /// み+たい → みたい).
+    private List<WordInfo> RepairSakkiMoraTheft(List<WordInfo> wordInfos)
+    {
+        if (HasCompoundLookup == null) return wordInfos;
+
+        List<WordInfo>? result = null;
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+            if (word is { Text: "さっ" }
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1].Text == "きみ")
+            {
+                var stolen = wordInfos[i + 1];
+                result ??= [..wordInfos[..i]];
+                result.Add(new WordInfo(word)
+                {
+                    Text = "さっき", DictionaryForm = "さっき", NormalizedForm = "さっき",
+                    Reading = "サッキ", PartOfSpeech = PartOfSpeech.Noun,
+                    EndOffset = word.StartOffset >= 0 ? word.StartOffset + 3 : -1
+                });
+
+                var following = i + 2 < wordInfos.Count ? wordInfos[i + 2] : null;
+                if (following != null && HasCompoundLookup("み" + following.Text))
+                {
+                    result.Add(new WordInfo(following)
+                    {
+                        Text = "み" + following.Text,
+                        DictionaryForm = "み" + following.Text,
+                        NormalizedForm = "み" + following.Text,
+                        // A rebuilt token must not inherit the source token's match state, and a
+                        // partial reading is worse than none when the tail's reading is unknown.
+                        Reading = following.Reading.Length > 0 ? "ミ" + following.Reading : "",
+                        PartOfSpeech = PartOfSpeech.Noun,
+                        PreMatchedWordId = null,
+                        PreMatchedConjugations = null,
+                        StartOffset = stolen.StartOffset >= 0 ? stolen.StartOffset + 1 : -1
+                    });
+                    i += 2;
+                }
+                else
+                {
+                    result.Add(new WordInfo(stolen)
+                    {
+                        Text = "み", DictionaryForm = "み", NormalizedForm = "み",
+                        Reading = "ミ", PartOfSpeech = PartOfSpeech.Noun,
+                        PreMatchedWordId = null,
+                        PreMatchedConjugations = null,
+                        StartOffset = stolen.StartOffset >= 0 ? stolen.StartOffset + 1 : -1
+                    });
+                    i++;
+                }
+                continue;
+            }
+
+            result?.Add(word);
+        }
+
+        return result ?? wordInfos;
+    }
+
     /// <summary>
     /// Collapses an over-repeated reduplicative mimetic into one occurrence resolving to the 2× entry: a run
     /// of kana tokens whose combined text is a 2-mora unit repeated 3+ times (ごろごろごろ, ぐるぐるぐる, ぺら +
@@ -1232,8 +1333,9 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            // 湑む (したむ, dated "pour out every drop") is only ever a Sudachi mis-analysis of した (する
-            // past) + ん(だ). RepairNTokenisation already merged したん+だ→したんだ (losing the 湑む NormForm),
+            // A kana したん… shape with dictionary form 湑む (したむ, dated "pour out every drop") is a
+            // Sudachi mis-analysis of した (する past) + ん(だ) — the dated verb is written in kanji.
+            // RepairNTokenisation already merged したん+だ→したんだ (losing the 湑む NormForm),
             // but the kana dict-form したむ survives — re-cut した (する past) + remainder.
             if (w1.DictionaryForm == "したむ" && w1.Text.StartsWith("した", StringComparison.Ordinal)
                 && w1.Text.Length >= 3)

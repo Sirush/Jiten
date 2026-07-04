@@ -67,6 +67,48 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(?<=[぀-ゟ])ー+[っッ]+(?!と)")]
     private static partial Regex EmphLongVowelSokuonRegex();
 
+    // A small vowel stretching a mimetic adverb before っと (すぅっと, ふわぁっと, ざぁっと) is expressive
+    // lengthening of the base form (すっと, ふわっと, ざっと) — collapse it so the adverb matches its
+    // entry. Deleted only when the small vowel repeats the preceding mora's vowel: a different-row
+    // small forms a digraph (ファ, ティ), which is that mora's spelling, not a stretch.
+    [GeneratedRegex(@"([ぁ-ゖァ-ヴ])([ぁぃぅぇぉァィゥェォ]+)(?=[っッ]と)")]
+    private static partial Regex SmallVowelBeforeSokuonToRegex();
+
+    private const string VowelRowA = "あかがさざただなはばぱまやらわゃぁアカガサザタダナハバパマヤラワャァ";
+    private const string VowelRowI = "いきぎしじちぢにひびぴみりぃイキギシジチヂニヒビピミリィ";
+    private const string VowelRowU = "うくぐすずつづぬふぶぷむゆるゅぅゔウクグスズツヅヌフブプムユルュゥヴ";
+    private const string VowelRowE = "えけげせぜてでねへべぺめれぇエケゲセゼテデネヘベペメレェ";
+    private const string VowelRowO = "おこごそぞとどのほぼぽもよろをょぉオコゴソゾトドノホボポモヨロヲョォ";
+
+    private static int VowelRowOf(char c) =>
+        VowelRowA.IndexOf(c) >= 0 ? 0 :
+        VowelRowI.IndexOf(c) >= 0 ? 1 :
+        VowelRowU.IndexOf(c) >= 0 ? 2 :
+        VowelRowE.IndexOf(c) >= 0 ? 3 :
+        VowelRowO.IndexOf(c) >= 0 ? 4 : -1;
+
+    private static string CollapseSameVowelSmallBeforeSokuonTo(string text) =>
+        SmallVowelBeforeSokuonToRegex().Replace(text, m =>
+        {
+            int row = VowelRowOf(m.Groups[1].Value[0]);
+            return row >= 0 && m.Groups[2].Value.All(c => VowelRowOf(c) == row)
+                ? m.Groups[1].Value
+                : m.Value;
+        });
+
+    // A small vowel before a clause-final ー run (行けぇーー, 切ったぁーー) is a shouted stretch; drop
+    // the small vowel and keep the ー so the base form survives tokenisation (行けー, 切ったー).
+    [GeneratedRegex(@"(?<=[ぁ-ゖ])[ぁぃぅぇぉ](?=ー+([\s\n！？!?]|$))")]
+    private static partial Regex SmallVowelBeforeFinalLongVowelRegex();
+
+    // ー stretching the final い of a shouted word (せんぱーい, すごーい, かわいーい) — drop it so
+    // the base word survives. Hiragana context only (katakana ーイ endings are real loanword
+    // orthography: ボーイ), at least two kana before the ー (おーい is itself a word), not after な
+    // (なーい is the stretched negative), and no earlier ー in the run (わーいわーい repeats the
+    // whole word わーい — its second ー is lexical, not a stretch).
+    [GeneratedRegex(@"(?<=[ぁ-ゖ][ぁ-ゖ])(?<!な)(?<!ー[ぁ-ゖ]{1,8})ー+(?=い([\s\n！？!?」』）]|$))")]
+    private static partial Regex LongVowelBeforeFinalIRegex();
+
     // Script-crossing emphatic small vowels: 黙れェッ！ / ヤダぁ！. A small vowel kana never
     // follows the opposite script as part of a real word (digraphs like ファ/ティ are same-script),
     // so the boundary is always real — Sudachi otherwise shreds 黙れェ into 黙|れ|ェ.
@@ -191,6 +233,8 @@ public partial class MorphologicalAnalyser
         text = MultipleLongVowelRegex().Replace(text, "ー");
         text = EmphLongVowelKanjiHiraganaRegex().Replace(text, "");
         text = EmphLongVowelSokuonRegex().Replace(text, "");
+        text = CollapseSameVowelSmallBeforeSokuonTo(text);
+        text = SmallVowelBeforeFinalLongVowelRegex().Replace(text, "");
         // が/ならあらァ: rough-speech elongated ある (覚えがあらァ, 金ならあらぁ). Must run before the
         // script-crossing small-vowel split detaches the ァ and strands あら as the interjection. The
         // preceding particle keeps the clause-initial exclamation あらぁ untouched.
@@ -198,6 +242,9 @@ public partial class MorphologicalAnalyser
         text = ScriptCrossingSmallVowelRegex().Replace(text, $"{_stopToken}$1$2");
         text = SameScriptSmallVowelRunRegex().Replace(text, "");
         text = ShoutedImperativeSmallVowelRegex().Replace(text, "$1");
+        // After the small-vowel deletions so a shielded lookbehind cannot misfire
+        // (おぉぉーーい must reduce to おーい, not おい).
+        text = LongVowelBeforeFinalIRegex().Replace(text, "");
 
         text = StutterFragmentRegex().Replace(text, "");
         text = StutteringDigraphRunRegex().Replace(text, "");

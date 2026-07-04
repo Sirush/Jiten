@@ -27,6 +27,8 @@ internal static class PriorityOverrides
         (1508300, 2), // 柄 reading index 2 = ガラ (katakana) — "character/nature", exempts from short-kana gate
         (1593500, 2), // 轟々 reading index 2 = ごうごう (kana) — thundering/roaring, beats 囂々 (noisy) to avoid margin=0 reseg
         (2013900, 4), // 赤 reading index 4 = あか (kana) — "red", beats 垢 (dirt) and 銅 (copper) homophones
+        (1529560, 1), // 無し reading index 1 = なし (kana) — negation "without", beats 梨 (pear) on the
+                      // katakana surface ナシ that casual writing uses for the negation
     ];
 
     public static void Apply(JmDictWord word)

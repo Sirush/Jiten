@@ -41,7 +41,8 @@ internal static class ResegmentationEngine
                 else
                 {
                     path = ResegmentationScorer.FindBestPath(span.Text, lookups, frequencyRanks,
-                                                             forbidFullSpanEdge: span.NameOnly);
+                                                             forbidFullSpanEdge: span.NameOnly,
+                                                             wordMeta: wordMeta);
                     var rejection = path switch
                     {
                         null => "no path found",
@@ -49,6 +50,10 @@ internal static class ResegmentationEngine
                         _ when path.Segments.Count <= 1 => "single segment",
                         _ when path.Segments.Count > (span.Text.Length + 1) / 2 => "too fragmented",
                         _ when HasBadSingleKana(path, span.Text) => "single-kana segment",
+                        _ when IsReduplicatedKanaSplit(path, span.Text, wordMeta) => "reduplicated mimetic",
+                        _ when IsKatakanaConjugatedWordSpelling(span.Text, lookups, wordMeta) =>
+                            "katakana conjugated-word spelling",
+                        _ when HasSuruConjugationTail(path, span.Text) => "suru-conjugation tail",
                         _ when HasShortPureNameSegment(path, wordMeta) => "short pure-name segment",
                         _ when ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text) < 0 => "negative path score",
                         _ => null
@@ -121,12 +126,19 @@ internal static class ResegmentationEngine
                 if (!marginMap.TryGetValue((si, wi), out var margin) || !ScoringPolicy.IsLowConfidence(margin))
                     continue;
 
-                var path = ResegmentationScorer.FindBestPath(word.Text, lookups, frequencyRanks);
+                var path = ResegmentationScorer.FindBestPath(word.Text, lookups, frequencyRanks,
+                                                             wordMeta: wordMeta);
                 if (path == null || !path.IsComplete(word.Text.Length) || path.Segments.Count <= 1)
                     continue;
                 if (path.Segments.Count > (word.Text.Length + 1) / 2)
                     continue;
                 if (HasBadSingleKana(path, word.Text))
+                    continue;
+                if (IsReduplicatedKanaSplit(path, word.Text, wordMeta))
+                    continue;
+                if (IsKatakanaConjugatedWordSpelling(word.Text, lookups, wordMeta))
+                    continue;
+                if (HasSuruConjugationTail(path, word.Text))
                     continue;
                 if (HasShortPureNameSegment(path, wordMeta))
                     continue;
@@ -231,6 +243,60 @@ internal static class ResegmentationEngine
     // frequency score and shred OOV katakana names, e.g. ゴブリンスレイヤー → ゴ+ブ+リ+ン+スレイヤー).
     // Exceptions: honorific お/ご at the start, and katakana-styled particles anywhere
     // (オマエガ → オマエ+ガ, ナニガ悪イ → ナニ+ガ+悪イ).
+    // A bare する-conjugation surface can never be a compound component: its only lookup matches
+    // are noun homographs (した→舌), while the real reading — a verb ending — is not reachable
+    // from a resegmentation path (キャッキャウフフした must not shed a 舌 token).
+    private static bool HasSuruConjugationTail(SpanPath path, string text)
+    {
+        var last = path.Segments[^1];
+        return text.Substring(last.StartChar, last.Length) is "し" or "した" or "して";
+    }
+
+    // An all-katakana span that is the katakana spelling of a conjugated word (オカシクナイ →
+    // おかしくない → おかしい) is one word — splitting it into nominal fragments (オカ|シク) can
+    // only produce phonetic coincidences.
+    private static bool IsKatakanaConjugatedWordSpelling(string text,
+        Dictionary<string, List<int>> lookups, Dictionary<int, JmDictWordMeta> wordMeta)
+    {
+        if (text.Length < 3 || !JapaneseTextHelper.IsAllKatakana(text)) return false;
+
+        string hira = KanaConverter.ToHiragana(text);
+        foreach (var f in Deconjugator.Instance.Deconjugate(hira))
+        {
+            if (f.Process.Count == 0 || f.Text.Length < 2 || f.Text == hira) continue;
+            if (!lookups.TryGetValue(f.Text, out var ids)) continue;
+            foreach (var id in ids)
+                if (wordMeta.TryGetValue(id, out var meta)
+                    && meta.Pos.Any(p => p is PartOfSpeech.Verb or PartOfSpeech.IAdjective))
+                    return true;
+        }
+
+        return false;
+    }
+
+    // A kana span whose best path is the same segment repeated (ずりずり → ずり|ずり) is a
+    // reduplicated mimetic: one word formed by doubling, never two occurrences of the base noun.
+    // Repeated interjections (はいはいはい) are the exception — emphatic speech genuinely is the
+    // unit uttered several times, so those stay splittable.
+    private static bool IsReduplicatedKanaSplit(SpanPath path, string text,
+        Dictionary<int, JmDictWordMeta> wordMeta)
+    {
+        if (path.Segments.Count < 2) return false;
+
+        var first = text.Substring(path.Segments[0].StartChar, path.Segments[0].Length);
+        if (first.Length == 0 || !first.All(IsKana)) return false;
+
+        foreach (var s in path.Segments.Skip(1))
+            if (text.Substring(s.StartChar, s.Length) != first)
+                return false;
+
+        foreach (var id in path.Segments[0].WordIds)
+            if (wordMeta.TryGetValue(id, out var meta) && meta.GetPrimaryPos() == PartOfSpeech.Interjection)
+                return false;
+
+        return true;
+    }
+
     private static bool HasBadSingleKana(SpanPath path, string text)
     {
         foreach (var s in path.Segments)
@@ -250,6 +316,11 @@ internal static class ResegmentationEngine
 
     private static bool IsHiragana(char c) => JapaneseTextHelper.IsHiragana(c);
 
+    // Homograph pins for segments born here, which never pass FilterMisparse: casual writing
+    // uses katakana ナシ for the negation 無し, but the pear 梨 lists the same katakana form and
+    // wins the frequency-rank tiebreak below.
+    private static readonly Dictionary<string, int> SegmentSurfacePins = new() { ["ナシ"] = 1529560 };
+
     private static void ReplaceSpan(SentenceInfo sentence, UncertainSpan span, SpanPath path,
         Dictionary<int, int> frequencyRanks, Dictionary<int, JmDictWordMeta> wordMeta,
         string source, int freqScore, int posScore, ParserDiagnostics? diagnostics)
@@ -259,13 +330,22 @@ internal static class ResegmentationEngine
             || path.Segments.Any(s => s.WordIds == null || s.WordIds.Count == 0))
             return;
 
-        var replacements = path.Segments.Select(seg =>
+        var replacements = path.Segments.Select((seg, segIdx) =>
         {
             var text = span.Text.Substring(seg.StartChar, seg.Length);
-            int? bestWordId = seg.WordIds
-                .OrderBy(id => frequencyRanks.TryGetValue(id, out int r) ? r : int.MaxValue)
-                .Cast<int?>()
-                .FirstOrDefault();
+            // Coordination with と marks a genuine noun list (リンゴとナシ), mirroring the
+            // FilterMisparse exemption for the same surface — there the pear is the word meant.
+            string precedingText = segIdx > 0
+                ? span.Text.Substring(path.Segments[segIdx - 1].StartChar, path.Segments[segIdx - 1].Length)
+                : span.WordIndex > 0 ? sentence.Words[span.WordIndex - 1].word.Text : "";
+            bool surfacePinned = SegmentSurfacePins.TryGetValue(text, out var pinnedId)
+                                 && precedingText is not ("と" or "ト");
+            int? bestWordId = surfacePinned
+                ? pinnedId
+                : seg.WordIds
+                    .OrderBy(id => frequencyRanks.TryGetValue(id, out int r) ? r : int.MaxValue)
+                    .Cast<int?>()
+                    .FirstOrDefault();
 
             var pos = PartOfSpeech.Noun;
             if (bestWordId.HasValue && wordMeta.TryGetValue(bestWordId.Value, out var meta))
@@ -279,7 +359,9 @@ internal static class ResegmentationEngine
                 PartOfSpeech               = pos,
                 Reading                    = text.All(IsKana) ? KanaConverter.ToHiragana(text) : string.Empty,
                 PreMatchedWordId           = bestWordId,
-                PreMatchedCandidateWordIds = seg.WordIds,
+                PreMatchedCandidateWordIds = surfacePinned && bestWordId.HasValue
+                    ? [bestWordId.Value]
+                    : seg.WordIds,
             };
             return (replacement, span.Position + seg.StartChar, seg.Length);
         }).ToList();

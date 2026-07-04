@@ -1467,10 +1467,10 @@ public class MorphologicalAnalyserTests
         // 着なきゃ should be one token (着る + contracted conditional); 本当に is the adverb (1611580)
         yield return ["本当にこれ着なきゃダメ", new[] { "本当に", "これ", "着なきゃ", "ダメ" }];
 
-        // Misparse fixes (batch): segmentation expectations
+        // Segmentation cases: mimetic reduplication, boundary repairs, compound joins
         yield return ["ごろごろごろ", new[] { "ごろごろごろ" }];                    // over-repeated mimetic (Sudachi: ごろごろ+ごろ) → one occurrence
         yield return ["ぐるぐるぐる", new[] { "ぐるぐるぐる" }];                    // ...(Sudachi: one ぐるぐるぐる token) → one occurrence
-        yield return ["ざわざわざわ", new[] { "ざわざわざわ" }];                    // ...(previously dropped entirely) → one occurrence
+        yield return ["ざわざわざわ", new[] { "ざわざわざわ" }];                    // ...(Sudachi: one ざわざわざわ token) → one occurrence
         yield return ["ゴロゴロゴロと鳴った", new[] { "ゴロゴロゴロ", "と", "鳴った" }]; // katakana run collapses via the kana-normalised lookup
         yield return ["はいはいはい、わかったよ", new[] { "はい", "わかった", "よ" }]; // interjection run is not 這い這い; repeats dedup to one はい
         yield return ["化け物どもめ", new[] { "化け物", "ども", "め" }];            // ど+もめ → ども+め
@@ -1972,6 +1972,107 @@ public class MorphologicalAnalyserTests
         // Sudachi strands 続ける's final る onto an OOV blob るってことだろ; the verb is reformed and the
         // blob split — だろ must be a known grammar token or the trailing ろ aborts the whole split.
         yield return ["続けるってことだろ", new[] { "続ける", "って", "こと", "だろ" }];
+
+        // SFX/onomatopoeia fragments: an isolated kana burst (quote/exclamation-bounded, sokuon-clipped)
+        // or the quotative-mimetic frame X！と / X、と is phonetic material — a content-noun homograph
+        // match (ぱん→パン, とう→塔, ぼん→盆) is dropped rather than emitted as vocabulary.
+        yield return ["ぱぁん！", new string[] { }];
+        yield return ["「ぶほっ！」", new string[] { }];
+        yield return ["「とうっ！」", new string[] { }];
+        // An in-surface sokuon the entry does not spell is the same phonetic evidence: ズクッ can
+        // only reach the owl 木菟 (ズク) by ignoring its ッ, while おっさん spells its ッ and stays.
+        yield return ["ズクッ、ズクッ、ズクッ、ズクッ。", new string[] { }];
+        yield return ["おっさんが来た。", new[] { "おっさん", "が", "来た" }];
+        // Expressive deformation of credible vocabulary still attests the word: emphatic
+        // gemination (バカッ, ほんっと), trailing stretch (そっかー, だってぇ), internal chōonpu
+        // on an interjection (おーっと). Function words are never internally stretched, so the
+        // わい noise pair behind わーいわーい stays out.
+        yield return ["悟「バカッ！　バカッ！」", new[] { "悟", "バカッ", "バカッ" }];
+        yield return ["「ほんっと、ちゃんとしてくれよな…」", new[] { "ほんっと", "ちゃんと", "してくれ", "よ", "な" }];
+        yield return ["そっかー、そろそろかー。", new[] { "そっかー", "そろそろ", "か" }];
+        yield return ["こころ「だってぇ！」", new[] { "こころ", "だってぇ" }];
+        yield return ["「おーっと、いいところに来た」", new[] { "おーっと", "いいところ", "に", "来た" }];
+        // A symbol in the gap separates utterance elements: no blob spans the comma, so the real
+        // って survives while the mutated fragment beside it still falls.
+        yield return ["「って、くっさ！」", new[] { "って" }];
+        yield return ["わーいわーい、と喜んだ。", new[] { "と", "喜んだ" }];
+        // Small-vowel collapse before っと fires only when the small repeats the mora's vowel
+        // (すぅっと→すっと); a different-row small is a digraph spelling its own mora — ふぁっと
+        // is its own mimetic, not ふっと.
+        yield return ["ふぁっと風が吹いた", new[] { "ふぁっと", "風", "が", "吹いた" }];
+        yield return ["ぱん！と乾いた音がした。", new[] { "と", "乾いた", "音がした" }];
+        yield return ["ぼんっ！と空で音がした。", new[] { "と", "空", "で", "音がした" }];
+        yield return ["ぴーー！と笛が鳴る。", new[] { "と", "笛", "が", "鳴る" }];
+        yield return ["「きゃーっ！　そんなところ掴めるわけないでしょっ！！」",
+            new[] { "そんなところ", "掴める", "わけない", "でしょ" }];
+        // A reduplicated kana mimetic with no entry (ずりずり) must not resegment into its unit twice
+        yield return ["ドアを閉めると、腕を引っ張られ、そのままずりずりと階段まで連れてこられる。",
+            new[] { "ドア", "を", "閉める", "と", "腕", "を", "引っ張られ", "そのまま", "と", "階段", "まで", "連れてこられる" }];
+        // Small-vowel stretch of a mimetic adverb collapses to its base form (すぅっと → すっと)
+        yield return ["目の前の闇がすぅっと消え去っていくようにして、私の視界は光に包まれていった。",
+            new[] { "目の前", "の", "闇", "が", "すっと", "消え去っていく", "ようにして", "私", "の", "視界", "は", "光", "に", "包まれていった" }];
+        // Legitimate words in SFX-like frames must survive the mimetic gate: attested
+        // interjection/expression entries, usually-kana vocatives, and unpunctuated coordination
+        yield return ["「うっす！」", new[] { "うっす" }];
+        yield return ["「うそっ！」", new[] { "うそ" }];
+        yield return ["「ばかっ！」", new[] { "ばか" }];
+        yield return ["パンとバターを買った。", new[] { "パン", "と", "バター", "を", "買った" }];
+        yield return ["ガシャーンと皿が割れた。", new[] { "ガシャーン", "と", "皿", "が", "割れた" }];
+        yield return ["ぼーっとしていた。", new[] { "ぼーっと", "していた" }];
+
+        // A potential form is one lexeme (Sudachi lemmatises 思い出せる as itself, base verb in
+        // NormalizedForm) — it must not be cut into noun + causative (思い出+せる)
+        yield return ["胸に走る激痛も思い出せる。", new[] { "胸", "に", "走る", "激痛", "も", "思い出せる" }];
+        yield return ["どうしても名前が思い出せない。", new[] { "どうしても", "名前", "が", "思い出せない" }];
+        // Completion auxiliary 切る after a 連用形 merges when JMDict attests the compound (逃げ切る)
+        yield return ["彼は逃げ切った。", new[] { "彼", "は", "逃げ切った" }];
+        yield return ["「よし、逃げ切ったぁーー！！」", new[] { "よし", "逃げ切ったー" }];
+        // A short katakana fragment of a pure-katakana span must not resegment through
+        // cross-script verb/suffix readings (ディ→"day", スク→空く)
+        yield return ["ゆに「テラバイトディスク」", new[] { "に", "テラバイト", "ディスク" }];
+        // Katakana spelling of a conjugated word resolves whole (オカシクナイ → おかしい), never
+        // as nominal fragments (オカ+シク)
+        yield return ["なんか、それって、オカシクナイ？", new[] { "なんか", "それ", "って", "オカシクナイ" }];
+        // A bare あ/I directly against いつも is the stolen first mora of あいつ; with a pause it
+        // is the interjection
+        yield return ["あいつも幹部だから、ここに集合しなきゃいけないんじゃないのか？",
+            new[] { "あいつ", "も", "幹部", "だから", "ここ", "に", "集合しなきゃ", "いけない", "ん", "じゃない", "の", "か" }];
+        yield return ["あ、いつも通りだね。", new[] { "あ", "いつも通り", "だ", "ね" }];
+        // さっき gives its stolen き back (さっ|きみ|ごと → さっき + みごと, さっ|きみ|たい → さっき + みたい)
+        yield return ["さっきみごと反故にされたばかりだ…。", new[] { "さっき", "みごと", "反故にされた", "ばかり", "だ" }];
+        yield return ["さっきみたいなことはやめてくれ。", new[] { "さっき", "みたい", "な", "こと", "は", "やめてくれ" }];
+        // The whole burst drops once its fragments expose each other (ず|がんっ)
+        yield return ["ずがんっ！！", new string[] { }];
+
+        // ない + quotative って must not let いく steal ない's final mora (出られな|いって)
+        yield return ["「出られないってことか？」", new[] { "出られ", "ない", "って", "こと", "か" }];
+        // Kana からだ directly after a predicate is から + だ "because it is"; 体つき compounds
+        // and the body noun elsewhere stay intact
+        yield return ["逃げたのは怖かったからだ。", new[] { "逃げた", "の", "は", "怖かった", "から", "だ" }];
+        yield return ["鍛え上げたからだつきだった。", new[] { "鍛え上げた", "からだつき", "だった" }];
+
+        // The botanical ユキノシタ must not swallow prose 雪+の+下
+        yield return ["冷たい雪の下で眠っていた。", new[] { "冷たい", "雪", "の", "下", "で", "眠っていた" }];
+        // The wrist is the head noun of 右手首 (右+手首, not 右手+首); 主人格 is 主+人格
+        yield return ["右手首を掴まれた。", new[] { "右", "手首", "を", "掴まれた" }];
+        yield return ["主人格が支配している。", new[] { "主", "人格", "が", "支配している" }];
+        // 〜ずにおこう is the aspectual おく volitional, not the interjection お + こう
+        yield return ["もうツッコまずにおこう…。", new[] { "もう", "ツッコまずに", "おこう" }];
+        // A real word after a dropped burst fragment must survive (うぅ drops, なぜ stays;
+        // そっか survives its dropped neighbour わりっ)
+        yield return ["「うぅっ…なぜ！？」", new[] { "なぜ" }];
+        yield return ["「そっか、わりっ」", new[] { "そっか" }];
+        // A stutter-dedup drop is a repeated real word: the surviving twin stays (one わーい kept,
+        // like はいはい), and a speaker tag before a stutter is untouched
+        yield return ["ゆに「わ〜いわ〜い！」", new[] { "に", "わーい" }];
+        yield return ["こころ「ちょ、ちょっと待って！」", new[] { "こころ", "ちょっと", "待って" }];
+        // A mimetic that resolves to its own on-mim entry is vocabulary and survives the
+        // quotative frame (ごくり、と / がたん、と); noun-only coincidences (ぱん→パン) still drop
+        yield return ["ごくり、と固唾を飲む音がした。", new[] { "ごくり", "と", "固唾を飲む", "音がした" }];
+        yield return ["がたん、と警官が立ち上がる。", new[] { "がたん", "と", "警官", "が", "立ち上がる" }];
+        // いじらしい思いで = 思い + で after an adjective, not the memory noun 思い出
+        yield return ["ゆにが、いじらしい思いで私を励ましてくれたように。",
+            new[] { "に", "が", "いじらしい", "思い", "で", "私", "を", "励ましてくれた", "ように" }];
     }
 
     [Theory]
