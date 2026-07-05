@@ -217,6 +217,7 @@ public partial class AdminController(
                 await model.File.CopyToAsync(stream);
 
                 metadata.FilePath = mainFilePath;
+                metadata.OriginalFileName = model.File.FileName;
             }
             else if (model.Subdecks != null && model.Subdecks.Any(sd => sd.File is { Length: > 0 }))
             {
@@ -230,7 +231,11 @@ public partial class AdminController(
                     await using var stream = new FileStream(subdeckFilePath, FileMode.Create);
                     await subdeck.File.CopyToAsync(stream);
 
-                    var subdeckMetadata = new Metadata { OriginalTitle = subdeck.OriginalTitle, FilePath = subdeckFilePath };
+                    var subdeckMetadata = new Metadata
+                                          {
+                                              OriginalTitle = subdeck.OriginalTitle, FilePath = subdeckFilePath,
+                                              OriginalFileName = subdeck.File.FileName
+                                          };
 
                     metadata.Children.Add(subdeckMetadata);
                 }
@@ -298,10 +303,12 @@ public partial class AdminController(
         var mainDeckDto = new DeckDto(deck);
         mainDeckDto.Relationships = DeckRelationshipDto.FromDeck(deck.RelationshipsAsSource, deck.RelationshipsAsTarget);
 
+        mainDeckDto.OriginalFileName = deck.OriginalFileName;
+
         List<DeckDto> subDeckDtos = new();
 
         foreach (var subDeck in subDecks)
-            subDeckDtos.Add(new DeckDto(subDeck));
+            subDeckDtos.Add(new DeckDto(subDeck) { OriginalFileName = subDeck.OriginalFileName });
 
         var dto = new DeckDetailDto { MainDeck = mainDeckDto, SubDecks = subDeckDtos };
 
@@ -364,6 +371,7 @@ public partial class AdminController(
         if (model.File is { Length: > 0 })
         {
             var (text, stats) = await GetTextFromFile(model.File);
+            deck.OriginalFileName = model.File.FileName;
             if (deck.RawText != null)
                 deck.RawText.RawText = text;
             else
@@ -500,6 +508,7 @@ public partial class AdminController(
 
         // Update subdecks if provided
         var newChildDecks = new List<Deck>();
+        var updatedChildIdsWithText = new List<int>();
         if (model.Subdecks != null && model.Subdecks.Count != 0)
         {
             var existingSubdeckIds = deck.Children.Select(d => d.DeckId).ToHashSet();
@@ -523,12 +532,15 @@ public partial class AdminController(
                     if (subdeck.File is { Length: > 0 })
                     {
                         var (text, stats) = await GetTextFromFile(subdeck.File);
+                        existingSubdeck.OriginalFileName = subdeck.File.FileName;
                         existingSubdeck.RawText!.RawText = text;
                         if (stats.DurationMs > 0)
                         {
                             existingSubdeck.SpeechDuration = stats.DurationMs;
                             existingSubdeck.SpeechMoraCount = stats.MoraCount;
                         }
+
+                        updatedChildIdsWithText.Add(existingSubdeck.DeckId);
                     }
                 }
                 else
@@ -542,6 +554,7 @@ public partial class AdminController(
                     if (subdeck.File is { Length: > 0 })
                     {
                         var (text, stats) = await GetTextFromFile(subdeck.File);
+                        newDeck.OriginalFileName = subdeck.File.FileName;
                         newDeck.RawText = new DeckRawText(text);
                         newDeck.SpeechDuration = stats.DurationMs;
                         newDeck.SpeechMoraCount = stats.MoraCount;
@@ -604,13 +617,17 @@ public partial class AdminController(
 
         await dbContext.SaveChangesAsync();
 
-        var newChildIdsWithText = newChildDecks
+        // Children whose text was added or replaced need a parse even without a full-deck
+        // reparse; existing children are reparsed in place so their DeckId (and with it user
+        // progress/preferences) is preserved.
+        var childIdsToParse = newChildDecks
             .Where(d => d.RawText != null)
             .Select(d => d.DeckId)
+            .Concat(updatedChildIdsWithText)
             .ToList();
-        if (newChildIdsWithText.Count > 0 && !model.Reparse)
+        if (childIdsToParse.Count > 0 && !model.Reparse)
             backgroundJobs.Enqueue<ParseNewSubdecksJob>(
-                job => job.ParseNewSubdecks(deck.DeckId, newChildIdsWithText));
+                job => job.ParseNewSubdecks(deck.DeckId, childIdsToParse));
 
         if (model.Reparse)
             backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId));
@@ -1266,6 +1283,7 @@ public partial class AdminController(
             }
 
             var downloadedFiles = new List<string>();
+            var titleByFile = new Dictionary<string, string?>();
             foreach (var file in model.Files)
             {
                 var filePath = Path.Join(path, file.Name);
@@ -1273,6 +1291,7 @@ public partial class AdminController(
 
                 if (Path.GetExtension(filePath) is ".zip" or ".rar" or ".7z")
                 {
+                    var archiveFiles = new List<string>();
                     using var archive = ArchiveFactory.Open(filePath);
                     foreach (var e in archive.Entries.Where(currentEntry => !currentEntry.IsDirectory &&
                                                                             SubtitleExtractor.SupportedExtensions
@@ -1280,12 +1299,18 @@ public partial class AdminController(
                     {
                         var entryPath = Path.Combine(path, Path.GetFileName(e.Key)!);
                         e.WriteToFile(entryPath, new ExtractionOptions { ExtractFullPath = false, Overwrite = true });
-                        downloadedFiles.Add(entryPath);
+                        archiveFiles.Add(entryPath);
                     }
+
+                    downloadedFiles.AddRange(archiveFiles);
+                    // A custom title is only unambiguous when the archive holds a single subtitle
+                    if (archiveFiles.Count == 1)
+                        titleByFile[archiveFiles[0]] = file.Title;
                 }
                 else
                 {
                     downloadedFiles.Add(filePath);
+                    titleByFile[filePath] = file.Title;
                 }
             }
 
@@ -1297,6 +1322,7 @@ public partial class AdminController(
 
             List<string> extractedFiles = [];
             var subtitleStatsByFile = new Dictionary<string, SubtitleStats>();
+            var originalNameByTxt = new Dictionary<string, string>();
             foreach (var file in subtitleFiles)
             {
                 var text = await extractor.Extract(file);
@@ -1305,6 +1331,9 @@ public partial class AdminController(
                 var txtPath = Path.ChangeExtension(file, ".txt");
                 await System.IO.File.WriteAllTextAsync(txtPath, text);
                 extractedFiles.Add(txtPath);
+                titleByFile[txtPath] = titleByFile.GetValueOrDefault(file);
+                // Real .srt/.ass name (direct download or archive entry) — the .txt is throwaway
+                originalNameByTxt[txtPath] = Path.GetFileName(file);
 
                 var items = await extractor.ExtractItems(file);
                 if (items.Count > 0)
@@ -1321,19 +1350,26 @@ public partial class AdminController(
                 {
                     var file = extractedFiles[i];
                     subtitleStatsByFile.TryGetValue(file, out var stats);
+                    var customTitle = titleByFile.GetValueOrDefault(file);
                     metadata.Children.Add(new Metadata
                     {
                         FilePath = file,
-                        OriginalTitle = $"Episode {i + 1}",
+                        OriginalFileName = originalNameByTxt.GetValueOrDefault(file),
+                        OriginalTitle = string.IsNullOrWhiteSpace(customTitle) ? $"Episode {i + 1}" : customTitle,
                         SpeechDuration = stats.DurationMs,
                         SpeechMoraCount = stats.MoraCount
                     });
                 }
+
+                // When exactly one Jimaku file was selected (e.g. a season batch archive), record its name on the parent
+                if (model.Files.Count == 1)
+                    metadata.OriginalFileName = model.Files[0].Name;
             }
             else if (extractedFiles.Count == 1)
             {
                 var file = extractedFiles.First();
                 metadata.FilePath = file;
+                metadata.OriginalFileName = originalNameByTxt.GetValueOrDefault(file);
                 if (subtitleStatsByFile.TryGetValue(file, out var stats))
                 {
                     metadata.SpeechDuration = stats.DurationMs;

@@ -713,7 +713,7 @@
                 </div>
                 <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">
                   <Tooltip
-                    :content="`${maturePct(deck)}% mature (well-retained)<br>${knownPct(deck)}% known (young + mature)`"
+                    :content="`${maturePct(deck)}% mature<br>${knownPct(deck)}% known (young + mature)`"
                     placement="top"
                   >
                     <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
@@ -869,7 +869,7 @@
                 </div>
                 <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">
                   <Tooltip
-                    :content="`${maturePct(deck)}% mature (well-retained)<br>${knownPct(deck)}% known (young + mature)`"
+                    :content="`${maturePct(deck)}% mature<br>${knownPct(deck)}% known (young + mature)`"
                     placement="top"
                   >
                     <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">

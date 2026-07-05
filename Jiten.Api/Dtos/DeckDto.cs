@@ -52,6 +52,11 @@ public class DeckDto
     public int DistinctVoterCount { get; set; }
     public decimal UserAdjustment { get; set; }
 
+    /// <summary>
+    /// Original source file name
+    /// </summary>
+    public string? OriginalFileName { get; set; }
+
     public DeckDto()
     {
     }
