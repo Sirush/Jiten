@@ -4,6 +4,7 @@
   import Button from 'primevue/button';
   import FileUpload from 'primevue/fileupload';
   import InputText from 'primevue/inputtext';
+  import SplitButton from 'primevue/splitbutton';
   import Toast from 'primevue/toast';
   import { useToast } from 'primevue/usetoast';
   import type { Metadata, DuplicateCheckDeckDto } from '~/types';
@@ -76,6 +77,8 @@
       id: number;
       originalTitle: string;
       file: File | null;
+      titleEdited?: boolean;
+      autoDetected?: boolean;
     }>
   >([]);
   let nextSubdeckId = 1;
@@ -93,6 +96,36 @@
     const baseText = getChildrenCountText(selectedMediaType.value);
     return baseText.endsWith('s') ? baseText.slice(0, -1) : baseText;
   });
+
+  // Prefill subdeck titles from the numbering detected in file names ("Vol 7.5" → "Volume 7.5").
+  // Automatic runs never touch manually edited titles; the Auto-name button (force) overwrites all.
+  function applyAutoNames(mode: 'detected' | 'sequential' | 'filename', force = false) {
+    if (!subdecks.value.length) return;
+    const label = subdeckDefaultName.value;
+    const names = subdecks.value.map((sd) => sd.file?.name ?? sd.originalTitle);
+    let titles: { title: string; detected: boolean }[];
+    if (mode === 'detected') titles = buildSubdeckTitles(names, label);
+    else if (mode === 'filename') titles = names.map((n) => ({ title: cleanFileName(n), detected: false }));
+    else titles = names.map((_, i) => ({ title: `${label} ${i + 1}`, detected: false }));
+
+    subdecks.value.forEach((sd, i) => {
+      if (!force && sd.titleEdited) return;
+      sd.originalTitle = titles[i].title;
+      sd.autoDetected = titles[i].detected;
+      if (force) sd.titleEdited = false;
+    });
+  }
+
+  const autoNameItems = [
+    { label: 'Detected numbering', icon: 'pi pi-sparkles', command: () => applyAutoNames('detected', true) },
+    { label: 'Sequential', icon: 'pi pi-sort-numeric-down', command: () => applyAutoNames('sequential', true) },
+    { label: 'From file name', icon: 'pi pi-file', command: () => applyAutoNames('filename', true) },
+  ];
+
+  function markTitleEdited(subdeck: { titleEdited?: boolean; autoDetected?: boolean }) {
+    subdeck.titleEdited = true;
+    subdeck.autoDetected = false;
+  }
 
   onBeforeUnmount(() => {
     if (duplicateTimeout) clearTimeout(duplicateTimeout);
@@ -119,6 +152,7 @@
       const subdeck = subdecks.value.find((sd) => sd.id === subdeckId);
       if (subdeck) {
         subdeck.file = file;
+        applyAutoNames('detected');
       }
     }
   }
@@ -154,6 +188,8 @@
           });
         }
       }
+
+      applyAutoNames('detected');
 
       // Explicitly clear the FileUpload component's selection
       if (newSubdeckUploaderRef.value) {
@@ -549,11 +585,26 @@
 
         <!-- Subdecks section -->
         <div v-if="selectedFile" class="mt-6">
-          <h3 class="text-lg font-medium mb-4">Subdecks</h3>
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-medium">Subdecks</h3>
+            <SplitButton
+              v-if="subdecks.length"
+              v-tooltip.top="'Rename all subdecks from the numbering detected in their file names'"
+              label="Auto-name"
+              icon="pi pi-sparkles"
+              severity="secondary"
+              size="small"
+              :model="autoNameItems"
+              @click="applyAutoNames('detected', true)"
+            />
+          </div>
           <Card v-for="subdeck in subdecks" :key="subdeck.id" class="mb-4">
             <template #title>
               <div class="flex justify-between items-center">
-                <InputText v-model="subdeck.originalTitle" class="w-64" />
+                <div class="flex items-center gap-2">
+                  <InputText v-model="subdeck.originalTitle" class="w-64" @input="markTitleEdited(subdeck)" />
+                  <i v-if="subdeck.autoDetected" v-tooltip.top="'Detected from the file name'" class="pi pi-sparkles text-primary-500 dark:text-primary-400" />
+                </div>
                 <Button
                   v-if="subdecks.length > 1 && subdeck.id === subdecks[subdecks.length - 1].id"
                   class="p-button-danger p-button-text"

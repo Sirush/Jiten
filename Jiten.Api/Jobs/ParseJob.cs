@@ -95,6 +95,7 @@ public class ParseJob(
         await deck.AddChildDeckWords(context);
 
         deck.OriginalTitle = metadata.OriginalTitle;
+        deck.OriginalFileName = metadata.OriginalFileName;
         deck.MediaType = deckType;
 
         if (metadata.ReleaseDate != null)
@@ -198,6 +199,7 @@ public class ParseJob(
 
             deck.DeckOrder = order;
             deck.OriginalTitle = meta.OriginalTitle;
+            deck.OriginalFileName = meta.OriginalFileName;
             deck.MediaType = deckType;
             deck.DifficultyOverride = -1;
             deck.SpeechDuration = meta.SpeechDuration ?? 0;

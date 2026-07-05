@@ -42,13 +42,18 @@ public class ParseNewSubdecksJob(
             return;
         }
 
+        var dictEntries = await context.Set<DeckDictionaryEntry>()
+            .Where(e => e.DeckId == parentDeckId)
+            .ToListAsync();
+
         var texts = childrenWithText.Select(c => c.RawText!.RawText).ToList();
         var parsedDecks = await Parser.Parser.ParseTextsToDeck(
             contextFactory,
             texts,
             storeRawText: true,
             predictDifficulty: true,
-            parent.MediaType);
+            parent.MediaType,
+            dictionaryEntries: dictEntries.Count > 0 ? dictEntries : null);
 
         for (int i = 0; i < childrenWithText.Count; i++)
         {

@@ -63,6 +63,7 @@ export interface Deck {
   isIgnored?: boolean;
   distinctVoterCount: number;
   userAdjustment: number;
+  originalFileName?: string | null;
 }
 
 export interface DeckDetail {

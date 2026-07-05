@@ -21,6 +21,7 @@
   import Select from 'primevue/select';
   import MultiSelect from 'primevue/multiselect';
   import InputNumber from 'primevue/inputnumber';
+  import SplitButton from 'primevue/splitbutton';
   import CoverImageField from '~/components/dashboard/CoverImageField.vue';
 
   const route = useRoute();
@@ -149,6 +150,7 @@
   };
 
   const newSubdeckUploaderRef = ref<InstanceType<typeof FileUpload> | null>(null);
+  const replaceSubdecksUploaderRef = ref<InstanceType<typeof FileUpload> | null>(null);
 
   const availableLinkTypes = computed(() => {
     return Object.values(LinkType)
@@ -166,6 +168,9 @@
       file: File | null;
       mediaSubdeckId?: number; // Added to track existing subdeck IDs
       difficultyOverride: number;
+      originalFileName?: string | null; // Origin file name (provenance), read-only
+      titleEdited?: boolean;
+      autoDetected?: boolean;
     }>
   >([]);
   let nextSubdeckId = 1;
@@ -231,6 +236,9 @@
           file: null,
           mediaSubdeckId: subdeck.deckId,
           difficultyOverride: subdeck.difficultyOverride || -1,
+          originalFileName: subdeck.originalFileName,
+          // Saved titles are only renamed through the explicit Auto-name button, never automatically
+          titleEdited: true,
         }));
       }
 
@@ -252,12 +260,65 @@
           subdeck.file = file;
         }
       }
+      applyAutoNames('detected');
     }
+  }
+
+  // Numeric-aware sort so "ep2" comes before "ep10" regardless of drop order
+  const naturalCompare = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare;
+
+  function sortFilesNaturally(files: File[]): File[] {
+    return [...files].sort((a, b) => naturalCompare(a.name, b.name));
+  }
+
+  // Best name available for numbering detection: staged file > stored origin file > current title
+  const subdeckDetectionNames = () => subdecks.value.map((sd) => sd.file?.name ?? sd.originalFileName ?? sd.originalTitle);
+
+  // Prefill subdeck titles from the numbering detected in file names ("Vol 7.5" → "Volume 7.5").
+  // Automatic runs only touch freshly added rows; the Auto-name button (force) covers saved rows too,
+  // though a saved row is never renamed to a mere positional fallback.
+  function applyAutoNames(mode: 'detected' | 'sequential' | 'filename', force = false) {
+    if (!subdecks.value.length) return;
+    const label = subdeckDefaultName.value;
+    const names = subdeckDetectionNames();
+    let titles: { title: string; detected: boolean }[];
+    if (mode === 'detected') titles = buildSubdeckTitles(names, label);
+    else if (mode === 'filename') titles = names.map((n) => ({ title: cleanFileName(n), detected: false }));
+    else titles = names.map((_, i) => ({ title: `${label} ${i + 1}`, detected: false }));
+
+    subdecks.value.forEach((sd, i) => {
+      if (!force && sd.titleEdited) return;
+      if (mode === 'detected' && !titles[i].detected && sd.mediaSubdeckId) return;
+      sd.originalTitle = titles[i].title;
+      sd.autoDetected = titles[i].detected;
+      if (force) sd.titleEdited = false;
+    });
+  }
+
+  function sortSubdecksByDetected() {
+    const detections = detectNumbering(subdeckDetectionNames());
+    subdecks.value = subdecks.value
+      .map((sd, i) => ({ sd, i, value: detections[i]?.value ?? Infinity }))
+      .sort((a, b) => a.value - b.value || a.i - b.i)
+      .map((x) => x.sd);
+  }
+
+  const autoNameItems = [
+    { label: 'Detected numbering', icon: 'pi pi-sparkles', command: () => applyAutoNames('detected', true) },
+    { label: 'Sequential', icon: 'pi pi-sort-numeric-down', command: () => applyAutoNames('sequential', true) },
+    { label: 'From file name', icon: 'pi pi-file', command: () => applyAutoNames('filename', true) },
+    { separator: true },
+    { label: 'Sort by detected number', icon: 'pi pi-sort-amount-down', command: sortSubdecksByDetected },
+  ];
+
+  function markTitleEdited(subdeck: { titleEdited?: boolean; autoDetected?: boolean }) {
+    subdeck.titleEdited = true;
+    subdeck.autoDetected = false;
   }
 
   function handleNewSubdeckFileUpload(event: { files: File[] }) {
     if (event.files && event.files.length > 0) {
-      for (const file of event.files) {
+      for (const file of sortFilesNaturally(event.files)) {
         const newSubdeckNumber = subdecks.value.length + 1;
         subdecks.value.push({
           id: nextSubdeckId++,
@@ -266,11 +327,60 @@
           difficultyOverride: -1,
         });
       }
+      applyAutoNames('detected');
       // Explicitly clear the FileUpload component's selection
       if (newSubdeckUploaderRef.value) {
         newSubdeckUploaderRef.value.clear();
       }
     }
+  }
+
+  // Files are matched onto saved subdecks by position so existing DeckIds survive: users keep
+  // their progress/preferences on those decks, only the text is replaced and reparsed. Extra
+  // files become new subdecks; if fewer files are dropped, the trailing subdecks are deleted.
+  function handleReplaceAllSubdecksUpload(event: { files: File[] }) {
+    if (!event.files || event.files.length === 0) return;
+
+    const files = sortFilesNaturally(event.files);
+    const savedSubdecks = subdecks.value.filter((sd) => sd.mediaSubdeckId);
+    const pendingCount = subdecks.value.length - savedSubdecks.length;
+    const keptCount = Math.min(savedSubdecks.length, files.length);
+    const appendedCount = Math.max(0, files.length - savedSubdecks.length);
+    const deletedCount = Math.max(0, savedSubdecks.length - files.length);
+
+    const parts: string[] = [];
+    if (keptCount > 0) parts.push(`${keptCount} existing subdeck(s) keep their identity (user progress preserved) but get their text replaced and reparsed`);
+    if (appendedCount > 0) parts.push(`${appendedCount} new subdeck(s) will be appended`);
+    if (deletedCount > 0) parts.push(`the last ${deletedCount} existing subdeck(s) will be PERMANENTLY DELETED (fewer files than subdecks)`);
+    if (pendingCount > 0) parts.push(`${pendingCount} unsaved pending subdeck(s) will be discarded`);
+
+    const message = `Replace all subdecks with ${files.length} file(s)?\n\n- ${parts.join('\n- ')}\n\nNothing is applied until you click Update.`;
+
+    if (!confirm(message)) {
+      replaceSubdecksUploaderRef.value?.clear();
+      return;
+    }
+
+    subdecks.value = files.map((file, index) => {
+      const existing = index < savedSubdecks.length ? savedSubdecks[index] : null;
+      return {
+        id: nextSubdeckId++,
+        originalTitle: existing ? existing.originalTitle : `${subdeckDefaultName.value} ${index + 1}`,
+        file: file,
+        mediaSubdeckId: existing?.mediaSubdeckId,
+        difficultyOverride: existing ? existing.difficultyOverride : -1,
+        originalFileName: existing?.originalFileName,
+        titleEdited: false,
+      };
+    });
+    applyAutoNames('detected');
+
+    replaceSubdecksUploaderRef.value?.clear();
+    showToast(
+      'info',
+      'Subdecks replaced',
+      `${files.length} file(s) staged: ${keptCount} in-place, ${appendedCount} appended${deletedCount > 0 ? `, ${deletedCount} to delete` : ''}. Click Update to apply.`
+    );
   }
 
   function addSubdeck() {
@@ -431,9 +541,7 @@
     // Store the type from THIS deck's perspective so the list label matches the public site.
     const displayType = flip ? getInverseRelationshipType(primaryType) : primaryType;
 
-    const exists = relationships.value.some(
-      (r) => r.targetDeckId === newRelationship.value.targetDeckId && r.relationshipType === displayType
-    );
+    const exists = relationships.value.some((r) => r.targetDeckId === newRelationship.value.targetDeckId && r.relationshipType === displayType);
     if (exists) {
       showToast('warn', 'Duplicate', 'This relationship already exists');
       return;
@@ -1238,7 +1346,7 @@
                       :src="option.coverName && option.coverName !== 'nocover.jpg' ? option.coverName : '/img/nocover.jpg'"
                       :alt="getDeckLabel(option)"
                       class="h-10 w-7 object-cover rounded shrink-0"
-                    >
+                    />
                     <span class="truncate text-sm">{{ getDeckLabel(option) }}</span>
                     <PrimeTag :value="getMediaTypeText(option.mediaType)" severity="secondary" class="shrink-0 text-xs" />
                   </div>
@@ -1246,20 +1354,13 @@
               </AutoComplete>
             </div>
 
-            <div
-              v-if="relationshipPreview"
-              class="mb-2 p-3 rounded bg-surface-100 dark:bg-surface-800 text-sm border-l-4 border-primary"
-            >
+            <div v-if="relationshipPreview" class="mb-2 p-3 rounded bg-surface-100 dark:bg-surface-800 text-sm border-l-4 border-primary">
               {{ relationshipPreview }}
             </div>
           </div>
           <template #footer>
             <Button label="Cancel" severity="secondary" text @click="showAddRelationshipDialog = false" />
-            <Button
-              label="Add"
-              @click="addRelationship"
-              :disabled="!newRelationship.targetDeckId || !newRelationship.role || !newRelationship.targetTitle"
-            />
+            <Button label="Add" @click="addRelationship" :disabled="!newRelationship.targetDeckId || !newRelationship.role || !newRelationship.targetTitle" />
           </template>
         </Dialog>
 
@@ -1268,6 +1369,10 @@
           <h3 class="text-lg font-medium mb-4">Text File</h3>
           <Card>
             <template #content>
+              <p class="text-xs text-muted-color mb-3 truncate" :title="response?.mainDeck?.originalFileName || undefined">
+                Origin file:
+                <span class="font-mono">{{ parentTextFile?.name || response?.mainDeck?.originalFileName || '—' }}</span>
+              </p>
               <div v-if="parentTextFile" class="flex items-center gap-2">
                 <span class="text-sm text-gray-600">{{ parentTextFile.name }}</span>
                 <Button class="p-button-danger p-button-text p-button-sm" @click="parentTextFile = null">
@@ -1294,10 +1399,21 @@
         <div class="mt-6">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-medium">Subdecks</h3>
-            <Button @click="addSubdeck">
-              <Icon name="material-symbols-light:add-circle-outline" size="1.5em" />
-              Add Subdeck
-            </Button>
+            <div class="flex items-center gap-2">
+              <SplitButton
+                v-if="subdecks.length"
+                v-tooltip.top="'Rename all subdecks from the numbering detected in their file names'"
+                label="Auto-name"
+                icon="pi pi-sparkles"
+                severity="secondary"
+                :model="autoNameItems"
+                @click="applyAutoNames('detected', true)"
+              />
+              <Button @click="addSubdeck">
+                <Icon name="material-symbols-light:add-circle-outline" size="1.5em" />
+                Add Subdeck
+              </Button>
+            </div>
           </div>
 
           <div v-if="response && response.subDecks && response.subDecks.length > 0" class="mb-4">
@@ -1361,13 +1477,24 @@
                   <div class="flex flex-row gap-4">
                     <div>
                       <label class="block text-sm font-medium mb-1">Title</label>
-                      <InputText v-model="subdeck.originalTitle" class="w-96" />
+                      <div class="flex items-center gap-2">
+                        <InputText v-model="subdeck.originalTitle" class="w-96" @input="markTitleEdited(subdeck)" />
+                        <i
+                          v-if="subdeck.autoDetected"
+                          v-tooltip.top="'Detected from the file name'"
+                          class="pi pi-sparkles text-primary-500 dark:text-primary-400"
+                        />
+                      </div>
                     </div>
                     <div>
                       <label class="block text-sm font-medium mb-1">Difficulty Override</label>
                       <InputNumber v-model="subdeck.difficultyOverride" class="w-32" :min-fraction-digits="1" />
                     </div>
                   </div>
+                  <p class="text-xs text-muted-color truncate" :title="subdeck.originalFileName || undefined">
+                    Origin file:
+                    <span class="font-mono">{{ subdeck.file?.name || subdeck.originalFileName || '—' }}</span>
+                  </p>
                 </div>
               </template>
               <template #content>
@@ -1429,6 +1556,40 @@
                   <div class="flex items-center justify-center flex-col">
                     <Icon name="material-symbols-light:arrow-upload-progress" class="!border-2 !rounded-full !p-8 !text-4xl !text-muted-color" />
                     <p class="mt-6 mb-0">Drag and drop file to here to upload.</p>
+                  </div>
+                </template>
+              </FileUpload>
+            </template>
+          </Card>
+
+          <Card v-if="subdecks.length > 0" class="mb-4">
+            <template #title>
+              <div class="flex justify-between items-center">
+                <span>Replace All Subdecks</span>
+              </div>
+            </template>
+            <template #content>
+              <p class="text-sm text-muted-color mb-3">
+                Drop the complete new set of files here to replace all {{ subdecks.length }} subdeck(s) above in one go. Files are ordered by filename and
+                matched onto the existing subdecks by position, so those keep their identity and user progress — only their text is replaced and reparsed.
+                Extra files are appended as new subdecks; if you drop fewer files, the trailing subdecks are deleted when you click Update.
+              </p>
+              <FileUpload
+                ref="replaceSubdecksUploaderRef"
+                mode="advanced"
+                :auto="true"
+                choose-label="Select Files to Replace All Subdecks"
+                :multiple="true"
+                class="w-full subdeck-file-upload replace-subdecks-upload"
+                :custom-upload="true"
+                :show-upload-button="false"
+                :show-cancel-button="false"
+                @select="handleReplaceAllSubdecksUpload"
+              >
+                <template #empty>
+                  <div class="flex items-center justify-center flex-col">
+                    <Icon name="material-symbols-light:sync-alt" class="!border-2 !rounded-full !p-8 !text-4xl !text-muted-color" />
+                    <p class="mt-6 mb-0">Drag and drop the new set of files here to replace all subdecks.</p>
                   </div>
                 </template>
               </FileUpload>
@@ -1508,6 +1669,17 @@
 
   .p-fileupload.p-fileupload-advanced .p-fileupload-content > div > span[data-pc-section='dndmessage'] {
     font-weight: bold;
+  }
+
+  .replace-subdecks-upload.p-fileupload.p-fileupload-advanced .p-fileupload-content:hover {
+    border-color: #f59e0b;
+    background-color: rgba(245, 158, 11, 0.05);
+  }
+
+  .replace-subdecks-upload.p-fileupload.p-fileupload-advanced .p-fileupload-content.p-fileupload-highlight {
+    border-color: #f59e0b;
+    background-color: rgba(245, 158, 11, 0.1);
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
   }
 
   .subdeck-card {

@@ -25,6 +25,12 @@ public class Deck
     public string CoverName { get; set; } = "nocover.jpg";
 
     /// <summary>
+    /// Complete name of the source file this deck was created from
+    /// </summary>
+    [MaxLength(1024)]
+    public string? OriginalFileName { get; set; }
+
+    /// <summary>
     /// Type of media the deck belongs to
     /// </summary>
     public MediaType MediaType { get; set; } = new();
