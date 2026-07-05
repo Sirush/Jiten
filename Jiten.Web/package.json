@@ -19,6 +19,7 @@
   "dependencies": {
     "@floating-ui/vue": "1.1.11",
     "@fontsource-variable/noto-sans-jp": "5.2.10",
+    "@nuxt/content": "^3.14.0",
     "@nuxt/icon": "1.15.0",
     "@nuxt/scripts": "0.13.2",
     "@nuxtjs/seo": "3.4.0",
@@ -60,6 +61,7 @@
     "@iconify-json/mdi": "1.2.3",
     "@nuxt/eslint": "1.15.2",
     "@primevue/nuxt-module": "4.5.5",
+    "@tailwindcss/typography": "^0.5.20",
     "@types/sql.js": "1.4.11",
     "cross-env": "7.0.3",
     "eslint-config-prettier": "9.1.2",
