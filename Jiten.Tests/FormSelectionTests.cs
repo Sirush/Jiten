@@ -1280,8 +1280,9 @@ public class FormSelectionTests
         // 言うことを聞く (to obey, 2033700) — user_dic entry makes Sudachi tokenize as single verb
         yield return ["よく言うことを聞いてるね", "言うことを聞いてる", 2033700, (byte)0];
 
-        // 凛と (dignified, 1564320) — Sudachi fuses adv-to words with their と particle into a single adverb token
-        yield return ["凛とした表情で彼女の顔を見据えた", "凛と", 1564320, (byte)0];
+        // 凛 (dignified, 1564320) — Sudachi fuses adv-to words with their と particle into a single
+        // adverb token; SplitUnattestedToAdverbs re-cuts it so the bare adj-t entry matches
+        yield return ["凛とした表情で彼女の顔を見据えた", "凛", 1564320, (byte)0];
 
         // いけすかねぇ (colloquial negative of いけ好かない) → 2007280 (nasty/disagreeable)
         // Sudachi splits into いけす (生け簀) + か + ねぇ; SpecialCases3 recombines
@@ -1619,6 +1620,22 @@ public class FormSelectionTests
         // Adversarial counterparts of the homograph pins: the other reading must survive
         yield return ["強がりを言うな。", "強がり", 1236110, (byte)0]; // the noun 強がり "bluff", not 強い via the がる chain
         yield return ["強がりながら笑った。", "強がりながら", 1236070, (byte)0]; // verbal use merges and keeps the がる chain
+
+        // Fossilised adverbial compounds and literary function words
+        yield return ["ゆえに馬鹿げている、度し難い", "ゆえに", 1267130, (byte)1];      // 故に, not 故+に
+        yield return ["奴らは、自国の化外をとうに滅ぼしているのだから", "とうに", 1633370, (byte)1]; // 疾うに, not 塔+に
+        yield return ["「否定は出来ぬね。そも東征に参加するという時点で、身の安全も何もない」", "そも", 2836401, (byte)1];
+        // 将に is まさに's rarely-used kanji spelling; before は the analysis is 将+に+は
+        yield return ["これもまた、将には必要な資質なれば", "将", 1956440, (byte)0];
+        // Coordination of single-kanji virtue nouns (仁も義も…) defeats Sudachi's name reading
+        yield return ["自己愛に酔った者ども、仁も義も礼も智も、信も忠も孝悌もない。", "智", 2081550, (byte)1];
+        yield return ["礼と智を尊ぶ。", "智", 2081550, (byte)1]; // と-coordination, same frame
+        yield return ["仁や智を重んじる。", "智", 2081550, (byte)1]; // や-coordination, same frame
+        yield return ["太郎と智が来た。", "智", 5509444, (byte)0]; // full-name partner keeps the name reading
+        // ばっか after a te-form is the ばかり contraction, not 馬鹿 or the 麦価 reading collision
+        yield return ["てめぇら女子が昨日の練習で凡ミスしてばっかだったからだよっ！", "ばっか", 2857403, (byte)0];
+        yield return ["遊んでばっかいないで勉強しなさい。", "ばっか", 2857403, (byte)0];
+        yield return ["あんたはばっかじゃないの。", "ばっか", 1601260, (byte)4]; // predicative stays 馬鹿
         yield return ["リンゴとナシを買った。", "ナシ", 1549860, (byte)3]; // と-coordination keeps the pear
         yield return ["コンサートでピアノが弾かれた。", "弾かれた", 1419370, (byte)0]; // music keeps ひく
         yield return ["「俺のバンドでいくらでも弾かせてやるぞっ…て」", "弾かせてやる", 1419370, (byte)0]; // causative = play

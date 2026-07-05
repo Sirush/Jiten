@@ -19,6 +19,7 @@ internal readonly record struct MisparseGateContext(
     string SymbolsBefore = "",
     string SymbolsAfter = "",
     bool SurfaceAttestsListedForm = false,
+    bool SurfaceAttestsLiterally = false,
     bool ShardBlobUnattested = false,
     bool PrevDroppedByGate = false,
     bool NextDroppedByGate = false);
@@ -30,6 +31,28 @@ internal static class MisparseGates
         PartOfSpeech.Particle, PartOfSpeech.Auxiliary, PartOfSpeech.Conjunction,
         PartOfSpeech.Adnominal, PartOfSpeech.Pronoun
     ];
+
+    /// Cheap pre-filter: every gate judges only short kana fragments (≤4 chars, or a single-kana
+    /// stutter run of any length). Tokens that cannot possibly gate — anything with kanji, Latin,
+    /// digits, or a long mixed-kana surface — are excluded before the caller assembles flags,
+    /// neighbour frames and blob context. The character test accepts a superset of the kana the
+    /// gates accept (full/half-width kana blocks plus stretch marks), so it can only skip tokens
+    /// no gate would touch.
+    public static bool MayBeKanaFragment(string s)
+    {
+        if (s.Length == 0) return false;
+        if (s.Length > 4)
+        {
+            for (int i = 1; i < s.Length; i++)
+                if (s[i] != s[0])
+                    return false;
+        }
+
+        foreach (var c in s)
+            if (!(c is >= '぀' and <= 'ヿ' or >= 'ｦ' and <= 'ﾝ' or '〜'))
+                return false;
+        return true;
+    }
 
     public static MisparseDecision Evaluate(in MisparseGateContext ctx)
     {
@@ -134,13 +157,15 @@ internal static class MisparseGates
         // genuinely at home beside a burst: attested usually-kana words (なぜ), attested
         // interjections/expressions (そっか), and usually-kana interjections even when the exact
         // stretch is unlisted (わーい). A bare usually-kana NOUN or verb reached through mutation
-        // (ばぁ→婆, おりゃ→居る) is still burst noise.
+        // (ばぁ→婆, おりゃ→居る) is still burst noise. Inside a blob only LITERAL attestation
+        // counts: a deformation-attested shard (くぅ→くう in ざ|くぅ) is exactly the phonetic
+        // material the blob rule exists to remove.
         // Adverb included: mimetic adverbs (おどおど) are kana-only entries without a uk tag.
         bool blobInterjection = ctx.SelectedWord.PartsOfSpeech.Any(p => p is PartOfSpeech.Interjection
             or PartOfSpeech.Expression or PartOfSpeech.Adverb or PartOfSpeech.AdverbTo);
         if (ctx.ShardBlobUnattested
-            && !(blobInterjection && (ctx.IsUsuallyKana || ctx.SurfaceAttestsListedForm))
-            && !(ctx.IsUsuallyKana && ctx.SurfaceAttestsListedForm))
+            && !(blobInterjection && (ctx.IsUsuallyKana || ctx.SurfaceAttestsLiterally))
+            && !(ctx.IsUsuallyKana && ctx.SurfaceAttestsLiterally))
             return true;
 
         // SCOPE: outside blobs, this gate judges only plain noun/numeral matches — the
@@ -320,10 +345,11 @@ internal static class MisparseGates
            // (してある+っていう), the same way a bare って does — they only differ by a later merge.
            || text.StartsWith("って", StringComparison.Ordinal);
 
-    public static (bool isUsuallyKana, bool hasKanjiSpelling, bool readingIsIchi, bool surfaceAttestsForm)
+    public static (bool isUsuallyKana, bool hasKanjiSpelling, bool readingIsIchi, bool surfaceAttestsForm,
+        bool surfaceAttestsLiterally)
         GetWordFlags(JmDictWord? word, byte readingIndex, string? surface = null)
     {
-        if (word == null) return (false, true, false, false);
+        if (word == null) return (false, true, false, false, false);
 
         bool isUk = word.PartsOfSpeech.Contains("uk");
         bool hasKanji = word.Forms.Any(f => f.FormType == JmDictFormType.KanjiForm);
@@ -339,6 +365,8 @@ internal static class MisparseGates
         // the entry does not actually spell was reached through normalisation or text mutation.
         bool surfaceAttestsForm = surface != null && word.Forms.Any(f => f.Text == surface);
 
+        bool surfaceAttestsLiterally = surfaceAttestsForm;
+
         // Expressive spelling deforms a word without changing it: emphatic gemination writes a
         // sokuon in (ほんっと, バカッ, マジッす), a chōonpu stretches a mora (おーっと), and a
         // trailing stretch elongates the final one (そっかー, だってぇ, なんだとぉ). Such a
@@ -346,7 +374,7 @@ internal static class MisparseGates
         // kana-native (マジ, そっか) or carrying a priority tag (馬鹿, 本当). For a rare kanji
         // word the unlisted deformation is instead the give-away that only text mutation produced
         // the match (ズクッ → the owl 木菟).
-        if (!surfaceAttestsForm && surface != null
+        if (!surfaceAttestsForm && surface is { Length: > 0 }
             && (!hasKanji || word.Priorities is { Count: > 0 }))
         {
             string detrailed = surface.TrimEnd('ー', '〜', 'っ', 'ッ', 'ぁ', 'ぃ', 'ぅ', 'ぇ', 'ぉ');
@@ -367,7 +395,28 @@ internal static class MisparseGates
             // that is phonetic material, not the word.
             if (detrailed.Length * 2 < surface.Length) detrailed = surface;
             if (bare.Length * 2 < surface.Length) bare = surface;
-            foreach (var variant in (ReadOnlySpan<string>)[detrailed, degeminated, destretched, bare])
+            // A trailing small vowel often stands for the full vowel in sigh spellings (ふぅ→ふう,
+            // はぁ→はあ) — promote it. Not on vowel-initial surfaces (うぅ, ああぁ): there the whole
+            // run is scream material, not a word's final mora stretched.
+            string promoted = surface;
+            if ("あいうえおぁぃぅぇぉアイウエオァィゥェォ".IndexOf(surface[0]) < 0)
+            {
+                int end = surface.Length;
+                while (end > 0 && "ぁぃぅぇぉァィゥェォ".IndexOf(surface[end - 1]) >= 0) end--;
+                if (end < surface.Length)
+                {
+                    var chars = surface.ToCharArray();
+                    for (int i = end; i < surface.Length; i++)
+                        chars[i] = chars[i] switch
+                        {
+                            'ぁ' => 'あ', 'ぃ' => 'い', 'ぅ' => 'う', 'ぇ' => 'え', 'ぉ' => 'お',
+                            'ァ' => 'ア', 'ィ' => 'イ', 'ゥ' => 'ウ', 'ェ' => 'エ', 'ォ' => 'オ',
+                            _ => chars[i]
+                        };
+                    promoted = new string(chars);
+                }
+            }
+            foreach (var variant in (ReadOnlySpan<string>)[detrailed, degeminated, destretched, bare, promoted])
             {
                 if (variant.Length == 0 || variant == surface) continue;
                 if (word.Forms.Any(f => f.Text == variant))
@@ -378,6 +427,6 @@ internal static class MisparseGates
             }
         }
 
-        return (isUk, hasKanji, readingIsIchi, surfaceAttestsForm);
+        return (isUk, hasKanji, readingIsIchi, surfaceAttestsForm, surfaceAttestsLiterally);
     }
 }

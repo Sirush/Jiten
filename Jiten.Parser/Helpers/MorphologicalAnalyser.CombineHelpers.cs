@@ -116,7 +116,12 @@ public partial class MorphologicalAnalyser
                 nextWord.Text != currentWord.Text &&
                 !currentWord.Text.EndsWith("くて", StringComparison.Ordinal) &&
                 !isClassicalWaRowTeForm &&
-                (nextWord.DictionaryForm is "しまう" or "こなす" or "いく" or "貰う" or "いる" or "ない" or "だす" ||
+                (nextWord.DictionaryForm is "しまう" or "こなす" or "いく" or "貰う" or "いる" or "ない" ||
+                 // Aspectual だす only re-attaches when the compound verb is real (走り出す):
+                 // an unattested pair (混じり+だした) stays split so the aspectual verb remains
+                 // a visible word instead of vanishing into an unmatchable merged surface.
+                 (nextWord.DictionaryForm == "だす" && HasCompoundLookup != null &&
+                  (HasCompoundLookup(currentWord.Text + "だす") || HasCompoundLookup(currentWord.Text + "出す"))) ||
                  (nextWord.DictionaryForm == "得る" && HasCompoundLookup != null &&
                   HasCompoundLookup(currentWord.Text + "得る")) ||
                  (nextWord.DictionaryForm == "する" && (currentWord.Text.EndsWith("た") || currentWord.Text.EndsWith("だ"))) ||

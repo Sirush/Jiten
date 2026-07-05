@@ -674,6 +674,59 @@ public partial class MorphologicalAnalyser
     }
 
     /// <summary>
+    /// Splits a Sudachi adverb token Xと into X + と when the whole has no JMDict entry but X does.
+    /// JMDict lists taru-adjective/adv-to words bare (凛, 堂々, 悠然) — the と is the adverbializer
+    /// particle — while Sudachi lexicalises the と into the token (凛と). Left whole, the token can
+    /// only resolve through a partial surface match that silently swallows the と.
+    /// Restricted to kanji/katakana leads: the class is Sino-Japanese adverbs plus gairaigo nouns
+    /// (キッチンと = kitchen + と). A hiragana Xと is an emphatically deformed mimetic (ひっしと,
+    /// た〜んと) whose base entry the sokuon/stretch machinery already reaches — splitting those
+    /// trades the right word for a reading-key homophone of the lead.
+    /// </summary>
+    private List<WordInfo> SplitUnattestedToAdverbs(List<WordInfo> wordInfos)
+    {
+        List<WordInfo>? result = null;
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+
+            if (word is { PartOfSpeech: PartOfSpeech.Adverb, PreMatchedWordId: null }
+                && word.Text.Length >= 2 && word.Text[^1] == 'と'
+                && word.Text[0] is not (>= 'ぁ' and <= 'ゟ')
+                && word.Reading.Length >= 2 && word.Reading[^1] is 'ト' or 'と'
+                && HasNonNameCompoundLookup != null)
+            {
+                bool wholeAttested = HasNonNameCompoundLookup(word.Text)
+                                     || HasNonNameCompoundLookup(NormalizeToHiragana(word.Text));
+                string lead = word.Text[..^1];
+                if (!wholeAttested &&
+                    (HasNonNameCompoundLookup(lead) || HasNonNameCompoundLookup(NormalizeToHiragana(lead))))
+                {
+                    result ??= [..wordInfos[..i]];
+                    int mid = word.EndOffset >= 0 ? word.EndOffset - 1 : -1;
+                    result.Add(new WordInfo(word)
+                    {
+                        Text = lead, DictionaryForm = lead, NormalizedForm = lead,
+                        Reading = word.Reading[..^1], EndOffset = mid
+                    });
+                    result.Add(new WordInfo
+                    {
+                        Text = "と", DictionaryForm = "と", NormalizedForm = "と", Reading = "ト",
+                        PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle,
+                        StartOffset = mid, EndOffset = word.EndOffset
+                    });
+                    continue;
+                }
+            }
+
+            result?.Add(word);
+        }
+
+        return result ?? wordInfos;
+    }
+
+    /// <summary>
     /// Splits たわけ (misanalysed as 戯け noun or たわける verb) into た (past auxiliary) + わけ (noun)
     /// when preceded by a verb stem, auxiliary, or っ (geminate mark).
     /// Sudachi frequently fuses た+わけ into たわけ after verb stems,

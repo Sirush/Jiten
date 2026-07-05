@@ -1760,6 +1760,31 @@ namespace Jiten.Parser
             }
         }
 
+        // Mirrors the DictionaryForm/NormalizedForm fallback's key checks in
+        // DeconjugateVerbOrAdjective: true when either form would find lookup ids, meaning the
+        // fallback can resolve the token itself and the reading-based channel must stay out of
+        // its way.
+        private static bool DictOrNormalizedFormHasLookup(WordInfo wordInfo)
+        {
+            if (!string.IsNullOrEmpty(wordInfo.DictionaryForm))
+            {
+                var dictHiragana = KanaConverter.ToHiragana(wordInfo.DictionaryForm.Replace("ゎ", "わ").Replace("ヮ", "わ"),
+                                                            convertLongVowelMark: false);
+                if (_lookups.ContainsKey(dictHiragana) || _lookups.ContainsKey(wordInfo.DictionaryForm))
+                    return true;
+            }
+
+            if (!string.IsNullOrEmpty(wordInfo.NormalizedForm)
+                && !NormalizedFormIntroducesKanji(wordInfo.Text, wordInfo.NormalizedForm))
+            {
+                var normalizedHiragana = KanaConverter.ToHiragana(wordInfo.NormalizedForm, convertLongVowelMark: false);
+                if (_lookups.ContainsKey(normalizedHiragana) || _lookups.ContainsKey(wordInfo.NormalizedForm))
+                    return true;
+            }
+
+            return false;
+        }
+
         // For mixed-script surfaces the kana tail is okurigana;
         // a Sudachi NormalizedForm that rewrites it into ADDITIONAL kanji is a different lexeme
         // (屈し must not become 屈指). Kanji-for-kanji variant normalization (敲き → 叩く) and
@@ -2142,6 +2167,36 @@ namespace Jiten.Parser
                 }
             }
 
+            // A verb spelled with kana in place of one of its kanji (帰りつけた for 帰り着く)
+            // deconjugates only to kanji-mixed strings (帰りつく) that are not lookup keys, even
+            // though the entry's kana reading (かえりつく) is one. When neither the written-form channel nor the
+            // DictionaryForm/NormalizedForm fallback below can find a key, deconjugate the token's
+            // reading instead — reliable for in-vocabulary tokens — and look those forms up as kana
+            // keys. Deferring to the fallback keeps kanji-form ReadingIndexes for words it can reach
+            // (営 → 営み, not いとなみ). Single kanji and digit-bearing tokens are excluded: their
+            // readings collide with unrelated homophones (髀/フトモモ → 蒲桃, ３万/サンマン → 散漫)
+            // instead of recovering a spelling variant.
+            bool fromReadingChannel = false;
+            if (candidates.Count == 0 && wordData.wordInfo.Text.Length >= 2 &&
+                wordData.wordInfo.Text.Any(JapaneseTextHelper.IsKanji) &&
+                !wordData.wordInfo.Text.Any(c => char.IsDigit(c) || c is >= '０' and <= '９') &&
+                !string.IsNullOrEmpty(wordData.wordInfo.Reading) &&
+                !DictOrNormalizedFormHasLookup(wordData.wordInfo))
+            {
+                var readingHiragana = KanaNormalizer.Normalize(KanaConverter.ToHiragana(wordData.wordInfo.Reading));
+                if (readingHiragana != normalizedText && WanaKana.IsHiragana(readingHiragana))
+                {
+                    foreach (var form in deconjugator.Deconjugate(readingHiragana).OrderByDescending(d => d.Text.Length))
+                    {
+                        if (_lookups.TryGetValue(form.Text, out List<int>? lookup))
+                        {
+                            candidates.Add((form, lookup));
+                            fromReadingChannel = true;
+                        }
+                    }
+                }
+            }
+
             // Track if we need to try DictionaryForm lookup later (for compound expressions)
             bool tryDictionaryFormFallback = candidates.Count == 0 && !string.IsNullOrEmpty(wordData.wordInfo.DictionaryForm);
 
@@ -2226,6 +2281,24 @@ namespace Jiten.Parser
                 // but don't crash the entire process
                 Console.WriteLine($"Error retrieving verb/adjective word cache: {ex.Message}");
                 return (false, null, null, null);
+            }
+
+            // Reading-derived candidates may only recover spelling variants of the surface, never
+            // pure homophones: the entry must share a kanji with the token (帰りつけた/帰り着く
+            // share 帰). Without this, any Sudachi-known word missing from JMDict would resolve to
+            // whatever unrelated word owns its reading as a kana key.
+            if (fromReadingChannel)
+            {
+                var surfaceKanji = wordData.wordInfo.Text.Where(JapaneseTextHelper.IsKanji).ToArray();
+                for (int ci = candidates.Count - 1; ci >= 0; ci--)
+                {
+                    var kept = candidates[ci].ids.Where(id => wordCache.TryGetValue(id, out var w)
+                                   && w.Forms.Any(f => f.Text.IndexOfAny(surfaceKanji) >= 0)).ToList();
+                    if (kept.Count > 0)
+                        candidates[ci] = (candidates[ci].form, kept);
+                    else
+                        candidates.RemoveAt(ci);
+                }
             }
 
             var matchResults = DeconjugationMatcher.FilterMatches(candidates, wordCache, wordData.wordInfo.PartOfSpeech);
@@ -2359,6 +2432,26 @@ namespace Jiten.Parser
                     bestPair = baseVerbCandidate;
                     margin = ScoringPolicy.HighConfidenceThreshold;
                 }
+            }
+
+            // Negative-contraction disambiguation: the token's ん was Sudachi's negative auxiliary
+            // ぬ, but the deconjugator's slurred-る path (られん→られる, as in してん) is a step
+            // shorter and wins chain selection, mislabelling 認められん as non-negative. Swap to the
+            // same word's negative-labelled chain when one exists. margin is deliberately left
+            // untouched: it measures the gap to the next different WORD, and the word is unchanged —
+            // only the displayed chain moved. Unlike the imperative block above (which switches to a
+            // different lemma and re-anchors confidence), lowering it here would invite the
+            // low-confidence resegmentation retry to re-cut a correctly merged token.
+            if (bestPair != null && wordData.wordInfo.IsSlurredNegative
+                && bestPair.DeconjForm?.Process.Any(p => p.Contains("negative")) != true)
+            {
+                var negativeChain = allFormCandidates
+                                    .Where(c => c.Word.WordId == bestPair.Word.WordId
+                                                && c.DeconjForm?.Process.Any(p => p.Contains("negative")) == true)
+                                    .OrderByDescending(c => ScoringPolicy.EffectiveScore(c))
+                                    .FirstOrDefault();
+                if (negativeChain != null)
+                    bestPair = negativeChain;
             }
 
             if (bestPair == null)
@@ -3664,12 +3757,18 @@ namespace Jiten.Parser
                         // When an adjective stem or verb infinitive is followed by a noun-like token, try combining.
                         // Adjective: Sudachi splits kana compounds like でかぶつ into でか (形容詞) + ぶつ (接尾辞).
                         // Verb: Sudachi splits compounds like 飛び道具 into 飛び (動詞) + 道具 (名詞).
+                        // Adverb: a kanji lead that doubles as an adverb keeps its adverb tag inside a
+                        // nominal compound (一向 → 一向一揆) — the JMDict lookup gates it, so only real
+                        // compounds reform. Kana adverbs are excluded: そう/どう + a kana noun can collide
+                        // with an unrelated kanji compound through its reading key (そう+なん = 遭難).
                         // Lone kanji: Sudachi splits a kanji compound whose lead it mis-tags as a non-noun
                         // (偶然 → 偶 タマ 副詞 | 然), often when a particle like って follows. A single mis-tagged
                         // kanji + a noun-like token recompounds the same way — the JMDict lookup gates it, so only
                         // real compounds reform.
                         bool misparsedKanjiLead = word.Text.Length == 1 && JapaneseTextHelper.IsKanji(word.Text[0]);
-                        if ((word.PartOfSpeech is PartOfSpeech.IAdjective or PartOfSpeech.Verb || misparsedKanjiLead) &&
+                        bool kanjiAdverbLead = word.PartOfSpeech == PartOfSpeech.Adverb &&
+                                               word.Text.Any(JapaneseTextHelper.IsKanji);
+                        if ((word.PartOfSpeech is PartOfSpeech.IAdjective or PartOfSpeech.Verb || kanjiAdverbLead || misparsedKanjiLead) &&
                             i + 1 < sentence.Words.Count &&
                             PosMapper.IsNounForCompounding(sentence.Words[i + 1].word.PartOfSpeech))
                         {
@@ -4523,8 +4622,15 @@ namespace Jiten.Parser
             MisparseDecision EvaluateAt(int i, DeckWord deckWord)
             {
                 var token = flatTokens[i];
+
+                // Skip the flag/neighbour/blob assembly outright for tokens no gate can judge.
+                if (!MisparseGates.MayBeKanaFragment(token.Text)
+                    && (deckWord.OriginalText.Length == 0
+                        || !MisparseGates.MayBeKanaFragment(deckWord.OriginalText)))
+                    return default;
+
                 wordData.TryGetValue(deckWord.WordId, out var jmWord);
-                var (isUk, hasKanji, readingIsIchi, attestsForm) = MisparseGates.GetWordFlags(
+                var (isUk, hasKanji, readingIsIchi, attestsForm, attestsLiterally) = MisparseGates.GetWordFlags(
                     jmWord, deckWord.ReadingIndex,
                     deckWord.OriginalText.Length > 0 ? deckWord.OriginalText : token.Text);
 
@@ -4580,6 +4686,7 @@ namespace Jiten.Parser
                     symbolsBefore[i],
                     symAfter,
                     attestsForm,
+                    attestsLiterally,
                     blobUnattested,
                     prevDropped,
                     nextDropped);

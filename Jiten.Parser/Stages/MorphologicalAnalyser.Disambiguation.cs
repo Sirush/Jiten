@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Parser.Scoring;
 
@@ -86,11 +87,13 @@ public partial class MorphologicalAnalyser
                 word.PreMatchedWordId = 1209690;
             }
 
-            // A bare kana し/した that Sudachi lemmatises as する is that verb; the kana surface must
-            // not fall to a noun homograph (詩/舌) through surface-match priority. Inflection merges
-            // can leave the token with a surface dictionary form and Unknown POS — the kanji homographs
-            // always carry their own dictionary form, so those stay untouched.
-            if (word.Text is "し" or "した"
+            // A bare kana し/した/して that Sudachi lemmatises as する is that verb; the kana surface
+            // must not fall to a homograph (詩/舌, or the dated particle して) through surface-match
+            // priority. Inflection merges can leave the token with a surface dictionary form and
+            // Unknown POS — the kanji homographs always carry their own dictionary form, so those
+            // stay untouched, and so does the standalone conjunction して (Sudachi lemmatises it
+            // as して itself, so the dictionary-form gate does not fire).
+            if (word.Text is "し" or "した" or "して"
                 && word.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Unknown
                 && word.DictionaryForm is "する" or "為る" or "した" && word.PreMatchedWordId == null)
             {
@@ -392,17 +395,6 @@ public partial class MorphologicalAnalyser
                 wordInfos.Insert(i + 1, deP);
             }
 
-            // 連用形 仕舞い before 直す is 仕舞う (仕舞い直す), not the noun 仕舞い "the end".
-            if (word.Text == "仕舞い" && i + 1 < wordInfos.Count
-                && wordInfos[i + 1].DictionaryForm == "直す" && word.PreMatchedWordId == null)
-            {
-                word.PartOfSpeech = PartOfSpeech.Verb;
-                word.DictionaryForm = "仕舞う";
-                word.NormalizedForm = "仕舞う";
-                word.PreMatchedWordId = 1305380;
-                word.PreMatchedConjugations = PinnedConjugationProcess("仕舞い", "仕舞う");
-            }
-
             // 放ってお* is the expression 放っておく (1907980), not bare 放る.
             if (word.Text.StartsWith("放ってお", StringComparison.Ordinal) && word.Text.Length >= 5
                 && word.PreMatchedWordId == null)
@@ -433,34 +425,6 @@ public partial class MorphologicalAnalyser
                 word.PreMatchedWordId = 1448820;
             }
 
-            // 雪の下 in prose is 雪 + の + 下 (buried under snow); the plant ユキノシタ is a
-            // botanical term.
-            if (word.Text == "雪の下")
-            {
-                int ykEnd = word.EndOffset;
-                word.Text = "雪";
-                word.DictionaryForm = "雪";
-                word.NormalizedForm = "雪";
-                word.PartOfSpeech = PartOfSpeech.Noun;
-                word.PreMatchedWordId = null;
-                var noP = new WordInfo(word)
-                {
-                    Text = "の", DictionaryForm = "の", NormalizedForm = "の",
-                    Reading = "ノ", PartOfSpeech = PartOfSpeech.Particle,
-                    StartOffset = ykEnd >= 0 ? ykEnd - 2 : -1,
-                    EndOffset = ykEnd >= 0 ? ykEnd - 1 : -1
-                };
-                var shita = new WordInfo(word)
-                {
-                    Text = "下", DictionaryForm = "下", NormalizedForm = "下",
-                    Reading = "シタ", PartOfSpeech = PartOfSpeech.Noun,
-                    StartOffset = ykEnd >= 0 ? ykEnd - 1 : -1
-                };
-                word.EndOffset = ykEnd >= 0 ? ykEnd - 2 : ykEnd;
-                wordInfos.Insert(i + 1, noP);
-                wordInfos.Insert(i + 2, shita);
-            }
-
             // 右手首/左手首 is 右+手首 "right wrist": the wrist is the head noun, the side its
             // modifier — the lattice otherwise cuts 右手+首 "right hand's neck".
             if (word.Text is "右手首" or "左手首")
@@ -483,22 +447,102 @@ public partial class MorphologicalAnalyser
                 wordInfos.Insert(i + 1, tekubi);
             }
 
-            // ずにおこう: Sudachi strands お as an interjection before こう — it is the volitional
-            // of the aspectual おく (〜ずにおく "leave it un-done").
-            if (word is { Text: "お", PartOfSpeech: PartOfSpeech.Interjection }
-                && i > 0 && (wordInfos[i - 1].Text == "に"
-                             || wordInfos[i - 1].Text.EndsWith("ずに", StringComparison.Ordinal))
-                && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "こう")
+            // ばっか directly after a te-form is the ばかり contraction (してばっか "nothing but
+            // doing"), never a noun — a predicative 馬鹿 needs its own clause slot. Pinned because
+            // the surface is also a listed kana form of unrelated kanji words (麦価/幕下), whose
+            // exact-form matches otherwise compete with the particle depending on neighbour scoring.
+            if (word is { Text: "ばっか", PreMatchedWordId: null } && i > 0
+                && ((wordInfos[i - 1] is { PartOfSpeech: PartOfSpeech.Verb } vprev
+                     && (vprev.Text.EndsWith("て") || vprev.Text.EndsWith("で")))
+                    || wordInfos[i - 1] is { PartOfSpeech: PartOfSpeech.Particle, Text: "て" or "で" }))
             {
-                word.Text = "おこう";
-                word.DictionaryForm = "おく";
-                word.NormalizedForm = "おく";
-                word.Reading = "オコウ";
-                word.PartOfSpeech = PartOfSpeech.Verb;
-                word.PreMatchedWordId = 1421850;
-                word.PreMatchedConjugations = PinnedConjugationProcess("おこう", "おく");
-                word.EndOffset = wordInfos[i + 1].EndOffset;
-                wordInfos.RemoveAt(i + 1);
+                word.PreMatchedWordId = 2857403;
+                word.DictionaryForm = "ばっか";
+                word.NormalizedForm = "ばっか";
+                word.PartOfSpeech = PartOfSpeech.Particle;
+            }
+
+            // A single-kanji noun coordinated with another single-kanji noun (仁も義も礼も智も,
+            // 礼と智を尊ぶ, 仁や義) enumerates concepts, yet Sudachi still lemmatises each bare
+            // kanji to a given-name reading (智→サトシ) and tags it as a proper noun, letting a
+            // name entry outrank the JMDict noun downstream. Inside the frame the name tagging is
+            // noise — strip the proper-noun sections so the token competes as an ordinary noun.
+            // The list partner must itself be a single kanji, so a list of full names (太郎と智)
+            // is untouched; the strip is a no-op for tokens Sudachi never name-tagged.
+            if (word.PartOfSpeech is PartOfSpeech.Noun && word.Text.Length == 1
+                && JapaneseTextHelper.IsKanji(word.Text[0]) && word.PreMatchedWordId == null
+                && ((i >= 2
+                     && wordInfos[i - 1] is { PartOfSpeech: PartOfSpeech.Particle, Text: "も" or "と" or "や" }
+                     && wordInfos[i - 2].Text.Length == 1
+                     && JapaneseTextHelper.IsKanji(wordInfos[i - 2].Text[0])
+                     && wordInfos[i - 2].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
+                    || (i + 2 < wordInfos.Count
+                        && wordInfos[i + 1] is { PartOfSpeech: PartOfSpeech.Particle, Text: "も" or "と" or "や" }
+                        && wordInfos[i + 2].Text.Length == 1
+                        && JapaneseTextHelper.IsKanji(wordInfos[i + 2].Text[0])
+                        && wordInfos[i + 2].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)))
+            {
+                word.PartOfSpeechSection1 = PartOfSpeechSection.None;
+                word.PartOfSpeechSection2 = PartOfSpeechSection.None;
+                word.PartOfSpeechSection3 = PartOfSpeechSection.None;
+            }
+
+            // 将に is JMDict's rarely-used kanji spelling of まさに, but まさに is an intensifying
+            // adverb that attaches directly to its predicate and never takes a topic particle —
+            // 将に right before は can only be the noun 将 + に (将には必要な資質).
+            if (word is { Text: "将に", PartOfSpeech: PartOfSpeech.Adverb }
+                && i + 1 < wordInfos.Count && wordInfos[i + 1] is { Text: "は", PartOfSpeech: PartOfSpeech.Particle })
+            {
+                int shoEnd = word.EndOffset;
+                word.Text = "将";
+                word.DictionaryForm = "将";
+                word.NormalizedForm = "将";
+                word.Reading = "ショウ";
+                word.PartOfSpeech = PartOfSpeech.Noun;
+                word.EndOffset = shoEnd >= 0 ? shoEnd - 1 : -1;
+                wordInfos.Insert(i + 1, new WordInfo
+                {
+                    Text = "に", DictionaryForm = "に", NormalizedForm = "に", Reading = "ニ",
+                    PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle,
+                    StartOffset = shoEnd >= 0 ? shoEnd - 1 : -1, EndOffset = shoEnd
+                });
+            }
+
+            // General lattice boundary theft on a 2-kanji + 1-kanji noun pair: a trailing kanji
+            // that is not a word on its own (営) can only be the tail of the following compound —
+            // shift the boundary so both sides are real words (敵陣|営 → 敵|陣営). A trailing kanji
+            // that stands alone stays put (東京|都), so genuinely ambiguous cuts are untouched.
+            if (word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && word.Text.Length == 2 && word.PreMatchedWordId == null
+                && JapaneseTextHelper.IsKanji(word.Text[0]) && JapaneseTextHelper.IsKanji(word.Text[1])
+                && i + 1 < wordInfos.Count && HasNonNameCompoundLookup != null)
+            {
+                var tail = wordInfos[i + 1];
+                if (tail.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                    && tail.Text.Length == 1 && JapaneseTextHelper.IsKanji(tail.Text[0])
+                    && tail.PreMatchedWordId == null
+                    && !HasNonNameCompoundLookup(tail.Text)
+                    && HasNonNameCompoundLookup(word.Text[..1])
+                    && HasNonNameCompoundLookup(word.Text[1..] + tail.Text))
+                {
+                    string newTail = word.Text[1..] + tail.Text;
+                    tail.Text = newTail;
+                    tail.DictionaryForm = newTail;
+                    tail.NormalizedForm = newTail;
+                    // Neither side's reading is recoverable from the stolen cut (営 carries the
+                    // mutated lemma's reading); leave them empty so JMDict matching supplies them.
+                    tail.Reading = "";
+                    tail.PartOfSpeech = PartOfSpeech.Noun;
+                    word.Text = word.Text[..1];
+                    word.DictionaryForm = word.Text;
+                    word.NormalizedForm = word.Text;
+                    word.Reading = "";
+                    if (word.EndOffset >= 0)
+                    {
+                        tail.StartOffset = word.EndOffset - 1;
+                        word.EndOffset -= 1;
+                    }
+                }
             }
 
             // 主人格 is 主 + 人格 "primary personality"; the lattice cuts 主人+格 "master's rank".

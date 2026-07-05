@@ -916,6 +916,10 @@ public partial class MorphologicalAnalyser
                     TryCombineWithLookback(result, "ん", "ん", deconj, IsAnyVerbForm, out var negativeWord))
                 {
                     negativeWord!.EndOffset = current.EndOffset;
+                    // Sudachi identified this ん as the negative auxiliary ぬ. The deconjugator
+                    // alone can't tell it from a slurred る (してん) and prefers that shorter
+                    // path, so record the diagnosis for chain selection.
+                    negativeWord.IsSlurredNegative = true;
 
                     // After combining ませ+ん→ません, try to combine preceding verb stem with ません
                     // e.g., [し, ませ] + ん → [しません]
@@ -936,6 +940,34 @@ public partial class MorphologicalAnalyser
                             if (verbStem.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant))
                                 negativeWord.PartOfSpeechSection1 = PartOfSpeechSection.PossibleDependant;
                         }
+                    }
+
+                    // The lookback stops at the shortest valid form, so a slurred negative on a voice
+                    // auxiliary absorbs only the ん (られん→られる validates alone) and strands the
+                    // preceding stem (認め|られん). Like the ません case above, reattach leftward while
+                    // the combined token is still headed by a voice auxiliary: each step is valid only
+                    // if the stem's own dictionary form deconjugates out of the whole (認められん→認める).
+                    // Loops so causative-passive chains reattach fully (させ+られん, then 食べ+させられん).
+                    while (VerbIndicatingAuxiliaries.Contains(negativeWord.DictionaryForm) && result.Count > 0 &&
+                           (result[^1].PartOfSpeech == PartOfSpeech.Verb ||
+                            (result[^1].PartOfSpeech == PartOfSpeech.Auxiliary &&
+                             VerbIndicatingAuxiliaries.Contains(result[^1].DictionaryForm))))
+                    {
+                        var stem = result[^1];
+                        var candidateText = stem.Text + negativeWord.Text;
+                        var forms = deconj.Deconjugate(NormalizeToHiragana(candidateText));
+                        var stemTarget = NormalizeToHiragana(stem.DictionaryForm);
+                        if (!ContainsText(forms, stemTarget))
+                            break;
+
+                        result.RemoveAt(result.Count - 1);
+                        negativeWord.Text = candidateText;
+                        negativeWord.StartOffset = stem.StartOffset;
+                        negativeWord.DictionaryForm = stem.DictionaryForm;
+                        negativeWord.NormalizedForm = candidateText;
+                        negativeWord.Reading = KanaConverter.ToHiragana(stem.Reading + negativeWord.Reading);
+                        if (stem.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant))
+                            negativeWord.PartOfSpeechSection1 = PartOfSpeechSection.PossibleDependant;
                     }
 
                     result.Add(negativeWord);

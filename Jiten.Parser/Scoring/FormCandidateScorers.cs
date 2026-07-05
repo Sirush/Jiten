@@ -792,11 +792,25 @@ internal static class ReadingScorer
         // Kanji with multiple valid readings (e.g. 得る える/うる, 色 いろ/しょく)
         // shouldn't be crushed when Sudachi picks a different reading — the kanji
         // surface is inherently ambiguous. This also prevents the SurfaceMatch 0.3
-        // slash in FormCandidateScorer.Score from triggering.
+        // slash in FormCandidateScorer.Score from triggering. A bare single kanji is
+        // the extreme case: Sudachi must lemmatise it to SOME reading (often a given
+        // name, 智→サトシ), so that choice can't crush an exactly-attested homograph
+        // even without frequency data.
         if (readingMatchScore < 0
             && candidate.Form.FormType == JmDictFormType.KanjiForm
             && context.Surface == candidate.Form.Text
-            && KanaScoringHelpers.HasFrequencyMarker(candidate.Word.Priorities))
+            && (KanaScoringHelpers.HasFrequencyMarker(candidate.Word.Priorities)
+                || context.Surface.Length == 1))
+        {
+            readingMatchScore = 0;
+        }
+
+        // A name entry's reading agreement on a bare single kanji is circular evidence:
+        // Sudachi picked a name lemma for the isolated kanji and the name entry carries
+        // that same reading. Without actual name context it must not outweigh a JMDict
+        // homograph's exact attestation (仁も義も礼も智も = the virtue noun, not サトシ).
+        if (readingMatchScore > 0 && !context.IsKanaSurface && context.Surface.Length == 1
+            && !context.IsNameContext && candidate.Word.CachedPOS.Contains(PartOfSpeech.Name))
         {
             readingMatchScore = 0;
         }

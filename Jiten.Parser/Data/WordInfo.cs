@@ -22,6 +22,12 @@ public class WordInfo
     public List<string>? PreMatchedConjugations { get; set; }
     public List<int>? PreMatchedCandidateWordIds { get; set; }
     public bool IsImperative { get; set; }
+
+    /// Set when a merge absorbed an ん that Sudachi tagged as the negative auxiliary ぬ
+    /// (認め+られ+ん). The deconjugator alone can't tell that ん from a slurred る (してん),
+    /// and its slur path is shorter, so chain selection needs this to keep the negative sense.
+    public bool IsSlurredNegative { get; set; }
+
     public bool WasReclassifiedFromSuffix { get; set; }
     public bool IsMergedInflection { get; set; }
     public int? ResolvedWordId { get; set; }
@@ -58,6 +64,7 @@ public class WordInfo
         PreMatchedConjugations = other.PreMatchedConjugations?.ToList();
         PreMatchedCandidateWordIds = other.PreMatchedCandidateWordIds?.ToList();
         IsImperative = other.IsImperative;
+        IsSlurredNegative = other.IsSlurredNegative;
         WasReclassifiedFromSuffix = other.WasReclassifiedFromSuffix;
         IsMergedInflection = other.IsMergedInflection;
         ResolvedWordId = other.ResolvedWordId;

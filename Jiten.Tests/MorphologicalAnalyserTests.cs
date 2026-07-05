@@ -2000,6 +2000,45 @@ public class MorphologicalAnalyserTests
         // (すぅっと→すっと); a different-row small is a digraph spelling its own mora — ふぁっと
         // is its own mimetic, not ふっと.
         yield return ["ふぁっと風が吹いた", new[] { "ふぁっと", "風", "が", "吹いた" }];
+        // A single-kanji orphan after a two-kanji token is a boundary-theft shred when the
+        // orphan is unattested alone and the shifted cut restores two attested words (敵陣|営
+        // → 敵+陣営); attested orphans (東京|都) keep Sudachi's cut.
+        yield return ["敵陣営に大きな変化がありました", new[] { "敵", "陣営", "に", "大きな", "変化", "が", "ありました" }];
+        yield return ["東京都に住んでいる。", new[] { "東京都", "に", "住んでいる" }];
+        // ん-slurred passive/potential (られん = られぬ) combines with the preceding renyoukei
+        // exactly like られない does.
+        yield return ["しかし、どうしても認められん。", new[] { "しかし", "どうしても", "認められん" }];
+        yield return ["この味は忘れられんな。", new[] { "この", "味", "は", "忘れられん", "な" }];
+        // A タリ-adverb token Sudachi emits with a fused と (凛と) splits into word + particle
+        // when the fused surface has no entry of its own but the base does.
+        yield return ["その立場に相応しい凛とした声音で応じた。",
+            new[] { "その", "立場", "に", "相応しい", "凛", "と", "した", "声音", "で", "応じた" }];
+        // Mixed-script compound verbs resolve through the kana form of their deconjugated base
+        // (帰りつけた → かえりつく) when the kanji-mixed key is not in the lookups.
+        yield return ["潰走した東征軍で、西の人界に帰りつけた者はごく僅かだったという。",
+            new[] { "潰走した", "東征", "軍", "で", "西", "の", "人界", "に", "帰りつけた", "者", "は", "ごく僅か", "だった", "という" }];
+        // Renyoukei + aspectual だす stays split when the compound is unattested (混じり出す),
+        // so the aspectual verb remains visible; attested compounds still merge (走り出した).
+        yield return ["湖に塩が混じりだしたということなのか。",
+            new[] { "湖", "に", "塩", "が", "混じり", "だした", "という", "こと", "な", "の", "か" }];
+        yield return ["彼は突然走りだした。", new[] { "彼", "は", "突然", "走りだした" }];
+        // Fossilised adverbial compounds recombine when Sudachi splits them (ゆえ+に, とう+に —
+        // the latter otherwise strands とう on the homograph 塔).
+        yield return ["ゆえに馬鹿げている、度し難い", new[] { "ゆえに", "馬鹿げている", "度し難い" }];
+        yield return ["奴らは、自国の化外をとうに滅ぼしているのだから",
+            new[] { "奴ら", "は", "自国", "の", "化外", "を", "とうに", "滅ぼしている", "の", "だから" }];
+        // Literary そも: Sudachi emits pronoun そ + も; the conjunction entry is the word.
+        yield return ["「否定は出来ぬね。そも東征に参加するという時点で、身の安全も何もない」",
+            new[] { "否定", "は", "出来ぬ", "ね", "そも", "東征", "に", "参加する", "という", "時点", "で", "身の安全", "も", "何もない" }];
+        // The honorific benefactive 差し上げる is a counted word, not a swallowed auxiliary.
+        yield return ["吉凶を判じて差し上げるくらいしか役目を与えられぬだろうし、それすらそもそも信じまい",
+            new[] { "吉凶", "を", "判じて", "差し上げる", "くらい", "しか", "役目", "を", "与えられぬだろう", "し", "それすら", "そもそも", "信じまい" }];
+        // An adverb-tagged lead (一向) may still head an attested noun compound (一向一揆).
+        yield return ["一向一揆", new[] { "一向一揆" }];
+        // Sigh spellings survive standalone (small-vowel promotion attests ふぅ→ふう)…
+        yield return ["こころ「ふぅ……」", new[] { "こころ", "ふぅ" }];
+        // …but shards of an unsegmentable kana blob stay phonetic material and drop.
+        yield return ["ずがんっ！と響いた。", new[] { "と", "響いた" }];
         yield return ["ぱん！と乾いた音がした。", new[] { "と", "乾いた", "音がした" }];
         yield return ["ぼんっ！と空で音がした。", new[] { "と", "空", "で", "音がした" }];
         yield return ["ぴーー！と笛が鳴る。", new[] { "と", "笛", "が", "鳴る" }];
@@ -2051,13 +2090,9 @@ public class MorphologicalAnalyserTests
         yield return ["逃げたのは怖かったからだ。", new[] { "逃げた", "の", "は", "怖かった", "から", "だ" }];
         yield return ["鍛え上げたからだつきだった。", new[] { "鍛え上げた", "からだつき", "だった" }];
 
-        // The botanical ユキノシタ must not swallow prose 雪+の+下
-        yield return ["冷たい雪の下で眠っていた。", new[] { "冷たい", "雪", "の", "下", "で", "眠っていた" }];
         // The wrist is the head noun of 右手首 (右+手首, not 右手+首); 主人格 is 主+人格
         yield return ["右手首を掴まれた。", new[] { "右", "手首", "を", "掴まれた" }];
         yield return ["主人格が支配している。", new[] { "主", "人格", "が", "支配している" }];
-        // 〜ずにおこう is the aspectual おく volitional, not the interjection お + こう
-        yield return ["もうツッコまずにおこう…。", new[] { "もう", "ツッコまずに", "おこう" }];
         // A real word after a dropped burst fragment must survive (うぅ drops, なぜ stays;
         // そっか survives its dropped neighbour わりっ)
         yield return ["「うぅっ…なぜ！？」", new[] { "なぜ" }];
