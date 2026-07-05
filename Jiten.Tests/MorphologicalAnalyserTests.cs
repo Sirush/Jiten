@@ -2089,6 +2089,10 @@ public class MorphologicalAnalyserTests
         // and the body noun elsewhere stay intact
         yield return ["逃げたのは怖かったからだ。", new[] { "逃げた", "の", "は", "怖かった", "から", "だ" }];
         yield return ["鍛え上げたからだつきだった。", new[] { "鍛え上げた", "からだつき", "だった" }];
+        // A case particle after からだ marks the body noun — the preceding adjective is attributive
+        yield return ["弱いからだを鍛える", new[] { "弱い", "からだ", "を", "鍛える" }];
+        // 何かって is 何 + か + quotative って, not 何 + かつて
+        yield return ["何かって思った", new[] { "何", "か", "って", "思った" }];
 
         // The wrist is the head noun of 右手首 (右+手首, not 右手+首); 主人格 is 主+人格
         yield return ["右手首を掴まれた。", new[] { "右", "手首", "を", "掴まれた" }];

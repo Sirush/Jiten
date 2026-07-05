@@ -67,11 +67,9 @@ public partial class MorphologicalAnalyser
 
             // Katakana ナシ in casual writing is the negation なし (1529560), not the pear 梨 the
             // kana surface otherwise matches; the fruit is written 梨. Sudachi tags the negation
-            // use as a noun suffix (記憶ナシ). Coordination with と (リンゴとナシ) is produce-list
-            // territory — leave the pear.
+            // use as a noun suffix (記憶ナシ).
             if (word.Text == "ナシ" && word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
-                    or PartOfSpeech.NounSuffix or PartOfSpeech.Suffix
-                && !(i > 0 && wordInfos[i - 1] is { Text: "と", PartOfSpeech: PartOfSpeech.Particle }))
+                    or PartOfSpeech.NounSuffix or PartOfSpeech.Suffix)
             {
                 word.DictionaryForm = "なし";
                 word.NormalizedForm = "なし";
@@ -166,6 +164,7 @@ public partial class MorphologicalAnalyser
                 word.Text = "か";
                 word.DictionaryForm = "か";
                 word.NormalizedForm = "か";
+                word.Reading = "カ";
                 word.PartOfSpeech = PartOfSpeech.Particle;
                 word.PreMatchedWordId = null;
                 var tte = new WordInfo(word)
@@ -208,15 +207,23 @@ public partial class MorphologicalAnalyser
             }
 
             // Kana からだ directly after a predicate is から + だ "because it is", not the body 体
-            // (which is written in kanji in that position).
+            // (which is written in kanji in that position). A case/topic particle right after rules
+            // the predicate reading out — だ takes none of them — so there the preceding verb or
+            // adjective is attributive and からだ is the body noun (弱いからだを鍛える). が is kept in
+            // that set even though …からだが、 can be the conjunction だが: the nominal reading is the
+            // safer default for an ambiguous frame. と/として stay on the split side — からだと思う and
+            // からだとしても are predicative grammar and dominate the nominal からだと向き合う frame.
             if (word.Text == "からだ" && word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
                 && i > 0 && wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
-                    or PartOfSpeech.Auxiliary)
+                    or PartOfSpeech.Auxiliary
+                && !(i + 1 < wordInfos.Count && wordInfos[i + 1].PartOfSpeech == PartOfSpeech.Particle
+                     && wordInfos[i + 1].Text is "を" or "が" or "に" or "は" or "も" or "の" or "で" or "へ" or "や"))
             {
                 int kdMid = word.EndOffset >= 0 ? word.EndOffset - 1 : -1;
                 word.Text = "から";
                 word.DictionaryForm = "から";
                 word.NormalizedForm = "から";
+                word.Reading = "カラ";
                 word.PartOfSpeech = PartOfSpeech.Particle;
                 word.PreMatchedWordId = null;
                 var da = new WordInfo(word)
@@ -405,11 +412,12 @@ public partial class MorphologicalAnalyser
                 word.PreMatchedConjugations = PinnedConjugationProcess(word.Text, "放っておく");
             }
 
-            // 向い* after を with a direction word is 向く "to face" (前を向いて), not 剥く "to peel".
-            if (word.Text.StartsWith("向い", StringComparison.Ordinal) && i >= 2
-                && wordInfos[i - 1].Text == "を"
-                && wordInfos[i - 2].Text is "前" or "後ろ" or "横" or "上" or "下" or "こっち" or "そっち"
-                    or "あっち" or "未来" or "正面"
+            // 向い* that Sudachi lemmatises as 向く is 向く "to face" (1277080). Unpinned, the
+            // scorer hands the surface to 向かう instead: its okurigana-less spelling 向う makes
+            // 向い a valid renyoukei, and its richer priority tags outrank the correct lemma.
+            if (word.Text.StartsWith("向い", StringComparison.Ordinal)
+                && word.PartOfSpeech == PartOfSpeech.Verb
+                && word.DictionaryForm == "向く"
                 && word.PreMatchedWordId == null)
             {
                 word.DictionaryForm = "向く";
@@ -613,8 +621,9 @@ public partial class MorphologicalAnalyser
             // 方々 with を/に + a movement verb (町の方々を歩き回った, 方々に散らばった) is the adverb ほうぼう
             // "here and there" (1584105) — places are moved through. Sudachi reads bare 方々 as カタガタ, so
             // skipping the pin is not enough: the reading-match bonus makes かたがた win anyway; pin ほうぼう
-            // explicitly. Otherwise 方々 after の is the honorific "people" かたがた (1584100, 軍の方々,
-            // あの方々) — people are addressed or spoken to.
+            // explicitly. Otherwise 方々 after の or an adnominal (軍の方々, その方々) is the honorific
+            // "people" かたがた (1584100) — ほうぼう never takes a demonstrative, and Sudachi's reading
+            // is unreliable in that frame (その方々 comes back ホウボウ).
             bool movementFollows = i + 2 < wordInfos.Count && wordInfos[i + 1].Text is "を" or "に"
                 && (wordInfos[i + 2].DictionaryForm is "歩く" or "巡る" or "旅する" or "走る" or "駆ける"
                        or "散る" or "散らばる" or "逃げる" or "飛ぶ"
@@ -622,7 +631,9 @@ public partial class MorphologicalAnalyser
                     || wordInfos[i + 2].DictionaryForm.EndsWith("散る", StringComparison.Ordinal));
             if (word.Text == "方々" && movementFollows)
                 word.PreMatchedWordId = 1584105;
-            else if (word.Text == "方々" && i > 0 && wordInfos[i - 1].Text == "の")
+            else if (word.Text == "方々" && i > 0
+                && (wordInfos[i - 1].Text == "の"
+                    || wordInfos[i - 1].PartOfSpeech == PartOfSpeech.PrenounAdjectival))
                 word.PreMatchedWordId = 1584100;
 
             // Clause-final だい (何がだい, そうだい) is the familiar question particle "is it?" (2097680),

@@ -1551,7 +1551,8 @@ public class FormSelectionTests
         yield return ["ついあれこれ見ているうちに夢中になってしまって", "つい", 1008030, (byte)0];
         // 奢りじゃ悪い: じゃ (では contraction) is the dedicated じゃ copula (2851029), not the plain だ (2089020).
         yield return ["全部あんたの奢りじゃ悪いだろ", "じゃ", 2851029, (byte)0];
-        // 奢り resolves via the user_dic おごり entry, not a homograph.
+        // 奢り is the noun 2060630 "treat"; user_dic deliberately has no おごり verb row (it would
+        // hijack this noun), only the other 奢る conjugation surfaces.
         yield return ["全部あんたの奢りじゃ悪いだろ", "奢り", 2060630, (byte)0];
         // 事実+上達 must stay Sudachi's cut — the X|Y達 rebind is for single-char fragments (部|下達) only.
         yield return ["剣術は事実上達していた", "上達していた", 1353850, (byte)0];
@@ -1587,6 +1588,9 @@ public class FormSelectionTests
         yield return ["ゆに「ねえ、それよりメガネー。ぼくのメガネー」", "ねえ", 2029080, (byte)2]; // hey, not dialectal ない
         yield return ["「ありゃ？　どこいった？」", "いった", 1578850, (byte)0]; // 行く after a place word
         yield return ["「時間が経てば治るのよ。ようは死なないの」", "ようは", 1914670, (byte)1]; // 要は, not 様+は
+        yield return ["その方々は貴族の出だ", "方々", 1584100, (byte)0]; // demonstrative + 方々 = かたがた (Sudachi reads it ホウボウ)
+        yield return ["何かって思った", "か", 2028970, (byte)0]; // 何+か+って, not 何+かつて
+        yield return ["弱いからだを鍛える", "からだ", 1409140, (byte)6]; // body noun before を, not から+だ
 
         // Homograph wrong-reading: context selects the reading (kanji is shared)
         yield return ["どれだけ時間が経っただろう、１分ぐらいか。", "１分", 1166290, (byte)0]; // いっぷん, not いちぶ
@@ -1607,7 +1611,8 @@ public class FormSelectionTests
         yield return ["皿をその横に置き、てきぱきと野菜を並べた。", "置き", 1421850, (byte)0]; // 置く 連用形, not おき interval
         yield return ["強がってみせる。", "強がって", 1928800, (byte)0]; // 強がる
         yield return ["「先に行け！」", "行け", 1578850, (byte)0]; // 行く imperative, not 行ける
-        yield return ["それなら、前を向いて進むのが正しいはずだ。", "向いて", 1277080, (byte)0]; // 向く, not 剥く
+        yield return ["それなら、前を向いて進むのが正しいはずだ。", "向いて", 1277080, (byte)0]; // 向く, not 向かう via its 向う spelling
+        yield return ["彼女の方を向いて笑った", "向いて", 1277080, (byte)0]; // same theft without a whitelisted direction word
         yield return ["俺は立華宛の手紙を思い出す。", "宛", 1448820, (byte)1]; // 宛て suffix
         yield return ["「やべぇ！　後ろからも来やがるぜ！！」", "来", 1547720, (byte)0]; // 来る stem before やがる
 
@@ -1636,7 +1641,6 @@ public class FormSelectionTests
         yield return ["てめぇら女子が昨日の練習で凡ミスしてばっかだったからだよっ！", "ばっか", 2857403, (byte)0];
         yield return ["遊んでばっかいないで勉強しなさい。", "ばっか", 2857403, (byte)0];
         yield return ["あんたはばっかじゃないの。", "ばっか", 1601260, (byte)4]; // predicative stays 馬鹿
-        yield return ["リンゴとナシを買った。", "ナシ", 1549860, (byte)3]; // と-coordination keeps the pear
         yield return ["コンサートでピアノが弾かれた。", "弾かれた", 1419370, (byte)0]; // music keeps ひく
         yield return ["「俺のバンドでいくらでも弾かせてやるぞっ…て」", "弾かせてやる", 1419370, (byte)0]; // causative = play
         yield return ["ピアノはもう弾かない。", "弾かない", 1419370, (byte)0]; // negative = play

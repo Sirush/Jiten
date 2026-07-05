@@ -333,13 +333,7 @@ internal static class ResegmentationEngine
         var replacements = path.Segments.Select((seg, segIdx) =>
         {
             var text = span.Text.Substring(seg.StartChar, seg.Length);
-            // Coordination with と marks a genuine noun list (リンゴとナシ), mirroring the
-            // FilterMisparse exemption for the same surface — there the pear is the word meant.
-            string precedingText = segIdx > 0
-                ? span.Text.Substring(path.Segments[segIdx - 1].StartChar, path.Segments[segIdx - 1].Length)
-                : span.WordIndex > 0 ? sentence.Words[span.WordIndex - 1].word.Text : "";
-            bool surfacePinned = SegmentSurfacePins.TryGetValue(text, out var pinnedId)
-                                 && precedingText is not ("と" or "ト");
+            bool surfacePinned = SegmentSurfacePins.TryGetValue(text, out var pinnedId);
             int? bestWordId = surfacePinned
                 ? pinnedId
                 : seg.WordIds
