@@ -40,6 +40,11 @@ internal enum TokenFeatures : uint
     TextTatte       = 1 << 16,
     TextRan         = 1 << 17,
     OovGarbage      = 1 << 19,
+    TextSakki       = 1 << 20,
+    KanaRepetition  = 1 << 21,
+    DictKiru        = 1 << 22,
+    HiraganaOovBlob = 1 << 23,
+    AdverbEndsTo    = 1 << 24,
 
     // Composite
     InflectableBase = 1 << 18,
@@ -62,6 +67,7 @@ internal static class TokenFeatureScanner
     public static TokenFeatures Scan(List<WordInfo> tokens)
     {
         var f = TokenFeatures.None;
+        string prevText = "";
 
         foreach (var w in tokens)
         {
@@ -128,7 +134,29 @@ internal static class TokenFeatureScanner
                 case "らん":
                     f |= TokenFeatures.TextRan;
                     break;
+                case "さっ":
+                    f |= TokenFeatures.TextSakki;
+                    break;
             }
+
+            if (w.DictionaryForm == "切る")
+                f |= TokenFeatures.DictKiru;
+
+            // SplitUnattestedToAdverbs only acts on adverb tokens ending in と (凛と, 堂々と).
+            if (w.PartOfSpeech == PartOfSpeech.Adverb && text.Length >= 2 && text[^1] == 'と')
+                f |= TokenFeatures.AdverbEndsTo;
+
+            // A 2-mora-unit kana repetition long enough to be a collapsible run by itself
+            // (ごろごろごろ), or continuing the previous token's unit (ごろごろ|ごろ) — a cheap
+            // superset of what CollapseReduplicatedMimetic can act on (it needs 3+ units total).
+            if ((f & TokenFeatures.KanaRepetition) == 0 && IsUnitRepetition(text))
+            {
+                if (text.Length >= 6
+                    || (prevText.Length >= 2 && IsUnitRepetition(prevText)
+                        && prevText[0] == text[0] && prevText[1] == text[1]))
+                    f |= TokenFeatures.KanaRepetition;
+            }
+            prevText = text;
 
             if (w.Text.Length >= 3
                 && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Interjection or PartOfSpeech.Filler
@@ -140,9 +168,35 @@ internal static class TokenFeatureScanner
                 if (allHira)
                     f |= TokenFeatures.OovGarbage;
             }
+
+            // RetokeniseOovBlobs only re-cuts long hiragana(+ー) noun blobs.
+            if (w.Text.Length >= 5
+                && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && (f & TokenFeatures.HiraganaOovBlob) == 0)
+            {
+                bool hiraBlob = true;
+                foreach (var c in w.Text)
+                    if (c is (< '぀' or > 'ゟ') and not 'ー') { hiraBlob = false; break; }
+                if (hiraBlob)
+                    f |= TokenFeatures.HiraganaOovBlob;
+            }
         }
 
         return f;
+    }
+
+    // Even-length kana text that is its own leading 2-char unit repeated (ごろ, ごろごろ, ぐるぐるぐる).
+    // Character test is a cheap kana-range superset; the consuming stage re-checks precisely.
+    private static bool IsUnitRepetition(string s)
+    {
+        if (s.Length < 2 || (s.Length & 1) != 0) return false;
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c is < '぀' or > 'ヿ') return false;
+            if (i >= 2 && c != s[i & 1]) return false;
+        }
+        return true;
     }
 
     private static TokenFeatures SectionFeature(PartOfSpeechSection section) => section switch

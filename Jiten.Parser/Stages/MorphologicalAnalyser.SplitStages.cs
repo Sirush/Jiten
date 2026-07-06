@@ -109,6 +109,16 @@ public partial class MorphologicalAnalyser
         ['び'] = 'ぶ', ['み'] = 'む', ['り'] = 'る', ['い'] = 'う'
     };
 
+    private bool DeconjugatesToForm(string surface, string targetForm)
+    {
+        string target = KanaNormalizer.Normalize(KanaConverter.ToHiragana(targetForm));
+        string hira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(surface));
+        foreach (var f in PipelineCachedDeconjugate(hira))
+            if (f.Text == target)
+                return true;
+        return false;
+    }
+
     /// <summary>
     /// Decomposes productive compound verbs that are not in JMDict (驚き戸惑う, 縫い止める,
     /// 挑みかかる, 寝乱れる) into renyokei-stem verb + second verb, so both surface as vocabulary
@@ -199,6 +209,91 @@ public partial class MorphologicalAnalyser
             {
                 Text = tailSurface, DictionaryForm = word.DictionaryForm[at..], NormalizedForm = word.DictionaryForm[at..],
                 PartOfSpeech = PartOfSpeech.Verb, Reading = KanaConverter.ToHiragana(tailSurface),
+                StartOffset = word.StartOffset >= 0 ? word.StartOffset + at : -1,
+                EndOffset = word.EndOffset
+            });
+        }
+
+        return result ?? wordInfos;
+    }
+
+    // A 連用形 surface → its dictionary verb if one exists in JMDict (撃ち→撃つ, 食べ→食べる).
+    private string? RenyokeiSurfaceToVerb(string s)
+    {
+        if (s.Length < 2 || HasNonNameCompoundLookup == null) return null;
+        var ichidan = s + 'る';
+        if (HasNonNameCompoundLookup(ichidan)) return ichidan;
+        if (RenyokeiToGodanBase.TryGetValue(s[^1], out var baseEnd))
+        {
+            var godan = s[..^1] + baseEnd;
+            if (HasNonNameCompoundLookup(godan)) return godan;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Decomposes a productive 連用形 V+V compound that Sudachi tags as a single Noun and that has no
+    /// JMDict entry (撃ち漏らし → 撃つ + 漏らす, 殴り倒し → 殴る + 倒す), so both verbs surface as vocabulary
+    /// instead of the whole token being dropped as unresolvable at lookup. Both halves must resolve
+    /// to real verbs, which keeps non-compound nouns from being split apart.
+    /// </summary>
+    private List<WordInfo> SplitUnresolvableRenyokeiNounCompounds(List<WordInfo> wordInfos)
+    {
+        if (HasCompoundLookup == null || HasNonNameCompoundLookup == null)
+            return wordInfos;
+
+        List<WordInfo>? result = null;
+
+        for (int idx = 0; idx < wordInfos.Count; idx++)
+        {
+            var word = wordInfos[idx];
+
+            if (word.PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.CommonNoun) ||
+                word.Text.Length < 3 ||
+                !word.Text.Any(c => c is >= '一' and <= '鿿') ||
+                HasCompoundLookup(word.Text) ||
+                (!string.IsNullOrEmpty(word.NormalizedForm) && word.NormalizedForm != word.Text &&
+                 HasCompoundLookup(word.NormalizedForm)))
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            (int at, string leftBase, string rightBase)? split = null;
+            // Longest left stem first so 撃ち|漏らし wins over a shorter coincidental cut.
+            for (int p = word.Text.Length - 1; p >= 2 && split == null; p--)
+            {
+                var leftBase = RenyokeiSurfaceToVerb(word.Text[..p]);
+                if (leftBase == null) continue;
+                var rightBase = RenyokeiSurfaceToVerb(word.Text[p..]);
+                if (rightBase == null) continue;
+                split = (p, leftBase, rightBase);
+            }
+
+            if (split == null)
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            result ??= [..wordInfos[..idx]];
+            var (at, lBase, rBase) = split.Value;
+            var leftSurface = word.Text[..at];
+            var rightSurface = word.Text[at..];
+            // The halves' readings can't be recovered from the blob's reading (kanji reading lengths
+            // vary), so leave them empty — the reading scorer skips empty readings, while a surface
+            // copied into Reading would register as a mismatch against every kana form.
+            result.Add(new WordInfo
+            {
+                Text = leftSurface, DictionaryForm = lBase, NormalizedForm = lBase,
+                PartOfSpeech = PartOfSpeech.Verb, Reading = "",
+                StartOffset = word.StartOffset,
+                EndOffset = word.StartOffset >= 0 ? word.StartOffset + at : -1
+            });
+            result.Add(new WordInfo
+            {
+                Text = rightSurface, DictionaryForm = rBase, NormalizedForm = rBase,
+                PartOfSpeech = PartOfSpeech.Verb, Reading = "",
                 StartOffset = word.StartOffset >= 0 ? word.StartOffset + at : -1,
                 EndOffset = word.EndOffset
             });
@@ -324,8 +419,17 @@ public partial class MorphologicalAnalyser
                 if (HasSuruVerbCompoundLookup(prefix)) break;
                 // A dictForm that resolves on its own and is not just the noun stem means the
                 // deconjugation path can handle this token (思い出して → 思い出す): keep merged.
+                // Sudachi lemmatises a potential as its own lexeme (思い出せる with DictionaryForm=
+                // 思い出せる) and puts the base verb in NormalizedForm (思い出す) — check both.
                 if (word.DictionaryForm != prefix && word.DictionaryForm != text
                     && HasCompoundLookup(word.DictionaryForm)) break;
+                // The NormalizedForm route must be reachable: the surface has to actually
+                // deconjugate to it (思い出せる → 思い出す does; a doubled-し merge like
+                // 話ししません claims 話す but cannot, and must fall through to the split).
+                if (!string.IsNullOrEmpty(word.NormalizedForm)
+                    && word.NormalizedForm != prefix && word.NormalizedForm != text
+                    && HasCompoundLookup(word.NormalizedForm)
+                    && DeconjugatesToForm(text, word.NormalizedForm)) break;
 
                 var tail = text[p..];
                 foreach (var f in deconj.Deconjugate(tail))
@@ -567,6 +671,59 @@ public partial class MorphologicalAnalyser
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Splits a Sudachi adverb token Xと into X + と when the whole has no JMDict entry but X does.
+    /// JMDict lists taru-adjective/adv-to words bare (凛, 堂々, 悠然) — the と is the adverbializer
+    /// particle — while Sudachi lexicalises the と into the token (凛と). Left whole, the token can
+    /// only resolve through a partial surface match that silently swallows the と.
+    /// Restricted to kanji/katakana leads: the class is Sino-Japanese adverbs plus gairaigo nouns
+    /// (キッチンと = kitchen + と). A hiragana Xと is an emphatically deformed mimetic (ひっしと,
+    /// た〜んと) whose base entry the sokuon/stretch machinery already reaches — splitting those
+    /// trades the right word for a reading-key homophone of the lead.
+    /// </summary>
+    private List<WordInfo> SplitUnattestedToAdverbs(List<WordInfo> wordInfos)
+    {
+        List<WordInfo>? result = null;
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+
+            if (word is { PartOfSpeech: PartOfSpeech.Adverb, PreMatchedWordId: null }
+                && word.Text.Length >= 2 && word.Text[^1] == 'と'
+                && word.Text[0] is not (>= 'ぁ' and <= 'ゟ')
+                && word.Reading.Length >= 2 && word.Reading[^1] is 'ト' or 'と'
+                && HasNonNameCompoundLookup != null)
+            {
+                bool wholeAttested = HasNonNameCompoundLookup(word.Text)
+                                     || HasNonNameCompoundLookup(NormalizeToHiragana(word.Text));
+                string lead = word.Text[..^1];
+                if (!wholeAttested &&
+                    (HasNonNameCompoundLookup(lead) || HasNonNameCompoundLookup(NormalizeToHiragana(lead))))
+                {
+                    result ??= [..wordInfos[..i]];
+                    int mid = word.EndOffset >= 0 ? word.EndOffset - 1 : -1;
+                    result.Add(new WordInfo(word)
+                    {
+                        Text = lead, DictionaryForm = lead, NormalizedForm = lead,
+                        Reading = word.Reading[..^1], EndOffset = mid
+                    });
+                    result.Add(new WordInfo
+                    {
+                        Text = "と", DictionaryForm = "と", NormalizedForm = "と", Reading = "ト",
+                        PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle,
+                        StartOffset = mid, EndOffset = word.EndOffset
+                    });
+                    continue;
+                }
+            }
+
+            result?.Add(word);
+        }
+
+        return result ?? wordInfos;
     }
 
     /// <summary>
