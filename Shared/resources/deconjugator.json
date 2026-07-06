@@ -727,6 +727,14 @@
     "detail": "(te form)"
   },
   {
+    "type": "stdrule",
+    "dec_end": ["い"],
+    "con_end": ["くって"],
+    "dec_tag": ["adj-i"],
+    "con_tag": ["stem-te"],
+    "detail": "(te form)"
+  },
+  {
     "type": "rewriterule",
     "dec_end": ["です"],
     "con_end": ["でした"],

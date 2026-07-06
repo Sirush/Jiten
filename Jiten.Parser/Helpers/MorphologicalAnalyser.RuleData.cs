@@ -48,7 +48,9 @@ public partial class MorphologicalAnalyser
         "くれる", "呉れる",
         "もらう", "貰う",
         "やる",
-        "さしあげる", "差し上げる",
+        // 差し上げる is deliberately absent: unlike the fully grammaticalised single-morpheme
+        // subsidiaries above, the honorific benefactive is a content verb worth keeping as its
+        // own token (判じて + 差し上げる).
         "くださる", "下さる",
         "おく", "置く",
         "みる", "見る",
@@ -80,6 +82,8 @@ public partial class MorphologicalAnalyser
     private static readonly HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
     [
         ("じゃ", "ない", PartOfSpeech.Expression),
+        ("本当", "に", PartOfSpeech.Adverb), // 本当に 1611580 ("really") — recombine the 本当+に that Sudachi sometimes splits
+        ("ため", "に", PartOfSpeech.Conjunction), // ために 1157150 ("for the sake of / because of")
         ("だ", "ろう", PartOfSpeech.Auxiliary), // Sudachi shreds そりゃそうだろう into …だ|ろう(蝋)
         ("す", "べき", PartOfSpeech.Expression), // classical す + べき → すべき 1006200 (とすべき戦術)
         ("なさ", "すぎる", PartOfSpeech.Verb), // なさ[ない]+すぎる → ない via さすぎる excess deconj
@@ -106,6 +110,13 @@ public partial class MorphologicalAnalyser
         ("誰", "か", PartOfSpeech.Expression),
         ("すぐ", "に", PartOfSpeech.Adverb),
         ("たしか", "に", PartOfSpeech.Adverb),
+        ("確か", "に", PartOfSpeech.Adverb), // 確かに 1205770 — kanji variant of the たしか row above
+        ("ゆえ", "に", PartOfSpeech.Conjunction), // 故に 1267130 ("therefore") — literary connective Sudachi splits
+        ("故", "に", PartOfSpeech.Conjunction), // kanji variant of the ゆえ row above
+        ("とう", "に", PartOfSpeech.Adverb), // 疾うに 1633370 ("long ago") — the bare とう otherwise strands on 塔
+        ("そ", "も", PartOfSpeech.Conjunction), // そも 2836401 ("in the first place") — Sudachi emits archaic pronoun そ + も
+        ("どう", "こう", PartOfSpeech.Adverb), // どうこう 2670710 ("this or that / one thing or another")
+        ("何で", "も", PartOfSpeech.Adverb), // 何でも 1611030 ("anything / whatever")
         ("ただ", "今", PartOfSpeech.Adverb),
         ("ところ", "で", PartOfSpeech.Conjunction),
         ("度", "に", PartOfSpeech.Expression),

@@ -825,6 +825,9 @@ public partial class MorphologicalAnalyser
                     previousWord.PartOfSpeech != PartOfSpeech.Verb ||
                     previousWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
                     VerbDictFormExistsInLookup(previousWord.DictionaryForm, previousWord.NormalizedForm, Deconj))
+                // A pinned auxiliary is a repair stage's explicit decision that this token is its own
+                // vocabulary item (した+んだ) — absorbing it would erase that word from the output.
+                && currentWord.PreMatchedWordId == null
                 && currentWord.Text != "な"
                 && currentWord.Text != "に"
                 && (currentWord.DictionaryForm != "です" ||
@@ -887,6 +890,49 @@ public partial class MorphologicalAnalyser
         }
 
         return changed ? newList : wordInfos;
+    }
+
+    // Completion auxiliaries that Sudachi tokenises as a bare verb after a 連用形 stem when the
+    // compound is absent from its own lexicon (逃げ|切った). Merged only when JMDict attests the
+    // compound (逃げ切る), so an ordinary main-verb use (紙を切った) is never touched.
+    private static readonly HashSet<string> CompletionAuxVerbs = ["切る"];
+
+    private List<WordInfo> CombineCompletionAuxVerb(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2 || HasCompoundLookup == null)
+            return wordInfos;
+
+        List<WordInfo>? result = null;
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+            if (i + 1 < wordInfos.Count
+                && word.PartOfSpeech == PartOfSpeech.Verb
+                && word.Text.Length >= 2
+                && !word.Text.EndsWith('て') && !word.Text.EndsWith('で')
+                && wordInfos[i + 1] is { PartOfSpeech: PartOfSpeech.Verb } aux
+                && CompletionAuxVerbs.Contains(aux.DictionaryForm)
+                && HasCompoundLookup(word.Text + aux.DictionaryForm))
+            {
+                result ??= [..wordInfos[..i]];
+                result.Add(new WordInfo(word)
+                {
+                    Text = word.Text + aux.Text,
+                    DictionaryForm = word.Text + aux.DictionaryForm,
+                    NormalizedForm = word.Text + aux.DictionaryForm,
+                    Reading = word.Reading + aux.Reading,
+                    PartOfSpeech = PartOfSpeech.Verb,
+                    IsMergedInflection = true,
+                    EndOffset = aux.EndOffset
+                });
+                i++;
+                continue;
+            }
+
+            result?.Add(word);
+        }
+
+        return result ?? wordInfos;
     }
 
     private List<WordInfo> CombineAuxiliaryVerbStem(List<WordInfo> wordInfos)

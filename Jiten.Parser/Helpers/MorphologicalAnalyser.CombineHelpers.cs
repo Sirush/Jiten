@@ -70,6 +70,9 @@ public partial class MorphologicalAnalyser
                 currentWord.PartOfSpeech == PartOfSpeech.Verb &&
                 nextWord.DictionaryForm != "おる" &&
                 nextWord.Text != currentWord.Text &&
+                // A bare interjection is never a verb-dependent auxiliary: 持って + あ (mis-split 当たれ)
+                // must not fuse into 持ってあ.
+                nextWord.PartOfSpeech != PartOfSpeech.Interjection &&
                 // くて is always an i-adjective te-form (verb te-forms are って/いて); dependant
                 // auxiliaries attach to verb te-forms only (頭が良くて + やりたい stays split)
                 !currentWord.Text.EndsWith("くて", StringComparison.Ordinal))
@@ -113,7 +116,12 @@ public partial class MorphologicalAnalyser
                 nextWord.Text != currentWord.Text &&
                 !currentWord.Text.EndsWith("くて", StringComparison.Ordinal) &&
                 !isClassicalWaRowTeForm &&
-                (nextWord.DictionaryForm is "しまう" or "こなす" or "いく" or "貰う" or "いる" or "ない" or "だす" ||
+                (nextWord.DictionaryForm is "しまう" or "こなす" or "いく" or "貰う" or "いる" or "ない" ||
+                 // Aspectual だす only re-attaches when the compound verb is real (走り出す):
+                 // an unattested pair (混じり+だした) stays split so the aspectual verb remains
+                 // a visible word instead of vanishing into an unmatchable merged surface.
+                 (nextWord.DictionaryForm == "だす" && HasCompoundLookup != null &&
+                  (HasCompoundLookup(currentWord.Text + "だす") || HasCompoundLookup(currentWord.Text + "出す"))) ||
                  (nextWord.DictionaryForm == "得る" && HasCompoundLookup != null &&
                   HasCompoundLookup(currentWord.Text + "得る")) ||
                  (nextWord.DictionaryForm == "する" && (currentWord.Text.EndsWith("た") || currentWord.Text.EndsWith("だ"))) ||
@@ -218,13 +226,23 @@ public partial class MorphologicalAnalyser
 
                 bool isClassicalWaRowTeForm = nextWord.DictionaryForm.EndsWith("う") &&
                                               nextWord.Text.EndsWith("いて");
+                // A demonstrative is never a te-form subsidiary verb: 夢見て + これ must not fuse
+                // into 夢見てこれ (これ spuriously deconjugates to a subsidiary-verb form). Gate on the
+                // demonstrative dict-form, not POS Pronoun — こん (来ん) is also POS Pronoun but is a
+                // genuine 来る negative that must still attach (出て+こん → 出てこん). Exception: これ
+                // followed by an inflection continuation (ない/た/ます/ん/ず) is the ら抜き potential stem
+                // of 来る (戻って|これ|なかった → 戻ってこれなかった), not the pronoun, and must still attach.
+                bool isDemonstrative = nextWord.DictionaryForm is "これ" or "それ" or "あれ" or "どれ";
+                bool koreIsPotentialStem = nextWord.DictionaryForm == "これ" && i + 2 < wordInfos.Count
+                    && wordInfos[i + 2].DictionaryForm is "ない" or "無い" or "た" or "ます" or "ん" or "ぬ" or "ず" or "る";
                 if ((currentWord.Text.EndsWith("て") || currentWord.Text.EndsWith("で")) &&
                     currentWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective &&
                     // くて is a genuine i-adjective te-form — subsidiary verbs attach to verb
                     // te-forms only (頭が良くて + やりたい stays split)
                     !currentWord.Text.EndsWith("くて", StringComparison.Ordinal) &&
                     !isClassicalWaRowTeForm &&
-                    nextWord.PartOfSpeech != PartOfSpeech.IAdjective)
+                    nextWord.PartOfSpeech != PartOfSpeech.IAdjective &&
+                    (!isDemonstrative || koreIsPotentialStem))
                 {
                     bool isKnownSubsidiary = false;
 

@@ -81,8 +81,9 @@ internal static class TransitionRuleSets
     // (targetWordId) → (anchor surfaces, bonus)
     internal static readonly Dictionary<int, (string[] NextAnchors, int Bonus)> ForwardAnchorBoosts = new()
     {
-        // 一分前 / 一分後 = いっぷん (one minute, 1166290), not the news-ranked いちぶ (one tenth, 1166270)
-        { 1166290, (["前", "後"], 40) },
+        // 一分前 / 一分後 / １分ぐらい = いっぷん (one minute, 1166290), not the news-ranked
+        // いちぶ (one tenth, 1166270) — quantity approximators anchor the duration reading
+        { 1166290, (["前", "後", "ぐらい", "くらい", "ほど", "経つ", "経った", "経って"], 40) },
     };
 
     // Flattened set of every anchor surface, used by the pass-2 prefilter to keep an

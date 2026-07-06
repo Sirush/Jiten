@@ -916,6 +916,10 @@ public partial class MorphologicalAnalyser
                     TryCombineWithLookback(result, "ん", "ん", deconj, IsAnyVerbForm, out var negativeWord))
                 {
                     negativeWord!.EndOffset = current.EndOffset;
+                    // Sudachi identified this ん as the negative auxiliary ぬ. The deconjugator
+                    // alone can't tell it from a slurred る (してん) and prefers that shorter
+                    // path, so record the diagnosis for chain selection.
+                    negativeWord.IsSlurredNegative = true;
 
                     // After combining ませ+ん→ません, try to combine preceding verb stem with ません
                     // e.g., [し, ませ] + ん → [しません]
@@ -938,6 +942,34 @@ public partial class MorphologicalAnalyser
                         }
                     }
 
+                    // The lookback stops at the shortest valid form, so a slurred negative on a voice
+                    // auxiliary absorbs only the ん (られん→られる validates alone) and strands the
+                    // preceding stem (認め|られん). Like the ません case above, reattach leftward while
+                    // the combined token is still headed by a voice auxiliary: each step is valid only
+                    // if the stem's own dictionary form deconjugates out of the whole (認められん→認める).
+                    // Loops so causative-passive chains reattach fully (させ+られん, then 食べ+させられん).
+                    while (VerbIndicatingAuxiliaries.Contains(negativeWord.DictionaryForm) && result.Count > 0 &&
+                           (result[^1].PartOfSpeech == PartOfSpeech.Verb ||
+                            (result[^1].PartOfSpeech == PartOfSpeech.Auxiliary &&
+                             VerbIndicatingAuxiliaries.Contains(result[^1].DictionaryForm))))
+                    {
+                        var stem = result[^1];
+                        var candidateText = stem.Text + negativeWord.Text;
+                        var forms = deconj.Deconjugate(NormalizeToHiragana(candidateText));
+                        var stemTarget = NormalizeToHiragana(stem.DictionaryForm);
+                        if (!ContainsText(forms, stemTarget))
+                            break;
+
+                        result.RemoveAt(result.Count - 1);
+                        negativeWord.Text = candidateText;
+                        negativeWord.StartOffset = stem.StartOffset;
+                        negativeWord.DictionaryForm = stem.DictionaryForm;
+                        negativeWord.NormalizedForm = candidateText;
+                        negativeWord.Reading = KanaConverter.ToHiragana(stem.Reading + negativeWord.Reading);
+                        if (stem.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant))
+                            negativeWord.PartOfSpeechSection1 = PartOfSpeechSection.PossibleDependant;
+                    }
+
                     result.Add(negativeWord);
                     combined = true;
                 }
@@ -955,6 +987,280 @@ public partial class MorphologicalAnalyser
         return changed ? result! : source;
     }
 
+    // True if the surface deconjugates to a verb (godan/ichidan) whose dictionary form is in JMDict.
+    private bool DeconjugatesToVerbInLookup(string surface)
+    {
+        if (HasNonNameCompoundLookup == null) return false;
+        foreach (var f in Deconjugator.Instance.Deconjugate(NormalizeToHiragana(surface)))
+            if (f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)) && HasNonNameCompoundLookup(f.Text))
+                return true;
+        return false;
+    }
+
+    // True if the surface deconjugates to a causative/passive verb in JMDict (やらせない → やる/やらせる).
+    // Stricter than the plain check so ordinary ichidan negatives (聞こえない, plain 信用ない) stay split.
+    private bool DeconjugatesToCausativeOrPassiveVerb(string surface)
+    {
+        if (HasNonNameCompoundLookup == null) return false;
+        foreach (var f in Deconjugator.Instance.Deconjugate(NormalizeToHiragana(surface)))
+            if (f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)) && HasNonNameCompoundLookup(f.Text)
+                && f.Process.Any(p => p.Contains("causative") || p.Contains("passive")))
+                return true;
+        return false;
+    }
+
+    /// Sudachi's lattice sometimes lets a following word steal the first mora of あいつ, reading the
+    /// あ as an interjection (あ|いつも幹部だから). A genuine interjection あ is set off by punctuation
+    /// (あ、いつも), which tokenises the pause separately — so a bare interjection あ directly against いつも is
+    /// the pronoun; re-cut to あいつ + も.
+    private List<WordInfo> RepairInterjectionPronounTheft(List<WordInfo> wordInfos)
+    {
+        List<WordInfo>? result = null;
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+            if (word is { Text: "あ", PartOfSpeech: PartOfSpeech.Interjection }
+                && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "いつも")
+            {
+                var next = wordInfos[i + 1];
+                result ??= [..wordInfos[..i]];
+                result.Add(new WordInfo(word)
+                {
+                    Text = "あいつ", DictionaryForm = "あいつ", NormalizedForm = "あいつ",
+                    Reading = "アイツ", PartOfSpeech = PartOfSpeech.Pronoun,
+                    EndOffset = word.StartOffset >= 0 ? word.StartOffset + 3 : -1
+                });
+                result.Add(new WordInfo(next)
+                {
+                    Text = "も", DictionaryForm = "も", NormalizedForm = "も",
+                    Reading = "モ", PartOfSpeech = PartOfSpeech.Particle,
+                    StartOffset = next.StartOffset >= 0 ? next.StartOffset + 2 : -1
+                });
+                i++;
+                continue;
+            }
+
+            result?.Add(word);
+        }
+
+        return result ?? wordInfos;
+    }
+
+    /// さっき loses its き to a following pronoun in the lattice (さっきみごと → さっ|きみ|ごと).
+    /// The fragment さっ (the clipped first morae of さっき) never legitimately precedes きみ; give the き back — さっき plus the remainder,
+    /// which re-attaches to the following token when that forms a word (み+ごと → みごと,
+    /// み+たい → みたい).
+    private List<WordInfo> RepairSakkiMoraTheft(List<WordInfo> wordInfos)
+    {
+        if (HasCompoundLookup == null) return wordInfos;
+
+        List<WordInfo>? result = null;
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+            if (word is { Text: "さっ" }
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1].Text == "きみ")
+            {
+                var stolen = wordInfos[i + 1];
+                result ??= [..wordInfos[..i]];
+                result.Add(new WordInfo(word)
+                {
+                    Text = "さっき", DictionaryForm = "さっき", NormalizedForm = "さっき",
+                    Reading = "サッキ", PartOfSpeech = PartOfSpeech.Noun,
+                    EndOffset = word.StartOffset >= 0 ? word.StartOffset + 3 : -1
+                });
+
+                var following = i + 2 < wordInfos.Count ? wordInfos[i + 2] : null;
+                if (following != null && HasCompoundLookup("み" + following.Text))
+                {
+                    result.Add(new WordInfo(following)
+                    {
+                        Text = "み" + following.Text,
+                        DictionaryForm = "み" + following.Text,
+                        NormalizedForm = "み" + following.Text,
+                        // A rebuilt token must not inherit the source token's match state, and a
+                        // partial reading is worse than none when the tail's reading is unknown.
+                        Reading = following.Reading.Length > 0 ? "ミ" + following.Reading : "",
+                        PartOfSpeech = PartOfSpeech.Noun,
+                        PreMatchedWordId = null,
+                        PreMatchedConjugations = null,
+                        StartOffset = stolen.StartOffset >= 0 ? stolen.StartOffset + 1 : -1
+                    });
+                    i += 2;
+                }
+                else
+                {
+                    result.Add(new WordInfo(stolen)
+                    {
+                        Text = "み", DictionaryForm = "み", NormalizedForm = "み",
+                        Reading = "ミ", PartOfSpeech = PartOfSpeech.Noun,
+                        PreMatchedWordId = null,
+                        PreMatchedConjugations = null,
+                        StartOffset = stolen.StartOffset >= 0 ? stolen.StartOffset + 1 : -1
+                    });
+                    i++;
+                }
+                continue;
+            }
+
+            result?.Add(word);
+        }
+
+        return result ?? wordInfos;
+    }
+
+    /// <summary>
+    /// Collapses an over-repeated reduplicative mimetic into one occurrence resolving to the 2× entry: a run
+    /// of kana tokens whose combined text is a 2-mora unit repeated 3+ times (ごろごろごろ, ぐるぐるぐる, ぺら +
+    /// ぺらぺら) is pinned to the 2× word (ごろごろ). Robust to however Sudachi cut the run — XYXY+XY, XY+XYXY,
+    /// or a single XYXYXY token. The pin (PreMatchedWordId) resolves it to the 2× entry and skips
+    /// deconjugation/re-segmentation; DictionaryForm/NormalizedForm hold the 2× key (the reading-index
+    /// source) while Text keeps the full surface. The 2× form must be a non-name JMDict entry, so ordinary
+    /// kana words and plain 2× mimetics (k=2) are left untouched.
+    /// </summary>
+    private List<WordInfo> CollapseReduplicatedMimetic(List<WordInfo> wordInfos)
+    {
+        if (GetNonNameCompoundWordId == null || wordInfos.Count == 0) return wordInfos;
+
+        List<WordInfo>? result = null;
+        int i = 0;
+        while (i < wordInfos.Count)
+        {
+            var first = wordInfos[i];
+            if (IsKanaUnitRepetition(first.Text, out var unit))
+            {
+                int j = i + 1;
+                int unitCount = first.Text.Length / 2;
+                bool allInterjections = first.PartOfSpeech == PartOfSpeech.Interjection;
+                while (j < wordInfos.Count && IsRepetitionOf(wordInfos[j].Text, unit))
+                {
+                    unitCount += wordInfos[j].Text.Length / 2;
+                    allInterjections &= wordInfos[j].PartOfSpeech == PartOfSpeech.Interjection;
+                    j++;
+                }
+
+                // A run of repeated interjection tokens (はい|はい|はい, まあ|まあ|まあ) is deliberate emphatic
+                // speech, not a mimetic — and its 2× surface can be an unrelated word (はいはい → 這い這い
+                // "crawling"). Genuine mimetics reach here as Adverb/Noun tokens, so leave interjection runs
+                // to resolve token-by-token.
+                if (unitCount >= 3 && !allInterjections && GetNonNameCompoundWordId(unit + unit) is { } twoXId)
+                {
+                    result ??= [..wordInfos[..i]];
+                    string text = "", reading = "";
+                    for (int k = i; k < j; k++) { text += wordInfos[k].Text; reading += wordInfos[k].Reading; }
+                    result.Add(new WordInfo(first)
+                    {
+                        Text = text, Reading = reading,
+                        DictionaryForm = unit + unit, NormalizedForm = unit + unit,
+                        PartOfSpeech = PartOfSpeech.Adverb,
+                        EndOffset = wordInfos[j - 1].EndOffset,
+                        PreMatchedWordId = twoXId
+                    });
+                    i = j;
+                    continue;
+                }
+            }
+
+            result?.Add(first);
+            i++;
+        }
+        return result ?? wordInfos;
+    }
+
+    // A kana string that is its own leading 2-mora unit repeated a whole number of times (ごろ, ごろごろ,
+    // ぐるぐるぐる); outputs the 2-char unit.
+    private static bool IsKanaUnitRepetition(string s, out string unit)
+    {
+        unit = "";
+        if (s.Length < 2 || s.Length % 2 != 0 || !WanaKanaShaapu.WanaKana.IsKana(s)) return false;
+        unit = s[..2];
+        return IsRepetitionOf(s, unit);
+    }
+
+    // True if s is the 2-char unit repeated a whole number of times (kana only).
+    private static bool IsRepetitionOf(string s, string unit)
+    {
+        if (s.Length == 0 || s.Length % 2 != 0 || !WanaKanaShaapu.WanaKana.IsKana(s)) return false;
+        for (int k = 0; k < s.Length; k += 2)
+            if (s[k] != unit[0] || s[k + 1] != unit[1]) return false;
+        return true;
+    }
+
+    // Sudachi occasionally mega-blobs an all-hiragana colloquial run into one OOV noun (ってもんじゃねえのかよ,
+    // っぽくいってみようや) because of surrounding-lattice pressure; the same substring segments cleanly in
+    // isolation. Re-run Sudachi on such a blob and splice the pieces, so they resolve instead of the whole
+    // token dropping. Gated to hiragana/ー OOV tokens (≥5 chars) — katakana names / kanji compounds / romaji
+    // are never touched — and only spliced when Sudachi actually splits it (>1 token). Results are memoized
+    // per pass (the same colloquial blob recurs across a long text) and the whole stage disables itself on
+    // the first FFI failure — a broken native context will not start working for the next blob.
+    private List<WordInfo> RetokeniseOovBlobs(List<WordInfo> wordInfos)
+    {
+        if (_sudachiConfigPath == null || _sudachiDicPath == null || HasNonNameCompoundLookup == null
+            || _retokeniseOovDisabled || !SudachiInterop.StreamingAvailable)
+            return wordInfos;
+
+        Dictionary<string, List<WordInfo>?>? memo = null;
+        List<WordInfo>? result = null;
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var w = wordInfos[i];
+            bool candidate = w.Text.Length >= 5
+                             && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                             && w.Text.All(c => c is >= 'ぁ' and <= 'ゟ' or 'ー')
+                             && !HasNonNameCompoundLookup(w.Text)
+                             // A token whose dictionary form is a different, resolvable word is not a
+                             // Sudachi OOV blob (those carry their surface as the dictionary form) — it is
+                             // an earlier repair's deliberate merge (わがまま+な → Text わがままな, dict form
+                             // わがまま) and must not be torn apart again.
+                             && (w.DictionaryForm == w.Text || string.IsNullOrEmpty(w.DictionaryForm)
+                                 || !HasNonNameCompoundLookup(w.DictionaryForm));
+            if (candidate)
+            {
+                memo ??= new Dictionary<string, List<WordInfo>?>(StringComparer.Ordinal);
+                if (!memo.TryGetValue(w.Text, out var retok))
+                {
+                    try
+                    {
+                        retok = SudachiInterop.ProcessTextStreaming(_sudachiConfigPath, w.Text, _sudachiDicPath,
+                                                                    mode: _sudachiMode, userDictCsv: _sudachiUserDictCsv);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Keep this blob and stop retokenising for the rest of the parse.
+                        Console.WriteLine($"[Warning] RetokeniseOovBlobs: Sudachi FFI failed on '{w.Text}', disabling retokenisation for this parse: {ex.Message}");
+                        _retokeniseOovDisabled = true;
+                        result?.Add(w);
+                        for (int j = i + 1; j < wordInfos.Count; j++)
+                            result?.Add(wordInfos[j]);
+                        return result ?? wordInfos;
+                    }
+
+                    memo[w.Text] = retok;
+                }
+
+                if (retok is { Count: > 1 })
+                {
+                    result ??= [..wordInfos[..i]];
+                    int off = w.StartOffset;
+                    foreach (var rt in retok)
+                    {
+                        // Clone: the memoized pieces are spliced at every occurrence of the blob, and
+                        // later stages mutate tokens in place.
+                        var piece = new WordInfo(rt);
+                        piece.StartOffset = off >= 0 ? off : -1;
+                        off = off >= 0 ? off + piece.Text.Length : -1;
+                        piece.EndOffset = off >= 0 ? off : -1;
+                        result.Add(piece);
+                    }
+                    continue;
+                }
+            }
+            result?.Add(w);
+        }
+        return result ?? wordInfos;
+    }
+
     private List<WordInfo> ProcessSpecialCases(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count == 0)
@@ -966,6 +1272,215 @@ public partial class MorphologicalAnalyser
         for (int i = 0; i < wordInfos.Count;)
         {
             WordInfo w1 = wordInfos[i];
+
+            // そうかいそうかい ("is that so, is that so") — Sudachi mashes the middle into an OOV noun かいそうか
+            // that then matches the rare 階層化 "stratification" (2345760) via its kana reading. Re-cut the
+            // OOV blob into かい + そう + か (all particles/adverb), so the reduplicated そう+かい survives.
+            if (w1.Text == "かいそうか" && w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
+            {
+                int o0 = w1.StartOffset;
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "かい", DictionaryForm = "かい", NormalizedForm = "かい", Reading = "カイ",
+                    PartOfSpeech = PartOfSpeech.Particle, EndOffset = o0 >= 0 ? o0 + 2 : -1
+                });
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "そう", DictionaryForm = "そう", NormalizedForm = "そう", Reading = "ソウ",
+                    PartOfSpeech = PartOfSpeech.Adverb,
+                    StartOffset = o0 >= 0 ? o0 + 2 : -1, EndOffset = o0 >= 0 ? o0 + 4 : -1
+                });
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "か", DictionaryForm = "か", NormalizedForm = "か", Reading = "カ",
+                    PartOfSpeech = PartOfSpeech.Particle, StartOffset = o0 >= 0 ? o0 + 4 : -1
+                });
+                i += 1;
+                continue;
+            }
+
+            // [noun]がないって: before a quotative って, Sudachi mis-lattices が+ない into がな(仮名)+いっ(言う)
+            // (the whole then resolves to the rare 我鳴る "to yell" 2101910). In isolation 分がない segments
+            // correctly (分|が|ない) — it's the following って that flips the lattice. Regroup the chars back to
+            // が(particle) + ない(adjective 1529520) + って, gated on the exact mis-segmentation shape after a noun.
+            if (w1 is { Text: "がな", NormalizedForm: "仮名" }
+                && i + 2 < wordInfos.Count
+                && wordInfos[i + 1] is { Text: "いっ" } igai && igai.NormalizedForm == "言う"
+                && wordInfos[i + 2].Text == "て"
+                && newList.Count > 0
+                && newList[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                    or PartOfSpeech.Pronoun or PartOfSpeech.Counter)
+            {
+                int o0 = w1.StartOffset;
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "が", DictionaryForm = "が", NormalizedForm = "が", Reading = "ガ",
+                    PartOfSpeech = PartOfSpeech.Particle, PreMatchedWordId = 2028930,
+                    EndOffset = o0 >= 0 ? o0 + 1 : -1
+                });
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "ない", DictionaryForm = "ない", NormalizedForm = "無い", Reading = "ナイ",
+                    PartOfSpeech = PartOfSpeech.IAdjective, PreMatchedWordId = 1529520,
+                    StartOffset = o0 >= 0 ? o0 + 1 : -1, EndOffset = o0 >= 0 ? o0 + 3 : -1
+                });
+                newList.Add(new WordInfo(wordInfos[i + 2])
+                {
+                    Text = "って", DictionaryForm = "って", NormalizedForm = "って", Reading = "ッテ",
+                    PartOfSpeech = PartOfSpeech.Particle, PreMatchedWordId = 2086960,
+                    StartOffset = o0 >= 0 ? o0 + 3 : -1, EndOffset = wordInfos[i + 2].EndOffset
+                });
+                i += 3;
+                continue;
+            }
+
+            // [predicate]ときっての: the きっての entry ("foremost of") steals とき's き after a relative
+            // clause (しょうがねぇとき + って + の). きっての genuinely follows a noun (学校きっての秀才) —
+            // after a clause-final predicate the reading is とき + quotative って + の. Re-cut accordingly.
+            if (w1.Text == "と" && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "きっての"
+                && newList.Count > 0
+                && newList[^1].PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
+                    or PartOfSpeech.Auxiliary or PartOfSpeech.Expression)
+            {
+                var kitteno = wordInfos[i + 1];
+                int o0 = w1.StartOffset;
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "とき", DictionaryForm = "とき", NormalizedForm = "時", Reading = "トキ",
+                    PartOfSpeech = PartOfSpeech.Noun, EndOffset = o0 >= 0 ? o0 + 2 : -1
+                });
+                newList.Add(new WordInfo(kitteno)
+                {
+                    Text = "って", DictionaryForm = "って", NormalizedForm = "って", Reading = "ッテ",
+                    PartOfSpeech = PartOfSpeech.Particle, PreMatchedWordId = 2086960,
+                    StartOffset = o0 >= 0 ? o0 + 2 : -1, EndOffset = o0 >= 0 ? o0 + 4 : -1
+                });
+                newList.Add(new WordInfo(kitteno)
+                {
+                    Text = "の", DictionaryForm = "の", NormalizedForm = "の", Reading = "ノ",
+                    PartOfSpeech = PartOfSpeech.Particle,
+                    StartOffset = o0 >= 0 ? o0 + 4 : -1, EndOffset = kitteno.EndOffset
+                });
+                i += 2;
+                continue;
+            }
+
+            // A kana したん… shape with dictionary form 湑む (したむ, dated "pour out every drop") is a
+            // Sudachi mis-analysis of した (する past) + ん(だ) — the dated verb is written in kanji.
+            // RepairNTokenisation already merged したん+だ→したんだ (losing the 湑む NormForm),
+            // but the kana dict-form したむ survives — re-cut した (する past) + remainder.
+            if (w1.DictionaryForm == "したむ" && w1.Text.StartsWith("した", StringComparison.Ordinal)
+                && w1.Text.Length >= 3)
+            {
+                string rest = w1.Text[2..];
+                int mid = w1.StartOffset >= 0 ? w1.StartOffset + 2 : -1;
+                // Pin した→する (1157170): un-pinned, CombineAuxiliary re-merges した+んだ→したんだ which then
+                // re-derives したむ→湑む again. The pin keeps the correct word (する) through that merge, with
+                // the conjugation chain recovered explicitly (pins bypass deconjugation).
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "した", DictionaryForm = "する", NormalizedForm = "為る",
+                    PartOfSpeech = PartOfSpeech.Verb, Reading = "シタ",
+                    PreMatchedWordId = 1157170, PreMatchedConjugations = PinnedConjugationProcess("した", "する"),
+                    EndOffset = mid
+                });
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = rest, DictionaryForm = rest, NormalizedForm = rest,
+                    PartOfSpeech = PartOfSpeech.Auxiliary,
+                    Reading = w1.Reading.Length > 2 ? w1.Reading[2..] : "",
+                    PreMatchedWordId = rest == "んだ" ? 2849387 : null,
+                    StartOffset = mid, EndOffset = w1.EndOffset
+                });
+                i += 1;
+                continue;
+            }
+
+            // それっぽく…: Sudachi mis-tags それ's opening as a lone そ (adverb そう) and mega-blobs the rest
+            // starting with れ. Re-cut そ + れ → それ (pronoun, 1006970); the remainder (っぽく…) re-tokenises
+            // via RetokeniseOovBlobs below. Gated on the blob being OOV so genuine そ+れ-word pairs are safe.
+            if (w1.Text == "そ" && i + 1 < wordInfos.Count
+                && wordInfos[i + 1].Text.Length >= 3 && wordInfos[i + 1].Text[0] == 'れ'
+                && HasNonNameCompoundLookup?.Invoke(wordInfos[i + 1].Text) == false)
+            {
+                var blob = wordInfos[i + 1];
+                string rest = blob.Text[1..];
+                int mid = w1.EndOffset >= 0 ? w1.EndOffset + 1 : -1;
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "それ", DictionaryForm = "それ", NormalizedForm = "其れ",
+                    PartOfSpeech = PartOfSpeech.Pronoun, Reading = "ソレ",
+                    PreMatchedWordId = 1006970, EndOffset = mid
+                });
+                wordInfos[i + 1] = new WordInfo(blob)
+                {
+                    Text = rest, DictionaryForm = rest, NormalizedForm = rest, StartOffset = mid
+                };
+                i += 1;
+                continue;
+            }
+
+            // Sudachi mega-blobs a る-ending verb whose て-continuation is a colloquial contraction it can't
+            // parse (募るってもんじゃねえ → 募|るってもんじゃねえ). When a single-kanji Noun + the blob's leading
+            // る forms a JMDict verb (募る), extract the verb; the remainder (ってもんじゃねえ) resegments on its
+            // own. Gated on the blob being OOV so genuine 名詞+る words aren't split.
+            if (w1.Text.Length == 1 && JapaneseTextHelper.IsKanji(w1.Text[0])
+                && w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && i + 1 < wordInfos.Count && wordInfos[i + 1].Text.Length >= 3
+                && wordInfos[i + 1].Text[0] == 'る'
+                && HasNonNameCompoundLookup?.Invoke(wordInfos[i + 1].Text) == false
+                && HasNonNameCompoundLookup?.Invoke(w1.Text + "る") == true)
+            {
+                var blob = wordInfos[i + 1];
+                string rest = blob.Text[1..];
+                int mid = w1.EndOffset >= 0 ? w1.EndOffset + 1 : -1;
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = w1.Text + "る", DictionaryForm = w1.Text + "る", NormalizedForm = w1.Text + "る",
+                    PartOfSpeech = PartOfSpeech.Verb, Reading = "",
+                    EndOffset = mid
+                });
+                wordInfos[i + 1] = new WordInfo(blob)
+                {
+                    Text = rest, DictionaryForm = rest, NormalizedForm = rest, StartOffset = mid
+                };
+                i += 1;
+                continue;
+            }
+
+            // ありがてぇ (colloquial 有り難い / ありがたい 1541560, the ai→ee casual form): Sudachi shreds it
+            // あり|が|てぇ. Most ai→ee adjectives (すげぇ/あぶねぇ/うるせぇ) Sudachi normalises whole, but this
+            // fixed compound shreds — recombine and pin.
+            if (w1.Text == "あり" && i + 2 < wordInfos.Count
+                && wordInfos[i + 1].Text == "が" && wordInfos[i + 2].Text == "てぇ")
+            {
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "ありがてぇ", DictionaryForm = "ありがたい", NormalizedForm = "ありがたい",
+                    PartOfSpeech = PartOfSpeech.IAdjective, Reading = "アリガテェ",
+                    PreMatchedWordId = 1541560,
+                    PreMatchedConjugations = PinnedConjugationProcess("ありがてぇ", "ありがたい"),
+                    EndOffset = wordInfos[i + 2].EndOffset
+                });
+                i += 3;
+                continue;
+            }
+
+            // 貸り (non-standard spelling of 借り, entry 貸りる 1323560): Sudachi tags 貸 as a Noun + り(Aux).
+            // Merge to the verb renyokei 貸り so the inflection (貸りたい) combines and resolves.
+            if (w1.Text == "貸" && w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "り"
+                && HasNonNameCompoundLookup?.Invoke("貸りる") == true)
+            {
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "貸り", DictionaryForm = "貸りる", NormalizedForm = "貸りる",
+                    PartOfSpeech = PartOfSpeech.Verb, Reading = "カリ",
+                    EndOffset = wordInfos[i + 1].EndOffset
+                });
+                i += 2;
+                continue;
+            }
 
             // こんな/そんな/あんな/どんな + の: Sudachi cuts the 連体詞 as こん|なの (and the scorer then
             // mismatches こん to 紺 "navy"). Re-cut to こんな + の when こんな etc. is a real word. Gated on
@@ -987,6 +1502,216 @@ public partial class MorphologicalAnalyser
                     Text = "の", DictionaryForm = "の", NormalizedForm = "の",
                     PartOfSpeech = PartOfSpeech.Particle, Reading = "ノ",
                     StartOffset = naEnd, EndOffset = nano.EndOffset
+                });
+                i += 2;
+                continue;
+            }
+
+            // 〜つ目 that Sudachi keeps as one token (四つ目) is number + つ + the ordinal suffix 目 "-th"
+            // (1604890), not the noun "four-eyed". Split so it matches the split 三つ目.
+            if (w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && w1.Text.Length >= 3 && w1.Text.EndsWith("つ目", StringComparison.Ordinal)
+                && TakesOrdinalMeAfterTsu(w1.Text[0]))
+            {
+                var numPart = w1.Text[..^1];   // 四つ
+                int mid = w1.StartOffset >= 0 ? w1.StartOffset + numPart.Length : -1;
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = numPart, DictionaryForm = numPart, NormalizedForm = numPart,
+                    Reading = w1.Reading.Length > 0 ? w1.Reading[..^1] : "", EndOffset = mid
+                });
+                newList.Add(new WordInfo
+                {
+                    Text = "目", DictionaryForm = "目", NormalizedForm = "目",
+                    PartOfSpeech = PartOfSpeech.Suffix, Reading = "メ",
+                    PreMatchedWordId = 1604890, PreMatchedReadingIndex = 0,
+                    StartOffset = mid, EndOffset = w1.EndOffset
+                });
+                i += 1;
+                continue;
+            }
+
+            // 化け物どもめ etc.: Sudachi cuts the plural+derogatory suffix run ども+め as prefix ど +
+            // noun もめ (揉め). After a content noun, recut to ども (plural suffix) + め (derogatory suffix).
+            if (w1 is { Text: "ど", PartOfSpeech: PartOfSpeech.Prefix }
+                && i + 1 < wordInfos.Count && wordInfos[i + 1] is { Text: "もめ" } w2dm
+                && newList.Count > 0 && newList[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                    or PartOfSpeech.Name or PartOfSpeech.Pronoun)
+            {
+                int mid = w1.EndOffset >= 0 ? w1.EndOffset + 1 : -1;
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "ども", DictionaryForm = "ども", NormalizedForm = "ども",
+                    PartOfSpeech = PartOfSpeech.Suffix, Reading = "ドモ", EndOffset = mid
+                });
+                newList.Add(new WordInfo(w2dm)
+                {
+                    Text = "め", DictionaryForm = "め", NormalizedForm = "め",
+                    PartOfSpeech = PartOfSpeech.Suffix, Reading = "メ", StartOffset = mid
+                });
+                i += 2;
+                continue;
+            }
+
+            // X | Y達 → XY | 達: the pluralising suffix 達 binds looser than the compound XY, so Sudachi's
+            // 部|下達 (下達 = a separate noun) becomes 部下|達 when X + Y-without-達 is a real compound.
+            // The theft leaves a single-char fragment X (部) — a multi-char X next to a Y達 noun is two
+            // genuine words (事実|上達していた) and must stay Sudachi's cut. The rebound compound must also
+            // be in common use (部下, frequency rank < 40000) so a coincidental 1-char+Y lookup key can't
+            // trigger a rebind on its own.
+            if (w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && w1.Text.Length == 1
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1] is { PartOfSpeech: PartOfSpeech.Noun or PartOfSpeech.CommonNoun } w2tachi
+                && w2tachi.Text.Length >= 2 && w2tachi.Text.EndsWith("達", StringComparison.Ordinal)
+                && HasNonNameCompoundLookup?.Invoke(w1.Text + w2tachi.Text[..^1]) == true
+                && GetNonNameCompoundFrequencyRank?.Invoke(w1.Text + w2tachi.Text[..^1]) is < 40000)
+            {
+                var compound = w1.Text + w2tachi.Text[..^1];
+                int mid = w2tachi.EndOffset >= 0 ? w2tachi.EndOffset - 1 : -1;
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = compound, DictionaryForm = compound, NormalizedForm = compound,
+                    Reading = "", EndOffset = mid
+                });
+                newList.Add(new WordInfo(w2tachi)
+                {
+                    Text = "達", DictionaryForm = "達", NormalizedForm = "達",
+                    PartOfSpeech = PartOfSpeech.Suffix, Reading = "タチ", StartOffset = mid
+                });
+                i += 2;
+                continue;
+            }
+
+            // 前-rebinding: Sudachi greedily attaches 前 rightward (お|前山, この|前山) when 前 belongs to the
+            // preceding word. Rebind [prev][前+rest] → [prev+前][rest] when prev+前 and rest are both real
+            // words AND the 前-compound's 前 is the KUN reading (まえ/さき, e.g. 前山=サキヤマ) — never the ON
+            // reading ゼン, which marks a tight Sino compound (前後=ゼンゴ, 前世=ゼンセイ, 前回) that must stay whole.
+            // A 前-compound that is itself in common use (前髪, 前歯, 前置き, 前触れ) keeps its own reading —
+            // この|前髪 is a correct Sudachi split, not a theft; only compounds nobody actually uses (前山)
+            // exist because Sudachi stole 前 from the preceding word. JMDict priority tags can't make this
+            // call (前山's homograph ぜんざん carries news-frequency tags), so gate on frequency rank.
+            // A rest that is a verb 連用形 (掛け, 置き, 払い) marks a genuine deverbal 前+V-stem compound
+            // (前掛け "apron") rather than a theft — those stay whole even when unranked (この|前掛け).
+            if (w1.Text.Length >= 2 && w1.Text[0] == '前'
+                && w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && !w1.Reading.StartsWith("ゼン", StringComparison.Ordinal)
+                && GetNonNameCompoundFrequencyRank != null
+                && GetNonNameCompoundFrequencyRank(w1.Text) is not < 40000
+                && newList.Count > 0
+                && HasNonNameCompoundLookup?.Invoke(newList[^1].Text + "前") == true
+                && HasNonNameCompoundLookup?.Invoke(w1.Text[1..]) == true
+                && RenyokeiSurfaceToVerb(w1.Text[1..]) == null)
+            {
+                var prev = newList[^1];
+                string rest = w1.Text[1..];
+                int mid = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1;
+                newList[^1] = new WordInfo(prev)
+                {
+                    Text = prev.Text + "前", DictionaryForm = prev.Text + "前", NormalizedForm = prev.Text + "前",
+                    Reading = "", EndOffset = mid
+                };
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = rest, DictionaryForm = rest, NormalizedForm = rest,
+                    Reading = "", StartOffset = mid
+                });
+                i += 1;
+                continue;
+            }
+
+            // 親-prefix OOV: Sudachi emits an OOV noun 親X (親ソ, 親米) where 親 is the productive "pro-"
+            // prefix (しん, 2256340). Split 親 + X when X is a JMDict word and 親X itself is NOT (so 親友/親指/
+            // 親子, which ARE dictionary words, stay whole). The remainder resolves on its own merits (a
+            // single-kana abbreviation like ソ may still drop at lookup — acceptable; 親 is recovered).
+            // Only a single-character rest is the geopolitical pro- pattern (親ソ, 親米, 親日); a longer rest
+            // means "parent" (親ギツネ, 親スレ) — leave that 親 unpinned so it resolves to おや.
+            if (w1.Text.Length >= 2 && w1.Text[0] == '親'
+                && w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && HasNonNameCompoundLookup?.Invoke(w1.Text) == false
+                && HasNonNameCompoundLookup?.Invoke(w1.Text[1..]) == true)
+            {
+                string rest = w1.Text[1..];
+                // Geopolitical abbreviations are katakana (ソ) or kanji (米/日); a hiragana rest is a
+                // colloquial fragment where 親 means parent.
+                bool isProPrefix = rest.Length == 1 && rest[0] is not (>= 'ぁ' and <= 'ゟ');
+                int mid = w1.StartOffset >= 0 ? w1.StartOffset + 1 : -1;
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "親", DictionaryForm = "親", NormalizedForm = "親",
+                    PartOfSpeech = isProPrefix ? PartOfSpeech.Prefix : PartOfSpeech.Noun,
+                    Reading = isProPrefix ? "シン" : "オヤ",
+                    PreMatchedWordId = isProPrefix ? 2256340 : null, EndOffset = mid
+                });
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = rest, DictionaryForm = rest, NormalizedForm = rest,
+                    Reading = "", StartOffset = mid,
+                    // Lone ソ never resolves to the Soviet-Union abbreviation on its own (generic noun
+                    // ids come first in its lookup), so pin it; kanji rests resolve via normal lookup.
+                    PreMatchedWordId = rest == "ソ" ? 2853158 : null
+                });
+                i += 1;
+                continue;
+            }
+
+            // 〜くも emitted as a single OOV token (美しくも, 早くも) is the adj-i adverbial 〜く + the
+            // particle も. Split when the 〜く part deconjugates to an i-adjective and the whole token
+            // isn't itself a dictionary word.
+            if (w1.Text.Length >= 4 && w1.Text.EndsWith("くも", StringComparison.Ordinal)
+                && (HasCompoundLookup == null || !HasCompoundLookup(w1.Text))
+                && Deconjugator.Instance.Deconjugate(NormalizeToHiragana(w1.Text[..^1]))
+                    .Any(f => f.Tags.Any(t => t == "adj-i") && HasNonNameCompoundLookup?.Invoke(f.Text) == true))
+            {
+                var kuPart = w1.Text[..^1];
+                int mid = w1.StartOffset >= 0 ? w1.StartOffset + kuPart.Length : -1;
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = kuPart, DictionaryForm = kuPart, NormalizedForm = kuPart,
+                    PartOfSpeech = PartOfSpeech.IAdjective, Reading = "", EndOffset = mid
+                });
+                newList.Add(new WordInfo
+                {
+                    Text = "も", DictionaryForm = "も", NormalizedForm = "も",
+                    PartOfSpeech = PartOfSpeech.Particle, Reading = "モ",
+                    StartOffset = mid, EndOffset = w1.EndOffset
+                });
+                i += 1;
+                continue;
+            }
+
+            // Sudachi splits an imperative/te-form like 当たれ into あ (interjection) + たれ (noun 垂れ).
+            // Recombine when あ + the next token deconjugates to a real verb, before CombineVerbDependant
+            // would otherwise steal the あ into the preceding verb (持って + あ).
+            if (w1 is { Text: "あ", PartOfSpeech: PartOfSpeech.Interjection }
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1] is { PartOfSpeech: PartOfSpeech.Noun } w2at && w2at.Text.Length >= 2
+                && DeconjugatesToVerbInLookup("あ" + w2at.Text))
+            {
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = "あ" + w2at.Text, DictionaryForm = "あ" + w2at.Text, NormalizedForm = "あ" + w2at.Text,
+                    PartOfSpeech = PartOfSpeech.Verb, Reading = "ア" + w2at.Reading,
+                    EndOffset = w2at.EndOffset
+                });
+                i += 2;
+                continue;
+            }
+
+            // Sudachi tags a causative stem (やらせ = 遣らせ) as a noun before ない. When (noun + ない) has
+            // a causative/passive verb deconjugation it is that verb (やらせない → やる/やらせる), not 遣らせ +
+            // 無い — merge so it resolves as the verb. Plain negatives (聞こえない, 仕方ない, 信用ない) lack a
+            // causative/passive deconjugation and stay split.
+            if (w1.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "ない"
+                && DeconjugatesToCausativeOrPassiveVerb(w1.Text + "ない"))
+            {
+                var nai = wordInfos[i + 1];
+                newList.Add(new WordInfo(w1)
+                {
+                    Text = w1.Text + "ない", DictionaryForm = w1.Text + "ない", NormalizedForm = w1.Text + "ない",
+                    PartOfSpeech = PartOfSpeech.Verb, Reading = w1.Reading + nai.Reading,
+                    EndOffset = nai.EndOffset
                 });
                 i += 2;
                 continue;
@@ -2637,7 +3362,10 @@ public partial class MorphologicalAnalyser
             {
                 // An auxiliary stem in the run is a verb/polite ending (ませ+ん = ません), not a stolen noun
                 // mora — leave it to RepairN/CombineAuxiliary, so わかってませんって is not mis-merged through ません.
-                if (result[^k].PartOfSpeech == PartOfSpeech.Auxiliary) break;
+                // The case particle が never belongs inside a reattached noun: stop so が + 行って is not glued
+                // into the kana-row noun が行 (気が行って) and the verb keeps its mora.
+                if (result[^k].PartOfSpeech == PartOfSpeech.Auxiliary
+                    || result[^k] is { PartOfSpeech: PartOfSpeech.Particle, Text: "が" }) break;
                 var t = result[^k].Text;
                 if (t.Length == 0) break;
                 bool kanaOrKanji = true;

@@ -35,6 +35,20 @@ public static class JapaneseTextHelper
         return true;
     }
 
+    /// <summary>Fullwidth (Ａ-Ｚ/ａ-ｚ) or halfwidth (A-Z/a-z) Latin letter.</summary>
+    public static bool IsLatinLetter(char c) =>
+        c is (>= '\uFF21' and <= '\uFF3A') or (>= '\uFF41' and <= '\uFF5A')  // fullwidth Ａ-Ｚ / ａ-ｚ
+          or (>= 'A' and <= 'Z') or (>= 'a' and <= 'z');                     // halfwidth A-Z / a-z
+
+    /// <summary>Non-empty string whose every char is a Latin letter (fullwidth or halfwidth). Allocation-free.</summary>
+    public static bool IsAllLatin(ReadOnlySpan<char> s)
+    {
+        if (s.IsEmpty) return false;
+        foreach (var c in s)
+            if (!IsLatinLetter(c)) return false;
+        return true;
+    }
+
     /// <summary>
     /// Converts katakana characters to their hiragana equivalents, leaving all other characters
     /// (kanji, ASCII, hiragana, the long-vowel mark, etc.) untouched. Allocation-free when the
