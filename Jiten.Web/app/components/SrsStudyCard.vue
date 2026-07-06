@@ -459,8 +459,6 @@
         :tabindex="!isFlipped && !inputPhase ? 0 : undefined"
         :aria-label="!isFlipped && !inputPhase ? 'Reveal answer' : undefined"
         @click="!isFlipped && !inputPhase && emit('flip')"
-        @keydown.enter="!isFlipped && !inputPhase && emit('flip')"
-        @keydown.space.prevent="!isFlipped && !inputPhase && emit('flip')"
       >
         <div v-if="srsStore.studySettings.showCardStatus" class="text-sm mb-4 uppercase tracking-wider" :class="srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'text-red-400 dark:text-red-400' : 'text-surface-400 dark:text-surface-300'">
           {{ srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'Again' : card.isNewCard ? 'New' : 'Review' }}
