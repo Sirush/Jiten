@@ -151,6 +151,15 @@ public class TokenProcessingStage
     public int OutputTokenCount { get; set; }
     public List<TokenModification> Modifications { get; set; } = [];
 
+    /// Full token surfaces entering/leaving the stage. Serialized only when the
+    /// stage changed something — unchanged stages carry state forward implicitly,
+    /// so consumers can reconstruct the exact token list at every pipeline point.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? InputTokens { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? OutputTokens { get; set; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Skipped { get; set; }
 }
@@ -160,9 +169,15 @@ public class TokenProcessingStage
 /// </summary>
 public class TokenModification
 {
-    public string Type { get; set; } = string.Empty; // "merge", "split", "reclassify", "remove"
+    public string Type { get; set; } = string.Empty; // "merge", "split", "remove", "insert", "replace", "resegment", "reclassify"
     public string[] InputTokens { get; set; } = [];
-    public string? OutputToken { get; set; }
+    public string[] OutputTokens { get; set; } = [];
+
+    /// Positions of the affected run in the stage's input/output token lists,
+    /// so repeated surfaces stay unambiguous for consumers.
+    public int InputIndex { get; set; }
+    public int OutputIndex { get; set; }
+
     public string Reason { get; set; } = string.Empty;
 }
 
