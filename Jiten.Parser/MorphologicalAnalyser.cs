@@ -15,6 +15,7 @@ public partial class MorphologicalAnalyser
     public Func<string, bool>? HasSuruVerbCompoundLookup { get; set; }
     public Func<string, int?>? GetNonNameCompoundWordId { get; set; }
     public Func<string, int?>? GetNonNameCompoundFrequencyRank { get; set; }
+    public Func<string, bool>? HasVerbOrAdjectiveLookup { get; set; }
 
     // Captured per Parse call for RetokeniseOovBlobs; an instance must not serve two parses with
     // different Sudachi configs concurrently (all production paths construct one instance per parse).

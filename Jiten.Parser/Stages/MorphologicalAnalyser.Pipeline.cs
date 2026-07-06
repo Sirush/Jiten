@@ -32,6 +32,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Repair, RepairHasaNoun, TokenFeatures.TextHasa),
         Stage(TokenStageGroup.Repair, RepairNTokenisation),
         Stage(TokenStageGroup.Repair, RepairVowelElongation),
+        Stage(TokenStageGroup.Repair, ApplyTokenRewriteRulesEarly),
         Stage(TokenStageGroup.Repair, ProcessSpecialCases),
         Stage(TokenStageGroup.Repair, RetokeniseOovBlobs, TokenFeatures.HiraganaOovBlob),
         Stage(TokenStageGroup.Repair, RepairColloquialNegativeNee, TokenFeatures.Interjection),
@@ -39,7 +40,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Repair, RepairQuotativeTte, TokenFeatures.EndsWithTsu),
 
         Stage(TokenStageGroup.Repair, RecombineHiraganaTokens),
-        Stage(TokenStageGroup.Repair, RepairInterjectionPronounTheft, TokenFeatures.AItsumo),
+        Stage(TokenStageGroup.Repair, ApplyTokenRewriteRulesLate),
         Stage(TokenStageGroup.Repair, RepairSakkiMoraTheft, TokenFeatures.TextSakki),
         Stage(TokenStageGroup.Repair, CollapseReduplicatedMimetic, TokenFeatures.KanaRepetition),
         Stage(TokenStageGroup.Repair, RepairClassicalKiAdjective),
@@ -66,6 +67,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Repair, RepairTankaToTaNKa, TokenFeatures.TextTanka),
         Stage(TokenStageGroup.Repair, RepairTteNani),
 
+        Stage(TokenStageGroup.Cleanup, ApplyTokenRewriteRulesCleanup),
         Stage(TokenStageGroup.Cleanup, FilterMisparse),
         Stage(TokenStageGroup.Disambiguation, FixReadingAmbiguity),
     ];

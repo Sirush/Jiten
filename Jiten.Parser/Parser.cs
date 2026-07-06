@@ -741,7 +741,7 @@ namespace Jiten.Parser
 
             var (cleanText, furiganaHints) = FuriganaHintExtractor.Extract(text);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup };
             var (sentences, cleanedOriginal) = await parser.ParseWithCleanedOriginal(cleanText, preserveStopToken: preserveStopToken, diagnostics: diagnostics);
 
             // ComputeTokenOffsets strips \r\n — relocate against the same coordinate space
@@ -874,7 +874,7 @@ namespace Jiten.Parser
             timer.Start();
 
             // Batch morphological analysis
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup };
             var cleanedOriginals = new List<string>();
             var rawCharCounts = new List<int>();
             var batchedSentences = await parser.ParseBatch(cleanTexts, diagnostics: diagnostics, timings: timings, userDictCsv: userDictCsv, cleanedOriginals: cleanedOriginals, rawContentCharCounts: rawCharCounts);
@@ -1057,7 +1057,7 @@ namespace Jiten.Parser
         {
             await EnsureInitializedAsync(contextFactory);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup };
             var sentences = await parser.Parse(text, morphemesOnly: true, diagnostics: diagnostics);
             var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
 
@@ -3533,9 +3533,21 @@ namespace Jiten.Parser
             LookupWithKanaFallback(text, static key =>
             {
                 if (!_lookups.TryGetValue(key, out var ids) || ids.Count == 0) return null;
+                int? bestId = null;
+                long bestRank = long.MaxValue;
                 foreach (var id in ids)
-                    if (!_nameOnlyWordIds.Contains(id)) return id;
-                return null;
+                {
+                    if (_nameOnlyWordIds.Contains(id)) continue;
+                    long rank = _wordFrequencyRanks.TryGetValue(id, out var r) ? r : int.MaxValue;
+                    // Best (lowest) frequency rank wins; ties (incl. unranked) break to the lowest
+                    // WordId so the pin is stable regardless of _lookups' array_agg order.
+                    if (bestId == null || rank < bestRank || (rank == bestRank && id < bestId))
+                    {
+                        bestId = id;
+                        bestRank = rank;
+                    }
+                }
+                return bestId;
             });
 
         // The best (lowest) frequency rank of any non-name word with this written form,
@@ -3570,6 +3582,19 @@ namespace Jiten.Parser
             {
             }
 
+            return false;
+        }
+
+        // True when a written form has a JMDict entry POS-tagged as a verb or i-adjective (not merely
+        // present as some other part of speech). Distinguishes a real conjugating lexeme from a
+        // homographic noun (明日/あす) that a verb deconjugation path happens to land on.
+        private static bool HasVerbOrAdjectiveLookup(string text)
+        {
+            if (!_lookups.TryGetValue(text, out var ids)) return false;
+            foreach (var id in ids)
+                if (WordMeta.TryGetValue(id, out var meta)
+                    && meta.Pos.Any(p => p is PartOfSpeech.Verb or PartOfSpeech.IAdjective))
+                    return true;
             return false;
         }
 
@@ -4600,9 +4625,12 @@ namespace Jiten.Parser
                     }
                     if (word.PartOfSpeech == PartOfSpeech.BlankSpace)
                     {
+                        // Whitespace is a transparent neighbour: it holds no symbol gap of its own and
+                        // lets pendingSymbols flow to the next real token (avoids the double-store that
+                        // would otherwise double-count symbols once the neighbour walks skip spaces).
                         flatTokens.Add(word);
                         sentenceInitial.Add(first || afterOpeningQuote);
-                        symbolsBefore.Add(pendingSymbols);
+                        symbolsBefore.Add("");
                         continue;
                     }
                     flatTokens.Add(word);
@@ -4637,15 +4665,24 @@ namespace Jiten.Parser
                 // Empty-text remnants (cleaned split markers) are transparent as neighbours; their
                 // symbol gaps still count toward the frame.
                 int pi = i - 1;
-                while (pi >= 0 && flatTokens[pi].Text.Length == 0) pi--;
+                bool spaceBefore = false;
+                while (pi >= 0 && (flatTokens[pi].Text.Length == 0
+                                   || flatTokens[pi].PartOfSpeech == PartOfSpeech.BlankSpace))
+                {
+                    if (flatTokens[pi].PartOfSpeech == PartOfSpeech.BlankSpace) spaceBefore = true;
+                    pi--;
+                }
                 var prev = pi >= 0 ? flatTokens[pi] : null;
 
                 int ni = i + 1;
                 string symAfter = "";
+                bool spaceAfter = false;
                 while (ni < flatTokens.Count)
                 {
                     symAfter += symbolsBefore[ni];
-                    if (flatTokens[ni].Text.Length > 0) break;
+                    bool niIsBlank = flatTokens[ni].PartOfSpeech == PartOfSpeech.BlankSpace;
+                    if (niIsBlank) spaceAfter = true;
+                    if (flatTokens[ni].Text.Length > 0 && !niIsBlank) break;
                     ni++;
                 }
                 if (ni >= flatTokens.Count) symAfter += trailingSymbols;
@@ -4665,9 +4702,9 @@ namespace Jiten.Parser
                 // no blob spans it. A pure-vowel scrap after a verb/adjective is that word's own
                 // expressive elongation (わかる|う), not a blob.
                 bool prevIsShard = (MisparseGates.IsKanaShardNeighbour(prev) || prevDropped)
-                                   && symbolsBefore[i].Length == 0;
+                                   && symbolsBefore[i].Length == 0 && !spaceBefore;
                 bool nextIsShard = (MisparseGates.IsKanaShardNeighbour(next) || nextDropped)
-                                   && symAfter.Length == 0;
+                                   && symAfter.Length == 0 && !spaceAfter;
                 if (nextIsShard && next != null
                     && token.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
                     && next.Text.All(c => "あいうえおぁぃぅぇぉーっッ".Contains(c)))

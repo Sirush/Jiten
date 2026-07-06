@@ -2041,6 +2041,10 @@ public class MorphologicalAnalyserTests
         yield return ["ずがんっ！と響いた。", new[] { "と", "響いた" }];
         yield return ["ぱん！と乾いた音がした。", new[] { "と", "乾いた", "音がした" }];
         yield return ["ぼんっ！と空で音がした。", new[] { "と", "空", "で", "音がした" }];
+        // Full-width space after the exclamation is transparent: the quotative-と gate must still see
+        // と as the next token (VN typography ぱん！　と), yielding the same drop as the spaceless case.
+        yield return ["ぱん！　と乾いた音がした。", new[] { "と", "乾いた", "音がした" }];
+        yield return ["ぼんっ！　と空で音がした。", new[] { "と", "空", "で", "音がした" }];
         yield return ["ぴーー！と笛が鳴る。", new[] { "と", "笛", "が", "鳴る" }];
         yield return ["「きゃーっ！　そんなところ掴めるわけないでしょっ！！」",
             new[] { "そんなところ", "掴める", "わけない", "でしょ" }];

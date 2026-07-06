@@ -990,9 +990,9 @@ public partial class MorphologicalAnalyser
     // True if the surface deconjugates to a verb (godan/ichidan) whose dictionary form is in JMDict.
     private bool DeconjugatesToVerbInLookup(string surface)
     {
-        if (HasNonNameCompoundLookup == null) return false;
+        if (HasVerbOrAdjectiveLookup == null) return false;
         foreach (var f in Deconjugator.Instance.Deconjugate(NormalizeToHiragana(surface)))
-            if (f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)) && HasNonNameCompoundLookup(f.Text))
+            if (f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)) && HasVerbOrAdjectiveLookup(f.Text))
                 return true;
         return false;
     }
@@ -1001,49 +1001,12 @@ public partial class MorphologicalAnalyser
     // Stricter than the plain check so ordinary ichidan negatives (聞こえない, plain 信用ない) stay split.
     private bool DeconjugatesToCausativeOrPassiveVerb(string surface)
     {
-        if (HasNonNameCompoundLookup == null) return false;
+        if (HasVerbOrAdjectiveLookup == null) return false;
         foreach (var f in Deconjugator.Instance.Deconjugate(NormalizeToHiragana(surface)))
-            if (f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)) && HasNonNameCompoundLookup(f.Text)
+            if (f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)) && HasVerbOrAdjectiveLookup(f.Text)
                 && f.Process.Any(p => p.Contains("causative") || p.Contains("passive")))
                 return true;
         return false;
-    }
-
-    /// Sudachi's lattice sometimes lets a following word steal the first mora of あいつ, reading the
-    /// あ as an interjection (あ|いつも幹部だから). A genuine interjection あ is set off by punctuation
-    /// (あ、いつも), which tokenises the pause separately — so a bare interjection あ directly against いつも is
-    /// the pronoun; re-cut to あいつ + も.
-    private List<WordInfo> RepairInterjectionPronounTheft(List<WordInfo> wordInfos)
-    {
-        List<WordInfo>? result = null;
-        for (int i = 0; i < wordInfos.Count; i++)
-        {
-            var word = wordInfos[i];
-            if (word is { Text: "あ", PartOfSpeech: PartOfSpeech.Interjection }
-                && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "いつも")
-            {
-                var next = wordInfos[i + 1];
-                result ??= [..wordInfos[..i]];
-                result.Add(new WordInfo(word)
-                {
-                    Text = "あいつ", DictionaryForm = "あいつ", NormalizedForm = "あいつ",
-                    Reading = "アイツ", PartOfSpeech = PartOfSpeech.Pronoun,
-                    EndOffset = word.StartOffset >= 0 ? word.StartOffset + 3 : -1
-                });
-                result.Add(new WordInfo(next)
-                {
-                    Text = "も", DictionaryForm = "も", NormalizedForm = "も",
-                    Reading = "モ", PartOfSpeech = PartOfSpeech.Particle,
-                    StartOffset = next.StartOffset >= 0 ? next.StartOffset + 2 : -1
-                });
-                i++;
-                continue;
-            }
-
-            result?.Add(word);
-        }
-
-        return result ?? wordInfos;
     }
 
     /// さっき loses its き to a following pronoun in the lattice (さっきみごと → さっ|きみ|ごと).

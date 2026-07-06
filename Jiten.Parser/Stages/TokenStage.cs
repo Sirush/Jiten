@@ -41,11 +41,10 @@ internal enum TokenFeatures : uint
     TextRan         = 1 << 17,
     OovGarbage      = 1 << 19,
     TextSakki       = 1 << 20,
-    AItsumo         = 1 << 21,
-    KanaRepetition  = 1 << 22,
-    DictKiru        = 1 << 23,
-    HiraganaOovBlob = 1 << 24,
-    AdverbEndsTo    = 1 << 25,
+    KanaRepetition  = 1 << 21,
+    DictKiru        = 1 << 22,
+    HiraganaOovBlob = 1 << 23,
+    AdverbEndsTo    = 1 << 24,
 
     // Composite
     InflectableBase = 1 << 18,
@@ -68,7 +67,6 @@ internal static class TokenFeatureScanner
     public static TokenFeatures Scan(List<WordInfo> tokens)
     {
         var f = TokenFeatures.None;
-        bool sawAInterjection = false, sawItsumo = false;
         string prevText = "";
 
         foreach (var w in tokens)
@@ -139,12 +137,6 @@ internal static class TokenFeatureScanner
                 case "さっ":
                     f |= TokenFeatures.TextSakki;
                     break;
-                case "あ" when w.PartOfSpeech == PartOfSpeech.Interjection:
-                    sawAInterjection = true;
-                    break;
-                case "いつも":
-                    sawItsumo = true;
-                    break;
             }
 
             if (w.DictionaryForm == "切る")
@@ -189,9 +181,6 @@ internal static class TokenFeatureScanner
                     f |= TokenFeatures.HiraganaOovBlob;
             }
         }
-
-        if (sawAInterjection && sawItsumo)
-            f |= TokenFeatures.AItsumo;
 
         return f;
     }
