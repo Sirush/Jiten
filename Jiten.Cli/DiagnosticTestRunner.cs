@@ -393,7 +393,7 @@ public class DiagnosticTestRunner
                 var merges = stage.Modifications.Where(m => m.Type == "merge").ToList();
                 foreach (var merge in merges)
                 {
-                    return $"Stage '{stage.StageName}' merged [{string.Join(", ", merge.InputTokens)}] → '{merge.OutputToken}'";
+                    return $"Stage '{stage.StageName}' merged [{string.Join(", ", merge.InputTokens)}] → '{merge.OutputTokens.FirstOrDefault()}'";
                 }
             }
         }
@@ -501,7 +501,7 @@ public class DiagnosticTestRunner
                 foreach (var stage in diagnostics.TokenStages)
                 {
                     var merge = stage.Modifications.FirstOrDefault(m =>
-                                                                       m.Type == "merge" && m.OutputToken == actualToken);
+                                                                       m.Type == "merge" && m.OutputTokens is [var mergedToken] && mergedToken == actualToken);
                     if (merge != null)
                     {
                         sb.AppendLine($"// Caused by stage: {stage.StageName}");
