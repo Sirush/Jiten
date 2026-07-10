@@ -1101,6 +1101,8 @@ export interface StudyKeybinds {
   undo: string;
   wrapUp: string;
   pauseTimer: string;
+  dictPrev: string;
+  dictNext: string;
 }
 
 export interface StudySettingsDto {

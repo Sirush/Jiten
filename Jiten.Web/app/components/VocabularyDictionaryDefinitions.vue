@@ -3,12 +3,13 @@
   import type { ResolvedDefinitionGroup } from '~/composables/useYomitanDictionary';
   import { definitionsToHtml } from '~/composables/useYomitanDictionary';
 
-  const props = defineProps<{
+  const props = withDefaults(defineProps<{
     resolvedGroups: readonly ResolvedDefinitionGroup[];
     isCompact: boolean;
     currentReadingIndex?: number;
     readings?: Reading[];
-  }>();
+    arrowKeyNav?: boolean;
+  }>(), { arrowKeyNav: true });
 
   const store = useJitenStore();
 
@@ -21,10 +22,35 @@
   const activeTab = ref<string | undefined>(undefined);
 
   watch(() => props.resolvedGroups, (groups) => {
-    if (groups.length > 0 && !activeTab.value) {
+    if (groups.length === 0) return;
+    if (!activeTab.value || !groups.some((g) => g.dictionaryId === activeTab.value)) {
       activeTab.value = groups[0].dictionaryId;
     }
   }, { immediate: true });
+
+  function cycleDictionary(direction: 1 | -1) {
+    const groups = props.resolvedGroups;
+    if (props.isCompact || groups.length < 2) return;
+    const current = groups.findIndex((g) => g.dictionaryId === activeTab.value);
+    const next = ((current === -1 ? 0 : current) + direction + groups.length) % groups.length;
+    activeTab.value = groups[next]!.dictionaryId;
+  }
+
+  function onWindowKeydown(e: KeyboardEvent) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    const target = e.target as HTMLElement | null;
+    // Don't steal arrows from text inputs, or double-handle PrimeVue's own tab-header navigation.
+    if (target?.closest('input, textarea, select, [contenteditable], [role="tab"]')) return;
+    cycleDictionary(e.key === 'ArrowRight' ? 1 : -1);
+  }
+
+  onMounted(() => {
+    if (props.arrowKeyNav) window.addEventListener('keydown', onWindowKeydown);
+  });
+  onUnmounted(() => window.removeEventListener('keydown', onWindowKeydown));
+
+  defineExpose({ cycleDictionary });
 </script>
 
 <template>
@@ -40,7 +66,9 @@
 
   <!-- Multiple groups: tabbed view -->
   <template v-else-if="!isCompact && hasMultipleGroups">
-    <Tabs v-model:value="activeTab" :show-navigators="false">
+    <!-- select-on-focus: after clicking a tab, focus stays on the tab header; arrows there are
+         handled by PrimeVue's own (wrapping) tab navigation, which the window listener skips. -->
+    <Tabs v-model:value="activeTab" :show-navigators="false" select-on-focus>
       <TabList class="dict-tabs">
         <Tab v-for="group in resolvedGroups" :key="group.dictionaryId" :value="group.dictionaryId">
           {{ group.dictionaryName }}

@@ -269,6 +269,8 @@
     ['undo', 'Undo'],
     ['wrapUp', 'Wrap up'],
     ['pauseTimer', 'Pause/resume timer'],
+    ['dictPrev', 'Previous dictionary'],
+    ['dictNext', 'Next dictionary'],
   ];
 
   const gradeEntries = computed(() => (form.gradingButtons === 4 ? gradeLabels4 : gradeLabels2));

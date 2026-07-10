@@ -88,6 +88,13 @@
     computed(() => wordData.value?.definitions),
   );
 
+  // Dictionary cycling is driven by the study page's rebindable keybinds (dictPrev/dictNext),
+  // so the definitions component's own arrow-key listener is disabled below.
+  const dictDefinitionsRef = ref<{ cycleDictionary: (direction: 1 | -1) => void } | null>(null);
+  defineExpose({
+    cycleDictionary: (direction: 1 | -1) => dictDefinitionsRef.value?.cycleDictionary(direction),
+  });
+
   const currentReadingIndex = computed(() => props.card.readingIndex);
 
   const LANG_NAMES: Record<string, string> = {
@@ -647,7 +654,9 @@
           <template v-if="wordData">
             <ClientOnly>
               <VocabularyDictionaryDefinitions
+                ref="dictDefinitionsRef"
                 :resolved-groups="resolvedGroups"
+                :arrow-key-nav="false"
                 :is-compact="false"
                 :current-reading-index="currentReadingIndex"
                 :readings="wordData.alternativeReadings"

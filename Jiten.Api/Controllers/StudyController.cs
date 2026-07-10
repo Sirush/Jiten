@@ -2078,8 +2078,12 @@ public class StudyController(
         kb.Forget = SanitizeKeybind(kb.Forget, defaultKeybinds.Forget);
         kb.Master = SanitizeKeybind(kb.Master, defaultKeybinds.Master);
         kb.Suspend = SanitizeKeybind(kb.Suspend, defaultKeybinds.Suspend);
+        kb.Bury = SanitizeKeybind(kb.Bury, defaultKeybinds.Bury);
         kb.Undo = SanitizeKeybind(kb.Undo, defaultKeybinds.Undo);
         kb.WrapUp = SanitizeKeybind(kb.WrapUp, defaultKeybinds.WrapUp);
+        kb.PauseTimer = SanitizeKeybind(kb.PauseTimer, defaultKeybinds.PauseTimer);
+        kb.DictPrev = SanitizeKeybind(kb.DictPrev, defaultKeybinds.DictPrev);
+        kb.DictNext = SanitizeKeybind(kb.DictNext, defaultKeybinds.DictNext);
 
         if (!string.IsNullOrEmpty(request.Timezone))
         {

@@ -16,6 +16,8 @@ export const DEFAULT_KEYBINDS: StudyKeybinds = {
   undo: 'z',
   wrapUp: 'w',
   pauseTimer: 'p',
+  dictPrev: 'ArrowLeft',
+  dictNext: 'ArrowRight',
 };
 
 export function displayKeyName(key: string): string {
@@ -56,6 +58,8 @@ export interface StudyKeyboardCallbacks {
   onUndo: () => void;
   onWrapUp: () => void;
   onPauseTimer: () => void;
+  onDictPrev: () => void;
+  onDictNext: () => void;
 }
 
 const RATINGS_4 = [FsrsRating.Again, FsrsRating.Hard, FsrsRating.Good, FsrsRating.Easy];
@@ -128,6 +132,9 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
       if (matchesKeybind(e, kb.master)) { flashKey(kb.master); callbacks.onMaster(); return; }
       if (matchesKeybind(e, kb.suspend)) { flashKey(kb.suspend); callbacks.onSuspend(); return; }
       if (matchesKeybind(e, kb.bury)) { flashKey(kb.bury); callbacks.onBury(); return; }
+      const onTabHeader = e.target instanceof HTMLElement && !!e.target.closest('[role="tab"]');
+      if (!onTabHeader && matchesKeybind(e, kb.dictPrev ?? DEFAULT_KEYBINDS.dictPrev)) { callbacks.onDictPrev(); return; }
+      if (!onTabHeader && matchesKeybind(e, kb.dictNext ?? DEFAULT_KEYBINDS.dictNext)) { callbacks.onDictNext(); return; }
     }
 
     if (matchesKeybind(e, kb.pauseTimer)) {
