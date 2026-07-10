@@ -8,6 +8,10 @@ export function getDeckOrderText(deckOrder: DeckOrder): string {
       return 'Deck Frequency';
     case DeckOrder.GlobalFrequency:
       return 'Global Frequency';
+    case DeckOrder.ImportOrder:
+      return 'Import Order';
+    case DeckOrder.Random:
+      return 'Random';
     default:
       return 'Unknown';
   }

@@ -187,6 +187,8 @@
     return segments;
   });
 
+  const studyCardRef = ref<{ cycleDictionary: (direction: 1 | -1) => void } | null>(null);
+
   const { pressedKey } = useStudyKeyboard({
     onGrade: handleGrade,
     onBlacklist: handleBlacklist,
@@ -197,6 +199,8 @@
     onUndo: handleUndo,
     onWrapUp: handleWrapUp,
     onPauseTimer: handlePauseTimer,
+    onDictPrev: () => studyCardRef.value?.cycleDictionary(-1),
+    onDictNext: () => studyCardRef.value?.cycleDictionary(1),
   });
 
   // Write-in review: per-card modality, input/reveal phase, suggested grade and auto-advance.
@@ -649,6 +653,7 @@
             >Again</div>
 
             <SrsStudyCard
+              ref="studyCardRef"
               :card="srsStore.currentCard"
               :is-flipped="srsStore.isFlipped"
               :write-in-active="isWriteInCard"

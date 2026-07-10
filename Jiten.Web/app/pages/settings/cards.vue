@@ -4,6 +4,7 @@
   import { useToast } from 'primevue/usetoast';
   import type { FsrsCardWithWordDto } from '~/types/types';
   import { FsrsState } from '~/types/enums';
+  import { useSrsStore } from '~/stores/srsStore';
 
   definePageMeta({
     middleware: ['auth'],
@@ -14,12 +15,14 @@
   const { $api } = useNuxtApp();
   const toast = useToast();
   const confirm = useConfirm();
+  const route = useRoute();
+  const srsStore = useSrsStore();
   const { subscriptions, fetchSubscriptions } = useWordSets();
 
   const cards = ref<FsrsCardWithWordDto[]>([]);
   const loading = ref(true);
   const searchQuery = ref('');
-  const activeFilter = ref<FsrsState | 'all' | 'due'>('all');
+  const activeFilter = ref<FsrsState | 'all' | 'due' | 'leech'>('all');
   const sortBy = ref<'due' | 'state' | 'rank' | 'lapses' | 'stability' | 'difficulty'>('due');
   const sortAsc = ref(true);
   const selectedIds = ref(new Set<string>());
@@ -44,9 +47,17 @@
   const hasWordSetSubscriptions = computed(() => subscriptions.value.length > 0);
 
   onMounted(async () => {
+    srsStore.fetchSettings();
+    if (route.query.filter === 'leech') activeFilter.value = 'leech';
     await fetchCards();
     fetchSubscriptions();
   });
+
+  const leechThreshold = computed(() => srsStore.studySettings.leechThreshold);
+
+  function cardIsLeech(card: FsrsCardWithWordDto): boolean {
+    return card.state !== FsrsState.Mastered && card.state !== FsrsState.Blacklisted && isLeechCard(card.lapses, card.stability, leechThreshold.value);
+  }
 
   async function fetchCards() {
     loading.value = true;
@@ -73,15 +84,18 @@
     const now = new Date();
     const byState: Record<number, number> = {};
     let dueCount = 0;
+    let leechCount = 0;
     for (const c of cards.value) {
       byState[c.state] = (byState[c.state] || 0) + 1;
       if ((c.state === FsrsState.Learning || c.state === FsrsState.Review || c.state === FsrsState.Relearning) && new Date(c.due) <= now) {
         dueCount++;
       }
+      if (cardIsLeech(c)) leechCount++;
     }
     return {
       total,
       due: dueCount,
+      leeches: leechCount,
       learning: byState[FsrsState.Learning] || 0,
       review: byState[FsrsState.Review] || 0,
       relearning: byState[FsrsState.Relearning] || 0,
@@ -94,6 +108,7 @@
   const filterChips = computed(() => [
     { key: 'all' as const, label: 'All', count: stats.value.total, color: '' },
     { key: 'due' as const, label: 'Due', count: stats.value.due, color: 'text-red-600 dark:text-red-400' },
+    { key: 'leech' as const, label: 'Leeches', count: stats.value.leeches, color: 'text-amber-600 dark:text-amber-400' },
     { key: FsrsState.Learning, label: 'Learning', count: stats.value.learning, color: 'text-yellow-600 dark:text-yellow-400' },
     { key: FsrsState.Review, label: 'Review', count: stats.value.review, color: 'text-green-600 dark:text-green-400' },
     { key: FsrsState.Relearning, label: 'Relearning', count: stats.value.relearning, color: 'text-orange-600 dark:text-orange-400' },
@@ -102,7 +117,7 @@
     { key: FsrsState.Blacklisted, label: 'Blacklisted', count: stats.value.blacklisted, color: 'text-gray-500 dark:text-gray-400' },
   ]);
 
-  function setFilter(key: FsrsState | 'all' | 'due') {
+  function setFilter(key: FsrsState | 'all' | 'due' | 'leech') {
     activeFilter.value = activeFilter.value === key ? 'all' : key;
     page.value = 1;
     selectedIds.value.clear();
@@ -117,6 +132,8 @@
       result = result.filter(
         (c) => (c.state === FsrsState.Learning || c.state === FsrsState.Review || c.state === FsrsState.Relearning) && new Date(c.due) <= now
       );
+    } else if (activeFilter.value === 'leech') {
+      result = result.filter(cardIsLeech);
     } else if (activeFilter.value !== 'all') {
       result = result.filter((c) => c.state === activeFilter.value);
     }
@@ -622,6 +639,11 @@
               </div>
 
               <Tag
+                v-if="cardIsLeech(card)"
+                value="Leech"
+                class="shrink-0 !text-xs row-start-1 col-start-2 justify-self-end !bg-amber-100 !text-amber-700 dark:!bg-amber-900/40 dark:!text-amber-300 sm:order-5"
+              />
+              <Tag
                 :value="getFsrsStateName(card.state)"
                 :severity="getFsrsStateSeverity(card.state)"
                 class="shrink-0 !text-xs row-start-1 col-start-3 sm:order-5"
@@ -684,7 +706,7 @@
                 </div>
                 <div>
                   <div class="text-surface-400 text-xs">Lapses</div>
-                  <div class="font-medium" :class="card.lapses >= 8 ? 'text-red-600 dark:text-red-400' : ''">{{ card.lapses }}</div>
+                  <div class="font-medium" :class="cardIsLeech(card) ? 'text-amber-600 dark:text-amber-400' : ''">{{ card.lapses }}</div>
                 </div>
                 <div>
                   <div class="text-surface-400 text-xs">Due</div>
@@ -738,14 +760,7 @@
               class="!hidden sm:!inline-flex"
               @click="openAddToList(selectedCards)"
             />
-            <Button
-              icon="pi pi-list"
-              size="small"
-              severity="secondary"
-              :loading="bulkLoading"
-              class="sm:!hidden"
-              @click="openAddToList(selectedCards)"
-            />
+            <Button icon="pi pi-list" size="small" severity="secondary" :loading="bulkLoading" class="sm:!hidden" @click="openAddToList(selectedCards)" />
             <Button
               icon="pi pi-check-circle"
               label="Master"

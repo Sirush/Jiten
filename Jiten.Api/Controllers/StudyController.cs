@@ -1897,6 +1897,7 @@ public class StudyController(
 
             var mainForm = forms?.FirstOrDefault(f => f.ReadingIndex == item.ReadingIndex);
             var exKey = WordFormHelper.EncodeWordKey(item.WordId, item.ReadingIndex);
+            var fsrsCard = dueCardLookup.GetValueOrDefault((item.WordId, item.ReadingIndex));
 
             cards.Add(new StudyCardDto
             {
@@ -1905,6 +1906,8 @@ public class StudyController(
                 ReadingIndex = item.ReadingIndex,
                 State = item.State,
                 IsNewCard = item.IsNew,
+                Lapses = fsrsCard?.Lapses ?? 0,
+                IsLeech = fsrsCard != null && LeechHelper.IsLeech(fsrsCard.Lapses, fsrsCard.Stability, settings.LeechThreshold),
                 WordText = mainForm?.RubyText ?? mainForm?.Text ?? "",
                 WordTextPlain = mainForm?.Text ?? "",
                 Readings = forms?.Select(f => new StudyReadingDto
@@ -2078,8 +2081,12 @@ public class StudyController(
         kb.Forget = SanitizeKeybind(kb.Forget, defaultKeybinds.Forget);
         kb.Master = SanitizeKeybind(kb.Master, defaultKeybinds.Master);
         kb.Suspend = SanitizeKeybind(kb.Suspend, defaultKeybinds.Suspend);
+        kb.Bury = SanitizeKeybind(kb.Bury, defaultKeybinds.Bury);
         kb.Undo = SanitizeKeybind(kb.Undo, defaultKeybinds.Undo);
         kb.WrapUp = SanitizeKeybind(kb.WrapUp, defaultKeybinds.WrapUp);
+        kb.PauseTimer = SanitizeKeybind(kb.PauseTimer, defaultKeybinds.PauseTimer);
+        kb.DictPrev = SanitizeKeybind(kb.DictPrev, defaultKeybinds.DictPrev);
+        kb.DictNext = SanitizeKeybind(kb.DictNext, defaultKeybinds.DictNext);
 
         if (!string.IsNullOrEmpty(request.Timezone))
         {
@@ -3180,11 +3187,13 @@ public class StudyController(
         var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: fsrsParams, enableFuzzing: false);
 
         var now = DateTime.UtcNow;
+        var studySettings = await LoadStudySettings(userId);
+        var leechThreshold = studySettings.LeechThreshold;
 
         var cards = await userContext.FsrsCards
             .AsNoTracking()
             .Where(c => c.UserId == userId)
-            .Select(c => new { c.State, c.Stability, c.Difficulty, c.Due, c.LastReview })
+            .Select(c => new { c.WordId, c.ReadingIndex, c.State, c.Stability, c.Difficulty, c.Due, c.LastReview, c.Lapses })
             .ToListAsync();
 
         int newCount = 0, learning = 0, relearning = 0, young = 0, mature = 0, suspended = 0, mastered = 0, blacklisted = 0;
@@ -3199,8 +3208,26 @@ public class StudyController(
         double retrievabilitySum = 0;
         int masteredCount = 0;
 
+        int activeLeeches = 0, suspendedLeeches = 0, recoveredLeeches = 0;
+        var leechCards = new List<(int WordId, byte ReadingIndex, int Lapses, FsrsState State)>();
+
         foreach (var c in cards)
         {
+            if (leechThreshold > 0 && c.Lapses >= leechThreshold
+                && c.State is not (FsrsState.Mastered or FsrsState.Blacklisted))
+            {
+                if ((c.Stability ?? 0) >= RetentionCalculator.MatureThresholdDays)
+                {
+                    recoveredLeeches++;
+                }
+                else
+                {
+                    if (c.State == FsrsState.Suspended) suspendedLeeches++;
+                    else activeLeeches++;
+                    leechCards.Add((c.WordId, c.ReadingIndex, c.Lapses, c.State));
+                }
+            }
+
             switch (c.State)
             {
                 case FsrsState.New: newCount++; break;
@@ -3250,6 +3277,14 @@ public class StudyController(
 
         var total = cards.Count;
 
+        var topLeeches = leechCards
+            .OrderByDescending(l => l.Lapses)
+            .Take(10)
+            .ToList();
+        var leechForms = topLeeches.Count > 0
+            ? await WordFormHelper.LoadWordForms(context, topLeeches.Select(l => l.WordId).Distinct().ToList())
+            : new Dictionary<(int, short), JmDictWordForm>();
+
         return Results.Ok(new
         {
             stateCounts = new
@@ -3284,6 +3319,21 @@ public class StudyController(
                 estimatedKnowledge = (int)Math.Round(retrievabilitySum),
                 count = retrievabilityValues.Count,
                 masteredCount,
+            },
+            leeches = new
+            {
+                threshold = leechThreshold,
+                active = activeLeeches,
+                suspended = suspendedLeeches,
+                recovered = recoveredLeeches,
+                top = topLeeches.Select(l => new
+                {
+                    wordId = l.WordId,
+                    readingIndex = l.ReadingIndex,
+                    wordText = leechForms.GetValueOrDefault((l.WordId, l.ReadingIndex))?.Text ?? "",
+                    lapses = l.Lapses,
+                    state = (int)l.State,
+                }).ToList(),
             },
         });
     }
@@ -3901,10 +3951,23 @@ public class StudyController(
             case StudyDeckType.StaticWordList:
             {
                 if (request.Format == DeckFormat.Yomitan)
-                    return Results.BadRequest("Yomitan format is not supported for static word list decks.");
+                {
+                    var allWords = await deckWordResolver.ResolveStaticDeckWords(id, (int)DeckOrder.ImportOrder);
+                    var yomitanWords = allWords.Select(w => (w.WordId, w.ReadingIndex, Math.Max(1, w.Occurrences))).ToList();
+                    var title = studyDeck.Name.Substring(0, Math.Min(studyDeck.Name.Length, 30));
+                    var yomitanBytes = await YomitanHelper.GenerateYomitanFrequencyDeckFromWords(contextFactory, yomitanWords, title);
+                    return Results.File(yomitanBytes, "application/zip", $"freq_{studyDeck.Name}.zip");
+                }
+
+                var downloadType = request.DownloadType == 0 ? DeckDownloadType.Full : request.DownloadType;
+                if (downloadType == DeckDownloadType.TargetCoverage && request.TargetPercentage is null or < 1 or > 100)
+                    return Results.BadRequest("Target percentage must be between 1 and 100");
 
                 var words = await deckWordResolver.ResolveStaticDeckWords(id, (int)request.Order,
-                    request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords);
+                    request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
+                    downloadType, request.MinFrequency, request.MaxFrequency,
+                    request.MinOccurrences, request.MaxOccurrences,
+                    request.TargetPercentage, request.StartFromKnown);
                 deckWords = words.Select(w => (w.WordId, w.ReadingIndex, Math.Max(1, w.Occurrences))).ToList();
                 deckTitle = studyDeck.Name;
                 break;
@@ -3929,6 +3992,98 @@ public class StudyController(
             DeckFormat.Txt or DeckFormat.TxtRepeated => Results.File(bytes, "text/plain", $"{deckTitle}.txt"),
             _ => Results.BadRequest()
         };
+    }
+
+    [HttpPost("study-decks/{id:int}/learn")]
+    [EnableRateLimiting("download")]
+    [SwaggerOperation(Summary = "Bulk mark study deck vocabulary as mastered or blacklisted",
+                      Description = "Mark resolved vocabulary as mastered or blacklisted.")]
+    public async Task<IResult> LearnStudyDeck(int id, [FromBody] DeckLearnRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var state = request.VocabularyState?.ToLowerInvariant();
+        if (state is not ("mastered" or "blacklisted"))
+            return Results.BadRequest("VocabularyState must be 'mastered' or 'blacklisted'.");
+
+        var studyDeck = await userContext.UserStudyDecks
+            .AsNoTracking()
+            .FirstOrDefaultAsync(sd => sd.UserStudyDeckId == id && sd.UserId == userId);
+        if (studyDeck == null) return Results.NotFound();
+
+        List<DeckWord> resolvedWords;
+        var kanaAlreadyExcluded = false;
+
+        switch (studyDeck.DeckType)
+        {
+            case StudyDeckType.MediaDeck:
+            {
+                if (!studyDeck.DeckId.HasValue) return Results.BadRequest("Study deck has no linked media deck.");
+
+                var deck = await context.Decks.AsNoTracking().FirstOrDefaultAsync(d => d.DeckId == studyDeck.DeckId.Value);
+                if (deck == null) return Results.NotFound("Linked media deck not found.");
+
+                var (words, error) = await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
+                    studyDeck.DeckId.Value, deck,
+                    request.DownloadType, request.Order,
+                    request.MinFrequency, request.MaxFrequency,
+                    request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
+                    request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
+                    studyDeck.PosFilter, request.StartFromKnown));
+                if (error != null) return error;
+
+                resolvedWords = words!;
+                break;
+            }
+            case StudyDeckType.GlobalDynamic:
+            {
+                var result = await deckWordResolver.ResolveGlobalDynamicWords(
+                    studyDeck.MinGlobalFrequency, studyDeck.MaxGlobalFrequency, studyDeck.PosFilter,
+                    request.ExcludeKana, request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords);
+                resolvedWords = result.Words.Select(w => new DeckWord { WordId = w.WordId, ReadingIndex = w.ReadingIndex }).ToList();
+                kanaAlreadyExcluded = true;
+                break;
+            }
+            case StudyDeckType.StaticWordList:
+            {
+                var downloadType = request.DownloadType == 0 ? DeckDownloadType.Full : request.DownloadType;
+                if (downloadType == DeckDownloadType.TargetCoverage && request.TargetPercentage is null or < 1 or > 100)
+                    return Results.BadRequest("Target percentage must be between 1 and 100");
+
+                var words = await deckWordResolver.ResolveStaticDeckWords(id, (int)request.Order,
+                    request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
+                    downloadType, request.MinFrequency, request.MaxFrequency,
+                    request.MinOccurrences, request.MaxOccurrences,
+                    request.TargetPercentage, request.StartFromKnown);
+                resolvedWords = words.Select(w => new DeckWord { WordId = w.WordId, ReadingIndex = w.ReadingIndex }).ToList();
+                break;
+            }
+            default:
+                return Results.BadRequest("Unsupported deck type.");
+        }
+
+        if (request.ExcludeKana && !kanaAlreadyExcluded && resolvedWords.Count > 0)
+        {
+            var kanaFormKeys = await WordFormHelper.GetKanaFormKeys(context, resolvedWords.Select(dw => dw.WordId));
+            if (kanaFormKeys.Count > 0)
+                resolvedWords = resolvedWords
+                    .Where(dw => !kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex)))
+                    .ToList();
+        }
+
+        var applied = state == "mastered"
+            ? await currentUserService.AddKnownWords(resolvedWords)
+            : await currentUserService.BlacklistWords(resolvedWords);
+
+        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        await userContext.SaveChangesAsync();
+
+        logger.LogInformation(
+            "User applied learn to study deck: StudyDeckId={StudyDeckId}, DeckType={DeckType}, State={State}, WordCount={WordCount}",
+            id, studyDeck.DeckType, state, applied);
+
+        return Results.Ok(new { applied, state });
     }
 
     [HttpPost("study-decks/{id:int}/vocabulary-count")]
@@ -3986,9 +4141,24 @@ public class StudyController(
             }
             case StudyDeckType.StaticWordList:
             {
-                var (staticCount, _) = await deckWordResolver.CountStaticDeckWords(id, request.ExcludeKana,
-                    request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords);
-                count = staticCount;
+                var downloadType = request.DownloadType == 0 ? DeckDownloadType.Full : request.DownloadType;
+                if (downloadType == DeckDownloadType.TargetCoverage && request.TargetPercentage is null or < 1 or > 100)
+                    return Results.BadRequest("Target percentage must be between 1 and 100");
+
+                var words = await deckWordResolver.ResolveStaticDeckWords(id, (int)DeckOrder.ImportOrder,
+                    request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
+                    downloadType, request.MinFrequency, request.MaxFrequency,
+                    request.MinOccurrences, request.MaxOccurrences,
+                    request.TargetPercentage, request.StartFromKnown);
+
+                if (request.ExcludeKana && words.Count > 0)
+                {
+                    var kanaFormKeys = await WordFormHelper.GetKanaFormKeys(context, words.Select(w => w.WordId));
+                    if (kanaFormKeys.Count > 0)
+                        words = words.Where(w => !kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex))).ToList();
+                }
+
+                count = words.Count;
                 break;
             }
             default:
@@ -4009,6 +4179,20 @@ public class StudyController(
             .AsNoTracking()
             .FirstOrDefaultAsync(sd => sd.UserStudyDeckId == id && sd.UserId == userId);
         if (studyDeck == null) return Results.NotFound();
+
+        if (studyDeck.DeckType == StudyDeckType.StaticWordList)
+        {
+            var pairs = await userContext.UserStudyDeckWords.AsNoTracking()
+                .Where(w => w.UserStudyDeckId == id)
+                .Select(w => new { w.WordId, w.ReadingIndex })
+                .ToListAsync();
+            if (pairs.Count == 0) return Results.Ok(0);
+
+            var freqMap = await WordFormHelper.LoadWordFormFrequencies(context, pairs.Select(p => p.WordId).Distinct().ToList());
+            var staticCount = pairs.Count(p => freqMap.TryGetValue((p.WordId, p.ReadingIndex), out var f) &&
+                                               f.FrequencyRank >= minFrequency && f.FrequencyRank <= maxFrequency);
+            return Results.Ok(staticCount);
+        }
 
         if (studyDeck.DeckType != StudyDeckType.MediaDeck || !studyDeck.DeckId.HasValue)
         {
@@ -4040,6 +4224,16 @@ public class StudyController(
             .AsNoTracking()
             .FirstOrDefaultAsync(sd => sd.UserStudyDeckId == id && sd.UserId == userId);
         if (studyDeck == null) return Results.NotFound();
+
+        if (studyDeck.DeckType == StudyDeckType.StaticWordList)
+        {
+            var staticQuery = userContext.UserStudyDeckWords.AsNoTracking().Where(w => w.UserStudyDeckId == id);
+            if (minOccurrences.HasValue)
+                staticQuery = staticQuery.Where(w => w.Occurrences >= minOccurrences.Value);
+            if (maxOccurrences.HasValue)
+                staticQuery = staticQuery.Where(w => w.Occurrences <= maxOccurrences.Value);
+            return Results.Ok(await staticQuery.CountAsync());
+        }
 
         if (studyDeck.DeckType != StudyDeckType.MediaDeck || !studyDeck.DeckId.HasValue)
         {

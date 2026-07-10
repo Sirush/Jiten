@@ -975,6 +975,8 @@ export interface StudyCardDto {
   readingIndex: number;
   state: number;
   isNewCard: boolean;
+  lapses: number;
+  isLeech: boolean;
   wordText: string;
   wordTextPlain: string;
   readings: StudyReadingDto[];
@@ -1101,6 +1103,8 @@ export interface StudyKeybinds {
   undo: string;
   wrapUp: string;
   pauseTimer: string;
+  dictPrev: string;
+  dictNext: string;
 }
 
 export interface StudySettingsDto {
@@ -1300,6 +1304,23 @@ export interface CardStatsResponseDto {
   difficulty: DifficultyStatsDto;
   stability: StabilityStatsDto;
   retrievability: RetrievabilityStatsDto;
+  leeches: LeechStatsDto;
+}
+
+export interface LeechStatsDto {
+  threshold: number;
+  active: number;
+  suspended: number;
+  recovered: number;
+  top: LeechTopCardDto[];
+}
+
+export interface LeechTopCardDto {
+  wordId: number;
+  readingIndex: number;
+  wordText: string;
+  lapses: number;
+  state: number;
 }
 
 export interface StudyHeatmapResponse {

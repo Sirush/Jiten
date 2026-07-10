@@ -278,4 +278,6 @@ public class StudyKeybindsDto
     [JsonPropertyName("undo")] public string Undo { get; set; } = "z";
     [JsonPropertyName("wrapUp")] public string WrapUp { get; set; } = "w";
     [JsonPropertyName("pauseTimer")] public string PauseTimer { get; set; } = "p";
+    [JsonPropertyName("dictPrev")] public string DictPrev { get; set; } = "ArrowLeft";
+    [JsonPropertyName("dictNext")] public string DictNext { get; set; } = "ArrowRight";
 }

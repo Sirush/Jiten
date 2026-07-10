@@ -17,6 +17,8 @@ public class StudyCardDto
     public byte ReadingIndex { get; set; }
     public int State { get; set; }
     public bool IsNewCard { get; set; }
+    public int Lapses { get; set; }
+    public bool IsLeech { get; set; }
     public string WordText { get; set; } = "";
     public string WordTextPlain { get; set; } = "";
     public List<StudyReadingDto> Readings { get; set; } = new();

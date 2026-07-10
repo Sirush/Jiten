@@ -97,7 +97,7 @@
       jimakuId: jimakuData.value.entry.id,
       files: selectedFiles.map((f) => ({
         url: f.url,
-        name: `${prefix.value}${f.name}${suffix.value}`,
+        name: f.name,
         // Position-based "Episode {n}" is the backend default, so only send manual or detected titles
         title: f.title ?? detectedTitles.value.get(f.url) ?? null,
       })),
@@ -315,7 +315,6 @@
           <Button icon="pi pi-times" aria-label="Deselect by regex" @click="selectByRegex(false)" />
         </InputGroup>
       </div>
-      <p class="text-xs text-surface-500 dark:text-surface-400 mb-4">Prefix/suffix are also prepended/appended to the submitted file names.</p>
 
       <div class="flex flex-wrap items-center gap-2 mb-4">
         <Button label="Select All" severity="secondary" size="small" @click="setAll(true)" />
