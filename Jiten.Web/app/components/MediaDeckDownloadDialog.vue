@@ -16,7 +16,8 @@
   const isStudyDeckMode = computed(() => !!props.studyDeck);
   const isMediaListMode = computed(() => !!props.mediaList);
   const isMediaStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.MediaDeck);
-  const isNonMediaStudyDeck = computed(() => isStudyDeckMode.value && !isMediaStudyDeck.value);
+  const isStaticStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.StaticWordList);
+  const isGlobalDynamicStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.GlobalDynamic);
   const apiBase = computed(() =>
     isMediaListMode.value
       ? props.mediaList!.apiBase
@@ -78,9 +79,18 @@
   });
 
   // --- Options ---
-  const deckOrders = getEnumOptions(DeckOrder, getDeckOrderText);
-  let downloadTypes = getEnumOptions(DeckDownloadType, getDownloadTypeText);
-  downloadTypes = downloadTypes.filter((d) => d.value != DeckDownloadType.TargetCoverage);
+  // Import Order only exists for word lists; word lists have no chronological position beyond it.
+  const deckOrders = computed(() => {
+    const orders = getEnumOptions(DeckOrder, getDeckOrderText);
+    return isStaticStudyDeck.value
+      ? orders.filter((o) => o.value !== DeckOrder.Chronological)
+      : orders.filter((o) => o.value !== DeckOrder.ImportOrder);
+  });
+  const downloadTypes = computed(() =>
+    getEnumOptions(DeckDownloadType, getDownloadTypeText).filter(
+      (d) => d.value != DeckDownloadType.TargetCoverage && d.value != DeckDownloadType.OccurrenceCount
+    )
+  );
 
   const formatOptions = computed(() => [
     {
@@ -121,7 +131,7 @@
       desc: 'Occurrences dic (.zip)',
       icon: 'pi pi-book',
       longDesc: `A zip file importable as a Yomitan dictionary. It displays the specific number of occurrences of each word within this media source.`,
-      disabled: isNonMediaStudyDeck.value,
+      disabled: isGlobalDynamicStudyDeck.value,
     },
     {
       value: DeckFormat.Learn,
@@ -129,7 +139,7 @@
       desc: authStore.isAuthenticated ? 'Bulk vocabulary update' : 'Bulk vocabulary update (Login required)',
       icon: 'pi pi-graduation-cap',
       longDesc: `Mark the selected vocabulary as <b>mastered</b> or <b>blacklisted</b> in your vocabulary tracker. No file is downloaded, the words are applied directly to your account. Both of those options count towards your coverage after you trigger a manual refresh.`,
-      disabled: !authStore.isAuthenticated || isStudyDeckMode.value,
+      disabled: !authStore.isAuthenticated,
     },
   ]);
 
@@ -141,7 +151,7 @@
 
   const isLearn = computed(() => format.value === DeckFormat.Learn);
   const isOccurrences = computed(() => format.value === DeckFormat.Yomitan);
-  const showStrategyAndOptions = computed(() => !isOccurrences.value && !isNonMediaStudyDeck.value);
+  const showStrategyAndOptions = computed(() => !isOccurrences.value && !isGlobalDynamicStudyDeck.value);
   const hasExampleSentences = computed(() => {
     if (isMediaListMode.value) return props.mediaList!.hasExampleSentences;
     const mt = props.deck?.mediaType ?? props.studyDeck?.mediaType;
@@ -230,6 +240,11 @@
   onMounted(() => {
     if (!frequencyRange.value) {
       frequencyRange.value = [0, Math.min(wordCount.value, 5000)];
+    }
+
+    // Imported lists carry a meaningful order of their own; occurrence sort is arbitrary for hand-typed ones.
+    if (isStaticStudyDeck.value && deckOrder.value === DeckOrder.DeckFrequency) {
+      deckOrder.value = DeckOrder.ImportOrder;
     }
 
     if (localVisible.value && requiresAccurateCardAmount.value) {
@@ -660,10 +675,16 @@
 </script>
 
 <template>
-  <Dialog v-model:visible="localVisible" modal :header="isLearn ? 'Learn Vocabulary' : 'Download Deck'" class="w-[95vw] sm:w-[90vw] md:w-[42rem]" :pt="{ content: { class: 'p-0' } }">
-    <div class="flex flex-col h-full">
+  <Dialog
+    v-model:visible="localVisible"
+    modal
+    :header="isLearn ? 'Learn Vocabulary' : 'Download Deck'"
+    class="w-[95vw] sm:w-[90vw] md:w-[42rem]"
+    :pt="{ content: { class: 'p-0 flex flex-col', style: 'overflow: hidden' } }"
+  >
+    <div class="flex flex-col min-h-0">
       <!-- SCROLLABLE CONTENT AREA -->
-      <div class="p-5 overflow-y-auto max-h-[70vh] flex flex-col gap-6">
+      <div class="p-5 overflow-y-auto min-h-0 flex flex-col gap-6">
         <!-- 1. FORMAT SELECTION -->
         <section>
           <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Format</div>
@@ -923,7 +944,7 @@
           </section>
         </template>
 
-        <template v-if="isNonMediaStudyDeck && !isOccurrences">
+        <template v-if="isGlobalDynamicStudyDeck && !isOccurrences">
           <section>
             <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Options</div>
             <div class="flex flex-col gap-0">
@@ -997,6 +1018,12 @@
                     <NuxtLink to="/settings/dictionaries" class="text-primary hover:underline" @click.stop>Manage dictionaries</NuxtLink>
                   </div>
                 </div>
+              </div>
+
+              <!-- Learn: Vocabulary State selector -->
+              <div v-if="isLearn" class="flex flex-col gap-1 p-3">
+                <label class="text-xs text-gray-500 dark:text-gray-400 font-medium">Vocabulary State</label>
+                <Select v-model="learnState" :options="learnStateOptions" option-value="value" option-label="label" class="w-full text-sm" size="small" />
               </div>
             </div>
           </section>

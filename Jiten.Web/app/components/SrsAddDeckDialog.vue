@@ -449,6 +449,7 @@
   const staticOrderOptions = [
     { label: 'Import Order', value: DeckOrder.ImportOrder },
     { label: 'Global Frequency', value: DeckOrder.GlobalFrequency },
+    { label: 'Deck Frequency', value: DeckOrder.DeckFrequency },
     { label: 'Random', value: DeckOrder.Random },
   ];
 

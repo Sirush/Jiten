@@ -36,7 +36,11 @@ public interface IDeckWordResolver
     Task<GlobalDynamicResult> ResolveGlobalDynamicWords(int? minFreq, int? maxFreq, string? posFilter,
         bool excludeKana, bool excludeMatureMasteredBlacklisted, bool excludeAllTrackedWords);
     Task<List<ResolvedWord>> ResolveStaticDeckWords(int studyDeckId, int order,
-        bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false);
+        bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false,
+        DeckDownloadType downloadType = DeckDownloadType.Full,
+        int minFrequency = 0, int maxFrequency = 0,
+        int? minOccurrences = null, int? maxOccurrences = null,
+        float? targetPercentage = null, bool startFromKnown = false);
     Task<HashSet<long>> GetGlobalDynamicWordKeys(int? minFreq, int? maxFreq, string? posFilter);
     Task<HashSet<long>> GetGlobalDynamicWordKeysForWordIds(int? minFreq, int? maxFreq, string? posFilter, List<int> wordIds, bool excludeKana = false);
     Task<(int Count, bool WasTruncated)> CountGlobalDynamicWords(int? minFreq, int? maxFreq, string? posFilter, bool excludeKana,
