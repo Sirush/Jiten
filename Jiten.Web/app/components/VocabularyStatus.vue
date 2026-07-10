@@ -65,19 +65,51 @@
     catch { /* state unchanged on failure */ }
   };
 
+  const deckMembership = ref<Set<number>>(new Set());
+  const membershipLoaded = ref(false);
+
+  const fetchDeckMembership = async () => {
+    try {
+      const res = await $api<{ result: number[][]; decks: number[][] }>('reader/lookup-vocabulary', {
+        method: 'POST',
+        body: { words: [[props.word.wordId, props.word.mainReading.readingIndex]] },
+      });
+      deckMembership.value = new Set(res.decks?.[0] ?? []);
+    }
+    catch {}
+    finally { membershipLoaded.value = true; }
+  };
+
+  const decksContaining = computed(() => staticDecks.value.filter(d => deckMembership.value.has(d.userStudyDeckId)));
+  const decksNotContaining = computed(() => staticDecks.value.filter(d => !deckMembership.value.has(d.userStudyDeckId)));
+
   const addToDeck = async (deckId: number) => {
     addingToDeck.value = deckId;
     try {
       await srsStore.addDeckWord(deckId, props.word.wordId, props.word.mainReading.readingIndex, 1);
+      deckMembership.value.add(deckId);
       toast.add({ severity: 'success', summary: `Added to deck`, life: 1500 });
-      deckOp.value?.hide();
     } catch (e: any) {
       const msg = e?.data?.message || e?.message || '';
       if (msg.includes('already in the deck')) {
+        deckMembership.value.add(deckId);
         toast.add({ severity: 'info', summary: 'Already in deck', life: 2000 });
       } else {
         toast.add({ severity: 'error', summary: 'Failed to add', life: 3000 });
       }
+    } finally {
+      addingToDeck.value = null;
+    }
+  };
+
+  const removeFromDeck = async (deckId: number) => {
+    addingToDeck.value = deckId;
+    try {
+      await srsStore.removeDeckWord(deckId, props.word.wordId, props.word.mainReading.readingIndex);
+      deckMembership.value.delete(deckId);
+      toast.add({ severity: 'success', summary: 'Removed from deck', life: 1500 });
+    } catch {
+      toast.add({ severity: 'error', summary: 'Failed to remove', life: 3000 });
     } finally {
       addingToDeck.value = null;
     }
@@ -100,6 +132,7 @@
     deckOpActivated.value = true;
     await nextTick();
     deckOp.value?.toggle(e);
+    fetchDeckMembership();
     if (srsStore.studyDecks.length === 0) {
       loadingDecks.value = true;
       await srsStore.fetchStudyDecks();
@@ -165,24 +198,44 @@
         <Button icon="pi pi-ellipsis-h" size="small" text severity="secondary" @click="onDeckMenuClick" />
         <Popover v-if="deckOpActivated" ref="deckOp" :pt="{ content: { class: 'p-1' } }">
           <div class="flex flex-col">
-            <span class="px-3 py-1 text-xs font-semibold text-surface-400 uppercase tracking-wide">Add to deck</span>
-            <div v-if="loadingDecks" class="flex justify-center py-2">
+            <div v-if="loadingDecks || !membershipLoaded" class="flex justify-center py-2">
               <i class="pi pi-spin pi-spinner text-surface-400" />
             </div>
-            <template v-else-if="staticDecks.length > 0">
-              <button
-                v-for="deck in staticDecks"
-                :key="deck.userStudyDeckId"
-                class="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700 cursor-pointer"
-                :disabled="addingToDeck === deck.userStudyDeckId"
-                @click="addToDeck(deck.userStudyDeckId)"
-              >
-                <i v-if="addingToDeck === deck.userStudyDeckId" class="pi pi-spin pi-spinner w-4 text-center" />
-                <i v-else class="pi pi-list w-4 text-center" />
-                <span class="truncate max-w-40">{{ deck.name }}</span>
-              </button>
+            <template v-else>
+              <template v-if="decksContaining.length > 0">
+                <span class="px-3 py-1 text-xs font-semibold text-surface-400 uppercase tracking-wide">In decks</span>
+                <button
+                  v-for="deck in decksContaining"
+                  :key="deck.userStudyDeckId"
+                  class="group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer text-green-600 dark:text-green-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-300"
+                  title="Remove from deck"
+                  :disabled="addingToDeck === deck.userStudyDeckId"
+                  @click="removeFromDeck(deck.userStudyDeckId)"
+                >
+                  <i v-if="addingToDeck === deck.userStudyDeckId" class="pi pi-spin pi-spinner w-4 text-center" />
+                  <i v-else class="pi pi-check w-4 text-center" />
+                  <span class="truncate max-w-40">{{ deck.name }}</span>
+                  <span class="ml-auto pl-2 text-xs invisible group-hover:visible">Remove</span>
+                </button>
+                <div class="border-t border-surface-200 dark:border-surface-700 my-1" />
+              </template>
+              <span class="px-3 py-1 text-xs font-semibold text-surface-400 uppercase tracking-wide">Add to deck</span>
+              <template v-if="decksNotContaining.length > 0">
+                <button
+                  v-for="deck in decksNotContaining"
+                  :key="deck.userStudyDeckId"
+                  class="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700 cursor-pointer"
+                  :disabled="addingToDeck === deck.userStudyDeckId"
+                  @click="addToDeck(deck.userStudyDeckId)"
+                >
+                  <i v-if="addingToDeck === deck.userStudyDeckId" class="pi pi-spin pi-spinner w-4 text-center" />
+                  <i v-else class="pi pi-list w-4 text-center" />
+                  <span class="truncate max-w-40">{{ deck.name }}</span>
+                </button>
+              </template>
+              <span v-else-if="staticDecks.length > 0" class="px-3 py-1.5 text-sm text-surface-400 italic">In all your decks</span>
+              <span v-else class="px-3 py-1.5 text-sm text-surface-400 italic">No word list decks</span>
             </template>
-            <span v-else class="px-3 py-1.5 text-sm text-surface-400 italic">No word list decks</span>
             <div class="border-t border-surface-200 dark:border-surface-700 my-1" />
             <NuxtLink
               :to="`/vocabulary/${word.wordId}/${word.mainReading.readingIndex}/reviews`"
