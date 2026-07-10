@@ -303,12 +303,20 @@
       .map((x) => x.sd);
   }
 
+  function sortSubdecksByTitle() {
+    subdecks.value = subdecks.value
+      .map((sd, i) => ({ sd, i }))
+      .sort((a, b) => naturalCompare(a.sd.originalTitle, b.sd.originalTitle) || a.i - b.i)
+      .map((x) => x.sd);
+  }
+
   const autoNameItems = [
     { label: 'Detected numbering', icon: 'pi pi-sparkles', command: () => applyAutoNames('detected', true) },
     { label: 'Sequential', icon: 'pi pi-sort-numeric-down', command: () => applyAutoNames('sequential', true) },
     { label: 'From file name', icon: 'pi pi-file', command: () => applyAutoNames('filename', true) },
     { separator: true },
     { label: 'Sort by detected number', icon: 'pi pi-sort-amount-down', command: sortSubdecksByDetected },
+    { label: 'Sort by title', icon: 'pi pi-sort-alpha-down', command: sortSubdecksByTitle },
   ];
 
   function markTitleEdited(subdeck: { titleEdited?: boolean; autoDetected?: boolean }) {
