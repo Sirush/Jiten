@@ -1897,6 +1897,7 @@ public class StudyController(
 
             var mainForm = forms?.FirstOrDefault(f => f.ReadingIndex == item.ReadingIndex);
             var exKey = WordFormHelper.EncodeWordKey(item.WordId, item.ReadingIndex);
+            var fsrsCard = dueCardLookup.GetValueOrDefault((item.WordId, item.ReadingIndex));
 
             cards.Add(new StudyCardDto
             {
@@ -1905,6 +1906,8 @@ public class StudyController(
                 ReadingIndex = item.ReadingIndex,
                 State = item.State,
                 IsNewCard = item.IsNew,
+                Lapses = fsrsCard?.Lapses ?? 0,
+                IsLeech = fsrsCard != null && LeechHelper.IsLeech(fsrsCard.Lapses, fsrsCard.Stability, settings.LeechThreshold),
                 WordText = mainForm?.RubyText ?? mainForm?.Text ?? "",
                 WordTextPlain = mainForm?.Text ?? "",
                 Readings = forms?.Select(f => new StudyReadingDto
@@ -3184,11 +3187,13 @@ public class StudyController(
         var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: fsrsParams, enableFuzzing: false);
 
         var now = DateTime.UtcNow;
+        var studySettings = await LoadStudySettings(userId);
+        var leechThreshold = studySettings.LeechThreshold;
 
         var cards = await userContext.FsrsCards
             .AsNoTracking()
             .Where(c => c.UserId == userId)
-            .Select(c => new { c.State, c.Stability, c.Difficulty, c.Due, c.LastReview })
+            .Select(c => new { c.WordId, c.ReadingIndex, c.State, c.Stability, c.Difficulty, c.Due, c.LastReview, c.Lapses })
             .ToListAsync();
 
         int newCount = 0, learning = 0, relearning = 0, young = 0, mature = 0, suspended = 0, mastered = 0, blacklisted = 0;
@@ -3203,8 +3208,26 @@ public class StudyController(
         double retrievabilitySum = 0;
         int masteredCount = 0;
 
+        int activeLeeches = 0, suspendedLeeches = 0, recoveredLeeches = 0;
+        var leechCards = new List<(int WordId, byte ReadingIndex, int Lapses, FsrsState State)>();
+
         foreach (var c in cards)
         {
+            if (leechThreshold > 0 && c.Lapses >= leechThreshold
+                && c.State is not (FsrsState.Mastered or FsrsState.Blacklisted))
+            {
+                if ((c.Stability ?? 0) >= RetentionCalculator.MatureThresholdDays)
+                {
+                    recoveredLeeches++;
+                }
+                else
+                {
+                    if (c.State == FsrsState.Suspended) suspendedLeeches++;
+                    else activeLeeches++;
+                    leechCards.Add((c.WordId, c.ReadingIndex, c.Lapses, c.State));
+                }
+            }
+
             switch (c.State)
             {
                 case FsrsState.New: newCount++; break;
@@ -3254,6 +3277,14 @@ public class StudyController(
 
         var total = cards.Count;
 
+        var topLeeches = leechCards
+            .OrderByDescending(l => l.Lapses)
+            .Take(10)
+            .ToList();
+        var leechForms = topLeeches.Count > 0
+            ? await WordFormHelper.LoadWordForms(context, topLeeches.Select(l => l.WordId).Distinct().ToList())
+            : new Dictionary<(int, short), JmDictWordForm>();
+
         return Results.Ok(new
         {
             stateCounts = new
@@ -3288,6 +3319,21 @@ public class StudyController(
                 estimatedKnowledge = (int)Math.Round(retrievabilitySum),
                 count = retrievabilityValues.Count,
                 masteredCount,
+            },
+            leeches = new
+            {
+                threshold = leechThreshold,
+                active = activeLeeches,
+                suspended = suspendedLeeches,
+                recovered = recoveredLeeches,
+                top = topLeeches.Select(l => new
+                {
+                    wordId = l.WordId,
+                    readingIndex = l.ReadingIndex,
+                    wordText = leechForms.GetValueOrDefault((l.WordId, l.ReadingIndex))?.Text ?? "",
+                    lapses = l.Lapses,
+                    state = (int)l.State,
+                }).ToList(),
             },
         });
     }

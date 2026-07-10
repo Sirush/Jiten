@@ -2,6 +2,7 @@
   import { FsrsRating, FsrsState, type ReviewHistoryDto } from '~/types';
   import { stripRuby } from '~/utils/stripRuby';
   import type { Word } from '~/types/types';
+  import { useSrsStore } from '~/stores/srsStore';
 
   definePageMeta({ middleware: ['auth'] });
 
@@ -9,8 +10,17 @@
   const wordId = Number(route.params.wordId) || 0;
   const readingIndex = Number(route.params.readingIndex) || 0;
 
+  const srsStore = useSrsStore();
+  onMounted(() => srsStore.fetchSettings());
+
   const { data: wordData } = await useApiFetch<Word>(`vocabulary/${wordId}/${readingIndex}/info`);
   const { data, pending } = await useApiFetch<ReviewHistoryDto>(`srs/review-history/${wordId}/${readingIndex}`);
+
+  const isLeech = computed(() => {
+    const card = data.value?.card;
+    if (!card || card.state === FsrsState.Mastered || card.state === FsrsState.Blacklisted) return false;
+    return isLeechCard(card.lapses, card.stability, srsStore.studySettings.leechThreshold);
+  });
 
   const title = computed(() => {
     if (wordData.value?.mainReading?.text) return stripRuby(wordData.value.mainReading.text);
@@ -52,12 +62,14 @@
   }
 
   function ratingColor(rating: FsrsRating) {
-    return {
-      [FsrsRating.Again]: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-      [FsrsRating.Hard]: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-      [FsrsRating.Good]: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-      [FsrsRating.Easy]: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    }[rating] ?? '';
+    return (
+      {
+        [FsrsRating.Again]: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+        [FsrsRating.Hard]: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+        [FsrsRating.Good]: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+        [FsrsRating.Easy]: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+      }[rating] ?? ''
+    );
   }
 
   function formatDate(dateStr: string) {
@@ -66,8 +78,11 @@
 
   function formatDateTime(dateStr: string) {
     const d = new Date(dateStr);
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-      + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return (
+      d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) +
+      ' ' +
+      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    );
   }
 
   function formatDuration(ms: number) {
@@ -114,7 +129,18 @@
             </div>
             <div>
               <div class="text-surface-400 text-xs uppercase tracking-wide mb-0.5">Lapses</div>
-              <div class="font-medium" :class="data.card.lapses >= 8 ? 'text-red-600 dark:text-red-400' : ''">{{ data.card.lapses }}</div>
+              <div class="font-medium flex items-center gap-1.5" :class="isLeech ? 'text-amber-600 dark:text-amber-400' : ''">
+                {{ data.card.lapses }}
+                <Tooltip
+                  v-if="isLeech"
+                  content="This card is a leech — it keeps lapsing. Consider suspending it or attaching a mnemonic or custom meaning."
+                  placement="top"
+                >
+                  <span class="text-xs px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium cursor-help">
+                    Leech
+                  </span>
+                </Tooltip>
+              </div>
             </div>
             <div>
               <div class="text-surface-400 text-xs uppercase tracking-wide mb-0.5">Due</div>
@@ -133,7 +159,10 @@
 
         <div class="text-sm text-surface-400 mb-3">{{ data.reviews.length }} review{{ data.reviews.length !== 1 ? 's' : '' }}</div>
 
-        <div v-if="data.reviews.length > 0" class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden divide-y divide-surface-100 dark:divide-surface-800">
+        <div
+          v-if="data.reviews.length > 0"
+          class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden divide-y divide-surface-100 dark:divide-surface-800"
+        >
           <div
             v-for="(review, i) in data.reviews"
             :key="i"
@@ -150,7 +179,10 @@
         </div>
       </template>
 
-      <div v-else class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-12 text-center text-surface-400">
+      <div
+        v-else
+        class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-12 text-center text-surface-400"
+      >
         No reviews yet
       </div>
     </template>

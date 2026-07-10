@@ -13,6 +13,7 @@
     type ChartData,
   } from 'chart.js';
   import ChartDataLabels from 'chartjs-plugin-datalabels';
+  import { FsrsState } from '~/types';
   import type { CardStatsResponseDto, RetentionResponseDto, ReviewForecast30dDto, AnswerButtonsDto, HourlyReviewDto } from '~/types';
 
   ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ChartTooltip, Legend);
@@ -78,6 +79,20 @@
     ];
   });
   const hasStates = computed(() => (stateCounts.value?.total ?? 0) > 0);
+
+  // ── Leeches ───────────────────────────────────────────────────────────────
+  const leeches = computed(() => cardStats.value?.leeches ?? null);
+  const showLeechPanel = computed(() => !!leeches.value && leeches.value.threshold > 0 && hasStates.value);
+  const leechTiles = computed(() => {
+    const l = leeches.value;
+    if (!l) return [];
+    const tiles = [
+      { key: 'active', label: 'Active', count: l.active, color: 'text-amber-600 dark:text-amber-400' },
+      { key: 'suspended', label: 'Suspended', count: l.suspended, color: 'text-gray-600 dark:text-gray-300' },
+    ];
+    if (l.recovered > 0) tiles.push({ key: 'recovered', label: 'Recovered', count: l.recovered, color: 'text-green-600 dark:text-green-300' });
+    return tiles;
+  });
 
   // Stacked horizontal bar segments for the active (non-suspended/blacklisted) breakdown.
   const stateBarSegments = computed(() => {
@@ -466,6 +481,51 @@
           </div>
         </template>
         <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-500">No cards yet.</div>
+      </div>
+
+      <!-- 2b. Leeches -->
+      <div v-if="showLeechPanel" class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4">
+        <div class="flex items-center justify-between gap-2 mb-3">
+          <span class="font-semibold">Leeches</span>
+          <NuxtLink
+            v-if="leeches!.active + leeches!.suspended > 0"
+            to="/settings/cards?filter=leech"
+            class="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+          >
+            View all
+          </NuxtLink>
+        </div>
+        <template v-if="leeches!.active + leeches!.suspended > 0">
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+            Cards that keep lapsing ({{ leeches!.threshold }}+ times). These cost the most review time, consider suspending them or attaching a mnemonic or
+            custom meaning.
+          </p>
+          <div class="flex flex-wrap gap-3 mb-4">
+            <div
+              v-for="tile in leechTiles"
+              :key="tile.key"
+              class="flex-1 min-w-[6.5rem] rounded-lg border border-surface-100 dark:border-surface-800 bg-surface-50 dark:bg-surface-800/40 p-3 text-center"
+            >
+              <div class="text-[clamp(0.95rem,5vw,1.4rem)] font-bold tabular-nums" :class="tile.color">{{ tile.count }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{{ tile.label }}</div>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <NuxtLink
+              v-for="leech in leeches!.top"
+              :key="`${leech.wordId}-${leech.readingIndex}`"
+              :to="`/vocabulary/${leech.wordId}/${leech.readingIndex}`"
+              class="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors text-sm"
+            >
+              <span class="font-medium text-gray-800 dark:text-gray-200" lang="ja">{{ leech.wordText }}</span>
+              <span class="text-xs text-amber-700 dark:text-amber-300 tabular-nums">{{ leech.lapses }}</span>
+              <span v-if="leech.state === FsrsState.Suspended" class="text-xs text-gray-500 dark:text-gray-400">(suspended)</span>
+            </NuxtLink>
+          </div>
+        </template>
+        <div v-else class="py-6 text-center text-sm text-gray-400 dark:text-gray-500">
+          No leeches currently. <span v-if="leeches!.recovered > 0">({{ leeches!.recovered }} recovered)</span>
+        </div>
       </div>
 
       <!-- 3. Retention -->

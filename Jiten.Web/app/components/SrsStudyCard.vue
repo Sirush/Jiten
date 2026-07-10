@@ -30,8 +30,7 @@
     const mode = props.frontFurigana ?? 'default';
     if (mode === 'hide') return false;
     if (mode === 'show') return true;
-    return srsStore.studySettings.showFuriganaOnFront
-      && (!srsStore.studySettings.furiganaOnFrontNewOnly || props.card.isNewCard);
+    return srsStore.studySettings.showFuriganaOnFront && (!srsStore.studySettings.furiganaOnFrontNewOnly || props.card.isNewCard);
   });
 
   const srsStore = useSrsStore();
@@ -65,27 +64,28 @@
     wordLoadFailed.value = false;
 
     try {
-      wordData.value = await $api<Word>(
-        `vocabulary/${props.card.wordId}/${props.card.readingIndex}/info`,
-        { signal: controller.signal },
-      );
+      wordData.value = await $api<Word>(`vocabulary/${props.card.wordId}/${props.card.readingIndex}/info`, { signal: controller.signal });
     } catch (error: any) {
       if (error?.name === 'AbortError') return;
       wordLoadFailed.value = true;
     }
   }
 
-  watch(() => `${props.card.wordId}-${props.card.readingIndex}`, () => {
-    wordData.value = null;
-    showMenu.value = false;
-    fetchWordData();
-  }, { immediate: true });
+  watch(
+    () => `${props.card.wordId}-${props.card.readingIndex}`,
+    () => {
+      wordData.value = null;
+      showMenu.value = false;
+      fetchWordData();
+    },
+    { immediate: true }
+  );
 
   onUnmounted(() => abortController?.abort());
 
   const { resolvedGroups } = useDictionaryDefinitions(
     computed(() => wordData.value?.mainReading?.text),
-    computed(() => wordData.value?.definitions),
+    computed(() => wordData.value?.definitions)
   );
 
   // Dictionary cycling is driven by the study page's rebindable keybinds (dictPrev/dictNext),
@@ -98,10 +98,30 @@
   const currentReadingIndex = computed(() => props.card.readingIndex);
 
   const LANG_NAMES: Record<string, string> = {
-    eng: 'English', por: 'Portuguese', dut: 'Dutch', fre: 'French', ger: 'German', ita: 'Italian',
-    spa: 'Spanish', rus: 'Russian', chi: 'Chinese', kor: 'Korean', lat: 'Latin', gre: 'Greek',
-    ara: 'Arabic', heb: 'Hebrew', san: 'Sanskrit', tha: 'Thai', vie: 'Vietnamese', tur: 'Turkish',
-    pol: 'Polish', swe: 'Swedish', nor: 'Norwegian', hun: 'Hungarian', haw: 'Hawaiian', afr: 'Afrikaans',
+    eng: 'English',
+    por: 'Portuguese',
+    dut: 'Dutch',
+    fre: 'French',
+    ger: 'German',
+    ita: 'Italian',
+    spa: 'Spanish',
+    rus: 'Russian',
+    chi: 'Chinese',
+    kor: 'Korean',
+    lat: 'Latin',
+    gre: 'Greek',
+    ara: 'Arabic',
+    heb: 'Hebrew',
+    san: 'Sanskrit',
+    tha: 'Thai',
+    vie: 'Vietnamese',
+    tur: 'Turkish',
+    pol: 'Polish',
+    swe: 'Swedish',
+    nor: 'Norwegian',
+    hun: 'Hungarian',
+    haw: 'Hawaiian',
+    afr: 'Afrikaans',
   };
   const hasWasei = computed(() => wordData.value?.languageSources?.some((s) => s.isWasei) ?? false);
   const etymologyLine = computed(() => {
@@ -118,7 +138,7 @@
 
   const pitchReadingText = computed(() => {
     if (wordData.value) return wordData.value.mainReading.text;
-    const kanaReading = props.card.readings.find(r => r.formType === 1);
+    const kanaReading = props.card.readings.find((r) => r.formType === 1);
     return kanaReading?.text || props.card.wordTextPlain;
   });
 
@@ -164,8 +184,7 @@
   const favouriting = ref(false);
   const exampleIsCustom = computed(() => !!cardExample.value?.isCustom);
   // Custom examples encode a negated UserExampleSentenceId in sentenceId (see BuildCustomStudyExample).
-  const exampleUserSentenceId = computed(() =>
-    cardExample.value?.isCustom ? -cardExample.value.sentenceId : null);
+  const exampleUserSentenceId = computed(() => (cardExample.value?.isCustom ? -cardExample.value.sentenceId : null));
 
   function buildMarkedText(ex: NonNullable<typeof cardExample.value>): string {
     if (ex.isCustom && ex.customText) return ex.customText;
@@ -185,8 +204,8 @@
     return source;
   }
 
-  const editInitialText = computed(() => cardExample.value ? buildMarkedText(cardExample.value) : '');
-  const editInitialSource = computed(() => cardExample.value ? buildSource(cardExample.value) : '');
+  const editInitialText = computed(() => (cardExample.value ? buildMarkedText(cardExample.value) : ''));
+  const editInitialSource = computed(() => (cardExample.value ? buildSource(cardExample.value) : ''));
 
   function applyCustomDto(dto: UserExampleSentenceDto) {
     srsStore.setCardExample(props.card.wordId, props.card.readingIndex, {
@@ -205,10 +224,10 @@
     if (!ex || ex.isCustom || favouriting.value) return;
     favouriting.value = true;
     try {
-      const dto = await $api<UserExampleSentenceDto>(
-        `user/example-sentences/${props.card.wordId}/${props.card.readingIndex}/favourite`,
-        { method: 'POST', body: { text: buildMarkedText(ex), source: buildSource(ex) || undefined } },
-      );
+      const dto = await $api<UserExampleSentenceDto>(`user/example-sentences/${props.card.wordId}/${props.card.readingIndex}/favourite`, {
+        method: 'POST',
+        body: { text: buildMarkedText(ex), source: buildSource(ex) || undefined },
+      });
       applyCustomDto(dto);
       toast.add({ severity: 'success', summary: 'Saved as custom sentence', life: 2000 });
     } catch {
@@ -228,11 +247,14 @@
     await srsStore.refreshCardExample(props.card.wordId, props.card.readingIndex);
   }
 
-  watch(() => `${props.card.wordId}-${props.card.readingIndex}`, () => {
-    exampleRevealed.value = false;
-    occExpanded.value = false;
-    editingExample.value = false;
-  });
+  watch(
+    () => `${props.card.wordId}-${props.card.readingIndex}`,
+    () => {
+      exampleRevealed.value = false;
+      occExpanded.value = false;
+      editingExample.value = false;
+    }
+  );
 
   const extraSentences = ref<ExampleSentence[]>([]);
   const extraSentencesExpanded = ref(false);
@@ -247,13 +269,13 @@
     const sorting = srsStore.studySettings.exampleSentenceSorting;
 
     try {
-      const alreadyLoaded = extraSentences.value.map(s => s.sourceDeck.deckId);
+      const alreadyLoaded = extraSentences.value.map((s) => s.sourceDeck.deckId);
 
       if (sorting === 'Random') {
-        const results = await $api<ExampleSentence[]>(
-          `vocabulary/${props.card.wordId}/${props.card.readingIndex}/random-example-sentences`,
-          { method: 'POST', body: alreadyLoaded },
-        );
+        const results = await $api<ExampleSentence[]>(`vocabulary/${props.card.wordId}/${props.card.readingIndex}/random-example-sentences`, {
+          method: 'POST',
+          body: alreadyLoaded,
+        });
 
         if (results.length === 0) {
           canLoadMoreSentences.value = false;
@@ -265,7 +287,7 @@
         const descending = sorting === 'HardestFirst';
         const results = await $api<ExampleSentencesByDifficultyResponse>(
           `vocabulary/${props.card.wordId}/${props.card.readingIndex}/example-sentences-by-difficulty?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}`,
-          { method: 'POST', body: alreadyLoaded },
+          { method: 'POST', body: alreadyLoaded }
         );
 
         if (results.sentences.length > 0) {
@@ -307,19 +329,22 @@
     }
   }
 
-  watch(() => `${props.card.wordId}-${props.card.readingIndex}`, () => {
-    extraSentences.value = [];
-    extraSentencesExpanded.value = false;
-    canLoadMoreSentences.value = true;
-    const sorting = srsStore.studySettings.exampleSentenceSorting;
-    if (sorting === 'HardestFirst') {
-      nextBandMin.value = 999;
-      nextBandMax.value = 999 + bandSize;
-    } else {
-      nextBandMin.value = 0;
-      nextBandMax.value = bandSize;
+  watch(
+    () => `${props.card.wordId}-${props.card.readingIndex}`,
+    () => {
+      extraSentences.value = [];
+      extraSentencesExpanded.value = false;
+      canLoadMoreSentences.value = true;
+      const sorting = srsStore.studySettings.exampleSentenceSorting;
+      if (sorting === 'HardestFirst') {
+        nextBandMin.value = 999;
+        nextBandMax.value = 999 + bandSize;
+      } else {
+        nextBandMin.value = 0;
+        nextBandMax.value = bandSize;
+      }
     }
-  });
+  );
 
   const headWordTtsText = computed(() => {
     const raw = wordData.value?.mainReading?.text || props.card.wordText || props.card.wordTextPlain;
@@ -328,32 +353,36 @@
 
   const tts = useTts();
 
-  watch(() => `${props.card.wordId}-${props.card.readingIndex}`, () => {
-    tts.stop();
+  watch(
+    () => `${props.card.wordId}-${props.card.readingIndex}`,
+    () => {
+      tts.stop();
 
-    const settings = srsStore.studySettings;
-    if (!settings.autoPlayWordOnFront) return;
-    if (settings.autoPlayWordOnFrontNewOnly && !props.card.isNewCard) return;
-    if (props.isFlipped) return;
+      const settings = srsStore.studySettings;
+      if (!settings.autoPlayWordOnFront) return;
+      if (settings.autoPlayWordOnFrontNewOnly && !props.card.isNewCard) return;
+      if (props.isFlipped) return;
 
-    const cardKey = `${props.card.wordId}-${props.card.readingIndex}`;
-    tts.speakWord(props.card.wordId, props.card.readingIndex, headWordTtsText.value);
+      const cardKey = `${props.card.wordId}-${props.card.readingIndex}`;
+      tts.speakWord(props.card.wordId, props.card.readingIndex, headWordTtsText.value);
 
-    if (settings.autoPlaySentenceOnFront) {
-      const example = cardExample.value;
-      if (example?.sentenceId) {
-        const unwatch = watch(tts.isAnyPlaying, (playing) => {
-          if (!playing) {
-            unwatch();
-            setTimeout(() => {
-              if (`${props.card.wordId}-${props.card.readingIndex}` !== cardKey) return;
-              playExample(example);
-            }, 150);
-          }
-        });
+      if (settings.autoPlaySentenceOnFront) {
+        const example = cardExample.value;
+        if (example?.sentenceId) {
+          const unwatch = watch(tts.isAnyPlaying, (playing) => {
+            if (!playing) {
+              unwatch();
+              setTimeout(() => {
+                if (`${props.card.wordId}-${props.card.readingIndex}` !== cardKey) return;
+                playExample(example);
+              }, 150);
+            }
+          });
+        }
       }
-    }
-  }, { immediate: true });
+    },
+    { immediate: true }
+  );
 
   onUnmounted(() => tts.stop());
 
@@ -381,42 +410,43 @@
   const backRef = ref<HTMLElement | null>(null);
   const answerAnnouncement = ref('');
 
-  watch(() => props.isFlipped, (flipped) => {
-    if (!flipped) {
-      answerAnnouncement.value = '';
-      return;
-    }
-    answerAnnouncement.value = 'Answer revealed';
-    nextTick(() => backRef.value?.focus({ preventScroll: true }));
-    const playWord = srsStore.studySettings.autoPlayWord;
-    const example = cardExample.value;
-    const playSentence = srsStore.studySettings.autoPlaySentence && example?.sentenceId && !sentenceBlurred.value;
-    const cardKey = `${props.card.wordId}-${props.card.readingIndex}`;
-
-    if (playWord) {
-      tts.speakWord(props.card.wordId, props.card.readingIndex, headWordTtsText.value);
-      if (playSentence) {
-        const unwatch = watch(tts.isAnyPlaying, (playing) => {
-          if (!playing) {
-            unwatch();
-            setTimeout(() => {
-              if (`${props.card.wordId}-${props.card.readingIndex}` !== cardKey) return;
-              playExample(example!);
-            }, 150);
-          }
-        });
+  watch(
+    () => props.isFlipped,
+    (flipped) => {
+      if (!flipped) {
+        answerAnnouncement.value = '';
+        return;
       }
-    } else if (playSentence) {
-      playExample(example!);
+      answerAnnouncement.value = 'Answer revealed';
+      nextTick(() => backRef.value?.focus({ preventScroll: true }));
+      const playWord = srsStore.studySettings.autoPlayWord;
+      const example = cardExample.value;
+      const playSentence = srsStore.studySettings.autoPlaySentence && example?.sentenceId && !sentenceBlurred.value;
+      const cardKey = `${props.card.wordId}-${props.card.readingIndex}`;
+
+      if (playWord) {
+        tts.speakWord(props.card.wordId, props.card.readingIndex, headWordTtsText.value);
+        if (playSentence) {
+          const unwatch = watch(tts.isAnyPlaying, (playing) => {
+            if (!playing) {
+              unwatch();
+              setTimeout(() => {
+                if (`${props.card.wordId}-${props.card.readingIndex}` !== cardKey) return;
+                playExample(example!);
+              }, 150);
+            }
+          });
+        }
+      } else if (playSentence) {
+        playExample(example!);
+      }
     }
-  });
+  );
 </script>
 
 <template>
   <div class="w-full mx-auto">
-    <div
-      class="relative bg-surface-0 dark:bg-transparent rounded-2xl shadow-lg dark:shadow-none border border-surface-200 dark:border-surface-700 p-6 md:p-8"
-    >
+    <div class="relative bg-surface-0 dark:bg-transparent rounded-2xl shadow-lg dark:shadow-none border border-surface-200 dark:border-surface-700 p-6 md:p-8">
       <!-- Screen-reader announcement when the answer is revealed -->
       <div class="sr-only" role="status" aria-live="polite">{{ answerAnnouncement }}</div>
 
@@ -467,8 +497,21 @@
         :aria-label="!isFlipped && !inputPhase ? 'Reveal answer' : undefined"
         @click="!isFlipped && !inputPhase && emit('flip')"
       >
-        <div v-if="srsStore.studySettings.showCardStatus" class="text-sm mb-4 uppercase tracking-wider" :class="srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'text-red-400 dark:text-red-400' : 'text-surface-400 dark:text-surface-300'">
-          {{ srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'Again' : card.isNewCard ? 'New' : 'Review' }}
+        <div v-if="srsStore.studySettings.showCardStatus" class="flex items-center gap-2 text-sm mb-4 uppercase tracking-wider">
+          <span
+            :class="
+              srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'text-red-400 dark:text-red-400' : 'text-surface-400 dark:text-surface-300'
+            "
+          >
+            {{ srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'Again' : card.isNewCard ? 'New' : 'Review' }}
+          </span>
+          <span
+            v-if="card.isLeech"
+            class="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
+          >
+            <i class="pi pi-exclamation-triangle !text-[10px]" />
+            Leech
+          </span>
         </div>
         <!-- Plain text before flip, ruby text after flip -->
         <div class="flex items-center justify-center gap-3 mb-2">
@@ -509,207 +552,12 @@
             @cancel="editingExample = false"
           />
           <template v-else>
-          <blockquote
-            class="relative inline-block border-l-4 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
-            :class="[cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500', { 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }]"
-            @click.stop="revealExample()"
-          >
-            <div class="flex items-start gap-2">
-              <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" lang="ja" />
-              <div class="flex items-center gap-1 mt-0.5 shrink-0">
-                <TtsButton
-                  v-if="cardExample"
-                  :text="cardExample.text"
-                  :sentence-id="cardExample.isCustom ? undefined : cardExample.sentenceId"
-                  :custom-sentence-id="cardExample.isCustom ? -cardExample.sentenceId : undefined"
-                  type="sentence"
-                  size="sm"
-                />
-                <button
-                  v-if="authStore.isAuthenticated && cardExample"
-                  class="inline-flex items-center justify-center transition-colors"
-                  :class="exampleIsCustom ? 'text-yellow-500' : 'text-surface-400 hover:text-yellow-500'"
-                  :disabled="exampleIsCustom || favouriting"
-                  :title="exampleIsCustom ? 'Saved as custom sentence' : 'Save as custom sentence'"
-                  @pointerdown.stop
-                  @click.stop="favouriteExample"
-                >
-                  <i class="pi text-sm" :class="exampleIsCustom ? 'pi-star-fill' : 'pi-star'" />
-                </button>
-                <button
-                  v-if="authStore.isAuthenticated && cardExample"
-                  class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
-                  title="Edit sentence"
-                  @pointerdown.stop
-                  @click.stop="editingExample = true"
-                >
-                  <i class="pi pi-pencil text-sm" />
-                </button>
-              </div>
-            </div>
-          </blockquote>
-          <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">
-            <span class="text-xs italic mr-2 ml-4">Source:</span>
-            <span class="text-xs">{{ cardExample.customSource }}</span>
-          </div>
-          <div v-else-if="cardExample?.sourceDeck" class="flex items-center mt-1">
-            <span class="text-xs italic mr-2 ml-4">Source:</span>
-            <div class="inline-flex items-center text-xs flex-wrap">
-              <NuxtLink
-                v-if="cardExample.sourceParent"
-                :to="`/decks/media/${cardExample.sourceParent.deckId}/detail`"
-                target="_blank"
-                class="hover:underline text-primary-600"
-              >
-                {{ localiseTitle(cardExample.sourceParent) }}
-              </NuxtLink>
-              <span v-if="cardExample.sourceParent" class="mx-1">-</span>
-              <NuxtLink
-                :to="`/decks/media/${cardExample.sourceDeck.deckId}/detail`"
-                target="_blank"
-                class="hover:underline text-primary-600"
-              >
-                {{ localiseTitle(cardExample.sourceDeck) }}
-              </NuxtLink>
-              &nbsp;
-              ({{ getMediaTypeText(cardExample.sourceDeck.mediaType) }})
-            </div>
-          </div>
-
-          <button
-            class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 mt-1 ml-1 flex items-center gap-1 cursor-pointer"
-            @pointerdown.stop
-            @click="toggleExtraSentences"
-          >
-            <i :class="extraSentencesExpanded ? 'pi pi-chevron-up' : 'pi pi-plus'" class="text-[0.6rem]" />
-            {{ extraSentencesExpanded ? 'Hide extra sentences' : 'See more sentences' }}
-          </button>
-
-          <div v-if="extraSentencesExpanded" class="mt-2 space-y-2">
-            <ExampleSentenceEntry
-              v-for="(sentence, i) in extraSentences"
-              :key="i"
-              :example-sentence="sentence"
-              :show-source="true"
-            />
-            <div v-if="isLoadingMoreSentences" class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r">
-              <div class="h-5 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
-            </div>
-            <button
-              v-if="extraSentences.length > 0 && canLoadMoreSentences"
-              class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 ml-1 flex items-center gap-1 cursor-pointer"
-              :disabled="isLoadingMoreSentences"
-              @pointerdown.stop
-              @click="loadMoreSentences"
-            >
-              <i class="pi pi-plus text-[0.6rem]" />
-              Load more
-            </button>
-          </div>
-          </template>
-        </div>
-
-        <!-- Confusable readings -->
-        <div v-if="confusableReadings.length" class="mt-4 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400" @click.stop>
-          <i class="pi pi-exclamation-triangle text-xs shrink-0" />
-          <span>
-            Do not confuse with:
-            <template v-for="(cr, i) in confusableReadings" :key="i">
-              <strong>{{ cr }}</strong><span v-if="i < confusableReadings.length - 1">,&ensp;</span>
-            </template>
-          </span>
-        </div>
-
-        <div v-if="!isFlipped && !inputPhase" class="text-sm text-surface-500 dark:text-surface-300 mt-6">
-          <span class="md:hidden">Tap to reveal</span>
-          <span class="hidden md:inline">Click or press {{ displayKeyName(srsStore.studySettings.keybinds.flipCard) }} to reveal</span>
-        </div>
-      </div>
-
-      <!-- Back (shown when flipped) -->
-      <Transition name="reveal">
-      <div
-        v-if="isFlipped"
-        ref="backRef"
-        role="region"
-        aria-label="Answer"
-        tabindex="-1"
-        class="mt-6 pt-6 border-t border-surface-200 dark:border-surface-700 focus:outline-none"
-      >
-        <!-- Etymology / wasei (from lsource) -->
-        <div
-          v-if="wordData && wordData.languageSources && wordData.languageSources.length"
-          class="mb-3 flex flex-wrap items-center justify-center gap-2"
-        >
-          <span
-            v-if="hasWasei"
-            class="inline-block rounded-full px-2 py-0.5 text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
-            title="Japanese-made — constructed in Japanese from foreign words, not a real foreign phrase"
-          >和製 wasei</span>
-          <span v-if="etymologyLine" class="text-sm text-gray-500 dark:text-gray-400">{{ etymologyLine }}</span>
-        </div>
-
-        <!-- Definitions -->
-        <div class="mb-4">
-          <template v-if="wordData">
-            <ClientOnly>
-              <VocabularyDictionaryDefinitions
-                ref="dictDefinitionsRef"
-                :resolved-groups="resolvedGroups"
-                :arrow-key-nav="false"
-                :is-compact="false"
-                :current-reading-index="currentReadingIndex"
-                :readings="wordData.alternativeReadings"
-              />
-              <template #fallback>
-                <VocabularyDefinitions
-                  :definitions="wordData.definitions"
-                  :is-compact="false"
-                  :current-reading-index="currentReadingIndex"
-                  :readings="wordData.alternativeReadings"
-                />
-              </template>
-            </ClientOnly>
-          </template>
-          <template v-else>
-            <div v-for="def in fallbackDefinitions" :key="def.index">
-              <div v-if="def.showPos" class="flex flex-wrap gap-1 mt-2 mb-0.5">
-                <Tooltip v-for="pos in def.partsOfSpeech" :key="pos" :content="pos" placement="top">
-                  <span
-                    class="pos-badge"
-                    :class="`pos-${posColorClass(abbreviatePos(pos))}`"
-                  >{{ abbreviatePos(pos) }}</span>
-                </Tooltip>
-              </div>
-              <div>
-                <span class="text-gray-400">{{ def.index }}.</span> {{ def.meanings.join('; ') }}
-              </div>
-            </div>
-            <div v-if="wordLoading" class="flex items-center gap-1.5 mt-2 text-xs text-gray-400">
-              <Icon name="svg-spinners:ring-resize" size="0.875rem" />
-              <span>Loading full entry…</span>
-            </div>
-          </template>
-          <CustomMeaning :word-id="card.wordId" editable class="mt-3" />
-        </div>
-
-        <!-- Example sentence (back) -->
-        <div v-if="srsStore.studySettings.exampleSentencePosition === 'Back'" class="mb-4">
-          <InlineSentenceEditor
-            v-if="editingExample"
-            :word-id="card.wordId"
-            :reading-index="card.readingIndex"
-            :initial-text="editInitialText"
-            :initial-source="editInitialSource"
-            :user-sentence-id="exampleUserSentenceId"
-            @saved="onExampleSaved"
-            @deleted="onExampleDeleted"
-            @cancel="editingExample = false"
-          />
-          <template v-else-if="exampleSentenceHtml">
             <blockquote
               class="relative inline-block border-l-4 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
-              :class="[cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500', { 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed }]"
+              :class="[
+                cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500',
+                { 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed },
+              ]"
               @click.stop="revealExample()"
             >
               <div class="flex items-start gap-2">
@@ -736,7 +584,7 @@
                   </button>
                   <button
                     v-if="authStore.isAuthenticated && cardExample"
-                    class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors"
+                    class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
                     title="Edit sentence"
                     @pointerdown.stop
                     @click.stop="editingExample = true"
@@ -762,153 +610,338 @@
                   {{ localiseTitle(cardExample.sourceParent) }}
                 </NuxtLink>
                 <span v-if="cardExample.sourceParent" class="mx-1">-</span>
-                <NuxtLink
-                  :to="`/decks/media/${cardExample.sourceDeck.deckId}/detail`"
-                  target="_blank"
-                  class="hover:underline text-primary-600"
-                >
+                <NuxtLink :to="`/decks/media/${cardExample.sourceDeck.deckId}/detail`" target="_blank" class="hover:underline text-primary-600">
                   {{ localiseTitle(cardExample.sourceDeck) }}
                 </NuxtLink>
-                &nbsp;
-                ({{ getMediaTypeText(cardExample.sourceDeck.mediaType) }})
+                &nbsp; ({{ getMediaTypeText(cardExample.sourceDeck.mediaType) }})
               </div>
             </div>
+
+            <button
+              class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 mt-1 ml-1 flex items-center gap-1 cursor-pointer"
+              @pointerdown.stop
+              @click="toggleExtraSentences"
+            >
+              <i :class="extraSentencesExpanded ? 'pi pi-chevron-up' : 'pi pi-plus'" class="text-[0.6rem]" />
+              {{ extraSentencesExpanded ? 'Hide extra sentences' : 'See more sentences' }}
+            </button>
+
+            <div v-if="extraSentencesExpanded" class="mt-2 space-y-2">
+              <ExampleSentenceEntry v-for="(sentence, i) in extraSentences" :key="i" :example-sentence="sentence" :show-source="true" />
+              <div
+                v-if="isLoadingMoreSentences"
+                class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r"
+              >
+                <div class="h-5 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
+              </div>
+              <button
+                v-if="extraSentences.length > 0 && canLoadMoreSentences"
+                class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 ml-1 flex items-center gap-1 cursor-pointer"
+                :disabled="isLoadingMoreSentences"
+                @pointerdown.stop
+                @click="loadMoreSentences"
+              >
+                <i class="pi pi-plus text-[0.6rem]" />
+                Load more
+              </button>
+            </div>
           </template>
+        </div>
 
-          <button
-            v-if="!editingExample"
-            class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 mt-1 ml-1 flex items-center gap-1 cursor-pointer"
-            @pointerdown.stop
-            @click="toggleExtraSentences"
-          >
-            <i :class="extraSentencesExpanded ? 'pi pi-chevron-up' : 'pi pi-plus'" class="text-[0.6rem]" />
-            {{ extraSentencesExpanded ? 'Hide extra sentences' : 'See more sentences' }}
-          </button>
+        <!-- Confusable readings -->
+        <div v-if="confusableReadings.length" class="mt-4 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400" @click.stop>
+          <i class="pi pi-exclamation-triangle text-xs shrink-0" />
+          <span>
+            Do not confuse with:
+            <template v-for="(cr, i) in confusableReadings" :key="i">
+              <strong>{{ cr }}</strong
+              ><span v-if="i < confusableReadings.length - 1">,&ensp;</span>
+            </template>
+          </span>
+        </div>
 
-          <div v-if="extraSentencesExpanded && !editingExample" class="mt-2 space-y-2">
-            <ExampleSentenceEntry
-              v-for="(sentence, i) in extraSentences"
-              :key="i"
-              :example-sentence="sentence"
-              :show-source="true"
+        <div v-if="!isFlipped && !inputPhase" class="text-sm text-surface-500 dark:text-surface-300 mt-6">
+          <span class="md:hidden">Tap to reveal</span>
+          <span class="hidden md:inline">Click or press {{ displayKeyName(srsStore.studySettings.keybinds.flipCard) }} to reveal</span>
+        </div>
+      </div>
+
+      <!-- Back (shown when flipped) -->
+      <Transition name="reveal">
+        <div
+          v-if="isFlipped"
+          ref="backRef"
+          role="region"
+          aria-label="Answer"
+          tabindex="-1"
+          class="mt-6 pt-6 border-t border-surface-200 dark:border-surface-700 focus:outline-none"
+        >
+          <!-- Etymology / wasei (from lsource) -->
+          <div v-if="wordData && wordData.languageSources && wordData.languageSources.length" class="mb-3 flex flex-wrap items-center justify-center gap-2">
+            <span
+              v-if="hasWasei"
+              class="inline-block rounded-full px-2 py-0.5 text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
+              title="Japanese-made — constructed in Japanese from foreign words, not a real foreign phrase"
+              >和製 wasei</span
+            >
+            <span v-if="etymologyLine" class="text-sm text-gray-500 dark:text-gray-400">{{ etymologyLine }}</span>
+          </div>
+
+          <!-- Definitions -->
+          <div class="mb-4">
+            <template v-if="wordData">
+              <ClientOnly>
+                <VocabularyDictionaryDefinitions
+                  ref="dictDefinitionsRef"
+                  :resolved-groups="resolvedGroups"
+                  :arrow-key-nav="false"
+                  :is-compact="false"
+                  :current-reading-index="currentReadingIndex"
+                  :readings="wordData.alternativeReadings"
+                />
+                <template #fallback>
+                  <VocabularyDefinitions
+                    :definitions="wordData.definitions"
+                    :is-compact="false"
+                    :current-reading-index="currentReadingIndex"
+                    :readings="wordData.alternativeReadings"
+                  />
+                </template>
+              </ClientOnly>
+            </template>
+            <template v-else>
+              <div v-for="def in fallbackDefinitions" :key="def.index">
+                <div v-if="def.showPos" class="flex flex-wrap gap-1 mt-2 mb-0.5">
+                  <Tooltip v-for="pos in def.partsOfSpeech" :key="pos" :content="pos" placement="top">
+                    <span class="pos-badge" :class="`pos-${posColorClass(abbreviatePos(pos))}`">{{ abbreviatePos(pos) }}</span>
+                  </Tooltip>
+                </div>
+                <div>
+                  <span class="text-gray-400">{{ def.index }}.</span> {{ def.meanings.join('; ') }}
+                </div>
+              </div>
+              <div v-if="wordLoading" class="flex items-center gap-1.5 mt-2 text-xs text-gray-400">
+                <Icon name="svg-spinners:ring-resize" size="0.875rem" />
+                <span>Loading full entry…</span>
+              </div>
+            </template>
+            <CustomMeaning :word-id="card.wordId" editable class="mt-3" />
+          </div>
+
+          <!-- Example sentence (back) -->
+          <div v-if="srsStore.studySettings.exampleSentencePosition === 'Back'" class="mb-4">
+            <InlineSentenceEditor
+              v-if="editingExample"
+              :word-id="card.wordId"
+              :reading-index="card.readingIndex"
+              :initial-text="editInitialText"
+              :initial-source="editInitialSource"
+              :user-sentence-id="exampleUserSentenceId"
+              @saved="onExampleSaved"
+              @deleted="onExampleDeleted"
+              @cancel="editingExample = false"
             />
-            <div v-if="isLoadingMoreSentences" class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r">
-              <div class="h-5 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
+            <template v-else-if="exampleSentenceHtml">
+              <blockquote
+                class="relative inline-block border-l-4 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
+                :class="[
+                  cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500',
+                  { 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed },
+                ]"
+                @click.stop="revealExample()"
+              >
+                <div class="flex items-start gap-2">
+                  <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" lang="ja" />
+                  <div class="flex items-center gap-1 mt-0.5 shrink-0">
+                    <TtsButton
+                      v-if="cardExample"
+                      :text="cardExample.text"
+                      :sentence-id="cardExample.isCustom ? undefined : cardExample.sentenceId"
+                      :custom-sentence-id="cardExample.isCustom ? -cardExample.sentenceId : undefined"
+                      type="sentence"
+                      size="sm"
+                    />
+                    <button
+                      v-if="authStore.isAuthenticated && cardExample"
+                      class="inline-flex items-center justify-center transition-colors"
+                      :class="exampleIsCustom ? 'text-yellow-500' : 'text-surface-400 hover:text-yellow-500'"
+                      :disabled="exampleIsCustom || favouriting"
+                      :title="exampleIsCustom ? 'Saved as custom sentence' : 'Save as custom sentence'"
+                      @pointerdown.stop
+                      @click.stop="favouriteExample"
+                    >
+                      <i class="pi text-sm" :class="exampleIsCustom ? 'pi-star-fill' : 'pi-star'" />
+                    </button>
+                    <button
+                      v-if="authStore.isAuthenticated && cardExample"
+                      class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors"
+                      title="Edit sentence"
+                      @pointerdown.stop
+                      @click.stop="editingExample = true"
+                    >
+                      <i class="pi pi-pencil text-sm" />
+                    </button>
+                  </div>
+                </div>
+              </blockquote>
+              <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">
+                <span class="text-xs italic mr-2 ml-4">Source:</span>
+                <span class="text-xs">{{ cardExample.customSource }}</span>
+              </div>
+              <div v-else-if="cardExample?.sourceDeck" class="flex items-center mt-1">
+                <span class="text-xs italic mr-2 ml-4">Source:</span>
+                <div class="inline-flex items-center text-xs flex-wrap">
+                  <NuxtLink
+                    v-if="cardExample.sourceParent"
+                    :to="`/decks/media/${cardExample.sourceParent.deckId}/detail`"
+                    target="_blank"
+                    class="hover:underline text-primary-600"
+                  >
+                    {{ localiseTitle(cardExample.sourceParent) }}
+                  </NuxtLink>
+                  <span v-if="cardExample.sourceParent" class="mx-1">-</span>
+                  <NuxtLink :to="`/decks/media/${cardExample.sourceDeck.deckId}/detail`" target="_blank" class="hover:underline text-primary-600">
+                    {{ localiseTitle(cardExample.sourceDeck) }}
+                  </NuxtLink>
+                  &nbsp; ({{ getMediaTypeText(cardExample.sourceDeck.mediaType) }})
+                </div>
+              </div>
+            </template>
+
+            <button
+              v-if="!editingExample"
+              class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 mt-1 ml-1 flex items-center gap-1 cursor-pointer"
+              @pointerdown.stop
+              @click="toggleExtraSentences"
+            >
+              <i :class="extraSentencesExpanded ? 'pi pi-chevron-up' : 'pi pi-plus'" class="text-[0.6rem]" />
+              {{ extraSentencesExpanded ? 'Hide extra sentences' : 'See more sentences' }}
+            </button>
+
+            <div v-if="extraSentencesExpanded && !editingExample" class="mt-2 space-y-2">
+              <ExampleSentenceEntry v-for="(sentence, i) in extraSentences" :key="i" :example-sentence="sentence" :show-source="true" />
+              <div
+                v-if="isLoadingMoreSentences"
+                class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r"
+              >
+                <div class="h-5 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
+              </div>
+              <button
+                v-if="extraSentences.length > 0 && canLoadMoreSentences"
+                class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 ml-1 flex items-center gap-1 cursor-pointer"
+                :disabled="isLoadingMoreSentences"
+                @pointerdown.stop
+                @click="loadMoreSentences"
+              >
+                <i class="pi pi-plus text-[0.6rem]" />
+                Load more
+              </button>
+            </div>
+          </div>
+
+          <!-- Pitch accents -->
+          <ClientOnly v-if="srsStore.studySettings.showPitchAccent">
+            <div v-if="pitchAccents" class="mb-3">
+              <h3 class="text-gray-500 dark:text-gray-300 text-sm mb-2">Pitch accent</h3>
+              <div class="flex flex-wrap gap-2">
+                <LazyPitchDiagram v-for="pitch in pitchAccents" :key="pitch" :reading="pitchReadingText" :pitch-accent="pitch" />
+              </div>
+            </div>
+          </ClientOnly>
+
+          <KanjiBreakdown
+            v-if="srsStore.studySettings.showKanjiBreakdown"
+            :key="`${card.wordId}-${card.readingIndex}`"
+            :word-id="card.wordId"
+            :reading-index="card.readingIndex"
+          />
+
+          <WordComposition v-if="srsStore.studySettings.showWordComposition && wordData?.composedOf?.length" :components="wordData.composedOf" />
+
+          <WordUsedIn
+            v-if="srsStore.studySettings.showWordUsedIn && wordData?.usedInTotal"
+            :key="`usedin-${card.wordId}-${card.readingIndex}`"
+            :word-id="card.wordId"
+            :reading-index="card.readingIndex"
+            :initial-items="wordData.usedIn ?? []"
+            :total="wordData.usedInTotal"
+            :highlight="wordData.mainReading.text"
+            :collapsed-count="2"
+          />
+
+          <!-- Deck occurrences -->
+          <div v-if="card.deckOccurrences?.length || card.sourceDeckName" class="mt-4 pt-3 border-t border-surface-200 dark:border-surface-700">
+            <div
+              class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-500 overflow-hidden transition-[max-height] duration-200"
+              :class="occExpanded ? 'max-h-none' : 'max-h-[3.75rem]'"
+            >
+              <template v-if="card.deckOccurrences?.length">
+                <span v-for="occ in card.deckOccurrences" :key="occ.deckId">
+                  ×{{ occ.occurrences }}
+                  <template v-if="occ.parentOriginalTitle"
+                    >{{
+                      localiseTitle({ originalTitle: occ.parentOriginalTitle, romajiTitle: occ.parentRomajiTitle, englishTitle: occ.parentEnglishTitle })
+                    }}
+                    - </template
+                  >{{ localiseTitle(occ) }}
+                </span>
+              </template>
+              <span v-else-if="card.sourceDeckName">{{ card.sourceDeckName }}</span>
             </div>
             <button
-              v-if="extraSentences.length > 0 && canLoadMoreSentences"
-              class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 ml-1 flex items-center gap-1 cursor-pointer"
-              :disabled="isLoadingMoreSentences"
-              @pointerdown.stop
-              @click="loadMoreSentences"
+              v-if="card.deckOccurrences && card.deckOccurrences.length > 3"
+              type="button"
+              class="mt-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
+              @click="occExpanded = !occExpanded"
             >
-              <i class="pi pi-plus text-[0.6rem]" />
-              Load more
+              {{ occExpanded ? '- View less' : `+ View all ${card.deckOccurrences.length}` }}
             </button>
           </div>
         </div>
-
-        <!-- Pitch accents -->
-        <ClientOnly v-if="srsStore.studySettings.showPitchAccent">
-          <div v-if="pitchAccents" class="mb-3">
-            <h3 class="text-gray-500 dark:text-gray-300 text-sm mb-2">Pitch accent</h3>
-            <div class="flex flex-wrap gap-2">
-              <LazyPitchDiagram
-                v-for="pitch in pitchAccents"
-                :key="pitch"
-                :reading="pitchReadingText"
-                :pitch-accent="pitch"
-              />
-            </div>
-          </div>
-        </ClientOnly>
-
-        <KanjiBreakdown v-if="srsStore.studySettings.showKanjiBreakdown" :key="`${card.wordId}-${card.readingIndex}`" :word-id="card.wordId" :reading-index="card.readingIndex" />
-
-        <WordComposition
-          v-if="srsStore.studySettings.showWordComposition && wordData?.composedOf?.length"
-          :components="wordData.composedOf"
-        />
-
-        <WordUsedIn
-          v-if="srsStore.studySettings.showWordUsedIn && wordData?.usedInTotal"
-          :key="`usedin-${card.wordId}-${card.readingIndex}`"
-          :word-id="card.wordId"
-          :reading-index="card.readingIndex"
-          :initial-items="wordData.usedIn ?? []"
-          :total="wordData.usedInTotal"
-          :highlight="wordData.mainReading.text"
-          :collapsed-count="2"
-        />
-
-        <!-- Deck occurrences -->
-        <div v-if="card.deckOccurrences?.length || card.sourceDeckName" class="mt-4 pt-3 border-t border-surface-200 dark:border-surface-700">
-          <div
-            class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-500 overflow-hidden transition-[max-height] duration-200"
-            :class="occExpanded ? 'max-h-none' : 'max-h-[3.75rem]'"
-          >
-            <template v-if="card.deckOccurrences?.length">
-              <span v-for="occ in card.deckOccurrences" :key="occ.deckId">
-                ×{{ occ.occurrences }}
-                <template v-if="occ.parentOriginalTitle">{{ localiseTitle({ originalTitle: occ.parentOriginalTitle, romajiTitle: occ.parentRomajiTitle, englishTitle: occ.parentEnglishTitle }) }} - </template>{{ localiseTitle(occ) }}
-              </span>
-            </template>
-            <span v-else-if="card.sourceDeckName">{{ card.sourceDeckName }}</span>
-          </div>
-          <button
-            v-if="card.deckOccurrences && card.deckOccurrences.length > 3"
-            type="button"
-            class="mt-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
-            @click="occExpanded = !occExpanded"
-          >
-            {{ occExpanded ? '- View less' : `+ View all ${card.deckOccurrences.length}` }}
-          </button>
-        </div>
-
-      </div>
       </Transition>
     </div>
   </div>
 </template>
 
 <style scoped>
-:deep([data-pc-name="tabs"]),
-:deep([data-pc-name="tabpanels"]),
-:deep([data-pc-name="tabpanel"]),
-:deep([data-pc-name="tablist"]) {
-  background: transparent !important;
-}
-.head-word :deep(rt) {
-  font-size: 0.35em !important;
-  font-weight: 700;
-  color: light-dark(var(--p-surface-700), var(--p-surface-400));
-}
+  :deep([data-pc-name='tabs']),
+  :deep([data-pc-name='tabpanels']),
+  :deep([data-pc-name='tabpanel']),
+  :deep([data-pc-name='tablist']) {
+    background: transparent !important;
+  }
+  .head-word :deep(rt) {
+    font-size: 0.35em !important;
+    font-weight: 700;
+    color: light-dark(var(--p-surface-700), var(--p-surface-400));
+  }
 
-/* Write-in reveal: tint the furigana reading to echo whether the typed reading matched. */
-.head-word.writein-correct :deep(rt) {
-  color: var(--p-green-500);
-}
-.head-word.writein-wrong :deep(rt) {
-  color: var(--p-red-500);
-}
+  /* Write-in reveal: tint the furigana reading to echo whether the typed reading matched. */
+  .head-word.writein-correct :deep(rt) {
+    color: var(--p-green-500);
+  }
+  .head-word.writein-wrong :deep(rt) {
+    color: var(--p-red-500);
+  }
 
-/* Reveal animation for the answer side (enter only, so card advance stays snappy). */
-.reveal-enter-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-.reveal-enter-from {
-  opacity: 0;
-  transform: translateY(-6px);
-}
-
-@media (prefers-reduced-motion: reduce) {
+  /* Reveal animation for the answer side (enter only, so card advance stays snappy). */
   .reveal-enter-active {
-    transition: none;
+    transition:
+      opacity 0.18s ease,
+      transform 0.18s ease;
   }
   .reveal-enter-from {
-    opacity: 1;
-    transform: none;
+    opacity: 0;
+    transform: translateY(-6px);
   }
-}
 
+  @media (prefers-reduced-motion: reduce) {
+    .reveal-enter-active {
+      transition: none;
+    }
+    .reveal-enter-from {
+      opacity: 1;
+      transform: none;
+    }
+  }
 </style>
