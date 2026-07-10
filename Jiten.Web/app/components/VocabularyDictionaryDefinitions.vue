@@ -24,9 +24,14 @@
   watch(() => props.resolvedGroups, (groups) => {
     if (groups.length === 0) return;
     if (!activeTab.value || !groups.some((g) => g.dictionaryId === activeTab.value)) {
-      activeTab.value = groups[0].dictionaryId;
+      const preferred = groups.find((g) => g.dictionaryId === store.preferredDictionaryId);
+      activeTab.value = (preferred ?? groups[0]!).dictionaryId;
     }
   }, { immediate: true });
+
+  function onTabSelected(value: string | number) {
+    store.preferredDictionaryId = String(value);
+  }
 
   function cycleDictionary(direction: 1 | -1) {
     const groups = props.resolvedGroups;
@@ -34,6 +39,7 @@
     const current = groups.findIndex((g) => g.dictionaryId === activeTab.value);
     const next = ((current === -1 ? 0 : current) + direction + groups.length) % groups.length;
     activeTab.value = groups[next]!.dictionaryId;
+    store.preferredDictionaryId = activeTab.value;
   }
 
   function onWindowKeydown(e: KeyboardEvent) {
@@ -68,7 +74,7 @@
   <template v-else-if="!isCompact && hasMultipleGroups">
     <!-- select-on-focus: after clicking a tab, focus stays on the tab header; arrows there are
          handled by PrimeVue's own (wrapping) tab navigation, which the window listener skips. -->
-    <Tabs v-model:value="activeTab" :show-navigators="false" select-on-focus>
+    <Tabs v-model:value="activeTab" :show-navigators="false" select-on-focus @update:value="onTabSelected">
       <TabList class="dict-tabs">
         <Tab v-for="group in resolvedGroups" :key="group.dictionaryId" :value="group.dictionaryId">
           {{ group.dictionaryName }}

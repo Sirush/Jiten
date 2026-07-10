@@ -43,6 +43,7 @@ export const useJitenStore = defineStore('jiten', () => {
   const difficultyDisplayStyle = createCookieState<DifficultyDisplayStyle>('difficulty-display-style', 0);
   const kanjiScale = createCookieState<KanjiScalePref>('kanji-scale', 'jlpt');
   const similarMediaPinnedType = createCookieState<number>('similar-media-pinned-type', 0);
+  const preferredDictionaryId = createCookieState<string>('preferred-dictionary-id', '');
 
   const difficultyValueDisplayStyleCookie = useCookie<DifficultyValueDisplayStyle>('jiten-difficulty-value-display-style', {
     default: () => DifficultyValueDisplayStyle.ZeroToFive,
@@ -120,6 +121,7 @@ export const useJitenStore = defineStore('jiten', () => {
     difficultyValueDisplayStyle,
     kanjiScale,
     similarMediaPinnedType,
+    preferredDictionaryId,
     coverageVersion,
     bumpCoverageVersion,
   };
