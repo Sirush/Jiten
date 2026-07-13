@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, computed } from 'vue';
+  import { ref, computed, watch, onBeforeUnmount } from 'vue';
   import Button from 'primevue/button';
   import InputText from 'primevue/inputtext';
   import InputNumber from 'primevue/inputnumber';
@@ -50,6 +50,49 @@
   const coverImageUrl = ref<string | null>(null);
   const chunkCharBudget = ref<number | null>(null);
 
+  const originalTitle = ref('');
+  const romajiTitle = ref('');
+  const englishTitle = ref('');
+  const romanizing = ref(false);
+  const titleConflict = ref(false);
+
+  // The importer dedupes on (OriginalTitle, WebNovel), so an edited title needs its own conflict check
+  let conflictTimeout: ReturnType<typeof setTimeout> | null = null;
+  watch(originalTitle, (newTitle) => {
+    if (conflictTimeout) clearTimeout(conflictTimeout);
+    if (!newTitle.trim()) {
+      titleConflict.value = false;
+      return;
+    }
+    conflictTimeout = setTimeout(async () => {
+      try {
+        const data = await $api<{ conflict: boolean }>('admin/webnovel-title-conflict', { query: { title: newTitle.trim() } });
+        titleConflict.value = data.conflict;
+      } catch {
+        titleConflict.value = false;
+      }
+    }, 500);
+  });
+
+  onBeforeUnmount(() => {
+    if (conflictTimeout) clearTimeout(conflictTimeout);
+  });
+
+  const autoRomanize = async () => {
+    if (!originalTitle.value.trim()) return;
+
+    romanizing.value = true;
+    try {
+      const data = await $api<{ romaji: string }>('utils/romanize', { method: 'POST', body: { title: originalTitle.value.trim() } });
+      romajiTitle.value = data.romaji;
+    } catch (error) {
+      console.error(error);
+      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to auto-romanize title', life: 5000 });
+    } finally {
+      romanizing.value = false;
+    }
+  };
+
   // A long novel is fetched one episode at a time at ~0.7s each, plus a pause every 10
   const estimatedMinutes = computed(() => {
     if (!preview.value) return 0;
@@ -63,6 +106,10 @@
     preview.value = null;
     try {
       preview.value = await $api<WebNovelPreview>('admin/webnovel-preview', { query: { url: url.value.trim() } });
+      originalTitle.value = preview.value.title;
+      romajiTitle.value = '';
+      englishTitle.value = '';
+      titleConflict.value = preview.value.titleConflict;
     } catch (error) {
       console.error(error);
       toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Could not read this novel.'), life: 5000 });
@@ -72,10 +119,13 @@
   };
 
   const submit = async () => {
-    if (!preview.value) return;
+    if (!preview.value || !originalTitle.value.trim()) return;
 
     const formData = new FormData();
     formData.append('url', preview.value.url);
+    formData.append('originalTitle', originalTitle.value.trim());
+    formData.append('romajiTitle', romajiTitle.value.trim());
+    formData.append('englishTitle', englishTitle.value.trim());
     if (coverImage.value) formData.append('coverImage', coverImage.value);
     if (chunkCharBudget.value) formData.append('chunkCharBudget', String(chunkCharBudget.value));
 
@@ -85,7 +135,7 @@
       toast.add({
         severity: 'success',
         summary: 'Import queued',
-        detail: `'${preview.value.title}' is being fetched — roughly ${estimatedMinutes.value} min.`,
+        detail: `'${originalTitle.value.trim()}' is being fetched — roughly ${estimatedMinutes.value} min.`,
         life: 5000,
       });
 
@@ -94,6 +144,10 @@
       coverImage.value = null;
       coverImageUrl.value = null;
       chunkCharBudget.value = null;
+      originalTitle.value = '';
+      romajiTitle.value = '';
+      englishTitle.value = '';
+      titleConflict.value = false;
     } catch (error) {
       console.error(error);
       toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to queue the import.'), life: 5000 });
@@ -181,8 +235,35 @@
           </div>
         </div>
 
-        <Message v-if="preview.titleConflict" severity="error" :closable="false" class="mt-4">
-          A webnovel deck titled “{{ preview.title }}” already exists. Rename or remove it first — importing would otherwise be skipped.
+        <div class="mt-4 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 p-4">
+          <h3 class="text-lg font-medium mb-3">Titles</h3>
+          <div class="mb-4">
+            <label for="originalTitle" class="block text-sm font-medium mb-1">Original Title</label>
+            <InputText id="originalTitle" v-model="originalTitle" class="w-full" />
+          </div>
+          <div class="mb-4">
+            <label for="romajiTitle" class="block text-sm font-medium mb-1">Romaji Title</label>
+            <div class="flex gap-2">
+              <InputText id="romajiTitle" v-model="romajiTitle" class="flex-1" />
+              <Button
+                v-tooltip.top="'Auto-romanize from original title'"
+                :disabled="!originalTitle.trim() || romanizing"
+                @click="autoRomanize"
+              >
+                <Icon v-if="!romanizing" name="material-symbols-light:translate" size="1.5em" />
+                <Icon v-else name="line-md:loading-loop" size="1.5em" />
+              </Button>
+            </div>
+          </div>
+          <div>
+            <label for="englishTitle" class="block text-sm font-medium mb-1">English Title</label>
+            <InputText id="englishTitle" v-model="englishTitle" class="w-full" />
+          </div>
+        </div>
+
+        <Message v-if="titleConflict" severity="error" :closable="false" class="mt-4">
+          A webnovel deck titled “{{ originalTitle.trim() }}” already exists. Rename it or remove the other deck — importing would
+          otherwise be skipped.
         </Message>
 
         <Message severity="info" :closable="false" class="mt-4">
@@ -192,7 +273,12 @@
       </div>
 
       <div>
-        <CoverImageField v-model:file="coverImage" v-model:url="coverImageUrl" :title="preview.title" :subtitle="preview.author ?? ''" />
+        <CoverImageField
+          v-model:file="coverImage"
+          v-model:url="coverImageUrl"
+          :title="originalTitle"
+          :subtitle="romajiTitle || preview.author || ''"
+        />
         <p class="mt-2 text-xs text-surface-500 dark:text-surface-400">
           Syosetu works have no cover art — upload one or generate it from the title.
         </p>
@@ -218,7 +304,7 @@
           class="w-full mt-6"
           severity="success"
           :loading="submitting"
-          :disabled="preview.titleConflict"
+          :disabled="titleConflict || !originalTitle.trim()"
           @click="submit"
         />
       </div>

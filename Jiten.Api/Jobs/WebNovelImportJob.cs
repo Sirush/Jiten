@@ -23,7 +23,8 @@ public class WebNovelImportJob(
     /// </summary>
     [Queue(WebNovelQueues.Syosetu)]
     [AutomaticRetry(Attempts = 1)]
-    public async Task Import(WebNovelProvider provider, string sourceId, string? coverPath, int? chunkCharBudget)
+    public async Task Import(WebNovelProvider provider, string sourceId, string? coverPath, int? chunkCharBudget,
+                             WebNovelTitles? titles = null)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
 
@@ -37,12 +38,14 @@ public class WebNovelImportJob(
 
         var info = await source.GetInfoAsync(sourceId);
 
+        var originalTitle = Normalise(titles?.OriginalTitle) ?? info.Title;
+
         // InsertDeck dedupes new decks on (OriginalTitle, MediaType) and silently keeps the existing one, which
         // would leave us with a ledger pointing at someone else's deck. Catch it before the long fetch.
-        if (await context.Decks.AnyAsync(d => d.OriginalTitle == info.Title && d.MediaType == MediaType.WebNovel))
+        if (await context.Decks.AnyAsync(d => d.OriginalTitle == originalTitle && d.MediaType == MediaType.WebNovel))
         {
             throw new InvalidOperationException(
-                $"A webnovel deck titled '{info.Title}' already exists. Rename or remove it before importing {sourceId}.");
+                $"A webnovel deck titled '{originalTitle}' already exists. Rename or remove it before importing {sourceId}.");
         }
 
         var toc = await source.GetTocAsync(sourceId);
@@ -51,7 +54,7 @@ public class WebNovelImportJob(
             throw new InvalidOperationException($"{provider}/{sourceId} has no episodes.");
 
         logger.LogInformation("WebNovelImport: {Title} ({SourceId}) — {Episodes} episodes, ~{Chars} chars",
-                              info.Title, sourceId, toc.Count, info.TotalCharacters);
+                              originalTitle, sourceId, toc.Count, info.TotalCharacters);
 
         var budget = chunkCharBudget ?? SubdeckChunker.DefaultCharBudget;
 
@@ -74,6 +77,9 @@ public class WebNovelImportJob(
             var textByEpisode = episodes.ToDictionary(e => e.Chunk.Number, e => e.Text);
 
             var metadata = info.ToMetadata();
+            metadata.OriginalTitle = originalTitle;
+            metadata.RomajiTitle = Normalise(titles?.RomajiTitle);
+            metadata.EnglishTitle = Normalise(titles?.EnglishTitle);
 
             foreach (var plan in plans)
             {
@@ -98,7 +104,7 @@ public class WebNovelImportJob(
             DeleteCoverDirectory(coverPath);
 
             logger.LogInformation("WebNovelImport: created deck {DeckId} with {Subdecks} subdecks for {Title}",
-                                  parentDeckId, plans.Count, info.Title);
+                                  parentDeckId, plans.Count, originalTitle);
         }
         finally
         {
@@ -129,6 +135,8 @@ public class WebNovelImportJob(
             logger.LogWarning(ex, "WebNovelImport: could not clean up the cover at {CoverPath}", coverPath);
         }
     }
+
+    private static string? Normalise(string? title) => string.IsNullOrWhiteSpace(title) ? null : title.Trim();
 
     private static string JoinEpisodes(ChunkPlan plan, Dictionary<int, string> textByEpisode) =>
         string.Join("\n\n", plan.EpisodesToAppend.Select(e => textByEpisode[e.Number]));

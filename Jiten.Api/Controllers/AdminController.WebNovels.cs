@@ -70,6 +70,22 @@ public partial class AdminController
         }
     }
 
+    /// <summary>
+    /// Re-checks the InsertDeck dedupe key after the admin edits the title on the add page.
+    /// </summary>
+    [HttpGet("webnovel-title-conflict")]
+    public async Task<IActionResult> CheckWebNovelTitleConflict([FromQuery] string? title)
+    {
+        var normalised = title?.Trim();
+        if (string.IsNullOrEmpty(normalised))
+            return Ok(new { Conflict = false });
+
+        var conflict = await dbContext.Decks
+                                      .AnyAsync(d => d.OriginalTitle == normalised && d.MediaType == MediaType.WebNovel);
+
+        return Ok(new { Conflict = conflict });
+    }
+
     [HttpPost("add-webnovel-deck")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> AddWebNovelDeck([FromForm] AddWebNovelDeckRequest model,
@@ -98,9 +114,16 @@ public partial class AdminController
             await model.CoverImage.CopyToAsync(stream);
         }
 
+        var titles = new WebNovelTitles
+        {
+            OriginalTitle = model.OriginalTitle,
+            RomajiTitle = model.RomajiTitle,
+            EnglishTitle = model.EnglishTitle
+        };
+
         // Fetching a long novel is 20+ minutes of polite requests, so it can never run in-request
         var jobId = backgroundJobs.Enqueue<WebNovelImportJob>(
-            job => job.Import(provider, sourceId, coverPath, model.ChunkCharBudget));
+            job => job.Import(provider, sourceId, coverPath, model.ChunkCharBudget, titles));
 
         logger.LogInformation("Admin queued webnovel import for {Provider}/{SourceId} (job {JobId})",
                               provider, sourceId, jobId);
