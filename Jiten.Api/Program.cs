@@ -12,6 +12,7 @@ using Jiten.Api.Services;
 using Jiten.Api.Authentication;
 using Jiten.Core;
 using Jiten.Core.Data.Authentication;
+using Jiten.Core.WebNovel;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -114,6 +115,22 @@ builder.Services.AddHttpClient("Voicevox", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 builder.Services.AddSingleton<ITtsService, TtsService>();
+
+builder.Services.AddHttpClient(SyosetuSource.HttpClientName, client =>
+       {
+           client.DefaultRequestHeaders.Add("User-Agent",
+                                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                                            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+           client.Timeout = TimeSpan.FromSeconds(30);
+       })
+       // The API's gzip=5 body is inflated by hand; this covers the HTML pages
+       .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+       {
+           AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+       });
+
+builder.Services.AddSingleton<IWebNovelSource, SyosetuSource>();
+builder.Services.AddSingleton<IWebNovelSourceResolver, WebNovelSourceResolver>();
 
 // OpenTelemetry Configuration
 var otelConfig = builder.Configuration.GetSection("OpenTelemetry");
@@ -532,6 +549,9 @@ builder.Services.AddResponseCompression(options =>
 
 // Hangfire jobs
 builder.Services.AddScoped<ParseJob>();
+builder.Services.AddScoped<WebNovelImportJob>();
+builder.Services.AddScoped<WebNovelFetchJob>();
+builder.Services.AddScoped<WebNovelSyncSweepJob>();
 builder.Services.AddScoped<ReparseJob>();
 builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
@@ -590,6 +610,24 @@ builder.Services.AddHangfireServer((options) =>
 {
     options.ServerName = "JikanServer";
     options.Queues = ["jikan"];
+    options.WorkerCount = 1;
+});
+
+
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "WebNovelSyosetuServer";
+    options.Queues = [WebNovelQueues.Syosetu];
+    options.WorkerCount = 1;
+    // A large novel can take hours
+    options.ShutdownTimeout = TimeSpan.FromHours(3);
+    options.StopTimeout = TimeSpan.FromHours(3);
+});
+
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "WebNovelSyosetuMetadataServer";
+    options.Queues = [WebNovelQueues.SyosetuMetadata];
     options.WorkerCount = 1;
 });
 
@@ -668,6 +706,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         "embed-pending-decks",
         job => job.EmbedPending(),
         "*/30 * * * *");
+
+    recurringJobs.AddOrUpdate<WebNovelSyncSweepJob>(
+        "webnovel-sync-sweep",
+        job => job.Sweep(),
+        Cron.Daily(5));
 }
 
 app.UseResponseCompression();

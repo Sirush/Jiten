@@ -317,4 +317,12 @@ public class CliOptions
 
     [Option(longName: "min-shared", Required = false, HelpText = "Override the gated minimum shared-distinctive-word count for --explain probing.")]
     public int? MinShared { get; set; }
+
+    [Option(longName: "webnovel-test", Required = false,
+            HelpText = "Dry run a webnovel URL or ncode: metadata, table of contents, first episode and the subdeck split. Writes nothing.")]
+    public string? WebNovelTest { get; set; }
+
+    [Option(longName: "chunk-chars", Required = false,
+            HelpText = "Subdeck character budget for --webnovel-test (default: 150000).")]
+    public int? ChunkChars { get; set; }
 }

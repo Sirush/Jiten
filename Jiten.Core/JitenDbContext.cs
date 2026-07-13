@@ -1,5 +1,6 @@
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
+using Jiten.Core.Data.WebNovel;
 using Microsoft.Extensions.Configuration;
 
 namespace Jiten.Core;
@@ -43,6 +44,9 @@ public class JitenDbContext : DbContext
     public DbSet<ExternalTagMapping> ExternalTagMappings { get; set; }
 
     public DbSet<DeckRelationship> DeckRelationships { get; set; }
+
+    public DbSet<WebNovelSource> WebNovelSources { get; set; }
+    public DbSet<WebNovelChapter> WebNovelChapters { get; set; }
 
     public DbSet<WordSet> WordSets { get; set; }
     public DbSet<WordSetMember> WordSetMembers { get; set; }
@@ -208,6 +212,40 @@ public class JitenDbContext : DbContext
             entity.HasOne(drt => drt.Deck)
                   .WithOne(d => d.RawText)
                   .HasForeignKey<DeckRawText>(drt => drt.DeckId);
+        });
+
+        modelBuilder.Entity<WebNovelSource>(entity =>
+        {
+            entity.ToTable("WebNovelSources", "jiten");
+            entity.HasKey(s => s.DeckId);
+            entity.Property(s => s.DeckId).ValueGeneratedNever();
+
+            entity.HasOne(s => s.Deck)
+                  .WithOne()
+                  .HasForeignKey<WebNovelSource>(s => s.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(s => new { s.Provider, s.SourceId })
+                  .IsUnique()
+                  .HasDatabaseName("IX_WebNovelSources_Provider_SourceId");
+
+            // The sweeper scans for novels due a check
+            entity.HasIndex(s => new { s.SyncEnabled, s.NextCheckAt })
+                  .HasDatabaseName("IX_WebNovelSources_SyncEnabled_NextCheckAt");
+        });
+
+        modelBuilder.Entity<WebNovelChapter>(entity =>
+        {
+            entity.ToTable("WebNovelChapters", "jiten");
+            entity.HasKey(c => new { c.DeckId, c.EpisodeNumber });
+
+            entity.HasOne(c => c.Source)
+                  .WithMany(s => s.Chapters)
+                  .HasForeignKey(c => c.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(c => c.ChildDeckId)
+                  .HasDatabaseName("IX_WebNovelChapters_ChildDeckId");
         });
 
         modelBuilder.Entity<DeckStats>(entity =>

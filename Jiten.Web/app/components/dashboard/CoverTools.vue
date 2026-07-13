@@ -17,6 +17,7 @@
     canvasToFile,
     shuffleOptions,
     defaultCoverOptions,
+    fallbackPalette,
     type CoverOptions,
     type CoverPalette,
     type BackgroundStyle,
@@ -51,11 +52,12 @@
   let currentCanvas: HTMLCanvasElement | null = null;
   let rafId: number | null = null;
 
-  const styleOptions: { label: string; value: BackgroundStyle }[] = [
+
+  const styleOptions = computed<{ label: string; value: BackgroundStyle }[]>(() => [
     { label: 'Gradient', value: 'gradient' },
     { label: 'Solid', value: 'solid' },
-    { label: 'Blurred art', value: 'blurred' },
-  ];
+    ...(props.source ? [{ label: 'Blurred art', value: 'blurred' as const }] : []),
+  ]);
   const orientationOptions: { label: string; value: Orientation }[] = [
     { label: 'Horizontal', value: 'horizontal' },
     { label: 'Vertical (tategaki)', value: 'vertical' },
@@ -128,16 +130,21 @@
   }
 
   async function openGenerator() {
-    if (!props.source) return;
     generatorVisible.value = true;
     loadingSource.value = true;
     previewUrl.value = null;
     sourceImage = null;
     currentCanvas = null;
     try {
-      const blob = await resolveBlob(props.source);
-      sourceImage = await loadImage(blob);
-      palette.value = extractPalette(sourceImage);
+
+      if (props.source) {
+        const blob = await resolveBlob(props.source);
+        sourceImage = await loadImage(blob);
+        palette.value = extractPalette(sourceImage);
+      } else {
+        palette.value = fallbackPalette(props.title);
+      }
+
       await ensureTitleFont();
       options.value = defaultCoverOptions(palette.value, props.title, props.subtitle ?? '');
       swatchTarget.value = 'bg1';
@@ -198,7 +205,7 @@
       <Icon name="material-symbols-light:rotate-right" size="1.3em" />
       <span class="ml-1">Rotate right</span>
     </Button>
-    <Button type="button" size="small" :disabled="!source" @click="openGenerator">
+    <Button type="button" size="small" :disabled="!title" @click="openGenerator">
       <Icon name="material-symbols-light:auto-awesome" size="1.3em" />
       <span class="ml-1">Generate cover…</span>
     </Button>

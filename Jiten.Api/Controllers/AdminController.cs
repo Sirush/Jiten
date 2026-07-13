@@ -1155,6 +1155,9 @@ public partial class AdminController(
                 else
                     backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchGoogleBooksMissingMetadata(deckId));
                 break;
+            case MediaType.WebNovel:
+                backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchSyosetuMissingMetadata(deckId));
+                break;
             default:
                 return NotFound("No fetch job for this media type.");
         }
@@ -1203,6 +1206,10 @@ public partial class AdminController(
                             backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchGoogleBooksMissingMetadata(deck.DeckId));
                     }
 
+                    break;
+                case MediaType.WebNovel:
+                    if (deck.Links.Any(l => l.LinkType == LinkType.Syosetsu))
+                        backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchSyosetuMissingMetadata(deck.DeckId));
                     break;
                 default:
                     break;

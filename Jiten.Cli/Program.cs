@@ -43,6 +43,13 @@ public class Program
         var metadataCommands = new MetadataCommands();
         var benchmarkCommands = new BenchmarkCommands(context);
         var rubyExtractCommands = new RubyExtractCommands(context);
+        var webNovelCommands = new WebNovelCommands();
+
+        if (!string.IsNullOrEmpty(options.WebNovelTest))
+        {
+            await webNovelCommands.Test(options.WebNovelTest, options.ChunkChars);
+            return;
+        }
 
         // Import commands
         if (options.Import)

@@ -15,6 +15,7 @@
   import AutoComplete from 'primevue/autocomplete';
   import PrimeTag from 'primevue/tag';
   import { getMediaTypeText, getChildrenCountText } from '~/utils/mediaTypeMapper';
+  import WebNovelSyncPanel from '~/components/dashboard/WebNovelSyncPanel.vue';
   import { getLinkTypeText } from '~/utils/linkTypeMapper';
   import { getAllGenres } from '~/utils/genreMapper';
   import Checkbox from 'primevue/checkbox';
@@ -923,6 +924,9 @@
           <h2 class="text-xl font-semibold">Edit {{ getMediaTypeText(selectedMediaType!) }}</h2>
         </div>
 
+        <!-- Only renders for decks tracked as webnovels -->
+        <WebNovelSyncPanel :deck-id="Number(mediaId)" />
+
         <!-- File details card -->
         <Card class="mb-6">
           <template #title>Media Details</template>
@@ -1236,6 +1240,10 @@
                 option-label="name"
                 option-value="tagId"
                 placeholder="Select a tag"
+                filter
+                filter-placeholder="Search tag..."
+                auto-filter-focus
+                reset-filter-on-hide
                 class="w-full"
                 :loading="tagsLoading"
               />

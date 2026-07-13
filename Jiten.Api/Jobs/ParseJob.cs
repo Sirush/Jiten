@@ -19,6 +19,15 @@ public class ParseJob(
     [Queue("parse")]
     public async Task Parse(Metadata metadata, MediaType deckType, bool storeRawText = false)
     {
+        await ParseAndGetDeckId(metadata, deckType, storeRawText);
+    }
+
+    /// <summary>
+    /// Same as <see cref="Parse"/>, but hands back the created deck. Callers that need to attach their own
+    /// rows to the new deck tree (webnovel ledger) run it inline instead of enqueuing it.
+    /// </summary>
+    public async Task<int> ParseAndGetDeckId(Metadata metadata, MediaType deckType, bool storeRawText = false)
+    {
         Deck deck = new();
         string filePath = metadata.FilePath!;
 
@@ -127,10 +136,13 @@ public class ParseJob(
             await MetadataProviderHelper.ApplyGenreAndTagMappings(context, deck, metadata, firstLink.LinkType);
         }
 
-        var coverImage = await File.ReadAllBytesAsync(metadata.Image ?? throw new Exception("No cover image found."));
+        // Sources with no cover art (webnovels) fall back to nocover.jpg, set above
+        var coverImage = !string.IsNullOrEmpty(metadata.Image) && File.Exists(metadata.Image)
+            ? await File.ReadAllBytesAsync(metadata.Image)
+            : [];
 
         // Insert the deck into the database
-        await JitenHelper.InsertDeck(contextFactory, deck, coverImage ?? [], false);
+        await JitenHelper.InsertDeck(contextFactory, deck, coverImage, false);
 
         // Process relations from metadata
         if (metadata.Relations.Count > 0)
@@ -154,6 +166,8 @@ public class ParseJob(
 
         // Notify IndexNow of the new (top-level) deck page so Bing can index it quickly.
         await indexNow.SubmitDeckAsync(deck.DeckId);
+
+        return deck.DeckId;
     }
 
     /// <summary>

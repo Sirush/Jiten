@@ -225,6 +225,10 @@ onMounted(() => {
         optionValue="value"
         placeholder="Filter by Genre"
         showClear
+        filter
+        filterPlaceholder="Search genre..."
+        autoFilterFocus
+        resetFilterOnHide
         class="w-full"
       />
       <InputText
@@ -321,6 +325,10 @@ onMounted(() => {
             optionLabel="label"
             optionValue="value"
             placeholder="Select Jiten Genre"
+            filter
+            filterPlaceholder="Search genre..."
+            autoFilterFocus
+            resetFilterOnHide
             class="w-full"
           />
         </div>

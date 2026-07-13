@@ -248,6 +248,10 @@ onMounted(() => {
         optionValue="value"
         placeholder="Filter by Tag"
         showClear
+        filter
+        filterPlaceholder="Search tag..."
+        autoFilterFocus
+        resetFilterOnHide
         class="w-full"
       />
       <InputText
@@ -344,6 +348,10 @@ onMounted(() => {
             optionLabel="label"
             optionValue="value"
             placeholder="Select Jiten Tag"
+            filter
+            filterPlaceholder="Search tag..."
+            autoFilterFocus
+            resetFilterOnHide
             class="w-full"
           />
         </div>
