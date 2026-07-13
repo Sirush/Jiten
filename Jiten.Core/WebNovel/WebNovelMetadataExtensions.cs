@@ -18,7 +18,9 @@ public static class WebNovelMetadataExtensions
             ReleaseDate = info.FirstPublishedAt?.UtcDateTime,
             IsAdultOnly = info.IsAdultOnly,
             Links = [new Link { LinkType = LinkType.Syosetsu, Url = info.Url }],
-            Tags = info.Keywords.Select(k => new MetadataTag { Name = k, Percentage = 100 }).ToList()
+            Tags = info.Keywords.Select(k => new MetadataTag { Name = k, Percentage = 100 }).ToList(),
+
+            Genres = info.Keywords.ToList()
         };
 
         if (!string.IsNullOrEmpty(info.Genre))
