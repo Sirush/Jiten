@@ -40,6 +40,17 @@ public class WebNovelInfo
 }
 
 /// <summary>
+/// Titles chosen by the admin at add time. A source only reports the Japanese title, so romaji and English
+/// are typed in (or auto-romanised) on the add page and carried into the import.
+/// </summary>
+public class WebNovelTitles
+{
+    public string? OriginalTitle { get; set; }
+    public string? RomajiTitle { get; set; }
+    public string? EnglishTitle { get; set; }
+}
+
+/// <summary>
 /// One entry in the table of contents.
 /// </summary>
 public class WebNovelEpisodeRef
