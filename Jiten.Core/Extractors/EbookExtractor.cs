@@ -150,33 +150,7 @@ public class EbookExtractor
         if (body == null)
             return "";
 
-        foreach (var rubyElement in body.QuerySelectorAll("ruby").ToList())
-        {
-            string baseText = "";
-            var rbElements = rubyElement.QuerySelectorAll("rb");
-            if (rbElements.Any())
-            {
-                baseText = string.Concat(rbElements.Select(rb => rb.TextContent));
-            }
-            else
-            {
-                baseText = string.Concat(
-                                         rubyElement.ChildNodes
-                                                    .Where(cn => cn.NodeType == NodeType.Text || (cn is IElement el &&
-                                                               !el.TagName.Equals("RT", StringComparison.OrdinalIgnoreCase) &&
-                                                               !el.TagName.Equals("RP", StringComparison.OrdinalIgnoreCase)))
-                                                    .Select(cn => cn.TextContent)
-                                        );
-            }
-
-            var rtText = string.Concat(rubyElement.QuerySelectorAll("rt").Select(rt => rt.TextContent)).Trim();
-            var trimmedBase = baseText.Trim();
-            var replacement = !string.IsNullOrEmpty(rtText) && trimmedBase.Length > 0
-                ? $"{{{trimmedBase}'{rtText}}}"
-                : trimmedBase;
-
-            rubyElement.Parent?.ReplaceChild(document.CreateTextNode(replacement), rubyElement);
-        }
+        RubyHtmlHelper.InlineRubyAnnotations(body, document);
 
         var textNodes = body.Descendants<IText>()
                             .Where(n => n.ParentElement != null &&

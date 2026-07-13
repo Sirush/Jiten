@@ -57,6 +57,16 @@
       </Card>
 
       <Card class="shadow-md">
+        <template #title>Add Webnovel</template>
+        <template #content>
+          <p class="mb-4">Import a syosetu novel and keep it in sync</p>
+          <div class="flex justify-center">
+            <Button label="Add Webnovel" class="p-button-primary" @click="navigateTo('/dashboard/add-webnovel')" />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
         <template #title>Maintenance Banner</template>
         <template #content>
           <p class="mb-4">Display a site-wide maintenance notice</p>

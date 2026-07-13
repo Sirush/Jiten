@@ -2,11 +2,16 @@ using Hangfire;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.Providers;
+using Jiten.Core.Data.WebNovel;
+using Jiten.Core.WebNovel;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Jobs;
 
-public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, IConfiguration configuration)
+public class FetchMetadataJob(
+    IDbContextFactory<JitenDbContext> contextFactory,
+    IConfiguration configuration,
+    IWebNovelSourceResolver sourceResolver)
 {
     private const float ANILIST_DELAY = 2.2f;
     private const float GOOGLE_BOOKS_DELAY = 3f;
@@ -364,6 +369,64 @@ public class FetchMetadataJob(IDbContextFactory<JitenDbContext> contextFactory, 
         {
             await Task.Delay(TimeSpan.FromSeconds(JIKAN_DELAY));
         }
+    }
+
+    /// <summary>
+    /// Refreshes a tracked webnovel from the source's metadata API
+    /// </summary>
+    [Queue(WebNovelQueues.SyosetuMetadata)]
+    public async Task FetchSyosetuMissingMetadata(int deckId)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        var deck = await context.Decks
+                                .Include(d => d.Links)
+                                .Include(d => d.Titles)
+                                .Include(d => d.DeckGenres)
+                                .Include(d => d.DeckTags)
+                                .FirstAsync(d => d.DeckId == deckId);
+
+        var (provider, sourceId) = await ResolveWebNovelWork(context, deck);
+
+        var info = await sourceResolver.Resolve(provider).GetInfoAsync(sourceId);
+        var metadata = info.ToMetadata();
+
+        if (deck.ReleaseDate == default && metadata.ReleaseDate != null)
+            deck.ReleaseDate = DateOnly.FromDateTime(metadata.ReleaseDate.Value);
+
+        if (string.IsNullOrEmpty(deck.Description))
+            deck.Description = metadata.Description?.Length > 2000 ? metadata.Description?[..2000] : metadata.Description;
+
+        if (deck.Links.All(l => l.LinkType != LinkType.Syosetsu))
+            deck.Links.Add(new Link { DeckId = deck.DeckId, LinkType = LinkType.Syosetsu, Url = info.Url });
+
+        await MetadataProviderHelper.ApplyGenreAndTagMappings(context, deck, metadata, LinkType.Syosetsu);
+
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// The ledger is the authority on which work a deck came from; the link is the fallback for a webnovel
+    /// deck that was added by hand rather than imported.
+    /// </summary>
+    private static async Task<(WebNovelProvider Provider, string SourceId)> ResolveWebNovelWork(JitenDbContext context, Deck deck)
+    {
+        var tracked = await context.WebNovelSources
+                                   .AsNoTracking()
+                                   .FirstOrDefaultAsync(s => s.DeckId == deck.DeckId);
+
+        if (tracked != null)
+            return (tracked.Provider, tracked.SourceId);
+
+        var link = deck.Links.FirstOrDefault(l => l.LinkType == LinkType.Syosetsu);
+
+        if (link == null)
+            throw new Exception($"No Syosetsu link found for deck with ID {deck.DeckId}.");
+
+        if (!WebNovelUrlParser.TryParse(link.Url, out var provider, out var sourceId))
+            throw new Exception($"Syosetsu link '{link.Url}' on deck {deck.DeckId} is not a work URL.");
+
+        return (provider, sourceId);
     }
 
     private static void MergeDictionaryEntries(Deck deck, List<DeckDictionaryEntry> entries)

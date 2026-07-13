@@ -203,6 +203,37 @@ export function extractPalette(img: HTMLImageElement): CoverPalette {
   };
 }
 
+// Palettes for works that ship no art at all (webnovels). Picked for legible white/dark text.
+const FALLBACK_PAIRS: Array<[string, string]> = [
+  ['#1e3a8a', '#0f172a'],
+  ['#4c1d95', '#1e1b4b'],
+  ['#7f1d1d', '#292524'],
+  ['#064e3b', '#0f172a'],
+  ['#831843', '#1e1b4b'],
+  ['#78350f', '#292524'],
+  ['#0c4a6e', '#082f49'],
+  ['#365314', '#1c1917'],
+];
+
+/**
+ * Palette for a work with no source art. Seeded from the title so the same novel always starts from
+ * the same colours; Shuffle still re-rolls it.
+ */
+export function fallbackPalette(seed: string): CoverPalette {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+
+  const [dominant, accent] = FALLBACK_PAIRS[hash % FALLBACK_PAIRS.length];
+
+  return {
+    dominant,
+    accent,
+    isDark: true,
+    textColor: '#ffffff',
+    swatches: FALLBACK_PAIRS.flat(),
+  };
+}
+
 /** Sensible default options seeded from a palette + the title/subtitle. */
 export function defaultCoverOptions(palette: CoverPalette, title: string, subtitle = ''): CoverOptions {
   return {

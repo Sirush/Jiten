@@ -46,7 +46,7 @@ export function getChildrenCountText(mediaType: MediaType): string {
     case MediaType.VisualNovel:
       return 'Routes';
     case MediaType.WebNovel:
-      return 'Chapters';
+      return 'Parts';
     case MediaType.Audio:
       return 'Entries';
     default:
