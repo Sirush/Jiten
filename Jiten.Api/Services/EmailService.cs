@@ -63,6 +63,40 @@ public class EmailService : IEmailSender, IEmailService
                              "<br/>If this wasn't you, please reset your password immediately.");
     }
 
+    public async Task SendSubscriptionConfirmedAsync(string? email, Jiten.Core.Data.Billing.SubscriptionPlan? plan)
+    {
+        if (string.IsNullOrEmpty(email)) return;
+        var planName = plan == Jiten.Core.Data.Billing.SubscriptionPlan.Yearly ? "yearly" : "monthly";
+        await SendEmailAsync(email, "Jiten+ - Subscription confirmed",
+                             $"Your Jiten+ {planName} subscription is active. Thank you for supporting Jiten." +
+                             "<br/>You can manage or cancel your subscription any time from your account settings.");
+    }
+
+    public async Task SendSubscriptionPaymentFailedAsync(string? email)
+    {
+        if (string.IsNullOrEmpty(email)) return;
+        await SendEmailAsync(email, "Jiten+ - Payment failed",
+                             "We couldn't process your latest Jiten+ payment. No action is needed right now — Stripe will " +
+                             "retry automatically over the next few days, and your access continues in the meantime." +
+                             "<br/>If you'd like to update your payment method, you can do so from your account settings.");
+    }
+
+    public async Task SendSubscriptionEndedAsync(string? email)
+    {
+        if (string.IsNullOrEmpty(email)) return;
+        await SendEmailAsync(email, "Jiten+ - Subscription ended",
+                             "Your Jiten+ subscription has ended and your access to Jiten+ features has stopped." +
+                             "<br/>Anything you stored while subscribed is kept safe, and you can resubscribe any time from your account settings.");
+    }
+
+    public async Task SendLifetimeConfirmedAsync(string? email)
+    {
+        if (string.IsNullOrEmpty(email)) return;
+        await SendEmailAsync(email, "Jiten+ - Lifetime access confirmed",
+                             "Your Jiten+ lifetime access is now active. Thank you for supporting Jiten." +
+                             "<br/>Lifetime access is tied to this account and never expires.");
+    }
+
     private readonly IConfiguration _configuration;
 
     public EmailService(IConfiguration configuration)

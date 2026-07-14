@@ -66,6 +66,32 @@ public class RecordingEmailService : IEmailService, IEmailSender
         return Task.CompletedTask;
     }
 
+    // Jiten+ billing
+
+    public Task SendSubscriptionConfirmedAsync(string? email, Jiten.Core.Data.Billing.SubscriptionPlan? plan)
+    {
+        _sent.Enqueue(new SentEmail(nameof(SendSubscriptionConfirmedAsync), email ?? "", null, null, null, plan?.ToString()));
+        return Task.CompletedTask;
+    }
+
+    public Task SendSubscriptionPaymentFailedAsync(string? email)
+    {
+        _sent.Enqueue(new SentEmail(nameof(SendSubscriptionPaymentFailedAsync), email ?? "", null, null, null, null));
+        return Task.CompletedTask;
+    }
+
+    public Task SendSubscriptionEndedAsync(string? email)
+    {
+        _sent.Enqueue(new SentEmail(nameof(SendSubscriptionEndedAsync), email ?? "", null, null, null, null));
+        return Task.CompletedTask;
+    }
+
+    public Task SendLifetimeConfirmedAsync(string? email)
+    {
+        _sent.Enqueue(new SentEmail(nameof(SendLifetimeConfirmedAsync), email ?? "", null, null, null, null));
+        return Task.CompletedTask;
+    }
+
     // IEmailSender (used by AuthController register/forgot-password)
 
     public Task SendEmailAsync(string email, string subject, string htmlMessage)

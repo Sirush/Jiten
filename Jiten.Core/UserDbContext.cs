@@ -1,5 +1,6 @@
 using Jiten.Core.Data;
 using Jiten.Core.Data.Authentication;
+using Jiten.Core.Data.Billing;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.User;
 using Microsoft.AspNetCore.Identity;
@@ -40,6 +41,9 @@ public class UserDbContext : IdentityDbContext<User>
     public DbSet<UserStudyDeckWord> UserStudyDeckWords { get; set; }
     public DbSet<UserExampleSentence> UserExampleSentences { get; set; }
     public DbSet<UserCustomMeaning> UserCustomMeanings { get; set; }
+
+    public DbSet<PromoCode> PromoCodes { get; set; }
+    public DbSet<UserPromoCredit> UserPromoCredits { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -399,6 +403,44 @@ public class UserDbContext : IdentityDbContext<User>
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(uwss => uwss.UserId).HasDatabaseName("IX_UserWordSetState_UserId");
+        });
+
+        modelBuilder.Entity<PromoCode>(entity =>
+        {
+            entity.HasKey(pc => pc.CodeId);
+            entity.Property(pc => pc.Code).IsRequired().HasMaxLength(12);
+            entity.Property(pc => pc.Description).HasMaxLength(500);
+            entity.Property(pc => pc.CurrentUses).HasDefaultValue(0);
+            entity.Property(pc => pc.IsActive).HasDefaultValue(true);
+            entity.Property(pc => pc.GrantsFullTier).HasDefaultValue(false);
+            entity.Property(pc => pc.CreatedAt).IsRequired();
+
+            entity.HasIndex(pc => pc.Code).IsUnique().HasDatabaseName("IX_PromoCode_Code");
+        });
+
+        modelBuilder.Entity<UserPromoCredit>(entity =>
+        {
+            entity.HasKey(upc => upc.UserPromoCreditId);
+            if (isNpgsql)
+                entity.Property(upc => upc.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(upc => upc.RemainingDays).IsRequired();
+            entity.Property(upc => upc.GrantedAt).IsRequired();
+            entity.Property(upc => upc.ThankYouMessage).HasMaxLength(1000);
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(upc => upc.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<PromoCode>()
+                  .WithMany()
+                  .HasForeignKey(upc => upc.PromoCodeId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(upc => upc.UserId).HasDatabaseName("IX_UserPromoCredit_UserId");
+            entity.HasIndex(upc => new { upc.UserId, upc.PromoCodeId })
+                  .IsUnique()
+                  .HasDatabaseName("IX_UserPromoCredit_UserId_PromoCodeId");
         });
 
         base.OnModelCreating(modelBuilder);

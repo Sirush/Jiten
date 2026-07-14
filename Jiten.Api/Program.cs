@@ -369,6 +369,10 @@ builder.Services.AddScoped<Microsoft.AspNetCore.Identity.UI.Services.IEmailSende
 builder.Services.AddScoped<Jiten.Api.Services.IEmailService, Jiten.Api.Services.EmailService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<IJitenPlusService, JitenPlusService>();
+builder.Services.Configure<Jiten.Api.Services.Stripe.StripeOptions>(builder.Configuration.GetSection("Stripe"));
+builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Api.Services.Stripe.StripeGateway>();
+builder.Services.AddScoped<Jiten.Api.Services.Stripe.StripeService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
 builder.Services.AddSingleton<Jiten.Core.Services.DeckVectorService>();
 builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
@@ -557,6 +561,7 @@ builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
 builder.Services.AddScoped<RecomputeVectorsJob>();
+builder.Services.AddScoped<StripeReconcileJob>();
 
 builder.Services.AddHangfire(configuration =>
                                  configuration.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -711,6 +716,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         "webnovel-sync-sweep",
         job => job.Sweep(),
         Cron.Daily(5));
+
+    recurringJobs.AddOrUpdate<StripeReconcileJob>(
+        "stripe-reconcile",
+        job => job.Reconcile(),
+        Cron.Daily(6));
 }
 
 app.UseResponseCompression();

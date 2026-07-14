@@ -52,5 +52,13 @@
   "IndexNow": {
     "Key": "",
     "SiteUrl": "https://jiten.moe"
+  },
+  "Stripe": {
+    "SecretKey": "sk_test_placeholder",
+    "WebhookSecret": "whsec_placeholder",
+    "MonthlyPriceId": "price_monthly_placeholder",
+    "YearlyPriceId": "price_yearly_placeholder",
+    "LifetimePriceId": "price_lifetime_placeholder",
+    "LifetimeWindowEnd": "2026-08-18T00:00:00Z"
   }
 }
