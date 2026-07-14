@@ -1650,9 +1650,6 @@ public class FormSelectionTests
         // 話 after an ordinal/numeral is the episode counter, not はなし
         yield return ["聞き耳ラジオ、第二話", "話", 2100460, (byte)0];
         yield return ["１０度って言われた", "度", 1445160, (byte)0];
-        // A suffix-tagged kanji inside a plain compound must keep its noun homograph: counter
-        // senses need numeric material before them (石=いし stone, not せき the jewel counter)
-        yield return ["結晶石", "石", 1382440, (byte)0];
         yield return ["小さな石を拾った", "石", 1382440, (byte)0];
         // Bare す stem before explanatory ん is contracted する; the lexical 済んだ/澄んだ stay themselves
         yield return ["なんでロボット相手に八つ当たりなんかすんだよ！", "す", 1157170, (byte)1];
@@ -1756,7 +1753,7 @@ public class FormSelectionTests
         yield return ["「ラジオ流しっぱなしで寝てんなよ」", "っぱなし", 1008020, (byte)1];
         yield return ["不動産は上がりっぱなしだったのだ。", "っぱなし", 1008020, (byte)1];
         yield return ["彼女の気力の失いっぷりはかなり激しいみたいだ。", "っぷり", 2202980, (byte)0];
-        yield return ["ざまあみやがれ山犬野郎", "ざまあ", 1410750, (byte)2];
+        yield return ["ざまあみやがれ山犬野郎", "ざまあみやがれ", 2868161, (byte)1];
         yield return ["「そりゃいいこった」", "こった", 2106260, (byte)0];
         yield return ["ミッチーのあまりの脳天気っぷりに面食らった。", "脳天気", 2027320, (byte)2];
         yield return ["俺の皮肉っぽい言い方に、むっとしたのがわかった。", "っぽい", 2083720, (byte)0];

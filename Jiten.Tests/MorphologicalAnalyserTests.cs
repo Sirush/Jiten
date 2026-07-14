@@ -2029,9 +2029,9 @@ public class MorphologicalAnalyserTests
         // token or the reattachment aborts and the whole blob drops (any verb, not just 出る).
         yield return ["見るってなれば", new[] { "見る", "って", "なれば" }];
         yield return ["出るってなれば", new[] { "出る", "って", "なれば" }];
-        // ざまあ's long vowel is stolen by the following 見 (み), read as あみ (編む). Only the theft is
-        // repaired (ざまあ + み); the vulgar auxiliary やがれ stays its own token as after any verb renyoukei.
-        yield return ["ざまあみやがれ", new[] { "ざまあ", "み", "やがれ" }];
+        // Sudachi shreds ざま|あみ(編む)|やがれ; the whole surface is its own expression entry
+        // ("serves you right!"), unreachable via compound matching (only the imperative is attested).
+        yield return ["ざまあみやがれ", new[] { "ざまあみやがれ" }];
         // An OOV X返る intensifier compound (Sudachi norm のさばり返る) has no JMDict entry and dropped
         // whole; split into head verb + 返る, folding the following て into 返って (not a quotative って).
         yield return ["のさばりかえっている", new[] { "のさばり", "かえっている" }];

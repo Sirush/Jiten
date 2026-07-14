@@ -289,15 +289,15 @@ public partial class MorphologicalAnalyser
             [new TokenTemplate("", DictForm: "こった", NormalizedForm: "こった", Pos: PartOfSpeech.Expression, Reading: "コッタ", Pin: 2106260, PinReadingIndex: 0)],
             Prev: new ContextCond(PosAnyOf: [PartOfSpeech.IAdjective])),
 
-        // ざまあみやがれ: the あ of the interjection ざまあ is stolen by the following 見 (み), which
-        // Sudachi then reads as あみ (編む). Repair only the theft — recut ざま+あみ to ざまあ + み (見る) —
-        // and leave やがれ untouched: the vulgar auxiliary やがる is its own token (1012740) after any
-        // verb renyoukei (死に|やがれ, し|やがる), so 見|やがれ falls out of the existing machinery.
-        new RewriteRule("zamaa-mi", RewritePhase.Late,
+        // ざまあみやがれ has its own expression entry ("serves you right!") that the shredded
+        // ざま|あみ|やがれ can never reach: compound matching probes the tail's dictionary form
+        // (ざまあみやがる), and only the imperative surface is attested. Reunite the whole thing.
+        new RewriteRule("zamaa-miyagare", RewritePhase.Late,
             [new TokenPattern(Text: "ざま", RequireUnpinned: false),
-             new TokenPattern(Text: "あみ", RequireUnpinned: false)],
-            [new TokenTemplate("ざまあ", DictForm: "ざま", NormalizedForm: "ざま", Pos: PartOfSpeech.Noun, Reading: "ザマー", Pin: 1410750, PinReadingIndex: 2),
-             new TokenTemplate("み", DictForm: "みる", NormalizedForm: "みる", Pos: PartOfSpeech.Verb, Reading: "ミ", Pin: 1259290, RecoverConjugations: true)]),
+             new TokenPattern(Text: "あみ", RequireUnpinned: false),
+             new TokenPattern(Text: "やがれ", RequireUnpinned: false)],
+            [new TokenTemplate("ざまあみやがれ", DictForm: "ざまあみやがれ", NormalizedForm: "ざまあみやがれ",
+                Pos: PartOfSpeech.Expression, Reading: "ザマーミヤガレ", Pin: 2868161, PinReadingIndex: 1)]),
 
         // Katakana イイ is a stylistic spelling of the adjective いい — never the イラン・イラク
         // abbreviation, which otherwise wins on exact surface match.
