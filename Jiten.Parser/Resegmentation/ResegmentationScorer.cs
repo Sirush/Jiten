@@ -16,6 +16,8 @@ internal static class ResegmentationScorer
     internal static bool IsKatakanaParticleChar(char c) =>
         c is 'ガ' or 'ヲ' or 'ニ' or 'ハ' or 'ヘ' or 'デ' or 'ト' or 'モ' or 'カ' or 'ノ';
 
+    private static bool IsKatakanaRunChar(char c) => JapaneseTextHelper.IsKatakanaWordChar(c);
+
     public static List<SpanTokenCandidate> BuildEdges(
         string spanText,
         int startPos,
@@ -128,8 +130,17 @@ internal static class ResegmentationScorer
             if (filterKatakanaFragments)
                 edges.RemoveAll(e => e.Length <= 2 && e.Length < spanText.Length
                                      && !(e.Length == 1 && IsKatakanaParticleChar(spanText[e.StartChar]))
+                                     && !(e.Length == 1 && pos == 0 && spanText[0] == 'ド')
                                      && !IsPlausibleSegment(e, wordMeta!, pos == 0,
                                          pos + e.Length == spanText.Length));
+            // In a mixed span, a cut between two katakana characters is never a real word
+            // boundary: ポンコツ車 splits ポンコツ|車, not ポン|コツ|車; クオンツが splits
+            // クオンツ|が. Pure-katakana spans keep the plausibility filter above instead
+            // (テラバイト|ディスク is a legitimate intra-katakana split).
+            if (!JapaneseTextHelper.IsAllKatakana(spanText))
+                edges.RemoveAll(e => pos + e.Length < spanText.Length
+                                     && IsKatakanaRunChar(spanText[pos + e.Length - 1])
+                                     && IsKatakanaRunChar(spanText[pos + e.Length]));
             if (debug)
                 Console.WriteLine($"[reseg] '{spanText}' pos={pos} states={states.Count} edges: " +
                                   string.Join(", ", edges.Select(e => $"{spanText.Substring(e.StartChar, e.Length)}({e.WordIds.Count})")));
@@ -213,6 +224,20 @@ internal static class ResegmentationScorer
             validStates = completeStates.Where(s => s.segCount <= maxSegments).ToList();
         if (validStates.Count == 0)
             validStates = completeStates;
+
+        // A long pure-katakana span shredding into three-plus short fragments (コーポ|レイ|テッド) is
+        // an OOV loanword, not a compound of real words — no path is better than a junk path. Two-piece
+        // splits stay (a two-name sequence, or a real katakana compound テラバイト|ディスク), as do
+        // katakana-styled sentences carrying particle segments.
+        if (filterKatakanaFragments && spanText.Length >= 5)
+        {
+            validStates.RemoveAll(s => s.segs.Count >= 3
+                                       && s.segs.All(seg => seg.Length < 4)
+                                       && !s.segs.Any(seg => seg.Length == 1
+                                           && IsKatakanaParticleChar(spanText[seg.StartChar])));
+            if (validStates.Count == 0)
+                return null;
+        }
 
         if (frequencyRanks != null)
         {

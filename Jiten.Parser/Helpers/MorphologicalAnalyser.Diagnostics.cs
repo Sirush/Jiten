@@ -30,12 +30,13 @@ public partial class MorphologicalAnalyser
         return tokens;
     }
 
-    private static List<WordInfo> TrackStage(TokenStage stage, List<WordInfo> input, ParserDiagnostics? diagnostics)
+    private static List<WordInfo> TrackStage(TokenStage stage, List<WordInfo> input, ParserDiagnostics? diagnostics,
+                                             TokenFeatureScan? scan = null)
     {
         var inputSnapshot = diagnostics != null ? input.Select(TokenSnapshot.From).ToList() : null;
         var sw = diagnostics != null ? Stopwatch.StartNew() : null;
 
-        var result = stage.Apply(input);
+        var result = stage.Apply(input, scan);
 
         if (diagnostics == null)
             return result;

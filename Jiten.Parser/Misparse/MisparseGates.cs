@@ -37,7 +37,9 @@ internal static class MisparseGates
     /// digits, or a long mixed-kana surface — are excluded before the caller assembles flags,
     /// neighbour frames and blob context. The character test accepts a superset of the kana the
     /// gates accept (full/half-width kana blocks plus stretch marks), so it can only skip tokens
-    /// no gate would touch.
+    /// no gate would touch. The ≤4 cap excludes 6-character reduplications such as ギュウギュウ;
+    /// those overlap attested on-mim adverbs such as ごちゃごちゃとして and require separate
+    /// mimetic preference handling.
     public static bool MayBeKanaFragment(string s)
     {
         if (s.Length == 0) return false;
@@ -95,7 +97,14 @@ internal static class MisparseGates
             ? ctx.SelectedWord.OriginalText
             : ctx.Token.Text;
 
-        if (surface.Length == 0 || surface.Length > 4 || !WanaKana.IsKana(surface)) return false;
+        // Pure reduplication (コクコク) is mimetic orthography — it extends the local length
+        // window and counts as a positive marker below. Six-character reduplications
+        // (ギュウギュウ) only arrive when a shorter resolved token carries the longer
+        // OriginalText — MayBeKanaFragment's ≤4 cap excludes them as whole tokens upstream.
+        bool reduplicated = surface.Length is 4 or 6
+                            && surface[..(surface.Length / 2)] == surface[(surface.Length / 2)..];
+        if (surface.Length == 0 || (surface.Length > 4 && !reduplicated) || surface.Length > 6
+            || !WanaKana.IsKana(surface)) return false;
 
         // A neighbour already discarded as a misparse shred is part of the same burst; so is an
         // unresolved kana scrap. Both make the current token frame-transparent on that side.
@@ -117,17 +126,24 @@ internal static class MisparseGates
         // unsegmentable blob. A case particle or content word on either side means real syntax,
         // which the gate must not touch. When a sokuon is clipped straight onto the token (ず|がんっ),
         // a short kana neighbour is part of the same burst even if it happened to resolve.
+        // A reduplicated surface heading the mimetic-adverb frame 〜と+verb (コクコクと振る) is
+        // phonetic wherever it sits — the construction itself is the isolation.
+        bool reduplicatedToFrame = reduplicated
+                                   && ctx.Next is { Text: "と", PartOfSpeech: PartOfSpeech.Particle };
+
         bool frameBefore = ctx.Prev == null || ctx.SymbolsBefore.Length > 0 || ctx.IsSentenceInitial
                            || ctx.Prev.PartOfSpeech == PartOfSpeech.Interjection
                            || (ctx.Prev.PartOfSpeech == PartOfSpeech.Particle
                                && ctx.Prev.Text is "な" or "よ" or "ね" or "ぞ" or "ぜ" or "わ" or "さ")
                            || (exclamatoryClip && ctx.Prev.Text.Length <= 2 && WanaKana.IsKana(ctx.Prev.Text))
-                           || prevShard;
+                           || prevShard
+                           || reduplicatedToFrame;
         if (!frameBefore) return false;
 
         bool nextIsQuotativeTo = ctx.Next is { Text: "と", PartOfSpeech: PartOfSpeech.Particle }
                                  && ctx.SymbolsAfter.Length > 0;
-        bool frameAfter = ctx.Next == null || ctx.SymbolsAfter.Length > 0 || nextShard;
+        bool frameAfter = ctx.Next == null || ctx.SymbolsAfter.Length > 0 || nextShard
+                          || reduplicatedToFrame;
         if (!frameAfter) return false;
 
         // Require a positive mimetic signal; isolation alone describes any one-word answer (「梨」).
@@ -138,6 +154,7 @@ internal static class MisparseGates
                       || ctx.SymbolsAfter.IndexOfAny(GapMimeticChars) >= 0
                       || nextIsQuotativeTo
                       || prevShard || nextShard
+                      || reduplicated
                       // An in-surface sokuon is ordinary orthography when the entry spells the
                       // surface — literally (おっさん) or through the expressive-deformation check
                       // in GetWordFlags (バカッ/ほんっと) — but phonetic evidence when it does not
@@ -174,9 +191,15 @@ internal static class MisparseGates
         // うぜえ、と, ごくり、と, ハルさんっ): attested as written, usually-kana, or reached
         // through conjugation. A non-noun invented by text mutation (うぅ→うん) stays in scope
         // as noise.
+        // An entry with an adverbial sense used in the adverbial と frame is that sense, whatever
+        // POS happens to be listed first (ぽつぽつ [n, adv, adv-to] + と + 灯す) — first-POS alone
+        // must not pull an attested mimetic back into the plain-noun scope.
+        bool adverbialInToFrame = ctx.Next is { Text: "と", PartOfSpeech: PartOfSpeech.Particle }
+            && ctx.SelectedWord.PartsOfSpeech.Any(p => p is PartOfSpeech.Adverb or PartOfSpeech.AdverbTo);
         if ((ctx.SelectedWord.PartsOfSpeech.Count == 0
              || ctx.SelectedWord.PartsOfSpeech[0] is not (PartOfSpeech.Noun
-                 or PartOfSpeech.CommonNoun or PartOfSpeech.Numeral or PartOfSpeech.NaAdjective))
+                 or PartOfSpeech.CommonNoun or PartOfSpeech.Numeral or PartOfSpeech.NaAdjective)
+             || adverbialInToFrame)
             && (ctx.SurfaceAttestsListedForm || ctx.IsUsuallyKana
                 || (ctx.SelectedWord.Conjugations.Count > 0
                     && ctx.SelectedWord.Conjugations[0] is not ("(stem)" or "(infinitive)"
@@ -366,6 +389,23 @@ internal static class MisparseGates
         bool surfaceAttestsForm = surface != null && word.Forms.Any(f => f.Text == surface);
 
         bool surfaceAttestsLiterally = surfaceAttestsForm;
+
+        // Mimetic adverbs and interjections are written in either kana script interchangeably and
+        // JMdict lists most of them hiragana-only — a katakana spelling (スタスタと) is ordinary
+        // orthography for the same word, not a deformation. Restricted to the adverbial/
+        // interjection class so a katakana SFX cannot claim an unrelated hiragana word's identity
+        // through the script fold.
+        if (!surfaceAttestsForm && surface is { Length: > 0 }
+            && word.PartsOfSpeech.Any(p => p is "adv" or "adv-to" or "int" or "on-mim")
+            && JapaneseTextHelper.IsAllKatakana(surface))
+        {
+            var folded = WanaKana.ToHiragana(surface);
+            if (folded != surface && word.Forms.Any(f => f.Text == folded))
+            {
+                surfaceAttestsForm = true;
+                surfaceAttestsLiterally = true;
+            }
+        }
 
         // Expressive spelling deforms a word without changing it: emphatic gemination writes a
         // sokuon in (ほんっと, バカッ, マジッす), a chōonpu stretches a mora (おーっと), and a

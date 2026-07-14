@@ -350,6 +350,10 @@ public static class PosMapper
 
         // Sudachi 接尾辞 (Suffix) should match JMDict n-suf (NounSuffix) and suf (Suffix).
         // E.g. だらけ is n-suf in JMDict but 接尾辞 in Sudachi; 達 (たち) is suf in JMDict.
+        // Counter (ctr) entries are deliberately NOT compatible here: counter eligibility is
+        // contextual (needs a preceding numeral), which this context-free check cannot see —
+        // a suffix-tagged kanji inside a plain compound (結晶|石) must not prefer a counter
+        // homograph. Numeral contexts select counters in adjacent rescoring instead.
         if (sudachiPos == PartOfSpeech.Suffix &&
             (convertedPosList.Contains(PartOfSpeech.NounSuffix) || convertedPosList.Contains(PartOfSpeech.Suffix)))
             return true;

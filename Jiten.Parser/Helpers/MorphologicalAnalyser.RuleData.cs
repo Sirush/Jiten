@@ -111,6 +111,7 @@ public partial class MorphologicalAnalyser
         ("すぐ", "に", PartOfSpeech.Adverb),
         ("たしか", "に", PartOfSpeech.Adverb),
         ("確か", "に", PartOfSpeech.Adverb), // 確かに 1205770 — kanji variant of the たしか row above
+        ("直", "に", PartOfSpeech.Adverb), // 直に 1430690 (じかに, "directly/in person") — the bare 直 otherwise reads ちょく
         ("ゆえ", "に", PartOfSpeech.Conjunction), // 故に 1267130 ("therefore") — literary connective Sudachi splits
         ("故", "に", PartOfSpeech.Conjunction), // kanji variant of the ゆえ row above
         ("とう", "に", PartOfSpeech.Adverb), // 疾うに 1633370 ("long ago") — the bare とう otherwise strands on 塔

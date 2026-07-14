@@ -953,6 +953,14 @@
   {
     "type": "onlyfinalrule",
     "dec_end": [""],
+    "con_end": ["ませぬ"],
+    "dec_tag": ["stem-ren"],
+    "con_tag": ["uninflectable"],
+    "detail": "negative polite (classical ぬ)"
+  },
+  {
+    "type": "onlyfinalrule",
+    "dec_end": [""],
     "con_end": ["ました"],
     "dec_tag": ["stem-ren"],
     "con_tag": ["uninflectable"],
@@ -1542,11 +1550,19 @@
   },
   {
     "type": "stdrule",
-    "dec_end": ["ていれば", "でいれば"],
-    "con_end": ["てりゃ", "でりゃ"],
+    "dec_end": ["ていれば", "でいれば", "ていれば", "でいれば"],
+    "con_end": ["てりゃ", "でりゃ", "てりゃあ", "でりゃあ"],
     "dec_tag": ["uninflectable"],
     "con_tag": ["uninflectable"],
     "detail": "contracted conditional (te-ireba)"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": ["れば", "れば"],
+    "con_end": ["りゃ", "りゃあ"],
+    "dec_tag": ["uninflectable"],
+    "con_tag": ["uninflectable"],
+    "detail": "contracted conditional (-reba)"
   },
   {
     "type": "stdrule",
@@ -1635,6 +1651,14 @@
     "dec_tag": ["adj-i"],
     "con_tag": ["adj-i"],
     "detail": "slang negative"
+  },
+  {
+    "type": "stdrule",
+    "dec_end": ["しれない"],
+    "con_end": ["しんない"],
+    "dec_tag": ["adj-i"],
+    "con_tag": ["adj-i"],
+    "detail": "slang negative (shirenai)"
   },
   {
     "type": "stdrule",
