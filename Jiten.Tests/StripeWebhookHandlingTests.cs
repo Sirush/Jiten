@@ -127,7 +127,7 @@ public class StripeWebhookHandlingTests : IDisposable
     }
 
     [Fact]
-    public async Task LifetimeCheckout_WithActiveSubscription_CancelsAtPeriodEnd()
+    public async Task LifetimeCheckout_WithActiveSubscription_CancelsImmediately()
     {
         var user = _context.Users.First(u => u.Id == UserId);
         user.StripeSubscriptionActive = true;
@@ -136,16 +136,22 @@ public class StripeWebhookHandlingTests : IDisposable
 
         await _service.HandleWebhookAsync(CheckoutLifetime());
 
-        _gateway.CanceledSubscriptions.Should().ContainSingle().Which.Should().Be("sub_1");
+        _gateway.ImmediatelyCanceledSubscriptions.Should().ContainSingle().Which.Should().Be("sub_1");
     }
 
     [Fact]
-    public async Task LifetimeCheckout_ReplayWithNewEventId_IsIdempotent()
+    public async Task LifetimeCheckout_ReplayWithNewEventId_IsIdempotent_NoSecondCancel()
     {
+        var user = _context.Users.First(u => u.Id == UserId);
+        user.StripeSubscriptionActive = true;
+        user.StripeSubscriptionId = "sub_1";
+        await _context.SaveChangesAsync();
+
         await _service.HandleWebhookAsync(CheckoutLifetime("evt_l1"));
         await _service.HandleWebhookAsync(CheckoutLifetime("evt_l2"));
 
         EmailCount(nameof(IEmailService.SendLifetimeConfirmedAsync)).Should().Be(1);
+        _gateway.ImmediatelyCanceledSubscriptions.Should().ContainSingle(); // only the first call cancels
     }
 
     // ---- customer.subscription.updated --------------------------------------------------------

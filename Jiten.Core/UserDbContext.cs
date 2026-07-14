@@ -425,6 +425,8 @@ public class UserDbContext : IdentityDbContext<User>
                 entity.Property(upc => upc.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
             entity.Property(upc => upc.RemainingDays).IsRequired();
             entity.Property(upc => upc.GrantedAt).IsRequired();
+            entity.Property(upc => upc.Source).HasDefaultValue(PromoCreditSource.Redemption);
+            entity.Property(upc => upc.GrantsFullTier).HasDefaultValue(false);
             entity.Property(upc => upc.ThankYouMessage).HasMaxLength(1000);
 
             entity.HasOne<User>()
@@ -432,6 +434,7 @@ public class UserDbContext : IdentityDbContext<User>
                   .HasForeignKey(upc => upc.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
 
+            // PromoCodeId is null for admin grants; the FK is optional and non-cascading.
             entity.HasOne<PromoCode>()
                   .WithMany()
                   .HasForeignKey(upc => upc.PromoCodeId)

@@ -127,6 +127,16 @@
           </div>
         </template>
       </Card>
+
+      <Card class="shadow-md">
+        <template #title>Jiten+</template>
+        <template #content>
+          <p class="mb-4">Grant Jiten+ rewards and manage promo codes</p>
+          <div class="flex justify-center">
+            <Button label="Manage Jiten+" icon="pi pi-gift" class="p-button-primary" @click="navigateTo('/dashboard/jiten-plus')" />
+          </div>
+        </template>
+      </Card>
     </div>
   </div>
 </template>

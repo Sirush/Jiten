@@ -35,7 +35,11 @@ public record StripeSubscriptionSnapshot(
     string? PriceId,
     DateTime? CurrentPeriodEnd,
     bool CancelAtPeriodEnd,
-    DateTime? EndedAt = null);
+    DateTime? EndedAt = null,
+    DateTime? CurrentPeriodStart = null);
+
+/// <summary>A paid invoice reduced to the money that actually moved: amount paid minus post-payment refunds.</summary>
+public record StripeInvoiceRecord(string Id, long AmountPaidCents, long RefundedCents, DateTime Created);
 
 /// <summary>A normalised, verified webhook event. The only Stripe SDK types are behind the gateway.</summary>
 public record StripeWebhookEvent(
@@ -68,9 +72,13 @@ public interface IStripeGateway
     /// <summary>Creates a one-off <c>amount_off</c> coupon (duration: once) and returns its id.</summary>
     Task<string> CreateAmountOffCouponAsync(long amountOffCents, string currency, string name, CancellationToken ct = default);
 
-    Task CancelSubscriptionAtPeriodEndAsync(string subscriptionId, CancellationToken ct = default);
+    /// <summary>Cancels a subscription immediately (no proration, no invoice). Tolerant of an already-canceled sub.</summary>
+    Task CancelSubscriptionImmediatelyAsync(string subscriptionId, CancellationToken ct = default);
 
     Task<StripeSubscriptionSnapshot?> GetSubscriptionAsync(string subscriptionId, CancellationToken ct = default);
+
+    /// <summary>The subscription's paid invoices, for computing credit from money actually collected.</summary>
+    Task<IReadOnlyList<StripeInvoiceRecord>> ListSubscriptionInvoicesAsync(string subscriptionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<StripeSubscriptionSnapshot>> ListSubscriptionsAsync(string customerId, CancellationToken ct = default);
 

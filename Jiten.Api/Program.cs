@@ -562,6 +562,7 @@ builder.Services.AddScoped<SrsRecomputeJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
 builder.Services.AddScoped<RecomputeVectorsJob>();
 builder.Services.AddScoped<StripeReconcileJob>();
+builder.Services.AddScoped<DecrementPromoCreditsJob>();
 
 builder.Services.AddHangfire(configuration =>
                                  configuration.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -721,6 +722,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         "stripe-reconcile",
         job => job.Reconcile(),
         Cron.Daily(6));
+
+    recurringJobs.AddOrUpdate<DecrementPromoCreditsJob>(
+        "promo-credits-decrement",
+        job => job.Run(),
+        Cron.Daily(1));
 }
 
 app.UseResponseCompression();

@@ -2,6 +2,7 @@
   import SettingsCoverage from '~/components/SettingsCoverage.vue';
   import SettingsApiKey from '~/components/SettingsApiKey.vue';
   import SettingsWordSets from '~/components/SettingsWordSets.vue';
+  import SettingsJitenPlus from '~/components/SettingsJitenPlus.vue';
   import { useSrsStore } from '~/stores/srsStore';
 
   definePageMeta({
@@ -45,6 +46,8 @@
         </NuxtLink>
       </template>
     </Card>
+
+    <SettingsJitenPlus class="mb-4" />
 
     <SettingsCoverage class="mb-4" />
 

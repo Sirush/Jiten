@@ -96,10 +96,20 @@ public class StripeGateway : IStripeGateway
         return coupon.Id;
     }
 
-    public async Task CancelSubscriptionAtPeriodEndAsync(string subscriptionId, CancellationToken ct = default)
+    public async Task CancelSubscriptionImmediatelyAsync(string subscriptionId, CancellationToken ct = default)
     {
         var service = new SubscriptionService(_client);
-        await service.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions { CancelAtPeriodEnd = true }, cancellationToken: ct);
+        try
+        {
+            await service.CancelAsync(subscriptionId,
+                                      new SubscriptionCancelOptions { Prorate = false, InvoiceNow = false },
+                                      cancellationToken: ct);
+        }
+        catch (StripeException ex) when (ex.StripeError?.Code is "resource_missing"
+                                         || ex.Message.Contains("canceled", StringComparison.OrdinalIgnoreCase))
+        {
+            // Already canceled or gone — nothing left to charge, so treat as success (idempotent).
+        }
     }
 
     public async Task<StripeSubscriptionSnapshot?> GetSubscriptionAsync(string subscriptionId, CancellationToken ct = default)
@@ -107,6 +117,17 @@ public class StripeGateway : IStripeGateway
         var service = new SubscriptionService(_client);
         var sub = await service.GetAsync(subscriptionId, cancellationToken: ct);
         return StripeEventNormalizer.SnapshotFrom(sub);
+    }
+
+    public async Task<IReadOnlyList<StripeInvoiceRecord>> ListSubscriptionInvoicesAsync(string subscriptionId, CancellationToken ct = default)
+    {
+        var service = new InvoiceService(_client);
+        var list = await service.ListAsync(
+            new InvoiceListOptions { Subscription = subscriptionId, Status = "paid", Limit = 100 }, cancellationToken: ct);
+        // Net paid per invoice = amount paid minus post-payment credit notes (the refunds issued after payment).
+        return list.Data
+                   .Select(i => new StripeInvoiceRecord(i.Id, i.AmountPaid, i.PostPaymentCreditNotesAmount, i.Created))
+                   .ToList();
     }
 
     public async Task<IReadOnlyList<StripeSubscriptionSnapshot>> ListSubscriptionsAsync(string customerId, CancellationToken ct = default)

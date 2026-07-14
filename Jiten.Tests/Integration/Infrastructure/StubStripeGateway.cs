@@ -20,19 +20,21 @@ public class StubStripeGateway : IStripeGateway
     public string? CustomerUserId { get; set; }
 
     public Dictionary<string, StripeSubscriptionSnapshot> Subscriptions { get; } = new();
+    public Dictionary<string, IReadOnlyList<StripeInvoiceRecord>> Invoices { get; } = new();
     public Func<string, IReadOnlyList<StripeSubscriptionSnapshot>>? ListSubscriptionsFor { get; set; }
 
     public List<StripeCheckoutRequest> CheckoutRequests { get; } = new();
-    public List<string> CanceledSubscriptions { get; } = new();
+    public List<string> ImmediatelyCanceledSubscriptions { get; } = new();
     public List<(long AmountCents, string Currency, string Name)> Coupons { get; } = new();
     public List<(string Email, string UserId)> CreatedCustomers { get; } = new();
 
     public void Reset()
     {
         Subscriptions.Clear();
+        Invoices.Clear();
         ListSubscriptionsFor = null;
         CheckoutRequests.Clear();
-        CanceledSubscriptions.Clear();
+        ImmediatelyCanceledSubscriptions.Clear();
         Coupons.Clear();
         CreatedCustomers.Clear();
         CustomerUserId = null;
@@ -62,14 +64,17 @@ public class StubStripeGateway : IStripeGateway
         return Task.FromResult(NextCouponId);
     }
 
-    public Task CancelSubscriptionAtPeriodEndAsync(string subscriptionId, CancellationToken ct = default)
+    public Task CancelSubscriptionImmediatelyAsync(string subscriptionId, CancellationToken ct = default)
     {
-        CanceledSubscriptions.Add(subscriptionId);
+        ImmediatelyCanceledSubscriptions.Add(subscriptionId);
         return Task.CompletedTask;
     }
 
     public Task<StripeSubscriptionSnapshot?> GetSubscriptionAsync(string subscriptionId, CancellationToken ct = default) =>
         Task.FromResult(Subscriptions.GetValueOrDefault(subscriptionId));
+
+    public Task<IReadOnlyList<StripeInvoiceRecord>> ListSubscriptionInvoicesAsync(string subscriptionId, CancellationToken ct = default) =>
+        Task.FromResult(Invoices.GetValueOrDefault(subscriptionId, []));
 
     public Task<IReadOnlyList<StripeSubscriptionSnapshot>> ListSubscriptionsAsync(string customerId, CancellationToken ct = default) =>
         Task.FromResult(ListSubscriptionsFor?.Invoke(customerId) ?? []);

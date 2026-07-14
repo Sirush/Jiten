@@ -6,7 +6,15 @@ public class UserPromoCredit
 
     public string UserId { get; set; } = default!;
 
-    public int PromoCodeId { get; set; }
+    /// <summary>The redeemed code, or null for a direct admin grant.</summary>
+    public int? PromoCodeId { get; set; }
+
+    /// <summary>How this credit was created (code redemption vs admin grant).</summary>
+    public PromoCreditSource Source { get; set; } = PromoCreditSource.Redemption;
+
+    /// <summary>Whether this credit grants Full tier. Copied from the code at redemption, or set directly on an
+    /// admin grant, so tier resolution and the decrement job never need a PromoCode join.</summary>
+    public bool GrantsFullTier { get; set; }
 
     /// <summary>Decremented daily while the user has no active paid subscription.</summary>
     public int RemainingDays { get; set; }

@@ -17,4 +17,9 @@ public interface IEmailService
     Task SendSubscriptionPaymentFailedAsync(string? email);
     Task SendSubscriptionEndedAsync(string? email);
     Task SendLifetimeConfirmedAsync(string? email);
+
+    // Jiten+ promo codes & grants
+    Task SendPromoRedeemedAsync(string? email, int days, bool grantsFullTier);
+    Task SendPromoAccessEndsTomorrowAsync(string? email);
+    Task SendJitenPlusGrantAsync(string? email, bool isLifetime, int? days, string? thankYouMessage);
 }

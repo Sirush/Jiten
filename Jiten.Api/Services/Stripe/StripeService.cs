@@ -33,11 +33,8 @@ public class StripeService(
     private const string SiteUrl = "https://jiten.moe";
     private const string Currency = "eur";
 
-    // Sticker prices in whole cents (tax-inclusive), used only for the upgrade-credit proration.
-    private const long MonthlyPriceCents = 500;
-    private const long YearlyPriceCents = 5000;
-    private const int MonthlyLengthDays = 30;
-    private const int YearlyLengthDays = 365;
+    // Lifetime sticker price in whole cents (tax-inclusive) — the ceiling on any upgrade credit.
+    private const long LifetimePriceCents = 15000;
 
     private readonly StripeOptions _options = options.Value;
 
@@ -50,6 +47,11 @@ public class StripeService(
         var user = await userContext.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
         if (user is null)
             return new CheckoutOutcome(false, null, "User not found.");
+
+        // Lifetime users have nothing left to buy: another lifetime payment would no-op on the webhook
+        // idempotency guard (money for nothing) and a subscription would bill on top of permanent access.
+        if (user.IsLifetime)
+            return new CheckoutOutcome(false, null, "You already have lifetime access — nothing to buy.");
 
         if (string.IsNullOrEmpty(user.StripeCustomerId))
         {
@@ -66,9 +68,9 @@ public class StripeService(
         };
 
         string? couponId = null;
-        if (plan == CheckoutPlan.Lifetime && user.StripeSubscriptionActive && user.SubscriptionPlan.HasValue)
+        if (plan == CheckoutPlan.Lifetime && user.StripeSubscriptionActive && !string.IsNullOrEmpty(user.StripeSubscriptionId))
         {
-            var creditCents = ComputeUpgradeCreditCents(user.SubscriptionPlan.Value, user.SubscriptionPeriodEnd, now);
+            var creditCents = await ComputeUpgradeCreditForSubscriptionAsync(user.StripeSubscriptionId!, now, ct);
             if (creditCents > 0)
                 couponId = await gateway.CreateAmountOffCouponAsync(
                     creditCents, Currency, $"Jiten+ upgrade credit ({creditCents / 100.0:0.00} EUR)", ct);
@@ -96,22 +98,56 @@ public class StripeService(
     }
 
     /// <summary>
-    /// Unused subscription value as whole cents: plan price pro-rated by remaining days over the plan length.
-    /// A period end in the past yields 0. Clamped to the plan price.
+    /// Fetches the live subscription + its paid invoices and returns the upgrade credit in whole cents.
+    /// Returns 0 if the subscription or its billing period can't be resolved.
     /// </summary>
-    public static long ComputeUpgradeCreditCents(SubscriptionPlan plan, DateTime? periodEnd, DateTime now)
+    private async Task<long> ComputeUpgradeCreditForSubscriptionAsync(string subscriptionId, DateTime now, CancellationToken ct)
     {
-        if (periodEnd is null || periodEnd.Value <= now)
+        var sub = await gateway.GetSubscriptionAsync(subscriptionId, ct);
+        if (sub?.CurrentPeriodStart is null || sub.CurrentPeriodEnd is null)
             return 0;
 
-        var (priceCents, lengthDays) = plan == SubscriptionPlan.Monthly
-            ? (MonthlyPriceCents, MonthlyLengthDays)
-            : (YearlyPriceCents, YearlyLengthDays);
+        var invoices = await gateway.ListSubscriptionInvoicesAsync(subscriptionId, ct);
+        return ComputeUpgradeCreditCents(invoices, sub.CurrentPeriodStart.Value, sub.CurrentPeriodEnd.Value, now, LifetimePriceCents);
+    }
 
-        var remainingDays = (periodEnd.Value - now).TotalDays;
-        var raw = priceCents * (remainingDays / lengthDays);
-        var rounded = (long)Math.Round(raw, MidpointRounding.AwayFromZero);
-        return Math.Clamp(rounded, 0, priceCents);
+    /// <summary>
+    /// Upgrade credit as whole cents, computed from money actually collected — never from plan config, which
+    /// can badly overstate what a mid-cycle plan-switcher really paid (proration invoices, promo discounts).
+    /// credit = remaining fraction of the current billing period × net paid for that period, then hard-capped
+    /// at the subscription's total net payments (all periods) and at the lifetime price. Net paid excludes
+    /// post-payment refunds. Never negative; rounded to whole cents. Nothing paid → 0.
+    /// </summary>
+    public static long ComputeUpgradeCreditCents(
+        IReadOnlyList<StripeInvoiceRecord> invoices,
+        DateTime currentPeriodStart,
+        DateTime currentPeriodEnd,
+        DateTime now,
+        long lifetimePriceCents)
+    {
+        if (currentPeriodEnd <= currentPeriodStart || now >= currentPeriodEnd)
+            return 0;
+
+        long NetPaid(StripeInvoiceRecord i) => Math.Max(0, i.AmountPaidCents - i.RefundedCents);
+
+        var totalNetPaid = invoices.Sum(NetPaid);
+        if (totalNetPaid <= 0)
+            return 0;
+
+        // Only payments for the current period contribute their unused fraction; older payments only raise the cap.
+        var currentPeriodNetPaid = invoices
+            .Where(i => i.Created >= currentPeriodStart && i.Created < currentPeriodEnd)
+            .Sum(NetPaid);
+        if (currentPeriodNetPaid <= 0)
+            return 0;
+
+        var remainingFraction = (currentPeriodEnd - now).TotalSeconds / (currentPeriodEnd - currentPeriodStart).TotalSeconds;
+        remainingFraction = Math.Clamp(remainingFraction, 0, 1);
+
+        var credit = (long)Math.Round(currentPeriodNetPaid * remainingFraction, MidpointRounding.AwayFromZero);
+
+        var cap = Math.Min(totalNetPaid, lifetimePriceCents);
+        return Math.Clamp(credit, 0, cap);
     }
 
     // ---- Webhook handling ----------------------------------------------------------------------
@@ -188,8 +224,10 @@ public class StripeService(
         var subToCancel = user.StripeSubscriptionActive ? user.StripeSubscriptionId : null;
         await userContext.SaveChangesAsync(ct);
 
+        // Cancel immediately, not at period end: the upgrade credit already compensated the unused time, and a
+        // still-running subscription (which may keep its original billing anchor) could otherwise be invoiced again.
         if (!string.IsNullOrEmpty(subToCancel))
-            await gateway.CancelSubscriptionAtPeriodEndAsync(subToCancel, ct);
+            await gateway.CancelSubscriptionImmediatelyAsync(subToCancel, ct);
 
         await SafeSend(() => emails.SendLifetimeConfirmedAsync(user.Email));
     }

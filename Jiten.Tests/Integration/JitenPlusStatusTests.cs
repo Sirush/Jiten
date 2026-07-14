@@ -76,6 +76,7 @@ public class JitenPlusStatusTests(JitenWebApplicationFactory factory)
         {
             UserId = userId,
             PromoCodeId = code.CodeId,
+            GrantsFullTier = grantsFull,
             RemainingDays = remainingDays,
             GrantedAt = DateTime.UtcNow,
             ThankYouMessage = thankYou

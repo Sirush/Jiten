@@ -69,7 +69,8 @@ public static class StripeEventNormalizer
             item?.Price?.Id,
             NormalizePeriodEnd(item?.CurrentPeriodEnd),
             sub.CancelAtPeriodEnd,
-            NormalizePeriodEnd(sub.EndedAt));
+            NormalizePeriodEnd(sub.EndedAt),
+            NormalizePeriodEnd(item?.CurrentPeriodStart));
     }
 
     private static string? MetadataUserId(IDictionary<string, string>? metadata) =>

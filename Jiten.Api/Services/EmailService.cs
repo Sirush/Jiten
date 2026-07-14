@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 using System.Text.Encodings.Web;
 using MailKit.Net.Smtp;
@@ -95,6 +96,98 @@ public class EmailService : IEmailSender, IEmailService
         await SendEmailAsync(email, "Jiten+ - Lifetime access confirmed",
                              "Your Jiten+ lifetime access is now active. Thank you for supporting Jiten." +
                              "<br/>Lifetime access is tied to this account and never expires.");
+    }
+
+    public async Task SendPromoRedeemedAsync(string? email, int days, bool grantsFullTier)
+    {
+        if (string.IsNullOrEmpty(email)) return;
+        var tierLine = grantsFullTier
+            ? "This unlocks Jiten+ in full."
+            : "This unlocks the Jiten+ trial containing everything except the features that permanently store data (like image and audio upload).";
+        await SendEmailAsync(email, "Jiten+ - Code redeemed",
+                             $"Your code is active: you now have {days} day{(days == 1 ? "" : "s")} of Jiten+." +
+                             $"<br/>{tierLine}" +
+                             "<br/>Your Jiten+ days only count down while you don't have an active paid subscription.");
+    }
+
+    public async Task SendPromoAccessEndsTomorrowAsync(string? email)
+    {
+        if (string.IsNullOrEmpty(email)) return;
+        await SendEmailAsync(email, "Jiten+ - Your access ends tomorrow",
+                             "Your Jiten+ access from promo credit ends tomorrow." +
+                             "<br/>Subscribe any time from your settings to keep your Jiten+ features. All your stored data stays safe either way.");
+    }
+
+    public async Task SendJitenPlusGrantAsync(string? email, bool isLifetime, int? days, string? thankYouMessage)
+    {
+        if (string.IsNullOrEmpty(email)) return;
+        var grantLine = isLifetime
+            ? "You've been given Jiten+ lifetime access as a thank-you."
+            : $"You've been given {days} day{(days == 1 ? "" : "s")} of Jiten+ as a thank-you.";
+        var body = grantLine;
+        if (!string.IsNullOrWhiteSpace(thankYouMessage))
+            body += $"<br/><br/>{FormatMessageHtml(thankYouMessage)}";
+        await SendEmailAsync(email, "Jiten+ - A gift for you", body);
+    }
+
+    /// <summary>
+    /// Renders the limited formatting subset used for admin-authored thank-you messages:
+    /// **bold**, *italic*, "- " bullet lists, and preserved line breaks. Mirrors the frontend's
+    /// parseCustomMeaningHtml so the email and the in-app notification look the same. Text is
+    /// HTML-encoded FIRST (defense in depth — messages are admin-authored but not markup), then only
+    /// the app-controlled marker transforms below emit tags.
+    /// </summary>
+    internal static string FormatMessageHtml(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+
+        static string Inline(string s) =>
+            System.Text.RegularExpressions.Regex.Replace(
+                System.Text.RegularExpressions.Regex.Replace(s, @"\*\*([^*\n]+)\*\*", "<strong>$1</strong>"),
+                @"\*([^*\n]+)\*", "<em>$1</em>");
+
+        var blocks = new List<string>();
+        var textLines = new List<string>();
+        var listItems = new List<string>();
+
+        void FlushText()
+        {
+            if (textLines.Count > 0)
+            {
+                blocks.Add(string.Join("<br/>", textLines));
+                textLines.Clear();
+            }
+        }
+
+        void FlushList()
+        {
+            if (listItems.Count > 0)
+            {
+                blocks.Add("<ul>" + string.Concat(listItems.Select(i => $"<li>{i}</li>")) + "</ul>");
+                listItems.Clear();
+            }
+        }
+
+        foreach (var rawLine in text.Replace("\r\n", "\n").Split('\n'))
+        {
+            var escaped = HtmlEncoder.Default.Encode(rawLine);
+            var listMatch = System.Text.RegularExpressions.Regex.Match(escaped, @"^\s*-\s+(.*)$");
+            if (listMatch.Success)
+            {
+                FlushText();
+                listItems.Add(Inline(listMatch.Groups[1].Value));
+            }
+            else
+            {
+                FlushList();
+                textLines.Add(Inline(escaped));
+            }
+        }
+
+        FlushText();
+        FlushList();
+
+        return string.Concat(blocks);
     }
 
     private readonly IConfiguration _configuration;

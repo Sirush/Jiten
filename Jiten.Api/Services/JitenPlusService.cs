@@ -48,35 +48,19 @@ public class JitenPlusService(UserDbContext userContext, IMemoryCache cache) : I
             return new JitenPlusStatus(JitenPlusTier.None, false, null, null, false, null, 0, [], false);
         }
 
-        var credits = await userContext.UserPromoCredits
-                                       .AsNoTracking()
-                                       .Where(c => c.UserId == userId && c.RemainingDays > 0)
-                                       .OrderBy(c => c.GrantedAt)
-                                       .Select(c => new
-                                       {
-                                           c.UserPromoCreditId,
-                                           c.RemainingDays,
-                                           c.PromoCodeId,
-                                           c.GrantedAt,
-                                           c.ThankYouMessage
-                                       })
-                                       .ToListAsync(ct);
-
-        var codeIds = credits.Select(c => c.PromoCodeId).Distinct().ToList();
-        var grantsFull = await userContext.PromoCodes
-                                          .AsNoTracking()
-                                          .Where(p => codeIds.Contains(p.CodeId))
-                                          .Select(p => new { p.CodeId, p.GrantsFullTier })
-                                          .ToDictionaryAsync(p => p.CodeId, p => p.GrantsFullTier, ct);
-
-        var creditInfos = credits
-            .Select(c => new PromoCreditInfo(
-                c.UserPromoCreditId,
-                c.RemainingDays,
-                grantsFull.GetValueOrDefault(c.PromoCodeId),
-                c.GrantedAt,
-                c.ThankYouMessage))
-            .ToList();
+        // GrantsFullTier is denormalised onto the credit (copied from the code at redemption, or set on an
+        // admin grant), so no PromoCode join is needed and admin grants with a null PromoCodeId resolve too.
+        var creditInfos = await userContext.UserPromoCredits
+                                           .AsNoTracking()
+                                           .Where(c => c.UserId == userId && c.RemainingDays > 0)
+                                           .OrderBy(c => c.GrantedAt)
+                                           .Select(c => new PromoCreditInfo(
+                                               c.UserPromoCreditId,
+                                               c.RemainingDays,
+                                               c.GrantsFullTier,
+                                               c.GrantedAt,
+                                               c.ThankYouMessage))
+                                           .ToListAsync(ct);
 
         var input = new JitenPlusTierResolver.Input(
             user.StripeSubscriptionActive,

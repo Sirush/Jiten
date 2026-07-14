@@ -105,7 +105,7 @@ public class StripeCheckoutTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task Checkout_LifetimeWithActiveSubscription_AttachesUpgradeCredit()
+    public async Task Checkout_LifetimeWithActiveSubscription_AttachesUpgradeCreditFromActualPayments()
     {
         await SetUser(TestUsers.UserA, u =>
         {
@@ -115,6 +115,13 @@ public class StripeCheckoutTests(JitenWebApplicationFactory factory)
             u.SubscriptionPlan = SubscriptionPlan.Yearly;
             u.SubscriptionPeriodEnd = DateTime.UtcNow.AddDays(182.5);
         });
+
+        // A genuinely-paid yearly, half elapsed → €25 credit (from the actual €50 invoice, not the plan table).
+        var periodStart = DateTime.UtcNow.AddDays(-182.5);
+        factory.Stripe.Subscriptions["sub_x"] = new StripeSubscriptionSnapshot(
+            "sub_x", "cus_existing", "active", "price_yearly", DateTime.UtcNow.AddDays(182.5), false,
+            CurrentPeriodStart: periodStart);
+        factory.Stripe.Invoices["sub_x"] = new[] { new StripeInvoiceRecord("in_1", 5000, 0, periodStart) };
 
         var response = await Checkout(TestUsers.UserA, "lifetime");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -126,10 +133,64 @@ public class StripeCheckoutTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Checkout_LifetimeAfterPlanSwitch_CreditsOnlyActualPaid_Not50()
+    {
+        // Exact live repro: monthly (€5) → portal switch to yearly (€4.25 proration). Subscription now reads
+        // yearly with a year-out period, but only €9.25 was collected — the credit must reflect that, not €50.
+        await SetUser(TestUsers.UserA, u =>
+        {
+            u.StripeCustomerId = "cus_switch";
+            u.StripeSubscriptionActive = true;
+            u.StripeSubscriptionId = "sub_switch";
+            u.SubscriptionPlan = SubscriptionPlan.Yearly;
+            u.SubscriptionPeriodEnd = DateTime.UtcNow.AddDays(365);
+        });
+
+        var periodStart = DateTime.UtcNow;
+        factory.Stripe.Subscriptions["sub_switch"] = new StripeSubscriptionSnapshot(
+            "sub_switch", "cus_switch", "active", "price_yearly", periodStart.AddDays(31), false,
+            CurrentPeriodStart: periodStart);
+        factory.Stripe.Invoices["sub_switch"] = new[]
+        {
+            new StripeInvoiceRecord("in_monthly", 500, 0, periodStart),
+            new StripeInvoiceRecord("in_proration", 425, 0, periodStart)
+        };
+
+        var response = await Checkout(TestUsers.UserA, "lifetime");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var coupon = factory.Stripe.Coupons.Should().ContainSingle().Subject;
+        coupon.AmountCents.Should().Be(925);
+        coupon.AmountCents.Should().NotBe(5000);
+    }
+
+    [Fact]
     public async Task Checkout_UnknownPlan_Returns400()
     {
         var response = await Checkout(TestUsers.UserA, "quarterly");
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Theory]
+    [InlineData("monthly")]
+    [InlineData("yearly")]
+    [InlineData("lifetime")]
+    public async Task Checkout_WhenAlreadyLifetime_IsBlockedForEveryPlan(string plan)
+    {
+        await SetUser(TestUsers.UserA, u =>
+        {
+            u.IsLifetime = true;
+            u.LifetimeSource = LifetimeSource.WindowPurchase;
+        });
+
+        var response = await Checkout(TestUsers.UserA, plan);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Contain("lifetime access");
+
+        // No Stripe interaction at all — the guard short-circuits before any gateway call.
+        factory.Stripe.CheckoutRequests.Should().BeEmpty();
     }
 
     [Fact]
