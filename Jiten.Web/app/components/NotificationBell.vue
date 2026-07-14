@@ -8,21 +8,33 @@ const popover = ref();
 
 const recentNotifications = ref<NotificationDto[]>([]);
 const isLoadingRecent = ref(false);
+const expandedIds = ref<Set<number>>(new Set());
 
 async function togglePopover(event: Event) {
   popover.value.toggle(event);
   isLoadingRecent.value = true;
+  expandedIds.value = new Set();
   await fetchNotifications({ limit: 10 });
   recentNotifications.value = notifications.value;
   isLoadingRecent.value = false;
 }
 
-async function handleNotificationClick(notification: NotificationDto) {
+// Clicking a notification expands its full message in place (long messages are otherwise clamped and
+// unreadable in the dropdown). Following the link is a separate affordance shown while expanded.
+async function toggleNotification(notification: NotificationDto) {
+  const next = new Set(expandedIds.value);
+  if (next.has(notification.id)) next.delete(notification.id);
+  else next.add(notification.id);
+  expandedIds.value = next;
+
   if (!notification.isRead) {
     await markAsRead(notification.id);
     const item = recentNotifications.value.find(n => n.id === notification.id);
     if (item) item.isRead = true;
   }
+}
+
+function openNotificationLink(notification: NotificationDto) {
   popover.value.hide();
   if (notification.linkUrl) {
     router.push(notification.linkUrl);
@@ -114,9 +126,14 @@ function formatTimeAgo(dateString: string): string {
         <div
           v-for="notification in recentNotifications"
           :key="notification.id"
+          role="button"
+          tabindex="0"
           class="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors border-b border-surface-100 dark:border-surface-700 last:border-b-0"
           :class="{ 'bg-primary-50 dark:bg-primary-950/20': !notification.isRead }"
-          @click="handleNotificationClick(notification)"
+          :aria-expanded="expandedIds.has(notification.id)"
+          @click="toggleNotification(notification)"
+          @keydown.enter.prevent="toggleNotification(notification)"
+          @keydown.space.prevent="toggleNotification(notification)"
         >
           <i :class="[getNotificationIcon(notification.type), getNotificationIconClass(notification.type), 'mt-0.5']" />
           <div class="flex-1 min-w-0">
@@ -126,9 +143,28 @@ function formatTimeAgo(dateString: string): string {
                 v-if="!notification.isRead"
                 class="shrink-0 w-2 h-2 rounded-full bg-primary"
               />
+              <i
+                class="pi ml-auto shrink-0 text-xs text-muted-color transition-transform"
+                :class="expandedIds.has(notification.id) ? 'pi-chevron-up' : 'pi-chevron-down'"
+              />
             </div>
-            <p class="text-xs text-muted-color mt-0.5 line-clamp-2">{{ notification.message }}</p>
-            <span class="text-xs text-muted-color mt-1">{{ formatTimeAgo(notification.createdAt) }}</span>
+            <!-- eslint-disable-next-line vue/no-v-html -->
+            <p
+              class="text-xs text-muted-color mt-0.5 break-words"
+              :class="{ 'line-clamp-2': !expandedIds.has(notification.id) }"
+              v-html="parseCustomMeaningHtml(notification.message)"
+            />
+            <div class="flex items-center gap-3 mt-1">
+              <span class="text-xs text-muted-color">{{ formatTimeAgo(notification.createdAt) }}</span>
+              <button
+                v-if="notification.linkUrl && expandedIds.has(notification.id)"
+                type="button"
+                class="text-xs text-primary hover:underline"
+                @click.stop="openNotificationLink(notification)"
+              >
+                Open <i class="pi pi-arrow-right text-[0.6rem]" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

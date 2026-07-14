@@ -149,7 +149,8 @@ onMounted(() => {
                   class="shrink-0 w-2 h-2 rounded-full bg-primary"
                 />
               </div>
-              <p class="text-sm text-muted-color mt-1">{{ notification.message }}</p>
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <p class="text-sm text-muted-color mt-1 break-words" v-html="parseCustomMeaningHtml(notification.message)" />
               <span class="text-xs text-muted-color mt-1">{{ formatTimeAgo(notification.createdAt) }}</span>
             </div>
             <Button
