@@ -79,7 +79,7 @@ public class StripeService(
         var request = new StripeCheckoutRequest(
             user.StripeCustomerId!, mode, priceId, userId,
             SuccessUrl: $"{SiteUrl}/settings/subscription?checkout=success",
-            CancelUrl: $"{SiteUrl}/jiten-plus",
+            CancelUrl: $"{SiteUrl}/jiten-plus?checkout=cancelled",
             CouponId: couponId);
 
         var result = await gateway.CreateCheckoutSessionAsync(request, ct);

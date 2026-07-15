@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  const emit = defineEmits<{ redeemed: [] }>();
+  const emit = defineEmits<{ redeemed: [result: { tier: string; days: number; grantsFullTier: boolean }] }>();
 
   const { $api } = useNuxtApp();
 
@@ -22,7 +22,7 @@
       });
       success.value = { tier: result.tier, days: result.days };
       code.value = '';
-      emit('redeemed');
+      emit('redeemed', result);
     } catch (e) {
       errorMessage.value = (e as { data?: { error?: string } })?.data?.error || 'This code could not be redeemed.';
     } finally {
@@ -33,7 +33,7 @@
 
 <template>
   <div>
-    <label for="promoCode" class="block text-sm font-medium mb-1">Redeem a code</label>
+    <label for="promoCode" class="sr-only">Redeem a code</label>
     <div class="flex flex-col sm:flex-row gap-2">
       <InputText
         id="promoCode"
@@ -55,7 +55,7 @@
     </div>
 
     <Message v-if="success" severity="success" :closable="false" class="mt-3">
-      Code redeemed — you now have Jiten+ {{ success.tier === 'full' ? 'Full' : 'Trial' }} for {{ success.days }}
+      Code redeemed! You now have Jiten+ {{ success.tier === 'full' ? 'Full' : 'Trial' }} for {{ success.days }}
       day{{ success.days === 1 ? '' : 's' }}.
     </Message>
     <Message v-if="errorMessage" severity="error" :closable="false" class="mt-3">

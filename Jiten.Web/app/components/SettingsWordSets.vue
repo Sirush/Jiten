@@ -25,7 +25,7 @@ onMounted(() => {
         You have {{ subscriptionCount }} active subscription{{ subscriptionCount === 1 ? '' : 's' }}.
       </p>
       <NuxtLink to="/settings/word-sets">
-        <Button icon="pi pi-cog" label="Manage Word Sets" class="w-full md:w-auto" />
+        <Button icon="pi pi-cog" label="Manage Word Sets" class="w-full md:w-64" />
       </NuxtLink>
     </template>
   </Card>

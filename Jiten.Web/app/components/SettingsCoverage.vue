@@ -79,12 +79,10 @@
         <h3 class="text-lg font-semibold">Coverage</h3>
       </template>
       <template #content>
-        <p>
+        <p class="mb-3">
           Your coverage was last refreshed: <b>{{ lastRefresh?.toLocaleString() ?? 'Never' }}</b>
         </p>
-        <div class="p-2">
-          <Button icon="pi pi-refresh" label="Refresh now" class="w-full md:w-auto" @click="refreshCoverage" />
-        </div>
+        <Button icon="pi pi-refresh" label="Refresh now" class="w-full md:w-64" @click="refreshCoverage" />
       </template>
     </Card>
     <LoadingOverlay :visible="isRefreshing" message="Refreshing your coverage, please wait a few seconds…" />

@@ -42,7 +42,7 @@
           Manage your email and password, update your newsletter preference, and review your sign-in methods and account details.
         </p>
         <NuxtLink to="/settings/account">
-          <Button icon="pi pi-user" label="Account Settings" class="w-full md:w-auto" />
+          <Button icon="pi pi-user" label="Account Settings" class="w-full md:w-64" />
         </NuxtLink>
       </template>
     </Card>
@@ -66,7 +66,7 @@
           }}.
         </p>
         <NuxtLink to="/settings/vocabulary">
-          <Button icon="pi pi-cog" label="Manage Vocabulary" class="w-full md:w-auto" />
+          <Button icon="pi pi-cog" label="Manage Vocabulary" class="w-full md:w-64" />
         </NuxtLink>
       </template>
     </Card>
@@ -81,7 +81,7 @@
           browser.
         </p>
         <NuxtLink to="/settings/dictionaries">
-          <Button icon="pi pi-book" label="Manage Dictionaries" class="w-full md:w-auto" />
+          <Button icon="pi pi-book" label="Manage Dictionaries" class="w-full md:w-64" />
         </NuxtLink>
       </template>
     </Card>
@@ -97,7 +97,7 @@
           Configure your SRS study preferences, daily limits, card display options, and FSRS scheduling parameters.
         </p>
         <NuxtLink to="/settings/srs">
-          <Button icon="pi pi-cog" label="SRS Settings" class="w-full md:w-auto" />
+          <Button icon="pi pi-cog" label="SRS Settings" class="w-full md:w-64" />
         </NuxtLink>
       </template>
     </Card>
@@ -117,7 +117,7 @@
             I understand that the SRS is in preview and that it may contain bugs. I will share feedback and bug reports to help improve it.
           </label>
         </div>
-        <Button icon="pi pi-arrow-right" label="Enable SRS" :disabled="!srsAcknowledged" :loading="enrolling" class="w-full md:w-auto" @click="enrollInSrs" />
+        <Button icon="pi pi-arrow-right" label="Enable SRS" :disabled="!srsAcknowledged" :loading="enrolling" class="w-full md:w-64" @click="enrollInSrs" />
       </template>
     </Card>
 

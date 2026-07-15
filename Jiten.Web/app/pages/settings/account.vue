@@ -14,6 +14,17 @@
   const toast = useToast();
   const confirm = useConfirm();
   const auth = useAuthStore();
+  const { tier: jitenPlusTier, sources: jitenPlusSources, loading: jitenPlusLoading } = useJitenPlus();
+
+  const jitenPlusBadge = computed<{ label: string; severity: string }>(() => {
+    const s = jitenPlusSources.value;
+    if (s?.isLifetime) return { label: 'Lifetime', severity: 'success' };
+    if (s?.plan === 'Yearly') return { label: 'Yearly', severity: 'info' };
+    if (s?.plan === 'Monthly') return { label: 'Monthly', severity: 'info' };
+    if (jitenPlusTier.value === 'trial') return { label: 'Trial', severity: 'warn' };
+    if (jitenPlusTier.value === 'full') return { label: 'Full', severity: 'info' };
+    return { label: 'None', severity: 'secondary' };
+  });
 
   const account = ref<AccountInfo | null>(null);
 
@@ -217,8 +228,11 @@
 </script>
 
 <template>
-  <div class="container mx-auto p-2 md:p-4 max-w-3xl">
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
+  <div class="container mx-auto p-2 md:p-4 flex flex-col gap-4">
+    <div class="flex items-center gap-2">
+      <NuxtLink to="/settings">
+        <Button icon="pi pi-arrow-left" severity="secondary" text rounded />
+      </NuxtLink>
       <h1 class="text-2xl font-bold">Account Settings</h1>
     </div>
 
@@ -273,6 +287,15 @@
                 <Tag v-for="r in account.roles" :key="r" :value="r" severity="secondary" />
               </dd>
             </template>
+
+            <dt class="font-semibold text-muted-color">Jiten+</dt>
+            <dd class="flex items-center gap-2 flex-wrap">
+              <Skeleton v-if="jitenPlusLoading && !jitenPlusSources" width="4rem" height="1.5rem" />
+              <template v-else>
+                <Tag :value="jitenPlusBadge.label" :severity="jitenPlusBadge.severity" />
+                <NuxtLink to="/settings/subscription" class="text-sm text-primary-600 dark:text-primary-400 hover:underline">Manage</NuxtLink>
+              </template>
+            </dd>
           </dl>
         </template>
       </Card>

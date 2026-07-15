@@ -1,10 +1,12 @@
 using Jiten.Api.Services;
+using Jiten.Api.Services.Stripe;
 using Jiten.Core;
 using Jiten.Core.Data.Billing;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Jiten.Api.Controllers;
 
@@ -18,9 +20,26 @@ public class JitenPlusController(
     ICurrentUserService currentUserService,
     UserDbContext userContext,
     IEmailService emailService,
+    IOptions<StripeOptions> stripeOptions,
     ILogger<JitenPlusController> logger) : ControllerBase
 {
     public record RedeemRequest(string? Code);
+
+    /// <summary>
+    /// Public pricing/window info for the marketing page. Anonymous-readable so /jiten-plus renders
+    /// server-side for logged-out visitors.
+    /// </summary>
+    [HttpGet("pricing")]
+    [AllowAnonymous]
+    public IResult GetPricing()
+    {
+        var windowEnd = stripeOptions.Value.LifetimeWindowEnd;
+        return Results.Ok(new
+        {
+            lifetimeWindowEnd = windowEnd,
+            lifetimeAvailable = DateTime.UtcNow <= windowEnd
+        });
+    }
 
     [HttpGet("status")]
     public async Task<IResult> GetStatus()

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Services;
+using Jiten.Api.Services.Stripe;
 using Jiten.Core.Data;
 using Jiten.Core.Data.Billing;
 using Jiten.Core.Services;
@@ -21,7 +22,8 @@ public partial class AdminController
         [FromBody] GrantJitenPlusRequest request,
         [FromServices] NotificationService notificationService,
         [FromServices] IEmailService emailService,
-        [FromServices] IJitenPlusService jitenPlus)
+        [FromServices] IJitenPlusService jitenPlus,
+        [FromServices] IStripeGateway stripeGateway)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
@@ -42,7 +44,12 @@ public partial class AdminController
 
             user.IsLifetime = true;
             user.LifetimeSource = LifetimeSource.ContributorGrant;
+
+            var subToCancel = user.StripeSubscriptionActive ? user.StripeSubscriptionId : null;
             await userContext.SaveChangesAsync();
+            if (!string.IsNullOrEmpty(subToCancel))
+                await stripeGateway.CancelSubscriptionImmediatelyAsync(subToCancel);
+
             summary = "You've been given Jiten+ lifetime access as a thank-you.";
         }
         else if (kind == "days")

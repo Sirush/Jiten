@@ -94,6 +94,20 @@ public class JitenPlusStatusTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Pricing_IsAnonymous_AndReportsLifetimeWindow()
+    {
+        // No auth headers: the endpoint is [AllowAnonymous] so the marketing page renders logged-out.
+        var response = await _client.GetAsync("/api/jiten-plus/pricing");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        // The test factory sets Stripe__LifetimeWindowEnd=2999-01-01, so the window is open.
+        body.GetProperty("lifetimeAvailable").GetBoolean().Should().BeTrue();
+        body.GetProperty("lifetimeWindowEnd").GetDateTime().Year.Should().Be(2999);
+    }
+
+    [Fact]
     public async Task FreeUser_IsNone_WithQuotaShape()
     {
         var body = await GetStatus(TestUsers.UserB);
