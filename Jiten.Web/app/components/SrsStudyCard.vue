@@ -314,8 +314,11 @@
       }
 
       extraSentencesExpanded.value = true;
-    } catch {
-      canLoadMoreSentences.value = false;
+    } catch (e) {
+      const status = (e as { status?: number; statusCode?: number } | null)?.status ?? (e as { statusCode?: number } | null)?.statusCode;
+      if (status !== 429) {
+        canLoadMoreSentences.value = false;
+      }
     } finally {
       isLoadingMoreSentences.value = false;
     }

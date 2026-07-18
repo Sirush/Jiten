@@ -346,6 +346,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     /// <param name="mediaType">Optional media type filter.</param>
     /// <returns>A list of example sentences with metadata.</returns>
     [HttpPost("{wordId}/{readingIndex}/random-example-sentences/{mediaType?}")]
+    [EnableRateLimiting("heavy")]
     [SwaggerOperation(Summary = "Get random example sentences",
                       Description =
                           "Returns up to three random example sentences for the given word and reading index, excluding already loaded ones.")]
@@ -353,35 +354,57 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     public async Task<List<ExampleSentenceDto>> GetRandomExampleSentences([FromRoute] int wordId, [FromRoute] int readingIndex,
                                                                           [FromBody] List<int> alreadyLoaded, [FromRoute] MediaType? mediaType = null)
     {
-        // Subquery: distinct sentence IDs for this word+reading (not materialised)
-        var sentenceIdSubquery = context.ExampleSentenceWords
+        // Sample candidate ids first so ORDER BY random() never sorts the full sentence set of a common word
+        const int sampleSize = 200;
+        var candidateIds = await context.ExampleSentenceWords
             .Where(w => w.WordId == wordId && w.ReadingIndex == readingIndex)
-            .Select(w => w.ExampleSentenceId)
-            .Distinct();
-
-        // Filter, deduplicate, exclude already-loaded decks, sample 3 random — all in SQL
-        var picked = await context.ExampleSentences
-            .AsNoTracking()
-            .Where(s => sentenceIdSubquery.Contains(s.SentenceId))
-            .Join(context.Decks.AsNoTracking(),
-                  s => s.DeckId, d => d.DeckId,
-                  (s, d) => new { Sentence = s, Deck = d })
-            .Where(j => !mediaType.HasValue || j.Deck.MediaType == mediaType.Value)
-            .Where(j => !alreadyLoaded.Contains(j.Deck.DeckId)
-                     && (!j.Deck.ParentDeckId.HasValue || !alreadyLoaded.Contains(j.Deck.ParentDeckId.Value)))
             .OrderBy(_ => EF.Functions.Random())
-            .Take(3)
-            .Select(j => new PickedSentence(
-                j.Sentence.SentenceId, j.Sentence.Text, j.Sentence.Difficulty,
-                j.Deck.DeckId, j.Deck.ParentDeckId))
+            .Take(sampleSize)
+            .Select(w => w.ExampleSentenceId)
             .ToListAsync();
+
+        var picked = await PickRandomSentences(
+            context.ExampleSentences.AsNoTracking().Where(s => candidateIds.Contains(s.SentenceId)),
+            alreadyLoaded, mediaType, 3);
+
+        // A truncated sample can miss all eligible sentences under heavy filtering; fall back to the full set
+        if (picked.Count < 3 && candidateIds.Count == sampleSize)
+        {
+            var sentenceIdSubquery = context.ExampleSentenceWords
+                .Where(w => w.WordId == wordId && w.ReadingIndex == readingIndex)
+                .Select(w => w.ExampleSentenceId)
+                .Distinct();
+
+            picked = await PickRandomSentences(
+                context.ExampleSentences.AsNoTracking().Where(s => sentenceIdSubquery.Contains(s.SentenceId)),
+                alreadyLoaded, mediaType, 3);
+        }
 
         if (picked.Count == 0) return [];
 
         return await BuildExampleSentenceDtos(picked, wordId, readingIndex);
     }
 
+    private Task<List<PickedSentence>> PickRandomSentences(IQueryable<ExampleSentence> sentences, List<int> excludedDeckIds,
+                                                           MediaType? mediaType, int take)
+    {
+        return sentences
+            .Join(context.Decks.AsNoTracking(),
+                  s => s.DeckId, d => d.DeckId,
+                  (s, d) => new { Sentence = s, Deck = d })
+            .Where(j => !mediaType.HasValue || j.Deck.MediaType == mediaType.Value)
+            .Where(j => !excludedDeckIds.Contains(j.Deck.DeckId)
+                     && (!j.Deck.ParentDeckId.HasValue || !excludedDeckIds.Contains(j.Deck.ParentDeckId.Value)))
+            .OrderBy(_ => EF.Functions.Random())
+            .Take(take)
+            .Select(j => new PickedSentence(
+                j.Sentence.SentenceId, j.Sentence.Text, j.Sentence.Difficulty,
+                j.Deck.DeckId, j.Deck.ParentDeckId))
+            .ToListAsync();
+    }
+
     [HttpPost("{wordId}/{readingIndex}/example-sentences-by-difficulty/{mediaType?}")]
+    [EnableRateLimiting("heavy")]
     [SwaggerOperation(Summary = "Get example sentences ordered by difficulty",
                       Description =
                           "Returns example sentences for the given word and reading index, ordered by difficulty score. " +
@@ -406,8 +429,12 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             .AsNoTracking()
             .Where(s => sentenceIdSubquery.Contains(s.SentenceId));
 
-        var globalMin = await baseSentences.Select(s => (float?)s.Difficulty).MinAsync() ?? 0f;
-        var globalMax = await baseSentences.Select(s => (float?)s.Difficulty).MaxAsync() ?? 0f;
+        var difficultyStats = await baseSentences
+            .GroupBy(_ => 1)
+            .Select(g => new { Min = g.Min(s => s.Difficulty), Max = g.Max(s => s.Difficulty) })
+            .FirstOrDefaultAsync();
+        var globalMin = difficultyStats?.Min ?? 0f;
+        var globalMax = difficultyStats?.Max ?? 0f;
 
         var collected = new List<PickedSentence>();
         var bandMin = minDifficulty;
@@ -419,6 +446,12 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             bandMin = bandMax - bandSize;
         }
 
+        if (!descending && bandMax <= globalMin)
+        {
+            bandMin = Math.Max(bandMin, (float)(Math.Floor(globalMin / bandSize) * bandSize));
+            bandMax = bandMin + bandSize;
+        }
+
         for (var i = 0; i < maxIterations && collected.Count < take; i++)
         {
             if (descending ? bandMax < globalMin : bandMin > globalMax + bandSize)
@@ -427,22 +460,50 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             var remaining = take - collected.Count;
             var excludeIds = alreadyLoaded.Concat(collected.Select(c => c.DeckId)).Distinct().ToList();
 
-            var batch = await baseSentences
-                .Where(s => s.Difficulty >= bandMin && s.Difficulty < bandMax)
-                .Join(context.Decks.AsNoTracking(),
-                      s => s.DeckId, d => d.DeckId,
-                      (s, d) => new { Sentence = s, Deck = d })
-                .Where(j => !mediaType.HasValue || j.Deck.MediaType == mediaType.Value)
-                .Where(j => !excludeIds.Contains(j.Deck.DeckId)
-                         && (!j.Deck.ParentDeckId.HasValue || !excludeIds.Contains(j.Deck.ParentDeckId.Value)))
-                .OrderBy(_ => EF.Functions.Random())
-                .Take(remaining)
-                .Select(j => new PickedSentence(
-                    j.Sentence.SentenceId, j.Sentence.Text, j.Sentence.Difficulty,
-                    j.Deck.DeckId, j.Deck.ParentDeckId))
-                .ToListAsync();
+            var batch = await PickRandomSentences(
+                baseSentences.Where(s => s.Difficulty >= bandMin && s.Difficulty < bandMax),
+                excludeIds, mediaType, remaining);
 
             collected.AddRange(batch);
+
+            if (batch.Count == 0)
+            {
+                // Empty band: jump straight to the band containing the nearest sentence instead of stepping through the gap
+                var next = descending
+                    ? await baseSentences.Where(s => s.Difficulty < bandMin).Select(s => (float?)s.Difficulty).MaxAsync()
+                    : await baseSentences.Where(s => s.Difficulty >= bandMax).Select(s => (float?)s.Difficulty).MinAsync();
+
+                if (next == null)
+                {
+                    // Range exhausted; leave the band cursor past the global bounds so the client stops paging
+                    if (descending)
+                    {
+                        bandMax = globalMin - bandSize;
+                        bandMin = bandMax - bandSize;
+                    }
+                    else
+                    {
+                        bandMin = globalMax + bandSize * 2;
+                        bandMax = bandMin + bandSize;
+                    }
+
+                    break;
+                }
+
+                var bandStart = (float)(Math.Floor(next.Value / bandSize) * bandSize);
+                if (descending)
+                {
+                    bandMax = Math.Min(bandStart + bandSize, bandMin);
+                    bandMin = bandMax - bandSize;
+                }
+                else
+                {
+                    bandMin = Math.Max(bandStart, bandMax);
+                    bandMax = bandMin + bandSize;
+                }
+
+                continue;
+            }
 
             if (descending)
             {

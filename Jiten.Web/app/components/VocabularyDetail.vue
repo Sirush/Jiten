@@ -225,6 +225,11 @@
     }
   }
 
+  function isRateLimited(e: unknown) {
+    const err = e as { status?: number; statusCode?: number } | null;
+    return (err?.status ?? err?.statusCode) === 429;
+  }
+
   async function getRandomExampleSentences() {
     isLoadingExampleSentences.value = true;
     let url = `vocabulary/${props.wordId}/${currentReadingIndex.value}/random-example-sentences`;
@@ -234,19 +239,26 @@
     }
 
     const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeck.deckId);
-    const results = await $api<ExampleSentence[]>(url, {
-      method: 'POST',
-      body: alreadyLoaded,
-    });
 
-    isLoadingExampleSentences.value = false;
+    try {
+      const results = await $api<ExampleSentence[]>(url, {
+        method: 'POST',
+        body: alreadyLoaded,
+      });
 
-    if (results.length == 0) {
-      canLoadExampleSentences.value = false;
-      return;
+      if (results.length == 0) {
+        canLoadExampleSentences.value = false;
+        return;
+      }
+
+      exampleSentences.value.push(...results);
+    } catch (e) {
+      if (!isRateLimited(e)) {
+        canLoadExampleSentences.value = false;
+      }
+    } finally {
+      isLoadingExampleSentences.value = false;
     }
-
-    exampleSentences.value.push(...results);
   }
 
   async function getExampleSentencesByDifficulty() {
@@ -259,29 +271,36 @@
     }
 
     const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeck.deckId);
-    const results = await $api<ExampleSentencesByDifficultyResponse>(
-      `${url}?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}`,
-      { method: 'POST', body: alreadyLoaded },
-    );
 
-    isLoadingExampleSentences.value = false;
+    try {
+      const results = await $api<ExampleSentencesByDifficultyResponse>(
+        `${url}?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}`,
+        { method: 'POST', body: alreadyLoaded },
+      );
 
-    if (results.sentences.length > 0) {
-      exampleSentences.value.push(...results.sentences);
-    }
+      if (results.sentences.length > 0) {
+        exampleSentences.value.push(...results.sentences);
+      }
 
-    if (descending) {
-      nextBandMax.value = results.searchedBandMin;
-      nextBandMin.value = nextBandMax.value - bandSize;
-      if (nextBandMax.value <= results.minDifficulty) {
+      if (descending) {
+        nextBandMax.value = results.searchedBandMin;
+        nextBandMin.value = nextBandMax.value - bandSize;
+        if (nextBandMax.value <= results.minDifficulty) {
+          canLoadExampleSentences.value = false;
+        }
+      } else {
+        nextBandMin.value = results.searchedBandMax;
+        nextBandMax.value = nextBandMin.value + bandSize;
+        if (nextBandMin.value > results.maxDifficulty) {
+          canLoadExampleSentences.value = false;
+        }
+      }
+    } catch (e) {
+      if (!isRateLimited(e)) {
         canLoadExampleSentences.value = false;
       }
-    } else {
-      nextBandMin.value = results.searchedBandMax;
-      nextBandMax.value = nextBandMin.value + bandSize;
-      if (nextBandMin.value > results.maxDifficulty) {
-        canLoadExampleSentences.value = false;
-      }
+    } finally {
+      isLoadingExampleSentences.value = false;
     }
   }
 </script>

@@ -434,6 +434,33 @@ builder.Services.AddRateLimiter(options =>
                                                              });
     });
 
+    options.AddPolicy("heavy", context =>
+    {
+        if (IsTrustedSsr(context))
+            return RateLimitPartition.GetNoLimiter("ssr-internal");
+
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var tier = context.User.FindFirst("rate_limit_tier")?.Value ?? "Default";
+
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        var permitLimit = tier switch
+        {
+            "Researcher" => 300,
+            "Unlimited" => int.MaxValue,
+            _ => userId != null ? 45 : 20
+        };
+
+        return RateLimitPartition.GetSlidingWindowLimiter(partitionKey,
+                                                          _ => new SlidingWindowRateLimiterOptions
+                                                               {
+                                                                   PermitLimit = permitLimit, Window = TimeSpan.FromSeconds(60),
+                                                                   SegmentsPerWindow = 6,
+                                                                   QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 2,
+                                                                   AutoReplenishment = true
+                                                               });
+    });
+
     options.AddPolicy("download", context =>
     {
         if (IsTrustedSsr(context))
