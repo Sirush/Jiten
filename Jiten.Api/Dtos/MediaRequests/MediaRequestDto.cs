@@ -15,9 +15,11 @@ public class MediaRequestDto
     public int? FulfilledDeckId { get; set; }
     public string? FulfilledDeckTitle { get; set; }
     public int UpvoteCount { get; set; }
+    public int BoostCount { get; set; }
     public int CommentCount { get; set; }
     public int UploadCount { get; set; }
     public bool HasUserUpvoted { get; set; }
+    public bool HasUserBoosted { get; set; }
     public bool IsSubscribed { get; set; }
     public bool IsOwnRequest { get; set; }
     public string? RequesterName { get; set; }

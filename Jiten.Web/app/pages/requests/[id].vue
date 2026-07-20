@@ -154,6 +154,16 @@ async function handleUpvote() {
   }
 }
 
+const isBoostable = computed(() =>
+  !!request.value && (request.value.status === RequestStatus.Open || request.value.status === RequestStatus.InProgress)
+);
+
+function handleBoosted(payload: { boostCount: number }) {
+  if (!request.value) return;
+  request.value.boostCount = payload.boostCount;
+  request.value.hasUserBoosted = true;
+}
+
 async function handleSubscribe() {
   if (!request.value) return;
   if (request.value.isSubscribed) {
@@ -560,11 +570,19 @@ onMounted(() => loadData());
             </NuxtLink>
           </div>
 
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3 flex-wrap">
             <UpvoteButton
               :has-upvoted="request.hasUserUpvoted"
               :upvote-count="request.upvoteCount"
+              :boost-count="request.boostCount"
               @toggle="handleUpvote"
+            />
+            <RequestBoostButton
+              :request-id="request.id"
+              :boost-count="request.boostCount"
+              :has-boosted="request.hasUserBoosted"
+              :boostable="isBoostable"
+              @boosted="handleBoosted"
             />
             <RequestSubscribeButton
               :is-subscribed="request.isSubscribed"

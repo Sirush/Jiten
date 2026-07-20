@@ -750,9 +750,11 @@ export interface MediaRequestDto {
   fulfilledDeckId?: number;
   fulfilledDeckTitle?: string;
   upvoteCount: number;
+  boostCount: number;
   commentCount: number;
   uploadCount: number;
   hasUserUpvoted: boolean;
+  hasUserBoosted: boolean;
   isSubscribed: boolean;
   isOwnRequest: boolean;
   requesterName?: string;
@@ -822,6 +824,7 @@ export interface RequestActivityLogDto {
 export interface RequestUserSummaryDto {
   requestCount: number;
   upvoteCount: number;
+  boostCount: number;
   subscriptionCount: number;
   uploadCount: number;
   fulfilledCount: number;

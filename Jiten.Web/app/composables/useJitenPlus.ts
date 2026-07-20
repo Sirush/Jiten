@@ -80,9 +80,16 @@ export function useJitenPlus() {
     }
   }
 
+  function startFetch() {
+    const p = doFetch().finally(() => {
+      if (inflight === p) inflight = null;
+    });
+    inflight = p;
+    return p;
+  }
+
   async function refresh() {
-    await (inflight = doFetch());
-    inflight = null;
+    await startFetch();
   }
 
   function reset() {
@@ -93,8 +100,8 @@ export function useJitenPlus() {
   }
 
   function ensure() {
-    if (!import.meta.client || fetched.value || loading.value) return;
-    if (!inflight) inflight = doFetch().finally(() => (inflight = null));
+    if (!import.meta.client || fetched.value || loading.value || inflight) return;
+    startFetch();
   }
 
   // Kick off the lazy first fetch on first use.

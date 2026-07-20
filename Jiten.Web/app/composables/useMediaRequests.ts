@@ -11,6 +11,18 @@ export interface RequestFacets {
   attachmentTotal: number;
 }
 
+export interface BoostBalance {
+  used: number;
+  limit: number;
+  remaining: number;
+  resetAt: string;
+}
+
+export interface BoostResult {
+  boostCount: number;
+  balance: BoostBalance;
+}
+
 export function useMediaRequests() {
   const { $api } = useNuxtApp();
 
@@ -107,6 +119,26 @@ export function useMediaRequests() {
       return await $api<{ upvoted: boolean; upvoteCount: number }>(`requests/${id}/upvote`, {
         method: 'POST',
       });
+    } catch (e) {
+      error.value = e as Error;
+      return null;
+    }
+  };
+
+  const boostRequest = async (id: number): Promise<BoostResult | null> => {
+    error.value = null;
+    try {
+      return await $api<BoostResult>(`requests/${id}/boost`, { method: 'POST' });
+    } catch (e) {
+      error.value = e as Error;
+      return null;
+    }
+  };
+
+  const fetchBoostBalance = async (): Promise<BoostBalance | null> => {
+    error.value = null;
+    try {
+      return await $api<BoostBalance>('requests/boost-balance');
     } catch (e) {
       error.value = e as Error;
       return null;
@@ -372,6 +404,8 @@ export function useMediaRequests() {
     createRequest,
     deleteRequest,
     toggleUpvote,
+    boostRequest,
+    fetchBoostBalance,
     subscribe,
     unsubscribe,
     fetchComments,

@@ -4,7 +4,7 @@ import type { MediaRequestDto } from '~/types/types';
 import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
 import { getLinkTypeText } from '~/utils/linkTypeMapper';
-import type { RequestFacets } from '~/composables/useMediaRequests';
+import type { RequestFacets, BoostBalance } from '~/composables/useMediaRequests';
 
 definePageMeta({
   middleware: ['auth'],
@@ -12,8 +12,17 @@ definePageMeta({
 
 useHead({ title: 'Media Requests - Jiten' });
 
-const { requests, totalCount, isLoading, fetchRequests, toggleUpvote, subscribe, unsubscribe, fetchMyQuota, fetchFacets, error: apiError } = useMediaRequests();
+const { requests, totalCount, isLoading, fetchRequests, toggleUpvote, subscribe, unsubscribe, fetchMyQuota, fetchBoostBalance, fetchFacets, error: apiError } = useMediaRequests();
 const facets = ref<RequestFacets | null>(null);
+
+const { isPlus, hasFeature } = useJitenPlus();
+const canBoost = computed(() => hasFeature('request-boosts'));
+const boostBalance = ref<BoostBalance | null>(null);
+const showBoostBalance = computed(() => canBoost.value && boostBalance.value !== null);
+
+function isBoostable(request: MediaRequestDto) {
+  return request.status === RequestStatus.Open || request.status === RequestStatus.InProgress;
+}
 
 function withCount(label: string, count: number | undefined) {
   return count === undefined ? label : `${label} (${count})`;
@@ -165,9 +174,7 @@ watch([selectedMediaType, selectedStatus, sortBy, activeTab, debouncedSearch, se
   offset.value = 0;
   loadRequests();
   loadFacets();
-  if (activeTab.value === 1) {
-    fetchMyQuota().then(q => { quota.value = q; });
-  }
+  fetchMyQuota().then(q => { quota.value = q; });
 });
 
 watch(offset, () => loadRequests());
@@ -201,6 +208,17 @@ async function handleUpvote(request: MediaRequestDto) {
   } else {
     toastApiError('Vote failed', 'Failed to update your vote. Please try again.');
   }
+}
+
+async function loadHeaderStats() {
+  quota.value = await fetchMyQuota();
+  if (isPlus.value) boostBalance.value = await fetchBoostBalance();
+}
+
+function handleBoosted(request: MediaRequestDto, payload: { boostCount: number; balance: BoostBalance }) {
+  request.boostCount = payload.boostCount;
+  request.hasUserBoosted = true;
+  boostBalance.value = payload.balance;
 }
 
 async function handleSubscribe(request: MediaRequestDto) {
@@ -245,6 +263,11 @@ function onPageChange(event: { first: number }) {
 onMounted(() => {
   loadRequests();
   loadFacets();
+  loadHeaderStats();
+});
+
+watch(isPlus, (val) => {
+  if (val && !boostBalance.value) fetchBoostBalance().then(b => { boostBalance.value = b; });
 });
 </script>
 
@@ -322,6 +345,21 @@ onMounted(() => {
       </div>
     </div>
 
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <Tag
+        v-if="quota"
+        :value="`${quota.activeCount} / ${quota.limit} active slots used`"
+        severity="secondary"
+        v-tooltip.top="'Open requests you currently have across the platform'"
+      />
+      <Tag
+        v-if="showBoostBalance"
+        :value="`${boostBalance!.remaining} / ${boostBalance!.limit} boosts left this month`"
+        severity="secondary"
+        v-tooltip.top="'Monthly Jiten+ boosts remaining'"
+      />
+    </div>
+
     <div v-if="isLoading" class="flex justify-center py-12">
       <ProgressSpinner style="width: 50px; height: 50px" />
     </div>
@@ -344,10 +382,6 @@ onMounted(() => {
     </div>
 
     <template v-else>
-      <div v-if="isMine && quota" class="mb-3">
-        <Tag :value="`${quota.activeCount} / ${quota.limit} active slots used`" severity="secondary" />
-      </div>
-
       <template v-for="section in displaySections" :key="section.title">
         <div v-if="section.items.length > 0" class="mb-6" :class="{ 'opacity-50': section.muted }">
           <h3 v-if="section.title" class="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -368,6 +402,7 @@ onMounted(() => {
                       <UpvoteButton
                         :has-upvoted="request.hasUserUpvoted"
                         :upvote-count="request.upvoteCount"
+                        :boost-count="request.boostCount"
                         compact
                         @toggle="handleUpvote(request)"
                       />
@@ -391,6 +426,14 @@ onMounted(() => {
                           <i class="pi pi-external-link text-xs" />
                           {{ getLinkTypeText(request.externalLinkType) }}
                         </span>
+                        <span
+                          v-if="request.boostCount > 0"
+                          class="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium"
+                          v-tooltip.top="`${request.boostCount} boost${request.boostCount === 1 ? '' : 's'} (+${request.boostCount * 5} votes)`"
+                        >
+                          <i class="pi pi-bolt text-xs" />
+                          {{ request.boostCount }}
+                        </span>
                         <span v-if="request.commentCount > 0" class="flex items-center gap-1">
                           <i class="pi pi-comments text-xs" />
                           {{ request.commentCount }}
@@ -411,7 +454,17 @@ onMounted(() => {
                       </div>
                     </div>
 
-                    <div class="shrink-0 hidden md:block" @click.prevent>
+                    <div class="shrink-0 hidden md:flex items-center gap-2" @click.prevent>
+                      <RequestBoostButton
+                        :request-id="request.id"
+                        :boost-count="request.boostCount"
+                        :has-boosted="request.hasUserBoosted"
+                        :boostable="isBoostable(request)"
+                        :balance="boostBalance"
+                        :auto-fetch-balance="false"
+                        compact
+                        @boosted="handleBoosted(request, $event)"
+                      />
                       <RequestSubscribeButton
                         :is-subscribed="request.isSubscribed"
                         compact

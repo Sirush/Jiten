@@ -264,6 +264,17 @@ onMounted(() => loadActivityLog());
             <Card class="shadow-md">
               <template #title>
                 <div class="flex items-center gap-2">
+                  <i class="pi pi-bolt text-amber-500" />
+                  Boosts
+                </div>
+              </template>
+              <template #content>
+                <div class="text-4xl font-bold text-center">{{ userSummary.boostCount }}</div>
+              </template>
+            </Card>
+            <Card class="shadow-md">
+              <template #title>
+                <div class="flex items-center gap-2">
                   <i class="pi pi-bell text-orange-500" />
                   Subscriptions
                 </div>

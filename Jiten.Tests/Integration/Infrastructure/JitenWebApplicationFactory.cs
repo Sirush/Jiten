@@ -191,6 +191,7 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         db.MediaRequestComments.RemoveRange(db.MediaRequestComments);
         db.MediaRequestSubscriptions.RemoveRange(db.MediaRequestSubscriptions);
         db.MediaRequestUpvotes.RemoveRange(db.MediaRequestUpvotes);
+        db.MediaRequestBoosts.RemoveRange(db.MediaRequestBoosts);
         db.MediaRequests.RemoveRange(db.MediaRequests);
         db.Decks.RemoveRange(db.Decks);
         await db.SaveChangesAsync();

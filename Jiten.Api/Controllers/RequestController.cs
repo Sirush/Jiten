@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Jiten.Api.Authorization;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Services;
@@ -37,6 +38,8 @@ public partial class RequestController(
     private const long MaxUploadSize = 104_857_600; // 100MB
     private const long MaxUploadBytesPerDay = 500 * 1024 * 1024; // 500MB per 24h
     private const int RequestQuotaLimit = 20;
+    private const int MonthlyBoostLimit = 5;
+    private const int BoostWeight = 5;
     private const int MaxCommentLength = 500;
     private const int CommentRateLimitPerFiveMin = 5;
     private const int CommentRateLimitPerHour = 25;
@@ -98,7 +101,8 @@ public partial class RequestController(
         query = sort switch {
             "recent" => query.OrderByDescending(r => r.CreatedAt),
             "completed" => query.OrderByDescending(r => r.CompletedAt).ThenByDescending(r => r.CreatedAt),
-            _ => query.OrderByDescending(r => r.UpvoteCount).ThenByDescending(r => r.CreatedAt),
+            // "top"/default: rank by effective score (raw votes + boosts weighted). Counts stay separate on the row.
+            _ => query.OrderByDescending(r => r.UpvoteCount + r.BoostCount * BoostWeight).ThenByDescending(r => r.CreatedAt),
         };
 
         var requests = await query.Skip(offset).Take(limit).ToListAsync();
@@ -108,6 +112,13 @@ public partial class RequestController(
             .AsNoTracking()
             .Where(u => requestIds.Contains(u.MediaRequestId) && u.UserId == userId)
             .Select(u => u.MediaRequestId)
+            .ToListAsync();
+
+        // A request can only be boosted once per user, ever, so this is an all-time check.
+        var userBoosts = await context.MediaRequestBoosts
+            .AsNoTracking()
+            .Where(b => requestIds.Contains(b.MediaRequestId) && b.UserId == userId)
+            .Select(b => b.MediaRequestId)
             .ToListAsync();
 
         var userSubscriptions = await context.MediaRequestSubscriptions
@@ -157,6 +168,7 @@ public partial class RequestController(
         }
 
         var upvoteSet = new HashSet<int>(userUpvotes);
+        var boostSet = new HashSet<int>(userBoosts);
         var subSet = new HashSet<int>(userSubscriptions);
 
         var dtos = requests.Select(r => new MediaRequestDto
@@ -174,9 +186,11 @@ public partial class RequestController(
                 ? deckTitles.GetValueOrDefault(r.FulfilledDeckId.Value)
                 : null,
             UpvoteCount = r.UpvoteCount,
+            BoostCount = r.BoostCount,
             CommentCount = commentCounts.GetValueOrDefault(r.Id, 0),
             UploadCount = uploadCounts.GetValueOrDefault(r.Id, 0),
             HasUserUpvoted = upvoteSet.Contains(r.Id),
+            HasUserBoosted = boostSet.Contains(r.Id),
             IsSubscribed = subSet.Contains(r.Id),
             IsOwnRequest = r.RequesterId == userId,
             RequesterName = isAdmin ? requesterNames.GetValueOrDefault(r.RequesterId) : null,
@@ -281,6 +295,10 @@ public partial class RequestController(
         var hasUpvoted = await context.MediaRequestUpvotes.AsNoTracking()
             .AnyAsync(u => u.MediaRequestId == id && u.UserId == userId);
 
+        // Boosting a request is a once-ever action per user, so this is an all-time check.
+        var hasBoosted = await context.MediaRequestBoosts.AsNoTracking()
+            .AnyAsync(b => b.MediaRequestId == id && b.UserId == userId);
+
         var isSubscribed = await context.MediaRequestSubscriptions.AsNoTracking()
             .AnyAsync(s => s.MediaRequestId == id && s.UserId == userId);
 
@@ -322,9 +340,11 @@ public partial class RequestController(
             FulfilledDeckId = request.FulfilledDeckId,
             FulfilledDeckTitle = deckTitle,
             UpvoteCount = request.UpvoteCount,
+            BoostCount = request.BoostCount,
             CommentCount = commentCount,
             UploadCount = uploadCount,
             HasUserUpvoted = hasUpvoted,
+            HasUserBoosted = hasBoosted,
             IsSubscribed = isSubscribed,
             IsOwnRequest = request.RequesterId == userId,
             RequesterName = requesterName,
@@ -457,6 +477,7 @@ public partial class RequestController(
         var request = await context.MediaRequests
             .Include(r => r.Comments)
             .Include(r => r.Upvotes)
+            .Include(r => r.Boosts)
             .Include(r => r.Subscriptions)
             .Include(r => r.Uploads)
             .FirstOrDefaultAsync(r => r.Id == id);
@@ -488,6 +509,7 @@ public partial class RequestController(
         context.MediaRequestUploads.RemoveRange(request.Uploads);
         context.MediaRequestComments.RemoveRange(request.Comments);
         context.MediaRequestUpvotes.RemoveRange(request.Upvotes);
+        context.MediaRequestBoosts.RemoveRange(request.Boosts);
         context.MediaRequestSubscriptions.RemoveRange(request.Subscriptions);
         context.MediaRequests.Remove(request);
 
@@ -577,6 +599,110 @@ public partial class RequestController(
             .AnyAsync(u => u.MediaRequestId == id && u.UserId == userId);
 
         return Results.Ok(new { upvoted = hasUpvoted });
+    }
+
+    /// <summary>
+    /// Applies a permanent +<see cref="BoostWeight"/> votes boost to a request. Every Jiten+ user
+    /// gets <see cref="MonthlyBoostLimit"/> boosts per calendar month (UTC).
+    /// </summary>
+    [HttpPost("{id:int}/boost")]
+    [JitenPlus(Feature = "request-boosts")]
+    public async Task<IResult> BoostRequest(int id)
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        var request = await context.MediaRequests.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null)
+            return Results.NotFound("Request not found");
+
+        // Only active requests are boostable — boosting is about steering what gets worked on next.
+        if (request.Status != MediaRequestStatus.Open && request.Status != MediaRequestStatus.InProgress)
+            return Results.BadRequest("Only open or in-progress requests can be boosted.");
+
+        var now = DateTime.UtcNow;
+        var (monthStart, nextMonthStart) = CurrentMonthWindow(now);
+
+        // A request can only ever be boosted once per user, so the uniqueness check is all-time.
+        var alreadyBoosted = await context.MediaRequestBoosts.AsNoTracking()
+            .AnyAsync(b => b.UserId == userId && b.MediaRequestId == id);
+
+        if (alreadyBoosted)
+            return Results.Problem(
+                title: "Already boosted",
+                detail: "You have already boosted this request. Each request can only be boosted once.",
+                statusCode: StatusCodes.Status409Conflict);
+
+        // The 5-per-month allowance is separate: it caps how many distinct requests you can boost each month.
+        var usedThisMonth = await context.MediaRequestBoosts.AsNoTracking()
+            .CountAsync(b => b.UserId == userId && b.CreatedAt >= monthStart && b.CreatedAt < nextMonthStart);
+        if (usedThisMonth >= MonthlyBoostLimit)
+            return Results.Problem(
+                title: "No boosts left",
+                detail: $"You have used all {MonthlyBoostLimit} of your monthly boosts. Your allowance resets on {nextMonthStart:MMMM d} (UTC).",
+                statusCode: StatusCodes.Status422UnprocessableEntity,
+                extensions: new Dictionary<string, object?>
+                {
+                    ["used"] = usedThisMonth,
+                    ["limit"] = MonthlyBoostLimit,
+                    ["remaining"] = 0,
+                    ["resetAt"] = nextMonthStart
+                });
+
+        await using var transaction = await context.Database.BeginTransactionAsync();
+
+        context.MediaRequestBoosts.Add(new MediaRequestBoost
+        {
+            MediaRequestId = id,
+            UserId = userId,
+            CreatedAt = now
+        });
+        await context.SaveChangesAsync();
+
+        await context.MediaRequests
+            .Where(r => r.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.BoostCount, r => r.BoostCount + 1));
+
+        await transaction.CommitAsync();
+
+        var boostCount = request.BoostCount + 1;
+        var used = usedThisMonth + 1;
+        logger.LogInformation("Request boosted: Id={Id}, UserId={UserId}, BoostCount={BoostCount}", id, userId, boostCount);
+
+        return Results.Ok(new
+        {
+            boostCount,
+            balance = new
+            {
+                used,
+                limit = MonthlyBoostLimit,
+                remaining = Math.Max(0, MonthlyBoostLimit - used),
+                resetAt = nextMonthStart
+            }
+        });
+    }
+
+    [HttpGet("boost-balance")]
+    [JitenPlus(Feature = "request-boosts")]
+    public async Task<IResult> GetBoostBalance()
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        var (monthStart, nextMonthStart) = CurrentMonthWindow(DateTime.UtcNow);
+        var used = await context.MediaRequestBoosts.AsNoTracking()
+            .CountAsync(b => b.UserId == userId && b.CreatedAt >= monthStart && b.CreatedAt < nextMonthStart);
+
+        return Results.Ok(new
+        {
+            used,
+            limit = MonthlyBoostLimit,
+            remaining = Math.Max(0, MonthlyBoostLimit - used),
+            resetAt = nextMonthStart
+        });
     }
 
     [HttpPost("{id:int}/subscribe")]
@@ -1387,6 +1513,8 @@ public partial class RequestController(
                 .CountAsync(r => r.RequesterId == targetUserId),
             UpvoteCount = await context.MediaRequestUpvotes.AsNoTracking()
                 .CountAsync(u => u.UserId == targetUserId),
+            BoostCount = await context.MediaRequestBoosts.AsNoTracking()
+                .CountAsync(b => b.UserId == targetUserId),
             SubscriptionCount = await context.MediaRequestSubscriptions.AsNoTracking()
                 .CountAsync(s => s.UserId == targetUserId),
             UploadCount = await context.MediaRequestUploads.AsNoTracking()
@@ -1556,6 +1684,13 @@ public partial class RequestController(
         MediaRequestStatus.Rejected => [MediaRequestStatus.Open],
         _ => []
     };
+
+    // Calendar-month window in UTC: [first of this month 00:00, first of next month 00:00).
+    private static (DateTime MonthStart, DateTime NextMonthStart) CurrentMonthWindow(DateTime utcNow)
+    {
+        var monthStart = new DateTime(utcNow.Year, utcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        return (monthStart, monthStart.AddMonths(1));
+    }
 
     private static string SanitiseFileName(string fileName)
     {

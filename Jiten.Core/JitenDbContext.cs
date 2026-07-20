@@ -60,6 +60,7 @@ public class JitenDbContext : DbContext
 
     public DbSet<MediaRequest> MediaRequests { get; set; }
     public DbSet<MediaRequestUpvote> MediaRequestUpvotes { get; set; }
+    public DbSet<MediaRequestBoost> MediaRequestBoosts { get; set; }
     public DbSet<MediaRequestSubscription> MediaRequestSubscriptions { get; set; }
     public DbSet<MediaRequestComment> MediaRequestComments { get; set; }
     public DbSet<MediaRequestUpload> MediaRequestUploads { get; set; }
@@ -737,6 +738,7 @@ public class JitenDbContext : DbContext
             entity.Property(mr => mr.AdminNote).HasMaxLength(500);
             entity.Property(mr => mr.RequesterId).IsRequired().HasMaxLength(36);
             entity.Property(mr => mr.UpvoteCount).HasDefaultValue(0);
+            entity.Property(mr => mr.BoostCount).HasDefaultValue(0);
             entity.Property(mr => mr.CreatedAt).IsRequired();
             entity.Property(mr => mr.UpdatedAt).IsRequired();
 
@@ -785,6 +787,25 @@ public class JitenDbContext : DbContext
             entity.HasIndex(u => new { u.MediaRequestId, u.UserId })
                   .IsUnique()
                   .HasDatabaseName("IX_MediaRequestUpvote_RequestId_UserId");
+        });
+
+        modelBuilder.Entity<MediaRequestBoost>(entity =>
+        {
+            entity.ToTable("MediaRequestBoosts", "jiten");
+            entity.HasKey(b => b.Id);
+            entity.Property(b => b.Id).ValueGeneratedOnAdd();
+            entity.Property(b => b.UserId).IsRequired().HasMaxLength(36);
+            entity.Property(b => b.CreatedAt).IsRequired();
+
+            entity.HasOne(b => b.MediaRequest)
+                  .WithMany(mr => mr.Boosts)
+                  .HasForeignKey(b => b.MediaRequestId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(b => new { b.MediaRequestId, b.UserId })
+                  .HasDatabaseName("IX_MediaRequestBoost_RequestId_UserId");
+            entity.HasIndex(b => new { b.UserId, b.CreatedAt })
+                  .HasDatabaseName("IX_MediaRequestBoost_UserId_CreatedAt");
         });
 
         modelBuilder.Entity<MediaRequestSubscription>(entity =>
