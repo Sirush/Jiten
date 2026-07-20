@@ -2,7 +2,6 @@ using Hangfire;
 using Jiten.Api.Services;
 using Jiten.Api.Services.Stripe;
 using Jiten.Core;
-using Jiten.Core.Data.Billing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -63,7 +62,7 @@ public class StripeReconcileJob(
         var subs = await gateway.ListSubscriptionsAsync(user.StripeCustomerId!);
 
         // The canonical subscription: an active/trialing one if present, otherwise the one we already track.
-        var canonical = subs.FirstOrDefault(s => s.Status is "active" or "trialing")
+        var canonical = subs.FirstOrDefault(s => StripeOptions.IsActiveStatus(s.Status))
                         ?? subs.FirstOrDefault(s => s.Id == user.StripeSubscriptionId);
 
         var changed = false;
@@ -82,7 +81,7 @@ public class StripeReconcileJob(
             return changed;
         }
 
-        var active = canonical.Status is "active" or "trialing";
+        var active = StripeOptions.IsActiveStatus(canonical.Status);
         if (user.StripeSubscriptionActive != active)
         {
             logger.LogWarning("StripeReconcile: user {UserId} active flag {Old} -> {New}", userId, user.StripeSubscriptionActive, active);
@@ -104,7 +103,7 @@ public class StripeReconcileJob(
             changed = true;
         }
 
-        var plan = PlanFromPriceId(canonical.PriceId);
+        var plan = _options.PlanForPriceId(canonical.PriceId);
         if (plan.HasValue && user.SubscriptionPlan != plan)
         {
             logger.LogWarning("StripeReconcile: user {UserId} plan {Old} -> {New}", userId, user.SubscriptionPlan, plan);
@@ -114,13 +113,5 @@ public class StripeReconcileJob(
 
         if (changed) await context.SaveChangesAsync();
         return changed;
-    }
-
-    private SubscriptionPlan? PlanFromPriceId(string? priceId)
-    {
-        if (string.IsNullOrEmpty(priceId)) return null;
-        if (priceId == _options.MonthlyPriceId) return SubscriptionPlan.Monthly;
-        if (priceId == _options.YearlyPriceId) return SubscriptionPlan.Yearly;
-        return null;
     }
 }

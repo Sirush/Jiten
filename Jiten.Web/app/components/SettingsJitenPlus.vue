@@ -1,7 +1,5 @@
 <script setup lang="ts">
-  const { tier, sources, loading } = useJitenPlus();
-
-  const tierBadgeTier = computed<'any' | 'full'>(() => (tier.value === 'full' ? 'full' : 'any'));
+  const { tier, sources } = useJitenPlus();
 
   const detailLine = computed(() => {
     const s = sources.value;

@@ -33,9 +33,6 @@ public class StripeService(
     private const string SiteUrl = "https://jiten.moe";
     private const string Currency = "eur";
 
-    // Lifetime sticker price in whole cents (tax-inclusive) — the ceiling on any upgrade credit.
-    private const long LifetimePriceCents = 15000;
-
     private readonly StripeOptions _options = options.Value;
 
     public async Task<CheckoutOutcome> CreateCheckoutAsync(string userId, CheckoutPlan plan, CancellationToken ct = default)
@@ -108,7 +105,7 @@ public class StripeService(
             return 0;
 
         var invoices = await gateway.ListSubscriptionInvoicesAsync(subscriptionId, ct);
-        return ComputeUpgradeCreditCents(invoices, sub.CurrentPeriodStart.Value, sub.CurrentPeriodEnd.Value, now, LifetimePriceCents);
+        return ComputeUpgradeCreditCents(invoices, sub.CurrentPeriodStart.Value, sub.CurrentPeriodEnd.Value, now, _options.LifetimePriceCents);
     }
 
     /// <summary>
@@ -213,22 +210,30 @@ public class StripeService(
         cache.Set(dedupeKey, true, TimeSpan.FromHours(6));
     }
 
+    /// <summary>
+    /// Marks the user lifetime, cancels any active subscription immediately, and saves. The caller owns
+    /// idempotency and user-facing messaging. Cancelled immediately (not at period end) because the upgrade
+    /// credit already compensated the unused time, and a still-running subscription (which may keep its
+    /// original billing anchor) could otherwise be invoiced again.
+    /// </summary>
+    public async Task GrantLifetimeAsync(User user, LifetimeSource source, CancellationToken ct = default)
+    {
+        user.IsLifetime = true;
+        user.LifetimeSource = source;
+
+        var subToCancel = user.StripeSubscriptionActive ? user.StripeSubscriptionId : null;
+        await userContext.SaveChangesAsync(ct);
+
+        if (!string.IsNullOrEmpty(subToCancel))
+            await gateway.CancelSubscriptionImmediatelyAsync(subToCancel, ct);
+    }
+
     private async Task HandleLifetimeAsync(User user, CancellationToken ct)
     {
         if (user.IsLifetime)
             return; // already applied — idempotent
 
-        user.IsLifetime = true;
-        user.LifetimeSource = LifetimeSource.WindowPurchase;
-
-        var subToCancel = user.StripeSubscriptionActive ? user.StripeSubscriptionId : null;
-        await userContext.SaveChangesAsync(ct);
-
-        // Cancel immediately, not at period end: the upgrade credit already compensated the unused time, and a
-        // still-running subscription (which may keep its original billing anchor) could otherwise be invoiced again.
-        if (!string.IsNullOrEmpty(subToCancel))
-            await gateway.CancelSubscriptionImmediatelyAsync(subToCancel, ct);
-
+        await GrantLifetimeAsync(user, LifetimeSource.WindowPurchase, ct);
         await SafeSend(() => emails.SendLifetimeConfirmedAsync(user.Email));
     }
 
@@ -287,11 +292,11 @@ public class StripeService(
             return;
         }
 
-        user.StripeSubscriptionActive = IsActiveStatus(snapshot.Status);
+        user.StripeSubscriptionActive = StripeOptions.IsActiveStatus(snapshot.Status);
         if (snapshot.CurrentPeriodEnd.HasValue)
             user.SubscriptionPeriodEnd = snapshot.CurrentPeriodEnd;
 
-        var plan = PlanFromPriceId(snapshot.PriceId);
+        var plan = _options.PlanForPriceId(snapshot.PriceId);
         if (plan.HasValue)
             user.SubscriptionPlan = plan;
     }
@@ -311,17 +316,6 @@ public class StripeService(
         return await userContext.Users.Where(u => u.StripeCustomerId == evt.CustomerId)
                                 .Select(u => u.Id).FirstOrDefaultAsync(ct);
     }
-
-    private SubscriptionPlan? PlanFromPriceId(string? priceId)
-    {
-        if (string.IsNullOrEmpty(priceId)) return null;
-        if (priceId == _options.MonthlyPriceId) return SubscriptionPlan.Monthly;
-        if (priceId == _options.YearlyPriceId) return SubscriptionPlan.Yearly;
-        return null;
-    }
-
-    private static bool IsActiveStatus(string? status) =>
-        status is "active" or "trialing";
 
     private async Task SafeSend(Func<Task> send)
     {

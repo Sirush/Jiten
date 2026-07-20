@@ -23,7 +23,7 @@ public partial class AdminController
         [FromServices] NotificationService notificationService,
         [FromServices] IEmailService emailService,
         [FromServices] IJitenPlusService jitenPlus,
-        [FromServices] IStripeGateway stripeGateway)
+        [FromServices] StripeService stripeService)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
@@ -35,6 +35,7 @@ public partial class AdminController
             return NotFound(new { Message = "User not found" });
 
         var kind = request.Kind.Trim().ToLowerInvariant();
+        var personal = string.IsNullOrWhiteSpace(request.ThankYouMessage) ? null : request.ThankYouMessage.Trim();
         string summary;
 
         if (kind == "lifetime")
@@ -42,13 +43,7 @@ public partial class AdminController
             if (user.IsLifetime)
                 return BadRequest(new { Message = "User already has lifetime Jiten+." });
 
-            user.IsLifetime = true;
-            user.LifetimeSource = LifetimeSource.ContributorGrant;
-
-            var subToCancel = user.StripeSubscriptionActive ? user.StripeSubscriptionId : null;
-            await userContext.SaveChangesAsync();
-            if (!string.IsNullOrEmpty(subToCancel))
-                await stripeGateway.CancelSubscriptionImmediatelyAsync(subToCancel);
+            await stripeService.GrantLifetimeAsync(user, LifetimeSource.ContributorGrant);
 
             summary = "You've been given Jiten+ lifetime access as a thank-you.";
         }
@@ -65,7 +60,7 @@ public partial class AdminController
                 GrantsFullTier = request.GrantsFullTier,
                 RemainingDays = request.Days.Value,
                 GrantedAt = DateTime.UtcNow,
-                ThankYouMessage = string.IsNullOrWhiteSpace(request.ThankYouMessage) ? null : request.ThankYouMessage.Trim()
+                ThankYouMessage = personal
             });
             await userContext.SaveChangesAsync();
             summary = $"You've been given {request.Days.Value} day{(request.Days.Value == 1 ? "" : "s")} of Jiten+ as a thank-you.";
@@ -80,7 +75,6 @@ public partial class AdminController
         // Deliver the thank-you both in-app and by email, each carrying the personal message. The blank line
         // between the summary and the personal note is a markdown paragraph break the clients render (and it
         // keeps the admin's own line breaks intact).
-        var personal = string.IsNullOrWhiteSpace(request.ThankYouMessage) ? null : request.ThankYouMessage.Trim();
         var notifMessage = personal is null ? summary : $"{summary}\n\n{personal}";
         if (notifMessage.Length > 500)
             notifMessage = notifMessage[..500];
