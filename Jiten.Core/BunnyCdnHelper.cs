@@ -8,6 +8,8 @@ public class BunnyCdnHelper
     private static string? _secret;
     private static string? _storageZoneName;
     private static string? _cdnBaseUrl;
+    private static string? _apiKey;
+    private static readonly HttpClient _httpClient = new();
 
     static BunnyCdnHelper()
     {
@@ -22,6 +24,7 @@ public class BunnyCdnHelper
         _secret = configuration.GetValue<string>("BunnyCdnSecret");
         _storageZoneName = configuration.GetValue<string>("BunnyCdnStorageZone");
         _cdnBaseUrl = configuration.GetValue<string>("CdnBaseUrl");
+        _apiKey = configuration.GetValue<string>("BunnyCdnApiKey");
     }
 
     public BunnyCdnHelper()
@@ -64,4 +67,28 @@ public class BunnyCdnHelper
     }
 
     public static string GetCdnUrl(string storagePath) => $"{_cdnBaseUrl}/{storagePath}";
+
+    /// <summary>
+    /// Purges the pull-zone cache for a single URL so an overwritten file is refreshed immediately.
+    /// Best-effort: silently no-ops when no account API key is configured and never throws.
+    /// </summary>
+    public static async Task PurgeUrl(string cdnUrl)
+    {
+        if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrEmpty(cdnUrl))
+            return;
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post,
+                                                 $"https://api.bunny.net/purge?url={Uri.EscapeDataString(cdnUrl)}&async=false");
+            request.Headers.Add("AccessKey", _apiKey);
+            var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+                Console.WriteLine($"[{DateTime.UtcNow:O}] Warning: CDN purge for {cdnUrl} returned {(int)response.StatusCode}.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[{DateTime.UtcNow:O}] Warning: CDN purge for {cdnUrl} failed: {ex.Message}");
+        }
+    }
 }

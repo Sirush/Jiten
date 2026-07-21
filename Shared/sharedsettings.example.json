@@ -33,6 +33,7 @@
   "StaticFilesPath": "/path/to/staticFiles",
   "UseBunnyCdn": false,
   "BunnyCdnSecret": "",
+  "BunnyCdnApiKey": "",
   "BunnyCdnStorageZone": "jiten",
   "CdnBaseUrl": "https://jiten.b-cdn.net",
   "DictionaryPath": "path/to/system_full.dic",

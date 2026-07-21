@@ -13,4 +13,7 @@ public class BunnyCdnService : ICdnService
 
     public Task<byte[]?> DownloadFile(string storagePath)
         => BunnyCdnHelper.DownloadFile(storagePath);
+
+    public Task PurgeUrl(string cdnUrl)
+        => BunnyCdnHelper.PurgeUrl(cdnUrl);
 }

@@ -168,6 +168,9 @@ public static class JitenHelper
                     {
                         var coverUrl = await BunnyCdnHelper.UploadFile(optimizedCoverBytes, $"{deck.DeckId}/cover.jpg");
                         deck.CoverName = coverUrl;
+
+                        // The pull-zone cache isn't purged when a file is overwritten, so refresh this single URL.
+                        await BunnyCdnHelper.PurgeUrl(coverUrl);
                     }
                     catch (Exception ex)
                     {

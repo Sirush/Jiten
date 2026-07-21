@@ -6,6 +6,7 @@ public class StubCdnService : ICdnService
 {
     public List<(byte[] File, string FileName)> Uploads { get; } = [];
     public List<string> Deletions { get; } = [];
+    public List<string> Purges { get; } = [];
 
     public Task<string> UploadFile(byte[] file, string fileName)
     {
@@ -20,6 +21,12 @@ public class StubCdnService : ICdnService
     }
 
     public string GetCdnUrl(string storagePath) => $"https://cdn.test/{storagePath}";
+
+    public Task PurgeUrl(string cdnUrl)
+    {
+        Purges.Add(cdnUrl);
+        return Task.CompletedTask;
+    }
 
     public Task<byte[]?> DownloadFile(string storagePath)
     {
