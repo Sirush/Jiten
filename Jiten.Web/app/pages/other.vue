@@ -159,6 +159,17 @@
             </template>
           </Column>
         </DataTable>
+        <div class="mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
+          <JitenPlusGate feature="freq-list-generate" feature-label="Custom frequency lists" compact>
+            <Button as="router-link" to="/frequency-lists/custom" severity="primary" outlined>
+              <Icon name="material-symbols-light:tune" class="mr-2" size="1.4em" />
+              Build your own custom list
+            </Button>
+          </JitenPlusGate>
+          <span class="text-sm text-surface-500">
+            Filter by media type, genre, tag, year or difficulty or hand-pick decks. <JitenPlusBadge />
+          </span>
+        </div>
       </template>
     </Card>
 

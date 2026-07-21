@@ -1208,6 +1208,8 @@ public class ComputationJob(
             await File.WriteAllBytesAsync(filePath, bytes);
             await File.WriteAllTextAsync(indexFilePath, index);
         }
+
+        backgroundJobs.Enqueue<FrequencyListJob>(job => job.RegenerateAutoUpdateLists());
     }
 
     public async Task RecomputeKanjiFrequencies()
@@ -1280,48 +1282,13 @@ public class ComputationJob(
         var formsByWord = allForms.GroupBy(wf => wf.WordId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        var formFreqLookup = formFrequencies
-            .ToDictionary(ff => (ff.WordId, ff.ReadingIndex));
-
-        List<(string word, string form, int rank)> frequencyList = new();
-        var addedEntries = new HashSet<string>();
-
-        foreach (var frequency in frequencies)
-        {
-            if (!formsByWord.TryGetValue(frequency.WordId, out var wordForms))
-                continue;
-
-            var kanaForms = wordForms.Where(wf => wf.FormType == JmDictFormType.KanaForm)
-                .OrderBy(wf => wf.ReadingIndex).ToList();
-            var kanjiForms = wordForms.Where(wf => wf.FormType == JmDictFormType.KanjiForm).ToList();
-
-            string mainKanaReading = kanaForms.FirstOrDefault()?.Text ?? "";
-
-            foreach (var kanaForm in kanaForms)
-            {
-                var formFreq = formFreqLookup.GetValueOrDefault((frequency.WordId, kanaForm.ReadingIndex));
-                if (formFreq == null || formFreq.UsedInMediaAmount <= 0) continue;
-                if (!addedEntries.Add(kanaForm.Text)) continue;
-
-                frequencyList.Add((kanaForm.Text, kanaForm.Text, formFreq.FrequencyRank));
-            }
-
-            foreach (var kanjiForm in kanjiForms)
-            {
-                var formFreq = formFreqLookup.GetValueOrDefault((frequency.WordId, kanjiForm.ReadingIndex));
-                if (formFreq == null || formFreq.UsedInMediaAmount <= 0) continue;
-
-                frequencyList.Add((kanjiForm.Text, mainKanaReading, formFreq.FrequencyRank));
-            }
-        }
-
-        frequencyList.Sort((a, b) => a.rank.CompareTo(b.rank));
+        var frequencyList = YomitanHelper.BuildFrequencyCsvRows(frequencies, formFrequencies, formsByWord);
 
         using var stream = new MemoryStream();
         await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
         await using var csv = new CsvWriter(writer, CultureInfo.InvariantCulture);
 
-        var frequencyListCsv = frequencyList.Select(f => new { Word = f.word, Form = f.form, Rank = f.rank }).ToArray();
+        var frequencyListCsv = frequencyList.Select(f => new { f.Word, f.Form, f.Rank }).ToArray();
 
         await csv.WriteRecordsAsync(frequencyListCsv);
         await writer.FlushAsync();

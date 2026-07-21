@@ -650,62 +650,154 @@ public static class JitenHelper
     public static async Task<(List<JmDictWordFrequency> WordFrequencies, List<JmDictWordFormFrequency> FormFrequencies)>
         ComputeFrequencies(IDbContextFactory<JitenDbContext> contextFactory, MediaType? mediaType = null)
     {
+        List<int> primaryDeckIds;
+        await using (var selectionContext = await contextFactory.CreateDbContextAsync())
+        {
+            var primaryDecksQuery = selectionContext.Decks.AsNoTracking().Where(d => d.ParentDeck == null);
+            if (mediaType.HasValue)
+                primaryDecksQuery = primaryDecksQuery.Where(d => d.MediaType == mediaType.Value);
+            primaryDeckIds = await primaryDecksQuery.Select(d => d.DeckId).ToListAsync();
+        }
+
+        return await ComputeFrequenciesForDeckIds(contextFactory, primaryDeckIds);
+    }
+
+    /// <summary>
+    /// Computes in-memory frequency data for an explicit set of primary deck ids (used by custom frequency
+    /// lists). CRITICAL: never pass this result to <see cref="SaveFrequenciesToDatabase"/> — that TRUNCATEs
+    /// the site-wide jmdict.WordFrequencies tables. In-memory results only.
+    /// </summary>
+    public static async Task<(List<JmDictWordFrequency> WordFrequencies, List<JmDictWordFormFrequency> FormFrequencies)>
+        ComputeFrequenciesForDeckIds(IDbContextFactory<JitenDbContext> contextFactory, List<int> primaryDecks)
+    {
         await using var context = await contextFactory.CreateDbContextAsync();
 
-        // Initialise word frequencies from WordForms
+        // Seed one entry per word / per reading from the full WordForms vocabulary.
         var wordFormKeys = await context.WordForms.AsNoTracking()
             .Select(wf => new { wf.WordId, wf.ReadingIndex })
             .ToListAsync();
 
-        var wordIds = wordFormKeys.Select(wf => wf.WordId).Distinct().ToList();
-
-        Dictionary<int, JmDictWordFrequency> wordFrequencies = new();
-        foreach (var wordId in wordIds)
-        {
-            wordFrequencies.Add(wordId, new JmDictWordFrequency
-            {
-                WordId = wordId, FrequencyRank = 0, UsedInMediaAmount = 0
-            });
-        }
-
-        // Initialise per-reading form frequencies
-        var readingFreqs = new Dictionary<(int, short), JmDictWordFormFrequency>();
-        foreach (var fk in wordFormKeys)
-        {
-            readingFreqs[(fk.WordId, fk.ReadingIndex)] = new JmDictWordFormFrequency
-            {
-                WordId = fk.WordId, ReadingIndex = fk.ReadingIndex
-            };
-        }
-
-        var formFreqsByWord = readingFreqs.Values
-            .GroupBy(rf => rf.WordId)
-            .ToDictionary(g => g.Key, g => g.OrderBy(rf => rf.ReadingIndex).ToList());
-
-        var primaryDecksQuery = context.Decks.AsNoTracking().Where(d => d.ParentDeck == null);
-
-        if (mediaType.HasValue)
-        {
-            primaryDecksQuery = primaryDecksQuery.Where(d => d.MediaType == mediaType.Value);
-        }
-
-        var primaryDecks = await primaryDecksQuery.Select(d => d.DeckId).ToListAsync();
+        var (wordFrequencies, readingFreqs) =
+            BuildInitialFrequencyDicts(wordFormKeys.Select(fk => (fk.WordId, fk.ReadingIndex)));
 
         if (!primaryDecks.Any())
         {
             return (wordFrequencies.Values.ToList(), readingFreqs.Values.ToList());
         }
 
-        var wordAggregates = await context.DeckWords
-                                          .Where(d => primaryDecks.Contains(d.DeckId))
-                                          .GroupBy(d => d.WordId)
-                                          .Select(g => new
-                                                       {
-                                                           WordId = g.Key, TotalOccurrences = g.Sum(dw => dw.Occurrences),
-                                                           DistinctDeckCount =
-                                                               g.Select(dw => dw.DeckId).Distinct().Count()
-                                                       })
-                                          .ToListAsync();
+        var (wordAggregates, readingAggregates) = await LoadDeckWordAggregates(context, primaryDecks);
+
+        return ApplyAggregatesAndRank(wordFrequencies, readingFreqs, wordAggregates, readingAggregates);
+    }
+
+    /// <summary>
+    /// Custom-frequency-list variant of <see cref="ComputeFrequenciesForDeckIds"/>: aggregates the deck set
+    /// first, then only initialises entries for observed words instead of the full JMdict vocabulary
+    /// (~800k words). Produces identical entries and ranks for every observed word (unobserved words are
+    /// simply absent) and also returns the observed words' WordForms so the Yomitan/CSV generators don't
+    /// have to re-query them. The global/per-media pipeline must keep using
+    /// <see cref="ComputeFrequenciesForDeckIds"/>, which emits a row for every word as required by
+    /// <see cref="SaveFrequenciesToDatabase"/>.
+    /// </summary>
+    public static async Task<(List<JmDictWordFrequency> WordFrequencies, List<JmDictWordFormFrequency> FormFrequencies,
+            List<JmDictWordForm> WordForms)>
+        ComputeObservedFrequenciesForDeckIds(IDbContextFactory<JitenDbContext> contextFactory, List<int> primaryDecks)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        if (!primaryDecks.Any())
+            return ([], [], []);
+
+        var (wordAggregates, readingAggregates) = await LoadDeckWordAggregates(context, primaryDecks);
+
+        var observedWordIds = wordAggregates.Select(a => a.WordId).ToList();
+        var observedForms = await context.WordForms.AsNoTracking()
+                                         .Where(wf => observedWordIds.Contains(wf.WordId))
+                                         .ToListAsync();
+
+        var (wordFrequencies, readingFreqs) =
+            BuildInitialFrequencyDicts(observedForms.Select(f => (f.WordId, f.ReadingIndex)));
+
+        var (words, forms) = ApplyAggregatesAndRank(wordFrequencies, readingFreqs,
+                                                    wordAggregates, readingAggregates);
+        return (words, forms, observedForms);
+    }
+
+    /// <summary>
+    /// Seeds a zeroed <see cref="JmDictWordFrequency"/> per distinct word and a zeroed
+    /// <see cref="JmDictWordFormFrequency"/> per (word, reading) key, ready for the deck aggregates to
+    /// be applied by <see cref="ApplyAggregatesAndRank"/>.
+    /// </summary>
+    private static (Dictionary<int, JmDictWordFrequency> WordFrequencies,
+        Dictionary<(int, short), JmDictWordFormFrequency> ReadingFreqs)
+        BuildInitialFrequencyDicts(IEnumerable<(int WordId, short ReadingIndex)> formKeys)
+    {
+        Dictionary<int, JmDictWordFrequency> wordFrequencies = new();
+        var readingFreqs = new Dictionary<(int, short), JmDictWordFormFrequency>();
+        foreach (var (wordId, readingIndex) in formKeys)
+        {
+            if (!wordFrequencies.ContainsKey(wordId))
+            {
+                wordFrequencies.Add(wordId, new JmDictWordFrequency
+                {
+                    WordId = wordId, FrequencyRank = 0, UsedInMediaAmount = 0
+                });
+            }
+
+            readingFreqs[(wordId, readingIndex)] = new JmDictWordFormFrequency
+            {
+                WordId = wordId, ReadingIndex = readingIndex
+            };
+        }
+
+        return (wordFrequencies, readingFreqs);
+    }
+
+    private sealed record DeckWordAggregate(int WordId, int TotalOccurrences, int DistinctDeckCount);
+
+    private sealed record DeckReadingAggregate(int WordId, byte ReadingIndex, int TotalOccurrences, int EntryCount);
+
+    private static async Task<(List<DeckWordAggregate> WordAggregates, List<DeckReadingAggregate> ReadingAggregates)>
+        LoadDeckWordAggregates(JitenDbContext context, List<int> primaryDecks)
+    {
+        var wordAggregates = (await context.DeckWords
+                                           .Where(d => primaryDecks.Contains(d.DeckId))
+                                           .GroupBy(d => d.WordId)
+                                           .Select(g => new
+                                                        {
+                                                            WordId = g.Key, TotalOccurrences = g.Sum(dw => dw.Occurrences),
+                                                            DistinctDeckCount =
+                                                                g.Select(dw => dw.DeckId).Distinct().Count()
+                                                        })
+                                           .ToListAsync())
+                             .Select(a => new DeckWordAggregate(a.WordId, a.TotalOccurrences, a.DistinctDeckCount))
+                             .ToList();
+
+        var readingAggregates = (await context.DeckWords
+                                              .Where(d => primaryDecks.Contains(d.DeckId))
+                                              .GroupBy(d => new { d.WordId, d.ReadingIndex })
+                                              .Select(g => new
+                                                           {
+                                                               g.Key.WordId, g.Key.ReadingIndex,
+                                                               TotalOccurrences = g.Sum(dw => dw.Occurrences),
+                                                               EntryCount = g.Count()
+                                                           })
+                                              .ToListAsync())
+                                .Select(a => new DeckReadingAggregate(a.WordId, a.ReadingIndex, a.TotalOccurrences, a.EntryCount))
+                                .ToList();
+
+        return (wordAggregates, readingAggregates);
+    }
+
+    private static (List<JmDictWordFrequency> WordFrequencies, List<JmDictWordFormFrequency> FormFrequencies)
+        ApplyAggregatesAndRank(Dictionary<int, JmDictWordFrequency> wordFrequencies,
+                               Dictionary<(int, short), JmDictWordFormFrequency> readingFreqs,
+                               List<DeckWordAggregate> wordAggregates,
+                               List<DeckReadingAggregate> readingAggregates)
+    {
+        var formFreqsByWord = readingFreqs.Values
+            .GroupBy(rf => rf.WordId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(rf => rf.ReadingIndex).ToList());
 
         foreach (var agg in wordAggregates)
         {
@@ -715,16 +807,6 @@ public static class JitenHelper
                 freq.UsedInMediaAmount = agg.DistinctDeckCount;
             }
         }
-
-        var readingAggregates = await context.DeckWords
-                                             .Where(d => primaryDecks.Contains(d.DeckId))
-                                             .GroupBy(d => new { d.WordId, d.ReadingIndex })
-                                             .Select(g => new
-                                                          {
-                                                              g.Key.WordId, g.Key.ReadingIndex,
-                                                              TotalOccurrences = g.Sum(dw => dw.Occurrences), EntryCount = g.Count()
-                                                          })
-                                             .ToListAsync();
 
         foreach (var agg in readingAggregates)
         {

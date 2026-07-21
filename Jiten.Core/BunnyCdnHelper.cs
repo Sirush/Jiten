@@ -44,5 +44,24 @@ public class BunnyCdnHelper
         await bunnyCDNStorage.DeleteObjectAsync($"{_storageZoneName}/{storagePath}");
     }
 
+    public static async Task<byte[]?> DownloadFile(string storagePath)
+    {
+        var bunnyCDNStorage = new BunnyCDNStorage(_storageZoneName, _secret, "de");
+        try
+        {
+            await using var stream = await bunnyCDNStorage.DownloadObjectAsStreamAsync($"{_storageZoneName}/{storagePath}");
+            if (stream == null)
+                return null;
+
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            return ms.ToArray();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     public static string GetCdnUrl(string storagePath) => $"{_cdnBaseUrl}/{storagePath}";
 }

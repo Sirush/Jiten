@@ -44,6 +44,7 @@ public class UserDbContext : IdentityDbContext<User>
 
     public DbSet<PromoCode> PromoCodes { get; set; }
     public DbSet<UserPromoCredit> UserPromoCredits { get; set; }
+    public DbSet<UserFrequencyList> UserFrequencyLists { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -444,6 +445,47 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasIndex(upc => new { upc.UserId, upc.PromoCodeId })
                   .IsUnique()
                   .HasDatabaseName("IX_UserPromoCredit_UserId_PromoCodeId");
+        });
+
+        modelBuilder.Entity<UserFrequencyList>(entity =>
+        {
+            entity.HasKey(f => f.Id);
+            if (isNpgsql)
+            {
+                entity.Property(f => f.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+                entity.Property(f => f.DefinitionJson).HasColumnType("jsonb").IsRequired();
+            }
+            else
+            {
+                entity.Property(f => f.DefinitionJson).IsRequired();
+            }
+            entity.Property(f => f.Name).HasMaxLength(100).IsRequired();
+            entity.Property(f => f.PublicSlug).HasMaxLength(32);
+            entity.Property(f => f.ZipUrl).HasMaxLength(1024);
+            entity.Property(f => f.CsvUrl).HasMaxLength(1024);
+            entity.Property(f => f.CreatedAt).IsRequired();
+            entity.Ignore(f => f.Definition);
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(f => f.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(f => f.UserId).HasDatabaseName("IX_UserFrequencyList_UserId");
+
+            // Unique share slug where set. On Postgres a filtered index keeps multiple NULLs legal;
+            // SQLite already treats NULLs as distinct, so a plain unique index suffices there.
+            if (isNpgsql)
+            {
+                entity.HasIndex(f => f.PublicSlug)
+                      .IsUnique()
+                      .HasFilter("\"PublicSlug\" IS NOT NULL")
+                      .HasDatabaseName("IX_UserFrequencyList_PublicSlug");
+            }
+            else
+            {
+                entity.HasIndex(f => f.PublicSlug).IsUnique().HasDatabaseName("IX_UserFrequencyList_PublicSlug");
+            }
         });
 
         base.OnModelCreating(modelBuilder);

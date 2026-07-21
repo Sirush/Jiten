@@ -20,4 +20,10 @@ public class StubCdnService : ICdnService
     }
 
     public string GetCdnUrl(string storagePath) => $"https://cdn.test/{storagePath}";
+
+    public Task<byte[]?> DownloadFile(string storagePath)
+    {
+        var match = Uploads.LastOrDefault(u => u.FileName == storagePath);
+        return Task.FromResult(match.File);
+    }
 }

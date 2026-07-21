@@ -479,6 +479,20 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
+    options.AddPolicy("freq-list-create", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5, Window = TimeSpan.FromMinutes(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
     options.AddPolicy("auth", context =>
     {
         var partitionKey = $"ip:{GetClientIp(context)}";
@@ -563,6 +577,7 @@ builder.Services.AddScoped<DifficultyAdjustmentJob>();
 builder.Services.AddScoped<RecomputeVectorsJob>();
 builder.Services.AddScoped<StripeReconcileJob>();
 builder.Services.AddScoped<DecrementPromoCreditsJob>();
+builder.Services.AddScoped<FrequencyListJob>();
 
 builder.Services.AddHangfire(configuration =>
                                  configuration.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -727,6 +742,14 @@ if (!app.Environment.IsEnvironment("Testing"))
         "promo-credits-decrement",
         job => job.Run(),
         Cron.Daily(1));
+
+    // Auto-update lists are regenerated at the end of ComputationJob.RecomputeFrequencies instead of on a schedule.
+    recurringJobs.RemoveIfExists("freq-list-auto-update");
+
+    recurringJobs.AddOrUpdate<FrequencyListJob>(
+        "freq-list-transient-cleanup",
+        job => job.CleanupTransientLists(),
+        Cron.Daily(3));
 }
 
 app.UseResponseCompression();

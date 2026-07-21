@@ -10,4 +10,7 @@ public class BunnyCdnService : ICdnService
 
     public string GetCdnUrl(string storagePath)
         => BunnyCdnHelper.GetCdnUrl(storagePath);
+
+    public Task<byte[]?> DownloadFile(string storagePath)
+        => BunnyCdnHelper.DownloadFile(storagePath);
 }
