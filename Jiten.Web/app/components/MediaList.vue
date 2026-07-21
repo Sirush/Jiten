@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { useApiFetchPaginated } from '~/composables/useApiFetch';
+  import { useApiFetch, useApiFetchPaginated } from '~/composables/useApiFetch';
   import { type Deck, MediaType, SortOrder, type Word, DisplayStyle } from '~/types';
   import Skeleton from 'primevue/skeleton';
   import Card from 'primevue/card';
@@ -563,6 +563,44 @@
     watch: [offset, mediaType],
   });
 
+  const facetArr = (a: number[]) => (a.length > 0 ? a.join(',') : undefined);
+  const facetNum = (v: number | null) => (v == null ? undefined : v);
+  const { data: facetData } = useApiFetch<{ genreCounts: Record<number, number>; tagCounts: Record<number, number> }>(
+    'media-deck/filter-facets',
+    {
+      server: false,
+      lazy: true,
+      query: {
+        mediaType: computed(() => (mediaType.value ? Number(mediaType.value) : undefined)),
+        charCountMin: computed(() => facetNum(debouncedFilters.value.charCountMin)),
+        charCountMax: computed(() => facetNum(debouncedFilters.value.charCountMax)),
+        difficultyMin: computed(() => facetNum(debouncedFilters.value.difficultyMin)),
+        difficultyMax: computed(() => facetNum(debouncedFilters.value.difficultyMax)),
+        releaseYearMin: computed(() => facetNum(debouncedFilters.value.releaseYearMin)),
+        releaseYearMax: computed(() => facetNum(debouncedFilters.value.releaseYearMax)),
+        uniqueKanjiMin: computed(() => facetNum(debouncedFilters.value.uniqueKanjiMin)),
+        uniqueKanjiMax: computed(() => facetNum(debouncedFilters.value.uniqueKanjiMax)),
+        subdeckCountMin: computed(() => facetNum(debouncedFilters.value.subdeckCountMin)),
+        subdeckCountMax: computed(() => facetNum(debouncedFilters.value.subdeckCountMax)),
+        extRatingMin: computed(() => facetNum(debouncedFilters.value.extRatingMin)),
+        extRatingMax: computed(() => facetNum(debouncedFilters.value.extRatingMax)),
+        speechSpeedMin: computed(() => facetNum(debouncedFilters.value.speechSpeedMin)),
+        speechSpeedMax: computed(() => facetNum(debouncedFilters.value.speechSpeedMax)),
+        speechDurationMin: computed(() => facetNum(debouncedFilters.value.speechDurationMin)),
+        speechDurationMax: computed(() => facetNum(debouncedFilters.value.speechDurationMax)),
+        genres: computed(() => facetArr(debouncedFilters.value.includeGenres)),
+        excludeGenres: computed(() => facetArr(debouncedFilters.value.excludeGenres)),
+        tags: computed(() => facetArr(debouncedFilters.value.includeTags)),
+        excludeTags: computed(() => facetArr(debouncedFilters.value.excludeTags)),
+        excludeSequels: computed(() => (debouncedFilters.value.excludeSequels === true ? true : undefined)),
+      },
+      watch: [mediaType, debouncedFilters],
+    },
+  );
+
+  const genreCounts = computed(() => facetData.value?.genreCounts ?? {});
+  const tagCounts = computed(() => facetData.value?.tagCounts ?? {});
+
   const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
 
   // Stream cards in over a few frames instead of mounting the whole page at once.
@@ -691,6 +729,8 @@
         v-model:exclude-tags="excludeTags"
         v-model:exclude-sequels="excludeSequels"
         :is-connected="isConnected"
+        :genre-counts="genreCounts"
+        :tag-counts="tagCounts"
         @reset="resetAllFilters"
       />
 

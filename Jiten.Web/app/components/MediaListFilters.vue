@@ -5,9 +5,14 @@
   import type { TagState } from '~/components/TriStateTag.vue';
   import ScrollPanel from 'primevue/scrollpanel';
 
-  const props = defineProps<{
-    isConnected: boolean;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      isConnected: boolean;
+      genreCounts?: Record<number, number>;
+      tagCounts?: Record<number, number>;
+    }>(),
+    { genreCounts: () => ({}), tagCounts: () => ({}) },
+  );
 
   const emit = defineEmits<{
     reset: [];
@@ -81,17 +86,39 @@
   const genreSearchQuery = ref('');
   const tagSearchQuery = ref('');
 
+  // Only hide zero-count chips once counts have actually loaded (empty = not loaded, or nothing matches).
+  const hasGenreFacets = computed(() => Object.keys(props.genreCounts).length > 0);
+  const hasTagFacets = computed(() => Object.keys(props.tagCounts).length > 0);
+
   const filteredGenres = computed(() => {
-    if (!genreSearchQuery.value) return genres.value;
     const query = genreSearchQuery.value.toLowerCase();
-    return genres.value.filter((genre) => genre.label.toLowerCase().includes(query));
+    return genres.value.filter((genre) => {
+      if (query && !genre.label.toLowerCase().includes(query)) return false;
+      // keep selected chips reachable so they can be toggled back off
+      if (includeGenres.value.includes(genre.value) || excludeGenres.value.includes(genre.value)) return true;
+      if (!hasGenreFacets.value) return true;
+      return (props.genreCounts[genre.value] ?? 0) > 0;
+    });
   });
 
   const filteredTags = computed(() => {
-    if (!tagSearchQuery.value) return tags.value;
     const query = tagSearchQuery.value.toLowerCase();
-    return tags.value.filter((tag) => tag.name.toLowerCase().includes(query));
+    return tags.value.filter((tag) => {
+      if (query && !tag.name.toLowerCase().includes(query)) return false;
+      if (includeTags.value.includes(tag.tagId) || excludeTags.value.includes(tag.tagId)) return true;
+      if (!hasTagFacets.value) return true;
+      return (props.tagCounts[tag.tagId] ?? 0) > 0;
+    });
   });
+
+  const genreLabel = (value: number, label: string): string => {
+    const c = props.genreCounts[value];
+    return hasGenreFacets.value && c != null ? `${label} (${c.toLocaleString()})` : label;
+  };
+  const tagLabel = (tagId: number, name: string): string => {
+    const c = props.tagCounts[tagId];
+    return hasTagFacets.value && c != null ? `${name} (${c.toLocaleString()})` : name;
+  };
 
   const genreFilteredCount = computed(() => filteredGenres.value.length);
   const genreTotalCount = computed(() => genres.value.length);
@@ -694,7 +721,7 @@
                   <TriStateTag
                     v-for="genre in filteredGenres"
                     :key="genre.value"
-                    :label="genre.label"
+                    :label="genreLabel(genre.value, genre.label)"
                     :state="includeGenres.includes(genre.value) ? 'include' : excludeGenres.includes(genre.value) ? 'exclude' : 'neutral'"
                     @update:state="(state) => updateGenreState(genre.value, state)"
                   />
@@ -722,7 +749,7 @@
                   <TriStateTag
                     v-for="tag in filteredTags"
                     :key="tag.tagId"
-                    :label="tag.name"
+                    :label="tagLabel(tag.tagId, tag.name)"
                     :state="includeTags.includes(tag.tagId) ? 'include' : excludeTags.includes(tag.tagId) ? 'exclude' : 'neutral'"
                     @update:state="(state) => updateTagState(tag.tagId, state)"
                   />

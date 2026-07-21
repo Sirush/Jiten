@@ -446,6 +446,205 @@ public class MediaDeckController(
     }
 
     /// <summary>
+    /// Applies the SQL-expressible browse filters (media type, numeric ranges, genre/tag include/exclude,
+    /// exclude-sequels) to a primary-deck query. Shared by the deck list and the filter-facet counts so both
+    /// stay in sync. Does not apply title search, coverage, status or ignored-deck filters.
+    /// </summary>
+    private static IQueryable<Deck> ApplyBrowseFilters(IQueryable<Deck> query, MediaType? mediaType,
+                                                       int? charCountMin, int? charCountMax,
+                                                       float? difficultyMin, float? difficultyMax,
+                                                       int? releaseYearMin, int? releaseYearMax,
+                                                       int? uniqueKanjiMin, int? uniqueKanjiMax,
+                                                       int? subdeckCountMin, int? subdeckCountMax,
+                                                       int? extRatingMin, int? extRatingMax,
+                                                       float? speechSpeedMin, float? speechSpeedMax,
+                                                       int? speechDurationMin, int? speechDurationMax,
+                                                       string? genres, string? excludeGenres,
+                                                       string? tags, string? excludeTags,
+                                                       bool? excludeSequels)
+    {
+        if (mediaType != null)
+            query = query.Where(d => d.MediaType == mediaType);
+
+        if (charCountMin != null)
+            query = query.Where(d => d.CharacterCount >= charCountMin);
+
+        if (charCountMax != null)
+            query = query.Where(d => d.CharacterCount <= charCountMax);
+
+        if (difficultyMin != null)
+            query = query.Where(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
+                + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0) >= difficultyMin);
+
+        if (difficultyMax != null)
+            query = query.Where(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
+                + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0) <= difficultyMax);
+
+        if (releaseYearMin != null)
+            query = query.Where(d => d.ReleaseDate.Year >= releaseYearMin);
+
+        if (releaseYearMax != null)
+            query = query.Where(d => d.ReleaseDate.Year <= releaseYearMax);
+
+        if (uniqueKanjiMin != null)
+            query = query.Where(d => d.UniqueKanjiCount >= uniqueKanjiMin);
+
+        if (uniqueKanjiMax != null)
+            query = query.Where(d => d.UniqueKanjiCount <= uniqueKanjiMax);
+
+        if (subdeckCountMin != null)
+            query = query.Where(d => d.Children.Count >= subdeckCountMin);
+
+        if (subdeckCountMax != null)
+            query = query.Where(d => d.Children.Count <= subdeckCountMax);
+
+        if (extRatingMin != null)
+            query = query.Where(d => d.ExternalRating >= extRatingMin);
+
+        if (extRatingMax != null)
+            query = query.Where(d => d.ExternalRating <= extRatingMax);
+
+        if (speechSpeedMin != null || speechSpeedMax != null)
+        {
+            query = query.Where(d => d.SpeechDuration > 0);
+
+            if (speechSpeedMin != null)
+                query = query.Where(d => d.SpeechMoraCount / (d.SpeechDuration / 60000.0) >= speechSpeedMin);
+
+            if (speechSpeedMax != null)
+                query = query.Where(d => d.SpeechMoraCount / (d.SpeechDuration / 60000.0) <= speechSpeedMax);
+        }
+
+        if (speechDurationMin != null)
+            query = query.Where(d => d.SpeechDuration >= (long)speechDurationMin * 3_600_000L);
+
+        if (speechDurationMax != null)
+            query = query.Where(d => d.SpeechDuration <= (long)speechDurationMax * 3_600_000L);
+
+        // Genre filters
+        if (!string.IsNullOrEmpty(genres))
+        {
+            var genreIds = genres.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                 .Select(g => int.TryParse(g, out var genreId) ? (Genre?)genreId : null)
+                                 .Where(g => g.HasValue)
+                                 .Select(g => g!.Value)
+                                 .ToList();
+
+            if (genreIds.Any())
+            {
+                foreach (var genreId in genreIds)
+                {
+                    query = query.Where(d => d.DeckGenres.Any(dg => dg.Genre == genreId));
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(excludeGenres))
+        {
+            var excludeGenreIds = excludeGenres.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                               .Select(g => int.TryParse(g, out var genreId) ? (Genre?)genreId : null)
+                                               .Where(g => g.HasValue)
+                                               .Select(g => g!.Value)
+                                               .ToList();
+
+            if (excludeGenreIds.Any())
+            {
+                query = query.Where(d => !d.DeckGenres.Any(dg => excludeGenreIds.Contains(dg.Genre)));
+            }
+        }
+
+        // Tag filters
+        if (!string.IsNullOrEmpty(tags))
+        {
+            var tagIds = tags.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                             .Select(t => int.TryParse(t, out var tagId) ? (int?)tagId : null)
+                             .Where(t => t.HasValue)
+                             .Select(t => t!.Value)
+                             .ToList();
+
+            if (tagIds.Any())
+            {
+                foreach (var tagId in tagIds)
+                {
+                    query = query.Where(d => d.DeckTags.Any(dt => dt.TagId == tagId));
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(excludeTags))
+        {
+            var excludeTagIds = excludeTags.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                           .Select(t => int.TryParse(t, out var tagId) ? (int?)tagId : null)
+                                           .Where(t => t.HasValue)
+                                           .Select(t => t!.Value)
+                                           .ToList();
+
+            if (excludeTagIds.Any())
+            {
+                query = query.Where(d => !d.DeckTags.Any(dt => excludeTagIds.Contains(dt.TagId)));
+            }
+        }
+
+        // Exclude sequels and fandiscs
+        if (excludeSequels == true)
+        {
+            query = query.Where(d =>
+                                    !d.RelationshipsAsSource.Any(r =>
+                                                                     r.RelationshipType == DeckRelationshipType.Sequel ||
+                                                                     r.RelationshipType == DeckRelationshipType.Fandisc));
+        }
+
+        return query;
+    }
+
+    /// <summary>
+    /// Per-genre and per-tag deck counts for the current browse filter selection, so the filter UI can annotate
+    /// each chip with how many matching decks carry it. Mirrors the deck list's SQL-expressible filters (it does
+    /// not apply title search, coverage, status or ignored-deck filters, which are request- or user-specific).
+    /// </summary>
+    [HttpGet("filter-facets")]
+    [ResponseCache(Duration = 300, VaryByQueryKeys =
+                   [
+                       "mediaType", "charCountMin", "charCountMax", "difficultyMin", "difficultyMax", "releaseYearMin",
+                       "releaseYearMax", "uniqueKanjiMin", "uniqueKanjiMax", "subdeckCountMin", "subdeckCountMax",
+                       "extRatingMin", "extRatingMax", "genres", "excludeGenres", "tags", "excludeTags", "speechSpeedMin",
+                       "speechSpeedMax", "speechDurationMin", "speechDurationMax", "excludeSequels"
+                   ])]
+    [SwaggerOperation(Summary = "Browse filter facet counts",
+                      Description = "Returns per-genre and per-tag deck counts for the current filter selection.")]
+    public async Task<IResult> GetFilterFacets(MediaType? mediaType = null,
+                                               int? charCountMin = null, int? charCountMax = null,
+                                               float? difficultyMin = null, float? difficultyMax = null,
+                                               int? releaseYearMin = null, int? releaseYearMax = null,
+                                               int? uniqueKanjiMin = null, int? uniqueKanjiMax = null,
+                                               int? subdeckCountMin = null, int? subdeckCountMax = null,
+                                               int? extRatingMin = null, int? extRatingMax = null,
+                                               string? genres = null, string? excludeGenres = null,
+                                               string? tags = null, string? excludeTags = null,
+                                               float? speechSpeedMin = null, float? speechSpeedMax = null,
+                                               int? speechDurationMin = null, int? speechDurationMax = null,
+                                               bool? excludeSequels = null)
+    {
+        var query = ApplyBrowseFilters(context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null), mediaType,
+                                       charCountMin, charCountMax, difficultyMin, difficultyMax, releaseYearMin,
+                                       releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin, subdeckCountMax,
+                                       extRatingMin, extRatingMax, speechSpeedMin, speechSpeedMax, speechDurationMin,
+                                       speechDurationMax, genres, excludeGenres, tags, excludeTags, excludeSequels);
+
+        var genreCounts = await query.SelectMany(d => d.DeckGenres)
+                                     .GroupBy(dg => dg.Genre)
+                                     .Select(g => new { g.Key, Count = g.Count() })
+                                     .ToDictionaryAsync(g => (int)g.Key, g => g.Count);
+
+        var tagCounts = await query.SelectMany(d => d.DeckTags)
+                                   .GroupBy(dt => dt.TagId)
+                                   .Select(g => new { g.Key, Count = g.Count() })
+                                   .ToDictionaryAsync(g => g.Key, g => g.Count);
+
+        return Results.Ok(new { genreCounts, tagCounts });
+    }
+
+    /// <summary>
     /// Returns media decks with optional filtering, sorting and pagination.
     /// </summary>
     /// <param name="offset">Page offset (multiple of 50).</param>
@@ -611,137 +810,11 @@ public class MediaDeckController(
             query = query.Where(d => d.ParentDeckId == null);
         }
 
-        if (mediaType != null)
-            query = query.Where(d => d.MediaType == mediaType);
-
-        // Advanced filters
-        if (charCountMin != null)
-            query = query.Where(d => d.CharacterCount >= charCountMin);
-
-        if (charCountMax != null)
-            query = query.Where(d => d.CharacterCount <= charCountMax);
-
-        if (difficultyMin != null)
-            query = query.Where(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
-                + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0) >= difficultyMin);
-
-        if (difficultyMax != null)
-            query = query.Where(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
-                + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0) <= difficultyMax);
-
-        if (releaseYearMin != null)
-            query = query.Where(d => d.ReleaseDate.Year >= releaseYearMin);
-
-        if (releaseYearMax != null)
-            query = query.Where(d => d.ReleaseDate.Year <= releaseYearMax);
-
-        if (uniqueKanjiMin != null)
-            query = query.Where(d => d.UniqueKanjiCount >= uniqueKanjiMin);
-
-        if (uniqueKanjiMax != null)
-            query = query.Where(d => d.UniqueKanjiCount <= uniqueKanjiMax);
-
-        if (subdeckCountMin != null)
-            query = query.Where(d => d.Children.Count >= subdeckCountMin);
-
-        if (subdeckCountMax != null)
-            query = query.Where(d => d.Children.Count <= subdeckCountMax);
-
-        if (extRatingMin != null)
-            query = query.Where(d => d.ExternalRating >= extRatingMin);
-
-        if (extRatingMax != null)
-            query = query.Where(d => d.ExternalRating <= extRatingMax);
-
-        if (speechSpeedMin != null || speechSpeedMax != null)
-        {
-            query = query.Where(d => d.SpeechDuration > 0);
-
-            if (speechSpeedMin != null)
-                query = query.Where(d => d.SpeechMoraCount / (d.SpeechDuration / 60000.0) >= speechSpeedMin);
-
-            if (speechSpeedMax != null)
-                query = query.Where(d => d.SpeechMoraCount / (d.SpeechDuration / 60000.0) <= speechSpeedMax);
-        }
-
-        if (speechDurationMin != null)
-            query = query.Where(d => d.SpeechDuration >= (long)speechDurationMin * 3_600_000L);
-
-        if (speechDurationMax != null)
-            query = query.Where(d => d.SpeechDuration <= (long)speechDurationMax * 3_600_000L);
-
-        // Genre filters
-        if (!string.IsNullOrEmpty(genres))
-        {
-            var genreIds = genres.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                                 .Select(g => int.TryParse(g, out var genreId) ? (Genre?)genreId : null)
-                                 .Where(g => g.HasValue)
-                                 .Select(g => g!.Value)
-                                 .ToList();
-
-            if (genreIds.Any())
-            {
-                foreach (var genreId in genreIds)
-                {
-                    query = query.Where(d => d.DeckGenres.Any(dg => dg.Genre == genreId));
-                }
-            }
-        }
-
-        if (!string.IsNullOrEmpty(excludeGenres))
-        {
-            var excludeGenreIds = excludeGenres.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                                               .Select(g => int.TryParse(g, out var genreId) ? (Genre?)genreId : null)
-                                               .Where(g => g.HasValue)
-                                               .Select(g => g!.Value)
-                                               .ToList();
-
-            if (excludeGenreIds.Any())
-            {
-                query = query.Where(d => !d.DeckGenres.Any(dg => excludeGenreIds.Contains(dg.Genre)));
-            }
-        }
-
-        // Tag filters
-        if (!string.IsNullOrEmpty(tags))
-        {
-            var tagIds = tags.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                             .Select(t => int.TryParse(t, out var tagId) ? (int?)tagId : null)
-                             .Where(t => t.HasValue)
-                             .Select(t => t!.Value)
-                             .ToList();
-
-            if (tagIds.Any())
-            {
-                foreach (var tagId in tagIds)
-                {
-                    query = query.Where(d => d.DeckTags.Any(dt => dt.TagId == tagId));
-                }
-            }
-        }
-
-        if (!string.IsNullOrEmpty(excludeTags))
-        {
-            var excludeTagIds = excludeTags.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                                           .Select(t => int.TryParse(t, out var tagId) ? (int?)tagId : null)
-                                           .Where(t => t.HasValue)
-                                           .Select(t => t!.Value)
-                                           .ToList();
-
-            if (excludeTagIds.Any())
-            {
-                query = query.Where(d => !d.DeckTags.Any(dt => excludeTagIds.Contains(dt.TagId)));
-            }
-        }
-
-        // Exclude sequels and fandiscs
-        if (excludeSequels == true)
-        {
-            query = query.Where(d =>
-                                    !d.RelationshipsAsSource.Any(r =>
-                                                                     r.RelationshipType == DeckRelationshipType.Sequel ||
-                                                                     r.RelationshipType == DeckRelationshipType.Fandisc));
-        }
+        query = ApplyBrowseFilters(query, mediaType, charCountMin, charCountMax, difficultyMin, difficultyMax,
+                                   releaseYearMin, releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin,
+                                   subdeckCountMax, extRatingMin, extRatingMax, speechSpeedMin, speechSpeedMax,
+                                   speechDurationMin, speechDurationMax, genres, excludeGenres, tags, excludeTags,
+                                   excludeSequels);
 
         // Word filter
         if (wordId != 0)
