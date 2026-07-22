@@ -512,6 +512,15 @@ export const useSrsStore = defineStore('srs', () => {
     refreshOverview();
   }
 
+  async function removeDeckWordsBatch(deckId: number, words: { wordId: number; readingIndex: number }[]) {
+    const result = await $api<{ removed: number }>(`srs/study-decks/${deckId}/words/batch-delete`, {
+      method: 'POST',
+      body: { words },
+    });
+    refreshOverview();
+    return result;
+  }
+
   async function updateDeckWordOccurrences(deckId: number, wordId: number, readingIndex: number, occurrences: number) {
     await $api(`srs/study-decks/${deckId}/words/${wordId}/${readingIndex}`, {
       method: 'PATCH',
@@ -1430,6 +1439,7 @@ export const useSrsStore = defineStore('srs', () => {
     addDeckWord,
     addDeckWordsBatch,
     removeDeckWord,
+    removeDeckWordsBatch,
     updateDeckWordOccurrences,
     importPreview,
     importCommit,

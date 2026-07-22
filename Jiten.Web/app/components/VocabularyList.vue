@@ -11,10 +11,13 @@
     skeletonCount?: number;
     removable?: boolean;
     removingKey?: string | null;
+    selectable?: boolean;
+    selectedKeys?: Set<string>;
   }>();
 
   const emit = defineEmits<{
     remove: [word: Word];
+    select: [word: Word];
   }>();
 </script>
 
@@ -51,8 +54,11 @@
       :is-compact="true"
       :removable="removable"
       :removing="removingKey === `${word.wordId}-${word.mainReading.readingIndex}`"
+      :selectable="selectable"
+      :selected="selectedKeys?.has(`${word.wordId}-${word.mainReading.readingIndex}`)"
       :class="index >= 8 ? '[content-visibility:auto] [contain-intrinsic-size:auto_8rem]' : ''"
       @remove="emit('remove', word)"
+      @select="emit('select', word)"
     />
   </div>
 </template>

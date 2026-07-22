@@ -6,12 +6,14 @@
   import { useJitenStore } from '~/stores/jitenStore';
   import { useSrsStore } from '~/stores/srsStore';
   import { useToast } from 'primevue/usetoast';
+  import { useConfirm } from 'primevue/useconfirm';
   import { storeToRefs } from 'pinia';
 
   const { $api } = useNuxtApp();
   const auth = useAuthStore();
   const srsStore = useSrsStore();
   const toast = useToast();
+  const confirm = useConfirm();
   const { quickMasterVocabulary } = storeToRefs(useJitenStore());
 
   const props = defineProps<{
@@ -147,6 +149,85 @@
     }
     catch { /* state unchanged on failure */ }
   };
+
+  const plainText = computed(() => stripRubyMarkup(props.word.mainReading.text));
+
+  const confirmForget = () => {
+    confirm.require({
+      message: `Forget "${plainText.value}"? This removes it from your vocabulary and deletes its review history.`,
+      header: 'Forget Word',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-danger',
+      accept: removeWord,
+    });
+  };
+
+  const srsAction = async (action: string, optimistic: KnownState[]) => {
+    try {
+      await $api('srs/set-vocabulary-state', {
+        method: 'POST',
+        body: { wordId: props.word.wordId, readingIndex: props.word.mainReading.readingIndex, state: action },
+      });
+      knownStates.value = optimistic;
+    }
+    catch { /* state unchanged on failure */ }
+  };
+
+  const resumeWord = () => srsAction('suspend-remove', [KnownState.Young]);
+  const suspendWord = () => srsAction('suspend-add', [KnownState.Suspended]);
+  const unmasterWord = () => srsAction('neverForget-remove', [KnownState.Young]);
+  const unblacklistWord = () => srsAction('blacklist-remove', [KnownState.Young]);
+
+  const confirmReset = () => {
+    confirm.require({
+      message: `Reset "${plainText.value}"? This clears its scheduling (stability, difficulty) and puts it back into Learning. Review history is kept.`,
+      header: 'Reset Schedule',
+      icon: 'pi pi-history',
+      accept: () => srsAction('reset-schedule', [KnownState.Young]),
+    });
+  };
+
+  interface StateAction {
+    label: string;
+    icon: string;
+    danger?: boolean;
+    run: () => void;
+  }
+
+  const stateActions = computed<StateAction[]>(() => {
+    if (isRedundant.value) return [];
+    const actions: StateAction[] = [];
+    const states = knownStates.value;
+    const isActive = states.includes(KnownState.Young) || states.includes(KnownState.Mature) || states.includes(KnownState.Due);
+
+    if (isSuspended.value) {
+      actions.push({ label: 'Resume', icon: 'pi pi-play', run: resumeWord });
+      actions.push({ label: 'Master', icon: 'pi pi-check', run: masterWord });
+      actions.push({ label: 'Blacklist', icon: 'pi pi-ban', run: blacklistWord });
+    } else if (states.includes(KnownState.Mastered)) {
+      actions.push({ label: 'Unmaster', icon: 'pi pi-replay', run: unmasterWord });
+      actions.push({ label: 'Suspend', icon: 'pi pi-pause', run: suspendWord });
+      actions.push({ label: 'Blacklist', icon: 'pi pi-ban', run: blacklistWord });
+    } else if (isBlacklisted.value) {
+      actions.push({ label: 'Unblacklist', icon: 'pi pi-undo', run: unblacklistWord });
+      actions.push({ label: 'Master', icon: 'pi pi-check', run: masterWord });
+    } else if (isActive) {
+      actions.push({ label: 'Master', icon: 'pi pi-check', run: masterWord });
+      actions.push({ label: 'Suspend', icon: 'pi pi-pause', run: suspendWord });
+      actions.push({ label: 'Blacklist', icon: 'pi pi-ban', run: blacklistWord });
+      actions.push({ label: 'Reset schedule', icon: 'pi pi-history', run: confirmReset });
+    } else {
+      return [];
+    }
+
+    actions.push({ label: 'Forget', icon: 'pi pi-trash', danger: true, run: confirmForget });
+    return actions;
+  });
+
+  const runStateAction = (action: StateAction) => {
+    deckOp.value?.hide();
+    action.run();
+  };
 </script>
 
 <template>
@@ -159,26 +240,28 @@
           </Tooltip>
         </template>
         <template v-else-if="isSuspended">
-          <Tooltip content="Paused — retains its scheduling but is not due for review">
+          <Tooltip content="Paused, retains its scheduling but is not due for review">
             <span class="text-gray-600 dark:text-gray-300 cursor-default">Suspended</span>
           </Tooltip>
-          <Button icon="pi pi-minus" size="small" text severity="danger" @click="removeWord" />
+          <Tooltip content="Resume reviews">
+            <Button icon="pi pi-play" size="small" text severity="success" @click="resumeWord" />
+          </Tooltip>
         </template>
         <template v-else-if="knownStates.includes(KnownState.Mature)">
           <span class="text-green-600 dark:text-green-300">Mature</span>
-          <Button icon="pi pi-minus" size="small" text severity="danger" @click="removeWord" />
+          <Button icon="pi pi-minus" size="small" text severity="danger" @click="confirmForget" />
         </template>
         <template v-else-if="knownStates.includes(KnownState.Mastered)">
           <span class="text-green-600 dark:text-green-300">Mastered</span>
-          <Button icon="pi pi-minus" size="small" text severity="danger" @click="removeWord" />
+          <Button icon="pi pi-minus" size="small" text severity="danger" @click="confirmForget" />
         </template>
         <template v-else-if="knownStates.includes(KnownState.Young)">
           <span class="text-yellow-600 dark:text-yellow-300">Young</span>
-          <Button icon="pi pi-minus" size="small" text severity="danger" @click="removeWord" />
+          <Button icon="pi pi-minus" size="small" text severity="danger" @click="confirmForget" />
         </template>
         <template v-else-if="isBlacklisted">
           <span class="text-gray-600 dark:text-gray-300">Blacklisted</span>
-          <Button icon="pi pi-minus" size="small" text severity="danger" @click="removeWord" />
+          <Button icon="pi pi-minus" size="small" text severity="danger" @click="confirmForget" />
         </template>
         <template v-else>
           <Tooltip :content="(quickMasterVocabulary ? 'Click: Master\nCtrl+Click: Blacklist' : 'Shift+Click: Master\nCtrl+Click: Blacklist') + '\n(Change in the quick cog settings with the Master in 1 click option)'">
@@ -198,6 +281,23 @@
         <Button icon="pi pi-ellipsis-h" size="small" text severity="secondary" @click="onDeckMenuClick" />
         <Popover v-if="deckOpActivated" ref="deckOp" :pt="{ content: { class: 'p-1' } }">
           <div class="flex flex-col">
+            <template v-if="stateActions.length > 0">
+              <span class="px-3 py-1 text-xs font-semibold text-surface-400 uppercase tracking-wide">Card</span>
+              <button
+                v-for="action in stateActions"
+                :key="action.label"
+                class="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer"
+                :class="
+                  action.danger
+                    ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
+                    : 'text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700'
+                "
+                @click="runStateAction(action)"
+              >
+                <i :class="action.icon" class="w-4 text-center" /><span>{{ action.label }}</span>
+              </button>
+              <div class="border-t border-surface-200 dark:border-surface-700 my-1" />
+            </template>
             <div v-if="loadingDecks || !membershipLoaded" class="flex justify-center py-2">
               <i class="pi pi-spin pi-spinner text-surface-400" />
             </div>

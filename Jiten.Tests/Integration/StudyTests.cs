@@ -977,6 +977,46 @@ public class StudyTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task MassAction_RestoreState_RestoresSuspendedCards()
+    {
+        var review = new HttpRequestMessage(HttpMethod.Post, "/api/srs/review")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { wordId = 15, readingIndex = 0, rating = 3 });
+        await _client.SendAsync(review);
+
+        var suspend = new HttpRequestMessage(HttpMethod.Post, "/api/srs/set-vocabulary-state")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { wordId = 15, readingIndex = 0, state = "suspend-add" });
+        await _client.SendAsync(suspend);
+
+        var restore = new HttpRequestMessage(HttpMethod.Post, "/api/srs/mass-action/execute")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { stateFilter = new[] { (int)FsrsState.Suspended }, action = "restore-state" });
+        var response = await _client.SendAsync(restore);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("affectedCount").GetInt32().Should().BeGreaterThanOrEqualTo(1);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var card = await userDb.FsrsCards.FirstOrDefaultAsync(c => c.WordId == 15 && c.ReadingIndex == 0 && c.UserId == TestUsers.UserA);
+        card.Should().NotBeNull();
+        card!.State.Should().Be(FsrsState.Review);
+        card.Stability.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task MassAction_RestoreState_RequiresFilter()
+    {
+        var restore = new HttpRequestMessage(HttpMethod.Post, "/api/srs/mass-action/execute")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { action = "restore-state" });
+        var response = await _client.SendAsync(restore);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task SetVocabularyStateBulk_EmptyItemsReturnsBadRequest()
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/srs/set-vocabulary-state-bulk")

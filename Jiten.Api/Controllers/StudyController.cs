@@ -665,6 +665,37 @@ public class StudyController(
         return Results.Ok(new { added, updated });
     }
 
+    [HttpPost("study-decks/{id:int}/words/batch-delete")]
+    [SwaggerOperation(Summary = "Remove multiple words from a static deck")]
+    public async Task<IResult> BatchRemoveDeckWords(int id, BatchRemoveDeckWordsRequest request)
+    {
+        if (request.Words.Count == 0)
+            return Results.BadRequest("No words provided.");
+        if (request.Words.Count > 10_000)
+            return Results.BadRequest("Maximum of 10,000 words per batch.");
+
+        var (_, error) = await GetStaticDeckForUser(id, "removed from");
+        if (error != null) return error;
+
+        var userId = currentUserService.UserId!;
+        var requestedKeys = request.Words.Select(w => WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex)).ToHashSet();
+        var requestedWordIds = request.Words.Select(w => w.WordId).Distinct().ToList();
+        var words = (await userContext.UserStudyDeckWords
+                .Where(w => w.UserStudyDeckId == id && requestedWordIds.Contains(w.WordId))
+                .ToListAsync())
+            .Where(w => requestedKeys.Contains(WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex)))
+            .ToList();
+
+        if (words.Count > 0)
+        {
+            userContext.UserStudyDeckWords.RemoveRange(words);
+            await userContext.SaveChangesAsync();
+            await sessionService.BumpStudyOverviewVersion(userId);
+        }
+
+        return Results.Ok(new { removed = words.Count });
+    }
+
     [HttpGet("study-decks/{id:int}/word-keys")]
     [SwaggerOperation(Summary = "Get all word keys (wordId + readingIndex) in a static deck")]
     public async Task<IResult> GetDeckWordKeys(int id)

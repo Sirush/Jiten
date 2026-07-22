@@ -1273,6 +1273,18 @@ public class SrsController(
                     .SetProperty(c => c.LastReview, (DateTime?)null));
                 break;
 
+            case "restore-state":
+                affected = await query.Where(c => c.Stability > 0)
+                                      .ExecuteUpdateAsync(s => s
+                                                              .SetProperty(c => c.State, FsrsState.Review)
+                                                              .SetProperty(c => c.Due, DateTime.UtcNow));
+                affected += await query.Where(c => c.Stability == null || c.Stability <= 0)
+                                       .ExecuteUpdateAsync(s => s
+                                                               .SetProperty(c => c.State, FsrsState.Learning)
+                                                               .SetProperty(c => c.Step, 0)
+                                                               .SetProperty(c => c.Due, DateTime.UtcNow));
+                break;
+
             default:
                 return Results.BadRequest($"Invalid action: {request.Action}");
         }
@@ -1632,7 +1644,7 @@ public class SrsController(
 
     private static string? ValidateMassActionRequest(MassActionRequest request, bool previewOnly)
     {
-        if (request.Action is not ("change-state" or "push-due" or "delete-cards" or "reset-schedule"))
+        if (request.Action is not ("change-state" or "push-due" or "delete-cards" or "reset-schedule" or "restore-state"))
             return $"Invalid action: {request.Action}";
 
         if (!previewOnly)
@@ -1652,7 +1664,7 @@ public class SrsController(
                         return "StaggerBatchSize must be between 1 and 10000.";
                     break;
 
-                case "delete-cards" or "reset-schedule":
+                case "delete-cards" or "reset-schedule" or "restore-state":
                     var hasFilter = (request.StateFilter is { Length: > 0 })
                                     || request.DateFrom.HasValue
                                     || request.DateTo.HasValue;

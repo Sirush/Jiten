@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { useSrsStore } from '~/stores/srsStore';
-  import { type Word, SortOrder, StudyDeckType } from '~/types';
+  import { type Word, KnownState, SortOrder, StudyDeckType } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
@@ -11,6 +11,7 @@
 
   const route = useRoute();
   const router = useRouter();
+  const { $api } = useNuxtApp();
   const srsStore = useSrsStore();
   const auth = useAuthStore();
   const toast = useToast();
@@ -184,10 +185,121 @@
   function onWordsAdded() {
     refresh();
   }
+
+  // Selection + bulk actions
+  const selectedKeys = ref(new Set<string>());
+  const bulkLoading = ref(false);
+
+  const wordKey = (w: Word) => `${w.wordId}-${w.mainReading.readingIndex}`;
+  const pageWords = computed(() => response.value?.data ?? []);
+  const selectedWords = computed(() => pageWords.value.filter((w) => selectedKeys.value.has(wordKey(w))));
+  const allOnPageSelected = computed(() => pageWords.value.length > 0 && pageWords.value.every((w) => selectedKeys.value.has(wordKey(w))));
+
+  watch(
+    () => response.value?.data,
+    () => selectedKeys.value.clear(),
+  );
+
+  function toggleSelect(word: Word) {
+    const key = wordKey(word);
+    if (selectedKeys.value.has(key)) selectedKeys.value.delete(key);
+    else selectedKeys.value.add(key);
+  }
+
+  function toggleSelectAll() {
+    if (allOnPageSelected.value) {
+      for (const w of pageWords.value) selectedKeys.value.delete(wordKey(w));
+    } else {
+      for (const w of pageWords.value) selectedKeys.value.add(wordKey(w));
+    }
+  }
+
+  interface BulkActionDef {
+    label: string;
+    icon: string;
+    severity: string;
+    run: () => void;
+  }
+
+  const bulkActions = computed<BulkActionDef[]>(() => {
+    const actions: BulkActionDef[] = [
+      { label: 'Master', icon: 'pi pi-check-circle', severity: 'success', run: () => confirmBulkState('Master', 'neverForget-add', [KnownState.Mastered]) },
+      { label: 'Suspend', icon: 'pi pi-pause', severity: 'warn', run: () => confirmBulkState('Suspend', 'suspend-add', [KnownState.Suspended]) },
+      { label: 'Blacklist', icon: 'pi pi-ban', severity: 'secondary', run: () => confirmBulkState('Blacklist', 'blacklist-add', [KnownState.Blacklisted]) },
+    ];
+    if (isStaticDeck.value) {
+      actions.push({ label: 'Remove', icon: 'pi pi-trash', severity: 'danger', run: confirmBulkRemove });
+    }
+    return actions;
+  });
+
+  function confirmBulkState(label: string, state: string, optimistic: KnownState[]) {
+    const words = selectedWords.value;
+    if (words.length === 0) return;
+    confirm.require({
+      message: `${label} ${words.length} word${words.length !== 1 ? 's' : ''}?`,
+      header: `Bulk ${label}`,
+      acceptLabel: label,
+      rejectLabel: 'Cancel',
+      acceptClass: 'p-button-danger',
+      accept: async () => {
+        bulkLoading.value = true;
+        try {
+          await $api('srs/set-vocabulary-state-bulk', {
+            method: 'POST',
+            body: { state, items: words.map((w) => ({ wordId: w.wordId, readingIndex: w.mainReading.readingIndex })) },
+          });
+          for (const w of words) w.knownStates = optimistic;
+          selectedKeys.value.clear();
+          toast.add({ severity: 'success', summary: `${words.length} word${words.length !== 1 ? 's' : ''} updated`, life: 2500 });
+        } catch {
+          toast.add({ severity: 'error', summary: 'Failed to update words', life: 3000 });
+        } finally {
+          bulkLoading.value = false;
+        }
+      },
+    });
+  }
+
+  function confirmBulkRemove() {
+    const words = selectedWords.value;
+    if (words.length === 0) return;
+    confirm.require({
+      message: `Remove ${words.length} word${words.length !== 1 ? 's' : ''} from this deck?`,
+      header: 'Remove Words',
+      acceptLabel: 'Remove',
+      rejectLabel: 'Cancel',
+      acceptClass: 'p-button-danger',
+      accept: async () => {
+        bulkLoading.value = true;
+        try {
+          const result = await srsStore.removeDeckWordsBatch(
+            deckId,
+            words.map((w) => ({ wordId: w.wordId, readingIndex: w.mainReading.readingIndex })),
+          );
+          if (response.value) {
+            const removedKeys = new Set(words.map(wordKey));
+            response.value = {
+              data: response.value.data.filter((w) => !removedKeys.has(wordKey(w))),
+              totalItems: response.value.totalItems - result.removed,
+              pageSize: response.value.pageSize,
+              currentOffset: response.value.currentOffset,
+            };
+          }
+          selectedKeys.value.clear();
+          toast.add({ severity: 'info', summary: `${result.removed} word${result.removed !== 1 ? 's' : ''} removed`, life: 2500 });
+        } catch {
+          toast.add({ severity: 'error', summary: 'Failed to remove words', life: 3000 });
+        } finally {
+          bulkLoading.value = false;
+        }
+      },
+    });
+  }
 </script>
 
 <template>
-  <div class="container mx-auto p-2 md:p-4">
+  <div class="container mx-auto p-2 md:p-4 pb-24">
     <SrsSubNav />
     <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
       <div class="flex items-center gap-2 min-w-0">
@@ -216,14 +328,24 @@
 
     <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
 
+    <div v-if="pageWords.length > 0" class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500">
+      <Checkbox :model-value="allOnPageSelected" :binary="true" @change="toggleSelectAll" />
+      <span class="text-xs cursor-pointer select-none" @click="toggleSelectAll">
+        {{ selectedWords.length > 0 ? `${selectedWords.length} selected` : `Select page (${pageWords.length})` }}
+      </span>
+    </div>
+
     <VocabularyList
       :words="response?.data ?? []"
       :status="status"
       :error="error"
       :removable="isStaticDeck"
       :removing-key="removingKey"
+      :selectable="true"
+      :selected-keys="selectedKeys"
       empty-message="Try adjusting your search or filters"
       @remove="confirmRemoveWord"
+      @select="toggleSelect"
     >
       <template #error="{ error: err }">
         <div>Error: {{ err }}</div>
@@ -241,5 +363,54 @@
     />
 
     <SrsAddWordsDialog v-if="isStaticDeck" v-model:visible="showAddDialog" :deck-id="deckId" @words-added="onWordsAdded" />
+
+    <Transition name="slide-up">
+      <div
+        v-if="selectedKeys.size > 0"
+        class="fixed bottom-0 left-0 right-0 z-40 bg-surface-0 dark:bg-surface-900 border-t border-surface-200 dark:border-surface-700 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] px-4 py-3"
+      >
+        <div class="container mx-auto flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-medium">{{ selectedKeys.size }} selected</span>
+            <Button label="Clear" text size="small" severity="secondary" @click="selectedKeys.clear()" />
+          </div>
+          <div class="flex gap-2 flex-wrap justify-end">
+            <template v-for="action in bulkActions" :key="action.label">
+              <Button
+                :icon="action.icon"
+                :label="action.label"
+                size="small"
+                :severity="action.severity"
+                :loading="bulkLoading"
+                class="!hidden sm:!inline-flex"
+                @click="action.run()"
+              />
+              <Button :icon="action.icon" size="small" :severity="action.severity" :loading="bulkLoading" class="sm:!hidden" @click="action.run()" />
+            </template>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
+
+<style scoped>
+  .slide-up-enter-active {
+    transition:
+      transform 0.2s ease-out,
+      opacity 0.2s ease-out;
+  }
+  .slide-up-leave-active {
+    transition:
+      transform 0.15s ease-in,
+      opacity 0.15s ease-in;
+  }
+  .slide-up-enter-from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  .slide-up-leave-to {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+</style>

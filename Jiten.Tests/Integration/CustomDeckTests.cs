@@ -176,6 +176,59 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task StaticDeck_BatchRemoveWords()
+    {
+        await SeedJmDictWords(1, 10);
+
+        var createReq = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckType = 2, name = "Batch Remove Test", downloadType = 1, order = 4, minFrequency = 0, maxFrequency = 0, excludeKana = false, excludeMatureMasteredBlacklisted = true, excludeAllTrackedWords = false });
+        var createRes = await _client.SendAsync(createReq);
+        var deckResult = await createRes.Content.ReadFromJsonAsync<IdResult>();
+        var deckId = deckResult!.UserStudyDeckId;
+
+        var words = Enumerable.Range(1, 10).Select(i => new { wordId = i, readingIndex = 0, occurrences = 1 }).ToArray();
+        var batchReq = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{deckId}/words/batch")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { words });
+        await _client.SendAsync(batchReq);
+
+        var removeWords = Enumerable.Range(1, 5).Select(i => new { wordId = i, readingIndex = 0 }).ToArray();
+        var removeReq = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{deckId}/words/batch-delete")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { words = removeWords });
+        var removeRes = await _client.SendAsync(removeReq);
+        removeRes.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var removeBody = await removeRes.Content.ReadFromJsonAsync<JsonElement>();
+        removeBody.GetProperty("removed").GetInt32().Should().Be(5);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var count = await userDb.UserStudyDeckWords.CountAsync(w => w.UserStudyDeckId == deckId);
+        count.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task StaticDeck_BatchRemove_OtherUserDeckReturnsNotFound()
+    {
+        await SeedJmDictWords(1, 3);
+
+        var createReq = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckType = 2, name = "Ownership Test", downloadType = 1, order = 4, minFrequency = 0, maxFrequency = 0, excludeKana = false, excludeMatureMasteredBlacklisted = true, excludeAllTrackedWords = false });
+        var createRes = await _client.SendAsync(createReq);
+        var deckResult = await createRes.Content.ReadFromJsonAsync<IdResult>();
+        var deckId = deckResult!.UserStudyDeckId;
+
+        var removeReq = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{deckId}/words/batch-delete")
+            .WithUser(TestUsers.UserB)
+            .WithJsonContent(new { words = new[] { new { wordId = 1, readingIndex = 0 } } });
+        var removeRes = await _client.SendAsync(removeReq);
+        removeRes.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task StaticDeck_UpdateWordOccurrences()
     {
         await SeedJmDictWords(200, 200);
