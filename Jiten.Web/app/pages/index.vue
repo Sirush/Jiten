@@ -189,7 +189,7 @@
                 </Button>
               </NuxtLink>
             </div>
-            <Image src="/img/jitenreader_screenshot.jpg" alt="Jiten Reader screenshot" class="rounded-lg w-full md:w-80" preview width="320" height="200" />
+            <Image src="/img/jitenreader_screenshot.webp" alt="Jiten Reader screenshot" class="rounded-lg w-full md:w-80" preview width="320" height="200" />
           </div>
         </template>
       </Card>
