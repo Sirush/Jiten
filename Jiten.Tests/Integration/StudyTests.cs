@@ -838,6 +838,165 @@ public class StudyTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task SetVocabularyState_ResetSchedule_ClearsSchedulingButKeepsHistory()
+    {
+        var review = new HttpRequestMessage(HttpMethod.Post, "/api/srs/review")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { wordId = 8, readingIndex = 0, rating = 3 });
+        await _client.SendAsync(review);
+
+        var reset = new HttpRequestMessage(HttpMethod.Post, "/api/srs/set-vocabulary-state")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { wordId = 8, readingIndex = 0, state = "reset-schedule" });
+        var response = await _client.SendAsync(reset);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var card = await userDb.FsrsCards.FirstOrDefaultAsync(c => c.WordId == 8 && c.ReadingIndex == 0 && c.UserId == TestUsers.UserA);
+        card.Should().NotBeNull();
+        card!.State.Should().Be(FsrsState.Learning);
+        card.Stability.Should().BeNull();
+        card.Difficulty.Should().BeNull();
+        card.LastReview.Should().BeNull();
+
+        var logs = await userDb.FsrsReviewLogs.Where(l => l.Card.WordId == 8 && l.Card.UserId == TestUsers.UserA).ToListAsync();
+        logs.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task SetVocabularyStateBulk_SuspendAndResume_RestoresReviewState()
+    {
+        foreach (var wordId in new[] { 9, 10 })
+        {
+            var review = new HttpRequestMessage(HttpMethod.Post, "/api/srs/review")
+                .WithUser(TestUsers.UserA)
+                .WithJsonContent(new { wordId, readingIndex = 0, rating = 3 });
+            await _client.SendAsync(review);
+        }
+
+        var suspend = new HttpRequestMessage(HttpMethod.Post, "/api/srs/set-vocabulary-state-bulk")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new
+            {
+                state = "suspend-add",
+                items = new[] { new { wordId = 9, readingIndex = 0 }, new { wordId = 10, readingIndex = 0 } }
+            });
+        var suspendResponse = await _client.SendAsync(suspend);
+        suspendResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var suspendBody = await suspendResponse.Content.ReadFromJsonAsync<JsonElement>();
+        suspendBody.GetProperty("affectedCount").GetInt32().Should().Be(2);
+
+        var resume = new HttpRequestMessage(HttpMethod.Post, "/api/srs/set-vocabulary-state-bulk")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new
+            {
+                state = "suspend-remove",
+                items = new[] { new { wordId = 9, readingIndex = 0 }, new { wordId = 10, readingIndex = 0 } }
+            });
+        var resumeResponse = await _client.SendAsync(resume);
+        resumeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var resumeBody = await resumeResponse.Content.ReadFromJsonAsync<JsonElement>();
+        resumeBody.GetProperty("affectedCount").GetInt32().Should().Be(2);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var restored = await userDb.FsrsCards
+            .Where(c => c.UserId == TestUsers.UserA && (c.WordId == 9 || c.WordId == 10) && c.ReadingIndex == 0)
+            .ToListAsync();
+        restored.Should().HaveCount(2);
+        restored.Should().OnlyContain(c => c.State != FsrsState.Suspended);
+        restored.Should().OnlyContain(c => c.Stability != null);
+    }
+
+    [Fact]
+    public async Task SetVocabularyStateBulk_ResumeSkipsNonSuspendedCards()
+    {
+        var review = new HttpRequestMessage(HttpMethod.Post, "/api/srs/review")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { wordId = 11, readingIndex = 0, rating = 3 });
+        await _client.SendAsync(review);
+
+        var resume = new HttpRequestMessage(HttpMethod.Post, "/api/srs/set-vocabulary-state-bulk")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new
+            {
+                state = "suspend-remove",
+                items = new[] { new { wordId = 11, readingIndex = 0 } }
+            });
+        var response = await _client.SendAsync(resume);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("affectedCount").GetInt32().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SetVocabularyStateBulk_MasterCreatesMissingCards()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/srs/set-vocabulary-state-bulk")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new
+            {
+                state = "neverForget-add",
+                items = new[] { new { wordId = 12, readingIndex = 0 }, new { wordId = 13, readingIndex = 0 } }
+            });
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var cards = await userDb.FsrsCards
+            .Where(c => c.UserId == TestUsers.UserA && (c.WordId == 12 || c.WordId == 13) && c.ReadingIndex == 0)
+            .ToListAsync();
+        cards.Should().HaveCount(2);
+        cards.Should().OnlyContain(c => c.State == FsrsState.Mastered);
+    }
+
+    [Fact]
+    public async Task SetVocabularyStateBulk_ForgetDeletesCards()
+    {
+        var review = new HttpRequestMessage(HttpMethod.Post, "/api/srs/review")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { wordId = 14, readingIndex = 0, rating = 3 });
+        await _client.SendAsync(review);
+
+        var forget = new HttpRequestMessage(HttpMethod.Post, "/api/srs/set-vocabulary-state-bulk")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new
+            {
+                state = "forget-add",
+                items = new[] { new { wordId = 14, readingIndex = 0 } }
+            });
+        var response = await _client.SendAsync(forget);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var card = await userDb.FsrsCards.FirstOrDefaultAsync(c => c.WordId == 14 && c.ReadingIndex == 0 && c.UserId == TestUsers.UserA);
+        card.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetVocabularyStateBulk_EmptyItemsReturnsBadRequest()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/srs/set-vocabulary-state-bulk")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { state = "suspend-add", items = Array.Empty<object>() });
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task SetVocabularyStateBulk_InvalidStateReturnsBadRequest()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/srs/set-vocabulary-state-bulk")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { state = "invalid-state", items = new[] { new { wordId = 1, readingIndex = 0 } } });
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task UpdateStudyDeck_UpdatesFilters()
     {
         var add = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")

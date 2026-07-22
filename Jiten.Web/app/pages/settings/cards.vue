@@ -23,7 +23,7 @@
   const loading = ref(true);
   const searchQuery = ref('');
   const activeFilter = ref<FsrsState | 'all' | 'due' | 'leech'>('all');
-  const sortBy = ref<'due' | 'state' | 'rank' | 'lapses' | 'stability' | 'difficulty'>('due');
+  const sortBy = ref<'due' | 'state' | 'rank' | 'lapses' | 'stability' | 'difficulty' | 'created' | 'lastReview'>('due');
   const sortAsc = ref(true);
   const selectedIds = ref(new Set<string>());
   const bulkLoading = ref(false);
@@ -165,6 +165,10 @@
           return dir * ((a.stability ?? 0) - (b.stability ?? 0));
         case 'difficulty':
           return dir * ((a.difficulty ?? 0) - (b.difficulty ?? 0));
+        case 'created':
+          return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        case 'lastReview':
+          return dir * ((a.lastReview ? new Date(a.lastReview).getTime() : 0) - (b.lastReview ? new Date(b.lastReview).getTime() : 0));
         default:
           return 0;
       }
@@ -181,16 +185,10 @@
   });
 
   function prevPage() {
-    if (page.value > 1) {
-      page.value--;
-      selectedIds.value.clear();
-    }
+    if (page.value > 1) page.value--;
   }
   function nextPage() {
-    if (page.value < totalPages.value) {
-      page.value++;
-      selectedIds.value.clear();
-    }
+    if (page.value < totalPages.value) page.value++;
   }
 
   // Relative due date
@@ -276,29 +274,67 @@
 
   const selectedCards = computed(() => cards.value.filter((c) => selectedIds.value.has(cardKey(c))));
 
-  function stateAfterAction(action: string): FsrsState | null {
+  const allMatchingSelected = computed(() => sortedCards.value.length > 0 && sortedCards.value.every((c) => selectedIds.value.has(cardKey(c))));
+
+  const hiddenSelectedCount = computed(() => {
+    const visible = new Set(paginatedCards.value.map(cardKey));
+    let count = 0;
+    for (const key of selectedIds.value) {
+      if (!visible.has(key)) count++;
+    }
+    return count;
+  });
+
+  function selectAllMatching() {
+    for (const c of sortedCards.value) selectedIds.value.add(cardKey(c));
+  }
+
+  type CardSnapshot = Pick<FsrsCardWithWordDto, 'state' | 'stability' | 'difficulty' | 'due' | 'lastReview'>;
+
+  function snapshotCard(card: FsrsCardWithWordDto): CardSnapshot {
+    return { state: card.state, stability: card.stability, difficulty: card.difficulty, due: card.due, lastReview: card.lastReview };
+  }
+
+  function applyOptimisticState(card: FsrsCardWithWordDto, action: string) {
     switch (action) {
       case 'neverForget-add':
-        return FsrsState.Mastered;
-      case 'neverForget-remove':
-        return FsrsState.Review;
+        card.state = FsrsState.Mastered;
+        break;
       case 'blacklist-add':
-        return FsrsState.Blacklisted;
-      case 'blacklist-remove':
-        return FsrsState.Review;
+        card.state = FsrsState.Blacklisted;
+        break;
       case 'suspend-add':
-        return FsrsState.Suspended;
+        card.state = FsrsState.Suspended;
+        break;
+      case 'neverForget-remove':
+      case 'blacklist-remove':
       case 'suspend-remove':
-        return FsrsState.Review;
-      default:
-        return null;
+        card.state = (card.stability ?? 0) > 0 ? FsrsState.Review : FsrsState.Learning;
+        card.due = new Date();
+        break;
+      case 'reset-schedule':
+        card.state = FsrsState.Learning;
+        card.stability = undefined;
+        card.difficulty = undefined;
+        card.due = new Date();
+        card.lastReview = undefined;
+        break;
     }
   }
 
+  const actionEligibility: Record<string, (card: FsrsCardWithWordDto) => boolean> = {
+    'neverForget-add': (c) => c.state !== FsrsState.Mastered,
+    'neverForget-remove': (c) => c.state === FsrsState.Mastered,
+    'suspend-add': (c) => c.state !== FsrsState.Suspended,
+    'suspend-remove': (c) => c.state === FsrsState.Suspended,
+    'blacklist-add': (c) => c.state !== FsrsState.Blacklisted,
+    'blacklist-remove': (c) => c.state === FsrsState.Blacklisted,
+    'reset-schedule': () => true,
+  };
+
   async function setVocabularyState(card: FsrsCardWithWordDto, state: string) {
-    const prevState = card.state;
-    const newState = stateAfterAction(state);
-    if (newState !== null) card.state = newState;
+    const prev = snapshotCard(card);
+    applyOptimisticState(card, state);
 
     try {
       await $api('srs/set-vocabulary-state', {
@@ -306,7 +342,7 @@
         body: { wordId: card.wordId, readingIndex: card.readingIndex, state },
       });
     } catch {
-      card.state = prevState;
+      Object.assign(card, prev);
       toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to update card', life: 5000 });
     }
   }
@@ -314,19 +350,22 @@
   function getActions(card: FsrsCardWithWordDto) {
     const actions: { label: string; icon: string; action: () => void; severity?: string }[] = [];
 
+    const master = { label: 'Master', icon: 'pi pi-check-circle', action: () => setVocabularyState(card, 'neverForget-add') };
+    const suspend = { label: 'Suspend', icon: 'pi pi-pause', action: () => setVocabularyState(card, 'suspend-add') };
+    const blacklist = { label: 'Blacklist', icon: 'pi pi-ban', action: () => setVocabularyState(card, 'blacklist-add') };
+
     if (card.state === FsrsState.Mastered) {
-      actions.push({ label: 'Unmaster', icon: 'pi pi-replay', action: () => setVocabularyState(card, 'neverForget-remove') });
+      actions.push({ label: 'Unmaster', icon: 'pi pi-replay', action: () => setVocabularyState(card, 'neverForget-remove') }, suspend, blacklist);
     } else if (card.state === FsrsState.Blacklisted) {
-      actions.push({ label: 'Unblacklist', icon: 'pi pi-replay', action: () => setVocabularyState(card, 'blacklist-remove') });
+      actions.push({ label: 'Unblacklist', icon: 'pi pi-undo', action: () => setVocabularyState(card, 'blacklist-remove') }, master, suspend);
     } else if (card.state === FsrsState.Suspended) {
-      actions.push({ label: 'Resume', icon: 'pi pi-play', action: () => setVocabularyState(card, 'suspend-remove') });
+      actions.push({ label: 'Resume', icon: 'pi pi-play', action: () => setVocabularyState(card, 'suspend-remove') }, master, blacklist);
     } else {
-      actions.push({ label: 'Master', icon: 'pi pi-check-circle', action: () => setVocabularyState(card, 'neverForget-add') });
-      actions.push({ label: 'Suspend', icon: 'pi pi-pause', action: () => setVocabularyState(card, 'suspend-add') });
-      actions.push({ label: 'Blacklist', icon: 'pi pi-ban', action: () => setVocabularyState(card, 'blacklist-add') });
+      actions.push(master, suspend, blacklist);
     }
 
     actions.push({ label: 'Add to list', icon: 'pi pi-list', action: () => openAddToList([card]) });
+    actions.push({ label: 'Reset schedule', icon: 'pi pi-history', action: () => confirmResetSchedule(card) });
 
     actions.push({
       label: 'Forget',
@@ -336,6 +375,16 @@
     });
 
     return actions;
+  }
+
+  function confirmResetSchedule(card: FsrsCardWithWordDto) {
+    const plain = stripRuby(card.wordText);
+    confirm.require({
+      message: `Reset "${plain}"? This clears its scheduling (stability, difficulty) and puts it back into Learning. Review history is kept.`,
+      header: 'Reset Schedule',
+      icon: 'pi pi-history',
+      accept: () => setVocabularyState(card, 'reset-schedule'),
+    });
   }
 
   function openAddToList(cards: FsrsCardWithWordDto[]) {
@@ -373,10 +422,53 @@
   }
 
   // Bulk actions
+  const BULK_CHUNK = 5000;
+
+  interface BulkActionDef {
+    label: string;
+    icon: string;
+    severity: string;
+    run: () => void;
+  }
+
+  const visibleBulkActions = computed<BulkActionDef[]>(() => {
+    const selected = selectedCards.value;
+    const anyEligible = (state: string) => selected.some(actionEligibility[state]!);
+    const defs: BulkActionDef[] = [{ label: 'Add to list', icon: 'pi pi-list', severity: 'secondary', run: () => openAddToList(selected) }];
+
+    if (anyEligible('neverForget-add'))
+      defs.push({ label: 'Master', icon: 'pi pi-check-circle', severity: 'success', run: () => confirmBulkAction('Master', 'neverForget-add') });
+    if (anyEligible('neverForget-remove'))
+      defs.push({ label: 'Unmaster', icon: 'pi pi-replay', severity: 'success', run: () => confirmBulkAction('Unmaster', 'neverForget-remove') });
+    if (anyEligible('suspend-add'))
+      defs.push({ label: 'Suspend', icon: 'pi pi-pause', severity: 'warn', run: () => confirmBulkAction('Suspend', 'suspend-add') });
+    if (anyEligible('suspend-remove'))
+      defs.push({ label: 'Resume', icon: 'pi pi-play', severity: 'warn', run: () => confirmBulkAction('Resume', 'suspend-remove') });
+    if (anyEligible('blacklist-add'))
+      defs.push({ label: 'Blacklist', icon: 'pi pi-ban', severity: 'secondary', run: () => confirmBulkAction('Blacklist', 'blacklist-add') });
+    if (anyEligible('blacklist-remove'))
+      defs.push({ label: 'Unblacklist', icon: 'pi pi-undo', severity: 'secondary', run: () => confirmBulkAction('Unblacklist', 'blacklist-remove') });
+
+    defs.push({ label: 'Reset', icon: 'pi pi-history', severity: 'info', run: () => confirmBulkAction('Reset', 'reset-schedule') });
+    defs.push({ label: 'Forget', icon: 'pi pi-trash', severity: 'danger', run: confirmBulkForget });
+    return defs;
+  });
+
   function confirmBulkAction(label: string, state: string) {
-    const count = selectedIds.value.size;
+    const eligible = selectedCards.value.filter(actionEligibility[state] ?? (() => true));
+    if (eligible.length === 0) return;
+    const skipped = selectedCards.value.length - eligible.length;
+
+    let message =
+      state === 'reset-schedule'
+        ? `Reset ${eligible.length} card${eligible.length !== 1 ? 's' : ''}? This clears their scheduling (stability, difficulty) and puts them back into Learning. Review history is kept.`
+        : `Are you sure you want to ${label.toLowerCase()} ${eligible.length} card${eligible.length !== 1 ? 's' : ''}?`;
+    if (skipped > 0) {
+      message += ` ${skipped} selected card${skipped !== 1 ? 's are' : ' is'} not applicable and will be skipped.`;
+    }
+
     confirm.require({
-      message: `Are you sure you want to ${label.toLowerCase()} ${count} card${count !== 1 ? 's' : ''}?`,
+      message,
       header: `Bulk ${label}`,
       acceptLabel: label,
       rejectLabel: 'Cancel',
@@ -386,30 +478,24 @@
   }
 
   async function bulkSetState(state: string) {
-    bulkLoading.value = true;
-    const selected = selectedCards.value;
-    const newState = stateAfterAction(state);
-    const prevStates = new Map(selected.map((c) => [cardKey(c), c.state]));
+    const eligible = selectedCards.value.filter(actionEligibility[state] ?? (() => true));
+    if (eligible.length === 0) return;
 
-    if (newState !== null) {
-      for (const c of selected) c.state = newState;
-    }
+    bulkLoading.value = true;
+    const snapshots = eligible.map((c) => ({ card: c, prev: snapshotCard(c) }));
+    for (const c of eligible) applyOptimisticState(c, state);
     selectedIds.value.clear();
 
     try {
-      await Promise.all(
-        selected.map((c) =>
-          $api('srs/set-vocabulary-state', {
-            method: 'POST',
-            body: { wordId: c.wordId, readingIndex: c.readingIndex, state },
-          })
-        )
-      );
-    } catch {
-      for (const c of selected) {
-        const prev = prevStates.get(cardKey(c));
-        if (prev !== undefined) c.state = prev;
+      for (let i = 0; i < eligible.length; i += BULK_CHUNK) {
+        const chunk = eligible.slice(i, i + BULK_CHUNK);
+        await $api('srs/set-vocabulary-state-bulk', {
+          method: 'POST',
+          body: { state, items: chunk.map((c) => ({ wordId: c.wordId, readingIndex: c.readingIndex })) },
+        });
       }
+    } catch {
+      for (const { card, prev } of snapshots) Object.assign(card, prev);
       toast.add({ severity: 'error', summary: 'Error', detail: 'Some cards failed to update', life: 5000 });
     } finally {
       bulkLoading.value = false;
@@ -435,7 +521,13 @@
     forgetDialogVisible.value = false;
 
     try {
-      await Promise.all(selected.map((c) => $api(`user/vocabulary/remove/${c.wordId}/${c.readingIndex}`, { method: 'POST' })));
+      for (let i = 0; i < selected.length; i += BULK_CHUNK) {
+        const chunk = selected.slice(i, i + BULK_CHUNK);
+        await $api('srs/set-vocabulary-state-bulk', {
+          method: 'POST',
+          body: { state: 'forget-add', items: chunk.map((c) => ({ wordId: c.wordId, readingIndex: c.readingIndex })) },
+        });
+      }
       toast.add({ severity: 'success', summary: 'Forgotten', detail: `${selected.length} card${selected.length !== 1 ? 's' : ''} forgotten`, life: 3000 });
     } catch {
       for (const { card, idx } of removedWithIndex.sort((a, b) => a.idx - b.idx)) {
@@ -462,6 +554,8 @@
     { label: 'Lapses', value: 'lapses' },
     { label: 'Stability', value: 'stability' },
     { label: 'Difficulty', value: 'difficulty' },
+    { label: 'Created', value: 'created' },
+    { label: 'Last Review', value: 'lastReview' },
   ];
 
   function onSortChange() {
@@ -588,11 +682,22 @@
     <!-- Card list -->
     <template v-else>
       <!-- Select all row -->
+      <Message v-if="hiddenSelectedCount > 0" severity="warn" :closable="false" class="mb-2">
+        <span class="font-semibold">{{ selectedIds.size }} card{{ selectedIds.size !== 1 ? 's' : '' }} selected,</span>
+        including {{ hiddenSelectedCount }} on other pages. Bulk actions will affect every selected card, not just the ones you can see.
+      </Message>
       <div class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500">
         <Checkbox :model-value="allOnPageSelected" :binary="true" @change="toggleSelectAll" />
         <span class="text-xs cursor-pointer select-none" @click="toggleSelectAll">
           {{ selectedCards.length > 0 ? `${selectedCards.length} selected` : `Select page (${paginatedCards.length})` }}
         </span>
+        <button
+          v-if="sortedCards.length > paginatedCards.length && !allMatchingSelected"
+          class="text-xs text-primary-600 dark:text-primary-400 hover:underline cursor-pointer"
+          @click="selectAllMatching"
+        >
+          Select all {{ sortedCards.length }}
+        </button>
       </div>
 
       <div
@@ -751,77 +856,18 @@
             <Button label="Clear" text size="small" severity="secondary" @click="selectedIds.clear()" />
           </div>
           <div class="flex gap-2 flex-wrap justify-end">
-            <Button
-              icon="pi pi-list"
-              label="Add to list"
-              size="small"
-              severity="secondary"
-              :loading="bulkLoading"
-              class="!hidden sm:!inline-flex"
-              @click="openAddToList(selectedCards)"
-            />
-            <Button icon="pi pi-list" size="small" severity="secondary" :loading="bulkLoading" class="sm:!hidden" @click="openAddToList(selectedCards)" />
-            <Button
-              icon="pi pi-check-circle"
-              label="Master"
-              size="small"
-              severity="success"
-              :loading="bulkLoading"
-              class="!hidden sm:!inline-flex"
-              @click="confirmBulkAction('Master', 'neverForget-add')"
-            />
-            <Button
-              icon="pi pi-check-circle"
-              size="small"
-              severity="success"
-              :loading="bulkLoading"
-              class="sm:!hidden"
-              @click="confirmBulkAction('Master', 'neverForget-add')"
-            />
-            <Button
-              icon="pi pi-pause"
-              label="Suspend"
-              size="small"
-              severity="warn"
-              :loading="bulkLoading"
-              class="!hidden sm:!inline-flex"
-              @click="confirmBulkAction('Suspend', 'suspend-add')"
-            />
-            <Button
-              icon="pi pi-pause"
-              size="small"
-              severity="warn"
-              :loading="bulkLoading"
-              class="sm:!hidden"
-              @click="confirmBulkAction('Suspend', 'suspend-add')"
-            />
-            <Button
-              icon="pi pi-ban"
-              label="Blacklist"
-              size="small"
-              severity="secondary"
-              :loading="bulkLoading"
-              class="!hidden sm:!inline-flex"
-              @click="confirmBulkAction('Blacklist', 'blacklist-add')"
-            />
-            <Button
-              icon="pi pi-ban"
-              size="small"
-              severity="secondary"
-              :loading="bulkLoading"
-              class="sm:!hidden"
-              @click="confirmBulkAction('Blacklist', 'blacklist-add')"
-            />
-            <Button
-              icon="pi pi-trash"
-              label="Forget"
-              size="small"
-              severity="danger"
-              :loading="bulkLoading"
-              class="!hidden sm:!inline-flex"
-              @click="confirmBulkForget"
-            />
-            <Button icon="pi pi-trash" size="small" severity="danger" :loading="bulkLoading" class="sm:!hidden" @click="confirmBulkForget" />
+            <template v-for="action in visibleBulkActions" :key="action.label">
+              <Button
+                :icon="action.icon"
+                :label="action.label"
+                size="small"
+                :severity="action.severity"
+                :loading="bulkLoading"
+                class="!hidden sm:!inline-flex"
+                @click="action.run()"
+              />
+              <Button :icon="action.icon" size="small" :severity="action.severity" :loading="bulkLoading" class="sm:!hidden" @click="action.run()" />
+            </template>
           </div>
         </div>
       </div>
