@@ -41,6 +41,28 @@ public enum ExampleSentenceSorting
     HardestFirst
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<CardImageLayout>))]
+public enum CardImageLayout
+{
+    [JsonStringEnumMemberName("beside")] Beside,
+    [JsonStringEnumMemberName("below")] Below
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<CardImagePosition>))]
+public enum CardImagePosition
+{
+    Back,
+    Front
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<CardAudioAutoPlayPosition>))]
+public enum CardAudioAutoPlayPosition
+{
+    Back,
+    Front,
+    Both
+}
+
 [JsonConverter(typeof(JsonStringEnumConverter<LeechAction>))]
 public enum LeechAction
 {
@@ -109,6 +131,15 @@ public class StudySettingsDto
     [JsonPropertyName("exampleSentenceSorting")]
     public ExampleSentenceSorting ExampleSentenceSorting { get; set; } = ExampleSentenceSorting.Random;
 
+    [JsonPropertyName("cardImageLayout")]
+    public CardImageLayout CardImageLayout { get; set; } = CardImageLayout.Beside;
+
+    [JsonPropertyName("cardImagePosition")]
+    public CardImagePosition CardImagePosition { get; set; } = CardImagePosition.Back;
+
+    [JsonPropertyName("blurCardImage")]
+    public bool BlurCardImage { get; set; } = true;
+
     [JsonPropertyName("showFrequencyRank")]
     public bool ShowFrequencyRank { get; set; } = true;
 
@@ -159,6 +190,15 @@ public class StudySettingsDto
 
     [JsonPropertyName("autoPlaySentenceOnFront")]
     public bool AutoPlaySentenceOnFront { get; set; }
+
+    [JsonPropertyName("autoPlayCustomAudio")]
+    public bool AutoPlayCustomAudio { get; set; }
+
+    [JsonPropertyName("autoPlayCustomAudioPosition")]
+    public CardAudioAutoPlayPosition AutoPlayCustomAudioPosition { get; set; } = CardAudioAutoPlayPosition.Back;
+
+    [JsonPropertyName("autoPlayCustomAudioInstead")]
+    public bool AutoPlayCustomAudioInstead { get; set; }
 
     [JsonPropertyName("showReviewActivity")]
     public bool ShowReviewActivity { get; set; } = true;

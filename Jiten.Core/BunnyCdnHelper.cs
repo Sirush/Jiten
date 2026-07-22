@@ -9,6 +9,11 @@ public class BunnyCdnHelper
     private static string? _storageZoneName;
     private static string? _cdnBaseUrl;
     private static string? _apiKey;
+    private static string? _securePullZoneUrl;
+    private static string? _tokenAuthKey;
+    private static string? _userStorageZoneName;
+    private static string? _userSecret;
+    private static int _signedUrlFallbackWarned;
     private static readonly HttpClient _httpClient = new();
 
     static BunnyCdnHelper()
@@ -25,34 +30,53 @@ public class BunnyCdnHelper
         _storageZoneName = configuration.GetValue<string>("BunnyCdnStorageZone");
         _cdnBaseUrl = configuration.GetValue<string>("CdnBaseUrl");
         _apiKey = configuration.GetValue<string>("BunnyCdnApiKey");
+        _securePullZoneUrl = configuration.GetValue<string>("CdnSecurePullZoneUrl");
+        _tokenAuthKey = configuration.GetValue<string>("CdnTokenAuthKey");
+        _userStorageZoneName = configuration.GetValue<string>("BunnyCdnUserStorageZone");
+        _userSecret = configuration.GetValue<string>("BunnyCdnUserSecret");
+    }
+
+    /// <summary>
+    /// Picks the storage-zone credentials and public base URL for an operation. User media (<paramref
+    /// name="secure"/> = true) lives in a separate storage zone served by the token-authed pull zone
+    /// </summary>
+    private static (string ZoneName, string Secret, string BaseUrl) ResolveTarget(bool secure)
+    {
+        if (secure && !string.IsNullOrEmpty(_userStorageZoneName) && !string.IsNullOrEmpty(_userSecret))
+            return (_userStorageZoneName!, _userSecret!, _securePullZoneUrl ?? _cdnBaseUrl!);
+
+        return (_storageZoneName!, _secret!, _cdnBaseUrl!);
     }
 
     public BunnyCdnHelper()
     {
     }
 
-    public static async Task<string> UploadFile(byte[] file, string fileName)
+    public static async Task<string> UploadFile(byte[] file, string fileName, bool secure = false)
     {
-        var bunnyCDNStorage = new BunnyCDNStorage(_storageZoneName, _secret, "de");
+        var (zoneName, secret, baseUrl) = ResolveTarget(secure);
+        var bunnyCDNStorage = new BunnyCDNStorage(zoneName, secret, "de");
 
         var stream = new MemoryStream(file);
-        await bunnyCDNStorage.UploadAsync(stream, $"{_storageZoneName}/{fileName}");
+        await bunnyCDNStorage.UploadAsync(stream, $"{zoneName}/{fileName}");
 
-        return $"{_cdnBaseUrl}/{fileName}";
+        return $"{baseUrl}/{fileName}";
     }
 
-    public static async Task DeleteFile(string storagePath)
+    public static async Task DeleteFile(string storagePath, bool secure = false)
     {
-        var bunnyCDNStorage = new BunnyCDNStorage(_storageZoneName, _secret, "de");
-        await bunnyCDNStorage.DeleteObjectAsync($"{_storageZoneName}/{storagePath}");
+        var (zoneName, secret, _) = ResolveTarget(secure);
+        var bunnyCDNStorage = new BunnyCDNStorage(zoneName, secret, "de");
+        await bunnyCDNStorage.DeleteObjectAsync($"{zoneName}/{storagePath}");
     }
 
-    public static async Task<byte[]?> DownloadFile(string storagePath)
+    public static async Task<byte[]?> DownloadFile(string storagePath, bool secure = false)
     {
-        var bunnyCDNStorage = new BunnyCDNStorage(_storageZoneName, _secret, "de");
+        var (zoneName, secret, _) = ResolveTarget(secure);
+        var bunnyCDNStorage = new BunnyCDNStorage(zoneName, secret, "de");
         try
         {
-            await using var stream = await bunnyCDNStorage.DownloadObjectAsStreamAsync($"{_storageZoneName}/{storagePath}");
+            await using var stream = await bunnyCDNStorage.DownloadObjectAsStreamAsync($"{zoneName}/{storagePath}");
             if (stream == null)
                 return null;
 
@@ -67,6 +91,36 @@ public class BunnyCdnHelper
     }
 
     public static string GetCdnUrl(string storagePath) => $"{_cdnBaseUrl}/{storagePath}";
+
+    /// <summary>
+    /// Untokened URL of a user-media file on the secure pull zone, used as the purge target after an
+    /// overwrite. Falls back to the plain CDN URL when the secure zone is unconfigured (dev/tests).
+    /// </summary>
+    public static string GetSecureCdnUrl(string storagePath)
+    {
+        var baseUrl = string.IsNullOrEmpty(_securePullZoneUrl) ? _cdnBaseUrl : _securePullZoneUrl;
+        
+        return $"{baseUrl}/{storagePath}";
+    }
+
+    /// <summary>
+    /// Token-authenticated URL for a file served from the secured pull zone. When the secure-zone config is
+    /// missing (dev), logs a one-time warning and returns the plain CDN URL so playback still works locally.
+    /// </summary>
+    public static string GetSignedUrl(string storagePath, TimeSpan ttl)
+    {
+        if (string.IsNullOrEmpty(_securePullZoneUrl) || string.IsNullOrEmpty(_tokenAuthKey))
+        {
+            if (Interlocked.Exchange(ref _signedUrlFallbackWarned, 1) == 0)
+                Console.WriteLine($"[{DateTime.UtcNow:O}] Warning: CdnSecurePullZoneUrl/CdnTokenAuthKey not configured; " +
+                                  "serving unsigned CDN URLs for card media.");
+            return GetCdnUrl(storagePath);
+        }
+
+        var urlPath = "/" + storagePath.TrimStart('/');
+        var expires = DateTimeOffset.UtcNow.Add(ttl).ToUnixTimeSeconds();
+        return BunnyTokenAuth.BuildSignedUrl(_securePullZoneUrl, _tokenAuthKey, urlPath, expires);
+    }
 
     /// <summary>
     /// Purges the pull-zone cache for a single URL so an overwritten file is refreshed immediately.

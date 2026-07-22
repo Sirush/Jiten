@@ -138,6 +138,9 @@ export const useSrsStore = defineStore('srs', () => {
     exampleSentencePosition: 'Back',
     exampleSentenceSorting: 'Random',
     blurExampleSentence: false,
+    cardImageLayout: 'beside',
+    cardImagePosition: 'Back',
+    blurCardImage: true,
     showFrequencyRank: true,
     showKanjiBreakdown: true,
     showWordComposition: true,
@@ -154,6 +157,9 @@ export const useSrsStore = defineStore('srs', () => {
     autoPlayWordOnFront: false,
     autoPlayWordOnFrontNewOnly: false,
     autoPlaySentenceOnFront: false,
+    autoPlayCustomAudio: false,
+    autoPlayCustomAudioPosition: 'Back',
+    autoPlayCustomAudioInstead: false,
     showReviewActivity: true,
     showReviewForecast: true,
     timezone: 'Europe/London',
@@ -234,6 +240,7 @@ export const useSrsStore = defineStore('srs', () => {
   const exampleCache = ref(new Map<string, StudyExampleSentenceDto | null>());
   const inFlightExampleKeys = new Set<string>();
   const EXAMPLE_PREFETCH_AHEAD = 4;
+  const MEDIA_WARM_AHEAD = 3;
   const sessionDirty = ref(false);
   const sessionStreak = ref<SessionStreakDto | null>(null);
   const sessionForecast = ref<ReviewForecastDto | null>(null);
@@ -616,6 +623,7 @@ export const useSrsStore = defineStore('srs', () => {
       // Prefetch example sentences for first 4 cards (await so the first card has its example ready)
       if (currentBatch.value.length > 0)
         await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
+      prefetchCardMedia();
     } catch (error) {
       console.error('Failed to fetch study batch:', error);
       fetchError.value = 'Failed to load cards. Please try again.';
@@ -723,6 +731,7 @@ export const useSrsStore = defineStore('srs', () => {
         fetchError.value = null;
         if (currentBatch.value.length > 0)
           await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
+        prefetchCardMedia();
         return;
       }
     }
@@ -809,6 +818,28 @@ export const useSrsStore = defineStore('srs', () => {
 
   function ensurePrefetched() {
     prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
+    warmCardMedia(currentCardIndex.value);
+  }
+
+  // Prefetch card media (image + audio) URLs for the whole loaded batch via the batch endpoint,
+  // then start byte downloads for the first few cards once the URLs are cached.
+  function prefetchCardMedia() {
+    if (!import.meta.client || currentBatch.value.length === 0) return;
+    const pairs = currentBatch.value.map(c => ({ wordId: c.wordId, readingIndex: c.readingIndex }));
+    useCardMedia().prefetch(pairs).then(() => warmCardMedia(currentCardIndex.value));
+  }
+
+  // Download media bytes for the current card and the next few. The current card is included because
+  // its back-position image and audio clip aren't mounted until flip/play.
+  function warmCardMedia(fromIndex: number) {
+    if (!import.meta.client) return;
+    const media = useCardMedia();
+    const start = Math.max(0, fromIndex);
+    const end = Math.min(start + MEDIA_WARM_AHEAD + 1, currentBatch.value.length);
+    for (let i = start; i < end; i++) {
+      const c = currentBatch.value[i];
+      if (c) media.warm(c.wordId, c.readingIndex);
+    }
   }
 
   watch(currentCard, (card) => {
@@ -1327,6 +1358,7 @@ export const useSrsStore = defineStore('srs', () => {
     } else {
       await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
     }
+    prefetchCardMedia();
     return true;
   }
 

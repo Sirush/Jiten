@@ -64,6 +64,8 @@
     return word.value?.alternativeReadings.sort((a, b) => b.frequencyPercentage - a.frequencyPercentage) || [];
   });
 
+  const mediaReadings = computed(() => toMediaReadings(word.value?.alternativeReadings));
+
   const LANG_NAMES: Record<string, string> = {
     eng: 'English', por: 'Portuguese', dut: 'Dutch', fre: 'French', ger: 'German', ita: 'Italian',
     spa: 'Spanish', rus: 'Russian', chi: 'Chinese', kor: 'Korean', lat: 'Latin', gre: 'Greek',
@@ -361,6 +363,17 @@
           </ClientOnly>
 
           <KanjiBreakdown :key="`${wordId}-${currentReadingIndex}`" :word-id="wordId" :reading-index="currentReadingIndex" />
+
+          <div v-if="authStore.isAuthenticated" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h1 class="text-gray-500 dark:text-gray-300 text-sm">Card media</h1>
+            <CardMediaEditor
+              :key="`media-${wordId}-${currentReadingIndex}`"
+              :word-id="wordId"
+              :reading-index="currentReadingIndex"
+              :readings="mediaReadings"
+              compact
+            />
+          </div>
         </div>
 
         <div class="md:min-w-64">

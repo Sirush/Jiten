@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import type { CardMediaManageSummary } from '~/types';
   import RedeemPromoCode from '~/components/RedeemPromoCode.vue';
   import { useToast } from 'primevue/usetoast';
 
@@ -75,22 +76,20 @@
     return Math.min(100, Math.round((q.usedBytes / q.maxBytes) * 100));
   });
 
-  function formatBytes(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    const units = ['KB', 'MB', 'GB', 'TB'];
-    let value = bytes / 1024;
-    let i = 0;
-    while (value >= 1024 && i < units.length - 1) {
-      value /= 1024;
-      i++;
-    }
-    return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
-  }
   const quotaLabel = computed(() => {
     const q = quota.value;
     if (!q) return '';
     return `${formatBytes(q.usedBytes)} used of ${formatBytes(q.maxBytes)}`;
   });
+
+  const cardMediaSummary = ref<CardMediaManageSummary | null>(null);
+  async function loadCardMediaSummary() {
+    try {
+      cardMediaSummary.value = await $api<CardMediaManageSummary>('srs/card-media/summary');
+    } catch {
+      cardMediaSummary.value = null;
+    }
+  }
 
   const openingPortal = ref(false);
   async function openPortal() {
@@ -122,6 +121,7 @@
   }
 
   onMounted(async () => {
+    loadCardMediaSummary();
     if (route.query.checkout === 'success') {
       toast.add({
         severity: 'success',
@@ -240,14 +240,36 @@
       </template>
     </Card>
 
-    <!-- Storage quota (Full only) -->
-    <Card v-if="isFull && quota">
+    <!-- Storage quota -->
+    <Card v-if="quota && (isFull || quota.usedBytes > 0)">
       <template #title>
         <h3 class="text-lg font-semibold">Card media storage</h3>
       </template>
       <template #content>
         <ProgressBar :value="quotaPercent" :show-value="false" class="!h-3" />
         <p class="text-sm text-gray-600 dark:text-gray-400 mt-2">{{ quotaLabel }}</p>
+
+        <div v-if="cardMediaSummary && quota.usedBytes > 0" class="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-surface-100 dark:bg-surface-800 px-3 py-1 text-surface-700 dark:text-surface-200">
+            <i class="pi pi-image text-surface-500 dark:text-surface-400" />
+            {{ cardMediaSummary.imageCount }} image{{ cardMediaSummary.imageCount === 1 ? '' : 's' }} · {{ formatBytes(cardMediaSummary.imageBytes) }}
+          </span>
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-surface-100 dark:bg-surface-800 px-3 py-1 text-surface-700 dark:text-surface-200">
+            <i class="pi pi-volume-up text-surface-500 dark:text-surface-400" />
+            {{ cardMediaSummary.audioCount }} audio clip{{ cardMediaSummary.audioCount === 1 ? '' : 's' }} · {{ formatBytes(cardMediaSummary.audioBytes) }}
+          </span>
+        </div>
+
+        <p v-if="!isFull" class="mt-3 flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400">
+          <i class="pi pi-exclamation-triangle mt-0.5 shrink-0" />
+          <span>Without an active Jiten+ subscription you can view and delete your existing card media, but can't add new media. Resubscribe to add media again.</span>
+        </p>
+
+        <div v-if="quota.usedBytes > 0" class="mt-4">
+          <NuxtLink to="/settings/card-media">
+            <Button label="Browse media" icon="pi pi-images" severity="secondary" outlined class="w-full sm:w-auto" />
+          </NuxtLink>
+        </div>
       </template>
     </Card>
 

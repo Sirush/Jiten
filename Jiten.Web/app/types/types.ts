@@ -1055,6 +1055,10 @@ export type TimedRevealAction = 'Reveal' | 'FailLearn' | 'Nudge';
 // SoftFail = arm Again with an overridable grace; HardFail = grade Again immediately.
 export type TimedAnswerAction = 'SoftFail' | 'HardFail';
 export type ExampleSentencePosition = 'Hidden' | 'Back' | 'Front';
+
+export type CardImageLayout = 'beside' | 'below';
+export type CardImagePosition = 'Front' | 'Back';
+export type CardAudioAutoPlayPosition = 'Front' | 'Back' | 'Both';
 export type ExampleSentenceSorting = 'Random' | 'EasiestFirst' | 'HardestFirst';
 
 /** "Speed Focus" timed-review preferences. Behaviour is entirely client-side; the server round-trips it. */
@@ -1123,6 +1127,9 @@ export interface StudySettingsDto {
   exampleSentencePosition: ExampleSentencePosition;
   exampleSentenceSorting: ExampleSentenceSorting;
   blurExampleSentence: boolean;
+  cardImageLayout: CardImageLayout;
+  cardImagePosition: CardImagePosition;
+  blurCardImage: boolean;
   showFrequencyRank: boolean;
   showKanjiBreakdown: boolean;
   showWordComposition: boolean;
@@ -1140,6 +1147,9 @@ export interface StudySettingsDto {
   autoPlayWordOnFront: boolean;
   autoPlayWordOnFrontNewOnly: boolean;
   autoPlaySentenceOnFront: boolean;
+  autoPlayCustomAudio: boolean;
+  autoPlayCustomAudioPosition: CardAudioAutoPlayPosition;
+  autoPlayCustomAudioInstead: boolean;
   showReviewActivity: boolean;
   showReviewForecast: boolean;
   timezone: string | null;
@@ -1488,4 +1498,85 @@ export interface CorpusCoOccurrence {
   termA: string;
   termB: string;
   sharedDecks: number;
+}
+
+export type CardMediaKind = 'image' | 'audio';
+
+export interface CardMediaDto {
+  kind: CardMediaKind;
+  url: string;
+  contentType: string;
+  fileSizeBytes: number;
+  createdAt: string;
+  inherited: boolean;
+  sourceReadingIndex: number;
+}
+
+export interface CardMediaQuotaDto {
+  usedBytes: number;
+  maxBytes: number;
+}
+
+export interface CardMediaUploadResponse {
+  media: CardMediaDto;
+  quota: CardMediaQuotaDto;
+}
+
+export interface CardMediaEntry {
+  wordId: number;
+  readingIndex: number;
+  image: CardMediaDto | null;
+  audio: CardMediaDto | null;
+}
+
+export interface CardMediaBatchResponse {
+  items: CardMediaEntry[];
+}
+
+export interface CardMediaManageFile {
+  url: string;
+  fileSizeBytes: number;
+  createdAt: string;
+  contentType: string;
+}
+
+export interface CardMediaManageItem {
+  wordId: number;
+  readingIndex: number;
+  wordText: string;
+  totalBytes: number;
+  image: CardMediaManageFile | null;
+  audio: CardMediaManageFile | null;
+}
+
+export interface CardMediaManageSummary {
+  totalForms: number;
+  imageCount: number;
+  imageBytes: number;
+  audioCount: number;
+  audioBytes: number;
+  usedBytes: number;
+  maxBytes: number;
+}
+
+export interface CardMediaManageResponse {
+  items: CardMediaManageItem[];
+  page: number;
+  pageSize: number;
+  totalForms: number;
+  summary: CardMediaManageSummary;
+}
+
+export type CardMediaSort = 'size' | 'date_desc' | 'date_asc';
+export type CardMediaKindFilter = 'all' | 'image' | 'audio';
+
+export interface CardMediaDeleteTarget {
+  wordId: number;
+  readingIndex: number;
+  kind: CardMediaKind;
+}
+
+export interface CardMediaDeleteBatchResponse {
+  deleted: number;
+  quota: CardMediaQuotaDto;
 }

@@ -38,6 +38,9 @@ builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnCh
 builder.Configuration.AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddEnvironmentVariables();
 
+// Lock down the native image decoder before anything can hand it an uploaded file.
+ImageMagickHardening.Configure();
+
 // Suppress verbose HTTP client logging
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 

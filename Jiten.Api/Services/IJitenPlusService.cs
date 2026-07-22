@@ -1,4 +1,5 @@
 using Jiten.Core.Data.Billing;
+using Microsoft.Extensions.Configuration;
 
 namespace Jiten.Api.Services;
 
@@ -7,6 +8,10 @@ public static class JitenPlusConstants
 {
     /// <summary>10 GB per-user media quota (card images/audio).</summary>
     public const long StorageQuotaBytes = 10L * 1024 * 1024 * 1024;
+
+    /// <summary>Per-user card-media quota, overridable via config (tests lower it) with the 10 GB default.</summary>
+    public static long CardMediaQuotaBytes(IConfiguration configuration) =>
+        configuration.GetValue<long?>("JitenPlus:CardMediaQuotaBytes") ?? StorageQuotaBytes;
 }
 
 public record PromoCreditInfo(

@@ -58,6 +58,22 @@
     { label: 'Back', value: 'Back' },
   ];
 
+  const cardImageLayoutOptions = [
+    { label: 'Beside word', value: 'beside' },
+    { label: 'Below word', value: 'below' },
+  ];
+
+  const cardImagePositionOptions = [
+    { label: 'Front', value: 'Front' },
+    { label: 'Back', value: 'Back' },
+  ];
+
+  const cardAudioPositionOptions = [
+    { label: 'Front', value: 'Front' },
+    { label: 'Back', value: 'Back' },
+    { label: 'Both', value: 'Both' },
+  ];
+
   const leechActionOptions = [
     { label: 'Suspend', value: 'Suspend' },
     { label: 'Notify only', value: 'NotifyOnly' },
@@ -838,6 +854,62 @@
           </div>
 
           <div>
+            <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card image</label>
+            <div class="flex flex-col gap-2">
+              <div>
+                <label class="text-sm mb-1 block">
+                  Layout
+                  <Tooltip
+                    content="Where your uploaded card image appears.<br>**Beside word** — to the right of the word on wider screens (stacks below on mobile).<br>**Below word** — centred under the word."
+                    placement="right"
+                  >
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+                <SelectButton
+                  v-model="form.cardImageLayout"
+                  :options="cardImageLayoutOptions"
+                  option-label="label"
+                  option-value="value"
+                  :allow-empty="false"
+                />
+              </div>
+              <div>
+                <label class="text-sm mb-1 block">
+                  Position
+                  <Tooltip
+                    content="**Front** — image visible before you flip the card.<br>**Back** — image shown only after you flip."
+                    placement="right"
+                  >
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+                <SelectButton
+                  v-model="form.cardImagePosition"
+                  :options="cardImagePositionOptions"
+                  option-label="label"
+                  option-value="value"
+                  :allow-empty="false"
+                />
+              </div>
+              <div v-if="form.cardImagePosition === 'Front'" class="flex items-center gap-2">
+                <ToggleSwitch v-model="form.blurCardImage" input-id="blurCardImage" />
+                <label for="blurCardImage" class="text-sm cursor-pointer">
+                  Blur image before reveal
+                  <Tooltip content="Image is blurred until you flip the card or click it." placement="right">
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+              </div>
+              <p class="text-xs text-surface-500 dark:text-surface-400">
+                Card images are a
+                <NuxtLink to="/jiten-plus" class="underline font-medium">Jiten+</NuxtLink>
+                feature.
+              </p>
+            </div>
+          </div>
+
+          <div>
             <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card back</label>
             <div class="flex flex-col gap-2">
               <div class="flex items-center gap-2">
@@ -943,6 +1015,55 @@
             </Tooltip>
           </label>
         </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.autoPlayCustomAudio" input-id="autoPlayCustomAudio" />
+          <label for="autoPlayCustomAudio" class="text-sm cursor-pointer">
+            Auto-play custom card audio
+            <Tooltip
+              content="On cards with an uploaded audio clip, auto-play the clip. Independent of the headword audio settings above."
+              placement="right"
+            >
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div v-if="form.autoPlayCustomAudio" class="ml-6 flex flex-col gap-2">
+          <div>
+            <label class="text-sm mb-1 block">
+              Play on
+              <Tooltip
+                content="**Front** — as a prompt when the card appears.<br>**Back** — after you flip.<br>**Both** — on the front and again on the back."
+                placement="right"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+            <SelectButton
+              v-model="form.autoPlayCustomAudioPosition"
+              :options="cardAudioPositionOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.autoPlayCustomAudioInstead" input-id="autoPlayCustomAudioInstead" />
+            <label for="autoPlayCustomAudioInstead" class="text-sm cursor-pointer">
+              Play instead of the headword
+              <Tooltip
+                content="When the headword audio also auto-plays on the same side, play the clip instead of it."
+                placement="right"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
+        </div>
+        <p class="text-xs text-surface-500 dark:text-surface-400">
+          Custom card audio is a
+          <NuxtLink to="/jiten-plus" class="underline font-medium">Jiten+</NuxtLink>
+          feature.
+        </p>
       </div>
 
       <Divider />

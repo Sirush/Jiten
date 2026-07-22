@@ -353,38 +353,164 @@
 
   const tts = useTts();
 
+  const cardMedia = useCardMedia();
+  const wordAudio = useCardWordAudio();
+  const cardMediaEntry = computed(() => cardMedia.get(props.card.wordId, props.card.readingIndex));
+  const cardImage = computed(() => cardMediaEntry.value?.image ?? null);
+  const cardAudio = computed(() => cardMediaEntry.value?.audio ?? null);
+
+  const hasCardMedia = computed(() => !!cardImage.value || !!cardAudio.value);
+  const showMediaEditor = ref(false);
+  const imageRetried = ref(false);
+  const imageManuallyRevealed = ref(false);
+  const customAudioPlaying = computed(() => wordAudio.customPlaying.value);
+
+  const cardImageUrl = computed(() => cardImage.value?.url ?? '');
+  const imageBesideLayout = computed(() => srsStore.studySettings.cardImageLayout === 'beside');
+  const imageOnFront = computed(() => srsStore.studySettings.cardImagePosition === 'Front');
+
+  const imageBlurred = computed(() => imageOnFront.value && srsStore.studySettings.blurCardImage && !props.isFlipped && !imageManuallyRevealed.value);
+  const showBesideImage = computed(() => !!cardImage.value && imageBesideLayout.value && (imageOnFront.value || props.isFlipped));
+  const showFrontBelowImage = computed(() => !!cardImage.value && imageOnFront.value);
+  const showBackBelowImage = computed(() => !!cardImage.value && !imageOnFront.value && props.isFlipped);
+
+  function playCustomAudio() {
+    wordAudio.playWord({
+      wordId: props.card.wordId,
+      readingIndex: props.card.readingIndex,
+      fallbackText: headWordTtsText.value,
+      media: cardAudio.value,
+      onExpired: async () => (await cardMedia.refreshOne(props.card.wordId, props.card.readingIndex))?.audio ?? null,
+    });
+  }
+
+  function playHeadwordAudio() {
+    wordAudio.stop();
+    tts.speakWord(props.card.wordId, props.card.readingIndex, headWordTtsText.value);
+  }
+
+  function playCustomToEnd() {
+    return wordAudio.playCustomToEnd({
+      media: cardAudio.value,
+      onExpired: async () => (await cardMedia.refreshOne(props.card.wordId, props.card.readingIndex))?.audio ?? null,
+    });
+  }
+
+  // Resolves once the current word audio (TTS or custom clip) has finished. Waits briefly for playback
+  // to start first, since server-side TTS fetches its audio before the playing state flips on.
+  function afterWordAudio(): Promise<void> {
+    return new Promise((resolve) => {
+      let started = false;
+      const stopWatch = watch(wordAudio.isWordPlaying, (playing) => {
+        if (playing) {
+          started = true;
+        } else if (started) {
+          stopWatch();
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+      const timer = setTimeout(() => {
+        if (!started) {
+          stopWatch();
+          resolve();
+        }
+      }, 1500);
+    });
+  }
+
+  async function playAutoWordPhase(headword: boolean, custom: boolean, instead: boolean) {
+    if (custom && (instead || !headword)) {
+      const ok = await playCustomToEnd();
+      if (ok || !headword) return;
+    }
+    if (headword) {
+      playHeadwordAudio();
+      await afterWordAudio();
+      if (custom && !instead) await playCustomToEnd();
+    }
+  }
+
+  function wait(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function startAutoAudio(mode: 'front' | 'flip') {
+    const settings = srsStore.studySettings;
+    const onFront = mode === 'front';
+    if (onFront && props.isFlipped) return;
+    const example = cardExample.value;
+    const hasCustom = !!cardAudio.value?.url;
+
+    let headword = onFront ? settings.autoPlayWordOnFront : settings.autoPlayWord;
+    if (onFront && headword && settings.autoPlayWordOnFrontNewOnly && !props.card.isNewCard) headword = false;
+
+    const pos = settings.autoPlayCustomAudioPosition;
+    const customThisSide = pos === 'Both' || pos === (onFront ? 'Front' : 'Back');
+    const custom = hasCustom && settings.autoPlayCustomAudio && customThisSide;
+
+    const playSentence = !!example?.sentenceId && (onFront ? settings.autoPlayWordOnFront && settings.autoPlaySentenceOnFront : settings.autoPlaySentence && !sentenceBlurred.value);
+
+    if (!headword && !custom && !playSentence) return;
+
+    const cardKey = `${props.card.wordId}-${props.card.readingIndex}`;
+    const sameCard = () => `${props.card.wordId}-${props.card.readingIndex}` === cardKey;
+
+    if (headword || custom) {
+      await playAutoWordPhase(headword, custom, settings.autoPlayCustomAudioInstead);
+      if (!playSentence || !sameCard()) return;
+      await wait(150);
+      if (!sameCard()) return;
+      playExample(example!);
+    } else if (playSentence) {
+      playExample(example!);
+    }
+  }
+
+  async function onImageError() {
+    if (imageRetried.value) return;
+    imageRetried.value = true;
+    await cardMedia.refreshOne(props.card.wordId, props.card.readingIndex);
+  }
+
+  const { tierSatisfies } = useJitenPlus();
+  const canEditMedia = computed(() => tierSatisfies('full'));
+
+  const mediaReadings = computed(() => toMediaReadings(wordData.value?.alternativeReadings));
+
+  const droppedFile = ref<File | null>(null);
+
+  function onCardDragOver(e: DragEvent) {
+    if (!authStore.isAuthenticated || !canEditMedia.value) return;
+    if (e.dataTransfer?.types?.includes('Files')) e.preventDefault();
+  }
+
+  function onCardDrop(e: DragEvent) {
+    if (!authStore.isAuthenticated || !canEditMedia.value) return;
+    const file = e.dataTransfer?.files?.[0];
+    if (!file) return;
+    e.preventDefault();
+    droppedFile.value = file;
+    showMediaEditor.value = true;
+  }
+
+  watch(showMediaEditor, (open) => {
+    if (!open) droppedFile.value = null;
+  });
+
   watch(
     () => `${props.card.wordId}-${props.card.readingIndex}`,
     () => {
-      tts.stop();
-
-      const settings = srsStore.studySettings;
-      if (!settings.autoPlayWordOnFront) return;
-      if (settings.autoPlayWordOnFrontNewOnly && !props.card.isNewCard) return;
-      if (props.isFlipped) return;
-
-      const cardKey = `${props.card.wordId}-${props.card.readingIndex}`;
-      tts.speakWord(props.card.wordId, props.card.readingIndex, headWordTtsText.value);
-
-      if (settings.autoPlaySentenceOnFront) {
-        const example = cardExample.value;
-        if (example?.sentenceId) {
-          const unwatch = watch(tts.isAnyPlaying, (playing) => {
-            if (!playing) {
-              unwatch();
-              setTimeout(() => {
-                if (`${props.card.wordId}-${props.card.readingIndex}` !== cardKey) return;
-                playExample(example);
-              }, 150);
-            }
-          });
-        }
-      }
+      wordAudio.stop();
+      imageRetried.value = false;
+      imageManuallyRevealed.value = false;
+      showMediaEditor.value = false;
+      startAutoAudio('front');
     },
     { immediate: true }
   );
 
-  onUnmounted(() => tts.stop());
+  onUnmounted(() => wordAudio.stop());
 
   const sentenceBlurred = computed(() => srsStore.studySettings.blurExampleSentence && !exampleRevealed.value);
 
@@ -419,34 +545,18 @@
       }
       answerAnnouncement.value = 'Answer revealed';
       nextTick(() => backRef.value?.focus({ preventScroll: true }));
-      const playWord = srsStore.studySettings.autoPlayWord;
-      const example = cardExample.value;
-      const playSentence = srsStore.studySettings.autoPlaySentence && example?.sentenceId && !sentenceBlurred.value;
-      const cardKey = `${props.card.wordId}-${props.card.readingIndex}`;
-
-      if (playWord) {
-        tts.speakWord(props.card.wordId, props.card.readingIndex, headWordTtsText.value);
-        if (playSentence) {
-          const unwatch = watch(tts.isAnyPlaying, (playing) => {
-            if (!playing) {
-              unwatch();
-              setTimeout(() => {
-                if (`${props.card.wordId}-${props.card.readingIndex}` !== cardKey) return;
-                playExample(example!);
-              }, 150);
-            }
-          });
-        }
-      } else if (playSentence) {
-        playExample(example!);
-      }
+      startAutoAudio('flip');
     }
   );
 </script>
 
 <template>
   <div class="w-full mx-auto">
-    <div class="relative bg-surface-0 dark:bg-transparent rounded-2xl shadow-lg dark:shadow-none border border-surface-200 dark:border-surface-700 p-6 md:p-8">
+    <div
+      class="relative bg-surface-0 dark:bg-transparent rounded-2xl shadow-lg dark:shadow-none border border-surface-200 dark:border-surface-700 p-6 md:p-8"
+      @dragover="onCardDragOver"
+      @drop="onCardDrop"
+    >
       <!-- Screen-reader announcement when the answer is revealed -->
       <div class="sr-only" role="status" aria-live="polite">{{ answerAnnouncement }}</div>
 
@@ -513,25 +623,59 @@
             Leech
           </span>
         </div>
-        <!-- Plain text before flip, ruby text after flip -->
-        <div class="flex items-center justify-center gap-3 mb-2">
-          <div
-            v-if="showRubyOnFront"
-            class="text-4xl md:text-5xl text-center font-noto-sans head-word"
-            lang="ja"
-            v-html="convertToRuby(card.wordText || card.wordTextPlain, true)"
-          />
-          <div v-else-if="!isFlipped" class="text-4xl md:text-5xl text-center font-noto-sans" lang="ja">
-            {{ card.wordTextPlain }}
+        <!-- Plain text before flip, ruby text after flip. -->
+        <div class="mb-2 flex items-center justify-center gap-4 md:grid md:grid-cols-[1fr_auto_1fr]">
+          <div class="hidden md:block" aria-hidden="true" />
+          <div class="flex items-center gap-3">
+            <div
+              v-if="showRubyOnFront"
+              class="text-4xl md:text-5xl text-center font-noto-sans head-word"
+              lang="ja"
+              v-html="convertToRuby(card.wordText || card.wordTextPlain, true)"
+            />
+            <div v-else-if="!isFlipped" class="text-4xl md:text-5xl text-center font-noto-sans" lang="ja">
+              {{ card.wordTextPlain }}
+            </div>
+            <div
+              v-else
+              class="text-4xl md:text-5xl text-center font-noto-sans head-word"
+              :class="{ 'writein-correct': writeInOutcome === 'correct', 'writein-wrong': writeInOutcome === 'wrong' }"
+              lang="ja"
+              v-html="convertToRuby(wordData?.mainReading?.text || card.wordText || card.wordTextPlain, true)"
+            />
+            <TtsButton :text="headWordTtsText" :word-id="card.wordId" :reading-index="card.readingIndex" size="md" @click.stop />
+            <button
+              v-if="cardAudio"
+              type="button"
+              class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
+              :class="{ '!text-primary-500': customAudioPlaying }"
+              title="Play custom audio"
+              @click.stop="playCustomAudio"
+            >
+              <i class="pi pi-play-circle text-base" />
+            </button>
           </div>
-          <div
-            v-else
-            class="text-4xl md:text-5xl text-center font-noto-sans head-word"
-            :class="{ 'writein-correct': writeInOutcome === 'correct', 'writein-wrong': writeInOutcome === 'wrong' }"
-            lang="ja"
-            v-html="convertToRuby(wordData?.mainReading?.text || card.wordText || card.wordTextPlain, true)"
+          <div class="hidden min-w-0 md:flex md:items-center">
+            <SrsCardImage
+              v-if="showBesideImage"
+              :url="cardImageUrl"
+              :blurred="imageBlurred"
+              img-class="max-h-36 w-auto max-w-full rounded-lg object-contain border border-surface-200 dark:border-surface-700"
+              @error="onImageError"
+              @reveal="imageManuallyRevealed = true"
+            />
+          </div>
+        </div>
+
+        <!-- Below-layout image on the front -->
+        <div v-if="showFrontBelowImage" class="mt-2 flex justify-center w-full" :class="{ 'md:hidden': imageBesideLayout }" @click.stop>
+          <SrsCardImage
+            :url="cardImageUrl"
+            :blurred="imageBlurred"
+            img-class="max-h-[40vh] w-auto rounded-lg object-contain"
+            @error="onImageError"
+            @reveal="imageManuallyRevealed = true"
           />
-          <TtsButton :text="headWordTtsText" :word-id="card.wordId" :reading-index="card.readingIndex" size="md" @click.stop />
         </div>
 
         <!-- Inline write-in input (sits directly under the word during the input phase) -->
@@ -676,6 +820,34 @@
           tabindex="-1"
           class="mt-6 pt-6 border-t border-surface-200 dark:border-surface-700 focus:outline-none"
         >
+          <!-- Below-layout image on the back  -->
+          <div v-if="showBackBelowImage" class="mb-4 flex justify-center" :class="{ 'md:hidden': imageBesideLayout }">
+            <SrsCardImage :url="cardImageUrl" img-class="max-h-[40vh] w-auto rounded-lg object-contain" @error="onImageError" />
+          </div>
+
+          <!-- Edit / add card media -->
+          <div v-if="authStore.isAuthenticated" class="mb-4 flex justify-center">
+            <button
+              v-if="hasCardMedia"
+              type="button"
+              class="inline-flex items-center gap-1.5 text-xs text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
+              @click="showMediaEditor = true"
+            >
+              <i class="pi pi-image text-sm" />
+              Edit card media
+            </button>
+            <JitenPlusGate v-else feature="card-media" tier="full" feature-label="Card media" compact>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 text-xs text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
+                @click="showMediaEditor = true"
+              >
+                <i class="pi pi-image text-sm" />
+                Add image or audio
+              </button>
+            </JitenPlusGate>
+          </div>
+
           <!-- Etymology / wasei (from lsource) -->
           <div v-if="wordData && wordData.languageSources && wordData.languageSources.length" class="mb-3 flex flex-wrap items-center justify-center gap-2">
             <span
@@ -900,6 +1072,15 @@
         </div>
       </Transition>
     </div>
+
+    <Dialog v-model:visible="showMediaEditor" modal header="Card media" :style="{ width: '32rem' }" :breakpoints="{ '640px': '94vw' }">
+      <CardMediaEditor
+        :word-id="card.wordId"
+        :reading-index="card.readingIndex"
+        :readings="mediaReadings"
+        :dropped-file="droppedFile"
+      />
+    </Dialog>
   </div>
 </template>
 

@@ -90,7 +90,7 @@
 
     <Card v-if="srs.srsEnrolled === true" class="mb-4">
       <template #title>
-        <h3 class="text-lg font-semibold">SRS</h3>
+        <h3 class="text-lg font-semibold">Study (SRS)</h3>
       </template>
       <template #content>
         <p class="text-gray-600 dark:text-gray-300 mb-3">

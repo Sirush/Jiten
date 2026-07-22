@@ -20,6 +20,7 @@ public class JitenPlusController(
     ICurrentUserService currentUserService,
     UserDbContext userContext,
     IEmailService emailService,
+    IConfiguration configuration,
     IOptions<StripeOptions> stripeOptions,
     ILogger<JitenPlusController> logger) : ControllerBase
 {
@@ -50,6 +51,10 @@ public class JitenPlusController(
 
         var status = await jitenPlusService.GetStatusAsync(userId);
 
+        var usedBytes = await userContext.UserCardMedia
+                                         .Where(m => m.UserId == userId)
+                                         .SumAsync(m => m.FileSizeBytes);
+
         return Results.Ok(new
         {
             tier = status.Tier.ToString().ToLowerInvariant(),
@@ -73,8 +78,8 @@ public class JitenPlusController(
             },
             quota = new
             {
-                usedBytes = 0L,
-                maxBytes = JitenPlusConstants.StorageQuotaBytes
+                usedBytes,
+                maxBytes = JitenPlusConstants.CardMediaQuotaBytes(configuration)
             }
         });
     }

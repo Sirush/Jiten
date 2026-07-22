@@ -45,6 +45,11 @@ const FEATURE_TIERS: Record<JitenPlusFeature, 'trial' | 'full'> = {
 // Deduplicates concurrent first-fetches across the many gates that mount at once (client-only,
 // so it is per-tab, never shared across SSR requests).
 let inflight: Promise<void> | null = null;
+let attempted = false;
+let refetchOnFocusBound = false;
+
+// Matches the API-side tier cache duration, so a focus refetch can actually observe a change.
+const STALE_AFTER_MS = 60_000;
 
 /**
  * Single source of truth for the viewer's Jiten+ tier. Status is fetched once and shared via
@@ -55,6 +60,7 @@ export function useJitenPlus() {
   const status = useState<JitenPlusStatus | null>('jitenplus-status', () => null);
   const loading = useState<boolean>('jitenplus-loading', () => false);
   const fetched = useState<boolean>('jitenplus-fetched', () => false);
+  const fetchedAt = useState<number | null>('jitenplus-fetched-at', () => null);
 
   const tier = computed<JitenPlusTier>(() => (auth.isAuthenticated ? (status.value?.tier ?? 'none') : 'none'));
   const isFull = computed(() => tier.value === 'full');
@@ -72,15 +78,19 @@ export function useJitenPlus() {
     try {
       const { $api } = useNuxtApp();
       status.value = await $api<JitenPlusStatus>('/jiten-plus/status');
+      fetched.value = true;
+      fetchedAt.value = Date.now();
     } catch {
+      // Leave fetched false so a later mount or window focus retries, instead of pinning
+      // the user at 'none' for the rest of the tab session after one transient failure.
       status.value = null;
     } finally {
       loading.value = false;
-      fetched.value = true;
     }
   }
 
   function startFetch() {
+    attempted = true;
     const p = doFetch().finally(() => {
       if (inflight === p) inflight = null;
     });
@@ -89,19 +99,38 @@ export function useJitenPlus() {
   }
 
   async function refresh() {
-    await startFetch();
+    await (inflight ?? startFetch());
   }
 
   function reset() {
     status.value = null;
     loading.value = false;
     fetched.value = false;
+    fetchedAt.value = null;
     inflight = null;
+    attempted = false;
   }
 
   function ensure() {
     if (!import.meta.client || fetched.value || loading.value || inflight) return;
     startFetch();
+  }
+
+  // The tier can change server-side while a tab sits open (admin grant/revoke, subscription
+  // change from another tab, promo expiry). Refetch on return-to-tab once the last successful
+  // fetch is stale; `attempted` keeps tabs that never needed the status from fetching it.
+  function refetchIfStale() {
+    if (!auth.isAuthenticated || loading.value || inflight || !attempted) return;
+    if (fetched.value && fetchedAt.value && Date.now() - fetchedAt.value < STALE_AFTER_MS) return;
+    startFetch();
+  }
+
+  if (import.meta.client && !refetchOnFocusBound) {
+    refetchOnFocusBound = true;
+    window.addEventListener('focus', refetchIfStale);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') refetchIfStale();
+    });
   }
 
   // Kick off the lazy first fetch on first use.

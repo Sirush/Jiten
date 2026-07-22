@@ -45,6 +45,7 @@ public class UserDbContext : IdentityDbContext<User>
     public DbSet<PromoCode> PromoCodes { get; set; }
     public DbSet<UserPromoCredit> UserPromoCredits { get; set; }
     public DbSet<UserFrequencyList> UserFrequencyLists { get; set; }
+    public DbSet<UserCardMedia> UserCardMedia { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -486,6 +487,27 @@ public class UserDbContext : IdentityDbContext<User>
             {
                 entity.HasIndex(f => f.PublicSlug).IsUnique().HasDatabaseName("IX_UserFrequencyList_PublicSlug");
             }
+        });
+
+        modelBuilder.Entity<UserCardMedia>(entity =>
+        {
+            entity.HasKey(m => m.Id);
+            if (isNpgsql)
+                entity.Property(m => m.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(m => m.StoragePath).HasMaxLength(512).IsRequired();
+            entity.Property(m => m.ContentType).HasMaxLength(100).IsRequired();
+            entity.Property(m => m.CreatedAt).IsRequired();
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(m => m.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(m => m.UserId).HasDatabaseName("IX_UserCardMedia_UserId");
+
+            entity.HasIndex(m => new { m.UserId, m.WordId, m.ReadingIndex, m.Kind })
+                  .IsUnique()
+                  .HasDatabaseName("IX_UserCardMedia_UserId_WordId_ReadingIndex_Kind");
         });
 
         base.OnModelCreating(modelBuilder);
