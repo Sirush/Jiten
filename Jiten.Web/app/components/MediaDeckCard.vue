@@ -8,7 +8,6 @@
   import { useJitenStore } from '~/stores/jitenStore';
   import { formatDateAsYyyyMmDd } from '~/utils/formatDateAsYyyyMmDd';
   import { useAuthStore } from '~/stores/authStore';
-  import { useSrsStore } from '~/stores/srsStore';
   import { useConfirm } from 'primevue/useconfirm';
 
   const props = defineProps<{
@@ -40,7 +39,6 @@
 
   const store = useJitenStore();
   const authStore = useAuthStore();
-  const srs = useSrsStore();
   const localiseTitle = useLocaliseTitle();
   const confirm = useConfirm();
 
@@ -207,7 +205,7 @@
     {
       label: 'Study with SRS',
       icon: 'pi pi-play',
-      visible: srs.srsEnrolled === true,
+      visible: true,
       command: () => { showStudyDeckDialog.value = true; },
     },
     {
@@ -590,7 +588,7 @@
                         icon="pi pi-book"
                       />
                     </Tooltip>
-                    <Tooltip v-if="srs.srsEnrolled === true" content="Study with SRS">
+                    <Tooltip v-if="authStore.isAuthenticated" content="Study with SRS">
                       <Button
                         :label="isCompact ? undefined : 'Study'"
                         class="text-center shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.7)]"

@@ -2000,53 +2000,6 @@ public class StudyController(
         });
     }
 
-    [HttpGet("enrolled")]
-    [SwaggerOperation(Summary = "Check if user has enrolled in SRS preview")]
-    public async Task<IResult> GetEnrolled()
-    {
-        var userId = currentUserService.UserId;
-        if (userId == null) return Results.Unauthorized();
-
-        var fsrsSettings = await userContext.UserFsrsSettings
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.UserId == userId);
-
-        var enrolled = fsrsSettings != null
-            && !string.IsNullOrEmpty(fsrsSettings.SettingsJson)
-            && fsrsSettings.SettingsJson != "{}";
-
-        return Results.Ok(new { enrolled });
-    }
-
-    [HttpPost("enroll")]
-    [SwaggerOperation(Summary = "Enroll in SRS preview by creating default settings")]
-    public async Task<IResult> Enroll()
-    {
-        var userId = currentUserService.UserId;
-        if (userId == null) return Results.Unauthorized();
-
-        var fsrsSettings = await userContext.UserFsrsSettings
-            .FirstOrDefaultAsync(s => s.UserId == userId);
-
-        if (fsrsSettings != null
-            && !string.IsNullOrEmpty(fsrsSettings.SettingsJson)
-            && fsrsSettings.SettingsJson != "{}")
-        {
-            return Results.Ok(new { enrolled = true });
-        }
-
-        if (fsrsSettings == null)
-        {
-            fsrsSettings = new UserFsrsSettings { UserId = userId };
-            userContext.UserFsrsSettings.Add(fsrsSettings);
-        }
-
-        fsrsSettings.SettingsJson = JsonSerializer.Serialize(new StudySettingsDto());
-        await userContext.SaveChangesAsync();
-
-        return Results.Ok(new { enrolled = true });
-    }
-
     [HttpGet("study-settings")]
     [SwaggerOperation(Summary = "Get study experience settings")]
     public async Task<IResult> GetStudySettings()

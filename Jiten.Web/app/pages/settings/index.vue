@@ -3,26 +3,10 @@
   import SettingsApiKey from '~/components/SettingsApiKey.vue';
   import SettingsWordSets from '~/components/SettingsWordSets.vue';
   import SettingsJitenPlus from '~/components/SettingsJitenPlus.vue';
-  import { useSrsStore } from '~/stores/srsStore';
 
   definePageMeta({
     middleware: ['auth'],
   });
-
-  const srs = useSrsStore();
-  const srsAcknowledged = ref(false);
-
-  const enrolling = ref(false);
-
-  async function enrollInSrs() {
-    enrolling.value = true;
-    try {
-      await srs.enroll();
-      await navigateTo('/settings/srs');
-    } finally {
-      enrolling.value = false;
-    }
-  }
 
   const { vocabStatsLoading, totalWordsAmount, fetchKnownWordsAmount } = useVocabularyStats();
 
@@ -88,7 +72,7 @@
 
     <SettingsWordSets class="mb-4" />
 
-    <Card v-if="srs.srsEnrolled === true" class="mb-4">
+    <Card class="mb-4">
       <template #title>
         <h3 class="text-lg font-semibold">Study (SRS)</h3>
       </template>
@@ -99,25 +83,6 @@
         <NuxtLink to="/settings/srs">
           <Button icon="pi pi-cog" label="SRS Settings" class="w-full md:w-64" />
         </NuxtLink>
-      </template>
-    </Card>
-
-    <Card v-else-if="srs.srsEnrolled === false" class="mb-4">
-      <template #title>
-        <h3 class="text-lg font-semibold">SRS <span class="text-sm font-normal text-orange-500">preview</span></h3>
-      </template>
-      <template #content>
-        <p class="text-gray-600 dark:text-gray-300 mb-3">
-          Jiten's built-in SRS is currently in preview. It is actively developed but may contain bugs. Please report any issues you encounter to help improve it
-          and give all your feedback.
-        </p>
-        <div class="flex items-start gap-2 mb-4">
-          <Checkbox v-model="srsAcknowledged" input-id="srsAcknowledge" :binary="true" />
-          <label for="srsAcknowledge" class="text-sm cursor-pointer">
-            I understand that the SRS is in preview and that it may contain bugs. I will share feedback and bug reports to help improve it.
-          </label>
-        </div>
-        <Button icon="pi pi-arrow-right" label="Enable SRS" :disabled="!srsAcknowledged" :loading="enrolling" class="w-full md:w-64" @click="enrollInSrs" />
       </template>
     </Card>
 

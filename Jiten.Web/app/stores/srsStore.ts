@@ -106,7 +106,6 @@ interface UndoSnapshot {
 export const useSrsStore = defineStore('srs', () => {
   const { $api } = useNuxtApp();
 
-  const srsEnrolled = ref<boolean | null>(null);
   const studyDecks = ref<StudyDeckDto[]>([]);
   const overviewVersion = ref<number>(0);
   const sessionId = ref<string | null>(null);
@@ -1204,22 +1203,6 @@ export const useSrsStore = defineStore('srs', () => {
     preWrapUpBatch.value = [];
   }
 
-  async function fetchEnrollment() {
-    try {
-      const res = await $api<{ enrolled: boolean }>('srs/enrolled');
-      srsEnrolled.value = res.enrolled;
-    } catch {
-      if (srsEnrolled.value !== true) {
-        srsEnrolled.value = false;
-      }
-    }
-  }
-
-  async function enroll() {
-    const res = await $api<{ enrolled: boolean }>('srs/enroll', { method: 'POST' });
-    srsEnrolled.value = res.enrolled;
-  }
-
   async function fetchSettings(force = false) {
     if (!force && settingsLoaded.value) return;
     try {
@@ -1470,9 +1453,6 @@ export const useSrsStore = defineStore('srs', () => {
     sessionLeeches,
     suspendLeech,
     cancelWrapUp,
-    srsEnrolled,
-    fetchEnrollment,
-    enroll,
     fetchSettings,
     updateSettings,
     resetSession,

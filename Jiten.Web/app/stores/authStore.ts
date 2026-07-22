@@ -406,7 +406,6 @@ export const useAuthStore = defineStore('auth', () => {
 
   function onLoginSuccess() {
     const srs = useSrsStore();
-    srs.fetchEnrollment();
     srs.refreshOverview(true);
 
     useJitenPlus().refresh();
