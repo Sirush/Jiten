@@ -14,6 +14,7 @@
   const { displayAdminFunctions, themeMode } = storeToRefs(store);
   const auth = useAuthStore();
   const srs = useSrsStore();
+  const { isPlus } = useJitenPlus();
 
   // Mobile menu state
   const mobileMenuOpen = ref(false);
@@ -111,7 +112,7 @@
     },
   ]);
 
-  // Due-card badge on the global "Study" link (enrolled users only — enrollment stays hidden pre-1.0).
+  // Due-card badge on the global "Study" link.
   // Same formula as SrsSubNav so the header and in-section counts always agree.
   const totalDue = computed(() => {
     const ds = srs.dueSummary;
@@ -121,7 +122,7 @@
   const dueBadge = computed(() => (totalDue.value > 999 ? '999+' : String(totalDue.value)));
 
   watch(
-    () => auth.isAuthenticated && srs.srsEnrolled,
+    () => auth.isAuthenticated,
     (ok) => {
       if (ok && !srs.dueSummary) srs.fetchDueSummary();
     },
@@ -142,14 +143,14 @@
     <div class="bg-indigo-900">
       <div class="flex justify-between items-center mb-6 mx-auto p-4 max-w-6xl">
         <NuxtLink to="/" class="!no-underline" aria-label="Jiten home">
-          <span class="text-2xl font-bold text-white">Jiten <span class="text-red-600 text-xs align-super">beta</span></span>
+          <span class="text-2xl font-bold text-white">Jiten<span v-if="isPlus" class="text-green-400 text-sm font-black relative -top-[3px] ml-1">+</span></span>
         </NuxtLink>
 
         <!-- Desktop nav -->
         <nav class="hidden md:flex items-center space-x-4">
           <nuxt-link to="/decks/media" :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'">Media</nuxt-link>
           <nuxt-link
-            v-if="auth.isAuthenticated && srs.srsEnrolled"
+            v-if="auth.isAuthenticated"
             to="/srs/decks"
             class="inline-flex items-center gap-1.5"
             :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'"
@@ -229,7 +230,7 @@
               >Media</nuxt-link
             >
             <nuxt-link
-              v-if="auth.isAuthenticated && srs.srsEnrolled"
+              v-if="auth.isAuthenticated"
               to="/srs/decks"
               class="py-2 px-3 flex items-center gap-2"
               :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'"
@@ -258,7 +259,7 @@
               @click="mobileMenuOpen = false"
               >Ratings</nuxt-link
             >
-              <nuxt-link
+            <nuxt-link
               v-if="auth.isAuthenticated"
               to="/settings"
               class="py-2 px-3"
