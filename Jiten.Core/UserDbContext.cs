@@ -41,6 +41,7 @@ public class UserDbContext : IdentityDbContext<User>
     public DbSet<UserStudyDeckWord> UserStudyDeckWords { get; set; }
     public DbSet<UserExampleSentence> UserExampleSentences { get; set; }
     public DbSet<UserCustomMeaning> UserCustomMeanings { get; set; }
+    public DbSet<UserHiddenDefinition> UserHiddenDefinitions { get; set; }
 
     public DbSet<PromoCode> PromoCodes { get; set; }
     public DbSet<UserPromoCredit> UserPromoCredits { get; set; }
@@ -390,6 +391,18 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasIndex(e => new { e.UserId, e.WordId })
                   .IsUnique()
                   .HasDatabaseName("IX_UserCustomMeaning_UserId_WordId");
+        });
+
+        modelBuilder.Entity<UserHiddenDefinition>(entity =>
+        {
+            entity.HasKey(e => new { e.UserId, e.WordId });
+            if (isNpgsql)
+                entity.Property(e => e.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<UserWordSetState>(entity =>

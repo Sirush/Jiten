@@ -8,9 +8,19 @@
     readings?: Reading[];
     // When set (>0), the non-compact list shows only the first N senses behind a "Show N more" expander.
     maxDefinitions?: number | null;
+    wordId?: number;
+    hiddenBehaviour?: 'gray' | 'hide';
   }>();
 
   const store = useJitenStore();
+
+  const { hiddenFor, ensureLoaded, toggle, isEditing } = useHiddenDefinitions();
+  onMounted(() => ensureLoaded(props.wordId));
+  watch(() => props.wordId, (id) => ensureLoaded(id));
+
+  const hiddenIndices = computed(() => new Set(hiddenFor(props.wordId)));
+  const editingVisibility = computed(() => isEditing(props.wordId));
+  const isHidden = (definition: Definition) => hiddenIndices.value.has(definition.index);
   const hideDefinition = computed({
     get: () => store.hideVocabularyDefinitions,
     set: (value) => {
@@ -140,7 +150,13 @@
     }
     let previousPartOfSpeech: string[] | null = null;
 
-    return props.definitions.map((definition) => {
+    // Dropped senses must not take part in the POS-header dedupe, or the first surviving sense of a
+    // group loses its header. Editing always shows everything so hidden senses can be brought back.
+    const source = props.hiddenBehaviour === 'hide' && !editingVisibility.value
+      ? props.definitions.filter((d) => !isHidden(d))
+      : props.definitions;
+
+    return source.map((definition) => {
       // JMdict's per-sense POS order is inconsistent; normalise to a canonical order so it reads
       // the same across senses and the header dedupes (same set in different order = one header).
       const sortedPos = sortPos(definition.partsOfSpeech);
@@ -173,7 +189,14 @@
 <template>
   <div v-if="!isCompact">
     <ul>
-      <li v-for="definition in visibleDefinitions" :key="definition.index" :class="{ 'opacity-40': isRestricted(definition) }">
+      <li
+        v-for="definition in visibleDefinitions"
+        :key="definition.index"
+        :class="{
+          'opacity-40': isRestricted(definition) || (isHidden(definition) && !editingVisibility),
+          'opacity-60': isHidden(definition) && editingVisibility,
+        }"
+      >
         <div v-if="definition.isDifferentPartOfSpeech" class="flex flex-wrap gap-1 mt-1 mb-0.5">
           <Tooltip v-for="pos in definition.partsOfSpeech" :key="pos" :content="pos" placement="top">
             <span
@@ -182,6 +205,17 @@
             >{{ abbreviatePos(pos) }}</span>
           </Tooltip>
         </div>
+        <Checkbox
+          v-if="editingVisibility"
+          :model-value="!isHidden(definition)"
+          binary
+          size="small"
+          class="mr-1.5 align-middle"
+          :aria-label="`Show meaning ${definition.index}`"
+          @click.stop
+          @pointerdown.stop
+          @update:model-value="toggle(wordId!, definition.index)"
+        />
         <span class="text-gray-400 mr-1">{{ definition.index }}.</span>
         <!-- plain meanings inline (trademarks get a ™) -->
         <template v-for="(seg, i) in meaningSegments(definition).inline" :key="'inl' + i">
@@ -239,7 +273,7 @@
   <div v-if="isCompact && !hideDefinition">
     <template v-for="(definition, di) in definitionsWithPartsOfSpeech.slice(0, 10)" :key="definition.index">
       <span v-if="di > 0" class="text-gray-400">; </span>
-      <span :class="{ 'opacity-40': isRestricted(definition) }">{{ definition.meanings.join('; ') }}</span>
+      <span :class="{ 'opacity-40': isRestricted(definition) || isHidden(definition) }">{{ definition.meanings.join('; ') }}</span>
       <!-- glanceable tag badges (misc / field / dial); verbose s_inf/g_type/xref stay on the detail + SRS views -->
       <Tooltip v-for="m in definition.misc" :key="'cm' + m" :content="miscLabel(m)" placement="top">
         <span

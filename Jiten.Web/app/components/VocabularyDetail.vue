@@ -326,11 +326,12 @@
             <h1 class="text-gray-500 dark:text-gray-300 text-sm">Meanings</h1>
             <div class="pl-2">
               <ClientOnly>
-                <VocabularyDictionaryDefinitions :resolved-groups="resolvedGroups" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" />
+                <VocabularyDictionaryDefinitions :resolved-groups="resolvedGroups" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" :word-id="props.wordId" />
                 <template #fallback>
-                  <VocabularyDefinitions :definitions="word.definitions" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" />
+                  <VocabularyDefinitions :definitions="word.definitions" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" :word-id="props.wordId" />
                 </template>
               </ClientOnly>
+              <HiddenDefinitionsToggle :word-id="props.wordId" class="mt-2" />
               <CustomMeaning :word-id="props.wordId" editable class="mt-2" />
             </div>
           </div>

@@ -428,6 +428,11 @@ export interface UserCustomMeaningDto {
   text: string;
 }
 
+export interface UserHiddenDefinitionsDto {
+  wordId: number;
+  hiddenIndices: number[];
+}
+
 export interface ExampleSentencesByDifficultyResponse {
   minDifficulty: number;
   maxDifficulty: number;

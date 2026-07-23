@@ -18,9 +18,15 @@
     computed(() => wordData.value?.definitions)
   );
 
+  const wordId = computed(() => card.value?.wordId);
+  const { hiddenFor, ensureLoaded, isEditing } = useHiddenDefinitions();
+  watch(wordId, (id) => ensureLoaded(id), { immediate: true });
+
   const fallbackDefinitions = computed(() => {
+    const hidden = new Set(hiddenFor(wordId.value));
+    const showAll = isEditing(wordId.value);
     let previousPos: string | null = null;
-    return (card.value?.definitions ?? []).map((def) => {
+    return (card.value?.definitions ?? []).filter((def) => showAll || !hidden.has(def.index)).map((def) => {
       const posKey = JSON.stringify(def.partsOfSpeech);
       const showPos = def.partsOfSpeech.length > 0 && posKey !== previousPos;
       previousPos = posKey;
@@ -85,6 +91,8 @@
             :max-definitions="opts.maxDefinitions"
             :current-reading-index="currentReadingIndex"
             :readings="wordData.alternativeReadings"
+            :word-id="wordId"
+            hidden-behaviour="hide"
           />
           <template #fallback>
             <VocabularyDefinitions
@@ -93,6 +101,8 @@
               :max-definitions="opts.maxDefinitions"
               :current-reading-index="currentReadingIndex"
               :readings="wordData.alternativeReadings"
+              :word-id="wordId"
+              hidden-behaviour="hide"
             />
           </template>
         </ClientOnly>
@@ -121,6 +131,7 @@
           <span>Loading full entry…</span>
         </div>
       </template>
+      <HiddenDefinitionsToggle v-if="wordId != null" :word-id="wordId" hidden-behaviour="hide" class="mt-2" />
     </div>
   </CardBlockSpoiler>
 </template>

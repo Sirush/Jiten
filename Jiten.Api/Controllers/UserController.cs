@@ -3257,4 +3257,69 @@ public class UserController(
     }
 
     #endregion
+
+    #region Hidden Definitions
+
+    [HttpGet("hidden-definitions/{wordId}")]
+    public async Task<IResult> GetHiddenDefinitions(int wordId)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var mask = await userContext.UserHiddenDefinitions
+                                    .AsNoTracking()
+                                    .Where(e => e.UserId == userId && e.WordId == wordId)
+                                    .Select(e => e.HiddenMask)
+                                    .FirstOrDefaultAsync();
+
+        return Results.Ok(new UserHiddenDefinitionsDto { WordId = wordId, HiddenIndices = UserHiddenDefinition.ToIndices(mask) });
+    }
+
+    [HttpPut("hidden-definitions/{wordId}")]
+    public async Task<IResult> UpdateHiddenDefinitions(int wordId, [FromBody] UpdateUserHiddenDefinitionsRequest request)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var mask = UserHiddenDefinition.ToMask(request.HiddenIndices);
+
+        var entry = await userContext.UserHiddenDefinitions
+                                     .FirstOrDefaultAsync(e => e.UserId == userId && e.WordId == wordId);
+
+        if (mask == 0)
+        {
+            if (entry != null) userContext.UserHiddenDefinitions.Remove(entry);
+        }
+        else if (entry == null)
+        {
+            userContext.UserHiddenDefinitions.Add(new UserHiddenDefinition { UserId = userId, WordId = wordId, HiddenMask = mask });
+        }
+        else
+        {
+            entry.HiddenMask = mask;
+        }
+
+        await userContext.SaveChangesAsync();
+
+        return Results.Ok(new UserHiddenDefinitionsDto { WordId = wordId, HiddenIndices = UserHiddenDefinition.ToIndices(mask) });
+    }
+
+    [HttpPost("hidden-definitions/batch")]
+    public async Task<IResult> GetHiddenDefinitionsBatch([FromBody] List<int> wordIds)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+        if (wordIds is not { Count: > 0 and <= 200 }) return Results.BadRequest();
+
+        var distinct = wordIds.Distinct().ToList();
+        var entries = await userContext.UserHiddenDefinitions
+                                       .AsNoTracking()
+                                       .Where(e => e.UserId == userId && distinct.Contains(e.WordId))
+                                       .Select(e => new { e.WordId, e.HiddenMask })
+                                       .ToListAsync();
+
+        return Results.Ok(entries.ToDictionary(e => e.WordId, e => UserHiddenDefinition.ToIndices(e.HiddenMask)));
+    }
+
+    #endregion
 }
