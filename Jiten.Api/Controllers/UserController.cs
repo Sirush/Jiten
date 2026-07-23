@@ -36,6 +36,7 @@ public class UserController(
     IConnectionMultiplexer redis,
     IDeckWordResolver deckWordResolver,
     IDeckDownloadService downloadService,
+    IUserLimitsService userLimits,
     ILogger<UserController> logger) : ControllerBase
 {
     /// <summary>
@@ -3024,7 +3025,8 @@ public class UserController(
 
         var count = await userContext.UserExampleSentences
             .CountAsync(e => e.UserId == userId && e.WordId == wordId && e.ReadingIndex == readingIndex);
-        if (count >= 3) return Results.BadRequest("Maximum of 3 custom sentences per word.");
+        var limits = await userLimits.GetLimitsAsync(userId);
+        if (count >= limits.CustomSentencesPerWord) return Results.BadRequest(LimitMessages.CustomSentencesPerWord(limits));
 
         var sentence = new UserExampleSentence
         {
@@ -3059,7 +3061,8 @@ public class UserController(
 
         var count = await userContext.UserExampleSentences
             .CountAsync(e => e.UserId == userId && e.WordId == wordId && e.ReadingIndex == readingIndex);
-        if (count >= 3) return Results.BadRequest("Maximum of 3 custom sentences per word.");
+        var limits = await userLimits.GetLimitsAsync(userId);
+        if (count >= limits.CustomSentencesPerWord) return Results.BadRequest(LimitMessages.CustomSentencesPerWord(limits));
 
         var sentence = new UserExampleSentence
         {

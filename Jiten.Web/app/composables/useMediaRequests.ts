@@ -23,6 +23,13 @@ export interface BoostResult {
   balance: BoostBalance;
 }
 
+export interface MediaRequestQuota {
+  activeCount: number;
+  limit: number;
+  plusLimit: number;
+  isPlus: boolean;
+}
+
 export function useMediaRequests() {
   const { $api } = useNuxtApp();
 
@@ -386,11 +393,12 @@ export function useMediaRequests() {
     }
   };
 
-  const fetchMyQuota = async (): Promise<{ activeCount: number; limit: number }> => {
+  const fetchMyQuota = async (): Promise<MediaRequestQuota> => {
+    const fallback: MediaRequestQuota = { activeCount: 0, limit: 20, plusLimit: 30, isPlus: false };
     try {
-      return await $api<{ activeCount: number; limit: number }>('requests/my-quota') ?? { activeCount: 0, limit: 20 };
+      return await $api<MediaRequestQuota>('requests/my-quota') ?? fallback;
     } catch {
-      return { activeCount: 0, limit: 20 };
+      return fallback;
     }
   };
 

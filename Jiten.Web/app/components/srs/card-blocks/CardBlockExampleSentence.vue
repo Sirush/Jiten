@@ -18,6 +18,7 @@
   const localiseTitle = useLocaliseTitle();
   const srsStore = useSrsStore();
   const toast = useToast();
+  const { limits: planLimits } = useJitenPlus();
 
   const blurred = computed(() => opts.value.blur && !exampleRevealed.value && !(opts.value.unblurOnFlip && isFlipped.value));
 
@@ -69,7 +70,7 @@
     let source = '';
     if (ex.sourceParent) source += localiseTitle(ex.sourceParent) + ' - ';
     if (ex.sourceDeck) source += localiseTitle(ex.sourceDeck);
-    return source;
+    return clampSentenceSource(source);
   }
 
   const editInitialText = computed(() => (cardExample.value ? buildMarkedText(cardExample.value) : ''));
@@ -100,7 +101,7 @@
       applyCustomDto(dto);
       toast.add({ severity: 'success', summary: 'Saved as custom sentence', life: 2000 });
     } catch {
-      toast.add({ severity: 'error', summary: 'Maximum of 3 custom sentences reached', life: 3000 });
+      toast.add({ severity: 'error', summary: `Maximum of ${planLimits.value.customSentencesPerWord} custom sentences reached`, life: 3000 });
     } finally {
       favouriting.value = false;
     }

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using CsvHelper;
 using CsvHelper.Configuration;
+using Jiten.Api.Helpers;
 using Jiten.Cli;
 using Jiten.Core;
 using Jiten.Core.Data.User;
@@ -62,6 +63,7 @@ public interface IDeckImportService
 public partial class DeckImportService(
     IDbContextFactory<JitenDbContext> contextFactory,
     UserDbContext userContext,
+    IUserLimitsService userLimits,
     IConnectionMultiplexer redis) : IDeckImportService
 {
     private static readonly TimeSpan PreviewTtl = TimeSpan.FromMinutes(30);
@@ -250,13 +252,14 @@ public partial class DeckImportService(
                                            .Where(sd => sd.UserId == userId)
                                            .Select(sd => sd.UserStudyDeckId)
                                            .ToListAsync();
-        if (userDeckIds.Count >= 30) return new(null, "Deck limit reached (maximum 30 decks).");
+        var limits = await userLimits.GetLimitsAsync(userId);
+        if (userDeckIds.Count >= limits.StudyDecks) return new(null, LimitMessages.StudyDeckCount(limits));
 
         var totalUserWords = await userContext.UserStudyDeckWords
                                               .CountAsync(w => userDeckIds.Contains(w.UserStudyDeckId));
-        if (totalUserWords + wordsToImport.Count > 200_000)
-            return new(null, "Total word limit exceeded (maximum 200,000 words across all decks).");
-        if (wordsToImport.Count > 50_000) return new(null, "Import too large (maximum 50,000 words per deck).");
+        if (totalUserWords + wordsToImport.Count > limits.StudyDeckWords)
+            return new(null, LimitMessages.StudyDeckWordsTotal(limits, wordsToImport.Count));
+        if (wordsToImport.Count > limits.ImportWords) return new(null, LimitMessages.ImportTooLarge(limits));
 
         await using var transaction = await userContext.Database.BeginTransactionAsync();
 
@@ -311,10 +314,12 @@ public partial class DeckImportService(
                                            .Where(sd => sd.UserId == userId)
                                            .Select(sd => sd.UserStudyDeckId)
                                            .ToListAsync();
+        var limits = await userLimits.GetLimitsAsync(userId);
         var totalUserWords = await userContext.UserStudyDeckWords
                                               .CountAsync(w => userDeckIds.Contains(w.UserStudyDeckId));
-        if (totalUserWords + wordsToImport.Count > 200_000)
-            return new(null, $"Adding {wordsToImport.Count} words would exceed the 200,000 total limit.");
+        if (totalUserWords + wordsToImport.Count > limits.StudyDeckWords)
+            return new(null, LimitMessages.StudyDeckWordsTotal(limits, wordsToImport.Count));
+        if (wordsToImport.Count > limits.ImportWords) return new(null, LimitMessages.ImportTooLarge(limits));
 
         var existingWords = await userContext.UserStudyDeckWords
                                              .Where(w => w.UserStudyDeckId == deckId)

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Jiten.Api.Authorization;
 using Jiten.Api.Dtos;
+using Jiten.Api.Helpers;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Services;
 using Jiten.Core;
@@ -30,6 +31,7 @@ public partial class RequestController(
     NotificationService notificationService,
     ICdnService cdnService,
     IMemoryCache memoryCache,
+    IUserLimitsService userLimits,
     ILogger<RequestController> logger) : ControllerBase
 {
     private static readonly HashSet<string> AllowedExtensions =
@@ -37,7 +39,6 @@ public partial class RequestController(
 
     private const long MaxUploadSize = 104_857_600; // 100MB
     private const long MaxUploadBytesPerDay = 500 * 1024 * 1024; // 500MB per 24h
-    private const int RequestQuotaLimit = 20;
     private const int MonthlyBoostLimit = 5;
     private const int BoostWeight = 5;
     private const int MaxCommentLength = 500;
@@ -397,6 +398,8 @@ public partial class RequestController(
             UpvoteCount = 1
         };
 
+        var limits = await userLimits.GetLimitsAsync(userId);
+
         try
         {
             await using var transaction = await context.Database
@@ -407,12 +410,18 @@ public partial class RequestController(
                                  (r.Status == MediaRequestStatus.Open ||
                                   r.Status == MediaRequestStatus.InProgress));
 
-            if (activeCount >= RequestQuotaLimit)
+            if (activeCount >= limits.ActiveMediaRequests)
                 return Results.Problem(
                     title: "Quota exceeded",
-                    detail: $"You have reached the limit of {RequestQuotaLimit} active requests. Wait for existing requests to be fulfilled or rejected.",
+                    detail: LimitMessages.ActiveMediaRequests(limits),
                     statusCode: StatusCodes.Status422UnprocessableEntity,
-                    extensions: new Dictionary<string, object?> { ["activeCount"] = activeCount, ["limit"] = RequestQuotaLimit });
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["activeCount"] = activeCount,
+                        ["limit"] = limits.ActiveMediaRequests,
+                        ["plusLimit"] = limits.Allowances.ActiveMediaRequests.Plus,
+                        ["isPlus"] = limits.IsPlus
+                    });
 
             context.MediaRequests.Add(request);
             await context.SaveChangesAsync();
@@ -447,9 +456,15 @@ public partial class RequestController(
         {
             return Results.Problem(
                 title: "Quota exceeded",
-                detail: $"You have reached the limit of {RequestQuotaLimit} active requests.",
+                detail: LimitMessages.ActiveMediaRequests(limits),
                 statusCode: StatusCodes.Status422UnprocessableEntity,
-                extensions: new Dictionary<string, object?> { ["activeCount"] = RequestQuotaLimit, ["limit"] = RequestQuotaLimit });
+                extensions: new Dictionary<string, object?>
+                {
+                    ["activeCount"] = limits.ActiveMediaRequests,
+                    ["limit"] = limits.ActiveMediaRequests,
+                    ["plusLimit"] = limits.Allowances.ActiveMediaRequests.Plus,
+                    ["isPlus"] = limits.IsPlus
+                });
         }
     }
 
@@ -464,7 +479,14 @@ public partial class RequestController(
                              (r.Status == MediaRequestStatus.Open ||
                               r.Status == MediaRequestStatus.InProgress));
 
-        return Results.Ok(new { activeCount, limit = RequestQuotaLimit });
+        var limits = await userLimits.GetLimitsAsync(userId);
+        return Results.Ok(new
+        {
+            activeCount,
+            limit = limits.ActiveMediaRequests,
+            plusLimit = limits.Allowances.ActiveMediaRequests.Plus,
+            isPlus = limits.IsPlus
+        });
     }
 
     [HttpDelete("{id:int}")]

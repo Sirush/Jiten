@@ -35,6 +35,7 @@ public class StudyController(
     IDeckImportService importService,
     IWordFormSiblingCache wordFormCache,
     IStudySessionService sessionService,
+    IUserLimitsService userLimits,
     ILogger<StudyController> logger) : ControllerBase
 {
     private static readonly Regex SentenceMarkerRegex =
@@ -332,9 +333,10 @@ public class StudyController(
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
 
+        var limits = await userLimits.GetLimitsAsync(userId);
         var deckCount = await userContext.UserStudyDecks.CountAsync(sd => sd.UserId == userId);
-        if (deckCount >= 50)
-            return Results.BadRequest("Maximum of 50 study decks reached.");
+        if (deckCount >= limits.StudyDecks)
+            return Results.BadRequest(LimitMessages.StudyDeckCount(limits));
 
         if (request.DeckType == StudyDeckType.MediaDeck)
         {
@@ -4416,10 +4418,9 @@ public class StudyController(
             .ToListAsync();
         var totalUserWords = await userContext.UserStudyDeckWords
             .CountAsync(w => userDeckIds.Contains(w.UserStudyDeckId));
-        if (totalUserWords + wordsToAdd > 200_000)
-            return wordsToAdd == 1
-                ? "Maximum of 200,000 total static deck words reached."
-                : $"Adding {wordsToAdd} words would exceed the 200,000 total limit.";
+        var limits = await userLimits.GetLimitsAsync(userId);
+        if (totalUserWords + wordsToAdd > limits.StudyDeckWords)
+            return LimitMessages.StudyDeckWordsTotal(limits, wordsToAdd);
 
         return null;
     }

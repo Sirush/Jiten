@@ -35,11 +35,41 @@ export interface JitenPlusQuota {
   allowances: JitenPlusAllowances;
 }
 
+export interface JitenPlusLimitValues {
+  studyDecks: number;
+  studyDeckWords: number;
+  importWords: number;
+  activeMediaRequests: number;
+  customSentencesPerWord: number;
+}
+
+export interface JitenPlusLimits extends JitenPlusLimitValues {
+  // What the same limits would be on any paid or trial tier, so a free user can be shown the gain.
+  plus: JitenPlusLimitValues;
+}
+
 export interface JitenPlusStatus {
   tier: JitenPlusTier;
   sources: JitenPlusSources;
   quota: JitenPlusQuota;
+  limits: JitenPlusLimits;
 }
+
+// Mirrors the free tier of JitenPlusLimitsOptions; used until the status call resolves.
+const FREE_LIMITS: JitenPlusLimits = {
+  studyDecks: 60,
+  studyDeckWords: 150_000,
+  importWords: 50_000,
+  activeMediaRequests: 20,
+  customSentencesPerWord: 3,
+  plus: {
+    studyDecks: 200,
+    studyDeckWords: 300_000,
+    importWords: 100_000,
+    activeMediaRequests: 30,
+    customSentencesPerWord: 10,
+  },
+};
 
 // 'trial' means Trial-or-Full suffices; 'full' means the paid tier is required.
 const FEATURE_TIERS: Record<JitenPlusFeature, 'trial' | 'full'> = {
@@ -75,6 +105,7 @@ export function useJitenPlus() {
   const isPlus = computed(() => tier.value === 'full' || tier.value === 'trial');
   const sources = computed(() => status.value?.sources ?? null);
   const quota = computed(() => status.value?.quota ?? null);
+  const limits = computed<JitenPlusLimits>(() => status.value?.limits ?? FREE_LIMITS);
 
   async function doFetch() {
     if (!import.meta.client || !auth.isAuthenticated) {
@@ -151,5 +182,5 @@ export function useJitenPlus() {
     return tierSatisfies(FEATURE_TIERS[feature]);
   }
 
-  return { tier, isFull, isTrial, isPlus, sources, quota, loading, refresh, reset, hasFeature, tierSatisfies };
+  return { tier, isFull, isTrial, isPlus, sources, quota, limits, loading, refresh, reset, hasFeature, tierSatisfies };
 }

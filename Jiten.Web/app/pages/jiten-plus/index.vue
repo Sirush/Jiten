@@ -2,10 +2,22 @@
   import { useToast } from 'primevue/usetoast';
   import { useAuthStore } from '~/stores/authStore';
 
+  interface LimitPair {
+    free: number;
+    plus: number;
+  }
+
   interface PricingInfo {
     lifetimeWindowEnd: string;
     lifetimeAvailable: boolean;
     cardMediaStorage: { trialBytes: number; fullBytes: number };
+    limits: {
+      studyDecks: LimitPair;
+      studyDeckWords: LimitPair;
+      importWords: LimitPair;
+      activeMediaRequests: LimitPair;
+      customSentencesPerWord: LimitPair;
+    };
   }
 
   const { $api } = useNuxtApp();
@@ -31,6 +43,18 @@
   const fullStorageLabel = computed(() => {
     const bytes = pricing.value?.cardMediaStorage?.fullBytes;
     return bytes ? formatBytes(bytes) : null;
+  });
+
+  const limitRows = computed(() => {
+    const l = pricing.value?.limits;
+    if (!l) return [];
+    return [
+      { label: 'Study decks', ...l.studyDecks },
+      { label: 'Words across word list decks', ...l.studyDeckWords },
+      { label: 'Words per import', ...l.importWords },
+      { label: 'Active media requests', ...l.activeMediaRequests },
+      { label: 'Custom sentences per word', ...l.customSentencesPerWord },
+    ].map(row => ({ label: row.label, free: row.free.toLocaleString(), plus: row.plus.toLocaleString() }));
   });
 
   const showLifetimeNotice = computed(() => lifetimeAvailable.value && !!lifetimeWindowEndLabel.value && !isLifetime.value);
@@ -70,7 +94,7 @@
 
   useSeoMeta({
     title: 'Jiten+ - Get more from Jiten and help it grow',
-    description: 'Jiten+ adds richer cards, custom frequency lists, media request boosts and more while helping support Jiten. Everything free stays free.',
+    description: 'Jiten+ adds richer cards, custom frequency lists, media request boosts, higher limits and more while helping support Jiten. Everything free stays free.',
     ogTitle: 'Jiten+ - Get more from Jiten and help it grow',
     ogDescription: 'Get useful extras while helping support Jiten. Everything free stays free.',
     ogType: 'website',
@@ -108,10 +132,23 @@
       <JitenPlusBadge :link="false" class="!text-sm !px-3 !py-1 mb-4" />
       <h1 class="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">Get more from Jiten and help it grow</h1>
       <p class="text-lg text-gray-600 dark:text-gray-300 leading-relaxed">
-        <span class="font-semibold text-gray-800 dark:text-gray-100">Jiten+</span> gives you extra tools to personalize your learning, from richer cards
-        and custom frequency lists to media request boosts. Your support helps cover server costs and keeps Jiten growing. Everything that's free today stays
-        free, forever.
+        <span class="font-semibold text-gray-800 dark:text-gray-100">Jiten+</span> gives you extra tools to personalize your learning while helping cover
+        server costs and keep Jiten growing. Everything that's free today stays free, forever.
       </p>
+      <ul class="mt-5 flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-6 text-sm font-medium text-gray-700 dark:text-gray-200">
+        <li class="inline-flex items-center gap-1.5">
+          <Icon name="material-symbols:check-circle-rounded" class="text-primary-500" />
+          Richer cards with images &amp; audio
+        </li>
+        <li class="inline-flex items-center gap-1.5">
+          <Icon name="material-symbols:check-circle-rounded" class="text-primary-500" />
+          Custom frequency lists
+        </li>
+        <li class="inline-flex items-center gap-1.5">
+          <Icon name="material-symbols:check-circle-rounded" class="text-primary-500" />
+          Higher limits &amp; monthly boosts
+        </li>
+      </ul>
       <div v-if="isFull" class="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary-50 dark:bg-primary-950/50 px-4 py-2">
         <Icon name="material-symbols:favorite-rounded" class="text-primary-500" />
         <span class="text-sm font-medium text-primary-700 dark:text-primary-300">You have Jiten+. Thank you for supporting Jiten!</span>
@@ -124,55 +161,6 @@
           <Icon name="material-symbols:event-available-outline-rounded" class="text-amber-600 dark:text-amber-400" />
           <span class="text-sm font-medium text-amber-800 dark:text-amber-300">Lifetime access is available until {{ lifetimeWindowEndLabel }}.</span>
         </a>
-      </div>
-    </section>
-
-    <!-- What you get -->
-    <section class="mt-14 max-w-4xl mx-auto">
-      <h2 class="text-2xl font-bold text-center mb-2 text-gray-900 dark:text-white">Everything included with Jiten+</h2>
-      <p class="text-center text-gray-600 dark:text-gray-300 mb-6">Jiten's core features stay free. Jiten+ adds these extras on top.</p>
-      <div class="grid gap-4 sm:grid-cols-2">
-        <div class="jp-feature border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-          <div class="jp-feature__head">
-            <Icon name="material-symbols:image-outline-rounded" class="jp-feature__icon" />
-            <h3 class="jp-feature__title text-gray-900 dark:text-white">Richer cards with images &amp; audio</h3>
-          </div>
-          <p class="jp-feature__body text-gray-600 dark:text-gray-300">
-            Make your cards more memorable with your own images and audio.
-            <template v-if="fullStorageLabel">You get {{ fullStorageLabel }} of storage, and you</template>
-            <template v-else>You</template>
-            keep your uploads even if you cancel.
-          </p>
-        </div>
-
-        <div class="jp-feature border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-          <div class="jp-feature__head">
-            <Icon name="material-symbols:format-list-numbered-rounded" class="jp-feature__icon" />
-            <h3 class="jp-feature__title text-gray-900 dark:text-white">Frequency lists made for you</h3>
-          </div>
-          <p class="jp-feature__body text-gray-600 dark:text-gray-300">
-            Build frequency lists from any media available on Jiten, use them in Yomitan, and share them with a link. Saved lists update automatically as Jiten
-            grows.
-          </p>
-        </div>
-
-        <div class="jp-feature border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-          <div class="jp-feature__head">
-            <Icon name="material-symbols:bolt-rounded" class="jp-feature__icon" />
-            <h3 class="jp-feature__title text-gray-900 dark:text-white">Media request boosts</h3>
-          </div>
-          <p class="jp-feature__body text-gray-600 dark:text-gray-300">
-            Get 5 boosts every month to prioritize any open media request. Each boost is the equivalent of 5 regular votes.
-          </p>
-        </div>
-
-        <div class="jp-feature border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-          <div class="jp-feature__head">
-            <Icon name="material-symbols:favorite-rounded" class="jp-feature__icon" />
-            <h3 class="jp-feature__title text-gray-900 dark:text-white">Help Jiten keep growing</h3>
-          </div>
-          <p class="jp-feature__body text-gray-600 dark:text-gray-300">Your support helps pay for servers and ongoing development, while everything currently free remains free for everyone.</p>
-        </div>
       </div>
     </section>
 
@@ -257,7 +245,87 @@
         </template>
       </div>
     </section>
-    <p class="text-center text-xs text-gray-500 dark:text-gray-400 mt-3">Patreon and Ko-fi contributions are donation-only and don't include Jiten+.</p>
+    <p class="text-center text-sm text-gray-600 dark:text-gray-300 mt-4">
+      Cancel anytime. Cards, uploads, and lists are never deleted.
+    </p>
+    <p class="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">Patreon and Ko-fi contributions are donation-only and don't include Jiten+.</p>
+
+    <!-- What you get -->
+    <section class="mt-14 max-w-4xl mx-auto">
+      <h2 class="text-2xl font-bold text-center mb-2 text-gray-900 dark:text-white">Everything included with Jiten+</h2>
+      <p class="text-center text-gray-600 dark:text-gray-300 mb-6">Jiten's core features stay free. Jiten+ adds these extras on top.</p>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div class="jp-feature border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+          <div class="jp-feature__head">
+            <Icon name="material-symbols:image-outline-rounded" class="jp-feature__icon" />
+            <h3 class="jp-feature__title text-gray-900 dark:text-white">Richer cards with images &amp; audio</h3>
+          </div>
+          <p class="jp-feature__body text-gray-600 dark:text-gray-300">
+            Make your cards more memorable with your own images and audio.
+            <template v-if="fullStorageLabel">You get {{ fullStorageLabel }} of storage, and you</template>
+            <template v-else>You</template>
+            keep your uploads even if you cancel.
+          </p>
+        </div>
+
+        <div class="jp-feature border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+          <div class="jp-feature__head">
+            <Icon name="material-symbols:format-list-numbered-rounded" class="jp-feature__icon" />
+            <h3 class="jp-feature__title text-gray-900 dark:text-white">Frequency lists made for you</h3>
+          </div>
+          <p class="jp-feature__body text-gray-600 dark:text-gray-300">
+            Build frequency lists from any media available on Jiten, use them in Yomitan, and share them with a link. Saved lists update automatically as Jiten
+            grows.
+          </p>
+        </div>
+
+        <div v-if="limitRows.length" class="jp-feature sm:col-span-2 border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+          <div class="jp-feature__head">
+            <Icon name="material-symbols:trending-up-rounded" class="jp-feature__icon" />
+            <h3 class="jp-feature__title text-gray-900 dark:text-white">Higher limits</h3>
+          </div>
+          <p class="jp-feature__body text-gray-600 dark:text-gray-300">
+            Free limits cover most learners. If you're a power user, Jiten+ raises the caps.
+          </p>
+          <div class="mt-3 overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="text-left text-gray-500 dark:text-gray-400">
+                  <th class="font-medium py-1 pr-3"></th>
+                  <th class="font-medium py-1 px-3 text-right whitespace-nowrap">Free</th>
+                  <th class="font-medium py-1 pl-3 text-right whitespace-nowrap">Jiten+</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in limitRows" :key="row.label" class="border-t border-gray-100 dark:border-gray-800">
+                  <td class="py-1.5 pr-3 text-gray-700 dark:text-gray-300">{{ row.label }}</td>
+                  <td class="py-1.5 px-3 text-right tabular-nums text-gray-500 dark:text-gray-400">{{ row.free }}</td>
+                  <td class="py-1.5 pl-3 text-right tabular-nums font-semibold text-primary-600 dark:text-primary-300">{{ row.plus }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="jp-feature border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+          <div class="jp-feature__head">
+            <Icon name="material-symbols:bolt-rounded" class="jp-feature__icon" />
+            <h3 class="jp-feature__title text-gray-900 dark:text-white">Media request boosts</h3>
+          </div>
+          <p class="jp-feature__body text-gray-600 dark:text-gray-300">
+            Get 5 boosts every month to prioritize any open media request. Each boost is the equivalent of 5 regular votes.
+          </p>
+        </div>
+
+        <div class="jp-feature border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+          <div class="jp-feature__head">
+            <Icon name="material-symbols:favorite-rounded" class="jp-feature__icon" />
+            <h3 class="jp-feature__title text-gray-900 dark:text-white">Help Jiten keep growing</h3>
+          </div>
+          <p class="jp-feature__body text-gray-600 dark:text-gray-300">Your support helps pay for servers and ongoing development, while everything currently free remains free for everyone.</p>
+        </div>
+      </div>
+    </section>
 
     <!-- FAQ -->
     <section class="mt-12 max-w-3xl mx-auto">

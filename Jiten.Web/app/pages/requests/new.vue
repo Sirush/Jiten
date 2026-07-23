@@ -22,9 +22,10 @@ const externalUrl = ref('');
 const description = ref('');
 const isSubmitting = ref(false);
 const duplicates = ref<DuplicateCheckResultDto | null>(null);
-const quota = ref<{ activeCount: number; limit: number } | null>(null);
+const quota = ref<MediaRequestQuota | null>(null);
 
 const isAtQuotaLimit = computed(() => quota.value !== null && quota.value.activeCount >= quota.value.limit);
+const showPlusUpsell = computed(() => quota.value !== null && !quota.value.isPlus && quota.value.plusLimit > quota.value.limit);
 
 onMounted(async () => {
   quota.value = await fetchMyQuota();
@@ -85,11 +86,17 @@ async function handleSubmit() {
     const is422 = err?.response?.status === 422 || err?.status === 422;
     const hasActiveCount = err?.data?.activeCount !== undefined || err?.response?._data?.activeCount !== undefined;
     if (is422 && hasActiveCount) {
-      quota.value = { activeCount: quota.value?.limit ?? 20, limit: quota.value?.limit ?? 20 };
+      const limit = quota.value?.limit ?? 20;
+      quota.value = {
+        activeCount: limit,
+        limit,
+        plusLimit: quota.value?.plusLimit ?? 30,
+        isPlus: quota.value?.isPlus ?? false,
+      };
       toast.add({
         severity: 'warn',
         summary: 'Quota reached',
-        detail: "You've reached your request quota (20 active requests). Wait for some to be fulfilled or rejected.",
+        detail: `You've reached your request quota (${limit} active requests). Wait for some to be fulfilled or rejected.`,
         life: 6000,
       });
     } else {
@@ -207,6 +214,9 @@ async function handleSubmit() {
           <template v-if="quota">
             <Message v-if="isAtQuotaLimit" severity="error" :closable="false" class="text-sm">
               You have reached the limit of {{ quota.limit }} active requests. Wait for existing requests to be fulfilled or rejected before submitting a new one.
+              <template v-if="showPlusUpsell">
+                <NuxtLink to="/jiten-plus" class="underline">Jiten+</NuxtLink> raises this to {{ quota.plusLimit }} slots.
+              </template>
             </Message>
             <small v-else class="text-muted-color">
               <i class="pi pi-list mr-1" />

@@ -22,11 +22,15 @@ public class JitenPlusController(
     UserDbContext userContext,
     IEmailService emailService,
     ICardMediaQuotaService cardMediaQuotaService,
+    IUserLimitsService userLimitsService,
     IOptions<CardMediaStorageOptions> cardMediaStorageOptions,
+    IOptions<JitenPlusLimitsOptions> limitsOptions,
     IOptions<StripeOptions> stripeOptions,
     ILogger<JitenPlusController> logger) : ControllerBase
 {
     public record RedeemRequest(string? Code);
+
+    private static object Pair(TieredLimit limit) => new { free = limit.Free, plus = limit.Plus };
 
     /// <summary>
     /// Public pricing/window info for the marketing page. Anonymous-readable so /jiten-plus renders
@@ -38,11 +42,20 @@ public class JitenPlusController(
     {
         var windowEnd = stripeOptions.Value.LifetimeWindowEnd;
         var storage = cardMediaStorageOptions.Value;
+        var limits = limitsOptions.Value;
         return Results.Ok(new
         {
             lifetimeWindowEnd = windowEnd,
             lifetimeAvailable = DateTime.UtcNow <= windowEnd,
-            cardMediaStorage = new { trialBytes = storage.TrialBytes, fullBytes = storage.FullBytes }
+            cardMediaStorage = new { trialBytes = storage.TrialBytes, fullBytes = storage.FullBytes },
+            limits = new
+            {
+                studyDecks = Pair(limits.StudyDecks),
+                studyDeckWords = Pair(limits.StudyDeckWords),
+                importWords = Pair(limits.ImportWords),
+                activeMediaRequests = Pair(limits.ActiveMediaRequests),
+                customSentencesPerWord = Pair(limits.CustomSentencesPerWord)
+            }
         });
     }
 
@@ -60,6 +73,7 @@ public class JitenPlusController(
                                          .SumAsync(m => m.FileSizeBytes);
         var quota = await cardMediaQuotaService.GetQuotaAsync(userId);
         var storage = cardMediaStorageOptions.Value;
+        var limits = await userLimitsService.GetLimitsAsync(userId);
 
         return Results.Ok(new
         {
@@ -87,6 +101,22 @@ public class JitenPlusController(
                 usedBytes,
                 maxBytes = quota.MaxBytes,
                 allowances = new { trialBytes = storage.TrialBytes, fullBytes = storage.FullBytes }
+            },
+            limits = new
+            {
+                studyDecks = limits.StudyDecks,
+                studyDeckWords = limits.StudyDeckWords,
+                importWords = limits.ImportWords,
+                activeMediaRequests = limits.ActiveMediaRequests,
+                customSentencesPerWord = limits.CustomSentencesPerWord,
+                plus = new
+                {
+                    studyDecks = limits.Allowances.StudyDecks.Plus,
+                    studyDeckWords = limits.Allowances.StudyDeckWords.Plus,
+                    importWords = limits.Allowances.ImportWords.Plus,
+                    activeMediaRequests = limits.Allowances.ActiveMediaRequests.Plus,
+                    customSentencesPerWord = limits.Allowances.CustomSentencesPerWord.Plus
+                }
             }
         });
     }

@@ -22,6 +22,8 @@
   const localiseTitle = useLocaliseTitle();
   const store = useJitenStore();
   const isNsfw = isTextNsfw(props.exampleSentence.text);
+  const { limits: planLimits } = useJitenPlus();
+  const sentenceLimitMessage = computed(() => `Maximum of ${planLimits.value.customSentencesPerWord} custom sentences reached`);
   const favourited = ref(false);
   const isRevealed = computed({
     get: () => store.displayAllNsfw,
@@ -67,7 +69,7 @@
     let source = '';
     if (sourceDeckParent) source += localiseTitle(sourceDeckParent) + ' - ';
     if (sourceDeck) source += localiseTitle(sourceDeck);
-    return source;
+    return clampSentenceSource(source);
   });
 
   // Editing a corpus sentence creates a new custom (favourite) sentence; reuse the favourite flow.
@@ -89,6 +91,7 @@
     let source = '';
     if (sourceDeckParent) source += localiseTitle(sourceDeckParent) + ' - ';
     if (sourceDeck) source += localiseTitle(sourceDeck);
+    source = clampSentenceSource(source);
 
     try {
       await $api(`user/example-sentences/${props.wordId}/${props.readingIndex}/favourite`, {
@@ -98,7 +101,7 @@
       favourited.value = true;
       emit('favourited');
     } catch {
-      toast.add({ severity: 'error', summary: 'Maximum of 3 custom sentences reached', life: 3000 });
+      toast.add({ severity: 'error', summary: sentenceLimitMessage.value, life: 3000 });
     }
   }
 </script>
@@ -126,7 +129,7 @@
           class="inline-flex items-center justify-center transition-colors mt-0.5 shrink-0"
           :class="favourited ? 'text-yellow-500' : atLimit ? 'text-surface-300 dark:text-surface-600 cursor-not-allowed' : 'text-surface-400 hover:text-yellow-500'"
           :disabled="favourited || atLimit"
-          :title="atLimit ? 'Maximum of 3 custom sentences reached' : 'Save as custom sentence'"
+          :title="atLimit ? sentenceLimitMessage : 'Save as custom sentence'"
           @click="favouriteSentence"
         >
           <i class="pi text-sm" :class="favourited ? 'pi-star-fill' : 'pi-star'" />
@@ -136,7 +139,7 @@
           class="inline-flex items-center justify-center transition-colors mt-0.5 shrink-0"
           :class="atLimit ? 'text-surface-300 dark:text-surface-600 cursor-not-allowed' : 'text-surface-400 hover:text-primary-500 cursor-pointer'"
           :disabled="atLimit"
-          :title="atLimit ? 'Maximum of 3 custom sentences reached' : 'Edit sentence'"
+          :title="atLimit ? sentenceLimitMessage : 'Edit sentence'"
           @click="editing = true"
         >
           <i class="pi pi-pencil text-sm" />

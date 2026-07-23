@@ -29,7 +29,7 @@ function withCount(label: string, count: number | undefined) {
 }
 
 const authStore = useAuthStore();
-const quota = ref<{ activeCount: number; limit: number } | null>(null);
+const quota = ref<MediaRequestQuota | null>(null);
 const toast = useToast();
 const router = useRouter();
 const route = useRoute();
@@ -350,7 +350,11 @@ watch(isPlus, (val) => {
         v-if="quota"
         :value="`${quota.activeCount} / ${quota.limit} active slots used`"
         severity="secondary"
-        v-tooltip.top="'Open requests you currently have across the platform'"
+        v-tooltip.top="
+          quota.isPlus
+            ? 'Open requests you currently have across the platform'
+            : `Open requests you currently have across the platform. Jiten+ raises this to ${quota.plusLimit} slots.`
+        "
       />
       <Tag
         v-if="showBoostBalance"

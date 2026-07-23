@@ -106,6 +106,12 @@ public class JitenPlusStatusTests(JitenWebApplicationFactory factory)
         // The test factory sets Stripe__LifetimeWindowEnd=2999-01-01, so the window is open.
         body.GetProperty("lifetimeAvailable").GetBoolean().Should().BeTrue();
         body.GetProperty("lifetimeWindowEnd").GetDateTime().Year.Should().Be(2999);
+
+        // The marketing page renders the free/plus comparison straight from this payload.
+        var defaults = new JitenPlusLimitsOptions();
+        var studyDecks = body.GetProperty("limits").GetProperty("studyDecks");
+        studyDecks.GetProperty("free").GetInt32().Should().Be(defaults.StudyDecks.Free);
+        studyDecks.GetProperty("plus").GetInt32().Should().Be(defaults.StudyDecks.Plus);
     }
 
     [Fact]
@@ -135,6 +141,43 @@ public class JitenPlusStatusTests(JitenWebApplicationFactory factory)
 
         body.GetProperty("tier").GetString().Should().Be("trial");
         body.GetProperty("quota").GetProperty("maxBytes").GetInt64().Should().Be(new CardMediaStorageOptions().TrialBytes);
+    }
+
+    [Fact]
+    public async Task FreeUser_GetsFreeLimits_AndSeesWhatPlusWouldGive()
+    {
+        var body = await GetStatus(TestUsers.UserB);
+        var defaults = new JitenPlusLimitsOptions();
+        var limits = body.GetProperty("limits");
+
+        limits.GetProperty("studyDecks").GetInt32().Should().Be(defaults.StudyDecks.Free);
+        limits.GetProperty("studyDeckWords").GetInt32().Should().Be(defaults.StudyDeckWords.Free);
+        limits.GetProperty("importWords").GetInt32().Should().Be(defaults.ImportWords.Free);
+        limits.GetProperty("activeMediaRequests").GetInt32().Should().Be(defaults.ActiveMediaRequests.Free);
+        limits.GetProperty("customSentencesPerWord").GetInt32().Should().Be(defaults.CustomSentencesPerWord.Free);
+
+        limits.GetProperty("plus").GetProperty("studyDecks").GetInt32().Should().Be(defaults.StudyDecks.Plus);
+    }
+
+    /// <summary>The trial tier gets the same raised limits as a paid plan.</summary>
+    [Fact]
+    public async Task TrialUser_GetsThePlusLimits()
+    {
+        await AddCredit(TestUsers.UserA, remainingDays: 6, grantsFull: false);
+
+        var body = await GetStatus(TestUsers.UserA);
+        var defaults = new JitenPlusLimitsOptions();
+        var limits = body.GetProperty("limits");
+
+        limits.GetProperty("studyDecks").GetInt32().Should().Be(defaults.StudyDecks.Plus);
+        limits.GetProperty("studyDeckWords").GetInt32().Should().Be(defaults.StudyDeckWords.Plus);
+        limits.GetProperty("customSentencesPerWord").GetInt32().Should().Be(defaults.CustomSentencesPerWord.Plus);
+
+        var quotaResponse = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "/api/requests/my-quota").WithUser(TestUsers.UserA));
+        var quota = await quotaResponse.Content.ReadFromJsonAsync<JsonElement>();
+        quota.GetProperty("limit").GetInt32().Should().Be(defaults.ActiveMediaRequests.Plus);
+        quota.GetProperty("isPlus").GetBoolean().Should().BeTrue();
     }
 
     [Fact]

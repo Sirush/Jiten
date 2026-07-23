@@ -24,6 +24,7 @@
 
   const { $api } = useNuxtApp();
   const toast = useToast();
+  const { limits: planLimits } = useJitenPlus();
 
   const text = ref(props.initialText);
   const source = ref(props.initialSource);
@@ -57,7 +58,9 @@
     } catch {
       toast.add({
         severity: 'error',
-        summary: props.userSentenceId != null ? 'Failed to save sentence' : 'Maximum of 3 custom sentences reached',
+        summary: props.userSentenceId != null
+          ? 'Failed to save sentence'
+          : `Maximum of ${planLimits.value.customSentencesPerWord} custom sentences reached`,
         life: 3000,
       });
     } finally {
