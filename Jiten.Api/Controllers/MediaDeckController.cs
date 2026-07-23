@@ -1229,6 +1229,13 @@ public class MediaDeckController(
                 : query.OrderByDescending(d => d.ExternalRating)
                        .ThenBy(d => d.DeckId)
                        .Where(d => d.ExternalRating != 0),
+            "communityVotes" => sortOrder == SortOrder.Ascending
+                ? query.Where(d => d.DeckDifficulty != null && d.DeckDifficulty.DistinctVoterCount > 0)
+                       .OrderBy(d => d.DeckDifficulty!.DistinctVoterCount)
+                       .ThenBy(d => d.DeckId)
+                : query.Where(d => d.DeckDifficulty != null && d.DeckDifficulty.DistinctVoterCount > 0)
+                       .OrderByDescending(d => d.DeckDifficulty!.DistinctVoterCount)
+                       .ThenBy(d => d.DeckId),
             _ => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.RomajiTitle).ThenBy(d => d.DeckId)
                 : query.OrderByDescending(d => d.RomajiTitle).ThenBy(d => d.DeckId),
@@ -1298,6 +1305,13 @@ public class MediaDeckController(
             "releaseDate" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(p => p.Deck.ReleaseDate).ThenBy(p => p.Deck.DeckId)
                 : query.OrderByDescending(p => p.Deck.ReleaseDate).ThenBy(p => p.Deck.DeckId),
+            "communityVotes" => sortOrder == SortOrder.Ascending
+                ? query.Where(p => p.Deck.DeckDifficulty != null && p.Deck.DeckDifficulty.DistinctVoterCount > 0)
+                       .OrderBy(p => p.Deck.DeckDifficulty!.DistinctVoterCount)
+                       .ThenBy(p => p.Deck.DeckId)
+                : query.Where(p => p.Deck.DeckDifficulty != null && p.Deck.DeckDifficulty.DistinctVoterCount > 0)
+                       .OrderByDescending(p => p.Deck.DeckDifficulty!.DistinctVoterCount)
+                       .ThenBy(p => p.Deck.DeckId),
             _ => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(p => p.Deck.RomajiTitle).ThenBy(p => p.Deck.DeckId)
                 : query.OrderByDescending(p => p.Deck.RomajiTitle).ThenBy(p => p.Deck.DeckId),

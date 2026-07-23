@@ -55,6 +55,7 @@
     { label: 'Unique Word Count', value: 'uWordCount' },
     { label: 'Word Count', value: 'wordCount' },
     { label: 'Unique Kanji Used Once', value: 'uKanjiOnce' },
+    { label: 'Community Ratings', value: 'communityVotes' },
     { label: 'Release Date', value: 'releaseDate' },
     { label: 'Added Date', value: 'addedDate' },
   ]);
@@ -88,6 +89,7 @@
     'wordCount',
     'subdeckCount',
     'uKanjiOnce',
+    'communityVotes',
     'releaseDate',
     'addedDate',
   ];
@@ -98,6 +100,7 @@
     coverage:            { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
     uCoverage:           { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
     extRating:           { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
+    communityVotes:      { default: SortOrder.Descending, asc: 'Fewest first',         desc: 'Most first' },
     sentenceLength:      { default: SortOrder.Ascending,  asc: 'Shortest first',       desc: 'Longest first' },
     uKanji:              { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
     uWordCount:          { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
