@@ -10,11 +10,11 @@
       return `Active ${plan} subscription.`;
     }
     if (tier.value === 'trial') {
-      return `Jiten+ Trial — ${s.promoCreditDays} day${s.promoCreditDays === 1 ? '' : 's'} left · includes everything except permanent-storage features.`;
+      return `Jiten+ Trial - ${s.promoCreditDays} day${s.promoCreditDays === 1 ? '' : 's'} left.`;
     }
     if (s.adminOverride) return 'Access granted by an administrator.';
     if (s.promoCreditDays > 0) return `${s.promoCreditDays} day${s.promoCreditDays === 1 ? '' : 's'} left.`;
-    return 'Support Jiten and unlock a few extras. The core platform is always free.';
+    return 'Support Jiten and unlock a few extras.';
   });
 </script>
 

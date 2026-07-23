@@ -32,9 +32,9 @@
   const cardMedia = useCardMedia();
   const { refresh: refreshPlus, tierSatisfies } = useJitenPlus();
 
-  // Uploading (and replacing) is a Full-tier action; viewing and deleting existing media are not, so
+  // Uploading (and replacing) needs an active tier; viewing and deleting existing media do not, so
   // a lapsed user can always remove media they own. Gating lives on the upload surfaces below.
-  const canUpload = computed(() => tierSatisfies('full'));
+  const canUpload = computed(() => tierSatisfies('trial'));
 
   const MAX_BYTES = 5 * 1024 * 1024;
   // Only the formats the backend accepts. .wav/.aac and other audio/image subtypes are rejected
@@ -289,14 +289,15 @@
   });
 
   function handleError(e: unknown, action: 'upload' | 'delete' = 'upload') {
-    const err = e as { status?: number; statusCode?: number; data?: { message?: string } | string };
+    const err = e as { status?: number; statusCode?: number; data?: { message?: string; error?: string } | string };
     const status = err?.status ?? err?.statusCode;
     if (status === 403 && action === 'upload') {
-      toast.add({ severity: 'warn', summary: 'Jiten+ Full required', detail: 'Card media is part of Jiten+ Full.', life: 5000 });
+      toast.add({ severity: 'warn', summary: 'Jiten+ required', detail: 'Card media uploads are part of Jiten+.', life: 5000 });
       return;
     }
     const summary = action === 'delete' ? 'Could not remove media' : 'Upload failed';
-    const detail = (typeof err?.data === 'object' ? err?.data?.message : err?.data) || 'Please try again.';
+    // Quota and validation rejections carry `error`; other endpoints use `message`.
+    const detail = (typeof err?.data === 'object' ? (err?.data?.error ?? err?.data?.message) : err?.data) || 'Please try again.';
     toast.add({ severity: 'error', summary, detail, life: 5000 });
   }
 
@@ -432,7 +433,7 @@
           @click="openPicker"
         />
 
-        <JitenPlusGate v-if="!image && !audio" feature="card-media" tier="full" feature-label="Card media" compact>
+        <JitenPlusGate v-if="!image && !audio" feature="card-media" feature-label="Card media" compact>
           <Button
             v-tooltip.top="'You can also drop or paste a file anywhere on the page.'"
             size="small"
@@ -527,7 +528,7 @@
       </div>
 
       <!-- Dropzone -->
-      <JitenPlusGate feature="card-media" tier="full" feature-label="Card media">
+      <JitenPlusGate feature="card-media" feature-label="Card media">
         <button
           type="button"
           class="flex w-full flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-4 py-4 text-center transition-colors cursor-pointer"

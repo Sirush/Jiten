@@ -6,6 +6,7 @@ using FluentAssertions;
 using ImageMagick;
 using Jiten.Api.Services;
 using Jiten.Core;
+using Jiten.Core.Data.Billing;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.User;
@@ -291,20 +292,20 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task Upload_NonFullUser_Returns403WithJitenPlusPayload()
+    public async Task Upload_FreeUser_Returns403WithJitenPlusPayload()
     {
         var resp = await Upload(TestUsers.UserB, 104, 0, RealPng());
         resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("jitenPlus").GetBoolean().Should().BeTrue();
-        body.GetProperty("requiredTier").GetString().Should().Be("full");
+        body.GetProperty("requiredTier").GetString().Should().Be("trial");
     }
 
     [Fact]
-    public async Task Delete_NonFullUser_CanDeleteOwnMedia()
+    public async Task Delete_FreeUser_CanDeleteOwnMedia()
     {
         // Deletion is not tier-gated: a lapsed/free user must always be able to remove their own media.
-        // Upload is Full-gated, so seed UserB's row directly.
+        // Upload is tier-gated, so seed UserB's row directly.
         using (var scope = factory.Services.CreateScope())
         {
             var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
@@ -609,7 +610,7 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task Manage_NonFullUser_NotTierGated()
+    public async Task Manage_FreeUser_NotTierGated()
     {
         // UserB is free (tier none); the manage read must still succeed.
         await SeedMedia(TestUsers.UserB, 600, 0, CardMediaKind.Image, 42);
@@ -646,7 +647,7 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task DeleteAll_NonFullUser_CanClearOwnMedia()
+    public async Task DeleteAll_FreeUser_CanClearOwnMedia()
     {
         // Deletion is not tier-gated: UserB (free) must be able to clear their own storage.
         await SeedMedia(TestUsers.UserB, 900, 0, CardMediaKind.Image, 100);
@@ -682,7 +683,7 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task Summary_NonFullUser_NotTierGated()
+    public async Task Summary_FreeUser_NotTierGated()
     {
         await SeedMedia(TestUsers.UserB, 1200, 0, CardMediaKind.Image, 42);
 
@@ -772,7 +773,7 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task DeleteBatch_NonFullUser_CanDeleteOwn()
+    public async Task DeleteBatch_FreeUser_CanDeleteOwn()
     {
         await SeedMedia(TestUsers.UserB, 1600, 0, CardMediaKind.Image, 100);
 
@@ -789,16 +790,23 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
 }
 
 /// <summary>
-/// Quota rejection uses a factory with a lowered <c>JitenPlus:CardMediaQuotaBytes</c> so a small file trips
-/// the limit without uploading gigabytes. The config is host-scoped (not a global env var) to avoid leaking
-/// into other test classes running in parallel.
+/// Quota rejection uses a factory with lowered <c>JitenPlus:CardMediaStorage</c> allowances so a small file
+/// trips the limit without uploading gigabytes, and Trial sits below Full so the two are distinguishable.
+/// The config is host-scoped (not a global env var) to avoid leaking into other test classes running in parallel.
 /// </summary>
 public class LowQuotaWebApplicationFactory : JitenWebApplicationFactory
 {
+    public const long FullBytes = 8;
+    public const long TrialBytes = 4;
+
     protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
     {
         builder.ConfigureAppConfiguration((_, cfg) =>
-            cfg.AddInMemoryCollection(new Dictionary<string, string?> { ["JitenPlus:CardMediaQuotaBytes"] = "8" }));
+            cfg.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["JitenPlus:CardMediaStorage:FullBytes"] = FullBytes.ToString(),
+                ["JitenPlus:CardMediaStorage:TrialBytes"] = TrialBytes.ToString()
+            }));
         base.ConfigureWebHost(builder);
     }
 }
@@ -813,27 +821,84 @@ public class CardMediaQuotaTests(LowQuotaWebApplicationFactory factory)
         using var scope = factory.Services.CreateScope();
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         userDb.UserCardMedia.RemoveRange(userDb.UserCardMedia);
+        userDb.UserPromoCredits.RemoveRange(userDb.UserPromoCredits);
         var userA = await userDb.Users.FirstAsync(u => u.Id == TestUsers.UserA);
         userA.AdminPremiumOverride = true;
         await userDb.SaveChangesAsync();
-        scope.ServiceProvider.GetRequiredService<IJitenPlusService>().InvalidateTier(TestUsers.UserA);
+
+        var jitenPlus = scope.ServiceProvider.GetRequiredService<IJitenPlusService>();
+        jitenPlus.InvalidateTier(TestUsers.UserA);
+        jitenPlus.InvalidateTier(TestUsers.UserB);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    [Fact]
-    public async Task Upload_OverQuota_Rejected()
+    /// <summary>Trial comes only from an unconsumed non-Full promo credit.</summary>
+    private async Task MakeTrial(string userId)
     {
-        // Quota is 8 bytes; even a tiny real image exceeds it once processed.
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+        var code = new PromoCode { Code = Guid.NewGuid().ToString("N")[..10].ToUpperInvariant(), DurationDays = 7 };
+        userDb.PromoCodes.Add(code);
+        await userDb.SaveChangesAsync();
+
+        userDb.UserPromoCredits.Add(new UserPromoCredit
+        {
+            UserId = userId,
+            PromoCodeId = code.CodeId,
+            GrantsFullTier = false,
+            RemainingDays = 7,
+            GrantedAt = DateTime.UtcNow
+        });
+        await userDb.SaveChangesAsync();
+
+        scope.ServiceProvider.GetRequiredService<IJitenPlusService>().InvalidateTier(userId);
+    }
+
+    private Task<HttpResponseMessage> Upload(string userId, int wordId)
+    {
         using var image = new MagickImage(MagickColors.Red, 32, 32) { Format = MagickFormat.Png };
         var content = new MultipartFormDataContent();
         content.Add(new ByteArrayContent(image.ToByteArray()), "file", "x.png");
-        var request = new HttpRequestMessage(HttpMethod.Post, "/api/srs/card-media/100/0") { Content = content }
-            .WithUser(TestUsers.UserA);
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/card-media/{wordId}/0") { Content = content }
+            .WithUser(userId);
+        return _client.SendAsync(request);
+    }
 
-        var resp = await _client.SendAsync(request);
+    [Fact]
+    public async Task Upload_OverQuota_Rejected()
+    {
+        // Even a tiny real image exceeds the lowered allowance once processed.
+        var resp = await Upload(TestUsers.UserA, 100);
         resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("maxBytes").GetInt64().Should().Be(8);
+        body.GetProperty("maxBytes").GetInt64().Should().Be(LowQuotaWebApplicationFactory.FullBytes);
+    }
+
+    [Fact]
+    public async Task Upload_TrialUser_IsAllowed_AtTheTrialAllowance()
+    {
+        await MakeTrial(TestUsers.UserB);
+
+        var resp = await Upload(TestUsers.UserB, 101);
+
+        // Not a 403: Trial may upload. It fails on the lowered byte allowance, which is the Trial one.
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("maxBytes").GetInt64().Should().Be(LowQuotaWebApplicationFactory.TrialBytes);
+    }
+
+    [Fact]
+    public async Task Status_ReportsZeroAllowanceForLapsedUser()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/jiten-plus/status").WithUser(TestUsers.UserB);
+        var resp = await _client.SendAsync(request);
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var quota = (await resp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("quota");
+        quota.GetProperty("maxBytes").GetInt64().Should().Be(0);
+        quota.GetProperty("allowances").GetProperty("trialBytes").GetInt64().Should().Be(LowQuotaWebApplicationFactory.TrialBytes);
+        quota.GetProperty("allowances").GetProperty("fullBytes").GetInt64().Should().Be(LowQuotaWebApplicationFactory.FullBytes);
     }
 }

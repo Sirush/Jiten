@@ -23,9 +23,16 @@ export interface JitenPlusSources {
   adminOverride: boolean;
 }
 
+export interface JitenPlusAllowances {
+  trialBytes: number;
+  fullBytes: number;
+}
+
 export interface JitenPlusQuota {
   usedBytes: number;
+  // Zero once access lapses: existing media stays readable and deletable, but nothing new can be uploaded.
   maxBytes: number;
+  allowances: JitenPlusAllowances;
 }
 
 export interface JitenPlusStatus {
@@ -34,9 +41,9 @@ export interface JitenPlusStatus {
   quota: JitenPlusQuota;
 }
 
-// 'trial' means Trial-or-Full suffices; 'full' means the paid (storage) tier is required.
+// 'trial' means Trial-or-Full suffices; 'full' means the paid tier is required.
 const FEATURE_TIERS: Record<JitenPlusFeature, 'trial' | 'full'> = {
-  'card-media': 'full',
+  'card-media': 'trial',
   'freq-list-save': 'full',
   'freq-list-generate': 'trial',
   'request-boosts': 'trial',

@@ -2,6 +2,7 @@ using Jiten.Api.Services;
 using Jiten.Api.Services.Stripe;
 using Jiten.Core;
 using Jiten.Core.Data.Billing;
+using Jiten.Core.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -20,7 +21,8 @@ public class JitenPlusController(
     ICurrentUserService currentUserService,
     UserDbContext userContext,
     IEmailService emailService,
-    IConfiguration configuration,
+    ICardMediaQuotaService cardMediaQuotaService,
+    IOptions<CardMediaStorageOptions> cardMediaStorageOptions,
     IOptions<StripeOptions> stripeOptions,
     ILogger<JitenPlusController> logger) : ControllerBase
 {
@@ -35,10 +37,12 @@ public class JitenPlusController(
     public IResult GetPricing()
     {
         var windowEnd = stripeOptions.Value.LifetimeWindowEnd;
+        var storage = cardMediaStorageOptions.Value;
         return Results.Ok(new
         {
             lifetimeWindowEnd = windowEnd,
-            lifetimeAvailable = DateTime.UtcNow <= windowEnd
+            lifetimeAvailable = DateTime.UtcNow <= windowEnd,
+            cardMediaStorage = new { trialBytes = storage.TrialBytes, fullBytes = storage.FullBytes }
         });
     }
 
@@ -54,6 +58,8 @@ public class JitenPlusController(
         var usedBytes = await userContext.UserCardMedia
                                          .Where(m => m.UserId == userId)
                                          .SumAsync(m => m.FileSizeBytes);
+        var quota = await cardMediaQuotaService.GetQuotaAsync(userId);
+        var storage = cardMediaStorageOptions.Value;
 
         return Results.Ok(new
         {
@@ -79,7 +85,8 @@ public class JitenPlusController(
             quota = new
             {
                 usedBytes,
-                maxBytes = JitenPlusConstants.CardMediaQuotaBytes(configuration)
+                maxBytes = quota.MaxBytes,
+                allowances = new { trialBytes = storage.TrialBytes, fullBytes = storage.FullBytes }
             }
         });
     }

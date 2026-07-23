@@ -14,7 +14,7 @@
   const route = useRoute();
   const router = useRouter();
 
-  const { tier, isFull, sources, quota, loading, refresh } = useJitenPlus();
+  const { tier, isFull, isPlus, sources, quota, loading, refresh } = useJitenPlus();
 
   const tierBadgeTier = computed<'any' | 'full' | 'trial'>(() => {
     if (tier.value === 'full') return 'full';
@@ -39,7 +39,9 @@
   const trialLine = computed(() => {
     if (tier.value !== 'trial') return null;
     const days = sources.value?.promoCreditDays ?? 0;
-    return `${days} day${days === 1 ? '' : 's'} left — includes everything except permanent storage features.`;
+    const allowance = quota.value?.allowances?.trialBytes;
+    const storage = allowance ? `${formatBytes(allowance)} of card media storage` : 'a reduced card media allowance';
+    return `${days} day${days === 1 ? '' : 's'} left — ${storage}; saved frequency lists need a paid plan.`;
   });
 
   const showCreditBreakdown = computed(() => {
@@ -76,10 +78,25 @@
     return Math.min(100, Math.round((q.usedBytes / q.maxBytes) * 100));
   });
 
+  // A lapsed account has no allowance at all, so there is no denominator to show it against.
   const quotaLabel = computed(() => {
     const q = quota.value;
     if (!q) return '';
+    if (q.maxBytes <= 0) return `${formatBytes(q.usedBytes)} stored`;
     return `${formatBytes(q.usedBytes)} used of ${formatBytes(q.maxBytes)}`;
+  });
+
+  const overQuota = computed(() => {
+    const q = quota.value;
+    return !!q && q.maxBytes > 0 && q.usedBytes > q.maxBytes;
+  });
+
+  // Shown to Trial users as the reason to upgrade; hidden when the paid allowance isn't larger.
+  const upgradeStorageLabel = computed(() => {
+    const q = quota.value;
+    const full = q?.allowances?.fullBytes;
+    if (!q || !full || full <= q.maxBytes) return null;
+    return formatBytes(full);
   });
 
   const cardMediaSummary = ref<CardMediaManageSummary | null>(null);
@@ -241,7 +258,7 @@
     </Card>
 
     <!-- Storage quota -->
-    <Card v-if="quota && (isFull || quota.usedBytes > 0)">
+    <Card v-if="quota && (isPlus || quota.usedBytes > 0)">
       <template #title>
         <h3 class="text-lg font-semibold">Card media storage</h3>
       </template>
@@ -260,10 +277,15 @@
           </span>
         </div>
 
-        <p v-if="!isFull" class="mt-3 flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400">
+        <p v-if="!isPlus" class="mt-3 flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400">
           <i class="pi pi-exclamation-triangle mt-0.5 shrink-0" />
-          <span>Without an active Jiten+ subscription you can view and delete your existing card media, but can't add new media. Resubscribe to add media again.</span>
+          <span>Without active Jiten+ you can view and delete your existing card media, but can't add or replace media. Resubscribe to upload again.</span>
         </p>
+        <p v-else-if="overQuota" class="mt-3 flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400">
+          <i class="pi pi-exclamation-triangle mt-0.5 shrink-0" />
+          <span>You're over your current allowance. Existing media is untouched, but you can't upload more until you delete some or move to a paid plan.</span>
+        </p>
+        <p v-else-if="upgradeStorageLabel" class="mt-3 text-sm text-gray-600 dark:text-gray-400">A paid plan raises this to {{ upgradeStorageLabel }}.</p>
 
         <div v-if="quota.usedBytes > 0" class="mt-4">
           <NuxtLink to="/settings/card-media">

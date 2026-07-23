@@ -5,6 +5,7 @@
   interface PricingInfo {
     lifetimeWindowEnd: string;
     lifetimeAvailable: boolean;
+    cardMediaStorage: { trialBytes: number; fullBytes: number };
   }
 
   const { $api } = useNuxtApp();
@@ -25,6 +26,11 @@
     const d = new Date(raw);
     if (Number.isNaN(d.getTime())) return null;
     return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  });
+
+  const fullStorageLabel = computed(() => {
+    const bytes = pricing.value?.cardMediaStorage?.fullBytes;
+    return bytes ? formatBytes(bytes) : null;
   });
 
   const showLifetimeNotice = computed(() => lifetimeAvailable.value && !!lifetimeWindowEndLabel.value && !isLifetime.value);
@@ -132,7 +138,10 @@
             <h3 class="jp-feature__title text-gray-900 dark:text-white">Richer cards with images &amp; audio</h3>
           </div>
           <p class="jp-feature__body text-gray-600 dark:text-gray-300">
-            Make your cards more memorable with your own images and audio. You get 10&nbsp;GB of storage, and you keep your uploads even if you cancel.
+            Make your cards more memorable with your own images and audio.
+            <template v-if="fullStorageLabel">You get {{ fullStorageLabel }} of storage, and you</template>
+            <template v-else>You</template>
+            keep your uploads even if you cancel.
           </p>
         </div>
 

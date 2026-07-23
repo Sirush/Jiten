@@ -450,7 +450,7 @@
               <i class="pi pi-image text-sm" />
               Edit card media
             </button>
-            <JitenPlusGate v-else feature="card-media" tier="full" feature-label="Card media" compact>
+            <JitenPlusGate v-else feature="card-media" feature-label="Card media" compact>
               <button
                 type="button"
                 class="inline-flex items-center gap-1.5 text-xs text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"

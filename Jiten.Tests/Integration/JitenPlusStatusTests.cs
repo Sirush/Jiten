@@ -5,6 +5,7 @@ using FluentAssertions;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.Billing;
+using Jiten.Core.Services;
 using Jiten.Parser.Tests.Integration.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -116,7 +117,24 @@ public class JitenPlusStatusTests(JitenWebApplicationFactory factory)
         body.GetProperty("sources").GetProperty("subscriptionActive").GetBoolean().Should().BeFalse();
         body.GetProperty("sources").GetProperty("promoCreditDays").GetInt32().Should().Be(0);
         body.GetProperty("quota").GetProperty("usedBytes").GetInt64().Should().Be(0);
-        body.GetProperty("quota").GetProperty("maxBytes").GetInt64().Should().Be(JitenPlusConstants.StorageQuotaBytes);
+        // No access, no allowance: existing media stays readable but nothing new can be uploaded.
+        body.GetProperty("quota").GetProperty("maxBytes").GetInt64().Should().Be(0);
+
+        var defaults = new CardMediaStorageOptions();
+        var allowances = body.GetProperty("quota").GetProperty("allowances");
+        allowances.GetProperty("trialBytes").GetInt64().Should().Be(defaults.TrialBytes);
+        allowances.GetProperty("fullBytes").GetInt64().Should().Be(defaults.FullBytes);
+    }
+
+    [Fact]
+    public async Task TrialUser_GetsTheTrialAllowance()
+    {
+        await AddCredit(TestUsers.UserA, remainingDays: 6, grantsFull: false);
+
+        var body = await GetStatus(TestUsers.UserA);
+
+        body.GetProperty("tier").GetString().Should().Be("trial");
+        body.GetProperty("quota").GetProperty("maxBytes").GetInt64().Should().Be(new CardMediaStorageOptions().TrialBytes);
     }
 
     [Fact]

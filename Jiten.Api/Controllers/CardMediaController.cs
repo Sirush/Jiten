@@ -11,9 +11,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Jiten.Api.Controllers;
 
 /// <summary>
-/// User-uploaded per-card images and audio (Jiten+ Full). Media is keyed on (UserId, WordId, ReadingIndex,
-/// Kind); the type is sniffed from the file's magic bytes, never from Content-Type. Upload/delete are
-/// Full-tier; the batch fetch gates on ownership only so lapsed subscribers keep read access.
+/// User-uploaded per-card images and audio (Jiten+). Media is keyed on (UserId, WordId, ReadingIndex,
+/// Kind); the type is sniffed from the file's magic bytes, never from Content-Type. Uploading needs an
+/// active tier and is bounded by that tier's allowance; reads and deletes gate on ownership only, so a
+/// lapsed subscriber keeps and can clear what they already uploaded.
 /// </summary>
 [ApiController]
 [Route("api/srs/card-media")]
@@ -23,7 +24,7 @@ public class CardMediaController(
     UserDbContext userContext,
     IDbContextFactory<JitenDbContext> jitenFactory,
     ICurrentUserService currentUserService,
-    IConfiguration configuration,
+    ICardMediaQuotaService quotaService,
     ICdnService cdn,
     ILogger<CardMediaController> logger) : ControllerBase
 {
@@ -41,7 +42,7 @@ public class CardMediaController(
     [HttpPost("{wordId:int}/{readingIndex:int}")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(MaxFileBytes + 4096)]
-    [JitenPlus(JitenPlusTier.Full, Feature = "card-media")]
+    [JitenPlus(JitenPlusTier.Trial, Feature = "card-media")]
     public async Task<IResult> Upload(int wordId, int readingIndex, [FromForm] IFormFile? file)
     {
         var userId = currentUserService.UserId;
@@ -77,17 +78,22 @@ public class CardMediaController(
         var processed = CardMediaImageProcessor.Normalize(sniff.Kind, sniff.Extension, sniff.ContentType, bytes, logger);
         bytes = processed.Bytes;
 
-        var quota = JitenPlusConstants.CardMediaQuotaBytes(configuration);
+        var quota = await quotaService.GetQuotaAsync(userId);
+
+        // Replacing the file already on this (word, reading, kind) frees its bytes, so a user sitting at
+        // the ceiling can still swap an image for another of the same size.
         var usedByOthers = await userContext.UserCardMedia
                                             .Where(m => m.UserId == userId
                                                         && !(m.WordId == wordId && m.ReadingIndex == ri && m.Kind == sniff.Kind))
                                             .SumAsync(m => m.FileSizeBytes);
-        if (usedByOthers + bytes.Length > quota)
+        if (usedByOthers + bytes.Length > quota.MaxBytes)
             return Results.BadRequest(new
             {
-                error = "This upload would exceed your storage quota. Delete some card media and try again.",
+                error = quota.Tier == JitenPlusTier.Trial
+                    ? "This upload would exceed your trial storage. Delete some card media, or subscribe for the full allowance."
+                    : "This upload would exceed your storage quota. Delete some card media and try again.",
                 usedBytes = usedByOthers,
-                maxBytes = quota
+                maxBytes = quota.MaxBytes
             });
 
         var kindStr = sniff.Kind.ToString().ToLowerInvariant();
@@ -140,7 +146,7 @@ public class CardMediaController(
         return Results.Ok(new
         {
             media = ToDto(existing, inherited: false, sourceReadingIndex: ri),
-            quota = new { usedBytes = usedByOthers + bytes.Length, maxBytes = quota }
+            quota = new { usedBytes = usedByOthers + bytes.Length, maxBytes = quota.MaxBytes }
         });
     }
 
@@ -173,10 +179,7 @@ public class CardMediaController(
         try { await cdn.DeleteFile(storagePath, secure: true); }
         catch (Exception ex) { logger.LogWarning(ex, "Failed to delete card-media CDN file {Path}", storagePath); }
 
-        var quota = JitenPlusConstants.CardMediaQuotaBytes(configuration);
-        var usedBytes = await userContext.UserCardMedia.Where(m => m.UserId == userId).SumAsync(m => m.FileSizeBytes);
-
-        return Results.Ok(new { quota = new { usedBytes, maxBytes = quota } });
+        return Results.Ok(new { quota = await QuotaPayloadAsync(userId) });
     }
 
     [HttpDelete]
@@ -198,8 +201,8 @@ public class CardMediaController(
             catch (Exception ex) { logger.LogWarning(ex, "Failed to delete card-media CDN file {Path}", path); }
         }
 
-        var quota = JitenPlusConstants.CardMediaQuotaBytes(configuration);
-        return Results.Ok(new { quota = new { usedBytes = 0L, maxBytes = quota } });
+        var quota = await quotaService.GetQuotaAsync(userId);
+        return Results.Ok(new { quota = new { usedBytes = 0L, maxBytes = quota.MaxBytes } });
     }
 
     // ---- Batch delete -------------------------------------------------------
@@ -248,9 +251,14 @@ public class CardMediaController(
             catch (Exception ex) { logger.LogWarning(ex, "Failed to delete card-media CDN file {Path}", path); }
         }
 
-        var quota = JitenPlusConstants.CardMediaQuotaBytes(configuration);
+        return Results.Ok(new { deleted = toDelete.Count, quota = await QuotaPayloadAsync(userId) });
+    }
+
+    private async Task<object> QuotaPayloadAsync(string userId)
+    {
+        var quota = await quotaService.GetQuotaAsync(userId);
         var usedBytes = await userContext.UserCardMedia.Where(m => m.UserId == userId).SumAsync(m => m.FileSizeBytes);
-        return Results.Ok(new { deleted = toDelete.Count, quota = new { usedBytes, maxBytes = quota } });
+        return new { usedBytes, maxBytes = quota.MaxBytes };
     }
 
     // ---- Summary ------------------------------------------------------------
@@ -259,7 +267,7 @@ public class CardMediaController(
 
     private async Task<CardMediaSummary> ComputeSummaryAsync(string userId)
     {
-        var quota = JitenPlusConstants.CardMediaQuotaBytes(configuration);
+        var quota = await quotaService.GetQuotaAsync(userId);
 
         var byKind = await userContext.UserCardMedia
                                       .AsNoTracking()
@@ -280,7 +288,7 @@ public class CardMediaController(
                                           .Distinct()
                                           .CountAsync();
 
-        return new CardMediaSummary(totalForms, image?.Count ?? 0, imageBytes, audio?.Count ?? 0, audioBytes, imageBytes + audioBytes, quota);
+        return new CardMediaSummary(totalForms, image?.Count ?? 0, imageBytes, audio?.Count ?? 0, audioBytes, imageBytes + audioBytes, quota.MaxBytes);
     }
 
     private static object SummaryPayload(CardMediaSummary s) => new

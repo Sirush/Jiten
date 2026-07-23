@@ -52,7 +52,13 @@
     if (!s || s.maxBytes <= 0) return 0;
     return Math.min(100, Math.round((s.usedBytes / s.maxBytes) * 100));
   });
-  const quotaLabel = computed(() => (summary.value ? `${formatBytes(summary.value.usedBytes)} used of ${formatBytes(summary.value.maxBytes)}` : ''));
+  // A lapsed account has no allowance at all, so there is no denominator to show it against.
+  const quotaLabel = computed(() => {
+    const s = summary.value;
+    if (!s) return '';
+    if (s.maxBytes <= 0) return `${formatBytes(s.usedBytes)} stored`;
+    return `${formatBytes(s.usedBytes)} used of ${formatBytes(s.maxBytes)}`;
+  });
 
   function rowKey(item: CardMediaManageItem) {
     return `${item.wordId}-${item.readingIndex}`;
