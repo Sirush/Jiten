@@ -9,6 +9,7 @@
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
   import { LazyHydrateMediaDeckCard, LazyHydrateMediaDeckCompactView, LazyHydrateMediaDeckTableView } from '~/utils/lazyHydratedComponents';
+  import { type DeckSortOption, deckSortMeta, deckSortOption, deckSortOrdering } from '~/utils/deckSorting';
 
 
   const props = defineProps<{
@@ -46,25 +47,17 @@
   const titleFilter = ref(route.query.title ? (Array.isArray(route.query.title) ? route.query.title[0] : route.query.title) : null);
   const debouncedTitleFilter = ref(titleFilter.value);
 
-  const sortByOptions = ref([
-    { label: 'Title', value: 'title' },
-    { label: 'Difficulty', value: 'difficulty' },
-    { label: 'Subdeck Count', value: 'subdeckCount' },
-    { label: 'External Rating', value: 'extRating' },
-    { label: 'Unique Kanji', value: 'uKanji' },
-    { label: 'Unique Word Count', value: 'uWordCount' },
-    { label: 'Word Count', value: 'wordCount' },
-    { label: 'Unique Kanji Used Once', value: 'uKanjiOnce' },
-    { label: 'Community Ratings', value: 'communityVotes' },
-    { label: 'Release Date', value: 'releaseDate' },
-    { label: 'Added Date', value: 'addedDate' },
-  ]);
+  const sortByOptions = ref(
+    ['title', 'difficulty', 'subdeckCount', 'extRating', 'uKanji', 'uWordCount', 'wordCount', 'uKanjiOnce', 'communityVotes', 'releaseDate', 'addedDate'].map(
+      deckSortOption
+    )
+  );
 
-  const novelSortOptions = ref<{ label: string; value: string }[]>([]);
-  const speechSortOptions = ref<{ label: string; value: string }[]>([]);
+  const novelSortOptions = ref<DeckSortOption[]>([]);
+  const speechSortOptions = ref<DeckSortOption[]>([]);
 
   const sortByGrouped = computed(() => {
-    const groups: { label: string; items: { label: string; value: string }[] }[] = [
+    const groups: { label: string; items: DeckSortOption[] }[] = [
       { label: 'General', items: sortByOptions.value },
     ];
     if (novelSortOptions.value.length > 0) {
@@ -76,53 +69,8 @@
     return groups;
   });
 
-  // Array used to reorder the sortByOptions when some options are added or removed to keep the order consistent
-  const sortByOrdering = [
-    'title',
-    'difficulty',
-    'totalCoverage',
-    'coverage',
-    'uTotalCoverage',
-    'uCoverage',
-    'extRating',
-    'sentenceLength',
-    'uKanji',
-    'uWordCount',
-    'wordCount',
-    'subdeckCount',
-    'uKanjiOnce',
-    'communityVotes',
-    'releaseDate',
-    'addedDate',
-  ];
-
-  const sortMeta: Record<string, { default: SortOrder; asc: string; desc: string }> = {
-    title:               { default: SortOrder.Ascending,  asc: 'A → Z',               desc: 'Z → A' },
-    difficulty:          { default: SortOrder.Ascending,  asc: 'Easiest first',        desc: 'Hardest first' },
-    coverage:            { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
-    totalCoverage:       { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
-    uCoverage:           { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
-    uTotalCoverage:      { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
-    extRating:           { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
-    communityVotes:      { default: SortOrder.Descending, asc: 'Fewest first',         desc: 'Most first' },
-    sentenceLength:      { default: SortOrder.Ascending,  asc: 'Shortest first',       desc: 'Longest first' },
-    uKanji:              { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
-    uWordCount:          { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
-    wordCount:           { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
-    subdeckCount:        { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
-    uKanjiOnce:          { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
-    releaseDate:         { default: SortOrder.Descending, asc: 'Oldest first',         desc: 'Newest first' },
-    addedDate:           { default: SortOrder.Descending, asc: 'Oldest first',         desc: 'Newest first' },
-    charCount:           { default: SortOrder.Ascending,  asc: 'Shortest first',       desc: 'Longest first' },
-    dialoguePercentage:  { default: SortOrder.Descending, asc: 'Least dialogue',       desc: 'Most dialogue' },
-    speechSpeed:         { default: SortOrder.Ascending,  asc: 'Slowest first',        desc: 'Fastest first' },
-    speechDuration:      { default: SortOrder.Descending, asc: 'Shortest first',       desc: 'Longest first' },
-    occurrences:         { default: SortOrder.Descending, asc: 'Fewest first',         desc: 'Most first' },
-    filter:              { default: SortOrder.Descending, asc: 'Least relevant',       desc: 'Most relevant' },
-  };
-
   const sortOrderLabel = computed(() => {
-    const meta = sortMeta[sortBy.value as string];
+    const meta = deckSortMeta[sortBy.value as string];
     if (!meta) return sortOrder.value === SortOrder.Ascending ? '↑' : '↓';
     return sortOrder.value === SortOrder.Ascending ? meta.asc : meta.desc;
   });
@@ -133,22 +81,15 @@
   const isConnected = computed(() => authStore.isAuthenticated);
 
   const sortBy = ref(route.query.sortBy ? route.query.sortBy : sortByOptions.value[0].value);
-  const sortOrder = ref(route.query.sortOrder ? Number(route.query.sortOrder) : (sortMeta[sortBy.value as string]?.default ?? SortOrder.Ascending));
+  const sortOrder = ref(route.query.sortOrder ? Number(route.query.sortOrder) : (deckSortMeta[sortBy.value as string]?.default ?? SortOrder.Ascending));
   const wordIdRef = ref(props.word?.wordId);
   const readingIndexRef = ref(props.word?.mainReading?.readingIndex);
 
   if (isConnected.value) {
-    if (!sortByOptions.value.some((o) => o.value === 'uCoverage')) {
-      sortByOptions.value.push({ label: 'Unique Coverage (Mature)', value: 'uCoverage' });
-    }
-    if (!sortByOptions.value.some((o) => o.value === 'coverage')) {
-      sortByOptions.value.push({ label: 'Coverage (Mature)', value: 'coverage' });
-    }
-    if (!sortByOptions.value.some((o) => o.value === 'uTotalCoverage')) {
-      sortByOptions.value.push({ label: 'Unique Coverage (Total)', value: 'uTotalCoverage' });
-    }
-    if (!sortByOptions.value.some((o) => o.value === 'totalCoverage')) {
-      sortByOptions.value.push({ label: 'Coverage (Total)', value: 'totalCoverage' });
+    for (const key of ['uCoverage', 'coverage', 'uTotalCoverage', 'totalCoverage']) {
+      if (!sortByOptions.value.some((o) => o.value === key)) {
+        sortByOptions.value.push(deckSortOption(key));
+      }
     }
   }
 
@@ -333,10 +274,7 @@
     const showspeechSpeedOptionMediaTypes = [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio];
 
     if (mediaType.value == null || !showspeechSpeedOptionMediaTypes.includes(Number(mediaType.value))) {
-      novelSortOptions.value = [
-        { label: 'Character Count', value: 'charCount' },
-        { label: 'Dialogue Percentage', value: 'dialoguePercentage' },
-      ];
+      novelSortOptions.value = ['charCount', 'dialoguePercentage'].map(deckSortOption);
     } else {
       novelSortOptions.value = [];
       if (sortBy.value === 'charCount' || sortBy.value === 'dialoguePercentage') {
@@ -345,10 +283,7 @@
     }
 
     if (mediaType.value == null || showspeechSpeedOptionMediaTypes.includes(Number(mediaType.value))) {
-      speechSortOptions.value = [
-        { label: 'Speech Speed', value: 'speechSpeed' },
-        { label: 'Speech Duration', value: 'speechDuration' },
-      ];
+      speechSortOptions.value = ['speechSpeed', 'speechDuration'].map(deckSortOption);
     } else {
       speechSortOptions.value = [];
       if (sortBy.value === 'speechSpeed' || sortBy.value === 'speechDuration') {
@@ -360,7 +295,7 @@
 
     if (mediaType.value == null || showAvgSentenceLengthOptionMediaTypes.includes(Number(mediaType.value))) {
       if (!sortByOptions.value.some((o) => o.value === 'sentenceLength')) {
-        sortByOptions.value.push({ label: 'Average Sentence Length', value: 'sentenceLength' });
+        sortByOptions.value.push(deckSortOption('sentenceLength'));
       }
     } else {
       if (sortByOptions.value.some((o) => o.value === 'sentenceLength')) {
@@ -371,12 +306,7 @@
       }
     }
 
-    // reorder the options by sortByOrdering
-    sortByOptions.value.sort((a, b) => {
-      const indexA = sortByOrdering.indexOf(a.value);
-      const indexB = sortByOrdering.indexOf(b.value);
-      return indexA - indexB;
-    });
+    sortByOptions.value.sort((a, b) => deckSortOrdering.indexOf(a.value) - deckSortOrdering.indexOf(b.value));
   };
 
   updateOptions();
@@ -463,7 +393,7 @@
 
         // Reset sorting when word changes
         if (!sortByOptions.value.some((opt) => opt.value === 'occurrences')) {
-          sortByOptions.value.unshift({ label: 'Occurrences', value: 'occurrences' });
+          sortByOptions.value.unshift(deckSortOption('occurrences'));
         }
         sortBy.value = 'occurrences';
         sortOrder.value = SortOrder.Descending;
@@ -473,7 +403,7 @@
   );
 
   if (props.word != null) {
-    sortByOptions.value.unshift({ label: 'Occurrences', value: 'occurrences' });
+    sortByOptions.value.unshift(deckSortOption('occurrences'));
     sortBy.value = 'occurrences';
     sortOrder.value = SortOrder.Descending;
   }
@@ -506,7 +436,7 @@
   });
 
   watch(sortBy, (newValue) => {
-    const meta = sortMeta[newValue as string];
+    const meta = deckSortMeta[newValue as string];
     if (meta) {
       sortOrder.value = meta.default;
     }

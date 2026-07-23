@@ -1,13 +1,15 @@
 <script setup lang="ts">
-  import { type Deck, DisplayStyle, DeckStatus, MediaType, DeckDownloadType, DeckOrder } from '~/types';
+  import { type Deck, DisplayStyle, DeckStatus, MediaType, DeckDownloadType, DeckOrder, SortOrder } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
   import { useDisplayStyleStore } from '~/stores/displayStyleStore';
   import { storeToRefs } from 'pinia';
   import { getDeckStatusText } from '~/utils/deckStatusMapper';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { type DeckSortOption, deckSortMeta, deckSortOption, deckSortOrdering, sortDecks } from '~/utils/deckSorting';
   import { LazyHydrateMediaDeckCard, LazyHydrateMediaDeckCompactView, LazyHydrateMediaDeckTableView } from '~/utils/lazyHydratedComponents';
 
   const route = useRoute();
+  const router = useRouter();
   const { $api } = useNuxtApp();
   const auth = useAuthStore();
   const displayStore = useDisplayStyleStore();
@@ -28,12 +30,88 @@
   // Status groups in reading order; only non-empty ones get a tab.
   const statusOrder: DeckStatus[] = [DeckStatus.Ongoing, DeckStatus.Completed, DeckStatus.Planning, DeckStatus.Dropped];
 
-  // Media-type filter (client-side; the full list is already loaded).
-  const mediaTypeFilter = ref<MediaType | null>(null);
+  // Media-type filter and sorting are client-side; the full list is already loaded.
+  const mediaTypeFilter = ref<MediaType | null>(parseTypeQuery(route.query.type));
+  const sortBy = ref<string>(parseSortByQuery(route.query.sortBy));
+  const sortOrder = ref<SortOrder>(parseSortOrderQuery(route.query.sortOrder) ?? deckSortMeta[sortBy.value]!.default);
+
+  function parseTypeQuery(value: unknown): MediaType | null {
+    const parsed = Number(Array.isArray(value) ? value[0] : value);
+    const known = Object.values(MediaType).filter((v) => typeof v === 'number') as MediaType[];
+    return known.includes(parsed as MediaType) ? (parsed as MediaType) : null;
+  }
+
+  function parseSortByQuery(value: unknown): string {
+    const key = Array.isArray(value) ? value[0] : value;
+    return typeof key === 'string' && key in deckSortMeta ? key : 'title';
+  }
+
+  function parseSortOrderQuery(value: unknown): SortOrder | null {
+    const parsed = Number(Array.isArray(value) ? value[0] : value);
+    return parsed === SortOrder.Ascending || parsed === SortOrder.Descending ? (parsed as SortOrder) : null;
+  }
+
+  const presentTypes = computed(() => new Set((decks.value ?? []).map((d) => d.mediaType)));
 
   const mediaTypeOptions = computed(() => {
-    const present = [...new Set((decks.value ?? []).map((d) => d.mediaType))].sort((a, b) => a - b);
+    const present = [...presentTypes.value].sort((a, b) => a - b);
     return [{ label: 'All types', value: null as MediaType | null }, ...present.map((t) => ({ label: getMediaTypeText(t), value: t as MediaType | null }))];
+  });
+
+  const audioVisualTypes = [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio];
+  const sentenceLengthTypes = [MediaType.Novel, MediaType.NonFiction, MediaType.VideoGame, MediaType.VisualNovel, MediaType.WebNovel];
+
+  const sortGroups = computed(() => {
+    const types = [...presentTypes.value];
+
+    const general = ['title', 'difficulty', 'subdeckCount', 'extRating', 'uKanji', 'uWordCount', 'wordCount', 'uKanjiOnce', 'communityVotes', 'releaseDate', 'addedDate'];
+    // Coverage is always the viewer's own, even when browsing someone else's list.
+    if (auth.isAuthenticated) general.push('uCoverage', 'coverage', 'uTotalCoverage', 'totalCoverage');
+    if (types.some((t) => sentenceLengthTypes.includes(t))) general.push('sentenceLength');
+    general.sort((a, b) => deckSortOrdering.indexOf(a) - deckSortOrdering.indexOf(b));
+
+    const groups: { label: string; items: DeckSortOption[] }[] = [{ label: 'General', items: general.map(deckSortOption) }];
+
+    if (types.some((t) => !audioVisualTypes.includes(t))) {
+      groups.push({ label: 'Novel', items: ['charCount', 'dialoguePercentage'].map(deckSortOption) });
+    }
+    if (types.some((t) => audioVisualTypes.includes(t))) {
+      groups.push({ label: 'Audio-Video', items: ['speechSpeed', 'speechDuration'].map(deckSortOption) });
+    }
+
+    return groups;
+  });
+
+  // Runs before the query-sync watchers exist, so a stale key falls back without a redirect on load.
+  if (!sortGroups.value.some((g) => g.items.some((i) => i.value === sortBy.value))) {
+    sortBy.value = 'title';
+    sortOrder.value = deckSortMeta.title!.default;
+  }
+
+  const sortOrderLabel = computed(() => {
+    const meta = deckSortMeta[sortBy.value];
+    if (!meta) return sortOrder.value === SortOrder.Ascending ? 'Ascending' : 'Descending';
+    return sortOrder.value === SortOrder.Ascending ? meta.asc : meta.desc;
+  });
+
+  watch(sortGroups, (groups) => {
+    const available = new Set(groups.flatMap((g) => g.items.map((i) => i.value)));
+    if (!available.has(sortBy.value)) sortBy.value = 'title';
+  });
+
+  watch(sortBy, (value) => {
+    sortOrder.value = deckSortMeta[value]?.default ?? SortOrder.Ascending;
+  });
+
+  watch([sortBy, sortOrder, mediaTypeFilter], () => {
+    router.replace({
+      query: {
+        ...route.query,
+        sortBy: sortBy.value === 'title' ? undefined : sortBy.value,
+        sortOrder: sortBy.value === 'title' && sortOrder.value === deckSortMeta.title!.default ? undefined : sortOrder.value,
+        type: mediaTypeFilter.value ?? undefined,
+      },
+    });
   });
 
   const filteredDecks = computed(() => {
@@ -41,12 +119,14 @@
     return mediaTypeFilter.value === null ? list : list.filter((d) => d.mediaType === mediaTypeFilter.value);
   });
 
+  const sortedDecks = computed(() => sortDecks(filteredDecks.value, sortBy.value, sortOrder.value));
+
   const groups = computed(() =>
     statusOrder
-      .map((s) => ({ status: s, label: getDeckStatusText(s), decks: filteredDecks.value.filter((d) => d.status === s) }))
+      .map((s) => ({ status: s, label: getDeckStatusText(s), decks: sortedDecks.value.filter((d) => d.status === s) }))
       .filter((g) => g.decks.length > 0)
   );
-  
+
   const selectedTabRaw = ref<string>('');
   const activeGroup = computed(() => {
     const g = groups.value;
@@ -161,7 +241,32 @@
             size="small"
             @click="openDownload"
           />
-          <div class="ml-auto flex items-center gap-2">
+          <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
+            <Select
+              v-model="sortBy"
+              :options="sortGroups"
+              option-label="label"
+              option-value="value"
+              option-group-label="label"
+              option-group-children="items"
+              placeholder="Sort by"
+              aria-label="Sort by"
+              size="small"
+              class="w-44"
+              scroll-height="50vh"
+            >
+              <template #optiongroup="{ option }">
+                <div class="text-xs font-semibold text-surface-500 dark:text-surface-400 py-0.5 px-1">{{ option.label }}</div>
+              </template>
+            </Select>
+            <Button
+              v-tooltip.top="sortOrderLabel"
+              :icon="sortOrder === SortOrder.Ascending ? 'pi pi-arrow-up' : 'pi pi-arrow-down'"
+              :aria-label="`Sort order: ${sortOrderLabel}`"
+              size="small"
+              severity="secondary"
+              @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending"
+            />
             <Select
               v-if="mediaTypeOptions.length > 2"
               v-model="mediaTypeFilter"
@@ -169,6 +274,7 @@
               option-label="label"
               option-value="value"
               placeholder="All types"
+              aria-label="Filter by media type"
               size="small"
               class="w-40"
             />
