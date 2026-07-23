@@ -80,7 +80,9 @@
   const sortByOrdering = [
     'title',
     'difficulty',
+    'totalCoverage',
     'coverage',
+    'uTotalCoverage',
     'uCoverage',
     'extRating',
     'sentenceLength',
@@ -98,7 +100,9 @@
     title:               { default: SortOrder.Ascending,  asc: 'A → Z',               desc: 'Z → A' },
     difficulty:          { default: SortOrder.Ascending,  asc: 'Easiest first',        desc: 'Hardest first' },
     coverage:            { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
+    totalCoverage:       { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
     uCoverage:           { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
+    uTotalCoverage:      { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
     extRating:           { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
     communityVotes:      { default: SortOrder.Descending, asc: 'Fewest first',         desc: 'Most first' },
     sentenceLength:      { default: SortOrder.Ascending,  asc: 'Shortest first',       desc: 'Longest first' },
@@ -135,10 +139,16 @@
 
   if (isConnected.value) {
     if (!sortByOptions.value.some((o) => o.value === 'uCoverage')) {
-      sortByOptions.value.push({ label: 'Unique Coverage', value: 'uCoverage' });
+      sortByOptions.value.push({ label: 'Unique Coverage (Mature)', value: 'uCoverage' });
     }
     if (!sortByOptions.value.some((o) => o.value === 'coverage')) {
-      sortByOptions.value.push({ label: 'Coverage', value: 'coverage' });
+      sortByOptions.value.push({ label: 'Coverage (Mature)', value: 'coverage' });
+    }
+    if (!sortByOptions.value.some((o) => o.value === 'uTotalCoverage')) {
+      sortByOptions.value.push({ label: 'Unique Coverage (Total)', value: 'uTotalCoverage' });
+    }
+    if (!sortByOptions.value.some((o) => o.value === 'totalCoverage')) {
+      sortByOptions.value.push({ label: 'Coverage (Total)', value: 'totalCoverage' });
     }
   }
 

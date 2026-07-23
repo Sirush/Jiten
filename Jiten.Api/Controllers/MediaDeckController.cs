@@ -652,7 +652,7 @@ public class MediaDeckController(
     /// <param name="wordId">If set, only decks containing this word are returned.</param>
     /// <param name="readingIndex">Reading index associated with wordId.</param>
     /// <param name="titleFilter">Full‑text filter on title (supports romaji/english/japanese).</param>
-    /// <param name="sortBy">Sort field (title, difficulty, charCount, wordCount, sentenceLength, dialoguePercentage, subtitleRate, uKanji, uWordCount, uKanjiOnce, filter, releaseDate, coverage, uCoverage, etc.).</param>
+    /// <param name="sortBy">Sort field (title, difficulty, charCount, wordCount, sentenceLength, dialoguePercentage, subtitleRate, uKanji, uWordCount, uKanjiOnce, filter, releaseDate, coverage, uCoverage, totalCoverage, uTotalCoverage, communityVotes, etc.).</param>
     /// <param name="sortOrder">Ascending or Descending.</param>
     /// <param name="status">Status (none, nostatus, fav, ignore, planning, ongoing, completed, dropped)</param>
     /// <param name="charCountMin"></param>
@@ -958,11 +958,18 @@ public class MediaDeckController(
 
             // Reuse allUserPrefs from earlier instead of querying again
 
-            if ((sortBy is "coverage" or "uCoverage"))
+            if (sortBy is "coverage" or "uCoverage" or "totalCoverage" or "uTotalCoverage")
             {
-                bool sortByUnique = sortBy == "uCoverage";
+                var sortDict = sortBy switch
+                {
+                    "uCoverage" => uniqueCoverageDict,
+                    "totalCoverage" => CombineCoverage(coverageDict, youngCoverageDict),
+                    "uTotalCoverage" => CombineCoverage(uniqueCoverageDict, youngUniqueCoverageDict),
+                    _ => coverageDict
+                };
+
                 return await HandleCoverageSorting(query, projectedQuery, sortOrder, offset ?? 0, pageSize, coverageDict,
-                                                   uniqueCoverageDict, youngCoverageDict, youngUniqueCoverageDict, sortByUnique,
+                                                   uniqueCoverageDict, youngCoverageDict, youngUniqueCoverageDict, sortDict,
                                                    allUserPrefs);
             }
         }
@@ -1034,6 +1041,19 @@ public class MediaDeckController(
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset ?? 0);
     }
 
+    /// <summary>
+    /// Mature + young coverage, capped at 100% to match the total shown on the deck cards.
+    /// </summary>
+    private static Dictionary<int, float> CombineCoverage(Dictionary<int, float> mature, Dictionary<int, float> young)
+    {
+        var combined = new Dictionary<int, float>(mature);
+
+        foreach (var (deckId, youngValue) in young)
+            combined[deckId] = Math.Min(combined.GetValueOrDefault(deckId) + youngValue, 100f);
+
+        return combined;
+    }
+
     private async Task<PaginatedResponse<List<DeckDto>>> HandleCoverageSorting(
         IQueryable<Deck> query,
         IQueryable<DeckWithOccurrences>? projectedQuery,
@@ -1044,13 +1064,12 @@ public class MediaDeckController(
         Dictionary<int, float> uniqueCoverageDict,
         Dictionary<int, float> youngCoverageDict,
         Dictionary<int, float> youngUniqueCoverageDict,
-        bool sortByUnique,
+        Dictionary<int, float> selectedDict,
         Dictionary<int, UserDeckPreference> preferencesDict)
     {
         var totalCount = await query.CountAsync();
         var allDeckIds = await query.Select(d => d.DeckId).ToListAsync();
 
-        var selectedDict = sortByUnique ? uniqueCoverageDict : coverageDict;
         var idsWithCoverage = allDeckIds.Where(id => selectedDict.ContainsKey(id)).ToList();
         var idsWithoutCoverage = allDeckIds.Where(id => !selectedDict.ContainsKey(id)).ToList();
 
