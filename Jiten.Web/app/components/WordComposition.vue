@@ -3,6 +3,7 @@
 
   defineProps<{
     components: WordSummary[];
+    hideHeading?: boolean;
   }>();
 
   const convertToRuby = useConvertToRuby();
@@ -10,7 +11,7 @@
 
 <template>
   <div v-if="components.length > 0" class="mt-2">
-    <h3 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm mb-2">Composed of</h3>
+    <h3 v-if="!hideHeading" class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm mb-2">Composed of</h3>
     <div class="flex flex-wrap gap-2">
       <Tooltip
         v-for="component in components"

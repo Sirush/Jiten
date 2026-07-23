@@ -2094,6 +2094,10 @@ public class StudyController(
                     request.EasyDays[i] = Math.Clamp(request.EasyDays[i], 0.0, 1.0);
         }
 
+        if (request.CardLayout != null)
+            SanitizeCardLayout(request.CardLayout);
+        request.CardLayoutPresets = SanitizeCardLayoutPresets(request.CardLayoutPresets);
+
         var fsrsSettings = await userContext.UserFsrsSettings
             .FirstOrDefaultAsync(s => s.UserId == userId);
 
@@ -2101,6 +2105,19 @@ public class StudyController(
         {
             fsrsSettings = new UserFsrsSettings { UserId = userId };
             userContext.UserFsrsSettings.Add(fsrsSettings);
+        }
+
+        // A null cardLayout from a stale client that predates this feature must not clear a stored
+        // layout; treat null as "unchanged" and preserve what is on disk. An explicit clear from a
+        // current client is expressed as an EMPTY layout (version set, empty lists), never null.
+        // Same rule for cardLayoutPresets: null preserves, [] clears.
+        if (request.CardLayout == null || request.CardLayoutPresets == null)
+        {
+            var stored = DeserializeStoredSettings(fsrsSettings.SettingsJson);
+            if (request.CardLayout == null && stored?.CardLayout != null)
+                request.CardLayout = stored.CardLayout;
+            if (request.CardLayoutPresets == null && stored?.CardLayoutPresets != null)
+                request.CardLayoutPresets = stored.CardLayoutPresets;
         }
 
         fsrsSettings.SettingsJson = JsonSerializer.Serialize(request);
@@ -2133,6 +2150,79 @@ public class StudyController(
     {
         if (string.IsNullOrEmpty(value) || value.Length > 20) return fallback;
         return value;
+    }
+
+    private const int MaxCardLayoutBlocksPerSide = 30;
+    private const int MaxCardBlockTypeLength = 40;
+    private const int MaxCardBlockIdLength = 32;
+    private const int MaxCardBlockOptionKeys = 20;
+    private const int MaxCardBlockOptionValueLength = 500;
+    private const int MaxCardLayoutPresets = 10;
+    private const int MaxCardLayoutPresetNameLength = 40;
+
+    private static StudySettingsDto? DeserializeStoredSettings(string? json)
+    {
+        if (string.IsNullOrEmpty(json) || json == "{}") return null;
+        try { return JsonSerializer.Deserialize<StudySettingsDto>(json); }
+        catch (JsonException) { return null; }
+    }
+
+    private static void SanitizeCardLayout(CardLayoutDto layout)
+    {
+        layout.Front = SanitizeCardLayoutBlocks(layout.Front);
+        layout.Back = SanitizeCardLayoutBlocks(layout.Back);
+    }
+
+    private static List<CardLayoutBlockDto> SanitizeCardLayoutBlocks(List<CardLayoutBlockDto>? blocks)
+    {
+        if (blocks == null) return new List<CardLayoutBlockDto>();
+        if (blocks.Count > MaxCardLayoutBlocksPerSide)
+            blocks = blocks.Take(MaxCardLayoutBlocksPerSide).ToList();
+
+        foreach (var block in blocks)
+        {
+            block.Id = TruncateString(block.Id, MaxCardBlockIdLength);
+            block.Type = TruncateString(block.Type, MaxCardBlockTypeLength);
+            block.Options = SanitizeCardBlockOptions(block.Options);
+        }
+
+        return blocks;
+    }
+
+    private static Dictionary<string, JsonElement>? SanitizeCardBlockOptions(Dictionary<string, JsonElement>? options)
+    {
+        if (options == null || options.Count == 0) return options;
+
+        var result = new Dictionary<string, JsonElement>();
+        foreach (var (key, value) in options)
+        {
+            if (result.Count >= MaxCardBlockOptionKeys) break;
+            if (value.GetRawText().Length > MaxCardBlockOptionValueLength) continue;
+            result[key] = value;
+        }
+
+        return result;
+    }
+
+    private static List<CardLayoutPresetDto>? SanitizeCardLayoutPresets(List<CardLayoutPresetDto>? presets)
+    {
+        if (presets == null) return null;
+        if (presets.Count > MaxCardLayoutPresets)
+            presets = presets.Take(MaxCardLayoutPresets).ToList();
+
+        foreach (var preset in presets)
+        {
+            preset.Name = TruncateString(preset.Name?.Trim(), MaxCardLayoutPresetNameLength);
+            SanitizeCardLayout(preset.Layout ??= new CardLayoutDto());
+        }
+
+        return presets;
+    }
+
+    private static string TruncateString(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return value ?? string.Empty;
+        return value.Length > maxLength ? value[..maxLength] : value;
     }
 
     private static List<(int WordId, byte ReadingIndex, long CardId, bool IsNew, int State)> InterleaveMixed(

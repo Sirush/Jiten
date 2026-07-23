@@ -9,7 +9,8 @@
     currentReadingIndex?: number;
     readings?: Reading[];
     arrowKeyNav?: boolean;
-  }>(), { arrowKeyNav: true });
+    maxDefinitions?: number | null;
+  }>(), { arrowKeyNav: true, maxDefinitions: null });
 
   const store = useJitenStore();
 
@@ -65,6 +66,7 @@
     <VocabularyDefinitions
       :definitions="resolvedGroups[0].jmDictDefinitions"
       :is-compact="isCompact"
+      :max-definitions="maxDefinitions"
       :current-reading-index="currentReadingIndex"
       :readings="readings"
     />
@@ -87,6 +89,7 @@
               v-if="group.isJmDict && group.jmDictDefinitions"
               :definitions="group.jmDictDefinitions"
               :is-compact="false"
+              :max-definitions="maxDefinitions"
               :current-reading-index="currentReadingIndex"
               :readings="readings"
             />

@@ -6,6 +6,8 @@
     isCompact: boolean;
     currentReadingIndex?: number;
     readings?: Reading[];
+    // When set (>0), the non-compact list shows only the first N senses behind a "Show N more" expander.
+    maxDefinitions?: number | null;
   }>();
 
   const store = useJitenStore();
@@ -151,12 +153,27 @@
       };
     });
   });
+
+  const definitionsExpanded = ref(false);
+  watch(
+    () => props.definitions,
+    () => {
+      definitionsExpanded.value = false;
+    }
+  );
+  const definitionLimit = computed(() => (props.maxDefinitions && props.maxDefinitions > 0 ? props.maxDefinitions : null));
+  const visibleDefinitions = computed(() =>
+    definitionLimit.value && !definitionsExpanded.value
+      ? definitionsWithPartsOfSpeech.value.slice(0, definitionLimit.value)
+      : definitionsWithPartsOfSpeech.value
+  );
+  const hiddenDefinitionCount = computed(() => Math.max(0, definitionsWithPartsOfSpeech.value.length - visibleDefinitions.value.length));
 </script>
 
 <template>
   <div v-if="!isCompact">
     <ul>
-      <li v-for="definition in definitionsWithPartsOfSpeech" :key="definition.index" :class="{ 'opacity-40': isRestricted(definition) }">
+      <li v-for="definition in visibleDefinitions" :key="definition.index" :class="{ 'opacity-40': isRestricted(definition) }">
         <div v-if="definition.isDifferentPartOfSpeech" class="flex flex-wrap gap-1 mt-1 mb-0.5">
           <Tooltip v-for="pos in definition.partsOfSpeech" :key="pos" :content="pos" placement="top">
             <span
@@ -209,6 +226,14 @@
         </div>
       </li>
     </ul>
+    <button
+      v-if="hiddenDefinitionCount > 0"
+      type="button"
+      class="mt-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
+      @click.stop="definitionsExpanded = true"
+    >
+      Show {{ hiddenDefinitionCount }} more
+    </button>
   </div>
 
   <div v-if="isCompact && !hideDefinition">

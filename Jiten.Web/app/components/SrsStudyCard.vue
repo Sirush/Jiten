@@ -1,13 +1,11 @@
 <script setup lang="ts">
-  import type { ExampleSentence, ExampleSentencesByDifficultyResponse, StudyCardDto, UserExampleSentenceDto, Word } from '~/types';
+  import type { CardLayoutBlock, StudyCardDto, Word } from '~/types';
   import { useSrsStore } from '~/stores/srsStore';
-  import { getMediaTypeText } from '~/utils/mediaTypeMapper';
-  import { sanitiseHtml } from '~/utils/sanitiseHtml';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
-  import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
-  import InlineSentenceEditor from '~/components/InlineSentenceEditor.vue';
-  import { useToast } from 'primevue/usetoast';
   import { displayKeyName } from '~/composables/useStudyKeyboard';
+  import { resolveCardLayout } from '~/utils/cardLayout';
+  import { cardBlockRegistry } from '~/components/srs/card-blocks/cardBlockRegistry';
+  import { provideCardContext, type CardContext } from '~/components/srs/card-blocks/useCardContext';
 
   const props = defineProps<{
     card: StudyCardDto;
@@ -18,39 +16,57 @@
     // Furigana override for the front in write-in mode: 'hide' (reading mode), 'show' (meaning mode
     // with reading shown), or 'default' (honour the user's furigana settings).
     frontFurigana?: 'default' | 'hide' | 'show';
+    // The tested dimension for the current write-in card; drives which front blocks are masked during
+    // the input phase (see frontBlockMasked).
+    writeInMode?: 'srs' | 'reading' | 'meaning' | null;
     // After reveal, tint the headword reading green/red to echo whether the typed reading was correct.
     writeInOutcome?: 'correct' | 'wrong' | null;
   }>();
-
-  // Write-in input phase: a write-in card that hasn't been revealed yet.
-  const inputPhase = computed(() => !!props.writeInActive && !props.isFlipped);
-
-  const showRubyOnFront = computed(() => {
-    if (props.isFlipped) return false;
-    const mode = props.frontFurigana ?? 'default';
-    if (mode === 'hide') return false;
-    if (mode === 'show') return true;
-    return srsStore.studySettings.showFuriganaOnFront && (!srsStore.studySettings.furiganaOnFrontNewOnly || props.card.isNewCard);
-  });
-
-  const srsStore = useSrsStore();
 
   const emit = defineEmits<{
     flip: [];
   }>();
 
-  const { $api } = useNuxtApp();
-  const localiseTitle = useLocaliseTitle();
-  const convertToRuby = useConvertToRuby();
+  const srsStore = useSrsStore();
   const authStore = useAuthStore();
-  const toast = useToast();
+  const { $api } = useNuxtApp();
+
+  // Write-in input phase: a write-in card that hasn't been revealed yet.
+  const inputPhase = computed(() => !!props.writeInActive && !props.isFlipped);
+
+  const layout = computed(() => resolveCardLayout(srsStore.studySettings));
+  // The frequency rank is rendered as top-bar chrome (see template), so it is filtered out of the
+  // content loops even though the layout model carries it as a block.
+  const frontBlocks = computed(() => layout.value.front.filter((b) => b.type !== 'frequencyRank'));
+  const backBlocks = computed(() => layout.value.back.filter((b) => b.type !== 'frequencyRank'));
+  const frontHasSentence = computed(() => layout.value.front.some((b) => b.type === 'exampleSentence'));
+
+  // The rank is chrome, not a body block: its presence and its onlyAfterFlip option come from the
+  // layout, not the legacy toggle, so an advanced-added block still shows.
+  const frequencyRankBlock = computed(() => layout.value.front.find((b) => b.type === 'frequencyRank') ?? layout.value.back.find((b) => b.type === 'frequencyRank'));
+  const showFrequencyRankChrome = computed(() => {
+    const blk = frequencyRankBlock.value;
+    if (!blk) return false;
+    return (blk.options?.onlyAfterFlip ?? true) ? props.isFlipped : true;
+  });
+
+  // A front block is collapsed to a placeholder chip while its tested dimension is being typed in a
+  // write-in card: reading-revealing blocks during reading input, meaning-revealing blocks during
+  // meaning input. The headword is exempt — it is the prompt and masks its own furigana instead.
+  function frontBlockMasked(block: CardLayoutBlock): boolean {
+    if (!inputPhase.value || block.type === 'headword') return false;
+    const def = cardBlockRegistry[block.type];
+    if (props.writeInMode === 'reading') return def.revealsReading;
+    if (props.writeInMode === 'meaning') return def.revealsMeaning;
+    return false;
+  }
 
   const wordData = ref<Word | null>(null);
   const wordLoadFailed = ref(false);
   const wordLoading = computed(() => !wordData.value && !wordLoadFailed.value);
   const showMenu = ref(false);
 
-  function onClickOutsideMenu(e: Event) {
+  function onClickOutsideMenu() {
     showMenu.value = false;
   }
   onMounted(() => document.addEventListener('click', onClickOutsideMenu));
@@ -65,8 +81,8 @@
 
     try {
       wordData.value = await $api<Word>(`vocabulary/${props.card.wordId}/${props.card.readingIndex}/info`, { signal: controller.signal });
-    } catch (error: any) {
-      if (error?.name === 'AbortError') return;
+    } catch (error) {
+      if ((error as { name?: string })?.name === 'AbortError') return;
       wordLoadFailed.value = true;
     }
   }
@@ -83,268 +99,19 @@
 
   onUnmounted(() => abortController?.abort());
 
-  const { resolvedGroups } = useDictionaryDefinitions(
-    computed(() => wordData.value?.mainReading?.text),
-    computed(() => wordData.value?.definitions)
-  );
-
-  // Dictionary cycling is driven by the study page's rebindable keybinds (dictPrev/dictNext),
-  // so the definitions component's own arrow-key listener is disabled below.
-  const dictDefinitionsRef = ref<{ cycleDictionary: (direction: 1 | -1) => void } | null>(null);
+  const dictCycler = ref<((direction: 1 | -1) => void) | null>(null);
+  function registerDictCycler(fn: ((direction: 1 | -1) => void) | null) {
+    dictCycler.value = fn;
+  }
+  // Dictionary cycling is driven by the study page's rebindable keybinds (dictPrev/dictNext); the
+  // definitions block registers its cycler here so this delegation survives the block extraction.
   defineExpose({
-    cycleDictionary: (direction: 1 | -1) => dictDefinitionsRef.value?.cycleDictionary(direction),
-  });
-
-  const currentReadingIndex = computed(() => props.card.readingIndex);
-
-  const LANG_NAMES: Record<string, string> = {
-    eng: 'English',
-    por: 'Portuguese',
-    dut: 'Dutch',
-    fre: 'French',
-    ger: 'German',
-    ita: 'Italian',
-    spa: 'Spanish',
-    rus: 'Russian',
-    chi: 'Chinese',
-    kor: 'Korean',
-    lat: 'Latin',
-    gre: 'Greek',
-    ara: 'Arabic',
-    heb: 'Hebrew',
-    san: 'Sanskrit',
-    tha: 'Thai',
-    vie: 'Vietnamese',
-    tur: 'Turkish',
-    pol: 'Polish',
-    swe: 'Swedish',
-    nor: 'Norwegian',
-    hun: 'Hungarian',
-    haw: 'Hawaiian',
-    afr: 'Afrikaans',
-  };
-  const hasWasei = computed(() => wordData.value?.languageSources?.some((s) => s.isWasei) ?? false);
-  const etymologyLine = computed(() => {
-    const sources = wordData.value?.languageSources;
-    if (!sources || sources.length === 0) return '';
-    const parts = sources
-      .map((s) => {
-        const name = LANG_NAMES[s.lang] ?? s.lang;
-        return s.text ? `${name} ${s.text}` : name;
-      })
-      .filter((p) => p.length > 0);
-    return parts.length > 0 ? `from ${parts.join(' + ')}` : '';
-  });
-
-  const pitchReadingText = computed(() => {
-    if (wordData.value) return wordData.value.mainReading.text;
-    const kanaReading = props.card.readings.find((r) => r.formType === 1);
-    return kanaReading?.text || props.card.wordTextPlain;
-  });
-
-  const pitchAccents = computed(() => {
-    const accents = wordData.value?.pitchAccents || props.card.pitchAccents;
-    return accents && accents.length > 0 ? accents : null;
-  });
-
-  const fallbackDefinitions = computed(() => {
-    let previousPos: string | null = null;
-    return props.card.definitions.map((def) => {
-      const posKey = JSON.stringify(def.partsOfSpeech);
-      const showPos = def.partsOfSpeech.length > 0 && posKey !== previousPos;
-      previousPos = posKey;
-      return { ...def, showPos };
-    });
+    cycleDictionary: (direction: 1 | -1) => dictCycler.value?.(direction),
   });
 
   const cardExample = computed(() => srsStore.getCardExample(props.card.wordId, props.card.readingIndex));
 
-  const exampleSentenceHtml = computed(() => {
-    const ex = cardExample.value;
-    if (!ex) return null;
-    if (ex.isCustom && ex.customText) {
-      return parseCustomSentenceHtml(ex.customText);
-    }
-    const { text, wordPosition, wordLength } = ex;
-    if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) {
-      return text;
-    }
-    const before = text.substring(0, wordPosition);
-    const word = text.substring(wordPosition, wordPosition + wordLength);
-    const after = text.substring(wordPosition + wordLength);
-    const html = `${before}<span class="text-primary-500 dark:text-primary-500 font-bold">${word}</span>${after}`;
-    return sanitiseHtml(html);
-  });
-
   const exampleRevealed = ref(false);
-  const occExpanded = ref(false);
-
-  // Favourite / inline-edit of the displayed example sentence.
-  const editingExample = ref(false);
-  const favouriting = ref(false);
-  const exampleIsCustom = computed(() => !!cardExample.value?.isCustom);
-  // Custom examples encode a negated UserExampleSentenceId in sentenceId (see BuildCustomStudyExample).
-  const exampleUserSentenceId = computed(() => (cardExample.value?.isCustom ? -cardExample.value.sentenceId : null));
-
-  function buildMarkedText(ex: NonNullable<typeof cardExample.value>): string {
-    if (ex.isCustom && ex.customText) return ex.customText;
-    const { text, wordPosition, wordLength } = ex;
-    if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) return text;
-    const before = text.substring(0, wordPosition);
-    const word = text.substring(wordPosition, wordPosition + wordLength);
-    const after = text.substring(wordPosition + wordLength);
-    return `${before}**${word}**${after}`;
-  }
-
-  function buildSource(ex: NonNullable<typeof cardExample.value>): string {
-    if (ex.isCustom) return ex.customSource ?? '';
-    let source = '';
-    if (ex.sourceParent) source += localiseTitle(ex.sourceParent) + ' - ';
-    if (ex.sourceDeck) source += localiseTitle(ex.sourceDeck);
-    return source;
-  }
-
-  const editInitialText = computed(() => (cardExample.value ? buildMarkedText(cardExample.value) : ''));
-  const editInitialSource = computed(() => (cardExample.value ? buildSource(cardExample.value) : ''));
-
-  function applyCustomDto(dto: UserExampleSentenceDto) {
-    srsStore.setCardExample(props.card.wordId, props.card.readingIndex, {
-      sentenceId: -dto.userExampleSentenceId,
-      text: dto.text.replace(/\*\*/g, ''),
-      wordPosition: 0,
-      wordLength: 0,
-      isCustom: true,
-      customText: dto.text,
-      customSource: dto.source,
-    });
-  }
-
-  async function favouriteExample() {
-    const ex = cardExample.value;
-    if (!ex || ex.isCustom || favouriting.value) return;
-    favouriting.value = true;
-    try {
-      const dto = await $api<UserExampleSentenceDto>(`user/example-sentences/${props.card.wordId}/${props.card.readingIndex}/favourite`, {
-        method: 'POST',
-        body: { text: buildMarkedText(ex), source: buildSource(ex) || undefined },
-      });
-      applyCustomDto(dto);
-      toast.add({ severity: 'success', summary: 'Saved as custom sentence', life: 2000 });
-    } catch {
-      toast.add({ severity: 'error', summary: 'Maximum of 3 custom sentences reached', life: 3000 });
-    } finally {
-      favouriting.value = false;
-    }
-  }
-
-  function onExampleSaved(dto: UserExampleSentenceDto) {
-    applyCustomDto(dto);
-    editingExample.value = false;
-  }
-
-  async function onExampleDeleted() {
-    editingExample.value = false;
-    await srsStore.refreshCardExample(props.card.wordId, props.card.readingIndex);
-  }
-
-  watch(
-    () => `${props.card.wordId}-${props.card.readingIndex}`,
-    () => {
-      exampleRevealed.value = false;
-      occExpanded.value = false;
-      editingExample.value = false;
-    }
-  );
-
-  const extraSentences = ref<ExampleSentence[]>([]);
-  const extraSentencesExpanded = ref(false);
-  const canLoadMoreSentences = ref(true);
-  const isLoadingMoreSentences = ref(false);
-  const bandSize = 0.5;
-  const nextBandMin = ref(0);
-  const nextBandMax = ref(bandSize);
-
-  async function loadMoreSentences() {
-    isLoadingMoreSentences.value = true;
-    const sorting = srsStore.studySettings.exampleSentenceSorting;
-
-    try {
-      const alreadyLoaded = extraSentences.value.map((s) => s.sourceDeck.deckId);
-
-      if (sorting === 'Random') {
-        const results = await $api<ExampleSentence[]>(`vocabulary/${props.card.wordId}/${props.card.readingIndex}/random-example-sentences`, {
-          method: 'POST',
-          body: alreadyLoaded,
-        });
-
-        if (results.length === 0) {
-          canLoadMoreSentences.value = false;
-          return;
-        }
-
-        extraSentences.value.push(...results);
-      } else {
-        const descending = sorting === 'HardestFirst';
-        const results = await $api<ExampleSentencesByDifficultyResponse>(
-          `vocabulary/${props.card.wordId}/${props.card.readingIndex}/example-sentences-by-difficulty?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}`,
-          { method: 'POST', body: alreadyLoaded }
-        );
-
-        if (results.sentences.length > 0) {
-          extraSentences.value.push(...results.sentences);
-        }
-
-        if (descending) {
-          nextBandMax.value = results.searchedBandMin;
-          nextBandMin.value = nextBandMax.value - bandSize;
-          if (nextBandMax.value <= results.minDifficulty) {
-            canLoadMoreSentences.value = false;
-          }
-        } else {
-          nextBandMin.value = results.searchedBandMax;
-          nextBandMax.value = nextBandMin.value + bandSize;
-          if (nextBandMin.value > results.maxDifficulty) {
-            canLoadMoreSentences.value = false;
-          }
-        }
-
-        if (results.sentences.length === 0 && canLoadMoreSentences.value) {
-          return;
-        }
-      }
-
-      extraSentencesExpanded.value = true;
-    } catch {
-      canLoadMoreSentences.value = false;
-    } finally {
-      isLoadingMoreSentences.value = false;
-    }
-  }
-
-  function toggleExtraSentences() {
-    if (extraSentences.value.length === 0) {
-      loadMoreSentences();
-    } else {
-      extraSentencesExpanded.value = !extraSentencesExpanded.value;
-    }
-  }
-
-  watch(
-    () => `${props.card.wordId}-${props.card.readingIndex}`,
-    () => {
-      extraSentences.value = [];
-      extraSentencesExpanded.value = false;
-      canLoadMoreSentences.value = true;
-      const sorting = srsStore.studySettings.exampleSentenceSorting;
-      if (sorting === 'HardestFirst') {
-        nextBandMin.value = 999;
-        nextBandMax.value = 999 + bandSize;
-      } else {
-        nextBandMin.value = 0;
-        nextBandMax.value = bandSize;
-      }
-    }
-  );
 
   const headWordTtsText = computed(() => {
     const raw = wordData.value?.mainReading?.text || props.card.wordText || props.card.wordTextPlain;
@@ -363,16 +130,17 @@
   const showMediaEditor = ref(false);
   const imageRetried = ref(false);
   const imageManuallyRevealed = ref(false);
-  const customAudioPlaying = computed(() => wordAudio.customPlaying.value);
 
   const cardImageUrl = computed(() => cardImage.value?.url ?? '');
-  const imageBesideLayout = computed(() => srsStore.studySettings.cardImageLayout === 'beside');
-  const imageOnFront = computed(() => srsStore.studySettings.cardImagePosition === 'Front');
+  // The card-image block, if present anywhere, drives image rendering: its list decides the side, its
+  // options decide beside/below and blur. An absent block means no image is shown at all.
+  const cardImageBlock = computed(() => layout.value.front.find((b) => b.type === 'cardImage') ?? layout.value.back.find((b) => b.type === 'cardImage') ?? null);
+  const imageBesideLayout = computed(() => (cardImageBlock.value?.options?.layout ?? 'beside') === 'beside');
+  const imageOnFront = computed(() => layout.value.front.some((b) => b.type === 'cardImage'));
+  const imageBlurEnabled = computed(() => cardImageBlock.value?.options?.blur ?? true);
 
-  const imageBlurred = computed(() => imageOnFront.value && srsStore.studySettings.blurCardImage && !props.isFlipped && !imageManuallyRevealed.value);
-  const showBesideImage = computed(() => !!cardImage.value && imageBesideLayout.value && (imageOnFront.value || props.isFlipped));
-  const showFrontBelowImage = computed(() => !!cardImage.value && imageOnFront.value);
-  const showBackBelowImage = computed(() => !!cardImage.value && !imageOnFront.value && props.isFlipped);
+  const imageBlurred = computed(() => imageOnFront.value && imageBlurEnabled.value && !props.isFlipped && !imageManuallyRevealed.value);
+  const showBesideImage = computed(() => !!cardImage.value && !!cardImageBlock.value && imageBesideLayout.value && (imageOnFront.value || props.isFlipped));
 
   function playCustomAudio() {
     wordAudio.playWord({
@@ -449,7 +217,11 @@
     const customThisSide = pos === 'Both' || pos === (onFront ? 'Front' : 'Back');
     const custom = hasCustom && settings.autoPlayCustomAudio && customThisSide;
 
-    const playSentence = !!example?.sentenceId && (onFront ? settings.autoPlayWordOnFront && settings.autoPlaySentenceOnFront : settings.autoPlaySentence && !sentenceBlurred.value);
+    const playSentence =
+      !!example?.sentenceId &&
+      (onFront
+        ? frontHasSentence.value && settings.autoPlayWordOnFront && settings.autoPlaySentenceOnFront
+        : settings.autoPlaySentence && !sentenceBlurred.value);
 
     if (!headword && !custom && !playSentence) return;
 
@@ -505,6 +277,7 @@
       imageRetried.value = false;
       imageManuallyRevealed.value = false;
       showMediaEditor.value = false;
+      exampleRevealed.value = false;
       startAutoAudio('front');
     },
     { immediate: true }
@@ -513,11 +286,6 @@
   onUnmounted(() => wordAudio.stop());
 
   const sentenceBlurred = computed(() => srsStore.studySettings.blurExampleSentence && !exampleRevealed.value);
-
-  const confusableReadings = computed(() => {
-    if (!srsStore.studySettings.showConfusableReadings) return [];
-    return props.card.confusableReadings ?? [];
-  });
 
   function playExample(ex: NonNullable<typeof cardExample.value>) {
     // Custom sentences are encoded with a negated UserExampleSentenceId (see BuildCustomStudyExample).
@@ -548,6 +316,39 @@
       startAutoAudio('flip');
     }
   );
+
+  const context: CardContext = {
+    card: computed(() => props.card),
+    settings: computed(() => srsStore.studySettings),
+    isFlipped: toRef(props, 'isFlipped'),
+    isPreview: false,
+    sample: null,
+    wordData,
+    wordLoading,
+    wordLoadFailed,
+    writeInActive: computed(() => !!props.writeInActive),
+    writeInFrontFurigana: computed(() => props.frontFurigana ?? 'default'),
+    writeInOutcome: computed(() => props.writeInOutcome ?? null),
+    writeInInputPhase: inputPhase,
+    cardImage,
+    cardImageUrl,
+    cardAudio,
+    customAudioPlaying: wordAudio.customPlaying,
+    imageBlurred,
+    showBesideImage,
+    imageBesideLayout,
+    headWordTtsText,
+    playCustomAudio,
+    onImageError,
+    revealImage: () => {
+      imageManuallyRevealed.value = true;
+    },
+    cardExample,
+    exampleRevealed,
+    revealExample,
+    registerDictCycler,
+  };
+  provideCardContext(context);
 </script>
 
 <template>
@@ -562,7 +363,7 @@
 
       <!-- Top bar: frequency rank + menu -->
       <div class="flex justify-end items-center gap-2 min-h-[1.25rem]">
-        <div v-if="isFlipped && card.frequencyRank > 0 && srsStore.studySettings.showFrequencyRank" class="text-xs text-gray-400">
+        <div v-if="showFrequencyRankChrome && card.frequencyRank > 0" class="text-xs text-gray-400">
           #{{ card.frequencyRank.toLocaleString() }}
         </div>
         <button
@@ -607,202 +408,20 @@
         :aria-label="!isFlipped && !inputPhase ? 'Reveal answer' : undefined"
         @click="!isFlipped && !inputPhase && emit('flip')"
       >
-        <div v-if="srsStore.studySettings.showCardStatus" class="flex items-center gap-2 text-sm mb-4 uppercase tracking-wider">
-          <span
-            :class="
-              srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'text-red-400 dark:text-red-400' : 'text-surface-400 dark:text-surface-300'
-            "
+        <template v-for="block in frontBlocks" :key="block.id">
+          <div
+            v-if="frontBlockMasked(block)"
+            class="my-2 inline-flex items-center gap-1.5 rounded-full bg-surface-100 px-3 py-1 text-xs text-surface-400 dark:bg-surface-800 dark:text-surface-500"
           >
-            {{ srsStore.againCardKeys.has(`${card.wordId}-${card.readingIndex}`) ? 'Again' : card.isNewCard ? 'New' : 'Review' }}
-          </span>
-          <span
-            v-if="card.isLeech"
-            class="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
-          >
-            <i class="pi pi-exclamation-triangle !text-[10px]" />
-            Leech
-          </span>
-        </div>
-        <!-- Plain text before flip, ruby text after flip. -->
-        <div class="mb-2 flex items-center justify-center gap-4 md:grid md:grid-cols-[1fr_auto_1fr]">
-          <div class="hidden md:block" aria-hidden="true" />
-          <div class="flex items-center gap-3">
-            <div
-              v-if="showRubyOnFront"
-              class="text-4xl md:text-5xl text-center font-noto-sans head-word"
-              lang="ja"
-              v-html="convertToRuby(card.wordText || card.wordTextPlain, true)"
-            />
-            <div v-else-if="!isFlipped" class="text-4xl md:text-5xl text-center font-noto-sans" lang="ja">
-              {{ card.wordTextPlain }}
-            </div>
-            <div
-              v-else
-              class="text-4xl md:text-5xl text-center font-noto-sans head-word"
-              :class="{ 'writein-correct': writeInOutcome === 'correct', 'writein-wrong': writeInOutcome === 'wrong' }"
-              lang="ja"
-              v-html="convertToRuby(wordData?.mainReading?.text || card.wordText || card.wordTextPlain, true)"
-            />
-            <TtsButton :text="headWordTtsText" :word-id="card.wordId" :reading-index="card.readingIndex" size="md" @click.stop />
-            <button
-              v-if="cardAudio"
-              type="button"
-              class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
-              :class="{ '!text-primary-500': customAudioPlaying }"
-              title="Play custom audio"
-              @click.stop="playCustomAudio"
-            >
-              <i class="pi pi-play-circle text-base" />
-            </button>
+            <i class="pi pi-eye-slash text-[0.7rem]" />
+            Hidden during write-in
           </div>
-          <div class="hidden min-w-0 md:flex md:items-center">
-            <SrsCardImage
-              v-if="showBesideImage"
-              :url="cardImageUrl"
-              :blurred="imageBlurred"
-              img-class="max-h-36 w-auto max-w-full rounded-lg object-contain border border-surface-200 dark:border-surface-700"
-              @error="onImageError"
-              @reveal="imageManuallyRevealed = true"
-            />
+          <component :is="cardBlockRegistry[block.type].component" v-else :block="block" side="front" />
+          <!-- Inline write-in input (sits directly under the word during the input phase) -->
+          <div v-if="block.type === 'headword' && inputPhase && $slots.writeInput" class="mt-5 w-full" @click.stop>
+            <slot name="writeInput" />
           </div>
-        </div>
-
-        <!-- Below-layout image on the front -->
-        <div v-if="showFrontBelowImage" class="mt-2 flex justify-center w-full" :class="{ 'md:hidden': imageBesideLayout }" @click.stop>
-          <SrsCardImage
-            :url="cardImageUrl"
-            :blurred="imageBlurred"
-            img-class="max-h-[40vh] w-auto rounded-lg object-contain"
-            @error="onImageError"
-            @reveal="imageManuallyRevealed = true"
-          />
-        </div>
-
-        <!-- Inline write-in input (sits directly under the word during the input phase) -->
-        <div v-if="inputPhase && $slots.writeInput" class="mt-5 w-full" @click.stop>
-          <slot name="writeInput" />
-        </div>
-        <!-- Example sentence on front -->
-        <div v-if="srsStore.studySettings.exampleSentencePosition === 'Front' && exampleSentenceHtml" class="mt-4 w-full" @click.stop>
-          <InlineSentenceEditor
-            v-if="editingExample"
-            :word-id="card.wordId"
-            :reading-index="card.readingIndex"
-            :initial-text="editInitialText"
-            :initial-source="editInitialSource"
-            :user-sentence-id="exampleUserSentenceId"
-            @saved="onExampleSaved"
-            @deleted="onExampleDeleted"
-            @cancel="editingExample = false"
-          />
-          <template v-else>
-            <blockquote
-              class="relative inline-block border-l-4 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
-              :class="[
-                cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500',
-                { 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed },
-              ]"
-              @click.stop="revealExample()"
-            >
-              <div class="flex items-start gap-2">
-                <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" lang="ja" />
-                <div class="flex items-center gap-1 mt-0.5 shrink-0">
-                  <TtsButton
-                    v-if="cardExample"
-                    :text="cardExample.text"
-                    :sentence-id="cardExample.isCustom ? undefined : cardExample.sentenceId"
-                    :custom-sentence-id="cardExample.isCustom ? -cardExample.sentenceId : undefined"
-                    type="sentence"
-                    size="sm"
-                  />
-                  <button
-                    v-if="authStore.isAuthenticated && cardExample"
-                    class="inline-flex items-center justify-center transition-colors"
-                    :class="exampleIsCustom ? 'text-yellow-500' : 'text-surface-400 hover:text-yellow-500'"
-                    :disabled="exampleIsCustom || favouriting"
-                    :title="exampleIsCustom ? 'Saved as custom sentence' : 'Save as custom sentence'"
-                    @pointerdown.stop
-                    @click.stop="favouriteExample"
-                  >
-                    <i class="pi text-sm" :class="exampleIsCustom ? 'pi-star-fill' : 'pi-star'" />
-                  </button>
-                  <button
-                    v-if="authStore.isAuthenticated && cardExample"
-                    class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
-                    title="Edit sentence"
-                    @pointerdown.stop
-                    @click.stop="editingExample = true"
-                  >
-                    <i class="pi pi-pencil text-sm" />
-                  </button>
-                </div>
-              </div>
-            </blockquote>
-            <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">
-              <span class="text-xs italic mr-2 ml-4">Source:</span>
-              <span class="text-xs">{{ cardExample.customSource }}</span>
-            </div>
-            <div v-else-if="cardExample?.sourceDeck" class="flex items-center mt-1">
-              <span class="text-xs italic mr-2 ml-4">Source:</span>
-              <div class="inline-flex items-center text-xs flex-wrap">
-                <NuxtLink
-                  v-if="cardExample.sourceParent"
-                  :to="`/decks/media/${cardExample.sourceParent.deckId}/detail`"
-                  target="_blank"
-                  class="hover:underline text-primary-600"
-                >
-                  {{ localiseTitle(cardExample.sourceParent) }}
-                </NuxtLink>
-                <span v-if="cardExample.sourceParent" class="mx-1">-</span>
-                <NuxtLink :to="`/decks/media/${cardExample.sourceDeck.deckId}/detail`" target="_blank" class="hover:underline text-primary-600">
-                  {{ localiseTitle(cardExample.sourceDeck) }}
-                </NuxtLink>
-                &nbsp; ({{ getMediaTypeText(cardExample.sourceDeck.mediaType) }})
-              </div>
-            </div>
-
-            <button
-              class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 mt-1 ml-1 flex items-center gap-1 cursor-pointer"
-              @pointerdown.stop
-              @click="toggleExtraSentences"
-            >
-              <i :class="extraSentencesExpanded ? 'pi pi-chevron-up' : 'pi pi-plus'" class="text-[0.6rem]" />
-              {{ extraSentencesExpanded ? 'Hide extra sentences' : 'See more sentences' }}
-            </button>
-
-            <div v-if="extraSentencesExpanded" class="mt-2 space-y-2">
-              <ExampleSentenceEntry v-for="(sentence, i) in extraSentences" :key="i" :example-sentence="sentence" :show-source="true" />
-              <div
-                v-if="isLoadingMoreSentences"
-                class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r"
-              >
-                <div class="h-5 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
-              </div>
-              <button
-                v-if="extraSentences.length > 0 && canLoadMoreSentences"
-                class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 ml-1 flex items-center gap-1 cursor-pointer"
-                :disabled="isLoadingMoreSentences"
-                @pointerdown.stop
-                @click="loadMoreSentences"
-              >
-                <i class="pi pi-plus text-[0.6rem]" />
-                Load more
-              </button>
-            </div>
-          </template>
-        </div>
-
-        <!-- Confusable readings -->
-        <div v-if="confusableReadings.length" class="mt-4 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400" @click.stop>
-          <i class="pi pi-exclamation-triangle text-xs shrink-0" />
-          <span>
-            Do not confuse with:
-            <template v-for="(cr, i) in confusableReadings" :key="i">
-              <strong>{{ cr }}</strong
-              ><span v-if="i < confusableReadings.length - 1">,&ensp;</span>
-            </template>
-          </span>
-        </div>
+        </template>
 
         <div v-if="!isFlipped && !inputPhase" class="text-sm text-surface-500 dark:text-surface-300 mt-6">
           <span class="md:hidden">Tap to reveal</span>
@@ -820,11 +439,6 @@
           tabindex="-1"
           class="mt-6 pt-6 border-t border-surface-200 dark:border-surface-700 focus:outline-none"
         >
-          <!-- Below-layout image on the back  -->
-          <div v-if="showBackBelowImage" class="mb-4 flex justify-center" :class="{ 'md:hidden': imageBesideLayout }">
-            <SrsCardImage :url="cardImageUrl" img-class="max-h-[40vh] w-auto rounded-lg object-contain" @error="onImageError" />
-          </div>
-
           <!-- Edit / add card media -->
           <div v-if="authStore.isAuthenticated" class="mb-4 flex justify-center">
             <button
@@ -848,263 +462,20 @@
             </JitenPlusGate>
           </div>
 
-          <!-- Etymology / wasei (from lsource) -->
-          <div v-if="wordData && wordData.languageSources && wordData.languageSources.length" class="mb-3 flex flex-wrap items-center justify-center gap-2">
-            <span
-              v-if="hasWasei"
-              class="inline-block rounded-full px-2 py-0.5 text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
-              title="Japanese-made — constructed in Japanese from foreign words, not a real foreign phrase"
-              >和製 wasei</span
-            >
-            <span v-if="etymologyLine" class="text-sm text-gray-500 dark:text-gray-400">{{ etymologyLine }}</span>
-          </div>
-
-          <!-- Definitions -->
-          <div class="mb-4">
-            <template v-if="wordData">
-              <ClientOnly>
-                <VocabularyDictionaryDefinitions
-                  ref="dictDefinitionsRef"
-                  :resolved-groups="resolvedGroups"
-                  :arrow-key-nav="false"
-                  :is-compact="false"
-                  :current-reading-index="currentReadingIndex"
-                  :readings="wordData.alternativeReadings"
-                />
-                <template #fallback>
-                  <VocabularyDefinitions
-                    :definitions="wordData.definitions"
-                    :is-compact="false"
-                    :current-reading-index="currentReadingIndex"
-                    :readings="wordData.alternativeReadings"
-                  />
-                </template>
-              </ClientOnly>
-            </template>
-            <template v-else>
-              <div v-for="def in fallbackDefinitions" :key="def.index">
-                <div v-if="def.showPos" class="flex flex-wrap gap-1 mt-2 mb-0.5">
-                  <Tooltip v-for="pos in def.partsOfSpeech" :key="pos" :content="pos" placement="top">
-                    <span class="pos-badge" :class="`pos-${posColorClass(abbreviatePos(pos))}`">{{ abbreviatePos(pos) }}</span>
-                  </Tooltip>
-                </div>
-                <div>
-                  <span class="text-gray-400">{{ def.index }}.</span> {{ def.meanings.join('; ') }}
-                </div>
-              </div>
-              <div v-if="wordLoading" class="flex items-center gap-1.5 mt-2 text-xs text-gray-400">
-                <Icon name="svg-spinners:ring-resize" size="0.875rem" />
-                <span>Loading full entry…</span>
-              </div>
-            </template>
-            <CustomMeaning :word-id="card.wordId" editable class="mt-3" />
-          </div>
-
-          <!-- Example sentence (back) -->
-          <div v-if="srsStore.studySettings.exampleSentencePosition === 'Back'" class="mb-4">
-            <InlineSentenceEditor
-              v-if="editingExample"
-              :word-id="card.wordId"
-              :reading-index="card.readingIndex"
-              :initial-text="editInitialText"
-              :initial-source="editInitialSource"
-              :user-sentence-id="exampleUserSentenceId"
-              @saved="onExampleSaved"
-              @deleted="onExampleDeleted"
-              @cancel="editingExample = false"
-            />
-            <template v-else-if="exampleSentenceHtml">
-              <blockquote
-                class="relative inline-block border-l-4 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
-                :class="[
-                  cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500',
-                  { 'blur-md select-none cursor-pointer': srsStore.studySettings.blurExampleSentence && !exampleRevealed },
-                ]"
-                @click.stop="revealExample()"
-              >
-                <div class="flex items-start gap-2">
-                  <div v-html="exampleSentenceHtml" class="text-base leading-relaxed flex-1" lang="ja" />
-                  <div class="flex items-center gap-1 mt-0.5 shrink-0">
-                    <TtsButton
-                      v-if="cardExample"
-                      :text="cardExample.text"
-                      :sentence-id="cardExample.isCustom ? undefined : cardExample.sentenceId"
-                      :custom-sentence-id="cardExample.isCustom ? -cardExample.sentenceId : undefined"
-                      type="sentence"
-                      size="sm"
-                    />
-                    <button
-                      v-if="authStore.isAuthenticated && cardExample"
-                      class="inline-flex items-center justify-center transition-colors"
-                      :class="exampleIsCustom ? 'text-yellow-500' : 'text-surface-400 hover:text-yellow-500'"
-                      :disabled="exampleIsCustom || favouriting"
-                      :title="exampleIsCustom ? 'Saved as custom sentence' : 'Save as custom sentence'"
-                      @pointerdown.stop
-                      @click.stop="favouriteExample"
-                    >
-                      <i class="pi text-sm" :class="exampleIsCustom ? 'pi-star-fill' : 'pi-star'" />
-                    </button>
-                    <button
-                      v-if="authStore.isAuthenticated && cardExample"
-                      class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors"
-                      title="Edit sentence"
-                      @pointerdown.stop
-                      @click.stop="editingExample = true"
-                    >
-                      <i class="pi pi-pencil text-sm" />
-                    </button>
-                  </div>
-                </div>
-              </blockquote>
-              <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">
-                <span class="text-xs italic mr-2 ml-4">Source:</span>
-                <span class="text-xs">{{ cardExample.customSource }}</span>
-              </div>
-              <div v-else-if="cardExample?.sourceDeck" class="flex items-center mt-1">
-                <span class="text-xs italic mr-2 ml-4">Source:</span>
-                <div class="inline-flex items-center text-xs flex-wrap">
-                  <NuxtLink
-                    v-if="cardExample.sourceParent"
-                    :to="`/decks/media/${cardExample.sourceParent.deckId}/detail`"
-                    target="_blank"
-                    class="hover:underline text-primary-600"
-                  >
-                    {{ localiseTitle(cardExample.sourceParent) }}
-                  </NuxtLink>
-                  <span v-if="cardExample.sourceParent" class="mx-1">-</span>
-                  <NuxtLink :to="`/decks/media/${cardExample.sourceDeck.deckId}/detail`" target="_blank" class="hover:underline text-primary-600">
-                    {{ localiseTitle(cardExample.sourceDeck) }}
-                  </NuxtLink>
-                  &nbsp; ({{ getMediaTypeText(cardExample.sourceDeck.mediaType) }})
-                </div>
-              </div>
-            </template>
-
-            <button
-              v-if="!editingExample"
-              class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 mt-1 ml-1 flex items-center gap-1 cursor-pointer"
-              @pointerdown.stop
-              @click="toggleExtraSentences"
-            >
-              <i :class="extraSentencesExpanded ? 'pi pi-chevron-up' : 'pi pi-plus'" class="text-[0.6rem]" />
-              {{ extraSentencesExpanded ? 'Hide extra sentences' : 'See more sentences' }}
-            </button>
-
-            <div v-if="extraSentencesExpanded && !editingExample" class="mt-2 space-y-2">
-              <ExampleSentenceEntry v-for="(sentence, i) in extraSentences" :key="i" :example-sentence="sentence" :show-source="true" />
-              <div
-                v-if="isLoadingMoreSentences"
-                class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r"
-              >
-                <div class="h-5 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
-              </div>
-              <button
-                v-if="extraSentences.length > 0 && canLoadMoreSentences"
-                class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 ml-1 flex items-center gap-1 cursor-pointer"
-                :disabled="isLoadingMoreSentences"
-                @pointerdown.stop
-                @click="loadMoreSentences"
-              >
-                <i class="pi pi-plus text-[0.6rem]" />
-                Load more
-              </button>
-            </div>
-          </div>
-
-          <!-- Pitch accents -->
-          <ClientOnly v-if="srsStore.studySettings.showPitchAccent">
-            <div v-if="pitchAccents" class="mb-3">
-              <h3 class="text-gray-500 dark:text-gray-300 text-sm mb-2">Pitch accent</h3>
-              <div class="flex flex-wrap gap-2">
-                <LazyPitchDiagram v-for="pitch in pitchAccents" :key="pitch" :reading="pitchReadingText" :pitch-accent="pitch" />
-              </div>
-            </div>
-          </ClientOnly>
-
-          <KanjiBreakdown
-            v-if="srsStore.studySettings.showKanjiBreakdown"
-            :key="`${card.wordId}-${card.readingIndex}`"
-            :word-id="card.wordId"
-            :reading-index="card.readingIndex"
-          />
-
-          <WordComposition v-if="srsStore.studySettings.showWordComposition && wordData?.composedOf?.length" :components="wordData.composedOf" />
-
-          <WordUsedIn
-            v-if="srsStore.studySettings.showWordUsedIn && wordData?.usedInTotal"
-            :key="`usedin-${card.wordId}-${card.readingIndex}`"
-            :word-id="card.wordId"
-            :reading-index="card.readingIndex"
-            :initial-items="wordData.usedIn ?? []"
-            :total="wordData.usedInTotal"
-            :highlight="wordData.mainReading.text"
-            :collapsed-count="2"
-          />
-
-          <!-- Deck occurrences -->
-          <div v-if="card.deckOccurrences?.length || card.sourceDeckName" class="mt-4 pt-3 border-t border-surface-200 dark:border-surface-700">
-            <div
-              class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-500 overflow-hidden transition-[max-height] duration-200"
-              :class="occExpanded ? 'max-h-none' : 'max-h-[3.75rem]'"
-            >
-              <template v-if="card.deckOccurrences?.length">
-                <span v-for="occ in card.deckOccurrences" :key="occ.deckId">
-                  ×{{ occ.occurrences }}
-                  <template v-if="occ.parentOriginalTitle"
-                    >{{
-                      localiseTitle({ originalTitle: occ.parentOriginalTitle, romajiTitle: occ.parentRomajiTitle, englishTitle: occ.parentEnglishTitle })
-                    }}
-                    - </template
-                  >{{ localiseTitle(occ) }}
-                </span>
-              </template>
-              <span v-else-if="card.sourceDeckName">{{ card.sourceDeckName }}</span>
-            </div>
-            <button
-              v-if="card.deckOccurrences && card.deckOccurrences.length > 3"
-              type="button"
-              class="mt-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
-              @click="occExpanded = !occExpanded"
-            >
-              {{ occExpanded ? '- View less' : `+ View all ${card.deckOccurrences.length}` }}
-            </button>
-          </div>
+          <template v-for="block in backBlocks" :key="block.id">
+            <component :is="cardBlockRegistry[block.type].component" :block="block" side="back" />
+          </template>
         </div>
       </Transition>
     </div>
 
     <Dialog v-model:visible="showMediaEditor" modal header="Card media" :style="{ width: '32rem' }" :breakpoints="{ '640px': '94vw' }">
-      <CardMediaEditor
-        :word-id="card.wordId"
-        :reading-index="card.readingIndex"
-        :readings="mediaReadings"
-        :dropped-file="droppedFile"
-      />
+      <CardMediaEditor :word-id="card.wordId" :reading-index="card.readingIndex" :readings="mediaReadings" :dropped-file="droppedFile" />
     </Dialog>
   </div>
 </template>
 
 <style scoped>
-  :deep([data-pc-name='tabs']),
-  :deep([data-pc-name='tabpanels']),
-  :deep([data-pc-name='tabpanel']),
-  :deep([data-pc-name='tablist']) {
-    background: transparent !important;
-  }
-  .head-word :deep(rt) {
-    font-size: 0.35em !important;
-    font-weight: 700;
-    color: light-dark(var(--p-surface-700), var(--p-surface-400));
-  }
-
-  /* Write-in reveal: tint the furigana reading to echo whether the typed reading matched. */
-  .head-word.writein-correct :deep(rt) {
-    color: var(--p-green-500);
-  }
-  .head-word.writein-wrong :deep(rt) {
-    color: var(--p-red-500);
-  }
-
   /* Reveal animation for the answer side (enter only, so card advance stays snappy). */
   .reveal-enter-active {
     transition:

@@ -1163,6 +1163,10 @@ export interface StudySettingsDto {
   timedReview: TimedReviewSettings;
   writeInReview: WriteInReviewSettings;
   keybinds: StudyKeybinds;
+  // Null/absent = derive the card layout from the legacy display toggles above. Once the layout editor
+  // writes an explicit layout it takes precedence and those toggles no longer drive the card display.
+  cardLayout?: CardLayout | null;
+  cardLayoutPresets?: CardLayoutPreset[];
 }
 
 export type LeechAction = 'Suspend' | 'NotifyOnly';
@@ -1579,4 +1583,130 @@ export interface CardMediaDeleteTarget {
 export interface CardMediaDeleteBatchResponse {
   deleted: number;
   quota: CardMediaQuotaDto;
+}
+
+export type CardBlockType =
+  | 'cardStatus'
+  | 'headword'
+  | 'cardImage'
+  | 'exampleSentence'
+  | 'confusableReadings'
+  | 'frequencyRank'
+  | 'etymology'
+  | 'definitions'
+  | 'customMeaning'
+  | 'pitchAccent'
+  | 'kanjiBreakdown'
+  | 'wordComposition'
+  | 'wordUsedIn'
+  | 'deckOccurrences'
+  | 'divider';
+
+export type HeadwordFurigana = 'hidden' | 'shown' | 'newOnly' | 'afterFlip';
+
+export type CardTextSize = 'small' | 'medium' | 'large';
+
+export interface HeadwordBlockOptions {
+  furigana: HeadwordFurigana;
+  showAudioButton: boolean;
+  size: CardTextSize;
+}
+
+export interface ExampleSentenceBlockOptions {
+  blur: boolean;
+  showSource: boolean;
+  showActions: boolean;
+  unblurOnFlip: boolean;
+  size: CardTextSize;
+}
+
+export interface FrequencyRankBlockOptions {
+  onlyAfterFlip: boolean;
+}
+
+export interface DefinitionsBlockOptions {
+  maxDefinitions: number | null;
+  size: CardTextSize;
+  spoiler: boolean;
+}
+
+export interface CustomMeaningBlockOptions {
+  size: CardTextSize;
+  spoiler: boolean;
+}
+
+export interface EtymologyBlockOptions {
+  spoiler: boolean;
+}
+
+export interface ConfusableReadingsBlockOptions {
+  spoiler: boolean;
+}
+
+export interface PitchAccentBlockOptions {
+  hideHeading: boolean;
+  spoiler: boolean;
+}
+
+export interface KanjiBreakdownBlockOptions {
+  hideHeading: boolean;
+  spoiler: boolean;
+}
+
+export interface WordCompositionBlockOptions {
+  hideHeading: boolean;
+  spoiler: boolean;
+}
+
+export interface WordUsedInBlockOptions {
+  hideHeading: boolean;
+  spoiler: boolean;
+}
+
+export interface DeckOccurrencesBlockOptions {
+  collapsed: boolean;
+}
+
+export interface CardImageBlockOptions {
+  layout: CardImageLayout;
+  blur: boolean;
+}
+
+export interface DividerBlockOptions {
+  style: 'line' | 'space';
+  label?: string;
+}
+
+export type CardBlockOptions = Partial<
+  HeadwordBlockOptions &
+    ExampleSentenceBlockOptions &
+    FrequencyRankBlockOptions &
+    DefinitionsBlockOptions &
+    CustomMeaningBlockOptions &
+    EtymologyBlockOptions &
+    ConfusableReadingsBlockOptions &
+    PitchAccentBlockOptions &
+    KanjiBreakdownBlockOptions &
+    WordCompositionBlockOptions &
+    WordUsedInBlockOptions &
+    DeckOccurrencesBlockOptions &
+    CardImageBlockOptions &
+    DividerBlockOptions
+>;
+
+export interface CardLayoutBlock {
+  id: string;
+  type: CardBlockType;
+  options?: CardBlockOptions;
+}
+
+export interface CardLayout {
+  version: 1;
+  front: CardLayoutBlock[];
+  back: CardLayoutBlock[];
+}
+
+export interface CardLayoutPreset {
+  name: string;
+  layout: CardLayout;
 }

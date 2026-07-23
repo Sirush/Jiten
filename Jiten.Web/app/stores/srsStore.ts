@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, DueSummaryDto, DeckStreakDto, ReviewForecast30dDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto, SessionStreakDto, ReviewForecastDto } from '~/types';
 import { FsrsRating } from '~/types';
 import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
+import { DEFAULT_CARD_DISPLAY_SETTINGS } from '~/utils/defaultStudySettings';
 import { useAuthStore } from '~/stores/authStore';
 
 interface SessionReview {
@@ -125,6 +126,7 @@ export const useSrsStore = defineStore('srs', () => {
   const moreCardsLikely = ref(false);
   const settingsLoaded = ref(false);
   const studySettings = ref<StudySettingsDto>({
+    ...DEFAULT_CARD_DISPLAY_SETTINGS,
     newCardsPerDay: 20,
     maxReviewsPerDay: 200,
     batchSize: 100,
@@ -133,24 +135,15 @@ export const useSrsStore = defineStore('srs', () => {
     interleaving: 'Mixed',
     newCardGathering: 'TopDeck',
     reviewFrom: 'AllTracked',
-    showPitchAccent: true,
-    exampleSentencePosition: 'Back',
     exampleSentenceSorting: 'Random',
-    blurExampleSentence: false,
     cardImageLayout: 'beside',
     cardImagePosition: 'Back',
     blurCardImage: true,
-    showFrequencyRank: true,
-    showKanjiBreakdown: true,
-    showWordComposition: true,
-    showWordUsedIn: true,
     showNextInterval: true,
     showKeybinds: true,
     showElapsedTime: true,
     enableSwipeGesture: true,
     countFailedReviews: true,
-    showFuriganaOnFront: false,
-    furiganaOnFrontNewOnly: false,
     autoPlayWord: true,
     autoPlaySentence: true,
     autoPlayWordOnFront: false,
@@ -162,7 +155,6 @@ export const useSrsStore = defineStore('srs', () => {
     showReviewActivity: true,
     showReviewForecast: true,
     timezone: 'Europe/London',
-    showConfusableReadings: true,
     dayBoundaryScheduling: false,
     loadBalancing: true,
     easyDays: null,

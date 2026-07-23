@@ -296,6 +296,167 @@ public class StudyTests(JitenWebApplicationFactory factory)
                .Should().Equal(0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5);
     }
 
+    private async Task<JsonElement> GetSettings(string userId)
+    {
+        var response = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-settings").WithUser(userId));
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
+    private Task<HttpResponseMessage> PutSettings(string userId, object body) =>
+        _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
+            .WithUser(userId).WithJsonContent(body));
+
+    [Fact]
+    public async Task StudySettings_CardLayout_RoundTrips()
+    {
+        var layout = new
+        {
+            version = 1,
+            front = new object[]
+            {
+                new { id = "hw1", type = "headword", options = new { furigana = "afterFlip" } },
+                new { id = "ex1", type = "exampleSentence" },
+            },
+            back = new object[]
+            {
+                new { id = "def1", type = "definitions" },
+            },
+        };
+        var presets = new object[]
+        {
+            new
+            {
+                name = "Minimal",
+                layout = new
+                {
+                    version = 1,
+                    front = new object[] { new { id = "h", type = "headword" } },
+                    back = Array.Empty<object>(),
+                },
+            },
+        };
+
+        (await PutSettings(TestUsers.UserA, new { cardLayout = layout, cardLayoutPresets = presets }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await GetSettings(TestUsers.UserA);
+        var cl = body.GetProperty("cardLayout");
+        cl.GetProperty("version").GetInt32().Should().Be(1);
+        cl.GetProperty("front").GetArrayLength().Should().Be(2);
+        cl.GetProperty("front")[0].GetProperty("type").GetString().Should().Be("headword");
+        cl.GetProperty("front")[0].GetProperty("id").GetString().Should().Be("hw1");
+        cl.GetProperty("front")[0].GetProperty("options").GetProperty("furigana").GetString().Should().Be("afterFlip");
+        cl.GetProperty("back").GetArrayLength().Should().Be(1);
+        cl.GetProperty("back")[0].GetProperty("type").GetString().Should().Be("definitions");
+
+        var ps = body.GetProperty("cardLayoutPresets");
+        ps.GetArrayLength().Should().Be(1);
+        ps[0].GetProperty("name").GetString().Should().Be("Minimal");
+        ps[0].GetProperty("layout").GetProperty("front").GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task StudySettings_CardLayout_NullRoundTripsAsNull()
+    {
+        await PutSettings(TestUsers.UserB, new { newCardsPerDay = 15 });
+
+        var body = await GetSettings(TestUsers.UserB);
+        body.GetProperty("cardLayout").ValueKind.Should().Be(JsonValueKind.Null);
+        body.GetProperty("cardLayoutPresets").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task StudySettings_CardLayout_ClampsOversizedInput()
+    {
+        var manyBlocks = Enumerable.Range(0, 40)
+            .Select(i => new { id = "b" + i, type = "divider" }).ToArray();
+        var longType = new string('t', 100);
+        var longId = new string('i', 100);
+        var bigOptionValue = new string('x', 600);
+
+        var layout = new
+        {
+            version = 1,
+            front = manyBlocks,
+            back = new object[]
+            {
+                new { id = longId, type = longType, options = new { big = bigOptionValue, ok = "keep" } },
+            },
+        };
+        var manyPresets = Enumerable.Range(0, 15)
+            .Select(i => new
+            {
+                name = new string('n', 80),
+                layout = new { version = 1, front = Array.Empty<object>(), back = Array.Empty<object>() },
+            }).ToArray();
+
+        await PutSettings(TestUsers.UserA, new { cardLayout = layout, cardLayoutPresets = manyPresets });
+
+        var body = await GetSettings(TestUsers.UserA);
+        var cl = body.GetProperty("cardLayout");
+        cl.GetProperty("front").GetArrayLength().Should().Be(30);
+
+        var backBlock = cl.GetProperty("back")[0];
+        backBlock.GetProperty("type").GetString().Should().HaveLength(40);
+        backBlock.GetProperty("id").GetString().Should().HaveLength(32);
+        var opts = backBlock.GetProperty("options");
+        opts.TryGetProperty("big", out _).Should().BeFalse();
+        opts.GetProperty("ok").GetString().Should().Be("keep");
+
+        var ps = body.GetProperty("cardLayoutPresets");
+        ps.GetArrayLength().Should().Be(10);
+        ps[0].GetProperty("name").GetString().Should().HaveLength(40);
+    }
+
+    [Fact]
+    public async Task StudySettings_CardLayout_PreservedWhenNullFromStaleClient()
+    {
+        var layout = new
+        {
+            version = 1,
+            front = new object[] { new { id = "hw", type = "headword" } },
+            back = Array.Empty<object>(),
+        };
+        var presets = new object[]
+        {
+            new { name = "P", layout = new { version = 1, front = Array.Empty<object>(), back = Array.Empty<object>() } },
+        };
+        await PutSettings(TestUsers.UserA, new { cardLayout = layout, cardLayoutPresets = presets });
+
+        // A stale client sends no cardLayout/presets fields at all — they must not be wiped.
+        await PutSettings(TestUsers.UserA, new { newCardsPerDay = 7 });
+
+        var body = await GetSettings(TestUsers.UserA);
+        body.GetProperty("newCardsPerDay").GetInt32().Should().Be(7);
+        body.GetProperty("cardLayout").ValueKind.Should().Be(JsonValueKind.Object);
+        body.GetProperty("cardLayout").GetProperty("front").GetArrayLength().Should().Be(1);
+        body.GetProperty("cardLayoutPresets").GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task StudySettings_CardLayout_ExplicitEmptyClears()
+    {
+        var layout = new
+        {
+            version = 1,
+            front = new object[] { new { id = "hw", type = "headword" } },
+            back = Array.Empty<object>(),
+        };
+        await PutSettings(TestUsers.UserA, new { cardLayout = layout });
+
+        await PutSettings(TestUsers.UserA, new
+        {
+            cardLayout = new { version = 1, front = Array.Empty<object>(), back = Array.Empty<object>() },
+        });
+
+        var body = await GetSettings(TestUsers.UserA);
+        var cl = body.GetProperty("cardLayout");
+        cl.ValueKind.Should().Be(JsonValueKind.Object);
+        cl.GetProperty("front").GetArrayLength().Should().Be(0);
+        cl.GetProperty("back").GetArrayLength().Should().Be(0);
+    }
+
     [Fact]
     public async Task StudyBatch_RespectsNewCardLimit()
     {

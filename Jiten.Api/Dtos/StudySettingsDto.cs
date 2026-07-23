@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Jiten.Api.Dtos;
@@ -248,6 +249,40 @@ public class StudySettingsDto
 
     [JsonPropertyName("keybinds")]
     public StudyKeybindsDto Keybinds { get; set; } = new();
+
+    /// <summary>
+    /// User-customised ordering of the SRS card blocks per side. Null means "not customised" — the
+    /// client derives the layout from the legacy display toggles. The server bounds its size but does
+    /// not interpret block types; the client registry owns their semantics.
+    /// </summary>
+    [JsonPropertyName("cardLayout")]
+    public CardLayoutDto? CardLayout { get; set; }
+
+    [JsonPropertyName("cardLayoutPresets")]
+    public List<CardLayoutPresetDto>? CardLayoutPresets { get; set; }
+}
+
+[JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
+public class CardLayoutDto
+{
+    [JsonPropertyName("version")] public int Version { get; set; } = 1;
+    [JsonPropertyName("front")] public List<CardLayoutBlockDto> Front { get; set; } = new();
+    [JsonPropertyName("back")] public List<CardLayoutBlockDto> Back { get; set; } = new();
+}
+
+[JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
+public class CardLayoutBlockDto
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
+    [JsonPropertyName("options")] public Dictionary<string, JsonElement>? Options { get; set; }
+}
+
+[JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
+public class CardLayoutPresetDto
+{
+    [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
+    [JsonPropertyName("layout")] public CardLayoutDto Layout { get; set; } = new();
 }
 
 [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
