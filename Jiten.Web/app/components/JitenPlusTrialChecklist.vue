@@ -20,6 +20,7 @@
   const included = computed(() => [
     trialStorage.value ? `Card images & audio uploads (${trialStorage.value} of storage)` : 'Card images & audio uploads',
     'Custom frequency lists (generate & download)',
+    'Build custom immersion plans',
     '5 media request boosts each month',
   ]);
 

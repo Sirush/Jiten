@@ -15,6 +15,7 @@ public sealed record UserLimits(JitenPlusTier Tier, JitenPlusLimitsOptions Allow
     public int ImportWords => Allowances.ImportWords.ForTier(Tier);
     public int ActiveMediaRequests => Allowances.ActiveMediaRequests.ForTier(Tier);
     public int CustomSentencesPerWord => Allowances.CustomSentencesPerWord.ForTier(Tier);
+    public int Roadmaps => Allowances.Roadmaps.ForTier(Tier);
 }
 
 /// <summary>

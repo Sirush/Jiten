@@ -46,6 +46,7 @@ public class UserDbContext : IdentityDbContext<User>
     public DbSet<PromoCode> PromoCodes { get; set; }
     public DbSet<UserPromoCredit> UserPromoCredits { get; set; }
     public DbSet<UserFrequencyList> UserFrequencyLists { get; set; }
+    public DbSet<UserRoadmap> UserRoadmaps { get; set; }
     public DbSet<UserCardMedia> UserCardMedia { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -459,6 +460,35 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasIndex(upc => new { upc.UserId, upc.PromoCodeId })
                   .IsUnique()
                   .HasDatabaseName("IX_UserPromoCredit_UserId_PromoCodeId");
+        });
+
+        modelBuilder.Entity<UserRoadmap>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            if (isNpgsql)
+            {
+                entity.Property(r => r.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+                entity.Property(r => r.DefinitionJson).HasColumnType("jsonb").IsRequired();
+                entity.Property(r => r.StepsJson).HasColumnType("jsonb").IsRequired();
+            }
+            else
+            {
+                entity.Property(r => r.DefinitionJson).IsRequired();
+                entity.Property(r => r.StepsJson).IsRequired();
+            }
+
+            entity.Property(r => r.Name).HasMaxLength(100).IsRequired();
+            entity.Property(r => r.FailureReason).HasMaxLength(500);
+            entity.Property(r => r.CreatedAt).IsRequired();
+            entity.Ignore(r => r.Definition);
+            entity.Ignore(r => r.Payload);
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(r => r.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(r => r.UserId).HasDatabaseName("IX_UserRoadmap_UserId");
         });
 
         modelBuilder.Entity<UserFrequencyList>(entity =>

@@ -2,7 +2,12 @@ import { useAuthStore } from '~/stores/authStore';
 
 export type JitenPlusTier = 'none' | 'trial' | 'full';
 
-export type JitenPlusFeature = 'card-media' | 'freq-list-save' | 'freq-list-generate' | 'request-boosts';
+export type JitenPlusFeature =
+  | 'card-media'
+  | 'freq-list-save'
+  | 'freq-list-generate'
+  | 'request-boosts'
+  | 'immersion-plan-generate';
 
 export interface PromoCreditInfo {
   userPromoCreditId: number;
@@ -77,6 +82,7 @@ const FEATURE_TIERS: Record<JitenPlusFeature, 'trial' | 'full'> = {
   'freq-list-save': 'full',
   'freq-list-generate': 'trial',
   'request-boosts': 'trial',
+  'immersion-plan-generate': 'trial',
 };
 
 // Deduplicates concurrent first-fetches across the many gates that mount at once (client-only,
@@ -182,5 +188,5 @@ export function useJitenPlus() {
     return tierSatisfies(FEATURE_TIERS[feature]);
   }
 
-  return { tier, isFull, isTrial, isPlus, sources, quota, limits, loading, refresh, reset, hasFeature, tierSatisfies };
+  return { tier, isFull, isTrial, isPlus, sources, quota, limits, loading, fetched, refresh, reset, hasFeature, tierSatisfies };
 }

@@ -32,4 +32,6 @@ public sealed class JitenPlusLimitsOptions
     public TieredLimit ActiveMediaRequests { get; set; } = new() { Free = 20, Plus = 30 };
 
     public TieredLimit CustomSentencesPerWord { get; set; } = new() { Free = 3, Plus = 10 };
+
+    public TieredLimit Roadmaps { get; set; } = new() { Free = 0, Plus = 50 };
 }

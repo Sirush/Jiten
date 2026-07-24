@@ -1715,3 +1715,21 @@ export interface CardLayoutPreset {
   name: string;
   layout: CardLayout;
 }
+
+export interface JitenPlusLimitPair {
+  free: number;
+  plus: number;
+}
+
+export interface JitenPlusPricingInfo {
+  lifetimeWindowEnd: string;
+  lifetimeAvailable: boolean;
+  cardMediaStorage: { trialBytes: number; fullBytes: number };
+  limits: {
+    studyDecks: JitenPlusLimitPair;
+    studyDeckWords: JitenPlusLimitPair;
+    importWords: JitenPlusLimitPair;
+    activeMediaRequests: JitenPlusLimitPair;
+    customSentencesPerWord: JitenPlusLimitPair;
+  };
+}

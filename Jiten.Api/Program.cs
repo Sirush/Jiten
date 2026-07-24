@@ -384,6 +384,7 @@ builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Ap
 builder.Services.AddScoped<Jiten.Api.Services.Stripe.StripeService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
 builder.Services.AddSingleton<Jiten.Core.Services.DeckVectorService>();
+builder.Services.AddScoped<IRoadmapDataLoader, RoadmapDataLoader>();
 builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
 builder.Services.AddScoped<IStudyDeckMembershipService, StudyDeckMembershipService>();
 builder.Services.AddScoped<IDeckDownloadService, DeckDownloadService>();
@@ -587,6 +588,7 @@ builder.Services.AddScoped<RecomputeVectorsJob>();
 builder.Services.AddScoped<StripeReconcileJob>();
 builder.Services.AddScoped<DecrementPromoCreditsJob>();
 builder.Services.AddScoped<FrequencyListJob>();
+builder.Services.AddScoped<RoadmapJob>();
 
 builder.Services.AddHangfire(configuration =>
                                  configuration.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
