@@ -19,21 +19,21 @@ public class NotificationService(JitenDbContext context)
 
     public async Task NotifyMany(IEnumerable<string> userIds, NotificationType type, string title, string message, string? linkUrl = null)
     {
-        var distinct = userIds.Distinct().ToList();
-        if (distinct.Count == 0) return;
+        var notifications = userIds.Distinct()
+                                   .Select(userId => new Notification
+                                   {
+                                       UserId = userId,
+                                       Type = type,
+                                       Title = title,
+                                       Message = message,
+                                       LinkUrl = linkUrl
+                                   })
+                                   .ToList();
 
-        foreach (var userId in distinct)
-        {
-            context.Notifications.Add(new Notification
-            {
-                UserId = userId,
-                Type = type,
-                Title = title,
-                Message = message,
-                LinkUrl = linkUrl
-            });
-        }
+        if (notifications.Count == 0) return;
 
+        // AddRange runs change detection once; per-row Add is quadratic at site-wide broadcast sizes.
+        context.Notifications.AddRange(notifications);
         await context.SaveChangesAsync();
     }
 }

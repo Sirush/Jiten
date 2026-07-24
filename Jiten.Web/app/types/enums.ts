@@ -199,7 +199,9 @@ export enum NotificationType {
   RequestStatusChanged = 1,
   RequestCompleted = 2,
   RequestFileUploaded = 3,
+  RequestAdminComment = 4,
   General = 10,
+  SiteUpdate = 11,
 }
 
 export enum RequestAction {

@@ -22,6 +22,7 @@
     "@nuxt/content": "^3.14.0",
     "@nuxt/icon": "1.15.0",
     "@nuxt/scripts": "0.13.2",
+    "@nuxtjs/mdc": "^0.22.0",
     "@nuxtjs/seo": "3.4.0",
     "@pinia/nuxt": "0.11.3",
     "@primeuix/themes": "1.2.5",

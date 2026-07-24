@@ -129,6 +129,16 @@
       </Card>
 
       <Card class="shadow-md">
+        <template #title>Site Updates</template>
+        <template #content>
+          <p class="mb-4">Write, preview and publish changelog entries</p>
+          <div class="flex justify-center">
+            <Button label="Manage Updates" icon="pi pi-megaphone" class="p-button-primary" @click="navigateTo('/dashboard/updates')" />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
         <template #title>Jiten+</template>
         <template #content>
           <p class="mb-4">Grant Jiten+ rewards and manage promo codes</p>

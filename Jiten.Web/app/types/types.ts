@@ -1733,3 +1733,22 @@ export interface JitenPlusPricingInfo {
     customSentencesPerWord: JitenPlusLimitPair;
   };
 }
+
+export interface SiteUpdate {
+  id: number;
+  title: string;
+  bodyMarkdown: string;
+  publishedAt: string;
+  updatedAt?: string | null;
+}
+
+export interface AdminSiteUpdate {
+  id: number;
+  title: string;
+  bodyMarkdown: string;
+  notificationTeaser?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  publishedAt?: string | null;
+  notifiedAt?: string | null;
+}

@@ -66,6 +66,7 @@ public class JitenDbContext : DbContext
     public DbSet<MediaRequestUpload> MediaRequestUploads { get; set; }
     public DbSet<RequestActivityLog> RequestActivityLogs { get; set; }
     public DbSet<Notification> Notifications { get; set; }
+    public DbSet<SiteUpdate> SiteUpdates { get; set; }
 
     public JitenDbContext()
     {
@@ -932,6 +933,29 @@ public class JitenDbContext : DbContext
             }
             entity.HasIndex(n => n.CreatedAt)
                   .HasDatabaseName("IX_Notification_CreatedAt");
+        });
+
+        modelBuilder.Entity<SiteUpdate>(entity =>
+        {
+            entity.ToTable("SiteUpdates", "jiten");
+            entity.HasKey(u => u.Id);
+            entity.Property(u => u.Id).ValueGeneratedOnAdd();
+            entity.Property(u => u.Title).IsRequired().HasMaxLength(200);
+            entity.Property(u => u.BodyMarkdown).IsRequired();
+            entity.Property(u => u.NotificationTeaser).HasMaxLength(300);
+            entity.Property(u => u.CreatedAt).IsRequired();
+
+            if (isNpgsql)
+            {
+                entity.HasIndex(u => u.PublishedAt)
+                      .IsDescending(true)
+                      .HasDatabaseName("IX_SiteUpdate_PublishedAt");
+            }
+            else
+            {
+                entity.HasIndex(u => u.PublishedAt)
+                      .HasDatabaseName("IX_SiteUpdate_PublishedAt");
+            }
         });
 
         modelBuilder.Entity<DifficultyVote>(entity =>

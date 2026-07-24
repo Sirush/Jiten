@@ -186,6 +186,7 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
 
         db.Notifications.RemoveRange(db.Notifications);
+        db.SiteUpdates.RemoveRange(db.SiteUpdates);
         db.RequestActivityLogs.RemoveRange(db.RequestActivityLogs);
         db.MediaRequestUploads.RemoveRange(db.MediaRequestUploads);
         db.MediaRequestComments.RemoveRange(db.MediaRequestComments);

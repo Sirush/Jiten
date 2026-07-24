@@ -54,6 +54,7 @@ function getNotificationIcon(type: NotificationType): string {
     case NotificationType.RequestCompleted: return 'pi pi-check-circle';
     case NotificationType.RequestStatusChanged: return 'pi pi-info-circle';
     case NotificationType.RequestFileUploaded: return 'pi pi-upload';
+    case NotificationType.SiteUpdate: return 'pi pi-megaphone';
     default: return 'pi pi-bell';
   }
 }
@@ -63,6 +64,7 @@ function getNotificationIconClass(type: NotificationType): string {
     case NotificationType.RequestCompleted: return 'text-green-500';
     case NotificationType.RequestStatusChanged: return 'text-blue-500';
     case NotificationType.RequestFileUploaded: return 'text-orange-500';
+    case NotificationType.SiteUpdate: return 'text-purple-500';
     default: return 'text-muted-color';
   }
 }
