@@ -19,17 +19,5 @@
 </script>
 
 <template>
-  <Card>
-    <template #title>
-      <div class="flex items-center gap-2">
-        <h3 class="text-lg font-semibold">Jiten+</h3>
-      </div>
-    </template>
-    <template #content>
-      <p class="text-gray-600 dark:text-gray-300 mb-3">{{ detailLine }}</p>
-      <NuxtLink to="/settings/subscription">
-        <Button icon="pi pi-star" label="Manage Jiten+" class="w-full md:w-64" />
-      </NuxtLink>
-    </template>
-  </Card>
+  <SettingsTile icon="pi pi-star" title="Jiten+" to="/settings/subscription" description="Subscription, billing and perks." :status="detailLine" />
 </template>

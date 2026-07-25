@@ -1,4 +1,4 @@
-<script async setup lang="ts">
+<script setup lang="ts">
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { type ApiKeyInfo, type CreateApiKeyResponse } from '~/types/types';
@@ -21,7 +21,14 @@
     }
   };
 
-  await fetchApiKeyInfo();
+  onMounted(fetchApiKeyInfo);
+
+  const status = computed(() => {
+    if (!apiKeyInfo.value) return null;
+    if (apiKeyInfo.value.isRevoked) return 'Revoked';
+    const lastUsed = apiKeyInfo.value.lastUsedAt ? formatDateShort(apiKeyInfo.value.lastUsedAt) : 'never used';
+    return `Created ${formatDateShort(apiKeyInfo.value.createdAt)} - last used ${lastUsed}`;
+  });
 
   const createApiKey = async () => {
     try {
@@ -143,62 +150,40 @@
       });
     }
   };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
-  };
 </script>
 
 <template>
-  <div>
-    <Card>
-      <template #title>
-        <h3 class="text-lg font-semibold">API Key</h3>
-      </template>
-      <template #content>
-        <div v-if="newlyCreatedKey" class="mb-4">
-          <Message severity="warn" :closable="false">
-            <p class="font-semibold mb-2">Your new API key (only shown once):</p>
-            <div class="flex items-center gap-2">
-              <code class="bg-surface-100 dark:bg-surface-800 p-2 rounded text-sm break-all flex-1">
-                {{ newlyCreatedKey }}
-              </code>
-              <Button :icon="isCopied ? 'pi pi-check' : 'pi pi-copy'" :severity="isCopied ? 'success' : 'secondary'" @click="copyToClipboard" />
-            </div>
-          </Message>
-        </div>
+  <SettingsTile
+    icon="pi pi-key"
+    title="API Key"
+    description="Authenticate third-party apps. Anyone holding the key can read all your information, so make sure it's a trusted source."
+    :status="status"
+  >
+    <Message v-if="newlyCreatedKey" severity="warn" :closable="false" class="mt-3">
+      <p class="mb-2 font-semibold">Your new API key (only shown once):</p>
+      <div class="flex items-center gap-2">
+        <code class="flex-1 rounded bg-surface-100 p-2 text-sm break-all dark:bg-surface-800">{{ newlyCreatedKey }}</code>
+        <Button
+          :icon="isCopied ? 'pi pi-check' : 'pi pi-copy'"
+          :severity="isCopied ? 'success' : 'secondary'"
+          :aria-label="isCopied ? 'API key copied' : 'Copy API key'"
+          @click="copyToClipboard"
+        />
+      </div>
+    </Message>
 
-        <div v-if="!apiKeyInfo && !newlyCreatedKey">
-          <p class="mb-4">
-            API keys allow you to authenticate with the Jiten API from 3rd party applications. Never give this key to anyone or an application you don't trust as it can access all your information.
-          </p>
-          <Message severity="info" :closable="false" class="mb-4">
-            <p>Your API key will only be shown once after creation. Make sure to store it securely.</p>
-          </Message>
-          <Button icon="pi pi-key" label="Generate API Key" :loading="isLoading" @click="confirmGenerate" />
-        </div>
-
-        <div v-else-if="apiKeyInfo">
-          <div class="space-y-2 mb-4">
-            <p>
-              <span class="font-semibold">Key preview:</span>
-              <code class="bg-surface-100 dark:bg-surface-800 px-2 py-1 rounded ml-2">{{ apiKeyInfo.keyPreview }}</code>
-            </p>
-            <p>
-              <span class="font-semibold">Created:</span>
-              {{ formatDate(apiKeyInfo.createdAt) }}
-            </p>
-            <p>
-              <span class="font-semibold">Last used:</span>
-              {{ apiKeyInfo.lastUsedAt ? formatDate(apiKeyInfo.lastUsedAt) : 'Never' }}
-            </p>
-          </div>
-          <Button icon="pi pi-refresh" label="Regenerate API Key" severity="warn" :loading="isLoading" :disabled="isLoading || apiKeyInfo.isRevoked" @click="confirmRegenerate" />
-        </div>
-      </template>
-    </Card>
-<!--    <BlockUI :blocked="isLoading" full-screen />-->
-  </div>
+    <Button
+      v-if="apiKeyInfo"
+      icon="pi pi-refresh"
+      label="Regenerate"
+      severity="warn"
+      size="small"
+      outlined
+      class="mt-3"
+      :loading="isLoading"
+      :disabled="isLoading || apiKeyInfo.isRevoked"
+      @click="confirmRegenerate"
+    />
+    <Button v-else icon="pi pi-key" label="Generate API key" size="small" outlined class="mt-3" :loading="isLoading" @click="confirmGenerate" />
+  </SettingsTile>
 </template>
-
-<style scoped></style>

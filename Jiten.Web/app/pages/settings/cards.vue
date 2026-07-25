@@ -576,6 +576,7 @@
     <!-- Header -->
     <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
       <div class="flex items-center gap-2">
+        <SettingsBackLink />
         <h1 class="text-2xl font-bold">My Cards</h1>
         <span v-if="!loading" class="text-surface-500 text-sm">({{ stats.total }})</span>
       </div>
