@@ -210,6 +210,8 @@
         </template>
       </Card>
 
+      <ProfileVocabularySummary :username="displayUsername" />
+
       <div v-if="accomplishments.length === 0" class="text-center py-8">
         <Message severity="info">No accomplishments yet. Complete some media to see your stats!</Message>
       </div>

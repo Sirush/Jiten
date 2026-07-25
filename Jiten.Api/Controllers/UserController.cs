@@ -48,6 +48,11 @@ public class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
+        return Results.Ok(await ComputeKnownWordAmountAsync(userId));
+    }
+
+    private async Task<KnownWordAmountDto> ComputeKnownWordAmountAsync(string userId)
+    {
         var fsrsCards = await userContext.FsrsCards
                                          .AsNoTracking()
                                          .Where(uk => uk.UserId == userId)
@@ -179,22 +184,22 @@ public class UserController(
                 redundantForms++;
         }
 
-        return Results.Ok(new KnownWordAmountDto
-                          {
-                              Young = youngWords,
-                              YoungForm = youngForms,
-                              Mature = matureWords,
-                              MatureForm = matureForms,
-                              Mastered = masteredWords,
-                              MasteredForm = masteredForms,
-                              Blacklisted = blacklistedWords,
-                              BlacklistedForm = blacklistedForms,
-                              WordSetMastered = wsMasteredWordIds.Count,
-                              WordSetMasteredForm = wsMasteredForms,
-                              WordSetBlacklisted = wsBlacklistedWordIds.Count,
-                              WordSetBlacklistedForm = wsBlacklistedForms,
-                              RedundantForms = redundantForms
-                          });
+        return new KnownWordAmountDto
+               {
+                   Young = youngWords,
+                   YoungForm = youngForms,
+                   Mature = matureWords,
+                   MatureForm = matureForms,
+                   Mastered = masteredWords,
+                   MasteredForm = masteredForms,
+                   Blacklisted = blacklistedWords,
+                   BlacklistedForm = blacklistedForms,
+                   WordSetMastered = wsMasteredWordIds.Count,
+                   WordSetMasteredForm = wsMasteredForms,
+                   WordSetBlacklisted = wsBlacklistedWordIds.Count,
+                   WordSetBlacklistedForm = wsBlacklistedForms,
+                   RedundantForms = redundantForms
+               };
     }
 
     /// <summary>
@@ -2856,6 +2861,64 @@ public class UserController(
         longest = Math.Max(longest, streak);
 
         return (currentStreak, Math.Max(longest, currentStreak));
+    }
+
+    #endregion
+
+    #region Profile Vocabulary Stats
+
+    /// <summary>
+    /// Get aggregate known-word counts for a user profile.
+    /// </summary>
+    [HttpGet("profile/{username}/vocabulary-stats")]
+    [AllowAnonymous]
+    [SwaggerOperation(Summary = "Get aggregate vocabulary knowledge counts for a user profile")]
+    public async Task<IResult> GetProfileVocabularyStats(string username)
+    {
+        var user = await userContext.Users
+                                    .AsNoTracking()
+                                    .FirstOrDefaultAsync(u => u.NormalizedUserName == username.ToUpperInvariant());
+
+        if (user == null)
+            return Results.NotFound(new { message = "Profile not found" });
+
+        var targetUserId = user.Id;
+        var currentUserId = userService.UserId;
+        var isOwnProfile = currentUserId == targetUserId;
+
+        if (!isOwnProfile)
+        {
+            var profile = await userContext.UserProfiles
+                                           .AsNoTracking()
+                                           .FirstOrDefaultAsync(p => p.UserId == targetUserId);
+
+            if (profile is not { IsPublic: true })
+                return Results.NotFound(new { message = "Profile not found" });
+        }
+
+        // Counting loads every FSRS card for the user; this endpoint is anonymous and crawlable.
+        var redisDb = redis.GetDatabase();
+        var cacheKey = $"jiten:profile-vocab:{targetUserId}";
+
+        var cached = await redisDb.StringGetAsync(cacheKey);
+        if (!cached.IsNullOrEmpty)
+        {
+            var hit = JsonSerializer.Deserialize<ProfileVocabularyStatsDto>(cached!);
+            if (hit != null) return Results.Ok(hit);
+        }
+
+        var amounts = await ComputeKnownWordAmountAsync(targetUserId);
+        var dto = new ProfileVocabularyStatsDto
+                  {
+                      Young = amounts.Young,
+                      Mature = amounts.Mature,
+                      Mastered = amounts.Mastered,
+                      WordSetMastered = amounts.WordSetMastered
+                  };
+
+        await redisDb.StringSetAsync(cacheKey, JsonSerializer.Serialize(dto), expiry: TimeSpan.FromMinutes(5));
+
+        return Results.Ok(dto);
     }
 
     #endregion
