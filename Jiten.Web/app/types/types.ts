@@ -603,6 +603,13 @@ export interface UserAccomplishment {
   lastComputedAt: string;
 }
 
+export interface ProfileVocabularyStats {
+  young: number;
+  mature: number;
+  mastered: number;
+  wordSetMastered: number;
+}
+
 export interface AccomplishmentVocabularyDto {
   words: Word[];
 }

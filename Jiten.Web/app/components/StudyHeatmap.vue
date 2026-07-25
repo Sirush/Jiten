@@ -5,6 +5,10 @@
     username: string;
   }>();
 
+  const emit = defineEmits<{
+    loaded: [data: StudyHeatmapResponse | null];
+  }>();
+
   const { $api } = useNuxtApp();
 
   const isLoading = ref(false);
@@ -32,8 +36,10 @@
       error.value = fetchError?.response?.status === 404
         ? 'Study data not available'
         : 'Failed to load study heatmap';
+      heatmapData.value = null;
     } finally {
       isLoading.value = false;
+      emit('loaded', heatmapData.value);
     }
   };
 

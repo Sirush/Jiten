@@ -1,13 +1,12 @@
 <script setup lang="ts">
-  interface ProfileVocabularyStats {
-    young: number;
-    mature: number;
-    mastered: number;
-    wordSetMastered: number;
-  }
+  import type { ProfileVocabularyStats } from '~/types';
 
   const props = defineProps<{
     username: string;
+  }>();
+
+  const emit = defineEmits<{
+    loaded: [stats: ProfileVocabularyStats | null];
   }>();
 
   const { $api } = useNuxtApp();
@@ -23,6 +22,7 @@
       stats.value = null;
     } finally {
       isLoading.value = false;
+      emit('loaded', stats.value);
     }
   };
 

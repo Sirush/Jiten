@@ -1,6 +1,13 @@
 <script setup lang="ts">
   import { useAuthStore } from '~/stores/authStore';
-  import { type UserProfile, type UserAccomplishment, MediaType } from '~/types';
+  import {
+    type UserProfile,
+    type UserAccomplishment,
+    type ProfileVocabularyStats,
+    type StudyHeatmapResponse,
+    type KnowledgeGrowth,
+    MediaType,
+  } from '~/types';
   import { useToast } from 'primevue/usetoast';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 
@@ -30,8 +37,15 @@
     { watch: [targetUsername] }
   );
 
+  const shareVocabulary = ref<ProfileVocabularyStats | null>(null);
+  const shareGrowth = ref<KnowledgeGrowth | null>(null);
+  const shareHeatmap = ref<StudyHeatmapResponse | null>(null);
+
   watch(targetUsername, () => {
     selectedTab.value = 'global';
+    shareVocabulary.value = null;
+    shareGrowth.value = null;
+    shareHeatmap.value = null;
   });
 
   const accomplishments = computed(() => accomplishmentsData.value ?? []);
@@ -190,7 +204,16 @@
         <template #content>
           <div class="flex justify-between items-center flex-wrap gap-4">
             <div>
-              <h1 class="text-2xl font-bold">{{ displayUsername }}</h1>
+              <div class="flex items-center gap-3">
+                <h1 class="text-2xl font-bold">{{ displayUsername }}</h1>
+                <ProfileShareButton
+                  v-if="isOwnProfile"
+                  :username="displayUsername"
+                  :vocabulary="shareVocabulary"
+                  :growth="shareGrowth"
+                  :accomplishment="globalAccomplishment ?? null"
+                  :heatmap="shareHeatmap" />
+              </div>
               <p class="text-gray-500 text-sm">
                 <span v-if="profile.isPublic">Public profile</span>
                 <span v-else>Private profile</span>
@@ -210,7 +233,10 @@
         </template>
       </Card>
 
-      <ProfileVocabularySummary :username="displayUsername" />
+      <ProfileVocabularySummary :username="displayUsername" @loaded="shareVocabulary = $event" />
+
+      <!-- srs/knowledge-growth is scoped to the signed-in user, so it can only be shown on your own profile. -->
+      <ProfileGrowthSummary v-if="isOwnProfile" @loaded="shareGrowth = $event" />
 
       <div v-if="accomplishments.length === 0" class="text-center py-8">
         <Message severity="info">No accomplishments yet. Complete some media to see your stats!</Message>
@@ -310,7 +336,7 @@
           </div>
         </template>
         <template #content>
-          <StudyHeatmap :username="displayUsername" />
+          <StudyHeatmap :username="displayUsername" @loaded="shareHeatmap = $event" />
         </template>
       </Card>
 
