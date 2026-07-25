@@ -19,8 +19,10 @@
     { label: 'Global Frequency', value: 'globalFreq' },
   ]);
 
+  const ALL_MEDIA_TYPES = 'all';
+
   const mediaTypeOptions = computed(() => {
-    const options = [{ label: 'All Media Types', value: '' }];
+    const options = [{ label: 'All Media Types', value: ALL_MEDIA_TYPES }];
     for (const type of Object.values(MediaType).filter((v) => typeof v === 'number')) {
       options.push({
         label: getMediaTypeText(type as MediaType),
@@ -32,7 +34,7 @@
 
   const sortDescending = ref(route.query.sortOrder !== 'false' && route.query.sortOrder !== '0');
   const sortBy = ref(route.query.sortBy?.toString() || sortByOptions.value[0].value);
-  const mediaTypeFilter = ref(route.query.mediaType?.toString() || '');
+  const mediaTypeFilter = ref(route.query.mediaType?.toString() || ALL_MEDIA_TYPES);
   const display = ref(route.query.display?.toString() || 'all');
   const search = ref(route.query.search?.toString() || '');
   const debouncedSearch = ref(search.value);
@@ -55,7 +57,7 @@
 
   watch(mediaTypeFilter, (newValue) => {
     router.replace({
-      query: { ...route.query, mediaType: newValue || undefined, offset: 0 },
+      query: { ...route.query, mediaType: newValue === ALL_MEDIA_TYPES ? undefined : newValue, offset: 0 },
     });
   });
 
@@ -115,7 +117,7 @@
       excludePos: debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined,
       hideKanaOnly: debouncedHideKanaOnly.value || undefined,
     };
-    if (mediaTypeFilter.value) {
+    if (mediaTypeFilter.value !== ALL_MEDIA_TYPES) {
       params.mediaType = parseInt(mediaTypeFilter.value);
     }
     return params;
