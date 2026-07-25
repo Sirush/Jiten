@@ -1752,3 +1752,44 @@ export interface AdminSiteUpdate {
   publishedAt?: string | null;
   notifiedAt?: string | null;
 }
+
+export type JourneyGranularity = 'weekly' | 'monthly';
+
+export interface GrowthPoint {
+  date: string;
+  knownWords: number;
+  knownWordsCombined: number;
+}
+
+export interface JourneyPoint extends GrowthPoint {
+  coverage: number;
+  combinedCoverage: number;
+  uniqueCoverage: number;
+  combinedUniqueCoverage: number;
+}
+
+export interface JourneyMilestone {
+  threshold: number;
+  reachedAt: string;
+  unique: boolean;
+}
+
+export interface CoverageJourney {
+  deckId: number;
+  granularity: JourneyGranularity;
+  points: JourneyPoint[];
+  milestones: JourneyMilestone[];
+  startDate: string | null;
+  startCoverage: number;
+  currentCoverage: number;
+  startUniqueCoverage: number;
+  currentUniqueCoverage: number;
+  hasEnoughHistory: boolean;
+  asOf: string | null;
+}
+
+export interface KnowledgeGrowth {
+  granularity: JourneyGranularity;
+  points: GrowthPoint[];
+  hasEnoughHistory: boolean;
+}

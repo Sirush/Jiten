@@ -19,6 +19,7 @@
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { useApiFetch } from '~/composables/useApiFetch';
+  import { coverUrl } from '~/utils/coverImage';
   import { MediaType, type Tag as MediaTag, type MediaSuggestion } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getAllGenres } from '~/utils/genreMapper';
@@ -129,10 +130,6 @@
   const previewSample = ref<string[]>([]);
   const previewLoading = ref(false);
   const minDecks = 2;
-
-  function coverUrl(coverName: string): string {
-    return !coverName || coverName === 'nocover.jpg' ? '/img/nocover.jpg' : coverName;
-  }
 
   function csv(values: number[]): string {
     return values.join(',');

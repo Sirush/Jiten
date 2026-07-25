@@ -53,6 +53,15 @@
 
   const showLifetimeNotice = computed(() => lifetimeAvailable.value && !!lifetimeWindowEndLabel.value && !isLifetime.value);
 
+  const exampleJourney = computed(() => buildExampleJourney());
+  const exampleRange = computed(() => {
+    const points = exampleJourney.value.points;
+    return {
+      start: formatBucketDated(points[0]!.date, 'monthly'),
+      end: formatBucketDated(points[points.length - 1]!.date, 'monthly'),
+    };
+  });
+
   onMounted(() => {
     if (route.query.checkout === 'cancelled') {
       toast.add({
@@ -70,7 +79,7 @@
   useSeoMeta({
     title: 'Jiten+ - Get more from Jiten and help it grow',
     description:
-      'Jiten+ adds richer cards, custom frequency lists, a personalised immersion plan, media request boosts, higher limits and more while helping support Jiten. Everything free stays free.',
+      'Jiten+ adds richer cards, custom frequency lists, a personalised immersion plan, media request boosts, your coverage journey, higher limits and more while helping support Jiten. Everything free stays free.',
     ogTitle: 'Jiten+ - Get more from Jiten and help it grow',
     ogDescription: 'Get useful extras while helping support Jiten. Everything free stays free.',
     ogType: 'website',
@@ -140,9 +149,13 @@
             </li>
             <li class="inline-flex items-center gap-1.5">
               <Icon name="material-symbols:check-circle-rounded" class="text-primary-500" />
-              Build personalised immersion plans
+              Personalised immersion plans
             </li>
-            <li class="basis-full inline-flex items-center justify-center gap-1.5">
+            <li class="inline-flex items-center gap-1.5">
+              <Icon name="material-symbols:check-circle-rounded" class="text-primary-500" />
+              Your coverage journey
+            </li>
+            <li class="inline-flex items-center gap-1.5">
               <Icon name="material-symbols:check-circle-rounded" class="text-primary-500" />
               Higher limits &amp; monthly boosts
             </li>
@@ -162,6 +175,20 @@
         <div class="mt-10">
           <JitenPlusPricingCards :pricing="pricing" />
         </div>
+
+        <!-- Personal note -->
+        <section class="mt-10 max-w-3xl mx-auto text-center border-y border-gray-200 dark:border-gray-800 py-7">
+          <h2 class="jp-note__title text-gray-900 dark:text-white">Made by one person</h2>
+          <p class="jp-note__body text-gray-600 dark:text-gray-300">
+            Jiten is built and maintained by me alone. It's not a side project: I have been working on it full time for over a year now, and have spent
+            thousands of hours on the parser, the decks and everything in between. I am very grateful for all the contributions and donations, but they don't
+            cover a salary yet, and Jiten+ is what gets it there, without putting anything that's currently free behind a paywall.
+          </p>
+          <p class="jp-note__sign">
+            <span class="jp-note__name text-gray-800 dark:text-gray-100">Sirus</span>
+            <span class="jp-note__role text-gray-500 dark:text-gray-400">Creator of Jiten</span>
+          </p>
+        </section>
 
         <!-- What you get -->
         <section class="mt-14 max-w-4xl mx-auto">
@@ -203,6 +230,45 @@
               </p>
             </div>
 
+            <div class="jp-feature border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+              <div class="jp-feature__head">
+                <Icon name="material-symbols:bolt-rounded" class="jp-feature__icon" />
+                <h3 class="jp-feature__title text-gray-900 dark:text-white">Media request boosts</h3>
+              </div>
+              <p class="jp-feature__body text-gray-600 dark:text-gray-300">
+                Get 5 boosts every month to prioritize any open media request. Each boost is the equivalent of 5 regular votes.
+              </p>
+            </div>
+
+            <div class="jp-feature sm:col-span-2 border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+              <div class="grid gap-4">
+                <div class="text-center">
+                  <div class="jp-feature__head justify-center">
+                    <Icon name="material-symbols:show-chart-rounded" class="jp-feature__icon" />
+                    <h3 class="jp-feature__title text-gray-900 dark:text-white">Your coverage journey</h3>
+                  </div>
+                  <p class="jp-feature__body text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+                    Watch how the coverage of the titles you're interested in grows over time. Get a look back at the journey that got you where you are today.
+                  </p>
+                </div>
+                <div class="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-3">
+                  <div class="flex items-baseline justify-between gap-2 mb-1">
+                    <span class="text-sm font-semibold">
+                      <span class="text-gray-500 dark:text-gray-400">{{ exampleJourney.startCoverage.toFixed(0) }}%</span>
+                      <span class="text-gray-400 dark:text-gray-500 mx-1">&rarr;</span>
+                      <span class="text-primary-600 dark:text-primary-300">{{ exampleJourney.currentCoverage.toFixed(0) }}% readable</span>
+                    </span>
+                    <span class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Example</span>
+                  </div>
+                  <LazyCoverageJourneyChart :points="exampleJourney.points" granularity="monthly" compact :tooltip="false" height="150px" hydrate-on-visible />
+                  <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                    <span>{{ exampleRange.start }}</span>
+                    <span>{{ exampleRange.end }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div v-if="limitRows.length" class="jp-feature sm:col-span-2 border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
               <div class="jp-feature__head">
                 <Icon name="material-symbols:trending-up-rounded" class="jp-feature__icon" />
@@ -227,26 +293,6 @@
                   </tbody>
                 </table>
               </div>
-            </div>
-
-            <div class="jp-feature border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-              <div class="jp-feature__head">
-                <Icon name="material-symbols:bolt-rounded" class="jp-feature__icon" />
-                <h3 class="jp-feature__title text-gray-900 dark:text-white">Media request boosts</h3>
-              </div>
-              <p class="jp-feature__body text-gray-600 dark:text-gray-300">
-                Get 5 boosts every month to prioritize any open media request. Each boost is the equivalent of 5 regular votes.
-              </p>
-            </div>
-
-            <div class="jp-feature border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-              <div class="jp-feature__head">
-                <Icon name="material-symbols:favorite-rounded" class="jp-feature__icon" />
-                <h3 class="jp-feature__title text-gray-900 dark:text-white">Help Jiten keep growing</h3>
-              </div>
-              <p class="jp-feature__body text-gray-600 dark:text-gray-300">
-                Your support helps pay for servers and ongoing development, while everything currently free remains free for everyone.
-              </p>
             </div>
           </div>
         </section>
@@ -292,6 +338,34 @@
     margin-top: 0.5rem;
     font-size: 0.85rem;
     line-height: 1.5;
+  }
+
+  .jp-note__title {
+    font-size: 1.35rem;
+    font-weight: 700;
+  }
+
+  .jp-note__body {
+    margin-top: 0.75rem;
+    font-size: 0.95rem;
+    line-height: 1.75;
+  }
+
+  .jp-note__sign {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 1.1rem;
+    line-height: 1.3;
+  }
+
+  .jp-note__name {
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+
+  .jp-note__role {
+    font-size: 0.75rem;
   }
 
   .jp-faq {

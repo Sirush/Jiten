@@ -171,6 +171,8 @@
     <div v-else-if="response?.data?.mainDeck">
       <MediaDeckCard :deck="response.data.mainDeck" title-tag="h1" hide-detail-button @update:deck="updateMainDeck" />
 
+      <LazyCoverageJourneyCard :deck-id="response.data.mainDeck.deckId" />
+
       <div v-if="response.data.parentDeck != null" class="pt-4">
         This deck belongs to
         <NuxtLink :to="`/decks/media/${response.data.parentDeck.deckId}/detail`">

@@ -36,6 +36,7 @@ public class StudyController(
     IWordFormSiblingCache wordFormCache,
     IStudySessionService sessionService,
     IUserLimitsService userLimits,
+    ICoverageJourneyService coverageJourneyService,
     ILogger<StudyController> logger) : ControllerBase
 {
     private static readonly Regex SentenceMarkerRegex =
@@ -2706,6 +2707,19 @@ public class StudyController(
             nextReviewAt,
             dayBoundaryScheduling = dayBoundary,
         });
+    }
+
+    [HttpGet("knowledge-growth")]
+    [EnableRateLimiting("journey")]
+    [SwaggerOperation(Summary = "Get the user's known-word count over time",
+                      Description = "Cumulative known words per adaptive bucket, dated from each word's first review.")]
+    [ProducesResponseType(typeof(GlobalGrowthDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<GlobalGrowthDto>> GetKnowledgeGrowth(CancellationToken ct)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Unauthorized();
+
+        return Ok(await coverageJourneyService.GetGlobalGrowthAsync(userId, ct));
     }
 
     [HttpGet("review-forecast-30d")]

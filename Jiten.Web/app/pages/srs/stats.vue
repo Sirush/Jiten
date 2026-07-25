@@ -710,6 +710,8 @@
         <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-500">Not enough data yet.</div>
       </div>
 
+      <LazySrsKnowledgeGrowthPanel hydrate-on-visible />
+
       <!-- 9. Forecast -->
       <div class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4">
         <div class="flex flex-wrap items-center justify-between gap-2 mb-3">

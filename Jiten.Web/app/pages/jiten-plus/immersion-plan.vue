@@ -25,6 +25,7 @@
   import { getAllGenres } from '~/utils/genreMapper';
   import { extractApiError } from '~/utils/toast';
   import { createBitmapLoader, drawCoverImage, fitCanvasText, saveCanvasPng } from '~/utils/imageExport';
+  import { coverUrl } from '~/utils/coverImage';
   import type { TagState } from '~/components/TriStateTag.vue';
   import DifficultyDisplay from '~/components/DifficultyDisplay.vue';
 
@@ -755,10 +756,6 @@
       romajiTitle: goal.romajiTitle,
       englishTitle: goal.englishTitle,
     });
-  }
-
-  function coverUrl(coverName: string | null): string {
-    return !coverName || coverName === 'nocover.jpg' ? '/img/nocover.jpg' : coverName;
   }
 
   function pct(value: number): string {

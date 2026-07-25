@@ -1,8 +1,13 @@
 <script setup lang="ts">
   import type { BoostBalance } from '~/composables/useMediaRequests';
 
+  import { useAuthStore } from '~/stores/authStore';
+
   const { tier, isFull, isTrial, sources, quota, limits } = useJitenPlus();
   const { fetchBoostBalance } = useMediaRequests();
+  const auth = useAuthStore();
+
+  const mediaListLink = computed(() => (auth.user?.userName ? `/profile/${auth.user.userName}/media` : '/profile'));
 
   const badgeTier = computed<'full' | 'trial'>(() => (isTrial.value ? 'trial' : 'full'));
   const isLifetime = computed(() => !!sources.value?.isLifetime);
@@ -72,7 +77,7 @@
       { label: 'Words per import', value: l.importWords },
       { label: 'Active media requests', value: l.activeMediaRequests },
       { label: 'Custom sentences per word', value: l.customSentencesPerWord },
-    ].map(row => ({ label: row.label, value: row.value.toLocaleString() }));
+    ].map((row) => ({ label: row.label, value: row.value.toLocaleString() }));
   });
 </script>
 
@@ -84,10 +89,7 @@
         <JitenPlusBadge :tier="badgeTier" :link="false" class="!text-sm !px-3 !py-1 mb-3" />
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Your Jiten+</h1>
         <p class="mt-2 text-gray-600 dark:text-gray-300 flex items-center gap-2">
-          <Icon
-            :name="tier === 'trial' ? 'material-symbols:hourglass-top-rounded' : 'material-symbols:favorite-rounded'"
-            class="text-primary-500 shrink-0"
-          />
+          <Icon :name="tier === 'trial' ? 'material-symbols:hourglass-top-rounded' : 'material-symbols:favorite-rounded'" class="text-primary-500 shrink-0" />
           {{ statusLine }}
         </p>
       </div>
@@ -149,8 +151,7 @@
           <h3 class="jp-tile__title text-gray-900 dark:text-white">Immersion plans</h3>
         </div>
         <p class="jp-tile__body text-gray-600 dark:text-gray-300">
-          Get a plan of what to read or watch next, picked from your own vocabulary and ordered to teach you
-          the most new words.
+          Get a plan of what to read or watch next, picked from your own vocabulary and ordered to teach you the most new words.
         </p>
         <div class="jp-tile__actions">
           <NuxtLink to="/jiten-plus/immersion-plan">
@@ -170,9 +171,7 @@
             class="ml-auto"
           />
         </div>
-        <p class="jp-tile__body text-gray-600 dark:text-gray-300">
-          Prioritise any open media request. Each boost counts as 5 regular votes.
-        </p>
+        <p class="jp-tile__body text-gray-600 dark:text-gray-300">Prioritise any open media request. Each boost counts as 5 regular votes.</p>
         <div class="jp-tile__actions">
           <NuxtLink to="/requests">
             <Button label="Boost a request" size="small" severity="secondary" outlined />
@@ -182,15 +181,22 @@
 
       <div class="jp-tile sm:col-span-2 border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
         <div class="jp-tile__head">
+          <Icon name="material-symbols:show-chart-rounded" class="jp-tile__icon" />
+          <h3 class="jp-tile__title text-gray-900 dark:text-white">Your coverage journey</h3>
+        </div>
+        <p class="jp-tile__body text-gray-600 dark:text-gray-300">
+          Watch how the coverage of the titles you're interested in grows over time. Get a look back at the journey that got you where you are today.
+          Access in any media deck detail, check the stats of it for the full chart with milestones.
+        </p>
+      </div>
+
+      <div class="jp-tile sm:col-span-2 border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+        <div class="jp-tile__head">
           <Icon name="material-symbols:trending-up-rounded" class="jp-tile__icon" />
           <h3 class="jp-tile__title text-gray-900 dark:text-white">Your limits</h3>
         </div>
         <div class="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2 text-sm">
-          <div
-            v-for="row in limitRows"
-            :key="row.label"
-            class="flex items-baseline justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-1.5"
-          >
+          <div v-for="row in limitRows" :key="row.label" class="flex items-baseline justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-1.5">
             <span class="text-gray-700 dark:text-gray-300">{{ row.label }}</span>
             <span class="tabular-nums font-semibold text-primary-600 dark:text-primary-300">{{ row.value }}</span>
           </div>

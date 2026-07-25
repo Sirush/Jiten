@@ -21,6 +21,7 @@
     trialStorage.value ? `Card images & audio uploads (${trialStorage.value} of storage)` : 'Card images & audio uploads',
     'Custom frequency lists (generate & download)',
     'Build custom immersion plans',
+    'Your coverage journey: coverage over time for each individual title',
     '5 media request boosts each month',
   ]);
 

@@ -63,8 +63,17 @@
       <div class="jiten-plus-gate__content" aria-hidden="true" inert>
         <slot />
       </div>
-      <div class="jiten-plus-gate__overlay">
-        <JitenPlusBadge v-tooltip.top="tooltip" :tier="showFullChip ? 'full' : 'any'" />
+      <div
+        v-tooltip.top="tooltip"
+        class="jiten-plus-gate__overlay"
+        role="button"
+        tabindex="0"
+        :aria-label="`${featureLabel ?? 'This feature'} requires Jiten+`"
+        @click="showUpsell = true"
+        @keydown.enter.prevent="showUpsell = true"
+        @keydown.space.prevent="showUpsell = true"
+      >
+        <JitenPlusBadge :link="false" :tier="showFullChip ? 'full' : 'any'" />
       </div>
     </div>
 
@@ -128,6 +137,23 @@
     align-items: center;
     justify-content: center;
     z-index: 1;
+    cursor: pointer;
+  }
+
+  .jiten-plus-gate__overlay:hover .jiten-plus-badge,
+  .jiten-plus-gate__overlay:focus-visible .jiten-plus-badge {
+    background: var(--p-primary-200);
+  }
+
+  :global(.dark-mode .jiten-plus-gate__overlay:hover .jiten-plus-badge),
+  :global(.dark-mode .jiten-plus-gate__overlay:focus-visible .jiten-plus-badge) {
+    background: var(--p-primary-800);
+  }
+
+  .jiten-plus-gate__overlay:focus-visible {
+    outline: 2px solid var(--p-primary-500);
+    outline-offset: -2px;
+    border-radius: 0.5rem;
   }
 
   .jiten-plus-gate__dot {

@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using System.Text.Json;
 using AnkiNet;
 using Hangfire;
+using Jiten.Api.Authorization;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Enums;
@@ -43,6 +44,7 @@ public class MediaDeckController(
     IDeckWordResolver deckWordResolver,
     IDeckDownloadService downloadService,
     IBackgroundJobClient backgroundJobClient,
+    ICoverageJourneyService coverageJourneyService,
     Jiten.Core.Services.DeckVectorService deckVectorService) : ControllerBase
 {
     private record DeckIdWithCount(int DeckId, int TotalCount);
@@ -2320,6 +2322,28 @@ public class MediaDeckController(
                                               // Round to whole number before 99%, keep 2 decimals at 99%+
                                               Coverage = p.coverage < 99.0 ? Math.Round(p.coverage, 0) : Math.Round(p.coverage, 2)
                                           }).ToList());
+    }
+
+    [HttpGet("{id}/coverage-journey")]
+    [Authorize]
+    [JitenPlus(Feature = "coverage-journey")]
+    [EnableRateLimiting("journey")]
+    [SwaggerOperation(Summary = "Get the user's coverage journey for a deck",
+                      Description = "Coverage of this deck over time, derived from the dates the user first studied each word they know.")]
+    [ProducesResponseType(typeof(JourneyDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<JourneyDto>> GetCoverageJourney(int id, CancellationToken ct)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null)
+            return Unauthorized();
+
+        var journey = await coverageJourneyService.GetDeckJourneyAsync(userId, id, ct);
+        if (journey == null)
+            return NotFound();
+
+        return Ok(journey);
     }
 
     /// <summary>

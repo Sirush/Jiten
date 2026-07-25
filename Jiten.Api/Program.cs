@@ -204,7 +204,8 @@ if (enableOtlpExporter)
                    .SetResourceBuilder(resourceBuilder)
                    .AddAspNetCoreInstrumentation()
                    .AddHttpClientInstrumentation()
-                   .AddRuntimeInstrumentation();
+                   .AddRuntimeInstrumentation()
+                   .AddMeter(CoverageJourneyService.MeterName);
 
                if (enableConsoleExporter)
                {
@@ -385,6 +386,7 @@ builder.Services.AddScoped<Jiten.Api.Services.Stripe.StripeService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
 builder.Services.AddSingleton<Jiten.Core.Services.DeckVectorService>();
 builder.Services.AddScoped<IRoadmapDataLoader, RoadmapDataLoader>();
+builder.Services.AddScoped<ICoverageJourneyService, CoverageJourneyService>();
 builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
 builder.Services.AddScoped<IStudyDeckMembershipService, StudyDeckMembershipService>();
 builder.Services.AddScoped<IDeckDownloadService, DeckDownloadService>();
@@ -484,6 +486,20 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 2, Window = TimeSpan.FromMinutes(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
+    options.AddPolicy("journey", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20, Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
                 AutoReplenishment = true
             });

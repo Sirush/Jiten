@@ -7,7 +7,8 @@ export type JitenPlusFeature =
   | 'freq-list-save'
   | 'freq-list-generate'
   | 'request-boosts'
-  | 'immersion-plan-generate';
+  | 'immersion-plan-generate'
+  | 'coverage-journey';
 
 export interface PromoCreditInfo {
   userPromoCreditId: number;
@@ -83,6 +84,7 @@ const FEATURE_TIERS: Record<JitenPlusFeature, 'trial' | 'full'> = {
   'freq-list-generate': 'trial',
   'request-boosts': 'trial',
   'immersion-plan-generate': 'trial',
+  'coverage-journey': 'trial',
 };
 
 // Deduplicates concurrent first-fetches across the many gates that mount at once (client-only,
