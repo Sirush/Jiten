@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Text.Json;
@@ -1483,6 +1484,7 @@ public class MediaDeckController(
     /// <param name="offset">Pagination offset.</param>
     /// <param name="displayFilter">When authenticated: all | known | young | mature | mastered | blacklisted | unknown.</param>
     /// <param name="search">Optional text search filter (Japanese, romaji, or English).</param>
+    /// <param name="limit">Page size, clamped to 1-200.</param>
     /// <returns>Paginated deck vocabulary list.</returns>
     [HttpGet("{id}/vocabulary")]
     // [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "sortBy", "sortOrder", "offset"])]
@@ -1493,9 +1495,10 @@ public class MediaDeckController(
                                                                                int? offset = 0, string displayFilter = "all",
                                                                                string? search = null,
                                                                                string? pos = null, string? excludePos = null,
-                                                                               bool hideKanaOnly = false)
+                                                                               bool hideKanaOnly = false,
+                                                                               int limit = 100)
     {
-        int pageSize = 100;
+        int pageSize = Math.Clamp(limit, 1, 200);
 
         var deck = await context.Decks.AsNoTracking().FirstOrDefaultAsync(d => d.DeckId == id);
 
@@ -1661,12 +1664,18 @@ public class MediaDeckController(
     /// </summary>
     /// <param name="id">Deck identifier.</param>
     /// <param name="offset">Pagination offset for subdecks.</param>
+    /// <param name="subdeckFilter">Case-insensitive substring matched against the subdeck titles.</param>
+    /// <param name="subdeckSort">Subdeck ordering.</param>
+    /// <param name="subdeckSortOrder">Direction for <paramref name="subdeckSort"/>.</param>
     /// <returns>Deck detail with subdecks.</returns>
     [HttpGet("{id}/detail")]
     // [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "offset"])]
     [SwaggerOperation(Summary = "Get deck details")]
     [ProducesResponseType(typeof(PaginatedResponse<DeckDetailDto?>), StatusCodes.Status200OK)]
-    public async Task<PaginatedResponse<DeckDetailDto?>> GetMediaDeckDetail(int id, int? offset = 0)
+    public async Task<PaginatedResponse<DeckDetailDto?>> GetMediaDeckDetail(int id, int? offset = 0,
+                                                                           string? subdeckFilter = null,
+                                                                           SubdeckSort subdeckSort = SubdeckSort.Order,
+                                                                           SortOrder subdeckSortOrder = SortOrder.Ascending)
     {
         int pageSize = 25;
 
@@ -1690,10 +1699,27 @@ public class MediaDeckController(
                                       .FirstOrDefaultAsync(d => d.DeckId == deck.ParentDeckId);
         var subDecks = context.Decks.AsNoTracking().Include(d => d.DeckGenres).Include(d => d.DeckTags).ThenInclude(dt => dt.Tag).Include(d => d.DeckDifficulty)
                               .Where(d => d.ParentDeckId == id);
+
+        if (!string.IsNullOrWhiteSpace(subdeckFilter))
+        {
+            // lower() + LIKE rather than ILIKE: the integration suite runs on SQLite, which has no ILIKE.
+            var pattern = $"%{EscapeLikeWildcards(subdeckFilter.Trim().ToLower())}%";
+            subDecks = subDecks.Where(d => EF.Functions.Like(d.OriginalTitle.ToLower(), pattern, LikeEscapeCharacter)
+                                           || (d.RomajiTitle != null && EF.Functions.Like(d.RomajiTitle.ToLower(), pattern, LikeEscapeCharacter))
+                                           || (d.EnglishTitle != null && EF.Functions.Like(d.EnglishTitle.ToLower(), pattern, LikeEscapeCharacter)));
+        }
+
         int totalCount = await subDecks.CountAsync();
 
+        subDecks = (subdeckSort, subdeckSortOrder) switch
+        {
+            (SubdeckSort.Difficulty, SortOrder.Descending) => subDecks.OrderByDescending(SubdeckDifficultyKey).ThenBy(d => d.DeckOrder),
+            (SubdeckSort.Difficulty, _) => subDecks.OrderBy(SubdeckDifficultyKey).ThenBy(d => d.DeckOrder),
+            (_, SortOrder.Descending) => subDecks.OrderByDescending(d => d.DeckOrder),
+            _ => subDecks.OrderBy(d => d.DeckOrder),
+        };
+
         subDecks = subDecks
-                   .OrderBy(dw => dw.DeckOrder)
                    .Skip(offset ?? 0)
                    .Take(pageSize);
 
@@ -2392,6 +2418,24 @@ public class MediaDeckController(
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
             targetPercentage, minOccurrences, maxOccurrences,
             StartFromKnown: startFromKnown));
+    }
+
+    private const string LikeEscapeCharacter = "\\";
+
+    /// <summary>
+    /// Same difficulty expression the browse endpoint sorts by (override wins, community adjustment applied).
+    /// Stays float: SQLite refuses decimal in ORDER BY, so a decimal key would break the integration suite.
+    /// </summary>
+    private static readonly Expression<Func<Deck, float>> SubdeckDifficultyKey =
+        d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
+             + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0);
+
+    /// <summary>Neutralises user-supplied LIKE wildcards so a term of "%" matches literally instead of everything.</summary>
+    private static string EscapeLikeWildcards(string term)
+    {
+        return term.Replace(LikeEscapeCharacter, LikeEscapeCharacter + LikeEscapeCharacter)
+                   .Replace("%", LikeEscapeCharacter + "%")
+                   .Replace("_", LikeEscapeCharacter + "_");
     }
 
     private static int GetLevenshteinMaxDistance(string query)

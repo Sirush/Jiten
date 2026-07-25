@@ -942,9 +942,10 @@ public class StudyController(
         [FromQuery] string? search = null,
         [FromQuery] string? pos = null,
         [FromQuery] string? excludePos = null,
-        [FromQuery] bool hideKanaOnly = false)
+        [FromQuery] bool hideKanaOnly = false,
+        [FromQuery] int limit = 100)
     {
-        const int pageSize = 100;
+        int pageSize = Math.Clamp(limit, 1, 200);
         if (offset < 0) return Results.BadRequest("Offset cannot be negative.");
 
         var userId = currentUserService.UserId;

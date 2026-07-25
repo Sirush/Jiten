@@ -20,7 +20,7 @@
     watch: [offset],
   });
 
-  const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
+  const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor } = usePagination(response);
 
   const hasMultiplePages = computed(() => totalItems.value > (response.value?.pageSize ?? 10));
 
@@ -125,11 +125,14 @@
         v-if="hasMultiplePages"
         :previous-link="previousLink"
         :next-link="nextLink"
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :page-link-for="pageLinkFor"
         :start="start"
         :end="end"
         :total-items="totalItems"
         item-label="updates"
-        :scroll-to-top-on-next="true"
+        :scroll-to-top-on-navigate="true"
       />
     </div>
   </div>

@@ -78,6 +78,7 @@
   });
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
+  const limit = computed(() => (route.query.limit ? Number(route.query.limit) : undefined));
   const sortDescending = ref(route.query.sortOrder === String(SortOrder.Descending));
   const sortBy = ref(route.query.sortBy?.toString() || defaultSort.value);
   const display = ref(route.query.display?.toString() || 'all');
@@ -144,11 +145,21 @@
       pos: computed(() => debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined),
       excludePos: computed(() => debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined),
       hideKanaOnly: debouncedHideKanaOnly,
+      limit: limit,
     },
-    watch: [offset, debouncedSearch],
+    watch: [offset, debouncedSearch, limit],
   });
 
-  const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
+  const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor, pageSize } = usePagination(response);
+
+  const listContext = computed(() => ({
+    label: deckName.value,
+    sortLabel: sortByOptions.value.find((o) => o.value === sortBy.value)?.label,
+    sortDescending: sortDescending.value,
+    offset: offset.value,
+    totalItems: totalItems.value,
+    pageSize: pageSize.value,
+  }));
 
   const showAddDialog = ref(false);
   const removingKey = ref<string | null>(null);
@@ -326,7 +337,7 @@
       :show-display-filter="auth.isAuthenticated"
     />
 
-    <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
+    <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="words" :page-size="pageSize" :page-size-options="[50, 100, 200]" mobile-compact />
 
     <div v-if="pageWords.length > 0" class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500">
       <Checkbox :model-value="allOnPageSelected" :binary="true" @change="toggleSelectAll" />
@@ -337,6 +348,7 @@
 
     <VocabularyList
       :words="response?.data ?? []"
+      :list-context="listContext"
       :status="status"
       :error="error"
       :removable="isStaticDeck"
@@ -355,11 +367,14 @@
     <PaginationControls v-if="response?.data?.length"
       :previous-link="previousLink"
       :next-link="nextLink"
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      :page-link-for="pageLinkFor"
       :start="start"
       :end="end"
       :total-items="totalItems"
       :show-summary="false"
-      :scroll-to-top-on-next="true"
+      :scroll-to-top-on-navigate="true"
     />
 
     <SrsAddWordsDialog v-if="isStaticDeck" v-model:visible="showAddDialog" :deck-id="deckId" @words-added="onWordsAdded" />

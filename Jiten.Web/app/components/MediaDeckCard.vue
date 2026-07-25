@@ -466,7 +466,7 @@
                       <span class="tabular-nums font-semibold">{{ deck.uniqueKanjiUsedOnceCount.toLocaleString() }}</span>
                     </div>
                     <div v-if="deck.averageSentenceLength !== 0 && !deck.hideAverageSentenceLength" class="flex justify-between flex-wrap stat-row">
-                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Average sentence length</span>
+                      <span class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal"><span class="md:hidden">Avg.</span><span class="hidden md:inline">Average</span> sentence length</span>
                       <span class="tabular-nums font-semibold">{{ deck.averageSentenceLength.toFixed(1) }}</span>
                     </div>
                     <div v-if="speechSpeed > 0" class="flex justify-between flex-wrap stat-row">

@@ -67,10 +67,15 @@
 </script>
 
 <template>
-  <VocabularyDetail
-    :word-id="wordId"
-    :reading-index="readingIndex"
-    @reading-selected="onReadingSelected"
-    @main-reading-text-changed="onMainReadingTextChanged"
-  />
+  <div class="flex flex-col gap-2">
+    <ClientOnly>
+      <WordListContextBar :word-id="wordId" :reading-index="readingIndex" />
+    </ClientOnly>
+    <VocabularyDetail
+      :word-id="wordId"
+      :reading-index="readingIndex"
+      @reading-selected="onReadingSelected"
+      @main-reading-text-changed="onMainReadingTextChanged"
+    />
+  </div>
 </template>

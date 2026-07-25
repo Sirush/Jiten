@@ -561,6 +561,22 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddResponseCaching();
 builder.Services.AddMemoryCache();
 
+var allowPrivateNetworkOrigins = builder.Environment.IsDevelopment();
+
+static bool IsPrivateNetworkOrigin(string origin)
+{
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri) || !IPAddress.TryParse(uri.Host, out var ip))
+        return false;
+
+    var octets = ip.GetAddressBytes();
+    if (octets.Length != 4)
+        return false;
+
+    return octets[0] == 10
+           || (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31)
+           || (octets[0] == 192 && octets[1] == 168);
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowSpecificOrigin", policy =>
@@ -576,6 +592,9 @@ builder.Services.AddCors(options =>
                 {
                     return true;
                 }
+
+                if (allowPrivateNetworkOrigins && IsPrivateNetworkOrigin(origin))
+                    return true;
 
                 return origin == "https://jiten.moe" ||
                        origin == "https://kizuna-texthooker-ui.fly.dev" ||

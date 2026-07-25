@@ -87,16 +87,17 @@
 </script>
 
 <template>
-  <div class="relative">
-    <Button @click="toggle($event)">
+  <div class="relative shrink-0">
+    <Button class="max-md:px-2!" aria-label="Filters" @click="toggle($event)">
       <Icon name="material-symbols:filter-list" size="1.25em" />
-      Filters
+      <!-- Below md this shares one row with the search field, which needs the width more. -->
+      <span class="hidden md:inline">Filters</span>
     </Button>
     <Badge v-if="activeFilterCount > 0" :value="activeFilterCount" severity="warn" class="absolute -top-2 -right-2 pointer-events-none" />
   </div>
 
   <Popover ref="popover">
-    <div class="flex flex-col gap-3 p-3 w-[min(32rem,calc(100vw_-_2rem))] max-h-[min(56rem,90vh)]">
+    <div class="flex flex-col overflow-hidden w-[min(32rem,calc(100vw_-_2rem))] max-md:gap-2 max-md:p-2 max-md:max-h-[65vh] md:gap-3 md:p-3 md:max-h-[min(56rem,90vh)]">
       <div class="flex items-center gap-2">
         <Checkbox v-model="hideKanaOnly" class="flex-shrink-0" input-id="hideKanaOnly" binary />
         <label for="hideKanaOnly" class="text-sm font-medium text-gray-600 dark:text-gray-300">Hide kana-only words</label>
@@ -126,10 +127,10 @@
         </InputIcon>
       </IconField>
 
-      <div class="flex-1 min-h-[min(32rem,45vh)] overflow-y-auto -mr-1 pr-1">
-        <Accordion v-model:value="openPanels" multiple>
+      <div class="flex-1 overflow-y-auto -mr-1 pr-1 max-md:min-h-0 md:min-h-[min(32rem,45vh)]">
+        <Accordion v-model:value="openPanels" multiple lazy>
           <AccordionPanel v-for="category in filteredCategories" :key="category.key" :value="category.key">
-            <AccordionHeader class="!py-2.5">
+            <AccordionHeader class="max-md:py-1.5! md:py-2.5!">
               <span class="flex flex-1 items-center justify-between gap-2 pr-2">
                 <span class="text-sm">{{ category.label }}</span>
                 <Badge
@@ -158,7 +159,7 @@
         </p>
       </div>
 
-      <div class="flex justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
+      <div class="flex justify-end border-t border-gray-200 dark:border-gray-700 max-md:pt-2 md:pt-3">
         <Button severity="danger" size="small" @click="handleReset">
           <Icon name="material-symbols:refresh" class="mr-1" />
           Reset Filters

@@ -13,6 +13,7 @@
   const isOwnProfile = computed(() => auth.isAuthenticated && auth.user?.userName?.toLowerCase() === targetUsername.value.toLowerCase());
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
+  const pageSizeQuery = computed(() => (route.query.pageSize ? Number(route.query.pageSize) : undefined));
 
   const sortByOptions = ref([
     { label: 'Occurrences', value: 'occurrences' },
@@ -116,6 +117,7 @@
       pos: debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined,
       excludePos: debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined,
       hideKanaOnly: debouncedHideKanaOnly.value || undefined,
+      pageSize: pageSizeQuery.value,
     };
     if (mediaTypeFilter.value !== ALL_MEDIA_TYPES) {
       params.mediaType = parseInt(mediaTypeFilter.value);
@@ -129,10 +131,19 @@
     error,
   } = await useApiFetchPaginated<AccomplishmentVocabularyDto>(`user/profile/${targetUsername.value}/accomplishments/vocabulary`, {
     query: queryParams,
-    watch: [offset, sortBy, sortDescending, mediaTypeFilter, display, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly],
+    watch: [offset, sortBy, sortDescending, mediaTypeFilter, display, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly, pageSizeQuery],
   });
 
-  const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
+  const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor, pageSize } = usePagination(response);
+
+  const listContext = computed(() => ({
+    label: `${displayUsername.value} - Vocabulary`,
+    sortLabel: sortByOptions.value.find((o) => o.value === sortBy.value)?.label,
+    sortDescending: sortDescending.value,
+    offset: offset.value,
+    totalItems: totalItems.value,
+    pageSize: pageSize.value,
+  }));
 
   useHead(() => ({
     title: `${displayUsername.value} - Vocabulary`,
@@ -209,16 +220,17 @@
         </FloatLabel>
       </VocabularyFilters>
 
-      <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
+      <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="words" :page-size="pageSize" :page-size-options="[25, 50, 100]" page-size-param="pageSize" mobile-compact />
 
       <VocabularyList
         :words="response?.data?.words ?? []"
         :status="status"
         :error="error"
+        :list-context="listContext"
         empty-message="Complete some media to see your vocabulary!"
       />
 
-      <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" :scroll-to-top-on-next="true" />
+      <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" :scroll-to-top-on-navigate="true" />
     </div>
   </div>
 </template>

@@ -524,6 +524,10 @@
     font-weight: normal;
   }
 
+  :deep(.p-accordioncontent-wrapper) {
+    min-width: 0;
+  }
+
   :deep(.sort-mode-select) {
     background: transparent !important;
     border: none !important;

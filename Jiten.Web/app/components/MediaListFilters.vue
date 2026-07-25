@@ -299,17 +299,17 @@
 </script>
 
 <template>
-  <div class="relative">
-    <Button @click="toggle($event)">
+  <div class="relative shrink-0">
+    <Button class="max-md:px-2!" aria-label="Filters" @click="toggle($event)">
       <Icon name="material-symbols:filter-list" size="1.25em" />
-      Filters
+      <span class="hidden md:inline">Filters</span>
     </Button>
     <Badge v-if="activeFilterCount > 0" :value="activeFilterCount" severity="warn" class="absolute -top-2 -right-2 pointer-events-none" />
   </div>
 
-  <Popover ref="popover" class="w-full max-w-3xl">
+  <Popover ref="popover" class="w-[min(48rem,calc(100vw_-_2rem))]">
     <div class="flex flex-col gap-4 p-3 min-w-[280px]">
-      <Tabs value="filters" :show-navigators="false">
+      <Tabs value="filters" :show-navigators="false" lazy>
         <TabList>
           <Tab value="filters">Filters</Tab>
           <Tab value="genres">Genres</Tab>
@@ -318,7 +318,7 @@
 
         <TabPanels>
           <TabPanel value="filters">
-            <div class="overflow-y-auto" style="max-height: 60vh">
+            <div class="overflow-y-auto max-md:max-h-[50vh] md:max-h-[60vh]">
             <div class="flex flex-col gap-4 pt-4">
               <FloatLabel v-if="isConnected" variant="on" class="w-full">
                 <Select
@@ -334,7 +334,7 @@
                 <label for="preferenceFilter">Status</label>
               </FloatLabel>
 
-              <Accordion multiple>
+              <Accordion multiple lazy>
                 <AccordionPanel value="content">
                   <AccordionHeader>Content</AccordionHeader>
                   <AccordionContent>
