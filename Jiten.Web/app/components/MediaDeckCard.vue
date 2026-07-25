@@ -285,6 +285,29 @@
     `\nYoung: ${((props.deck.uniqueWordCount * props.deck.youngUniqueCoverage) / 100).toFixed(0)} / ${props.deck.uniqueWordCount} (${props.deck.youngUniqueCoverage.toFixed(1)}%)` +
     `\nTotal: ${combinedUniqueCoverage.value.toFixed(1)}%`);
 
+  const titleBoxRef = ref<HTMLElement | null>(null);
+  const isTitleClipped = ref(false);
+  let titleResizeObserver: ResizeObserver | undefined;
+
+  const measureTitleClip = () => {
+    const el = titleBoxRef.value;
+    if (el) isTitleClipped.value = el.scrollHeight > el.clientHeight + 1;
+  };
+
+  onMounted(() => {
+    if (!props.isCompact) return;
+    measureTitleClip();
+    if (titleBoxRef.value && typeof ResizeObserver !== 'undefined') {
+      titleResizeObserver = new ResizeObserver(measureTitleClip);
+      titleResizeObserver.observe(titleBoxRef.value);
+    }
+    document.fonts?.ready.then(measureTitleClip);
+  });
+
+  onBeforeUnmount(() => titleResizeObserver?.disconnect());
+
+  watch(() => localiseTitle(props.deck), () => nextTick(measureTitleClip));
+
   const borderColor = computed(() => {
     if (!authStore.isAuthenticated || store.hideCoverageBorders || (props.deck.coverage == 0 && props.deck.uniqueCoverage == 0)) return 'none';
     return getCoverageBorder(props.deck.coverage);
@@ -294,7 +317,7 @@
 </script>
 
 <template>
-  <div class="relative" :class="isCompact ? 'w-80' : ''">
+  <div class="relative" :class="isCompact ? 'w-80 compact-card' : ''">
     <div
       v-if="showIgnoreOverlay"
       class="absolute inset-0 z-50 flex items-center justify-center backdrop-blur-lg bg-black/50 rounded-lg ignore-overlay"
@@ -314,9 +337,11 @@
       </div>
     </div>
 
-    <Card class="p-2" :style="{ outline: borderColor }">
+    <Card class="p-2" :class="isCompact ? 'h-full' : ''" :style="{ outline: borderColor }">
       <template #title>
-        <div class="overflow-hidden">
+        <!-- Compact titles are clipped to a fixed two-line box so sibling cards in a row keep
+             their stats aligned; the tooltip carries the untruncated title. -->
+        <div ref="titleBoxRef" class="overflow-hidden" :class="isCompact ? 'relative leading-snug h-[2.75em]' : ''">
           <div class="float-right flex flex-row items-center gap-1 h-6 shrink-0 ml-2">
             <div v-if="authStore.isAuthenticated" class="flex items-center gap-2">
               <i v-if="deck.isFavourite" class="pi pi-star-fill text-yellow-500 text-lg" />
@@ -340,7 +365,11 @@
               </button>
             </Tooltip>
           </div>
-          <component :is="titleTag || 'span'" class="break-words">{{ localiseTitle(deck) }}</component>
+          <Tooltip v-if="isCompact" :content="localiseTitle(deck)">
+            <component :is="titleTag || 'span'" class="break-words">{{ localiseTitle(deck) }}</component>
+          </Tooltip>
+          <component :is="titleTag || 'span'" v-else class="break-words">{{ localiseTitle(deck) }}</component>
+          <span v-if="isTitleClipped" aria-hidden="true" class="title-clip-ellipsis pointer-events-none absolute bottom-0 right-0 pl-6">…</span>
         </div>
       </template>
       <template v-if="!isCompact" #subtitle>
@@ -359,9 +388,9 @@
         </span>
       </template>
       <template #content>
-        <div class="flex-gap-6">
-          <div class="flex-1 max-w-full overflow-hidden">
-            <div class="flex flex-col md:flex-row gap-x-4 gap-y-2 w-full">
+        <div class="flex-gap-6" :class="isCompact ? 'h-full flex flex-col' : ''">
+          <div class="flex-1 max-w-full overflow-hidden" :class="isCompact ? 'flex flex-col' : ''">
+            <div class="flex flex-col md:flex-row gap-x-4 gap-y-2 w-full" :class="isCompact ? 'flex-1' : ''">
               <div v-if="!isCompact" class="text-left text-sm md:text-center">
                 <img
                   :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
@@ -397,7 +426,7 @@
                   </Tooltip>
                 </template>
               </div>
-              <div class="@container min-w-0 flex-1">
+              <div class="@container min-w-0 flex-1" :class="isCompact ? 'flex flex-col' : ''">
                 <div
                   class="grid grid-cols-1 gap-x-6 gap-y-2 max-w-[51rem]"
                   :class="isCompact ? '' : '@xl:grid-cols-2 @3xl:grid-cols-3'"
@@ -568,7 +597,7 @@
                     </div>
                   </Tooltip>
                 </template>
-                <div v-if="!hideControl" class="mt-4">
+                <div v-if="!hideControl" :class="isCompact ? 'mt-auto pt-4' : 'mt-4'">
                   <div class="flex gap-2" :class="[isCompact ? 'flex-row' : 'flex-col md:flex-row', { 'justify-center': isCompact }]">
                     <Tooltip v-if="!hideDetailButton" content="Details">
                       <Button
@@ -708,6 +737,19 @@
     .flex-1 > div > div {
       width: 100%;
     }
+  }
+
+  .title-clip-ellipsis {
+    background: linear-gradient(to right, transparent, var(--p-card-background, var(--p-content-background)) 1.5rem);
+  }
+
+  .compact-card :deep(.p-card-body) {
+    height: 100%;
+  }
+
+  .compact-card :deep(.p-card-content) {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   /* Style for stat rows */

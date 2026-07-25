@@ -201,7 +201,7 @@
             total
           </div>
         </div>
-        <div class="flex flex-row flex-wrap gap-2 justify-center pt-4">
+        <div class="flex flex-row flex-wrap items-stretch gap-2 justify-center pt-4">
           <MediaDeckCard v-for="deck in response.data.subDecks" :key="deck.deckId" :deck="deck" title-tag="h3" :is-compact="true" @update:deck="updateSubDeck" @parent-status-changed="updateParentStatus" />
         </div>
       </div>
