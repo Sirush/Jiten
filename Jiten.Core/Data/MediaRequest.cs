@@ -4,12 +4,17 @@ public class MediaRequest
 {
     public int Id { get; set; }
     public required string Title { get; set; }
+    public MediaRequestKind Kind { get; set; } = MediaRequestKind.New;
     public MediaType MediaType { get; set; }
     public string? ExternalUrl { get; set; }
     public LinkType? ExternalLinkType { get; set; }
     public string? Description { get; set; }
     public MediaRequestStatus Status { get; set; } = MediaRequestStatus.Open;
     public string? AdminNote { get; set; }
+
+    /// <summary>Deck an Update request is filed against. Null on New requests, or once the deck is deleted.</summary>
+    public int? TargetDeckId { get; set; }
+
     public int? FulfilledDeckId { get; set; }
     public required string RequesterId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -18,6 +23,7 @@ public class MediaRequest
     public int UpvoteCount { get; set; }
     public int BoostCount { get; set; }
 
+    public Deck? TargetDeck { get; set; }
     public Deck? FulfilledDeck { get; set; }
     public ICollection<MediaRequestUpvote> Upvotes { get; set; } = new List<MediaRequestUpvote>();
     public ICollection<MediaRequestBoost> Boosts { get; set; } = new List<MediaRequestBoost>();

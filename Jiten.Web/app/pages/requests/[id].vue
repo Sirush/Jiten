@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { RequestStatus, MediaType } from '~/types';
+import { RequestStatus, RequestKind, MediaType } from '~/types';
 import type { MediaRequestDto, MediaRequestCommentDto, MediaRequestUploadAdminDto, MediaSuggestion } from '~/types/types';
-import type { AutoCompleteCompleteEvent } from 'primevue/autocomplete';
-import { debounce } from 'perfect-debounce';
 import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
+import { getRequestKindText, getRequestKindIcon } from '~/utils/requestKindMapper';
 import { getLinkTypeText } from '~/utils/linkTypeMapper';
 import { stripEpubImages } from '~/utils/epubStripper';
 import { useAuthStore } from '~/stores/authStore';
@@ -19,8 +18,6 @@ const router = useRouter();
 const toast = useToast();
 const authStore = useAuthStore();
 const jitenStore = useJitenStore();
-const { $api } = useNuxtApp();
-const localiseTitle = useLocaliseTitle();
 
 const requestId = computed(() => Number(route.params.id));
 const {
@@ -49,49 +46,27 @@ const displayAdminFunctions = computed(() => jitenStore.displayAdminFunctions);
 const showAdminPanel = ref(false);
 const adminNote = ref('');
 const fulfilledDeckId = ref<number | null>(null);
-const selectedDeck = ref<MediaSuggestion | string | null>(null);
-const deckSuggestions = ref<MediaSuggestion[]>([]);
+const fulfilledDeckLabel = ref('');
 const isUpdatingStatus = ref(false);
 const reviewingUploadId = ref<number | null>(null);
-
-watch(selectedDeck, (val) => {
-  if (val && typeof val === 'object') fulfilledDeckId.value = val.deckId;
-  else if (typeof val === 'string' && /^\d+$/.test(val.trim())) fulfilledDeckId.value = Number(val.trim());
-  else fulfilledDeckId.value = null;
-});
-
-async function fetchRecentDecks(): Promise<MediaSuggestion[]> {
-  try {
-    return await $api<MediaSuggestion[]>('admin/recent-decks', { query: { limit: 12 } });
-  } catch { return []; }
-}
-
-const searchDecks = debounce(async (query: string) => {
-  try {
-    const res = await $api<{ suggestions: MediaSuggestion[] }>('media-deck/search-suggestions', { query: { query, limit: 10 } });
-    deckSuggestions.value = res.suggestions ?? [];
-  } catch { deckSuggestions.value = []; }
-}, 300);
-
-async function onDeckComplete(event: AutoCompleteCompleteEvent) {
-  if (!event.query || event.query.length < 2) {
-    deckSuggestions.value = await fetchRecentDecks();
-  } else {
-    await searchDecks(event.query);
-  }
-}
-
-function getDeckLabel(item: MediaSuggestion | string): string {
-  if (typeof item === 'string') return item;
-  return `${localiseTitle(item)} (ID: ${item.deckId})`;
-}
 
 // Admin edit fields
 const editTitle = ref('');
 const editMediaType = ref<MediaType>(MediaType.Anime);
+const editIsUpdate = ref(false);
+const editTargetDeckId = ref<number | null>(null);
+const editTargetDeckLabel = ref('');
 const editExternalUrl = ref('');
 const editDescription = ref('');
 const isSavingEdit = ref(false);
+
+watch(editIsUpdate, (val) => {
+  if (!val) editTargetDeckId.value = null;
+});
+
+function onEditTargetDeckSelect(suggestion: MediaSuggestion | null) {
+  if (suggestion) editMediaType.value = suggestion.mediaType;
+}
 const mediaTypeOptions = Object.entries(MediaType)
   .filter(([key]) => isNaN(Number(key)))
   .map(([key, value]) => ({ label: key, value: value as MediaType }));
@@ -110,7 +85,10 @@ const isSavingAdminNote = ref(false);
 const isEditingDescription = ref(false);
 const editOwnDescription = ref('');
 const editOwnExternalUrl = ref('');
+const editOwnTargetDeckId = ref<number | null>(null);
+const editOwnTargetDeckLabel = ref('');
 const isSavingDescription = ref(false);
+const isOwnUpdateRequest = computed(() => request.value?.kind === RequestKind.Update);
 
 // Delete upload confirmation
 const showDeleteUploadDialog = ref(false);
@@ -132,8 +110,17 @@ async function loadData() {
   if (req) {
     editTitle.value = req.title;
     editMediaType.value = req.mediaType;
+    editIsUpdate.value = req.kind === RequestKind.Update;
+    editTargetDeckId.value = req.targetDeckId ?? null;
+    editTargetDeckLabel.value = req.targetDeckTitle ?? '';
     editExternalUrl.value = req.externalUrl || '';
     editDescription.value = req.description || '';
+
+    // Completing an update request almost always fulfils it with the deck it targets.
+    if (req.kind === RequestKind.Update && req.targetDeckId && fulfilledDeckId.value === null) {
+      fulfilledDeckId.value = req.targetDeckId;
+      fulfilledDeckLabel.value = req.targetDeckTitle ?? String(req.targetDeckId);
+    }
   }
   isLoading.value = false;
 }
@@ -320,10 +307,16 @@ async function handleSaveEdit() {
     toast.add({ severity: 'warn', summary: 'Title is required', life: 5000 });
     return;
   }
+  if (editIsUpdate.value && editTargetDeckId.value === null) {
+    toast.add({ severity: 'warn', summary: 'Select the media this request updates', life: 5000 });
+    return;
+  }
   isSavingEdit.value = true;
   const success = await editRequest(request.value.id, {
     title: editTitle.value.trim(),
     mediaType: editMediaType.value,
+    kind: editIsUpdate.value ? RequestKind.Update : RequestKind.New,
+    targetDeckId: editIsUpdate.value ? editTargetDeckId.value ?? undefined : undefined,
     externalUrl: editExternalUrl.value.trim() || undefined,
     description: editDescription.value.trim() || undefined,
   });
@@ -414,6 +407,8 @@ function startEditDescription() {
   if (!request.value) return;
   editOwnDescription.value = request.value.description || '';
   editOwnExternalUrl.value = request.value.externalUrl || '';
+  editOwnTargetDeckId.value = request.value.targetDeckId ?? null;
+  editOwnTargetDeckLabel.value = request.value.targetDeckTitle ?? '';
   isEditingDescription.value = true;
 }
 
@@ -423,11 +418,16 @@ function cancelEditDescription() {
 
 async function handleSaveDescription() {
   if (!request.value) return;
+  if (isOwnUpdateRequest.value && editOwnTargetDeckId.value === null) {
+    toast.add({ severity: 'warn', summary: 'Select the media this request updates', life: 5000 });
+    return;
+  }
   isSavingDescription.value = true;
   const success = await editRequestDescription(
     request.value.id,
     editOwnDescription.value.trim() || undefined,
     editOwnExternalUrl.value.trim() || undefined,
+    isOwnUpdateRequest.value ? editOwnTargetDeckId.value ?? undefined : undefined,
   );
   isSavingDescription.value = false;
   if (success) {
@@ -502,6 +502,11 @@ onMounted(() => loadData());
           <div class="mb-4">
             <h1 class="text-2xl font-bold mb-2">{{ request.title }}</h1>
             <div class="flex items-center gap-2 flex-wrap">
+              <Tag
+                v-if="request.kind === RequestKind.Update"
+                :value="getRequestKindText(request.kind)"
+                :icon="getRequestKindIcon(request.kind)"
+              />
               <Tag :value="getMediaTypeText(request.mediaType)" severity="secondary" />
               <Tag
                 :value="getRequestStatusText(request.status)"
@@ -516,6 +521,21 @@ onMounted(() => loadData());
                 by <span class="font-medium">{{ request.requesterName }}</span>
               </span>
             </div>
+          </div>
+
+          <div v-if="request.kind === RequestKind.Update" class="mb-4">
+            <NuxtLink
+              v-if="request.targetDeckId"
+              :to="`/decks/media/${request.targetDeckId}/detail`"
+              class="text-primary hover:underline flex items-center gap-1"
+            >
+              <i class="pi pi-refresh" />
+              Update to: {{ request.targetDeckTitle || `#${request.targetDeckId}` }}
+            </NuxtLink>
+            <span v-else class="text-muted-color flex items-center gap-1">
+              <i class="pi pi-exclamation-triangle" />
+              The media this request targets is no longer available.
+            </span>
           </div>
 
           <template v-if="!isEditingDescription">
@@ -534,7 +554,7 @@ onMounted(() => loadData());
             <div v-if="request.isOwnRequest && canComment" class="mb-4">
               <Button
                 icon="pi pi-pencil"
-                label="Edit Description"
+                :label="isOwnUpdateRequest ? 'Edit Request' : 'Edit Description'"
                 severity="secondary"
                 text
                 size="small"
@@ -543,6 +563,15 @@ onMounted(() => loadData());
             </div>
           </template>
           <div v-else class="mb-4 flex flex-col gap-2">
+            <div v-if="isOwnUpdateRequest" class="flex flex-col gap-1">
+              <label class="text-xs font-semibold">Media to update</label>
+              <MediaDeckPicker
+                v-model="editOwnTargetDeckId"
+                :label="editOwnTargetDeckLabel"
+                placeholder="Search the media on Jiten..."
+                :allow-raw-id="false"
+              />
+            </div>
             <div class="flex flex-col gap-1">
               <label class="text-xs font-semibold">Description</label>
               <Textarea v-model="editOwnDescription" rows="3" class="w-full" :maxlength="1000" />
@@ -630,6 +659,21 @@ onMounted(() => loadData());
                   <label class="text-xs font-semibold">Title</label>
                   <InputText v-model="editTitle" class="w-full" />
                 </div>
+                <div class="flex items-center gap-2">
+                  <Checkbox v-model="editIsUpdate" input-id="editIsUpdate" binary />
+                  <label for="editIsUpdate" class="text-xs font-semibold cursor-pointer">Update to existing media</label>
+                </div>
+                <div v-if="editIsUpdate" class="flex flex-col gap-1">
+                  <label class="text-xs font-semibold">Target Media</label>
+                  <MediaDeckPicker
+                    v-model="editTargetDeckId"
+                    :label="editTargetDeckLabel"
+                    placeholder="Search or select recent deck..."
+                    show-recent
+                    @select="onEditTargetDeckSelect"
+                  />
+                  <small v-if="editTargetDeckId" class="text-surface-500">Deck ID: {{ editTargetDeckId }}</small>
+                </div>
                 <div class="flex flex-col gap-1">
                   <label class="text-xs font-semibold">Media Type</label>
                   <Select
@@ -638,7 +682,9 @@ onMounted(() => loadData());
                     option-label="label"
                     option-value="value"
                     class="w-full"
+                    :disabled="editIsUpdate"
                   />
+                  <small v-if="editIsUpdate" class="text-surface-500">Taken from the target media.</small>
                 </div>
                 <div class="flex flex-col gap-1">
                   <label class="text-xs font-semibold">External URL</label>
@@ -665,27 +711,12 @@ onMounted(() => loadData());
             </div>
             <div class="flex flex-col gap-2">
               <label class="font-semibold text-sm">Fulfilled Deck (for completion)</label>
-              <AutoComplete
-                v-model="selectedDeck"
-                :suggestions="deckSuggestions"
-                :option-label="getDeckLabel"
+              <MediaDeckPicker
+                v-model="fulfilledDeckId"
+                :label="fulfilledDeckLabel"
                 placeholder="Search or select recent deck..."
-                class="w-full"
-                dropdown
-                @complete="onDeckComplete"
-              >
-                <template #option="{ option }">
-                  <div class="flex items-center gap-2">
-                    <img
-                      :src="option.coverName && option.coverName !== 'nocover.jpg' ? option.coverName : '/img/nocover.jpg'"
-                      :alt="getDeckLabel(option)"
-                      class="h-10 w-7 object-cover rounded shrink-0"
-                    />
-                    <span class="truncate text-sm">{{ getDeckLabel(option) }}</span>
-                    <Tag :value="getMediaTypeText(option.mediaType)" severity="secondary" class="shrink-0 text-xs" />
-                  </div>
-                </template>
-              </AutoComplete>
+                show-recent
+              />
               <small v-if="fulfilledDeckId" class="text-surface-500">Deck ID: {{ fulfilledDeckId }}</small>
             </div>
             <div v-if="!isTerminal" class="flex gap-2 flex-wrap">

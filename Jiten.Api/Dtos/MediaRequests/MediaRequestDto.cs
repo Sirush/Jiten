@@ -6,12 +6,15 @@ public class MediaRequestDto
 {
     public int Id { get; set; }
     public required string Title { get; set; }
+    public MediaRequestKind Kind { get; set; }
     public MediaType MediaType { get; set; }
     public string? ExternalUrl { get; set; }
     public LinkType? ExternalLinkType { get; set; }
     public string? Description { get; set; }
     public MediaRequestStatus Status { get; set; }
     public string? AdminNote { get; set; }
+    public int? TargetDeckId { get; set; }
+    public string? TargetDeckTitle { get; set; }
     public int? FulfilledDeckId { get; set; }
     public string? FulfilledDeckTitle { get; set; }
     public int UpvoteCount { get; set; }

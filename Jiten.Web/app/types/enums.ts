@@ -195,6 +195,11 @@ export enum RequestStatus {
   Rejected = 4,
 }
 
+export enum RequestKind {
+  New = 1,
+  Update = 2,
+}
+
 export enum NotificationType {
   RequestStatusChanged = 1,
   RequestCompleted = 2,

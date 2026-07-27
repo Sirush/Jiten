@@ -12,6 +12,7 @@ import {
   type NotificationType,
   type ReadingType,
   type RequestAction,
+  type RequestKind,
   type RequestStatus,
   type WordSetStateType,
 } from '~/types';
@@ -753,12 +754,15 @@ export interface DictionarySearchResult {
 export interface MediaRequestDto {
   id: number;
   title: string;
+  kind: RequestKind;
   mediaType: MediaType;
   externalUrl?: string;
   externalLinkType?: LinkType;
   description?: string;
   status: RequestStatus;
   adminNote?: string;
+  targetDeckId?: number;
+  targetDeckTitle?: string;
   fulfilledDeckId?: number;
   fulfilledDeckTitle?: string;
   upvoteCount: number;
@@ -805,6 +809,7 @@ export interface MediaRequestUploadAdminDto extends MediaRequestUploadDto {
 export interface DuplicateCheckResultDto {
   existingDecks: DuplicateCheckDeckDto[];
   existingRequests: DuplicateCheckRequestDto[];
+  existingUpdateRequests: DuplicateCheckRequestDto[];
 }
 
 export interface DuplicateCheckDeckDto {
