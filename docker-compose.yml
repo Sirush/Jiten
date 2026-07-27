@@ -36,9 +36,9 @@ services:
       voicevox:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail http://localhost:8080/health || exit 1"]
+      test: ["CMD-SHELL", "curl --fail --max-time 8 http://localhost:8080/health || exit 1"]
       interval: 5s
-      timeout: 5s
+      timeout: 10s
       retries: 10
       start_period: 30s
     environment:

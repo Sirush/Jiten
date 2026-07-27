@@ -91,7 +91,7 @@ public class ComputationJob(
         """;
     private const string COVERAGE_WORK_MEM = "256MB";
 
-    [Queue("coverage")]
+    [Queue(CoverageQueues.Incremental)]
     public async Task DailyUserCoverage()
     {
         await using var userContext = await userContextFactory.CreateDbContextAsync();
@@ -113,7 +113,8 @@ public class ComputationJob(
         }
     }
 
-    [Queue("coverage")]
+    [AutomaticRetry(Attempts = 0)]
+    [Queue(CoverageQueues.Full)]
     public async Task ComputeUserCoverage(string userId)
     {
         // Prevent duplicate concurrent computations for the same user
@@ -170,7 +171,7 @@ public class ComputationJob(
     // Drains the Redis set of newly-parsed decks and fans out a single batch coverage job
     // per eligible user covering all pending decks. Runs on a recurring schedule (~15min).
     // This coalesces bursts of deck ingest so we enqueue O(users) jobs instead of O(users * decks).
-    [Queue("coverage")]
+    [Queue(CoverageQueues.Incremental)]
     public async Task SweepPendingCoverageDecks()
     {
         var deckIds = await pendingCoverageQueue.DrainAsync();
@@ -226,7 +227,7 @@ public class ComputationJob(
         }
     }
 
-    [Queue("coverage")]
+    [Queue(CoverageQueues.Incremental)]
     public async Task ComputeUserDeckCoverageBatch(string userId, int[] deckIds)
     {
         if (deckIds is null || deckIds.Length == 0) return;
@@ -295,7 +296,7 @@ public class ComputationJob(
         }
     }
 
-    [Queue("coverage")]
+    [Queue(CoverageQueues.Incremental)]
     public async Task ComputeUserDeckCoverage(string userId, int deckId)
     {
         // Prevent duplicate concurrent computations for the same user
@@ -333,7 +334,7 @@ public class ComputationJob(
         }
     }
 
-    [Queue("coverage")]
+    [Queue(CoverageQueues.Incremental)]
     public async Task ComputeUserChildrenCoverage(string userId, int parentDeckId)
     {
         lock (CoverageComputeLock)
@@ -693,7 +694,7 @@ public class ComputationJob(
     private static readonly object KanjiGridComputeLock = new();
     private static readonly HashSet<string> KanjiGridComputingUserIds = new();
 
-    [Queue("coverage")]
+    [Queue(CoverageQueues.Incremental)]
     public async Task ComputeUserKanjiGrid(string userId)
     {
         lock (KanjiGridComputeLock)
@@ -880,7 +881,7 @@ public class ComputationJob(
     private static readonly HashSet<string> AccomplishmentComputingUserIds = new();
     private const int GLOBAL_MEDIA_TYPE_KEY = -1;
 
-    [Queue("coverage")]
+    [Queue(CoverageQueues.Incremental)]
     public async Task ComputeUserAccomplishments(string userId)
     {
         lock (AccomplishmentComputeLock)

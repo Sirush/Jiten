@@ -29,6 +29,8 @@ using Jiten.Api.Middleware;
 using StackExchange.Redis;
 using IPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
 
+ThreadPool.SetMinThreads(64, 64);
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.AddJsonFile(Path.Combine(Environment.CurrentDirectory, "..", "Shared", "sharedsettings.json"), optional: true,
@@ -236,6 +238,14 @@ if (enableOtlpExporter)
 
     // Configure OpenTelemetry Logging
     builder.Logging.ClearProviders();
+    // Keep a console sink alongside OTLP: when the OTLP pipeline is the only sink, an outage or a
+    // process death leaves `docker logs` empty and the incident unreconstructable.
+    builder.Logging.AddSimpleConsole(options =>
+    {
+        options.SingleLine = true;
+        options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
+        options.UseUtcTimestamp = true;
+    });
     builder.Logging.AddOpenTelemetry(options =>
     {
         options.SetResourceBuilder(resourceBuilder);
@@ -701,8 +711,17 @@ builder.Services.AddHangfireServer((options) =>
 builder.Services.AddHangfireServer((options) =>
 {
     options.ServerName = "CoverageServer";
-    options.Queues = ["coverage"];
+    options.Queues = [CoverageQueues.Incremental];
     options.WorkerCount = 4;
+});
+
+// Single worker: a full recompute scans all of DeckWords, so concurrent runs thrash the shared
+// buffer pool and slow every other query rather than finishing any sooner.
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "CoverageFullServer";
+    options.Queues = [CoverageQueues.Full];
+    options.WorkerCount = 1;
 });
 
 builder.Services.AddHangfireServer((options) =>

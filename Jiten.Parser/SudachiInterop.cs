@@ -88,9 +88,10 @@ static class SudachiInterop
     // Dynamic user dictionary CSV bytes (set per-deck, used at context creation)
     private static byte[]? _dynamicUserDictCsv;
 
-    // Limit concurrent Sudachi processing to match parse worker count (ProcessorCount / 4, min 1)
-    // This reduces lock contention by gating how many threads attempt to acquire ProcessTextLock
-    private static readonly int MaxConcurrentProcessing = Math.Max(1, Environment.ProcessorCount / 4);
+    // One permit, because ProcessTextLock serialises the native calls anyway: a second permit only
+    // buys a thread parked on the monitor. Prefer the *Async entry points from request paths so
+    // queued callers wait on a task rather than occupying a thread-pool thread.
+    private const int MaxConcurrentProcessing = 1;
     private static readonly SemaphoreSlim _processingSemaphore = new(MaxConcurrentProcessing, MaxConcurrentProcessing);
 
     // Thread-static callback state
@@ -345,101 +346,146 @@ static class SudachiInterop
         byte[]? userDictCsv = null,
         bool emitMargins = false)
     {
+        _processingSemaphore.Wait();
+        try
+        {
+            return ProcessTextStreamingCore(configPath, inputText, dictionaryPath, out rawOutput, captureRaw,
+                                            mode, printAll, wakati, userDictCsv, emitMargins);
+        }
+        finally
+        {
+            _processingSemaphore.Release();
+        }
+    }
+
+    /// <summary>
+    /// Awaits the processing gate instead of blocking it. Use from request paths: a blocking wait here
+    /// parks a thread-pool thread for the whole queue depth, which starves unrelated requests.
+    /// </summary>
+    public static async Task<(List<WordInfo> Words, string? RawOutput)> ProcessTextStreamingAsync(
+        string configPath,
+        string inputText,
+        string dictionaryPath,
+        bool captureRaw = false,
+        char mode = 'C',
+        bool printAll = true,
+        bool wakati = false,
+        byte[]? userDictCsv = null,
+        bool emitMargins = false,
+        CancellationToken cancellationToken = default)
+    {
+        await _processingSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var words = ProcessTextStreamingCore(configPath, inputText, dictionaryPath, out var rawOutput, captureRaw,
+                                                 mode, printAll, wakati, userDictCsv, emitMargins);
+            return (words, rawOutput);
+        }
+        finally
+        {
+            _processingSemaphore.Release();
+        }
+    }
+
+    private static List<WordInfo> ProcessTextStreamingCore(
+        string configPath,
+        string inputText,
+        string dictionaryPath,
+        out string? rawOutput,
+        bool captureRaw,
+        char mode,
+        bool printAll,
+        bool wakati,
+        byte[]? userDictCsv,
+        bool emitMargins)
+    {
         rawOutput = null;
         if (_processTextCtxStreamV2 == null)
             throw new InvalidOperationException("Streaming FFI not available in this build");
         if (emitMargins && _processTextCtxStreamV3 == null)
             emitMargins = false; // old native library without margin support
 
-        _processingSemaphore.Wait();
-        try
+        lock (ProcessTextLock)
         {
-            lock (ProcessTextLock)
+            if (!CsvUnchanged(_dynamicUserDictCsv, userDictCsv))
             {
-                if (!CsvUnchanged(_dynamicUserDictCsv, userDictCsv))
-                {
-                    _dynamicUserDictCsv = userDictCsv;
-                    RecycleContext();
-                }
-                // Clean up text using fast lookup table filter
-                inputText = FilterAllowedChars(inputText);
-
-                // If there's no kanas, kanjis, or fullwidth letters, abort
-                if (HasNoJapaneseChars(inputText))
-                    return new List<WordInfo>();
-
-                ResetCallbackState(captureRaw);
-
-                IntPtr ctx = GetOrCreateContext(configPath, dictionaryPath);
-
-                byte[] inputBytes = Encoding.UTF8.GetBytes(inputText);
-
-                unsafe
-                {
-                    fixed (byte* inputPtr = inputBytes)
-                    {
-                        IntPtr errPtr = emitMargins
-                            ? _processTextCtxStreamV3!(
-                                ctx,
-                                inputPtr,
-                                (nuint)inputBytes.Length,
-                                (sbyte)mode,
-                                (byte)(printAll ? 1 : 0),
-                                (byte)(wakati ? 1 : 0),
-                                1,
-                                _outputCallback,
-                                IntPtr.Zero)
-                            : _processTextCtxStreamV2(
-                                ctx,
-                                inputPtr,
-                                (nuint)inputBytes.Length,
-                                (sbyte)mode,
-                                (byte)(printAll ? 1 : 0),
-                                (byte)(wakati ? 1 : 0),
-                                _outputCallback,
-                                IntPtr.Zero);
-
-                        string err = Marshal.PtrToStringUTF8(errPtr) ?? "";
-                        _freeString(errPtr);
-
-                        if (!string.IsNullOrEmpty(err))
-                        {
-                            RecycleContext();
-                            throw new InvalidOperationException($"Sudachi streaming error: {err}");
-                        }
-                    }
-                }
-
-                // Flush any remaining leftover
-                if (_leftoverLen > 0)
-                {
-                    string line = Encoding.UTF8.GetString(_leftover!, 0, _leftoverLen);
-                    if (line != "EOS" && line.Length != 0)
-                    {
-                        _rawCapture?.Append(line).Append('\n');
-                        var wi = new WordInfo(line);
-                        if (!wi.IsInvalid) _wordInfos!.Add(wi);
-                    }
-                }
-
-                if (_cbError != null)
-                    throw new InvalidOperationException("Sudachi streaming callback error", _cbError);
-
-                rawOutput = _rawCapture?.ToString();
-                _rawCapture = null;
-
-                var result = _wordInfos!;
-                _wordInfos = null;
-
-                if (Interlocked.Increment(ref _contextCallCount) % ContextRecycleThreshold == 0)
-                    RecycleContext();
-
-                return result;
+                _dynamicUserDictCsv = userDictCsv;
+                RecycleContext();
             }
-        }
-        finally
-        {
-            _processingSemaphore.Release();
+            // Clean up text using fast lookup table filter
+            inputText = FilterAllowedChars(inputText);
+
+            // If there's no kanas, kanjis, or fullwidth letters, abort
+            if (HasNoJapaneseChars(inputText))
+                return new List<WordInfo>();
+
+            ResetCallbackState(captureRaw);
+
+            IntPtr ctx = GetOrCreateContext(configPath, dictionaryPath);
+
+            byte[] inputBytes = Encoding.UTF8.GetBytes(inputText);
+
+            unsafe
+            {
+                fixed (byte* inputPtr = inputBytes)
+                {
+                    IntPtr errPtr = emitMargins
+                        ? _processTextCtxStreamV3!(
+                            ctx,
+                            inputPtr,
+                            (nuint)inputBytes.Length,
+                            (sbyte)mode,
+                            (byte)(printAll ? 1 : 0),
+                            (byte)(wakati ? 1 : 0),
+                            1,
+                            _outputCallback,
+                            IntPtr.Zero)
+                        : _processTextCtxStreamV2(
+                            ctx,
+                            inputPtr,
+                            (nuint)inputBytes.Length,
+                            (sbyte)mode,
+                            (byte)(printAll ? 1 : 0),
+                            (byte)(wakati ? 1 : 0),
+                            _outputCallback,
+                            IntPtr.Zero);
+
+                    string err = Marshal.PtrToStringUTF8(errPtr) ?? "";
+                    _freeString(errPtr);
+
+                    if (!string.IsNullOrEmpty(err))
+                    {
+                        RecycleContext();
+                        throw new InvalidOperationException($"Sudachi streaming error: {err}");
+                    }
+                }
+            }
+
+            // Flush any remaining leftover
+            if (_leftoverLen > 0)
+            {
+                string line = Encoding.UTF8.GetString(_leftover!, 0, _leftoverLen);
+                if (line != "EOS" && line.Length != 0)
+                {
+                    _rawCapture?.Append(line).Append('\n');
+                    var wi = new WordInfo(line);
+                    if (!wi.IsInvalid) _wordInfos!.Add(wi);
+                }
+            }
+
+            if (_cbError != null)
+                throw new InvalidOperationException("Sudachi streaming callback error", _cbError);
+
+            rawOutput = _rawCapture?.ToString();
+            _rawCapture = null;
+
+            var result = _wordInfos!;
+            _wordInfos = null;
+
+            if (Interlocked.Increment(ref _contextCallCount) % ContextRecycleThreshold == 0)
+                RecycleContext();
+
+            return result;
         }
     }
 
