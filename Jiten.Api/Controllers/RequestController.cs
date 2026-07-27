@@ -38,6 +38,9 @@ public partial class RequestController(
         [".srt", ".ass", ".ssa", ".epub", ".zip", ".rar", ".7z", ".txt", ".mokuro"];
 
     private const long MaxUploadSize = 104_857_600; // 100MB
+    // The transport limit covers the whole multipart body, so it needs headroom over the file payload it carries;
+    // without it a file just under 100MB is killed by Kestrel before the controller can explain why.
+    private const long MaxRequestBodySize = MaxUploadSize + 1_048_576;
     private const long MaxUploadBytesPerDay = 500 * 1024 * 1024; // 500MB per 24h
     private const int MonthlyBoostLimit = 5;
     private const int BoostWeight = 5;
@@ -636,6 +639,13 @@ public partial class RequestController(
         if (existing != null)
         {
             context.MediaRequestUpvotes.Remove(existing);
+
+            // Upvoting subscribes, so withdrawing it unsubscribes; the Subscribe button restores a wanted one.
+            var subscription = await context.MediaRequestSubscriptions
+                .FirstOrDefaultAsync(s => s.MediaRequestId == id && s.UserId == userId);
+            if (subscription != null)
+                context.MediaRequestSubscriptions.Remove(subscription);
+
             await context.SaveChangesAsync();
 
             await context.MediaRequests
@@ -681,7 +691,7 @@ public partial class RequestController(
             .Select(r => r.UpvoteCount)
             .FirstAsync();
 
-        return Results.Ok(new { upvoted, upvoteCount = Math.Max(0, upvoteCount) });
+        return Results.Ok(new { upvoted, upvoteCount = Math.Max(0, upvoteCount), subscribed = upvoted });
     }
 
     [HttpGet("{id:int}/upvote")]
@@ -862,7 +872,7 @@ public partial class RequestController(
 
     [HttpPost("{id:int}/comments")]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(MaxUploadSize)]
+    [RequestSizeLimit(MaxRequestBodySize)]
     public async Task<IResult> AddComment(int id, [FromForm] string? text, [FromForm] IFormFile[]? files)
     {
         var userId = currentUserService.UserId;

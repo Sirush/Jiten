@@ -244,13 +244,14 @@ public class CoverageJourneyService(
     private static List<KnownSegment> DeriveSegments(
         FsrsState state, DateTime due, DateTime? lastReview, DateTime createdAt, TransitionDates? cached, DateOnly today)
     {
-        var alwaysMature = state is FsrsState.Blacklisted or FsrsState.Mastered or FsrsState.Suspended;
+        // Blacklisted and Mastered only; _mature_known keeps Suspended on its interval-derived tier.
+        var alwaysMature = state is FsrsState.Blacklisted or FsrsState.Mastered;
         var finalInterval = lastReview.HasValue ? due - lastReview.Value : (TimeSpan?)null;
         var matureNow = alwaysMature || (finalInterval.HasValue && finalInterval.Value >= MatureInterval);
         // Mirrors _fsrs_young in CoverageComputeService, which is what the coverage bars count: a card whose
         // schedule was reset is back in the new queue and counts as neither mature nor young.
         var youngNow = !matureNow && lastReview.HasValue
-                                  && state is FsrsState.Learning or FsrsState.Review or FsrsState.Relearning;
+                                  && state is FsrsState.Learning or FsrsState.Review or FsrsState.Relearning or FsrsState.Suspended;
 
         DateOnly first;
         DateOnly? matured;

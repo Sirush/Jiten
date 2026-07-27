@@ -995,6 +995,7 @@ export interface StudyCardDto {
   readingIndex: number;
   state: number;
   isNewCard: boolean;
+  due?: string | null;
   lapses: number;
   isLeech: boolean;
   wordText: string;

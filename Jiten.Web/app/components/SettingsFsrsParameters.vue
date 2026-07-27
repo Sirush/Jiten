@@ -396,10 +396,15 @@
         body: { reschedule: true },
       });
       await Promise.all([loadHealth(), loadParameters(true)]);
+      const detail = result.remapped === 0
+        ? 'No Hard reviews found to remap.'
+        : result.rescheduled
+          ? `${result.remapped} Hard reviews remapped to Again and cards rescheduled.`
+          : `${result.remapped} Hard reviews remapped to Again.`;
       toast.add({
-        severity: 'success',
-        summary: 'Remap complete',
-        detail: `${result.remapped} Hard reviews remapped to Again and cards rescheduled.`,
+        severity: result.remapped === 0 ? 'info' : 'success',
+        summary: result.remapped === 0 ? 'Nothing to remap' : 'Remap complete',
+        detail,
         life: 6000,
       });
     } catch (error: unknown) {
@@ -752,7 +757,7 @@
       <div class="mb-5">
         <h4 class="text-md font-semibold mb-1">Optimise parameters</h4>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">
-          Analyse your review history to find the optimal FSRS parameters for your memory patterns. <br /> The more reviews you have, the more accurate the optimisation will be. It is recommended to optimise every time your number of review doubles.
+          Analyse your review history to find the optimal FSRS parameters for your memory patterns. <br /> The more reviews you have, the more accurate the optimisation will be. It is recommended to optimise every time your number of reviews doubles.
           <br />You currently have {{reviewCount}} reviews.
         </p>
 
@@ -798,11 +803,11 @@
             </div>
             <div v-if="health.neverUsesHard" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <i class="pi pi-info-circle text-sky-500 text-sm" />
-              You have never pressed <b>Hard</b>- Using it for cards you barely recalled gives the optimiser more to work with.
+              You have never pressed <b>Hard</b>. Using it for cards you barely recalled gives the optimiser more to work with.
             </div>
             <div v-if="health.neverUsesEasy" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <i class="pi pi-info-circle text-sky-500 text-sm" />
-              You have never pressed <b>Easy</b>- Reserve it for cards that felt effortless.
+              You have never pressed <b>Easy</b>. Reserve it for cards that felt effortless.
             </div>
             <div v-if="sameDayPct >= 40 && !health.likelyHardAsFail" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <i class="pi pi-info-circle text-sky-500 text-sm" />

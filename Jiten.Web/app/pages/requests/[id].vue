@@ -135,7 +135,7 @@ async function handleUpvote() {
   if (result) {
     request.value.hasUserUpvoted = result.upvoted;
     request.value.upvoteCount = result.upvoteCount;
-    if (result.upvoted) request.value.isSubscribed = true;
+    request.value.isSubscribed = result.subscribed;
   } else {
     toastApiError('Vote failed', 'Failed to update your vote. Please try again.');
   }
@@ -206,11 +206,13 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const maxUploadBytes = 104_857_600;
 const totalFileSize = computed(() => selectedFiles.value.reduce((sum, f) => sum + f.size, 0));
+const isOverUploadLimit = computed(() => totalFileSize.value > maxUploadBytes);
 const hasContent = computed(() => commentText.value.trim().length > 0 || selectedFiles.value.length > 0);
 
 async function handleAddComment() {
-  if (!hasContent.value || !request.value) return;
+  if (!hasContent.value || isOverUploadLimit.value || !request.value) return;
   isSubmittingComment.value = true;
   const text = commentText.value.trim() || undefined;
   const files = selectedFiles.value.length > 0 ? selectedFiles.value : undefined;
@@ -1043,8 +1045,9 @@ onMounted(() => loadData());
                     @click="removeFile(index)"
                   />
                 </div>
-                <small v-if="selectedFiles.length > 1" class="text-muted-color">
+                <small :class="isOverUploadLimit ? 'text-red-500' : 'text-muted-color'">
                   Total: {{ formatFileSize(totalFileSize) }}
+                  <template v-if="isOverUploadLimit">. Over the 100MB limit, remove a file to post.</template>
                 </small>
               </div>
             </div>
@@ -1054,7 +1057,7 @@ onMounted(() => loadData());
                 :label="selectedFiles.length > 0 ? 'Post Comment & Upload' : 'Post Comment'"
                 icon="pi pi-send"
                 :loading="isSubmittingComment"
-                :disabled="!hasContent"
+                :disabled="!hasContent || isOverUploadLimit"
                 @click="handleAddComment"
               />
             </div>

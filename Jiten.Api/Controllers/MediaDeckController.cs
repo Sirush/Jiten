@@ -1921,20 +1921,18 @@ public class MediaDeckController(
             }).ToList();
         }
 
-        int applied;
-        if (state == "mastered")
-            applied = await currentUserService.AddKnownWords(deckWordsRaw!);
-        else
-            applied = await currentUserService.BlacklistWords(deckWordsRaw!);
+        var applied = (state == "mastered"
+            ? await currentUserService.AddKnownWords(deckWordsRaw!)
+            : await currentUserService.BlacklistWords(deckWordsRaw!)).Inserted;
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, currentUserService.UserId!);
         await userContext.SaveChangesAsync();
 
         logger.LogInformation(
                               "User applied learn to deck: DeckId={DeckId}, DeckTitle={DeckTitle}, State={State}, WordCount={WordCount}",
-                              id, deck.OriginalTitle, state, deckWordsRaw!.Count);
+                              id, deck.OriginalTitle, state, applied);
 
-        return Results.Ok(new { applied = deckWordsRaw.Count, state });
+        return Results.Ok(new { applied, state });
     }
 
     /// <summary>

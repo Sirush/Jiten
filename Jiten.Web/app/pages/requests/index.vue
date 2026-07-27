@@ -220,9 +220,7 @@ async function handleUpvote(request: MediaRequestDto) {
   if (result) {
     request.hasUserUpvoted = result.upvoted;
     request.upvoteCount = result.upvoteCount;
-    if (result.upvoted) {
-      request.isSubscribed = true;
-    }
+    request.isSubscribed = result.subscribed;
   } else {
     toastApiError('Vote failed', 'Failed to update your vote. Please try again.');
   }

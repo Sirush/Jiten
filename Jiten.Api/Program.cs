@@ -70,6 +70,8 @@ builder.Services.AddSwaggerGen(c =>
 
     c.UseInlineDefinitionsForEnums();
     c.EnableAnnotations();
+
+    c.CustomSchemaIds(SwaggerSchemaId.For);
     c.SchemaFilter<EnumSchemaFilter>();
     c.DocumentFilter<EnumDocumentFilter>();
 
@@ -496,7 +498,7 @@ builder.Services.AddRateLimiter(options =>
         return RateLimitPartition.GetFixedWindowLimiter(partitionKey,
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 2, Window = TimeSpan.FromMinutes(5),
+                PermitLimit = 5, Window = TimeSpan.FromMinutes(5),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
                 AutoReplenishment = true
             });

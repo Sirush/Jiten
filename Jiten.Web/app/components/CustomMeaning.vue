@@ -2,6 +2,8 @@
   import type { UserCustomMeaningDto } from '~/types';
   import Button from 'primevue/button';
   import Textarea from 'primevue/textarea';
+  import { useToast } from 'primevue/usetoast';
+  import { extractApiError } from '~/utils/toast';
 
   const props = defineProps<{
     wordId: number;
@@ -13,6 +15,7 @@
 
   const { $api } = useNuxtApp();
   const authStore = useAuthStore();
+  const toast = useToast();
 
   const meaning = ref<string | null>(null);
   const loaded = ref(false);
@@ -72,6 +75,14 @@
       });
       meaning.value = dto.text;
       editing.value = false;
+    } catch (e) {
+      // Editor stays open so the unsaved draft isn't lost.
+      toast.add({
+        severity: 'error',
+        summary: 'Could not save note',
+        detail: extractApiError(e, 'Your note was not saved. Please try again.'),
+        life: 6000,
+      });
     } finally {
       saving.value = false;
     }
@@ -84,6 +95,14 @@
       meaning.value = null;
       editing.value = false;
       confirmingDelete.value = false;
+    } catch (e) {
+      confirmingDelete.value = false;
+      toast.add({
+        severity: 'error',
+        summary: 'Could not delete note',
+        detail: extractApiError(e, 'Your note was not deleted. Please try again.'),
+        life: 6000,
+      });
     } finally {
       deleting.value = false;
     }

@@ -794,6 +794,7 @@ public class SrsController(
     }
 
     [HttpPost("settings/recompute")]
+    [EnableRateLimiting("compute")]
     [SwaggerOperation(Summary = "Recompute FSRS scheduling",
                       Description = "Recompute scheduling for all cards using the stored settings (or defaults).")]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -978,7 +979,10 @@ public class SrsController(
             case "bury-remove":
                 if (card != null)
                 {
-                    card.Due = DateTime.UtcNow;
+                    // The client hands back the due date it held before burying. Burying only ever pushes a
+                    // card forward, so a value later than the current due is not a restore and is discarded.
+                    var restored = request.RestoreDue?.ToUniversalTime();
+                    card.Due = restored < card.Due ? restored.Value : DateTime.UtcNow;
                 }
                 break;
 

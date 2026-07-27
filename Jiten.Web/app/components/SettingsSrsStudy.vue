@@ -1242,7 +1242,7 @@
         <label class="block text-sm font-medium mb-1">
           Grading buttons
           <Tooltip
-            content="**4 buttons** — Again, Hard, Good, Easy — gives finer control over scheduling.<br>**2 buttons** — Forgot and Remembered — simpler and faster to grade."
+            content="**4 buttons** — Again, Hard, Good, Easy — gives finer control over scheduling.<br>**2 buttons** — Again and Good — simpler and faster to grade."
             placement="top"
           >
             <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />

@@ -91,14 +91,9 @@
       await srsStore.addDeckWord(deckId, props.word.wordId, props.word.mainReading.readingIndex, 1);
       deckMembership.value.add(deckId);
       toast.add({ severity: 'success', summary: `Added to deck`, life: 1500 });
-    } catch (e: any) {
-      const msg = e?.data?.message || e?.message || '';
-      if (msg.includes('already in the deck')) {
-        deckMembership.value.add(deckId);
-        toast.add({ severity: 'info', summary: 'Already in deck', life: 2000 });
-      } else {
-        toast.add({ severity: 'error', summary: 'Failed to add', life: 3000 });
-      }
+    } catch {
+      fetchDeckMembership();
+      toast.add({ severity: 'error', summary: 'Failed to add', life: 3000 });
     } finally {
       addingToDeck.value = null;
     }

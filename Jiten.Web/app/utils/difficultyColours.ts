@@ -1,9 +1,9 @@
-export const difficultyNames = ['Beginner', 'Easy', 'Moderate', 'Hard', 'Expert', 'Insane'] as const;
+export const difficultyNames = ['Beginner', 'Easy', 'Average', 'Hard', 'Expert', 'Insane'] as const;
 
 export const difficultyTextClasses = [
   'text-green-700 dark:text-green-300', // Beginner
   'text-green-500 dark:text-green-200', // Easy
-  'text-cyan-500 dark:text-cyan-300', // Moderate
+  'text-cyan-500 dark:text-cyan-300', // Average
   'text-amber-600 dark:text-amber-300', // Hard
   'text-red-600 dark:text-red-300', // Expert
   'text-red-600 dark:text-red-300', // Insane
@@ -12,7 +12,7 @@ export const difficultyTextClasses = [
 export const difficultyChartColours = [
   'rgba(21, 128, 61, 0.8)', // green-700 - Beginner
   'rgba(34, 197, 94, 0.8)', // green-500 - Easy
-  'rgba(6, 182, 212, 0.8)', // cyan-500 - Moderate
+  'rgba(6, 182, 212, 0.8)', // cyan-500 - Average
   'rgba(217, 119, 6, 0.8)', // amber-600 - Hard
   'rgba(220, 38, 38, 0.8)', // red-600 - Expert
   'rgba(220, 38, 38, 0.8)', // red-600 - Insane

@@ -23,11 +23,12 @@
 
   onMounted(fetchApiKeyInfo);
 
+  const hasLiveKey = computed(() => !!apiKeyInfo.value && !apiKeyInfo.value.isRevoked);
+
   const status = computed(() => {
-    if (!apiKeyInfo.value) return null;
-    if (apiKeyInfo.value.isRevoked) return 'Revoked';
-    const lastUsed = apiKeyInfo.value.lastUsedAt ? formatDateShort(apiKeyInfo.value.lastUsedAt) : 'never used';
-    return `Created ${formatDateShort(apiKeyInfo.value.createdAt)} - last used ${lastUsed}`;
+    if (!hasLiveKey.value) return null;
+    const lastUsed = apiKeyInfo.value!.lastUsedAt ? formatDateShort(apiKeyInfo.value!.lastUsedAt) : 'never used';
+    return `Created ${formatDateShort(apiKeyInfo.value!.createdAt)} - last used ${lastUsed}`;
   });
 
   const createApiKey = async () => {
@@ -56,15 +57,12 @@
   };
 
   const revokeAndRegenerate = async () => {
-    if (!apiKeyInfo.value) return;
+    if (!hasLiveKey.value) return;
 
     try {
       isLoading.value = true;
 
-      // Only revoke if not already revoked
-      if (!apiKeyInfo.value.isRevoked) {
-        await $api(`api-key/${apiKeyInfo.value.id}/revoke`, { method: 'POST' });
-      }
+      await $api(`api-key/${apiKeyInfo.value!.id}/revoke`, { method: 'POST' });
 
       const result = await $api<CreateApiKeyResponse>('api-key/create', { method: 'POST' });
       newlyCreatedKey.value = result.apiKey;
@@ -173,7 +171,7 @@
     </Message>
 
     <Button
-      v-if="apiKeyInfo"
+      v-if="hasLiveKey"
       icon="pi pi-refresh"
       label="Regenerate"
       severity="warn"
@@ -181,7 +179,7 @@
       outlined
       class="mt-3"
       :loading="isLoading"
-      :disabled="isLoading || apiKeyInfo.isRevoked"
+      :disabled="isLoading"
       @click="confirmRegenerate"
     />
     <Button v-else icon="pi pi-key" label="Generate API key" size="small" outlined class="mt-3" :loading="isLoading" @click="confirmGenerate" />

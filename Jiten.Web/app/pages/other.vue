@@ -4,10 +4,17 @@
   import Card from 'primevue/card';
   import DataTable from 'primevue/datatable';
   import Column from 'primevue/column';
+  import { useToast } from 'primevue/usetoast';
   import { type GlobalStats, MediaType, type Word } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { extractApiError } from '~/utils/toast';
 
   const { $api } = useNuxtApp();
+  const toast = useToast();
+
+  const downloadingKey = ref<string | null>(null);
+  const downloadKey = (mediaType: MediaType | null | 'kanji', downloadType: 'yomitan' | 'csv') =>
+    `${mediaType ?? 'global'}-${downloadType}`;
 
   // Create an array of all media types plus Global (sorted) and Kanji at the end
   const deckTypes = [
@@ -23,6 +30,8 @@
   ];
 
   const downloadFrequencyList = async (mediaType: MediaType | null | 'kanji', downloadType: 'yomitan' | 'csv') => {
+    if (downloadingKey.value) return;
+    downloadingKey.value = downloadKey(mediaType, downloadType);
     try {
       let url = '';
       let fileName = '';
@@ -98,11 +107,25 @@
           link.remove();
           window.URL.revokeObjectURL(blobUrl);
         } else {
-          console.error('Error downloading file');
+          toast.add({
+            severity: 'error',
+            summary: 'Download failed',
+            detail: 'The frequency list came back empty. Please try again.',
+            life: 6000,
+          });
         }
       }
     } catch (err) {
-      console.error('Error:', err);
+      const status = (err as { statusCode?: number; status?: number })?.statusCode ?? (err as { status?: number })?.status;
+      const detail =
+        status === 404
+          ? 'This frequency list has not been generated yet. Please check back later.'
+          : status === 429
+            ? 'Too many downloads in a short time. Please wait a moment and try again.'
+            : extractApiError(err, 'The download could not be completed. Please try again.');
+      toast.add({ severity: 'error', summary: 'Download failed', detail, life: 6000 });
+    } finally {
+      downloadingKey.value = null;
     }
   };
 
@@ -138,8 +161,15 @@
             body-class="text-center"
           >
             <template #body="slotProps">
-              <Button severity="primary" size="small" class="w-full" @click="downloadFrequencyList(slotProps.data.id, 'yomitan')">
-                <Icon name="material-symbols-light:download" class="mr-2" size="1.5em" />
+              <Button
+                severity="primary"
+                size="small"
+                class="w-full"
+                :loading="downloadingKey === downloadKey(slotProps.data.id, 'yomitan')"
+                :disabled="downloadingKey !== null"
+                @click="downloadFrequencyList(slotProps.data.id, 'yomitan')"
+              >
+                <Icon v-if="downloadingKey !== downloadKey(slotProps.data.id, 'yomitan')" name="material-symbols-light:download" class="mr-2" size="1.5em" />
                 Yomitan
               </Button>
             </template>
@@ -152,8 +182,15 @@
             body-class="text-center"
           >
             <template #body="slotProps">
-              <Button severity="primary" size="small" class="w-full" @click="downloadFrequencyList(slotProps.data.id, 'csv')">
-                <Icon name="material-symbols-light:download" class="mr-2" size="1.5em" />
+              <Button
+                severity="primary"
+                size="small"
+                class="w-full"
+                :loading="downloadingKey === downloadKey(slotProps.data.id, 'csv')"
+                :disabled="downloadingKey !== null"
+                @click="downloadFrequencyList(slotProps.data.id, 'csv')"
+              >
+                <Icon v-if="downloadingKey !== downloadKey(slotProps.data.id, 'csv')" name="material-symbols-light:download" class="mr-2" size="1.5em" />
                 CSV
               </Button>
             </template>

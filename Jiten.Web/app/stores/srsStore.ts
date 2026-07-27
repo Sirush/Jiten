@@ -1146,6 +1146,8 @@ export const useSrsStore = defineStore('srs', () => {
             wordId: snap.card.wordId,
             readingIndex: snap.card.readingIndex,
             state: revertState,
+            // Burying overwrote the due date server-side; hand back the one the card had.
+            restoreDue: snap.type === 'bury' ? snap.card.due : undefined,
           },
         });
       }

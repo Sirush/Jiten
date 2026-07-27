@@ -34,12 +34,13 @@
   const isSettingsInteracted = ref(false);
   const mediaSectionsOpen = ref(false);
 
-  const hiddenSectionsCount = computed(
-    () =>
-      [hideCoverageBorders, hideGenres, hideTags, hideRelations, hideDescriptions, hideExternalRating, hideAlternativeTitles].filter(
-        (s) => s.value
-      ).length
-  );
+  // Coverage borders only count while its checkbox is rendered, or a logged-out visitor reads a
+  // count they have no way to see or clear.
+  const hiddenSectionsCount = computed(() => {
+    const toggles = [hideGenres, hideTags, hideRelations, hideDescriptions, hideExternalRating, hideAlternativeTitles];
+    if (auth.isAuthenticated) toggles.push(hideCoverageBorders);
+    return toggles.filter((s) => s.value).length;
+  });
 
   const titleLanguageOptions = ref([
     { label: 'Japanese', value: 0 },

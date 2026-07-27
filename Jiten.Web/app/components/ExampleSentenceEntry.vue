@@ -10,6 +10,9 @@
     readingIndex?: number;
     // The user already has the max number of custom sentences for this word — disable the create paths.
     atLimit?: boolean;
+    // Marked text of the custom sentences already saved for this word, so a sentence saved in an
+    // earlier visit still shows as starred.
+    savedTexts?: string[];
   }>();
 
   const emit = defineEmits<{
@@ -24,7 +27,7 @@
   const isNsfw = isTextNsfw(props.exampleSentence.text);
   const { limits: planLimits } = useJitenPlus();
   const sentenceLimitMessage = computed(() => `Maximum of ${planLimits.value.customSentencesPerWord} custom sentences reached`);
-  const favourited = ref(false);
+  const savedLocally = ref(false);
   const isRevealed = computed({
     get: () => store.displayAllNsfw,
     set: (value) => {
@@ -55,7 +58,7 @@
   const canEdit = computed(() => authStore.isAuthenticated && props.wordId != null && props.readingIndex != null);
   const editing = ref(false);
 
-  const editInitialText = computed(() => {
+  const markedText = computed(() => {
     const { text, wordPosition, wordLength } = props.exampleSentence;
     if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) return text;
     const before = text.substring(0, wordPosition);
@@ -64,7 +67,9 @@
     return `${before}**${word}**${after}`;
   });
 
-  const editInitialSource = computed(() => {
+  const favourited = computed(() => savedLocally.value || (props.savedTexts?.includes(markedText.value) ?? false));
+
+  const sentenceSource = computed(() => {
     const { sourceDeckParent, sourceDeck } = props.exampleSentence;
     let source = '';
     if (sourceDeckParent) source += localiseTitle(sourceDeckParent) + ' - ';
@@ -75,33 +80,23 @@
   // Editing a corpus sentence creates a new custom (favourite) sentence; reuse the favourite flow.
   function onEdited() {
     editing.value = false;
-    favourited.value = true;
+    savedLocally.value = true;
     emit('favourited');
   }
 
   async function favouriteSentence() {
     if (props.wordId == null || props.readingIndex == null) return;
 
-    const { text, wordPosition, wordLength, sourceDeckParent, sourceDeck } = props.exampleSentence;
-    const before = text.substring(0, wordPosition);
-    const word = text.substring(wordPosition, wordPosition + wordLength);
-    const after = text.substring(wordPosition + wordLength);
-    const markedText = `${before}**${word}**${after}`;
-
-    let source = '';
-    if (sourceDeckParent) source += localiseTitle(sourceDeckParent) + ' - ';
-    if (sourceDeck) source += localiseTitle(sourceDeck);
-    source = clampSentenceSource(source);
-
     try {
       await $api(`user/example-sentences/${props.wordId}/${props.readingIndex}/favourite`, {
         method: 'POST',
-        body: { text: markedText, source: source || undefined },
+        body: { text: markedText.value, source: sentenceSource.value || undefined },
       });
-      favourited.value = true;
+      savedLocally.value = true;
       emit('favourited');
-    } catch {
-      toast.add({ severity: 'error', summary: sentenceLimitMessage.value, life: 3000 });
+    } catch (e) {
+      const data = (e as { data?: unknown })?.data;
+      toast.add({ severity: 'error', summary: typeof data === 'string' && data ? data : sentenceLimitMessage.value, life: 3000 });
     }
   }
 </script>
@@ -112,8 +107,8 @@
       v-if="editing"
       :word-id="wordId"
       :reading-index="readingIndex"
-      :initial-text="editInitialText"
-      :initial-source="editInitialSource"
+      :initial-text="markedText"
+      :initial-source="sentenceSource"
       :user-sentence-id="null"
       class="mb-2"
       @saved="onEdited"

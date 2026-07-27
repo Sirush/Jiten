@@ -45,7 +45,7 @@ public class CardMediaController(
     [RequestSizeLimit(MaxFileBytes + 4096)]
     [EnableRateLimiting("card-media-upload")]
     [JitenPlus(JitenPlusTier.Trial, Feature = "card-media")]
-    public async Task<IResult> Upload(int wordId, int readingIndex, [FromForm] IFormFile? file)
+    public async Task<IResult> Upload(int wordId, int readingIndex, IFormFile? file)
     {
         var userId = currentUserService.UserId;
         if (string.IsNullOrEmpty(userId))

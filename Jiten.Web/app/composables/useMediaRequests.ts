@@ -128,10 +128,10 @@ export function useMediaRequests() {
     }
   };
 
-  const toggleUpvote = async (id: number): Promise<{ upvoted: boolean; upvoteCount: number } | null> => {
+  const toggleUpvote = async (id: number): Promise<{ upvoted: boolean; upvoteCount: number; subscribed: boolean } | null> => {
     error.value = null;
     try {
-      return await $api<{ upvoted: boolean; upvoteCount: number }>(`requests/${id}/upvote`, {
+      return await $api<{ upvoted: boolean; upvoteCount: number; subscribed: boolean }>(`requests/${id}/upvote`, {
         method: 'POST',
       });
     } catch (e) {

@@ -569,23 +569,34 @@ public class StudyController(
             });
         }
 
-        if (request.Sentence is { Length: > 0 and <= 150 }
-            && SentenceMarkerRegex.IsMatch(request.Sentence))
-        {
-            var sentenceCount = await userContext.UserExampleSentences
-                .CountAsync(e => e.UserId == userId && e.WordId == request.WordId && e.ReadingIndex == request.ReadingIndex);
+        bool? sentenceStored = null;
+        var sentenceLimitReached = false;
 
-            if (sentenceCount < 3)
+        if (request.Sentence is { Length: > 0 })
+        {
+            sentenceStored = false;
+
+            if (request.Sentence.Length <= 150 && SentenceMarkerRegex.IsMatch(request.Sentence))
             {
-                userContext.UserExampleSentences.Add(new UserExampleSentence
+                var sentenceCount = await userContext.UserExampleSentences
+                    .CountAsync(e => e.UserId == userId && e.WordId == request.WordId && e.ReadingIndex == request.ReadingIndex);
+
+                var limits = await userLimits.GetLimitsAsync(userId);
+                sentenceLimitReached = sentenceCount >= limits.CustomSentencesPerWord;
+
+                if (!sentenceLimitReached)
                 {
-                    UserId = userId,
-                    WordId = request.WordId,
-                    ReadingIndex = (byte)request.ReadingIndex,
-                    Text = request.Sentence,
-                    Source = request.Source?.Length > 150 ? request.Source[..150] : request.Source,
-                    SortOrder = (byte)sentenceCount
-                });
+                    userContext.UserExampleSentences.Add(new UserExampleSentence
+                    {
+                        UserId = userId,
+                        WordId = request.WordId,
+                        ReadingIndex = (byte)request.ReadingIndex,
+                        Text = request.Sentence,
+                        Source = request.Source?.Length > 150 ? request.Source[..150] : request.Source,
+                        SortOrder = (byte)sentenceCount
+                    });
+                    sentenceStored = true;
+                }
             }
         }
 
@@ -593,7 +604,7 @@ public class StudyController(
         await transaction.CommitAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
 
-        return Results.Ok(new { success = true });
+        return Results.Ok(new { success = true, sentenceStored, sentenceLimitReached });
     }
 
     [HttpPost("study-decks/{id:int}/words/batch")]
@@ -1941,6 +1952,7 @@ public class StudyController(
                 ReadingIndex = item.ReadingIndex,
                 State = item.State,
                 IsNewCard = item.IsNew,
+                Due = fsrsCard?.Due,
                 Lapses = fsrsCard?.Lapses ?? 0,
                 IsLeech = fsrsCard != null && LeechHelper.IsLeech(fsrsCard.Lapses, fsrsCard.Stability, settings.LeechThreshold),
                 WordText = mainForm?.RubyText ?? mainForm?.Text ?? "",
@@ -4163,9 +4175,9 @@ public class StudyController(
                     .ToList();
         }
 
-        var applied = state == "mastered"
+        var applied = (state == "mastered"
             ? await currentUserService.AddKnownWords(resolvedWords)
-            : await currentUserService.BlacklistWords(resolvedWords);
+            : await currentUserService.BlacklistWords(resolvedWords)).Inserted;
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();

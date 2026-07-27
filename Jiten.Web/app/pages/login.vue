@@ -22,9 +22,22 @@
   const recaptchaResponse = ref();
   const resendLoading = ref(false);
   const resendMessage = ref<string | null>(null);
+  const resendOpen = ref(false);
+  const resendEmail = ref('');
 
   const emailNotConfirmed = computed(() => !!authStore.error && authStore.error.toLowerCase().includes('email not confirmed'));
-  const resendEmailValid = computed(() => credentials.usernameOrEmail.includes('@'));
+  const resendEmailValid = computed(() => /.+@.+\..+/.test(resendEmail.value.trim()));
+
+  // The resend form carries its own address: the login field above accepts a username, which is not
+  // something the confirmation endpoint can resolve.
+  function openResend() {
+    if (!resendEmail.value && credentials.usernameOrEmail.includes('@')) resendEmail.value = credentials.usernameOrEmail.trim();
+    resendOpen.value = true;
+  }
+
+  watch(emailNotConfirmed, (isUnconfirmed) => {
+    if (isUnconfirmed) openResend();
+  });
 
   async function resendConfirmation() {
     resendMessage.value = null;
@@ -36,7 +49,7 @@
     try {
       const result = await $api<{ message: string }>('/account/resend-confirmation', {
         method: 'POST',
-        body: { email: credentials.usernameOrEmail, recaptchaResponse: recaptchaResponse.value || '' },
+        body: { email: resendEmail.value.trim(), recaptchaResponse: recaptchaResponse.value || '' },
       });
       resendMessage.value = result?.message || 'If your email address is registered and not yet confirmed, a new confirmation link has been sent.';
     } catch {
@@ -124,14 +137,25 @@
 
       <p v-if="authStore.error" class="error-message">{{ authStore.error }}</p>
 
-      <div v-if="emailNotConfirmed" class="resend-block">
-        <p v-if="resendEmailValid" class="resend-hint">Didn't get the confirmation email? Resend it to {{ credentials.usernameOrEmail }}.</p>
-        <p v-else class="resend-hint">Didn't get the confirmation email? Enter your email address above to resend it.</p>
-        <component v-if="RecaptchaCheckboxComponent" :is="RecaptchaCheckboxComponent" v-model="recaptchaResponse" class="my-2" />
-        <Button type="button" severity="secondary" :disabled="resendLoading || !resendEmailValid" @click="resendConfirmation">
-          {{ resendLoading ? 'Sending...' : 'Resend confirmation email' }}
-        </Button>
-        <p v-if="resendMessage" class="info-message">{{ resendMessage }}</p>
+      <div class="resend-block">
+        <Button v-if="!resendOpen" type="button" link class="resend-toggle" @click="openResend">Didn't get your confirmation email?</Button>
+        <div v-else class="flex flex-col gap-2">
+          <p class="resend-hint">Enter the address you registered with and we'll send a new confirmation link.</p>
+          <InputText v-model="resendEmail" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email address" />
+          <component v-if="RecaptchaCheckboxComponent" :is="RecaptchaCheckboxComponent" v-model="recaptchaResponse" class="my-2" />
+          <div class="flex">
+            <Button type="button" severity="secondary" :disabled="resendLoading || !resendEmailValid" @click="resendConfirmation">
+              {{ resendLoading ? 'Sending...' : 'Resend confirmation email' }}
+            </Button>
+          </div>
+          <template v-if="resendMessage">
+            <p class="info-message text-green-700 dark:text-green-400">{{ resendMessage }}</p>
+            <p class="resend-hint text-gray-600 dark:text-gray-400">
+              Nothing after a few minutes? The address on your account may have a typo, which looks identical to success here. Email
+              <a href="mailto:contact@jiten.moe">contact@jiten.moe</a> from the address you meant to use and ask for manual confirmation.
+            </p>
+          </template>
+        </div>
       </div>
     </template>
   </Card>
@@ -170,13 +194,21 @@
     margin-top: 12px;
   }
 
+  .resend-block div {
+    margin-bottom: 0;
+  }
+
+  .resend-toggle {
+    padding: 0;
+    font-size: 0.875rem;
+  }
+
   .resend-hint {
     font-size: 0.875rem;
-    margin-bottom: 8px;
+    margin-bottom: 0;
   }
 
   .info-message {
-    color: #27ae60;
-    margin-top: 8px;
+    margin: 0;
   }
 </style>

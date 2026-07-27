@@ -17,6 +17,8 @@ public class StudyCardDto
     public byte ReadingIndex { get; set; }
     public int State { get; set; }
     public bool IsNewCard { get; set; }
+    /// <summary>Current due date, echoed back by the client to undo a bury.</summary>
+    public DateTime? Due { get; set; }
     public int Lapses { get; set; }
     public bool IsLeech { get; set; }
     public string WordText { get; set; } = "";

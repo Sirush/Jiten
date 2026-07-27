@@ -28,7 +28,8 @@ public static class CoverageComputeService
                 FROM "user"."FsrsCards" fc
                 WHERE fc."UserId" = {0}::uuid
                   AND (
-                      fc."State" IN (4, 5, 6)
+                      -- Blacklisted/Mastered only; Suspended keeps its interval-derived tier
+                      fc."State" IN (4, 5)
                       OR (fc."LastReview" IS NOT NULL AND (fc."Due" - fc."LastReview") >= INTERVAL '21 days')
                   )
             ),
