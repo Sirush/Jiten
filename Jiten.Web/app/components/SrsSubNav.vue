@@ -3,7 +3,7 @@
 
   const srsStore = useSrsStore();
   const route = useRoute();
-  const router = useRouter();
+  const { totalDue, startStudy } = useStudySummary();
 
   onMounted(() => {
     if (!srsStore.dueSummary) srsStore.fetchDueSummary();
@@ -17,21 +17,10 @@
     { label: 'Settings', to: '/settings/srs', match: (p: string) => p === '/settings/srs' },
   ];
 
-  const totalDue = computed(() => {
-    const ds = srsStore.dueSummary;
-    if (!ds) return 0;
-    return Math.min(ds.reviewsDue, ds.reviewBudgetLeft) + ds.newCardsAvailable;
-  });
-
   const studyLabel = computed(() => {
     if (!srsStore.dueSummary) return 'Study …';
     return totalDue.value > 0 ? `Study (${totalDue.value})` : 'Study';
   });
-
-  function startStudy() {
-    srsStore.resetSession();
-    router.push('/srs/study');
-  }
 </script>
 
 <template>

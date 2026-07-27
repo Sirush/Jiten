@@ -83,6 +83,8 @@
   );
   onUnmounted(() => stopPolling());
 
+  const { open: openSearch } = useHeaderSearch();
+
   const settings = ref();
   const userMenu = ref();
 
@@ -104,6 +106,11 @@
       icon: 'pi pi-list',
       route: '/requests',
     },
+    {
+      label: 'Ratings',
+      icon: 'pi pi-star',
+      route: '/ratings',
+    },
     { separator: true },
     {
       label: 'Logout',
@@ -112,13 +119,7 @@
     },
   ]);
 
-  // Due-card badge on the global "Study" link.
-  // Same formula as SrsSubNav so the header and in-section counts always agree.
-  const totalDue = computed(() => {
-    const ds = srs.dueSummary;
-    if (!ds) return 0;
-    return Math.min(ds.reviewsDue, ds.reviewBudgetLeft) + ds.newCardsAvailable;
-  });
+  const { totalDue } = useStudySummary();
   const dueBadge = computed(() => (totalDue.value > 999 ? '999+' : String(totalDue.value)));
 
   watch(
@@ -162,11 +163,14 @@
               >{{ dueBadge }}</span
             >
           </nuxt-link>
-          <nuxt-link v-if="auth.isAuthenticated" to="/ratings" :class="route.path === '/ratings' ? 'font-semibold !text-purple-200' : '!text-white'"
-            >Ratings</nuxt-link
-          >
           <nuxt-link to="/other" :class="route.path === '/other' ? 'font-semibold !text-purple-200' : '!text-white'">Tools</nuxt-link>
-          <nuxt-link to="/faq" :class="route.path === '/faq' ? 'font-semibold !text-purple-200' : '!text-white'">FAQ</nuxt-link>
+          <nuxt-link to="/guides" :class="route.path.startsWith('/guides') ? 'font-semibold !text-purple-200' : '!text-white'">Guides</nuxt-link>
+          <nuxt-link
+            v-if="auth.isAuthenticated"
+            to="/jiten-plus"
+            :class="route.path.startsWith('/jiten-plus') ? 'font-semibold !text-purple-200' : '!text-white'"
+            >Jiten+</nuxt-link
+          >
           <nuxt-link
             v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions"
             to="/Dashboard"
@@ -176,6 +180,9 @@
           <nuxt-link v-if="!auth.isAuthenticated" to="/login" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'"
             >Login</nuxt-link
           >
+          <Button text title="Search" aria-label="Search" class="!text-white hover:!bg-indigo-800" @click="openSearch()">
+            <Icon name="material-symbols:search" size="22" />
+          </Button>
           <button
             v-if="auth.isAuthenticated"
             type="button"
@@ -204,8 +211,16 @@
           </Button>
         </nav>
 
-        <!-- Mobile: bell + hamburger -->
+        <!-- Mobile: search + bell + hamburger -->
         <div class="md:hidden flex items-center gap-1">
+          <button
+            type="button"
+            class="inline-flex items-center justify-center p-2 rounded text-white hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-white"
+            aria-label="Search"
+            @click="openSearch()"
+          >
+            <Icon name="material-symbols:search" size="24" />
+          </button>
           <NotificationBell v-if="auth.isAuthenticated" />
           <button
             class="inline-flex items-center justify-center p-2 rounded text-white hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-white"
@@ -275,11 +290,19 @@
               >Tools</nuxt-link
             >
             <nuxt-link
-              to="/faq"
+              to="/guides"
               class="py-2 px-3"
-              :class="route.path === '/faq' ? 'font-semibold !text-purple-200' : '!text-white'"
+              :class="route.path.startsWith('/guides') ? 'font-semibold !text-purple-200' : '!text-white'"
               @click="mobileMenuOpen = false"
-              >FAQ</nuxt-link
+              >Guides</nuxt-link
+            >
+            <nuxt-link
+              v-if="auth.isAuthenticated"
+              to="/jiten-plus"
+              class="py-2 px-3"
+              :class="route.path.startsWith('/jiten-plus') ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >Jiten+</nuxt-link
             >
             <nuxt-link
               v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions"
@@ -322,6 +345,7 @@
   </header>
 
   <LazyAppHeaderSettings ref="settings" />
+  <LazyHeaderSearchDialog />
   <TieredMenu v-if="auth.isAuthenticated" ref="userMenu" :model="userMenuItems" popup>
     <template #item="{ item, props }">
       <NuxtLink v-if="item.route" v-slot="{ href, navigate }" :to="item.route" custom>

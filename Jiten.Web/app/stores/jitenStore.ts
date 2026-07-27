@@ -120,6 +120,9 @@ export const useJitenStore = defineStore('jiten', () => {
   // Only consulted while the user lacks Jiten+; getting the tier brings the section back.
   const hideCoverageJourney = createLocalStorageState<boolean>('hide-coverage-journey', false);
 
+  // Drives the unread dot on the home page's "what's new" strip.
+  const lastSeenUpdateId = createLocalStorageState<number>('last-seen-update-id', 0);
+
   const coverageVersion = ref(0);
 
   function bumpCoverageVersion() {
@@ -153,6 +156,7 @@ export const useJitenStore = defineStore('jiten', () => {
     similarMediaPinnedType,
     preferredDictionaryId,
     hideCoverageJourney,
+    lastSeenUpdateId,
     coverageVersion,
     bumpCoverageVersion,
   };

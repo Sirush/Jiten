@@ -74,11 +74,6 @@
     });
   }
 
-  function startStudy() {
-    srsStore.resetSession();
-    router.push('/srs/study');
-  }
-
   function getCoverUrl(coverName?: string) {
     if (!coverName || coverName === 'nocover.jpg') return null;
     return coverName;
@@ -202,33 +197,7 @@
     await srsStore.reorderStudyDecks([...srsStore.activeDecks, ...decks]);
   }
 
-  const nextReviewText = computed(() => {
-    const ds = srsStore.dueSummary;
-    if (!ds?.nextReviewAt) return null;
-    const next = new Date(ds.nextReviewAt);
-    const diffMs = next.getTime() - Date.now();
-    if (diffMs <= 0) return 'now';
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 60) return `${diffMin}m`;
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}h ${diffMin % 60}m`;
-    return `${Math.floor(diffHr / 24)}d ${diffHr % 24}h`;
-  });
-
-  const totalDue = computed(() => {
-    const ds = srsStore.dueSummary;
-    if (!ds) return 0;
-    return Math.min(ds.reviewsDue, ds.reviewBudgetLeft) + ds.newCardsAvailable;
-  });
-
-  const goalReviewsDone = computed(() => srsStore.dueSummary?.reviewsToday ?? 0);
-  const goalReviewsTarget = computed(() => {
-    const ds = srsStore.dueSummary;
-    if (!ds) return 0;
-    return ds.reviewsToday + Math.min(ds.reviewsDue, ds.reviewBudgetLeft);
-  });
-  const goalNewDone = computed(() => srsStore.dueSummary?.newCardsToday ?? 0);
-  const goalNewTarget = computed(() => srsStore.studySettings.newCardsPerDay);
+  const { totalDue, goalReviewsDone, goalReviewsTarget, goalNewDone, goalNewTarget, nextReviewText, startStudy } = useStudySummary();
 
   const CELL = 10;
   const GAP = 2;
@@ -264,8 +233,6 @@
     }
     return days;
   });
-
-
 
   const miniThresholds = computed<[number, number, number]>(() => {
     const counts = miniHeatmap.value
