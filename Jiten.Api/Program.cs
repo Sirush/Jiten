@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
@@ -529,6 +530,20 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
+    options.AddPolicy("card-media-upload", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetSlidingWindowLimiter(partitionKey,
+            _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 60, Window = TimeSpan.FromSeconds(60), SegmentsPerWindow = 6,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
     options.AddPolicy("auth", context =>
     {
         var partitionKey = $"ip:{GetClientIp(context)}";
@@ -538,6 +553,22 @@ builder.Services.AddRateLimiter(options =>
                 PermitLimit = 10, Window = TimeSpan.FromSeconds(60),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
                 AutoReplenishment = true
+            });
+    });
+
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        var policy = context.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+        if (policy != "card-media-upload")
+            return RateLimitPartition.GetNoLimiter("unlimited");
+
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetConcurrencyLimiter(partitionKey,
+            _ => new ConcurrencyLimiterOptions
+            {
+                PermitLimit = 3, QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 5
             });
     });
 

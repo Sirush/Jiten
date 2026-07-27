@@ -6,6 +6,7 @@ using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.User;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Controllers;
@@ -42,6 +43,7 @@ public class CardMediaController(
     [HttpPost("{wordId:int}/{readingIndex:int}")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(MaxFileBytes + 4096)]
+    [EnableRateLimiting("card-media-upload")]
     [JitenPlus(JitenPlusTier.Trial, Feature = "card-media")]
     public async Task<IResult> Upload(int wordId, int readingIndex, [FromForm] IFormFile? file)
     {
@@ -97,7 +99,8 @@ public class CardMediaController(
             });
 
         var kindStr = sniff.Kind.ToString().ToLowerInvariant();
-        var storagePath = $"card-media/{userId}/{wordId}_{ri}_{kindStr}.{processed.Extension}";
+        var version = Guid.NewGuid().ToString("N")[..8];
+        var storagePath = $"card-media/{userId}/{wordId}_{ri}_{kindStr}_{version}.{processed.Extension}";
 
         var existing = await userContext.UserCardMedia
                                         .FirstOrDefaultAsync(m => m.UserId == userId && m.WordId == wordId
@@ -133,15 +136,12 @@ public class CardMediaController(
             throw;
         }
 
-        // Best-effort cache housekeeping after the row is durably committed. On a same-path replace we purge
-        // the stale pull-zone copy; on an extension change (png -> webp) the old file's path differs and is deleted.
+        // Once the row is durably committed the file it replaced is orphaned; removing it is best-effort.
         if (oldStoragePath != null && oldStoragePath != storagePath)
         {
             try { await cdn.DeleteFile(oldStoragePath, secure: true); }
             catch (Exception ex) { logger.LogWarning(ex, "Failed to delete replaced card-media file {Path}", oldStoragePath); }
         }
-        try { await cdn.PurgeUrl(cdn.GetSecureCdnUrl(storagePath)); }
-        catch { /* best effort */ }
 
         return Results.Ok(new
         {

@@ -22,8 +22,6 @@ public class StubCdnService : ICdnService
 
     public string GetCdnUrl(string storagePath) => $"https://cdn.test/{storagePath}";
 
-    public string GetSecureCdnUrl(string storagePath) => $"https://secure-cdn.test/{storagePath}";
-
     public string GetSignedUrl(string storagePath, TimeSpan ttl) =>
         $"https://stub-cdn/{storagePath}?token=stub&expires=9999999999";
 

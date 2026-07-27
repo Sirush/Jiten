@@ -295,6 +295,10 @@
       toast.add({ severity: 'warn', summary: 'Jiten+ required', detail: 'Card media uploads are part of Jiten+.', life: 5000 });
       return;
     }
+    if (status === 429) {
+      toast.add({ severity: 'warn', summary: 'Slow down', detail: 'Too many uploads at once. Wait a moment and try again.', life: 5000 });
+      return;
+    }
     const summary = action === 'delete' ? 'Could not remove media' : 'Upload failed';
     // Quota and validation rejections carry `error`; other endpoints use `message`.
     const detail = (typeof err?.data === 'object' ? (err?.data?.error ?? err?.data?.message) : err?.data) || 'Please try again.';

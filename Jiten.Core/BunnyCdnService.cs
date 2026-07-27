@@ -11,9 +11,6 @@ public class BunnyCdnService : ICdnService
     public string GetCdnUrl(string storagePath)
         => BunnyCdnHelper.GetCdnUrl(storagePath);
 
-    public string GetSecureCdnUrl(string storagePath)
-        => BunnyCdnHelper.GetSecureCdnUrl(storagePath);
-
     public string GetSignedUrl(string storagePath, TimeSpan ttl)
         => BunnyCdnHelper.GetSignedUrl(storagePath, ttl);
 

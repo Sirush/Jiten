@@ -11,9 +11,6 @@ public interface ICdnService
     Task DeleteFile(string storagePath, bool secure = false);
     string GetCdnUrl(string storagePath);
 
-    /// <summary>Untokened URL of a user-media file on the secure pull zone; the target for a post-overwrite purge.</summary>
-    string GetSecureCdnUrl(string storagePath);
-
     /// <summary>
     /// Returns a token-authenticated URL for a private (secured pull zone) file that expires after
     /// <paramref name="ttl"/>. Falls back to the plain CDN URL when secure-zone config is absent so dev

@@ -43,6 +43,10 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
         return image.ToByteArray();
     }
 
+    /// <summary>Matches an uploaded path, whose kind segment carries a per-upload version suffix.</summary>
+    private static bool IsUploadOf(string storagePath, CardMediaKind kind, string extension) =>
+        storagePath.Contains($"_{kind.ToString().ToLowerInvariant()}_") && storagePath.EndsWith($".{extension}");
+
     private static bool IsWebp(byte[] bytes) =>
         bytes.Length >= 12 && Encoding.ASCII.GetString(bytes, 0, 4) == "RIFF"
                            && Encoding.ASCII.GetString(bytes, 8, 4) == "WEBP";
@@ -158,7 +162,7 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
         body.GetProperty("media").GetProperty("contentType").GetString().Should().Be("image/webp");
 
         // Re-read the exact bytes recorded by the stub CDN: WebP, long edge downscaled to <= 1600.
-        var stored = cdn.Uploads.Last(u => u.FileName.EndsWith("_image.webp"));
+        var stored = cdn.Uploads.Last(u => IsUploadOf(u.FileName, CardMediaKind.Image, "webp"));
         using var storedImage = new MagickImage(stored.File);
         storedImage.Format.Should().Be(MagickFormat.WebP);
         Math.Max(storedImage.Width, storedImage.Height).Should().BeLessThanOrEqualTo(1600);
@@ -186,7 +190,7 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
         (await resp.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("media").GetProperty("contentType").GetString().Should().Be("image/webp");
 
-        var stored = cdn.Uploads.Last(u => u.FileName.EndsWith("_image.webp"));
+        var stored = cdn.Uploads.Last(u => IsUploadOf(u.FileName, CardMediaKind.Image, "webp"));
         using var storedImage = new MagickImage(stored.File);
         storedImage.Format.Should().Be(MagickFormat.WebP);
         // never upscaled: dimensions unchanged
@@ -208,23 +212,22 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
         (await resp.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("media").GetProperty("contentType").GetString().Should().Be("image/webp");
 
-        var stored = cdn.Uploads.Last(u => u.FileName.EndsWith("_image.webp"));
+        var stored = cdn.Uploads.Last(u => IsUploadOf(u.FileName, CardMediaKind.Image, "webp"));
         stored.File.Should().NotEqual(gif); // re-encoded to WebP, not passed through
         IsWebp(stored.File).Should().BeTrue();
 
         using var scope = factory.Services.CreateScope();
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         var row = await userDb.UserCardMedia.FirstAsync(m => m.UserId == TestUsers.UserA && m.WordId == 109);
-        row.StoragePath.Should().EndWith("_image.webp");
+        IsUploadOf(row.StoragePath, CardMediaKind.Image, "webp").Should().BeTrue();
         row.ContentType.Should().Be("image/webp");
     }
 
     [Fact]
-    public async Task Upload_Replace_PathChange_DeletesOldCdnFile()
+    public async Task Upload_Replace_ExtensionChange_DeletesOldCdnFile()
     {
         // An undecodable-but-valid PNG falls back to its original extension (stored as .png); replacing it with a
-        // decodable image normalizes to .webp. The storage path changes (_image.png -> _image.webp) so the old
-        // CDN file must be deleted; one row remains.
+        // decodable image normalizes to .webp. The old CDN file must be deleted; one row remains.
         byte[] fallbackPng = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0, 0, 0, 0, 0];
         await Upload(TestUsers.UserA, 110, 0, fallbackPng, "broken.png");
         var cdn = factory.Services.GetRequiredService<StubCdnService>();
@@ -232,32 +235,42 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
 
         var resp = await Upload(TestUsers.UserA, 110, 0, RealPng());
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
-        cdn.Deletions.Should().Contain(p => p.EndsWith("_image.png"));
+        cdn.Deletions.Should().Contain(p => IsUploadOf(p, CardMediaKind.Image, "png"));
 
         using var scope = factory.Services.CreateScope();
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         var rows = await userDb.UserCardMedia.Where(m => m.UserId == TestUsers.UserA && m.WordId == 110).ToListAsync();
         rows.Should().HaveCount(1);
-        rows[0].StoragePath.Should().EndWith("_image.webp");
+        IsUploadOf(rows[0].StoragePath, CardMediaKind.Image, "webp").Should().BeTrue();
     }
 
     [Fact]
-    public async Task Upload_Replace_WebpOverWebp_SamePath_NoDelete()
+    public async Task Upload_Replace_SameExtension_TakesNewPathAndDeletesOldFile()
     {
-        // Two images both normalize to _image.webp: same path, so no cross-path delete, and the row is overwritten.
+        // Both images normalize to WebP, so only the version suffix distinguishes them. The replacement must
+        // still land on a fresh path (nothing cached can be served for it) and orphan exactly one old file.
         await Upload(TestUsers.UserA, 111, 0, RealPng());
         var cdn = factory.Services.GetRequiredService<StubCdnService>();
         cdn.Deletions.Clear();
 
+        string oldPath;
+        using (var before = factory.Services.CreateScope())
+        {
+            var db = before.ServiceProvider.GetRequiredService<UserDbContext>();
+            oldPath = (await db.UserCardMedia.FirstAsync(m => m.UserId == TestUsers.UserA && m.WordId == 111)).StoragePath;
+        }
+
         var resp = await Upload(TestUsers.UserA, 111, 0, RealJpeg());
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
-        cdn.Deletions.Should().BeEmpty();
+        cdn.Deletions.Should().ContainSingle().Which.Should().Be(oldPath);
+        cdn.Purges.Should().BeEmpty();
 
         using var scope = factory.Services.CreateScope();
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         var rows = await userDb.UserCardMedia.Where(m => m.UserId == TestUsers.UserA && m.WordId == 111).ToListAsync();
         rows.Should().HaveCount(1);
-        rows[0].StoragePath.Should().EndWith("_image.webp");
+        rows[0].StoragePath.Should().NotBe(oldPath);
+        IsUploadOf(rows[0].StoragePath, CardMediaKind.Image, "webp").Should().BeTrue();
     }
 
     [Fact]
@@ -349,7 +362,7 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
         var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("quota").GetProperty("usedBytes").GetInt64().Should().Be(0);
 
-        cdn.Deletions.Should().Contain(p => p.EndsWith("_image.webp"));
+        cdn.Deletions.Should().Contain(p => IsUploadOf(p, CardMediaKind.Image, "webp"));
 
         using var scope = factory.Services.CreateScope();
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
