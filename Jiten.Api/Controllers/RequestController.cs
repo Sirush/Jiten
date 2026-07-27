@@ -57,6 +57,7 @@ public partial class RequestController(
         [FromQuery] int limit = 20,
         [FromQuery] bool mine = false,
         [FromQuery] bool contributed = false,
+        [FromQuery] bool excludeOwn = false,
         [FromQuery] string? search = null,
         [FromQuery] string? attachments = null)
     {
@@ -77,7 +78,7 @@ public partial class RequestController(
                 .Where(c => context.MediaRequestUploads.Any(u => u.MediaRequestCommentId == c.Id && !u.FileDeleted))
                 .Select(c => c.MediaRequestId)
                 .Distinct();
-            query = query.Where(r => contributedRequestIds.Contains(r.Id) && r.RequesterId != userId);
+            query = query.Where(r => contributedRequestIds.Contains(r.Id) && (!excludeOwn || r.RequesterId != userId));
         }
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -208,6 +209,7 @@ public partial class RequestController(
         [FromQuery] MediaRequestStatus? status = null,
         [FromQuery] bool mine = false,
         [FromQuery] bool contributed = false,
+        [FromQuery] bool excludeOwn = false,
         [FromQuery] string? search = null,
         [FromQuery] string? attachments = null)
     {
@@ -228,7 +230,7 @@ public partial class RequestController(
                     .Where(c => context.MediaRequestUploads.Any(u => u.MediaRequestCommentId == c.Id && !u.FileDeleted))
                     .Select(c => c.MediaRequestId)
                     .Distinct();
-                q = q.Where(r => contributedRequestIds.Contains(r.Id) && r.RequesterId != userId);
+                q = q.Where(r => contributedRequestIds.Contains(r.Id) && (!excludeOwn || r.RequesterId != userId));
             }
 
             if (!string.IsNullOrWhiteSpace(search))

@@ -93,17 +93,6 @@ public class BunnyCdnHelper
     public static string GetCdnUrl(string storagePath) => $"{_cdnBaseUrl}/{storagePath}";
 
     /// <summary>
-    /// Untokened URL of a user-media file on the secure pull zone, used as the purge target after an
-    /// overwrite. Falls back to the plain CDN URL when the secure zone is unconfigured (dev/tests).
-    /// </summary>
-    public static string GetSecureCdnUrl(string storagePath)
-    {
-        var baseUrl = string.IsNullOrEmpty(_securePullZoneUrl) ? _cdnBaseUrl : _securePullZoneUrl;
-        
-        return $"{baseUrl}/{storagePath}";
-    }
-
-    /// <summary>
     /// Token-authenticated URL for a file served from the secured pull zone. When the secure-zone config is
     /// missing (dev), logs a one-time warning and returns the plain CDN URL so playback still works locally.
     /// </summary>

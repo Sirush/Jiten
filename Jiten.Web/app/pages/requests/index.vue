@@ -92,6 +92,7 @@ function parseAttachmentsFromQuery() {
 }
 
 const selectedAttachments = ref<string | undefined>(parseAttachmentsFromQuery());
+const excludeOwnContributions = ref(route.query.excludeOwn === '1');
 
 const searchQuery = ref(typeof route.query.search === 'string' ? route.query.search : '');
 const debouncedSearch = ref(searchQuery.value);
@@ -119,6 +120,7 @@ async function loadRequests() {
       offset: 0,
       limit: 200,
       contributed: true,
+      excludeOwn: excludeOwnContributions.value,
       search,
       attachments: selectedAttachments.value,
     });
@@ -153,6 +155,7 @@ async function loadFacets() {
     status: selectedStatus.value,
     mine: isMine.value || undefined,
     contributed: isContributed.value || undefined,
+    excludeOwn: (isContributed.value && excludeOwnContributions.value) || undefined,
     search: debouncedSearch.value.trim() || undefined,
     attachments: selectedAttachments.value,
   });
@@ -170,7 +173,7 @@ watch(selectedStatus, (status) => {
   else if (sortBy.value === 'completed') sortBy.value = 'votes';
 });
 
-watch([selectedMediaType, selectedStatus, sortBy, activeTab, debouncedSearch, selectedAttachments], () => {
+watch([selectedMediaType, selectedStatus, sortBy, activeTab, debouncedSearch, selectedAttachments, excludeOwnContributions], () => {
   offset.value = 0;
   loadRequests();
   loadFacets();
@@ -179,13 +182,14 @@ watch([selectedMediaType, selectedStatus, sortBy, activeTab, debouncedSearch, se
 
 watch(offset, () => loadRequests());
 
-watch([activeTab, selectedMediaType, selectedStatus, sortBy, offset, debouncedSearch, selectedAttachments], () => {
+watch([activeTab, selectedMediaType, selectedStatus, sortBy, offset, debouncedSearch, selectedAttachments, excludeOwnContributions], () => {
   const query: Record<string, string> = {};
   if (activeTab.value === 1) query.tab = 'mine';
   else if (activeTab.value === 2) query.tab = 'contributions';
   if (selectedMediaType.value !== undefined) query.type = String(selectedMediaType.value);
   if (debouncedSearch.value.trim()) query.search = debouncedSearch.value.trim();
   if (selectedAttachments.value) query.attachments = selectedAttachments.value;
+  if (isContributed.value && excludeOwnContributions.value) query.excludeOwn = '1';
   if (selectedStatus.value === undefined) query.status = 'all';
   else if (selectedStatus.value !== RequestStatus.Open) query.status = String(selectedStatus.value);
   if (sortBy.value !== 'votes') query.sort = sortBy.value;
@@ -343,6 +347,12 @@ watch(isPlus, (val) => {
           class="w-44"
         />
       </div>
+      <div v-if="isContributed" class="flex items-center gap-2 h-10">
+        <Checkbox v-model="excludeOwnContributions" input-id="excludeOwnContributions" :binary="true" />
+        <label for="excludeOwnContributions" class="text-sm cursor-pointer">
+          Exclude my own requests
+        </label>
+      </div>
     </div>
 
     <div class="flex flex-wrap items-center gap-2 mb-4">
@@ -381,7 +391,10 @@ watch(isPlus, (val) => {
           @click="router.push('/requests/new')"
         />
       </template>
-      <p v-else-if="isContributed">You haven't contributed to any requests yet.</p>
+      <template v-else-if="isContributed">
+        <p v-if="excludeOwnContributions">No contributions to other people's requests yet.</p>
+        <p v-else>You haven't contributed to any requests yet.</p>
+      </template>
       <p v-else>No requests found. Be the first!</p>
     </div>
 

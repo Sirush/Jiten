@@ -47,6 +47,7 @@ export function useMediaRequests() {
     limit?: number;
     mine?: boolean;
     contributed?: boolean;
+    excludeOwn?: boolean;
     search?: string;
     attachments?: string;
   } = {}) => {
@@ -64,6 +65,7 @@ export function useMediaRequests() {
           limit: params.limit ?? 20,
           mine: params.mine || undefined,
           contributed: params.contributed || undefined,
+          excludeOwn: params.excludeOwn || undefined,
           search: params.search || undefined,
           attachments: params.attachments || undefined,
         },
@@ -374,6 +376,7 @@ export function useMediaRequests() {
     status?: RequestStatus;
     mine?: boolean;
     contributed?: boolean;
+    excludeOwn?: boolean;
     search?: string;
     attachments?: string;
   } = {}): Promise<RequestFacets | null> => {
@@ -384,6 +387,7 @@ export function useMediaRequests() {
           status: params.status,
           mine: params.mine || undefined,
           contributed: params.contributed || undefined,
+          excludeOwn: params.excludeOwn || undefined,
           search: params.search || undefined,
           attachments: params.attachments || undefined,
         },
