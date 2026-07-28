@@ -2,6 +2,7 @@
 @import "tailwindcss";
 @import "tailwindcss-primeui";
 @import 'primeicons/primeicons.css';
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:where(.dark-mode, .dark-mode *));
 
@@ -140,6 +141,93 @@ a:not(.p-button) {
     background: transparent;
 }
 
+/* Guides (Nuxt Content) prose. Body links inherit the global blue a:not(.p-button) rule (it
+   out-specifies the typography :where() selectors and is already dark-mode aware). We only
+   re-theme the parts the plugin would otherwise leave invisible on the dark background. */
+.prose {
+    --tw-prose-headings: var(--p-primary-700);
+    /* Typography ships a near-black code block even in light mode, which the light Shiki
+       palette is unreadable on. */
+    --tw-prose-pre-bg: var(--p-surface-100);
+    --tw-prose-pre-code: var(--p-surface-800);
+    max-width: none;
+}
+
+.prose :where(pre) { border: 1px solid var(--p-surface-200); }
+.dark-mode .prose :where(pre) { border-color: var(--p-surface-700); }
+
+/* Shiki emits both palettes as --shiki-default/--shiki-dark and swaps them on a `.dark`
+   ancestor, which never exists here: the dark class is `.dark-mode`, and it sits on <html>. */
+html.dark-mode .prose .shiki span {
+    color: var(--shiki-dark);
+}
+
+/* MDC wraps each heading's text in an anchor link; without this it picks up the global blue
+   underlined link style and the headings read as links. Keep them looking like headings.
+   Both selectors are needed: the dark-mode global link rule out-specifies the light one. */
+.prose :is(h1, h2, h3, h4, h5, h6) a,
+.dark-mode .prose :is(h1, h2, h3, h4, h5, h6) a {
+    color: inherit;
+    font-weight: inherit;
+    text-decoration: none;
+}
+
+/* Tighten the default typography vertical rhythm and shrink headings — the out-of-the-box
+   spacing is loose and the h2/h3 sizes run large for short guide sections. */
+.prose :where(p, ul, ol, blockquote) { margin-top: 0.6em; margin-bottom: 0.6em; }
+.prose :where(h2) { margin-top: 1.3em; margin-bottom: 0.35em; font-size: 1.3em; }
+.prose :where(h3) { margin-top: 1em; margin-bottom: 0.3em; font-size: 1.1em; }
+.prose :where(li) { margin-top: 0.15em; margin-bottom: 0.15em; }
+
+.dark-mode .prose .guide-attribution {
+    color: var(--p-neutral-400);
+}
+
+.dark-mode .prose {
+    --tw-prose-body: var(--p-neutral-300);
+    --tw-prose-headings: var(--p-primary-300);
+    --tw-prose-bold: var(--p-neutral-100);
+    --tw-prose-counters: var(--p-neutral-400);
+    --tw-prose-bullets: var(--p-neutral-600);
+    --tw-prose-hr: var(--p-neutral-800);
+    --tw-prose-quotes: var(--p-neutral-200);
+    --tw-prose-quote-borders: var(--p-neutral-700);
+    --tw-prose-captions: var(--p-neutral-400);
+    --tw-prose-code: var(--p-neutral-100);
+    --tw-prose-pre-code: var(--p-neutral-200);
+    --tw-prose-pre-bg: var(--p-neutral-900);
+    --tw-prose-th-borders: var(--p-neutral-700);
+    --tw-prose-td-borders: var(--p-neutral-800);
+}
+
+/* Attribution logos sit inline with the body copy, not as full-width figures. */
+.prose img.guide-logo {
+    display: block;
+    max-width: min(200px, 100%);
+    height: auto;
+    margin: 0.4em 0 0.15em;
+}
+
+.prose .guide-attribution {
+    display: block;
+    font-size: 0.75rem;
+    line-height: 1.1rem;
+    color: var(--p-neutral-500);
+}
+
+/* The callout body slots a fresh prose context so nested markdown stays styled but
+   loses the outer top/bottom margins. */
+.prose-callout > :first-child { margin-top: 0; }
+.prose-callout > :last-child { margin-bottom: 0; }
+
+.guide-callout--tip { background: rgb(220 252 231); border-color: rgb(34 197 94); color: rgb(22 101 52); }
+.guide-callout--note { background: rgb(237 233 254); border-color: rgb(139 92 246); color: rgb(91 33 182); }
+.guide-callout--warning { background: rgb(254 243 199); border-color: rgb(245 158 11); color: rgb(146 64 14); }
+
+.dark-mode .guide-callout--tip { background: rgb(20 83 45 / 0.25); border-color: rgb(34 197 94); color: rgb(134 239 172); }
+.dark-mode .guide-callout--note { background: rgb(76 29 149 / 0.25); border-color: rgb(139 92 246); color: rgb(196 181 253); }
+.dark-mode .guide-callout--warning { background: rgb(120 53 15 / 0.25); border-color: rgb(245 158 11); color: rgb(252 211 77); }
+
 /* On phones the default PrimeVue toast keeps its fixed 25rem width anchored to a screen
    edge, so on narrow viewports the opposite edge (and its text/icon) clips off-screen.
    Pin every toast to full-width-with-gutters, respecting the safe-area insets. */
@@ -163,4 +251,29 @@ a:not(.p-button) {
     .p-toast-bottom-center {
         bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem) !important;
     }
+}
+
+/* Marks the row a list restored its scroll position to, so the jump is legible
+   rather than looking like a mis-scroll. */
+@keyframes list-anchor-flash {
+    from { background-color: var(--p-primary-100); }
+    to { background-color: transparent; }
+}
+
+.list-anchor-flash {
+    animation: list-anchor-flash 1.2s ease-out;
+    border-radius: 0.5rem;
+}
+
+.dark-mode .list-anchor-flash {
+    animation-name: list-anchor-flash-dark;
+}
+
+@keyframes list-anchor-flash-dark {
+    from { background-color: color-mix(in srgb, var(--p-primary-color) 22%, transparent); }
+    to { background-color: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .list-anchor-flash { animation: none; }
 }

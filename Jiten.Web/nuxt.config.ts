@@ -64,7 +64,7 @@ export default defineNuxtConfig({
     // first-party server rendering from the per-IP anonymous rate limit. Empty in dev.
     ssrBypassKey: process.env.NUXT_SSR_BYPASS_KEY || '',
     public: {
-      baseURL: 'https://localhost:7299/api/',
+      baseURL: process.env.NUXT_PUBLIC_BASE_URL || 'https://localhost:7299/api/',
       googleSignInClientId: process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID || '',
       ...(process.env.NUXT_PUBLIC_RECAPTCHA_V2_SITE_KEY
         ? {
@@ -81,11 +81,17 @@ export default defineNuxtConfig({
     '@nuxt/icon',
     '@pinia/nuxt',
     '@nuxtjs/seo',
+    '@nuxt/content',
     '@nuxt/scripts',
     ...(process.env.NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID ? ['nuxt-umami'] : []),
     ...(process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID ? ['nuxt-vue3-google-signin'] : []),
     ...(process.env.NUXT_PUBLIC_RECAPTCHA_V2_SITE_KEY ? ['vue-recaptcha/nuxt'] : []),
   ],
+  content: {
+    // Use Node 22.5+ built-in node:sqlite — no native better-sqlite3 build needed in dev,
+    // CI, or the Alpine production image (which runs Node 23).
+    experimental: { sqliteConnector: 'native' },
+  },
   primevue: {
     options: {
       theme: {
@@ -111,6 +117,8 @@ export default defineNuxtConfig({
   routeRules: {
     '/_nuxt/**': { ssr: false },
     '/.well-known/**': { ssr: false },
+    // FAQ migrated into the Guides system; preserve existing ranking/backlinks.
+    '/faq': { redirect: { to: '/guides', statusCode: 301 } },
   },
   app: {
     head: {

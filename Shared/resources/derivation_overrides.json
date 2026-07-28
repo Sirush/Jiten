@@ -1,0 +1,4277 @@
+{
+ "_meta": {
+  "description": "Seed derivation-link overrides: agent-classified verdicts for all Exclude/OneWayOnly pairs with derived FrequencyRank <= 10000 (600 pairs). Overrides the automatic sense-coverage rule in --build-derivations. See PLAN_DerivationalRedundancy.md §4.2.",
+  "generated": "2026-07-16",
+  "source": "4x sonnet classifier agents over highfreq_review.json (rule_yield simulation), merged + spot-checked",
+  "verdicts": [
+   "Bidirectional",
+   "OneWayOnly",
+   "Exclude"
+  ]
+ },
+ "overrides": [
+  {
+   "baseWordId": 1392580,
+   "derivedWordId": 1002290,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お前 means 'you' (pronoun), unpredictable from 前."
+  },
+  {
+   "baseWordId": 1562350,
+   "derivedWordId": 1600900,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "話し mirrors verb but 話 drifts to 'story/tale' in use."
+  },
+  {
+   "baseWordId": 1605820,
+   "derivedWordId": 1605870,
+   "category": "ku_adverb",
+   "verdict": "Exclude",
+   "reason": "良く lexicalized as 'often/frequently', not just 'well'."
+  },
+  {
+   "baseWordId": 1277480,
+   "derivedWordId": 1277450,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "好き is an independent na-adjective ('love/like'), not verb-stem noun."
+  },
+  {
+   "baseWordId": 1523060,
+   "derivedWordId": 1611580,
+   "category": "ni_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "本当に='really' fully predictable; base also means plain 'truth' noun."
+  },
+  {
+   "baseWordId": 1562360,
+   "derivedWordId": 1562350,
+   "category": "causative_doublet",
+   "verdict": "OneWayOnly",
+   "reason": "話せる also idiomatically 'sensible', not just potential of 話す.",
+   "recategorize": "potential (was mislabeled causative_doublet)"
+  },
+  {
+   "baseWordId": 1533050,
+   "derivedWordId": 1270670,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "ご免='sorry/excuse me', unpredictable from 免 (dismissal)."
+  },
+  {
+   "baseWordId": 1382990,
+   "derivedWordId": 1382980,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "積もり grammaticalized to 'intention', unrelated to piling up."
+  },
+  {
+   "baseWordId": 1519190,
+   "derivedWordId": 1519210,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "忘る is obsolete classical form, not a real modern base.",
+   "recategorize": "archaic_variant"
+  },
+  {
+   "baseWordId": 1465580,
+   "derivedWordId": 1465610,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "入る(はいる)'s real potential differs; 入れる is a separate verb.",
+   "recategorize": "transitive_intransitive (reading mismatch, spurious)"
+  },
+  {
+   "baseWordId": 1596930,
+   "derivedWordId": 1205770,
+   "category": "ni_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "確かに='certainly' transparent; base also 'reliable/sure' adj."
+  },
+  {
+   "baseWordId": 1307550,
+   "derivedWordId": 1342550,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "始めて lexicalized as 'for the first time', distinct adverb."
+  },
+  {
+   "baseWordId": 1422970,
+   "derivedWordId": 1495770,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "着く(arrive)/着ける(attach) are different verbs, not potential.",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 1495740,
+   "derivedWordId": 1495770,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "付ける is highly polysemous (season, name, turn on).",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 1543910,
+   "derivedWordId": 1584930,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "余り grammaticalized as adverb '(not) very' and 'remainder'."
+  },
+  {
+   "baseWordId": 1405790,
+   "derivedWordId": 1405800,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "続く/続ける trans-intrans pair, meanings track closely.",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 2823970,
+   "derivedWordId": 1394800,
+   "category": "ku_adverb",
+   "verdict": "Exclude",
+   "reason": "全く grammaticalized as 'really/entirely'; base rarely used alone."
+  },
+  {
+   "baseWordId": 1509430,
+   "derivedWordId": 1509480,
+   "category": "ni_adverb",
+   "verdict": "Exclude",
+   "reason": "別に mainly idiomatic '(not) particularly' in negation."
+  },
+  {
+   "baseWordId": 1430610,
+   "derivedWordId": 1430620,
+   "category": "ni_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "直ぐに standard adverb form, fully predictable."
+  },
+  {
+   "baseWordId": 1212260,
+   "derivedWordId": 1212250,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "感じ='feeling/impression', clean but slightly narrower noun."
+  },
+  {
+   "baseWordId": 1586270,
+   "derivedWordId": 1202450,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "あく/あける trans-intrans pair, kanji-sharing coincidence.",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 1217900,
+   "derivedWordId": 2036870,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お願い is fixed request phrase 'please', broader than 願い."
+  },
+  {
+   "baseWordId": 1441850,
+   "derivedWordId": 1441870,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "伝える(convey) differs from 伝う(walk along) entirely.",
+   "recategorize": "unrelated_lexical_drift"
+  },
+  {
+   "baseWordId": 1226480,
+   "derivedWordId": 1610430,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "詰まり grammaticalized as 'in other words', unrelated to blocked."
+  },
+  {
+   "baseWordId": 1467130,
+   "derivedWordId": 1467150,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "任せる also idioms 'leave to chance', not obvious from rarer 任す.",
+   "recategorize": "causative_doublet"
+  },
+  {
+   "baseWordId": 1589600,
+   "derivedWordId": 1589590,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "終わり='end' clean noun form of 終わる."
+  },
+  {
+   "baseWordId": 1224880,
+   "derivedWordId": 1224890,
+   "category": "ku_adverb",
+   "verdict": "Exclude",
+   "reason": "宜しく grammaticalized greeting ('regards'), beyond 'well'."
+  },
+  {
+   "baseWordId": 1346190,
+   "derivedWordId": 1346200,
+   "category": "ni_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "勝手に predictable; base also means unrelated 'kitchen'."
+  },
+  {
+   "baseWordId": 1433030,
+   "derivedWordId": 1432920,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "通り lexicalized as 'street' and 'as follows', beyond verb sense."
+  },
+  {
+   "baseWordId": 1242130,
+   "derivedWordId": 1242160,
+   "category": "ku_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "近く='nearby' predictable; 近い has extra relational 'close' sense."
+  },
+  {
+   "baseWordId": 1588410,
+   "derivedWordId": 1378690,
+   "category": "lexical_passive",
+   "verdict": "Exclude",
+   "reason": "生まれる is the standard independent verb for birth."
+  },
+  {
+   "baseWordId": 1589350,
+   "derivedWordId": 1589320,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "思い lexicalized to deep/romantic feeling (片思い), beyond 'thought'."
+  },
+  {
+   "baseWordId": 1609470,
+   "derivedWordId": 1002650,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "base 母さん also means 'wife'; derived lacks that sense."
+  },
+  {
+   "baseWordId": 1257250,
+   "derivedWordId": 1257240,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "嫌い is now a full independent na-adjective 'dislike'."
+  },
+  {
+   "baseWordId": 1610490,
+   "derivedWordId": 1002590,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "predictable honorific addition, meanings equivalent."
+  },
+  {
+   "baseWordId": 1242590,
+   "derivedWordId": 1001820,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お金='money' subset; base 金 also means 'metal'."
+  },
+  {
+   "baseWordId": 1590820,
+   "derivedWordId": 1590770,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "替わり lexicalized as 'seconds/refill' (お替わり), beyond verb."
+  },
+  {
+   "baseWordId": 1552390,
+   "derivedWordId": 2140120,
+   "category": "ni_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "流石に predictable adverb, base carries same core sense."
+  },
+  {
+   "baseWordId": 1326980,
+   "derivedWordId": 1326990,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "取れる drifted to 'come off/disappear' beyond simple potential."
+  },
+  {
+   "baseWordId": 1599780,
+   "derivedWordId": 1599760,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "匂い is clean masu-stem noun mirroring 匂う closely."
+  },
+  {
+   "baseWordId": 1281020,
+   "derivedWordId": 1281000,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "考え='thought/view' predictable, minor drift to 'opinion'."
+  },
+  {
+   "baseWordId": 2068840,
+   "derivedWordId": 1634500,
+   "category": "ni_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "たまに predictable from 偶 though base rarely stands alone."
+  },
+  {
+   "baseWordId": 1264640,
+   "derivedWordId": 1264610,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "限り lexicalized in many grammar patterns (力の限り), beyond limit."
+  },
+  {
+   "baseWordId": 1217950,
+   "derivedWordId": 1217900,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "願い='wish/request' clean mirror of 願う."
+  },
+  {
+   "baseWordId": 1420470,
+   "derivedWordId": 1420490,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "知れる narrowly idiomatic (気が知れない, かもしれない)."
+  },
+  {
+   "baseWordId": 1600900,
+   "derivedWordId": 2581590,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お話='story/talk', predictable extension of 話."
+  },
+  {
+   "baseWordId": 1221250,
+   "derivedWordId": 1612780,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お帰り mainly fixed greeting 'welcome home'."
+  },
+  {
+   "baseWordId": 2222800,
+   "derivedWordId": 1612820,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お早う='good morning', fully grammaticalized greeting."
+  },
+  {
+   "baseWordId": 1384830,
+   "derivedWordId": 1384860,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "切れる idiom-heavy (頭が切れる, 期限が切れる)."
+  },
+  {
+   "baseWordId": 1207240,
+   "derivedWordId": 1207250,
+   "category": "mi_nominal",
+   "verdict": "Exclude",
+   "reason": "楽しみ drifted to 'something anticipated', an independent sense."
+  },
+  {
+   "baseWordId": 1363760,
+   "derivedWordId": 1363740,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "真似 mostly predictable, minor drift ('that kind of behavior')."
+  },
+  {
+   "baseWordId": 2409940,
+   "derivedWordId": 1254130,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "決して grammaticalized negative adverb; base 決す archaic."
+  },
+  {
+   "baseWordId": 1179810,
+   "derivedWordId": 1449530,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "応え='answer/reply' clean mirror of 応える."
+  },
+  {
+   "baseWordId": 1451210,
+   "derivedWordId": 1451180,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "動き mirrors 動く perfectly, no meanings outside relation."
+  },
+  {
+   "baseWordId": 1611610,
+   "derivedWordId": 1215320,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "間違い extends to 'accident/mishap' euphemism, beyond mistake."
+  },
+  {
+   "baseWordId": 1590150,
+   "derivedWordId": 1001640,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お陰='thanks to/blessing', fixed idiom beyond plain 'shadow'."
+  },
+  {
+   "baseWordId": 1195970,
+   "derivedWordId": 1195960,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "過ぎ='past/over-' predictable suffix use of 過ぎる."
+  },
+  {
+   "baseWordId": 1228560,
+   "derivedWordId": 2269050,
+   "category": "ni_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "急に transparent na-adj to ni-adverb, no real drift."
+  },
+  {
+   "baseWordId": 1277080,
+   "derivedWordId": 1277100,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "向ける idiom-heavy (目を向ける, 力を向ける), trans-intrans pair.",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 1478190,
+   "derivedWordId": 1478200,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "抜ける drifts to 'slip away/go flat' (気が抜ける).",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 1557450,
+   "derivedWordId": 1270810,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お礼='thanks' subset; base 礼 also broader 'etiquette'."
+  },
+  {
+   "baseWordId": 1361330,
+   "derivedWordId": 1361130,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "振り heavily idiomatic (〜のふりをする 'pretend', 久しぶり)."
+  },
+  {
+   "baseWordId": 1985190,
+   "derivedWordId": 1170660,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "隠る is archaic form, not a real modern base.",
+   "recategorize": "archaic_variant"
+  },
+  {
+   "baseWordId": 2037060,
+   "derivedWordId": 1600270,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "乗す rare doublet of 乗せる; near-identical meaning.",
+   "recategorize": "causative_doublet"
+  },
+  {
+   "baseWordId": 1597040,
+   "derivedWordId": 1551530,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "立てる highly polysemous (角を立てる, 予定を立てる).",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 1200750,
+   "derivedWordId": 1200740,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "改めて drifted to independent adverb 'afresh/anew'."
+  },
+  {
+   "baseWordId": 1365980,
+   "derivedWordId": 1365990,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "進める extends to 'clock forward/plans', trans-intrans pair.",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 1577200,
+   "derivedWordId": 1590740,
+   "category": "sou_i_adj",
+   "verdict": "Exclude",
+   "reason": "可愛そう(=可哀想 'pitiful') unrelated to 可愛い 'cute'; kanji collision.",
+   "recategorize": "spurious_kanji_collision"
+  },
+  {
+   "baseWordId": 1423310,
+   "derivedWordId": 1002610,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お中=おなか 'stomach', unrelated to 中 'inside'; spurious.",
+   "recategorize": "spurious_kanji_collision"
+  },
+  {
+   "baseWordId": 1221270,
+   "derivedWordId": 1221250,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "帰り='return' clean transparent noun form."
+  },
+  {
+   "baseWordId": 2427840,
+   "derivedWordId": 1376640,
+   "category": "ni_adverb",
+   "verdict": "Exclude",
+   "reason": "正に has extra idiom 'just about to'; base rarely stands alone."
+  },
+  {
+   "baseWordId": 1407460,
+   "derivedWordId": 1861770,
+   "category": "ku_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "多く predictable extension ('many/majority') of 多い."
+  },
+  {
+   "baseWordId": 1596960,
+   "derivedWordId": 1596950,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "戦い='battle/fight' clean mirror of 戦う."
+  },
+  {
+   "baseWordId": 1403120,
+   "derivedWordId": 1611600,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "増し drifted to 'better/preferable' (comparative nuance)."
+  },
+  {
+   "baseWordId": 1448810,
+   "derivedWordId": 1448780,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "当たり drifted to gambling 'win' sense and idioms (当たり前)."
+  },
+  {
+   "baseWordId": 1227500,
+   "derivedWordId": 1612680,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お休み also means 'good night' greeting, beyond plain rest."
+  },
+  {
+   "baseWordId": 1422570,
+   "derivedWordId": 1002430,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お茶 near-synonymous with 茶, predictable."
+  },
+  {
+   "baseWordId": 1177800,
+   "derivedWordId": 1177820,
+   "category": "ku_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "遠く predictable spatial-noun extension of 遠い."
+  },
+  {
+   "baseWordId": 1160540,
+   "derivedWordId": 1160570,
+   "category": "potential",
+   "verdict": "Bidirectional",
+   "reason": "育つ/育てる 'grow up'/'raise' mirror cleanly, no extra idiom.",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 1307550,
+   "derivedWordId": 1342540,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "始め='beginning' clean noun form of 始める."
+  },
+  {
+   "baseWordId": 1511770,
+   "derivedWordId": 1511790,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "片付く/片付ける trans-intrans pair, meanings mirror well.",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 1552140,
+   "derivedWordId": 1552130,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "流れ predictable, extends metaphorically to 'trend' naturally."
+  },
+  {
+   "baseWordId": 1158880,
+   "derivedWordId": 1158870,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "違い mainly 'difference', predictable core mirror of 違う."
+  },
+  {
+   "baseWordId": 1457200,
+   "derivedWordId": 1457210,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "届ける extends to formal 'report/file' (届け出る), trans-intrans.",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 1153440,
+   "derivedWordId": 1153430,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "扱い clean mirror of 扱う, predictable."
+  },
+  {
+   "baseWordId": 1344410,
+   "derivedWordId": 1344390,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "助け clean mirror of 助ける, predictable."
+  },
+  {
+   "baseWordId": 1410590,
+   "derivedWordId": 1640770,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "待ち mostly predictable; niche mahjong sense not fully derivable."
+  },
+  {
+   "baseWordId": 1581370,
+   "derivedWordId": 1593570,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "ご存知 extends to noun 'acquaintance', beyond simple 'knowing'."
+  },
+  {
+   "baseWordId": 2258150,
+   "derivedWordId": 1593570,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "ご存知 extends to noun 'acquaintance', beyond simple 'knowing'."
+  },
+  {
+   "baseWordId": 1384830,
+   "derivedWordId": 1383800,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "切り drifted to abstract 'limit/ending point' (きりがない)."
+  },
+  {
+   "baseWordId": 1465580,
+   "derivedWordId": 1465410,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "入り predictable mirror of 入る, incl. natural 'attendance' extension."
+  },
+  {
+   "baseWordId": 1405790,
+   "derivedWordId": 1894690,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "続き='continuation/sequel' clean mirror of 続く."
+  },
+  {
+   "baseWordId": 1278410,
+   "derivedWordId": 1602360,
+   "category": "garu_both",
+   "verdict": "OneWayOnly",
+   "reason": "広がる='spread' predictable extension of 広い 'wide'."
+  },
+  {
+   "baseWordId": 1338240,
+   "derivedWordId": 1896380,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "出 is abstract/technical register, mostly bound in compounds."
+  },
+  {
+   "baseWordId": 1208000,
+   "derivedWordId": 1208020,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "割れる trans-intrans pair, meaning tracks 割る closely.",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 2859682,
+   "derivedWordId": 1445670,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "怒り='anger' clean mirror of 怒る."
+  },
+  {
+   "baseWordId": 1483730,
+   "derivedWordId": 2827267,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お疲れ is fixed greeting 'good job', different register."
+  },
+  {
+   "baseWordId": 1432710,
+   "derivedWordId": 1587300,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "痛み extends predictably to emotional 'grief' (natural metaphor)."
+  },
+  {
+   "baseWordId": 1432680,
+   "derivedWordId": 1587300,
+   "category": "mi_nominal",
+   "verdict": "OneWayOnly",
+   "reason": "base 痛い also slang 'cringy', not carried by 痛み."
+  },
+  {
+   "baseWordId": 1450520,
+   "derivedWordId": 1253780,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "透き rare/archaic, high homophone-confusion risk with 好き."
+  },
+  {
+   "baseWordId": 1397590,
+   "derivedWordId": 1397450,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "組み lexicalized as classifier noun 'class/team' (一組)."
+  },
+  {
+   "baseWordId": 1542160,
+   "derivedWordId": 1542070,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "遊び mostly predictable; minor technical 'slack/play' sense."
+  },
+  {
+   "baseWordId": 2006640,
+   "derivedWordId": 2748410,
+   "category": "ku_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "間違いなく fully predictable adverb formation."
+  },
+  {
+   "baseWordId": 1227560,
+   "derivedWordId": 1227500,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "休み clean transparent noun form of 休む."
+  },
+  {
+   "baseWordId": 2190820,
+   "derivedWordId": 2222580,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お姉ちゃん near-identical meaning, predictable honorific addition."
+  },
+  {
+   "baseWordId": 1540170,
+   "derivedWordId": 2858781,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お友達 has extra child-speech sense 'kid one doesn't know'."
+  },
+  {
+   "baseWordId": 1593410,
+   "derivedWordId": 1288790,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "込める(load/put in emotion) diverges from 込む(crowded).",
+   "recategorize": "unrelated_lexical_drift"
+  },
+  {
+   "baseWordId": 1422120,
+   "derivedWordId": 1593590,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "ご馳走 meaning aligns with 馳走; base rarely used alone."
+  },
+  {
+   "baseWordId": 1403040,
+   "derivedWordId": 1403020,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "騒ぎ='uproar' clean mirror of 騒ぐ."
+  },
+  {
+   "baseWordId": 1594530,
+   "derivedWordId": 1001970,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お仕舞い aligns with 仕舞い; 'done for' is natural extension of 'end'."
+  },
+  {
+   "baseWordId": 1396590,
+   "derivedWordId": 1396550,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "狙い clean mirror of 狙う, predictable."
+  },
+  {
+   "baseWordId": 1597790,
+   "derivedWordId": 1495640,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "付き合い mostly predictable; minor 'obligatory socializing' nuance."
+  },
+  {
+   "baseWordId": 1502490,
+   "derivedWordId": 1502480,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "物語り clean mirror of 物語る 'to narrate'."
+  },
+  {
+   "baseWordId": 1216880,
+   "derivedWordId": 1216890,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "含める has extra idiom 'instruct/make understand' (言い含める).",
+   "recategorize": "causative-like"
+  },
+  {
+   "baseWordId": 1307500,
+   "derivedWordId": 1611200,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "始まり='origin/beginning' clean mirror of 始まる."
+  },
+  {
+   "baseWordId": 1598530,
+   "derivedWordId": 1338400,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "出会い clean mirror of 出会う, no real drift."
+  },
+  {
+   "baseWordId": 1351360,
+   "derivedWordId": 1351280,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "笑い clean mirror of 笑う, predictable."
+  },
+  {
+   "baseWordId": 1500100,
+   "derivedWordId": 2220600,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お風呂 near-identical meaning to 風呂, predictable."
+  },
+  {
+   "baseWordId": 2262620,
+   "derivedWordId": 1583630,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "付き extra 'impression/look' sense (顔つき), productive suffix."
+  },
+  {
+   "baseWordId": 1495740,
+   "derivedWordId": 1583630,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "付き extra 'impression/look' sense (顔つき), productive suffix."
+  },
+  {
+   "baseWordId": 1548370,
+   "derivedWordId": 1610270,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "頼み='request/favor' clean mirror of 頼む."
+  },
+  {
+   "baseWordId": 1597890,
+   "derivedWordId": 1297250,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "作り mostly predictable; minor drift to 'structure/appearance'."
+  },
+  {
+   "baseWordId": 1497980,
+   "derivedWordId": 1497960,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "負け='defeat/loss' clean mirror of 負ける."
+  },
+  {
+   "baseWordId": 1323500,
+   "derivedWordId": 2157330,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お邪魔 predictable extension (お邪魔します idiom)."
+  },
+  {
+   "baseWordId": 1326980,
+   "derivedWordId": 2451270,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "取り mostly bound prefix/suffix (取り扱い, 相撲取り)."
+  },
+  {
+   "baseWordId": 1381820,
+   "derivedWordId": 2119870,
+   "category": "ni_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "静かに transparent na-adj to ni-adverb, no drift."
+  },
+  {
+   "baseWordId": 1218760,
+   "derivedWordId": 1218770,
+   "category": "te_form_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "喜んで fully predictable te-form adverbial use."
+  },
+  {
+   "baseWordId": 1236070,
+   "derivedWordId": 1236120,
+   "category": "sa_i_adj",
+   "verdict": "OneWayOnly",
+   "reason": "強さ predictable 'degree' nominalization, generalizes across senses."
+  },
+  {
+   "baseWordId": 2870930,
+   "derivedWordId": 1631030,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "呼ばる is archaic form, not a real modern base.",
+   "recategorize": "archaic_variant"
+  },
+  {
+   "baseWordId": 1266440,
+   "derivedWordId": 1631030,
+   "category": "lexical_passive",
+   "verdict": "Exclude",
+   "reason": "呼ばれる has extra idiom 'to be invited (to a party)'."
+  },
+  {
+   "baseWordId": 1315720,
+   "derivedWordId": 1612060,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "持ち core meaning predictable; heavily bound in compounds too."
+  },
+  {
+   "baseWordId": 1513250,
+   "derivedWordId": 1612060,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "保つ(たもつ) doesn't reach もち reading; spurious pairing.",
+   "recategorize": "spurious_reading_mismatch"
+  },
+  {
+   "baseWordId": 1584980,
+   "derivedWordId": 1545710,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "揺る is archaic form, not a real modern base.",
+   "recategorize": "archaic_variant"
+  },
+  {
+   "baseWordId": 1497190,
+   "derivedWordId": 2847506,
+   "category": "ni_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "普通に transparent, colloquial nuance still within 'normal' range."
+  },
+  {
+   "baseWordId": 1191740,
+   "derivedWordId": 2213230,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お家 predictable extension ('your home/family')."
+  },
+  {
+   "baseWordId": 1457730,
+   "derivedWordId": 2213230,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "内(うち)='home' is known alt orthography; base has other unrelated senses."
+  },
+  {
+   "baseWordId": 1519630,
+   "derivedWordId": 1519620,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "望み='wish/hope' clean mirror of 望む."
+  },
+  {
+   "baseWordId": 1591420,
+   "derivedWordId": 1951150,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "決まって grammaticalized to 'always/invariably', not obvious from te-form."
+  },
+  {
+   "baseWordId": 2229780,
+   "derivedWordId": 1328650,
+   "category": "ni_adverb",
+   "verdict": "Exclude",
+   "reason": "異に='especially' is more grammaticalized than plain 'differently'."
+  },
+  {
+   "baseWordId": 1206050,
+   "derivedWordId": 1206040,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "覚え='memory/sense' reasonably predictable from 覚える."
+  },
+  {
+   "baseWordId": 1218760,
+   "derivedWordId": 1606140,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "喜び='joy/delight' clean mirror of 喜ぶ."
+  },
+  {
+   "baseWordId": 1527110,
+   "derivedWordId": 1527140,
+   "category": "ni_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "未だに predictable intensified form of 未だ."
+  },
+  {
+   "baseWordId": 1328190,
+   "derivedWordId": 1328170,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "手伝い extra agent-noun sense 'helper/assistant' (a person)."
+  },
+  {
+   "baseWordId": 1350860,
+   "derivedWordId": 1350880,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "照れる('shy/embarrassed') is unrelated to 照る('shine') synchronically.",
+   "recategorize": "lexicalized_drift"
+  },
+  {
+   "baseWordId": 1338180,
+   "derivedWordId": 1339160,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "出し='dashi soup stock'/'pretext', unpredictable independent senses."
+  },
+  {
+   "baseWordId": 1591420,
+   "derivedWordId": 1609660,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "決まり lexicalized as institutional 'rule/regulation'."
+  },
+  {
+   "baseWordId": 1588880,
+   "derivedWordId": 1412910,
+   "category": "sa_i_adj",
+   "verdict": "OneWayOnly",
+   "reason": "大きさ='size' narrower-but-predictable subset of 大きい."
+  },
+  {
+   "baseWordId": 2427850,
+   "derivedWordId": 1412910,
+   "category": "na_sa",
+   "verdict": "Exclude",
+   "reason": "大き is classical root, not used standalone in modern Japanese.",
+   "recategorize": "archaic_variant"
+  },
+  {
+   "baseWordId": 1508380,
+   "derivedWordId": 1508390,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "並べる clean mirror of 並ぶ; 'enumerate' is natural extension.",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 1385910,
+   "derivedWordId": 1385920,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "折れる has extra idiom 'to give in/compromise' (相手に折れる).",
+   "recategorize": "transitive_intransitive"
+  },
+  {
+   "baseWordId": 1473950,
+   "derivedWordId": 1473960,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "Potential/spontaneous of sell naturally extends to 'sells well->popular'; base's extra 'betray' sense is not in derived."
+  },
+  {
+   "baseWordId": 1155780,
+   "derivedWordId": 2036550,
+   "category": "sou_i_adj",
+   "verdict": "OneWayOnly",
+   "reason": "そう of admirable predictably yields 'looks self-important/pompous' via the arrogance implicature; base has no other role."
+  },
+  {
+   "baseWordId": 1242170,
+   "derivedWordId": 1242520,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "Transitive counterpart 'bring near' is a predictable causative-like extension of intransitive 'approach'."
+  },
+  {
+   "baseWordId": 1560840,
+   "derivedWordId": 1605330,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "漏る is a rare/dialectal verb while 漏れる is the standard, much broader verb (leak, escape, shine through, of info/sound); pairing is a near-doublet not a clean derivation."
+  },
+  {
+   "baseWordId": 1277520,
+   "derivedWordId": 1277500,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "好み is exactly the transparent noun form of 好む with no independent lexicalized sense beyond liking/taste."
+  },
+  {
+   "baseWordId": 1198890,
+   "derivedWordId": 1198910,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "解ける (untie/solve sense) tracks 解く's untie and solve meanings closely; base likely carries additional senses (e.g. dismiss/lift a ban) not mirrored in the intransitive."
+  },
+  {
+   "baseWordId": 1192850,
+   "derivedWordId": 1600780,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "果たして is a heavily lexicalized sentence adverb ('as expected', rhetorical 'is it really...') not predictable from 'to accomplish'+te-form."
+  },
+  {
+   "baseWordId": 1548550,
+   "derivedWordId": 1548530,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "落ち has the specific lexicalized comedy sense 'punchline/twist' (オチ) not predictable from 'to fall'."
+  },
+  {
+   "baseWordId": 1208000,
+   "derivedWordId": 1606800,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "割り has narrowed into a fixed numeric/business 'rate, proportion (units of 10%)' term, a specialized sense beyond 'to divide'."
+  },
+  {
+   "baseWordId": 1426250,
+   "derivedWordId": 1660100,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "お昼 shares the exact same sense range (noon/lunch) as 昼 with no independent meaning added."
+  },
+  {
+   "baseWordId": 2068640,
+   "derivedWordId": 1586210,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "明り/明かり denotes a concrete light source/fixture, a metonymic leap beyond the state 'to become bright'."
+  },
+  {
+   "baseWordId": 1229840,
+   "derivedWordId": 1229650,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "泣き as a noun is predictable ('weeping'), but it also appears in the bound idiom 泣きが入る/を入れる ('to plead/beg') not obviously derivable from the base alone."
+  },
+  {
+   "baseWordId": 1299030,
+   "derivedWordId": 1299000,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "殺し predictably means 'killing/murder' and extends by common agent-noun metonymy to 'a murderer', a pattern not guaranteed to reverse cleanly."
+  },
+  {
+   "baseWordId": 1226960,
+   "derivedWordId": 1226980,
+   "category": "ni_adverb",
+   "verdict": "Bidirectional",
+   "reason": "逆に is the fully transparent adverbial 'in a reverse/opposite manner' = 'conversely', with no meaning outside that."
+  },
+  {
+   "baseWordId": 1483200,
+   "derivedWordId": 1590550,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "悲しみ carries an extra classical 'affection/dearness' gloss (from the archaic 愛し root) not predictable from modern 'to be sad'."
+  },
+  {
+   "baseWordId": 1483190,
+   "derivedWordId": 1590550,
+   "category": "mi_nominal",
+   "verdict": "Exclude",
+   "reason": "Same 悲しみ word; its extra 'affection' sense is not predictable from the adjective 'sad'."
+  },
+  {
+   "baseWordId": 1467150,
+   "derivedWordId": 1467130,
+   "category": "causative_doublet",
+   "verdict": "Bidirectional",
+   "reason": "任す is simply the colloquial register variant of 任せる with the same entrust/leave-to-someone senses; no independent meaning on either side."
+  },
+  {
+   "baseWordId": 1598800,
+   "derivedWordId": 1376140,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "整える is the predictable transitive counterpart 'to put in order' of intransitive 'to be ready/arranged'; not a true ability-potential."
+  },
+  {
+   "baseWordId": 1350600,
+   "derivedWordId": 1350610,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "焼ける is the predictable intransitive/potential counterpart of 焼く (burn/roast); metaphorical skin-tanning use stays within 'burn' semantics."
+  },
+  {
+   "baseWordId": 2821180,
+   "derivedWordId": 1350610,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "灼く is essentially a narrower synonym of 焼く (burn/tan); 焼ける's burn-related senses are predictable from it."
+  },
+  {
+   "baseWordId": 2821190,
+   "derivedWordId": 1350610,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "妬く 'to be jealous' and 焼ける 'to burn' are unrelated in modern meaning; they only share the やける/やく reading via the 焼き餅を焼く jealousy idiom, not a real semantic derivation."
+  },
+  {
+   "baseWordId": 1249300,
+   "derivedWordId": 1589840,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "係り has narrowed to the specific lexicalized sense 'clerk/official in charge', not predictable from 'to concern/relate to'."
+  },
+  {
+   "baseWordId": 2134950,
+   "derivedWordId": 1351580,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "証し ('proof, evidence, testimony') is the transparent noun form of 'to prove/verify' with no meaning outside that field."
+  },
+  {
+   "baseWordId": 1279680,
+   "derivedWordId": 1279700,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "構える's core senses (to set up a shop/building, to assume a stance) are a distinct, non-predictable extension from 構う's 'to mind/care about'."
+  },
+  {
+   "baseWordId": 1295070,
+   "derivedWordId": 2198630,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "済み ('settled, already done', as in 使用済み) is predictable from 'to finish/be completed'; base also carries the idiom 気が済む not reflected in the suffix-noun."
+  },
+  {
+   "baseWordId": 1483740,
+   "derivedWordId": 1483730,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "疲れ ('tiredness, fatigue') is the fully transparent noun form of 'to get tired' with no added meaning."
+  },
+  {
+   "baseWordId": 1512130,
+   "derivedWordId": 2202100,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "返し has the specific cultural sense 'a return gift' (as in お返し), a lexicalized custom-specific meaning beyond generic 'to return'."
+  },
+  {
+   "baseWordId": 1211200,
+   "derivedWordId": 1211140,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "巻き carries the specific extra senses 'volume (of a book)' and 'speeding things up' (巻きで), not predictable from 'to wind/roll'."
+  },
+  {
+   "baseWordId": 1448860,
+   "derivedWordId": 1448820,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "当て has the idiomatic sense 'something to rely on/a prospect' (当てにする), not predictable from plain 'to hit/apply'."
+  },
+  {
+   "baseWordId": 1153480,
+   "derivedWordId": 1448820,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "宛て shares the same broad あて word ('aim, prospect') which is far wider than the narrow base sense 'to address (a letter)'."
+  },
+  {
+   "baseWordId": 1238680,
+   "derivedWordId": 1238660,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "驚き ('surprise, astonishment') is the fully transparent noun form of 'to be surprised' with nothing extra."
+  },
+  {
+   "baseWordId": 2034480,
+   "derivedWordId": 1980660,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "身につける additionally has the plain literal sense 'to wear/put on (clothes)', not predictable from the abstract skill-acquisition sense of 身につく."
+  },
+  {
+   "baseWordId": 1606560,
+   "derivedWordId": 1606600,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "分かれる ('to branch/fork/diverge') is a distinct verb from 分かる ('to understand'); despite a shared root in 分ける, the meanings are not mutually predictable today."
+  },
+  {
+   "baseWordId": 1510790,
+   "derivedWordId": 1510720,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "変わり ('change, alteration, difference') is the transparent noun form of 'to change' with no independent meaning."
+  },
+  {
+   "baseWordId": 1595080,
+   "derivedWordId": 2850084,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "This links to the どける reading specifically ('to move something out of the way'), the clean transitive counterpart of どく 'to step aside'; base's extra 'to resign' sense doesn't carry over."
+  },
+  {
+   "baseWordId": 1532710,
+   "derivedWordId": 1641170,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "迷い additionally carries the Buddhist doctrinal sense 'worldly delusion/illusion' (煩悩), a domain-specific extension beyond ordinary 'hesitation, doubt'."
+  },
+  {
+   "baseWordId": 1289780,
+   "derivedWordId": 1289740,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "恨み ('resentment, grudge, bitterness') is the transparent noun form of 'to bear a grudge' with nothing extra."
+  },
+  {
+   "baseWordId": 2833583,
+   "derivedWordId": 1289740,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "憾む specifically means 'to regret', a milder sense than the derived 恨み's core 'grudge/malice/bitterness', so the strong grudge sense is not predictable from the base."
+  },
+  {
+   "baseWordId": 1589220,
+   "derivedWordId": 1634110,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "落ち着ける is the predictable transitive counterpart 'to calm/settle (something/someone) down' of intransitive 落ち着く."
+  },
+  {
+   "baseWordId": 1429060,
+   "derivedWordId": 1429050,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "調べ additionally means 'tune/melody' (音楽の調べ), a meaning unrelated to 'to investigate'."
+  },
+  {
+   "baseWordId": 1295250,
+   "derivedWordId": 1604130,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "祭り has the modern internet-slang sense 'online pile-on/dogpiling', not predictable from 'to deify/worship'."
+  },
+  {
+   "baseWordId": 1593100,
+   "derivedWordId": 1488840,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "凍り specifically denotes the shaved-ice dessert (かき氷-adjacent), a food-specific lexicalization beyond generic 'to freeze'."
+  },
+  {
+   "baseWordId": 1634340,
+   "derivedWordId": 1631690,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お断り narrows to specifically 'declining/refusal', while base 断り also covers 'advance notice/permission', so the reverse direction isn't fully safe."
+  },
+  {
+   "baseWordId": 1266550,
+   "derivedWordId": 1590410,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "固まり denotes a concrete physical lump/mass (肉の固まり), a metonymic object-noun leap beyond the process 'to harden'."
+  },
+  {
+   "baseWordId": 1406110,
+   "derivedWordId": 1406120,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "揃える is the predictable transitive counterpart 'to gather/complete a set' of intransitive 'to be complete/all present'."
+  },
+  {
+   "baseWordId": 1541900,
+   "derivedWordId": 1541840,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "誘い ('invitation, temptation') follows directly from 誘う's core entice/induce sense (already broader than plain 'invite'), safely predictable base->derived."
+  },
+  {
+   "baseWordId": 1478190,
+   "derivedWordId": 2009330,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "抜き ('omitting, without', as in 朝食抜き) is a fairly transparent extension of 'to pull/extract' (extracted = absent from the set)."
+  },
+  {
+   "baseWordId": 1546050,
+   "derivedWordId": 1546070,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "溶ける ('to melt, liquefy') is the predictable intransitive counterpart of 'to dissolve/mix'."
+  },
+  {
+   "baseWordId": 1198890,
+   "derivedWordId": 1546070,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "This links 解く ('to untie') to the melt-sense とける (1546070, distinct from the untie/solve とける 1198910); 'to melt' is not predictable from 'to untie/unfasten'."
+  },
+  {
+   "baseWordId": 1226490,
+   "derivedWordId": 1226510,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "詰める's dominant sense 'to stuff/jam/pack' is not clearly predictable from 詰む's given senses (fine weave, checkmated, hard-pressed), even though they share a historical 'tightness' root."
+  },
+  {
+   "baseWordId": 1374300,
+   "derivedWordId": 2144410,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "お世話 shares essentially the same 'help, care, assistance' meaning as 世話 with nothing added."
+  },
+  {
+   "baseWordId": 1567610,
+   "derivedWordId": 1567630,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "揉める ('to become disputed/fought over') is a predictable spontaneous extension of 揉む's own 'to argue/scuffle' sense."
+  },
+  {
+   "baseWordId": 1606590,
+   "derivedWordId": 1509490,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "別れ ('parting, separation, farewell') is the transparent noun form of 'to part from someone' with nothing extra."
+  },
+  {
+   "baseWordId": 2224700,
+   "derivedWordId": 1500220,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "This pair conflates 臥す (to be bedridden/reclining due to illness) with the ふせる word whose senses are all about face-down positioning, which belongs more properly to 伏す."
+  },
+  {
+   "baseWordId": 1602650,
+   "derivedWordId": 1500220,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "伏せる is the clean predictable transitive counterpart ('to lay something face down') of intransitive 'to lie face down/prostrate'."
+  },
+  {
+   "baseWordId": 1305990,
+   "derivedWordId": 1305720,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "使い has narrowed to the specific lexicalized sense 'errand, messenger', not predictable from generic 'to use'."
+  },
+  {
+   "baseWordId": 1244320,
+   "derivedWordId": 1244340,
+   "category": "mi_nominal",
+   "verdict": "Bidirectional",
+   "reason": "苦しみ ('pain, anguish, suffering') is the transparent み-nominal of 'painful' with no meaning outside that."
+  },
+  {
+   "baseWordId": 1253900,
+   "derivedWordId": 1253920,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "欠ける is the predictable intransitive counterpart of 欠く (to chip/break), including the shared abstract 'to lack' extension present in both verbs."
+  },
+  {
+   "baseWordId": 1264540,
+   "derivedWordId": 2060600,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お言葉 predictably narrows to 'your words/what you said' (honorific + word); base's broader 'language, dialect' senses don't carry over."
+  },
+  {
+   "baseWordId": 1590770,
+   "derivedWordId": 1612800,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お代わり has narrowed to the specific food-context sense 'a second helping/refill', not a generic polite 'substitute'."
+  },
+  {
+   "baseWordId": 1323560,
+   "derivedWordId": 1323540,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "借り ('borrowing, debt, loan') is predictable and extends naturally to the idiom 'owing someone a favor'; base's extra 'make use of (wisdom)' sense isn't reflected."
+  },
+  {
+   "baseWordId": 1323900,
+   "derivedWordId": 1323540,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "Same 借り noun; predictable from 借る's borrow/rent/hire senses."
+  },
+  {
+   "baseWordId": 1421610,
+   "derivedWordId": 1421590,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "恥じ/恥 ('shame, embarrassment, disgrace') is the transparent noun underlying 'to feel ashamed' with no independent meaning."
+  },
+  {
+   "baseWordId": 1227560,
+   "derivedWordId": 1227570,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "休める is the predictable transitive counterpart 'to rest (something), give relief' of intransitive 'to take a break'."
+  },
+  {
+   "baseWordId": 1005680,
+   "derivedWordId": 1002450,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お喋り additionally functions as a na-adjective/noun meaning 'talkative (person), chatterbox', a grammatical/lexical extension not present in base 喋り."
+  },
+  {
+   "baseWordId": 1283190,
+   "derivedWordId": 1283200,
+   "category": "sa_i_adj",
+   "verdict": "OneWayOnly",
+   "reason": "高さ ('height, level') fully covers the physical/degree sense of 高い (including abstract 'level', e.g. 意識の高さ); it's a predictable subset, not an extra meaning."
+  },
+  {
+   "baseWordId": 1474910,
+   "derivedWordId": 1580620,
+   "category": "matsu_intensifier",
+   "verdict": "OneWayOnly",
+   "reason": "真っ白 ('pure white, blank') follows directly from intensifier 真っ + 白い; the 'mind going blank' metaphor is a natural extension of 'blank'."
+  },
+  {
+   "baseWordId": 1244680,
+   "derivedWordId": 1270300,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "ご苦労様 is a fixed set phrase with social-register constraints (used downward, can sound condescending upward), a pragmatic lexicalization beyond plain 'hardship'."
+  },
+  {
+   "baseWordId": 2037070,
+   "derivedWordId": 1219560,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "寄せる ('to bring/come near, gather') closely tracks the rare/archaic base 寄す's own senses; predictable though base is uncommon."
+  },
+  {
+   "baseWordId": 1378690,
+   "derivedWordId": 1609350,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "生まれ ('birth, birthplace, born-in') is the transparent noun form of 'to be born' with no independent meaning."
+  },
+  {
+   "baseWordId": 1358760,
+   "derivedWordId": 1002190,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お尻 additionally names a specific modern product feature ('bidet function'), a technical/product-naming extension beyond the body part."
+  },
+  {
+   "baseWordId": 1251880,
+   "derivedWordId": 1251870,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "繋がり ('connection, link, relationship') is the transparent noun form of 'to be connected' with nothing extra."
+  },
+  {
+   "baseWordId": 1400620,
+   "derivedWordId": 1400560,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "争い ('fight, dispute, feud, conflict') is the transparent noun form of 'to compete/quarrel' with nothing extra."
+  },
+  {
+   "baseWordId": 1584930,
+   "derivedWordId": 1543890,
+   "category": "ni_adverb",
+   "verdict": "Bidirectional",
+   "reason": "余りに ('too much, excessively') is the transparent ni-adverb of 余り ('excess/remainder') with no meaning outside that."
+  },
+  {
+   "baseWordId": 1156870,
+   "derivedWordId": 1156890,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "慰める is the predictable transitive counterpart 'to comfort/console' of intransitive 'to feel comforted'."
+  },
+  {
+   "baseWordId": 1568640,
+   "derivedWordId": 1002770,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お洒落 has shifted entirely to 'stylish/fashionable', a different domain from base 洒落's 'joke, pun, wit'; not predictable as a simple honorific + noun."
+  },
+  {
+   "baseWordId": 1013290,
+   "derivedWordId": 1570040,
+   "category": "ni_adverb",
+   "verdict": "Exclude",
+   "reason": "碌に is a negative-polarity item (only used with negated predicates, e.g. 碌に食べていない), a grammatical constraint not predictable from 'satisfactory/decent'+に."
+  },
+  {
+   "baseWordId": 1244350,
+   "derivedWordId": 1244360,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "苦しめる is the predictable causative/transitive counterpart 'to torment, inflict pain' of intransitive 'to suffer'."
+  },
+  {
+   "baseWordId": 1537980,
+   "derivedWordId": 2842168,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "役に立てる ('to put to good use') is the predictable potential/transitive extension of 役に立つ 'to be useful'."
+  },
+  {
+   "baseWordId": 1350600,
+   "derivedWordId": 2265630,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "焼き ('roasting, grilling') is the transparent noun form of 'to burn/roast/grill' with nothing extra."
+  },
+  {
+   "baseWordId": 1593410,
+   "derivedWordId": 2078750,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "込み's dominant sense 'including/inclusive of' (税込み) comes from a different core meaning of 込む ('to put/mix in') than the shown base sense 'to be crowded'."
+  },
+  {
+   "baseWordId": 1384860,
+   "derivedWordId": 1384840,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "切れ specifically means 'a piece/slice/strip of cloth', a concrete-object lexicalization not predictable from 'to break/snap'."
+  },
+  {
+   "baseWordId": 1284430,
+   "derivedWordId": 1284320,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "合い specifically denotes 'between-season (spring/autumn) clothing', a fixed compound-derived sense wholly unrelated to 'to meet/merge'."
+  },
+  {
+   "baseWordId": 1495770,
+   "derivedWordId": 1495750,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "付け has the specific commercial sense 'a bill/tab for later payment' (つけで買う), not predictable from generic 'to attach'."
+  },
+  {
+   "baseWordId": 1614520,
+   "derivedWordId": 1610620,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お気に入り additionally denotes a browser 'bookmark', a modern but fairly transparent tech extension of 'favorite'; kept cautious since it is a distinct application domain."
+  },
+  {
+   "baseWordId": 1535910,
+   "derivedWordId": 2808940,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "貰える ('to be able to receive', and the polite request use 'could you give me') is the predictable potential form of 'to receive'."
+  },
+  {
+   "baseWordId": 1238610,
+   "derivedWordId": 1602130,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "響き ('echo, reverberation, characteristic sound') is a fairly predictable nominalization of 'to resound/reverberate'."
+  },
+  {
+   "baseWordId": 1589040,
+   "derivedWordId": 1422020,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "遅れ ('delay, lag, falling behind') is the transparent noun form of 'to be late/delayed' with nothing extra."
+  },
+  {
+   "baseWordId": 1588150,
+   "derivedWordId": 1588140,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "打ち合わせ additionally has the specific tailoring sense 'overlap (of a coat's front)', unrelated to 'meeting/arrangement'."
+  },
+  {
+   "baseWordId": 1415750,
+   "derivedWordId": 1002400,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お宅 carries extra pragmatic senses ('your husband', a distancing second-person address term), beyond plain 'house'."
+  },
+  {
+   "baseWordId": 1327100,
+   "derivedWordId": 1002060,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お守り denotes the specific physical religious object 'an amulet/charm' (omamori), a concrete cultural-item lexicalization beyond abstract 'protection'."
+  },
+  {
+   "baseWordId": 1599390,
+   "derivedWordId": 1430650,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "直し ('correction, mending, repair') is the transparent noun form of 'to repair/fix' with nothing extra."
+  },
+  {
+   "baseWordId": 1587610,
+   "derivedWordId": 1609260,
+   "category": "garu_both",
+   "verdict": "Bidirectional",
+   "reason": "嫌がる is the textbook がる pattern ('to show outward signs of disliking') applied to na-adjective 嫌, with no meaning outside that."
+  },
+  {
+   "baseWordId": 1219260,
+   "derivedWordId": 1219270,
+   "category": "ni_adverb",
+   "verdict": "Bidirectional",
+   "reason": "基本的に ('basically, fundamentally') is the transparent ni-adverb of 基本的 with nothing extra."
+  },
+  {
+   "baseWordId": 1509490,
+   "derivedWordId": 1002630,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "お別れ ('parting, farewell') shares the same meaning as base 別れ with nothing added."
+  },
+  {
+   "baseWordId": 1337390,
+   "derivedWordId": 1337370,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "祝い ('congratulations, celebration') is the transparent noun form of 'to celebrate' with nothing extra."
+  },
+  {
+   "baseWordId": 1473740,
+   "derivedWordId": 1636070,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "買い additionally carries a specialized trading/finance sense ('a buy', 買いが強い), beyond plain 'to purchase'."
+  },
+  {
+   "baseWordId": 1499320,
+   "derivedWordId": 2453580,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "お部屋 shares exactly the same 'room, apartment' meaning as 部屋 with nothing added."
+  },
+  {
+   "baseWordId": 1192910,
+   "derivedWordId": 1192860,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "果て ('end, extremity, limit, result') is a fairly predictable nominalization of 'to end/be exhausted'."
+  },
+  {
+   "baseWordId": 1601080,
+   "derivedWordId": 2078850,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "早め here is more properly the め-suffix form of 早い ('a bit early', see the parallel 早い->早め row) rather than a masu-stem nominalization of 早める ('to hasten/advance'); the 'a little early' meaning is not clearly predictable from 'to hasten'."
+  },
+  {
+   "baseWordId": 1404975,
+   "derivedWordId": 2078850,
+   "category": "me",
+   "verdict": "OneWayOnly",
+   "reason": "早め ('a bit early/fast') is the standard め-suffix ('slightly toward X') pattern on 早い; base's separate 'quick/rapid' (speed, non-timing) applications aren't guaranteed to reverse."
+  },
+  {
+   "baseWordId": 1151120,
+   "derivedWordId": 2256060,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "ご挨拶 has the extra sarcastic idiomatic use ('that's a fine thing to say!') not predictable from plain 'greeting'."
+  },
+  {
+   "baseWordId": 1207610,
+   "derivedWordId": 1207600,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "掛け has the specific commercial sense 'credit, money owed, a bill' (掛け売り), unrelated to 'to hang up'."
+  },
+  {
+   "baseWordId": 1240825,
+   "derivedWordId": 1240810,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "勤め ('service, duty, one's job') is the transparent noun form of 'to be employed' with nothing extra."
+  },
+  {
+   "baseWordId": 1465610,
+   "derivedWordId": 1465600,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "入れ as 'a container/case' only works as a compound suffix (靴入れ, ゴミ入れ); standalone it isn't reliably guessable from 'to put in'."
+  },
+  {
+   "baseWordId": 1448580,
+   "derivedWordId": 1002510,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お湯 covers 'hot water/bath'; base 湯 additionally covers 'hot spring' and 'molten iron' not reflected in the honorific form."
+  },
+  {
+   "baseWordId": 1324940,
+   "derivedWordId": 1324990,
+   "category": "ni_adverb",
+   "verdict": "Bidirectional",
+   "reason": "主に ('mainly, primarily') is the transparent ni-adverb of 主 ('chief, main') with nothing extra."
+  },
+  {
+   "baseWordId": 1277080,
+   "derivedWordId": 1277040,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "向き ('direction, orientation, exposure') is the transparent noun form of 'to face/turn toward' with nothing extra."
+  },
+  {
+   "baseWordId": 1411160,
+   "derivedWordId": 1411110,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "貸し ('a loan') is predictable and extends to the parallel favor-owed idiom (貸しがある); kept cautious in the same way as the mirrored 借り entries."
+  },
+  {
+   "baseWordId": 2864817,
+   "derivedWordId": 1352300,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "揚げ's senses here ('a tuck in sewing', 'a rise in price') are unrelated to 'to deep-fry/hoist'; this is a homophone collision with 上げ, not a real derivation."
+  },
+  {
+   "baseWordId": 1352320,
+   "derivedWordId": 1352300,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "上げ's sewing-tuck sense is a specific unrelated technical term not predictable from 'to raise/elevate', even though the 'price rise' sense is predictable."
+  },
+  {
+   "baseWordId": 1518050,
+   "derivedWordId": 2211980,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "ご褒美 ('reward, prize, treat, delight') stays within the same reward/prize semantic field as base 褒美 with nothing genuinely independent."
+  },
+  {
+   "baseWordId": 1259290,
+   "derivedWordId": 2256270,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "This 見 entry is the grammaticalized casual auxiliary use ('try it!', from 〜てみる), a distinct grammatical function requiring separate learning, not just 'to see' as a bare noun."
+  },
+  {
+   "baseWordId": 1451150,
+   "derivedWordId": 1451040,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "働き ('work, labor') predictably extends to 'achievement/contribution' (the results of one's work), a natural but not perfectly symmetric extension."
+  },
+  {
+   "baseWordId": 1224020,
+   "derivedWordId": 1224010,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "輝き ('brightness, brilliance, radiance') is the transparent noun form of 'to shine/sparkle' with nothing extra."
+  },
+  {
+   "baseWordId": 1411070,
+   "derivedWordId": 1002370,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お袋 is slang for '(one's) mother', an idiomatic meaning with no predictable connection to 'bag/sack'."
+  },
+  {
+   "baseWordId": 1250480,
+   "derivedWordId": 1611980,
+   "category": "lexical_passive",
+   "verdict": "OneWayOnly",
+   "reason": "恵まれる ('to be blessed with, rich in') is the predictable passive of 'to bless/give generously'; kept cautious for any narrower base-only nuance."
+  },
+  {
+   "baseWordId": 1419360,
+   "derivedWordId": 1419380,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "弾ける ('to burst/pop open', and metaphorically 'bursting with youth/laughter') is a fairly predictable extension of 弾く's 'to flick/snap/repel'."
+  },
+  {
+   "baseWordId": 1335750,
+   "derivedWordId": 1335760,
+   "category": "sa_i_adj",
+   "verdict": "OneWayOnly",
+   "reason": "重さ ('weight') is the predictable physical-dimension subset of 重い; base's extra 'depressed feeling' sense doesn't carry over, so the reverse isn't safe."
+  },
+  {
+   "baseWordId": 1232870,
+   "derivedWordId": 1232860,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "許し ('pardon, forgiveness, permission') is the transparent noun form of 'to permit/allow' with nothing extra."
+  },
+  {
+   "baseWordId": 1440810,
+   "derivedWordId": 1596490,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "The base glosses shown emphasize 'to meet expectations/comply', a different sense of 添う than the 'to accompany/be alongside' sense that would predict 添える's 'to garnish/add as support'."
+  },
+  {
+   "baseWordId": 2864818,
+   "derivedWordId": 1232490,
+   "category": "te_form_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "挙げて ('wholly, en masse', as in 国を挙げて) relies on 挙げる's 'to mobilize/raise up entirely' sense, distinct from the 'give an example' sense shown for the base."
+  },
+  {
+   "baseWordId": 1497420,
+   "derivedWordId": 1497370,
+   "category": "lexical_passive",
+   "verdict": "OneWayOnly",
+   "reason": "浮かれる ('to make merry, be festive') closely tracks base 浮く's own listed 'become merry, be cheerful' senses; kept cautious given the intensified/exclusive festive nuance."
+  },
+  {
+   "baseWordId": 1154330,
+   "derivedWordId": 1363190,
+   "category": "matsu_intensifier",
+   "verdict": "Bidirectional",
+   "reason": "真っ暗 ('pitch-dark', and 'very bleak future') follows directly from intensifier 真っ + 暗い, including base's own 'depressed' sense."
+  },
+  {
+   "baseWordId": 1591970,
+   "derivedWordId": 1240200,
+   "category": "te_form_adverb",
+   "verdict": "Bidirectional",
+   "reason": "極めて ('exceedingly, extremely') is the transparent te-form adverbial intensifier of 'to reach the extreme/peak', with nothing outside that."
+  },
+  {
+   "baseWordId": 1169250,
+   "derivedWordId": 1168800,
+   "category": "lexical_passive",
+   "verdict": "OneWayOnly",
+   "reason": "引かれる ('to be charmed by, attracted to') is predictable from base's own 'to draw (attention, sympathy)' sense; base's physical 'pull/tug/lead' senses don't carry over."
+  },
+  {
+   "baseWordId": 1277100,
+   "derivedWordId": 1277090,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "向け ('intended for, aimed at') is the transparent noun form of 'to point/aim toward' with nothing extra."
+  },
+  {
+   "baseWordId": 1355120,
+   "derivedWordId": 1354720,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "乗り additionally has the technical sense 'spread/application quality (of paint)' (ノリがいい), unrelated to 'to board a vehicle'."
+  },
+  {
+   "baseWordId": 1315920,
+   "derivedWordId": 2842263,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お時間 predictably narrows to '(your) time'; base's other sense 'class period' doesn't carry over."
+  },
+  {
+   "baseWordId": 1511790,
+   "derivedWordId": 1511780,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "片付け ('tidying up, finishing') is the transparent noun form of 'to tidy up' with nothing extra."
+  },
+  {
+   "baseWordId": 1404975,
+   "derivedWordId": 1404990,
+   "category": "sa_i_adj",
+   "verdict": "OneWayOnly",
+   "reason": "早さ ('speed, velocity') is the predictable speed-dimension subset of 早い; base's separate 'early/soon' timing sense doesn't carry over, so the reverse isn't fully safe."
+  },
+  {
+   "baseWordId": 1516925,
+   "derivedWordId": 2060470,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お方 predictably narrows to the 'person, lady' sense of 方; base's separate 'direction/way' sense doesn't carry over."
+  },
+  {
+   "baseWordId": 1486360,
+   "derivedWordId": 2765450,
+   "category": "sa_i_adj",
+   "verdict": "OneWayOnly",
+   "reason": "美しさ ('beauty') is the predictable nominalization of 'beautiful'; kept OneWayOnly rather than Exclude since it's a clean subset, not an added meaning."
+  },
+  {
+   "baseWordId": 1385910,
+   "derivedWordId": 1385780,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "折り has the specific lexicalized sense 'an occasion/opportunity' (この折に), not predictable from 'to break/fold'."
+  },
+  {
+   "baseWordId": 1407460,
+   "derivedWordId": 1588910,
+   "category": "sugiru",
+   "verdict": "Bidirectional",
+   "reason": "多すぎる ('to be too numerous/much') is the textbook すぎる pattern on 多い with no meaning outside that."
+  },
+  {
+   "baseWordId": 1251900,
+   "derivedWordId": 1251910,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "繋げる ('to connect, and to transfer a phone call') is a predictable transitive/potential extension of 'to connect/tie'."
+  },
+  {
+   "baseWordId": 1311870,
+   "derivedWordId": 1311850,
+   "category": "te_form_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "至って ('very much, extremely') is the predictable te-form intensifier of 'to reach an extreme/peak', parallel to 極めて."
+  },
+  {
+   "baseWordId": 1597045,
+   "derivedWordId": 1257330,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "建てる is the predictable transitive counterpart 'to build/construct' of intransitive 'to be erected'."
+  },
+  {
+   "baseWordId": 1420400,
+   "derivedWordId": 1002420,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "お知らせ ('notice, notification') shares the same meaning as base 知らせ with nothing added."
+  },
+  {
+   "baseWordId": 1473950,
+   "derivedWordId": 1854880,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "売り has the specific marketing sense 'a selling point/gimmick' (売りにする), a commercial abstraction beyond plain 'to sell'."
+  },
+  {
+   "baseWordId": 1589350,
+   "derivedWordId": 1309470,
+   "category": "lexical_passive",
+   "verdict": "OneWayOnly",
+   "reason": "思われる ('to seem, appear') is the standard predictable passive/spontaneous form of 'to think', a well-known early grammar pattern."
+  },
+  {
+   "baseWordId": 1304820,
+   "derivedWordId": 1594100,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "仕掛け denotes a concrete 'device/mechanism/gadget', a physical-object lexicalization beyond abstract 'to start/commence'."
+  },
+  {
+   "baseWordId": 1597040,
+   "derivedWordId": 1551240,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "立ち additionally means 'being used up' (stock depletion sense), not clearly predictable from 'to stand up'."
+  },
+  {
+   "baseWordId": 1604690,
+   "derivedWordId": 1001870,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "お見舞い shares the identical sense range with base 見舞い (both: visit to someone ill, inquiry, expression of sympathy)."
+  },
+  {
+   "baseWordId": 1589060,
+   "derivedWordId": 1643580,
+   "category": "lexical_passive",
+   "verdict": "OneWayOnly",
+   "reason": "行われる ('to be done, take place') is the standard predictable passive of 'to perform/carry out'; base's 'to conduct oneself' reflexive sense doesn't carry over."
+  },
+  {
+   "baseWordId": 1236900,
+   "derivedWordId": 1236890,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "教え ('teaching, instruction') is the transparent noun form of 'to teach' with nothing extra."
+  },
+  {
+   "baseWordId": 1848440,
+   "derivedWordId": 2017150,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "言い過ぎ ('exaggeration, overstatement') is the transparent noun form of 'to say too much' with nothing extra."
+  },
+  {
+   "baseWordId": 1587040,
+   "derivedWordId": 2017150,
+   "category": "sugiru",
+   "verdict": "OneWayOnly",
+   "reason": "言いすぎ is compositional via masu-stem 言い + すぎる ('to say too much'), predictable from 言う + the sugiru grammar point even though it's a two-step derivation."
+  },
+  {
+   "baseWordId": 1410520,
+   "derivedWordId": 1410510,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "待ち合わせ ('meeting up, rendezvous') is a reasonably predictable nominalization of 'to arrange to meet'; kept cautious since the gloss 'appointment' slightly generalizes beyond casual meetups."
+  },
+  {
+   "baseWordId": 1497960,
+   "derivedWordId": 1694410,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お負け/おまけ has fully lexicalized into 'a free gift/bonus thrown in with a purchase', a commercial-custom meaning not predictable from 'defeat/loss'."
+  },
+  {
+   "baseWordId": 1288490,
+   "derivedWordId": 1011770,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "呆け is lexicalized as a personal insult (\"fool/idiot\", the boke role in manzai comedy), not just \"senility\"."
+  },
+  {
+   "baseWordId": 1405800,
+   "derivedWordId": 2768100,
+   "category": "te_form_adverb",
+   "verdict": "Bidirectional",
+   "reason": "続けて (\"successively/continuously\") is the direct, fully compositional te-form-adverb extension of \"keep continuing\"; no independent sense."
+  },
+  {
+   "baseWordId": 1604130,
+   "derivedWordId": 1604135,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "Base carries an extra internet-slang sense (\"pitchfork mob\") not in derived; derived is fully predictable from base+honorific."
+  },
+  {
+   "baseWordId": 1456360,
+   "derivedWordId": 1456130,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "Derived's \"kanji reading / insight\" senses track the base's own \"predict\" sense, but \"reading of a kanji\" is a narrow lexicalized technical use; kept conservative."
+  },
+  {
+   "baseWordId": 1338470,
+   "derivedWordId": 1338475,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お出掛け lexicalized as a standalone \"outing/trip\" activity noun (お出かけ日和), beyond the polite form of \"point of leaving\"."
+  },
+  {
+   "baseWordId": 1305200,
+   "derivedWordId": 1594180,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "仕組み lexicalized as \"mechanism/system/structure\", far more common and independent than \"the act of devising\"."
+  },
+  {
+   "baseWordId": 1195140,
+   "derivedWordId": 1609180,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "苛め is exactly the transparent noun of \"to bully\"; no sense beyond \"bullying/teasing\" on either side."
+  },
+  {
+   "baseWordId": 2409970,
+   "derivedWordId": 1298730,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "察し (insight/guess) is fairly predictable from the base, kept conservative per input."
+  },
+  {
+   "baseWordId": 1365980,
+   "derivedWordId": 2399750,
+   "category": "te_form_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "進んで as \"voluntarily\" is a fixed idiomatic te-form-adverb narrower than the base's full range of \"advance\" meanings."
+  },
+  {
+   "baseWordId": 1487960,
+   "derivedWordId": 2434670,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お姫様 lexicalized as \"spoiled/pampered girl\", an independent judgmental sense not in the base."
+  },
+  {
+   "baseWordId": 1420410,
+   "derivedWordId": 1420400,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "知らせ (\"news/notification\") is fully transparent from \"to notify\"; no unrelated sense either side."
+  },
+  {
+   "baseWordId": 1391120,
+   "derivedWordId": 1391110,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "染み lexicalized as a concrete noun (stain, also skin age-spot), a specific standalone item beyond \"the act of soaking\"."
+  },
+  {
+   "baseWordId": 1235910,
+   "derivedWordId": 1235890,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "叫び is the fully transparent noun of \"to shout\"; no extra senses either direction."
+  },
+  {
+   "baseWordId": 1589200,
+   "derivedWordId": 1236660,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "恐れ is used in formal/legal register as \"risk/danger of\" (〜のおそれがある), an independent usage beyond simple \"fear\"."
+  },
+  {
+   "baseWordId": 1378040,
+   "derivedWordId": 2854341,
+   "category": "ni_adverb",
+   "verdict": "Exclude",
+   "reason": "Derived reading/word (まともに) is effectively a distinct heteronym-lexicalized adverb (\"properly/decently\"); risky pairing given the shared spelling with 正面(front)."
+  },
+  {
+   "baseWordId": 2266990,
+   "derivedWordId": 2706170,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お姉 carries the slang sense \"effeminate/gay man\" (おねえ言葉), absent from the base \"older sister\"."
+  },
+  {
+   "baseWordId": 1597130,
+   "derivedWordId": 1597120,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "例え has generalized into the everyday word for \"example\" (cf. 例えば), broader/more lexicalized than \"the act of comparing\"."
+  },
+  {
+   "baseWordId": 1406100,
+   "derivedWordId": 2084310,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お揃い adds an interpersonal sense (\"people going/being together\") not clearly present in the base's \"matching set of objects\"."
+  },
+  {
+   "baseWordId": 1579780,
+   "derivedWordId": 1270390,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "Derived's narrowing to \"your/her husband\" is predictable from honorific+\"head of household\"; base has broader senses (shopkeeper, landlord) not in derived."
+  },
+  {
+   "baseWordId": 2039050,
+   "derivedWordId": 2039060,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "考えすぎ is the fully transparent masu-stem noun of the compound verb; no added senses."
+  },
+  {
+   "baseWordId": 1281020,
+   "derivedWordId": 2039060,
+   "category": "sugiru",
+   "verdict": "Bidirectional",
+   "reason": "Fully compositional すぎる-attachment + noun form of 考える; same reasoning as the paired masu_stem_noun row."
+  },
+  {
+   "baseWordId": 1529390,
+   "derivedWordId": 1529370,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "眠り is fully transparent; the \"death/inactivity\" metaphors are already present in the base verb's own glosses, so nothing is added only in the derived."
+  },
+  {
+   "baseWordId": 1266350,
+   "derivedWordId": 1605990,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "呼び出し is lexicalized as the sumo ring-announcer job title (reflected in the odd \"curtain call\" gloss), a specific independent sense."
+  },
+  {
+   "baseWordId": 1433030,
+   "derivedWordId": 1432980,
+   "category": "sugiru",
+   "verdict": "Bidirectional",
+   "reason": "Fully compositional \"pass by/beyond\"; note this is the motion-compound use of 過ぎる (\"pass a point\"), not the excessive-degree すぎる pattern like 食べすぎる.",
+   "recategorize": "sugiru_motion_compound (not excessive-degree すぎる)"
+  },
+  {
+   "baseWordId": 1429750,
+   "derivedWordId": 1429770,
+   "category": "sa_i_adj",
+   "verdict": "Bidirectional",
+   "reason": "Canonical, fully transparent -sa nominalization of an i-adjective (long -> length); no independent senses."
+  },
+  {
+   "baseWordId": 1397480,
+   "derivedWordId": 1592290,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "組み合わせ is lexicalized in the sports/tournament sense as \"match-up/bracket pairing\", a domain-specific sense beyond plain \"combination\"."
+  },
+  {
+   "baseWordId": 1329690,
+   "derivedWordId": 1588060,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "受け付け is lexicalized as \"reception desk/receptionist\" (a place/role), independent of the plain \"act of accepting\"."
+  },
+  {
+   "baseWordId": 1253180,
+   "derivedWordId": 2512440,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お迎え carries the well-known euphemism \"death coming for someone\" (お迎えが来る), independent of the base."
+  },
+  {
+   "baseWordId": 1309320,
+   "derivedWordId": 2834138,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "思い切り is lexicalized as the adverb \"to the utmost/with all one's strength\", a specific idiomatic extension beyond \"give up/abandon\"."
+  },
+  {
+   "baseWordId": 1434120,
+   "derivedWordId": 1434040,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "釣り is lexicalized as \"change (money)\" and \"clickbait\", independent senses unrelated to fishing."
+  },
+  {
+   "baseWordId": 1370870,
+   "derivedWordId": 1370860,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "垂れ is lexicalized as the culinary term \"sauce\" (tare), independent of \"the act of hanging\"."
+  },
+  {
+   "baseWordId": 1441870,
+   "derivedWordId": 1441860,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "伝え narrows to \"legend/tradition\" (a specific folklore-narrative genre), not obviously predictable from the generic \"to convey/report\"."
+  },
+  {
+   "baseWordId": 1589060,
+   "derivedWordId": 1589050,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "行い narrows to personal moral conduct/deeds, a connotation not obviously predictable from the neutral base \"to perform/carry out\"."
+  },
+  {
+   "baseWordId": 1604300,
+   "derivedWordId": 2800530,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "回り carries several idiomatic domain-specific extensions (patrol rounds, fire/effect spreading, alcohol \"kicking in\") beyond simple nominalization."
+  },
+  {
+   "baseWordId": 1214430,
+   "derivedWordId": 1214440,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "This is a lexical transitive/intransitive verb pair (become loose / loosen something), not a productive \"potential\" (-eru ability) form; the alternation isn't a single reliable rule.",
+   "recategorize": "transitive_intransitive_pair (not potential)"
+  },
+  {
+   "baseWordId": 1431670,
+   "derivedWordId": 1431680,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "Same issue: transitive/intransitive pair (sink / sink something), mislabeled as potential.",
+   "recategorize": "transitive_intransitive_pair (not potential)"
+  },
+  {
+   "baseWordId": 1350780,
+   "derivedWordId": 1350770,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "焦り (\"impatience\") is the fully transparent abstract noun of \"to be impatient/anxious\"; no extra sense."
+  },
+  {
+   "baseWordId": 1589220,
+   "derivedWordId": 1548590,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "落ち着き (\"calmness/composure/stability\") is fully transparent from \"to calm down\"; no independent sense."
+  },
+  {
+   "baseWordId": 1604800,
+   "derivedWordId": 1604750,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "向かい functions as a fixed spatial/locational term (\"across the street/opposite side\"), more specific and idiom-like than bare nominalization of \"to face\"."
+  },
+  {
+   "baseWordId": 1310730,
+   "derivedWordId": 2602220,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "死に carries the idiomatic extension \"useless/wasted\" (死に金, 死に体), not predictable from simple \"dying\"."
+  },
+  {
+   "baseWordId": 1450330,
+   "derivedWordId": 1633800,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "逃げ (\"escape/getaway/evasion\") is fully transparent from \"to flee\", tracking the given glosses with no unrelated added sense."
+  },
+  {
+   "baseWordId": 2527190,
+   "derivedWordId": 1001670,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お化け is lexicalized specifically as \"ghost/monster/apparition\", a strong independent supernatural-noun sense."
+  },
+  {
+   "baseWordId": 1601560,
+   "derivedWordId": 1601550,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "引き換え is a transparent \"exchange/conversion\" nominalization; base has an extra sense (\"to contrast with\") not present in derived."
+  },
+  {
+   "baseWordId": 1180470,
+   "derivedWordId": 1852820,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "押して as an adverb (\"forcibly, despite\", e.g. 病を押して) is a specific lexicalized idiom beyond literal \"pushing\"."
+  },
+  {
+   "baseWordId": 1589880,
+   "derivedWordId": 1589870,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "関わり (\"relation/connection\") is fully transparent from \"to be involved with\"; no added sense."
+  },
+  {
+   "baseWordId": 1510640,
+   "derivedWordId": 1510680,
+   "category": "ni_adverb",
+   "verdict": "Bidirectional",
+   "reason": "変に is the canonical, fully productive na-adjective -> に adverb (\"strangely/curiously\"); no independent sense."
+  },
+  {
+   "baseWordId": 1212670,
+   "derivedWordId": 1212660,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "慣れ (\"practice/experience/habituation\") is fully transparent from \"to get used to\"; no added sense."
+  },
+  {
+   "baseWordId": 1846650,
+   "derivedWordId": 1611810,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "見とれる has drifted into its own idiom \"to be captivated/enchanted (by watching)\", not the literal potential (\"can perceive\") of 見とる.",
+   "recategorize": "lexicalized_derivative (not potential)"
+  },
+  {
+   "baseWordId": 1222770,
+   "derivedWordId": 1222760,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "祈り (\"prayer/supplication\") is fully transparent from \"to pray\"; no added sense."
+  },
+  {
+   "baseWordId": 1179005,
+   "derivedWordId": 1612200,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "汚れ (\"dirt/stain\") is a transparent result-noun of \"to get dirty\", parallel to English \"a stain\" from \"to stain\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 2014610,
+   "derivedWordId": 1183330,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "温もり (\"warmth\") is fully transparent from \"to get warm\"; no added sense."
+  },
+  {
+   "baseWordId": 1279700,
+   "derivedWordId": 1279690,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "構え is lexicalized as the specific martial-arts term \"stance/kamae\", a technical sense beyond generic \"to set up (a shop/house)\"."
+  },
+  {
+   "baseWordId": 1530030,
+   "derivedWordId": 1530040,
+   "category": "ni_adverb",
+   "verdict": "Bidirectional",
+   "reason": "無事に (\"safely/without incident\") is fully transparent from the na-adjective \"safe/uneventful\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 1371260,
+   "derivedWordId": 2083290,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お水 carries the well-known slang sense \"nightlife/hostess industry\" (水商売-adjacent), independent of plain \"water\"."
+  },
+  {
+   "baseWordId": 2202100,
+   "derivedWordId": 1002640,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "Base 返し additionally has a specific martial-arts/wrestling sense (\"reversal technique\") not reflected in derived's gift-giving-custom senses."
+  },
+  {
+   "baseWordId": 1194500,
+   "derivedWordId": 2863474,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お花 is lexicalized as \"ikebana\" (the specific art of flower arrangement), a narrower cultural-practice sense beyond generic \"flower\"."
+  },
+  {
+   "baseWordId": 1203310,
+   "derivedWordId": 1203300,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "外れ is lexicalized both as a spatial \"edge/outskirts\" term and as \"a miss/loss\" (lottery sense, opposite of 当たり), independent of \"disconnection\"."
+  },
+  {
+   "baseWordId": 1295170,
+   "derivedWordId": 1295190,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "砕ける additionally means \"to become informal/friendly\" (くだけた態度), an idiomatic extension beyond physical breaking; also mislabeled potential (really a transitive/intransitive pair).",
+   "recategorize": "transitive_intransitive_pair (not potential)"
+  },
+  {
+   "baseWordId": 1256520,
+   "derivedWordId": 1542850,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "兼ねて as \"previously/for some time\" is a fossilized classical-usage adverb, not predictable from the modern base meaning."
+  },
+  {
+   "baseWordId": 1583095,
+   "derivedWordId": 1589430,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お八つ (\"snack\") relies on an obscure historical time-system reference (八つ time, ~2-4pm), not derivable from \"eight\" + honorific for a modern learner."
+  },
+  {
+   "baseWordId": 1224390,
+   "derivedWordId": 1224350,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "偽り (\"lie/falsehood\") is fully transparent from \"to lie/falsify\"; no added sense."
+  },
+  {
+   "baseWordId": 1601660,
+   "derivedWordId": 1601650,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "引き出し is lexicalized as the concrete noun \"drawer\" (furniture) and idiomatically as \"one's repertoire of knowledge/skills\", both independent of the plain verb."
+  },
+  {
+   "baseWordId": 1372650,
+   "derivedWordId": 1952930,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "酔い shares the exact same range of senses as the base (drunkenness + motion sickness); fully parallel, no unrelated sense."
+  },
+  {
+   "baseWordId": 1402730,
+   "derivedWordId": 1402630,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "送り is lexicalized with the specific technical sense \"escapement\" (clockwork mechanism) and funeral-procession usage, independent of generic \"to send\"."
+  },
+  {
+   "baseWordId": 1546200,
+   "derivedWordId": 1270720,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "ご用 narrows predictably to \"(addressee's) business/order\" via honorific+\"task\"; base has broader senses (errand, general task) not in derived."
+  },
+  {
+   "baseWordId": 1287420,
+   "derivedWordId": 1604050,
+   "category": "matsu_intensifier",
+   "verdict": "Bidirectional",
+   "reason": "真っ黒 is the canonical, fully productive 真っ+adjective intensifier (\"totally black\"), including the base's own \"sun-tanned\" sense (真っ黒に日焼け); no unrelated sense."
+  },
+  {
+   "baseWordId": 2612780,
+   "derivedWordId": 1411390,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "退治る/退治 share identical \"exterminate\" semantics with no divergence; fully parallel regardless of which is historically prior."
+  },
+  {
+   "baseWordId": 1310090,
+   "derivedWordId": 1310080,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "支え (\"support/prop\") is fully transparent from \"to support\"; no added sense."
+  },
+  {
+   "baseWordId": 1324960,
+   "derivedWordId": 1852780,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お主 has grammaticalized into a 2nd-person pronoun (\"you\"), a categorical shift from \"master/owner\" not predictable from base+honorific for a modern learner."
+  },
+  {
+   "baseWordId": 1196020,
+   "derivedWordId": 1196010,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "過ち (\"fault/error\") is fully transparent from \"to make a mistake\"; no added sense."
+  },
+  {
+   "baseWordId": 1580820,
+   "derivedWordId": 1588930,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お数 (\"side dish\") is a historically opaque semantic shift from \"number/amount\", not predictable by a modern learner."
+  },
+  {
+   "baseWordId": 1508380,
+   "derivedWordId": 2762260,
+   "category": "te_form_adverb",
+   "verdict": "Bidirectional",
+   "reason": "並んで (\"alongside/side-by-side\") is a fully transparent spatial te-form-adverb of \"to line up\"; no added sense."
+  },
+  {
+   "baseWordId": 1591110,
+   "derivedWordId": 2701450,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "聞き carries the lexicalized sense \"rumour/hearsay\" (cf. 又聞き), independent of the plain \"act of hearing\"."
+  },
+  {
+   "baseWordId": 1004480,
+   "derivedWordId": 1004470,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "拘り has undergone a modern positive semantic shift to mean \"particular care/dedication to quality\", often opposite in connotation to the base's negative \"fuss/worry excessively\"."
+  },
+  {
+   "baseWordId": 1468440,
+   "derivedWordId": 1598750,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "年寄り is lexicalized as the specific institutional title \"Japan Sumo Association trustee\", independent of generic \"elderly person\"."
+  },
+  {
+   "baseWordId": 1284480,
+   "derivedWordId": 1506010,
+   "category": "te_form_adverb",
+   "verdict": "Bidirectional",
+   "reason": "合わせて as \"in total/combined\" is a transparent extension of \"to combine\", closely paralleling English \"combined\" used the same way; no unrelated sense."
+  },
+  {
+   "baseWordId": 1604890,
+   "derivedWordId": 2267210,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お目 is bound almost exclusively to fixed idioms (お目にかかる, お目が高い) rather than freely substituting for \"eye\" in general use, so it is not a productive polite substitution."
+  },
+  {
+   "baseWordId": 1335750,
+   "derivedWordId": 1589410,
+   "category": "mi_nominal",
+   "verdict": "Bidirectional",
+   "reason": "重み's \"weight of one's words / gravitas\" is the universal heavy-ness -> importance metaphor already latent in the base's \"heavy (feeling), depressed\" senses; no unrelated sense."
+  },
+  {
+   "baseWordId": 1403050,
+   "derivedWordId": 2423820,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "騒めき (\"stir/commotion\") is fully transparent from \"to be noisy/astir\"; no added sense."
+  },
+  {
+   "baseWordId": 1291300,
+   "derivedWordId": 1789470,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "差し入れ shares the exact specific \"delivery to a prisoner/worker\" sense with the base; fully parallel, no unrelated addition."
+  },
+  {
+   "baseWordId": 1376470,
+   "derivedWordId": 1376460,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "晴れ is lexicalized as \"formal/ceremonial\" (晴れの舞台, 晴れ着), a specific cultural idiom beyond \"clear weather\"."
+  },
+  {
+   "baseWordId": 2432160,
+   "derivedWordId": 1077750,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "禿び/ちび has shifted to mean \"small child/pipsqueak\" and the famous \"chibi\" art style, a modern independent sense far from \"getting blunt/worn down\"."
+  },
+  {
+   "baseWordId": 1456940,
+   "derivedWordId": 1456930,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "突っ込み is lexicalized as the manzai comedy \"straight man\" role, independent of the literal \"thrust/cram\"."
+  },
+  {
+   "baseWordId": 1326900,
+   "derivedWordId": 1326910,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "取り付ける (\"to install/fit/fix\") is a different, semantically divergent verb sharing only the 取り-prefix with 取り付く (\"to cling/hold fast to\"); not a true potential form.",
+   "recategorize": "different_lexeme (not potential)"
+  },
+  {
+   "baseWordId": 1210360,
+   "derivedWordId": 1210390,
+   "category": "sa_i_adj",
+   "verdict": "OneWayOnly",
+   "reason": "寒さ tracks the base's core \"coldness\" sense, but base has an extra colloquial sense (\"lame/uninteresting\", e.g. 寒いギャグ) not reflected in the temperature-only derived noun."
+  },
+  {
+   "baseWordId": 1386200,
+   "derivedWordId": 1270450,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "お節介 shares literally identical glosses with the base 節介 (meddling/nosiness); fully transparent honorific pair."
+  },
+  {
+   "baseWordId": 1169430,
+   "derivedWordId": 1169360,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "引っかける (\"to hang/hook/catch, throw on clothes\") is a different, semantically divergent verb from 引っ掻く (\"to scratch/claw\"), sharing only the 引っ- prefix; not a true potential form.",
+   "recategorize": "different_lexeme (not potential)"
+  },
+  {
+   "baseWordId": 1352290,
+   "derivedWordId": 1352190,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "あがり (from either 上がる or 揚がる) carries several unrelated lexicalized senses (sushi-shop tea, game \"finish/win\", income), independent of plain \"rise\"."
+  },
+  {
+   "baseWordId": 2864573,
+   "derivedWordId": 1352190,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "Same あがり entry via 揚がる; same unrelated lexicalized senses apply."
+  },
+  {
+   "baseWordId": 1559290,
+   "derivedWordId": 1559260,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "連れ is lexicalized as the specific narratological/fandom term \"tritagonist/second supporting character\", independent of plain \"companion\"."
+  },
+  {
+   "baseWordId": 1389430,
+   "derivedWordId": 1389410,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "占い additionally denotes the practitioner (\"fortune-teller\") by informal extension; kept conservative given this person-reference nuance."
+  },
+  {
+   "baseWordId": 1329590,
+   "derivedWordId": 1659120,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "受け carries the well-known slang sense \"bottom/receiving partner\" (BL/yaoi terminology) and \"popularity\" (受けがいい), independent of plain \"to receive\"."
+  },
+  {
+   "baseWordId": 1474350,
+   "derivedWordId": 1474340,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "むき出し (\"bare/naked/frank\") is a natural, transparent extension of \"exposed/bared\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 1217730,
+   "derivedWordId": 1862130,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "お顔 is a fully transparent polite substitution for \"face\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 1003860,
+   "derivedWordId": 1003870,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "This is a lexical transitive/intransitive pair (stick to / stick something together), mislabeled as potential; alternation isn't a single reliable rule.",
+   "recategorize": "transitive_intransitive_pair (not potential)"
+  },
+  {
+   "baseWordId": 1207730,
+   "derivedWordId": 1558610,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "Transitive/intransitive pair (tear something / to split), mislabeled as potential; also derived's \"burst\" sense is a modest extra nuance.",
+   "recategorize": "transitive_intransitive_pair (not potential)"
+  },
+  {
+   "baseWordId": 1550380,
+   "derivedWordId": 1550370,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "裏切り (\"betrayal/treachery\") is fully transparent from \"to betray\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 1587290,
+   "derivedWordId": 1430200,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "頂き is lexicalized as \"mountain summit/peak\" (a different but etymologically related lexeme) and as the exclamation \"got it!/mine!\" (game/poker slang), both independent of the humble verb \"to receive\"."
+  },
+  {
+   "baseWordId": 1444610,
+   "derivedWordId": 1855000,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "渡し is lexicalized as the concrete noun \"ferry(boat)\" (the vessel/service itself), a specific concrete-object sense beyond \"to ferry across\"."
+  },
+  {
+   "baseWordId": 1169870,
+   "derivedWordId": 2151640,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "飲み carries the completely unpredictable technical sense \"spigot/tap\" (a mechanical valve part), independent of \"to drink\"."
+  },
+  {
+   "baseWordId": 1009240,
+   "derivedWordId": 2748190,
+   "category": "ni_adverb",
+   "verdict": "Bidirectional",
+   "reason": "どの様に (\"how/in what way\") is the fully transparent, productive どの様+に adverb form; no unrelated sense."
+  },
+  {
+   "baseWordId": 1152660,
+   "derivedWordId": 1001620,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お握り is lexicalized as the specific food item \"onigiri/rice ball\", a completely independent common word not derivable from \"grasping\"+honorific."
+  },
+  {
+   "baseWordId": 1217700,
+   "derivedWordId": 1614350,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "頑張り (\"tenacity/endurance\") is fully transparent from \"to persevere\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 1259580,
+   "derivedWordId": 1604480,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "見込み (\"prospect/chance\") is a natural, transparent extension of \"anticipated outcome\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 1382980,
+   "derivedWordId": 2850128,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お積もり is a completely opaque, archaic idiom (\"last drink of sake\"), unrelated to \"intention/plan\"."
+  },
+  {
+   "baseWordId": 1421970,
+   "derivedWordId": 1421980,
+   "category": "ku_adverb",
+   "verdict": "Bidirectional",
+   "reason": "遅く is the textbook, fully productive -ku adverbialization of an i-adjective (\"slowly/late\"); no unrelated sense."
+  },
+  {
+   "baseWordId": 1257800,
+   "derivedWordId": 2841491,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "捲り is lexicalized with unrelated technical senses (\"unframed painting\", a keirin bicycle-racing overtaking tactic), independent of \"to roll up/turn\"."
+  },
+  {
+   "baseWordId": 1559290,
+   "derivedWordId": 1559280,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "連れて as \"as/in proportion to\" reflects the grammaticalized 〜につれて construction, a distinct meaning from literal \"bringing along\"."
+  },
+  {
+   "baseWordId": 1010110,
+   "derivedWordId": 2801130,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "This pairing risks conflating heteronym readings of 逸れる (それる \"deviate\" vs はぐれる \"get separated from companions\"); base glosses given for 逸る also look inconsistent with its usual \"to be impatient\" meaning, so the pairing is unreliable.",
+   "recategorize": "verify_word_pairing (possible heteronym/homograph mismatch)"
+  },
+  {
+   "baseWordId": 1309320,
+   "derivedWordId": 1609450,
+   "category": "te_form_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "思い切って (\"boldly/decisively\") reasonably tracks \"having resolved/made up one's mind\"; base's \"despair of\" nuance is not in derived, so kept one-way."
+  },
+  {
+   "baseWordId": 1559260,
+   "derivedWordId": 2835737,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お連れ is narrower than the base (drops 連れ's fandom \"tritagonist\" sense), so base->derived isn't safe but derived is fully predictable from base's core \"companion\" sense."
+  },
+  {
+   "baseWordId": 1592100,
+   "derivedWordId": 2629370,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "食い carries the specific fishing-jargon sense \"bite\" (魚の食いがいい); kept conservative though the metaphor is fairly natural."
+  },
+  {
+   "baseWordId": 2122420,
+   "derivedWordId": 1707920,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "取っておき (\"treasured/reserved\") is a natural, transparent extension of \"something set aside\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 1169250,
+   "derivedWordId": 2026830,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "引き (\"pull, patronage, influence\") parallels the English idiom \"to have pull/connections\", a natural extension of \"pulling\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 1259140,
+   "derivedWordId": 1578350,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "見え is effectively the idiomatic word for \"vanity/putting on airs\" (見栄を張る), a specific independent concept distinct from plain \"visibility\"."
+  },
+  {
+   "baseWordId": 1457210,
+   "derivedWordId": 1598810,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "届け narrows to the bureaucratic sense \"official report/registration form\" (婚姻届け), a specific administrative usage; kept conservative."
+  },
+  {
+   "baseWordId": 1604610,
+   "derivedWordId": 2524140,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お見通し is a fixed idiom (\"I see right through you\"), a specific metaphorical extension beyond plain \"unobstructed view\"."
+  },
+  {
+   "baseWordId": 1579720,
+   "derivedWordId": 2423480,
+   "category": "sa_i_adj",
+   "verdict": "Bidirectional",
+   "reason": "寂しさ is the canonical, fully productive -sa nominalization (\"loneliness\"); no unrelated sense."
+  },
+  {
+   "baseWordId": 2518760,
+   "derivedWordId": 1473670,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "買い出し narrows to commercial bulk-purchasing (going out to stock up for a shop/kitchen), a moderately specific usage beyond the rare base verb."
+  },
+  {
+   "baseWordId": 1535350,
+   "derivedWordId": 1954950,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "目覚め is fully transparent from \"to wake up\", including the shared metaphorical \"awakening to an ability\" sense; no unrelated sense."
+  },
+  {
+   "baseWordId": 1420410,
+   "derivedWordId": 2012190,
+   "category": "causative_doublet",
+   "verdict": "Exclude",
+   "reason": "知らす retains an archaic/classical sense \"to reign/rule\" (imperial edict language), independent of the modern causative \"to notify\"."
+  },
+  {
+   "baseWordId": 1550840,
+   "derivedWordId": 2013190,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "離れ is lexicalized as the specific architectural term \"detached building/guest house\", independent of plain \"to be separated\"."
+  },
+  {
+   "baseWordId": 1310300,
+   "derivedWordId": 1594480,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "支払い (\"payment\") is fully transparent from \"to pay\"; identical core meaning, no unrelated sense."
+  },
+  {
+   "baseWordId": 1357210,
+   "derivedWordId": 1357160,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "飾り (\"decoration/ornament\") is largely transparent, but base has an abstract extra sense (\"to grace/crown an achievement\", e.g. 有終の美を飾る) not captured by the concrete noun."
+  },
+  {
+   "baseWordId": 1606560,
+   "derivedWordId": 1502940,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "分かり (\"understanding/comprehension\") is fully transparent from \"to understand\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 1581790,
+   "derivedWordId": 1430700,
+   "category": "ni_adverb",
+   "verdict": "Exclude",
+   "reason": "This pairing risks conflating the heteronym readings of 直に (じかに \"directly/in person\" vs じきに \"soon\"), a genuine ambiguity risk even though this entry specifies the じきに reading.",
+   "recategorize": "verify_word_pairing (heteronym risk with じかに)"
+  },
+  {
+   "baseWordId": 1548520,
+   "derivedWordId": 1949300,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "Transitive/intransitive pair (get tangled / entwine something), mislabeled as potential.",
+   "recategorize": "transitive_intransitive_pair (not potential)"
+  },
+  {
+   "baseWordId": 1403120,
+   "derivedWordId": 1237470,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "増して as \"still more/not to mention\" is a specific rhetorical discourse-marker usage beyond simple \"to increase\"."
+  },
+  {
+   "baseWordId": 1514360,
+   "derivedWordId": 1514330,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "歩み is fully transparent from \"to walk\", including the base's own \"figurative path\" sense already covering \"course of history/life\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 1180470,
+   "derivedWordId": 1180130,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "押し (\"push/pressure/weight\") is fully transparent from \"to push\"; this entry is the 押 kanji, distinct from the unrelated slang 推し (\"favorite idol\")."
+  },
+  {
+   "baseWordId": 1636530,
+   "derivedWordId": 1551930,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "Transitive/intransitive-ish pair (graze / become blurred-hoarse), mislabeled as potential; derived's \"blurred/hoarse (voice)\" sense is a genuine divergence from \"graze/take a percentage\".",
+   "recategorize": "transitive_intransitive_pair (not potential)"
+  },
+  {
+   "baseWordId": 1362640,
+   "derivedWordId": 1362650,
+   "category": "sa_i_adj",
+   "verdict": "Bidirectional",
+   "reason": "深さ is the canonical, fully productive -sa nominalization (\"depth\"); no unrelated sense."
+  },
+  {
+   "baseWordId": 2098470,
+   "derivedWordId": 1419540,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "断じて (\"absolutely/positively\") is a fixed emphatic-negation idiom, beyond simple \"having judged/concluded\"."
+  },
+  {
+   "baseWordId": 1299680,
+   "derivedWordId": 1299685,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お皿 is mostly transparent, but there is DJ/turntablism slang using お皿 specifically for \"the turntable\", a possible independent sense; kept conservative."
+  },
+  {
+   "baseWordId": 1278410,
+   "derivedWordId": 1278440,
+   "category": "sa_i_adj",
+   "verdict": "Bidirectional",
+   "reason": "広さ is the canonical, fully productive -sa nominalization (\"area/extent\"); no unrelated sense."
+  },
+  {
+   "baseWordId": 1591330,
+   "derivedWordId": 1985020,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "気づき (\"awareness/realization\") is fully transparent from \"to notice\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 1573390,
+   "derivedWordId": 1573380,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "躊躇い (\"hesitation\") is fully transparent from \"to hesitate\"; no unrelated sense."
+  },
+  {
+   "baseWordId": 1514960,
+   "derivedWordId": 1514950,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "暮れ (\"sunset/dusk\") is fully transparent, and the base's own glosses already cover \"to end (of a day/year/season)\", so nothing is added only in derived."
+  },
+  {
+   "baseWordId": 1333400,
+   "derivedWordId": 2089560,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "蹴り (\"kick\") is fully transparent from \"to kick\"; single simple gloss, no unrelated sense."
+  },
+  {
+   "baseWordId": 1184450,
+   "derivedWordId": 1184370,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "下り is lexicalized as the specific Japan Rail terminology \"down-train\" (away from the center), a technical transit-system sense."
+  },
+  {
+   "baseWordId": 1254180,
+   "derivedWordId": 1630630,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "決め narrows to formal/procedural \"rule/arrangement\" (お決まり事), a moderately specific usage beyond a personal individual decision."
+  },
+  {
+   "baseWordId": 1603930,
+   "derivedWordId": 1631130,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "混じり is transparent for physical mixing, but base has an extra sense (\"to associate with\" people) not reflected in the purely physical-mixing derived glosses."
+  },
+  {
+   "baseWordId": 1238070,
+   "derivedWordId": 1630260,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "脅し is lexicalized as the concrete noun \"bird-scaring device\" (scarecrow/noise-maker), independent of the abstract \"act of threatening\"."
+  },
+  {
+   "baseWordId": 1588880,
+   "derivedWordId": 2083440,
+   "category": "sugiru",
+   "verdict": "Bidirectional",
+   "reason": "大きすぎる is the fully transparent, productive すぎる (\"too much/oversized\") compositional form; no unrelated sense."
+  },
+  {
+   "baseWordId": 1259830,
+   "derivedWordId": 1259820,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "見送り carries the specific administrative/business sense \"deferment, forgoing/shelving (a plan)\" (増税を見送る), not evidenced in the base's listed \"escort/watch go\" senses."
+  },
+  {
+   "baseWordId": 1407460,
+   "derivedWordId": 1953410,
+   "category": "me",
+   "verdict": "Bidirectional",
+   "reason": "多め is the canonical, fully productive 〜め suffix (\"somewhat more\"); no unrelated sense."
+  },
+  {
+   "baseWordId": 1305720,
+   "derivedWordId": 1001980,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "お使い shares literally identical glosses with the base; fully transparent polite substitution."
+  },
+  {
+   "baseWordId": 1310670,
+   "derivedWordId": 1552690,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "止め is lexicalized with unrelated technical senses (carpentry joint term, kanji calligraphy stroke-ending, geometric angle, postal \"remaining\"), independent of plain \"to stop\"."
+  },
+  {
+   "baseWordId": 1160540,
+   "derivedWordId": 1160520,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "育ち is fully transparent from \"to grow up/be raised\", including the natural \"upbringing/breeding\" connotation already latent in the base concept; no unrelated sense."
+  },
+  {
+   "baseWordId": 1259620,
+   "derivedWordId": 2235980,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お見事 has shifted into a fixed exclamation (\"Well done!/Bravo!\"), a distinct grammatical/pragmatic function (interjection) from the plain adjective \"splendid\"."
+  },
+  {
+   "baseWordId": 1459820,
+   "derivedWordId": 1459810,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "馴染み covers only the familiarity/acquaintance sense; base 馴染む also means to physically blend or harmonize (色が馴染む), which the noun doesn't teach."
+  },
+  {
+   "baseWordId": 1337560,
+   "derivedWordId": 1337570,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "縮める is a lexicalized transitive counterpart meaning 'to shorten' (a distinct verb entry), not a potential 'can shrink'; not predictable from base+potential rule.",
+   "recategorize": "transitivity_pair"
+  },
+  {
+   "baseWordId": 1605330,
+   "derivedWordId": 1560850,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "漏れ commonly means 'omission/oversight' (書類の漏れ), a lexicalized extension well beyond literal 'leak'."
+  },
+  {
+   "baseWordId": 1267100,
+   "derivedWordId": 1267090,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "戸惑い is simply the state of being bewildered; no meaning in either word falls outside this relation."
+  },
+  {
+   "baseWordId": 1847000,
+   "derivedWordId": 1642060,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "物言い has a specific lexicalized sumo-referee-challenge sense ('protesting a decision') not derivable from 'to talk'."
+  },
+  {
+   "baseWordId": 2583530,
+   "derivedWordId": 2222160,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "手をつける ('to start work on', 'to embezzle') is an unrelated idiom, not a potential form of 手をつく; the two phrases diverged.",
+   "recategorize": "idiom_divergence_not_potential"
+  },
+  {
+   "baseWordId": 2862798,
+   "derivedWordId": 2149730,
+   "category": "ni_adverb",
+   "verdict": "Bidirectional",
+   "reason": "結果的に is the plain adverbial form of 結果的 with no added meaning."
+  },
+  {
+   "baseWordId": 1432710,
+   "derivedWordId": 1432720,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "痛める is the transitive counterpart, but its idiomatic use (頭を痛める 'to rack one's brain/worry') isn't predictable from 痛む plus a grammar rule.",
+   "recategorize": "transitivity_pair"
+  },
+  {
+   "baseWordId": 1589330,
+   "derivedWordId": 1309380,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "思いつき ('idea, whim') is the predictable noun form; carries a mild 'half-baked' connotation base 思いつく doesn't emphasize."
+  },
+  {
+   "baseWordId": 1578210,
+   "derivedWordId": 1249420,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "傾ける has the idiomatic extension 'to devote (effort/heart)' (心血を傾ける), not obviously predictable from 'to tilt'.",
+   "recategorize": "transitivity_pair"
+  },
+  {
+   "baseWordId": 1538130,
+   "derivedWordId": 2813370,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お約束 has the very common modern sense 'cliché/predictable trope', unrelated to a literal polite 'promise'."
+  },
+  {
+   "baseWordId": 1357990,
+   "derivedWordId": 1624970,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "触れ means 'official proclamation/notice' (edict), a historical/administrative sense unrelated to 'touch'."
+  },
+  {
+   "baseWordId": 1499100,
+   "derivedWordId": 1956920,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "舞い as a noun mainly means formal 'dance'; base 舞う also covers 'to flutter/swirl' (of snow, leaves) which the noun doesn't cover."
+  },
+  {
+   "baseWordId": 1329650,
+   "derivedWordId": 1329770,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "受け取り commonly means a physical 'receipt' document, a concrete lexicalized sense beyond 'act of receiving'."
+  },
+  {
+   "baseWordId": 1416400,
+   "derivedWordId": 1416410,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "脱げる is used almost exclusively in the spontaneous 'comes off by itself' sense, a specific nuance of the potential form that isn't obvious from base plus a general potential rule."
+  },
+  {
+   "baseWordId": 1309230,
+   "derivedWordId": 1825680,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "思い込み ('assumption, prejudice') is the predictable noun form of 思い込む with no unrelated extra sense."
+  },
+  {
+   "baseWordId": 1264080,
+   "derivedWordId": 2827230,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "言い出し ('opening words') is a narrow, somewhat literary noun use not obviously guessable from 'to begin to say'."
+  },
+  {
+   "baseWordId": 1305180,
+   "derivedWordId": 1305170,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "仕切り ('partition, division') is the predictable noun form; base 仕切る also means 'to direct/manage', a sense the concrete noun doesn't carry."
+  },
+  {
+   "baseWordId": 1585360,
+   "derivedWordId": 1585370,
+   "category": "potential",
+   "verdict": "Bidirectional",
+   "reason": "歪める's metaphorical 'to distort (facts)' is already mirrored by base's own 'to be perverted' sense; both explicitly cover the figurative range, so nothing is hidden.",
+   "recategorize": "transitivity_pair"
+  },
+  {
+   "baseWordId": 1259990,
+   "derivedWordId": 1604690,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "見舞い commonly refers to the concrete 'get-well gift' brought on a visit, a lexicalized object-sense beyond 'act of visiting'."
+  },
+  {
+   "baseWordId": 1552120,
+   "derivedWordId": 1552100,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "流し is a lexicalized set of concrete nouns (kitchen sink, cruising taxi, bathhouse washing area) unrelated to 'to let flow'."
+  },
+  {
+   "baseWordId": 1335210,
+   "derivedWordId": 1335220,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "従える means 'to have accompany/lead/conquer' (a command sense), not 'can obey'; despite the -eru shape this is not a true potential.",
+   "recategorize": "lexicalized_transitive_not_potential"
+  },
+  {
+   "baseWordId": 1360010,
+   "derivedWordId": 1642760,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "寝 as a standalone word is archaic/classical (note the unusual い/しん/ね reading spread) and not the ordinary modern masu-stem noun a learner would recognize from 寝る."
+  },
+  {
+   "baseWordId": 1172660,
+   "derivedWordId": 1625860,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "運び's core modern use ('the pace/progress of a matter', 話の運び) is a real metaphorical shift from concrete 'carrying' that isn't obviously guessable."
+  },
+  {
+   "baseWordId": 1428830,
+   "derivedWordId": 1610960,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "眺め ('view, scenery') is the standard, fully transparent noun form of 'to gaze at'; neither word carries an unrelated sense."
+  },
+  {
+   "baseWordId": 1240750,
+   "derivedWordId": 2502400,
+   "category": "ni_adverb",
+   "verdict": "Bidirectional",
+   "reason": "僅かに is the plain adverbial form of 僅か with no added meaning."
+  },
+  {
+   "baseWordId": 1158880,
+   "derivedWordId": 1158890,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "違える has drifted to include 'to dislocate/sprain (a joint)' (足を違える), a lexicalized sense not predictable from 'to differ'.",
+   "recategorize": "transitivity_pair"
+  },
+  {
+   "baseWordId": 1548940,
+   "derivedWordId": 1641530,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "乱れ is simply 'disorder/disturbance', the direct nominalization of 'to be in disorder' with nothing extra on either side."
+  },
+  {
+   "baseWordId": 1416170,
+   "derivedWordId": 1416050,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "叩き is the well-known culinary term for chopped/seared raw fish or meat (tataki), a lexicalized dish name unrelated to plain 'striking'."
+  },
+  {
+   "baseWordId": 1587040,
+   "derivedWordId": 1008860,
+   "category": "potential",
+   "verdict": "OneWayOnly",
+   "reason": "言える is the textbook potential ('one could say that...'); base 言う also means 'to name/call' (花子と言う女性), a sense 言える doesn't carry."
+  },
+  {
+   "baseWordId": 1474850,
+   "derivedWordId": 1897840,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "泊まり can concretely mean 'an inn/hotel' itself, a lexicalized object-sense beyond 'the act of staying overnight'."
+  },
+  {
+   "baseWordId": 1335830,
+   "derivedWordId": 1335820,
+   "category": "te_form_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "重ねて ('once more, repeatedly') is the standard te-form adverb; base 重ねる also means 'to add to/accumulate (experience)', a broader sense not fully in the adverb."
+  },
+  {
+   "baseWordId": 1420470,
+   "derivedWordId": 2826419,
+   "category": "lexical_passive",
+   "verdict": "OneWayOnly",
+   "reason": "知られる is the textbook passive ('to become known'); base 知る also means 'to experience/undergo' (苦労を知る), a sense the passive doesn't carry."
+  },
+  {
+   "baseWordId": 1304940,
+   "derivedWordId": 1304920,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "仕込み carries the specific craft/slang sense 'a concealed weapon' (仕込み杖) alongside unrelated 'stocking up (ingredients)', both lexicalized beyond plain 'training'."
+  },
+  {
+   "baseWordId": 1535910,
+   "derivedWordId": 2828389,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "貰い specifically means 'a tip/alms', a lexicalized economic term beyond 'act of receiving'."
+  },
+  {
+   "baseWordId": 1589080,
+   "derivedWordId": 1613650,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "押さえ concretely means 'a weight/paperweight', a lexicalized object-sense beyond 'holding down'."
+  },
+  {
+   "baseWordId": 2836285,
+   "derivedWordId": 1613650,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "Same target word as 押さえる/押さえ; 抑え carries the same lexicalized 'paperweight' object-sense not predictable from 'to restrain'."
+  },
+  {
+   "baseWordId": 1343460,
+   "derivedWordId": 1343480,
+   "category": "sa_i_adj",
+   "verdict": "Bidirectional",
+   "reason": "暑さ ('heat of the weather') is the plain, fully transparent nominalization of 暑い with no unrelated sense on either side."
+  },
+  {
+   "baseWordId": 1350610,
+   "derivedWordId": 1317520,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "This derived word (やけ, 'desperation, self-abandonment') is actually the unrelated homophone 自棄, not the burn/scorch noun of 焼ける; a false pairing by shared reading.",
+   "recategorize": "homophone_false_pair"
+  },
+  {
+   "baseWordId": 1621700,
+   "derivedWordId": 1238910,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "仰向け ('facing upward') is the plain, transparent noun/adverbial form of 'to turn one's face up' with nothing extra either way."
+  },
+  {
+   "baseWordId": 1402540,
+   "derivedWordId": 1402420,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "走り has the specific idiomatic sense 'first of the season' (走りの野菜), unrelated to plain 'running'."
+  },
+  {
+   "baseWordId": 1447000,
+   "derivedWordId": 1628640,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "投げ has the specific game-terminology sense 'resignation' (giving up in shogi/go), a lexicalized sense beyond plain 'throwing'."
+  },
+  {
+   "baseWordId": 1604430,
+   "derivedWordId": 1604420,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "見かけ specifically and primarily means 'outward appearance', a lexicalized shift from 'act of noticing' that a learner wouldn't derive compositionally."
+  },
+  {
+   "baseWordId": 1846640,
+   "derivedWordId": 1260060,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "見返り specifically means 'reward/compensation/something given in return', an idiomatic extension of 'looking back' unrelated on its face."
+  },
+  {
+   "baseWordId": 1327190,
+   "derivedWordId": 2256560,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お手 carries 'handwriting/penmanship' and the dog command 'shake!', both lexicalized senses beyond a polite 'hand'."
+  },
+  {
+   "baseWordId": 1665010,
+   "derivedWordId": 1601120,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "張り付ける carries the idiom 'to station (a person to watch)', a lexicalized extension of 'to affix' applied to people that isn't obviously predictable.",
+   "recategorize": "transitivity_pair"
+  },
+  {
+   "baseWordId": 1259430,
+   "derivedWordId": 1604400,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "見覚え ('recollection of having seen something') is the direct, fully transparent nominalization of 'to remember by sight'; no extra sense either side."
+  },
+  {
+   "baseWordId": 1194450,
+   "derivedWordId": 1194430,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "稼ぎ narrows to 'earnings (money)'; base 稼ぐ also covers 'to score (points)' and 'to gain (time)', senses the noun doesn't carry."
+  },
+  {
+   "baseWordId": 1545710,
+   "derivedWordId": 1545700,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "揺れ ('shaking, jolt') is the plain, transparent nominalization of 'to shake/sway' with nothing extra either side."
+  },
+  {
+   "baseWordId": 1223680,
+   "derivedWordId": 1862270,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "起こり ('source, origin, cause') is an abstract metaphorical shift from concrete 'to occur' that requires learned convention rather than composition."
+  },
+  {
+   "baseWordId": 1376470,
+   "derivedWordId": 1953010,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "晴れて ('openly, formally, officially') is a fixed idiomatic adverb (晴れて夫婦になる); the leap from 'clear weather' to 'legitimately/publicly' requires cultural knowledge."
+  },
+  {
+   "baseWordId": 1219560,
+   "derivedWordId": 1219550,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "寄せ is the specific go/shogi term for the endgame phase ('yose'), a lexicalized domain term unrelated to plain 'to bring near'."
+  },
+  {
+   "baseWordId": 2008800,
+   "derivedWordId": 1278290,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "巧み ('skillful, adroit') describes proficiency, a different semantic domain from 巧む ('to devise/plot'); not predictable from one to the other."
+  },
+  {
+   "baseWordId": 1307850,
+   "derivedWordId": 2103380,
+   "category": "ppoi",
+   "verdict": "Bidirectional",
+   "reason": "子供っぽい is the fully regular '-child-like' construction with the standard っぽい suffix; nothing extra on either side."
+  },
+  {
+   "baseWordId": 1267460,
+   "derivedWordId": 1603970,
+   "category": "garu_both",
+   "verdict": "Exclude",
+   "reason": "股がる (またがる 'to straddle/span') is not the がる-suffixed form of the noun 股 at all; it's a separate verb whose connection to 'crotch' is etymological, not a productive grammar pattern a learner would recognize.",
+   "recategorize": "not_garu_pattern_unrelated_derivation"
+  },
+  {
+   "baseWordId": 1598080,
+   "derivedWordId": 1437030,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "摘み covers the lexicalized concrete senses 'knob/handle/button' and 'drinking snack' (おつまみ), both well beyond plain 'pinching'."
+  },
+  {
+   "baseWordId": 1389020,
+   "derivedWordId": 1610310,
+   "category": "potential",
+   "verdict": "Bidirectional",
+   "reason": "千切れる is the direct intransitive counterpart of 千切る with parallel meaning ('to be torn to pieces' vs 'to tear to pieces'); nothing extra either side.",
+   "recategorize": "transitivity_pair"
+  },
+  {
+   "baseWordId": 1279130,
+   "derivedWordId": 1279120,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "攻め carries the well-known relationship-role sense 'seme' (the dominant/pursuing partner, common in BL/romance contexts), a lexicalized sense not predictable from plain 'attack'."
+  },
+  {
+   "baseWordId": 1568670,
+   "derivedWordId": 1568640,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "洒落 covers the 'joke/pun' sense predictably, but base 洒落る also means 'to dress stylishly', a sense the noun doesn't carry."
+  },
+  {
+   "baseWordId": 2011740,
+   "derivedWordId": 1373150,
+   "category": "ku_adverb",
+   "verdict": "Bidirectional",
+   "reason": "数多く is the fully regular く-adverb of 数多い with no added meaning."
+  },
+  {
+   "baseWordId": 1591150,
+   "derivedWordId": 1954660,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "聞こえ specifically means 'reputation/how one is perceived' (世間の聞こえ), a lexicalized social sense beyond plain audibility."
+  },
+  {
+   "baseWordId": 1326870,
+   "derivedWordId": 1326880,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "取り入る ('to curry favor') and 取り入れる ('to incorporate/adopt/harvest') are unrelated lexical verbs that only coincidentally share the 取り stem; not a real potential relationship.",
+   "recategorize": "false_pair_not_potential"
+  },
+  {
+   "baseWordId": 1589260,
+   "derivedWordId": 2512880,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "落とし narrows to 'a missing item / something forgotten', a specific lexicalized sense beyond plain 'dropping'."
+  },
+  {
+   "baseWordId": 1303460,
+   "derivedWordId": 1303440,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "散らし is the well-known concrete noun for 'a flyer/leaflet' (チラシ), a lexicalized object-sense unrelated to plain 'scattering'."
+  },
+  {
+   "baseWordId": 1342050,
+   "derivedWordId": 2015930,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "巡り carries specific senses 'circumference/girth (of a measured object)' and 'pilgrimage', both lexicalized extensions beyond plain 'going around'."
+  },
+  {
+   "baseWordId": 1432410,
+   "derivedWordId": 1852860,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "追って ('later on, shortly') is a fixed formal adverb (追って連絡します); the shift from 'chasing' to a temporal 'afterward' needs idiomatic knowledge."
+  },
+  {
+   "baseWordId": 1259880,
+   "derivedWordId": 1630860,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "見張り ('watch, lookout') is the predictable noun form; base 見張る also means 'to open one's eyes wide', a sense the noun doesn't carry."
+  },
+  {
+   "baseWordId": 1283240,
+   "derivedWordId": 1808820,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "This entry mislabels the source: 高め ('somewhat high') actually derives from the adjective 高い via the め-suffix (see the correctly-tagged 高い→高め pair), not from the verb 高める; as a masu-stem noun of 高める it isn't predictable.",
+   "recategorize": "miscategorized_duplicate_of_takai_me_pair"
+  },
+  {
+   "baseWordId": 1283190,
+   "derivedWordId": 1808820,
+   "category": "me",
+   "verdict": "OneWayOnly",
+   "reason": "高め is the fully regular め-suffix ('somewhat high') pattern; base 高い also covers abstract/loudness senses (声が高い) that the purely gradable-degree noun doesn't carry."
+  },
+  {
+   "baseWordId": 1480470,
+   "derivedWordId": 1480480,
+   "category": "ni_adverb",
+   "verdict": "Bidirectional",
+   "reason": "反射的に is the fully regular 的+に adverb of 反射的 with no added meaning."
+  },
+  {
+   "baseWordId": 1384610,
+   "derivedWordId": 1384620,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "切り抜ける ('to get through/overcome a difficulty') is a lexicalized metaphorical verb (fighting one's way through obstacles), not simply 'can cut out'; not predictable from base+potential.",
+   "recategorize": "lexicalized_metaphor_not_potential"
+  },
+  {
+   "baseWordId": 1605630,
+   "derivedWordId": 2644980,
+   "category": "sa_i_adj",
+   "verdict": "Bidirectional",
+   "reason": "柔らかさ is the plain, fully transparent -さ nominalization of 柔らかい with no unrelated sense either side."
+  },
+  {
+   "baseWordId": 1460730,
+   "derivedWordId": 2644980,
+   "category": "na_sa",
+   "verdict": "Bidirectional",
+   "reason": "Same target noun 柔らかさ; the na-adjective 柔らか also has no unrelated sense, so the -さ form is fully predictable and adds nothing extra."
+  },
+  {
+   "baseWordId": 1588880,
+   "derivedWordId": 2040000,
+   "category": "me",
+   "verdict": "OneWayOnly",
+   "reason": "大きめ is the regular め-suffix pattern; base 大きい also covers abstract senses like 'loud', which the purely size-graded noun doesn't carry."
+  },
+  {
+   "baseWordId": 1170650,
+   "derivedWordId": 2077780,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "隠し ('hiding, concealing') and its common adjectival-prefix use ('hidden', as in 隠しポケット) are reasonably predictable from 'to hide' plus the noun-form rule."
+  },
+  {
+   "baseWordId": 1419570,
+   "derivedWordId": 1634340,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "断り covers both 'declining' and 'advance notice/permission' (先に断っておく), both of which are genuine senses of the base verb 断る itself, so the noun stays within the base's range."
+  },
+  {
+   "baseWordId": 1516160,
+   "derivedWordId": 2260040,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "お宝 stays within 'treasure/valuable possession' (including modern casual use for a prized item); no meaning falls outside the honorific relation."
+  },
+  {
+   "baseWordId": 1436570,
+   "derivedWordId": 1853450,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "締め has accrued many domain-specific lexicalized uses (closing accounts, the finishing dish/ritual at a meal or event), well beyond plain 'tying/fastening'."
+  },
+  {
+   "baseWordId": 2761830,
+   "derivedWordId": 1853450,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "Same target noun 締め/〆; base 〆る itself already carries the specialized senses 'to total up' and 'to kill (fish/poultry)', and the noun's domain-specific uses aren't predictable from a plain gloss."
+  },
+  {
+   "baseWordId": 1253190,
+   "derivedWordId": 1253180,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "迎え ('person sent to meet a visitor') is a natural but specific person-referring extension; predictable enough for base→derived but not guaranteed both ways."
+  },
+  {
+   "baseWordId": 1389440,
+   "derivedWordId": 1389460,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "占む is essentially a classical/archaic predecessor of the modern verb 占める, not a genuine potential derivation, and is too obscure for a learner to encounter standalone.",
+   "recategorize": "classical_modern_doublet_not_potential"
+  },
+  {
+   "baseWordId": 1508380,
+   "derivedWordId": 1508340,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "並び ('line, row, rank') is the predictable noun form; base 並ぶ also means 'to rival/match', a sense the concrete noun doesn't carry."
+  },
+  {
+   "baseWordId": 1559900,
+   "derivedWordId": 1270820,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "ご連絡 is the plain polite prefixation of the verbal noun 連絡 with no meaning shift; ご+action-noun rarely drifts the way お+concrete-noun does."
+  },
+  {
+   "baseWordId": 1427900,
+   "derivedWordId": 1427760,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "張り specifically describes physical 'tension/resilience/firmness' (of skin, hair) and figurative 'vanity' (見栄を張る-related), lexicalized senses beyond plain 'to stretch/paste'."
+  },
+  {
+   "baseWordId": 2585760,
+   "derivedWordId": 1456880,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "突き立てる adds a forceful/violent connotation ('to stab, thrust violently') not present in the base's more neutral 'to stick up/rise sharply'.",
+   "recategorize": "transitivity_pair"
+  },
+  {
+   "baseWordId": 1599570,
+   "derivedWordId": 1188680,
+   "category": "ku_adverb",
+   "verdict": "Bidirectional",
+   "reason": "何気なく is the fully regular く-adverb of 何気ない with no added meaning."
+  },
+  {
+   "baseWordId": 1283190,
+   "derivedWordId": 2857747,
+   "category": "sugiru",
+   "verdict": "OneWayOnly",
+   "reason": "高すぎる is the fully productive すぎる ('too much') construction; base 高い also covers senses (e.g. loud) that don't combine the same way in this specific derived form."
+  },
+  {
+   "baseWordId": 1333930,
+   "derivedWordId": 1595750,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "住まい ('dwelling, residence') is the standard, fully transparent noun form of 'to reside' with nothing extra either side."
+  },
+  {
+   "baseWordId": 1532980,
+   "derivedWordId": 1612000,
+   "category": "ni_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "In modern Japanese 滅多 is used almost exclusively inside the fixed adverbial 滅多に...ない; base 滅多 also has an archaic standalone adjectival sense ('reckless') the adverb doesn't teach."
+  },
+  {
+   "baseWordId": 1292010,
+   "derivedWordId": 1292020,
+   "category": "potential",
+   "verdict": "Bidirectional",
+   "reason": "挫ける is the direct intransitive counterpart of 挫く with closely parallel meaning ('to be disheartened' vs 'to discourage'); nothing extra either side.",
+   "recategorize": "transitivity_pair"
+  },
+  {
+   "baseWordId": 1257110,
+   "derivedWordId": 1610650,
+   "category": "sa_i_adj",
+   "verdict": "OneWayOnly",
+   "reason": "硬さ covers 'firmness/hardness' predictably; the extra 'honesty' gloss reflects 硬い's figurative 'stiff/formal (personality)' sense that a learner wouldn't derive from the plain physical adjective alone."
+  },
+  {
+   "baseWordId": 1213440,
+   "derivedWordId": 1213420,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "甘え ('overdependence, presumed acceptance') is the direct nominalization of the well-known psychological concept; kept one-way as a mild safety margin though the match is close."
+  },
+  {
+   "baseWordId": 1199350,
+   "derivedWordId": 1199340,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "回し is the specific sumo term for the wrestler's belt/loincloth (mawashi), a lexicalized object-sense unrelated to plain 'turning'."
+  },
+  {
+   "baseWordId": 1505740,
+   "derivedWordId": 1823460,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "聞き覚え ('memory of having heard before') is the direct, transparent nominalization with nothing extra either side."
+  },
+  {
+   "baseWordId": 1565670,
+   "derivedWordId": 2743130,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "囁き ('whisper, murmur') is the predictable noun form of 'to whisper'; kept one-way given base's additional 'to rumor/rumour' sense that the noun doesn't clearly carry."
+  },
+  {
+   "baseWordId": 1457560,
+   "derivedWordId": 1592340,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "曇り covers 'fog on glass/a mirror' and 'a flaw/cloudiness in a gem', both natural but domain-specific metaphorical extensions of 'clouding over' that need some exposure to recognize."
+  },
+  {
+   "baseWordId": 1378560,
+   "derivedWordId": 1830250,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "生き残り ('survivor, relic') is a natural person/thing-denoting extension of 'to survive'; kept one-way as the person-reference isn't guaranteed obvious from the verb alone."
+  },
+  {
+   "baseWordId": 1326840,
+   "derivedWordId": 1599080,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "取り調べ ('police investigation, examination') is the direct, fully transparent nominalization of 'to investigate' with nothing extra either side."
+  },
+  {
+   "baseWordId": 1601710,
+   "derivedWordId": 1169220,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "引きつれる (written 引き連れる, 'to bring/take someone along') is an entirely different verb from 引きつる (written 引き攣る, 'to have a cramp/twitch'); a false pairing from a homophone-adjacent reading, not a real potential form.",
+   "recategorize": "homophone_false_pair_major"
+  },
+  {
+   "baseWordId": 2005410,
+   "derivedWordId": 1642330,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "報い ('reward or punishment', reflecting karmic just-deserts) matches base 報う's own duality ('to reward'/'to retaliate'); kept one-way since 報う itself is a rare classical form."
+  },
+  {
+   "baseWordId": 1515630,
+   "derivedWordId": 1642330,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "報い directly mirrors modern 報いる's own reward/retribution duality ('to reward'/'to retaliate'); nothing extra either side."
+  },
+  {
+   "baseWordId": 1456890,
+   "derivedWordId": 1456590,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "突き ('thrust, stab, lunge') is the predictable martial/fencing noun form of 'to poke/stab'; kept one-way as a mild safety margin."
+  },
+  {
+   "baseWordId": 1213400,
+   "derivedWordId": 1609070,
+   "category": "mi_nominal",
+   "verdict": "OneWayOnly",
+   "reason": "Canonical example: 甘み covers 'sweetness' predictably, but base 甘い also commonly means 'naive/lenient', a sense the noun doesn't teach."
+  },
+  {
+   "baseWordId": 1527010,
+   "derivedWordId": 1527000,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "味わい's 'charm' sense is a natural but genuinely metaphorical extension (aesthetic charm from 'good taste/flavor') that needs some exposure to fully predict."
+  },
+  {
+   "baseWordId": 1851450,
+   "derivedWordId": 1309180,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "思いやり ('consideration, thoughtfulness') is the direct, transparent nominalization of 'to be considerate of' with nothing extra either side."
+  },
+  {
+   "baseWordId": 1283190,
+   "derivedWordId": 1283230,
+   "category": "mi_nominal",
+   "verdict": "OneWayOnly",
+   "reason": "高み ('height, elevated place') follows the productive adjective+み pattern (quality → a place/degree characterized by it, cf. 深み), reasonably predictable though the idiom 高みの見物 adds a specific connotation."
+  },
+  {
+   "baseWordId": 2836392,
+   "derivedWordId": 1231890,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "居眠り ('dozing off while sitting') is the direct, transparent nominalization; kept one-way since the verb 居眠る itself is a rare back-formation rarely encountered standalone."
+  },
+  {
+   "baseWordId": 1496740,
+   "derivedWordId": 1496730,
+   "category": "masu_stem_noun",
+   "verdict": "Bidirectional",
+   "reason": "富み is simply the direct nominal form of 'to be rich/abundant in'; the noun 富 ('wealth') is common knowledge and carries no extra sense."
+  },
+  {
+   "baseWordId": 1432900,
+   "derivedWordId": 1896920,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "通し carries the lexicalized culinary sense 'appetizer/amuse-bouche' and the theater term 'full uncut performance', both beyond plain 'letting through'."
+  },
+  {
+   "baseWordId": 1552120,
+   "derivedWordId": 2860956,
+   "category": "lexical_passive",
+   "verdict": "OneWayOnly",
+   "reason": "流される is the regular passive/spontaneous form ('to drift, be swept away'); base 流す is highly polysemous (broadcast, cancel, shed tears) with senses beyond what this specific passive covers."
+  },
+  {
+   "baseWordId": 1219680,
+   "derivedWordId": 2081070,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "寄り's common modern use ('leaning toward', 右寄り) is a predictable metaphorical extension of 'drawing near'; kept one-way given the additional specific sumo wrestling technique sense."
+  },
+  {
+   "baseWordId": 1379730,
+   "derivedWordId": 1379640,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "盛り specifically means 'the peak/height of a season' (盛りの桜), a lexicalized temporal sense beyond plain 'to become vigorous'."
+  },
+  {
+   "baseWordId": 1586700,
+   "derivedWordId": 1200190,
+   "category": "ge_i_adj",
+   "verdict": "OneWayOnly",
+   "reason": "怪しげ ('questionable, dubious') is the predictable げ-suffix ('looking/seeming X') form of 怪しい with no unrelated extra sense."
+  },
+  {
+   "baseWordId": 1733730,
+   "derivedWordId": 1002030,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お辞儀 ('a bow') matches base 辞儀 directly; kept one-way since 辞儀 without お is archaic and rarely encountered standalone by learners."
+  },
+  {
+   "baseWordId": 1403830,
+   "derivedWordId": 2797000,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お側 uses the specific literary/courtly reading そば ('to serve at someone's side' 側に仕える) rather than the ordinary がわ reading of 側, a register shift that isn't predictable."
+  },
+  {
+   "baseWordId": 1328020,
+   "derivedWordId": 1002100,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "お手洗い directly mirrors base 手洗い's own euphemistic 'restroom/toilet' sense (already listed in the base glosses); the honorific prefix adds nothing new."
+  },
+  {
+   "baseWordId": 1421630,
+   "derivedWordId": 1421640,
+   "category": "garu_both",
+   "verdict": "OneWayOnly",
+   "reason": "恥ずかしがる ('to act bashful/blush') is the fully regular がる-suffix ('show signs of feeling X') pattern from 恥ずかしい, kept one-way as a mild safety margin."
+  },
+  {
+   "baseWordId": 1250480,
+   "derivedWordId": 1250470,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "恵み ('blessing, grace') is the direct nominalization of 'to bless/show mercy'; kept one-way given a slight risk of over-narrow religious framing."
+  },
+  {
+   "baseWordId": 1263510,
+   "derivedWordId": 1610550,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "現れ ('embodiment, manifestation') is a fairly transparent nominalization ('a manifestation' = 'something that appeared'); kept one-way given the abstraction involved."
+  },
+  {
+   "baseWordId": 1226510,
+   "derivedWordId": 1226500,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "詰め is the specific go/shogi term for 'endgame/checkmate' (tsume), a lexicalized domain term beyond plain 'stuffing/packing'."
+  },
+  {
+   "baseWordId": 1259700,
+   "derivedWordId": 1604640,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "見習い concretely means 'an apprentice/trainee' (a job-status noun), a specific institutional sense beyond plain 'to imitate/follow an example'."
+  },
+  {
+   "baseWordId": 1254670,
+   "derivedWordId": 2769980,
+   "category": "lexical_passive",
+   "verdict": "Exclude",
+   "reason": "結ばれる carries the well-known idiomatic romantic sense 'to be united in marriage/love' (二人は結ばれた), not obviously predictable from a plain passive of 'to tie'."
+  },
+  {
+   "baseWordId": 1326930,
+   "derivedWordId": 1659010,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "取り返し appears almost exclusively in the fixed idiom 取り返しのつかない ('irreversible'), a specific set-phrase usage rather than a freely predictable noun."
+  },
+  {
+   "baseWordId": 2682070,
+   "derivedWordId": 1011020,
+   "category": "potential",
+   "verdict": "Bidirectional",
+   "reason": "吹っ切れる parallels 吹っ切る closely ('to be dispelled/put behind one' vs 'to get over/forget'), including the shared literal 'burst (of a boil)' sense; nothing hidden either side.",
+   "recategorize": "transitivity_pair"
+  },
+  {
+   "baseWordId": 2037050,
+   "derivedWordId": 1484320,
+   "category": "potential",
+   "verdict": "Exclude",
+   "reason": "被せる carries the common idiom 'to pin blame on someone' (罪を人に被せる), a lexicalized extension beyond plain 'to cover with something'.",
+   "recategorize": "transitivity_pair"
+  },
+  {
+   "baseWordId": 1202440,
+   "derivedWordId": 2764520,
+   "category": "lexical_passive",
+   "verdict": "OneWayOnly",
+   "reason": "開かれる is the regular passive ('to be held, of a meeting'); base 開く is highly polysemous (a wound opens, a gap widens, a store opens) with senses beyond this specific passive."
+  },
+  {
+   "baseWordId": 1236070,
+   "derivedWordId": 2855602,
+   "category": "me",
+   "verdict": "OneWayOnly",
+   "reason": "強め is the regular め-suffix pattern; base 強い also covers abstract senses (competent, domineering) the purely gradable noun doesn't carry."
+  },
+  {
+   "baseWordId": 1594600,
+   "derivedWordId": 1594590,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "締め切り is the fixed, highly conventionalized word for 'deadline'; while metaphorically motivated, it functions as a fixed term rather than a freely predictable noun."
+  },
+  {
+   "baseWordId": 1271480,
+   "derivedWordId": 1004990,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "誤魔化し ('cheating, trickery') is the direct, transparent nominalization of 'to deceive/cheat' with no unrelated extra sense."
+  },
+  {
+   "baseWordId": 1387210,
+   "derivedWordId": 1694080,
+   "category": "honorific_o_go",
+   "verdict": "OneWayOnly",
+   "reason": "お先 ('ahead, the future') including the set phrase お先に失礼します stays close to base 先's own 'point, tip, ahead' sense; kept one-way as a safety margin."
+  },
+  {
+   "baseWordId": 1357600,
+   "derivedWordId": 1357610,
+   "category": "ppoi",
+   "verdict": "Exclude",
+   "reason": "色っぽい ('sexy, amorous, erotic') draws on 色's specific romantic/sexual connotation (色気, 色恋), a sense not evident from the plain 'colour/hue' gloss given for the base."
+  },
+  {
+   "baseWordId": 1355930,
+   "derivedWordId": 2216480,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お嬢 carries the cultural stereotype of a pampered young lady (お嬢様 image) alongside a referent shift ('another's daughter'); kept conservative given the added social connotation."
+  },
+  {
+   "baseWordId": 1467150,
+   "derivedWordId": 2741830,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "任せ ('leaving everything up to someone else') is the direct, transparent nominalization of 'to entrust/leave to' with no unrelated extra sense."
+  },
+  {
+   "baseWordId": 1152720,
+   "derivedWordId": 1152660,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "握り is the very well-known abbreviation for nigiri sushi (握り寿司), a lexicalized culinary sense far beyond plain 'grasping'."
+  },
+  {
+   "baseWordId": 1582990,
+   "derivedWordId": 1474330,
+   "category": "lexical_passive",
+   "verdict": "OneWayOnly",
+   "reason": "剥がれる is the regular spontaneous/passive counterpart ('to come unstuck, peel off') of 'to tear/peel off', kept one-way as a mild safety margin."
+  },
+  {
+   "baseWordId": 1485350,
+   "derivedWordId": 2005420,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "飛び出し ('jumping/running/dashing out') is the direct, transparent nominalization of 'to jump out' with no unrelated extra sense."
+  },
+  {
+   "baseWordId": 2104360,
+   "derivedWordId": 2103390,
+   "category": "te_form_adverb",
+   "verdict": "Exclude",
+   "reason": "責任を持って ('responsibly, properly') functions as a fixed set adverbial phrase whose idiomatic register isn't obviously predictable from the literal 'holding responsibility'."
+  },
+  {
+   "baseWordId": 1588730,
+   "derivedWordId": 1861490,
+   "category": "lexical_passive",
+   "verdict": "Bidirectional",
+   "reason": "選ばれる ('to be chosen/elected') is simply the regular passive of 'to choose'; fully predictable with nothing extra either side."
+  },
+  {
+   "baseWordId": 1151260,
+   "derivedWordId": 1151280,
+   "category": "sa_i_adj",
+   "verdict": "Exclude",
+   "reason": "悪さ carries the specific idiom 'mischief' (悪さをする, said of children's naughty behaviour), a countable-event sense not predictable from the abstract quality noun 'badness' alone."
+  },
+  {
+   "baseWordId": 1195430,
+   "derivedWordId": 2453500,
+   "category": "honorific_o_go",
+   "verdict": "Bidirectional",
+   "reason": "お荷物 ('burden, albatross') matches base 荷物's own 'burden' sense (already in the base glosses); the honorific prefix adds nothing new."
+  },
+  {
+   "baseWordId": 1236070,
+   "derivedWordId": 1928800,
+   "category": "garu_both",
+   "verdict": "OneWayOnly",
+   "reason": "強がる ('to pretend to be tough, bluff') is the fully regular がる-suffix pattern; base 強い also covers broader abstract senses (competent, domineering) the specific 'pretend-strength' idiom doesn't carry."
+  },
+  {
+   "baseWordId": 1609660,
+   "derivedWordId": 2453520,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "お決まり means 'the usual/standard thing' (a routine or cliché), a lexicalized sense closely related to お約束's 'trope' sense and beyond plain 'a rule/decision'."
+  },
+  {
+   "baseWordId": 1342220,
+   "derivedWordId": 1342240,
+   "category": "ni_adverb",
+   "verdict": "OneWayOnly",
+   "reason": "順に is the predictable ni-adverb ('in order, in turn'); base 順 also means 'obedient', a sense the adverb doesn't carry."
+  },
+  {
+   "baseWordId": 1535810,
+   "derivedWordId": 1625300,
+   "category": "honorific_o_go",
+   "verdict": "Exclude",
+   "reason": "ご尤も functions as a fixed conversational response ('you're quite right', sometimes said pointedly/sarcastically), a specific usage pattern beyond the plain adjective 'reasonable'."
+  },
+  {
+   "baseWordId": 1584060,
+   "derivedWordId": 1515340,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "包み additionally functions as a counter word ('一包み', a counter for wrapped bundles), a grammatical extra function beyond the plain noun."
+  },
+  {
+   "baseWordId": 1532350,
+   "derivedWordId": 1532370,
+   "category": "sa_i_adj",
+   "verdict": "OneWayOnly",
+   "reason": "明るさ ('brightness') is the predictable noun form; kept one-way given base 明るい's additional figurative 'cheerful (personality)' sense."
+  },
+  {
+   "baseWordId": 1169280,
+   "derivedWordId": 1626750,
+   "category": "masu_stem_noun",
+   "verdict": "Exclude",
+   "reason": "引け appears in the fixed idiom 引けを取らない ('to be second to none'), a specific set-phrase sense beyond plain 'closing/leaving'."
+  },
+  {
+   "baseWordId": 1535880,
+   "derivedWordId": 1535860,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "戻り ('return, recovery') is the direct, transparent nominalization of 'to return' with no unrelated extra sense."
+  },
+  {
+   "baseWordId": 1379690,
+   "derivedWordId": 1379680,
+   "category": "masu_stem_noun",
+   "verdict": "OneWayOnly",
+   "reason": "盛り上がり's dominant modern sense 'climax/excitement' (of a party, mood) is a natural metaphorical extension of 'swelling/rising' that most learners can infer, though it needs some exposure to the collocation."
+  },
+  {
+   "baseWordId": 1432680,
+   "derivedWordId": 1369990,
+   "category": "ku_adverb",
+   "verdict": "Exclude",
+   "reason": "痛く as an intensifying adverb ('extremely, deeply') is a somewhat literary/classical usage (痛く感激する) not derivable from the modern colloquial 'painful/cringy' sense of 痛い."
+  }
+ ]
+}
