@@ -38,6 +38,10 @@ public class UserController(
     IUserLimitsService userLimits,
     ILogger<UserController> logger) : ControllerBase
 {
+    private const int MaxAnkiTxtBytes = 50 * 1024 * 1024;
+
+    private const int MaxAnkiTxtLines = 50_000;
+
     /// <summary>
     /// Get all known JMdict word IDs for the current user.
     /// </summary>
@@ -630,14 +634,16 @@ public class UserController(
     /// </summary>
     [HttpPost("vocabulary/import-from-anki-txt")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxAnkiTxtBytes)]
     public async Task<IResult> AddKnownFromAnkiTxt(IFormFile? file, [FromQuery] bool parseWords = false,
                                                    [FromQuery] bool overwriteExisting = false)
     {
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        if (file == null || file.Length == 0 || file.Length > 10 * 1024 * 1024)
-            return Results.BadRequest("File is empty, too big or not provided");
+        if (file == null) return Results.BadRequest("No file provided.");
+        if (file.Length == 0) return Results.BadRequest("File is empty.");
+        if (file.Length > MaxAnkiTxtBytes) return Results.BadRequest("File exceeds 50 MB limit.");
 
         using var reader = new StreamReader(file.OpenReadStream());
         var lineCount = 0;
@@ -646,8 +652,8 @@ public class UserController(
         while (await reader.ReadLineAsync() is { } line)
         {
             lineCount++;
-            if (lineCount > 50000)
-                return Results.BadRequest("File has more than 50,000 lines");
+            if (lineCount > MaxAnkiTxtLines)
+                return Results.BadRequest($"File has more than {MaxAnkiTxtLines:N0} lines.");
             if (line.StartsWith("#"))
                 continue;
 

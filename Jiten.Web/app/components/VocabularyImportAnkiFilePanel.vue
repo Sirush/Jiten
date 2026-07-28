@@ -48,8 +48,9 @@
       }
     } catch (error) {
       console.error('Error processing Anki file:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to process Anki file.';
-      toast.add({ severity: 'error', summary: 'Error', detail: errorMessage, life: 5000 });
+      const data = (error as { data?: unknown })?.data;
+      const detail = (typeof data === 'object' ? (data as { message?: string })?.message : data) || 'Failed to process Anki file.';
+      toast.add({ severity: 'error', summary: 'Error', detail, life: 5000 });
     } finally {
       isLoading.value = false;
     }
@@ -66,7 +67,7 @@
       <p class="mb-2">This can also import a list of words, one per line. The word can be ended by a comma or a tab as long as there's only one per line.</p>
       <p class="mb-3 text-sm text-amber-600 dark:text-amber-400">
         Warning: This will mark ALL words contained in the deck as known. You will have to remove the lines you don't want manually before uploading your file.
-        The words to add need to be the first word on each line. Limited to 50000 words.
+        The words to add need to be the first word on each line. Limited to 50,000 lines and 50 MB.
       </p>
 
       <div class="mb-3 flex items-center">
