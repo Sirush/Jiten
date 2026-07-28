@@ -286,7 +286,6 @@ export interface FsrsWorkloadCurveResponse {
   learningSeconds: number;
   youngSeconds: number;
   matureSeconds: number;
-  recommendedRetention: number | null;
   points: WorkloadCurvePoint[];
 }
 

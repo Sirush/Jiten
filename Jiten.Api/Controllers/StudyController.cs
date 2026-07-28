@@ -2815,11 +2815,6 @@ public class StudyController(
     private const double WorkloadDefaultMatureSeconds = 4.0;
     private const double WorkloadReviewSecondsCap = 60.0;
     private const int WorkloadMinSamplesForSeconds = 30;
-    // Recommended-retention (CMRR-style) is only offered with a large enough real population, and is
-    // searched inside a sane band rather than over the whole grid.
-    private const int WorkloadMinCardsForRecommendation = 200;
-    private const double WorkloadRecommendLow = 0.80;
-    private const double WorkloadRecommendHigh = 0.97;
 
     [HttpGet("workload-curve")]
     [SwaggerOperation(Summary = "Simulate review workload (avg reviews generated per day) across a grid of desired-retention values",
@@ -2949,28 +2944,6 @@ public class StudyController(
             })
             .ToArray();
 
-        // Recommended retention (CMRR-style): minimise study-time per memorized card, within a sane band,
-        // and only when the real population is large enough to trust the Monte-Carlo. Surfaced as a hint,
-        // never auto-applied.
-        double? recommendedRetention = null;
-        if (total >= WorkloadMinCardsForRecommendation)
-        {
-            var bestRatio = double.MaxValue;
-            foreach (var r in retentions)
-            {
-                if (r < WorkloadRecommendLow || r > WorkloadRecommendHigh) continue;
-                var proj = projByRetention[r];
-                var recall = RecallFraction(proj);
-                if (recall <= 0) continue;
-                var ratio = MinutesPerDay(proj) / recall;
-                if (ratio < bestRatio)
-                {
-                    bestRatio = ratio;
-                    recommendedRetention = r;
-                }
-            }
-        }
-
         return Results.Ok(new
         {
             baseRetention,
@@ -2981,7 +2954,6 @@ public class StudyController(
             learningSeconds = Math.Round(learningSeconds, 1),
             youngSeconds = Math.Round(youngSeconds, 1),
             matureSeconds = Math.Round(matureSeconds, 1),
-            recommendedRetention,
             points,
         });
     }

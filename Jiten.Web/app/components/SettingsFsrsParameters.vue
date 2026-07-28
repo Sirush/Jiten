@@ -528,24 +528,6 @@
     return `mature ${fmt(c.matureSeconds)} · young ${fmt(c.youngSeconds)} · learning ${fmt(c.learningSeconds)}`;
   });
 
-  // Recommended retention (CMRR-style, server-computed): only surfaced when present and meaningfully
-  // different from the current setting. Never auto-applied — the user clicks "Use".
-  const recommendedRetention = computed(() => workloadCurve.value?.recommendedRetention ?? null);
-  // Once a recommendation exists the band stays mounted; we only swap its content when the slider reaches
-  // the recommended value, so passing over it doesn't unmount the band and shove the layout up.
-  const atRecommended = computed(() => {
-    const rec = recommendedRetention.value;
-    return rec != null && Math.abs(rec - Number(desiredRetention.value)) < 0.01;
-  });
-  const recommendedPct = computed(() => {
-    const rec = recommendedRetention.value;
-    return rec == null ? null : Math.round(rec * 100);
-  });
-  function applyRecommended() {
-    const rec = recommendedRetention.value;
-    if (rec != null) desiredRetention.value = Math.round(rec * 100) / 100;
-  }
-
   const hasWorkloadData = computed(() => (workloadCurve.value?.points.length ?? 0) >= 2 && (workloadCurve.value?.total ?? 0) > 0);
 
   // Which curve the chart plots. The headline readout always shows reviews + time + recall together; the
@@ -719,15 +701,6 @@
             <p v-if="speedBreakdown" class="text-[11px] text-gray-400 mt-0.5">
               Time uses your measured review speed: {{ speedBreakdown }}.
             </p>
-
-            <div v-if="recommendedPct != null" class="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 px-3 py-2">
-              <i :class="atRecommended ? 'pi pi-check-circle' : 'pi pi-sparkles'" class="text-emerald-600 dark:text-emerald-400 text-sm" />
-              <span class="text-sm text-emerald-800 dark:text-emerald-200">
-                Recommended ≈ <span class="font-semibold tabular-nums">{{ recommendedPct }}%</span>
-                <span class="text-emerald-700/70 dark:text-emerald-300/70"> — least review time per word remembered</span>
-              </span>
-              <Button :label="atRecommended ? 'In use' : 'Use'" size="small" severity="success" outlined class="ml-auto" :disabled="atRecommended" @click="applyRecommended" />
-            </div>
 
             <div class="flex rounded-lg bg-surface-100 dark:bg-surface-800 p-0.5 text-xs mt-3 w-fit">
               <button
