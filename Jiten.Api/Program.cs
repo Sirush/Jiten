@@ -210,7 +210,8 @@ if (enableOtlpExporter)
                    .AddAspNetCoreInstrumentation()
                    .AddHttpClientInstrumentation()
                    .AddRuntimeInstrumentation()
-                   .AddMeter(CoverageJourneyService.MeterName);
+                   .AddMeter(CoverageJourneyService.MeterName)
+                   .AddMeter(Jiten.Api.Services.Stripe.BillingTelemetry.MeterName);
 
                if (enableConsoleExporter)
                {
@@ -393,6 +394,7 @@ builder.Services.AddScoped<ICardMediaQuotaService, CardMediaQuotaService>();
 builder.Services.Configure<Jiten.Core.Services.JitenPlusLimitsOptions>(
     builder.Configuration.GetSection(Jiten.Core.Services.JitenPlusLimitsOptions.SectionName));
 builder.Services.AddScoped<IUserLimitsService, UserLimitsService>();
+builder.Services.AddSingleton<IBillingAlertService, BillingAlertService>();
 builder.Services.Configure<Jiten.Api.Services.Stripe.StripeOptions>(builder.Configuration.GetSection("Stripe"));
 builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Api.Services.Stripe.StripeGateway>();
 builder.Services.AddScoped<Jiten.Api.Services.Stripe.StripeService>();

@@ -16,6 +16,7 @@ public class StripeReconcileJob(
     IDbContextFactory<UserDbContext> contextFactory,
     IStripeGateway gateway,
     IJitenPlusService jitenPlus,
+    IBillingAlertService alerts,
     IOptions<StripeOptions> options,
     ILogger<StripeReconcileJob> logger)
 {
@@ -32,6 +33,7 @@ public class StripeReconcileJob(
                                    .ToListAsync();
 
         var corrected = 0;
+        var failed = 0;
 
         foreach (var userId in userIds)
         {
@@ -40,11 +42,14 @@ public class StripeReconcileJob(
                 if (await ReconcileUserAsync(context, userId))
                 {
                     corrected++;
+                    BillingTelemetry.ReconcileCorrected.Add(1);
                     jitenPlus.InvalidateTier(userId);
                 }
             }
             catch (Exception ex)
             {
+                failed++;
+                BillingTelemetry.ReconcileFailed.Add(1);
                 logger.LogError(ex, "StripeReconcile: failed for user {UserId}", userId);
             }
 
@@ -52,7 +57,16 @@ public class StripeReconcileJob(
             await Task.Delay(250);
         }
 
-        logger.LogInformation("StripeReconcile: checked {Count} customers, corrected {Corrected}", userIds.Count, corrected);
+        logger.LogInformation("StripeReconcile: checked {Count} customers, corrected {Corrected}, failed {Failed}",
+                              userIds.Count, corrected, failed);
+
+        // Steady state is zero of both: a correction means a webhook was missed, a failure means Stripe could
+        // not be read, and either way the safety net is reporting that the primary path is not working.
+        if (corrected > 0 || failed > 0)
+            await alerts.RaiseAsync("reconcile-drift",
+                                    "Stripe reconciliation found drift",
+                                    $"Checked {userIds.Count} customers: corrected {corrected}, failed {failed}. " +
+                                    "Corrections mean webhook events were missed — check the endpoint's delivery log in Stripe.");
     }
 
     private async Task<bool> ReconcileUserAsync(UserDbContext context, string userId)

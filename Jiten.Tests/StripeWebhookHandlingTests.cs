@@ -22,6 +22,7 @@ public class StripeWebhookHandlingTests : IDisposable
     private readonly UserDbContext _context;
     private readonly StubStripeGateway _gateway = new();
     private readonly RecordingEmailService _emails = new();
+    private readonly RecordingBillingAlertService _alerts = new();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly JitenPlusService _jitenPlus;
     private readonly StripeService _service;
@@ -55,7 +56,7 @@ public class StripeWebhookHandlingTests : IDisposable
             LifetimeWindowEnd = new DateTime(2999, 1, 1, 0, 0, 0, DateTimeKind.Utc)
         });
 
-        _service = new StripeService(_gateway, _context, _jitenPlus, _emails, _cache, stripeOptions,
+        _service = new StripeService(_gateway, _context, _jitenPlus, _emails, _cache, _alerts, stripeOptions,
                                      NullLogger<StripeService>.Instance);
     }
 
@@ -83,6 +84,19 @@ public class StripeWebhookHandlingTests : IDisposable
     private static StripeWebhookEvent CheckoutLifetime(string eventId = "evt_life") =>
         new(StripeWebhookKind.CheckoutCompleted, "checkout.session.completed", eventId, CustomerId, null,
             StripeCheckoutMode.Payment, UserId, null);
+
+    [Fact]
+    public async Task UnresolvableUser_RaisesAlert_AndChangesNothing()
+    {
+        var orphan = new StripeWebhookEvent(StripeWebhookKind.CheckoutCompleted, "checkout.session.completed",
+                                            "evt_orphan", "cus_unknown", "sub_9",
+                                            StripeCheckoutMode.Subscription, null, null);
+
+        await _service.HandleWebhookAsync(orphan);
+
+        Reload().StripeSubscriptionActive.Should().BeFalse();
+        _alerts.Raised.Should().ContainSingle(a => a.Key == "webhook-unresolved-user");
+    }
 
     // ---- checkout.session.completed (subscription) --------------------------------------------
 

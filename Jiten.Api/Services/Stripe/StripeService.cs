@@ -27,6 +27,7 @@ public class StripeService(
     IJitenPlusService jitenPlus,
     IEmailService emails,
     IMemoryCache cache,
+    IBillingAlertService alerts,
     IOptions<StripeOptions> options,
     ILogger<StripeService> logger)
 {
@@ -171,6 +172,12 @@ public class StripeService(
         {
             logger.LogWarning("Stripe webhook {EventId} ({Type}): could not resolve a user for customer {Customer}",
                               evt.EventId, evt.RawType, evt.CustomerId);
+            // Terminal by design (returning 200 stops Stripe retrying), so someone has been charged with no
+            // account to credit and nothing else will surface it.
+            BillingTelemetry.WebhookUnresolvedUser.Add(1);
+            await alerts.RaiseAsync("webhook-unresolved-user",
+                                    "Stripe webhook could not be matched to a user",
+                                    $"Event {evt.EventId} ({evt.RawType}), customer {evt.CustomerId}. Payment may need manual reconciliation.");
             cache.Set(dedupeKey, true, TimeSpan.FromHours(6));
             return;
         }
@@ -179,6 +186,10 @@ public class StripeService(
         if (user is null)
         {
             logger.LogWarning("Stripe webhook {EventId} ({Type}): user {UserId} not found", evt.EventId, evt.RawType, userId);
+            BillingTelemetry.WebhookUnresolvedUser.Add(1);
+            await alerts.RaiseAsync("webhook-unresolved-user",
+                                    "Stripe webhook resolved to a missing user",
+                                    $"Event {evt.EventId} ({evt.RawType}) resolved to user {userId}, which no longer exists.");
             cache.Set(dedupeKey, true, TimeSpan.FromHours(6));
             return;
         }
@@ -327,7 +338,9 @@ public class StripeService(
         {
             // A billing email failure must not fail the webhook (which would trigger a Stripe retry and re-run
             // the state change). Log and move on.
+            BillingTelemetry.EmailFailed.Add(1);
             logger.LogError(ex, "Failed to send a Jiten+ billing email");
+            await alerts.RaiseAsync("billing-email", "Jiten+ billing email failed to send", ex.Message);
         }
     }
 }

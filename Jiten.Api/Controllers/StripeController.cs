@@ -14,6 +14,7 @@ public class StripeController(
     StripeService stripeService,
     IStripeGateway gateway,
     ICurrentUserService currentUserService,
+    IBillingAlertService alerts,
     ILogger<StripeController> logger) : ControllerBase
 {
     public record CheckoutRequest(string Plan);
@@ -66,7 +67,12 @@ public class StripeController(
         }
         catch (StripeException ex)
         {
-            logger.LogWarning(ex, "Stripe webhook signature verification failed");
+            BillingTelemetry.WebhookSignatureRejected.Add(1);
+            // A misconfigured WebhookSecret rejects every event while Stripe reports the charge as succeeded,
+            // so this must page rather than sit in the logs.
+            await alerts.RaiseAsync("webhook-signature",
+                                    "Stripe webhook signature rejected",
+                                    $"Verification failed — check Stripe:WebhookSecret against the live endpoint's signing secret.\n{ex.Message}");
             return Results.BadRequest();
         }
 
@@ -77,10 +83,15 @@ public class StripeController(
         catch (Exception ex)
         {
             // Return 500 so Stripe retries; the handler is idempotent so a replay is safe.
+            BillingTelemetry.WebhookFailed.Add(1, new KeyValuePair<string, object?>("event.type", evt.RawType));
             logger.LogError(ex, "Stripe webhook {EventId} ({Type}) handling failed", evt.EventId, evt.RawType);
+            await alerts.RaiseAsync($"webhook-failed:{evt.RawType}",
+                                    "Stripe webhook handling failed",
+                                    $"Event {evt.EventId} ({evt.RawType}) threw; Stripe will retry.\n{ex.Message}");
             return Results.StatusCode(StatusCodes.Status500InternalServerError);
         }
 
+        BillingTelemetry.WebhookHandled.Add(1, new KeyValuePair<string, object?>("event.type", evt.RawType));
         return Results.Ok();
     }
 
