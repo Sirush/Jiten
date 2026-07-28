@@ -127,9 +127,6 @@ export function useJitenPlus() {
       fetched.value = true;
       fetchedAt.value = Date.now();
     } catch {
-      // Leave fetched false so a later mount or window focus retries, instead of pinning
-      // the user at 'none' for the rest of the tab session after one transient failure.
-      status.value = null;
     } finally {
       loading.value = false;
     }

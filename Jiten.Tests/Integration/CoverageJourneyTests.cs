@@ -93,7 +93,7 @@ public class CoverageJourneyTests(JitenWebApplicationFactory factory)
         var redis = factory.Services.GetRequiredService<IConnectionMultiplexer>().GetDatabase();
         foreach (var id in new[] { TestUsers.UserA, TestUsers.UserB, TestUsers.Admin })
         {
-            await redis.KeyDeleteAsync($"journey:growth:{id}");
+            await redis.KeyDeleteAsync(CoverageJourneyService.GrowthCacheKeyPrefix + id);
             await redis.KeyDeleteAsync($"srsdates:{id}");
         }
 
@@ -220,6 +220,25 @@ public class CoverageJourneyTests(JitenWebApplicationFactory factory)
         foreach (var review in reviews)
             userDb.FsrsReviewLogs.Add(new FsrsReviewLog(cardId, FsrsRating.Good, review));
 
+        await userDb.SaveChangesAsync();
+    }
+
+    /// <summary>Adds a never-reviewed card marked known outright, which is how blacklisting a word records it.</summary>
+    private async Task AddBlacklistedCard(int wordId, byte readingIndex, DateTime createdAt, string userId = TestUsers.UserA)
+    {
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        userDb.FsrsCards.Add(new FsrsCard
+        {
+            CardId = _nextCardId++,
+            UserId = userId,
+            WordId = wordId,
+            ReadingIndex = readingIndex,
+            State = FsrsState.Blacklisted,
+            Due = createdAt,
+            LastReview = null,
+            CreatedAt = createdAt
+        });
         await userDb.SaveChangesAsync();
     }
 
@@ -627,6 +646,32 @@ public class CoverageJourneyTests(JitenWebApplicationFactory factory)
         growth.Points[^1].KnownWords.Should().Be(0);
         growth.Points[^1].KnownWordsCombined.Should().Be(1);
         growth.Points.Select(p => p.KnownWords).Should().NotBeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task KnowledgeGrowth_CountsAWordOnceWhenSeveralOfItsFormsAreStudied()
+    {
+        await AddCard(1, 0, Now.AddDays(-100), mature: true);
+        await AddCard(1, 1, Now.AddDays(-90), mature: false);
+        await AddCard(2, 0, Now.AddDays(-80), mature: true);
+
+        var growth = await ReadGrowth(await GetGrowth(TestUsers.UserA));
+
+        // Two words, three cards; the young card cannot pull its own word out of the mature count either.
+        growth.Points[^1].KnownWords.Should().Be(2);
+        growth.Points[^1].KnownWordsCombined.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task KnowledgeGrowth_ExcludesBlacklistedWords()
+    {
+        await AddCard(1, 0, Now.AddDays(-100), mature: true);
+        await AddBlacklistedCard(2, 0, Now.AddDays(-90));
+
+        var growth = await ReadGrowth(await GetGrowth(TestUsers.UserA));
+
+        growth.Points[^1].KnownWords.Should().Be(1);
+        growth.Points[^1].KnownWordsCombined.Should().Be(1);
     }
 
     [Fact]

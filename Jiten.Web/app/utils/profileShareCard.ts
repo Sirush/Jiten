@@ -266,14 +266,13 @@ export function drawProfileShareCard(options: ProfileShareCardOptions): HTMLCanv
     const known = points.map((p) => p.knownWords);
     const combined = points.map((p) => p.knownWordsCombined);
     const startLabel = formatBucketDated(points[0]!.date, growth.granularity);
-    const gained = (known[known.length - 1] ?? 0) - (known[0] ?? 0);
 
     kicker('WORDS LEARNED OVER TIME', y + 10);
-    if (gained > 0) {
+    if (growth.recentGain > 0) {
       ctx.font = `700 12px ${FONT}`;
       ctx.fillStyle = pal.line;
       ctx.textAlign = 'right';
-      ctx.fillText(`+${num(gained)} since ${startLabel}`, PAD + INNER, y + 10);
+      ctx.fillText(`+${num(growth.recentGain)} in the last 30 days`, PAD + INNER, y + 10);
       ctx.textAlign = 'left';
     }
     y += KICKER_H;

@@ -30,6 +30,9 @@ public class CoverageJourneyService(
 {
     public const string MeterName = "Jiten.Api.CoverageJourney";
 
+    /// <summary>Version-suffixed: entries written before the series moved from counting cards to counting words are not comparable.</summary>
+    public const string GrowthCacheKeyPrefix = "journey:growth:v2:";
+
     private static readonly Meter Meter = new(MeterName);
     private static readonly Counter<long> Requests = Meter.CreateCounter<long>("jiten.journey.requests");
 
@@ -59,10 +62,12 @@ public class CoverageJourneyService(
     /// <summary>
     /// Per card, without the kana expansion: a word count must not count one card twice. DirectPairs covers every
     /// card held, including new ones contributing no segment, since a word set loses to a card in any state.
+    /// GrowthFlat folds the same history to one entry per word and drops blacklisted cards, so the growth series
+    /// counts the population the profile's known-word total counts rather than the cards behind it.
     /// </summary>
     private sealed record CardSegments(
         List<(int WordId, byte ReadingIndex, List<KnownSegment> Segments)> ByCard,
-        List<KnownSegment> Flat,
+        List<KnownSegment> GrowthFlat,
         HashSet<(int WordId, byte ReadingIndex)> DirectPairs);
 
     public async Task<JourneyDto?> GetDeckJourneyAsync(string userId, int deckId, CancellationToken ct = default)
@@ -108,10 +113,10 @@ public class CoverageJourneyService(
         return journey;
     }
 
-    /// <summary>Counts cards rather than the coverage known-set's kana-expanded pairs.</summary>
+    /// <summary>Counts distinct words rather than the coverage known-set's kana-expanded pairs.</summary>
     public async Task<GlobalGrowthDto> GetGlobalGrowthAsync(string userId, CancellationToken ct = default)
     {
-        var cacheKey = $"journey:growth:{userId}";
+        var cacheKey = GrowthCacheKeyPrefix + userId;
 
         var cached = await ReadJsonAsync<GlobalGrowthDto>(cacheKey);
         if (cached != null)
@@ -125,7 +130,7 @@ public class CoverageJourneyService(
 
         var stamp = await GetCoverageStampAsync(userId, ct);
         var cards = await GetCardSegmentsAsync(userId, stamp, ct);
-        var growth = CoverageJourneyBuilder.BuildGlobalGrowth(cards.Flat, DateOnly.FromDateTime(DateTime.UtcNow));
+        var growth = CoverageJourneyBuilder.BuildGlobalGrowth(cards.GrowthFlat, DateOnly.FromDateTime(DateTime.UtcNow));
 
         await WriteJsonAsync(cacheKey, growth, GrowthCacheTtl);
         LogIfSlow(started, null);
@@ -220,10 +225,10 @@ public class CoverageJourneyService(
                                      .ToListAsync(ct);
 
         var byCard = new List<(int, byte, List<KnownSegment>)>(cards.Count);
-        var flat = new List<KnownSegment>(cards.Count * 2);
+        var byWord = new Dictionary<int, List<KnownSegment>>();
         var directPairs = cards.Select(c => (c.WordId, c.ReadingIndex)).ToHashSet();
         if (cards.Count == 0)
-            return new CardSegments(byCard, flat, directPairs);
+            return new CardSegments(byCard, [], directPairs);
 
         var dates = await GetTransitionDatesAsync(userId, ct);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -235,10 +240,18 @@ public class CoverageJourneyService(
             if (segments.Count == 0) continue;
 
             byCard.Add((card.WordId, card.ReadingIndex, segments));
-            flat.AddRange(segments);
+
+            if (card.State == FsrsState.Blacklisted) continue;
+            if (!byWord.TryGetValue(card.WordId, out var wordSegments))
+                byWord[card.WordId] = wordSegments = new List<KnownSegment>();
+            wordSegments.AddRange(segments);
         }
 
-        return new CardSegments(byCard, flat, directPairs);
+        var growthFlat = new List<KnownSegment>(byWord.Count * 2);
+        foreach (var wordSegments in byWord.Values)
+            growthFlat.AddRange(CoverageJourneyBuilder.MergePairSegments(wordSegments));
+
+        return new CardSegments(byCard, growthFlat, directPairs);
     }
 
     private static List<KnownSegment> DeriveSegments(

@@ -4,7 +4,7 @@ summary: Bring your JPDB words and review history across so coverage and decks r
 category: "Coming from another app?"
 level: beginner
 order: 30
-icon: material-symbols-light:import-export
+icon: material-symbols-light:move-item
 draft: false
 updated: 2026-07-28
 ---

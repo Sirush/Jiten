@@ -22,6 +22,9 @@ public static class CoverageJourneyBuilder
 
     private const int WeeklySpanLimitDays = 370;
 
+    /// <summary>Trailing window for the growth headline delta; a fixed span, not a bucket count, so weekly and monthly series report the same period.</summary>
+    public const int RecentGainDays = 30;
+
     private static readonly int[] MilestoneThresholds = [50, 60, 75, 80, 85, 90, 95, 98];
 
     /// <summary>
@@ -240,7 +243,21 @@ public static class CoverageJourneyBuilder
         }
 
         dto.HasEnoughHistory = dto.Points.Count >= 2;
+        dto.RecentGain = CountKnownOn(segments, today) - CountKnownOn(segments, today.AddDays(-RecentGainDays));
         return dto;
+    }
+
+    private static int CountKnownOn(IReadOnlyList<KnownSegment> segments, DateOnly day)
+    {
+        var count = 0;
+        foreach (var segment in segments)
+        {
+            if (segment.Start > day) continue;
+            if (segment.End is { } end && end <= day) continue;
+            count++;
+        }
+
+        return count;
     }
 
     private static List<JourneyMilestoneDto> BuildMilestones(IReadOnlyList<JourneyPointDto> points)
