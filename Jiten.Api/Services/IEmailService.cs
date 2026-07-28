@@ -1,3 +1,5 @@
+using Jiten.Core.Data.Billing;
+
 namespace Jiten.Api.Services;
 
 public interface IEmailService
@@ -9,4 +11,15 @@ public interface IEmailService
     Task SendEmailChangedConfirmationAsync(string newEmail);
     Task SendPasswordChangedNoticeAsync(string email);
     Task SendPasswordSetNoticeAsync(string email);
+
+    // Jiten+ billing
+    Task SendSubscriptionConfirmedAsync(string? email, SubscriptionPlan? plan);
+    Task SendSubscriptionPaymentFailedAsync(string? email);
+    Task SendSubscriptionEndedAsync(string? email);
+    Task SendLifetimeConfirmedAsync(string? email);
+
+    // Jiten+ promo codes & grants
+    Task SendPromoRedeemedAsync(string? email, int days, bool grantsFullTier);
+    Task SendPromoAccessEndsTomorrowAsync(string? email);
+    Task SendJitenPlusGrantAsync(string? email, bool isLifetime, int? days, string? thankYouMessage);
 }

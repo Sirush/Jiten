@@ -29,6 +29,10 @@ export default defineNuxtPlugin((nuxtApp) => {
       // Process response if needed
     },
     async onResponseError({ request, options, response }) {
+      if (response.status === 403 && import.meta.client && (response._data as { jitenPlus?: boolean } | undefined)?.jitenPlus === true) {
+        void nuxtApp.runWithContext(() => useJitenPlus().refresh());
+      }
+
       if (response.status === 401 && import.meta.client) {
         const authStore = useAuthStore();
 

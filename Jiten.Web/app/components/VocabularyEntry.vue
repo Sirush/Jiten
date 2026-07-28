@@ -10,10 +10,13 @@
     isCompact: boolean;
     removable?: boolean;
     removing?: boolean;
+    selectable?: boolean;
+    selected?: boolean;
   }>();
 
   const emit = defineEmits<{
     remove: [word: Word];
+    select: [word: Word];
   }>();
 
   const convertToRuby = useConvertToRuby();
@@ -33,7 +36,8 @@
   <Card>
     <template #title>
       <div class="flex justify-between">
-        <div class="flex flex-row md:gap-4 flex-wrap">
+        <div class="flex flex-row md:gap-4 flex-wrap items-center">
+          <Checkbox v-if="selectable" :model-value="selected" :binary="true" class="mr-2" @change="emit('select', word)" @click.stop />
           <router-link class="text-2xl" :to="`/vocabulary/${word.wordId}/${word.mainReading.readingIndex}`" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
           <Button text @click="toggleCompact">{{ isCompact ? 'Expand' : 'Compact' }}</Button>
         </div>

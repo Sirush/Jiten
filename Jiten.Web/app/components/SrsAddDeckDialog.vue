@@ -605,7 +605,7 @@
       </template>
 
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">Only include parts of speech <span class="text-gray-400">(optional)</span></label>
+        <label class="block text-sm font-medium mb-1">Only include words tagged <span class="text-gray-400">(optional)</span></label>
         <PosFilterSelect v-model="mediaPosFilter" />
       </div>
 
@@ -663,7 +663,7 @@
       </div>
 
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">Only include parts of speech <span class="text-gray-400">(optional)</span></label>
+        <label class="block text-sm font-medium mb-1">Only include words tagged <span class="text-gray-400">(optional)</span></label>
         <PosFilterSelect v-model="globalPosFilter" />
       </div>
 

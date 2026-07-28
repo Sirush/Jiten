@@ -114,6 +114,9 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("AdminPremiumOverride")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("text");
@@ -128,11 +131,17 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsLifetime")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("LastEmailChangeRequestedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("LastPasswordResetRequestedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("LifetimeSource")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
@@ -166,6 +175,21 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
+                    b.Property<string>("StripeCustomerId")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("StripeSubscriptionActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("StripeSubscriptionId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("SubscriptionPeriodEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("SubscriptionPlan")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("TosAcceptedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -189,6 +213,239 @@ namespace Jiten.Core.Migrations.UserDb
                         .HasDatabaseName("UserNameIndex");
 
                     b.ToTable("AspNetUsers", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Billing.PromoCode", b =>
+                {
+                    b.Property<int>("CodeId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("CodeId"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CurrentUses")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("DurationDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("GrantsFullTier")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<int?>("MaxUses")
+                        .HasColumnType("integer");
+
+                    b.HasKey("CodeId");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PromoCode_Code");
+
+                    b.ToTable("PromoCodes", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Billing.UserFrequencyList", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("AutoUpdate")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CsvUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<int>("DeckCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DefinitionJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime?>("GeneratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsSaved")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PublicSlug")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("WordCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ZipUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublicSlug")
+                        .IsUnique()
+                        .HasDatabaseName("IX_UserFrequencyList_PublicSlug")
+                        .HasFilter("\"PublicSlug\" IS NOT NULL");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_UserFrequencyList_UserId");
+
+                    b.ToTable("UserFrequencyLists", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Billing.UserPromoCredit", b =>
+                {
+                    b.Property<long>("UserPromoCreditId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("UserPromoCreditId"));
+
+                    b.Property<DateTime?>("FullyUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("GrantsFullTier")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateOnly?>("LastDecrementDate")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("PromoCodeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RemainingDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Source")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("ThankYouMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("UserPromoCreditId");
+
+                    b.HasIndex("PromoCodeId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_UserPromoCredit_UserId");
+
+                    b.HasIndex("UserId", "PromoCodeId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_UserPromoCredit_UserId_PromoCodeId");
+
+                    b.ToTable("UserPromoCredits", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Billing.UserRoadmap", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("CandidateCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DefinitionJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("GeneratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("GoalDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StepCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StepsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_UserRoadmap_UserId");
+
+                    b.ToTable("UserRoadmaps", "user");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsCard", b =>
@@ -273,6 +530,54 @@ namespace Jiten.Core.Migrations.UserDb
                         .IsUnique();
 
                     b.ToTable("FsrsReviewLogs", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.UserCardMedia", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<byte>("ReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("StoragePath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_UserCardMedia_UserId");
+
+                    b.HasIndex("UserId", "WordId", "ReadingIndex", "Kind")
+                        .IsUnique()
+                        .HasDatabaseName("IX_UserCardMedia_UserId_WordId_ReadingIndex_Kind");
+
+                    b.ToTable("UserCardMedia", "user");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.User.UserCustomMeaning", b =>
@@ -380,6 +685,22 @@ namespace Jiten.Core.Migrations.UserDb
                     b.HasKey("UserId");
 
                     b.ToTable("UserFsrsSettings", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.UserHiddenDefinition", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("HiddenMask")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("UserId", "WordId");
+
+                    b.ToTable("UserHiddenDefinitions", "user");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.User.UserStudyDeck", b =>
@@ -856,6 +1177,38 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.Billing.UserFrequencyList", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Billing.UserPromoCredit", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Billing.PromoCode", null)
+                        .WithMany()
+                        .HasForeignKey("PromoCodeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Billing.UserRoadmap", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsCard", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Authentication.User", null)
@@ -874,6 +1227,15 @@ namespace Jiten.Core.Migrations.UserDb
                         .IsRequired();
 
                     b.Navigation("Card");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.UserCardMedia", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.User.UserCustomMeaning", b =>
@@ -899,6 +1261,15 @@ namespace Jiten.Core.Migrations.UserDb
                     b.HasOne("Jiten.Core.Data.Authentication.User", null)
                         .WithOne()
                         .HasForeignKey("Jiten.Core.Data.User.UserFsrsSettings", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.UserHiddenDefinition", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

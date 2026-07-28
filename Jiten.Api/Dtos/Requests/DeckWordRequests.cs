@@ -24,3 +24,14 @@ public class UpdateDeckWordRequest
     [Range(1, int.MaxValue)]
     public int Occurrences { get; set; }
 }
+
+public class DeckWordKey
+{
+    public int WordId { get; set; }
+    public short ReadingIndex { get; set; }
+}
+
+public class BatchRemoveDeckWordsRequest
+{
+    public List<DeckWordKey> Words { get; set; } = new();
+}

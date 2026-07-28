@@ -18,6 +18,8 @@
       </div>
       <div class="flex space-x-4">
         <NuxtLink to="/media-updates" class="!text-white" no-rel>New media updates</NuxtLink>
+        <NuxtLink to="/updates" class="!text-white" no-rel>What's new</NuxtLink>
+        <NuxtLink to="/donate" class="!text-white" no-rel>Donate</NuxtLink>
       </div>
     </div>
     <p class="text-xs text-center text-gray-300 mt-3 max-w-4xl mx-auto">

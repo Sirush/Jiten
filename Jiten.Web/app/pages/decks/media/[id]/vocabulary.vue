@@ -13,6 +13,7 @@
   const id = route.params.id;
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
+  const limit = computed(() => (route.query.limit ? Number(route.query.limit) : undefined));
   const url = computed(() => `media-deck/${id}/vocabulary`);
 
   const sortByOptions = ref([
@@ -92,11 +93,21 @@
       pos: computed(() => debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined),
       excludePos: computed(() => debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined),
       hideKanaOnly: debouncedHideKanaOnly,
+      limit: limit,
     },
-    watch: [offset, debouncedSearch],
+    watch: [offset, debouncedSearch, limit],
   });
 
-  const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
+  const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor, pageSize } = usePagination(response);
+
+  const listContext = computed(() => ({
+    label: `${title.value} - Vocabulary`,
+    sortLabel: sortByOptions.value.find((o) => o.value === sortBy.value)?.label,
+    sortDescending: sortDescending.value,
+    offset: offset.value,
+    totalItems: totalItems.value,
+    pageSize: pageSize.value,
+  }));
 
   // Stream entries in over a few frames instead of mounting all ~100 at once.
   const { visibleItems: visibleWords } = useProgressiveList(
@@ -138,7 +149,7 @@
       :parent-deck="response?.data?.parentDeck"
       current="Vocabulary"
     />
-    <h1 v-if="title" class="text-2xl font-bold">{{ title }} - Vocabulary List</h1>
+    <h1 v-if="title" class="text-lg font-bold md:text-2xl">{{ title }}<span class="hidden md:inline"> - Vocabulary List</span></h1>
     <VocabularyFilters
       v-model:sort-by="sortBy"
       v-model:sort-descending="sortDescending"
@@ -150,13 +161,13 @@
       :sort-by-options="sortByOptions"
       :show-display-filter="auth.isAuthenticated"
     />
-    <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
-    <VocabularyList :words="visibleWords" :status="status" :error="error" empty-message="Try adjusting your search or filters">
+    <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="words" :page-size="pageSize" :page-size-options="[50, 100, 200]" mobile-compact />
+    <VocabularyList :words="visibleWords" :status="status" :error="error" :list-context="listContext" empty-message="Try adjusting your search or filters">
       <template #error="{ error: err }">
         <div>Error: {{ err }}</div>
       </template>
     </VocabularyList>
-    <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-next="true" />
+    <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-navigate="true" />
   </div>
 </template>
 

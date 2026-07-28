@@ -22,6 +22,9 @@ const props = defineProps<{
 
 const isLogScale = ref(true);
 
+const AXIS = '#6b7280';
+const GRID = 'rgba(107, 114, 128, 0.15)';
+
 const toggleScale = () => {
   isLogScale.value = !isLogScale.value;
 };
@@ -97,9 +100,11 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
           ? 'Number of Most Frequent Words Learned (Log Scale)'
           : 'Number of Most Frequent Words Learned (Linear Scale)',
         font: { size: 14, weight: 'bold' },
+        color: AXIS,
       },
-      grid: { color: 'rgba(0, 0, 0, 0.1)' },
+      grid: { color: GRID },
       ticks: {
+        color: AXIS,
         callback: (value) => {
           const num = Number(value);
 
@@ -129,10 +134,12 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
         display: true,
         text: 'Coverage (%)',
         font: { size: 14, weight: 'bold' },
+        color: AXIS,
       },
       min: 0,
       max: 100,
-      grid: { color: 'rgba(0, 0, 0, 0.1)' },
+      grid: { color: GRID },
+      ticks: { color: AXIS },
     },
   },
 }));
@@ -141,7 +148,7 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
 <template>
   <div class="chart-container">
     <div class="flex justify-between items-center mb-4 px-4">
-      <h3 class="text-lg font-semibold text-gray-700">Vocabulary Coverage</h3>
+      <h3 class="text-lg font-semibold text-gray-700 dark:text-gray-200">Vocabulary Coverage</h3>
       <Button
         :label="isLogScale ? 'Switch to Linear Scale' : 'Switch to Log Scale'"
         icon="pi pi-sort-alt"
@@ -163,7 +170,6 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
 <style scoped>
 .chart-container {
   width: 100%;
-  background: #fff;
   border-radius: 8px;
   padding-top: 1rem;
 }

@@ -658,6 +658,7 @@
               :is-flipped="srsStore.isFlipped"
               :write-in-active="isWriteInCard"
               :front-furigana="frontFuriganaForCard"
+              :write-in-mode="writeInMode"
               :write-in-outcome="writeInOutcome"
               @flip="handleFlip"
             >

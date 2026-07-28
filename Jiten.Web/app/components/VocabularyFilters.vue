@@ -49,11 +49,32 @@
     excludePos.value = [];
     hideKanaOnly.value = false;
   };
+
+  const sortPopover = ref();
+  const displayPopover = ref();
+
+  const sortLabel = computed(() => props.sortByOptions.find((o) => o.value === props.sortBy)?.label ?? 'Sort');
+  const displayLabel = computed(() => displayOptions.find((o) => o.value === props.displayFilter)?.label ?? 'All');
+
+  // Listbox emits null when the selected row is tapped again; keep the current value instead.
+  const onSortPicked = (value: unknown) => {
+    if (value == null) return;
+    emit('update:sortBy', value as string);
+    sortPopover.value?.hide();
+  };
+
+  const onDisplayPicked = (value: unknown) => {
+    if (value == null) return;
+    emit('update:displayFilter', value as string);
+    displayPopover.value?.hide();
+  };
 </script>
 
 <template>
-  <div class="flex flex-col md:flex-row gap-2 w-full">
-    <div class="flex gap-2">
+  <div
+    class="flex gap-2 md:w-full max-md:flex-row max-md:flex-wrap max-md:items-center md:flex-row max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:border-b max-md:border-surface-200 max-md:bg-[var(--p-neutral-50)] max-md:px-4 max-md:py-2 max-md:dark:border-surface-800 max-md:dark:bg-black"
+  >
+    <div class="hidden md:flex gap-2">
       <FloatLabel variant="on">
         <Select
           v-model="sortByModel"
@@ -71,7 +92,8 @@
         <Icon v-else name="mingcute:az-sort-ascending-letters-line" size="1.25em" />
       </Button>
     </div>
-    <IconField v-if="search !== undefined" class="flex-1 min-w-48">
+
+    <IconField v-if="search !== undefined" class="flex-1 max-md:min-w-32 md:min-w-48">
       <InputIcon>
         <Icon name="material-symbols:search-rounded" />
       </InputIcon>
@@ -80,8 +102,60 @@
         <Icon name="material-symbols:close" />
       </InputIcon>
     </IconField>
-    <slot />
-    <div v-if="showDisplayFilter">
+
+    <div class="md:hidden shrink-0">
+      <Button class="px-2!" :aria-label="`Sort by ${sortLabel}, ${sortDescending ? 'descending' : 'ascending'}`" @click="sortPopover.toggle($event)">
+        <Icon name="material-symbols:sort-rounded" size="1.25em" />
+      </Button>
+    </div>
+
+    <Popover ref="sortPopover" class="md:hidden">
+      <div class="flex w-56 flex-col gap-3">
+        <SelectButton
+          :model-value="sortDescending"
+          :options="[{ label: 'Ascending', value: false }, { label: 'Descending', value: true }]"
+          option-label="label"
+          option-value="value"
+          :allow-empty="false"
+          size="small"
+          class="w-full"
+          @update:model-value="emit('update:sortDescending', $event)"
+        />
+        <Listbox
+          :model-value="sortBy"
+          :options="sortByOptions"
+          option-label="label"
+          option-value="value"
+          scroll-height="50vh"
+          class="w-full border-0!"
+          @update:model-value="onSortPicked"
+        />
+      </div>
+    </Popover>
+
+    <div v-if="showDisplayFilter" class="md:hidden shrink-0">
+      <Button class="px-2!" severity="secondary" :aria-label="`Display: ${displayLabel}`" @click="displayPopover.toggle($event)">
+        <Icon name="material-symbols:visibility-outline-rounded" size="1.25em" />
+      </Button>
+    </div>
+
+    <Popover ref="displayPopover" class="md:hidden">
+      <Listbox
+        :model-value="displayFilter"
+        :options="displayOptions"
+        option-label="label"
+        option-value="value"
+        scroll-height="50vh"
+        class="w-48 border-0!"
+        @update:model-value="onDisplayPicked"
+      />
+    </Popover>
+
+    <div class="max-md:order-last max-md:w-full md:contents">
+      <slot />
+    </div>
+
+    <div v-if="showDisplayFilter" class="hidden md:block">
       <FloatLabel variant="on">
         <Select
           v-model="displayModel"
@@ -96,6 +170,7 @@
         <label for="display">Display</label>
       </FloatLabel>
     </div>
+
     <VocabularyAdvancedFilters
       v-model:include-pos="includePos"
       v-model:exclude-pos="excludePos"

@@ -26,6 +26,9 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
     /// <summary>The recording email stub registered for IEmailService/IEmailSender. Singleton, so reads are reliable.</summary>
     public RecordingEmailService Emails => Services.GetRequiredService<RecordingEmailService>();
 
+    /// <summary>The stub Stripe gateway. Singleton, so tests can configure canned responses and read recorded calls.</summary>
+    public StubStripeGateway Stripe => Services.GetRequiredService<StubStripeGateway>();
+
     public JitenWebApplicationFactory()
     {
         Environment.SetEnvironmentVariable("JwtSettings__Secret", "ThisIsATestSecretKeyThatIsLongEnoughForHS256!");
@@ -37,6 +40,14 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         Environment.SetEnvironmentVariable("ConnectionStrings__Redis", "localhost:6379");
         Environment.SetEnvironmentVariable("StaticFilesPath", Path.GetTempPath());
         Environment.SetEnvironmentVariable("UseBunnyCdn", "false");
+
+        // Stripe config
+        Environment.SetEnvironmentVariable("Stripe__SecretKey", "sk_test_placeholder");
+        Environment.SetEnvironmentVariable("Stripe__WebhookSecret", StubStripeGateway.WebhookSecret);
+        Environment.SetEnvironmentVariable("Stripe__MonthlyPriceId", "price_monthly");
+        Environment.SetEnvironmentVariable("Stripe__YearlyPriceId", "price_yearly");
+        Environment.SetEnvironmentVariable("Stripe__LifetimePriceId", "price_lifetime");
+        Environment.SetEnvironmentVariable("Stripe__LifetimeWindowEnd", "2999-01-01T00:00:00Z");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -124,6 +135,11 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
             services.AddSingleton<StubCdnService>();
             services.AddSingleton<ICdnService>(sp => sp.GetRequiredService<StubCdnService>());
 
+            // Replace the Stripe gateway with a stub (canned network, real signature verification).
+            services.RemoveAll<Jiten.Api.Services.Stripe.IStripeGateway>();
+            services.AddSingleton<StubStripeGateway>();
+            services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway>(sp => sp.GetRequiredService<StubStripeGateway>());
+
             // Replace email (EmailService talks to SMTP) with a recording stub. It implements both the
             // IEmailService used by AccountController and the IEmailSender used by AuthController.
             services.RemoveAll<Jiten.Api.Services.IEmailService>();
@@ -170,11 +186,13 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
 
         db.Notifications.RemoveRange(db.Notifications);
+        db.SiteUpdates.RemoveRange(db.SiteUpdates);
         db.RequestActivityLogs.RemoveRange(db.RequestActivityLogs);
         db.MediaRequestUploads.RemoveRange(db.MediaRequestUploads);
         db.MediaRequestComments.RemoveRange(db.MediaRequestComments);
         db.MediaRequestSubscriptions.RemoveRange(db.MediaRequestSubscriptions);
         db.MediaRequestUpvotes.RemoveRange(db.MediaRequestUpvotes);
+        db.MediaRequestBoosts.RemoveRange(db.MediaRequestBoosts);
         db.MediaRequests.RemoveRange(db.MediaRequests);
         db.Decks.RemoveRange(db.Decks);
         await db.SaveChangesAsync();

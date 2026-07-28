@@ -12,6 +12,7 @@ import {
   type NotificationType,
   type ReadingType,
   type RequestAction,
+  type RequestKind,
   type RequestStatus,
   type WordSetStateType,
 } from '~/types';
@@ -285,7 +286,6 @@ export interface FsrsWorkloadCurveResponse {
   learningSeconds: number;
   youngSeconds: number;
   matureSeconds: number;
-  recommendedRetention: number | null;
   points: WorkloadCurvePoint[];
 }
 
@@ -426,6 +426,11 @@ export interface UserExampleSentenceDto {
 export interface UserCustomMeaningDto {
   wordId: number;
   text: string;
+}
+
+export interface UserHiddenDefinitionsDto {
+  wordId: number;
+  hiddenIndices: number[];
 }
 
 export interface ExampleSentencesByDifficultyResponse {
@@ -598,6 +603,13 @@ export interface UserAccomplishment {
   lastComputedAt: string;
 }
 
+export interface ProfileVocabularyStats {
+  young: number;
+  mature: number;
+  mastered: number;
+  wordSetMastered: number;
+}
+
 export interface AccomplishmentVocabularyDto {
   words: Word[];
 }
@@ -741,18 +753,23 @@ export interface DictionarySearchResult {
 export interface MediaRequestDto {
   id: number;
   title: string;
+  kind: RequestKind;
   mediaType: MediaType;
   externalUrl?: string;
   externalLinkType?: LinkType;
   description?: string;
   status: RequestStatus;
   adminNote?: string;
+  targetDeckId?: number;
+  targetDeckTitle?: string;
   fulfilledDeckId?: number;
   fulfilledDeckTitle?: string;
   upvoteCount: number;
+  boostCount: number;
   commentCount: number;
   uploadCount: number;
   hasUserUpvoted: boolean;
+  hasUserBoosted: boolean;
   isSubscribed: boolean;
   isOwnRequest: boolean;
   requesterName?: string;
@@ -791,6 +808,7 @@ export interface MediaRequestUploadAdminDto extends MediaRequestUploadDto {
 export interface DuplicateCheckResultDto {
   existingDecks: DuplicateCheckDeckDto[];
   existingRequests: DuplicateCheckRequestDto[];
+  existingUpdateRequests: DuplicateCheckRequestDto[];
 }
 
 export interface DuplicateCheckDeckDto {
@@ -822,6 +840,7 @@ export interface RequestActivityLogDto {
 export interface RequestUserSummaryDto {
   requestCount: number;
   upvoteCount: number;
+  boostCount: number;
   subscriptionCount: number;
   uploadCount: number;
   fulfilledCount: number;
@@ -975,6 +994,7 @@ export interface StudyCardDto {
   readingIndex: number;
   state: number;
   isNewCard: boolean;
+  due?: string | null;
   lapses: number;
   isLeech: boolean;
   wordText: string;
@@ -1052,6 +1072,10 @@ export type TimedRevealAction = 'Reveal' | 'FailLearn' | 'Nudge';
 // SoftFail = arm Again with an overridable grace; HardFail = grade Again immediately.
 export type TimedAnswerAction = 'SoftFail' | 'HardFail';
 export type ExampleSentencePosition = 'Hidden' | 'Back' | 'Front';
+
+export type CardImageLayout = 'beside' | 'below';
+export type CardImagePosition = 'Front' | 'Back';
+export type CardAudioAutoPlayPosition = 'Front' | 'Back' | 'Both';
 export type ExampleSentenceSorting = 'Random' | 'EasiestFirst' | 'HardestFirst';
 
 /** "Speed Focus" timed-review preferences. Behaviour is entirely client-side; the server round-trips it. */
@@ -1120,6 +1144,9 @@ export interface StudySettingsDto {
   exampleSentencePosition: ExampleSentencePosition;
   exampleSentenceSorting: ExampleSentenceSorting;
   blurExampleSentence: boolean;
+  cardImageLayout: CardImageLayout;
+  cardImagePosition: CardImagePosition;
+  blurCardImage: boolean;
   showFrequencyRank: boolean;
   showKanjiBreakdown: boolean;
   showWordComposition: boolean;
@@ -1137,6 +1164,9 @@ export interface StudySettingsDto {
   autoPlayWordOnFront: boolean;
   autoPlayWordOnFrontNewOnly: boolean;
   autoPlaySentenceOnFront: boolean;
+  autoPlayCustomAudio: boolean;
+  autoPlayCustomAudioPosition: CardAudioAutoPlayPosition;
+  autoPlayCustomAudioInstead: boolean;
   showReviewActivity: boolean;
   showReviewForecast: boolean;
   timezone: string | null;
@@ -1150,6 +1180,10 @@ export interface StudySettingsDto {
   timedReview: TimedReviewSettings;
   writeInReview: WriteInReviewSettings;
   keybinds: StudyKeybinds;
+  // Null/absent = derive the card layout from the legacy display toggles above. Once the layout editor
+  // writes an explicit layout it takes precedence and those toggles no longer drive the card display.
+  cardLayout?: CardLayout | null;
+  cardLayoutPresets?: CardLayoutPreset[];
 }
 
 export type LeechAction = 'Suspend' | 'NotifyOnly';
@@ -1485,4 +1519,289 @@ export interface CorpusCoOccurrence {
   termA: string;
   termB: string;
   sharedDecks: number;
+}
+
+export type CardMediaKind = 'image' | 'audio';
+
+export interface CardMediaDto {
+  kind: CardMediaKind;
+  url: string;
+  contentType: string;
+  fileSizeBytes: number;
+  createdAt: string;
+  inherited: boolean;
+  sourceReadingIndex: number;
+}
+
+export interface CardMediaQuotaDto {
+  usedBytes: number;
+  maxBytes: number;
+}
+
+export interface CardMediaUploadResponse {
+  media: CardMediaDto;
+  quota: CardMediaQuotaDto;
+}
+
+export interface CardMediaEntry {
+  wordId: number;
+  readingIndex: number;
+  image: CardMediaDto | null;
+  audio: CardMediaDto | null;
+}
+
+export interface CardMediaBatchResponse {
+  items: CardMediaEntry[];
+}
+
+export interface CardMediaManageFile {
+  url: string;
+  fileSizeBytes: number;
+  createdAt: string;
+  contentType: string;
+}
+
+export interface CardMediaManageItem {
+  wordId: number;
+  readingIndex: number;
+  wordText: string;
+  totalBytes: number;
+  image: CardMediaManageFile | null;
+  audio: CardMediaManageFile | null;
+}
+
+export interface CardMediaManageSummary {
+  totalForms: number;
+  imageCount: number;
+  imageBytes: number;
+  audioCount: number;
+  audioBytes: number;
+  usedBytes: number;
+  maxBytes: number;
+}
+
+export interface CardMediaManageResponse {
+  items: CardMediaManageItem[];
+  page: number;
+  pageSize: number;
+  totalForms: number;
+  summary: CardMediaManageSummary;
+}
+
+export type CardMediaSort = 'size' | 'date_desc' | 'date_asc';
+export type CardMediaKindFilter = 'all' | 'image' | 'audio';
+
+export interface CardMediaDeleteTarget {
+  wordId: number;
+  readingIndex: number;
+  kind: CardMediaKind;
+}
+
+export interface CardMediaDeleteBatchResponse {
+  deleted: number;
+  quota: CardMediaQuotaDto;
+}
+
+export type CardBlockType =
+  | 'cardStatus'
+  | 'headword'
+  | 'cardImage'
+  | 'exampleSentence'
+  | 'confusableReadings'
+  | 'frequencyRank'
+  | 'etymology'
+  | 'definitions'
+  | 'customMeaning'
+  | 'pitchAccent'
+  | 'kanjiBreakdown'
+  | 'wordComposition'
+  | 'wordUsedIn'
+  | 'deckOccurrences'
+  | 'divider';
+
+export type HeadwordFurigana = 'hidden' | 'shown' | 'newOnly' | 'afterFlip';
+
+export type CardTextSize = 'small' | 'medium' | 'large';
+
+export interface HeadwordBlockOptions {
+  furigana: HeadwordFurigana;
+  showAudioButton: boolean;
+  size: CardTextSize;
+}
+
+export interface ExampleSentenceBlockOptions {
+  blur: boolean;
+  showSource: boolean;
+  showActions: boolean;
+  unblurOnFlip: boolean;
+  size: CardTextSize;
+}
+
+export interface FrequencyRankBlockOptions {
+  onlyAfterFlip: boolean;
+}
+
+export interface DefinitionsBlockOptions {
+  maxDefinitions: number | null;
+  size: CardTextSize;
+  spoiler: boolean;
+}
+
+export interface CustomMeaningBlockOptions {
+  size: CardTextSize;
+  spoiler: boolean;
+}
+
+export interface EtymologyBlockOptions {
+  spoiler: boolean;
+}
+
+export interface ConfusableReadingsBlockOptions {
+  spoiler: boolean;
+}
+
+export interface PitchAccentBlockOptions {
+  hideHeading: boolean;
+  spoiler: boolean;
+}
+
+export interface KanjiBreakdownBlockOptions {
+  hideHeading: boolean;
+  spoiler: boolean;
+}
+
+export interface WordCompositionBlockOptions {
+  hideHeading: boolean;
+  spoiler: boolean;
+}
+
+export interface WordUsedInBlockOptions {
+  hideHeading: boolean;
+  spoiler: boolean;
+}
+
+export interface DeckOccurrencesBlockOptions {
+  collapsed: boolean;
+}
+
+export interface CardImageBlockOptions {
+  layout: CardImageLayout;
+  blur: boolean;
+}
+
+export interface DividerBlockOptions {
+  style: 'line' | 'space';
+  label?: string;
+}
+
+export type CardBlockOptions = Partial<
+  HeadwordBlockOptions &
+    ExampleSentenceBlockOptions &
+    FrequencyRankBlockOptions &
+    DefinitionsBlockOptions &
+    CustomMeaningBlockOptions &
+    EtymologyBlockOptions &
+    ConfusableReadingsBlockOptions &
+    PitchAccentBlockOptions &
+    KanjiBreakdownBlockOptions &
+    WordCompositionBlockOptions &
+    WordUsedInBlockOptions &
+    DeckOccurrencesBlockOptions &
+    CardImageBlockOptions &
+    DividerBlockOptions
+>;
+
+export interface CardLayoutBlock {
+  id: string;
+  type: CardBlockType;
+  options?: CardBlockOptions;
+}
+
+export interface CardLayout {
+  version: 1;
+  front: CardLayoutBlock[];
+  back: CardLayoutBlock[];
+}
+
+export interface CardLayoutPreset {
+  name: string;
+  layout: CardLayout;
+}
+
+export interface JitenPlusLimitPair {
+  free: number;
+  plus: number;
+}
+
+export interface JitenPlusPricingInfo {
+  lifetimeWindowEnd: string;
+  lifetimeAvailable: boolean;
+  cardMediaStorage: { trialBytes: number; fullBytes: number };
+  limits: {
+    studyDecks: JitenPlusLimitPair;
+    studyDeckWords: JitenPlusLimitPair;
+    importWords: JitenPlusLimitPair;
+    activeMediaRequests: JitenPlusLimitPair;
+    customSentencesPerWord: JitenPlusLimitPair;
+  };
+}
+
+export interface SiteUpdate {
+  id: number;
+  title: string;
+  bodyMarkdown: string;
+  publishedAt: string;
+  updatedAt?: string | null;
+}
+
+export interface AdminSiteUpdate {
+  id: number;
+  title: string;
+  bodyMarkdown: string;
+  notificationTeaser?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  publishedAt?: string | null;
+  notifiedAt?: string | null;
+}
+
+export type JourneyGranularity = 'weekly' | 'monthly';
+
+export interface GrowthPoint {
+  date: string;
+  knownWords: number;
+  knownWordsCombined: number;
+}
+
+export interface JourneyPoint extends GrowthPoint {
+  coverage: number;
+  combinedCoverage: number;
+  uniqueCoverage: number;
+  combinedUniqueCoverage: number;
+}
+
+export interface JourneyMilestone {
+  threshold: number;
+  reachedAt: string;
+  unique: boolean;
+}
+
+export interface CoverageJourney {
+  deckId: number;
+  granularity: JourneyGranularity;
+  points: JourneyPoint[];
+  milestones: JourneyMilestone[];
+  startDate: string | null;
+  startCoverage: number;
+  currentCoverage: number;
+  startUniqueCoverage: number;
+  currentUniqueCoverage: number;
+  hasEnoughHistory: boolean;
+  asOf: string | null;
+}
+
+export interface KnowledgeGrowth {
+  granularity: JourneyGranularity;
+  points: GrowthPoint[];
+  hasEnoughHistory: boolean;
 }

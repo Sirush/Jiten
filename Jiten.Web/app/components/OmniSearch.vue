@@ -5,16 +5,21 @@ import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 import type { MediaSuggestion } from '~/types/types';
 import { TitleLanguage } from '~/types';
 
-const props = defineProps<{
-  placeholder?: string;
-  autofocus?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    placeholder?: string;
+    autofocus?: boolean;
+    /** Prefill from ?text= — right on /parse, wrong for a modal that should open empty. */
+    seedFromRoute?: boolean;
+  }>(),
+  { placeholder: undefined, autofocus: false, seedFromRoute: true }
+);
 
 const route = useRoute();
 const store = useJitenStore();
 
 const searchText = ref<string>(
-  Array.isArray(route.query.text) ? route.query.text[0] || '' : (route.query.text as string) || ''
+  props.seedFromRoute ? (Array.isArray(route.query.text) ? route.query.text[0] || '' : (route.query.text as string) || '') : ''
 );
 const isDropdownOpen = ref(false);
 const highlightedIndex = ref(0);

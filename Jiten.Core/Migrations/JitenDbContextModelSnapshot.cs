@@ -1216,6 +1216,11 @@ namespace Jiten.Core.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<int>("BoostCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1236,6 +1241,11 @@ namespace Jiten.Core.Migrations
                     b.Property<int?>("FulfilledDeckId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Kind")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<int>("MediaType")
                         .HasColumnType("integer");
 
@@ -1245,6 +1255,9 @@ namespace Jiten.Core.Migrations
                         .HasColumnType("character varying(36)");
 
                     b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TargetDeckId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Title")
@@ -1264,11 +1277,17 @@ namespace Jiten.Core.Migrations
 
                     b.HasIndex("FulfilledDeckId");
 
+                    b.HasIndex("Kind")
+                        .HasDatabaseName("IX_MediaRequest_Kind");
+
                     b.HasIndex("MediaType")
                         .HasDatabaseName("IX_MediaRequest_MediaType");
 
                     b.HasIndex("RequesterId")
                         .HasDatabaseName("IX_MediaRequest_RequesterId");
+
+                    b.HasIndex("TargetDeckId")
+                        .HasDatabaseName("IX_MediaRequest_TargetDeckId");
 
                     b.HasIndex("Title")
                         .HasDatabaseName("IX_MediaRequest_Title");
@@ -1282,6 +1301,36 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_MediaRequest_Status_UpvoteCount");
 
                     b.ToTable("MediaRequests", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestBoost", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MediaRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaRequestId", "UserId")
+                        .HasDatabaseName("IX_MediaRequestBoost_RequestId_UserId");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("IX_MediaRequestBoost_UserId_CreatedAt");
+
+                    b.ToTable("MediaRequestBoosts", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.MediaRequestComment", b =>
@@ -1543,6 +1592,48 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_RequestActivityLog_UserId_CreatedAt");
 
                     b.ToTable("RequestActivityLogs", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.SiteUpdate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BodyMarkdown")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NotificationTeaser")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime?>("NotifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublishedAt")
+                        .IsDescending()
+                        .HasDatabaseName("IX_SiteUpdate_PublishedAt");
+
+                    b.ToTable("SiteUpdates", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.SkippedComparison", b =>
@@ -2079,7 +2170,25 @@ namespace Jiten.Core.Migrations
                         .HasForeignKey("FulfilledDeckId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Jiten.Core.Data.Deck", "TargetDeck")
+                        .WithMany()
+                        .HasForeignKey("TargetDeckId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("FulfilledDeck");
+
+                    b.Navigation("TargetDeck");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestBoost", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.MediaRequest", "MediaRequest")
+                        .WithMany("Boosts")
+                        .HasForeignKey("MediaRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MediaRequest");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.MediaRequestComment", b =>
@@ -2229,6 +2338,8 @@ namespace Jiten.Core.Migrations
 
             modelBuilder.Entity("Jiten.Core.Data.MediaRequest", b =>
                 {
+                    b.Navigation("Boosts");
+
                     b.Navigation("Comments");
 
                     b.Navigation("Subscriptions");

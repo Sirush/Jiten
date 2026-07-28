@@ -74,11 +74,6 @@
     });
   }
 
-  function startStudy() {
-    srsStore.resetSession();
-    router.push('/srs/study');
-  }
-
   function getCoverUrl(coverName?: string) {
     if (!coverName || coverName === 'nocover.jpg') return null;
     return coverName;
@@ -133,11 +128,23 @@
     return ids;
   });
 
+  const { limits: planLimits, isPlus } = useJitenPlus();
+
   const deckUsage = computed(() => srsStore.studyDecks.length);
   const staticWordUsage = computed(() =>
     srsStore.studyDecks.filter((d) => d.deckType === StudyDeckType.StaticWordList).reduce((sum, d) => sum + d.totalWords, 0)
   );
   const hasStaticDecks = computed(() => srsStore.studyDecks.some((d) => d.deckType === StudyDeckType.StaticWordList));
+
+  function compactWords(count: number) {
+    return count >= 1000 ? `${Math.round(count / 1000)}K` : `${count}`;
+  }
+
+  const usageTooltip = computed(() => {
+    const base = 'Current usage of your study deck limits.<br>Word counts are from word list decks only.<br>These limits are subject to change.';
+    if (isPlus.value) return base;
+    return `${base}<br>Jiten+ raises these to ${planLimits.value.plus.studyDecks} decks and ${compactWords(planLimits.value.plus.studyDeckWords)} words.`;
+  });
 
   function usageColor(current: number, max: number) {
     const ratio = current / max;
@@ -190,33 +197,7 @@
     await srsStore.reorderStudyDecks([...srsStore.activeDecks, ...decks]);
   }
 
-  const nextReviewText = computed(() => {
-    const ds = srsStore.dueSummary;
-    if (!ds?.nextReviewAt) return null;
-    const next = new Date(ds.nextReviewAt);
-    const diffMs = next.getTime() - Date.now();
-    if (diffMs <= 0) return 'now';
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 60) return `${diffMin}m`;
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}h ${diffMin % 60}m`;
-    return `${Math.floor(diffHr / 24)}d ${diffHr % 24}h`;
-  });
-
-  const totalDue = computed(() => {
-    const ds = srsStore.dueSummary;
-    if (!ds) return 0;
-    return Math.min(ds.reviewsDue, ds.reviewBudgetLeft) + ds.newCardsAvailable;
-  });
-
-  const goalReviewsDone = computed(() => srsStore.dueSummary?.reviewsToday ?? 0);
-  const goalReviewsTarget = computed(() => {
-    const ds = srsStore.dueSummary;
-    if (!ds) return 0;
-    return ds.reviewsToday + Math.min(ds.reviewsDue, ds.reviewBudgetLeft);
-  });
-  const goalNewDone = computed(() => srsStore.dueSummary?.newCardsToday ?? 0);
-  const goalNewTarget = computed(() => srsStore.studySettings.newCardsPerDay);
+  const { totalDue, goalReviewsDone, goalReviewsTarget, goalNewDone, goalNewTarget, nextReviewText, startStudy } = useStudySummary();
 
   const CELL = 10;
   const GAP = 2;
@@ -252,8 +233,6 @@
     }
     return days;
   });
-
-
 
   const miniThresholds = computed<[number, number, number]>(() => {
     const counts = miniHeatmap.value
@@ -603,22 +582,26 @@
 
     <template v-else-if="srsStore.studyDecks.length > 0">
       <!-- Usage -->
-      <div class="flex items-center gap-1 mb-3 text-xs">
-        <Tooltip
-          content="Current usage of your study deck limits.<br>Word counts are from word list decks only.<br>These limits are subject to change."
-          placement="bottom"
-        >
+      <div class="flex items-center gap-3 mb-3 text-xs">
+        <Tooltip :content="usageTooltip" placement="bottom">
           <div class="flex items-center gap-3">
-            <span :class="usageColor(deckUsage, 50)">
+            <span :class="usageColor(deckUsage, planLimits.studyDecks)">
               <span class="font-semibold tabular-nums">{{ deckUsage }}</span
-              ><span class="opacity-60">/50 decks</span>
+              ><span class="opacity-60">/{{ planLimits.studyDecks }} decks</span>
             </span>
-            <span v-if="hasStaticDecks" :class="usageColor(staticWordUsage, 200_000)">
+            <span v-if="hasStaticDecks" :class="usageColor(staticWordUsage, planLimits.studyDeckWords)">
               <span class="font-semibold tabular-nums">{{ staticWordUsage.toLocaleString() }}</span
-              ><span class="opacity-60">/200K custom words</span>
+              ><span class="opacity-60">/{{ compactWords(planLimits.studyDeckWords) }} custom words</span>
             </span>
           </div>
         </Tooltip>
+        <NuxtLink
+          v-if="!isPlus"
+          to="/jiten-plus"
+          class="text-primary-600 dark:text-primary-400 hover:underline whitespace-nowrap"
+        >
+          Need more?
+        </NuxtLink>
       </div>
 
       <!-- Active Decks -->

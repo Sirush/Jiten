@@ -33,20 +33,132 @@ public static class YomitanHelper
     }
 
     /// <summary>
+    /// Generates the index.json for a user-built custom frequency list. The revision is a dot-separated date
+    /// (numeric-compared by Yomitan's compareRevisions, so it stays comparable across list renames). When
+    /// stable index/download URLs are provided the list is marked updatable; Yomitan then polls
+    /// <paramref name="indexUrl"/> for a newer revision and reinstalls from <paramref name="downloadUrl"/>.
+    /// </summary>
+    public static string GetCustomFrequencyIndexJson(string listName, DateTime generatedAt,
+                                                     string? indexUrl = null, string? downloadUrl = null)
+    {
+        string safeTitle = JsonEncodedText.Encode(listName).ToString();
+        string revision = $"{generatedAt:yyyy.MM.dd}";
+        string description = JsonEncodedText.Encode($"Custom frequency list '{listName}' built on jiten.moe").ToString();
+
+        string updateFields = "";
+        if (!string.IsNullOrEmpty(indexUrl) && !string.IsNullOrEmpty(downloadUrl))
+        {
+            string safeIndexUrl = JsonEncodedText.Encode(indexUrl).ToString();
+            string safeDownloadUrl = JsonEncodedText.Encode(downloadUrl).ToString();
+            updateFields = $$"""
+                           "isUpdatable":true,"indexUrl":"{{safeIndexUrl}}","downloadUrl":"{{safeDownloadUrl}}",
+                           """;
+        }
+
+        return
+            $$"""{"title":"{{safeTitle}}","format":3,"revision":"{{revision}}",{{updateFields}}"sequenced":false,"frequencyMode":"rank-based","author":"Jiten","url":"https://jiten.moe","description":"{{description}}"}""";
+    }
+
+    /// <summary>
+    /// Builds a CSV (Word, Form, Rank) byte array from pre-computed frequencies, mirroring the site-wide
+    /// CSV export but returning bytes for CDN upload rather than writing to disk.
+    /// </summary>
+    public static async Task<byte[]> GenerateFrequencyCsv(IDbContextFactory<JitenDbContext> contextFactory,
+                                                          List<JmDictWordFrequency> frequencies,
+                                                          List<JmDictWordFormFrequency> formFrequencies,
+                                                          List<JmDictWordForm>? preloadedForms = null)
+    {
+        var allForms = preloadedForms ?? await LoadFormsForFrequencies(contextFactory, frequencies);
+        var formsByWord = allForms.GroupBy(wf => wf.WordId).ToDictionary(g => g.Key, g => g.ToList());
+
+        var frequencyList = BuildFrequencyCsvRows(frequencies, formFrequencies, formsByWord);
+
+        var sb = new StringBuilder();
+        sb.Append("Word,Form,Rank\n");
+        foreach (var (word, form, rank) in frequencyList)
+        {
+            sb.Append(CsvField(word)).Append(',').Append(CsvField(form)).Append(',').Append(rank).Append('\n');
+        }
+
+        return new UTF8Encoding(false).GetBytes(sb.ToString());
+    }
+
+    /// <summary>
+    /// Projects pre-computed frequencies into rank-sorted (Word, Form, Rank) CSV rows: one row per kana
+    /// reading (deduped across the whole list) and one per kanji form (paired with the word's main kana
+    /// reading), skipping forms with no observed usage. Shared by the site-wide CSV export and the
+    /// custom-frequency-list byte export so both stay in lockstep.
+    /// </summary>
+    public static List<(string Word, string Form, int Rank)> BuildFrequencyCsvRows(
+        List<JmDictWordFrequency> frequencies,
+        List<JmDictWordFormFrequency> formFrequencies,
+        Dictionary<int, List<JmDictWordForm>> formsByWord)
+    {
+        var formFreqLookup = formFrequencies.ToDictionary(ff => (ff.WordId, ff.ReadingIndex));
+
+        List<(string Word, string Form, int Rank)> frequencyList = new();
+        var addedEntries = new HashSet<string>();
+
+        foreach (var frequency in frequencies)
+        {
+            if (!formsByWord.TryGetValue(frequency.WordId, out var wordForms))
+                continue;
+
+            var kanaForms = wordForms.Where(wf => wf.FormType == JmDictFormType.KanaForm)
+                                     .OrderBy(wf => wf.ReadingIndex).ToList();
+            var kanjiForms = wordForms.Where(wf => wf.FormType == JmDictFormType.KanjiForm).ToList();
+
+            string mainKanaReading = kanaForms.FirstOrDefault()?.Text ?? "";
+
+            foreach (var kanaForm in kanaForms)
+            {
+                var formFreq = formFreqLookup.GetValueOrDefault((frequency.WordId, kanaForm.ReadingIndex));
+                if (formFreq == null || formFreq.UsedInMediaAmount <= 0) continue;
+                if (!addedEntries.Add(kanaForm.Text)) continue;
+
+                frequencyList.Add((kanaForm.Text, kanaForm.Text, formFreq.FrequencyRank));
+            }
+
+            foreach (var kanjiForm in kanjiForms)
+            {
+                var formFreq = formFreqLookup.GetValueOrDefault((frequency.WordId, kanjiForm.ReadingIndex));
+                if (formFreq == null || formFreq.UsedInMediaAmount <= 0) continue;
+
+                frequencyList.Add((kanjiForm.Text, mainKanaReading, formFreq.FrequencyRank));
+            }
+        }
+
+        frequencyList.Sort((a, b) => a.Rank.CompareTo(b.Rank));
+        return frequencyList;
+    }
+
+    private static async Task<List<JmDictWordForm>> LoadFormsForFrequencies(IDbContextFactory<JitenDbContext> contextFactory,
+                                                                            List<JmDictWordFrequency> frequencies)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var wordIds = frequencies.Select(f => f.WordId).ToList();
+        return await context.WordForms.AsNoTracking()
+                            .Where(wf => wordIds.Contains(wf.WordId))
+                            .ToListAsync();
+    }
+
+    private static string CsvField(string value)
+    {
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        return value;
+    }
+
+    /// <summary>
     /// Generates a zipped Yomitan frequency dictionary for a given media type.
     /// </summary>
     public static async Task<byte[]> GenerateYomitanFrequencyDeck(IDbContextFactory<JitenDbContext> contextFactory,
                                                                   List<JmDictWordFrequency> frequencies,
                                                                   List<JmDictWordFormFrequency> formFrequencies,
-                                                                  MediaType? mediaType, string indexJson)
+                                                                  MediaType? mediaType, string indexJson,
+                                                                  List<JmDictWordForm>? preloadedForms = null)
     {
-        await using var context = await contextFactory.CreateDbContextAsync();
-
-        var wordIds = frequencies.Select(f => f.WordId).ToList();
-
-        var allForms = await context.WordForms.AsNoTracking()
-                                    .Where(wf => wordIds.Contains(wf.WordId))
-                                    .ToListAsync();
+        var allForms = preloadedForms ?? await LoadFormsForFrequencies(contextFactory, frequencies);
         var formsByWord = allForms.GroupBy(wf => wf.WordId).ToDictionary(g => g.Key, g => g.OrderBy(wf => wf.ReadingIndex).ToList());
 
         var allFormFreqs = formFrequencies.ToDictionary(wff => (wff.WordId, wff.ReadingIndex));

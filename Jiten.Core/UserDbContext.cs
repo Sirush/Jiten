@@ -1,5 +1,6 @@
 using Jiten.Core.Data;
 using Jiten.Core.Data.Authentication;
+using Jiten.Core.Data.Billing;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.User;
 using Microsoft.AspNetCore.Identity;
@@ -40,6 +41,13 @@ public class UserDbContext : IdentityDbContext<User>
     public DbSet<UserStudyDeckWord> UserStudyDeckWords { get; set; }
     public DbSet<UserExampleSentence> UserExampleSentences { get; set; }
     public DbSet<UserCustomMeaning> UserCustomMeanings { get; set; }
+    public DbSet<UserHiddenDefinition> UserHiddenDefinitions { get; set; }
+
+    public DbSet<PromoCode> PromoCodes { get; set; }
+    public DbSet<UserPromoCredit> UserPromoCredits { get; set; }
+    public DbSet<UserFrequencyList> UserFrequencyLists { get; set; }
+    public DbSet<UserRoadmap> UserRoadmaps { get; set; }
+    public DbSet<UserCardMedia> UserCardMedia { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -386,6 +394,18 @@ public class UserDbContext : IdentityDbContext<User>
                   .HasDatabaseName("IX_UserCustomMeaning_UserId_WordId");
         });
 
+        modelBuilder.Entity<UserHiddenDefinition>(entity =>
+        {
+            entity.HasKey(e => new { e.UserId, e.WordId });
+            if (isNpgsql)
+                entity.Property(e => e.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<UserWordSetState>(entity =>
         {
             entity.HasKey(uwss => new { uwss.UserId, uwss.SetId });
@@ -399,6 +419,138 @@ public class UserDbContext : IdentityDbContext<User>
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(uwss => uwss.UserId).HasDatabaseName("IX_UserWordSetState_UserId");
+        });
+
+        modelBuilder.Entity<PromoCode>(entity =>
+        {
+            entity.HasKey(pc => pc.CodeId);
+            entity.Property(pc => pc.Code).IsRequired().HasMaxLength(12);
+            entity.Property(pc => pc.Description).HasMaxLength(500);
+            entity.Property(pc => pc.CurrentUses).HasDefaultValue(0);
+            entity.Property(pc => pc.IsActive).HasDefaultValue(true);
+            entity.Property(pc => pc.GrantsFullTier).HasDefaultValue(false);
+            entity.Property(pc => pc.CreatedAt).IsRequired();
+
+            entity.HasIndex(pc => pc.Code).IsUnique().HasDatabaseName("IX_PromoCode_Code");
+        });
+
+        modelBuilder.Entity<UserPromoCredit>(entity =>
+        {
+            entity.HasKey(upc => upc.UserPromoCreditId);
+            if (isNpgsql)
+                entity.Property(upc => upc.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(upc => upc.RemainingDays).IsRequired();
+            entity.Property(upc => upc.GrantedAt).IsRequired();
+            entity.Property(upc => upc.Source).HasDefaultValue(PromoCreditSource.Redemption);
+            entity.Property(upc => upc.GrantsFullTier).HasDefaultValue(false);
+            entity.Property(upc => upc.ThankYouMessage).HasMaxLength(1000);
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(upc => upc.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // PromoCodeId is null for admin grants; the FK is optional and non-cascading.
+            entity.HasOne<PromoCode>()
+                  .WithMany()
+                  .HasForeignKey(upc => upc.PromoCodeId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(upc => upc.UserId).HasDatabaseName("IX_UserPromoCredit_UserId");
+            entity.HasIndex(upc => new { upc.UserId, upc.PromoCodeId })
+                  .IsUnique()
+                  .HasDatabaseName("IX_UserPromoCredit_UserId_PromoCodeId");
+        });
+
+        modelBuilder.Entity<UserRoadmap>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            if (isNpgsql)
+            {
+                entity.Property(r => r.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+                entity.Property(r => r.DefinitionJson).HasColumnType("jsonb").IsRequired();
+                entity.Property(r => r.StepsJson).HasColumnType("jsonb").IsRequired();
+            }
+            else
+            {
+                entity.Property(r => r.DefinitionJson).IsRequired();
+                entity.Property(r => r.StepsJson).IsRequired();
+            }
+
+            entity.Property(r => r.Name).HasMaxLength(100).IsRequired();
+            entity.Property(r => r.FailureReason).HasMaxLength(500);
+            entity.Property(r => r.CreatedAt).IsRequired();
+            entity.Ignore(r => r.Definition);
+            entity.Ignore(r => r.Payload);
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(r => r.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(r => r.UserId).HasDatabaseName("IX_UserRoadmap_UserId");
+        });
+
+        modelBuilder.Entity<UserFrequencyList>(entity =>
+        {
+            entity.HasKey(f => f.Id);
+            if (isNpgsql)
+            {
+                entity.Property(f => f.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+                entity.Property(f => f.DefinitionJson).HasColumnType("jsonb").IsRequired();
+            }
+            else
+            {
+                entity.Property(f => f.DefinitionJson).IsRequired();
+            }
+            entity.Property(f => f.Name).HasMaxLength(100).IsRequired();
+            entity.Property(f => f.PublicSlug).HasMaxLength(32);
+            entity.Property(f => f.ZipUrl).HasMaxLength(1024);
+            entity.Property(f => f.CsvUrl).HasMaxLength(1024);
+            entity.Property(f => f.CreatedAt).IsRequired();
+            entity.Ignore(f => f.Definition);
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(f => f.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(f => f.UserId).HasDatabaseName("IX_UserFrequencyList_UserId");
+
+            // Unique share slug where set. On Postgres a filtered index keeps multiple NULLs legal;
+            // SQLite already treats NULLs as distinct, so a plain unique index suffices there.
+            if (isNpgsql)
+            {
+                entity.HasIndex(f => f.PublicSlug)
+                      .IsUnique()
+                      .HasFilter("\"PublicSlug\" IS NOT NULL")
+                      .HasDatabaseName("IX_UserFrequencyList_PublicSlug");
+            }
+            else
+            {
+                entity.HasIndex(f => f.PublicSlug).IsUnique().HasDatabaseName("IX_UserFrequencyList_PublicSlug");
+            }
+        });
+
+        modelBuilder.Entity<UserCardMedia>(entity =>
+        {
+            entity.HasKey(m => m.Id);
+            if (isNpgsql)
+                entity.Property(m => m.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(m => m.StoragePath).HasMaxLength(512).IsRequired();
+            entity.Property(m => m.ContentType).HasMaxLength(100).IsRequired();
+            entity.Property(m => m.CreatedAt).IsRequired();
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(m => m.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(m => m.UserId).HasDatabaseName("IX_UserCardMedia_UserId");
+
+            entity.HasIndex(m => new { m.UserId, m.WordId, m.ReadingIndex, m.Kind })
+                  .IsUnique()
+                  .HasDatabaseName("IX_UserCardMedia_UserId_WordId_ReadingIndex_Kind");
         });
 
         base.OnModelCreating(modelBuilder);

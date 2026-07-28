@@ -10,6 +10,9 @@
     readingIndex?: number;
     // The user already has the max number of custom sentences for this word — disable the create paths.
     atLimit?: boolean;
+    // Marked text of the custom sentences already saved for this word, so a sentence saved in an
+    // earlier visit still shows as starred.
+    savedTexts?: string[];
   }>();
 
   const emit = defineEmits<{
@@ -22,13 +25,11 @@
   const localiseTitle = useLocaliseTitle();
   const store = useJitenStore();
   const isNsfw = isTextNsfw(props.exampleSentence.text);
-  const favourited = ref(false);
-  const isRevealed = computed({
-    get: () => store.displayAllNsfw,
-    set: (value) => {
-      store.displayAllNsfw = value;
-    },
-  });
+  const { limits: planLimits } = useJitenPlus();
+  const sentenceLimitMessage = computed(() => `Maximum of ${planLimits.value.customSentencesPerWord} custom sentences reached`);
+  const savedLocally = ref(false);
+  const revealedLocally = ref(false);
+  const isRevealed = computed(() => store.displayAllNsfw || revealedLocally.value);
 
   const formattedText = computed(() => {
     const { text, wordPosition, wordLength } = props.exampleSentence;
@@ -46,14 +47,14 @@
 
   const handleReveal = () => {
     if (isNsfw && !isRevealed.value) {
-      isRevealed.value = true;
+      revealedLocally.value = true;
     }
   };
 
   const canEdit = computed(() => authStore.isAuthenticated && props.wordId != null && props.readingIndex != null);
   const editing = ref(false);
 
-  const editInitialText = computed(() => {
+  const markedText = computed(() => {
     const { text, wordPosition, wordLength } = props.exampleSentence;
     if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) return text;
     const before = text.substring(0, wordPosition);
@@ -62,43 +63,36 @@
     return `${before}**${word}**${after}`;
   });
 
-  const editInitialSource = computed(() => {
+  const favourited = computed(() => savedLocally.value || (props.savedTexts?.includes(markedText.value) ?? false));
+
+  const sentenceSource = computed(() => {
     const { sourceDeckParent, sourceDeck } = props.exampleSentence;
     let source = '';
     if (sourceDeckParent) source += localiseTitle(sourceDeckParent) + ' - ';
     if (sourceDeck) source += localiseTitle(sourceDeck);
-    return source;
+    return clampSentenceSource(source);
   });
 
   // Editing a corpus sentence creates a new custom (favourite) sentence; reuse the favourite flow.
   function onEdited() {
     editing.value = false;
-    favourited.value = true;
+    savedLocally.value = true;
     emit('favourited');
   }
 
   async function favouriteSentence() {
     if (props.wordId == null || props.readingIndex == null) return;
 
-    const { text, wordPosition, wordLength, sourceDeckParent, sourceDeck } = props.exampleSentence;
-    const before = text.substring(0, wordPosition);
-    const word = text.substring(wordPosition, wordPosition + wordLength);
-    const after = text.substring(wordPosition + wordLength);
-    const markedText = `${before}**${word}**${after}`;
-
-    let source = '';
-    if (sourceDeckParent) source += localiseTitle(sourceDeckParent) + ' - ';
-    if (sourceDeck) source += localiseTitle(sourceDeck);
-
     try {
       await $api(`user/example-sentences/${props.wordId}/${props.readingIndex}/favourite`, {
         method: 'POST',
-        body: { text: markedText, source: source || undefined },
+        body: { text: markedText.value, source: sentenceSource.value || undefined },
       });
-      favourited.value = true;
+      savedLocally.value = true;
       emit('favourited');
-    } catch {
-      toast.add({ severity: 'error', summary: 'Maximum of 3 custom sentences reached', life: 3000 });
+    } catch (e) {
+      const data = (e as { data?: unknown })?.data;
+      toast.add({ severity: 'error', summary: typeof data === 'string' && data ? data : sentenceLimitMessage.value, life: 3000 });
     }
   }
 </script>
@@ -109,8 +103,8 @@
       v-if="editing"
       :word-id="wordId"
       :reading-index="readingIndex"
-      :initial-text="editInitialText"
-      :initial-source="editInitialSource"
+      :initial-text="markedText"
+      :initial-source="sentenceSource"
       :user-sentence-id="null"
       class="mb-2"
       @saved="onEdited"
@@ -126,7 +120,7 @@
           class="inline-flex items-center justify-center transition-colors mt-0.5 shrink-0"
           :class="favourited ? 'text-yellow-500' : atLimit ? 'text-surface-300 dark:text-surface-600 cursor-not-allowed' : 'text-surface-400 hover:text-yellow-500'"
           :disabled="favourited || atLimit"
-          :title="atLimit ? 'Maximum of 3 custom sentences reached' : 'Save as custom sentence'"
+          :title="atLimit ? sentenceLimitMessage : 'Save as custom sentence'"
           @click="favouriteSentence"
         >
           <i class="pi text-sm" :class="favourited ? 'pi-star-fill' : 'pi-star'" />
@@ -136,7 +130,7 @@
           class="inline-flex items-center justify-center transition-colors mt-0.5 shrink-0"
           :class="atLimit ? 'text-surface-300 dark:text-surface-600 cursor-not-allowed' : 'text-surface-400 hover:text-primary-500 cursor-pointer'"
           :disabled="atLimit"
-          :title="atLimit ? 'Maximum of 3 custom sentences reached' : 'Edit sentence'"
+          :title="atLimit ? sentenceLimitMessage : 'Edit sentence'"
           @click="editing = true"
         >
           <i class="pi pi-pencil text-sm" />

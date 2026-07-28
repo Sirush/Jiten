@@ -33,8 +33,13 @@
   "StaticFilesPath": "/path/to/staticFiles",
   "UseBunnyCdn": false,
   "BunnyCdnSecret": "",
+  "BunnyCdnApiKey": "",
   "BunnyCdnStorageZone": "jiten",
   "CdnBaseUrl": "https://jiten.b-cdn.net",
+  "CdnSecurePullZoneUrl": "https://jiten-user.b-cdn.net",
+  "CdnTokenAuthKey": "",
+  "BunnyCdnUserStorageZone": "jiten-user",
+  "BunnyCdnUserSecret": "",
   "DictionaryPath": "path/to/system_full.dic",
   "FastTextModelPath": "path/to/cc.ja.300.bin",
   "JimakuApiKey" : "YourApiKey",
@@ -52,5 +57,13 @@
   "IndexNow": {
     "Key": "",
     "SiteUrl": "https://jiten.moe"
+  },
+  "Stripe": {
+    "SecretKey": "sk_test_placeholder",
+    "WebhookSecret": "whsec_placeholder",
+    "MonthlyPriceId": "price_monthly_placeholder",
+    "YearlyPriceId": "price_yearly_placeholder",
+    "LifetimePriceId": "price_lifetime_placeholder",
+    "LifetimeWindowEnd": "2026-08-18T00:00:00Z"
   }
 }

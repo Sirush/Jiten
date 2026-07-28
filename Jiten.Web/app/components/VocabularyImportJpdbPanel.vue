@@ -33,12 +33,12 @@
     try {
       isLoading.value = true;
 
-      if (hasApiKey) {
-        await importViaApi();
-      }
-
       if (hasFile) {
         await importReviewsFile();
+      }
+
+      if (hasApiKey) {
+        await importViaApi();
       }
     } catch (error) {
       console.error('Error importing from JPDB:', error);

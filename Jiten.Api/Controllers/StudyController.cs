@@ -35,6 +35,8 @@ public class StudyController(
     IDeckImportService importService,
     IWordFormSiblingCache wordFormCache,
     IStudySessionService sessionService,
+    IUserLimitsService userLimits,
+    ICoverageJourneyService coverageJourneyService,
     ILogger<StudyController> logger) : ControllerBase
 {
     private static readonly Regex SentenceMarkerRegex =
@@ -332,9 +334,10 @@ public class StudyController(
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
 
+        var limits = await userLimits.GetLimitsAsync(userId);
         var deckCount = await userContext.UserStudyDecks.CountAsync(sd => sd.UserId == userId);
-        if (deckCount >= 50)
-            return Results.BadRequest("Maximum of 50 study decks reached.");
+        if (deckCount >= limits.StudyDecks)
+            return Results.BadRequest(LimitMessages.StudyDeckCount(limits));
 
         if (request.DeckType == StudyDeckType.MediaDeck)
         {
@@ -566,23 +569,34 @@ public class StudyController(
             });
         }
 
-        if (request.Sentence is { Length: > 0 and <= 150 }
-            && SentenceMarkerRegex.IsMatch(request.Sentence))
-        {
-            var sentenceCount = await userContext.UserExampleSentences
-                .CountAsync(e => e.UserId == userId && e.WordId == request.WordId && e.ReadingIndex == request.ReadingIndex);
+        bool? sentenceStored = null;
+        var sentenceLimitReached = false;
 
-            if (sentenceCount < 3)
+        if (request.Sentence is { Length: > 0 })
+        {
+            sentenceStored = false;
+
+            if (request.Sentence.Length <= 150 && SentenceMarkerRegex.IsMatch(request.Sentence))
             {
-                userContext.UserExampleSentences.Add(new UserExampleSentence
+                var sentenceCount = await userContext.UserExampleSentences
+                    .CountAsync(e => e.UserId == userId && e.WordId == request.WordId && e.ReadingIndex == request.ReadingIndex);
+
+                var limits = await userLimits.GetLimitsAsync(userId);
+                sentenceLimitReached = sentenceCount >= limits.CustomSentencesPerWord;
+
+                if (!sentenceLimitReached)
                 {
-                    UserId = userId,
-                    WordId = request.WordId,
-                    ReadingIndex = (byte)request.ReadingIndex,
-                    Text = request.Sentence,
-                    Source = request.Source?.Length > 150 ? request.Source[..150] : request.Source,
-                    SortOrder = (byte)sentenceCount
-                });
+                    userContext.UserExampleSentences.Add(new UserExampleSentence
+                    {
+                        UserId = userId,
+                        WordId = request.WordId,
+                        ReadingIndex = (byte)request.ReadingIndex,
+                        Text = request.Sentence,
+                        Source = request.Source?.Length > 150 ? request.Source[..150] : request.Source,
+                        SortOrder = (byte)sentenceCount
+                    });
+                    sentenceStored = true;
+                }
             }
         }
 
@@ -590,7 +604,7 @@ public class StudyController(
         await transaction.CommitAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
 
-        return Results.Ok(new { success = true });
+        return Results.Ok(new { success = true, sentenceStored, sentenceLimitReached });
     }
 
     [HttpPost("study-decks/{id:int}/words/batch")]
@@ -663,6 +677,37 @@ public class StudyController(
             await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new { added, updated });
+    }
+
+    [HttpPost("study-decks/{id:int}/words/batch-delete")]
+    [SwaggerOperation(Summary = "Remove multiple words from a static deck")]
+    public async Task<IResult> BatchRemoveDeckWords(int id, BatchRemoveDeckWordsRequest request)
+    {
+        if (request.Words.Count == 0)
+            return Results.BadRequest("No words provided.");
+        if (request.Words.Count > 10_000)
+            return Results.BadRequest("Maximum of 10,000 words per batch.");
+
+        var (_, error) = await GetStaticDeckForUser(id, "removed from");
+        if (error != null) return error;
+
+        var userId = currentUserService.UserId!;
+        var requestedKeys = request.Words.Select(w => WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex)).ToHashSet();
+        var requestedWordIds = request.Words.Select(w => w.WordId).Distinct().ToList();
+        var words = (await userContext.UserStudyDeckWords
+                .Where(w => w.UserStudyDeckId == id && requestedWordIds.Contains(w.WordId))
+                .ToListAsync())
+            .Where(w => requestedKeys.Contains(WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex)))
+            .ToList();
+
+        if (words.Count > 0)
+        {
+            userContext.UserStudyDeckWords.RemoveRange(words);
+            await userContext.SaveChangesAsync();
+            await sessionService.BumpStudyOverviewVersion(userId);
+        }
+
+        return Results.Ok(new { removed = words.Count });
     }
 
     [HttpGet("study-decks/{id:int}/word-keys")]
@@ -908,9 +953,10 @@ public class StudyController(
         [FromQuery] string? search = null,
         [FromQuery] string? pos = null,
         [FromQuery] string? excludePos = null,
-        [FromQuery] bool hideKanaOnly = false)
+        [FromQuery] bool hideKanaOnly = false,
+        [FromQuery] int limit = 100)
     {
-        const int pageSize = 100;
+        int pageSize = Math.Clamp(limit, 1, 200);
         if (offset < 0) return Results.BadRequest("Offset cannot be negative.");
 
         var userId = currentUserService.UserId;
@@ -1906,6 +1952,7 @@ public class StudyController(
                 ReadingIndex = item.ReadingIndex,
                 State = item.State,
                 IsNewCard = item.IsNew,
+                Due = fsrsCard?.Due,
                 Lapses = fsrsCard?.Lapses ?? 0,
                 IsLeech = fsrsCard != null && LeechHelper.IsLeech(fsrsCard.Lapses, fsrsCard.Stability, settings.LeechThreshold),
                 WordText = mainForm?.RubyText ?? mainForm?.Text ?? "",
@@ -2000,53 +2047,6 @@ public class StudyController(
         });
     }
 
-    [HttpGet("enrolled")]
-    [SwaggerOperation(Summary = "Check if user has enrolled in SRS preview")]
-    public async Task<IResult> GetEnrolled()
-    {
-        var userId = currentUserService.UserId;
-        if (userId == null) return Results.Unauthorized();
-
-        var fsrsSettings = await userContext.UserFsrsSettings
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.UserId == userId);
-
-        var enrolled = fsrsSettings != null
-            && !string.IsNullOrEmpty(fsrsSettings.SettingsJson)
-            && fsrsSettings.SettingsJson != "{}";
-
-        return Results.Ok(new { enrolled });
-    }
-
-    [HttpPost("enroll")]
-    [SwaggerOperation(Summary = "Enroll in SRS preview by creating default settings")]
-    public async Task<IResult> Enroll()
-    {
-        var userId = currentUserService.UserId;
-        if (userId == null) return Results.Unauthorized();
-
-        var fsrsSettings = await userContext.UserFsrsSettings
-            .FirstOrDefaultAsync(s => s.UserId == userId);
-
-        if (fsrsSettings != null
-            && !string.IsNullOrEmpty(fsrsSettings.SettingsJson)
-            && fsrsSettings.SettingsJson != "{}")
-        {
-            return Results.Ok(new { enrolled = true });
-        }
-
-        if (fsrsSettings == null)
-        {
-            fsrsSettings = new UserFsrsSettings { UserId = userId };
-            userContext.UserFsrsSettings.Add(fsrsSettings);
-        }
-
-        fsrsSettings.SettingsJson = JsonSerializer.Serialize(new StudySettingsDto());
-        await userContext.SaveChangesAsync();
-
-        return Results.Ok(new { enrolled = true });
-    }
-
     [HttpGet("study-settings")]
     [SwaggerOperation(Summary = "Get study experience settings")]
     public async Task<IResult> GetStudySettings()
@@ -2110,6 +2110,10 @@ public class StudyController(
                     request.EasyDays[i] = Math.Clamp(request.EasyDays[i], 0.0, 1.0);
         }
 
+        if (request.CardLayout != null)
+            SanitizeCardLayout(request.CardLayout);
+        request.CardLayoutPresets = SanitizeCardLayoutPresets(request.CardLayoutPresets);
+
         var fsrsSettings = await userContext.UserFsrsSettings
             .FirstOrDefaultAsync(s => s.UserId == userId);
 
@@ -2117,6 +2121,19 @@ public class StudyController(
         {
             fsrsSettings = new UserFsrsSettings { UserId = userId };
             userContext.UserFsrsSettings.Add(fsrsSettings);
+        }
+
+        // A null cardLayout from a stale client that predates this feature must not clear a stored
+        // layout; treat null as "unchanged" and preserve what is on disk. An explicit clear from a
+        // current client is expressed as an EMPTY layout (version set, empty lists), never null.
+        // Same rule for cardLayoutPresets: null preserves, [] clears.
+        if (request.CardLayout == null || request.CardLayoutPresets == null)
+        {
+            var stored = DeserializeStoredSettings(fsrsSettings.SettingsJson);
+            if (request.CardLayout == null && stored?.CardLayout != null)
+                request.CardLayout = stored.CardLayout;
+            if (request.CardLayoutPresets == null && stored?.CardLayoutPresets != null)
+                request.CardLayoutPresets = stored.CardLayoutPresets;
         }
 
         fsrsSettings.SettingsJson = JsonSerializer.Serialize(request);
@@ -2149,6 +2166,79 @@ public class StudyController(
     {
         if (string.IsNullOrEmpty(value) || value.Length > 20) return fallback;
         return value;
+    }
+
+    private const int MaxCardLayoutBlocksPerSide = 30;
+    private const int MaxCardBlockTypeLength = 40;
+    private const int MaxCardBlockIdLength = 32;
+    private const int MaxCardBlockOptionKeys = 20;
+    private const int MaxCardBlockOptionValueLength = 500;
+    private const int MaxCardLayoutPresets = 10;
+    private const int MaxCardLayoutPresetNameLength = 40;
+
+    private static StudySettingsDto? DeserializeStoredSettings(string? json)
+    {
+        if (string.IsNullOrEmpty(json) || json == "{}") return null;
+        try { return JsonSerializer.Deserialize<StudySettingsDto>(json); }
+        catch (JsonException) { return null; }
+    }
+
+    private static void SanitizeCardLayout(CardLayoutDto layout)
+    {
+        layout.Front = SanitizeCardLayoutBlocks(layout.Front);
+        layout.Back = SanitizeCardLayoutBlocks(layout.Back);
+    }
+
+    private static List<CardLayoutBlockDto> SanitizeCardLayoutBlocks(List<CardLayoutBlockDto>? blocks)
+    {
+        if (blocks == null) return new List<CardLayoutBlockDto>();
+        if (blocks.Count > MaxCardLayoutBlocksPerSide)
+            blocks = blocks.Take(MaxCardLayoutBlocksPerSide).ToList();
+
+        foreach (var block in blocks)
+        {
+            block.Id = TruncateString(block.Id, MaxCardBlockIdLength);
+            block.Type = TruncateString(block.Type, MaxCardBlockTypeLength);
+            block.Options = SanitizeCardBlockOptions(block.Options);
+        }
+
+        return blocks;
+    }
+
+    private static Dictionary<string, JsonElement>? SanitizeCardBlockOptions(Dictionary<string, JsonElement>? options)
+    {
+        if (options == null || options.Count == 0) return options;
+
+        var result = new Dictionary<string, JsonElement>();
+        foreach (var (key, value) in options)
+        {
+            if (result.Count >= MaxCardBlockOptionKeys) break;
+            if (value.GetRawText().Length > MaxCardBlockOptionValueLength) continue;
+            result[key] = value;
+        }
+
+        return result;
+    }
+
+    private static List<CardLayoutPresetDto>? SanitizeCardLayoutPresets(List<CardLayoutPresetDto>? presets)
+    {
+        if (presets == null) return null;
+        if (presets.Count > MaxCardLayoutPresets)
+            presets = presets.Take(MaxCardLayoutPresets).ToList();
+
+        foreach (var preset in presets)
+        {
+            preset.Name = TruncateString(preset.Name?.Trim(), MaxCardLayoutPresetNameLength);
+            SanitizeCardLayout(preset.Layout ??= new CardLayoutDto());
+        }
+
+        return presets;
+    }
+
+    private static string TruncateString(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return value ?? string.Empty;
+        return value.Length > maxLength ? value[..maxLength] : value;
     }
 
     private static List<(int WordId, byte ReadingIndex, long CardId, bool IsNew, int State)> InterleaveMixed(
@@ -2632,6 +2722,19 @@ public class StudyController(
         });
     }
 
+    [HttpGet("knowledge-growth")]
+    [EnableRateLimiting("journey")]
+    [SwaggerOperation(Summary = "Get the user's known-word count over time",
+                      Description = "Cumulative known words per adaptive bucket, dated from each word's first review.")]
+    [ProducesResponseType(typeof(GlobalGrowthDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<GlobalGrowthDto>> GetKnowledgeGrowth(CancellationToken ct)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Unauthorized();
+
+        return Ok(await coverageJourneyService.GetGlobalGrowthAsync(userId, ct));
+    }
+
     [HttpGet("review-forecast-30d")]
     [SwaggerOperation(Summary = "Get review forecast bucketed by user-local day (default 30 days, optional days param clamped to [7, 365])")]
     public async Task<IResult> GetReviewForecast30d([FromQuery] int days = 30)
@@ -2712,11 +2815,6 @@ public class StudyController(
     private const double WorkloadDefaultMatureSeconds = 4.0;
     private const double WorkloadReviewSecondsCap = 60.0;
     private const int WorkloadMinSamplesForSeconds = 30;
-    // Recommended-retention (CMRR-style) is only offered with a large enough real population, and is
-    // searched inside a sane band rather than over the whole grid.
-    private const int WorkloadMinCardsForRecommendation = 200;
-    private const double WorkloadRecommendLow = 0.80;
-    private const double WorkloadRecommendHigh = 0.97;
 
     [HttpGet("workload-curve")]
     [SwaggerOperation(Summary = "Simulate review workload (avg reviews generated per day) across a grid of desired-retention values",
@@ -2846,28 +2944,6 @@ public class StudyController(
             })
             .ToArray();
 
-        // Recommended retention (CMRR-style): minimise study-time per memorized card, within a sane band,
-        // and only when the real population is large enough to trust the Monte-Carlo. Surfaced as a hint,
-        // never auto-applied.
-        double? recommendedRetention = null;
-        if (total >= WorkloadMinCardsForRecommendation)
-        {
-            var bestRatio = double.MaxValue;
-            foreach (var r in retentions)
-            {
-                if (r < WorkloadRecommendLow || r > WorkloadRecommendHigh) continue;
-                var proj = projByRetention[r];
-                var recall = RecallFraction(proj);
-                if (recall <= 0) continue;
-                var ratio = MinutesPerDay(proj) / recall;
-                if (ratio < bestRatio)
-                {
-                    bestRatio = ratio;
-                    recommendedRetention = r;
-                }
-            }
-        }
-
         return Results.Ok(new
         {
             baseRetention,
@@ -2878,7 +2954,6 @@ public class StudyController(
             learningSeconds = Math.Round(learningSeconds, 1),
             youngSeconds = Math.Round(youngSeconds, 1),
             matureSeconds = Math.Round(matureSeconds, 1),
-            recommendedRetention,
             points,
         });
     }
@@ -4072,9 +4147,9 @@ public class StudyController(
                     .ToList();
         }
 
-        var applied = state == "mastered"
+        var applied = (state == "mastered"
             ? await currentUserService.AddKnownWords(resolvedWords)
-            : await currentUserService.BlacklistWords(resolvedWords);
+            : await currentUserService.BlacklistWords(resolvedWords)).Inserted;
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
@@ -4342,10 +4417,9 @@ public class StudyController(
             .ToListAsync();
         var totalUserWords = await userContext.UserStudyDeckWords
             .CountAsync(w => userDeckIds.Contains(w.UserStudyDeckId));
-        if (totalUserWords + wordsToAdd > 200_000)
-            return wordsToAdd == 1
-                ? "Maximum of 200,000 total static deck words reached."
-                : $"Adding {wordsToAdd} words would exceed the 200,000 total limit.";
+        var limits = await userLimits.GetLimitsAsync(userId);
+        if (totalUserWords + wordsToAdd > limits.StudyDeckWords)
+            return LimitMessages.StudyDeckWordsTotal(limits, wordsToAdd);
 
         return null;
     }

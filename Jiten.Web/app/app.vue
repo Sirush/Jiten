@@ -28,7 +28,6 @@
     // TODO remove after primevue fix
     document.documentElement.classList.add('loaded');
   });
-
 </script>
 
 <template>
@@ -40,7 +39,7 @@
 
     <div
       class="grid transition-[grid-template-rows] duration-300 ease-in-out"
-      :style="{ gridTemplateRows: (!isStudyMode || studyHeaderVisible) ? '1fr' : '0fr' }"
+      :style="{ gridTemplateRows: !isStudyMode || studyHeaderVisible ? '1fr' : '0fr' }"
     >
       <div :class="{ 'overflow-hidden': isStudyMode }">
         <AppHeader />
@@ -51,6 +50,7 @@
       <NuxtPage />
     </div>
     <AppFooter v-if="!isStudyMode" />
+    <LazyGuidesSearch />
     <LazyToast />
     <LazyToast position="bottom-center" group="bottom" />
     <LazyConfirmDialog />

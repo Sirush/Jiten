@@ -1,6 +1,6 @@
 <script setup lang="ts">
-  import { useApiFetchPaginated } from '~/composables/useApiFetch';
-  import { type Deck, MediaType, SortOrder, type Word, DisplayStyle } from '~/types';
+  import { useApiFetch, useApiFetchPaginated } from '~/composables/useApiFetch';
+  import { type Deck, MediaType, SortOrder, type Word, DisplayStyle, type Tag } from '~/types';
   import Skeleton from 'primevue/skeleton';
   import Card from 'primevue/card';
   import InputText from 'primevue/inputtext';
@@ -9,6 +9,8 @@
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
   import { LazyHydrateMediaDeckCard, LazyHydrateMediaDeckCompactView, LazyHydrateMediaDeckTableView } from '~/utils/lazyHydratedComponents';
+  import { type DeckSortOption, deckSortMeta, deckSortOption, deckSortOrdering, deckSortLabels } from '~/utils/deckSorting';
+  import { getGenreText } from '~/utils/genreMapper';
 
 
   const props = defineProps<{
@@ -46,24 +48,17 @@
   const titleFilter = ref(route.query.title ? (Array.isArray(route.query.title) ? route.query.title[0] : route.query.title) : null);
   const debouncedTitleFilter = ref(titleFilter.value);
 
-  const sortByOptions = ref([
-    { label: 'Title', value: 'title' },
-    { label: 'Difficulty', value: 'difficulty' },
-    { label: 'Subdeck Count', value: 'subdeckCount' },
-    { label: 'External Rating', value: 'extRating' },
-    { label: 'Unique Kanji', value: 'uKanji' },
-    { label: 'Unique Word Count', value: 'uWordCount' },
-    { label: 'Word Count', value: 'wordCount' },
-    { label: 'Unique Kanji Used Once', value: 'uKanjiOnce' },
-    { label: 'Release Date', value: 'releaseDate' },
-    { label: 'Added Date', value: 'addedDate' },
-  ]);
+  const sortByOptions = ref(
+    ['title', 'difficulty', 'subdeckCount', 'extRating', 'uKanji', 'uWordCount', 'wordCount', 'uKanjiOnce', 'communityVotes', 'releaseDate', 'addedDate'].map(
+      deckSortOption
+    )
+  );
 
-  const novelSortOptions = ref<{ label: string; value: string }[]>([]);
-  const speechSortOptions = ref<{ label: string; value: string }[]>([]);
+  const novelSortOptions = ref<DeckSortOption[]>([]);
+  const speechSortOptions = ref<DeckSortOption[]>([]);
 
   const sortByGrouped = computed(() => {
-    const groups: { label: string; items: { label: string; value: string }[] }[] = [
+    const groups: { label: string; items: DeckSortOption[] }[] = [
       { label: 'General', items: sortByOptions.value },
     ];
     if (novelSortOptions.value.length > 0) {
@@ -75,47 +70,8 @@
     return groups;
   });
 
-  // Array used to reorder the sortByOptions when some options are added or removed to keep the order consistent
-  const sortByOrdering = [
-    'title',
-    'difficulty',
-    'coverage',
-    'uCoverage',
-    'extRating',
-    'sentenceLength',
-    'uKanji',
-    'uWordCount',
-    'wordCount',
-    'subdeckCount',
-    'uKanjiOnce',
-    'releaseDate',
-    'addedDate',
-  ];
-
-  const sortMeta: Record<string, { default: SortOrder; asc: string; desc: string }> = {
-    title:               { default: SortOrder.Ascending,  asc: 'A → Z',               desc: 'Z → A' },
-    difficulty:          { default: SortOrder.Ascending,  asc: 'Easiest first',        desc: 'Hardest first' },
-    coverage:            { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
-    uCoverage:           { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
-    extRating:           { default: SortOrder.Descending, asc: 'Lowest first',         desc: 'Highest first' },
-    sentenceLength:      { default: SortOrder.Ascending,  asc: 'Shortest first',       desc: 'Longest first' },
-    uKanji:              { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
-    uWordCount:          { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
-    wordCount:           { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
-    subdeckCount:        { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
-    uKanjiOnce:          { default: SortOrder.Ascending,  asc: 'Fewest first',         desc: 'Most first' },
-    releaseDate:         { default: SortOrder.Descending, asc: 'Oldest first',         desc: 'Newest first' },
-    addedDate:           { default: SortOrder.Descending, asc: 'Oldest first',         desc: 'Newest first' },
-    charCount:           { default: SortOrder.Ascending,  asc: 'Shortest first',       desc: 'Longest first' },
-    dialoguePercentage:  { default: SortOrder.Descending, asc: 'Least dialogue',       desc: 'Most dialogue' },
-    speechSpeed:         { default: SortOrder.Ascending,  asc: 'Slowest first',        desc: 'Fastest first' },
-    speechDuration:      { default: SortOrder.Descending, asc: 'Shortest first',       desc: 'Longest first' },
-    occurrences:         { default: SortOrder.Descending, asc: 'Fewest first',         desc: 'Most first' },
-    filter:              { default: SortOrder.Descending, asc: 'Least relevant',       desc: 'Most relevant' },
-  };
-
   const sortOrderLabel = computed(() => {
-    const meta = sortMeta[sortBy.value as string];
+    const meta = deckSortMeta[sortBy.value as string];
     if (!meta) return sortOrder.value === SortOrder.Ascending ? '↑' : '↓';
     return sortOrder.value === SortOrder.Ascending ? meta.asc : meta.desc;
   });
@@ -126,16 +82,15 @@
   const isConnected = computed(() => authStore.isAuthenticated);
 
   const sortBy = ref(route.query.sortBy ? route.query.sortBy : sortByOptions.value[0].value);
-  const sortOrder = ref(route.query.sortOrder ? Number(route.query.sortOrder) : (sortMeta[sortBy.value as string]?.default ?? SortOrder.Ascending));
+  const sortOrder = ref(route.query.sortOrder ? Number(route.query.sortOrder) : (deckSortMeta[sortBy.value as string]?.default ?? SortOrder.Ascending));
   const wordIdRef = ref(props.word?.wordId);
   const readingIndexRef = ref(props.word?.mainReading?.readingIndex);
 
   if (isConnected.value) {
-    if (!sortByOptions.value.some((o) => o.value === 'uCoverage')) {
-      sortByOptions.value.push({ label: 'Unique Coverage', value: 'uCoverage' });
-    }
-    if (!sortByOptions.value.some((o) => o.value === 'coverage')) {
-      sortByOptions.value.push({ label: 'Coverage', value: 'coverage' });
+    for (const key of ['uCoverage', 'coverage', 'uTotalCoverage', 'totalCoverage']) {
+      if (!sortByOptions.value.some((o) => o.value === key)) {
+        sortByOptions.value.push(deckSortOption(key));
+      }
     }
   }
 
@@ -320,10 +275,7 @@
     const showspeechSpeedOptionMediaTypes = [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio];
 
     if (mediaType.value == null || !showspeechSpeedOptionMediaTypes.includes(Number(mediaType.value))) {
-      novelSortOptions.value = [
-        { label: 'Character Count', value: 'charCount' },
-        { label: 'Dialogue Percentage', value: 'dialoguePercentage' },
-      ];
+      novelSortOptions.value = ['charCount', 'dialoguePercentage'].map(deckSortOption);
     } else {
       novelSortOptions.value = [];
       if (sortBy.value === 'charCount' || sortBy.value === 'dialoguePercentage') {
@@ -332,10 +284,7 @@
     }
 
     if (mediaType.value == null || showspeechSpeedOptionMediaTypes.includes(Number(mediaType.value))) {
-      speechSortOptions.value = [
-        { label: 'Speech Speed', value: 'speechSpeed' },
-        { label: 'Speech Duration', value: 'speechDuration' },
-      ];
+      speechSortOptions.value = ['speechSpeed', 'speechDuration'].map(deckSortOption);
     } else {
       speechSortOptions.value = [];
       if (sortBy.value === 'speechSpeed' || sortBy.value === 'speechDuration') {
@@ -347,7 +296,7 @@
 
     if (mediaType.value == null || showAvgSentenceLengthOptionMediaTypes.includes(Number(mediaType.value))) {
       if (!sortByOptions.value.some((o) => o.value === 'sentenceLength')) {
-        sortByOptions.value.push({ label: 'Average Sentence Length', value: 'sentenceLength' });
+        sortByOptions.value.push(deckSortOption('sentenceLength'));
       }
     } else {
       if (sortByOptions.value.some((o) => o.value === 'sentenceLength')) {
@@ -358,12 +307,7 @@
       }
     }
 
-    // reorder the options by sortByOrdering
-    sortByOptions.value.sort((a, b) => {
-      const indexA = sortByOrdering.indexOf(a.value);
-      const indexB = sortByOrdering.indexOf(b.value);
-      return indexA - indexB;
-    });
+    sortByOptions.value.sort((a, b) => deckSortOrdering.indexOf(a.value) - deckSortOrdering.indexOf(b.value));
   };
 
   updateOptions();
@@ -450,7 +394,7 @@
 
         // Reset sorting when word changes
         if (!sortByOptions.value.some((opt) => opt.value === 'occurrences')) {
-          sortByOptions.value.unshift({ label: 'Occurrences', value: 'occurrences' });
+          sortByOptions.value.unshift(deckSortOption('occurrences'));
         }
         sortBy.value = 'occurrences';
         sortOrder.value = SortOrder.Descending;
@@ -460,7 +404,7 @@
   );
 
   if (props.word != null) {
-    sortByOptions.value.unshift({ label: 'Occurrences', value: 'occurrences' });
+    sortByOptions.value.unshift(deckSortOption('occurrences'));
     sortBy.value = 'occurrences';
     sortOrder.value = SortOrder.Descending;
   }
@@ -493,7 +437,7 @@
   });
 
   watch(sortBy, (newValue) => {
-    const meta = sortMeta[newValue as string];
+    const meta = deckSortMeta[newValue as string];
     if (meta) {
       sortOrder.value = meta.default;
     }
@@ -563,7 +507,45 @@
     watch: [offset, mediaType],
   });
 
-  const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
+  const facetArr = (a: number[]) => (a.length > 0 ? a.join(',') : undefined);
+  const facetNum = (v: number | null) => (v == null ? undefined : v);
+  const { data: facetData } = useApiFetch<{ genreCounts: Record<number, number>; tagCounts: Record<number, number> }>(
+    'media-deck/filter-facets',
+    {
+      server: false,
+      lazy: true,
+      query: {
+        mediaType: computed(() => (mediaType.value ? Number(mediaType.value) : undefined)),
+        charCountMin: computed(() => facetNum(debouncedFilters.value.charCountMin)),
+        charCountMax: computed(() => facetNum(debouncedFilters.value.charCountMax)),
+        difficultyMin: computed(() => facetNum(debouncedFilters.value.difficultyMin)),
+        difficultyMax: computed(() => facetNum(debouncedFilters.value.difficultyMax)),
+        releaseYearMin: computed(() => facetNum(debouncedFilters.value.releaseYearMin)),
+        releaseYearMax: computed(() => facetNum(debouncedFilters.value.releaseYearMax)),
+        uniqueKanjiMin: computed(() => facetNum(debouncedFilters.value.uniqueKanjiMin)),
+        uniqueKanjiMax: computed(() => facetNum(debouncedFilters.value.uniqueKanjiMax)),
+        subdeckCountMin: computed(() => facetNum(debouncedFilters.value.subdeckCountMin)),
+        subdeckCountMax: computed(() => facetNum(debouncedFilters.value.subdeckCountMax)),
+        extRatingMin: computed(() => facetNum(debouncedFilters.value.extRatingMin)),
+        extRatingMax: computed(() => facetNum(debouncedFilters.value.extRatingMax)),
+        speechSpeedMin: computed(() => facetNum(debouncedFilters.value.speechSpeedMin)),
+        speechSpeedMax: computed(() => facetNum(debouncedFilters.value.speechSpeedMax)),
+        speechDurationMin: computed(() => facetNum(debouncedFilters.value.speechDurationMin)),
+        speechDurationMax: computed(() => facetNum(debouncedFilters.value.speechDurationMax)),
+        genres: computed(() => facetArr(debouncedFilters.value.includeGenres)),
+        excludeGenres: computed(() => facetArr(debouncedFilters.value.excludeGenres)),
+        tags: computed(() => facetArr(debouncedFilters.value.includeTags)),
+        excludeTags: computed(() => facetArr(debouncedFilters.value.excludeTags)),
+        excludeSequels: computed(() => (debouncedFilters.value.excludeSequels === true ? true : undefined)),
+      },
+      watch: [mediaType, debouncedFilters],
+    },
+  );
+
+  const genreCounts = computed(() => facetData.value?.genreCounts ?? {});
+  const tagCounts = computed(() => facetData.value?.tagCounts ?? {});
+
+  const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor } = usePagination(response);
 
   // Stream cards in over a few frames instead of mounting the whole page at once.
   const { visibleItems: visibleDecks } = useProgressiveList(
@@ -610,26 +592,234 @@
     }
     return Number(mediaType.value) === type;
   };
+
+  const mediaTypeChipClass = (type: MediaType | null) => [
+    'rounded-full border px-3 py-1.5 text-sm no-underline! hover:no-underline!',
+    isActive(type)
+      ? 'border-primary-500 bg-primary-500 font-medium text-white! dark:text-white!'
+      : 'border-surface-300 text-surface-700! dark:border-surface-700 dark:text-surface-200!',
+  ];
+
+  const mediaTypePopover = ref();
+
+  // Below md the media types are a single scrolling line, so the selected one has to be
+  // brought into view or it reads as absent whenever it sits past the right edge.
+  const mediaTypeStrip = ref<HTMLElement | null>(null);
+  const stripCanScrollLeft = ref(false);
+  const stripCanScrollRight = ref(false);
+
+  const updateStripEdges = () => {
+    const strip = mediaTypeStrip.value;
+    if (!strip) return;
+    stripCanScrollLeft.value = strip.scrollLeft > 1;
+    stripCanScrollRight.value = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1;
+  };
+
+  const revealActiveMediaType = () => {
+    nextTick(() => {
+      mediaTypeStrip.value?.querySelector('[data-active="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+      updateStripEdges();
+    });
+  };
+
+  onMounted(() => {
+    revealActiveMediaType();
+    // Web fonts landing after mount change the chip widths, which moves both edges.
+    document.fonts?.ready.then(updateStripEdges);
+    window.addEventListener('resize', updateStripEdges);
+  });
+  onBeforeUnmount(() => window.removeEventListener('resize', updateStripEdges));
+  watch(mediaType, revealActiveMediaType);
+
+  const sortPopover = ref();
+  const sortLabel = computed(() => deckSortLabels[sortBy.value as string] ?? 'Sort');
+
+  // Listbox emits null when the selected row is tapped again; keep the current sort instead.
+  const onSortByPicked = (value: unknown) => {
+    if (value == null) return;
+    sortBy.value = value as string;
+    sortPopover.value?.hide();
+  };
+
+  const sortDirectionOptions = computed(() => {
+    const meta = deckSortMeta[sortBy.value as string];
+    return [
+      { label: meta?.asc ?? 'Ascending', value: SortOrder.Ascending },
+      { label: meta?.desc ?? 'Descending', value: SortOrder.Descending },
+    ];
+  });
+
+  const { data: filterTags } = useApiFetch<Tag[]>('media-deck/tags', { server: true, lazy: false });
+
+  const statusChipLabels: Record<string, string> = {
+    nostatus: 'Without status',
+    fav: 'Favourited',
+    ignore: 'Ignored',
+    planning: 'Planning',
+    ongoing: 'Ongoing',
+    completed: 'Completed',
+    dropped: 'Dropped',
+  };
+
+  type FilterChip = { key: string; label: string; clear: () => void };
+
+  const rangeChip = (
+    key: string,
+    label: string,
+    minRef: Ref<number | null>,
+    maxRef: Ref<number | null>,
+    format: (value: number) => string = (value) => value.toLocaleString(),
+  ): FilterChip | null => {
+    const min = minRef.value;
+    const max = maxRef.value;
+    if (min == null && max == null) return null;
+
+    let text: string;
+    if (min != null && max != null) text = min === max ? `${label} ${format(min)}` : `${label} ${format(min)}-${format(max)}`;
+    else if (min != null) text = `${label} ≥ ${format(min)}`;
+    else text = `${label} ≤ ${format(max as number)}`;
+
+    return { key, label: text, clear: () => { minRef.value = null; maxRef.value = null; } };
+  };
+
+  const tagName = (tagId: number) => filterTags.value?.find((tag) => tag.tagId === tagId)?.name ?? `Tag ${tagId}`;
+
+  const removeFrom = (listRef: Ref<number[]>, id: number) => {
+    listRef.value = listRef.value.filter((entry) => entry !== id);
+  };
+
+  const activeFilterChips = computed<FilterChip[]>(() => {
+    const chips: FilterChip[] = [];
+
+    if (statusFilter.value !== 'none') {
+      chips.push({
+        key: 'status',
+        label: statusChipLabels[statusFilter.value as string] ?? 'Status',
+        clear: () => { statusFilter.value = 'none'; },
+      });
+    }
+
+    const plain = (value: number) => String(value);
+    const percent = (value: number) => `${value}%`;
+
+    const ranges = [
+      rangeChip('charCount', 'Characters', charCountMin, charCountMax),
+      rangeChip('difficulty', 'Difficulty', difficultyMin, difficultyMax, plain),
+      rangeChip('releaseYear', 'Year', releaseYearMin, releaseYearMax, plain),
+      rangeChip('uniqueKanji', 'Unique kanji', uniqueKanjiMin, uniqueKanjiMax),
+      rangeChip('subdeckCount', 'Subdecks', subdeckCountMin, subdeckCountMax),
+      rangeChip('extRating', 'Rating', extRatingMin, extRatingMax, plain),
+      rangeChip('speechSpeed', 'Speech speed', speechSpeedMin, speechSpeedMax),
+      rangeChip('speechDuration', 'Duration', speechDurationMin, speechDurationMax, (value) => `${value}h`),
+      rangeChip('coverage', 'Coverage', coverageMin, coverageMax, percent),
+      rangeChip('uniqueCoverage', 'Unique coverage', uniqueCoverageMin, uniqueCoverageMax, percent),
+    ];
+    for (const chip of ranges) {
+      if (chip) chips.push(chip);
+    }
+
+    if (excludeSequels.value) {
+      chips.push({ key: 'excludeSequels', label: 'No sequels', clear: () => { excludeSequels.value = null; } });
+    }
+
+    for (const id of includeGenres.value) {
+      chips.push({ key: `genre-${id}`, label: getGenreText(id), clear: () => removeFrom(includeGenres, id) });
+    }
+    for (const id of excludeGenres.value) {
+      chips.push({ key: `genre-x-${id}`, label: `Not ${getGenreText(id)}`, clear: () => removeFrom(excludeGenres, id) });
+    }
+    for (const id of includeTags.value) {
+      chips.push({ key: `tag-${id}`, label: tagName(id), clear: () => removeFrom(includeTags, id) });
+    }
+    for (const id of excludeTags.value) {
+      chips.push({ key: `tag-x-${id}`, label: `Not ${tagName(id)}`, clear: () => removeFrom(excludeTags, id) });
+    }
+
+    return chips;
+  });
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
-    <Card>
-      <template #content>
-        <div class="flex flex-row flex-wrap justify-around gap-2">
-          <NuxtLink
-            v-for="option in mediaTypeOptions"
-            :key="option.label"
-            :to="{ query: option.type ? { ...route.query, mediaType: option.type, offset: 0 } : { ...route.query, mediaType: undefined, offset: 0 } }"
-            :class="{ 'font-bold !text-purple-500': isActive(option.type) }"
-          >
-            {{ option.label }}
-          </NuxtLink>
+  <div class="flex flex-col gap-4 max-md:gap-2">
+    <!-- Below md the eleven labels wrap to three lines, so they scroll on one line instead.
+         The strip can hide most of the list, so the fades mark the overflow and the trailing
+         button stays put as a way to reach every type without scrolling. -->
+    <div class="md:hidden flex items-center gap-2">
+      <div class="relative min-w-0 flex-1">
+        <!-- `w-0 min-w-full` fills the parent while contributing nothing to intrinsic width, so
+             the w-max row inside cannot stretch an ancestor that is sized by its content. -->
+        <div
+          ref="mediaTypeStrip"
+          class="w-0 min-w-full overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          @scroll.passive="updateStripEdges"
+        >
+          <div class="flex w-max gap-2 py-0.5">
+            <NuxtLink
+              v-for="option in mediaTypeOptions"
+              :key="option.label"
+              :to="{ query: option.type ? { ...route.query, mediaType: option.type, offset: 0 } : { ...route.query, mediaType: undefined, offset: 0 } }"
+              :data-active="isActive(option.type)"
+              :class="[mediaTypeChipClass(option.type), 'whitespace-nowrap']"
+            >
+              {{ option.label }}
+            </NuxtLink>
+          </div>
         </div>
-      </template>
-    </Card>
-    <div class="flex flex-col md:flex-row gap-2">
-      <div class="flex flex-row gap-2">
+        <div
+          v-show="stripCanScrollLeft"
+          class="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[var(--p-neutral-50)] to-transparent dark:from-black"
+        />
+        <div
+          v-show="stripCanScrollRight"
+          class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--p-neutral-50)] to-transparent dark:from-black"
+        />
+      </div>
+
+      <Button rounded outlined size="small" class="shrink-0 px-2!" aria-label="Show all media types" @click="mediaTypePopover.toggle($event)">
+        <Icon name="material-symbols:expand-more-rounded" size="1.25em" />
+      </Button>
+    </div>
+
+    <Popover ref="mediaTypePopover" class="md:hidden">
+      <div class="grid w-60 grid-cols-2 gap-1.5">
+        <NuxtLink
+          v-for="option in mediaTypeOptions"
+          :key="option.label"
+          :to="{ query: option.type ? { ...route.query, mediaType: option.type, offset: 0 } : { ...route.query, mediaType: undefined, offset: 0 } }"
+          :class="[mediaTypeChipClass(option.type), 'text-center']"
+          @click="mediaTypePopover.hide()"
+        >
+          {{ option.label }}
+        </NuxtLink>
+      </div>
+    </Popover>
+
+    <!-- The wrapper carries the breakpoint: PrimeVue's runtime .p-card display rule outranks
+         a `hidden` utility placed on the component itself. -->
+    <div class="hidden md:block">
+      <Card>
+        <template #content>
+          <div class="flex flex-row flex-wrap justify-around gap-2">
+            <NuxtLink
+              v-for="option in mediaTypeOptions"
+              :key="option.label"
+              :to="{ query: option.type ? { ...route.query, mediaType: option.type, offset: 0 } : { ...route.query, mediaType: undefined, offset: 0 } }"
+              :class="{ 'font-bold !text-purple-500': isActive(option.type) }"
+            >
+              {{ option.label }}
+            </NuxtLink>
+          </div>
+        </template>
+      </Card>
+    </div>
+
+    <!-- Below md this is the only place the controls live, so it sticks; the page header is
+         static, which leaves top-0 free. -->
+    <div
+      class="flex flex-col gap-2 max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:border-b max-md:border-surface-200 max-md:bg-[var(--p-neutral-50)] max-md:px-4 max-md:py-2 max-md:dark:border-surface-800 max-md:dark:bg-black"
+    >
+    <div class="flex gap-2 max-md:flex-row max-md:flex-wrap max-md:items-center md:flex-row">
+      <div class="hidden md:flex flex-row gap-2">
         <FloatLabel variant="on" class="w-full">
           <Select
             v-model="sortBy"
@@ -652,7 +842,10 @@
         <Button :icon="sortOrder === SortOrder.Ascending ? 'pi pi-arrow-up' : 'pi pi-arrow-down'" class="!px-4" @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending" />
       </div>
 
-      <IconField class="w-full">
+      <!-- A min width rather than min-w-0: in a narrow container (the vocabulary detail page nests
+           this inside a card, leaving ~314px) the field would otherwise shrink to a stub instead
+           of wrapping onto its own row. -->
+      <IconField class="max-md:min-w-32 max-md:flex-1 md:w-full">
         <InputIcon>
           <Icon name="material-symbols:search-rounded" />
         </InputIcon>
@@ -661,6 +854,43 @@
           <Icon name="material-symbols:close" />
         </InputIcon>
       </IconField>
+
+      <!-- The breakpoint sits on the wrapper: PrimeVue's runtime .p-button display rule
+           outranks a `hidden` utility placed on the Button itself. -->
+      <div class="md:hidden shrink-0">
+        <Button class="px-2!" :aria-label="`Sort by ${sortLabel}, ${sortOrderLabel}`" @click="sortPopover.toggle($event)">
+          <Icon name="material-symbols:sort-rounded" size="1.25em" />
+        </Button>
+      </div>
+
+      <Popover ref="sortPopover" class="md:hidden">
+        <div class="flex w-68 flex-col gap-3">
+          <SelectButton
+            v-model="sortOrder"
+            :options="sortDirectionOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+            size="small"
+            class="w-full"
+          />
+          <Listbox
+            :model-value="sortBy"
+            :options="sortByGrouped"
+            option-label="label"
+            option-value="value"
+            option-group-label="label"
+            option-group-children="items"
+            scroll-height="50vh"
+            class="w-full border-0!"
+            @update:model-value="onSortByPicked"
+          >
+            <template #optiongroup="{ option }">
+              <div class="text-xs font-semibold text-surface-500 dark:text-surface-400 py-0.5 px-1">{{ option.label }}</div>
+            </template>
+          </Listbox>
+        </div>
+      </Popover>
 
       <!-- Advanced Filters -->
       <MediaListFilters
@@ -691,6 +921,8 @@
         v-model:exclude-tags="excludeTags"
         v-model:exclude-sequels="excludeSequels"
         :is-connected="isConnected"
+        :genre-counts="genreCounts"
+        :tag-counts="tagCounts"
         @reset="resetAllFilters"
       />
 
@@ -698,9 +930,26 @@
         <DisplayStyleSelector />
       </div>
     </div>
+
+      <!-- The Filters badge is the only other trace of active filters, and it scrolls away
+           with its button; below md these keep the hidden state readable and removable. -->
+      <div v-if="activeFilterChips.length" class="flex flex-row flex-wrap items-center gap-1.5 md:hidden">
+        <Chip
+          v-for="chip in activeFilterChips"
+          :key="chip.key"
+          :label="chip.label"
+          removable
+          class="py-0.5! text-xs!"
+          @remove="chip.clear()"
+        />
+        <Button v-if="activeFilterChips.length > 1" severity="secondary" text size="small" class="py-0.5! text-xs!" @click="resetAllFilters">
+          Clear all
+        </Button>
+      </div>
+    </div>
     <div>
       <div class="flex flex-col gap-1">
-        <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="decks" />
+        <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="decks" mobile-compact />
 
         <div v-if="status === 'pending'" class="flex flex-col gap-4">
           <Card v-for="i in 5" :key="i" class="p-2">
@@ -742,7 +991,7 @@
           <LazyHydrateMediaDeckTableView v-for="(deck, index) in visibleDecks" :key="deck.deckId" :deck="deck" :lazy-render="index >= 12" />
         </div>
       </div>
-      <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-next="true" />
+      <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-navigate="true" />
     </div>
   </div>
 </template>

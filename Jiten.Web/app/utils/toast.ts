@@ -17,6 +17,7 @@ export function showWarnToast(toast: ToastServiceMethods, summary: string, detai
 export function extractApiError(err: unknown, fallback: string): string {
   const data = (err as any)?.data;
   if (typeof data === 'string' && data.length > 0 && data.length < 400) return data;
+  if (typeof data?.error === 'string' && data.error.length > 0) return data.error;
   if (typeof data?.detail === 'string' && data.detail.length > 0) return data.detail;
   // ValidationProblemDetails: flatten the errors dictionary into readable messages
   if (data?.errors && typeof data.errors === 'object') {

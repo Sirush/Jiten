@@ -132,7 +132,7 @@
       }
       await $api('/auth/register', { method: 'POST', body: { ...form, recaptchaResponse: recaptchaResponse.value || '' } });
       message.value =
-        "Registration successful. Please check your email to confirm your account. If you don't receive the email within a few minutes, please contact us on Discord or send an email to contact@jiten.moe from the email address you used to register for a manual confirmation.";
+        "Registration successful. Please check your email to confirm your account. If you don't receive the email within a few minutes, you can send it again from the login page under \"Didn't get your confirmation email?\". If it still doesn't arrive, please contact us on Discord or send an email to contact@jiten.moe from the email address you used to register for a manual confirmation.";
     } catch (err: any) {
       if (err.response && err.response._data) {
         const apiMessage = err.response._data.message || 'Registration failed.';

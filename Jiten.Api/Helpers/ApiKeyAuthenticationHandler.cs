@@ -28,6 +28,8 @@ public class ApiKeyAuthenticationHandler(
     private const int FAILED_ATTEMPT_LIMIT = 5;
     private static readonly TimeSpan FAILED_WINDOW = TimeSpan.FromMinutes(1);
 
+    private const string TooManyAttemptsItemKey = "ApiKey.TooManyAttempts";
+
     // Optional small delay added on failed authentication to slow down brute-force attempts.
     private const int FAILED_DELAY_MIN_MS = 150;
     private const int FAILED_DELAY_MAX_MS = 350;
@@ -147,9 +149,25 @@ public class ApiKeyAuthenticationHandler(
 
     private AuthenticateResult RejectTooManyAttempts()
     {
+        Context.Items[TooManyAttemptsItemKey] = true;
+        ApplyTooManyAttempts();
+        return AuthenticateResult.Fail("Too many invalid authentication attempts");
+    }
+
+    private void ApplyTooManyAttempts()
+    {
         Context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         Context.Response.Headers["Retry-After"] = ((int)FAILED_WINDOW.TotalSeconds).ToString();
-        return AuthenticateResult.Fail("Too many invalid authentication attempts");
+    }
+
+    /// <summary>Keeps the throttle's 429 instead of the 401 the base challenge would otherwise write over it.</summary>
+    protected override Task HandleChallengeAsync(AuthenticationProperties properties)
+    {
+        if (!Context.Items.ContainsKey(TooManyAttemptsItemKey))
+            return base.HandleChallengeAsync(properties);
+
+        ApplyTooManyAttempts();
+        return Task.CompletedTask;
     }
 
     private static FailedAttemptTracker GetOrAddTracker(string ip)

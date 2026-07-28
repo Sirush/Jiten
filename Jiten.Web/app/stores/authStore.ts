@@ -121,6 +121,8 @@ export const useAuthStore = defineStore('auth', () => {
 
     tokenCookie.value = null;
     refreshTokenCookie.value = null;
+
+    useJitenPlus().reset();
   }
 
   // Check if token is expired or about to expire (within 5 minutes)
@@ -404,8 +406,9 @@ export const useAuthStore = defineStore('auth', () => {
 
   function onLoginSuccess() {
     const srs = useSrsStore();
-    srs.fetchEnrollment();
     srs.refreshOverview(true);
+
+    useJitenPlus().refresh();
   }
 
   function initializeAuth() {

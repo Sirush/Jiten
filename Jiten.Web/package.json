@@ -6,7 +6,7 @@
   "scripts": {
     "build": "nuxt build",
     "dev": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 nuxt dev\n",
-    "dev-mobile": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 nuxt dev --host 0.0.0.0\n",
+    "dev-mobile": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 nuxt dev --host 0.0.0.0 --dotenv .env.mobile\n",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
@@ -22,6 +22,7 @@
     "@nuxt/content": "^3.14.0",
     "@nuxt/icon": "1.15.0",
     "@nuxt/scripts": "0.13.2",
+    "@nuxtjs/mdc": "^0.22.0",
     "@nuxtjs/seo": "3.4.0",
     "@pinia/nuxt": "0.11.3",
     "@primeuix/themes": "1.2.5",

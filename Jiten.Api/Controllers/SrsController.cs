@@ -794,6 +794,7 @@ public class SrsController(
     }
 
     [HttpPost("settings/recompute")]
+    [EnableRateLimiting("compute")]
     [SwaggerOperation(Summary = "Recompute FSRS scheduling",
                       Description = "Recompute scheduling for all cards using the stored settings (or defaults).")]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -978,7 +979,17 @@ public class SrsController(
             case "bury-remove":
                 if (card != null)
                 {
-                    card.Due = DateTime.UtcNow;
+                    // The client hands back the due date it held before burying. Burying only ever pushes a
+                    // card forward, so a value later than the current due is not a restore and is discarded.
+                    var restored = request.RestoreDue?.ToUniversalTime();
+                    card.Due = restored < card.Due ? restored.Value : DateTime.UtcNow;
+                }
+                break;
+
+            case "reset-schedule":
+                if (card != null)
+                {
+                    ResetCardSchedule(card);
                 }
                 break;
 
@@ -993,21 +1004,145 @@ public class SrsController(
         logger.LogInformation("User set vocabulary state: WordId={WordId}, ReadingIndex={ReadingIndex}, State={State}",
                               request.WordId, request.ReadingIndex, request.State);
         return Results.Json(new { success = true });
+    }
 
-        void RestoreCardState(FsrsCard card)
+    private static void RestoreCardState(FsrsCard card)
+    {
+        if (card.Stability is > 0)
         {
-            if (card.Stability is > 0)
+            card.State = FsrsState.Review;
+        }
+        else
+        {
+            card.State = FsrsState.Learning;
+            card.Step = 0;
+        }
+
+        card.Due = DateTime.UtcNow;
+    }
+
+    private static void ResetCardSchedule(FsrsCard card)
+    {
+        card.State = FsrsState.Learning;
+        card.Step = 0;
+        card.Stability = null;
+        card.Difficulty = null;
+        card.Due = DateTime.UtcNow;
+        card.LastReview = null;
+    }
+
+    [HttpPost("set-vocabulary-state-bulk")]
+    [SwaggerOperation(Summary = "Set vocabulary state for multiple cards",
+                      Description = "Applies one state action to a list of cards in a single request.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> SetVocabularyStateBulk(BulkSetVocabularyStateRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        if (request.Items.Count == 0)
+            return Results.BadRequest("No cards specified.");
+        if (request.Items.Count > 10000)
+            return Results.BadRequest("Too many cards in one request (max 10000).");
+
+        var requestedPairs = request.Items.Select(i => (i.WordId, i.ReadingIndex)).ToHashSet();
+        var wordIds = request.Items.Select(i => i.WordId).Distinct().ToList();
+        var cards = (await userContext.FsrsCards
+                                      .Where(c => c.UserId == userId && wordIds.Contains(c.WordId))
+                                      .ToListAsync())
+                    .Where(c => requestedPairs.Contains((c.WordId, c.ReadingIndex)))
+                    .ToList();
+
+        var affected = 0;
+
+        switch (request.State)
+        {
+            case "neverForget-add":
+            case "blacklist-add":
+            case "suspend-add":
             {
-                card.State = FsrsState.Review;
-            }
-            else
-            {
-                card.State = FsrsState.Learning;
-                card.Step = 0;
+                var target = request.State switch
+                {
+                    "neverForget-add" => FsrsState.Mastered,
+                    "blacklist-add" => FsrsState.Blacklisted,
+                    _ => FsrsState.Suspended,
+                };
+
+                foreach (var card in cards.Where(c => c.State != target))
+                {
+                    card.State = target;
+                    affected++;
+                }
+
+                var existingPairs = cards.Select(c => (c.WordId, c.ReadingIndex)).ToHashSet();
+                foreach (var item in request.Items.Where(i => !existingPairs.Contains((i.WordId, i.ReadingIndex))))
+                {
+                    await userContext.FsrsCards.AddAsync(target == FsrsState.Mastered
+                                                             ? new FsrsCard(userId, item.WordId, item.ReadingIndex,
+                                                                            due: DateTime.UtcNow, lastReview: DateTime.UtcNow, state: target)
+                                                             : new FsrsCard(userId, item.WordId, item.ReadingIndex, state: target));
+                    affected++;
+                }
+
+                if (target == FsrsState.Mastered)
+                {
+                    foreach (var item in request.Items)
+                        await WordFormHelper.RemoveRedundantKanaSrsCards(userContext, wordFormCache, userId, item.WordId, item.ReadingIndex);
+                }
+
+                break;
             }
 
-            card.Due = DateTime.UtcNow;
+            case "neverForget-remove":
+                foreach (var card in cards.Where(c => c.State == FsrsState.Mastered))
+                {
+                    RestoreCardState(card);
+                    affected++;
+                }
+                break;
+
+            case "blacklist-remove":
+                foreach (var card in cards.Where(c => c.State == FsrsState.Blacklisted))
+                {
+                    RestoreCardState(card);
+                    affected++;
+                }
+                break;
+
+            case "suspend-remove":
+                foreach (var card in cards.Where(c => c.State == FsrsState.Suspended))
+                {
+                    RestoreCardState(card);
+                    affected++;
+                }
+                break;
+
+            case "reset-schedule":
+                foreach (var card in cards)
+                {
+                    ResetCardSchedule(card);
+                    affected++;
+                }
+                break;
+
+            case "forget-add":
+                userContext.FsrsCards.RemoveRange(cards);
+                affected = cards.Count;
+                break;
+
+            default:
+                return Results.BadRequest($"Invalid state: {request.State}");
         }
+
+        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        await userContext.SaveChangesAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
+
+        logger.LogInformation("User bulk set vocabulary state: State={State}, Requested={Requested}, Affected={Affected}",
+                              request.State, request.Items.Count, affected);
+        return Results.Json(new { success = true, affectedCount = affected });
     }
 
     [HttpPost("mass-action/preview")]
@@ -1140,6 +1275,18 @@ public class SrsController(
                     .SetProperty(c => c.Difficulty, (double?)null)
                     .SetProperty(c => c.Due, DateTime.UtcNow)
                     .SetProperty(c => c.LastReview, (DateTime?)null));
+                break;
+
+            case "restore-state":
+                affected = await query.Where(c => c.Stability > 0)
+                                      .ExecuteUpdateAsync(s => s
+                                                              .SetProperty(c => c.State, FsrsState.Review)
+                                                              .SetProperty(c => c.Due, DateTime.UtcNow));
+                affected += await query.Where(c => c.Stability == null || c.Stability <= 0)
+                                       .ExecuteUpdateAsync(s => s
+                                                               .SetProperty(c => c.State, FsrsState.Learning)
+                                                               .SetProperty(c => c.Step, 0)
+                                                               .SetProperty(c => c.Due, DateTime.UtcNow));
                 break;
 
             default:
@@ -1501,7 +1648,7 @@ public class SrsController(
 
     private static string? ValidateMassActionRequest(MassActionRequest request, bool previewOnly)
     {
-        if (request.Action is not ("change-state" or "push-due" or "delete-cards" or "reset-schedule"))
+        if (request.Action is not ("change-state" or "push-due" or "delete-cards" or "reset-schedule" or "restore-state"))
             return $"Invalid action: {request.Action}";
 
         if (!previewOnly)
@@ -1521,7 +1668,7 @@ public class SrsController(
                         return "StaggerBatchSize must be between 1 and 10000.";
                     break;
 
-                case "delete-cards" or "reset-schedule":
+                case "delete-cards" or "reset-schedule" or "restore-state":
                     var hasFilter = (request.StateFilter is { Length: > 0 })
                                     || request.DateFrom.HasValue
                                     || request.DateTo.HasValue;

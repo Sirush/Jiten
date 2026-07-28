@@ -31,6 +31,7 @@ const sortByOptions = ref([
 ]);
 
 const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
+const limit = computed(() => (route.query.limit ? Number(route.query.limit) : undefined));
 const sortDescending = ref(route.query.sortOrder === '1');
 const sortBy = ref(route.query.sortBy?.toString() || sortByOptions.value[0].value);
 const display = ref(route.query.display?.toString() || 'all');
@@ -102,11 +103,21 @@ const {
     pos: computed(() => debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined),
     excludePos: computed(() => debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined),
     hideKanaOnly: debouncedHideKanaOnly,
+    limit: limit,
   },
-  watch: [offset, sortBy, sortDescending, display, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly],
+  watch: [offset, sortBy, sortDescending, display, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly, limit],
 });
 
-const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
+const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor, pageSize } = usePagination(response);
+
+const listContext = computed(() => ({
+  label: wordSet.value?.name ?? 'Word set',
+  sortLabel: sortByOptions.value.find((o) => o.value === sortBy.value)?.label,
+  sortDescending: sortDescending.value,
+  offset: offset.value,
+  totalItems: totalItems.value,
+  pageSize: pageSize.value,
+}));
 
 async function handleSubscribe(state: WordSetStateType) {
   if (!authStore.isAuthenticated) {
@@ -274,15 +285,16 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
           :show-display-filter="authStore.isAuthenticated"
         />
 
-        <PaginationControls :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
+        <PaginationControls :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="words" :page-size="pageSize" :page-size-options="[25, 50, 100]" mobile-compact />
 
         <VocabularyList
           :words="response?.data ?? []"
           :status="vocabStatus"
           :error="vocabError"
+          :list-context="listContext"
         />
 
-        <PaginationControls :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-next="true" />
+        <PaginationControls :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-navigate="true" />
       </div>
     </template>
   </div>

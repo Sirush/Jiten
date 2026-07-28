@@ -21,6 +21,9 @@ const props = defineProps<{
   usePercentage?: boolean;
 }>();
 
+const AXIS = '#6b7280';
+const GRID = 'rgba(107, 114, 128, 0.15)';
+
 const chartData = computed(() => {
   const sortedEntries = Object.entries(props.deciles)
     .map(([percentage, difficulty]) => ({
@@ -80,6 +83,7 @@ const chartOptions = computed(() => ({
       labels: {
         usePointStyle: true,
         padding: 16,
+        color: AXIS,
       },
     },
     datalabels: { display: false },
@@ -115,8 +119,10 @@ const chartOptions = computed(() => ({
         display: true,
         text: 'Percentage of Text',
         font: { size: 14, weight: 'bold' },
+        color: AXIS,
       },
       grid: { display: false },
+      ticks: { color: AXIS },
     },
     y: {
       type: 'linear',
@@ -124,14 +130,16 @@ const chartOptions = computed(() => ({
         display: true,
         text: 'Difficulty',
         font: { size: 14, weight: 'bold' },
+        color: AXIS,
       },
       min: 0,
       max: props.usePercentage ? 100 : 5,
       ticks: {
+        color: AXIS,
         stepSize: props.usePercentage ? 10 : 0.5,
         callback: (value) => props.usePercentage ? `${value}%` : value,
       },
-      grid: { color: 'rgba(0, 0, 0, 0.1)' },
+      grid: { color: GRID },
     },
   },
 }));

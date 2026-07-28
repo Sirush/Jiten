@@ -5,9 +5,14 @@
   import type { TagState } from '~/components/TriStateTag.vue';
   import ScrollPanel from 'primevue/scrollpanel';
 
-  const props = defineProps<{
-    isConnected: boolean;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      isConnected: boolean;
+      genreCounts?: Record<number, number>;
+      tagCounts?: Record<number, number>;
+    }>(),
+    { genreCounts: () => ({}), tagCounts: () => ({}) },
+  );
 
   const emit = defineEmits<{
     reset: [];
@@ -81,17 +86,39 @@
   const genreSearchQuery = ref('');
   const tagSearchQuery = ref('');
 
+  // Only hide zero-count chips once counts have actually loaded (empty = not loaded, or nothing matches).
+  const hasGenreFacets = computed(() => Object.keys(props.genreCounts).length > 0);
+  const hasTagFacets = computed(() => Object.keys(props.tagCounts).length > 0);
+
   const filteredGenres = computed(() => {
-    if (!genreSearchQuery.value) return genres.value;
     const query = genreSearchQuery.value.toLowerCase();
-    return genres.value.filter((genre) => genre.label.toLowerCase().includes(query));
+    return genres.value.filter((genre) => {
+      if (query && !genre.label.toLowerCase().includes(query)) return false;
+      // keep selected chips reachable so they can be toggled back off
+      if (includeGenres.value.includes(genre.value) || excludeGenres.value.includes(genre.value)) return true;
+      if (!hasGenreFacets.value) return true;
+      return (props.genreCounts[genre.value] ?? 0) > 0;
+    });
   });
 
   const filteredTags = computed(() => {
-    if (!tagSearchQuery.value) return tags.value;
     const query = tagSearchQuery.value.toLowerCase();
-    return tags.value.filter((tag) => tag.name.toLowerCase().includes(query));
+    return tags.value.filter((tag) => {
+      if (query && !tag.name.toLowerCase().includes(query)) return false;
+      if (includeTags.value.includes(tag.tagId) || excludeTags.value.includes(tag.tagId)) return true;
+      if (!hasTagFacets.value) return true;
+      return (props.tagCounts[tag.tagId] ?? 0) > 0;
+    });
   });
+
+  const genreLabel = (value: number, label: string): string => {
+    const c = props.genreCounts[value];
+    return hasGenreFacets.value && c != null ? `${label} (${c.toLocaleString()})` : label;
+  };
+  const tagLabel = (tagId: number, name: string): string => {
+    const c = props.tagCounts[tagId];
+    return hasTagFacets.value && c != null ? `${name} (${c.toLocaleString()})` : name;
+  };
 
   const genreFilteredCount = computed(() => filteredGenres.value.length);
   const genreTotalCount = computed(() => genres.value.length);
@@ -272,17 +299,17 @@
 </script>
 
 <template>
-  <div class="relative">
-    <Button @click="toggle($event)">
+  <div class="relative shrink-0">
+    <Button class="max-md:px-2!" aria-label="Filters" @click="toggle($event)">
       <Icon name="material-symbols:filter-list" size="1.25em" />
-      Filters
+      <span class="hidden md:inline">Filters</span>
     </Button>
     <Badge v-if="activeFilterCount > 0" :value="activeFilterCount" severity="warn" class="absolute -top-2 -right-2 pointer-events-none" />
   </div>
 
-  <Popover ref="popover" class="w-full max-w-3xl">
+  <Popover ref="popover" class="w-[min(48rem,calc(100vw_-_2rem))]">
     <div class="flex flex-col gap-4 p-3 min-w-[280px]">
-      <Tabs value="filters" :show-navigators="false">
+      <Tabs value="filters" :show-navigators="false" lazy>
         <TabList>
           <Tab value="filters">Filters</Tab>
           <Tab value="genres">Genres</Tab>
@@ -291,7 +318,7 @@
 
         <TabPanels>
           <TabPanel value="filters">
-            <div class="overflow-y-auto" style="max-height: 60vh">
+            <div class="overflow-y-auto max-md:max-h-[50vh] md:max-h-[60vh]">
             <div class="flex flex-col gap-4 pt-4">
               <FloatLabel v-if="isConnected" variant="on" class="w-full">
                 <Select
@@ -307,7 +334,7 @@
                 <label for="preferenceFilter">Status</label>
               </FloatLabel>
 
-              <Accordion multiple>
+              <Accordion multiple lazy>
                 <AccordionPanel value="content">
                   <AccordionHeader>Content</AccordionHeader>
                   <AccordionContent>
@@ -694,7 +721,7 @@
                   <TriStateTag
                     v-for="genre in filteredGenres"
                     :key="genre.value"
-                    :label="genre.label"
+                    :label="genreLabel(genre.value, genre.label)"
                     :state="includeGenres.includes(genre.value) ? 'include' : excludeGenres.includes(genre.value) ? 'exclude' : 'neutral'"
                     @update:state="(state) => updateGenreState(genre.value, state)"
                   />
@@ -722,7 +749,7 @@
                   <TriStateTag
                     v-for="tag in filteredTags"
                     :key="tag.tagId"
-                    :label="tag.name"
+                    :label="tagLabel(tag.tagId, tag.name)"
                     :state="includeTags.includes(tag.tagId) ? 'include' : excludeTags.includes(tag.tagId) ? 'exclude' : 'neutral'"
                     @update:state="(state) => updateTagState(tag.tagId, state)"
                   />

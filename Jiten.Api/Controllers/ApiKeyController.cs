@@ -22,8 +22,10 @@ public class ApiKeyController(
 
         try
         {
+            // Revoked keys are dead and offer the user no action; surfacing them leaves the settings tile
+            // with nothing but a disabled Regenerate button after a half-failed regeneration.
             var apiKey = await context.ApiKeys
-                                      .Where(k => k.UserId == userId)
+                                      .Where(k => k.UserId == userId && !k.IsRevoked)
                                       .OrderByDescending(k => k.Id)
                                       .Select(k => new
                                                    {

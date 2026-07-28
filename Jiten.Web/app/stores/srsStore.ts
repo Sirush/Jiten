@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, DueSummaryDto, DeckStreakDto, ReviewForecast30dDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto, SessionStreakDto, ReviewForecastDto } from '~/types';
 import { FsrsRating } from '~/types';
 import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
+import { DEFAULT_CARD_DISPLAY_SETTINGS } from '~/utils/defaultStudySettings';
 import { useAuthStore } from '~/stores/authStore';
 
 interface SessionReview {
@@ -106,7 +107,6 @@ interface UndoSnapshot {
 export const useSrsStore = defineStore('srs', () => {
   const { $api } = useNuxtApp();
 
-  const srsEnrolled = ref<boolean | null>(null);
   const studyDecks = ref<StudyDeckDto[]>([]);
   const overviewVersion = ref<number>(0);
   const sessionId = ref<string | null>(null);
@@ -126,6 +126,7 @@ export const useSrsStore = defineStore('srs', () => {
   const moreCardsLikely = ref(false);
   const settingsLoaded = ref(false);
   const studySettings = ref<StudySettingsDto>({
+    ...DEFAULT_CARD_DISPLAY_SETTINGS,
     newCardsPerDay: 20,
     maxReviewsPerDay: 200,
     batchSize: 100,
@@ -134,30 +135,26 @@ export const useSrsStore = defineStore('srs', () => {
     interleaving: 'Mixed',
     newCardGathering: 'TopDeck',
     reviewFrom: 'AllTracked',
-    showPitchAccent: true,
-    exampleSentencePosition: 'Back',
     exampleSentenceSorting: 'Random',
-    blurExampleSentence: false,
-    showFrequencyRank: true,
-    showKanjiBreakdown: true,
-    showWordComposition: true,
-    showWordUsedIn: true,
+    cardImageLayout: 'beside',
+    cardImagePosition: 'Back',
+    blurCardImage: true,
     showNextInterval: true,
     showKeybinds: true,
     showElapsedTime: true,
     enableSwipeGesture: true,
     countFailedReviews: true,
-    showFuriganaOnFront: false,
-    furiganaOnFrontNewOnly: false,
     autoPlayWord: true,
     autoPlaySentence: true,
     autoPlayWordOnFront: false,
     autoPlayWordOnFrontNewOnly: false,
     autoPlaySentenceOnFront: false,
+    autoPlayCustomAudio: false,
+    autoPlayCustomAudioPosition: 'Back',
+    autoPlayCustomAudioInstead: false,
     showReviewActivity: true,
     showReviewForecast: true,
     timezone: 'Europe/London',
-    showConfusableReadings: true,
     dayBoundaryScheduling: false,
     loadBalancing: true,
     easyDays: null,
@@ -234,6 +231,7 @@ export const useSrsStore = defineStore('srs', () => {
   const exampleCache = ref(new Map<string, StudyExampleSentenceDto | null>());
   const inFlightExampleKeys = new Set<string>();
   const EXAMPLE_PREFETCH_AHEAD = 4;
+  const MEDIA_WARM_AHEAD = 3;
   const sessionDirty = ref(false);
   const sessionStreak = ref<SessionStreakDto | null>(null);
   const sessionForecast = ref<ReviewForecastDto | null>(null);
@@ -506,6 +504,15 @@ export const useSrsStore = defineStore('srs', () => {
     refreshOverview();
   }
 
+  async function removeDeckWordsBatch(deckId: number, words: { wordId: number; readingIndex: number }[]) {
+    const result = await $api<{ removed: number }>(`srs/study-decks/${deckId}/words/batch-delete`, {
+      method: 'POST',
+      body: { words },
+    });
+    refreshOverview();
+    return result;
+  }
+
   async function updateDeckWordOccurrences(deckId: number, wordId: number, readingIndex: number, occurrences: number) {
     await $api(`srs/study-decks/${deckId}/words/${wordId}/${readingIndex}`, {
       method: 'PATCH',
@@ -616,6 +623,7 @@ export const useSrsStore = defineStore('srs', () => {
       // Prefetch example sentences for first 4 cards (await so the first card has its example ready)
       if (currentBatch.value.length > 0)
         await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
+      prefetchCardMedia();
     } catch (error) {
       console.error('Failed to fetch study batch:', error);
       fetchError.value = 'Failed to load cards. Please try again.';
@@ -723,6 +731,7 @@ export const useSrsStore = defineStore('srs', () => {
         fetchError.value = null;
         if (currentBatch.value.length > 0)
           await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
+        prefetchCardMedia();
         return;
       }
     }
@@ -809,6 +818,28 @@ export const useSrsStore = defineStore('srs', () => {
 
   function ensurePrefetched() {
     prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
+    warmCardMedia(currentCardIndex.value);
+  }
+
+  // Prefetch card media (image + audio) URLs for the whole loaded batch via the batch endpoint,
+  // then start byte downloads for the first few cards once the URLs are cached.
+  function prefetchCardMedia() {
+    if (!import.meta.client || currentBatch.value.length === 0) return;
+    const pairs = currentBatch.value.map(c => ({ wordId: c.wordId, readingIndex: c.readingIndex }));
+    useCardMedia().prefetch(pairs).then(() => warmCardMedia(currentCardIndex.value));
+  }
+
+  // Download media bytes for the current card and the next few. The current card is included because
+  // its back-position image and audio clip aren't mounted until flip/play.
+  function warmCardMedia(fromIndex: number) {
+    if (!import.meta.client) return;
+    const media = useCardMedia();
+    const start = Math.max(0, fromIndex);
+    const end = Math.min(start + MEDIA_WARM_AHEAD + 1, currentBatch.value.length);
+    for (let i = start; i < end; i++) {
+      const c = currentBatch.value[i];
+      if (c) media.warm(c.wordId, c.readingIndex);
+    }
   }
 
   watch(currentCard, (card) => {
@@ -1115,6 +1146,8 @@ export const useSrsStore = defineStore('srs', () => {
             wordId: snap.card.wordId,
             readingIndex: snap.card.readingIndex,
             state: revertState,
+            // Burying overwrote the due date server-side; hand back the one the card had.
+            restoreDue: snap.type === 'bury' ? snap.card.due : undefined,
           },
         });
       }
@@ -1171,22 +1204,6 @@ export const useSrsStore = defineStore('srs', () => {
     isWrappingUp.value = false;
     currentBatch.value = preWrapUpBatch.value;
     preWrapUpBatch.value = [];
-  }
-
-  async function fetchEnrollment() {
-    try {
-      const res = await $api<{ enrolled: boolean }>('srs/enrolled');
-      srsEnrolled.value = res.enrolled;
-    } catch {
-      if (srsEnrolled.value !== true) {
-        srsEnrolled.value = false;
-      }
-    }
-  }
-
-  async function enroll() {
-    const res = await $api<{ enrolled: boolean }>('srs/enroll', { method: 'POST' });
-    srsEnrolled.value = res.enrolled;
   }
 
   async function fetchSettings(force = false) {
@@ -1327,6 +1344,7 @@ export const useSrsStore = defineStore('srs', () => {
     } else {
       await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
     }
+    prefetchCardMedia();
     return true;
   }
 
@@ -1415,6 +1433,7 @@ export const useSrsStore = defineStore('srs', () => {
     addDeckWord,
     addDeckWordsBatch,
     removeDeckWord,
+    removeDeckWordsBatch,
     updateDeckWordOccurrences,
     importPreview,
     importCommit,
@@ -1438,9 +1457,6 @@ export const useSrsStore = defineStore('srs', () => {
     sessionLeeches,
     suspendLeech,
     cancelWrapUp,
-    srsEnrolled,
-    fetchEnrollment,
-    enroll,
     fetchSettings,
     updateSettings,
     resetSession,
