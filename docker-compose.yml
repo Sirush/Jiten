@@ -57,6 +57,13 @@ services:
       - BunnyCdnSecret=${BUNNYCDN_SECRET:-}
       - BunnyCdnStorageZone=${BUNNYCDN_STORAGE_ZONE:-}
       - CdnBaseUrl=${CDN_BASE_URL:-}
+      # Account-level API key; without it cache purges silently no-op and a replaced deck cover stays stale.
+      - BunnyCdnApiKey=${BUNNYCDN_API_KEY:-}
+      # User-uploaded card media lives in its own storage zone served by a token-authenticated pull zone.
+      - BunnyCdnUserStorageZone=${BUNNYCDN_USER_STORAGE_ZONE:-}
+      - BunnyCdnUserSecret=${BUNNYCDN_USER_SECRET:-}
+      - CdnSecurePullZoneUrl=${CDN_SECURE_PULL_ZONE_URL:-}
+      - CdnTokenAuthKey=${CDN_TOKEN_AUTH_KEY:-}
       - DictionaryPath=${DICTIONARY_PATH:-/path/to/system_full.dic}
       - FastTextModelPath=${FASTTEXT_MODEL_PATH:-/app/uploads/models/cc.ja.300.bin}
       - JimakuApiKey=${JIMAKU_API_KEY:-}
@@ -84,6 +91,20 @@ services:
       - IndexNow__Key=${INDEXNOW_KEY:-}
       - IndexNow__SiteUrl=${INDEXNOW_SITE_URL:-https://jiten.moe}
       - VoicevoxUrl=${VOICEVOX_URL:-http://voicevox:50021}
+      - Stripe__SecretKey=${STRIPE_SECRET_KEY:-}
+      - Stripe__WebhookSecret=${STRIPE_WEBHOOK_SECRET:-}
+      - Stripe__MonthlyPriceId=${STRIPE_MONTHLY_PRICE_ID:-}
+      - Stripe__YearlyPriceId=${STRIPE_YEARLY_PRICE_ID:-}
+      - Stripe__LifetimePriceId=${STRIPE_LIFETIME_PRICE_ID:-}
+      # Sticker price in whole cents; caps any upgrade credit granted to a switching subscriber.
+      - Stripe__LifetimePriceCents=${STRIPE_LIFETIME_PRICE_CENTS:-15000}
+      # Lifetime checkout is rejected after this instant. The default is deliberately in the past so an
+      # unconfigured deploy sells nothing; an empty value would fail to bind and break the options object.
+      - Stripe__LifetimeWindowEnd=${STRIPE_LIFETIME_WINDOW_END:-2000-01-01T00:00:00Z}
+      # Card-media storage allowance per tier, in bytes. Defaults match the code (300 MB trial / 10 GB paid)
+      # and exist here so the ceiling can be lowered without a redeploy if CDN spend runs away.
+      - JitenPlus__CardMediaStorage__TrialBytes=${JITENPLUS_TRIAL_STORAGE_BYTES:-314572800}
+      - JitenPlus__CardMediaStorage__FullBytes=${JITENPLUS_FULL_STORAGE_BYTES:-10737418240}
     volumes:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads
