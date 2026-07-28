@@ -166,7 +166,6 @@
           <div class="flex items-center">
             <Icon name="material-symbols-light:extension" class="mr-2 text-primary" size="1.5em" />
             Jiten Reader
-            <span class="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-500 text-white">NEW</span>
           </div>
         </template>
         <template #content>
@@ -191,6 +190,9 @@
           </div>
         </template>
       </Card>
+
+      <!-- Jiten MPV Section -->
+      <HomeMpvCard class="mb-4" />
 
       <!-- VNDB Character Count Userscript Section -->
       <Card class="shadow-lg mb-4">
@@ -218,7 +220,14 @@
                 </Button>
               </a>
             </div>
-            <Image src="/img/vndb_userscript.jpg" alt="VNDB Character Count userscript screenshot" class="rounded-lg w-full md:w-80" preview width="320" height="167" />
+            <Image
+              src="/img/vndb_userscript.jpg"
+              alt="VNDB Character Count userscript screenshot"
+              class="rounded-lg w-full md:w-80"
+              preview
+              width="320"
+              height="167"
+            />
           </div>
         </template>
       </Card>
