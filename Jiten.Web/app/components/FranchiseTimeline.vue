@@ -91,6 +91,24 @@
     return m;
   });
 
+  // Nodes grouped per grid cell: same-date same-type entries (e.g. a double-feature
+  // release) would otherwise stack in one cell and overlap.
+  const cellGroups = computed<{ row: number; col: number; nodes: FranchiseNode[] }[]>(() => {
+    const groups = new Map<string, { row: number; col: number; nodes: FranchiseNode[] }>();
+    for (const n of sortedNodes.value) {
+      const row = rowOf.value.get(n.deckId) ?? 0;
+      const col = columnOf.value.get(n.deckId) ?? 0;
+      const key = `${row}:${col}`;
+      let g = groups.get(key);
+      if (!g) {
+        g = { row, col, nodes: [] };
+        groups.set(key, g);
+      }
+      g.nodes.push(n);
+    }
+    return [...groups.values()];
+  });
+
   const isCurrent = (id: number) => id === props.currentDeckId;
 
   // Per-user coverage outline, matching MediaDeckCard's convention.
@@ -366,7 +384,7 @@
         <div
           class="z-10 flex items-center pl-1 text-[11px] font-semibold whitespace-nowrap text-gray-400 dark:text-gray-500"
           :style="{ gridColumn: 1, gridRow: 1 }"
-        ></div>
+        />
         <div
           v-for="(type, colIdx) in columns"
           :key="`head-${type}`"
@@ -386,49 +404,55 @@
           {{ label }}
         </div>
 
-        <!-- Node cards at (chronological row, media-type column). -->
-        <NuxtLink
-          v-for="node in sortedNodes"
-          :key="node.deckId"
-          :ref="(el: any) => setNodeEl(node.deckId, el?.$el ?? el)"
-          :to="`/decks/media/${node.deckId}/detail`"
-          class="group relative z-10 flex w-24 flex-col rounded-md border bg-surface-0 transition sm:w-28 md:w-34 dark:bg-surface-900"
-          :class="[
-            isCurrent(node.deckId) ? 'border-primary ring-2 ring-primary' : 'border-surface-200 dark:border-surface-700 hover:border-primary',
-            flashNode === node.deckId ? 'ring-2 ring-amber-400 dark:ring-amber-300' : '',
-            nodeDimmed(node.deckId) ? 'opacity-30' : 'opacity-100',
-          ]"
-          :style="{
-            gridColumn: (columnOf.get(node.deckId) ?? 0) + 2,
-            gridRow: (rowOf.get(node.deckId) ?? 0) + 2,
-            outline: flashNode === node.deckId || activeNode === node.deckId ? 'none' : coverageBorder(node),
-            outlineOffset: '-2px',
-          }"
-          @mouseenter="!isCoarsePointer && activate(node.deckId)"
-          @mouseleave="!isCoarsePointer && scheduleClear()"
-          @focus="!isCoarsePointer && activate(node.deckId)"
-          @blur="!isCoarsePointer && scheduleClear()"
-          @click.capture="onCardClick($event, node.deckId)"
+        <!-- Node cards at (chronological row, media-type column); one flex wrapper per cell
+             so same-date same-type entries sit side by side instead of stacking. -->
+        <div
+          v-for="cell in cellGroups"
+          :key="`cell-${cell.row}-${cell.col}`"
+          class="z-10 flex items-start gap-2"
+          :style="{ gridColumn: cell.col + 2, gridRow: cell.row + 2 }"
         >
-          <img
-            :src="coverSrc(node)"
-            :alt="localiseTitle(node)"
-            class="h-28 w-full rounded-t-md object-cover sm:h-32 md:h-40"
-            loading="lazy"
-            decoding="async"
-            width="136"
-            height="160"
-          />
-          <div class="flex flex-col gap-0.5 p-1.5">
-            <span class="line-clamp-2 text-xs font-medium leading-tight" :title="localiseTitle(node)">
-              {{ localiseTitle(node) }}
-            </span>
-            <div class="flex items-center justify-between gap-1 text-[11px]">
-              <span class="text-gray-500 dark:text-gray-400">{{ releaseYear(node) ?? '?' }}</span>
-              <DifficultyDisplay v-if="node.difficulty >= 0" :difficulty="node.difficulty" :difficulty-raw="node.difficultyRaw" class="text-[11px]" />
+          <NuxtLink
+            v-for="node in cell.nodes"
+            :key="node.deckId"
+            :ref="(el: any) => setNodeEl(node.deckId, el?.$el ?? el)"
+            :to="`/decks/media/${node.deckId}/detail`"
+            class="group relative flex w-24 flex-col rounded-md border bg-surface-0 transition sm:w-28 md:w-34 dark:bg-surface-900"
+            :class="[
+              isCurrent(node.deckId) ? 'border-primary ring-2 ring-primary' : 'border-surface-200 dark:border-surface-700 hover:border-primary',
+              flashNode === node.deckId ? 'ring-2 ring-amber-400 dark:ring-amber-300' : '',
+              nodeDimmed(node.deckId) ? 'opacity-30' : 'opacity-100',
+            ]"
+            :style="{
+              outline: flashNode === node.deckId || activeNode === node.deckId ? 'none' : coverageBorder(node),
+              outlineOffset: '-2px',
+            }"
+            @mouseenter="!isCoarsePointer && activate(node.deckId)"
+            @mouseleave="!isCoarsePointer && scheduleClear()"
+            @focus="!isCoarsePointer && activate(node.deckId)"
+            @blur="!isCoarsePointer && scheduleClear()"
+            @click.capture="onCardClick($event, node.deckId)"
+          >
+            <img
+              :src="coverSrc(node)"
+              :alt="localiseTitle(node)"
+              class="h-28 w-full rounded-t-md object-cover sm:h-32 md:h-40"
+              loading="lazy"
+              decoding="async"
+              width="136"
+              height="160"
+            >
+            <div class="flex flex-col gap-0.5 p-1.5">
+              <span class="line-clamp-2 text-xs font-medium leading-tight" :title="localiseTitle(node)">
+                {{ localiseTitle(node) }}
+              </span>
+              <div class="flex items-center justify-between gap-1 text-[11px]">
+                <span class="text-gray-500 dark:text-gray-400">{{ releaseYear(node) ?? '?' }}</span>
+                <DifficultyDisplay v-if="node.difficulty >= 0" :difficulty="node.difficulty" :difficulty-raw="node.difficultyRaw" class="text-[11px]" />
+              </div>
             </div>
-          </div>
-        </NuxtLink>
+          </NuxtLink>
+        </div>
       </div>
     </div>
 

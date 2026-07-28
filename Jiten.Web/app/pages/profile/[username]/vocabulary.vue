@@ -13,14 +13,17 @@
   const isOwnProfile = computed(() => auth.isAuthenticated && auth.user?.userName?.toLowerCase() === targetUsername.value.toLowerCase());
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
+  const pageSizeQuery = computed(() => (route.query.pageSize ? Number(route.query.pageSize) : undefined));
 
   const sortByOptions = ref([
     { label: 'Occurrences', value: 'occurrences' },
     { label: 'Global Frequency', value: 'globalFreq' },
   ]);
 
+  const ALL_MEDIA_TYPES = 'all';
+
   const mediaTypeOptions = computed(() => {
-    const options = [{ label: 'All Media Types', value: '' }];
+    const options = [{ label: 'All Media Types', value: ALL_MEDIA_TYPES }];
     for (const type of Object.values(MediaType).filter((v) => typeof v === 'number')) {
       options.push({
         label: getMediaTypeText(type as MediaType),
@@ -32,7 +35,7 @@
 
   const sortDescending = ref(route.query.sortOrder !== 'false' && route.query.sortOrder !== '0');
   const sortBy = ref(route.query.sortBy?.toString() || sortByOptions.value[0].value);
-  const mediaTypeFilter = ref(route.query.mediaType?.toString() || '');
+  const mediaTypeFilter = ref(route.query.mediaType?.toString() || ALL_MEDIA_TYPES);
   const display = ref(route.query.display?.toString() || 'all');
   const search = ref(route.query.search?.toString() || '');
   const debouncedSearch = ref(search.value);
@@ -55,7 +58,7 @@
 
   watch(mediaTypeFilter, (newValue) => {
     router.replace({
-      query: { ...route.query, mediaType: newValue || undefined, offset: 0 },
+      query: { ...route.query, mediaType: newValue === ALL_MEDIA_TYPES ? undefined : newValue, offset: 0 },
     });
   });
 
@@ -114,8 +117,9 @@
       pos: debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined,
       excludePos: debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined,
       hideKanaOnly: debouncedHideKanaOnly.value || undefined,
+      pageSize: pageSizeQuery.value,
     };
-    if (mediaTypeFilter.value) {
+    if (mediaTypeFilter.value !== ALL_MEDIA_TYPES) {
       params.mediaType = parseInt(mediaTypeFilter.value);
     }
     return params;
@@ -127,10 +131,19 @@
     error,
   } = await useApiFetchPaginated<AccomplishmentVocabularyDto>(`user/profile/${targetUsername.value}/accomplishments/vocabulary`, {
     query: queryParams,
-    watch: [offset, sortBy, sortDescending, mediaTypeFilter, display, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly],
+    watch: [offset, sortBy, sortDescending, mediaTypeFilter, display, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly, pageSizeQuery],
   });
 
-  const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
+  const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor, pageSize } = usePagination(response);
+
+  const listContext = computed(() => ({
+    label: `${displayUsername.value} - Vocabulary`,
+    sortLabel: sortByOptions.value.find((o) => o.value === sortBy.value)?.label,
+    sortDescending: sortDescending.value,
+    offset: offset.value,
+    totalItems: totalItems.value,
+    pageSize: pageSize.value,
+  }));
 
   useHead(() => ({
     title: `${displayUsername.value} - Vocabulary`,
@@ -207,16 +220,17 @@
         </FloatLabel>
       </VocabularyFilters>
 
-      <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="words" />
+      <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="words" :page-size="pageSize" :page-size-options="[25, 50, 100]" page-size-param="pageSize" mobile-compact />
 
       <VocabularyList
         :words="response?.data?.words ?? []"
         :status="status"
         :error="error"
+        :list-context="listContext"
         empty-message="Complete some media to see your vocabulary!"
       />
 
-      <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" :scroll-to-top-on-next="true" />
+      <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" :scroll-to-top-on-navigate="true" />
     </div>
   </div>
 </template>

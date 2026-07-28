@@ -396,10 +396,15 @@
         body: { reschedule: true },
       });
       await Promise.all([loadHealth(), loadParameters(true)]);
+      const detail = result.remapped === 0
+        ? 'No Hard reviews found to remap.'
+        : result.rescheduled
+          ? `${result.remapped} Hard reviews remapped to Again and cards rescheduled.`
+          : `${result.remapped} Hard reviews remapped to Again.`;
       toast.add({
-        severity: 'success',
-        summary: 'Remap complete',
-        detail: `${result.remapped} Hard reviews remapped to Again and cards rescheduled.`,
+        severity: result.remapped === 0 ? 'info' : 'success',
+        summary: result.remapped === 0 ? 'Nothing to remap' : 'Remap complete',
+        detail,
         life: 6000,
       });
     } catch (error: unknown) {
@@ -522,24 +527,6 @@
     const fmt = (s: number) => `${Math.round(s * 10) / 10}s`;
     return `mature ${fmt(c.matureSeconds)} · young ${fmt(c.youngSeconds)} · learning ${fmt(c.learningSeconds)}`;
   });
-
-  // Recommended retention (CMRR-style, server-computed): only surfaced when present and meaningfully
-  // different from the current setting. Never auto-applied — the user clicks "Use".
-  const recommendedRetention = computed(() => workloadCurve.value?.recommendedRetention ?? null);
-  // Once a recommendation exists the band stays mounted; we only swap its content when the slider reaches
-  // the recommended value, so passing over it doesn't unmount the band and shove the layout up.
-  const atRecommended = computed(() => {
-    const rec = recommendedRetention.value;
-    return rec != null && Math.abs(rec - Number(desiredRetention.value)) < 0.01;
-  });
-  const recommendedPct = computed(() => {
-    const rec = recommendedRetention.value;
-    return rec == null ? null : Math.round(rec * 100);
-  });
-  function applyRecommended() {
-    const rec = recommendedRetention.value;
-    if (rec != null) desiredRetention.value = Math.round(rec * 100) / 100;
-  }
 
   const hasWorkloadData = computed(() => (workloadCurve.value?.points.length ?? 0) >= 2 && (workloadCurve.value?.total ?? 0) > 0);
 
@@ -715,15 +702,6 @@
               Time uses your measured review speed: {{ speedBreakdown }}.
             </p>
 
-            <div v-if="recommendedPct != null" class="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 px-3 py-2">
-              <i :class="atRecommended ? 'pi pi-check-circle' : 'pi pi-sparkles'" class="text-emerald-600 dark:text-emerald-400 text-sm" />
-              <span class="text-sm text-emerald-800 dark:text-emerald-200">
-                Recommended ≈ <span class="font-semibold tabular-nums">{{ recommendedPct }}%</span>
-                <span class="text-emerald-700/70 dark:text-emerald-300/70"> — least review time per word remembered</span>
-              </span>
-              <Button :label="atRecommended ? 'In use' : 'Use'" size="small" severity="success" outlined class="ml-auto" :disabled="atRecommended" @click="applyRecommended" />
-            </div>
-
             <div class="flex rounded-lg bg-surface-100 dark:bg-surface-800 p-0.5 text-xs mt-3 w-fit">
               <button
                 v-for="opt in metricOptions"
@@ -752,7 +730,7 @@
       <div class="mb-5">
         <h4 class="text-md font-semibold mb-1">Optimise parameters</h4>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">
-          Analyse your review history to find the optimal FSRS parameters for your memory patterns. <br /> The more reviews you have, the more accurate the optimisation will be. It is recommended to optimise every time your number of review doubles.
+          Analyse your review history to find the optimal FSRS parameters for your memory patterns. <br /> The more reviews you have, the more accurate the optimisation will be. It is recommended to optimise every time your number of reviews doubles.
           <br />You currently have {{reviewCount}} reviews.
         </p>
 
@@ -798,11 +776,11 @@
             </div>
             <div v-if="health.neverUsesHard" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <i class="pi pi-info-circle text-sky-500 text-sm" />
-              You have never pressed <b>Hard</b>- Using it for cards you barely recalled gives the optimiser more to work with.
+              You have never pressed <b>Hard</b>. Using it for cards you barely recalled gives the optimiser more to work with.
             </div>
             <div v-if="health.neverUsesEasy" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <i class="pi pi-info-circle text-sky-500 text-sm" />
-              You have never pressed <b>Easy</b>- Reserve it for cards that felt effortless.
+              You have never pressed <b>Easy</b>. Reserve it for cards that felt effortless.
             </div>
             <div v-if="sameDayPct >= 40 && !health.likelyHardAsFail" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <i class="pi pi-info-circle text-sky-500 text-sm" />

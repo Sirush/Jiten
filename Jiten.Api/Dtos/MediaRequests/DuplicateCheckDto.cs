@@ -6,6 +6,9 @@ public class DuplicateCheckResultDto
 {
     public List<DuplicateCheckDeckDto> ExistingDecks { get; set; } = [];
     public List<DuplicateCheckRequestDto> ExistingRequests { get; set; } = [];
+
+    /// <summary>Active Update requests already filed against the same target deck, by anyone.</summary>
+    public List<DuplicateCheckRequestDto> ExistingUpdateRequests { get; set; } = [];
 }
 
 public class DuplicateCheckDeckDto

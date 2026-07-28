@@ -9,7 +9,10 @@
     currentReadingIndex?: number;
     readings?: Reading[];
     arrowKeyNav?: boolean;
-  }>(), { arrowKeyNav: true });
+    maxDefinitions?: number | null;
+    wordId?: number;
+    hiddenBehaviour?: 'gray' | 'hide';
+  }>(), { arrowKeyNav: true, maxDefinitions: null });
 
   const store = useJitenStore();
 
@@ -65,8 +68,11 @@
     <VocabularyDefinitions
       :definitions="resolvedGroups[0].jmDictDefinitions"
       :is-compact="isCompact"
+      :max-definitions="maxDefinitions"
       :current-reading-index="currentReadingIndex"
       :readings="readings"
+      :word-id="wordId"
+      :hidden-behaviour="hiddenBehaviour"
     />
   </template>
 
@@ -87,8 +93,11 @@
               v-if="group.isJmDict && group.jmDictDefinitions"
               :definitions="group.jmDictDefinitions"
               :is-compact="false"
+              :max-definitions="maxDefinitions"
               :current-reading-index="currentReadingIndex"
               :readings="readings"
+              :word-id="wordId"
+              :hidden-behaviour="hiddenBehaviour"
             />
             <div
               v-else-if="group.customDefinitions"
@@ -120,6 +129,8 @@
           :is-compact="true"
           :current-reading-index="currentReadingIndex"
           :readings="readings"
+          :word-id="wordId"
+          :hidden-behaviour="hiddenBehaviour"
         />
       </template>
       <template v-else-if="resolvedGroups[0].customDefinitions && !store.hideVocabularyDefinitions">

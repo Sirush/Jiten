@@ -7,7 +7,9 @@
   const isLoading = ref(false);
   const uploadedCount = ref<number | null>(null);
   const addedCount = ref<number | null>(null);
+  const updatedCount = ref<number | null>(null);
   const parseWordsAnkiTxt = ref(false);
+  const overwriteExisting = ref(false);
 
   async function handleAnkiFileSelect(event: any) {
     const file = event.files?.[0];
@@ -29,21 +31,20 @@
       const formData = new FormData();
       formData.append('file', file);
 
-      const result = await $api<{ parsed: number; added: number }>(`user/vocabulary/import-from-anki-txt?parseWords=${parseWordsAnkiTxt.value}`, {
-        method: 'POST',
-        body: formData,
-      });
+      const result = await $api<{ parsed: number; added: number; updated: number }>(
+        `user/vocabulary/import-from-anki-txt?parseWords=${parseWordsAnkiTxt.value}&overwriteExisting=${overwriteExisting.value}`,
+        { method: 'POST', body: formData },
+      );
 
       if (result) {
         uploadedCount.value = result.parsed;
         addedCount.value = result.added;
+        updatedCount.value = result.updated;
         emit('changed');
-        toast.add({
-          severity: 'success',
-          summary: 'Known words updated',
-          detail: `Parsed ${result.parsed} words, added ${result.added} forms.`,
-          life: 6000,
-        });
+        const detail = overwriteExisting.value
+          ? `Parsed ${result.parsed} words, added ${result.added} forms, overwrote ${result.updated}.`
+          : `Parsed ${result.parsed} words, added ${result.added} forms. Words you already track were left untouched.`;
+        toast.add({ severity: 'success', summary: 'Known words updated', detail, life: 6000 });
       }
     } catch (error) {
       console.error('Error processing Anki file:', error);
@@ -76,6 +77,16 @@
         </label>
       </div>
 
+      <div class="mb-3 flex items-center">
+        <Checkbox id="overwriteExistingAnkiTxt" v-model="overwriteExisting" :binary="true" />
+        <label for="overwriteExistingAnkiTxt" class="ml-2">
+          <span>Overwrite existing cards</span>
+          <span class="text-sm text-gray-600 dark:text-gray-400 block">
+            Marks words you are already studying as mastered, discarding their current state. Leave off to only add words you do not have yet.
+          </span>
+        </label>
+      </div>
+
       <FileUpload mode="basic" name="ankiFile" accept=".txt, .csv" :custom-upload="true" :auto="true" :choose-label="'Select .txt or .csv File'" :disabled="isLoading" class="mb-3" @select="handleAnkiFileSelect" />
 
       <div v-if="addedCount !== null || uploadedCount !== null" class="text-sm text-gray-700 dark:text-gray-300">
@@ -83,7 +94,10 @@
           Parsed from file: <strong>{{ uploadedCount }}</strong>
         </div>
         <div v-if="addedCount !== null">
-          Added: <strong class="text-green-600">{{ addedCount }}</strong>
+          Added: <strong class="text-green-600 dark:text-green-400">{{ addedCount }}</strong>
+        </div>
+        <div v-if="updatedCount">
+          Overwritten: <strong class="text-amber-600 dark:text-amber-400">{{ updatedCount }}</strong>
         </div>
       </div>
     </template>

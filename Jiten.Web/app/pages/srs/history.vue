@@ -8,16 +8,17 @@
   const route = useRoute();
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
+  const limit = computed(() => (route.query.limit ? Number(route.query.limit) : undefined));
 
   const {
     data: response,
     status,
   } = await useApiFetchPaginated<RecentReviewDto[]>('srs/review-history', {
-    query: { offset },
-    watch: [offset],
+    query: { offset, limit },
+    watch: [offset, limit],
   });
 
-  const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
+  const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor, pageSize } = usePagination(response);
 
   function ratingLabel(rating: FsrsRating) {
     return { [FsrsRating.Again]: 'Again', [FsrsRating.Hard]: 'Hard', [FsrsRating.Good]: 'Good', [FsrsRating.Easy]: 'Easy' }[rating] ?? '';
@@ -54,7 +55,7 @@
       <h1 class="text-2xl font-bold">Review History</h1>
     </div>
 
-    <PaginationControls :previous-link="previousLink" :next-link="nextLink" :start="start" :end="end" :total-items="totalItems" item-label="reviews" />
+    <PaginationControls :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="reviews" :page-size="pageSize" :page-size-options="[25, 50, 100]" />
 
     <div v-if="status === 'pending'" class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden divide-y divide-surface-100 dark:divide-surface-800">
       <div
@@ -100,11 +101,14 @@
     <PaginationControls
       :previous-link="previousLink"
       :next-link="nextLink"
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      :page-link-for="pageLinkFor"
       :start="start"
       :end="end"
       :total-items="totalItems"
       :show-summary="false"
-      :scroll-to-top-on-next="true"
+      :scroll-to-top-on-navigate="true"
     />
   </div>
 </template>

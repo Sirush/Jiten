@@ -74,9 +74,9 @@
   ];
 
   const screenshots = [
-    { src: '/img/jitenreader_popup.jpg', alt: 'Dictionary popup' },
-    { src: '/img/jitenreader_colouring.jpg', alt: 'Coloured text' },
-    { src: '/img/jitenreader_customisation.jpg', alt: 'Customisation panel' },
+    { src: '/img/jitenreader_popup.webp', alt: 'Dictionary popup' },
+    { src: '/img/jitenreader_colouring.webp', alt: 'Coloured text' },
+    { src: '/img/jitenreader_customisation.webp', alt: 'Customisation panel' },
   ];
 </script>
 
@@ -119,8 +119,8 @@
             </div>
 
             <!-- Hero Screenshot -->
-            <div class="mx-auto" style="max-width: 800px">
-              <Image src="/img/jitenreader_main.jpg" alt="Jiten Reader main interface" class="rounded-lg" preview />
+            <div class="mx-auto" style="max-width: 800px; max-height: 450px; border-radius: 6px; overflow: hidden;">
+              <Image src="/img/jitenreader_screenshot.webp" alt="Jiten Reader main interface" class="rounded-lg" preview />
             </div>
           </div>
         </template>

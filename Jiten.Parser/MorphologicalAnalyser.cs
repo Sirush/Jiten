@@ -113,14 +113,14 @@ public partial class MorphologicalAnalyser
         return (results.Count > 0 ? results[0] : [], cleanedOriginals.Count > 0 ? cleanedOriginals[0] : "");
     }
 
-    public Task<List<List<SentenceInfo>>> ParseBatch(List<string> texts, bool morphemesOnly = false, bool preserveStopToken = false,
-                                                     ParserDiagnostics? diagnostics = null,
-                                                     BenchmarkTimings? timings = null,
-                                                     byte[]? userDictCsv = null,
-                                                     List<string>? cleanedOriginals = null,
-                                                     List<int>? rawContentCharCounts = null)
+    public async Task<List<List<SentenceInfo>>> ParseBatch(List<string> texts, bool morphemesOnly = false, bool preserveStopToken = false,
+                                                           ParserDiagnostics? diagnostics = null,
+                                                           BenchmarkTimings? timings = null,
+                                                           byte[]? userDictCsv = null,
+                                                           List<string>? cleanedOriginals = null,
+                                                           List<int>? rawContentCharCounts = null)
     {
-        if (texts.Count == 0) return Task.FromResult<List<List<SentenceInfo>>>([]);
+        if (texts.Count == 0) return [];
 
         diagnostics?.TokenStages.Clear();
 
@@ -183,10 +183,11 @@ public partial class MorphologicalAnalyser
         if (SudachiInterop.StreamingAvailable)
         {
             // Diagnostics runs capture raw output and request lattice segmentation margins
-            allWordInfos = SudachiInterop.ProcessTextStreaming(configPath, combinedText, dic,
-                                                               out var rawOutput, captureRaw: diagnostics != null,
-                                                               mode: mode, userDictCsv: userDictCsv,
-                                                               emitMargins: diagnostics != null);
+            var (words, rawOutput) = await SudachiInterop.ProcessTextStreamingAsync(configPath, combinedText, dic,
+                                                                                    captureRaw: diagnostics != null,
+                                                                                    mode: mode, userDictCsv: userDictCsv,
+                                                                                    emitMargins: diagnostics != null);
+            allWordInfos = words;
             sudachiStopwatch?.Stop();
 
             if (sw != null) { timings!.SudachiFFIMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
@@ -298,6 +299,6 @@ public partial class MorphologicalAnalyser
             if (sw != null) { timings!.SentenceSplitMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
         }
 
-        return Task.FromResult(results);
+        return results;
     }
 }

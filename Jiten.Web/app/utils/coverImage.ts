@@ -2,6 +2,11 @@
 // Pure browser functions, no Nuxt context — callers resolve a Blob/File first
 // (remote URLs go through the admin/proxy-image endpoint to avoid canvas tainting).
 
+/** Cover URL for display, substituting the local placeholder for works with no art. */
+export function coverUrl(coverName: string | null | undefined): string {
+  return !coverName || coverName === 'nocover.jpg' ? '/img/nocover.jpg' : coverName;
+}
+
 export const COVER_WIDTH = 400;
 export const COVER_HEIGHT = 600; // 2:3 portrait, matches the display slot
 

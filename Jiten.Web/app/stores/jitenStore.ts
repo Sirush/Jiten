@@ -21,6 +21,33 @@ function createCookieState<T>(key: string, defaultValue: T): Ref<T> {
   return state;
 }
 
+// For flags that only ever matter client-side, so they don't ride along on every request as a cookie.
+function createLocalStorageState<T>(key: string, defaultValue: T): Ref<T> {
+  const storageKey = `jiten-${key}`;
+  const state = ref<T>(defaultValue) as Ref<T>;
+
+  if (import.meta.client) {
+    onMounted(() => {
+      try {
+        const stored = localStorage.getItem(storageKey);
+        if (stored !== null) state.value = JSON.parse(stored) as T;
+      } catch {
+        // A corrupt entry just means the default stands.
+      }
+    });
+
+    watch(state, (newValue) => {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(newValue));
+      } catch {
+        // Private-mode quota failures must not break the setting itself.
+      }
+    });
+  }
+
+  return state;
+}
+
 export const useJitenStore = defineStore('jiten', () => {
   const titleLanguage = createCookieState<TitleLanguage>('title-language', TitleLanguage.Romaji);
   const displayFurigana = createCookieState<boolean>('display-furigana', true);
@@ -90,6 +117,12 @@ export const useJitenStore = defineStore('jiten', () => {
     ensureInitialized();
   });
 
+  // Only consulted while the user lacks Jiten+; getting the tier brings the section back.
+  const hideCoverageJourney = createLocalStorageState<boolean>('hide-coverage-journey', false);
+
+  // Drives the unread dot on the home page's "what's new" strip.
+  const lastSeenUpdateId = createLocalStorageState<number>('last-seen-update-id', 0);
+
   const coverageVersion = ref(0);
 
   function bumpCoverageVersion() {
@@ -122,6 +155,8 @@ export const useJitenStore = defineStore('jiten', () => {
     kanjiScale,
     similarMediaPinnedType,
     preferredDictionaryId,
+    hideCoverageJourney,
+    lastSeenUpdateId,
     coverageVersion,
     bumpCoverageVersion,
   };

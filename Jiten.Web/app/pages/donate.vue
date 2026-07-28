@@ -1,8 +1,8 @@
 <script setup lang="ts">
-useSeoMeta({
-  title: 'Support Jiten',
-  description: 'Help support Jiten and keep it free for Japanese learners everywhere.',
-})
+  useSeoMeta({
+    title: 'Support Jiten',
+    description: 'Help support Jiten and keep it free for Japanese learners everywhere.',
+  });
 </script>
 
 <template>
@@ -17,15 +17,18 @@ useSeoMeta({
 
       <template #content>
         <p class="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-          Jiten is a free and open-source project.
-          Your support helps cover server costs and allows me to dedicate more time to developing new
-          features and improving the platform for everyone.
+          Jiten is a free and open-source project. Your support helps cover server costs and allows me to dedicate more time to developing new features and
+          improving the platform for everyone.
         </p>
 
-        <p class="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">
-          Every contribution, no matter how small, makes a real difference and helps keep Jiten
-          running and growing. Thank you for being part of this journey!
+        <p class="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
+          Every contribution, no matter how small, makes a real difference and helps keep Jiten running and growing. Thank you for being part of this journey!
         </p>
+
+        <Message severity="info" :closable="false" class="mb-6">
+          Donations are purely extra and do not include <NuxtLink to="/jiten-plus">Jiten+</NuxtLink>. If you want the Jiten+ features, subscribe
+          <NuxtLink to="/jiten-plus">there instead</NuxtLink>.
+        </Message>
 
         <Divider />
 
@@ -53,7 +56,8 @@ useSeoMeta({
         </div>
 
         <p class="text-sm text-gray-500 dark:text-gray-400 text-center">
-          Can't donate? No worries! You can simply share Jiten with your fellow learners, or why not <NuxtLink to="/contribute">contribute</NuxtLink> to the media database?
+          Can't donate? No worries! You can simply share Jiten with your fellow learners, or why not <NuxtLink to="/contribute">contribute</NuxtLink> to the
+          media database?
         </p>
       </template>
     </Card>

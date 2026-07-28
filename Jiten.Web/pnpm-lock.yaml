@@ -28,6 +28,9 @@ importers:
       '@nuxt/scripts':
         specifier: 0.13.2
         version: 0.13.2(@netlify/blobs@9.1.2)(@unhead/vue@2.1.13(vue@3.5.33(typescript@5.9.3)))(db0@0.3.4(better-sqlite3@12.11.1))(ioredis@5.11.1)(magicast@0.5.3)(typescript@5.9.3)(vue@3.5.33(typescript@5.9.3))
+      '@nuxtjs/mdc':
+        specifier: ^0.22.0
+        version: 0.22.0(magicast@0.5.3)
       '@nuxtjs/seo':
         specifier: 3.4.0
         version: 3.4.0(@netlify/blobs@9.1.2)(@unhead/vue@2.1.13(vue@3.5.33(typescript@5.9.3)))(db0@0.3.4(better-sqlite3@12.11.1))(ioredis@5.11.1)(magicast@0.5.3)(rollup@4.62.0)(unhead@2.1.15)(unstorage@1.17.5(@netlify/blobs@9.1.2)(db0@0.3.4(better-sqlite3@12.11.1))(ioredis@5.11.1))(vite@7.3.5(@types/node@25.9.3)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(yaml@2.9.0))(vue@3.5.33(typescript@5.9.3))(zod@3.25.76)

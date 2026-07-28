@@ -13,6 +13,10 @@
       type: Number,
       required: true,
     },
+    hideHeading: {
+      type: Boolean,
+      default: false,
+    },
   });
 
   const { data: kanjis, status } = useApiFetch<KanjiList[]>(
@@ -39,7 +43,7 @@
 
 <template>
   <div v-if="status === 'success' && kanjis && kanjis.length > 0" class="mt-2">
-    <h3 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm mb-2">Kanji breakdown</h3>
+    <h3 v-if="!hideHeading" class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm mb-2">Kanji breakdown</h3>
     <div class="flex flex-wrap gap-2">
       <NuxtLink
         v-for="kanji in kanjis"

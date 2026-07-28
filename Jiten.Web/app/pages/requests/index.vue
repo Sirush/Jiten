@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { MediaType, RequestStatus } from '~/types';
+import { MediaType, RequestKind, RequestStatus } from '~/types';
 import type { MediaRequestDto } from '~/types/types';
 import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
+import { getRequestKindText, getRequestKindIcon } from '~/utils/requestKindMapper';
 import { getLinkTypeText } from '~/utils/linkTypeMapper';
-import type { RequestFacets } from '~/composables/useMediaRequests';
+import type { RequestFacets, BoostBalance } from '~/composables/useMediaRequests';
 
 definePageMeta({
   middleware: ['auth'],
@@ -12,15 +13,24 @@ definePageMeta({
 
 useHead({ title: 'Media Requests - Jiten' });
 
-const { requests, totalCount, isLoading, fetchRequests, toggleUpvote, subscribe, unsubscribe, fetchMyQuota, fetchFacets, error: apiError } = useMediaRequests();
+const { requests, totalCount, isLoading, fetchRequests, toggleUpvote, subscribe, unsubscribe, fetchMyQuota, fetchBoostBalance, fetchFacets, error: apiError } = useMediaRequests();
 const facets = ref<RequestFacets | null>(null);
+
+const { isPlus, hasFeature } = useJitenPlus();
+const canBoost = computed(() => hasFeature('request-boosts'));
+const boostBalance = ref<BoostBalance | null>(null);
+const showBoostBalance = computed(() => canBoost.value && boostBalance.value !== null);
+
+function isBoostable(request: MediaRequestDto) {
+  return request.status === RequestStatus.Open || request.status === RequestStatus.InProgress;
+}
 
 function withCount(label: string, count: number | undefined) {
   return count === undefined ? label : `${label} (${count})`;
 }
 
 const authStore = useAuthStore();
-const quota = ref<{ activeCount: number; limit: number } | null>(null);
+const quota = ref<MediaRequestQuota | null>(null);
 const toast = useToast();
 const router = useRouter();
 const route = useRoute();
@@ -40,10 +50,12 @@ function parseStatusFromQuery() {
 }
 function parseSortFromQuery() { return typeof route.query.sort === 'string' ? route.query.sort : 'votes'; }
 function parseOffsetFromQuery() { return route.query.page ? (Number(route.query.page) - 1) * limit : 0; }
+function parseKindFromQuery() { return route.query.kind !== undefined ? Number(route.query.kind) as RequestKind : undefined; }
 
 const activeTab = ref(parseTabFromQuery());
 const selectedMediaType = ref<MediaType | undefined>(parseTypeFromQuery());
 const selectedStatus = ref<RequestStatus | undefined>(parseStatusFromQuery());
+const selectedKind = ref<RequestKind | undefined>(parseKindFromQuery());
 const sortBy = ref(parseSortFromQuery());
 const offset = ref(parseOffsetFromQuery());
 
@@ -65,6 +77,12 @@ const statusOptions = computed(() => [
   { label: withCount('Rejected', facets.value ? facets.value.statuses[String(RequestStatus.Rejected)] ?? 0 : undefined), value: RequestStatus.Rejected },
 ]);
 
+const kindOptions = computed(() => [
+  { label: withCount('All', facets.value?.kindTotal), value: undefined },
+  { label: withCount('New', facets.value ? facets.value.kinds[String(RequestKind.New)] ?? 0 : undefined), value: RequestKind.New },
+  { label: withCount('Update', facets.value ? facets.value.kinds[String(RequestKind.Update)] ?? 0 : undefined), value: RequestKind.Update },
+]);
+
 const sortOptions = [
   { label: 'Most Voted', value: 'votes' },
   { label: 'Newest', value: 'recent' },
@@ -83,6 +101,7 @@ function parseAttachmentsFromQuery() {
 }
 
 const selectedAttachments = ref<string | undefined>(parseAttachmentsFromQuery());
+const excludeOwnContributions = ref(route.query.excludeOwn === '1');
 
 const searchQuery = ref(typeof route.query.search === 'string' ? route.query.search : '');
 const debouncedSearch = ref(searchQuery.value);
@@ -106,10 +125,12 @@ async function loadRequests() {
     await fetchRequests({
       mediaType: selectedMediaType.value,
       status: selectedStatus.value,
+      kind: selectedKind.value,
       sort: sortBy.value,
       offset: 0,
       limit: 200,
       contributed: true,
+      excludeOwn: excludeOwnContributions.value,
       search,
       attachments: selectedAttachments.value,
     });
@@ -117,6 +138,7 @@ async function loadRequests() {
     await fetchRequests({
       mediaType: selectedMediaType.value,
       status: selectedStatus.value,
+      kind: selectedKind.value,
       sort: sortBy.value,
       offset: 0,
       limit: 200,
@@ -128,6 +150,7 @@ async function loadRequests() {
     await fetchRequests({
       mediaType: selectedMediaType.value,
       status: selectedStatus.value,
+      kind: selectedKind.value,
       sort: sortBy.value,
       offset: offset.value,
       limit,
@@ -142,8 +165,10 @@ async function loadFacets() {
   const result = await fetchFacets({
     mediaType: selectedMediaType.value,
     status: selectedStatus.value,
+    kind: selectedKind.value,
     mine: isMine.value || undefined,
     contributed: isContributed.value || undefined,
+    excludeOwn: (isContributed.value && excludeOwnContributions.value) || undefined,
     search: debouncedSearch.value.trim() || undefined,
     attachments: selectedAttachments.value,
   });
@@ -161,24 +186,24 @@ watch(selectedStatus, (status) => {
   else if (sortBy.value === 'completed') sortBy.value = 'votes';
 });
 
-watch([selectedMediaType, selectedStatus, sortBy, activeTab, debouncedSearch, selectedAttachments], () => {
+watch([selectedMediaType, selectedStatus, selectedKind, sortBy, activeTab, debouncedSearch, selectedAttachments, excludeOwnContributions], () => {
   offset.value = 0;
   loadRequests();
   loadFacets();
-  if (activeTab.value === 1) {
-    fetchMyQuota().then(q => { quota.value = q; });
-  }
+  fetchMyQuota().then(q => { quota.value = q; });
 });
 
 watch(offset, () => loadRequests());
 
-watch([activeTab, selectedMediaType, selectedStatus, sortBy, offset, debouncedSearch, selectedAttachments], () => {
+watch([activeTab, selectedMediaType, selectedStatus, selectedKind, sortBy, offset, debouncedSearch, selectedAttachments, excludeOwnContributions], () => {
   const query: Record<string, string> = {};
   if (activeTab.value === 1) query.tab = 'mine';
   else if (activeTab.value === 2) query.tab = 'contributions';
   if (selectedMediaType.value !== undefined) query.type = String(selectedMediaType.value);
+  if (selectedKind.value !== undefined) query.kind = String(selectedKind.value);
   if (debouncedSearch.value.trim()) query.search = debouncedSearch.value.trim();
   if (selectedAttachments.value) query.attachments = selectedAttachments.value;
+  if (isContributed.value && excludeOwnContributions.value) query.excludeOwn = '1';
   if (selectedStatus.value === undefined) query.status = 'all';
   else if (selectedStatus.value !== RequestStatus.Open) query.status = String(selectedStatus.value);
   if (sortBy.value !== 'votes') query.sort = sortBy.value;
@@ -195,12 +220,21 @@ async function handleUpvote(request: MediaRequestDto) {
   if (result) {
     request.hasUserUpvoted = result.upvoted;
     request.upvoteCount = result.upvoteCount;
-    if (result.upvoted) {
-      request.isSubscribed = true;
-    }
+    request.isSubscribed = result.subscribed;
   } else {
     toastApiError('Vote failed', 'Failed to update your vote. Please try again.');
   }
+}
+
+async function loadHeaderStats() {
+  quota.value = await fetchMyQuota();
+  if (isPlus.value) boostBalance.value = await fetchBoostBalance();
+}
+
+function handleBoosted(request: MediaRequestDto, payload: { boostCount: number; balance: BoostBalance }) {
+  request.boostCount = payload.boostCount;
+  request.hasUserBoosted = true;
+  boostBalance.value = payload.balance;
 }
 
 async function handleSubscribe(request: MediaRequestDto) {
@@ -245,6 +279,11 @@ function onPageChange(event: { first: number }) {
 onMounted(() => {
   loadRequests();
   loadFacets();
+  loadHeaderStats();
+});
+
+watch(isPlus, (val) => {
+  if (val && !boostBalance.value) fetchBoostBalance().then(b => { boostBalance.value = b; });
 });
 </script>
 
@@ -267,16 +306,16 @@ onMounted(() => {
       </TabList>
     </Tabs>
 
-    <div class="flex flex-wrap gap-3 my-4 items-end">
-      <div class="flex flex-col gap-1">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 my-4 items-end">
+      <div class="flex flex-col gap-1 col-span-2 sm:col-span-1">
         <label class="text-sm text-muted-color">Search</label>
         <IconField>
           <InputIcon class="pi pi-search" />
-          <InputText v-model="searchQuery" placeholder="Search titles..." class="w-56" />
+          <InputText v-model="searchQuery" placeholder="Search titles..." class="w-full" />
           <InputIcon v-if="searchQuery" class="pi pi-times cursor-pointer" @click="searchQuery = ''" />
         </IconField>
       </div>
-      <div class="flex flex-col gap-1">
+      <div class="flex flex-col gap-1 min-w-0">
         <label class="text-sm text-muted-color">Media Type</label>
         <Select
           v-model="selectedMediaType"
@@ -285,10 +324,21 @@ onMounted(() => {
           optionValue="value"
           placeholder="Media Type"
           scrollHeight="24rem"
-          class="w-40"
+          class="w-full"
         />
       </div>
-      <div class="flex flex-col gap-1">
+      <div class="flex flex-col gap-1 min-w-0">
+        <label class="text-sm text-muted-color">Request Type</label>
+        <Select
+          v-model="selectedKind"
+          :options="kindOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Request Type"
+          class="w-full"
+        />
+      </div>
+      <div class="flex flex-col gap-1 min-w-0">
         <label class="text-sm text-muted-color">Status</label>
         <Select
           v-model="selectedStatus"
@@ -296,20 +346,20 @@ onMounted(() => {
           optionLabel="label"
           optionValue="value"
           placeholder="Status"
-          class="w-40"
+          class="w-full"
         />
       </div>
-      <div class="flex flex-col gap-1">
+      <div class="flex flex-col gap-1 min-w-0">
         <label class="text-sm text-muted-color">Sort</label>
         <Select
           v-model="sortBy"
           :options="sortOptions"
           optionLabel="label"
           optionValue="value"
-          class="w-40"
+          class="w-full"
         />
       </div>
-      <div class="flex flex-col gap-1">
+      <div class="flex flex-col gap-1 min-w-0">
         <label class="text-sm text-muted-color">Attachments</label>
         <Select
           v-model="selectedAttachments"
@@ -317,9 +367,34 @@ onMounted(() => {
           optionLabel="label"
           optionValue="value"
           placeholder="Attachments"
-          class="w-44"
+          class="w-full"
         />
       </div>
+      <div v-if="isContributed" class="flex items-center gap-2 h-10 col-span-2 sm:col-span-3">
+        <Checkbox v-model="excludeOwnContributions" input-id="excludeOwnContributions" :binary="true" />
+        <label for="excludeOwnContributions" class="text-sm cursor-pointer">
+          Exclude my own requests
+        </label>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <Tag
+        v-if="quota"
+        :value="`${quota.activeCount} / ${quota.limit} active slots used`"
+        severity="secondary"
+        v-tooltip.top="
+          quota.isPlus
+            ? 'Open requests you currently have across the platform'
+            : `Open requests you currently have across the platform. Jiten+ raises this to ${quota.plusLimit} slots.`
+        "
+      />
+      <Tag
+        v-if="showBoostBalance"
+        :value="`${boostBalance!.remaining} / ${boostBalance!.limit} boosts left this month`"
+        severity="secondary"
+        v-tooltip.top="'Monthly Jiten+ boosts remaining'"
+      />
     </div>
 
     <div v-if="isLoading" class="flex justify-center py-12">
@@ -339,15 +414,14 @@ onMounted(() => {
           @click="router.push('/requests/new')"
         />
       </template>
-      <p v-else-if="isContributed">You haven't contributed to any requests yet.</p>
+      <template v-else-if="isContributed">
+        <p v-if="excludeOwnContributions">No contributions to other people's requests yet.</p>
+        <p v-else>You haven't contributed to any requests yet.</p>
+      </template>
       <p v-else>No requests found. Be the first!</p>
     </div>
 
     <template v-else>
-      <div v-if="isMine && quota" class="mb-3">
-        <Tag :value="`${quota.activeCount} / ${quota.limit} active slots used`" severity="secondary" />
-      </div>
-
       <template v-for="section in displaySections" :key="section.title">
         <div v-if="section.items.length > 0" class="mb-6" :class="{ 'opacity-50': section.muted }">
           <h3 v-if="section.title" class="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -368,6 +442,7 @@ onMounted(() => {
                       <UpvoteButton
                         :has-upvoted="request.hasUserUpvoted"
                         :upvote-count="request.upvoteCount"
+                        :boost-count="request.boostCount"
                         compact
                         @toggle="handleUpvote(request)"
                       />
@@ -376,6 +451,11 @@ onMounted(() => {
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2 flex-wrap mb-1">
                         <span class="font-semibold text-lg">{{ request.title }}</span>
+                        <Tag
+                          v-if="request.kind === RequestKind.Update"
+                          :value="getRequestKindText(request.kind)"
+                          :icon="getRequestKindIcon(request.kind)"
+                        />
                         <Tag :value="getMediaTypeText(request.mediaType)" severity="secondary" />
                         <Tag
                           :value="getRequestStatusText(request.status)"
@@ -386,10 +466,22 @@ onMounted(() => {
                         </span>
                       </div>
 
+                      <p v-if="request.kind === RequestKind.Update" class="text-sm text-muted-color truncate">
+                        Update to: {{ request.targetDeckTitle ?? 'media no longer available' }}
+                      </p>
+
                       <div class="flex items-center gap-3 text-sm text-muted-color mt-1">
                         <span v-if="request.externalLinkType" class="hidden md:flex items-center gap-1">
                           <i class="pi pi-external-link text-xs" />
                           {{ getLinkTypeText(request.externalLinkType) }}
+                        </span>
+                        <span
+                          v-if="request.boostCount > 0"
+                          class="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium"
+                          v-tooltip.top="`${request.boostCount} boost${request.boostCount === 1 ? '' : 's'} (+${request.boostCount * 5} votes)`"
+                        >
+                          <i class="pi pi-bolt text-xs" />
+                          {{ request.boostCount }}
                         </span>
                         <span v-if="request.commentCount > 0" class="flex items-center gap-1">
                           <i class="pi pi-comments text-xs" />
@@ -411,7 +503,17 @@ onMounted(() => {
                       </div>
                     </div>
 
-                    <div class="shrink-0 hidden md:block" @click.prevent>
+                    <div class="shrink-0 hidden md:flex items-center gap-2" @click.prevent>
+                      <RequestBoostButton
+                        :request-id="request.id"
+                        :boost-count="request.boostCount"
+                        :has-boosted="request.hasUserBoosted"
+                        :boostable="isBoostable(request)"
+                        :balance="boostBalance"
+                        :auto-fetch-balance="false"
+                        compact
+                        @boosted="handleBoosted(request, $event)"
+                      />
                       <RequestSubscribeButton
                         :is-subscribed="request.isSubscribed"
                         compact

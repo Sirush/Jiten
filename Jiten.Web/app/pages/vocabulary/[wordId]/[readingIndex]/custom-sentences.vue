@@ -13,6 +13,12 @@
   const { $api } = useNuxtApp();
   const confirm = useConfirm();
   const toast = useToast();
+  const { limits: planLimits, isPlus } = useJitenPlus();
+  const sentenceLimit = computed(() => planLimits.value.customSentencesPerWord);
+  const limitReachedSummary = computed(() => `Maximum of ${sentenceLimit.value} custom sentences reached`);
+  const plusUpsell = computed(() =>
+    isPlus.value ? '' : `Jiten+ raises this to ${planLimits.value.plus.customSentencesPerWord}.`,
+  );
   const wordId = Number(route.params.wordId) || 0;
   const readingIndex = Number(route.params.readingIndex) || 0;
 
@@ -79,7 +85,7 @@
       newSource.value = '';
       await loadSentences();
     } catch {
-      toast.add({ severity: 'error', summary: 'Maximum of 3 custom sentences reached', life: 3000 });
+      toast.add({ severity: 'error', summary: limitReachedSummary.value, detail: plusUpsell.value || undefined, life: 3000 });
     } finally {
       adding.value = false;
     }
@@ -153,7 +159,7 @@
 
       <h1 class="text-2xl font-bold mb-2">Custom Example Sentences</h1>
       <p class="text-sm text-surface-400 mb-6">
-        Up to 3 custom sentences for <span class="font-bold">{{ title }}</span>.
+        Up to {{ sentenceLimit }} custom sentences for <span class="font-bold">{{ title }}</span>.
         Surround words you want highlighted with <code class="bg-surface-100 dark:bg-surface-800 px-1 rounded">**</code>, e.g. <code class="bg-surface-100 dark:bg-surface-800 px-1 rounded">**{{ title }}**</code>
       </p>
 
@@ -230,7 +236,7 @@
       </template>
     </div>
 
-    <div v-if="sentences.length < 3" class="rounded-xl border border-dashed border-surface-300 dark:border-surface-600 p-4">
+    <div v-if="sentences.length < sentenceLimit" class="rounded-xl border border-dashed border-surface-300 dark:border-surface-600 p-4">
       <h2 class="text-sm font-semibold mb-3">Add a new sentence</h2>
       <div class="mb-2">
         <Textarea
@@ -273,7 +279,8 @@
     </div>
 
       <div v-else class="text-sm text-surface-400 italic">
-        Maximum of 3 custom sentences reached for this word.
+        {{ limitReachedSummary }} for this word.
+        <NuxtLink v-if="plusUpsell" to="/jiten-plus" class="text-primary not-italic hover:underline">{{ plusUpsell }}</NuxtLink>
       </div>
     </template>
   </Card>

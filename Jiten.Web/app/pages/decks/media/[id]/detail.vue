@@ -4,13 +4,19 @@
   import type { DeckDetail, Deck } from '~/types';
   import Card from 'primevue/card';
   import Skeleton from 'primevue/skeleton';
+  import { debounce } from 'perfect-debounce';
 
   const route = useRoute();
+  const router = useRouter();
   const deckId = computed(() => route.params.id as string);
   const localiseTitle = useLocaliseTitle();
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const url = computed(() => `media-deck/${route.params.id}/detail`);
+
+  const appliedSubdeckFilter = computed(() => (route.query.subdeckFilter as string) || undefined);
+  const subdeckSortQuery = computed(() => (route.query.subdeckSort as string) || undefined);
+  const subdeckSortOrderQuery = computed(() => (route.query.subdeckSortOrder as string) || undefined);
 
   const {
     data: response,
@@ -22,11 +28,60 @@
     revalidateOnClient: true,
     query: {
       offset: offset,
+      subdeckFilter: appliedSubdeckFilter,
+      subdeckSort: subdeckSortQuery,
+      subdeckSortOrder: subdeckSortOrderQuery,
     },
-    watch: [offset, deckId],
+    watch: [offset, deckId, appliedSubdeckFilter, subdeckSortQuery, subdeckSortOrderQuery],
   });
 
-  const { start, end, totalItems, previousLink, nextLink } = usePagination(response);
+  const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor } = usePagination(response);
+
+  const subdeckFilterInput = ref(appliedSubdeckFilter.value ?? '');
+
+  const pushSubdeckFilter = debounce(async (value: string) => {
+    await router.replace({ query: { ...route.query, subdeckFilter: value.trim() || undefined, offset: undefined } });
+  }, 400);
+
+  watch(subdeckFilterInput, (value) => {
+    if ((value.trim() || undefined) === appliedSubdeckFilter.value) return;
+    pushSubdeckFilter(value);
+  });
+
+  // Keeps the box in step with the URL when the user navigates back into a filtered view.
+  watch(appliedSubdeckFilter, (value) => {
+    if ((subdeckFilterInput.value.trim() || undefined) !== value) subdeckFilterInput.value = value ?? '';
+  });
+
+  const subdeckSortOptions = [
+    { label: 'Default order', value: 'order' },
+    { label: 'Reverse order', value: 'order-desc' },
+    { label: 'Easiest first', value: 'difficulty' },
+    { label: 'Hardest first', value: 'difficulty-desc' },
+  ];
+
+  const subdeckSortValue = computed(() => {
+    const sort = subdeckSortQuery.value?.toLowerCase() === 'difficulty' ? 'difficulty' : 'order';
+    return subdeckSortOrderQuery.value?.toLowerCase() === 'descending' ? `${sort}-desc` : sort;
+  });
+
+  const onSubdeckSortChange = (value: string) => {
+    const descending = value.endsWith('-desc');
+    const sort = descending ? value.slice(0, -'-desc'.length) : value;
+    router.replace({
+      query: {
+        ...route.query,
+        subdeckSort: sort === 'difficulty' ? 'Difficulty' : undefined,
+        subdeckSortOrder: descending ? 'Descending' : undefined,
+        offset: undefined,
+      },
+    });
+  };
+
+  const hasSubdecksToShow = computed(() => (response.value?.data?.subDecks?.length ?? 0) > 0);
+  // The filter is server-side, so a zero-match page must still render the controls that produced it.
+  const showSubdeckSection = computed(() => hasSubdecksToShow.value || !!appliedSubdeckFilter.value);
+  const showSubdeckControls = computed(() => totalItems.value > 25 || !!appliedSubdeckFilter.value);
 
   const jitenStore = useJitenStore();
   watch(() => jitenStore.coverageVersion, () => {
@@ -171,6 +226,8 @@
     <div v-else-if="response?.data?.mainDeck">
       <MediaDeckCard :deck="response.data.mainDeck" title-tag="h1" hide-detail-button @update:deck="updateMainDeck" />
 
+      <LazyCoverageJourneyCard :deck-id="response.data.mainDeck.deckId" />
+
       <div v-if="response.data.parentDeck != null" class="pt-4">
         This deck belongs to
         <NuxtLink :to="`/decks/media/${response.data.parentDeck.deckId}/detail`">
@@ -178,29 +235,51 @@
         </NuxtLink>
       </div>
 
-      <div v-if="response.data.subDecks.length > 0" class="pt-4">
+      <div v-if="showSubdeckSection" class="pt-4">
         <div class="flex items-baseline justify-between gap-4">
           <h2 class="font-bold">Subdecks</h2>
           <a href="#similar-media" class="text-primary text-sm cursor-pointer" @click.prevent="jumpToSimilar">
             Jump to similar media ↓
           </a>
         </div>
-        <div v-if="previousLink != null || nextLink != null" class="flex flex-col md:flex-row justify-between">
-          <div class="flex gap-8 pl-2">
-            <NuxtLink :to="previousLink" :class="previousLink == null ? 'text-gray-500 pointer-events-none' : ''">
-              Previous
-            </NuxtLink>
-            <NuxtLink :to="nextLink" :class="nextLink == null ? 'text-gray-500 pointer-events-none' : ''">
-              Next
-            </NuxtLink>
-          </div>
-          <div class="pr-2 text-gray-500 dark:text-gray-300">
-            viewing decks {{ start }}-{{ end }} from {{ totalItems }}
-            total
-          </div>
+        <div v-if="showSubdeckControls" class="flex flex-col sm:flex-row gap-2 sm:items-center pt-2">
+          <IconField class="grow">
+            <InputIcon>
+              <Icon name="material-symbols:search-rounded" />
+            </InputIcon>
+            <InputText v-model="subdeckFilterInput" type="text" placeholder="Filter subdecks by title" aria-label="Filter subdecks by title" class="w-full" />
+            <InputIcon v-if="subdeckFilterInput" class="cursor-pointer" @click="subdeckFilterInput = ''">
+              <Icon name="material-symbols:close" />
+            </InputIcon>
+          </IconField>
+          <Select
+            :model-value="subdeckSortValue"
+            :options="subdeckSortOptions"
+            option-label="label"
+            option-value="value"
+            aria-label="Sort subdecks"
+            class="sm:w-52"
+            @update:model-value="onSubdeckSortChange"
+          />
         </div>
-        <div class="flex flex-row flex-wrap gap-2 justify-center pt-4">
+        <PaginationControls
+          v-if="totalPages > 1"
+          class="pt-2"
+          :previous-link="previousLink"
+          :next-link="nextLink"
+          :current-page="currentPage"
+          :total-pages="totalPages"
+          :page-link-for="pageLinkFor"
+          :start="start"
+          :end="end"
+          :total-items="totalItems"
+          item-label="decks"
+        />
+        <div v-if="hasSubdecksToShow" class="flex flex-row flex-wrap items-stretch gap-2 justify-center pt-4">
           <MediaDeckCard v-for="deck in response.data.subDecks" :key="deck.deckId" :deck="deck" title-tag="h3" :is-compact="true" @update:deck="updateSubDeck" @parent-status-changed="updateParentStatus" />
+        </div>
+        <div v-else class="pt-6 text-center text-surface-500 dark:text-surface-400">
+          No subdecks match “{{ appliedSubdeckFilter }}”.
         </div>
       </div>
       <!--      <div v-else class="pt-4">This deck has no subdecks</div>-->

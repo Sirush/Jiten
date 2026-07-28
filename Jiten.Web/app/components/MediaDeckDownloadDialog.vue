@@ -181,6 +181,15 @@
   const excludeAllTrackedWords = ref(false);
   const excludeExampleSentences = ref(false);
 
+  // Coverage-from-known already accounts for what the user knows, so the three exclusion checkboxes are hidden
+  // there. Only the effective values below are ever sent or counted: a hidden checkbox must not filter anything.
+  const exclusionsApply = computed(() => isGlobalDynamicStudyDeck.value || downloadMode.value !== 'target' || !startFromKnown.value);
+  const effectiveExcludeKana = computed(() => exclusionsApply.value && excludeKana.value);
+  const effectiveExcludeMatureMasteredBlacklisted = computed(
+    () => exclusionsApply.value && authStore.isAuthenticated && excludeMatureMasteredBlacklisted.value
+  );
+  const effectiveExcludeAllTrackedWords = computed(() => exclusionsApply.value && authStore.isAuthenticated && excludeAllTrackedWords.value);
+
   // Stats
   const currentSliderMax = ref(wordCount.value);
   const debouncedCurrentCardAmount = ref(0);
@@ -209,8 +218,8 @@
 
   const requiresAccurateCardAmount = computed(() => {
     if (downloadMode.value === 'target') return true;
-    if (excludeKana.value) return true;
-    if (authStore.isAuthenticated && (excludeMatureMasteredBlacklisted.value || excludeAllTrackedWords.value)) return true;
+    if (effectiveExcludeKana.value) return true;
+    if (effectiveExcludeMatureMasteredBlacklisted.value || effectiveExcludeAllTrackedWords.value) return true;
     return false;
   });
 
@@ -294,19 +303,32 @@
     }
   );
 
+  // Both overrides below force exclusions on; each restores what the user had chosen once it stops applying,
+  // so a forced tick can never outlive the mode that forced it.
+  let exclusionsBeforeLearn: boolean | null = null;
   watch(
     () => format.value,
     (newFormat) => {
       if (newFormat === DeckFormat.Learn) {
+        exclusionsBeforeLearn ??= excludeMatureMasteredBlacklisted.value;
         excludeMatureMasteredBlacklisted.value = true;
+      } else if (exclusionsBeforeLearn !== null) {
+        excludeMatureMasteredBlacklisted.value = exclusionsBeforeLearn;
+        exclusionsBeforeLearn = null;
       }
     }
   );
 
-  watch(startFromKnown, (val) => {
-    if (!val && downloadMode.value === 'target' && authStore.isAuthenticated) {
+  let exclusionsBeforeStartFromKnown: [boolean, boolean] | null = null;
+  watch([startFromKnown, downloadMode], () => {
+    const forcing = downloadMode.value === 'target' && !startFromKnown.value && authStore.isAuthenticated;
+    if (forcing) {
+      exclusionsBeforeStartFromKnown ??= [excludeMatureMasteredBlacklisted.value, excludeAllTrackedWords.value];
       excludeMatureMasteredBlacklisted.value = true;
       excludeAllTrackedWords.value = true;
+    } else if (exclusionsBeforeStartFromKnown) {
+      [excludeMatureMasteredBlacklisted.value, excludeAllTrackedWords.value] = exclusionsBeforeStartFromKnown;
+      exclusionsBeforeStartFromKnown = null;
     }
   });
 
@@ -436,9 +458,9 @@
   // --- Helpers ---
   function buildFilterPayload() {
     let payload: any = {
-      excludeKana: excludeKana.value,
-      excludeMatureMasteredBlacklisted: excludeMatureMasteredBlacklisted.value,
-      excludeAllTrackedWords: excludeAllTrackedWords.value,
+      excludeKana: effectiveExcludeKana.value,
+      excludeMatureMasteredBlacklisted: effectiveExcludeMatureMasteredBlacklisted.value,
+      excludeAllTrackedWords: effectiveExcludeAllTrackedWords.value,
     };
 
     if (downloadMode.value === 'target') {
@@ -609,6 +631,12 @@
       }
     } catch (err) {
       console.error('Error:', err);
+      toast.add({
+        severity: 'error',
+        summary: 'Download failed',
+        detail: extractApiError(err, 'Could not generate the deck. Please try again.'),
+        life: 6000,
+      });
     } finally {
       downloading.value = false;
       downloadStatusMessage.value = '';

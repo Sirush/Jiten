@@ -26,5 +26,7 @@ export function usePagination<T>(response: Ref<PaginatedResponse<T> | null | und
     return { query: { ...route.query, offset: Math.min(r.totalItems, r.currentOffset + r.pageSize) } };
   });
 
-  return { currentPage, pageSize, totalItems, start, end, previousLink, nextLink };
+  const pageLinkFor = (page: number) => ({ query: { ...route.query, offset: Math.max(0, (page - 1) * pageSize.value) } });
+
+  return { currentPage, totalPages, pageSize, totalItems, start, end, previousLink, nextLink, pageLinkFor };
 }

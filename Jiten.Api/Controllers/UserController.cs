@@ -23,7 +23,6 @@ namespace Jiten.Api.Controllers;
 
 [ApiController]
 [Route("api/user")]
-[ApiExplorerSettings(IgnoreApi = true)]
 [Authorize]
 public class UserController(
     ICurrentUserService userService,
@@ -36,6 +35,7 @@ public class UserController(
     IConnectionMultiplexer redis,
     IDeckWordResolver deckWordResolver,
     IDeckDownloadService downloadService,
+    IUserLimitsService userLimits,
     ILogger<UserController> logger) : ControllerBase
 {
     /// <summary>
@@ -47,6 +47,11 @@ public class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
+        return Results.Ok(await ComputeKnownWordAmountAsync(userId));
+    }
+
+    private async Task<KnownWordAmountDto> ComputeKnownWordAmountAsync(string userId)
+    {
         var fsrsCards = await userContext.FsrsCards
                                          .AsNoTracking()
                                          .Where(uk => uk.UserId == userId)
@@ -178,22 +183,22 @@ public class UserController(
                 redundantForms++;
         }
 
-        return Results.Ok(new KnownWordAmountDto
-                          {
-                              Young = youngWords,
-                              YoungForm = youngForms,
-                              Mature = matureWords,
-                              MatureForm = matureForms,
-                              Mastered = masteredWords,
-                              MasteredForm = masteredForms,
-                              Blacklisted = blacklistedWords,
-                              BlacklistedForm = blacklistedForms,
-                              WordSetMastered = wsMasteredWordIds.Count,
-                              WordSetMasteredForm = wsMasteredForms,
-                              WordSetBlacklisted = wsBlacklistedWordIds.Count,
-                              WordSetBlacklistedForm = wsBlacklistedForms,
-                              RedundantForms = redundantForms
-                          });
+        return new KnownWordAmountDto
+               {
+                   Young = youngWords,
+                   YoungForm = youngForms,
+                   Mature = matureWords,
+                   MatureForm = matureForms,
+                   Mastered = masteredWords,
+                   MasteredForm = masteredForms,
+                   Blacklisted = blacklistedWords,
+                   BlacklistedForm = blacklistedForms,
+                   WordSetMastered = wsMasteredWordIds.Count,
+                   WordSetMasteredForm = wsMasteredForms,
+                   WordSetBlacklisted = wsBlacklistedWordIds.Count,
+                   WordSetBlacklistedForm = wsBlacklistedForms,
+                   RedundantForms = redundantForms
+               };
     }
 
     /// <summary>
@@ -589,7 +594,13 @@ public class UserController(
         _ => null
     };
 
+    /// <summary>Second precision is the resolution shared by Anki exports and Jiten's own logs.</summary>
+    private static DateTime TruncateToSecond(DateTime value) => new(value.Ticks - value.Ticks % TimeSpan.TicksPerSecond, value.Kind);
+
     private static int CountLapsesFromLogs(List<FsrsReviewLogExportDto> logs)
+        => CountLapsesFromLogs(logs.Select(l => (l.Rating, DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime, l.ReviewDuration)));
+
+    private static int CountLapsesFromLogs(IEnumerable<(FsrsRating Rating, DateTime ReviewDateTime, int? ReviewDuration)> logs)
     {
         var scheduler = new FsrsScheduler(enableFuzzing: false);
         var tempCard = new FsrsCard("", 0, 0);
@@ -597,8 +608,7 @@ public class UserController(
         foreach (var log in logs.OrderBy(l => l.ReviewDateTime))
         {
             var prevState = tempCard.State;
-            var reviewDt = DateTimeOffset.FromUnixTimeSeconds(log.ReviewDateTime).UtcDateTime;
-            var result = scheduler.ReviewCard(tempCard, log.Rating, reviewDt, log.ReviewDuration);
+            var result = scheduler.ReviewCard(tempCard, log.Rating, log.ReviewDateTime, log.ReviewDuration);
             if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
                 lapses++;
             tempCard = result.UpdatedCard;
@@ -620,7 +630,8 @@ public class UserController(
     /// </summary>
     [HttpPost("vocabulary/import-from-anki-txt")]
     [Consumes("multipart/form-data")]
-    public async Task<IResult> AddKnownFromAnkiTxt(IFormFile? file, [FromQuery] bool parseWords = false)
+    public async Task<IResult> AddKnownFromAnkiTxt(IFormFile? file, [FromQuery] bool parseWords = false,
+                                                   [FromQuery] bool overwriteExisting = false)
     {
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
@@ -658,15 +669,15 @@ public class UserController(
         var parsedWords = parseWords
             ? await Parser.Parser.ParseText(contextFactory, combinedText)
             : await Parser.Parser.GetWordsDirectLookup(contextFactory, validWords);
-        var added = await userService.AddKnownWords(parsedWords);
+        var result = await userService.AddKnownWords(parsedWords, overwriteExisting);
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
         backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
 
-        logger.LogInformation("User imported words from Anki TXT: UserId={UserId}, ParsedCount={ParsedCount}, AddedCount={AddedCount}",
-                              userId, parsedWords.Count, added);
-        return Results.Ok(new { parsed = parsedWords.Count, added });
+        logger.LogInformation("User imported words from Anki TXT: UserId={UserId}, ParsedCount={ParsedCount}, AddedCount={AddedCount}, UpdatedCount={UpdatedCount}",
+                              userId, parsedWords.Count, result.Inserted, result.Updated);
+        return Results.Ok(new { parsed = parsedWords.Count, added = result.Inserted, updated = result.Updated });
     }
 
     /// <summary>
@@ -802,13 +813,17 @@ public class UserController(
                     continue;
                 }
 
-                // Update existing card
-                existingCard.State = state;
-                existingCard.Stability = stability;
-                existingCard.Difficulty = difficulty;
-                existingCard.Due = wrapper.Card.Due;
-                existingCard.LastReview = wrapper.Card.LastReview;
-                existingCard.Step = state == FsrsState.Learning ? (byte?)0 : null;
+                // Scheduling belongs to whichever side was studied most recently, so someone who kept
+                // reviewing in Jiten does not get pulled back to a stale Anki schedule.
+                if (existingCard.LastReview == null || wrapper.Card.LastReview > existingCard.LastReview)
+                {
+                    existingCard.State = state;
+                    existingCard.Stability = stability;
+                    existingCard.Difficulty = difficulty;
+                    existingCard.Due = wrapper.Card.Due;
+                    existingCard.LastReview = wrapper.Card.LastReview;
+                    existingCard.Step = state == FsrsState.Learning ? (byte?)0 : null;
+                }
 
                 cardsToUpdate.Add(existingCard);
                 cardToAnkiMap[existingCard] = wrapper;
@@ -878,20 +893,20 @@ public class UserController(
             // Handle review logs
             var logsToAdd = new List<FsrsReviewLog>();
             var allCards = cardsToAdd.Concat(cardsToUpdate).ToList();
+            var updatedCards = cardsToUpdate.ToHashSet();
 
             foreach (var card in allCards)
             {
                 var key = (card.WordId, card.ReadingIndex);
 
-                // For updated cards, remove old review logs
-                if (cardsToUpdate.Contains(card))
-                {
-                    userContext.FsrsReviewLogs.RemoveRange(card.ReviewLogs);
-                }
-
                 // Get ALL review logs for this card (including from duplicates)
                 if (!processedPairs.TryGetValue(key, out var processed))
                     continue;
+
+                // Jiten's own history is kept and Anki's merged into it. A review already stored for the
+                // same second is that same review re-imported, so repeating an import adds nothing.
+                var knownReviewTimes = card.ReviewLogs.Select(l => TruncateToSecond(l.ReviewDateTime)).ToHashSet();
+                var mergedLogs = new List<FsrsReviewLog>();
 
                 foreach (var log in processed.AllReviewLogs)
                 {
@@ -899,11 +914,22 @@ public class UserController(
                     if (log.Rating is < FsrsRating.Again or > FsrsRating.Easy)
                         continue;
 
-                    logsToAdd.Add(new FsrsReviewLog
-                                  {
-                                      CardId = card.CardId, Rating = log.Rating, ReviewDateTime = log.ReviewDateTime,
-                                      ReviewDuration = log.ReviewDuration,
-                                  });
+                    if (!knownReviewTimes.Add(TruncateToSecond(log.ReviewDateTime)))
+                        continue;
+
+                    mergedLogs.Add(new FsrsReviewLog
+                                   {
+                                       CardId = card.CardId, Rating = log.Rating, ReviewDateTime = log.ReviewDateTime,
+                                       ReviewDuration = log.ReviewDuration,
+                                   });
+                }
+
+                logsToAdd.AddRange(mergedLogs);
+
+                if (updatedCards.Contains(card) && mergedLogs.Count > 0)
+                {
+                    card.Lapses = CountLapsesFromLogs(card.ReviewLogs.Concat(mergedLogs)
+                                                          .Select(l => (l.Rating, l.ReviewDateTime, l.ReviewDuration)));
                 }
             }
 
@@ -955,6 +981,9 @@ public class UserController(
         await WordFormHelper.RemoveRedundantKanaSrsCards(userContext, wordFormCache, userId, wordId, readingIndex);
         await userContext.SaveChangesAsync();
 
+        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        await userContext.SaveChangesAsync();
+
         return Results.Ok();
     }
 
@@ -969,6 +998,10 @@ public class UserController(
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
         await userService.RemoveKnownWord(wordId, readingIndex);
+
+        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        await userContext.SaveChangesAsync();
+
         return Results.Ok();
     }
 
@@ -979,6 +1012,10 @@ public class UserController(
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
         await userService.BlacklistWords([new DeckWord { WordId = wordId, ReadingIndex = readingIndex }]);
+
+        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        await userContext.SaveChangesAsync();
+
         return Results.Ok();
     }
 
@@ -2318,9 +2355,9 @@ public class UserController(
                        .Select(x => new DeckWord { WordId = x.WordId, ReadingIndex = x.ReadingIndex, Occurrences = x.Occurrences })
                        .ToList();
 
-        var applied = state == "mastered"
+        var applied = (state == "mastered"
             ? await userService.AddKnownWords(entities)
-            : await userService.BlacklistWords(entities);
+            : await userService.BlacklistWords(entities)).Inserted;
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userService.UserId!);
         await userContext.SaveChangesAsync();
@@ -2859,6 +2896,64 @@ public class UserController(
 
     #endregion
 
+    #region Profile Vocabulary Stats
+
+    /// <summary>
+    /// Get aggregate known-word counts for a user profile.
+    /// </summary>
+    [HttpGet("profile/{username}/vocabulary-stats")]
+    [AllowAnonymous]
+    [SwaggerOperation(Summary = "Get aggregate vocabulary knowledge counts for a user profile")]
+    public async Task<IResult> GetProfileVocabularyStats(string username)
+    {
+        var user = await userContext.Users
+                                    .AsNoTracking()
+                                    .FirstOrDefaultAsync(u => u.NormalizedUserName == username.ToUpperInvariant());
+
+        if (user == null)
+            return Results.NotFound(new { message = "Profile not found" });
+
+        var targetUserId = user.Id;
+        var currentUserId = userService.UserId;
+        var isOwnProfile = currentUserId == targetUserId;
+
+        if (!isOwnProfile)
+        {
+            var profile = await userContext.UserProfiles
+                                           .AsNoTracking()
+                                           .FirstOrDefaultAsync(p => p.UserId == targetUserId);
+
+            if (profile is not { IsPublic: true })
+                return Results.NotFound(new { message = "Profile not found" });
+        }
+
+        // Counting loads every FSRS card for the user; this endpoint is anonymous and crawlable.
+        var redisDb = redis.GetDatabase();
+        var cacheKey = $"jiten:profile-vocab:{targetUserId}";
+
+        var cached = await redisDb.StringGetAsync(cacheKey);
+        if (!cached.IsNullOrEmpty)
+        {
+            var hit = JsonSerializer.Deserialize<ProfileVocabularyStatsDto>(cached!);
+            if (hit != null) return Results.Ok(hit);
+        }
+
+        var amounts = await ComputeKnownWordAmountAsync(targetUserId);
+        var dto = new ProfileVocabularyStatsDto
+                  {
+                      Young = amounts.Young,
+                      Mature = amounts.Mature,
+                      Mastered = amounts.Mastered,
+                      WordSetMastered = amounts.WordSetMastered
+                  };
+
+        await redisDb.StringSetAsync(cacheKey, JsonSerializer.Serialize(dto), expiry: TimeSpan.FromMinutes(5));
+
+        return Results.Ok(dto);
+    }
+
+    #endregion
+
     #region Kanji Grid
 
     /// <summary>
@@ -3014,65 +3109,47 @@ public class UserController(
     }
 
     [HttpPost("example-sentences/{wordId}/{readingIndex}")]
-    public async Task<IResult> AddCustomExampleSentence(int wordId, byte readingIndex, [FromBody] UpsertUserExampleSentenceRequest request)
-    {
-        var userId = userService.UserId;
-        if (userId == null) return Results.Unauthorized();
-        if (!MarkerRegex.IsMatch(request.Text)) return Results.BadRequest("Text must contain at least one **word** marker.");
-        if (request.Text.Length > 150) return Results.BadRequest("Text must be 150 characters or fewer.");
-        if (request.Source?.Length > 150) return Results.BadRequest("Source must be 150 characters or fewer.");
-
-        var count = await userContext.UserExampleSentences
-            .CountAsync(e => e.UserId == userId && e.WordId == wordId && e.ReadingIndex == readingIndex);
-        if (count >= 3) return Results.BadRequest("Maximum of 3 custom sentences per word.");
-
-        var sentence = new UserExampleSentence
-        {
-            UserId = userId,
-            WordId = wordId,
-            ReadingIndex = readingIndex,
-            Text = request.Text,
-            Source = request.Source,
-            SortOrder = (byte)count
-        };
-
-        userContext.UserExampleSentences.Add(sentence);
-        await userContext.SaveChangesAsync();
-
-        return Results.Ok(new UserExampleSentenceDto
-        {
-            UserExampleSentenceId = sentence.UserExampleSentenceId,
-            Text = sentence.Text,
-            Source = sentence.Source,
-            SortOrder = sentence.SortOrder
-        });
-    }
+    public Task<IResult> AddCustomExampleSentence(int wordId, byte readingIndex, [FromBody] UpsertUserExampleSentenceRequest request)
+        => CreateUserExampleSentence(wordId, readingIndex, request.Text, request.Source);
 
     [HttpPost("example-sentences/{wordId}/{readingIndex}/favourite")]
-    public async Task<IResult> FavouriteExampleSentence(int wordId, byte readingIndex, [FromBody] FavouriteExampleSentenceRequest request)
+    public Task<IResult> FavouriteExampleSentence(int wordId, byte readingIndex, [FromBody] FavouriteExampleSentenceRequest request)
+        => CreateUserExampleSentence(wordId, readingIndex, request.Text, request.Source);
+
+    private async Task<IResult> CreateUserExampleSentence(int wordId, byte readingIndex, string text, string? source)
     {
         var userId = userService.UserId;
         if (userId == null) return Results.Unauthorized();
-        if (!MarkerRegex.IsMatch(request.Text)) return Results.BadRequest("Text must contain at least one **word** marker.");
-        if (request.Text.Length > 150) return Results.BadRequest("Text must be 150 characters or fewer.");
-        if (request.Source?.Length > 150) return Results.BadRequest("Source must be 150 characters or fewer.");
+        if (!MarkerRegex.IsMatch(text)) return Results.BadRequest("Text must contain at least one **word** marker.");
+        if (text.Length > 150) return Results.BadRequest("Text must be 150 characters or fewer.");
+        if (source?.Length > 150) return Results.BadRequest("Source must be 150 characters or fewer.");
 
-        var count = await userContext.UserExampleSentences
-            .CountAsync(e => e.UserId == userId && e.WordId == wordId && e.ReadingIndex == readingIndex);
-        if (count >= 3) return Results.BadRequest("Maximum of 3 custom sentences per word.");
+        var saved = await userContext.UserExampleSentences
+            .Where(e => e.UserId == userId && e.WordId == wordId && e.ReadingIndex == readingIndex)
+            .ToListAsync();
 
-        var sentence = new UserExampleSentence
+        // Clients only track the starred state in memory, so a reload re-offers a sentence that is
+        // already saved; saving it again must not spend another slot.
+        var sentence = saved.FirstOrDefault(e => e.Text == text);
+
+        if (sentence == null)
         {
-            UserId = userId,
-            WordId = wordId,
-            ReadingIndex = readingIndex,
-            Text = request.Text,
-            Source = request.Source,
-            SortOrder = (byte)count
-        };
+            var limits = await userLimits.GetLimitsAsync(userId);
+            if (saved.Count >= limits.CustomSentencesPerWord) return Results.BadRequest(LimitMessages.CustomSentencesPerWord(limits));
 
-        userContext.UserExampleSentences.Add(sentence);
-        await userContext.SaveChangesAsync();
+            sentence = new UserExampleSentence
+            {
+                UserId = userId,
+                WordId = wordId,
+                ReadingIndex = readingIndex,
+                Text = text,
+                Source = source,
+                SortOrder = (byte)saved.Count
+            };
+
+            userContext.UserExampleSentences.Add(sentence);
+            await userContext.SaveChangesAsync();
+        }
 
         return Results.Ok(new UserExampleSentenceDto
         {
@@ -3254,6 +3331,71 @@ public class UserController(
             .ToDictionaryAsync(e => e.WordId, e => e.Text);
 
         return Results.Ok(meanings);
+    }
+
+    #endregion
+
+    #region Hidden Definitions
+
+    [HttpGet("hidden-definitions/{wordId}")]
+    public async Task<IResult> GetHiddenDefinitions(int wordId)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var mask = await userContext.UserHiddenDefinitions
+                                    .AsNoTracking()
+                                    .Where(e => e.UserId == userId && e.WordId == wordId)
+                                    .Select(e => e.HiddenMask)
+                                    .FirstOrDefaultAsync();
+
+        return Results.Ok(new UserHiddenDefinitionsDto { WordId = wordId, HiddenIndices = UserHiddenDefinition.ToIndices(mask) });
+    }
+
+    [HttpPut("hidden-definitions/{wordId}")]
+    public async Task<IResult> UpdateHiddenDefinitions(int wordId, [FromBody] UpdateUserHiddenDefinitionsRequest request)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        var mask = UserHiddenDefinition.ToMask(request.HiddenIndices);
+
+        var entry = await userContext.UserHiddenDefinitions
+                                     .FirstOrDefaultAsync(e => e.UserId == userId && e.WordId == wordId);
+
+        if (mask == 0)
+        {
+            if (entry != null) userContext.UserHiddenDefinitions.Remove(entry);
+        }
+        else if (entry == null)
+        {
+            userContext.UserHiddenDefinitions.Add(new UserHiddenDefinition { UserId = userId, WordId = wordId, HiddenMask = mask });
+        }
+        else
+        {
+            entry.HiddenMask = mask;
+        }
+
+        await userContext.SaveChangesAsync();
+
+        return Results.Ok(new UserHiddenDefinitionsDto { WordId = wordId, HiddenIndices = UserHiddenDefinition.ToIndices(mask) });
+    }
+
+    [HttpPost("hidden-definitions/batch")]
+    public async Task<IResult> GetHiddenDefinitionsBatch([FromBody] List<int> wordIds)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+        if (wordIds is not { Count: > 0 and <= 200 }) return Results.BadRequest();
+
+        var distinct = wordIds.Distinct().ToList();
+        var entries = await userContext.UserHiddenDefinitions
+                                       .AsNoTracking()
+                                       .Where(e => e.UserId == userId && distinct.Contains(e.WordId))
+                                       .Select(e => new { e.WordId, e.HiddenMask })
+                                       .ToListAsync();
+
+        return Results.Ok(entries.ToDictionary(e => e.WordId, e => UserHiddenDefinition.ToIndices(e.HiddenMask)));
     }
 
     #endregion

@@ -5,6 +5,7 @@
   const toast = useToast();
 
   const stateOptions = [
+    { label: 'New', value: 0 },
     { label: 'Learning', value: 1 },
     { label: 'Review', value: 2 },
     { label: 'Relearning', value: 3 },
@@ -22,6 +23,7 @@
 
   const actionOptions = [
     { label: 'Change State', value: 'change-state' },
+    { label: 'Restore Cards', value: 'restore-state' },
     { label: 'Push Due Date', value: 'push-due' },
     { label: 'Reset Schedule', value: 'reset-schedule' },
     { label: 'Delete Cards', value: 'delete-cards' },
@@ -132,6 +134,8 @@
         if (staggerBatchSize.value && staggerBatchSize.value > 0) desc += `, staggered in batches of ${staggerBatchSize.value}`;
         return desc;
       }
+      case 'restore-state':
+        return 'Return all matching cards to Review (or Learning if never studied), keeping their scheduling. Use this to bulk-unsuspend, unmaster or unblacklist.';
       case 'reset-schedule':
         return 'Reset all matching cards to Learning state, clearing scheduling data but keeping review history.';
       case 'delete-cards':
@@ -231,6 +235,10 @@
         </Message>
         <Message v-if="action === 'reset-schedule'" severity="info" :closable="false">
           This will reset scheduling data (stability, difficulty) and set cards back to Learning. Review history is preserved.
+        </Message>
+        <Message v-if="action === 'restore-state'" severity="info" :closable="false">
+          This puts cards back into normal review rotation: cards with existing scheduling return to Review, cards never studied return to Learning. Stability,
+          difficulty and review history are kept.
         </Message>
 
         <p v-if="actionDescription && canPreview" class="text-sm text-muted-color italic">

@@ -5,11 +5,16 @@ namespace Jiten.Api.Dtos.Requests;
 
 public class CreateMediaRequestRequest
 {
-    [Required, MaxLength(300)]
-    public required string Title { get; set; }
+    /// <summary>Optional only for update requests, where it falls back to the target deck's title.</summary>
+    [MaxLength(300)]
+    public string? Title { get; set; }
 
     [Required]
     public MediaType MediaType { get; set; }
+
+    public MediaRequestKind Kind { get; set; } = MediaRequestKind.New;
+
+    public int? TargetDeckId { get; set; }
 
     [MaxLength(500)]
     public string? ExternalUrl { get; set; }
@@ -51,6 +56,9 @@ public class EditRequestDescriptionRequest
 
     [MaxLength(500)]
     public string? ExternalUrl { get; set; }
+
+    /// <summary>Retargets an update request. Omitted leaves the current target untouched.</summary>
+    public int? TargetDeckId { get; set; }
 }
 
 public class AdminEditMediaRequestRequest
@@ -60,6 +68,10 @@ public class AdminEditMediaRequestRequest
 
     [Required]
     public MediaType MediaType { get; set; }
+
+    public MediaRequestKind Kind { get; set; } = MediaRequestKind.New;
+
+    public int? TargetDeckId { get; set; }
 
     [MaxLength(500)]
     public string? ExternalUrl { get; set; }

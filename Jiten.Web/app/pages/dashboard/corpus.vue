@@ -944,7 +944,7 @@
     font-size: 0.85em;
   }
 
-  :global(.dark-mode) details code {
+  :global(.dark-mode details code) {
     background: var(--p-surface-700);
     color: var(--p-surface-100);
   }

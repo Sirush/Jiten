@@ -6,6 +6,7 @@ using Jiten.Core;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.User;
+using Jiten.Core.Services;
 using Jiten.Parser.Tests.Integration.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -176,6 +177,59 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task StaticDeck_BatchRemoveWords()
+    {
+        await SeedJmDictWords(1, 10);
+
+        var createReq = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckType = 2, name = "Batch Remove Test", downloadType = 1, order = 4, minFrequency = 0, maxFrequency = 0, excludeKana = false, excludeMatureMasteredBlacklisted = true, excludeAllTrackedWords = false });
+        var createRes = await _client.SendAsync(createReq);
+        var deckResult = await createRes.Content.ReadFromJsonAsync<IdResult>();
+        var deckId = deckResult!.UserStudyDeckId;
+
+        var words = Enumerable.Range(1, 10).Select(i => new { wordId = i, readingIndex = 0, occurrences = 1 }).ToArray();
+        var batchReq = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{deckId}/words/batch")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { words });
+        await _client.SendAsync(batchReq);
+
+        var removeWords = Enumerable.Range(1, 5).Select(i => new { wordId = i, readingIndex = 0 }).ToArray();
+        var removeReq = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{deckId}/words/batch-delete")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { words = removeWords });
+        var removeRes = await _client.SendAsync(removeReq);
+        removeRes.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var removeBody = await removeRes.Content.ReadFromJsonAsync<JsonElement>();
+        removeBody.GetProperty("removed").GetInt32().Should().Be(5);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var count = await userDb.UserStudyDeckWords.CountAsync(w => w.UserStudyDeckId == deckId);
+        count.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task StaticDeck_BatchRemove_OtherUserDeckReturnsNotFound()
+    {
+        await SeedJmDictWords(1, 3);
+
+        var createReq = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckType = 2, name = "Ownership Test", downloadType = 1, order = 4, minFrequency = 0, maxFrequency = 0, excludeKana = false, excludeMatureMasteredBlacklisted = true, excludeAllTrackedWords = false });
+        var createRes = await _client.SendAsync(createReq);
+        var deckResult = await createRes.Content.ReadFromJsonAsync<IdResult>();
+        var deckId = deckResult!.UserStudyDeckId;
+
+        var removeReq = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{deckId}/words/batch-delete")
+            .WithUser(TestUsers.UserB)
+            .WithJsonContent(new { words = new[] { new { wordId = 1, readingIndex = 0 } } });
+        var removeRes = await _client.SendAsync(removeReq);
+        removeRes.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task StaticDeck_UpdateWordOccurrences()
     {
         await SeedJmDictWords(200, 200);
@@ -266,9 +320,10 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task DeckLimit_50Decks()
+    public async Task DeckLimit_BlocksBeyondFreeAllowance()
     {
-        for (var i = 0; i < 50; i++)
+        var freeDeckLimit = new JitenPlusLimitsOptions().StudyDecks.Free;
+        for (var i = 0; i < freeDeckLimit; i++)
         {
             var req = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
                 .WithUser(TestUsers.UserA)
@@ -282,6 +337,7 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
             .WithJsonContent(new { deckType = 2, name = "Overflow", downloadType = 1, order = 4, minFrequency = 0, maxFrequency = 0, excludeKana = false, excludeMatureMasteredBlacklisted = true, excludeAllTrackedWords = false });
         var overflowRes = await _client.SendAsync(overflowReq);
         overflowRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await overflowRes.Content.ReadAsStringAsync()).Should().Contain(freeDeckLimit.ToString());
     }
 
     [Fact]
@@ -340,23 +396,26 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
 
 
     [Fact]
-    public async Task BatchAdd_RejectsWhenExceeding200KTotalLimit()
+    public async Task BatchAdd_RejectsWhenExceedingFreeWordTotal()
     {
-        // Fill 5 decks with 40,000 words each = 200,000 total
+        var freeWordLimit = new JitenPlusLimitsOptions().StudyDeckWords.Free;
+        const int deckCount = 5;
+        var perDeck = freeWordLimit / deckCount;
+
         var deckIds = new List<int>();
-        for (var d = 0; d < 5; d++)
+        for (var d = 0; d < deckCount; d++)
         {
             var res = await CreateStaticDeck($"Deck {d}");
             deckIds.Add((await res.Content.ReadFromJsonAsync<IdResult>())!.UserStudyDeckId);
 
             using var scope = factory.Services.CreateScope();
             var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
-            for (var i = 0; i < 40_000; i++)
+            for (var i = 0; i < perDeck; i++)
             {
                 userDb.UserStudyDeckWords.Add(new UserStudyDeckWord
                 {
                     UserStudyDeckId = deckIds[d],
-                    WordId = d * 40_000 + i + 1,
+                    WordId = d * perDeck + i + 1,
                     ReadingIndex = 0,
                     SortOrder = i
                 });
@@ -364,15 +423,15 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
             await userDb.SaveChangesAsync();
         }
 
-        // Total is 200,000. Adding 1 word should exceed 200K
+        // The user is exactly at the free allowance, so one more word must be refused.
         var words = new[] { new { wordId = 900_001, readingIndex = 0, occurrences = 1 } };
-        var batchReq = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{deckIds[4]}/words/batch")
+        var batchReq = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{deckIds[^1]}/words/batch")
             .WithUser(TestUsers.UserA)
             .WithJsonContent(new { words });
         var batchRes = await _client.SendAsync(batchReq);
         batchRes.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await batchRes.Content.ReadAsStringAsync();
-        body.Should().Contain("200,000");
+        body.Should().Contain(freeWordLimit.ToString("N0"));
     }
 
     [Fact]

@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
@@ -29,6 +30,8 @@ using Jiten.Api.Middleware;
 using StackExchange.Redis;
 using IPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
 
+ThreadPool.SetMinThreads(64, 64);
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.AddJsonFile(Path.Combine(Environment.CurrentDirectory, "..", "Shared", "sharedsettings.json"), optional: true,
@@ -37,6 +40,9 @@ builder.Configuration.AddJsonFile("sharedsettings.json", optional: true, reloadO
 builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddEnvironmentVariables();
+
+// Lock down the native image decoder before anything can hand it an uploaded file.
+ImageMagickHardening.Configure();
 
 // Suppress verbose HTTP client logging
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
@@ -64,6 +70,8 @@ builder.Services.AddSwaggerGen(c =>
 
     c.UseInlineDefinitionsForEnums();
     c.EnableAnnotations();
+
+    c.CustomSchemaIds(SwaggerSchemaId.For);
     c.SchemaFilter<EnumSchemaFilter>();
     c.DocumentFilter<EnumDocumentFilter>();
 
@@ -201,7 +209,9 @@ if (enableOtlpExporter)
                    .SetResourceBuilder(resourceBuilder)
                    .AddAspNetCoreInstrumentation()
                    .AddHttpClientInstrumentation()
-                   .AddRuntimeInstrumentation();
+                   .AddRuntimeInstrumentation()
+                   .AddMeter(CoverageJourneyService.MeterName)
+                   .AddMeter(Jiten.Api.Services.Stripe.BillingTelemetry.MeterName);
 
                if (enableConsoleExporter)
                {
@@ -232,6 +242,14 @@ if (enableOtlpExporter)
 
     // Configure OpenTelemetry Logging
     builder.Logging.ClearProviders();
+    // Keep a console sink alongside OTLP: when the OTLP pipeline is the only sink, an outage or a
+    // process death leaves `docker logs` empty and the incident unreconstructable.
+    builder.Logging.AddSimpleConsole(options =>
+    {
+        options.SingleLine = true;
+        options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
+        options.UseUtcTimestamp = true;
+    });
     builder.Logging.AddOpenTelemetry(options =>
     {
         options.SetResourceBuilder(resourceBuilder);
@@ -369,8 +387,21 @@ builder.Services.AddScoped<Microsoft.AspNetCore.Identity.UI.Services.IEmailSende
 builder.Services.AddScoped<Jiten.Api.Services.IEmailService, Jiten.Api.Services.EmailService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<IJitenPlusService, JitenPlusService>();
+builder.Services.Configure<Jiten.Core.Services.CardMediaStorageOptions>(
+    builder.Configuration.GetSection(Jiten.Core.Services.CardMediaStorageOptions.SectionName));
+builder.Services.AddScoped<ICardMediaQuotaService, CardMediaQuotaService>();
+builder.Services.Configure<Jiten.Core.Services.JitenPlusLimitsOptions>(
+    builder.Configuration.GetSection(Jiten.Core.Services.JitenPlusLimitsOptions.SectionName));
+builder.Services.AddScoped<IUserLimitsService, UserLimitsService>();
+builder.Services.AddSingleton<IBillingAlertService, BillingAlertService>();
+builder.Services.Configure<Jiten.Api.Services.Stripe.StripeOptions>(builder.Configuration.GetSection("Stripe"));
+builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Api.Services.Stripe.StripeGateway>();
+builder.Services.AddScoped<Jiten.Api.Services.Stripe.StripeService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
 builder.Services.AddSingleton<Jiten.Core.Services.DeckVectorService>();
+builder.Services.AddScoped<IRoadmapDataLoader, RoadmapDataLoader>();
+builder.Services.AddScoped<ICoverageJourneyService, CoverageJourneyService>();
 builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
 builder.Services.AddScoped<IStudyDeckMembershipService, StudyDeckMembershipService>();
 builder.Services.AddScoped<IDeckDownloadService, DeckDownloadService>();
@@ -496,7 +527,49 @@ builder.Services.AddRateLimiter(options =>
         return RateLimitPartition.GetFixedWindowLimiter(partitionKey,
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 2, Window = TimeSpan.FromMinutes(5),
+                PermitLimit = 5, Window = TimeSpan.FromMinutes(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
+    options.AddPolicy("journey", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20, Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
+    options.AddPolicy("freq-list-create", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5, Window = TimeSpan.FromMinutes(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
+    options.AddPolicy("card-media-upload", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetSlidingWindowLimiter(partitionKey,
+            _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 60, Window = TimeSpan.FromSeconds(60), SegmentsPerWindow = 6,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
                 AutoReplenishment = true
             });
@@ -511,6 +584,22 @@ builder.Services.AddRateLimiter(options =>
                 PermitLimit = 10, Window = TimeSpan.FromSeconds(60),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
                 AutoReplenishment = true
+            });
+    });
+
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        var policy = context.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+        if (policy != "card-media-upload")
+            return RateLimitPartition.GetNoLimiter("unlimited");
+
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetConcurrencyLimiter(partitionKey,
+            _ => new ConcurrencyLimiterOptions
+            {
+                PermitLimit = 3, QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 5
             });
     });
 
@@ -544,6 +633,22 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddResponseCaching();
 builder.Services.AddMemoryCache();
 
+var allowPrivateNetworkOrigins = builder.Environment.IsDevelopment();
+
+static bool IsPrivateNetworkOrigin(string origin)
+{
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri) || !IPAddress.TryParse(uri.Host, out var ip))
+        return false;
+
+    var octets = ip.GetAddressBytes();
+    if (octets.Length != 4)
+        return false;
+
+    return octets[0] == 10
+           || (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31)
+           || (octets[0] == 192 && octets[1] == 168);
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowSpecificOrigin", policy =>
@@ -559,6 +664,9 @@ builder.Services.AddCors(options =>
                 {
                     return true;
                 }
+
+                if (allowPrivateNetworkOrigins && IsPrivateNetworkOrigin(origin))
+                    return true;
 
                 return origin == "https://jiten.moe" ||
                        origin == "https://kizuna-texthooker-ui.fly.dev" ||
@@ -584,6 +692,10 @@ builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
 builder.Services.AddScoped<RecomputeVectorsJob>();
+builder.Services.AddScoped<StripeReconcileJob>();
+builder.Services.AddScoped<DecrementPromoCreditsJob>();
+builder.Services.AddScoped<FrequencyListJob>();
+builder.Services.AddScoped<RoadmapJob>();
 
 builder.Services.AddHangfire(configuration =>
                                  configuration.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -661,8 +773,17 @@ builder.Services.AddHangfireServer((options) =>
 builder.Services.AddHangfireServer((options) =>
 {
     options.ServerName = "CoverageServer";
-    options.Queues = ["coverage"];
+    options.Queues = [CoverageQueues.Incremental];
     options.WorkerCount = 4;
+});
+
+// Single worker: a full recompute scans all of DeckWords, so concurrent runs thrash the shared
+// buffer pool and slow every other query rather than finishing any sooner.
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "CoverageFullServer";
+    options.Queues = [CoverageQueues.Full];
+    options.WorkerCount = 1;
 });
 
 builder.Services.AddHangfireServer((options) =>
@@ -738,6 +859,24 @@ if (!app.Environment.IsEnvironment("Testing"))
         "webnovel-sync-sweep",
         job => job.Sweep(),
         Cron.Daily(5));
+
+    recurringJobs.AddOrUpdate<StripeReconcileJob>(
+        "stripe-reconcile",
+        job => job.Reconcile(),
+        Cron.Daily(6));
+
+    recurringJobs.AddOrUpdate<DecrementPromoCreditsJob>(
+        "promo-credits-decrement",
+        job => job.Run(),
+        Cron.Daily(1));
+
+    // Auto-update lists are regenerated at the end of ComputationJob.RecomputeFrequencies instead of on a schedule.
+    recurringJobs.RemoveIfExists("freq-list-auto-update");
+
+    recurringJobs.AddOrUpdate<FrequencyListJob>(
+        "freq-list-transient-cleanup",
+        job => job.CleanupTransientLists(),
+        Cron.Daily(3));
 }
 
 app.UseResponseCompression();

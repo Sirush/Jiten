@@ -8,6 +8,7 @@
     total: number;
     highlight?: string;
     collapsedCount?: number;
+    hideHeading?: boolean;
   }>();
 
   const convertToRuby = useConvertToRuby();
@@ -92,7 +93,7 @@
 
 <template>
   <div v-if="total > 0" class="mt-4">
-    <h3 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm mb-2">
+    <h3 v-if="!hideHeading" class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm mb-2">
       Used in {{ total }} word{{ total === 1 ? '' : 's' }}
     </h3>
     <div

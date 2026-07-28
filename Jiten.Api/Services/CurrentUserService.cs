@@ -62,26 +62,12 @@ public class CurrentUserService(
 
         return keysSet.ToDictionary(k => k, k =>
         {
-            var hasWordSetState = setDerivedStates.TryGetValue((k.WordId, k.ReadingIndex), out var setState);
-
+            // An existing card always wins over word-set membership, matching coverage,
+            // the known-word counters and the scheduler, which all ignore set state once a card exists.
             if (fsrsCardDict.TryGetValue(k, out var card))
-            {
-                var cardStates = GetKnownStatesFromCard(card);
+                return GetKnownStatesFromCard(card);
 
-                // A terminal word-set membership (Blacklisted/Mastered) must never present as Due:
-                // a stale scheduled Due on the card is suppressed in favour of the parked state.
-                if (cardStates.Contains(KnownState.Due) && hasWordSetState &&
-                    setState is WordSetStateType.Blacklisted or WordSetStateType.Mastered)
-                {
-                    return setState == WordSetStateType.Blacklisted
-                        ? [KnownState.Blacklisted]
-                        : [KnownState.Mastered];
-                }
-
-                return cardStates;
-            }
-
-            if (hasWordSetState)
+            if (setDerivedStates.TryGetValue((k.WordId, k.ReadingIndex), out var setState))
             {
                 return setState switch
                 {
@@ -217,17 +203,18 @@ public class CurrentUserService(
         return result.TryGetValue(key, out var states) ? states : [KnownState.New];
     }
 
-    public Task<int> AddKnownWords(IEnumerable<DeckWord> deckWords) =>
-        UpsertCardsWithState(deckWords, FsrsState.Mastered);
+    public Task<VocabularyUpsertResult> AddKnownWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true) =>
+        UpsertCardsWithState(deckWords, FsrsState.Mastered, overwriteExisting);
 
-    public Task<int> BlacklistWords(IEnumerable<DeckWord> deckWords) =>
-        UpsertCardsWithState(deckWords, FsrsState.Blacklisted);
+    public Task<VocabularyUpsertResult> BlacklistWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true) =>
+        UpsertCardsWithState(deckWords, FsrsState.Blacklisted, overwriteExisting);
 
-    private async Task<int> UpsertCardsWithState(IEnumerable<DeckWord> deckWords, FsrsState targetState)
+    // overwriteExisting=false leaves cards the user already has at their current state, preserving study history.
+    private async Task<VocabularyUpsertResult> UpsertCardsWithState(IEnumerable<DeckWord> deckWords, FsrsState targetState, bool overwriteExisting)
     {
-        if (!IsAuthenticated) return 0;
+        if (!IsAuthenticated) return new VocabularyUpsertResult(0, 0);
         var words = deckWords?.ToList() ?? [];
-        if (words.Count == 0) return 0;
+        if (words.Count == 0) return new VocabularyUpsertResult(0, 0);
 
         var wordIds = words.Select(w => w.WordId).Distinct().ToList();
 
@@ -249,7 +236,7 @@ public class CurrentUserService(
                 pairs.Add(key);
         }
 
-        if (pairs.Count == 0) return 0;
+        if (pairs.Count == 0) return new VocabularyUpsertResult(0, 0);
 
         DateTime now = DateTime.UtcNow;
         List<int> pairWordIds = pairs.Select(p => p.WordId).Distinct().ToList();
@@ -260,6 +247,7 @@ public class CurrentUserService(
                                   .ToDictionary(e => (e.WordId, e.ReadingIndex));
 
         List<FsrsCard> toInsert = new();
+        var updated = 0;
 
         foreach (var p in pairs)
         {
@@ -268,9 +256,10 @@ public class CurrentUserService(
                 toInsert.Add(new FsrsCard(UserId!, p.WordId, p.ReadingIndex, due: now, lastReview: now,
                                            state: targetState));
             }
-            else
+            else if (overwriteExisting && existingUk.State != targetState)
             {
                 existingUk.State = targetState;
+                updated++;
             }
         }
 
@@ -292,14 +281,23 @@ public class CurrentUserService(
             var retrySet = retryExisting.DistinctBy(e => (e.WordId, e.ReadingIndex))
                                         .ToDictionary(e => (e.WordId, e.ReadingIndex));
 
-            foreach (var p in pairs)
-                if (retrySet.TryGetValue(p, out var card))
-                    card.State = targetState;
+            // The inserts were detached, so nothing was created on this path however the first attempt was counted.
+            updated = 0;
+            if (overwriteExisting)
+            {
+                foreach (var p in pairs)
+                    if (retrySet.TryGetValue(p, out var card) && card.State != targetState)
+                    {
+                        card.State = targetState;
+                        updated++;
+                    }
+            }
 
             await userContext.SaveChangesAsync();
+            return new VocabularyUpsertResult(0, updated);
         }
 
-        return toInsert.Count;
+        return new VocabularyUpsertResult(toInsert.Count, updated);
     }
 
     public async Task AddKnownWord(int wordId, byte readingIndex)

@@ -60,11 +60,13 @@ public class JitenDbContext : DbContext
 
     public DbSet<MediaRequest> MediaRequests { get; set; }
     public DbSet<MediaRequestUpvote> MediaRequestUpvotes { get; set; }
+    public DbSet<MediaRequestBoost> MediaRequestBoosts { get; set; }
     public DbSet<MediaRequestSubscription> MediaRequestSubscriptions { get; set; }
     public DbSet<MediaRequestComment> MediaRequestComments { get; set; }
     public DbSet<MediaRequestUpload> MediaRequestUploads { get; set; }
     public DbSet<RequestActivityLog> RequestActivityLogs { get; set; }
     public DbSet<Notification> Notifications { get; set; }
+    public DbSet<SiteUpdate> SiteUpdates { get; set; }
 
     public JitenDbContext()
     {
@@ -730,6 +732,7 @@ public class JitenDbContext : DbContext
             entity.HasKey(mr => mr.Id);
             entity.Property(mr => mr.Id).ValueGeneratedOnAdd();
             entity.Property(mr => mr.Title).IsRequired().HasMaxLength(300);
+            entity.Property(mr => mr.Kind).IsRequired().HasDefaultValue(MediaRequestKind.New).HasSentinel(default(MediaRequestKind));
             entity.Property(mr => mr.MediaType).IsRequired();
             entity.Property(mr => mr.ExternalUrl).HasMaxLength(500);
             entity.Property(mr => mr.Description).HasMaxLength(1000);
@@ -737,8 +740,16 @@ public class JitenDbContext : DbContext
             entity.Property(mr => mr.AdminNote).HasMaxLength(500);
             entity.Property(mr => mr.RequesterId).IsRequired().HasMaxLength(36);
             entity.Property(mr => mr.UpvoteCount).HasDefaultValue(0);
+            entity.Property(mr => mr.BoostCount).HasDefaultValue(0);
             entity.Property(mr => mr.CreatedAt).IsRequired();
             entity.Property(mr => mr.UpdatedAt).IsRequired();
+
+            // SetNull, not Restrict: deleting a deck must not be blocked by, or cascade into, request history.
+            // An Update request whose target was deleted therefore has a null TargetDeckId, which read paths handle.
+            entity.HasOne(mr => mr.TargetDeck)
+                  .WithMany()
+                  .HasForeignKey(mr => mr.TargetDeckId)
+                  .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(mr => mr.FulfilledDeck)
                   .WithMany()
@@ -767,6 +778,10 @@ public class JitenDbContext : DbContext
                   .HasDatabaseName("IX_MediaRequest_RequesterId");
             entity.HasIndex(mr => mr.Title)
                   .HasDatabaseName("IX_MediaRequest_Title");
+            entity.HasIndex(mr => mr.Kind)
+                  .HasDatabaseName("IX_MediaRequest_Kind");
+            entity.HasIndex(mr => mr.TargetDeckId)
+                  .HasDatabaseName("IX_MediaRequest_TargetDeckId");
         });
 
         modelBuilder.Entity<MediaRequestUpvote>(entity =>
@@ -785,6 +800,25 @@ public class JitenDbContext : DbContext
             entity.HasIndex(u => new { u.MediaRequestId, u.UserId })
                   .IsUnique()
                   .HasDatabaseName("IX_MediaRequestUpvote_RequestId_UserId");
+        });
+
+        modelBuilder.Entity<MediaRequestBoost>(entity =>
+        {
+            entity.ToTable("MediaRequestBoosts", "jiten");
+            entity.HasKey(b => b.Id);
+            entity.Property(b => b.Id).ValueGeneratedOnAdd();
+            entity.Property(b => b.UserId).IsRequired().HasMaxLength(36);
+            entity.Property(b => b.CreatedAt).IsRequired();
+
+            entity.HasOne(b => b.MediaRequest)
+                  .WithMany(mr => mr.Boosts)
+                  .HasForeignKey(b => b.MediaRequestId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(b => new { b.MediaRequestId, b.UserId })
+                  .HasDatabaseName("IX_MediaRequestBoost_RequestId_UserId");
+            entity.HasIndex(b => new { b.UserId, b.CreatedAt })
+                  .HasDatabaseName("IX_MediaRequestBoost_UserId_CreatedAt");
         });
 
         modelBuilder.Entity<MediaRequestSubscription>(entity =>
@@ -911,6 +945,29 @@ public class JitenDbContext : DbContext
             }
             entity.HasIndex(n => n.CreatedAt)
                   .HasDatabaseName("IX_Notification_CreatedAt");
+        });
+
+        modelBuilder.Entity<SiteUpdate>(entity =>
+        {
+            entity.ToTable("SiteUpdates", "jiten");
+            entity.HasKey(u => u.Id);
+            entity.Property(u => u.Id).ValueGeneratedOnAdd();
+            entity.Property(u => u.Title).IsRequired().HasMaxLength(200);
+            entity.Property(u => u.BodyMarkdown).IsRequired();
+            entity.Property(u => u.NotificationTeaser).HasMaxLength(300);
+            entity.Property(u => u.CreatedAt).IsRequired();
+
+            if (isNpgsql)
+            {
+                entity.HasIndex(u => u.PublishedAt)
+                      .IsDescending(true)
+                      .HasDatabaseName("IX_SiteUpdate_PublishedAt");
+            }
+            else
+            {
+                entity.HasIndex(u => u.PublishedAt)
+                      .HasDatabaseName("IX_SiteUpdate_PublishedAt");
+            }
         });
 
         modelBuilder.Entity<DifficultyVote>(entity =>

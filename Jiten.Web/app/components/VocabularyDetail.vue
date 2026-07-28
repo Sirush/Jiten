@@ -64,6 +64,8 @@
     return word.value?.alternativeReadings.sort((a, b) => b.frequencyPercentage - a.frequencyPercentage) || [];
   });
 
+  const mediaReadings = computed(() => toMediaReadings(word.value?.alternativeReadings));
+
   const LANG_NAMES: Record<string, string> = {
     eng: 'English', por: 'Portuguese', dut: 'Dutch', fre: 'French', ger: 'German', ita: 'Italian',
     spa: 'Spanish', rus: 'Russian', chi: 'Chinese', kor: 'Korean', lat: 'Latin', gre: 'Greek',
@@ -180,6 +182,7 @@
   const bandSize = 0.5;
 
   const customSentences = ref<UserExampleSentenceDto[]>([]);
+  const { limits: planLimits } = useJitenPlus();
 
   async function loadCustomSentences() {
     if (!authStore.isAuthenticated) return;
@@ -191,6 +194,8 @@
       customSentences.value = [];
     }
   }
+
+  const customSentenceTexts = computed(() => customSentences.value.map(s => s.text));
 
   const exampleSentences = ref<ExampleSentence[]>([]);
   const canLoadExampleSentences = ref(true);
@@ -343,11 +348,12 @@
             <h1 class="text-gray-500 dark:text-gray-300 text-sm">Meanings</h1>
             <div class="pl-2">
               <ClientOnly>
-                <VocabularyDictionaryDefinitions :resolved-groups="resolvedGroups" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" />
+                <VocabularyDictionaryDefinitions :resolved-groups="resolvedGroups" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" :word-id="props.wordId" />
                 <template #fallback>
-                  <VocabularyDefinitions :definitions="word.definitions" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" />
+                  <VocabularyDefinitions :definitions="word.definitions" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" :word-id="props.wordId" />
                 </template>
               </ClientOnly>
+              <HiddenDefinitionsToggle :word-id="props.wordId" class="mt-2" />
               <CustomMeaning :word-id="props.wordId" editable class="mt-2" />
             </div>
           </div>
@@ -380,6 +386,17 @@
           </ClientOnly>
 
           <KanjiBreakdown :key="`${wordId}-${currentReadingIndex}`" :word-id="wordId" :reading-index="currentReadingIndex" />
+
+          <div v-if="authStore.isAuthenticated" class="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h1 class="text-gray-500 dark:text-gray-300 text-sm">Card media</h1>
+            <CardMediaEditor
+              :key="`media-${wordId}-${currentReadingIndex}`"
+              :word-id="wordId"
+              :reading-index="currentReadingIndex"
+              :readings="mediaReadings"
+              compact
+            />
+          </div>
         </div>
 
         <div class="md:min-w-64">
@@ -482,7 +499,7 @@
                   <div v-if="exampleSentences.length > 0" class="border-b border-surface-200 dark:border-surface-700 my-2" />
                 </template>
                 <template v-if="exampleSentences.length > 0">
-                  <ExampleSentenceEntry v-for="(exampleSentence, index) in exampleSentences" :key="index" :example-sentence="exampleSentence" :show-source="true" :word-id="props.wordId" :reading-index="currentReadingIndex" :at-limit="customSentences.length >= 3" @favourited="loadCustomSentences()" />
+                  <ExampleSentenceEntry v-for="(exampleSentence, index) in exampleSentences" :key="index" :example-sentence="exampleSentence" :show-source="true" :word-id="props.wordId" :reading-index="currentReadingIndex" :at-limit="customSentences.length >= planLimits.customSentencesPerWord" :saved-texts="customSentenceTexts" @favourited="loadCustomSentences()" />
                 </template>
                 <template v-else-if="isLoadingExampleSentences">
                   <div v-for="i in 3" :key="i" class="flex flex-col mb-2">
@@ -526,6 +543,10 @@
 <style scoped>
   th {
     font-weight: normal;
+  }
+
+  :deep(.p-accordioncontent-wrapper) {
+    min-width: 0;
   }
 
   :deep(.sort-mode-select) {

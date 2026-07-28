@@ -553,6 +553,53 @@ public class DeckVectorService
     }
 
     /// <summary>
+    /// Finds decks similar to a <i>set</i> of decks (e.g. everything a user has completed) by scoring against
+    /// the set's centroid. Members of the set are excluded from the results. Vectors are L2-normalized, so the
+    /// centroid of a coherent set stays meaningful; a set spanning unrelated genres yields a flat centroid and
+    /// correspondingly weak similarities, which is the honest outcome rather than a failure.
+    ///
+    /// When <paramref name="allowed"/> is supplied, only decks in that set are scored. This keeps the ranking
+    /// filter-aware: taking a global top-N and intersecting it with a narrow filter afterwards can collapse to
+    /// a handful of decks, whereas ranking within the filter returns up to <paramref name="limit"/> of it.
+    /// </summary>
+    public List<(int DeckId, float Similarity)> FindSimilarToSet(IReadOnlyCollection<int> deckIds, int limit,
+                                                                 IReadOnlySet<int>? allowed = null)
+    {
+        if (deckIds.Count == 0 || limit <= 0)
+            return [];
+
+        var members = deckIds as HashSet<int> ?? deckIds.ToHashSet();
+
+        float[]? centroid = null;
+        var counted = 0;
+
+        foreach (var deckId in members)
+        {
+            if (!_vectors.TryGetValue(deckId, out var vector))
+                continue;
+
+            centroid ??= new float[vector.Length];
+            if (vector.Length != centroid.Length)
+                continue;
+
+            for (var i = 0; i < vector.Length; i++)
+                centroid[i] += vector[i];
+            counted++;
+        }
+
+        if (centroid is null || counted == 0)
+            return [];
+
+        for (var i = 0; i < centroid.Length; i++)
+            centroid[i] /= counted;
+
+        if (!L2Normalize(centroid))
+            return [];
+
+        return TopK(centroid, limit, members.Contains, allowed is null ? null : allowed.Contains);
+    }
+
+    /// <summary>
     /// Recommendation entry point: picks the right similarity strategy for the deck. Short/saturated-regime
     /// source decks (few unique words, raw cosine unreliable) are gated by distinctive-vocabulary overlap;
     /// everything else takes the cheap pure-cosine path. Callers don't need to know the gating internals.
@@ -746,7 +793,8 @@ public class DeckVectorService
     }
 
     /// <summary>Maintains a bounded ascending list of the best <paramref name="limit"/> hits — O(N·limit), no full sort.</summary>
-    private List<(int DeckId, float Similarity)> TopK(float[] query, int limit, Func<int, bool> exclude)
+    private List<(int DeckId, float Similarity)> TopK(float[] query, int limit, Func<int, bool> exclude,
+                                                      Func<int, bool>? include = null)
     {
         if (limit <= 0)
             return [];
@@ -756,7 +804,7 @@ public class DeckVectorService
 
         foreach (var (id, vec) in _vectors)
         {
-            if (exclude(id))
+            if (exclude(id) || (include != null && !include(id)))
                 continue;
 
             var sim = Cosine(query, vec);

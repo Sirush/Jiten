@@ -46,6 +46,9 @@ const getMediaTypePrefix = (mediaType?: MediaType): string => {
   }
 };
 
+const AXIS = '#6b7280';
+const GRID = 'rgba(107, 114, 128, 0.15)';
+
 // Colours matching DifficultyDisplay.vue (Tailwind color values)
 const difficultyColours = [
   'rgba(21, 128, 61, 0.8)',   // green-700 - Beginner
@@ -139,6 +142,7 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => ({
       labels: {
         usePointStyle: true,
         padding: 16,
+        color: AXIS,
       },
     },
     datalabels: { display: false },
@@ -177,8 +181,10 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => ({
         display: true,
         text: props.isParentDeck ? 'Progress Through Series' : 'Progress Through Text',
         font: { size: 14, weight: 'bold' },
+        color: AXIS,
       },
       grid: { display: false },
+      ticks: { color: AXIS },
     },
     y: {
       type: 'linear',
@@ -186,14 +192,16 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => ({
         display: true,
         text: 'Difficulty',
         font: { size: 14, weight: 'bold' },
+        color: AXIS,
       },
       min: 0,
       max: props.usePercentage ? 100 : 5,
       ticks: {
+        color: AXIS,
         stepSize: props.usePercentage ? 10 : 0.5,
         callback: (value) => props.usePercentage ? `${value}%` : value,
       },
-      grid: { color: 'rgba(0, 0, 0, 0.1)' },
+      grid: { color: GRID },
     },
   },
 }));
@@ -211,7 +219,6 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => ({
 <style scoped>
 .chart-container {
   width: 100%;
-  background: #fff;
   border-radius: 8px;
   padding-top: 1rem;
 }

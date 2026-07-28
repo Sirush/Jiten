@@ -362,6 +362,8 @@ public partial class AdminController(
 
             var coverUrl = await BunnyCdnHelper.UploadFile(cover, $"{deck.DeckId}/cover.jpg");
             deck.CoverName = coverUrl;
+
+            await BunnyCdnHelper.PurgeUrl(coverUrl);
         }
 
         string path = Path.Join(config["StaticFilesPath"], "tmp", Guid.NewGuid().ToString());

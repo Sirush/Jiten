@@ -162,9 +162,6 @@ const expandedSkipId = ref<number | null>(null);
 async function loadSkipped() {
   const result = await fetchMySkipped({ limit: 50 });
   skippedPairs.value = result?.data ?? [];
-  for (const s of skippedPairs.value) {
-    sessionSkippedKeys.add(pairKey(s.deckA.id, s.deckB.id));
-  }
 }
 
 function removeSkip(id: number) {

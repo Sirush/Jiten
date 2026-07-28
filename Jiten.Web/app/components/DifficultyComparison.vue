@@ -29,7 +29,11 @@ const emit = defineEmits<{
 
 const toast = useToast();
 const confirm = useConfirm();
-const { submitVote, skipPair, blockDeck } = useDifficultyVotes();
+const { submitVote, skipPair, blockDeck, error: voteError } = useDifficultyVotes();
+
+function toastFailure(summary: string, fallback: string) {
+  toast.add({ severity: 'error', summary, detail: extractApiError(voteError.value, fallback), life: 5000 });
+}
 
 const isSubmitting = ref(false);
 const rateLimited = ref(false);
@@ -78,6 +82,8 @@ async function vote(outcome: ComparisonOutcome) {
       life: 1500,
     });
     emit('voted');
+  } else {
+    toastFailure('Vote failed', 'Could not record your vote. Please try again.');
   }
 }
 
@@ -88,6 +94,8 @@ async function skip(permanent: boolean) {
   isSubmitting.value = false;
   if (success) {
     emit('skipped', permanent);
+  } else {
+    toastFailure('Skip failed', 'Could not skip this pair. Please try again.');
   }
 }
 
@@ -103,6 +111,8 @@ function confirmBlock(event: Event, deck: DeckSummaryDto) {
       if (success) {
         toast.add({ severity: 'info', summary: `${deckTitle(deck)} blocked from comparisons`, life: 3000 });
         emit('blocked', deck.id);
+      } else {
+        toastFailure('Block failed', 'Could not block this title. Please try again.');
       }
     },
   });

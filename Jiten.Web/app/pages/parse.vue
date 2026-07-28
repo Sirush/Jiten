@@ -49,12 +49,30 @@
 
   const activeSearchQuery = computed(() => String(searchContent.value));
 
+  // Mirrors the cap in VocabularyController.SearchDictionary; parsing allows far longer input,
+  // so a long query must skip the dictionary call rather than trade it for a 400.
+  const DICTIONARY_QUERY_MAX_LENGTH = 200;
+
+  const isSearchable = computed(() => {
+    const trimmed = activeSearchQuery.value.trim();
+    return trimmed.length > 0 && trimmed.length <= DICTIONARY_QUERY_MAX_LENGTH;
+  });
+
+  const searchTooLong = computed(() => activeSearchQuery.value.trim().length > DICTIONARY_QUERY_MAX_LENGTH);
+
   const {
     data: searchResponse,
     status: searchStatus,
+    execute: executeSearch,
   } = await useApiFetch<DictionarySearchResult>('vocabulary/search', {
     query: { query: activeSearchQuery },
-    watch: [activeSearchQuery],
+    watch: false,
+    immediate: isSearchable.value,
+  });
+
+  watch(activeSearchQuery, () => {
+    if (isSearchable.value) executeSearch();
+    else searchResponse.value = null;
   });
 
   watch(
@@ -78,10 +96,12 @@
 
   const showParseResultsManually = ref(route.query.parsed === 'true');
 
+  // Only a request still in flight withholds parse results. A failed or skipped dictionary
+  // search must fall through to them, otherwise every render gate is false and the page is blank.
   const showParseResults = computed(() => {
     if (!canParse.value) return false;
     if (showParseResultsManually.value) return true;
-    if (searchStatus.value !== 'success') return false;
+    if (searchStatus.value === 'pending') return false;
     if (hasAnyDictionaryResults.value) return false;
     return true;
   });
@@ -325,6 +345,15 @@
   <div>
     <OmniSearch />
 
+    <div v-if="searchTooLong" class="mt-3 text-sm text-surface-500 dark:text-surface-400">
+      Dictionary search is limited to {{ DICTIONARY_QUERY_MAX_LENGTH }} characters, so only parse results are shown for this text.
+    </div>
+    <Message v-else-if="searchStatus === 'error'" severity="warn" :closable="false" class="mt-3">
+      Dictionary search is unavailable right now.
+      <template v-if="canParse">Parse results are shown below.</template>
+      <template v-else>Please try again in a moment.</template>
+    </Message>
+
     <!-- Parse link: shown when dictionary results exist but parse is also available -->
     <div v-if="showParseLink" class="mt-2 mb-2">
       <button
@@ -452,7 +481,7 @@
     </div>
 
     <div
-      v-if="searchStatus === 'success' && status !== 'pending' && !showParseResults && directMatches.length === 0 && dictionaryMatches.length === 0 && String(searchContent).trim().length > 0"
+      v-if="searchStatus !== 'pending' && searchStatus !== 'error' && !searchTooLong && status !== 'pending' && !showParseResults && directMatches.length === 0 && dictionaryMatches.length === 0 && String(searchContent).trim().length > 0"
       class="text-center py-8 text-gray-500 dark:text-gray-400"
     >
       No results found for "{{ activeSearchQuery }}"

@@ -1,14 +1,35 @@
 import type { MediaRequestDto, MediaRequestCommentDto, DuplicateCheckResultDto, PaginatedResponse, RequestActivityLogDto, RequestUserSummaryDto, MediaRequestUploadAdminDto } from '~/types/types';
-import { type MediaType, type RequestAction, type RequestStatus } from '~/types';
+import { type MediaType, type RequestAction, type RequestKind, type RequestStatus } from '~/types';
 
 export interface RequestFacets {
   mediaTypes: Record<string, number>;
   mediaTypeTotal: number;
   statuses: Record<string, number>;
   statusTotal: number;
+  kinds: Record<string, number>;
+  kindTotal: number;
   attachmentsYes: number;
   attachmentsNo: number;
   attachmentTotal: number;
+}
+
+export interface BoostBalance {
+  used: number;
+  limit: number;
+  remaining: number;
+  resetAt: string;
+}
+
+export interface BoostResult {
+  boostCount: number;
+  balance: BoostBalance;
+}
+
+export interface MediaRequestQuota {
+  activeCount: number;
+  limit: number;
+  plusLimit: number;
+  isPlus: boolean;
 }
 
 export function useMediaRequests() {
@@ -23,11 +44,13 @@ export function useMediaRequests() {
   const fetchRequests = async (params: {
     mediaType?: MediaType;
     status?: RequestStatus;
+    kind?: RequestKind;
     sort?: string;
     offset?: number;
     limit?: number;
     mine?: boolean;
     contributed?: boolean;
+    excludeOwn?: boolean;
     search?: string;
     attachments?: string;
   } = {}) => {
@@ -40,11 +63,13 @@ export function useMediaRequests() {
         query: {
           mediaType: params.mediaType,
           status: params.status,
+          kind: params.kind,
           sort: params.sort ?? 'votes',
           offset: params.offset ?? 0,
           limit: params.limit ?? 20,
           mine: params.mine || undefined,
           contributed: params.contributed || undefined,
+          excludeOwn: params.excludeOwn || undefined,
           search: params.search || undefined,
           attachments: params.attachments || undefined,
         },
@@ -75,6 +100,8 @@ export function useMediaRequests() {
   const createRequest = async (data: {
     title: string;
     mediaType: MediaType;
+    kind?: RequestKind;
+    targetDeckId?: number;
     externalUrl?: string;
     description?: string;
   }): Promise<{ id: number } | null> => {
@@ -101,12 +128,32 @@ export function useMediaRequests() {
     }
   };
 
-  const toggleUpvote = async (id: number): Promise<{ upvoted: boolean; upvoteCount: number } | null> => {
+  const toggleUpvote = async (id: number): Promise<{ upvoted: boolean; upvoteCount: number; subscribed: boolean } | null> => {
     error.value = null;
     try {
-      return await $api<{ upvoted: boolean; upvoteCount: number }>(`requests/${id}/upvote`, {
+      return await $api<{ upvoted: boolean; upvoteCount: number; subscribed: boolean }>(`requests/${id}/upvote`, {
         method: 'POST',
       });
+    } catch (e) {
+      error.value = e as Error;
+      return null;
+    }
+  };
+
+  const boostRequest = async (id: number): Promise<BoostResult | null> => {
+    error.value = null;
+    try {
+      return await $api<BoostResult>(`requests/${id}/boost`, { method: 'POST' });
+    } catch (e) {
+      error.value = e as Error;
+      return null;
+    }
+  };
+
+  const fetchBoostBalance = async (): Promise<BoostBalance | null> => {
+    error.value = null;
+    try {
+      return await $api<BoostBalance>('requests/boost-balance');
     } catch (e) {
       error.value = e as Error;
       return null;
@@ -194,12 +241,12 @@ export function useMediaRequests() {
     }
   };
 
-  const editRequestDescription = async (id: number, description?: string, externalUrl?: string): Promise<boolean> => {
+  const editRequestDescription = async (id: number, description?: string, externalUrl?: string, targetDeckId?: number): Promise<boolean> => {
     error.value = null;
     try {
       await $api(`requests/${id}/edit-description`, {
         method: 'PUT',
-        body: { description, externalUrl },
+        body: { description, externalUrl, targetDeckId },
       });
       return true;
     } catch (e) {
@@ -244,11 +291,11 @@ export function useMediaRequests() {
     }
   };
 
-  const checkDuplicates = async (title: string): Promise<DuplicateCheckResultDto | null> => {
+  const checkDuplicates = async (title: string, targetDeckId?: number): Promise<DuplicateCheckResultDto | null> => {
     error.value = null;
     try {
       return await $api<DuplicateCheckResultDto>('requests/duplicate-check', {
-        query: { title },
+        query: { title, targetDeckId },
       });
     } catch (e) {
       error.value = e as Error;
@@ -259,6 +306,8 @@ export function useMediaRequests() {
   const editRequest = async (id: number, data: {
     title: string;
     mediaType: MediaType;
+    kind?: RequestKind;
+    targetDeckId?: number;
     externalUrl?: string;
     description?: string;
   }): Promise<boolean> => {
@@ -333,8 +382,10 @@ export function useMediaRequests() {
   const fetchFacets = async (params: {
     mediaType?: MediaType;
     status?: RequestStatus;
+    kind?: RequestKind;
     mine?: boolean;
     contributed?: boolean;
+    excludeOwn?: boolean;
     search?: string;
     attachments?: string;
   } = {}): Promise<RequestFacets | null> => {
@@ -343,8 +394,10 @@ export function useMediaRequests() {
         query: {
           mediaType: params.mediaType,
           status: params.status,
+          kind: params.kind,
           mine: params.mine || undefined,
           contributed: params.contributed || undefined,
+          excludeOwn: params.excludeOwn || undefined,
           search: params.search || undefined,
           attachments: params.attachments || undefined,
         },
@@ -354,11 +407,12 @@ export function useMediaRequests() {
     }
   };
 
-  const fetchMyQuota = async (): Promise<{ activeCount: number; limit: number }> => {
+  const fetchMyQuota = async (): Promise<MediaRequestQuota> => {
+    const fallback: MediaRequestQuota = { activeCount: 0, limit: 20, plusLimit: 30, isPlus: false };
     try {
-      return await $api<{ activeCount: number; limit: number }>('requests/my-quota') ?? { activeCount: 0, limit: 20 };
+      return await $api<MediaRequestQuota>('requests/my-quota') ?? fallback;
     } catch {
-      return { activeCount: 0, limit: 20 };
+      return fallback;
     }
   };
 
@@ -372,6 +426,8 @@ export function useMediaRequests() {
     createRequest,
     deleteRequest,
     toggleUpvote,
+    boostRequest,
+    fetchBoostBalance,
     subscribe,
     unsubscribe,
     fetchComments,

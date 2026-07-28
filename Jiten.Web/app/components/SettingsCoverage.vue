@@ -1,4 +1,4 @@
-<script async setup lang="ts">
+<script setup lang="ts">
   import { type UserMetadata } from '~/types';
   import { useToast } from 'primevue/usetoast';
 
@@ -11,12 +11,18 @@
   const toast = useToast();
   const store = useJitenStore();
 
-  let lastRefresh = ref<Date>();
+  const lastRefresh = ref<Date>();
 
-  try {
-    const result = await $api<UserMetadata>('user/metadata');
-    lastRefresh.value = result.coverageRefreshedAt ? new Date(result.coverageRefreshedAt) : undefined;
-  } catch {}
+  onMounted(async () => {
+    try {
+      const result = await $api<UserMetadata>('user/metadata');
+      lastRefresh.value = result.coverageRefreshedAt ? new Date(result.coverageRefreshedAt) : undefined;
+    } catch {}
+  });
+
+  const status = computed(() =>
+    lastRefresh.value ? `Refreshed ${lastRefresh.value.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : 'Never refreshed',
+  );
 
   const isRefreshing = ref(false);
 
@@ -73,22 +79,8 @@
 </script>
 
 <template>
-  <div>
-    <Card>
-      <template #title>
-        <h3 class="text-lg font-semibold">Coverage</h3>
-      </template>
-      <template #content>
-        <p>
-          Your coverage was last refreshed: <b>{{ lastRefresh?.toLocaleString() ?? 'Never' }}</b>
-        </p>
-        <div class="p-2">
-          <Button icon="pi pi-refresh" label="Refresh now" class="w-full md:w-auto" @click="refreshCoverage" />
-        </div>
-      </template>
-    </Card>
-    <LoadingOverlay :visible="isRefreshing" message="Refreshing your coverage, please wait a few seconds…" />
-  </div>
+  <SettingsTile icon="pi pi-chart-pie" title="Coverage" description="How much of each media you already know." :status="status">
+    <Button icon="pi pi-refresh" label="Refresh now" size="small" outlined class="mt-3" @click="refreshCoverage" />
+  </SettingsTile>
+  <LoadingOverlay :visible="isRefreshing" message="Refreshing your coverage, please wait a few seconds…" />
 </template>
-
-<style scoped></style>

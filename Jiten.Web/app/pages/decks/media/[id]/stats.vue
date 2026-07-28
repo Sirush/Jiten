@@ -49,6 +49,20 @@
     return title;
   });
 
+  // The journey section hydrates on visibility, so it has no height until the scroll reaches it;
+  // the second pass lands on the section once its content is there.
+  async function scrollToHash() {
+    if (!route.hash) return;
+    await nextTick();
+    const target = document.querySelector(route.hash);
+    if (!target) return;
+    target.scrollIntoView({ block: 'start' });
+    setTimeout(() => document.querySelector(route.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
+  }
+
+  onMounted(scrollToHash);
+  watch(() => route.hash, scrollToHash);
+
   useRobotsRule({ noindex: true, follow: true });
 
   useHead(() => ({
@@ -122,7 +136,7 @@
 
     <Card v-else-if="statsError || curveError">
       <template #header>
-        <h2 class="text-xl font-bold px-6 pt-6">Coverage</h2>
+        <h2 class="text-xl font-bold px-4 pt-4">Coverage</h2>
       </template>
       <template #content>
         <p class="text-gray-500 dark:text-gray-400">Coverage statistics are not available for this deck.</p>
@@ -131,8 +145,8 @@
 
     <Card v-else-if="stats">
       <template #header>
-        <h2 class="text-xl font-bold px-6 pt-6">Coverage</h2>
-        <h3 class="italic text-sm px-6">This shows how much text coverage you'll have if you know the most X frequent words in that work.</h3>
+        <h2 class="text-xl font-bold px-4 pt-4">Coverage</h2>
+        <h3 class="italic text-sm px-4">This shows how much text coverage you'll have if you know the most X frequent words in that work.</h3>
       </template>
       <template #content>
         <LazyCoverageChart class="hidden sm:block" v-if="curveData" :curve-data="curveData" />
@@ -152,6 +166,10 @@
       </template>
     </Card>
 
+    <div id="coverage-journey" class="scroll-mt-20">
+      <LazyCoverageJourneySection v-if="deckResponse?.data?.mainDeck" :deck="deckResponse.data.mainDeck" :title="title" hydrate-on-visible />
+    </div>
+
     <!-- Difficulty Section (independent of coverage) -->
     <Card v-if="isDifficultyLoading" class="p-2">
         <template #content>
@@ -161,7 +179,7 @@
 
       <Card v-else-if="difficultyError">
         <template #header>
-          <h2 class="text-xl font-bold px-6 pt-6">Difficulty Progression</h2>
+          <h2 class="text-xl font-bold px-4 pt-4">Difficulty Progression</h2>
         </template>
         <template #content>
           <p class="text-gray-500 dark:text-gray-400">Difficulty data is not available for this deck.</p>
@@ -170,8 +188,8 @@
 
       <Card v-else-if="difficultyData">
         <template #header>
-          <h2 class="text-xl font-bold px-6 pt-6">Difficulty Progression</h2>
-          <h3 class="italic text-sm px-6">{{ progressionDescription }}</h3>
+          <h2 class="text-xl font-bold px-4 pt-4">Difficulty Progression</h2>
+          <h3 class="italic text-sm px-4">{{ progressionDescription }}</h3>
         </template>
         <template #content>
           <template v-if="difficultyData.progression && difficultyData.progression.length > 0">

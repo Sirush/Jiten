@@ -2,7 +2,9 @@ using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Jiten.Api.Authorization;
 using Jiten.Api.Dtos;
+using Jiten.Api.Helpers;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Services;
 using Jiten.Core;
@@ -29,14 +31,19 @@ public partial class RequestController(
     NotificationService notificationService,
     ICdnService cdnService,
     IMemoryCache memoryCache,
+    IUserLimitsService userLimits,
     ILogger<RequestController> logger) : ControllerBase
 {
     private static readonly HashSet<string> AllowedExtensions =
         [".srt", ".ass", ".ssa", ".epub", ".zip", ".rar", ".7z", ".txt", ".mokuro"];
 
     private const long MaxUploadSize = 104_857_600; // 100MB
+    // The transport limit covers the whole multipart body, so it needs headroom over the file payload it carries;
+    // without it a file just under 100MB is killed by Kestrel before the controller can explain why.
+    private const long MaxRequestBodySize = MaxUploadSize + 1_048_576;
     private const long MaxUploadBytesPerDay = 500 * 1024 * 1024; // 500MB per 24h
-    private const int RequestQuotaLimit = 20;
+    private const int MonthlyBoostLimit = 5;
+    private const int BoostWeight = 5;
     private const int MaxCommentLength = 500;
     private const int CommentRateLimitPerFiveMin = 5;
     private const int CommentRateLimitPerHour = 25;
@@ -48,11 +55,13 @@ public partial class RequestController(
     public async Task<IResult> GetRequests(
         [FromQuery] MediaType? mediaType = null,
         [FromQuery] MediaRequestStatus? status = null,
+        [FromQuery] MediaRequestKind? kind = null,
         [FromQuery] string sort = "votes",
         [FromQuery] int offset = 0,
         [FromQuery] int limit = 20,
         [FromQuery] bool mine = false,
         [FromQuery] bool contributed = false,
+        [FromQuery] bool excludeOwn = false,
         [FromQuery] string? search = null,
         [FromQuery] string? attachments = null)
     {
@@ -73,7 +82,7 @@ public partial class RequestController(
                 .Where(c => context.MediaRequestUploads.Any(u => u.MediaRequestCommentId == c.Id && !u.FileDeleted))
                 .Select(c => c.MediaRequestId)
                 .Distinct();
-            query = query.Where(r => contributedRequestIds.Contains(r.Id) && r.RequesterId != userId);
+            query = query.Where(r => contributedRequestIds.Contains(r.Id) && (!excludeOwn || r.RequesterId != userId));
         }
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -84,6 +93,9 @@ public partial class RequestController(
 
         if (mediaType.HasValue)
             query = query.Where(r => r.MediaType == mediaType.Value);
+
+        if (kind.HasValue)
+            query = query.Where(r => r.Kind == kind.Value);
 
         if (status.HasValue)
             query = query.Where(r => r.Status == status.Value);
@@ -98,7 +110,8 @@ public partial class RequestController(
         query = sort switch {
             "recent" => query.OrderByDescending(r => r.CreatedAt),
             "completed" => query.OrderByDescending(r => r.CompletedAt).ThenByDescending(r => r.CreatedAt),
-            _ => query.OrderByDescending(r => r.UpvoteCount).ThenByDescending(r => r.CreatedAt),
+            // "top"/default: rank by effective score (raw votes + boosts weighted). Counts stay separate on the row.
+            _ => query.OrderByDescending(r => r.UpvoteCount + r.BoostCount * BoostWeight).ThenByDescending(r => r.CreatedAt),
         };
 
         var requests = await query.Skip(offset).Take(limit).ToListAsync();
@@ -108,6 +121,13 @@ public partial class RequestController(
             .AsNoTracking()
             .Where(u => requestIds.Contains(u.MediaRequestId) && u.UserId == userId)
             .Select(u => u.MediaRequestId)
+            .ToListAsync();
+
+        // A request can only be boosted once per user, ever, so this is an all-time check.
+        var userBoosts = await context.MediaRequestBoosts
+            .AsNoTracking()
+            .Where(b => requestIds.Contains(b.MediaRequestId) && b.UserId == userId)
+            .Select(b => b.MediaRequestId)
             .ToListAsync();
 
         var userSubscriptions = await context.MediaRequestSubscriptions
@@ -130,15 +150,16 @@ public partial class RequestController(
             .Select(g => new { g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count);
 
-        var fulfilledDeckIds = requests
-            .Where(r => r.FulfilledDeckId.HasValue)
-            .Select(r => r.FulfilledDeckId!.Value)
+        var referencedDeckIds = requests
+            .SelectMany(r => new[] { r.FulfilledDeckId, r.TargetDeckId })
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
             .Distinct()
             .ToList();
 
-        var deckTitles = fulfilledDeckIds.Count > 0
+        var deckTitles = referencedDeckIds.Count > 0
             ? await context.Decks.AsNoTracking()
-                .Where(d => fulfilledDeckIds.Contains(d.DeckId))
+                .Where(d => referencedDeckIds.Contains(d.DeckId))
                 .ToDictionaryAsync(d => d.DeckId, d => d.OriginalTitle)
             : new Dictionary<int, string>();
 
@@ -157,26 +178,34 @@ public partial class RequestController(
         }
 
         var upvoteSet = new HashSet<int>(userUpvotes);
+        var boostSet = new HashSet<int>(userBoosts);
         var subSet = new HashSet<int>(userSubscriptions);
 
         var dtos = requests.Select(r => new MediaRequestDto
         {
             Id = r.Id,
             Title = r.Title,
+            Kind = r.Kind,
             MediaType = r.MediaType,
             ExternalUrl = r.ExternalUrl,
             ExternalLinkType = r.ExternalLinkType,
             Description = r.Description,
             Status = r.Status,
             AdminNote = r.AdminNote,
+            TargetDeckId = r.TargetDeckId,
+            TargetDeckTitle = r.TargetDeckId.HasValue
+                ? deckTitles.GetValueOrDefault(r.TargetDeckId.Value)
+                : null,
             FulfilledDeckId = r.FulfilledDeckId,
             FulfilledDeckTitle = r.FulfilledDeckId.HasValue
                 ? deckTitles.GetValueOrDefault(r.FulfilledDeckId.Value)
                 : null,
             UpvoteCount = r.UpvoteCount,
+            BoostCount = r.BoostCount,
             CommentCount = commentCounts.GetValueOrDefault(r.Id, 0),
             UploadCount = uploadCounts.GetValueOrDefault(r.Id, 0),
             HasUserUpvoted = upvoteSet.Contains(r.Id),
+            HasUserBoosted = boostSet.Contains(r.Id),
             IsSubscribed = subSet.Contains(r.Id),
             IsOwnRequest = r.RequesterId == userId,
             RequesterName = isAdmin ? requesterNames.GetValueOrDefault(r.RequesterId) : null,
@@ -191,8 +220,10 @@ public partial class RequestController(
     public async Task<IResult> GetRequestFacets(
         [FromQuery] MediaType? mediaType = null,
         [FromQuery] MediaRequestStatus? status = null,
+        [FromQuery] MediaRequestKind? kind = null,
         [FromQuery] bool mine = false,
         [FromQuery] bool contributed = false,
+        [FromQuery] bool excludeOwn = false,
         [FromQuery] string? search = null,
         [FromQuery] string? attachments = null)
     {
@@ -213,7 +244,7 @@ public partial class RequestController(
                     .Where(c => context.MediaRequestUploads.Any(u => u.MediaRequestCommentId == c.Id && !u.FileDeleted))
                     .Select(c => c.MediaRequestId)
                     .Distinct();
-                q = q.Where(r => contributedRequestIds.Contains(r.Id) && r.RequesterId != userId);
+                q = q.Where(r => contributedRequestIds.Contains(r.Id) && (!excludeOwn || r.RequesterId != userId));
             }
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -231,6 +262,8 @@ public partial class RequestController(
             mediaType.HasValue ? q.Where(r => r.MediaType == mediaType.Value) : q;
         IQueryable<MediaRequest> WithStatus(IQueryable<MediaRequest> q) =>
             status.HasValue ? q.Where(r => r.Status == status.Value) : q;
+        IQueryable<MediaRequest> WithKind(IQueryable<MediaRequest> q) =>
+            kind.HasValue ? q.Where(r => r.Kind == kind.Value) : q;
         IQueryable<MediaRequest> WithAttachments(IQueryable<MediaRequest> q) =>
             attachments == "yes"
                 ? q.Where(r => context.MediaRequestUploads.Any(u => u.MediaRequestId == r.Id && !u.FileDeleted))
@@ -238,17 +271,22 @@ public partial class RequestController(
                     ? q.Where(r => !context.MediaRequestUploads.Any(u => u.MediaRequestId == r.Id && !u.FileDeleted))
                     : q;
 
-        var mediaTypeCounts = await WithAttachments(WithStatus(BaseQuery()))
+        var mediaTypeCounts = await WithAttachments(WithKind(WithStatus(BaseQuery())))
             .GroupBy(r => r.MediaType)
             .Select(g => new { g.Key, Count = g.Count() })
             .ToListAsync();
 
-        var statusCounts = await WithAttachments(WithMediaType(BaseQuery()))
+        var statusCounts = await WithAttachments(WithKind(WithMediaType(BaseQuery())))
             .GroupBy(r => r.Status)
             .Select(g => new { g.Key, Count = g.Count() })
             .ToListAsync();
 
-        var attachmentBase = WithStatus(WithMediaType(BaseQuery()));
+        var kindCounts = await WithAttachments(WithStatus(WithMediaType(BaseQuery())))
+            .GroupBy(r => r.Kind)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var attachmentBase = WithKind(WithStatus(WithMediaType(BaseQuery())));
         var attachmentTotal = await attachmentBase.CountAsync();
         var attachmentsYes = await attachmentBase
             .CountAsync(r => context.MediaRequestUploads.Any(u => u.MediaRequestId == r.Id && !u.FileDeleted));
@@ -259,6 +297,8 @@ public partial class RequestController(
             mediaTypeTotal = mediaTypeCounts.Sum(x => x.Count),
             statuses = statusCounts.ToDictionary(x => (int)x.Key, x => x.Count),
             statusTotal = statusCounts.Sum(x => x.Count),
+            kinds = kindCounts.ToDictionary(x => (int)x.Key, x => x.Count),
+            kindTotal = kindCounts.Sum(x => x.Count),
             attachmentsYes,
             attachmentsNo = attachmentTotal - attachmentsYes,
             attachmentTotal,
@@ -281,6 +321,10 @@ public partial class RequestController(
         var hasUpvoted = await context.MediaRequestUpvotes.AsNoTracking()
             .AnyAsync(u => u.MediaRequestId == id && u.UserId == userId);
 
+        // Boosting a request is a once-ever action per user, so this is an all-time check.
+        var hasBoosted = await context.MediaRequestBoosts.AsNoTracking()
+            .AnyAsync(b => b.MediaRequestId == id && b.UserId == userId);
+
         var isSubscribed = await context.MediaRequestSubscriptions.AsNoTracking()
             .AnyAsync(s => s.MediaRequestId == id && s.UserId == userId);
 
@@ -299,6 +343,15 @@ public partial class RequestController(
                 .FirstOrDefaultAsync();
         }
 
+        string? targetDeckTitle = null;
+        if (request.TargetDeckId.HasValue)
+        {
+            targetDeckTitle = await context.Decks.AsNoTracking()
+                .Where(d => d.DeckId == request.TargetDeckId.Value)
+                .Select(d => d.OriginalTitle)
+                .FirstOrDefaultAsync();
+        }
+
         var isAdmin = User.IsInRole("Administrator");
         string? requesterName = null;
         if (isAdmin)
@@ -313,18 +366,23 @@ public partial class RequestController(
         {
             Id = request.Id,
             Title = request.Title,
+            Kind = request.Kind,
             MediaType = request.MediaType,
             ExternalUrl = request.ExternalUrl,
             ExternalLinkType = request.ExternalLinkType,
             Description = request.Description,
             Status = request.Status,
             AdminNote = request.AdminNote,
+            TargetDeckId = request.TargetDeckId,
+            TargetDeckTitle = targetDeckTitle,
             FulfilledDeckId = request.FulfilledDeckId,
             FulfilledDeckTitle = deckTitle,
             UpvoteCount = request.UpvoteCount,
+            BoostCount = request.BoostCount,
             CommentCount = commentCount,
             UploadCount = uploadCount,
             HasUserUpvoted = hasUpvoted,
+            HasUserBoosted = hasBoosted,
             IsSubscribed = isSubscribed,
             IsOwnRequest = request.RequesterId == userId,
             RequesterName = requesterName,
@@ -347,12 +405,27 @@ public partial class RequestController(
                 kvp => kvp.Key,
                 kvp => kvp.Value!.Errors.Select(e => e.ErrorMessage).ToArray()));
 
-        var trimmedTitle = model.Title.Trim();
+        var targetValidation = ValidateKindAndTarget(model.Kind, model.TargetDeckId);
+        if (targetValidation != null)
+            return targetValidation;
+
+        var isUpdate = model.Kind == MediaRequestKind.Update;
+        var target = isUpdate ? await LoadTargetDeckAsync(model.TargetDeckId!.Value) : null;
+        if (isUpdate && target == null)
+            return TargetDeckProblem("Referenced deck does not exist.");
+
+        var trimmedTitle = model.Title?.Trim() ?? string.Empty;
+        // An update request's title is the target media's title, so an empty one is filled in rather than rejected.
         if (trimmedTitle.Length == 0)
-            return Results.ValidationProblem(new Dictionary<string, string[]>
-            {
-                ["title"] = ["Title must not be empty or whitespace."]
-            });
+        {
+            if (target == null)
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["title"] = ["Title must not be empty or whitespace."]
+                });
+
+            trimmedTitle = target.OriginalTitle;
+        }
 
         if (!string.IsNullOrWhiteSpace(model.ExternalUrl) &&
             (!Uri.TryCreate(model.ExternalUrl.Trim(), UriKind.Absolute, out var parsedUrl) ||
@@ -362,6 +435,21 @@ public partial class RequestController(
                 ["externalUrl"] = ["ExternalUrl must be a valid http or https URL."]
             });
 
+        if (isUpdate)
+        {
+            var alreadyRequested = await context.MediaRequests.AsNoTracking()
+                .AnyAsync(r => r.RequesterId == userId
+                               && r.Kind == MediaRequestKind.Update
+                               && r.TargetDeckId == model.TargetDeckId
+                               && (r.Status == MediaRequestStatus.Open || r.Status == MediaRequestStatus.InProgress));
+
+            if (alreadyRequested)
+                return Results.Problem(
+                    title: "Duplicate request",
+                    detail: "You already have an open update request for this media. Comment on it instead.",
+                    statusCode: StatusCodes.Status409Conflict);
+        }
+
         var externalLinkType = !string.IsNullOrWhiteSpace(model.ExternalUrl)
             ? InferLinkType(model.ExternalUrl)
             : (LinkType?)null;
@@ -369,13 +457,18 @@ public partial class RequestController(
         var request = new MediaRequest
         {
             Title = trimmedTitle,
-            MediaType = model.MediaType,
+            Kind = model.Kind,
+            // The target deck decides the media type: an update request cannot disagree with the deck it points at.
+            MediaType = target?.MediaType ?? model.MediaType,
+            TargetDeckId = isUpdate ? model.TargetDeckId : null,
             ExternalUrl = model.ExternalUrl?.Trim(),
             ExternalLinkType = externalLinkType,
             Description = model.Description?.Trim(),
             RequesterId = userId,
             UpvoteCount = 1
         };
+
+        var limits = await userLimits.GetLimitsAsync(userId);
 
         try
         {
@@ -387,12 +480,18 @@ public partial class RequestController(
                                  (r.Status == MediaRequestStatus.Open ||
                                   r.Status == MediaRequestStatus.InProgress));
 
-            if (activeCount >= RequestQuotaLimit)
+            if (activeCount >= limits.ActiveMediaRequests)
                 return Results.Problem(
                     title: "Quota exceeded",
-                    detail: $"You have reached the limit of {RequestQuotaLimit} active requests. Wait for existing requests to be fulfilled or rejected.",
+                    detail: LimitMessages.ActiveMediaRequests(limits),
                     statusCode: StatusCodes.Status422UnprocessableEntity,
-                    extensions: new Dictionary<string, object?> { ["activeCount"] = activeCount, ["limit"] = RequestQuotaLimit });
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["activeCount"] = activeCount,
+                        ["limit"] = limits.ActiveMediaRequests,
+                        ["plusLimit"] = limits.Allowances.ActiveMediaRequests.Plus,
+                        ["isPlus"] = limits.IsPlus
+                    });
 
             context.MediaRequests.Add(request);
             await context.SaveChangesAsync();
@@ -412,7 +511,14 @@ public partial class RequestController(
             });
 
             activityService.LogWithoutSave(request.Id, userId, RequestAction.RequestCreated,
-                JsonSerializer.Serialize(new { request.Title, mediaType = request.MediaType.ToString(), request.ExternalUrl }),
+                JsonSerializer.Serialize(new
+                {
+                    request.Title,
+                    kind = request.Kind.ToString(),
+                    mediaType = request.MediaType.ToString(),
+                    request.TargetDeckId,
+                    request.ExternalUrl
+                }),
                 ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString());
 
             await context.SaveChangesAsync();
@@ -427,9 +533,15 @@ public partial class RequestController(
         {
             return Results.Problem(
                 title: "Quota exceeded",
-                detail: $"You have reached the limit of {RequestQuotaLimit} active requests.",
+                detail: LimitMessages.ActiveMediaRequests(limits),
                 statusCode: StatusCodes.Status422UnprocessableEntity,
-                extensions: new Dictionary<string, object?> { ["activeCount"] = RequestQuotaLimit, ["limit"] = RequestQuotaLimit });
+                extensions: new Dictionary<string, object?>
+                {
+                    ["activeCount"] = limits.ActiveMediaRequests,
+                    ["limit"] = limits.ActiveMediaRequests,
+                    ["plusLimit"] = limits.Allowances.ActiveMediaRequests.Plus,
+                    ["isPlus"] = limits.IsPlus
+                });
         }
     }
 
@@ -444,7 +556,14 @@ public partial class RequestController(
                              (r.Status == MediaRequestStatus.Open ||
                               r.Status == MediaRequestStatus.InProgress));
 
-        return Results.Ok(new { activeCount, limit = RequestQuotaLimit });
+        var limits = await userLimits.GetLimitsAsync(userId);
+        return Results.Ok(new
+        {
+            activeCount,
+            limit = limits.ActiveMediaRequests,
+            plusLimit = limits.Allowances.ActiveMediaRequests.Plus,
+            isPlus = limits.IsPlus
+        });
     }
 
     [HttpDelete("{id:int}")]
@@ -457,6 +576,7 @@ public partial class RequestController(
         var request = await context.MediaRequests
             .Include(r => r.Comments)
             .Include(r => r.Upvotes)
+            .Include(r => r.Boosts)
             .Include(r => r.Subscriptions)
             .Include(r => r.Uploads)
             .FirstOrDefaultAsync(r => r.Id == id);
@@ -488,6 +608,7 @@ public partial class RequestController(
         context.MediaRequestUploads.RemoveRange(request.Uploads);
         context.MediaRequestComments.RemoveRange(request.Comments);
         context.MediaRequestUpvotes.RemoveRange(request.Upvotes);
+        context.MediaRequestBoosts.RemoveRange(request.Boosts);
         context.MediaRequestSubscriptions.RemoveRange(request.Subscriptions);
         context.MediaRequests.Remove(request);
 
@@ -518,6 +639,13 @@ public partial class RequestController(
         if (existing != null)
         {
             context.MediaRequestUpvotes.Remove(existing);
+
+            // Upvoting subscribes, so withdrawing it unsubscribes; the Subscribe button restores a wanted one.
+            var subscription = await context.MediaRequestSubscriptions
+                .FirstOrDefaultAsync(s => s.MediaRequestId == id && s.UserId == userId);
+            if (subscription != null)
+                context.MediaRequestSubscriptions.Remove(subscription);
+
             await context.SaveChangesAsync();
 
             await context.MediaRequests
@@ -563,7 +691,7 @@ public partial class RequestController(
             .Select(r => r.UpvoteCount)
             .FirstAsync();
 
-        return Results.Ok(new { upvoted, upvoteCount = Math.Max(0, upvoteCount) });
+        return Results.Ok(new { upvoted, upvoteCount = Math.Max(0, upvoteCount), subscribed = upvoted });
     }
 
     [HttpGet("{id:int}/upvote")]
@@ -577,6 +705,110 @@ public partial class RequestController(
             .AnyAsync(u => u.MediaRequestId == id && u.UserId == userId);
 
         return Results.Ok(new { upvoted = hasUpvoted });
+    }
+
+    /// <summary>
+    /// Applies a permanent +<see cref="BoostWeight"/> votes boost to a request. Every Jiten+ user
+    /// gets <see cref="MonthlyBoostLimit"/> boosts per calendar month (UTC).
+    /// </summary>
+    [HttpPost("{id:int}/boost")]
+    [JitenPlus(Feature = "request-boosts")]
+    public async Task<IResult> BoostRequest(int id)
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        var request = await context.MediaRequests.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null)
+            return Results.NotFound("Request not found");
+
+        // Only active requests are boostable — boosting is about steering what gets worked on next.
+        if (request.Status != MediaRequestStatus.Open && request.Status != MediaRequestStatus.InProgress)
+            return Results.BadRequest("Only open or in-progress requests can be boosted.");
+
+        var now = DateTime.UtcNow;
+        var (monthStart, nextMonthStart) = CurrentMonthWindow(now);
+
+        // A request can only ever be boosted once per user, so the uniqueness check is all-time.
+        var alreadyBoosted = await context.MediaRequestBoosts.AsNoTracking()
+            .AnyAsync(b => b.UserId == userId && b.MediaRequestId == id);
+
+        if (alreadyBoosted)
+            return Results.Problem(
+                title: "Already boosted",
+                detail: "You have already boosted this request. Each request can only be boosted once.",
+                statusCode: StatusCodes.Status409Conflict);
+
+        // The 5-per-month allowance is separate: it caps how many distinct requests you can boost each month.
+        var usedThisMonth = await context.MediaRequestBoosts.AsNoTracking()
+            .CountAsync(b => b.UserId == userId && b.CreatedAt >= monthStart && b.CreatedAt < nextMonthStart);
+        if (usedThisMonth >= MonthlyBoostLimit)
+            return Results.Problem(
+                title: "No boosts left",
+                detail: $"You have used all {MonthlyBoostLimit} of your monthly boosts. Your allowance resets on {nextMonthStart:MMMM d} (UTC).",
+                statusCode: StatusCodes.Status422UnprocessableEntity,
+                extensions: new Dictionary<string, object?>
+                {
+                    ["used"] = usedThisMonth,
+                    ["limit"] = MonthlyBoostLimit,
+                    ["remaining"] = 0,
+                    ["resetAt"] = nextMonthStart
+                });
+
+        await using var transaction = await context.Database.BeginTransactionAsync();
+
+        context.MediaRequestBoosts.Add(new MediaRequestBoost
+        {
+            MediaRequestId = id,
+            UserId = userId,
+            CreatedAt = now
+        });
+        await context.SaveChangesAsync();
+
+        await context.MediaRequests
+            .Where(r => r.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.BoostCount, r => r.BoostCount + 1));
+
+        await transaction.CommitAsync();
+
+        var boostCount = request.BoostCount + 1;
+        var used = usedThisMonth + 1;
+        logger.LogInformation("Request boosted: Id={Id}, UserId={UserId}, BoostCount={BoostCount}", id, userId, boostCount);
+
+        return Results.Ok(new
+        {
+            boostCount,
+            balance = new
+            {
+                used,
+                limit = MonthlyBoostLimit,
+                remaining = Math.Max(0, MonthlyBoostLimit - used),
+                resetAt = nextMonthStart
+            }
+        });
+    }
+
+    [HttpGet("boost-balance")]
+    [JitenPlus(Feature = "request-boosts")]
+    public async Task<IResult> GetBoostBalance()
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        var (monthStart, nextMonthStart) = CurrentMonthWindow(DateTime.UtcNow);
+        var used = await context.MediaRequestBoosts.AsNoTracking()
+            .CountAsync(b => b.UserId == userId && b.CreatedAt >= monthStart && b.CreatedAt < nextMonthStart);
+
+        return Results.Ok(new
+        {
+            used,
+            limit = MonthlyBoostLimit,
+            remaining = Math.Max(0, MonthlyBoostLimit - used),
+            resetAt = nextMonthStart
+        });
     }
 
     [HttpPost("{id:int}/subscribe")]
@@ -640,7 +872,7 @@ public partial class RequestController(
 
     [HttpPost("{id:int}/comments")]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(MaxUploadSize)]
+    [RequestSizeLimit(MaxRequestBodySize)]
     public async Task<IResult> AddComment(int id, [FromForm] string? text, [FromForm] IFormFile[]? files)
     {
         var userId = currentUserService.UserId;
@@ -958,6 +1190,40 @@ public partial class RequestController(
         if (request.Status != MediaRequestStatus.Open && request.Status != MediaRequestStatus.InProgress)
             return Results.BadRequest("Request cannot be edited in its current status.");
 
+        // Omitting the target leaves it untouched, so a plain description edit never has to resend it.
+        var retargeted = model.TargetDeckId.HasValue && model.TargetDeckId != request.TargetDeckId;
+        if (model.TargetDeckId.HasValue)
+        {
+            if (request.Kind != MediaRequestKind.Update)
+                return TargetDeckProblem("Only update requests can target existing media.");
+
+            if (model.TargetDeckId is not > 0)
+                return TargetDeckProblem("Select the media this request updates.");
+
+            var target = await LoadTargetDeckAsync(model.TargetDeckId.Value);
+            if (target == null)
+                return TargetDeckProblem("Referenced deck does not exist.");
+
+            if (retargeted)
+            {
+                var alreadyRequested = await context.MediaRequests.AsNoTracking()
+                    .AnyAsync(r => r.Id != id
+                                   && r.RequesterId == userId
+                                   && r.Kind == MediaRequestKind.Update
+                                   && r.TargetDeckId == model.TargetDeckId
+                                   && (r.Status == MediaRequestStatus.Open || r.Status == MediaRequestStatus.InProgress));
+
+                if (alreadyRequested)
+                    return Results.Problem(
+                        title: "Duplicate request",
+                        detail: "You already have another open update request for this media.",
+                        statusCode: StatusCodes.Status409Conflict);
+
+                request.TargetDeckId = model.TargetDeckId;
+                request.MediaType = target.MediaType;
+            }
+        }
+
         var externalLinkType = !string.IsNullOrWhiteSpace(model.ExternalUrl)
             ? InferLinkType(model.ExternalUrl)
             : (LinkType?)null;
@@ -968,6 +1234,7 @@ public partial class RequestController(
         request.UpdatedAt = DateTime.UtcNow;
 
         activityService.LogWithoutSave(id, userId, RequestAction.RequestEditedByRequester,
+            retargeted ? JsonSerializer.Serialize(new { newTargetDeckId = request.TargetDeckId }) : null,
             ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString());
 
         await context.SaveChangesAsync();
@@ -1083,15 +1350,33 @@ public partial class RequestController(
     }
 
     [HttpGet("duplicate-check")]
-    public async Task<IResult> DuplicateCheck([FromQuery] string? title)
+    public async Task<IResult> DuplicateCheck([FromQuery] string? title, [FromQuery] int? targetDeckId)
     {
         var userId = currentUserService.UserId;
         if (string.IsNullOrEmpty(userId))
             return Results.Unauthorized();
 
+        var existingUpdateRequests = targetDeckId is > 0
+            ? await context.MediaRequests.AsNoTracking()
+                .Where(r => r.Kind == MediaRequestKind.Update
+                            && r.TargetDeckId == targetDeckId
+                            && (r.Status == MediaRequestStatus.Open || r.Status == MediaRequestStatus.InProgress))
+                .OrderByDescending(r => r.UpvoteCount)
+                .Take(5)
+                .Select(r => new DuplicateCheckRequestDto
+                {
+                    Id = r.Id,
+                    Title = r.Title,
+                    MediaType = r.MediaType,
+                    Status = r.Status,
+                    UpvoteCount = r.UpvoteCount
+                })
+                .ToListAsync()
+            : [];
+
         var normalisedTitle = title?.Trim() ?? string.Empty;
         if (normalisedTitle.Length < 2)
-            return Results.Ok(new DuplicateCheckResultDto());
+            return Results.Ok(new DuplicateCheckResultDto { ExistingUpdateRequests = existingUpdateRequests });
 
         var likePattern = $"%{EscapeLikePattern(normalisedTitle)}%";
 
@@ -1134,7 +1419,8 @@ public partial class RequestController(
         return Results.Ok(new DuplicateCheckResultDto
         {
             ExistingDecks = existingDecks,
-            ExistingRequests = existingRequests
+            ExistingRequests = existingRequests,
+            ExistingUpdateRequests = existingUpdateRequests
         });
     }
 
@@ -1213,11 +1499,14 @@ public partial class RequestController(
         // Best-effort notification dispatch
         try
         {
+            var isUpdateRequest = request.Kind == MediaRequestKind.Update;
+            var completionVerb = isUpdateRequest ? "updated" : "completed";
+
             var notifTitle = model.Status switch
             {
                 MediaRequestStatus.Open => "Request reopened",
                 MediaRequestStatus.InProgress => "Request in progress",
-                MediaRequestStatus.Completed => "Request completed",
+                MediaRequestStatus.Completed => isUpdateRequest ? "Media updated" : "Request completed",
                 MediaRequestStatus.Rejected => "Request rejected",
                 _ => "Request updated"
             };
@@ -1227,8 +1516,8 @@ public partial class RequestController(
                 MediaRequestStatus.Open => $"\"{request.Title}\" has been reopened.",
                 MediaRequestStatus.InProgress => $"\"{request.Title}\" is now being worked on.",
                 MediaRequestStatus.Completed => string.IsNullOrWhiteSpace(model.AdminNote)
-                    ? $"\"{request.Title}\" has been completed!"
-                    : $"\"{request.Title}\" has been completed! Note: {model.AdminNote}",
+                    ? $"\"{request.Title}\" has been {completionVerb}!"
+                    : $"\"{request.Title}\" has been {completionVerb}! Note: {model.AdminNote}",
                 MediaRequestStatus.Rejected => $"\"{request.Title}\" has been rejected. Reason: {model.AdminNote}",
                 _ => $"\"{request.Title}\" status has changed."
             };
@@ -1387,6 +1676,8 @@ public partial class RequestController(
                 .CountAsync(r => r.RequesterId == targetUserId),
             UpvoteCount = await context.MediaRequestUpvotes.AsNoTracking()
                 .CountAsync(u => u.UserId == targetUserId),
+            BoostCount = await context.MediaRequestBoosts.AsNoTracking()
+                .CountAsync(b => b.UserId == targetUserId),
             SubscriptionCount = await context.MediaRequestSubscriptions.AsNoTracking()
                 .CountAsync(s => s.UserId == targetUserId),
             UploadCount = await context.MediaRequestUploads.AsNoTracking()
@@ -1521,24 +1812,43 @@ public partial class RequestController(
                 ["externalUrl"] = ["ExternalUrl must be a valid http or https URL."]
             });
 
+        var targetValidation = ValidateKindAndTarget(model.Kind, model.TargetDeckId);
+        if (targetValidation != null)
+            return targetValidation;
+
+        var isUpdate = model.Kind == MediaRequestKind.Update;
+        var target = isUpdate ? await LoadTargetDeckAsync(model.TargetDeckId!.Value) : null;
+        if (isUpdate && target == null)
+            return TargetDeckProblem("Referenced deck does not exist.");
+
         var request = await context.MediaRequests.FirstOrDefaultAsync(r => r.Id == id);
         if (request == null)
             return Results.NotFound("Request not found");
 
         var oldTitle = request.Title;
+        var oldKind = request.Kind;
         var externalLinkType = !string.IsNullOrWhiteSpace(model.ExternalUrl)
             ? InferLinkType(model.ExternalUrl)
             : (LinkType?)null;
 
         request.Title = trimmedTitle;
-        request.MediaType = model.MediaType;
+        request.Kind = model.Kind;
+        request.MediaType = target?.MediaType ?? model.MediaType;
+        request.TargetDeckId = isUpdate ? model.TargetDeckId : null;
         request.ExternalUrl = model.ExternalUrl?.Trim();
         request.ExternalLinkType = externalLinkType;
         request.Description = model.Description?.Trim();
         request.UpdatedAt = DateTime.UtcNow;
 
         activityService.LogWithoutSave(id, userId, RequestAction.RequestEditedByAdmin,
-            JsonSerializer.Serialize(new { oldTitle, newTitle = request.Title }),
+            JsonSerializer.Serialize(new
+            {
+                oldTitle,
+                newTitle = request.Title,
+                oldKind = oldKind.ToString(),
+                newKind = request.Kind.ToString(),
+                request.TargetDeckId
+            }),
             ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString());
 
         await context.SaveChangesAsync();
@@ -1546,6 +1856,26 @@ public partial class RequestController(
         logger.LogInformation("Request edited by admin: Id={Id}, AdminUserId={UserId}", id, userId);
 
         return Results.Ok(new { success = true });
+    }
+
+    private sealed record TargetDeckInfo(MediaType MediaType, string OriginalTitle);
+
+    private Task<TargetDeckInfo?> LoadTargetDeckAsync(int deckId) =>
+        context.Decks.AsNoTracking()
+            .Where(d => d.DeckId == deckId)
+            .Select(d => new TargetDeckInfo(d.MediaType, d.OriginalTitle))
+            .FirstOrDefaultAsync();
+
+    private static IResult TargetDeckProblem(string message) =>
+        Results.ValidationProblem(new Dictionary<string, string[]> { ["targetDeckId"] = [message] });
+
+    private static IResult? ValidateKindAndTarget(MediaRequestKind kind, int? targetDeckId)
+    {
+        if (kind == MediaRequestKind.Update)
+            return targetDeckId is > 0 ? null : TargetDeckProblem("Select the media this request updates.");
+
+        // Rejected rather than silently cleared so a client sending a stale target is visible.
+        return targetDeckId.HasValue ? TargetDeckProblem("Only update requests can target existing media.") : null;
     }
 
     private static HashSet<MediaRequestStatus> GetAllowedTransitions(MediaRequestStatus current) => current switch
@@ -1556,6 +1886,13 @@ public partial class RequestController(
         MediaRequestStatus.Rejected => [MediaRequestStatus.Open],
         _ => []
     };
+
+    // Calendar-month window in UTC: [first of this month 00:00, first of next month 00:00).
+    private static (DateTime MonthStart, DateTime NextMonthStart) CurrentMonthWindow(DateTime utcNow)
+    {
+        var monthStart = new DateTime(utcNow.Year, utcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        return (monthStart, monthStart.AddMonths(1));
+    }
 
     private static string SanitiseFileName(string fileName)
     {

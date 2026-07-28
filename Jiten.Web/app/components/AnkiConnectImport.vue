@@ -79,6 +79,7 @@
   });
 
   type KeptReview = { Rating: number; ReviewDateTime: Date; ReviewDuration: number };
+  type CardReviews = { kept: KeptReview[]; lastReview: Date | null };
   let selectedFieldName = '';
   let selectedReadingFieldName = '';
   let supportsFieldsFilter = false;
@@ -133,8 +134,8 @@
   // capped at MAX_REVIEWS_PER_CARD. Fetching per chunk (rather than the whole deck up front) keeps
   // peak memory proportional to the chunk size — the raw, uncapped history is never all held at once.
   // getReviewsOfCards takes card IDs directly, so subdecks are covered without enumerating deck names.
-  async function fetchChunkReviews(chunkCardIds: number[]): Promise<Map<number, KeptReview[]>> {
-    const map = new Map<number, KeptReview[]>();
+  async function fetchChunkReviews(chunkCardIds: number[]): Promise<Map<number, CardReviews>> {
+    const map = new Map<number, CardReviews>();
     // Card IDs MUST be sent as numbers, not strings. AnkiConnect's getReviewsOfCards keys its internal
     // results by the integer cid from the DB but then re-looks them up by the exact values we passed,
     // so passing strings makes every lookup miss and returns empty reviews for every card. We call via
@@ -151,7 +152,12 @@
         ReviewDuration: r.time,
       }));
       mapped.sort((a, b) => a.ReviewDateTime.getTime() - b.ReviewDateTime.getTime());
-      map.set(Number(cardIdStr), mapped.length > MAX_REVIEWS_PER_CARD ? mapped.slice(0, MAX_REVIEWS_PER_CARD) : mapped);
+      // The window MUST start at the card's first review: the optimiser builds its first training entry at
+      // deltaT 0 and the SRS replay starts from a New card, so a head-truncated history cannot be replayed.
+      map.set(Number(cardIdStr), {
+        kept: mapped.length > MAX_REVIEWS_PER_CARD ? mapped.slice(0, MAX_REVIEWS_PER_CARD) : mapped,
+        lastReview: mapped[mapped.length - 1]!.ReviewDateTime,
+      });
     }
     return map;
   }
@@ -276,7 +282,7 @@
   type SkipStats = { suspended: number; newCard: number; missingField: number; emptyWord: number };
 
   // Helper to build a single card payload from Anki card info
-  const buildCardPayload = (card: any, fieldName: string, readingFieldName: string, reviewsByCard: Map<number, KeptReview[]>, stats?: SkipStats) => {
+  const buildCardPayload = (card: any, fieldName: string, readingFieldName: string, reviewsByCard: Map<number, CardReviews>, stats?: SkipStats) => {
     if (card.queue === -1) { if (stats) stats.suspended++; return null; } // suspended
     if (card.queue === 0) { if (stats) stats.newCard++; return null; } // new/forgotten
 
@@ -292,7 +298,8 @@
       reading = furiganaToReading(readingField?.value?.trim() || '');
     }
 
-    const reviews = reviewsByCard.get(card.cardId) ?? [];
+    const cardReviews = reviewsByCard.get(card.cardId);
+    const reviews = cardReviews?.kept ?? [];
 
     // Convert Anki state to FSRS state
     let state: number;
@@ -302,11 +309,11 @@
     const stability = card.interval > 0 ? card.interval : 0;
     const difficulty = Math.max(1, Math.min(10, 10 - (card.factor - 1300) / 170.0));
 
-    // Reviews are ordered oldest-first, so the most recent review — used to reconstruct LastReview and
-    // the Review/day-learning due date — is the last element. When review history isn't imported (or a
-    // studied card has no logs), fall back to Anki's card modification time so the card still carries a
+    // Taken from the untruncated history, not the kept window, so a clipped leech is not scheduled from a
+    // stale last review with an already-past due date. When review history isn't imported (or a studied
+    // card has no logs), fall back to Anki's card modification time so the card still carries a
     // LastReview and stays schedulable, instead of being dropped server-side for having none.
-    const mostRecentReview = reviews.length > 0 ? reviews[reviews.length - 1].ReviewDateTime : null;
+    const mostRecentReview = cardReviews?.lastReview ?? null;
     const modReview = card.mod ? new Date(card.mod * 1000) : null;
     const lastReview = isValidDate(mostRecentReview) ? mostRecentReview : isValidDate(modReview) ? modReview : null;
 
@@ -470,7 +477,7 @@
         // browser on large decks. On an AnkiConnect too old to support getReviewsOfCards, cards still
         // import (with their Anki FSRS state) but without review logs, and the user is warned afterwards.
         const reviewsUnsupported = importReviewHistory.value && !supportsGetReviewsOfCards;
-        const reviewsForChunk = async (chunkIds: number[]): Promise<Map<number, KeptReview[]>> => {
+        const reviewsForChunk = async (chunkIds: number[]): Promise<Map<number, CardReviews>> => {
           if (!importReviewHistory.value || !supportsGetReviewsOfCards) return new Map();
           return fetchChunkReviews(chunkIds);
         };

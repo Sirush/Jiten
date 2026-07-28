@@ -3,22 +3,44 @@
 
   const model = defineModel<string[]>({ required: true });
 
+  const searchQuery = ref('');
   const expanded = ref<Record<string, boolean>>({});
   const toggleExpand = (key: string) => {
     expanded.value[key] = !expanded.value[key];
   };
 
-  const categorySelectedCount = (cat: PosCategory) =>
-    cat.tags.reduce((n, t) => (model.value.includes(t.value) ? n + 1 : n), 0);
+  const filteredCategories = computed(() => {
+    if (!searchQuery.value) return posCategories;
+    const query = searchQuery.value.toLowerCase();
+    return posCategories
+      .map((cat) => ({
+        ...cat,
+        tags: cat.tags.filter((t) => t.label.toLowerCase().includes(query) || t.value.toLowerCase().includes(query)),
+      }))
+      .filter((cat) => cat.tags.length > 0);
+  });
+
+  // A search that only narrows the tags inside collapsed categories hides its own results.
+  watch(searchQuery, (query) => {
+    expanded.value = query ? Object.fromEntries(filteredCategories.value.map((cat) => [cat.key, true])) : {};
+  });
+
+  // Counts come from the full category, not the search-filtered copy, so narrowing
+  // the search never makes a category look less selected than it is.
+  const categorySelectedCount = (key: string) => {
+    const tags = posCategories.find((cat) => cat.key === key)?.tags ?? [];
+    return tags.reduce((n, t) => (model.value.includes(t.value) ? n + 1 : n), 0);
+  };
 
   const categoryState = (cat: PosCategory): 'all' | 'some' | 'none' => {
-    const c = categorySelectedCount(cat);
+    const total = posCategories.find((c) => c.key === cat.key)?.tags.length ?? 0;
+    const c = categorySelectedCount(cat.key);
     if (c === 0) return 'none';
-    return c === cat.tags.length ? 'all' : 'some';
+    return c === total ? 'all' : 'some';
   };
 
   const toggleCategory = (cat: PosCategory) => {
-    const tagValues = cat.tags.map((t) => t.value);
+    const tagValues = posCategories.find((c) => c.key === cat.key)?.tags.map((t) => t.value) ?? [];
     if (categoryState(cat) === 'all') {
       model.value = model.value.filter((v) => !tagValues.includes(v));
     } else {
@@ -35,18 +57,28 @@
 
 <template>
   <div class="border border-gray-200 dark:border-gray-700 rounded-md overflow-hidden">
-    <div
-      v-if="model.length > 0"
-      class="flex items-center justify-between px-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700"
-    >
-      <span class="text-gray-600 dark:text-gray-300">{{ model.length }} selected</span>
-      <button type="button" class="text-purple-600 dark:text-purple-400 hover:underline cursor-pointer" @click="clearAll">
-        Clear
+    <div class="flex items-center gap-2 px-2 py-2 border-b border-gray-200 dark:border-gray-700">
+      <IconField class="flex-1">
+        <InputIcon>
+          <Icon name="material-symbols:search-rounded" />
+        </InputIcon>
+        <InputText v-model="searchQuery" type="text" placeholder="Search tags..." size="small" class="w-full" />
+        <InputIcon v-if="searchQuery" class="cursor-pointer" @click="searchQuery = ''">
+          <Icon name="material-symbols:close" />
+        </InputIcon>
+      </IconField>
+      <button
+        v-if="model.length > 0"
+        type="button"
+        class="shrink-0 text-xs text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+        @click="clearAll"
+      >
+        Clear {{ model.length }}
       </button>
     </div>
 
-    <div class="max-h-64 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
-      <div v-for="cat in posCategories" :key="cat.key">
+    <div class="max-h-72 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
+      <div v-for="cat in filteredCategories" :key="cat.key">
         <div class="flex items-center gap-2 px-3 py-2">
           <Checkbox
             :model-value="categoryState(cat) === 'all'"
@@ -65,8 +97,8 @@
               <span class="text-gray-400 font-normal">({{ cat.tags.length }})</span>
             </span>
             <span class="flex items-center gap-2 shrink-0">
-              <span v-if="categorySelectedCount(cat) > 0" class="text-xs text-purple-600 dark:text-purple-400">
-                {{ categorySelectedCount(cat) }}
+              <span v-if="categorySelectedCount(cat.key) > 0" class="text-xs text-purple-600 dark:text-purple-400">
+                {{ categorySelectedCount(cat.key) }}
               </span>
               <Icon
                 :name="expanded[cat.key] ? 'material-symbols:expand-less' : 'material-symbols:expand-more'"
@@ -84,6 +116,10 @@
           </div>
         </div>
       </div>
+
+      <p v-if="filteredCategories.length === 0" class="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+        No tags match "{{ searchQuery }}"
+      </p>
     </div>
   </div>
 </template>

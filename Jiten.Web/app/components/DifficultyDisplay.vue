@@ -2,7 +2,7 @@
   import { computed } from 'vue';
   import { useJitenStore } from '~/stores/jitenStore';
   import { DifficultyDisplayStyle, DifficultyValueDisplayStyle } from '~/types';
-  import { formatDifficultyValue } from '~/utils/difficultyColours';
+  import { difficultyNames, difficultyTextClasses, formatDifficultyValue } from '~/utils/difficultyColours';
 
   const props = defineProps<{
     difficulty: number;
@@ -15,17 +15,10 @@
 
   const store = useJitenStore();
 
-  const nameValues = ['Beginner', 'Easy', 'Average', 'Hard', 'Expert', 'Insane'];
+  const nameValues = difficultyNames;
   const starValues = ['★☆☆☆☆', '★★☆☆☆', '★★★☆☆', '★★★★☆', '★★★★★', '★★★★★'];
 
-  const colorClasses = [
-    'text-green-700 dark:text-green-300',
-    'text-green-500 dark:text-green-200',
-    'text-cyan-500 dark:text-cyan-300',
-    'text-amber-600 dark:text-amber-300',
-    'text-red-600 dark:text-red-300',
-    'text-red-600 dark:text-red-300',
-  ] as const;
+  const colorClasses = difficultyTextClasses;
 
   const effectiveRaw = computed(() => {
     return Math.min(Math.max(props.difficultyRaw ?? props.difficulty, 0), 5);

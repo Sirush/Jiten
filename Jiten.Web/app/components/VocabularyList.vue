@@ -2,6 +2,7 @@
   import type { Word } from '~/types/types';
   import type { AsyncDataRequestStatus } from '#app';
   import { LazyHydrateVocabularyEntry } from '~/utils/lazyHydratedComponents';
+  import type { WordListContextInput, WordListItem } from '~/composables/useWordListContext';
 
   const props = defineProps<{
     words: Word[];
@@ -11,11 +12,30 @@
     skeletonCount?: number;
     removable?: boolean;
     removingKey?: string | null;
+    selectable?: boolean;
+    selectedKeys?: Set<string>;
+    listContext?: WordListContextInput;
   }>();
 
   const emit = defineEmits<{
     remove: [word: Word];
+    select: [word: Word];
   }>();
+
+  const entryKey = (word: Word) => `${word.wordId}-${word.mainReading.readingIndex}`;
+
+  const { rememberFromEvent } = useListAnchor(computed(() => props.words));
+
+  const { writeContext } = useWordListContext();
+
+  watch(
+    [() => props.words, () => props.listContext],
+    ([words, listContext]) => {
+      if (!listContext || words.length === 0) return;
+      writeContext(listContext, words.map((word): WordListItem => [word.wordId, word.mainReading.readingIndex]));
+    },
+    { immediate: true },
+  );
 </script>
 
 <template>
@@ -43,16 +63,20 @@
        content-visibility skips layout/paint for offscreen entries. The first
        viewport-worth of entries renders normally so the page paints at its real
        size immediately (no first-frame shift from the intrinsic-size estimate). -->
-  <div v-else class="flex flex-col gap-2">
+  <div v-else class="flex flex-col gap-2" @click="rememberFromEvent">
     <LazyHydrateVocabularyEntry
       v-for="(word, index) in words"
-      :key="`${word.wordId}-${word.mainReading.readingIndex}`"
+      :key="entryKey(word)"
       :word="word"
       :is-compact="true"
       :removable="removable"
-      :removing="removingKey === `${word.wordId}-${word.mainReading.readingIndex}`"
+      :removing="removingKey === entryKey(word)"
+      :selectable="selectable"
+      :selected="selectedKeys?.has(entryKey(word))"
+      :data-list-anchor="entryKey(word)"
       :class="index >= 8 ? '[content-visibility:auto] [contain-intrinsic-size:auto_8rem]' : ''"
       @remove="emit('remove', word)"
+      @select="emit('select', word)"
     />
   </div>
 </template>

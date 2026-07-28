@@ -2,28 +2,20 @@
   import SettingsCoverage from '~/components/SettingsCoverage.vue';
   import SettingsApiKey from '~/components/SettingsApiKey.vue';
   import SettingsWordSets from '~/components/SettingsWordSets.vue';
-  import { useSrsStore } from '~/stores/srsStore';
+  import SettingsJitenPlus from '~/components/SettingsJitenPlus.vue';
 
   definePageMeta({
     middleware: ['auth'],
   });
 
-  const srs = useSrsStore();
-  const srsAcknowledged = ref(false);
-
-  const enrolling = ref(false);
-
-  async function enrollInSrs() {
-    enrolling.value = true;
-    try {
-      await srs.enroll();
-      await navigateTo('/settings/srs');
-    } finally {
-      enrolling.value = false;
-    }
-  }
+  useHead({ title: 'Settings - Jiten' });
 
   const { vocabStatsLoading, totalWordsAmount, fetchKnownWordsAmount } = useVocabularyStats();
+
+  const vocabularyStatus = computed(() => {
+    if (vocabStatsLoading.value || totalWordsAmount.value === 0) return null;
+    return `${totalWordsAmount.value.toLocaleString()} tracked word${totalWordsAmount.value === 1 ? '' : 's'}`;
+  });
 
   onMounted(() => {
     fetchKnownWordsAmount();
@@ -32,94 +24,56 @@
 
 <template>
   <div class="container mx-auto p-2 md:p-4">
-    <Card class="mb-4">
-      <template #title>
-        <h3 class="text-lg font-semibold">Account</h3>
-      </template>
-      <template #content>
-        <p class="text-gray-600 dark:text-gray-300 mb-3">
-          Manage your email and password, update your newsletter preference, and review your sign-in methods and account details.
-        </p>
-        <NuxtLink to="/settings/account">
-          <Button icon="pi pi-user" label="Account Settings" class="w-full md:w-auto" />
-        </NuxtLink>
-      </template>
-    </Card>
+    <h1 class="mb-4 text-2xl font-bold">Settings</h1>
 
-    <SettingsCoverage class="mb-4" />
+    <section class="mb-6" aria-labelledby="settings-account">
+      <h2 id="settings-account" class="mb-2 text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Account</h2>
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <SettingsTile icon="pi pi-user" title="Account" to="/settings/account" description="Account details, email, password and sign-in methods." />
+        <SettingsJitenPlus />
+      </div>
+    </section>
 
-    <Card class="mb-4">
-      <template #title>
-        <h3 class="text-lg font-semibold">Vocabulary</h3>
-      </template>
-      <template #content>
-        <p class="text-gray-600 dark:text-gray-300 mb-3">
-          View your current known vocabulary. Import known words from AnkiConnect, JPDB, Anki text exports, or by frequency range. Export your word list, or
-          back up your complete vocabulary including review history.
-        </p>
-        <p v-if="!vocabStatsLoading && totalWordsAmount > 0" class="mb-3 text-muted-color">
-          You have <span class="font-extrabold text-primary-600 dark:text-primary-300">{{ totalWordsAmount }}</span> tracked word{{
-            totalWordsAmount === 1 ? '' : 's'
-          }}.
-        </p>
-        <NuxtLink to="/settings/vocabulary">
-          <Button icon="pi pi-cog" label="Manage Vocabulary" class="w-full md:w-auto" />
-        </NuxtLink>
-      </template>
-    </Card>
+    <section class="mb-6" aria-labelledby="settings-vocabulary">
+      <h2 id="settings-vocabulary" class="mb-2 text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Vocabulary</h2>
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <SettingsTile
+          icon="pi pi-book"
+          title="Vocabulary"
+          to="/settings/vocabulary"
+          description="Import and export your known words from Anki, JPDB, frequency ranges."
+          :status="vocabularyStatus"
+        />
+        <SettingsWordSets />
+        <SettingsCoverage />
+      </div>
+    </section>
 
-    <Card class="mb-4">
-      <template #title>
-        <h3 class="text-lg font-semibold">Dictionaries</h3>
-      </template>
-      <template #content>
-        <p class="text-gray-600 dark:text-gray-300 mb-3">
-          Import Yomitan dictionaries to show custom definitions on the website and in downloaded decks. Dictionary data is stored locally and never leaves your
-          browser.
-        </p>
-        <NuxtLink to="/settings/dictionaries">
-          <Button icon="pi pi-book" label="Manage Dictionaries" class="w-full md:w-auto" />
-        </NuxtLink>
-      </template>
-    </Card>
+    <section class="mb-6" aria-labelledby="settings-study">
+      <h2 id="settings-study" class="mb-2 text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Study</h2>
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <SettingsTile
+          icon="pi pi-sliders-h"
+          title="Study (SRS)"
+          to="/settings/srs"
+          description="Customise your study preferences, daily limits, card display and FSRS scheduling parameters."
+        />
+        <SettingsTile icon="pi pi-th-large" title="Cards" to="/settings/cards" description="Browse and bulk-edit your known words." />
+        <SettingsTile icon="pi pi-image" title="Card Media" to="/settings/card-media" description="Manage images and audio on your cards." plus />
+      </div>
+    </section>
 
-    <SettingsWordSets class="mb-4" />
-
-    <Card v-if="srs.srsEnrolled === true" class="mb-4">
-      <template #title>
-        <h3 class="text-lg font-semibold">SRS</h3>
-      </template>
-      <template #content>
-        <p class="text-gray-600 dark:text-gray-300 mb-3">
-          Configure your SRS study preferences, daily limits, card display options, and FSRS scheduling parameters.
-        </p>
-        <NuxtLink to="/settings/srs">
-          <Button icon="pi pi-cog" label="SRS Settings" class="w-full md:w-auto" />
-        </NuxtLink>
-      </template>
-    </Card>
-
-    <Card v-else-if="srs.srsEnrolled === false" class="mb-4">
-      <template #title>
-        <h3 class="text-lg font-semibold">SRS <span class="text-sm font-normal text-orange-500">preview</span></h3>
-      </template>
-      <template #content>
-        <p class="text-gray-600 dark:text-gray-300 mb-3">
-          Jiten's built-in SRS is currently in preview. It is actively developed but may contain bugs. Please report any issues you encounter to help improve it
-          and give all your feedback.
-        </p>
-        <div class="flex items-start gap-2 mb-4">
-          <Checkbox v-model="srsAcknowledged" input-id="srsAcknowledge" :binary="true" />
-          <label for="srsAcknowledge" class="text-sm cursor-pointer">
-            I understand that the SRS is in preview and that it may contain bugs. I will share feedback and bug reports to help improve it.
-          </label>
-        </div>
-        <Button icon="pi pi-arrow-right" label="Enable SRS" :disabled="!srsAcknowledged" :loading="enrolling" class="w-full md:w-auto" @click="enrollInSrs" />
-      </template>
-    </Card>
-
-    <SettingsApiKey />
+    <section aria-labelledby="settings-advanced">
+      <h2 id="settings-advanced" class="mb-2 text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Advanced</h2>
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <SettingsTile
+          icon="pi pi-language"
+          title="Dictionaries"
+          to="/settings/dictionaries"
+          description="Import Yomitan dictionaries to show custom definitions on the site and in downloaded decks. Data stays local and never leaves your browser."
+        />
+        <div class="lg:col-span-2"><SettingsApiKey /></div>
+      </div>
+    </section>
   </div>
 </template>
-
-<style scoped></style>

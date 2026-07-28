@@ -2,7 +2,22 @@
   import { useSrsStore } from '~/stores/srsStore';
   import { useToast } from 'primevue/usetoast';
   import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
-  import type { StudyKeybinds } from '~/types';
+  import type { CardBlockType, CardImageLayout, CardImagePosition, HeadwordFurigana, StudyKeybinds, StudySettingsDto } from '~/types';
+  import {
+    getCardImageBlock,
+    getCardImagePosition,
+    getHeadwordFurigana,
+    getSentencePosition,
+    hasCustomArrangement,
+    layoutHasBlock,
+    resolveCardLayout,
+    setBlockPresence,
+    setCardImageOption,
+    setCardImagePosition,
+    setHeadwordFurigana,
+    setSentenceBlur,
+    setSentencePosition,
+  } from '~/utils/cardLayout';
 
   const props = defineProps<{ inline?: boolean }>();
 
@@ -13,7 +28,33 @@
   const saveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const loaded = ref(false);
 
+  const ADVANCED_LAYOUT_KEY = 'srs-card-layout-advanced';
+  const advancedLayout = ref(false);
+  watch(advancedLayout, (on) => {
+    try {
+      localStorage.setItem(ADVANCED_LAYOUT_KEY, on ? '1' : '0');
+    } catch {
+      /* private mode — the preference simply resets next session */
+    }
+  });
+
+  const ADVANCED_PREVIEW_KEY = 'srs-card-layout-preview';
+  const advancedPreview = ref(false);
+  watch(advancedPreview, (on) => {
+    try {
+      localStorage.setItem(ADVANCED_PREVIEW_KEY, on ? '1' : '0');
+    } catch {
+      /* private mode — the preference simply resets next session */
+    }
+  });
+
   onMounted(async () => {
+    try {
+      advancedLayout.value = localStorage.getItem(ADVANCED_LAYOUT_KEY) === '1';
+      advancedPreview.value = localStorage.getItem(ADVANCED_PREVIEW_KEY) === '1';
+    } catch {
+      /* private mode — default to simple */
+    }
     await srsStore.fetchSettings(true);
     Object.assign(form, srsStore.studySettings);
     form.keybinds = { ...srsStore.studySettings.keybinds };
@@ -58,6 +99,22 @@
     { label: 'Back', value: 'Back' },
   ];
 
+  const cardImageLayoutOptions = [
+    { label: 'Beside word', value: 'beside' },
+    { label: 'Below word', value: 'below' },
+  ];
+
+  const cardImagePositionOptions = [
+    { label: 'Front', value: 'Front' },
+    { label: 'Back', value: 'Back' },
+  ];
+
+  const cardAudioPositionOptions = [
+    { label: 'Front', value: 'Front' },
+    { label: 'Back', value: 'Back' },
+    { label: 'Both', value: 'Both' },
+  ];
+
   const leechActionOptions = [
     { label: 'Suspend', value: 'Suspend' },
     { label: 'Notify only', value: 'NotifyOnly' },
@@ -89,6 +146,90 @@
     { label: 'Easiest', value: 'EasiestFirst' },
     { label: 'Hardest', value: 'HardestFirst' },
   ];
+
+  // The simple per-part controls read from the resolved layout and write back into it. The setters
+  // always mirror the legacy field (so an old client with a null cardLayout still derives correctly)
+  // and, once a concrete cardLayout exists, additionally rewrite it so the toggle keeps working.
+  const resolvedLayout = computed(() => resolveCardLayout(form as StudySettingsDto));
+  const layoutIsCustom = computed(() => !!form.cardLayout && hasCustomArrangement(form.cardLayout));
+
+  type PresenceKey = 'showCardStatus' | 'showConfusableReadings' | 'showPitchAccent' | 'showFrequencyRank' | 'showKanjiBreakdown' | 'showWordComposition' | 'showWordUsedIn';
+  function presenceToggle(key: PresenceKey, type: CardBlockType) {
+    return computed<boolean>({
+      get: () => layoutHasBlock(resolvedLayout.value, type),
+      set: (v) => {
+        form[key] = v;
+        if (form.cardLayout) form.cardLayout = setBlockPresence(form.cardLayout, type, v);
+      },
+    });
+  }
+
+  const showCardStatus = presenceToggle('showCardStatus', 'cardStatus');
+  const showConfusableReadings = presenceToggle('showConfusableReadings', 'confusableReadings');
+  const showPitchAccent = presenceToggle('showPitchAccent', 'pitchAccent');
+  const showFrequencyRank = presenceToggle('showFrequencyRank', 'frequencyRank');
+  const showKanjiBreakdown = presenceToggle('showKanjiBreakdown', 'kanjiBreakdown');
+  const showWordComposition = presenceToggle('showWordComposition', 'wordComposition');
+  const showWordUsedIn = presenceToggle('showWordUsedIn', 'wordUsedIn');
+
+  function applyFurigana(on: boolean, newOnly: boolean) {
+    const furigana: HeadwordFurigana = on ? (newOnly ? 'newOnly' : 'shown') : 'afterFlip';
+    form.showFuriganaOnFront = on;
+    form.furiganaOnFrontNewOnly = newOnly;
+    if (form.cardLayout) form.cardLayout = setHeadwordFurigana(form.cardLayout, furigana);
+  }
+  const showFuriganaOnFront = computed<boolean>({
+    get: () => {
+      const f = getHeadwordFurigana(resolvedLayout.value);
+      return f === 'shown' || f === 'newOnly';
+    },
+    set: (v) => applyFurigana(v, furiganaOnFrontNewOnly.value),
+  });
+  const furiganaOnFrontNewOnly = computed<boolean>({
+    get: () => getHeadwordFurigana(resolvedLayout.value) === 'newOnly',
+    set: (v) => applyFurigana(showFuriganaOnFront.value, v),
+  });
+
+  const exampleSentencePosition = computed<'Hidden' | 'Front' | 'Back'>({
+    get: () => getSentencePosition(resolvedLayout.value),
+    set: (pos) => {
+      form.exampleSentencePosition = pos;
+      if (form.cardLayout) form.cardLayout = setSentencePosition(form.cardLayout, pos, form.blurExampleSentence);
+    },
+  });
+  const blurExampleSentence = computed<boolean>({
+    get: () => {
+      if (!form.cardLayout) return form.blurExampleSentence;
+      const es = [...form.cardLayout.front, ...form.cardLayout.back].find((b) => b.type === 'exampleSentence');
+      return !!es?.options?.blur;
+    },
+    set: (v) => {
+      form.blurExampleSentence = v;
+      if (form.cardLayout) form.cardLayout = setSentenceBlur(form.cardLayout, v);
+    },
+  });
+
+  const cardImageLayout = computed<CardImageLayout>({
+    get: () => (getCardImageBlock(resolvedLayout.value)?.options?.layout ?? 'beside') as CardImageLayout,
+    set: (v) => {
+      form.cardImageLayout = v;
+      if (form.cardLayout) form.cardLayout = setCardImageOption(form.cardLayout, 'layout', v);
+    },
+  });
+  const cardImagePosition = computed<CardImagePosition>({
+    get: () => getCardImagePosition(resolvedLayout.value),
+    set: (pos) => {
+      form.cardImagePosition = pos;
+      if (form.cardLayout) form.cardLayout = setCardImagePosition(form.cardLayout, pos);
+    },
+  });
+  const blurCardImage = computed<boolean>({
+    get: () => getCardImageBlock(resolvedLayout.value)?.options?.blur ?? true,
+    set: (v) => {
+      form.blurCardImage = v;
+      if (form.cardLayout) form.cardLayout = setCardImageOption(form.cardLayout, 'blur', v);
+    },
+  });
 
   // Easy Days: per-weekday load weights, index 0=Sunday…6=Saturday, each in [0,1].
   const easyModeOptions = [
@@ -734,18 +875,32 @@
 
       <!-- Card appearance -->
       <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Card appearance</h3>
-      <div :class="props.inline ? 'flex flex-col gap-4' : 'flex flex-col md:flex-row md:items-start md:gap-6'">
-        <!-- Live preview (top on mobile, right on desktop). In the narrow inline dialog it stays full-width on top. -->
-        <div :class="props.inline ? 'mb-2' : 'mb-4 md:mb-0 md:order-2 md:w-80 lg:w-96 xl:w-[30rem] md:shrink-0 md:sticky md:top-4'">
-          <SrsCardPreview :settings="form" />
-        </div>
-        <!-- Toggle groups -->
-        <div class="flex-1 min-w-0 md:order-1 flex flex-col gap-4">
+
+      <template v-if="!advancedLayout">
+        <div :class="props.inline ? 'flex flex-col gap-4' : 'flex flex-col md:flex-row md:items-start md:gap-6'">
+          <!-- Live preview (top on mobile, sticky right column on desktop; full-width in the narrow inline dialog). -->
+          <div :class="props.inline ? 'mb-2' : 'mb-4 md:mb-0 md:order-2 md:w-80 lg:w-96 xl:w-[30rem] md:shrink-0 md:sticky md:top-4'">
+            <SrsCardPreview :settings="form" />
+            <p v-if="layoutIsCustom" class="mt-2 text-xs text-surface-500 dark:text-surface-400">
+              <i class="pi pi-info-circle mr-1" />
+              Your card arrangement has been customised. Reordering and per-block options are managed in the advanced editor.
+            </p>
+            <Button
+              type="button"
+              outlined
+              icon="pi pi-sliders-h"
+              label="Customise layout (advanced)"
+              class="mt-3 w-full"
+              @click="advancedLayout = true"
+            />
+          </div>
+          <!-- Toggle groups -->
+          <div class="flex-1 min-w-0 md:order-1 flex flex-col gap-4">
           <div>
             <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card front</label>
             <div class="flex flex-col gap-2">
               <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="form.showCardStatus" input-id="showCardStatus" />
+                <ToggleSwitch v-model="showCardStatus" input-id="showCardStatus" />
                 <label for="showCardStatus" class="text-sm cursor-pointer">
                   Show card learning status
                   <Tooltip content="Display the card status (New, Review, Again) at the top of the card." placement="right">
@@ -754,7 +909,7 @@
                 </label>
               </div>
               <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="form.showFuriganaOnFront" input-id="showFuriganaOnFront" />
+                <ToggleSwitch v-model="showFuriganaOnFront" input-id="showFuriganaOnFront" />
                 <label for="showFuriganaOnFront" class="text-sm cursor-pointer">
                   Show furigana
                   <Tooltip content="Display furigana (reading hints) above kanji on the card front." placement="right">
@@ -762,8 +917,8 @@
                   </Tooltip>
                 </label>
               </div>
-              <div v-if="form.showFuriganaOnFront" class="flex items-center gap-2 ml-6">
-                <ToggleSwitch v-model="form.furiganaOnFrontNewOnly" input-id="furiganaOnFrontNewOnly" />
+              <div v-if="showFuriganaOnFront" class="flex items-center gap-2 ml-6">
+                <ToggleSwitch v-model="furiganaOnFrontNewOnly" input-id="furiganaOnFrontNewOnly" />
                 <label for="furiganaOnFrontNewOnly" class="text-sm cursor-pointer">
                   New cards only
                   <Tooltip content="Only show furigana on cards you haven't seen before. Review cards will show plain kanji." placement="right">
@@ -772,7 +927,7 @@
                 </label>
               </div>
               <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="form.showConfusableReadings" input-id="showConfusableReadings" />
+                <ToggleSwitch v-model="showConfusableReadings" input-id="showConfusableReadings" />
                 <label for="showConfusableReadings" class="text-sm cursor-pointer">
                   Show confusable readings
                   <Tooltip
@@ -800,15 +955,15 @@
                   </Tooltip>
                 </label>
                 <SelectButton
-                  v-model="form.exampleSentencePosition"
+                  v-model="exampleSentencePosition"
                   :options="exampleSentenceOptions"
                   option-label="label"
                   option-value="value"
                   :allow-empty="false"
                 />
               </div>
-              <div v-if="form.exampleSentencePosition !== 'Hidden'" class="flex items-center gap-2">
-                <ToggleSwitch v-model="form.blurExampleSentence" input-id="blurExampleSentence" />
+              <div v-if="exampleSentencePosition !== 'Hidden'" class="flex items-center gap-2">
+                <ToggleSwitch v-model="blurExampleSentence" input-id="blurExampleSentence" />
                 <label for="blurExampleSentence" class="text-sm cursor-pointer">
                   Blur until clicked
                   <Tooltip content="Example sentence is blurred by default. Click it to reveal." placement="right">
@@ -816,7 +971,7 @@
                   </Tooltip>
                 </label>
               </div>
-              <div v-if="form.exampleSentencePosition !== 'Hidden'">
+              <div v-if="exampleSentencePosition !== 'Hidden'">
                 <label class="text-sm mb-1 block">
                   Sorting
                   <Tooltip
@@ -841,7 +996,7 @@
             <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card back</label>
             <div class="flex flex-col gap-2">
               <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="form.showPitchAccent" input-id="showPitchAccent" />
+                <ToggleSwitch v-model="showPitchAccent" input-id="showPitchAccent" />
                 <label for="showPitchAccent" class="text-sm cursor-pointer">
                   Pitch accent
                   <Tooltip content="Show the pitch accent pattern on the card back." placement="right">
@@ -850,7 +1005,7 @@
                 </label>
               </div>
               <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="form.showFrequencyRank" input-id="showFrequencyRank" />
+                <ToggleSwitch v-model="showFrequencyRank" input-id="showFrequencyRank" />
                 <label for="showFrequencyRank" class="text-sm cursor-pointer">
                   Frequency rank
                   <Tooltip content="Show how common the word is in Japanese, based on overall word frequency data." placement="right">
@@ -859,7 +1014,7 @@
                 </label>
               </div>
               <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="form.showKanjiBreakdown" input-id="showKanjiBreakdown" />
+                <ToggleSwitch v-model="showKanjiBreakdown" input-id="showKanjiBreakdown" />
                 <label for="showKanjiBreakdown" class="text-sm cursor-pointer">
                   Kanji breakdown
                   <Tooltip content="Show the individual kanji that make up the word along with their usual meaning." placement="right">
@@ -868,7 +1023,7 @@
                 </label>
               </div>
               <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="form.showWordComposition" input-id="showWordComposition" />
+                <ToggleSwitch v-model="showWordComposition" input-id="showWordComposition" />
                 <label for="showWordComposition" class="text-sm cursor-pointer">
                   Word composition
                   <Tooltip content="Show the component words that compose this word." placement="right">
@@ -877,7 +1032,7 @@
                 </label>
               </div>
               <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="form.showWordUsedIn" input-id="showWordUsedIn" />
+                <ToggleSwitch v-model="showWordUsedIn" input-id="showWordUsedIn" />
                 <label for="showWordUsedIn" class="text-sm cursor-pointer">
                   Word used in
                   <Tooltip content="Show other words that contain this word." placement="right">
@@ -887,8 +1042,93 @@
               </div>
             </div>
           </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card image</label>
+            <div class="flex flex-col gap-2">
+              <div>
+                <label class="text-sm mb-1 block">
+                  Layout
+                  <Tooltip
+                    content="Where your uploaded card image appears.<br>**Beside word** — to the right of the word on wider screens (stacks below on mobile).<br>**Below word** — centred under the word."
+                    placement="right"
+                  >
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+                <SelectButton v-model="cardImageLayout" :options="cardImageLayoutOptions" option-label="label" option-value="value" :allow-empty="false" />
+              </div>
+              <div>
+                <label class="text-sm mb-1 block">
+                  Position
+                  <Tooltip
+                    content="**Front** — image visible before you flip the card.<br>**Back** — image shown only after you flip."
+                    placement="right"
+                  >
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+                <SelectButton v-model="cardImagePosition" :options="cardImagePositionOptions" option-label="label" option-value="value" :allow-empty="false" />
+              </div>
+              <div v-if="cardImagePosition === 'Front'" class="flex items-center gap-2">
+                <ToggleSwitch v-model="blurCardImage" input-id="blurCardImage" />
+                <label for="blurCardImage" class="text-sm cursor-pointer">
+                  Blur image before reveal
+                  <Tooltip content="Image is blurred until you flip the card or click it." placement="right">
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+              </div>
+              <p class="text-xs text-surface-500 dark:text-surface-400">
+                Card images are a
+                <NuxtLink to="/jiten-plus" class="underline font-medium">Jiten+</NuxtLink>
+                feature.
+              </p>
+            </div>
+          </div>
+          </div>
         </div>
-      </div>
+      </template>
+
+      <template v-else>
+        <div class="flex flex-col gap-3">
+          <div class="flex items-center justify-between gap-2">
+            <Button
+              type="button"
+              severity="secondary"
+              size="small"
+              icon="pi pi-arrow-left"
+              label="Back to simple settings"
+              @click="advancedLayout = false"
+            />
+            <Button
+              type="button"
+              severity="secondary"
+              size="small"
+              :icon="advancedPreview ? 'pi pi-eye-slash' : 'pi pi-eye'"
+              :label="advancedPreview ? 'Hide preview' : 'Show preview'"
+              @click="advancedPreview = !advancedPreview"
+            />
+          </div>
+          <!-- The study-session Dialog embeds this component inline: the dialog is far narrower than
+               the viewport, so the md: two-column split must not apply there — always stack. -->
+          <div :class="advancedPreview ? (props.inline ? 'flex flex-col gap-4' : 'flex flex-col md:flex-row md:items-start md:gap-6') : ''">
+            <div :class="props.inline ? 'min-w-0' : 'flex-1 min-w-0 md:order-1'">
+              <SrsCardLayoutEditor v-model:layout="form.cardLayout" :settings="form">
+                <template #presetBar>
+                  <SrsCardLayoutPresetBar v-model:layout="form.cardLayout" v-model:presets="form.cardLayoutPresets" :settings="form" />
+                </template>
+              </SrsCardLayoutEditor>
+            </div>
+            <div
+              v-if="advancedPreview"
+              :class="props.inline ? 'order-first' : 'mt-4 md:mt-0 md:order-2 md:w-80 lg:w-96 xl:w-[30rem] md:shrink-0 md:sticky md:top-4'"
+            >
+              <SrsCardPreview :settings="form" />
+            </div>
+          </div>
+        </div>
+      </template>
 
       <Divider />
 
@@ -943,6 +1183,55 @@
             </Tooltip>
           </label>
         </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.autoPlayCustomAudio" input-id="autoPlayCustomAudio" />
+          <label for="autoPlayCustomAudio" class="text-sm cursor-pointer">
+            Auto-play custom card audio
+            <Tooltip
+              content="On cards with an uploaded audio clip, auto-play the clip. Independent of the headword audio settings above."
+              placement="right"
+            >
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
+        <div v-if="form.autoPlayCustomAudio" class="ml-6 flex flex-col gap-2">
+          <div>
+            <label class="text-sm mb-1 block">
+              Play on
+              <Tooltip
+                content="**Front** — as a prompt when the card appears.<br>**Back** — after you flip.<br>**Both** — on the front and again on the back."
+                placement="right"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+            <SelectButton
+              v-model="form.autoPlayCustomAudioPosition"
+              :options="cardAudioPositionOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.autoPlayCustomAudioInstead" input-id="autoPlayCustomAudioInstead" />
+            <label for="autoPlayCustomAudioInstead" class="text-sm cursor-pointer">
+              Play instead of the headword
+              <Tooltip
+                content="When the headword audio also auto-plays on the same side, play the clip instead of it."
+                placement="right"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
+        </div>
+        <p class="text-xs text-surface-500 dark:text-surface-400">
+          Custom card audio is a
+          <NuxtLink to="/jiten-plus" class="underline font-medium">Jiten+</NuxtLink>
+          feature.
+        </p>
       </div>
 
       <Divider />
@@ -953,7 +1242,7 @@
         <label class="block text-sm font-medium mb-1">
           Grading buttons
           <Tooltip
-            content="**4 buttons** — Again, Hard, Good, Easy — gives finer control over scheduling.<br>**2 buttons** — Forgot and Remembered — simpler and faster to grade."
+            content="**4 buttons** — Again, Hard, Good, Easy — gives finer control over scheduling.<br>**2 buttons** — Again and Good — simpler and faster to grade."
             placement="top"
           >
             <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />

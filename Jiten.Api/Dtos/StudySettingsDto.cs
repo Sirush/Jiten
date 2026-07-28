@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Jiten.Api.Dtos;
@@ -39,6 +40,28 @@ public enum ExampleSentenceSorting
     Random,
     EasiestFirst,
     HardestFirst
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<CardImageLayout>))]
+public enum CardImageLayout
+{
+    [JsonStringEnumMemberName("beside")] Beside,
+    [JsonStringEnumMemberName("below")] Below
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<CardImagePosition>))]
+public enum CardImagePosition
+{
+    Back,
+    Front
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<CardAudioAutoPlayPosition>))]
+public enum CardAudioAutoPlayPosition
+{
+    Back,
+    Front,
+    Both
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<LeechAction>))]
@@ -109,6 +132,15 @@ public class StudySettingsDto
     [JsonPropertyName("exampleSentenceSorting")]
     public ExampleSentenceSorting ExampleSentenceSorting { get; set; } = ExampleSentenceSorting.Random;
 
+    [JsonPropertyName("cardImageLayout")]
+    public CardImageLayout CardImageLayout { get; set; } = CardImageLayout.Beside;
+
+    [JsonPropertyName("cardImagePosition")]
+    public CardImagePosition CardImagePosition { get; set; } = CardImagePosition.Back;
+
+    [JsonPropertyName("blurCardImage")]
+    public bool BlurCardImage { get; set; } = true;
+
     [JsonPropertyName("showFrequencyRank")]
     public bool ShowFrequencyRank { get; set; } = true;
 
@@ -160,6 +192,15 @@ public class StudySettingsDto
     [JsonPropertyName("autoPlaySentenceOnFront")]
     public bool AutoPlaySentenceOnFront { get; set; }
 
+    [JsonPropertyName("autoPlayCustomAudio")]
+    public bool AutoPlayCustomAudio { get; set; }
+
+    [JsonPropertyName("autoPlayCustomAudioPosition")]
+    public CardAudioAutoPlayPosition AutoPlayCustomAudioPosition { get; set; } = CardAudioAutoPlayPosition.Back;
+
+    [JsonPropertyName("autoPlayCustomAudioInstead")]
+    public bool AutoPlayCustomAudioInstead { get; set; }
+
     [JsonPropertyName("showReviewActivity")]
     public bool ShowReviewActivity { get; set; } = true;
 
@@ -208,6 +249,40 @@ public class StudySettingsDto
 
     [JsonPropertyName("keybinds")]
     public StudyKeybindsDto Keybinds { get; set; } = new();
+
+    /// <summary>
+    /// User-customised ordering of the SRS card blocks per side. Null means "not customised" — the
+    /// client derives the layout from the legacy display toggles. The server bounds its size but does
+    /// not interpret block types; the client registry owns their semantics.
+    /// </summary>
+    [JsonPropertyName("cardLayout")]
+    public CardLayoutDto? CardLayout { get; set; }
+
+    [JsonPropertyName("cardLayoutPresets")]
+    public List<CardLayoutPresetDto>? CardLayoutPresets { get; set; }
+}
+
+[JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
+public class CardLayoutDto
+{
+    [JsonPropertyName("version")] public int Version { get; set; } = 1;
+    [JsonPropertyName("front")] public List<CardLayoutBlockDto> Front { get; set; } = new();
+    [JsonPropertyName("back")] public List<CardLayoutBlockDto> Back { get; set; } = new();
+}
+
+[JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
+public class CardLayoutBlockDto
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
+    [JsonPropertyName("options")] public Dictionary<string, JsonElement>? Options { get; set; }
+}
+
+[JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
+public class CardLayoutPresetDto
+{
+    [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
+    [JsonPropertyName("layout")] public CardLayoutDto Layout { get; set; } = new();
 }
 
 [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]

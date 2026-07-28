@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useToast } from 'primevue/usetoast';
+
 const props = defineProps<{
   deckId: number;
   currentRating?: number | null;
@@ -8,7 +10,8 @@ const emit = defineEmits<{
   rated: [rating: number];
 }>();
 
-const { submitRating } = useDifficultyVotes();
+const { submitRating, error: ratingError } = useDifficultyVotes();
+const toast = useToast();
 const isSubmitting = ref(false);
 const selectedRating = ref<number | null>(props.currentRating ?? null);
 
@@ -33,6 +36,13 @@ async function rate(rating: number) {
   if (success) {
     selectedRating.value = rating;
     emit('rated', rating);
+  } else {
+    toast.add({
+      severity: 'error',
+      summary: 'Rating failed',
+      detail: extractApiError(ratingError.value, 'Could not save your rating. Please try again.'),
+      life: 5000,
+    });
   }
 }
 </script>
