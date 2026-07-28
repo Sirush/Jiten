@@ -27,8 +27,10 @@
   const hasData = computed(() => Boolean(growth.value?.hasEnoughHistory) && (growth.value?.points.length ?? 0) > 1);
 
   const points = computed(() => growth.value?.points ?? []);
-  const learned = computed(() => points.value[points.value.length - 1]?.knownWords ?? 0);
-  const gained = computed(() => learned.value - (points.value[0]?.knownWords ?? 0));
+  // The whole known set, so this headline matches the words-known total on the vocabulary card; the
+  // chart's solid line is the mature subset of it.
+  const learned = computed(() => points.value[points.value.length - 1]?.knownWordsCombined ?? 0);
+  const recentGain = computed(() => growth.value?.recentGain ?? 0);
   const startLabel = computed(() => (points.value.length ? formatBucketDated(points.value[0]!.date, growth.value!.granularity) : ''));
 </script>
 
@@ -52,8 +54,12 @@
             {{ learned.toLocaleString() }}
           </span>
           <span class="text-gray-500">{{ learned === 1 ? 'word learned' : 'words learned' }}</span>
-          <span v-if="gained > 0" class="text-sm font-semibold text-green-600 dark:text-green-400">
-            +{{ gained.toLocaleString() }} since {{ startLabel }}
+          <span
+            v-if="recentGain !== 0"
+            class="text-sm font-semibold"
+            :class="recentGain > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'"
+          >
+            {{ recentGain > 0 ? '+' : '' }}{{ recentGain.toLocaleString() }} in the last 30 days
           </span>
         </div>
 

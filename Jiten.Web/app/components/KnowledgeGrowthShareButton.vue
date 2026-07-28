@@ -28,7 +28,7 @@
         palette,
         logo: logoBitmap,
         kicker: 'WORDS LEARNED OVER TIME',
-        stat: (known[known.length - 1] ?? 0).toLocaleString(),
+        stat: (combined[combined.length - 1] ?? 0).toLocaleString(),
         statSuffix: 'words learned',
         subtitle: `since ${startLabel}`,
         line: known,

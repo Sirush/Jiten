@@ -55,4 +55,7 @@ public class GlobalGrowthDto
     public string Granularity { get; set; } = "monthly";
     public List<GrowthPointDto> Points { get; set; } = [];
     public bool HasEnoughHistory { get; set; }
+
+    /// <summary>Net change in <see cref="GrowthPointDto.KnownWordsCombined"/> over a trailing 30 days, measured off the raw segments rather than the buckets.</summary>
+    public int RecentGain { get; set; }
 }

@@ -1804,4 +1804,5 @@ export interface KnowledgeGrowth {
   granularity: JourneyGranularity;
   points: GrowthPoint[];
   hasEnoughHistory: boolean;
+  recentGain: number;
 }

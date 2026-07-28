@@ -35,6 +35,9 @@
     </div>
     <div class="text-xs text-gray-500 dark:text-gray-400 mb-3">
       How many words you had learned over time.
+      <span v-if="hasData && growth!.recentGain !== 0" :class="growth!.recentGain > 0 ? 'text-green-600 dark:text-green-400 font-semibold' : 'font-semibold'">
+        {{ growth!.recentGain > 0 ? '+' : '' }}{{ growth!.recentGain.toLocaleString() }} in the last 30 days.
+      </span>
     </div>
 
     <div v-if="loading" class="h-[260px] rounded bg-surface-100 dark:bg-surface-800 animate-pulse" />

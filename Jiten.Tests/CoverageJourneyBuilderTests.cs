@@ -333,6 +333,56 @@ public class CoverageJourneyBuilderTests
     }
 
     [Fact]
+    public void GlobalGrowth_RecentGain_IsTheTrailing30DayChangeInTheWholeKnownSet()
+    {
+        var segments = new List<KnownSegment>
+        {
+            new(Today.AddDays(-200), null, true),
+            new(Today.AddDays(-40), null, true),
+            new(Today.AddDays(-20), null, true),
+            new(Today.AddDays(-10), null, true),
+            // Opened and closed inside the window, so it nets to nothing.
+            new(Today.AddDays(-15), Today.AddDays(-5), true),
+            // A young word is still a word learned.
+            new(Today.AddDays(-3), null, false)
+        };
+
+        var growth = CoverageJourneyBuilder.BuildGlobalGrowth(segments, Today);
+
+        growth.RecentGain.Should().Be(3);
+    }
+
+    [Fact]
+    public void GlobalGrowth_RecentGain_IgnoresAWordMerelyCrossingIntoMaturity()
+    {
+        // One word's history: young from three months ago, mature from a fortnight ago.
+        var segments = new List<KnownSegment>
+        {
+            new(Today.AddDays(-90), Today.AddDays(-14), false),
+            new(Today.AddDays(-14), null, true)
+        };
+
+        var growth = CoverageJourneyBuilder.BuildGlobalGrowth(segments, Today);
+
+        growth.RecentGain.Should().Be(0);
+    }
+
+    [Fact]
+    public void GlobalGrowth_RecentGain_IsNegativeWhenMoreWordsAreLostThanGained()
+    {
+        var segments = new List<KnownSegment>
+        {
+            new(Today.AddDays(-90), Today.AddDays(-10), true),
+            new(Today.AddDays(-90), Today.AddDays(-6), true),
+            new(Today.AddDays(-8), null, true)
+        };
+
+        var growth = CoverageJourneyBuilder.BuildGlobalGrowth(segments, Today);
+
+        growth.RecentGain.Should().Be(-1);
+    }
+
+    [Fact]
     public void GlobalGrowth_WithNoKnownWords_IsEmpty()
     {
         var growth = CoverageJourneyBuilder.BuildGlobalGrowth([], Today);
