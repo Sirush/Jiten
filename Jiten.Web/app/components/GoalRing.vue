@@ -69,11 +69,11 @@
     </div>
     <div class="flex flex-col gap-1 text-xs">
       <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-500">Done today</span>
-      <span class="flex items-center gap-1.5 text-surface-600 dark:text-surface-300">
+      <span class="flex items-center gap-1.5 text-surface-600 dark:text-surface-300 whitespace-nowrap">
         <span class="inline-block w-2 h-2 rounded-full bg-blue-400 dark:bg-blue-500"></span>
         <span class="tabular-nums font-medium">{{ reviewsDone }}</span> reviews
       </span>
-      <span class="flex items-center gap-1.5 text-surface-600 dark:text-surface-300">
+      <span class="flex items-center gap-1.5 text-surface-600 dark:text-surface-300 whitespace-nowrap">
         <span class="inline-block w-2 h-2 rounded-full bg-green-400 dark:bg-green-500"></span>
         <span class="tabular-nums font-medium">{{ newDone }}</span> new
       </span>
