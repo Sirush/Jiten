@@ -28,12 +28,8 @@
   const { limits: planLimits } = useJitenPlus();
   const sentenceLimitMessage = computed(() => `Maximum of ${planLimits.value.customSentencesPerWord} custom sentences reached`);
   const savedLocally = ref(false);
-  const isRevealed = computed({
-    get: () => store.displayAllNsfw,
-    set: (value) => {
-      store.displayAllNsfw = value;
-    },
-  });
+  const revealedLocally = ref(false);
+  const isRevealed = computed(() => store.displayAllNsfw || revealedLocally.value);
 
   const formattedText = computed(() => {
     const { text, wordPosition, wordLength } = props.exampleSentence;
@@ -51,7 +47,7 @@
 
   const handleReveal = () => {
     if (isNsfw && !isRevealed.value) {
-      isRevealed.value = true;
+      revealedLocally.value = true;
     }
   };
 

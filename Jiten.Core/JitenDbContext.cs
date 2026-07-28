@@ -732,7 +732,7 @@ public class JitenDbContext : DbContext
             entity.HasKey(mr => mr.Id);
             entity.Property(mr => mr.Id).ValueGeneratedOnAdd();
             entity.Property(mr => mr.Title).IsRequired().HasMaxLength(300);
-            entity.Property(mr => mr.Kind).IsRequired().HasDefaultValue(MediaRequestKind.New);
+            entity.Property(mr => mr.Kind).IsRequired().HasDefaultValue(MediaRequestKind.New).HasSentinel(default(MediaRequestKind));
             entity.Property(mr => mr.MediaType).IsRequired();
             entity.Property(mr => mr.ExternalUrl).HasMaxLength(500);
             entity.Property(mr => mr.Description).HasMaxLength(1000);

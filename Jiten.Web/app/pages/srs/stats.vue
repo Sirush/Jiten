@@ -566,6 +566,7 @@
               Estimated knowledge: {{ retrievability.estimatedKnowledge }} words
               <span v-if="retrievability.masteredCount > 0">(+{{ retrievability.masteredCount }} mastered)</span>
             </div>
+            <div>Counts cards in review and relearning, weighted by today's recall chance, so it runs below your learned-word total.</div>
           </template>
         </SrsStatsHistogram>
       </div>
