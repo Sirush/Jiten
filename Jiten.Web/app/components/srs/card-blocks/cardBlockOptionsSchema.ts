@@ -77,6 +77,7 @@ export const blockOptionsSchema: Partial<Record<CardBlockType, OptionControl[]>>
       ],
     },
     { key: 'blur', label: 'Blur until flip', type: 'toggle' },
+    { key: 'showEditButton', label: 'Add/edit media button', type: 'toggle' },
   ],
   divider: [
     {

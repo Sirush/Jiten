@@ -416,8 +416,8 @@
     await cardMedia.refreshOne(props.card.wordId, props.card.readingIndex);
   }
 
-  const { tierSatisfies } = useJitenPlus();
-  const canEditMedia = computed(() => tierSatisfies('full'));
+  const { hasFeature } = useJitenPlus();
+  const canEditMedia = computed(() => hasFeature('card-media'));
 
   const mediaReadings = computed(() => toMediaReadings(wordData.value?.alternativeReadings));
 
@@ -508,6 +508,11 @@
     imageBlurred,
     showBesideImage,
     imageBesideLayout,
+    hasCardMedia,
+    canEditCardMedia: computed(() => authStore.isAuthenticated && canEditMedia.value),
+    openMediaEditor: () => {
+      showMediaEditor.value = true;
+    },
     headWordTtsText,
     playCustomAudio,
     onImageError,
@@ -610,29 +615,6 @@
           tabindex="-1"
           class="mt-6 pt-6 border-t border-surface-200 dark:border-surface-700 focus:outline-none"
         >
-          <!-- Edit / add card media -->
-          <div v-if="authStore.isAuthenticated" class="mb-4 flex justify-center">
-            <button
-              v-if="hasCardMedia"
-              type="button"
-              class="inline-flex items-center gap-1.5 text-xs text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
-              @click="showMediaEditor = true"
-            >
-              <i class="pi pi-image text-sm" />
-              Edit card media
-            </button>
-            <JitenPlusGate v-else feature="card-media" feature-label="Card media" compact>
-              <button
-                type="button"
-                class="inline-flex items-center gap-1.5 text-xs text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
-                @click="showMediaEditor = true"
-              >
-                <i class="pi pi-image text-sm" />
-                Add image or audio
-              </button>
-            </JitenPlusGate>
-          </div>
-
           <template v-for="block in backBlocks" :key="block.id">
             <component :is="cardBlockRegistry[block.type].component" :block="block" side="back" />
           </template>

@@ -74,6 +74,9 @@ export interface CardContext {
   imageBlurred: ComputedRef<boolean>;
   showBesideImage: ComputedRef<boolean>;
   imageBesideLayout: ComputedRef<boolean>;
+  hasCardMedia: ComputedRef<boolean>;
+  canEditCardMedia: ComputedRef<boolean>;
+  openMediaEditor: () => void;
   headWordTtsText: ComputedRef<string>;
   playCustomAudio: () => void;
   onImageError: () => void;

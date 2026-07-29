@@ -1687,6 +1687,7 @@ export interface DeckOccurrencesBlockOptions {
 export interface CardImageBlockOptions {
   layout: CardImageLayout;
   blur: boolean;
+  showEditButton: boolean;
 }
 
 export interface DividerBlockOptions {

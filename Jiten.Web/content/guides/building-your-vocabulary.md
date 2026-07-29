@@ -1,6 +1,6 @@
 ---
 title: Building your starter vocabulary
-summary: The loop that gets you from a new account to reading something, and back around again
+summary: How to make sure your coverage is accurate on a fresh new account
 category: Getting Started
 level: beginner
 order: 30

@@ -157,6 +157,11 @@ export default defineNuxtConfig({
     },
   },
   ogImage: {
+    runtimeCacheStorage: {
+      driver: 'lruCache',
+      max: 500,
+      maxSize: 128 * 1024 * 1024,
+    },
     fonts: [
       {
         name: 'Noto Sans JP',
