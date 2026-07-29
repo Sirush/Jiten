@@ -171,8 +171,18 @@ public class RoadmapPayload
     /// <summary>Words still missing from the goal deck after the final step, in goal mode.</summary>
     public int? GoalWordsRemaining { get; set; }
 
+    /// <summary>
+    /// Goal mode: the fewest words that would reach the target from the user's known set as it stood when the
+    /// plan was generated. <see cref="TotalNewWords"/> is always larger — real titles teach vocabulary the
+    /// goal never uses — and the two together say what the detour costs.
+    /// </summary>
+    public int? GoalWordsAtStart { get; set; }
+
     /// <summary>New words learned across the whole plan, de-duplicated (a word taught by two steps counts once).</summary>
     public int TotalNewWords { get; set; }
+
+    /// <summary>Goal mode: the subset of <see cref="TotalNewWords"/> that the goal title actually uses.</summary>
+    public int? TotalGoalNewWords { get; set; }
 
     /// <summary>The goal title in goal mode, rendered as the destination rather than a step; null in discovery.</summary>
     public RoadmapGoalDto? Goal { get; set; }
@@ -219,6 +229,9 @@ public class RoadmapStepDto
 
     /// <summary>Words this step is projected to teach (occurrences ≥ acquisition threshold).</summary>
     public int NewWords { get; set; }
+
+    /// <summary>Goal mode: the subset of <see cref="NewWords"/> that the goal title actually uses.</summary>
+    public int? GoalNewWords { get; set; }
 
     public int WordCount { get; set; }
 
