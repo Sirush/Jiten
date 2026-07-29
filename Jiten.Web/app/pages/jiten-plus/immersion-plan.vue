@@ -73,6 +73,7 @@
     difficulty: number;
     coverage: number;
     newWords: number;
+    goalNewWords: number | null;
     wordCount: number;
     characterCount: number;
     speechDuration: number;
@@ -112,7 +113,9 @@
     goalUnreachableWords: number;
     goalCoverageFinal: number | null;
     goalWordsRemaining: number | null;
+    goalWordsAtStart: number | null;
     totalNewWords: number;
+    totalGoalNewWords: number | null;
     goal: RoadmapGoal | null;
   }
 
@@ -956,6 +959,9 @@
         `${exportSteps.length} ${exportSteps.length === 1 ? 'title' : 'titles'}`,
         `${payload.totalNewWords.toLocaleString()} new words`,
       ];
+      if (payload.totalGoalNewWords != null) {
+        totals.push(`${payload.totalGoalNewWords.toLocaleString()} your goal uses`);
+      }
       if (planTotals.value.hours > 0) totals.push(formatHours(planTotals.value.hours));
       ctx.font = `500 14px ${FONT}`;
       ctx.fillStyle = pal.sub;
@@ -987,20 +993,36 @@
         );
 
         const wordsLabel = `+${step.newWords.toLocaleString()} words`;
-        const knownLabel = `${(step.coverage * 100).toFixed(1)}% known`;
+        // Named explicitly: a bare "% known" reads as a running total of the user's own knowledge, which it
+        // isn't — it is comprehension of this one title, and so moves around as the titles change.
+        const knownLabel = `${(step.coverage * 100).toFixed(1)}% of this title`;
+        // The one figure that does accumulate. Without it the column above looks like progress going backwards.
+        const goalLabel = step.goalCoverageAfter != null
+          ? `→ ${(step.goalCoverageAfter * 100).toFixed(1)}% of goal`
+          : null;
+
         ctx.font = `700 15px ${FONT}`;
         let rightW = ctx.measureText(wordsLabel).width;
         ctx.font = `400 11px ${FONT}`;
         rightW = Math.max(rightW, ctx.measureText(knownLabel).width);
+        if (goalLabel) {
+          ctx.font = `700 11px ${FONT}`;
+          rightW = Math.max(rightW, ctx.measureText(goalLabel).width);
+        }
 
         const rightX = EXPORT_W - EXPORT_PAD - 14;
         ctx.textAlign = 'right';
         ctx.font = `700 15px ${FONT}`;
         ctx.fillStyle = pal.words;
-        ctx.fillText(wordsLabel, rightX, y + 26);
+        ctx.fillText(wordsLabel, rightX, goalLabel ? y + 21 : y + 26);
         ctx.font = `400 11px ${FONT}`;
         ctx.fillStyle = pal.sub;
-        ctx.fillText(knownLabel, rightX, y + 42);
+        ctx.fillText(knownLabel, rightX, goalLabel ? y + 36 : y + 42);
+        if (goalLabel) {
+          ctx.font = `700 11px ${FONT}`;
+          ctx.fillStyle = pal.goal;
+          ctx.fillText(goalLabel, rightX, y + 50);
+        }
         ctx.textAlign = 'left';
 
         const textX = EXPORT_PAD + 96;
@@ -1652,9 +1674,24 @@ v-for="r in roadmaps" :key="r.id" :label="r.name"
                       <div class="text-lg font-semibold tabular-nums">{{ activePayload.steps.length }}</div>
                     </div>
                     <div>
-                      <div class="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">New words</div>
+                      <div class="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                        New words
+                        <Tooltip
+                          v-if="activePayload.totalGoalNewWords != null"
+                          content="Everything these titles teach, whether or not your goal uses it. The amber figure is the part that counts toward the goal."
+                          placement="top"
+                        >
+                          <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
+                        </Tooltip>
+                      </div>
                       <div class="text-lg font-semibold tabular-nums text-green-600 dark:text-green-400">
                         {{ activePayload.totalNewWords.toLocaleString() }}
+                      </div>
+                      <div
+                        v-if="activePayload.totalGoalNewWords != null"
+                        class="text-sm font-semibold tabular-nums text-amber-600 dark:text-amber-400"
+                      >
+                        {{ activePayload.totalGoalNewWords.toLocaleString() }} your goal uses
                       </div>
                     </div>
                     <div v-if="planTotals.characters > 0">
@@ -1677,6 +1714,12 @@ v-for="r in roadmaps" :key="r.id" :label="r.name"
                     </div>
                   </div>
                   <p class="mt-2 text-sm opacity-80">Get through all of these and that's what you'll have covered.</p>
+                  <p v-if="activePayload.goalWordsAtStart" class="mt-1 text-sm opacity-80">
+                    Studied on their own, the
+                    <strong class="tabular-nums">{{ activePayload.goalWordsAtStart.toLocaleString() }}</strong>
+                    most-used words you're still missing from {{ goalTitleText }} would get you there too. No real
+                    title teaches only those, so a reading route always costs more words than the bare minimum.
+                  </p>
                 </div>
 
                 <!-- Steps -->
@@ -1764,9 +1807,9 @@ v-for="r in roadmaps" :key="r.id" :label="r.name"
 
                     <div class="stat-row flex items-center justify-between">
                       <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
-                        You know
+                        You know of this title
                         <Tooltip
-                          content="How much of the text you can already read. Words are counted every time they appear, so common words weigh more."
+                          content="How much of this title's text you will be able to read when you reach it if you follow the exact steps."
                           placement="top"
                         >
                           <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
@@ -1787,11 +1830,22 @@ v-for="r in roadmaps" :key="r.id" :label="r.name"
                       </span>
                       <span class="tabular-nums font-semibold text-green-600 dark:text-green-400">
                         {{ step.newWords.toLocaleString() }} new words
+                        <span v-if="step.goalNewWords != null" class="ml-1 text-xs font-normal opacity-70">
+                          ({{ step.goalNewWords.toLocaleString() }} your goal uses)
+                        </span>
                       </span>
                     </div>
 
                     <div v-if="step.goalCoverageAfter != null" class="stat-row flex items-center justify-between">
-                      <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">Then, of your title</span>
+                      <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
+                        Then, of your goal
+                        <Tooltip
+                          content="Your coverage of the title you're aiming for, after this step. This one only ever goes up."
+                          placement="top"
+                        >
+                          <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
+                        </Tooltip>
+                      </span>
                       <span class="tabular-nums font-semibold text-amber-600 dark:text-amber-400">
                         {{ pct(step.goalCoverageAfter) }}
                       </span>

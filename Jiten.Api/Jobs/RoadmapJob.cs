@@ -162,8 +162,11 @@ public class RoadmapJob(
             GoalCeilingReached = result.GoalCeilingReached,
             GoalUnreachableWords = result.GoalUnreachableWords,
             GoalCoverageFinal = result.GoalCoverageFinal,
-            GoalWordsRemaining = result.GoalWordsRemaining
+            GoalWordsRemaining = result.GoalWordsRemaining,
+            GoalWordsAtStart = result.GoalWordsAtStart
         };
+
+        var goalKeys = set.Goal is null ? null : set.Goal.Words.Select(w => w.Key).ToHashSet();
 
         // Steps can't share acquisition words by construction; dedupe defensively anyway.
         var planWords = new HashSet<long>();
@@ -207,6 +210,7 @@ public class RoadmapJob(
                 Difficulty = Math.Round(summary?.Difficulty ?? 0, 2),
                 Coverage = Math.Round(step.Coverage, 4),
                 NewWords = words.Count,
+                GoalNewWords = set.Goal is null ? null : step.GoalNewWords,
                 WordCount = (int)(summary?.WordCount ?? 0),
                 CharacterCount = summary?.CharacterCount ?? 0,
                 SpeechDuration = summary?.SpeechDuration ?? 0,
@@ -217,6 +221,7 @@ public class RoadmapJob(
         }
 
         payload.TotalNewWords = planWords.Count;
+        payload.TotalGoalNewWords = goalKeys is null ? null : planWords.Count(goalKeys.Contains);
 
         if (set.Goal is not null)
         {

@@ -23,6 +23,16 @@ public class RoadmapEngineTests
         };
     }
 
+    /// <summary>Re-stamps a deck with a reading length; <see cref="Deck"/> leaves it unset so cost falls back to tokens.</summary>
+    private static RoadmapCandidate Timed(RoadmapCandidate deck, double hours) => new()
+    {
+        DeckId = deck.DeckId,
+        WordCount = deck.WordCount,
+        LengthHours = hours,
+        Words = deck.Words,
+        Vector = deck.Vector
+    };
+
     private static RoadmapDefinition Settings(Action<RoadmapDefinition>? tweak = null)
     {
         var definition = new RoadmapDefinition
@@ -785,6 +795,68 @@ public class RoadmapEngineTests
         });
 
         result.Steps[0].DeckId.Should().Be(2, "four new words at max clamp still beat one");
+    }
+
+    [Fact]
+    public void Build_GoalMode_WeightsGoalWordsByOccurrenceNotByCount()
+    {
+        // The goal leans on word 50 and merely mentions 60-69. Buying the ten rare ones moves goal coverage by
+        // 10 tokens; buying the one frequent word moves it by 100. A sublinear occurrence weight inverts this.
+        var goalWords = new List<(int, int)> { (10, 800), (50, 100) };
+        for (var w = 60; w < 70; w++) goalWords.Add((w, 1));
+        var goal = Deck(99, goalWords.ToArray());
+
+        var oneFrequentWord = Deck(1, (10, 900), (50, 10));
+        var tenRareWords = Deck(2, (10, 900), (60, 10), (61, 10), (62, 10), (63, 10), (64, 10),
+                                (65, 10), (66, 10), (67, 10), (68, 10), (69, 10));
+        var known = new HashSet<long> { K(10) };
+
+        var result = RoadmapEngine.Build(Input(Settings(s => s.Steps = 1), [tenRareWords, oneFrequentWord], known,
+                                               goal: goal));
+
+        result.Steps[0].DeckId.Should().Be(1, "one word worth 100 goal tokens beats ten worth 1 each");
+    }
+
+    [Fact]
+    public void Build_GoalMode_ReportsTheMinimumWordsNeededBeforeAnyStepIsTaken()
+    {
+        // 90% known; reaching 95% needs 5 more tokens, which word 50 supplies on its own.
+        var goal = Deck(99, (10, 90), (50, 6), (51, 4));
+        var filler = Deck(1, (10, 90), (50, 10));
+        var known = new HashSet<long> { K(10) };
+
+        var result = RoadmapEngine.Build(Input(Settings(s => s.GoalComprehensionTarget = 0.95),
+                                               [filler], known, goal: goal));
+
+        result.GoalWordsAtStart.Should().Be(1);
+    }
+
+    [Fact]
+    public void Build_GoalMode_SeparatesGoalRelevantWordsFromTheRestOfAStepsYield()
+    {
+        var goal = Deck(99, (10, 80), (50, 10), (51, 10));
+        var mixed = Deck(1, (10, 300), (50, 6), (51, 6), (60, 6));
+        var known = new HashSet<long> { K(10) };
+
+        var result = RoadmapEngine.Build(Input(Settings(s => s.Steps = 1), [mixed], known, goal: goal));
+
+        result.Steps[0].NewWordsCount().Should().Be(3);
+        result.Steps[0].GoalNewWords.Should().Be(2, "word 60 never appears in the goal");
+    }
+
+    [Fact]
+    public void Build_EfficiencyPreference_PricesByHoursRatherThanTokenCount()
+    {
+        // Identical token counts and identical yield, but one takes ten times as long to get through.
+        var quick = Timed(Deck(1, (10, 900), (20, 100)), 1.0);
+        var slow = Timed(Deck(2, (10, 900), (20, 100)), 10.0);
+        var known = new HashSet<long> { K(10) };
+
+        var result = RoadmapEngine.Build(Input(
+                                             Settings(s => { s.Steps = 1; s.Preference = RoadmapPreference.Efficiency; }),
+                                             [slow, quick], known));
+
+        result.Steps[0].DeckId.Should().Be(1, "equal token counts hide a tenfold difference in time spent");
     }
 
     [Fact]

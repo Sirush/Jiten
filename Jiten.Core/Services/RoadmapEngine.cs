@@ -16,6 +16,12 @@ public sealed class RoadmapCandidate
     /// <summary>Total token count (<c>Deck.WordCount</c>), the denominator of coverage.</summary>
     public long WordCount { get; init; }
 
+    /// <summary>
+    /// Estimated hours to consume, the denominator of the efficiency preference. Zero when the deck carries
+    /// no length data, which falls the cost back to <see cref="WordCount"/>.
+    /// </summary>
+    public double LengthHours { get; init; }
+
     public RoadmapWord[] Words { get; init; } = [];
 
     public float[]? Vector { get; init; }
@@ -38,6 +44,13 @@ public sealed class RoadmapEngineResult
 
     /// <summary>Goal words that appear in no candidate title, so they can only be learned by reading the goal.</summary>
     public int GoalUnreachableWords { get; set; }
+
+    /// <summary>
+    /// Goal mode: the fewest words that would take the user from today's known set to the target, learning the
+    /// goal's highest-occurrence unknowns first. The floor any plan is measured against — a route through real
+    /// titles always teaches more than this, because titles carry vocabulary the goal never uses.
+    /// </summary>
+    public int? GoalWordsAtStart { get; set; }
 }
 
 public sealed record RoadmapEngineStep(
@@ -46,7 +59,11 @@ public sealed record RoadmapEngineStep(
     double Coverage,
     IReadOnlyList<RoadmapWord> AcquiredWords,
     double Score,
-    double? GoalCoverageAfter);
+    double? GoalCoverageAfter)
+{
+    /// <summary>Goal mode: how many of <see cref="AcquiredWords"/> the goal actually uses.</summary>
+    public int GoalNewWords { get; init; }
+}
 
 public sealed record RoadmapEngineDrill(
     int DeckId,
@@ -293,8 +310,12 @@ public static class RoadmapEngine
                 result.GoalReached = true;
                 result.GoalCoverageFinal = Coverage(input.Goal, known);
                 result.GoalWordsRemaining = 0;
+                result.GoalWordsAtStart = 0;
                 return result;
             }
+
+            // Measured against the known set as it stands now, before any step folds words into it.
+            result.GoalWordsAtStart = GapToReadable(input.Goal, known, goalTarget).Count;
         }
 
         // Only prerequisites the plan can account for may block a deck: schedulable candidates, decks the
@@ -332,7 +353,10 @@ public static class RoadmapEngine
             stepIndex++;
             result.Steps.Add(new RoadmapEngineStep(
                                  stepIndex, pinnedId, pinnedCoverage, pinnedAcquired, 0,
-                                 input.Goal is null ? null : Coverage(input.Goal, known)));
+                                 input.Goal is null ? null : Coverage(input.Goal, known))
+                             {
+                                 GoalNewWords = CountGoalWords(pinnedAcquired, goalWeights)
+                             });
         }
 
         if (input.Goal is not null && result.Steps.Count > 0
@@ -395,7 +419,10 @@ public static class RoadmapEngine
 
             double? goalCoverageAfter = input.Goal is null ? null : Coverage(input.Goal, known);
 
-            result.Steps.Add(new RoadmapEngineStep(i, best.DeckId, bestCoverage, bestAcquired, bestScore, goalCoverageAfter));
+            result.Steps.Add(new RoadmapEngineStep(i, best.DeckId, bestCoverage, bestAcquired, bestScore, goalCoverageAfter)
+                             {
+                                 GoalNewWords = CountGoalWords(bestAcquired, goalWeights)
+                             });
 
             if (input.Goal is not null && goalCoverageAfter >= goalTarget)
             {
@@ -474,25 +501,63 @@ public static class RoadmapEngine
 
         foreach (var word in acquired)
         {
-            var value = WordValue(ranks.GetValueOrDefault(word.Key, 0));
-
             if (goalWeights is not null)
             {
-                // Goal mode: a word is worth what the target actually uses it for. Words absent from the
-                // target contribute nothing, so the route bends toward the goal instead of the catalogue.
+                // Goal coverage is a share of the target's running text, so a word is worth exactly the
+                // occurrences it accounts for there — linearly. Compressing that (a log, say) collapses the
+                // 200:1 gap between a word the target leans on and one it mentions once into single digits,
+                // and the search then buys thousands of tail words instead of the few that move coverage.
+                // The global-rarity discount is deliberately absent here: it penalises precisely the
+                // work-specific vocabulary that carries most of a hard target's remaining gap.
                 if (!goalWeights.TryGetValue(word.Key, out var goalOcc))
                     continue;
-                value *= Math.Log(1.0 + goalOcc);
+
+                gross += goalOcc;
+                continue;
             }
 
-            gross += value;
+            gross += WordValue(ranks.GetValueOrDefault(word.Key, 0));
         }
 
-        var cost = settings.Preference == RoadmapPreference.Efficiency
-            ? Math.Max(1.0, deck.WordCount / 10000.0)
-            : 1.0;
+        return gross / EffortCost(deck, settings);
+    }
 
-        return gross / cost;
+    /// <summary>Reading hours assumed for a deck with no length data, per token.</summary>
+    private const double FallbackHoursPerToken = 1.0 / 10000.0;
+
+    /// <summary>
+    /// Per-title overhead floor. Finding a title, starting it and settling into it costs the same whether it
+    /// runs twenty minutes or two hours, and without a floor the efficiency ratio diverges as length tends to
+    /// zero, which hands the plan to whichever candidate happens to be shortest.
+    /// </summary>
+    private const double MinEffortHours = 0.5;
+
+    /// <summary>
+    /// What the efficiency preference divides yield by: hours of the user's life, not tokens. Token count is
+    /// only a stand-in for length, and it prices a two-hour film like a pamphlet.
+    /// </summary>
+    private static double EffortCost(RoadmapCandidate deck, RoadmapDefinition settings)
+    {
+        if (settings.Preference != RoadmapPreference.Efficiency)
+            return 1.0;
+
+        var hours = deck.LengthHours > 0 ? deck.LengthHours : deck.WordCount * FallbackHoursPerToken;
+        return Math.Max(MinEffortHours, hours);
+    }
+
+    private static int CountGoalWords(IReadOnlyList<RoadmapWord> acquired, IReadOnlyDictionary<long, int>? goalWeights)
+    {
+        if (goalWeights is null)
+            return 0;
+
+        var count = 0;
+        foreach (var word in acquired)
+        {
+            if (goalWeights.ContainsKey(word.Key))
+                count++;
+        }
+
+        return count;
     }
 
     private static Dictionary<long, int>? BuildGoalWeights(RoadmapCandidate? goal)

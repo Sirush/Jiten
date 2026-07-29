@@ -247,6 +247,7 @@ public class RoadmapDataLoader(
             {
                 DeckId = deckId,
                 WordCount = summary.WordCount,
+                LengthHours = EstimateHours(summary),
                 Words = deckWords,
                 Vector = vector
             };
@@ -515,6 +516,22 @@ public class RoadmapDataLoader(
     {
         if (min.HasValue && max.HasValue) return (min.Value + max.Value) / 2;
         return min ?? max;
+    }
+
+    /// <summary>
+    /// Characters per hour assumed for read media. Mirrors the client's default reading speed; the client
+    /// personalises the hours it displays, while scoring stays on a fixed rate so a plan does not reshuffle
+    /// when the user edits that setting.
+    /// </summary>
+    private const double DefaultReadingSpeed = 14000.0;
+
+    /// <summary>Timed audio wins where present; a subtitle track's character count understates a show's runtime.</summary>
+    private static double EstimateHours(DeckSummary summary)
+    {
+        if (summary.SpeechDuration > 0)
+            return summary.SpeechDuration / 3_600_000.0;
+
+        return summary.CharacterCount > 0 ? summary.CharacterCount / DefaultReadingSpeed : 0;
     }
 
     private static async Task<Dictionary<int, RoadmapWord[]>> LoadDeckWordsAsync(JitenDbContext jiten,
