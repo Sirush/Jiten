@@ -736,7 +736,7 @@
           <div class="flex items-center gap-2">
             <Checkbox v-model="overwriteExisting" inputId="overwrite" :binary="true" @change="onSelectionChanged" />
             <label for="overwrite" class="cursor-pointer">
-              Overwrite existing cards (replace cards you already have with Anki versions, even if they are more recent)
+              Update words you already track (adds Anki's review history to Jiten's without removing anything; whichever side you reviewed more recently sets your next review date)
             </label>
           </div>
           <div class="flex items-center gap-2">

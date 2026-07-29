@@ -28,13 +28,15 @@ Then, on the **AnkiConnect** tab:
 3. Choose the field holding the word **without furigana**. Each option shows a sample value from your deck to help you choose the right one. If possible, pick a reading field as well, which separates words that share a spelling. Full kana and `下[くだ]さる` style furigana both work.
 4. Look over the three checkboxes, then press **Import**.
 
-The boxes are **Import review history**, on by default, **Overwrite existing cards**, off, and **Parse words instead of importing them directly**, off. The last one is for decks whose words are conjugated rather than in dictionary form; it runs everything through Jiten's parser, which handles the conjugation at some cost in accuracy.
+The boxes are **Import review history**, on by default, **Update words you already track**, off, and **Parse words instead of importing them directly**, off. The last one is for decks whose words are conjugated rather than in dictionary form; it runs everything through Jiten's parser, which handles the conjugation at some cost in accuracy.
 
- Cards you have never studied in Anki are not imported. Words Jiten cannot find in its dictionary are skipped and listed for you afterwards. Words you already track are skipped too, unless you tick **Overwrite existing cards**.
+ Cards you have never studied in Anki are not imported. Words Jiten cannot find in its dictionary are skipped and listed for you afterwards. Words you already track are skipped too, unless you tick **Update words you already track**.
 
 ::note
-**Overwrite existing cards** brings Anki's review history across for words you already track and merges it into what Jiten has recorded, rather than replacing it. Reviews already stored for the same moment are not added twice, so importing the same deck again does not inflate anything. Scheduling only moves to Anki's version when Anki reviewed the word more recently than you did in Jiten, so whichever side you have been studying decides when the word comes back.
+**Update words you already track** brings Anki's review history across for words you already track and merges it into what Jiten has recorded, rather than replacing it. Reviews already stored for the same moment are not added twice, so importing the same deck again does not inflate anything. Scheduling only moves to Anki's version when Anki reviewed the word more recently than you did in Jiten, so whichever side you have been studying decides when the word comes back.
 ::
+
+This is the box to tick when you want to keep Jiten up to date with Anki. Run the import again after an Anki session and your reviews carry across; there is no need to delete anything first.
 
 ## Anki File
 
