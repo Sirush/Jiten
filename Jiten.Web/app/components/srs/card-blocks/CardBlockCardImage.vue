@@ -1,10 +1,24 @@
 <script setup lang="ts">
-  import type { CardLayoutBlock } from '~/types';
+  import type { CardImageBlockOptions, CardLayoutBlock } from '~/types';
+  import { cardImageDefaults, resolveOptions } from './cardBlockOptions';
   import { useCardContext } from './useCardContext';
 
-  defineProps<{ block: CardLayoutBlock; side: 'front' | 'back' }>();
+  const props = defineProps<{ block: CardLayoutBlock; side: 'front' | 'back' }>();
+  const opts = computed(() => resolveOptions<CardImageBlockOptions>(cardImageDefaults, props.block.options));
 
-  const { cardImage, cardImageUrl, imageBlurred, imageBesideLayout, onImageError, revealImage } = useCardContext();
+  const {
+    cardImage,
+    cardImageUrl,
+    imageBlurred,
+    imageBesideLayout,
+    hasCardMedia,
+    canEditCardMedia,
+    openMediaEditor,
+    onImageError,
+    revealImage,
+  } = useCardContext();
+
+  const showEditButton = computed(() => opts.value.showEditButton && canEditCardMedia.value);
 </script>
 
 <template>
@@ -18,5 +32,16 @@
       @error="onImageError"
       @reveal="revealImage"
     />
+  </div>
+
+  <div v-if="showEditButton" class="my-2 flex w-full justify-center" @click.stop>
+    <button
+      type="button"
+      class="inline-flex items-center gap-1.5 text-xs text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
+      @click="openMediaEditor"
+    >
+      <i class="pi pi-image text-sm" />
+      {{ hasCardMedia ? 'Edit card media' : 'Add image or audio' }}
+    </button>
   </div>
 </template>

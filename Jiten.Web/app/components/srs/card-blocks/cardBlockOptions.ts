@@ -27,7 +27,7 @@ export const kanjiBreakdownDefaults: KanjiBreakdownBlockOptions = { hideHeading:
 export const wordCompositionDefaults: WordCompositionBlockOptions = { hideHeading: false, spoiler: false };
 export const wordUsedInDefaults: WordUsedInBlockOptions = { hideHeading: false, spoiler: false };
 export const deckOccurrencesDefaults: DeckOccurrencesBlockOptions = { collapsed: false };
-export const cardImageDefaults: CardImageBlockOptions = { layout: 'beside', blur: true };
+export const cardImageDefaults: CardImageBlockOptions = { layout: 'beside', blur: true, showEditButton: true };
 export const dividerDefaults: DividerBlockOptions = { style: 'line', label: '' };
 
 export function resolveOptions<T extends object>(defaults: T, options: Partial<T> | undefined): T {

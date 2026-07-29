@@ -1,6 +1,7 @@
 import { computed, onMounted, ref, type ComputedRef, type Ref } from 'vue';
 import type { StudySettingsDto } from '~/types';
 import { resolveCardLayout } from '~/utils/cardLayout';
+import { useJitenPlus } from '~/composables/useJitenPlus';
 import type { CardContext, CardSampleData } from './useCardContext';
 
 // Self-contained placeholder so the card-image block renders something in the preview and editor rows
@@ -74,6 +75,10 @@ export function createSampleCardContext(
   const exampleRevealed = ref(false);
   const isolated = !!opts.isolated;
 
+  // Mirrors the live card's entitlement so the preview does not advertise a button the user won't get.
+  const { hasFeature } = useJitenPlus();
+  const canEditCardMedia = computed(() => hasFeature('card-media'));
+
   // Resolved on the client after mount so SSR markup stays deterministic.
   const sampleImage = ref(SAMPLE_CARD_IMAGE);
   onMounted(() => {
@@ -110,6 +115,9 @@ export function createSampleCardContext(
     imageBlurred: computed(() => !isolated && imageOnFront.value && blurEnabled.value && !isFlipped.value),
     showBesideImage: computed(() => !!imageBlock.value && besideLayout.value && (imageOnFront.value || isFlipped.value)),
     imageBesideLayout: besideLayout,
+    hasCardMedia: computed(() => false),
+    canEditCardMedia,
+    openMediaEditor: () => {},
     headWordTtsText: computed(() => ''),
     playCustomAudio: () => {},
     onImageError: () => {},
