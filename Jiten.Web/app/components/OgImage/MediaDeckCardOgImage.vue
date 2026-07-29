@@ -42,7 +42,7 @@
 <template>
   <div
     v-if="title"
-    class="og-card-container bg-white text-black border border-gray-300 flex flex-row overflow-hidden"
+    class="bg-white text-black border border-gray-300 flex flex-row overflow-hidden"
     style="width: 1200px; height: 630px; padding: 32px; font-family: 'Noto Sans JP', sans-serif; align-items: flex-start"
   >
     <div class="flex-shrink-0 h-full" style="width: 340px; margin-right: 32px">
@@ -104,7 +104,7 @@
 
   <div
     v-else
-    class="og-card-container bg-white text-black border border-gray-300 flex items-center justify-center"
+    class="bg-white text-black border border-gray-300 flex items-center justify-center"
     style="width: 1200px; height: 630px; padding: 32px; font-family: 'Noto Sans JP', sans-serif"
   >
     <span class="text-gray-500">Loading OG Image...</span>

@@ -47,7 +47,7 @@ This list is not exhaustive; if you see important things to add here or wrong fa
 
 **Migaku is easier to start with.** You install one extension, log in, and everything (dictionary, word tracking, mining, SRS) is in that single package with a guided onboarding. Within ten minutes you can be mining cards from Netflix. That premium experience is a real part of what you pay for.
 
-**Jiten is easy to *study* on, but the full immersion workflow can take a bit more time to setup.** Browsing the library, checking difficulty, and studying a deck works instantly with just an account. But to replicate Migaku's all-in-one pipeline, you combine pieces: the [Jiten Reader](/reader) extension for web pages, [asbplayer](/guides/watching-anime-with-asbplayer) for video, [mokuro](/guides/reading-manga-with-mokuro) for manga. Each piece takes a few minutes to set up, and we have a guide for every one of them.
+**Jiten is easy to *study* on, but the full immersion workflow can take a bit more time to setup.** Browsing the library, checking difficulty, and studying a deck works instantly with just an account. But to replicate Migaku's all-in-one pipeline, you combine pieces: the [Jiten Reader](/reader) extension for web pages, [asbplayer](https://github.com/killergerbah/asbplayer) for video, [mokuro](https://reader.mokuro.app) for manga. Each piece takes a few minutes to set up.
 
 This trade-off is deliberate: instead of one closed pipeline, you get open tools that each do their job well, work with each other, and keep working even if you stop using Jiten.
 
