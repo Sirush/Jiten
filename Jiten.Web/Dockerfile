@@ -31,5 +31,6 @@ COPY --from=build /app/.output ./
 ENV NUXT_HOST=0.0.0.0
 ENV NUXT_PORT=3001
 ENV PORT=3001
+ENV NODE_OPTIONS="--max-old-space-size=3072"
 EXPOSE 3001
-CMD ["node", "--max-old-space-size=1536", "server/index.mjs"]
+CMD ["node", "server/index.mjs"]
