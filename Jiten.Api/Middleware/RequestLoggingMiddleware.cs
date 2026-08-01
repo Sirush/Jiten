@@ -7,13 +7,11 @@ public class RequestLoggingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<RequestLoggingMiddleware> _logger;
-    private readonly long _slowMs;
 
-    public RequestLoggingMiddleware(RequestDelegate next, ILogger<RequestLoggingMiddleware> logger, IConfiguration configuration)
+    public RequestLoggingMiddleware(RequestDelegate next, ILogger<RequestLoggingMiddleware> logger)
     {
         _next = next;
         _logger = logger;
-        _slowMs = configuration.GetValue<long?>("RequestLogging:SlowMs") ?? 1000;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -27,6 +25,22 @@ public class RequestLoggingMiddleware
         }
 
         var stopwatch = Stopwatch.StartNew();
+        var requestId = Activity.Current?.Id ?? context.TraceIdentifier;
+
+        var routeValues = ExtractRouteValues(context);
+        var queryParams = ExtractQueryParameters(context);
+        var userId = GetUserId(context);
+        var clientIp = GetClientIp(context);
+
+        _logger.LogInformation(
+            "Request started: {Method} {Path} | RequestId: {RequestId} | UserId: {UserId} | ClientIp: {ClientIp} | RouteValues: {RouteValues} | Query: {QueryParams}",
+            context.Request.Method,
+            path,
+            requestId,
+            userId ?? "anonymous",
+            clientIp,
+            routeValues,
+            queryParams);
 
         try
         {
@@ -36,25 +50,14 @@ public class RequestLoggingMiddleware
         {
             stopwatch.Stop();
 
-            var statusCode = context.Response.StatusCode;
-            var elapsedMs = stopwatch.ElapsedMilliseconds;
-
-            // Only the tail is logged: AspNetCore OTel instrumentation already spans every request,
-            // so a line per request duplicates the trace. RequestLogging:SlowMs=0 restores logging all.
-            if (statusCode >= 400 || elapsedMs >= _slowMs)
-            {
-                _logger.LogInformation(
-                    "Request: {Method} {Path} | RequestId: {RequestId} | UserId: {UserId} | ClientIp: {ClientIp} | StatusCode: {StatusCode} | Duration: {Duration}ms | RouteValues: {RouteValues} | Query: {QueryParams}",
-                    context.Request.Method,
-                    path,
-                    Activity.Current?.Id ?? context.TraceIdentifier,
-                    GetUserId(context) ?? "anonymous",
-                    GetClientIp(context),
-                    statusCode,
-                    elapsedMs,
-                    ExtractRouteValues(context),
-                    ExtractQueryParameters(context));
-            }
+            _logger.LogInformation(
+                "Request completed: {Method} {Path} | RequestId: {RequestId} | UserId: {UserId} | StatusCode: {StatusCode} | Duration: {Duration}ms",
+                context.Request.Method,
+                path,
+                requestId,
+                userId ?? "anonymous",
+                context.Response.StatusCode,
+                stopwatch.ElapsedMilliseconds);
         }
     }
 
