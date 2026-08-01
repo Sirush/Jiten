@@ -114,6 +114,10 @@ export default defineNuxtConfig({
   sitemap: {
     sources: ['/api/__sitemap__/urls'],
   },
+  nitro: {
+    /// SSR is CPU-bound, so a single process caps throughput at one core; NITRO_CLUSTER_WORKERS sets the count at runtime.
+    preset: 'node-cluster',
+  },
   routeRules: {
     '/_nuxt/**': { ssr: false },
     '/.well-known/**': { ssr: false },
@@ -159,8 +163,9 @@ export default defineNuxtConfig({
   ogImage: {
     runtimeCacheStorage: {
       driver: 'lruCache',
-      max: 500,
-      maxSize: 128 * 1024 * 1024,
+      // Allocated per cluster worker, so the real footprint is this times NITRO_CLUSTER_WORKERS.
+      max: 150,
+      maxSize: 32 * 1024 * 1024,
     },
     fonts: [
       {

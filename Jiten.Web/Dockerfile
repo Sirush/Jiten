@@ -31,6 +31,8 @@ COPY --from=build /app/.output ./
 ENV NUXT_HOST=0.0.0.0
 ENV NUXT_PORT=3001
 ENV PORT=3001
-ENV NODE_OPTIONS="--max-old-space-size=3072"
+# Heap ceiling is per worker, so workers x max-old-space-size must stay under the container memory limit.
+ENV NITRO_CLUSTER_WORKERS=6
+ENV NODE_OPTIONS="--max-old-space-size=768"
 EXPOSE 3001
 CMD ["node", "server/index.mjs"]
