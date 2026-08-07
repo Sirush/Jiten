@@ -8,7 +8,7 @@
 
   onMounted(async () => {
     if (!srsStore.reviewForecast30d) srsStore.fetchReviewForecast30d();
-    await srsStore.refreshOverview();
+    await srsStore.refreshStudySummary();
     ready.value = true;
   });
 

@@ -39,7 +39,9 @@ export function useStudySummary() {
     return `${Math.floor(diffHr / 24)}d ${diffHr % 24}h`;
   });
 
-  const hasStudyDecks = computed(() => srsStore.studyDecks.length > 0);
+  // Either source is authoritative when it says decks exist; only agreement on "none" hides the banner,
+  // so a summary that lands before the deck list can't flash the "add your first deck" invitation.
+  const hasStudyDecks = computed(() => srsStore.studyDecks.length > 0 || (srsStore.dueSummary?.hasStudyDecks ?? false));
   const isCaughtUp = computed(() => loaded.value && totalDue.value === 0);
 
   function startStudy() {

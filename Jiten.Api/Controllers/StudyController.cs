@@ -45,6 +45,9 @@ public class StudyController(
     private static readonly Regex SentenceMarkerRegex =
         new(@"\*\*[^*]+\*\*", RegexOptions.Compiled);
 
+    private const int MaxConcurrentDeckQueries = 6;
+    private const int MaxHoistedFrequencyKeys = 400_000;
+
     [HttpGet("overview-version")]
     [SwaggerOperation(Summary = "Get current overview version for cache validation")]
     public async Task<IResult> GetOverviewVersion()
@@ -182,9 +185,13 @@ public class StudyController(
             }
         }
 
+        var globalFrequencyKeysByRange = await LoadGlobalFrequencyRanges(studyDecks);
+
         // Collect parallel tasks — each uses its own factory-created JitenDbContext
         var mediaDeckCountTasks = new List<(int StudyDeckId, Task<(int Count, HashSet<long> WordKeys)>)>();
         var globalDynamicCountTasks = new List<(int StudyDeckId, UserStudyDeck Sd, Task<(int Count, bool WasTruncated)>)>();
+
+        var deckQueryGate = new SemaphoreSlim(MaxConcurrentDeckQueries);
 
         foreach (var sd in studyDecks)
         {
@@ -201,7 +208,8 @@ public class StudyController(
                 {
                     mediaDeckCountTasks.Add((sd.UserStudyDeckId,
                         CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache)
-                            .CountTargetCoverageWords(sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown))));
+                            .CountTargetCoverageWords(sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown),
+                            deckQueryGate)));
                 }
                 else
                 {
@@ -213,9 +221,11 @@ public class StudyController(
                         sd.TargetPercentage,
                         sd.MinOccurrences, sd.MaxOccurrences,
                         sd.PosFilter, sd.StartFromKnown);
+                    globalFrequencyKeysByRange.TryGetValue((sd.MinFrequency, sd.MaxFrequency), out var frequencyKeys);
                     mediaDeckCountTasks.Add((sd.UserStudyDeckId,
                         CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache)
-                            .CountDeckWords(request, sd.ExcludeKana))));
+                            .CountDeckWords(request, sd.ExcludeKana, frequencyKeys),
+                            deckQueryGate)));
                 }
             }
             else if (sd.DeckType == StudyDeckType.GlobalDynamic)
@@ -223,7 +233,8 @@ public class StudyController(
                 resolvedDecks.Add((sd, null));
                 globalDynamicCountTasks.Add((sd.UserStudyDeckId, sd,
                     CountWithFactoryContext<(int, bool)>((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache)
-                        .CountGlobalDynamicWords(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, sd.ExcludeKana))));
+                        .CountGlobalDynamicWords(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, sd.ExcludeKana),
+                        deckQueryGate)));
             }
             else if (sd.DeckType == StudyDeckType.StaticWordList)
             {
@@ -2438,6 +2449,10 @@ public class StudyController(
 
         nextReviewAt = SnapToLocalDayStart(nextReviewAt, settings);
 
+        var hasStudyDecks = await userContext.UserStudyDecks
+            .AsNoTracking()
+            .AnyAsync(sd => sd.UserId == userId);
+
         return Results.Ok(new
         {
             reviewsDue,
@@ -2446,6 +2461,7 @@ public class StudyController(
             newCardsToday,
             reviewBudgetLeft,
             nextReviewAt,
+            hasStudyDecks,
         });
     }
 
@@ -3565,19 +3581,20 @@ public class StudyController(
         List<int> fallbackExampleIds;
         if (isNpgsql)
         {
+            // DISTINCT ON rather than a lateral with LIMIT 1 per word: the lateral makes Postgres probe
+            // ExampleSentences once per candidate row, and a word absent from the user's decks exhausts all
+            // ~6.8k of them before returning nothing. Both sides are covered by their index, so this only
+            // touches sentences containing the requested words — its cost does not grow with deck count.
             studyExampleIds = studyDeckIdArray.Length > 0
                 ? await context.Database
                     .SqlQueryRaw<int>(@"
-                        SELECT esw.""ExampleSentenceId""
+                        SELECT DISTINCT ON (esw.""WordId"", esw.""ReadingIndex"") esw.""ExampleSentenceId""
                         FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
-                        CROSS JOIN LATERAL (
-                            SELECT esw2.""ExampleSentenceId""
-                            FROM jiten.""ExampleSentenceWords"" esw2
-                            JOIN jiten.""ExampleSentences"" es ON es.""SentenceId"" = esw2.""ExampleSentenceId""
-                            WHERE esw2.""WordId"" = v.wid AND esw2.""ReadingIndex"" = v.ri
-                              AND es.""DeckId"" = ANY({2})
-                            LIMIT 1
-                        ) esw
+                        JOIN jiten.""ExampleSentenceWords"" esw
+                          ON esw.""WordId"" = v.wid AND esw.""ReadingIndex"" = v.ri
+                        JOIN jiten.""ExampleSentences"" es ON es.""SentenceId"" = esw.""ExampleSentenceId""
+                        WHERE es.""DeckId"" = ANY({2})
+                        ORDER BY esw.""WordId"", esw.""ReadingIndex"", esw.""ExampleSentenceId""
                     ", remainingWordIds, remainingReadingIndexes, studyDeckIdArray)
                     .ToListAsync()
                 : [];
@@ -3721,12 +3738,52 @@ public class StudyController(
         };
     }
 
-    private async Task<T> CountWithFactoryContext<T>(Func<JitenDbContext, UserDbContext, ICurrentUserService, Task<T>> query)
+    private async Task<T> CountWithFactoryContext<T>(Func<JitenDbContext, UserDbContext, ICurrentUserService, Task<T>> query,
+                                                     SemaphoreSlim gate)
     {
-        await using var ctx = await contextFactory.CreateDbContextAsync();
-        await using var uCtx = await userContextFactory.CreateDbContextAsync();
-        var userService = new CurrentUserService(httpContextAccessor, ctx, uCtx, wordFormCache);
-        return await query(ctx, uCtx, userService);
+        await gate.WaitAsync();
+        try
+        {
+            await using var ctx = await contextFactory.CreateDbContextAsync();
+            await using var uCtx = await userContextFactory.CreateDbContextAsync();
+            var userService = new CurrentUserService(httpContextAccessor, ctx, uCtx, wordFormCache);
+            return await query(ctx, uCtx, userService);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    // Resolves each distinct frequency range once instead of re-running the same range scan per deck.
+    // A range wider than the hoist cap is left out, so those decks keep the in-query filter.
+    private async Task<Dictionary<(int Min, int Max), HashSet<long>>> LoadGlobalFrequencyRanges(List<UserStudyDeck> studyDecks)
+    {
+        var ranges = studyDecks
+            .Where(sd => sd.DeckType == StudyDeckType.MediaDeck
+                         && (DeckDownloadType)sd.DownloadType == DeckDownloadType.TopGlobalFrequency)
+            .Select(sd => (Min: sd.MinFrequency, Max: sd.MaxFrequency))
+            .Distinct()
+            .ToList();
+
+        var result = new Dictionary<(int Min, int Max), HashSet<long>>();
+        if (ranges.Count == 0) return result;
+
+        foreach (var range in ranges)
+        {
+            var rows = await context.WordFormFrequencies
+                .AsNoTracking()
+                .Where(wff => wff.FrequencyRank >= range.Min && wff.FrequencyRank <= range.Max)
+                .Select(wff => new { wff.WordId, wff.ReadingIndex })
+                .Take(MaxHoistedFrequencyKeys + 1)
+                .ToListAsync();
+
+            if (rows.Count > MaxHoistedFrequencyKeys) continue;
+
+            result[range] = rows.Select(r => WordFormHelper.EncodeWordKey(r.WordId, r.ReadingIndex)).ToHashSet();
+        }
+
+        return result;
     }
 
     private static bool IsValidPosFilter(string? posFilter)

@@ -1199,6 +1199,7 @@ export interface DueSummaryDto {
   newCardsToday: number;
   reviewBudgetLeft: number;
   nextReviewAt: string | null;
+  hasStudyDecks: boolean;
 }
 
 export interface ReviewForecastDto {

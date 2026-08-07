@@ -394,18 +394,29 @@ export const useSrsStore = defineStore('srs', () => {
 
   let refreshOverviewPromise: Promise<void> | null = null;
 
+  async function refreshStudySummary() {
+    await Promise.all([fetchDueSummary(), fetchDeckStreak(), fetchSettings(true)]);
+  }
+
   async function refreshOverview(force = false) {
     if (refreshOverviewPromise) return refreshOverviewPromise;
     refreshOverviewPromise = (async () => {
       try {
-        let serverVersion = 0;
-        try {
-          const { version } = await $api<{ version: number }>('srs/overview-version');
-          serverVersion = version;
-          if (!force && overviewVersion.value > 0 && version === overviewVersion.value) return;
-        } catch { /* fall through to full refresh */ }
-        await Promise.all([fetchStudyDecks(), fetchDueSummary(), fetchDeckStreak(), fetchSettings(true)]);
-        overviewVersion.value = serverVersion;
+        const versionRequest = $api<{ version: number }>('srs/overview-version').catch(() => null);
+
+        if (!force && overviewVersion.value > 0) {
+          const current = await versionRequest;
+          if (current && current.version === overviewVersion.value) return;
+        }
+
+        const [version] = await Promise.all([
+          versionRequest,
+          fetchStudyDecks(),
+          fetchDueSummary(),
+          fetchDeckStreak(),
+          fetchSettings(true),
+        ]);
+        overviewVersion.value = version?.version ?? 0;
       } finally {
         refreshOverviewPromise = null;
       }
@@ -1430,6 +1441,7 @@ export const useSrsStore = defineStore('srs', () => {
     hasCards,
     progress,
     refreshOverview,
+    refreshStudySummary,
     fetchStudyDecks,
     fetchDueSummary,
     fetchDeckStreak,
