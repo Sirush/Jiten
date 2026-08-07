@@ -1272,6 +1272,7 @@ public class SrsController(
 
         var cards = await query
             .OrderBy(c => c.Due)
+            .ThenBy(c => c.CardId)
             .Skip(offset)
             .Take(limit)
             .Select(c => new { c.WordId, c.ReadingIndex, c.State, c.Due, c.CreatedAt })
@@ -1346,7 +1347,7 @@ public class SrsController(
 
                 if (request.StaggerBatchSize is > 0)
                 {
-                    var cardIds = await query.OrderBy(c => c.Due).Select(c => c.CardId).ToListAsync();
+                    var cardIds = await query.OrderBy(c => c.Due).ThenBy(c => c.CardId).Select(c => c.CardId).ToListAsync();
                     var batchSize = request.StaggerBatchSize.Value;
                     affected = 0;
 
