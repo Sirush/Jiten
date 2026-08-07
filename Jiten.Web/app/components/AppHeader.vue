@@ -144,7 +144,7 @@
     <div class="bg-indigo-900">
       <div class="flex justify-between items-center mb-6 mx-auto p-4 max-w-6xl">
         <NuxtLink to="/" class="!no-underline" aria-label="Jiten home">
-          <span class="text-2xl font-bold text-white">Jiten<span v-if="isPlus" class="text-green-400 text-sm font-black relative -top-[3px] ml-1">+</span></span>
+          <span class="text-2xl font-bold text-white">Jiten<span v-if="isPlus" class="text-purple-400 text-sm font-black relative -top-[3px] ml-1">+</span></span>
         </NuxtLink>
 
         <!-- Desktop nav -->
