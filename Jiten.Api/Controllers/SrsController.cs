@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
@@ -28,6 +29,7 @@ public class SrsController(
     IStudySessionService sessionService,
     IWordFormSiblingCache wordFormCache,
     SrsRecomputeJob recomputeJob,
+    IBackgroundJobClient backgroundJobs,
     ILogger<SrsController> logger) : ControllerBase
 {
     [HttpPost("undo-review")]
@@ -71,38 +73,36 @@ public class SrsController(
 
         var cardDeleted = false;
 
+        var undoSettings = await LoadUserSettings(userId);
+
         if (remainingLogs.Count == 0)
         {
+            // Not archived: undoing the only review leaves no history to keep, and the card itself was
+            // created by that review.
             userContext.FsrsCards.Remove(card);
             cardDeleted = true;
         }
         else
         {
-            var userSettings = await LoadUserSettings(userId);
-            var parameters = GetParameters(userSettings);
-            var desiredRetention = GetDesiredRetention(userSettings);
+            var parameters = GetParameters(undoSettings);
+            var desiredRetention = GetDesiredRetention(undoSettings);
             var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
 
-            var replayCard = new FsrsCard(userId, card.WordId, card.ReadingIndex);
-            var lapses = 0;
-            foreach (var log in remainingLogs)
-            {
-                var prevState = replayCard.State;
-                var reviewDt = DateTime.SpecifyKind(log.ReviewDateTime, DateTimeKind.Utc);
-                var result = scheduler.ReviewCard(replayCard, log.Rating, reviewDt);
-                if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
-                    lapses++;
-                replayCard = result.UpdatedCard;
-            }
-
-            card.State = replayCard.State;
-            card.Step = replayCard.Step;
-            card.Stability = replayCard.Stability;
-            card.Difficulty = replayCard.Difficulty;
-            card.Due = replayCard.Due;
-            card.LastReview = replayCard.LastReview;
-            card.Lapses = lapses;
+            // Undo restores the state the card had before the undone review, so a terminal state set by that
+            // review must not be preserved.
+            FsrsReplay.Recompute(card, remainingLogs, scheduler, scheduler, preserveTerminalState: false);
         }
+
+        // Undo is the one erasure at the granularity where erasing an activity record is meaningful: it takes
+        // back a mis-click seconds old. Card deletion, by contrast, never decrements the rollup.
+        await ReviewRollupHelper.ApplyDeltaAsync(
+            userContext, userId,
+            ReviewRollupHelper.LocalDateOf(DateTime.SpecifyKind(lastLog.ReviewDateTime, DateTimeKind.Utc),
+                                           ResolveTimeZone(GetStudySettings(undoSettings).Timezone)),
+            reviewDelta: -1,
+            correctDelta: lastLog.Rating != FsrsRating.Again ? -1 : 0,
+            newCardDelta: remainingLogs.Count == 0 ? -1 : 0,
+            durationDeltaMs: -(lastLog.ReviewDuration ?? 0));
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
@@ -170,8 +170,11 @@ public class SrsController(
             card = new FsrsCard(userId, request.WordId, request.ReadingIndex);
         }
 
+        var reviewedAt = DateTime.UtcNow;
+        var isFirstReview = card.CardId == 0 || !await userContext.FsrsReviewLogs.AnyAsync(l => l.CardId == card.CardId);
+
         var previousState = card.State;
-        var cardAndLog = scheduler.ReviewCard(card, request.Rating, DateTime.UtcNow, request.ReviewDuration);
+        var cardAndLog = scheduler.ReviewCard(card, request.Rating, reviewedAt, request.ReviewDuration);
 
         var leechDetected = false;
         var leechSuspended = false;
@@ -217,6 +220,15 @@ public class SrsController(
         }
 
         await userContext.FsrsReviewLogs.AddAsync(cardAndLog.ReviewLog);
+
+        await ReviewRollupHelper.ApplyDeltaAsync(
+            userContext, userId,
+            ReviewRollupHelper.LocalDateOf(reviewedAt, ResolveTimeZone(studySettings.Timezone)),
+            reviewDelta: 1,
+            correctDelta: request.Rating != FsrsRating.Again ? 1 : 0,
+            newCardDelta: isFirstReview ? 1 : 0,
+            durationDeltaMs: request.ReviewDuration ?? 0);
+
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
         await transaction.CommitAsync();
@@ -305,6 +317,15 @@ public class SrsController(
             .ToListAsync();
         var existingMap = existingCards.ToDictionary(c => (c.WordId, c.ReadingIndex));
 
+        var existingCardIds = existingCards.Select(c => c.CardId).ToList();
+        var reviewedBefore = (await userContext.FsrsReviewLogs
+                                               .Where(l => existingCardIds.Contains(l.CardId))
+                                               .Select(l => l.CardId)
+                                               .Distinct()
+                                               .ToListAsync())
+            .ToHashSet();
+        var firstReviews = 0;
+
         var results = new List<object>(deduped.Count);
         var leechSuspended = new List<int>();
         // New cards must be inserted before their review logs can reference a CardId.
@@ -314,6 +335,8 @@ public class SrsController(
         {
             existingMap.TryGetValue(key, out var card);
             var isNew = card == null;
+            if (isNew || !reviewedBefore.Contains(card!.CardId))
+                firstReviews++;
             card ??= new FsrsCard(userId, key.WordId, key.ReadingIndex);
 
             var previousState = card.State;
@@ -369,6 +392,14 @@ public class SrsController(
                 await userContext.FsrsReviewLogs.AddAsync(log);
             }
         }
+
+        await ReviewRollupHelper.ApplyDeltaAsync(
+            userContext, userId,
+            ReviewRollupHelper.LocalDateOf(now, ResolveTimeZone(studySettings.Timezone)),
+            reviewDelta: deduped.Count,
+            correctDelta: deduped.Count(r => r.Value != FsrsRating.Again),
+            newCardDelta: firstReviews,
+            durationDeltaMs: 0);
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
@@ -499,8 +530,13 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var isDefault = IsSettingsDefault(parameters, desiredRetention);
-        var reviewCount = await userContext.FsrsReviewLogs
-            .CountAsync(r => r.Card.UserId == userId);
+        var liveReviewCount = await userContext.FsrsReviewLogs.CountAsync(r => r.Card.UserId == userId);
+        // Counts archived history too, so the "N of M reviews" gate matches the corpus the optimizer trains on.
+        var archivedReviewCount = await userContext.FsrsCardArchives
+                                                   .Where(a => a.UserId == userId)
+                                                   .SumAsync(a => (int?)a.ReviewCount) ?? 0;
+        var reviewCount = liveReviewCount + archivedReviewCount;
+
         var response = new FsrsParametersResponse
         {
             Parameters = SerializeParametersCsv(parameters),
@@ -608,12 +644,9 @@ public class SrsController(
         if (userId == null)
             return Results.Unauthorized();
 
-        var reviewLogs = await userContext.FsrsReviewLogs
-            .Where(r => r.Card.UserId == userId)
-            .OrderBy(r => r.CardId)
-            .ThenBy(r => r.ReviewDateTime)
-            .Select(r => new { r.CardId, r.Rating, r.ReviewDateTime })
-            .ToListAsync();
+        // An archived row is a complete per-card interval chain, which is exactly the shape the optimizer
+        // trains on, so removing a card no longer shrinks the training corpus.
+        var reviewLogs = await CardArchiveService.LoadAllReviewsAsync(userContext, userId);
 
         var totalReviews = reviewLogs.Count;
         if (totalReviews < FsrsOptimizer.MinimumReviews)
@@ -635,7 +668,7 @@ public class SrsController(
             reviews[0] = new FsrsTrainingReview((int)logs[0].Rating, 0);
             for (var i = 1; i < logs.Count; i++)
             {
-                var deltaT = Math.Max(0, (logs[i].ReviewDateTime - logs[i - 1].ReviewDateTime).TotalDays);
+                var deltaT = Math.Max(0, (logs[i].ReviewUtc - logs[i - 1].ReviewUtc).TotalDays);
                 reviews[i] = new FsrsTrainingReview((int)logs[i].Rating, deltaT);
             }
             items.Add(new FsrsTrainingItem(reviews));
@@ -689,13 +722,9 @@ public class SrsController(
             return Results.Unauthorized();
 
         // Loaded into memory (like the optimizer) so the same-day grouping stays provider-agnostic
-        // across Postgres and the SQLite integration harness.
-        var logs = await userContext.FsrsReviewLogs
-            .Where(r => r.Card.UserId == userId)
-            .OrderBy(r => r.CardId)
-            .ThenBy(r => r.ReviewDateTime)
-            .Select(r => new { r.CardId, r.Rating, r.ReviewDateTime })
-            .ToListAsync();
+        // across Postgres and the SQLite integration harness. Health reads the user's whole grading
+        // history, so removed cards' reviews count too.
+        var logs = await CardArchiveService.LoadAllReviewsAsync(userContext, userId);
 
         var total = logs.Count;
         var ratingCounts = new int[4];
@@ -709,7 +738,7 @@ public class SrsController(
             if (idx >= 0 && idx < 4)
                 ratingCounts[idx]++;
 
-            var day = log.ReviewDateTime.Date;
+            var day = log.ReviewUtc.Date;
             if (log.CardId == prevCardId && day == prevDay)
                 sameDay++;
             prevCardId = log.CardId;
@@ -773,7 +802,11 @@ public class SrsController(
         foreach (var log in toRemap)
             log.Rating = FsrsRating.Again;
 
-        if (toRemap.Count > 0)
+        // The optimizer trains on archived history as well, so a repair that skipped it would leave the same
+        // bias in the corpus it exists to remove.
+        var remappedArchived = await RemapArchivedHardReviews(userId, request.From, request.To);
+
+        if (toRemap.Count > 0 || remappedArchived > 0)
             await userContext.SaveChangesAsync();
 
         if (request.Reschedule && toRemap.Count > 0)
@@ -787,10 +820,52 @@ public class SrsController(
         }
         await sessionService.BumpStudyOverviewVersion(userId);
 
-        logger.LogInformation("User remapped Hard→Again reviews: UserId={UserId}, Count={Count}, Rescheduled={Rescheduled}",
-                              userId, toRemap.Count, request.Reschedule && toRemap.Count > 0);
+        logger.LogInformation("User remapped Hard→Again reviews: UserId={UserId}, Count={Count}, Archived={Archived}, Rescheduled={Rescheduled}",
+                              userId, toRemap.Count, remappedArchived, request.Reschedule && toRemap.Count > 0);
 
-        return Results.Ok(new { remapped = toRemap.Count, rescheduled = request.Reschedule && toRemap.Count > 0 });
+        return Results.Ok(new
+                          {
+                              remapped = toRemap.Count + remappedArchived,
+                              rescheduled = request.Reschedule && toRemap.Count > 0
+                          });
+    }
+
+    /// <summary>Rewrites Hard to Again inside archived history blobs. Does not save.</summary>
+    private async Task<int> RemapArchivedHardReviews(string userId, DateTime? from, DateTime? to)
+    {
+        var rows = await userContext.FsrsCardArchives
+                                    .Where(a => a.UserId == userId && a.ReviewCount > 0 && a.Logs != null && a.FirstReview != null)
+                                    .ToListAsync();
+
+        var remapped = 0;
+
+        foreach (var row in rows)
+        {
+            var (reviews, corrupt) = CardArchiveService.ReadReviews(row);
+            if (corrupt)
+                continue;
+
+            var changed = 0;
+            var rewritten = reviews.Select(r =>
+            {
+                if (r.Rating != FsrsRating.Hard) return r;
+                if (from.HasValue && r.ReviewDateTime < DateTime.SpecifyKind(from.Value, DateTimeKind.Utc)) return r;
+                if (to.HasValue && r.ReviewDateTime > DateTime.SpecifyKind(to.Value, DateTimeKind.Utc)) return r;
+                changed++;
+                return r with { Rating = FsrsRating.Again };
+            }).ToList();
+
+            if (changed == 0)
+                continue;
+
+            var packed = ReviewLogPacker.Pack(rewritten, markTruncated: row.HistoryTruncated);
+            row.Logs = packed.Logs;
+            row.FirstReview = packed.FirstReview;
+            row.HistoryTruncated = packed.Truncated;
+            remapped += changed;
+        }
+
+        return remapped;
     }
 
     [HttpPost("settings/recompute")]
@@ -941,6 +1016,7 @@ public class SrsController(
             case "forget-add":
                 if (card != null)
                 {
+                    await CardArchiveService.ArchiveCardsAsync(userContext, userId, [card], CardArchiveReason.Forget);
                     userContext.FsrsCards.Remove(card);
                 }
 
@@ -997,14 +1073,24 @@ public class SrsController(
                 return Results.BadRequest($"Invalid state: {request.State}");
         }
 
+        // Only a card this request just created can carry archived history back; an existing one already has it.
+        var autoRestored = await CardRestoreService.AutoRestoreAsync(
+            userContext, userId, card is { CardId: 0 } ? [card] : []);
+
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
 
+        if (autoRestored > 0)
+            await MarkReviewRollupDirty(userId);
+
         logger.LogInformation("User set vocabulary state: WordId={WordId}, ReadingIndex={ReadingIndex}, State={State}",
                               request.WordId, request.ReadingIndex, request.State);
-        return Results.Json(new { success = true });
+        return Results.Json(new { success = true, autoRestored });
     }
+
+    private Task MarkReviewRollupDirty(string userId)
+        => ReviewRollupHelper.MarkDirtyAndQueue(userContext, backgroundJobs, userId);
 
     private static void RestoreCardState(FsrsCard card)
     {
@@ -1056,6 +1142,7 @@ public class SrsController(
                     .ToList();
 
         var affected = 0;
+        var createdCards = new List<FsrsCard>();
 
         switch (request.State)
         {
@@ -1079,18 +1166,32 @@ public class SrsController(
                 var existingPairs = cards.Select(c => (c.WordId, c.ReadingIndex)).ToHashSet();
                 foreach (var item in request.Items.Where(i => !existingPairs.Contains((i.WordId, i.ReadingIndex))))
                 {
-                    await userContext.FsrsCards.AddAsync(target == FsrsState.Mastered
-                                                             ? new FsrsCard(userId, item.WordId, item.ReadingIndex,
-                                                                            due: DateTime.UtcNow, lastReview: DateTime.UtcNow, state: target)
-                                                             : new FsrsCard(userId, item.WordId, item.ReadingIndex, state: target));
-                    affected++;
+                    var created = target == FsrsState.Mastered
+                        ? new FsrsCard(userId, item.WordId, item.ReadingIndex,
+                                       due: DateTime.UtcNow, lastReview: DateTime.UtcNow, state: target)
+                        : new FsrsCard(userId, item.WordId, item.ReadingIndex, state: target);
+                    createdCards.Add(created);
                 }
 
                 if (target == FsrsState.Mastered)
                 {
-                    foreach (var item in request.Items)
-                        await WordFormHelper.RemoveRedundantKanaSrsCards(userContext, wordFormCache, userId, item.WordId, item.ReadingIndex);
+                    // A kana form mastered alongside its kanji sibling in the same request is not created at
+                    // all — the same policy the removal below applies to a live kana card. Keyed to the
+                    // request's own items, not the whole collection: an explicitly mastered form only defers
+                    // to a sibling this request also masters, never to a card in an unknown state.
+                    var redundantCreated = await WordFormHelper.ArchiveRedundantImportCards(
+                        userContext, wordFormCache, userId, createdCards,
+                        request.Items.Select(i => (i.WordId, i.ReadingIndex)).ToHashSet(), _ => []);
+                    createdCards.RemoveAll(redundantCreated.Contains);
+
+                    await WordFormHelper.RemoveRedundantKanaSrsCards(
+                        userContext, wordFormCache, userId,
+                        request.Items.Select(i => (i.WordId, i.ReadingIndex)).ToList());
                 }
+
+                foreach (var created in createdCards)
+                    await userContext.FsrsCards.AddAsync(created);
+                affected += createdCards.Count;
 
                 break;
             }
@@ -1128,6 +1229,7 @@ public class SrsController(
                 break;
 
             case "forget-add":
+                await CardArchiveService.ArchiveCardsAsync(userContext, userId, cards, CardArchiveReason.BulkForget);
                 userContext.FsrsCards.RemoveRange(cards);
                 affected = cards.Count;
                 break;
@@ -1136,13 +1238,18 @@ public class SrsController(
                 return Results.BadRequest($"Invalid state: {request.State}");
         }
 
+        var autoRestored = await CardRestoreService.AutoRestoreAsync(userContext, userId, createdCards);
+
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
 
+        if (autoRestored > 0)
+            await MarkReviewRollupDirty(userId);
+
         logger.LogInformation("User bulk set vocabulary state: State={State}, Requested={Requested}, Affected={Affected}",
                               request.State, request.Items.Count, affected);
-        return Results.Json(new { success = true, affectedCount = affected });
+        return Results.Json(new { success = true, affectedCount = affected, autoRestored });
     }
 
     [HttpPost("mass-action/preview")]
@@ -1264,8 +1371,16 @@ public class SrsController(
             }
 
             case "delete-cards":
+            {
+                // ExecuteDeleteAsync bypasses the change tracker, so the archive rows must be committed
+                // alongside it rather than by a later SaveChanges.
+                await using var deleteTransaction = await userContext.Database.BeginTransactionAsync();
+                await CardArchiveService.ArchiveByQueryAsync(userContext, userId, query, CardArchiveReason.MassAction);
+                await userContext.SaveChangesAsync();
                 affected = await query.ExecuteDeleteAsync();
+                await deleteTransaction.CommitAsync();
                 break;
+            }
 
             case "reset-schedule":
                 affected = await query.ExecuteUpdateAsync(s => s
@@ -1681,11 +1796,7 @@ public class SrsController(
         return null;
     }
 
-    private async Task<UserFsrsSettings?> LoadUserSettings(string userId)
-    {
-        return await userContext.UserFsrsSettings.AsNoTracking()
-                                                 .FirstOrDefaultAsync(s => s.UserId == userId);
-    }
+    private Task<UserFsrsSettings?> LoadUserSettings(string userId) => FsrsSettingsHelper.LoadAsync(userContext, userId);
 
     private static bool AreParametersDefault(double[] parameters)
     {
@@ -1715,48 +1826,14 @@ public class SrsController(
         return AreParametersDefault(parameters) && IsDesiredRetentionDefault(desiredRetention);
     }
 
-    private static bool IsDesiredRetentionValid(double desiredRetention)
-    {
-        return desiredRetention > 0 && desiredRetention < 1 && !double.IsNaN(desiredRetention) && !double.IsInfinity(desiredRetention);
-    }
+    private static bool IsDesiredRetentionValid(double desiredRetention) => FsrsSettingsHelper.IsDesiredRetentionValid(desiredRetention);
 
-    private static double[] GetParameters(UserFsrsSettings? settings)
-    {
-        return TryGetStoredParameters(settings, out var parameters) ? parameters : FsrsConstants.DefaultParameters;
-    }
+    private static double[] GetParameters(UserFsrsSettings? settings) => FsrsSettingsHelper.GetParameters(settings);
 
-    private static double GetDesiredRetention(UserFsrsSettings? settings)
-    {
-        if (settings?.DesiredRetention is double desiredRetention && IsDesiredRetentionValid(desiredRetention))
-        {
-            return desiredRetention;
-        }
-
-        return FsrsConstants.DefaultDesiredRetention;
-    }
+    private static double GetDesiredRetention(UserFsrsSettings? settings) => FsrsSettingsHelper.GetDesiredRetention(settings);
 
     private static bool TryGetStoredParameters(UserFsrsSettings? settings, out double[] parameters)
-    {
-        parameters = Array.Empty<double>();
-        if (settings == null)
-        {
-            return false;
-        }
-
-        var stored = settings.GetParametersOnce();
-        if (stored.Length != FsrsConstants.DefaultParameters.Length)
-        {
-            return false;
-        }
-
-        if (stored.Any(value => double.IsNaN(value) || double.IsInfinity(value)))
-        {
-            return false;
-        }
-
-        parameters = stored;
-        return true;
-    }
+        => FsrsSettingsHelper.TryGetStoredParameters(settings, out parameters);
 
     private static bool TryParseParametersCsv(string? csv, out double[] parameters, out string error)
     {
@@ -1815,15 +1892,7 @@ public class SrsController(
         }
     }
 
-    private static StudySettingsDto GetStudySettings(UserFsrsSettings? settings)
-    {
-        if (settings?.SettingsJson is { Length: > 2 } json)
-        {
-            try { return JsonSerializer.Deserialize<StudySettingsDto>(json) ?? new StudySettingsDto(); }
-            catch (JsonException) { }
-        }
-        return new StudySettingsDto();
-    }
+    private static StudySettingsDto GetStudySettings(UserFsrsSettings? settings) => FsrsSettingsHelper.GetStudySettings(settings);
 
     /// <summary>
     /// Builds a load balancer seeded from the user's currently-scheduled review load, so freshly fuzzed
@@ -1847,12 +1916,10 @@ public class SrsController(
     }
 
     private static double ResolveOffsetHours(DateTime utcNow, string? timezone)
-    {
-        if (string.IsNullOrEmpty(timezone)) return 0;
-        try { return TimeZoneInfo.FindSystemTimeZoneById(timezone).GetUtcOffset(utcNow).TotalHours; }
-        catch (TimeZoneNotFoundException) { return 0; }
-        catch (InvalidTimeZoneException) { return 0; }
-    }
+        => FsrsSettingsHelper.ResolveOffsetHours(utcNow, timezone);
+
+    private static TimeZoneInfo? ResolveTimeZone(string? timezone)
+        => FsrsSettingsHelper.ResolveTimeZone(timezone);
 
 
     [HttpPost("reader-study-decks")]

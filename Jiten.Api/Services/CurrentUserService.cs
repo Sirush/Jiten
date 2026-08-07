@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using Jiten.Api.Helpers;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
@@ -263,8 +264,12 @@ public class CurrentUserService(
             }
         }
 
+        var autoRestored = 0;
         if (toInsert.Count > 0)
+        {
+            autoRestored = await CardRestoreService.AutoRestoreAsync(userContext, UserId!, toInsert);
             await userContext.FsrsCards.AddRangeAsync(toInsert);
+        }
 
         try
         {
@@ -274,6 +279,10 @@ public class CurrentUserService(
         {
             foreach (var entry in userContext.ChangeTracker.Entries().Where(e => e.State == EntityState.Added))
                 entry.State = EntityState.Detached;
+
+            foreach (var entry in userContext.ChangeTracker.Entries<FsrsCardArchive>()
+                                             .Where(e => e.State == EntityState.Deleted))
+                entry.State = EntityState.Unchanged;
 
             var retryExisting = await userContext.FsrsCards
                 .Where(uk => uk.UserId == UserId && pairWordIds.Contains(uk.WordId))
@@ -297,12 +306,15 @@ public class CurrentUserService(
             return new VocabularyUpsertResult(0, updated);
         }
 
-        return new VocabularyUpsertResult(toInsert.Count, updated);
+        if (autoRestored > 0)
+            await ReviewRollupHelper.MarkDirty(userContext, UserId!);
+
+        return new VocabularyUpsertResult(toInsert.Count, updated, autoRestored);
     }
 
-    public async Task AddKnownWord(int wordId, byte readingIndex)
+    public Task<VocabularyUpsertResult> AddKnownWord(int wordId, byte readingIndex)
     {
-        await AddKnownWords([new DeckWord { WordId = wordId, ReadingIndex = readingIndex }]);
+        return AddKnownWords([new DeckWord { WordId = wordId, ReadingIndex = readingIndex }]);
     }
 
     public async Task RemoveKnownWord(int wordId, byte readingIndex)
@@ -313,6 +325,7 @@ public class CurrentUserService(
                                                                         u.ReadingIndex == readingIndex);
         if (card == null) return;
 
+        await CardArchiveService.ArchiveCardsAsync(userContext, UserId!, [card], CardArchiveReason.Forget);
         userContext.FsrsCards.Remove(card);
         await userContext.SaveChangesAsync();
     }

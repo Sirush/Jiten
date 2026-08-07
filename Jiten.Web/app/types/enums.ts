@@ -160,6 +160,17 @@ export enum FsrsState {
   Suspended = 6,
 }
 
+export enum CardArchiveReason {
+  Unknown = 0,
+  KanaRedundancy = 1,
+  FormPrune = 2,
+  RedundancyResolve = 3,
+  Forget = 4,
+  BulkForget = 5,
+  MassAction = 6,
+  WordReplacementMerge = 7,
+}
+
 export enum FsrsRating {
   Again = 1,
   Hard = 2,

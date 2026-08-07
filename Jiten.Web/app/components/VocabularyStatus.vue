@@ -49,11 +49,22 @@
     return 'Covered by another form of this word in your deck (not yet studied)';
   });
 
+  const notifyRestored = (reviews: number) => {
+    if (reviews <= 0) return;
+    toast.add({
+      severity: 'info',
+      summary: 'History restored',
+      detail: `Restored ${reviews.toLocaleString()} review${reviews === 1 ? '' : 's'} from your previous ${plainText.value} card.`,
+      life: 6000,
+    });
+  };
+
   const masterWord = async () => {
     op.value?.hide();
     try {
-      await $api<boolean>(`user/vocabulary/add/${wordPath.value}`, { method: 'POST' });
+      const result = await $api<{ restored: number; restoredReviews: number }>(`user/vocabulary/add/${wordPath.value}`, { method: 'POST' });
       knownStates.value = [KnownState.Mastered];
+      notifyRestored(result?.restoredReviews ?? 0);
     }
     catch { /* state unchanged on failure */ }
   };
@@ -65,6 +76,57 @@
       knownStates.value = [KnownState.Blacklisted];
     }
     catch { /* state unchanged on failure */ }
+  };
+
+  interface ArchivedEntry {
+    reviewCount: number;
+    archivedAt: string;
+    historyTruncated: boolean;
+  }
+
+  const archived = ref<ArchivedEntry | null>(null);
+  const restoring = ref(false);
+
+  const fetchArchived = async () => {
+    try {
+      const res = await $api<{ found: boolean } & ArchivedEntry>(`user/vocabulary/archive/${wordPath.value}`);
+      archived.value = res?.found ? res : null;
+    }
+    catch { archived.value = null; }
+  };
+
+  const restoreWord = async () => {
+    restoring.value = true;
+    const reviews = archived.value?.reviewCount ?? 0;
+    try {
+      const result = await $api<{ restored: number; results: { error: string | null; knownStates: KnownState[] | null }[] }>('user/vocabulary/archive/restore', {
+        method: 'POST',
+        body: { forms: [{ wordId: props.word.wordId, readingIndex: props.word.mainReading.readingIndex }] },
+      });
+
+      if ((result?.restored ?? 0) === 0) {
+        toast.add({
+          severity: 'warn',
+          summary: 'Could not restore',
+          detail: result?.results?.[0]?.error ?? 'This card could not be restored.',
+          life: 5000,
+        });
+        return;
+      }
+
+      archived.value = null;
+      knownStates.value = result.results?.[0]?.knownStates ?? [KnownState.Young];
+      toast.add({
+        severity: 'success',
+        summary: 'Card restored',
+        detail: reviews > 0 ? `Brought back ${reviews.toLocaleString()} review${reviews === 1 ? '' : 's'}.` : 'The card is back in your collection.',
+        life: 5000,
+      });
+    }
+    catch (e) {
+      toast.add({ severity: 'error', summary: 'Restore failed', detail: extractApiError(e, 'Could not restore this card.'), life: 5000 });
+    }
+    finally { restoring.value = false; }
   };
 
   const deckMembership = ref<Set<number>>(new Set());
@@ -130,6 +192,7 @@
     await nextTick();
     deckOp.value?.toggle(e);
     fetchDeckMembership();
+    fetchArchived();
     if (srsStore.studyDecks.length === 0) {
       loadingDecks.value = true;
       await srsStore.fetchStudyDecks();
@@ -149,7 +212,7 @@
 
   const confirmForget = () => {
     confirm.require({
-      message: `Forget "${plainText.value}"? This removes it from your vocabulary and deletes its review history.`,
+      message: `Forget "${plainText.value}"? It leaves your vocabulary and its status resets to new. Your review history is kept — restore it any time from Recently Removed in vocabulary settings, or delete it for good there.`,
       header: 'Forget Word',
       icon: 'pi pi-exclamation-triangle',
       acceptClass: 'p-button-danger',
@@ -189,8 +252,19 @@
     run: () => void;
   }
 
+  const restoreAction = computed<StateAction | null>(() =>
+    archived.value === null
+      ? null
+      : {
+          label: archived.value.reviewCount > 0
+            ? `Restore ${archived.value.reviewCount.toLocaleString()} review${archived.value.reviewCount === 1 ? '' : 's'}`
+            : 'Restore removed card',
+          icon: 'pi pi-replay',
+          run: restoreWord,
+        });
+
   const stateActions = computed<StateAction[]>(() => {
-    if (isRedundant.value) return [];
+    if (isRedundant.value) return restoreAction.value ? [restoreAction.value] : [];
     const actions: StateAction[] = [];
     const states = knownStates.value;
     const isActive = states.includes(KnownState.Young) || states.includes(KnownState.Mature) || states.includes(KnownState.Due);
@@ -212,9 +286,10 @@
       actions.push({ label: 'Blacklist', icon: 'pi pi-ban', run: blacklistWord });
       actions.push({ label: 'Reset schedule', icon: 'pi pi-history', run: confirmReset });
     } else {
-      return [];
+      return restoreAction.value ? [restoreAction.value] : [];
     }
 
+    if (restoreAction.value) actions.unshift(restoreAction.value);
     actions.push({ label: 'Forget', icon: 'pi pi-trash', danger: true, run: confirmForget });
     return actions;
   });

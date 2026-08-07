@@ -95,45 +95,8 @@ public class SrsRecomputeJob(
 
         foreach (var card in cards)
         {
-            if (!logsByCard.TryGetValue(card.CardId, out var cardLogs) || cardLogs.Count == 0)
-            {
-                continue;
-            }
-
-            var overrideState = card.State is FsrsState.Mastered or FsrsState.Blacklisted or FsrsState.Suspended
-                ? card.State
-                : (FsrsState?)null;
-
-            var tempCard = new FsrsCard(card.UserId, card.WordId, card.ReadingIndex);
-            var lapses = 0;
-            for (var i = 0; i < cardLogs.Count; i++)
-            {
-                var log = cardLogs[i];
-                // Only the last review produces a due date that survives, and terminal-state cards
-                // (Mastered/Blacklisted/Suspended) never come due at all — everything else replays
-                // without fuzz so it doesn't compete for calendar days.
-                var isSurvivingPlacement = i == cardLogs.Count - 1 && overrideState == null;
-                var activeScheduler = isSurvivingPlacement ? scheduler : replayScheduler;
-
-                var prevState = tempCard.State;
-                var review = activeScheduler.ReviewCard(tempCard, log.Rating, log.ReviewDateTime, log.ReviewDuration);
-                if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
-                    lapses++;
-                tempCard = review.UpdatedCard;
-            }
-
-            card.State = tempCard.State;
-            card.Step = tempCard.Step;
-            card.Stability = tempCard.Stability;
-            card.Difficulty = tempCard.Difficulty;
-            card.LastReview = tempCard.LastReview;
-            card.Due = tempCard.Due;
-            card.Lapses = lapses;
-
-            if (overrideState != null)
-            {
-                card.State = overrideState.Value;
-            }
+            if (logsByCard.TryGetValue(card.CardId, out var cardLogs))
+                FsrsReplay.Recompute(card, cardLogs, scheduler, replayScheduler);
         }
 
         var newLastCardId = cards[^1].CardId;

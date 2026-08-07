@@ -36,6 +36,8 @@ public class StudyTests(JitenWebApplicationFactory factory)
         await userDb.UserStudyDecks.ExecuteDeleteAsync();
         await userDb.FsrsReviewLogs.ExecuteDeleteAsync();
         await userDb.FsrsCards.ExecuteDeleteAsync();
+        await userDb.FsrsCardArchives.ExecuteDeleteAsync();
+        await userDb.UserReviewDailies.ExecuteDeleteAsync();
         await userDb.UserFsrsSettings.ExecuteDeleteAsync();
 
         await jitenDb.DeckWords.ExecuteDeleteAsync();

@@ -211,6 +211,8 @@ export const useSrsStore = defineStore('srs', () => {
   const cardShownAt = ref<number | null>(null);
   const thinkingDuration = ref<number | undefined>(undefined);
   const isBusy = ref(false);
+  // Reviews recovered from the archive by the last quickAction
+  const lastAutoRestoredCount = ref(0);
   // Set by the timed-review "fail & learn" absorption window: blocks all grading (mouse + keyboard)
   // while the answer is shown for study, until the timer auto-fails the card.
   const gradeLock = ref(false);
@@ -1067,12 +1069,12 @@ export const useSrsStore = defineStore('srs', () => {
     };
 
     try {
-      // Forget permanently deletes the card and its review logs server-side — there is no restore
-      // path, so it can't be undone. Clear the stack rather than offer a misleading undo past it.
+      // Forget removes the card server-side. Its history survives under Recently Removed, but the
+      // in-session undo can't put the card back, so clear the stack rather than offer a misleading undo.
       if (action !== 'forget') takeSnapshot(card, action);
       else undoStack.value = [];
 
-      await $api('srs/set-vocabulary-state', {
+      const result = await $api<{ autoRestored?: number }>('srs/set-vocabulary-state', {
         method: 'POST',
         body: {
           wordId: card.wordId,
@@ -1080,6 +1082,8 @@ export const useSrsStore = defineStore('srs', () => {
           state: stateMap[action],
         },
       });
+
+      lastAutoRestoredCount.value = result?.autoRestored ?? 0;
 
       sessionStats.value.cardsReviewed++;
       clearedGrades.value = [...clearedGrades.value, 'action'];
@@ -1449,6 +1453,7 @@ export const useSrsStore = defineStore('srs', () => {
     revealCard,
     gradeCard,
     quickAction,
+    lastAutoRestoredCount,
     undoLastAction,
     startStudyMore,
     wrapUp,

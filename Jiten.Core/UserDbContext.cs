@@ -31,6 +31,8 @@ public class UserDbContext : IdentityDbContext<User>
 
     public DbSet<FsrsCard> FsrsCards { get; set; }
     public DbSet<FsrsReviewLog> FsrsReviewLogs { get; set; }
+    public DbSet<FsrsCardArchive> FsrsCardArchives { get; set; }
+    public DbSet<UserReviewDaily> UserReviewDailies { get; set; }
 
     public DbSet<UserAccomplishment> UserAccomplishments { get; set; }
     public DbSet<UserProfile> UserProfiles { get; set; }
@@ -146,8 +148,17 @@ public class UserDbContext : IdentityDbContext<User>
             entity.Property(um => um.CoverageRefreshedAt).IsRequired(false);
             entity.Property(um => um.CoverageDirty).IsRequired();
             entity.Property(um => um.CoverageDirtyAt).IsRequired(false);
+            entity.Property(um => um.ReviewRollupDirty).HasDefaultValue(false);
+            entity.Property(um => um.ReviewRollupRebuiltAt).IsRequired(false);
             if (isNpgsql)
+            {
                 entity.Property(um => um.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+
+                // Partial: the sweep runs every 15 minutes and the flag is false for nearly every row.
+                entity.HasIndex(um => um.ReviewRollupDirty)
+                      .HasDatabaseName("IX_UserMetadatas_ReviewRollupDirty")
+                      .HasFilter("\"ReviewRollupDirty\"");
+            }
 
             entity.HasOne<User>()
                   .WithOne()
@@ -225,6 +236,38 @@ public class UserDbContext : IdentityDbContext<User>
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(r => new { r.CardId, r.ReviewDateTime }).IsUnique();
+        });
+
+        modelBuilder.Entity<FsrsCardArchive>(entity =>
+        {
+            entity.HasKey(a => a.ArchiveId);
+            if (isNpgsql)
+                entity.Property(a => a.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+
+            entity.HasIndex(a => new { a.UserId, a.WordId, a.ReadingIndex })
+                  .IsUnique()
+                  .HasDatabaseName("IX_FsrsCardArchive_UserId_WordId_ReadingIndex");
+            entity.HasIndex(a => new { a.UserId, a.ArchivedAt })
+                  .HasDatabaseName("IX_FsrsCardArchive_UserId_ArchivedAt");
+            entity.Property(a => a.HistoryMerged).HasDefaultValue(false);
+            entity.Property(a => a.HistoryTruncated).HasDefaultValue(false);
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(a => a.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserReviewDaily>(entity =>
+        {
+            entity.HasKey(d => new { d.UserId, d.LocalDate });
+            if (isNpgsql)
+                entity.Property(d => d.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(d => d.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<UserAccomplishment>(entity =>

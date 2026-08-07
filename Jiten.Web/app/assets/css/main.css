@@ -64,6 +64,18 @@ a:not(.p-button) {
     font-weight: 400 !important;
 }
 
+.p-confirmdialog {
+    max-width: min(41rem, calc(100vw - 2rem));
+}
+
+.p-confirmdialog .p-dialog-content {
+    align-items: flex-start;
+}
+
+.p-confirmdialog-icon {
+    flex-shrink: 0;
+}
+
 .pos-badge {
     display: inline-block;
     padding: 0.05rem 0.4rem;

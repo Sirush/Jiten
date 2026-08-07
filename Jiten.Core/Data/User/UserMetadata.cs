@@ -8,5 +8,8 @@ public class UserMetadata
     public bool CoverageDirty { get; set; }
     public DateTime? CoverageDirtyAt { get; set; }
 
+    public bool ReviewRollupDirty { get; set; }
+    public DateTime? ReviewRollupRebuiltAt { get; set; }
+
     public DateTime? LastActivity { get; set; }
 }

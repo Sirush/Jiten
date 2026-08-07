@@ -41,6 +41,8 @@ public class StaticDeckDownloadTests(JitenWebApplicationFactory factory)
         await userDb.UserStudyDecks.ExecuteDeleteAsync();
         await userDb.FsrsReviewLogs.ExecuteDeleteAsync();
         await userDb.FsrsCards.ExecuteDeleteAsync();
+        await userDb.FsrsCardArchives.ExecuteDeleteAsync();
+        await userDb.UserReviewDailies.ExecuteDeleteAsync();
 
         await jitenDb.WordFormFrequencies.ExecuteDeleteAsync();
         await jitenDb.Definitions.ExecuteDeleteAsync();

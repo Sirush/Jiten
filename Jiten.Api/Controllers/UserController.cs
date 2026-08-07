@@ -36,11 +36,16 @@ public class UserController(
     IDeckWordResolver deckWordResolver,
     IDeckDownloadService downloadService,
     IUserLimitsService userLimits,
+    IStudySessionService sessionService,
     ILogger<UserController> logger) : ControllerBase
 {
     private const int MaxAnkiTxtBytes = 50 * 1024 * 1024;
 
     private const int MaxAnkiTxtLines = 50_000;
+
+    private const int MaxBulkRestore = 2000;
+
+    private const int PurgeCardChunkSize = 2000;
 
     /// <summary>
     /// Get all known JMdict word IDs for the current user.
@@ -51,7 +56,10 @@ public class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        return Results.Ok(await ComputeKnownWordAmountAsync(userId));
+        var amounts = await ComputeKnownWordAmountAsync(userId);
+        amounts.ArchivedCards = await userContext.FsrsCardArchives.AsNoTracking().CountAsync(a => a.UserId == userId);
+
+        return Results.Ok(amounts);
     }
 
     private async Task<KnownWordAmountDto> ComputeKnownWordAmountAsync(string userId)
@@ -242,6 +250,8 @@ public class UserController(
                                           .ToListAsync();
         if (cards.Count == 0) return Results.Ok(new { removed = 0 });
 
+        // Deliberately not archived: this is a Danger Zone action behind an explicit confirm, archiving would
+        // double-write the whole card table, and backup export already covers "I want this back".
         userContext.FsrsReviewLogs.RemoveRange(reviewLogs);
         userContext.FsrsCards.RemoveRange(cards);
         await userContext.SaveChangesAsync();
@@ -249,6 +259,8 @@ public class UserController(
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
         backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
+
+        await MarkReviewRollupDirty(userId);
 
         logger.LogInformation("User cleared all known words: UserId={UserId}, RemovedCount={RemovedCount}, RemovedLogsCount={RemovedLogsCount}",
                               userId, cards.Count, reviewLogs.Count);
@@ -307,7 +319,6 @@ public class UserController(
         }
         foreach (var k in alreadyKnownSet)
             allImportCardKeys.Add((k.WordId, (byte)k.Item2));
-        var importCardsByWord = WordFormHelper.GroupCardKeysByWord(allImportCardKeys);
 
         foreach (var word in jmdictWords)
         {
@@ -323,13 +334,14 @@ public class UserController(
                 if (alreadyKnownSet.Contains((word.WordId, i)))
                     continue;
 
-                if (WordFormHelper.IsRedundantKanaCard(wordFormCache, word.WordId, (byte)i, importCardsByWord))
-                    continue;
-
                 toInsert.Add(new FsrsCard(userId, word.WordId, (byte)i, due: DateTime.UtcNow, lastReview: DateTime.UtcNow,
                                           state: state));
             }
         }
+
+        var redundantIds = await WordFormHelper.ArchiveRedundantImportCards(
+            userContext, wordFormCache, userId, toInsert, allImportCardKeys, _ => []);
+        toInsert.RemoveAll(redundantIds.Contains);
 
         if (toInsert.Count > 0)
         {
@@ -337,13 +349,17 @@ public class UserController(
             await userContext.SaveChangesAsync();
         }
 
+        var pruned = await WordFormHelper.PruneRedundantForms(userContext, wordFormCache, userId, jmdictWordIds);
+        if (pruned > 0)
+            await userContext.SaveChangesAsync();
+
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
         backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
 
-        logger.LogInformation("User imported words from IDs: UserId={UserId}, AddedCount={AddedCount}, SkippedCount={SkippedCount}",
-                              userId, toInsert.Count, alreadyKnown.Count);
-        return Results.Ok(new { added = toInsert.Count, skipped = alreadyKnown.Count });
+        logger.LogInformation("User imported words from IDs: UserId={UserId}, AddedCount={AddedCount}, SkippedCount={SkippedCount}, PrunedCount={PrunedCount}",
+                              userId, toInsert.Count, alreadyKnown.Count, pruned);
+        return Results.Ok(new { added = toInsert.Count, skipped = alreadyKnown.Count, pruned });
     }
 
     private static List<int> GetReadingIndicesToImport(
@@ -503,19 +519,31 @@ public class UserController(
         var allJpdbCardKeys = cardsToReplay.Select(c => (c.WordId, c.ReadingIndex))
             .Concat(existingCards.Values.Select(c => (c.WordId, c.ReadingIndex)))
             .ToHashSet();
-        var jpdbCardsByWord = WordFormHelper.GroupCardKeysByWord(allJpdbCardKeys);
 
-        var redundantCardSet = cardsToAdd
-            .Where(c => WordFormHelper.IsRedundantKanaCard(wordFormCache, c.WordId, c.ReadingIndex, jpdbCardsByWord))
-            .ToHashSet();
+        var pendingByCard = logsToAdd.GroupBy(l => l.Card).ToDictionary(g => g.Key, g => g.ToList());
 
-        if (redundantCardSet.Count > 0)
+        var coveringByCard = await WordFormHelper.ArchiveRedundantImportCards(
+            userContext, wordFormCache, userId, cardsToAdd, allJpdbCardKeys,
+            card => pendingByCard.TryGetValue(card, out var logs)
+                ? logs.Select(l => new PackedReview(l.Rating, l.ReviewDateTime, l.ReviewDuration)).ToList()
+                : [],
+            scheduler);
+
+        var archivedRedundant = coveringByCard.Archived;
+
+        if (coveringByCard.Count > 0)
         {
-            cardsToAdd.RemoveAll(c => redundantCardSet.Contains(c));
-            cardsToReplay.RemoveAll(c => redundantCardSet.Contains(c));
-            logsToAdd.RemoveAll(l => redundantCardSet.Contains(l.Card));
-            skipped += redundantCardSet.Count;
+            cardsToAdd.RemoveAll(coveringByCard.Contains);
+            cardsToReplay.RemoveAll(coveringByCard.Contains);
+            logsToAdd.RemoveAll(l => coveringByCard.Contains(l.Card));
+            skipped += coveringByCard.Count;
         }
+
+        var restoredCards = await CardRestoreService.AutoRestoreAsync(
+            userContext, userId, cardsToAdd, restoreSchedule: false,
+            pendingReviewTimes: card => pendingByCard.TryGetValue(card, out var logs)
+                ? logs.Select(l => l.ReviewDateTime)
+                : []);
 
         if (cardsToAdd.Count > 0)
         {
@@ -553,41 +581,48 @@ public class UserController(
             if (!logsByCard.TryGetValue(card.CardId, out var cardLogs) || cardLogs.Count == 0)
                 continue;
 
-            var overrideState = !request.OverwriteCardStates
-                                && card.State is FsrsState.Mastered or FsrsState.Blacklisted or FsrsState.Suspended
-                ? card.State
-                : (FsrsState?)null;
-
-            var tempCard = new FsrsCard(card.UserId, card.WordId, card.ReadingIndex);
-            var lapses = 0;
-            foreach (var log in cardLogs)
-            {
-                var prevState = tempCard.State;
-                var result = scheduler.ReviewCard(tempCard, log.Rating, log.ReviewDateTime);
-                if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
-                    lapses++;
-                tempCard = result.UpdatedCard;
-            }
-
-            card.State = overrideState ?? tempCard.State;
-            card.Step = tempCard.Step;
-            card.Stability = tempCard.Stability;
-            card.Difficulty = tempCard.Difficulty;
-            card.Due = tempCard.Due;
-            card.LastReview = tempCard.LastReview;
-            card.Lapses = lapses;
+            FsrsReplay.Recompute(card, cardLogs, scheduler, scheduler,
+                                 preserveTerminalState: !request.OverwriteCardStates);
         }
 
         await userContext.SaveChangesAsync();
+
+        var droppedFromArchive = await CardArchiveService.DropReviewsHeldLiveAsync(
+            userContext, userId, cardsToReplay,
+            card => logsByCard.TryGetValue(card.CardId, out var live) ? live.Select(l => l.ReviewDateTime) : []);
+        if (droppedFromArchive > 0)
+            await userContext.SaveChangesAsync();
+
+        var pruned = await WordFormHelper.PruneRedundantForms(userContext, wordFormCache, userId, distinctWordIds);
+        if (pruned > 0)
+            await userContext.SaveChangesAsync();
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
         backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
 
-        logger.LogInformation("User imported JPDB reviews: UserId={UserId}, Cards={Cards}, Reviews={Reviews}, Updated={Updated}, Skipped={Skipped}",
-                              userId, cardsToReplay.Count, logsToAdd.Count, updatedLogs, skipped);
-        return Results.Ok(new { cardsProcessed = cardsToReplay.Count, reviewsImported = logsToAdd.Count, reviewsUpdated = updatedLogs, skipped });
+        await MarkReviewRollupDirty(userId);
+
+        logger.LogInformation(
+                              "User imported JPDB reviews: UserId={UserId}, Cards={Cards}, Reviews={Reviews}, Updated={Updated}, Skipped={Skipped}, Archived={Archived}, Restored={Restored}, Pruned={Pruned}",
+                              userId, cardsToReplay.Count, logsToAdd.Count, updatedLogs, skipped, archivedRedundant, restoredCards, pruned);
+        return Results.Ok(new
+                          {
+                              cardsProcessed = cardsToReplay.Count, reviewsImported = logsToAdd.Count,
+                              reviewsUpdated = updatedLogs, skipped, archivedRedundant, restoredCards, pruned
+                          });
     }
+
+    /// <summary>Anki's incoming reviews for a card, minus the ratings the import would refuse anyway.</summary>
+    private static IReadOnlyList<PackedReview> AnkiHistoryOf(
+        Dictionary<(int WordId, byte ReadingIndex), (FsrsCard Card, List<AnkiReviewLogImport> AllReviewLogs)> processedPairs,
+        FsrsCard card)
+        => processedPairs.TryGetValue((card.WordId, card.ReadingIndex), out var processed)
+            ? processed.AllReviewLogs
+                       .Where(l => l.Rating is >= FsrsRating.Again and <= FsrsRating.Easy)
+                       .Select(l => new PackedReview(l.Rating, l.ReviewDateTime, l.ReviewDuration))
+                       .ToList()
+            : [];
 
     private static FsrsRating? MapJpdbGrade(string grade) => grade switch
     {
@@ -605,20 +640,13 @@ public class UserController(
         => CountLapsesFromLogs(logs.Select(l => (l.Rating, DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime, l.ReviewDuration)));
 
     private static int CountLapsesFromLogs(IEnumerable<(FsrsRating Rating, DateTime ReviewDateTime, int? ReviewDuration)> logs)
-    {
-        var scheduler = new FsrsScheduler(enableFuzzing: false);
-        var tempCard = new FsrsCard("", 0, 0);
-        var lapses = 0;
-        foreach (var log in logs.OrderBy(l => l.ReviewDateTime))
-        {
-            var prevState = tempCard.State;
-            var result = scheduler.ReviewCard(tempCard, log.Rating, log.ReviewDateTime, log.ReviewDuration);
-            if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
-                lapses++;
-            tempCard = result.UpdatedCard;
-        }
-        return lapses;
-    }
+        => FsrsReplay.CountLapses(logs.Select(l => new FsrsReviewLog
+                                                   {
+                                                       Rating = l.Rating, ReviewDateTime = l.ReviewDateTime,
+                                                       ReviewDuration = l.ReviewDuration
+                                                   })
+                                      .ToList(),
+                                  new FsrsScheduler(enableFuzzing: false));
 
     private static byte ResolveReadingIndex(List<JmDictWordForm> forms, string spelling)
     {
@@ -627,6 +655,574 @@ public class UserController(
             return (byte)match.ReadingIndex;
 
         return 0;
+    }
+
+    [HttpGet("vocabulary/redundant-forms")]
+    [SwaggerOperation(Summary = "List redundant vocabulary forms",
+                      Description = "Returns the caller's cards that a Mastered sibling form already covers")]
+    public async Task<IResult> GetRedundantForms()
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        var found = await ComputeRedundantForms(userId);
+        if (found.Count == 0)
+            return Results.Ok(new { items = Array.Empty<RedundantFormDto>(), totalItems = 0 });
+
+        var wordIds = found.Select(f => f.Card.WordId).Distinct().ToList();
+        var presentation = await WordFormHelper.LoadWordPresentation(jitenContext, wordIds);
+
+        var items = found
+                    .Select(f => new RedundantFormDto
+                    {
+                        WordId = f.Card.WordId,
+                        ReadingIndex = f.Card.ReadingIndex,
+                        Reading = presentation.FormText(f.Card.WordId, f.Card.ReadingIndex),
+                        State = f.Card.State,
+                        ReviewCount = f.ReviewCount,
+                        CoveringReadingIndex = f.CoveringReadingIndex,
+                        CoveringReading = presentation.FormText(f.Card.WordId, f.CoveringReadingIndex),
+                        CoveringState = FsrsState.Mastered,
+                        MainDefinition = presentation.Definition(f.Card.WordId),
+                        FrequencyRank = presentation.FrequencyRank(f.Card.WordId, f.Card.ReadingIndex)
+                    })
+                    .OrderBy(i => i.FrequencyRank == 0 ? int.MaxValue : i.FrequencyRank)
+                    .ThenBy(i => i.WordId)
+                    .ToList();
+
+        return Results.Ok(new { items, totalItems = items.Count });
+    }
+
+    [HttpPost("vocabulary/redundant-forms/resolve")]
+    [SwaggerOperation(Summary = "Remove redundant vocabulary forms",
+                      Description = "Deletes the listed cards, but only those still confirmed redundant server-side. Their review history is archived and can be restored from Recently Removed.")]
+    public async Task<IResult> ResolveRedundantForms([FromBody] ResolveRedundantFormsRequest request)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        if (request.Forms == null || request.Forms.Count == 0)
+            return Results.BadRequest("No forms provided");
+
+        var requested = request.Forms.Select(f => (f.WordId, f.ReadingIndex)).ToHashSet();
+
+        var found = await ComputeRedundantForms(userId);
+        var confirmed = found.Where(f => requested.Contains((f.Card.WordId, f.Card.ReadingIndex))).ToList();
+        var toRemove = confirmed.Select(f => f.Card).ToList();
+
+        if (toRemove.Count == 0)
+            return Results.Ok(new { removed = 0, skipped = requested.Count });
+
+        var coveringByCardId = confirmed.ToDictionary(f => f.Card.CardId, f => f.CoveringReadingIndex);
+        await CardArchiveService.ArchiveCardsAsync(userContext, userId, toRemove, CardArchiveReason.RedundancyResolve,
+                                                   c => coveringByCardId.TryGetValue(c.CardId, out var ri) ? ri : null);
+        userContext.FsrsCards.RemoveRange(toRemove);
+        await userContext.SaveChangesAsync();
+
+        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        await userContext.SaveChangesAsync();
+        backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
+
+        await sessionService.BumpStudyOverviewVersion(userId);
+
+        logger.LogInformation("User removed redundant vocabulary forms: UserId={UserId}, Removed={Removed}, Skipped={Skipped}",
+                              userId, toRemove.Count, requested.Count - toRemove.Count);
+        return Results.Ok(new { removed = toRemove.Count, skipped = requested.Count - toRemove.Count });
+    }
+
+    /// <summary>
+    /// Restores the archive section of a backup
+    /// </summary>
+    private async Task<int> ImportArchiveSection(string userId, List<FsrsCardArchiveExportDto>? section)
+    {
+        if (section is not { Count: > 0 })
+            return 0;
+
+        var wordIds = section.Select(a => a.WordId).Distinct().ToList();
+        var readingCounts = await jitenContext.WordForms
+                                              .AsNoTracking()
+                                              .Where(wf => wordIds.Contains(wf.WordId))
+                                              .GroupBy(wf => wf.WordId)
+                                              .Select(g => new { WordId = g.Key, ReadingCount = g.Count() })
+                                              .ToDictionaryAsync(w => w.WordId, w => w.ReadingCount);
+
+        var existing = (await userContext.FsrsCardArchives
+                                         .Where(a => a.UserId == userId && wordIds.Contains(a.WordId))
+                                         .ToListAsync())
+                       .ToDictionary(a => (a.WordId, a.ReadingIndex));
+
+        var imported = 0;
+
+        foreach (var dto in section)
+        {
+            if (!readingCounts.TryGetValue(dto.WordId, out var readingCount) || dto.ReadingIndex >= readingCount)
+                continue;
+
+            var reviews = dto.ReviewLogs
+                             .Select(l => new PackedReview(l.Rating,
+                                                           DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime,
+                                                           l.ReviewDuration));
+            var packed = ReviewLogPacker.Pack(reviews);
+
+            var incoming = new FsrsCardArchive
+                           {
+                               UserId = userId,
+                               WordId = dto.WordId,
+                               ReadingIndex = dto.ReadingIndex,
+                               ArchivedAt = DateTimeOffset.FromUnixTimeSeconds(dto.ArchivedAt).UtcDateTime,
+                               Reason = dto.Reason,
+                               CoveringReadingIndex = dto.CoveringReadingIndex,
+                               State = dto.State,
+                               Step = dto.Step,
+                               Stability = dto.Stability,
+                               Difficulty = dto.Difficulty,
+                               Due = DateTimeOffset.FromUnixTimeSeconds(dto.Due).UtcDateTime,
+                               LastReview = dto.LastReview.HasValue
+                                   ? DateTimeOffset.FromUnixTimeSeconds(dto.LastReview.Value).UtcDateTime
+                                   : null,
+                               Lapses = dto.Lapses,
+                               CardCreatedAt = DateTimeOffset.FromUnixTimeSeconds(dto.CardCreatedAt).UtcDateTime,
+                               ReviewCount = Math.Max(dto.ReviewCount, packed.ReviewCount),
+                               HistoryMerged = dto.HistoryMerged,
+                               FirstReview = packed.FirstReview,
+                               HistoryTruncated = packed.Truncated,
+                               Logs = packed.Logs
+                           };
+
+            if (existing.TryGetValue((dto.WordId, dto.ReadingIndex), out var row))
+            {
+                CardArchiveService.MergeArchiveRows(row, incoming);
+            }
+            else
+            {
+                userContext.FsrsCardArchives.Add(incoming);
+                existing[(dto.WordId, dto.ReadingIndex)] = incoming;
+            }
+
+            imported++;
+        }
+
+        if (imported > 0)
+            await userContext.SaveChangesAsync();
+
+        return imported;
+    }
+
+    /// <summary>
+    /// Restores the per-day activity counters from a backup
+    /// </summary>
+    private async Task<bool> ImportReviewActivitySection(string userId, List<UserReviewDailyExportDto>? section)
+    {
+        if (section is not { Count: > 0 })
+            return false;
+
+        var incoming = new Dictionary<DateOnly, UserReviewDailyExportDto>();
+        foreach (var dto in section)
+            if (DateOnly.TryParse(dto.LocalDate, out var date))
+                incoming[date] = dto;
+
+        if (incoming.Count == 0)
+            return false;
+
+        var dates = incoming.Keys.ToList();
+        var existing = await userContext.UserReviewDailies
+                                        .Where(d => d.UserId == userId && dates.Contains(d.LocalDate))
+                                        .ToDictionaryAsync(d => d.LocalDate);
+
+        foreach (var (date, dto) in incoming)
+        {
+            if (!existing.TryGetValue(date, out var row))
+            {
+                row = new UserReviewDaily { UserId = userId, LocalDate = date };
+                userContext.UserReviewDailies.Add(row);
+            }
+
+            row.ReviewCount = Math.Max(0, dto.ReviewCount);
+            row.CorrectCount = Math.Max(0, dto.CorrectCount);
+            row.NewCardCount = Math.Max(0, dto.NewCardCount);
+            row.TotalDurationMs = Math.Max(0, dto.TotalDurationMs);
+        }
+
+        await ReviewRollupHelper.MarkRebuilt(userContext, userId);
+
+        await userContext.SaveChangesAsync();
+        return true;
+    }
+
+    #region Card archive
+
+    [HttpGet("vocabulary/archive")]
+    [SwaggerOperation(Summary = "List removed cards",
+                      Description = "Cards removed from the collection, newest first, with the review history kept for each.")]
+    public async Task<IResult> GetArchivedCards(
+        [FromQuery] CardArchiveReason? reason = null,
+        [FromQuery] int offset = 0,
+        [FromQuery] int limit = 50)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        offset = Math.Max(0, offset);
+        limit = Math.Clamp(limit, 1, 200);
+
+        var query = userContext.FsrsCardArchives.AsNoTracking().Where(a => a.UserId == userId);
+        if (reason.HasValue)
+            query = query.Where(a => a.Reason == reason.Value);
+
+        var totalItems = await query.CountAsync();
+        var rows = await query
+                         .OrderByDescending(a => a.ArchivedAt)
+                         .ThenBy(a => a.WordId)
+                         .Skip(offset)
+                         .Take(limit)
+                         .Select(a => new
+                                      {
+                                          a.WordId, a.ReadingIndex, a.ArchivedAt, a.Reason, a.CoveringReadingIndex,
+                                          a.State, a.ReviewCount, a.FirstReview, a.LastReview, a.Lapses, a.HistoryTruncated
+                                      })
+                         .ToListAsync();
+
+        if (rows.Count == 0)
+            return Results.Ok(new PaginatedResponse<List<ArchivedCardDto>>([], totalItems, limit, offset));
+
+        var wordIds = rows.Select(r => r.WordId).Distinct().ToList();
+        var presentation = await WordFormHelper.LoadWordPresentation(jitenContext, wordIds);
+
+        var items = rows.Select(r => new ArchivedCardDto
+                                     {
+                                         WordId = r.WordId,
+                                         ReadingIndex = r.ReadingIndex,
+                                         Reading = presentation.FormText(r.WordId, r.ReadingIndex),
+                                         MainDefinition = presentation.Definition(r.WordId),
+                                         FrequencyRank = presentation.FrequencyRank(r.WordId, r.ReadingIndex),
+                                         ArchivedAt = r.ArchivedAt,
+                                         Reason = r.Reason,
+                                         CoveringReadingIndex = r.CoveringReadingIndex,
+                                         CoveringReading = r.CoveringReadingIndex.HasValue
+                                             ? presentation.FormText(r.WordId, r.CoveringReadingIndex.Value)
+                                             : null,
+                                         State = r.State,
+                                         ReviewCount = r.ReviewCount,
+                                         FirstReview = r.FirstReview,
+                                         LastReview = r.LastReview,
+                                         Lapses = r.Lapses,
+                                         HistoryTruncated = r.HistoryTruncated,
+                                         AutoRestores = r.Reason.IsAutoRestorable()
+                                     }).ToList();
+
+        return Results.Ok(new PaginatedResponse<List<ArchivedCardDto>>(items, totalItems, limit, offset));
+    }
+
+    [HttpGet("vocabulary/archive/{wordId:int}/{readingIndex}")]
+    [SwaggerOperation(Summary = "Look up one removed form",
+                      Description = "Returns the archived entry for a single form, or null when nothing was removed for it")]
+    public async Task<IResult> GetArchivedCard(int wordId, byte readingIndex)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        var row = await userContext.FsrsCardArchives
+                                   .AsNoTracking()
+                                   .Where(a => a.UserId == userId && a.WordId == wordId && a.ReadingIndex == readingIndex)
+                                   .Select(a => new
+                                                {
+                                                    a.WordId, a.ReadingIndex, a.ArchivedAt, a.Reason,
+                                                    a.ReviewCount, a.State, a.HistoryTruncated
+                                                })
+                                   .FirstOrDefaultAsync();
+
+        if (row == null)
+            return Results.Ok(new { found = false });
+
+        return Results.Ok(new
+                          {
+                              found = true,
+                              row.WordId,
+                              row.ReadingIndex,
+                              row.ArchivedAt,
+                              row.Reason,
+                              row.ReviewCount,
+                              row.State,
+                              historyTruncated = row.HistoryTruncated,
+                              autoRestores = row.Reason.IsAutoRestorable()
+                          });
+    }
+
+    [HttpPost("vocabulary/archive/restore")]
+    [SwaggerOperation(Summary = "Restore removed cards",
+                      Description = "Puts archived cards and their review history back")]
+    public async Task<IResult> RestoreArchivedCards([FromBody] RestoreArchivedCardsRequest request)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        List<(int WordId, byte ReadingIndex)> keys;
+        var remaining = 0;
+
+        if (request.All)
+        {
+            var query = userContext.FsrsCardArchives.AsNoTracking().Where(a => a.UserId == userId);
+            if (request.Reason.HasValue)
+                query = query.Where(a => a.Reason == request.Reason.Value);
+
+            var total = await query.CountAsync();
+            keys = (await query.OrderBy(a => a.ArchiveId)
+                               .Take(MaxBulkRestore)
+                               .Select(a => new { a.WordId, a.ReadingIndex })
+                               .ToListAsync())
+                   .Select(a => (a.WordId, a.ReadingIndex))
+                   .ToList();
+
+            remaining = Math.Max(0, total - keys.Count);
+        }
+        else
+        {
+            if (request.Forms == null || request.Forms.Count == 0)
+                return Results.BadRequest("No forms provided");
+            if (request.Forms.Count > MaxBulkRestore)
+                return Results.BadRequest($"Too many forms in one request (max {MaxBulkRestore}).");
+
+            keys = request.Forms.Select(f => (f.WordId, f.ReadingIndex)).ToList();
+        }
+
+        if (keys.Count == 0)
+            return Results.Ok(new { restored = 0, skipped = 0, remaining = 0, results = Array.Empty<CardRestoreOutcome>() });
+
+        var settings = await FsrsSettingsHelper.LoadAsync(userContext, userId);
+
+        var outcomes = await CardRestoreService.RestoreAsync(
+            userContext, jitenContext, userId, keys,
+            FsrsSettingsHelper.GetParameters(settings), FsrsSettingsHelper.GetDesiredRetention(settings));
+
+        var restored = outcomes.Count(o => o.Restored);
+        if (restored > 0)
+        {
+            await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+            await userContext.SaveChangesAsync();
+            backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
+            await MarkReviewRollupDirty(userId);
+            await sessionService.BumpStudyOverviewVersion(userId);
+        }
+
+        logger.LogInformation("User restored archived cards: UserId={UserId}, Restored={Restored}, Requested={Requested}",
+                              userId, restored, keys.Count);
+
+        var restoredStates = restored > 0
+            ? await userService.GetKnownWordsState(outcomes.Where(o => o.Restored).Select(o => (o.WordId, o.ReadingIndex)))
+            : new Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>();
+
+        return Results.Ok(new
+                          {
+                              restored,
+                              skipped = outcomes.Count - restored,
+                              remaining,
+                              results = outcomes.Select(o => new
+                                                             {
+                                                                 o.WordId,
+                                                                 o.ReadingIndex,
+                                                                 o.Restored,
+                                                                 o.ReviewsRestored,
+                                                                 o.HistoryTruncated,
+                                                                 o.Error,
+                                                                 knownStates = restoredStates.GetValueOrDefault((o.WordId, o.ReadingIndex))
+                                                             })
+                          });
+    }
+
+    [HttpDelete("vocabulary/archive")]
+    [SwaggerOperation(Summary = "Permanently forget removed cards",
+                      Description = "Drops archived entries for good")]
+    public async Task<IResult> ForgetArchivedCards([FromBody] ForgetArchivedCardsRequest request)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        var query = userContext.FsrsCardArchives.Where(a => a.UserId == userId);
+
+        if (request.Reason.HasValue)
+            query = query.Where(a => a.Reason == request.Reason.Value);
+
+        int removed;
+
+        if (request.Forms is { Count: > 0 })
+        {
+            var keys = request.Forms.Select(f => (f.WordId, f.ReadingIndex)).ToHashSet();
+            var wordIds = keys.Select(k => k.WordId).Distinct().ToList();
+            var ids = (await query.Where(a => wordIds.Contains(a.WordId))
+                                  .Select(a => new { a.ArchiveId, a.WordId, a.ReadingIndex })
+                                  .ToListAsync())
+                      .Where(a => keys.Contains((a.WordId, a.ReadingIndex)))
+                      .Select(a => a.ArchiveId)
+                      .ToList();
+
+            removed = ids.Count == 0
+                ? 0
+                : await userContext.FsrsCardArchives.Where(a => ids.Contains(a.ArchiveId)).ExecuteDeleteAsync();
+        }
+        else
+        {
+            removed = await query.ExecuteDeleteAsync();
+        }
+
+        // Their reviews leave the rebuildable corpus with them, so the day counters no longer match.
+        if (removed > 0)
+            await MarkReviewRollupDirty(userId);
+
+        logger.LogInformation("User forgot archived cards: UserId={UserId}, Removed={Removed}, Reason={Reason}",
+                              userId, removed, request.Reason);
+
+        return Results.Ok(new { removed });
+    }
+
+    [HttpDelete("vocabulary/review-history")]
+    [SwaggerOperation(Summary = "Erase review history",
+                      Description = "Deletes review logs in the given range and clears the history kept on archived entries, then reschedules the cards that keep part of their history and removes the ones left with none. Card removal never does this; only this action does.")]
+    public async Task<IResult> PurgeReviewHistory([FromQuery] DateTime? since = null,
+                                                  [FromQuery] DateTime? until = null,
+                                                  [FromQuery] bool dropEmptyArchives = false)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        var from = since?.ToUniversalTime() ?? DateTime.UnixEpoch;
+        var to = until?.ToUniversalTime() ?? DateTime.UtcNow.AddYears(1);
+        if (from > to)
+            return Results.BadRequest("The start of the range is after its end.");
+
+        var userCardIds = userContext.FsrsCards.Where(c => c.UserId == userId).Select(c => c.CardId);
+
+        var emptiedCardIds = await userContext.FsrsCards
+                                              .Where(c => c.UserId == userId
+                                                          && (c.State == FsrsState.Learning
+                                                              || c.State == FsrsState.Review
+                                                              || c.State == FsrsState.Relearning)
+                                                          && userContext.FsrsReviewLogs.Any(l => l.CardId == c.CardId)
+                                                          && !userContext.FsrsReviewLogs
+                                                                         .Any(l => l.CardId == c.CardId
+                                                                                   && (l.ReviewDateTime < from || l.ReviewDateTime > to)))
+                                              .Select(c => c.CardId)
+                                              .ToListAsync();
+
+        var deletedLogs = await userContext.FsrsReviewLogs
+                                           .Where(l => userCardIds.Contains(l.CardId)
+                                                       && l.ReviewDateTime >= from
+                                                       && l.ReviewDateTime <= to)
+                                           .ExecuteDeleteAsync();
+
+        var deletedCards = 0;
+        foreach (var chunk in emptiedCardIds.Chunk(PurgeCardChunkSize))
+            deletedCards += await userContext.FsrsCards.Where(c => chunk.Contains(c.CardId)).ExecuteDeleteAsync();
+
+        var archiveRows = await userContext.FsrsCardArchives
+                                           .Where(a => a.UserId == userId && a.ReviewCount > 0)
+                                           .ToListAsync();
+
+        var clearedArchives = 0;
+        foreach (var row in archiveRows)
+        {
+            var (reviews, corrupt) = CardArchiveService.ReadReviews(row);
+            if (corrupt)
+                continue;
+
+            var kept = reviews.Where(r => r.ReviewDateTime < from || r.ReviewDateTime > to).ToList();
+            if (kept.Count == reviews.Count)
+                continue;
+
+            var packed = ReviewLogPacker.Pack(kept, markTruncated: row.HistoryTruncated);
+            row.Logs = packed.Logs;
+            row.FirstReview = packed.FirstReview;
+            row.HistoryTruncated = packed.Truncated;
+            row.ReviewCount = packed.ReviewCount;
+            clearedArchives++;
+        }
+
+        if (clearedArchives > 0)
+            await userContext.SaveChangesAsync();
+
+        var droppedArchives = 0;
+        if (dropEmptyArchives)
+            droppedArchives = await userContext.FsrsCardArchives
+                                               .Where(a => a.UserId == userId && a.ReviewCount == 0)
+                                               .ExecuteDeleteAsync();
+
+        if (deletedCards > 0)
+        {
+            await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+            await userContext.SaveChangesAsync();
+            backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
+        }
+
+        await MarkReviewRollupDirty(userId);
+
+        var settings = await FsrsSettingsHelper.LoadAsync(userContext, userId);
+        var studySettings = FsrsSettingsHelper.GetStudySettings(settings);
+        backgroundJobs.Enqueue<SrsRecomputeJob>(job => job.RecomputeUserSrs(
+                                                    userId,
+                                                    FsrsSettingsHelper.GetParameters(settings),
+                                                    FsrsSettingsHelper.GetDesiredRetention(settings),
+                                                    studySettings.LoadBalancing,
+                                                    null));
+
+        await sessionService.BumpStudyOverviewVersion(userId);
+
+        logger.LogInformation(
+            "User purged review history: UserId={UserId}, DeletedLogs={DeletedLogs}, DeletedCards={DeletedCards}, ClearedArchives={ClearedArchives}, DroppedArchives={DroppedArchives}",
+            userId, deletedLogs, deletedCards, clearedArchives, droppedArchives);
+
+        return Results.Ok(new { deletedLogs, deletedCards, clearedArchives, droppedArchives });
+    }
+
+    [HttpPost("vocabulary/review-activity/rebuild")]
+    [SwaggerOperation(Summary = "Rebuild activity history",
+                      Description = "Discards the stored per-day activity counters and recomputes them from review logs and archived history")]
+    public async Task<IResult> RebuildReviewActivity()
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        var cleared = await userContext.UserReviewDailies.Where(d => d.UserId == userId).ExecuteDeleteAsync();
+        await MarkReviewRollupDirty(userId);
+
+        logger.LogInformation("User queued an activity history rebuild: UserId={UserId}, ClearedDays={ClearedDays}", userId, cleared);
+
+        return Results.Ok(new { clearedDays = cleared, queued = true });
+    }
+
+    #endregion
+
+    private Task MarkReviewRollupDirty(string userId)
+        => ReviewRollupHelper.MarkDirtyAndQueue(userContext, backgroundJobs, userId);
+
+    private async Task<List<(FsrsCard Card, byte CoveringReadingIndex, int ReviewCount)>> ComputeRedundantForms(string userId)
+    {
+        var candidateWordIds = await userContext.FsrsCards
+                                                .Where(c => c.UserId == userId)
+                                                .GroupBy(c => c.WordId)
+                                                .Where(g => g.Count() > 1 && g.Any(c => c.State == FsrsState.Mastered))
+                                                .Select(g => g.Key)
+                                                .ToListAsync();
+
+        if (candidateWordIds.Count == 0)
+            return [];
+
+        var cards = await userContext.FsrsCards
+                                     .Where(c => c.UserId == userId && candidateWordIds.Contains(c.WordId))
+                                     .ToListAsync();
+
+        var reviewCounts = await WordFormHelper.LoadReviewCounts(userContext, cards.Select(c => c.CardId).ToList());
+
+        var result = new List<(FsrsCard, byte, int)>();
+        foreach (var group in cards.GroupBy(c => c.WordId))
+        {
+            var byIndex = group.ToDictionary(c => c.ReadingIndex);
+            foreach (var pair in WordFormHelper.FindRedundantForms(wordFormCache, group.Key, group.ToList(), reviewCounts))
+            {
+                if (byIndex.TryGetValue(pair.ReadingIndex, out var card))
+                    result.Add((card, pair.CoveringReadingIndex, reviewCounts.GetValueOrDefault(card.CardId)));
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -859,36 +1455,48 @@ public class UserController(
         var allAnkiCardKeys = processedPairs.Keys
             .Concat(existingCardsMap.Keys.Select(k => (k.WordId, k.ReadingIndex)))
             .ToHashSet();
-        var ankiCardsByWord = WordFormHelper.GroupCardKeysByWord(allAnkiCardKeys);
 
-        var redundantAnkiKeys = cardsToAdd.Concat(cardsToUpdate)
-            .Where(c => WordFormHelper.IsRedundantKanaCard(wordFormCache, c.WordId, c.ReadingIndex, ankiCardsByWord))
-            .Select(c => (c.WordId, c.ReadingIndex))
-            .ToHashSet();
+        var redundantAnkiCards = await WordFormHelper.ArchiveRedundantImportCards(
+            userContext, wordFormCache, userId, cardsToAdd.Concat(cardsToUpdate).ToList(), allAnkiCardKeys,
+            card => card.CardId == 0 ? AnkiHistoryOf(processedPairs, card) : []);
+        var archivedRedundant = redundantAnkiCards.Archived;
 
-        if (redundantAnkiKeys.Count > 0)
+        if (redundantAnkiCards.Count > 0)
         {
-            cardsToAdd.RemoveAll(c => redundantAnkiKeys.Contains((c.WordId, c.ReadingIndex)));
-            cardsToUpdate.RemoveAll(c => redundantAnkiKeys.Contains((c.WordId, c.ReadingIndex)));
-            foreach (var key in redundantAnkiKeys)
-                processedPairs.Remove(key);
-            skippedCount += redundantAnkiKeys.Count;
+            cardsToAdd.RemoveAll(redundantAnkiCards.Contains);
+            cardsToUpdate.RemoveAll(redundantAnkiCards.Contains);
+            foreach (var card in redundantAnkiCards.Covering.Keys)
+                processedPairs.Remove((card.WordId, card.ReadingIndex));
+            skippedCount += redundantAnkiCards.Count;
         }
 
         // Step 4: Bulk insert/update with transaction
         if (cardsToAdd.Count == 0 && cardsToUpdate.Count == 0)
         {
+            if (archivedRedundant > 0)
+            {
+                await userContext.SaveChangesAsync();
+                await MarkReviewRollupDirty(userId);
+            }
+
             return Results.Ok(new
                               {
                                   imported = 0, updated = 0, skipped = skippedCount, reviewLogs = 0,
                                   skippedWords = skippedWords.Take(50).ToList(),
-                                  skippedWordsNoReviews = skippedWordsNoReviews.Take(50).ToList(), skippedCountNoReviews
+                                  skippedWordsNoReviews = skippedWordsNoReviews.Take(50).ToList(), skippedCountNoReviews,
+                                  archivedRedundant, restoredCards = 0, pruned = 0
                               });
         }
 
         await using var transaction = await userContext.Database.BeginTransactionAsync();
         try
         {
+            var restoredCards = await CardRestoreService.AutoRestoreAsync(
+                userContext, userId, cardsToAdd, restoreSchedule: false,
+                pendingReviewTimes: card => processedPairs.TryGetValue((card.WordId, card.ReadingIndex), out var processed)
+                    ? processed.AllReviewLogs.Select(l => l.ReviewDateTime)
+                    : []);
+
             // Insert new cards
             if (cardsToAdd.Count > 0)
             {
@@ -900,6 +1508,7 @@ public class UserController(
             var logsToAdd = new List<FsrsReviewLog>();
             var allCards = cardsToAdd.Concat(cardsToUpdate).ToList();
             var updatedCards = cardsToUpdate.ToHashSet();
+            var liveTimesByCard = new Dictionary<FsrsCard, HashSet<DateTime>>();
 
             foreach (var card in allCards)
             {
@@ -912,6 +1521,7 @@ public class UserController(
                 // Jiten's own history is kept and Anki's merged into it. A review already stored for the
                 // same second is that same review re-imported, so repeating an import adds nothing.
                 var knownReviewTimes = card.ReviewLogs.Select(l => TruncateToSecond(l.ReviewDateTime)).ToHashSet();
+                liveTimesByCard[card] = knownReviewTimes;
                 var mergedLogs = new List<FsrsReviewLog>();
 
                 foreach (var log in processed.AllReviewLogs)
@@ -946,22 +1556,39 @@ public class UserController(
 
             await userContext.SaveChangesAsync();
 
+            // A form forgotten and re-imported would otherwise keep a copy of these reviews in its archive
+            // row, counted a second time by every whole-history statistic. knownReviewTimes ends the merge
+            // loop holding every review now live on the card, Jiten's own and the file's.
+            var droppedFromArchive = await CardArchiveService.DropReviewsHeldLiveAsync(
+                userContext, userId, allCards,
+                card => liveTimesByCard.TryGetValue(card, out var times) ? times : []);
+            if (droppedFromArchive > 0)
+                await userContext.SaveChangesAsync();
+
+            var pruned = await WordFormHelper.PruneRedundantForms(userContext, wordFormCache, userId, parsedWordIds);
+            if (pruned > 0)
+                await userContext.SaveChangesAsync();
+
             await transaction.CommitAsync();
 
             await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
             await userContext.SaveChangesAsync();
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
 
+            await MarkReviewRollupDirty(userId);
+
             logger.LogInformation(
-                                  "Anki import completed: UserId={UserId}, Imported={Imported}, Updated={Updated}, Skipped={Skipped}, Logs={Logs}, NotFound={NotFound}",
-                                  userId, cardsToAdd.Count, cardsToUpdate.Count, skippedCount, logsToAdd.Count, skippedWords.Count
+                                  "Anki import completed: UserId={UserId}, Imported={Imported}, Updated={Updated}, Skipped={Skipped}, Logs={Logs}, NotFound={NotFound}, Archived={Archived}, Restored={Restored}, Pruned={Pruned}",
+                                  userId, cardsToAdd.Count, cardsToUpdate.Count, skippedCount, logsToAdd.Count, skippedWords.Count,
+                                  archivedRedundant, restoredCards, pruned
                                  );
 
             return Results.Ok(new
                               {
                                   imported = cardsToAdd.Count, updated = cardsToUpdate.Count, skipped = skippedCount,
                                   reviewLogs = logsToAdd.Count, skippedWords = skippedWords,
-                                  skippedWordsNoReviews = skippedWordsNoReviews.ToList(), skippedCountNoReviews = skippedCountNoReviews
+                                  skippedWordsNoReviews = skippedWordsNoReviews.ToList(), skippedCountNoReviews = skippedCountNoReviews,
+                                  archivedRedundant, restoredCards, pruned
                               });
         }
         catch (Exception ex)
@@ -982,7 +1609,7 @@ public class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        await userService.AddKnownWord(wordId, readingIndex);
+        var upsert = await userService.AddKnownWord(wordId, readingIndex);
 
         await WordFormHelper.RemoveRedundantKanaSrsCards(userContext, wordFormCache, userId, wordId, readingIndex);
         await userContext.SaveChangesAsync();
@@ -990,8 +1617,22 @@ public class UserController(
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
 
-        return Results.Ok();
+        if (upsert.Restored > 0)
+            await MarkReviewRollupDirty(userId);
+
+        return Results.Ok(new
+                          {
+                              restored = upsert.Restored,
+                              restoredReviews = upsert.Restored > 0 ? await CountRestoredReviews(userId, wordId, readingIndex) : 0
+                          });
     }
+
+    /// <summary>Review count of a just-restored card, for the toast that tells the user their history came back.</summary>
+    private Task<int> CountRestoredReviews(string userId, int wordId, byte readingIndex)
+        => userContext.FsrsReviewLogs
+                      .CountAsync(l => l.Card.UserId == userId
+                                       && l.Card.WordId == wordId
+                                       && l.Card.ReadingIndex == readingIndex);
 
     /// <summary>
     /// Remove a single word for the current user.
@@ -1061,7 +1702,6 @@ public class UserController(
         var allFreqCardKeys = targetReadings.Select(r => (r.WordId, (byte)r.ReadingIndex))
             .Concat(alreadyKnown.Select(k => (k.WordId, k.ReadingIndex)))
             .ToHashSet();
-        var freqCardsByWord = WordFormHelper.GroupCardKeysByWord(allFreqCardKeys);
         List<FsrsCard> toInsert = new();
 
         foreach (var target in targetReadings)
@@ -1069,13 +1709,14 @@ public class UserController(
             if (alreadyKnownSet.Contains((target.WordId, target.ReadingIndex)))
                 continue;
 
-            if (WordFormHelper.IsRedundantKanaCard(wordFormCache, target.WordId, (byte)target.ReadingIndex, freqCardsByWord))
-                continue;
-
             toInsert.Add(new FsrsCard(userId, target.WordId, (byte)target.ReadingIndex,
                                       due: DateTime.UtcNow, lastReview: DateTime.UtcNow,
                                       state: FsrsState.Mastered));
         }
+
+        var redundantFreq = await WordFormHelper.ArchiveRedundantImportCards(
+            userContext, wordFormCache, userId, toInsert, allFreqCardKeys, _ => []);
+        toInsert.RemoveAll(redundantFreq.Contains);
 
         if (toInsert.Count > 0)
         {
@@ -1083,14 +1724,18 @@ public class UserController(
             await userContext.SaveChangesAsync();
         }
 
+        var pruned = await WordFormHelper.PruneRedundantForms(userContext, wordFormCache, userId, targetWordIds);
+        if (pruned > 0)
+            await userContext.SaveChangesAsync();
+
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
         backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
 
         var uniqueWords = toInsert.Select(c => c.WordId).Distinct().Count();
-        logger.LogInformation("User imported words from frequency range: UserId={UserId}, MinFreq={MinFrequency}, MaxFreq={MaxFrequency}, WordCount={WordCount}, FormCount={FormCount}",
-                              userId, minFrequency, maxFrequency, uniqueWords, toInsert.Count);
-        return Results.Ok(new { words = uniqueWords, forms = toInsert.Count });
+        logger.LogInformation("User imported words from frequency range: UserId={UserId}, MinFreq={MinFrequency}, MaxFreq={MaxFrequency}, WordCount={WordCount}, FormCount={FormCount}, PrunedCount={PrunedCount}",
+                              userId, minFrequency, maxFrequency, uniqueWords, toInsert.Count, pruned);
+        return Results.Ok(new { words = uniqueWords, forms = toInsert.Count, pruned });
     }
 
 
@@ -1373,6 +2018,19 @@ public class UserController(
                                      .ThenBy(c => c.ReadingIndex)
                                      .ToListAsync();
 
+        var archiveRows = await userContext.FsrsCardArchives
+                                           .AsNoTracking()
+                                           .Where(a => a.UserId == userId)
+                                           .OrderBy(a => a.WordId)
+                                           .ThenBy(a => a.ReadingIndex)
+                                           .ToListAsync();
+
+        var activityRows = await userContext.UserReviewDailies
+                                            .AsNoTracking()
+                                            .Where(d => d.UserId == userId)
+                                            .OrderBy(d => d.LocalDate)
+                                            .ToListAsync();
+
         var exportDto = new FsrsExportDto
                         {
                             ExportDate = DateTime.UtcNow, UserId = userId, TotalCards = cards.Count,
@@ -1392,11 +2050,46 @@ public class UserController(
                                                                            .ToUnixTimeSeconds(),
                                                                    ReviewDuration = r.ReviewDuration
                                                                }).ToList()
-                                }).ToList()
+                                }).ToList(),
+                            Archive = archiveRows.Select(a =>
+                                {
+                                    var (reviews, _) = CardArchiveService.ReadReviews(a);
+                                    return new FsrsCardArchiveExportDto
+                                           {
+                                               WordId = a.WordId, ReadingIndex = a.ReadingIndex,
+                                               ArchivedAt = new DateTimeOffset(a.ArchivedAt).ToUnixTimeSeconds(),
+                                               Reason = a.Reason, CoveringReadingIndex = a.CoveringReadingIndex,
+                                               State = a.State, Step = a.Step,
+                                               Stability = EnsureValidNumber(a.Stability), Difficulty = EnsureValidNumber(a.Difficulty),
+                                               Due = new DateTimeOffset(a.Due).ToUnixTimeSeconds(),
+                                               LastReview = a.LastReview.HasValue
+                                                   ? new DateTimeOffset(a.LastReview.Value).ToUnixTimeSeconds()
+                                                   : null,
+                                               Lapses = a.Lapses,
+                                               CardCreatedAt = new DateTimeOffset(a.CardCreatedAt).ToUnixTimeSeconds(),
+                                               ReviewCount = a.ReviewCount,
+                                               HistoryMerged = a.HistoryMerged,
+                                               ReviewLogs = reviews.Select(r => new FsrsReviewLogExportDto
+                                                                                {
+                                                                                    Rating = r.Rating,
+                                                                                    ReviewDateTime = new DateTimeOffset(r.ReviewDateTime).ToUnixTimeSeconds(),
+                                                                                    ReviewDuration = r.ReviewDuration
+                                                                                }).ToList()
+                                           };
+                                }).ToList(),
+                            ReviewActivity = activityRows.Select(d => new UserReviewDailyExportDto
+                                                                      {
+                                                                          LocalDate = d.LocalDate.ToString("yyyy-MM-dd"),
+                                                                          ReviewCount = d.ReviewCount,
+                                                                          CorrectCount = d.CorrectCount,
+                                                                          NewCardCount = d.NewCardCount,
+                                                                          TotalDurationMs = d.TotalDurationMs
+                                                                      }).ToList()
                         };
 
-        logger.LogInformation("User exported vocabulary: UserId={UserId}, CardCount={CardCount}, ReviewCount={ReviewCount}",
-                              userId, exportDto.TotalCards, exportDto.TotalReviews);
+        logger.LogInformation(
+            "User exported vocabulary: UserId={UserId}, CardCount={CardCount}, ReviewCount={ReviewCount}, ArchiveCount={ArchiveCount}, ActivityDays={ActivityDays}",
+            userId, exportDto.TotalCards, exportDto.TotalReviews, archiveRows.Count, activityRows.Count);
 
         return Results.Ok(exportDto);
 
@@ -1629,19 +2322,61 @@ public class UserController(
         var allBackupCardKeys = validCards.Select(c => (c.WordId, c.ReadingIndex))
             .Concat(existingUserCardKeys.Select(k => (k.WordId, k.ReadingIndex)))
             .ToHashSet();
-        var backupCardsByWord = WordFormHelper.GroupCardKeysByWord(allBackupCardKeys);
-        validCards.RemoveAll(c =>
-        {
-            if (!WordFormHelper.IsRedundantKanaCard(wordFormCache, c.WordId, c.ReadingIndex, backupCardsByWord))
-                return false;
-            skippedRedundant++;
-            return true;
-        });
+        // A file listing one form twice is malformed rather than fatal: the later entry wins, as it would once the
+        // import loop reached it.
+        var dtoByKey = new Dictionary<(int WordId, byte ReadingIndex), FsrsCardExportDto>();
+        foreach (var card in validCards)
+            dtoByKey[(card.WordId, card.ReadingIndex)] = card;
+
+        // The gate works on cards, so each entry is offered as the card it would become, minus the logs: the file's
+        // history is only unpacked for the forms actually dropped.
+        FsrsCard BackupCard(FsrsCardExportDto dto) => new(userId, dto.WordId, dto.ReadingIndex)
+                                                      {
+                                                          State = dto.State, Step = dto.Step, Stability = dto.Stability,
+                                                          Difficulty = dto.Difficulty,
+                                                          Due = DateTimeOffset.FromUnixTimeSeconds(dto.Due).UtcDateTime,
+                                                          LastReview = dto.LastReview.HasValue
+                                                              ? DateTimeOffset.FromUnixTimeSeconds(dto.LastReview.Value).UtcDateTime
+                                                              : null,
+                                                          CreatedAt = dto.CreatedAt > 0
+                                                              ? DateTimeOffset.FromUnixTimeSeconds(dto.CreatedAt).UtcDateTime
+                                                              : DateTime.UtcNow
+                                                      };
+
+        var backupCandidates = dtoByKey.Values.Select(BackupCard).ToList();
+
+        var archiveImported = await ImportArchiveSection(userId, exportDto.Archive);
+
+        // After the file's own archive section, which saves, so a form present in both merges into one row.
+        var redundantBackup = await WordFormHelper.ArchiveRedundantImportCards(
+            userContext, wordFormCache, userId, backupCandidates, allBackupCardKeys,
+            card => dtoByKey[(card.WordId, card.ReadingIndex)].ReviewLogs
+                                                             .DistinctBy(l => l.ReviewDateTime)
+                                                             .Select(l => new PackedReview(
+                                                                         l.Rating,
+                                                                         DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime)
+                                                                                       .UtcDateTime,
+                                                                         l.ReviewDuration))
+                                                             .ToList());
+        var archivedRedundant = redundantBackup.Archived;
+        if (archivedRedundant > 0)
+            await userContext.SaveChangesAsync();
+
+        var redundantKeys = redundantBackup.Covering.Keys.Select(c => (c.WordId, c.ReadingIndex)).ToHashSet();
+        validCards.RemoveAll(c => redundantKeys.Contains((c.WordId, c.ReadingIndex)));
+        skippedRedundant = redundantKeys.Count;
 
         result.CardsSkipped += skippedNew + skippedRedundant;
 
+        // Carried counters win over a rebuild: they were built under the timezone the backup was taken in, and
+        // recomputing would silently re-bucket every day. A file without the section falls back to a rebuild.
+        var activityImported = await ImportReviewActivitySection(userId, exportDto.ReviewActivity);
+        var rollupNeedsRebuild = !activityImported;
+
         if (validCards.Count == 0)
         {
+            if ((archiveImported > 0 || archivedRedundant > 0) && rollupNeedsRebuild)
+                await MarkReviewRollupDirty(userId);
             return Results.Ok(result);
         }
 
@@ -1654,6 +2389,7 @@ public class UserController(
                                                     .ToDictionaryAsync(c => (c.WordId, c.ReadingIndex));
 
             var cardsToAdd = new List<FsrsCard>();
+            var liveTimesByCard = new Dictionary<FsrsCard, List<DateTime>>();
 
             foreach (var cardDto in validCards)
             {
@@ -1700,6 +2436,9 @@ public class UserController(
 
                     result.CardsUpdated++;
                     result.ReviewLogsImported += cardDto.ReviewLogs.Count;
+                    liveTimesByCard[existingCard] = uniqueIncomingLogs
+                                                    .Select(l => DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime)
+                                                    .ToList();
                 }
                 else
                 {
@@ -1726,8 +2465,13 @@ public class UserController(
                     cardsToAdd.Add(newCard);
                     result.CardsImported++;
                     result.ReviewLogsImported += cardDto.ReviewLogs.Count;
+                    liveTimesByCard[newCard] = newCard.ReviewLogs.Select(l => l.ReviewDateTime).ToList();
                 }
             }
+
+            // The file's own logs are already on the card, so the archive only fills whatever gaps they leave.
+            var restoredCards = await CardRestoreService.AutoRestoreAsync(userContext, userId, cardsToAdd,
+                                                                         restoreSchedule: false);
 
             if (cardsToAdd.Count > 0)
             {
@@ -1735,14 +2479,30 @@ public class UserController(
             }
 
             await userContext.SaveChangesAsync();
+
+            var droppedFromArchive = await CardArchiveService.DropReviewsHeldLiveAsync(
+                userContext, userId, liveTimesByCard.Keys.ToList(),
+                card => liveTimesByCard.TryGetValue(card, out var times) ? times : []);
+            if (droppedFromArchive > 0)
+                await userContext.SaveChangesAsync();
+
+            var pruned = await WordFormHelper.PruneRedundantForms(userContext, wordFormCache, userId, importWordIds);
+            if (pruned > 0)
+                await userContext.SaveChangesAsync();
+
             await transaction.CommitAsync();
 
             await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
             await userContext.SaveChangesAsync();
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
 
-            logger.LogInformation("Import stats: Imported={Imported}, Updated={Updated}, Skipped={Skipped}, SkippedNew={SkippedNew}, SkippedRedundant={SkippedRedundant}",
-                                  result.CardsImported, result.CardsUpdated, result.CardsSkipped, skippedNew, skippedRedundant);
+            if (rollupNeedsRebuild)
+                await MarkReviewRollupDirty(userId);
+
+            logger.LogInformation(
+                                  "Import stats: Imported={Imported}, Updated={Updated}, Skipped={Skipped}, SkippedNew={SkippedNew}, SkippedRedundant={SkippedRedundant}, Archived={Archived}, Restored={Restored}, Pruned={Pruned}",
+                                  result.CardsImported, result.CardsUpdated, result.CardsSkipped, skippedNew, skippedRedundant,
+                                  archivedRedundant, restoredCards, pruned);
 
             return Results.Ok(result);
         }
@@ -2803,39 +3563,50 @@ public class UserController(
         }
 
         var targetYear = year ?? DateTime.UtcNow.AddHours(offsetHours).Year;
-        var utcWindowStart = DateTime.SpecifyKind(new DateTime(targetYear, 1, 1).AddHours(-offsetHours), DateTimeKind.Utc);
-        var utcWindowEnd = DateTime.SpecifyKind(new DateTime(targetYear + 1, 1, 1).AddHours(-offsetHours), DateTimeKind.Utc);
 
-        var dailyStats = await userContext.FsrsReviewLogs
-            .AsNoTracking()
-            .Where(rl => rl.Card.UserId == targetUserId
-                         && rl.ReviewDateTime >= utcWindowStart
-                         && rl.ReviewDateTime < utcWindowEnd)
-            .GroupBy(rl => rl.ReviewDateTime.AddHours(offsetHours).Date)
-            .Select(g => new
-            {
-                Date = g.Key,
-                ReviewCount = g.Count(),
-                CorrectCount = g.Count(rl => rl.Rating != FsrsRating.Again)
-            })
-            .OrderBy(g => g.Date)
-            .ToListAsync();
+        List<HeatmapDayDto> days;
+        List<DateTime> allReviewDates;
 
-        var days = dailyStats.Select(d => new HeatmapDayDto
+        var rollup = await ReviewRollupHelper.TryLoadAsync(userContext, targetUserId);
+        if (rollup != null)
         {
-            Date = DateOnly.FromDateTime(d.Date),
-            ReviewCount = d.ReviewCount,
-            CorrectCount = d.CorrectCount
-        }).ToList();
+            days = rollup
+                   .Where(d => d.LocalDate.Year == targetYear)
+                   .Select(d => new HeatmapDayDto
+                                {
+                                    Date = d.LocalDate,
+                                    ReviewCount = d.ReviewCount,
+                                    CorrectCount = d.CorrectCount
+                                })
+                   .ToList();
 
-        // Compute streaks from all-time distinct review dates
-        var allReviewDates = await userContext.FsrsReviewLogs
-            .AsNoTracking()
-            .Where(rl => rl.Card.UserId == targetUserId)
-            .Select(rl => rl.ReviewDateTime.AddHours(offsetHours).Date)
-            .Distinct()
-            .OrderByDescending(d => d)
-            .ToListAsync();
+            allReviewDates = rollup.Select(d => d.LocalDate.ToDateTime(TimeOnly.MinValue))
+                                   .OrderByDescending(d => d)
+                                   .ToList();
+        }
+        else
+        {
+            var tz = FsrsSettingsHelper.ResolveTimeZone(timezone);
+            var byDay = (await CardArchiveService.LoadAllReviewsAsync(userContext, targetUserId))
+                        .GroupBy(r => ReviewRollupHelper.LocalDateOf(r.ReviewUtc, tz))
+                        .ToList();
+
+            days = byDay
+                   .Where(g => g.Key.Year == targetYear)
+                   .OrderBy(g => g.Key)
+                   .Select(g => new HeatmapDayDto
+                   {
+                       Date = g.Key,
+                       ReviewCount = g.Count(),
+                       CorrectCount = g.Count(r => r.Rating != FsrsRating.Again)
+                   })
+                   .ToList();
+
+            allReviewDates = byDay
+                             .Select(g => g.Key.ToDateTime(TimeOnly.MinValue))
+                             .OrderByDescending(d => d)
+                             .ToList();
+        }
 
         var today = DateTime.UtcNow.AddHours(offsetHours).Date;
         var (currentStreak, longestStreak) = ComputeStreaks(allReviewDates, today);

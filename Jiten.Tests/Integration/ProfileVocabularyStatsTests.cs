@@ -56,6 +56,8 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
 
         // ResetDatabaseAsync leaves FSRS tables intact, so the previous test's cards would collide on the unique form key.
         await userDb.FsrsCards.ExecuteDeleteAsync();
+        await userDb.FsrsCardArchives.ExecuteDeleteAsync();
+        await userDb.UserReviewDailies.ExecuteDeleteAsync();
 
         var now = DateTime.UtcNow;
         userDb.FsrsCards.AddRange(
