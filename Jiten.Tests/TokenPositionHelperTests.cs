@@ -181,4 +181,34 @@ public class TokenPositionHelperTests
         pos.Should().Be(0);
         len.Should().Be(8, "source span includes the skipped ……");
     }
+
+    [Fact]
+    public void FuzzyMatch_SkipsLineBreakInsideMergedToken()
+    {
+        // The analyser tokenises across line breaks, so ことに\nなりまして comes back as one token
+        var source = "喫茶店しようということに\nなりまして";
+        var (pos, len) = TokenPositionHelper.FindTokenInSource(source, "ことになりまして", 0);
+        pos.Should().Be(9);
+        len.Should().Be(9, "source span includes the skipped newline");
+    }
+
+    [Fact]
+    public void FuzzyMatch_SkipsCarriageReturnLineFeed()
+    {
+        var source = "ことに\r\nなりまして";
+        var (pos, len) = TokenPositionHelper.FindTokenInSource(source, "ことになりまして", 0);
+        pos.Should().Be(0);
+        len.Should().Be(10, "source span includes the skipped \\r\\n");
+    }
+
+    [Fact]
+    public void FuzzyMatch_DoesNotStartOnASkippedCharacter()
+    {
+        // Anchoring on the token's first character keeps the leading newline out of the span,
+        // which would otherwise report the token as starting in the previous paragraph
+        var source = "まして\nほたるんは";
+        var (pos, len) = TokenPositionHelper.FindTokenInSource(source, "ほたるんは", 0);
+        pos.Should().Be(4);
+        len.Should().Be(5);
+    }
 }
