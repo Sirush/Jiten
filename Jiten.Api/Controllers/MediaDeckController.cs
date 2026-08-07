@@ -95,7 +95,12 @@ public class MediaDeckController(
     public async Task<List<DeckDto>> GetMediaDecksByType(MediaType mediaType)
     {
         var decks = await context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null && d.MediaType == mediaType)
-                                 .OrderBy(d => d.RomajiTitle).Include(d => d.Links).Include(d => d.Titles).ToListAsync();
+                                 .OrderBy(d => d.RomajiTitle)
+                                 .Include(d => d.Links)
+                                 .Include(d => d.Titles)
+                                 .Include(d => d.DeckDifficulty)
+                                 .AsSplitQuery()
+                                 .ToListAsync();
         var dtos = new List<DeckDto>();
         foreach (var deck in decks)
         {
