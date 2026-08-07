@@ -2004,8 +2004,9 @@ public class UserController(
     /// <summary>
     /// Export all FSRS cards and review logs for the current user as JSON.
     /// </summary>
+    /// <param name="includeWordText">Adds the surface and kana reading of every form, so a backup stays readable without JMdict ids.</param>
     [HttpGet("vocabulary/export")]
-    public async Task<IResult> ExportVocabulary()
+    public async Task<IResult> ExportVocabulary([FromQuery] bool includeWordText = false)
     {
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
@@ -2031,6 +2032,14 @@ public class UserController(
                                             .OrderBy(d => d.LocalDate)
                                             .ToListAsync();
 
+        Dictionary<(int, short), JmDictWordForm> wordForms = [];
+        if (includeWordText)
+        {
+            var textWordIds = cards.Select(c => c.WordId).Concat(archiveRows.Select(a => a.WordId)).Distinct().ToList();
+            if (textWordIds.Count > 0)
+                wordForms = await WordFormHelper.LoadWordForms(jitenContext, textWordIds);
+        }
+
         var exportDto = new FsrsExportDto
                         {
                             ExportDate = DateTime.UtcNow, UserId = userId, TotalCards = cards.Count,
@@ -2049,7 +2058,8 @@ public class UserController(
                                                                        new DateTimeOffset(r.ReviewDateTime)
                                                                            .ToUnixTimeSeconds(),
                                                                    ReviewDuration = r.ReviewDuration
-                                                               }).ToList()
+                                                               }).ToList(),
+                                    Text = FormText(c.WordId, c.ReadingIndex), Reading = FormReading(c.WordId, c.ReadingIndex)
                                 }).ToList(),
                             Archive = archiveRows.Select(a =>
                                 {
@@ -2074,7 +2084,11 @@ public class UserController(
                                                                                     Rating = r.Rating,
                                                                                     ReviewDateTime = new DateTimeOffset(r.ReviewDateTime).ToUnixTimeSeconds(),
                                                                                     ReviewDuration = r.ReviewDuration
-                                                                                }).ToList()
+                                                                                }).ToList(),
+                                               Text = FormText(a.WordId, a.ReadingIndex), Reading = FormReading(a.WordId, a.ReadingIndex),
+                                               CoveringText = a.CoveringReadingIndex.HasValue
+                                                   ? FormText(a.WordId, a.CoveringReadingIndex.Value)
+                                                   : null
                                            };
                                 }).ToList(),
                             ReviewActivity = activityRows.Select(d => new UserReviewDailyExportDto
@@ -2088,8 +2102,8 @@ public class UserController(
                         };
 
         logger.LogInformation(
-            "User exported vocabulary: UserId={UserId}, CardCount={CardCount}, ReviewCount={ReviewCount}, ArchiveCount={ArchiveCount}, ActivityDays={ActivityDays}",
-            userId, exportDto.TotalCards, exportDto.TotalReviews, archiveRows.Count, activityRows.Count);
+            "User exported vocabulary: UserId={UserId}, CardCount={CardCount}, ReviewCount={ReviewCount}, ArchiveCount={ArchiveCount}, ActivityDays={ActivityDays}, WordText={WordText}",
+            userId, exportDto.TotalCards, exportDto.TotalReviews, archiveRows.Count, activityRows.Count, includeWordText);
 
         return Results.Ok(exportDto);
 
@@ -2098,6 +2112,16 @@ public class UserController(
             if (!value.HasValue) return null;
             if (double.IsNaN(value.Value) || double.IsInfinity(value.Value)) return null;
             return value;
+        }
+
+        string? FormText(int wordId, byte readingIndex)
+            => wordForms.GetValueOrDefault((wordId, (short)readingIndex))?.Text;
+
+        string? FormReading(int wordId, byte readingIndex)
+        {
+            var form = wordForms.GetValueOrDefault((wordId, (short)readingIndex));
+            if (form == null) return null;
+            return form.FormType == JmDictFormType.KanaForm ? form.Text : RubyTextHelper.KanaFromRubyText(form.RubyText);
         }
     }
 

@@ -116,6 +116,35 @@ public static class RubyTextHelper
         return sb.ToString();
     }
 
+    /// <summary>Reading of a ruby-annotated surface: 食[た]べる gives たべる. Null when any base character lacks ruby.</summary>
+    public static string? KanaFromRubyText(string? rubyText)
+    {
+        if (string.IsNullOrEmpty(rubyText)) return null;
+
+        var sb = new StringBuilder();
+        var i = 0;
+        while (i < rubyText.Length)
+        {
+            if (IsKana(rubyText[i]))
+            {
+                sb.Append(rubyText[i++]);
+                continue;
+            }
+
+            var runEnd = i;
+            while (runEnd < rubyText.Length && !IsKana(rubyText[runEnd]) && rubyText[runEnd] != '[') runEnd++;
+            if (runEnd == i || runEnd >= rubyText.Length || rubyText[runEnd] != '[') return null;
+
+            var close = rubyText.IndexOf(']', runEnd + 1);
+            if (close < 0) return null;
+
+            sb.Append(rubyText, runEnd + 1, close - runEnd - 1);
+            i = close + 1;
+        }
+
+        return sb.Length > 0 ? sb.ToString() : null;
+    }
+
     private static string? FindBestGuess(JmDictWordForm kanjiForm, IEnumerable<JmDictWordForm> allForms)
     {
         var kanaForms = allForms

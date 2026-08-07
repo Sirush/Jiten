@@ -586,6 +586,76 @@ public class CardArchiveTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task BackupWithWordText_CarriesTheSurfaceAndReadingOfEveryForm()
+    {
+        await SeedCard(900, 1, FsrsState.Review, 1);
+        await SeedCard(902, 0, FsrsState.Review, 1);
+        await SeedCard(901, 0, FsrsState.Review, 2);
+        await SetState(901, 0, "forget-add");
+
+        var export = await (await _client.SendAsync(
+                                new HttpRequestMessage(HttpMethod.Get, "/api/user/vocabulary/export?includeWordText=true")
+                                    .WithUser(TestUsers.UserA)))
+                           .Content.ReadFromJsonAsync<FsrsExportDto>();
+
+        var kana = export!.Cards.Single(c => c.WordId == 900);
+        kana.Text.Should().Be("のむ");
+        kana.Reading.Should().Be("のむ");
+
+        var kanji = export.Cards.Single(c => c.WordId == 902);
+        kanji.Text.Should().Be("犬");
+        kanji.Reading.Should().Be("いぬ");
+
+        export.Archive.Should().ContainSingle();
+        export.Archive![0].Text.Should().Be("本");
+        export.Archive[0].Reading.Should().Be("ほん");
+    }
+
+    [Fact]
+    public async Task BackupWithoutWordText_LeavesTheSurfaceOut()
+    {
+        await SeedCard(902, 0, FsrsState.Review, 1);
+
+        var export = await (await _client.SendAsync(
+                                new HttpRequestMessage(HttpMethod.Get, "/api/user/vocabulary/export")
+                                    .WithUser(TestUsers.UserA)))
+                           .Content.ReadFromJsonAsync<FsrsExportDto>();
+
+        var card = export!.Cards.Should().ContainSingle().Subject;
+        card.Text.Should().BeNull();
+        card.Reading.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task BackupWithWordText_StillImports()
+    {
+        await SeedCard(902, 0, FsrsState.Review, 1);
+
+        var export = await (await _client.SendAsync(
+                                new HttpRequestMessage(HttpMethod.Get, "/api/user/vocabulary/export?includeWordText=true")
+                                    .WithUser(TestUsers.UserA)))
+                           .Content.ReadFromJsonAsync<FsrsExportDto>();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            await userDb.FsrsReviewLogs.ExecuteDeleteAsync();
+            await userDb.FsrsCards.ExecuteDeleteAsync();
+        }
+
+        var import = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Post, "/api/user/vocabulary/import")
+                .WithUser(TestUsers.UserA)
+                .WithJsonContent(export!));
+
+        import.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var verifyScope = factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<UserDbContext>();
+        (await verifyDb.FsrsCards.CountAsync(c => c.UserId == TestUsers.UserA && c.WordId == 902)).Should().Be(1);
+    }
+
+    [Fact]
     public async Task SingleFormLookup_TellsTheWordMenuWhetherThereIsAnythingToRestore()
     {
         await SeedCard(901, 0, FsrsState.Review, 4);
