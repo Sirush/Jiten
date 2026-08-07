@@ -4,13 +4,31 @@ export default defineNuxtPlugin((nuxtApp) => {
   const isAuthUrl = (url: string) => url.includes('/auth/');
   const needsAuthHeader = (url: string) => url.includes('/auth/me') || url.includes('/auth/revoke-token');
 
+  // ofetch retries PATCH/POST/PUT/DELETE zero times on its own; the guard keeps that true if its
+  // definition of a payload method ever widens.
+  const PAYLOAD_METHODS = new Set(['PATCH', 'POST', 'PUT', 'DELETE']);
+
+  // 401 and 403 are deliberately absent: the token-refresh path below owns 401, and 403 carries the
+  // Jiten+ gate payload. Retrying either would race the handler that already recovers it.
+  const RETRY_STATUS_CODES = [408, 425, 429, 500, 502, 503, 504];
+
   const baseApi = $fetch.create({
     baseURL: config.public.baseURL,
+    retryDelay: 500,
+    retryStatusCodes: RETRY_STATUS_CODES,
     async onRequest({ request, options }) {
       const authStore = useAuthStore();
 
       options.headers = new Headers(options.headers);
       applySSRProxyHeaders(options.headers);
+
+      // Only assign when unset. ofetch re-enters this hook on each retry carrying the decremented
+      // count, and overwriting it there would loop forever.
+      if (options.retry === undefined) {
+        options.retry = import.meta.server || PAYLOAD_METHODS.has((options.method ?? 'GET').toUpperCase())
+          ? 0
+          : 2;
+      }
 
       const url = request.toString();
       const isAuthEndpoint = isAuthUrl(url);
