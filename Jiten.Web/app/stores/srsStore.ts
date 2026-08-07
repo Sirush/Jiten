@@ -1058,6 +1058,8 @@ export const useSrsStore = defineStore('srs', () => {
   async function quickAction(action: 'blacklist' | 'master' | 'forget' | 'suspend' | 'bury'): Promise<boolean> {
     const card = currentCard.value;
     if (!card || isBusy.value) return true;
+    // An unseen card has no scheduling row to push back, so burying it would silently do nothing.
+    if (action === 'bury' && card.isNewCard) return true;
     isBusy.value = true;
 
     const stateMap: Record<string, string> = {

@@ -721,6 +721,7 @@
             :show-keybinds="srsStore.studySettings.showKeybinds"
             :show-swipe-hints="srsStore.studySettings.enableSwipeGesture"
             :disabled="srsStore.isBusy || timerLocked"
+            :is-new-card="srsStore.currentCard?.isNewCard"
             :armed-again="timerArmed"
             :armed-seconds="timerSeconds"
             :suggested-rating="writeInSuggested ?? undefined"

@@ -1048,7 +1048,8 @@ public class SrsController(
                 if (card != null)
                 {
                     var burySettings = GetStudySettings(await LoadUserSettings(userId));
-                    card.Due = ComputeNextMidnightUtc(DateTime.UtcNow, burySettings.Timezone);
+                    // A second past midnight, because day-boundary scheduling's due cutoff is midnight inclusive.
+                    card.Due = ComputeNextMidnightUtc(DateTime.UtcNow, burySettings.Timezone).AddSeconds(1);
                 }
                 break;
 
