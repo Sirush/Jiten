@@ -96,7 +96,7 @@ public class CoverageJourneyTests(JitenWebApplicationFactory factory)
         foreach (var id in new[] { TestUsers.UserA, TestUsers.UserB, TestUsers.Admin })
         {
             await redis.KeyDeleteAsync(CoverageJourneyService.GrowthCacheKeyPrefix + id);
-            await redis.KeyDeleteAsync($"srsdates:{id}");
+            await redis.KeyDeleteAsync(CoverageJourneyService.TransitionDatesKeyPrefix + id);
         }
 
         (factory.Services.GetRequiredService<IMemoryCache>() as MemoryCache)?.Clear();
@@ -241,6 +241,30 @@ public class CoverageJourneyTests(JitenWebApplicationFactory factory)
             LastReview = null,
             CreatedAt = createdAt
         });
+        await userDb.SaveChangesAsync();
+    }
+
+    /// <summary>Marks a run of words known in one go, the way a bulk "mark as known" writes them: no review logs at all.</summary>
+    private async Task AddBulkMasteredCards(int firstWordId, int count, DateTime declaredAt, string userId = TestUsers.UserA)
+    {
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+        for (var i = 0; i < count; i++)
+        {
+            userDb.FsrsCards.Add(new FsrsCard
+            {
+                CardId = _nextCardId++,
+                UserId = userId,
+                WordId = firstWordId + i,
+                ReadingIndex = 0,
+                State = FsrsState.Mastered,
+                Due = declaredAt,
+                LastReview = declaredAt,
+                CreatedAt = declaredAt
+            });
+        }
+
         await userDb.SaveChangesAsync();
     }
 
@@ -541,6 +565,37 @@ public class CoverageJourneyTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Journey_ShowsALargeBulkMarkKnownAsABaselineBand()
+    {
+        await MakeTrial(TestUsers.UserA);
+        await AddCard(1, 0, Now.AddDays(-100), mature: true);
+        // Deck word 2 is declared alongside enough others to make the batch a knowledge dump.
+        await AddBulkMasteredCards(2, 1, Now.AddDays(-20));
+        await AddBulkMasteredCards(100, 59, Now.AddDays(-20));
+
+        var journey = await ReadJourney(await GetJourney(TestUsers.UserA));
+
+        // Carried from the first bucket, so the line never steps up on the day the batch was declared.
+        journey.Points.Should().OnlyContain(p => Math.Abs(p.PriorCoverage - 30f) < 0.01f);
+        journey.Points.Select(p => p.Coverage).Should().AllBeEquivalentTo(70f);
+        journey.CurrentCoverage.Should().BeApproximately(70f, 0.01f);
+    }
+
+    [Fact]
+    public async Task Journey_LeavesASmallMarkKnownBatchOnItsOwnDate()
+    {
+        await MakeTrial(TestUsers.UserA);
+        await AddCard(1, 0, Now.AddDays(-100), mature: true);
+        await AddBulkMasteredCards(2, 1, Now.AddDays(-20));
+
+        var journey = await ReadJourney(await GetJourney(TestUsers.UserA));
+
+        journey.Points.Should().OnlyContain(p => p.PriorCoverage == 0f);
+        journey.StartCoverage.Should().BeApproximately(40f, 0.01f);
+        journey.CurrentCoverage.Should().BeApproximately(70f, 0.01f);
+    }
+
+    [Fact]
     public async Task Journey_IsPerUser()
     {
         await MakeTrial(TestUsers.UserA);
@@ -674,6 +729,35 @@ public class CoverageJourneyTests(JitenWebApplicationFactory factory)
 
         growth.Points[^1].KnownWords.Should().Be(1);
         growth.Points[^1].KnownWordsCombined.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task KnowledgeGrowth_TreatsALargeBulkMarkKnownAsAStartingPoint()
+    {
+        await AddCard(1, 0, Now.AddDays(-100), mature: true);
+        await AddBulkMasteredCards(100, 60, Now.AddDays(-20));
+
+        var growth = await ReadGrowth(await GetGrowth(TestUsers.UserA));
+
+        growth.Points.Should().OnlyContain(p => p.PriorKnownWords == 60);
+        growth.Points[0].KnownWordsCombined.Should().Be(61);
+        growth.Points[^1].KnownWordsCombined.Should().Be(61);
+        // Declaring a pile of words known is not a month of learning.
+        growth.RecentGain.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task KnowledgeGrowth_LeavesASmallMarkKnownBatchOnItsOwnDate()
+    {
+        await AddCard(1, 0, Now.AddDays(-100), mature: true);
+        await AddBulkMasteredCards(100, 10, Now.AddDays(-20));
+
+        var growth = await ReadGrowth(await GetGrowth(TestUsers.UserA));
+
+        growth.Points.Should().OnlyContain(p => p.PriorKnownWords == 0);
+        growth.Points[0].KnownWordsCombined.Should().Be(1);
+        growth.Points[^1].KnownWordsCombined.Should().Be(11);
+        growth.RecentGain.Should().Be(10);
     }
 
     [Fact]

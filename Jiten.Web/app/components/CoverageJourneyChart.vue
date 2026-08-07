@@ -27,6 +27,8 @@
       compact?: boolean;
       height?: string;
       tooltip?: boolean;
+      // Draws bulk-declared words as their own baseline band instead of folding them into the curve.
+      separatePrior?: boolean;
     }>(),
     {
       granularity: 'monthly',
@@ -36,6 +38,7 @@
       compact: false,
       height: '260px',
       tooltip: true,
+      separatePrior: true,
     }
   );
 
@@ -43,6 +46,7 @@
   const MATURE_FILL = 'rgba(210, 12, 163, 0.35)';
   const COMBINED_FILL = 'rgba(210, 12, 163, 0.12)';
   const AXIS = '#6b7280';
+  const PRIOR_LABEL = 'Already knew';
   const GRID = 'rgba(107, 114, 128, 0.15)';
 
   const isCount = computed(() => props.mode === 'count');
@@ -60,6 +64,13 @@
     return (props.points as JourneyPoint[]).map((p) => (isUnique.value ? p.combinedUniqueCoverage : p.combinedCoverage));
   });
 
+  const showPrior = computed(() => props.separatePrior && hasPriorKnowledge(props.points));
+
+  const priorValues = computed(() => {
+    if (isCount.value) return props.points.map((p) => p.priorKnownWords ?? 0);
+    return (props.points as JourneyPoint[]).map((p) => (isUnique.value ? (p.priorUniqueCoverage ?? 0) : (p.priorCoverage ?? 0)));
+  });
+
   // Markers and the dated milestone list below the chart must not disagree about which bucket crossed.
   const milestoneIndexByPoint = computed(() => {
     const indices = new Set<number>();
@@ -72,9 +83,24 @@
     return indices;
   });
 
+  const priorDataset = computed(() => ({
+    label: PRIOR_LABEL,
+    data: priorValues.value,
+    borderColor: AXIS,
+    backgroundColor: AXIS,
+    borderDash: [4, 4],
+    pointRadius: 0,
+    pointHitRadius: 0,
+    borderWidth: 1.5,
+    cubicInterpolationMode: 'monotone' as const,
+    fill: false as const,
+    order: 0,
+  }));
+
   const chartData = computed<ChartData<'line'>>(() => ({
     labels: labels.value,
     datasets: [
+      ...(showPrior.value ? [priorDataset.value] : []),
       {
         label: 'Mature + young',
         data: combinedValues.value,
@@ -83,7 +109,7 @@
         pointRadius: 0,
         pointHitRadius: 0,
         borderWidth: 0,
-        tension: 0.4,
+        cubicInterpolationMode: 'monotone' as const,
         fill: 'origin',
         order: 2,
       },
@@ -98,7 +124,7 @@
         pointStyle: props.points.map((_, i) => (milestoneIndexByPoint.value.has(i) ? 'rectRot' : 'circle')),
         pointHoverRadius: props.compact ? 4 : 5,
         borderWidth: 2,
-        tension: 0.4,
+        cubicInterpolationMode: 'monotone' as const,
         fill: 'origin',
         order: 1,
       },
@@ -127,6 +153,9 @@
       },
       tooltip: {
         enabled: props.tooltip,
+        // Chart.js clips the tooltip to the canvas, and a sparkline is too short for a third row. The
+        // baseline is flat across the whole series anyway, so it is the row a hover least needs.
+        filter: (item) => !props.compact || item.dataset.label !== PRIOR_LABEL,
         callbacks: {
           title: (items) => {
             const point = props.points[items[0]?.dataIndex ?? 0];
@@ -144,7 +173,7 @@
       },
       y: {
         display: !props.compact,
-        beginAtZero: true,
+        beginAtZero: isCount.value ? !showPrior.value : true,
         max: isCount.value ? undefined : 100,
         grace: isCount.value ? '10%' : undefined,
         grid: { color: GRID },

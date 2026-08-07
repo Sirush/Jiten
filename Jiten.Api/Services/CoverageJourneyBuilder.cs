@@ -9,7 +9,7 @@ public readonly record struct DeckWordEntry(int WordId, byte ReadingIndex, int O
 /// means it still holds. A card's segments are contiguous and non-overlapping, so it counts once at any
 /// instant. Cards produce at most three: young, mature, then a live tail that differs only after a lapse.
 /// </summary>
-public readonly record struct KnownSegment(DateOnly Start, DateOnly? End, bool IsMature);
+public readonly record struct KnownSegment(DateOnly Start, DateOnly? End, bool IsMature, bool IsPrior = false);
 
 /// <summary>
 /// Pure series construction for the coverage journey. Kept free of EF and IO so the coverage
@@ -28,12 +28,24 @@ public static class CoverageJourneyBuilder
     private static readonly int[] MilestoneThresholds = [50, 60, 75, 80, 85, 90, 95, 98];
 
     /// <summary>
+    /// Knowledge declared in bulk rather than studied here. The click date records when the user said so,
+    /// not when they learned it, so it is shown as a baseline holding across the whole series.
+    /// </summary>
+    public static readonly KnownSegment Prior = new(DateOnly.MinValue, null, true, true);
+
+    /// <summary>
     /// Collapses one pair's segments into non-overlapping intervals, mature winning any overlap. A word with
     /// several kanji forms is reached by one card per form once kana forms are expanded, and live coverage
     /// unions those, so segments left appended would count that word's occurrences once per card.
     /// </summary>
     public static List<KnownSegment> MergePairSegments(List<KnownSegment> segments)
     {
+        // A prior segment already spans the whole series, so it subsumes any dated history the pair also has;
+        // keeping both would count the word in the baseline and in the earned curve at the same instant.
+        foreach (var segment in segments)
+            if (segment.IsPrior)
+                return [Prior];
+
         if (segments.Count < 2)
             return segments;
 
@@ -121,6 +133,7 @@ public static class CoverageJourneyBuilder
 
         var matched = new List<(int Occurrences, List<KnownSegment> Segments)>();
         DateOnly? earliest = null;
+        var hasPrior = false;
         foreach (var dw in deckWords)
         {
             if (!segmentsByPair.TryGetValue((dw.WordId, dw.ReadingIndex), out var segments) || segments.Count == 0)
@@ -128,13 +141,17 @@ public static class CoverageJourneyBuilder
 
             matched.Add((dw.Occurrences, segments));
             foreach (var segment in segments)
-                if (earliest is null || segment.Start < earliest) earliest = segment.Start;
+            {
+                if (segment.IsPrior) hasPrior = true;
+                else if (earliest is null || segment.Start < earliest) earliest = segment.Start;
+            }
         }
 
-        if (earliest is null)
+        if (earliest is null && !hasPrior)
             return dto;
 
-        var buckets = BuildBuckets(earliest.Value, today);
+        // Prior knowledge carries no date of its own, so a user holding nothing else opens at today.
+        var buckets = BuildBuckets(earliest ?? today, today);
         dto.Granularity = buckets.GranularityName;
         var count = buckets.Starts.Count;
 
@@ -142,12 +159,23 @@ public static class CoverageJourneyBuilder
         var matureUnique = new int[count + 1];
         var youngOcc = new long[count + 1];
         var youngUnique = new int[count + 1];
+        var priorOcc = new long[count + 1];
+        var priorUnique = new int[count + 1];
 
         foreach (var (occurrences, segments) in matched)
         {
             foreach (var segment in segments)
             {
                 if (!buckets.TryRange(segment, out var from, out var to)) continue;
+
+                // Prior words are mature too, so they stay inside the headline coverage and only add a band.
+                if (segment.IsPrior)
+                {
+                    priorOcc[from] += occurrences;
+                    priorOcc[to] -= occurrences;
+                    priorUnique[from]++;
+                    priorUnique[to]--;
+                }
 
                 if (segment.IsMature)
                 {
@@ -166,15 +194,17 @@ public static class CoverageJourneyBuilder
             }
         }
 
-        long runMatureOcc = 0, runYoungOcc = 0;
-        int runMatureUnique = 0, runYoungUnique = 0;
+        long runMatureOcc = 0, runYoungOcc = 0, runPriorOcc = 0;
+        int runMatureUnique = 0, runYoungUnique = 0, runPriorUnique = 0;
 
         for (var i = 0; i < count; i++)
         {
             runMatureOcc += matureOcc[i];
             runYoungOcc += youngOcc[i];
+            runPriorOcc += priorOcc[i];
             runMatureUnique += matureUnique[i];
             runYoungUnique += youngUnique[i];
+            runPriorUnique += priorUnique[i];
 
             dto.Points.Add(new JourneyPointDto
             {
@@ -183,8 +213,11 @@ public static class CoverageJourneyBuilder
                 CombinedCoverage = Percent(runMatureOcc + runYoungOcc, wordCount),
                 UniqueCoverage = Percent(runMatureUnique, uniqueWordCount),
                 CombinedUniqueCoverage = Percent(runMatureUnique + runYoungUnique, uniqueWordCount),
+                PriorCoverage = Percent(runPriorOcc, wordCount),
+                PriorUniqueCoverage = Percent(runPriorUnique, uniqueWordCount),
                 KnownWords = runMatureUnique,
-                KnownWordsCombined = runMatureUnique + runYoungUnique
+                KnownWordsCombined = runMatureUnique + runYoungUnique,
+                PriorKnownWords = runPriorUnique
             });
         }
 
@@ -212,33 +245,46 @@ public static class CoverageJourneyBuilder
         if (segments.Count == 0)
             return dto;
 
-        var start = segments.Min(s => s.Start);
-        var buckets = BuildBuckets(start, today);
+        DateOnly? start = null;
+        foreach (var segment in segments)
+            if (!segment.IsPrior && (start is null || segment.Start < start))
+                start = segment.Start;
+
+        var buckets = BuildBuckets(start ?? today, today);
         dto.Granularity = buckets.GranularityName;
 
         var count = buckets.Starts.Count;
         var matureDelta = new int[count + 1];
         var youngDelta = new int[count + 1];
+        var priorDelta = new int[count + 1];
 
         foreach (var segment in segments)
         {
             if (!buckets.TryRange(segment, out var from, out var to)) continue;
+
+            if (segment.IsPrior)
+            {
+                priorDelta[from]++;
+                priorDelta[to]--;
+            }
 
             var delta = segment.IsMature ? matureDelta : youngDelta;
             delta[from]++;
             delta[to]--;
         }
 
-        int mature = 0, young = 0;
+        int mature = 0, young = 0, prior = 0;
         for (var i = 0; i < count; i++)
         {
             mature += matureDelta[i];
             young += youngDelta[i];
+            prior += priorDelta[i];
             dto.Points.Add(new GrowthPointDto
             {
                 Date = buckets.Starts[i],
                 KnownWords = mature,
-                KnownWordsCombined = mature + young
+                KnownWordsCombined = mature + young,
+                PriorKnownWords = prior
             });
         }
 
@@ -252,6 +298,13 @@ public static class CoverageJourneyBuilder
         var count = 0;
         foreach (var segment in segments)
         {
+            // Held at both ends of any window, so declaring a pile of words known is not reported as a gain.
+            if (segment.IsPrior)
+            {
+                count++;
+                continue;
+            }
+
             if (segment.Start > day) continue;
             if (segment.End is { } end && end <= day) continue;
             count++;
@@ -302,6 +355,13 @@ public static class CoverageJourneyBuilder
         /// <summary>Half-open bucket range a segment is observed in; false when no bucket-end falls inside it.</summary>
         public bool TryRange(KnownSegment segment, out int from, out int to)
         {
+            if (segment.IsPrior)
+            {
+                from = 0;
+                to = Starts.Count;
+                return to > 0;
+            }
+
             from = FirstBucketAtOrAfter(segment.Start);
             to = segment.End is { } end ? FirstBucketAtOrAfter(end) : Starts.Count;
             return from < to;

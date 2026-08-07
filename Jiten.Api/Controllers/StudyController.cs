@@ -4145,7 +4145,7 @@ public class StudyController(
         }
 
         var applied = (state == "mastered"
-            ? await currentUserService.AddKnownWords(resolvedWords)
+            ? await currentUserService.AddKnownWords(resolvedWords, countAsNewlyLearned: request.CountAsNewlyLearned)
             : await currentUserService.BlacklistWords(resolvedWords)).Inserted;
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);

@@ -71,6 +71,7 @@
     difficulties: false,
     difficultyVotes: false,
     speechSpeed: false,
+    reviewRollupBackfill: false,
     wordReplacementPreview: false,
     wordReplacementExecute: false,
     splitWordPreview: false,
@@ -455,6 +456,32 @@
       });
       console.error('Error fetching metadata:', error);
     } finally {
+    }
+  };
+
+  const backfillReviewRollup = async () => {
+    isLoading.value.reviewRollupBackfill = true;
+    try {
+      await $api(`/admin/review-rollup/backfill`, {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Review rollup backfill queued',
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to queue review rollup backfill',
+        life: 5000,
+      });
+      console.error('Error queueing review rollup backfill:', error);
+    } finally {
+      isLoading.value.reviewRollupBackfill = false;
     }
   };
 
@@ -1187,6 +1214,27 @@
               :disabled="isLoading.speechSpeed"
               :loading="isLoading.speechSpeed"
               @click="recomputeParentSpeechSpeed"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Backfill Review Rollup</template>
+        <template #content>
+          <p class="mb-4">
+            Build the review activity rollup for every user with history. Stats endpoints fall back to the log-join query until a user's rebuild lands, so this
+            is safe to run at any time.
+          </p>
+
+          <div class="flex justify-center">
+            <Button
+              label="Backfill Review Rollup"
+              icon="pi pi-history"
+              class="p-button-warning"
+              :disabled="isLoading.reviewRollupBackfill"
+              :loading="isLoading.reviewRollupBackfill"
+              @click="backfillReviewRollup"
             />
           </div>
         </template>

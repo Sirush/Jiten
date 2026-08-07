@@ -204,14 +204,16 @@ public class CurrentUserService(
         return result.TryGetValue(key, out var states) ? states : [KnownState.New];
     }
 
-    public Task<VocabularyUpsertResult> AddKnownWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true) =>
-        UpsertCardsWithState(deckWords, FsrsState.Mastered, overwriteExisting);
+    public Task<VocabularyUpsertResult> AddKnownWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true,
+                                                      bool countAsNewlyLearned = false) =>
+        UpsertCardsWithState(deckWords, FsrsState.Mastered, overwriteExisting, countAsNewlyLearned);
 
     public Task<VocabularyUpsertResult> BlacklistWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true) =>
-        UpsertCardsWithState(deckWords, FsrsState.Blacklisted, overwriteExisting);
+        UpsertCardsWithState(deckWords, FsrsState.Blacklisted, overwriteExisting, false);
 
     // overwriteExisting=false leaves cards the user already has at their current state, preserving study history.
-    private async Task<VocabularyUpsertResult> UpsertCardsWithState(IEnumerable<DeckWord> deckWords, FsrsState targetState, bool overwriteExisting)
+    private async Task<VocabularyUpsertResult> UpsertCardsWithState(IEnumerable<DeckWord> deckWords, FsrsState targetState,
+                                                                    bool overwriteExisting, bool countAsNewlyLearned)
     {
         if (!IsAuthenticated) return new VocabularyUpsertResult(0, 0);
         var words = deckWords?.ToList() ?? [];
@@ -261,6 +263,20 @@ public class CurrentUserService(
             {
                 existingUk.State = targetState;
                 updated++;
+            }
+        }
+
+        // Spread backwards from now, oldest first, so the batch keeps the order the deck supplied and no card
+        // carries a future timestamp. Spacing them past the cluster gap is what makes the coverage journey read
+        // each as its own decision instead of collapsing the lot into a starting-point baseline.
+        if (countAsNewlyLearned && toInsert.Count > 1)
+        {
+            for (var i = 0; i < toInsert.Count; i++)
+            {
+                var declaredAt = now - CoverageJourneyService.DistinctDeclarationSpacing * (toInsert.Count - 1 - i);
+                toInsert[i].CreatedAt = declaredAt;
+                toInsert[i].LastReview = declaredAt;
+                toInsert[i].Due = declaredAt;
             }
         }
 

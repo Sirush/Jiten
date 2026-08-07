@@ -120,6 +120,9 @@ export const useJitenStore = defineStore('jiten', () => {
   // Only consulted while the user lacks Jiten+; getting the tier brings the section back.
   const hideCoverageJourney = createLocalStorageState<boolean>('hide-coverage-journey', false);
 
+  // Off means bulk-declared words are folded into the curve, spike and all.
+  const separatePriorKnowledge = createLocalStorageState<boolean>('separate-prior-knowledge', true);
+
   // Drives the unread dot on the home page's "what's new" strip.
   const lastSeenUpdateId = createLocalStorageState<number>('last-seen-update-id', 0);
 
@@ -156,6 +159,7 @@ export const useJitenStore = defineStore('jiten', () => {
     similarMediaPinnedType,
     preferredDictionaryId,
     hideCoverageJourney,
+    separatePriorKnowledge,
     lastSeenUpdateId,
     coverageVersion,
     bumpCoverageVersion,

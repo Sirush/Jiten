@@ -148,6 +148,7 @@
     { label: 'Blacklisted (ignore)', value: 'blacklisted' },
   ];
   const learnState = ref<'mastered' | 'blacklisted'>('mastered');
+  const countAsNewlyLearned = ref(false);
 
   const isLearn = computed(() => format.value === DeckFormat.Learn);
   const isOccurrences = computed(() => format.value === DeckFormat.Yomitan);
@@ -663,6 +664,7 @@
           const payload = {
             ...buildFilterPayload(),
             vocabularyState: learnState.value,
+            countAsNewlyLearned: learnState.value === 'mastered' && countAsNewlyLearned.value,
           };
 
           const response = await $api<{ applied: number; state: string }>(url, {
@@ -967,6 +969,17 @@
               <div v-if="isLearn" class="flex flex-col gap-1 p-3">
                 <label class="text-xs text-gray-500 dark:text-gray-400 font-medium">Vocabulary State</label>
                 <Select v-model="learnState" :options="learnStateOptions" option-value="value" option-label="label" class="w-full text-sm" size="small" />
+                <div v-if="learnState === 'mastered'" class="flex items-start gap-3 mt-3">
+                  <Checkbox v-model="countAsNewlyLearned" input-id="countAsNewlyLearned" :binary="true" class="mt-1" />
+                  <div>
+                    <label for="countAsNewlyLearned" class="text-sm font-medium text-gray-800 dark:text-gray-200 cursor-pointer">
+                      I just learned these
+                    </label>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">
+                      Counts them as recent progress on your charts instead of knowledge you already had.
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
@@ -1052,6 +1065,17 @@
               <div v-if="isLearn" class="flex flex-col gap-1 p-3">
                 <label class="text-xs text-gray-500 dark:text-gray-400 font-medium">Vocabulary State</label>
                 <Select v-model="learnState" :options="learnStateOptions" option-value="value" option-label="label" class="w-full text-sm" size="small" />
+                <div v-if="learnState === 'mastered'" class="flex items-start gap-3 mt-3">
+                  <Checkbox v-model="countAsNewlyLearned" input-id="countAsNewlyLearned" :binary="true" class="mt-1" />
+                  <div>
+                    <label for="countAsNewlyLearned" class="text-sm font-medium text-gray-800 dark:text-gray-200 cursor-pointer">
+                      I just learned these
+                    </label>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">
+                      Counts them as recent progress on your charts instead of knowledge you already had.
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>

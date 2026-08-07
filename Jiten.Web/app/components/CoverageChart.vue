@@ -47,7 +47,7 @@ const chartData = computed<ChartData<'line'>>(() => {
         pointRadius: 4,
         pointHoverRadius: 6,
         borderWidth: 2,
-        tension: 0.4,
+        cubicInterpolationMode: 'monotone' as const,
         fill: true,
         clip: false,
       },

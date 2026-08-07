@@ -3122,7 +3122,7 @@ public class UserController(
                        .ToList();
 
         var applied = (state == "mastered"
-            ? await userService.AddKnownWords(entities)
+            ? await userService.AddKnownWords(entities, countAsNewlyLearned: request.CountAsNewlyLearned)
             : await userService.BlacklistWords(entities)).Inserted;
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userService.UserId!);

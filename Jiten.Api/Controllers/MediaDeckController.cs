@@ -1922,7 +1922,7 @@ public class MediaDeckController(
         }
 
         var applied = (state == "mastered"
-            ? await currentUserService.AddKnownWords(deckWordsRaw!)
+            ? await currentUserService.AddKnownWords(deckWordsRaw!, countAsNewlyLearned: request.CountAsNewlyLearned)
             : await currentUserService.BlacklistWords(deckWordsRaw!)).Inserted;
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, currentUserService.UserId!);

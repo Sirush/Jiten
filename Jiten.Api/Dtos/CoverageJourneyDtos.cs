@@ -8,6 +8,9 @@ public class GrowthPointDto
     public int KnownWords { get; set; }
 
     public int KnownWordsCombined { get; set; }
+
+    /// <summary>The part of <see cref="KnownWords"/> declared known in bulk rather than studied, which holds across every bucket.</summary>
+    public int PriorKnownWords { get; set; }
 }
 
 public class JourneyPointDto : GrowthPointDto
@@ -20,6 +23,11 @@ public class JourneyPointDto : GrowthPointDto
 
     public float UniqueCoverage { get; set; }
     public float CombinedUniqueCoverage { get; set; }
+
+    /// <summary>The part of <see cref="Coverage"/> carried by bulk-declared words, drawn as a baseline band.</summary>
+    public float PriorCoverage { get; set; }
+
+    public float PriorUniqueCoverage { get; set; }
 }
 
 public class JourneyMilestoneDto
@@ -56,6 +64,9 @@ public class GlobalGrowthDto
     public List<GrowthPointDto> Points { get; set; } = [];
     public bool HasEnoughHistory { get; set; }
 
-    /// <summary>Net change in <see cref="GrowthPointDto.KnownWordsCombined"/> over a trailing 30 days, measured off the raw segments rather than the buckets.</summary>
+    /// <summary>
+    /// Net change in <see cref="GrowthPointDto.KnownWordsCombined"/> over a trailing 30 days, measured off the raw
+    /// segments rather than the buckets. Bulk-declared words sit at both ends of the window and so never count.
+    /// </summary>
     public int RecentGain { get; set; }
 }

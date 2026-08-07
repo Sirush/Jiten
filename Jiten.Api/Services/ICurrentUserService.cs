@@ -14,7 +14,8 @@ public interface ICurrentUserService
     Task<Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>> GetKnownWordsState(IEnumerable<(int WordId, byte ReadingIndex)> keys);
     Task<List<KnownState>> GetKnownWordState(int wordId, byte readingIndex);
     Task<Dictionary<(int, byte), WordSetStateType>> GetWordSetDerivedStates();
-    Task<VocabularyUpsertResult> AddKnownWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true);
+    /// <summary>countAsNewlyLearned spaces the inserted cards out so the coverage journey dates them instead of treating the batch as prior knowledge.</summary>
+    Task<VocabularyUpsertResult> AddKnownWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true, bool countAsNewlyLearned = false);
     Task<VocabularyUpsertResult> BlacklistWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true);
     Task<VocabularyUpsertResult> AddKnownWord(int wordId, byte readingIndex);
     Task RemoveKnownWord(int wordId, byte readingIndex);
