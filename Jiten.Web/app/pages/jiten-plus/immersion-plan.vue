@@ -135,6 +135,7 @@
     includeLearningWords: boolean;
     acquisitionThreshold: number;
     steps: number;
+    goalSteps: number;
     preference: 'efficiency' | 'volume';
     candidateMode: 'seeded' | 'catalogwide';
     contentSimilarity: number;
@@ -176,6 +177,7 @@
   const countLearningWords = ref(true);
   const acquisitionThreshold = ref(5);
   const steps = ref(5);
+  const goalSteps = ref(30);
   const preference = ref<'efficiency' | 'volume'>('efficiency');
   const candidateMode = ref<'seeded' | 'catalogwide'>('seeded');
   const contentSimilarity = ref(0);
@@ -319,6 +321,7 @@
       includeLearningWords: countLearningWords.value,
       acquisitionThreshold: acquisitionThreshold.value,
       steps: steps.value,
+      goalSteps: goalSteps.value,
       preference: preference.value,
       candidateMode: candidateMode.value,
       contentSimilarity: contentSimilarity.value,
@@ -456,6 +459,7 @@
     countLearningWords.value = true;
     acquisitionThreshold.value = 5;
     steps.value = 5;
+    goalSteps.value = 30;
     preference.value = 'efficiency';
     candidateMode.value = 'seeded';
     contentSimilarity.value = 0;
@@ -495,6 +499,7 @@
     countLearningWords.value = d.includeLearningWords;
     acquisitionThreshold.value = d.acquisitionThreshold;
     steps.value = d.steps;
+    goalSteps.value = d.goalSteps ?? 30;
     preference.value = d.preference;
     candidateMode.value = d.candidateMode;
     contentSimilarity.value = d.contentSimilarity;
@@ -1416,8 +1421,20 @@
                 </div>
               </div>
 
-              <div class="grid gap-3" :class="mode === 'goal' ? 'grid-cols-1' : 'grid-cols-2'">
-                <div v-if="mode !== 'goal'" class="min-w-0">
+              <div class="grid grid-cols-2 gap-3">
+                <div v-if="mode === 'goal'" class="min-w-0">
+                  <label class="mb-1 block text-sm font-medium" for="goalSteps">
+                    Max titles
+                    <Tooltip
+                      content="How many titles the route may use at most. It stops early once you reach your target; if the budget runs out first, you'll be told how close it got."
+                      placement="top"
+                    >
+                      <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
+                    </Tooltip>
+                  </label>
+                  <InputNumber id="goalSteps" v-model="goalSteps" :min="1" :max="30" show-buttons fluid class="w-full" />
+                </div>
+                <div v-else class="min-w-0">
                   <label class="mb-1 block text-sm font-medium" for="steps">Suggestion count</label>
                   <InputNumber id="steps" v-model="steps" :min="1" :max="15" show-buttons fluid class="w-full" />
                 </div>
@@ -1660,7 +1677,9 @@ v-for="r in roadmaps" :key="r.id" :label="r.name"
                 >
                   These get you to {{ pct(activePayload.goalCoverageFinal ?? 0) }} of the words in the title you
                   picked, about {{ (activePayload.goalWordsRemaining ?? 0).toLocaleString() }} short of your
-                  target, after the maximum of 30 steps. This often happens because frequent words of this title are very specific, you can also try lowering the target percentage.
+                  target, using all {{ activePayload.steps.length }} of the titles it was allowed. Raise the title
+                  limit to let it go further. This can also happen because the frequent words of this title are
+                  very specific, in which case lowering the target percentage helps more.
                 </Message>
 
                 <!-- Plan summary -->

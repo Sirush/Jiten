@@ -124,6 +124,12 @@ public class RoadmapDefinition
 
     public int Steps { get; set; } = 5;
 
+    /// <summary>
+    /// Goal mode's own budget, kept separate from <see cref="Steps"/> so plans stored before it existed
+    /// deserialise to the old ceiling rather than to the discovery default.
+    /// </summary>
+    public int GoalSteps { get; set; } = MaxGoalSteps;
+
     public RoadmapPreference Preference { get; set; } = RoadmapPreference.Efficiency;
 
     public RoadmapCandidateMode CandidateMode { get; set; } = RoadmapCandidateMode.Seeded;
