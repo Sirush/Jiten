@@ -15,6 +15,9 @@ public class DeckLearnRequest
     public int? MaxOccurrences { get; set; }
     public string VocabularyState { get; set; } = "mastered";
 
+    /// <summary>Space the date learned of the words so they appear on the charts.</summary>
+    public bool CountAsNewlyLearned { get; set; }
+
     /// <summary>
     /// Projects the shared word-selection filters onto a <see cref="DeckDownloadRequest"/>
     /// (everything except the file-format options, which learn doesn't use).

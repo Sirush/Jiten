@@ -24,6 +24,7 @@
     wordSetBlacklistedWords,
     wordSetBlacklistedForms,
     hasWordSetContributions,
+    archivedCards,
     fetchKnownWordsAmount,
   } = useVocabularyStats();
 
@@ -111,7 +112,7 @@
       <VocabularyOptionGrid :options="mode === 'export' ? exportOptions : importOptions" v-model="option" />
     </section>
 
-    <div v-if="option">
+    <div v-if="option" id="vocabulary-transfer-panel">
       <VocabularyImportAnkiConnectPanel v-if="mode === 'import' && option === 'anki-connect'" @changed="onPanelChanged" />
       <VocabularyImportJpdbPanel v-if="mode === 'import' && option === 'jpdb'" @changed="onPanelChanged" />
       <VocabularyImportAnkiFilePanel v-if="mode === 'import' && option === 'anki-file'" @changed="onPanelChanged" />
@@ -121,11 +122,14 @@
       <VocabularyCompleteVocabularyPanel v-if="mode === 'export' && option === 'complete-vocabulary'" mode="export" @changed="onPanelChanged" />
     </div>
 
-    <SettingsVocabularyMassActionsCard class="mt-4" @changed="onPanelChanged" />
+    <SettingsVocabularyMassActionsCard @changed="onPanelChanged" />
 
-    <SettingsCompositionInferenceCard class="mt-4" @changed="onPanelChanged" />
+    <SettingsCompositionInferenceCard @changed="onPanelChanged" />
 
-    <SettingsVocabularyDangerZoneCard class="mt-4" @changed="onPanelChanged" />
+    <SettingsRedundantFormsCard @changed="onPanelChanged" />
 
+    <SettingsRecentlyRemovedCard :archived-count="archivedCards" :count-loading="vocabStatsLoading" @changed="onPanelChanged" />
+
+    <SettingsVocabularyDangerZoneCard @changed="onPanelChanged" />
   </div>
 </template>

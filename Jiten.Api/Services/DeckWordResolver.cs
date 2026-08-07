@@ -444,7 +444,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return (await query.CountAsync(), false);
     }
 
-    public async Task<(int Count, HashSet<long> WordKeys)> CountDeckWords(DeckWordResolveRequest request, bool excludeKana)
+     public async Task<(int Count, HashSet<long> WordKeys)> CountDeckWords(DeckWordResolveRequest request, bool excludeKana,
+                                                                          HashSet<long>? globalFrequencyKeys = null)
     {
         var (deckId, deck, downloadType, order, minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
@@ -457,11 +458,12 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             case DeckDownloadType.Full:
                 break;
             case DeckDownloadType.TopGlobalFrequency:
-                query = query.Where(dw => context.WordFormFrequencies
-                    .Any(wff => wff.WordId == dw.WordId &&
-                                wff.ReadingIndex == (short)dw.ReadingIndex &&
-                                wff.FrequencyRank >= minFrequency &&
-                                wff.FrequencyRank <= maxFrequency));
+                if (globalFrequencyKeys == null)
+                    query = query.Where(dw => context.WordFormFrequencies
+                        .Any(wff => wff.WordId == dw.WordId &&
+                                    wff.ReadingIndex == (short)dw.ReadingIndex &&
+                                    wff.FrequencyRank >= minFrequency &&
+                                    wff.FrequencyRank <= maxFrequency));
                 break;
             case DeckDownloadType.TopDeckFrequency:
                 query = query.OrderByDescending(dw => dw.Occurrences)
@@ -514,6 +516,10 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         }
 
         var keySet = pairs.Select(p => WordFormHelper.EncodeWordKey(p.WordId, p.ReadingIndex)).ToHashSet();
+
+        if (globalFrequencyKeys != null && downloadType == DeckDownloadType.TopGlobalFrequency)
+            keySet.IntersectWith(globalFrequencyKeys);
+
         return (keySet.Count, keySet);
     }
 

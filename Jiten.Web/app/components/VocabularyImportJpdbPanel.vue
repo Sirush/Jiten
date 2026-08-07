@@ -111,7 +111,13 @@
     jpdbProgress.value = `Importing ${cards.length} cards with review history...`;
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    const result = await $api<{ cardsProcessed: number; reviewsImported: number; reviewsUpdated: number; skipped: number }>('user/vocabulary/import-jpdb-reviews', {
+    const result = await $api<{
+      cardsProcessed: number;
+      reviewsImported: number;
+      reviewsUpdated: number;
+      skipped: number;
+      archivedRedundant: number;
+    }>('user/vocabulary/import-jpdb-reviews', {
       method: 'POST',
       body: JSON.stringify({ cards, overwriteCardStates: overwriteCardStates.value }),
       headers: { 'Content-Type': 'application/json' },
@@ -119,10 +125,11 @@
 
     if (result) {
       emit('changed');
+      const archived = result.archivedRedundant > 0 ? ` ${result.archivedRedundant} redundant forms kept in Recently Removed.` : '';
       toast.add({
         severity: 'success',
         summary: 'Reviews imported',
-        detail: `${result.cardsProcessed} cards processed, ${result.reviewsImported} reviews imported, ${result.reviewsUpdated} updated, ${result.skipped} skipped.`,
+        detail: `${result.cardsProcessed} cards processed, ${result.reviewsImported} reviews imported, ${result.reviewsUpdated} updated, ${result.skipped} skipped.${archived}`,
         life: 6000,
       });
     }

@@ -139,7 +139,7 @@
       case 'reset-schedule':
         return 'Reset all matching cards to Learning state, clearing scheduling data but keeping review history.';
       case 'delete-cards':
-        return 'Permanently delete all matching cards and their review history.';
+        return 'Delete all matching cards. Their review history is kept under Recently Removed.';
       default:
         return '';
     }
@@ -231,7 +231,7 @@
         </div>
 
         <Message v-if="action === 'delete-cards'" severity="warn" :closable="false">
-          This will permanently delete the matching cards and all their review history. This cannot be undone.
+          The matching cards leave your collection but their review history is kept and can be restored at any time from Recently Removed below, or deleted completely from the same place.
         </Message>
         <Message v-if="action === 'reset-schedule'" severity="info" :closable="false">
           This will reset scheduling data (stability, difficulty) and set cards back to Learning. Review history is preserved.

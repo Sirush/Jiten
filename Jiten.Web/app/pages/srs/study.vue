@@ -363,6 +363,8 @@
   async function handleMaster() {
     const ok = await srsStore.quickAction('master');
     if (!ok) toast.add({ severity: 'error', summary: 'Action failed', detail: 'Could not master card. Try again.', life: 5000 });
+    else if (srsStore.lastAutoRestoredCount > 0)
+      toast.add({ severity: 'info', summary: 'History restored', detail: 'Brought back the review history of a card this word had replaced.', life: 5000 });
   }
 
   async function handleSuspend() {
@@ -377,7 +379,7 @@
 
   function handleForget() {
     confirm.require({
-      message: 'Reset this card? All review history will be permanently deleted. This cannot be undone.',
+      message: 'Forget this card? The card will leave your collection, but your review history will be kept and can be restored ay any time from Recently Removed in your vocabulary settings, or deleted completely there.',
       header: 'Forget Card',
       acceptLabel: 'Forget',
       rejectLabel: 'Cancel',
@@ -719,6 +721,7 @@
             :show-keybinds="srsStore.studySettings.showKeybinds"
             :show-swipe-hints="srsStore.studySettings.enableSwipeGesture"
             :disabled="srsStore.isBusy || timerLocked"
+            :is-new-card="srsStore.currentCard?.isNewCard"
             :armed-again="timerArmed"
             :armed-seconds="timerSeconds"
             :suggested-rating="writeInSuggested ?? undefined"

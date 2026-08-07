@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Hangfire;
 using Jiten.Api.Dtos;
+using Jiten.Api.Jobs;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Enums;
 using Jiten.Api.Helpers;
@@ -37,10 +39,14 @@ public class StudyController(
     IStudySessionService sessionService,
     IUserLimitsService userLimits,
     ICoverageJourneyService coverageJourneyService,
+    IBackgroundJobClient backgroundJobs,
     ILogger<StudyController> logger) : ControllerBase
 {
     private static readonly Regex SentenceMarkerRegex =
         new(@"\*\*[^*]+\*\*", RegexOptions.Compiled);
+
+    private const int MaxConcurrentDeckQueries = 6;
+    private const int MaxHoistedFrequencyKeys = 400_000;
 
     [HttpGet("overview-version")]
     [SwaggerOperation(Summary = "Get current overview version for cache validation")]
@@ -179,9 +185,13 @@ public class StudyController(
             }
         }
 
+        var globalFrequencyKeysByRange = await LoadGlobalFrequencyRanges(studyDecks);
+
         // Collect parallel tasks — each uses its own factory-created JitenDbContext
         var mediaDeckCountTasks = new List<(int StudyDeckId, Task<(int Count, HashSet<long> WordKeys)>)>();
         var globalDynamicCountTasks = new List<(int StudyDeckId, UserStudyDeck Sd, Task<(int Count, bool WasTruncated)>)>();
+
+        var deckQueryGate = new SemaphoreSlim(MaxConcurrentDeckQueries);
 
         foreach (var sd in studyDecks)
         {
@@ -198,7 +208,8 @@ public class StudyController(
                 {
                     mediaDeckCountTasks.Add((sd.UserStudyDeckId,
                         CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache)
-                            .CountTargetCoverageWords(sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown))));
+                            .CountTargetCoverageWords(sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown),
+                            deckQueryGate)));
                 }
                 else
                 {
@@ -210,9 +221,11 @@ public class StudyController(
                         sd.TargetPercentage,
                         sd.MinOccurrences, sd.MaxOccurrences,
                         sd.PosFilter, sd.StartFromKnown);
+                    globalFrequencyKeysByRange.TryGetValue((sd.MinFrequency, sd.MaxFrequency), out var frequencyKeys);
                     mediaDeckCountTasks.Add((sd.UserStudyDeckId,
                         CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache)
-                            .CountDeckWords(request, sd.ExcludeKana))));
+                            .CountDeckWords(request, sd.ExcludeKana, frequencyKeys),
+                            deckQueryGate)));
                 }
             }
             else if (sd.DeckType == StudyDeckType.GlobalDynamic)
@@ -220,7 +233,8 @@ public class StudyController(
                 resolvedDecks.Add((sd, null));
                 globalDynamicCountTasks.Add((sd.UserStudyDeckId, sd,
                     CountWithFactoryContext<(int, bool)>((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache)
-                        .CountGlobalDynamicWords(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, sd.ExcludeKana))));
+                        .CountGlobalDynamicWords(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, sd.ExcludeKana),
+                        deckQueryGate)));
             }
             else if (sd.DeckType == StudyDeckType.StaticWordList)
             {
@@ -2127,18 +2141,21 @@ public class StudyController(
         // layout; treat null as "unchanged" and preserve what is on disk. An explicit clear from a
         // current client is expressed as an EMPTY layout (version set, empty lists), never null.
         // Same rule for cardLayoutPresets: null preserves, [] clears.
-        if (request.CardLayout == null || request.CardLayoutPresets == null)
-        {
-            var stored = DeserializeStoredSettings(fsrsSettings.SettingsJson);
-            if (request.CardLayout == null && stored?.CardLayout != null)
-                request.CardLayout = stored.CardLayout;
-            if (request.CardLayoutPresets == null && stored?.CardLayoutPresets != null)
-                request.CardLayoutPresets = stored.CardLayoutPresets;
-        }
+        var stored = DeserializeStoredSettings(fsrsSettings.SettingsJson);
+
+        if (request.CardLayout == null && stored?.CardLayout != null)
+            request.CardLayout = stored.CardLayout;
+        if (request.CardLayoutPresets == null && stored?.CardLayoutPresets != null)
+            request.CardLayoutPresets = stored.CardLayoutPresets;
+
+        var previousTimezone = stored?.Timezone;
 
         fsrsSettings.SettingsJson = JsonSerializer.Serialize(request);
         await userContext.SaveChangesAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
+
+        if (previousTimezone != request.Timezone)
+            await ReviewRollupHelper.MarkDirtyAndQueue(userContext, backgroundJobs, userId);
 
         return Results.Ok(request);
     }
@@ -2432,6 +2449,10 @@ public class StudyController(
 
         nextReviewAt = SnapToLocalDayStart(nextReviewAt, settings);
 
+        var hasStudyDecks = await userContext.UserStudyDecks
+            .AsNoTracking()
+            .AnyAsync(sd => sd.UserId == userId);
+
         return Results.Ok(new
         {
             reviewsDue,
@@ -2440,6 +2461,7 @@ public class StudyController(
             newCardsToday,
             reviewBudgetLeft,
             nextReviewAt,
+            hasStudyDecks,
         });
     }
 
@@ -2966,21 +2988,18 @@ public class StudyController(
     /// </summary>
     private async Task<(double LearningSeconds, double YoungSeconds, double MatureSeconds)> ComputeReviewSecondsModel(string userId)
     {
-        var userCardIds = userContext.FsrsCards.Where(c => c.UserId == userId).Select(c => c.CardId);
-        var rows = await userContext.FsrsReviewLogs
-            .AsNoTracking()
-            .Where(l => userCardIds.Contains(l.CardId) && l.ReviewDuration != null)
-            .Select(l => new { l.CardId, l.ReviewDateTime, l.ReviewDuration })
-            .ToListAsync();
+        var rows = (await CardArchiveService.LoadAllReviewsAsync(userContext, userId))
+                   .Where(r => r.DurationMs != null)
+                   .ToList();
 
         double learnSum = 0, youngSum = 0, matureSum = 0;
         int learnN = 0, youngN = 0, matureN = 0;
         foreach (var cardGroup in rows.GroupBy(r => r.CardId))
         {
             DateTime? previous = null;
-            foreach (var entry in cardGroup.OrderBy(e => e.ReviewDateTime))
+            foreach (var entry in cardGroup.OrderBy(e => e.ReviewUtc))
             {
-                var s = Math.Min(entry.ReviewDuration!.Value / 1000.0, WorkloadReviewSecondsCap);
+                var s = Math.Min(entry.DurationMs!.Value / 1000.0, WorkloadReviewSecondsCap);
                 if (s > 0)
                 {
                     // 0 = learning (first review or <1d gap), 1 = young, 2 = mature.
@@ -2989,7 +3008,7 @@ public class StudyController(
                         category = 0;
                     else
                     {
-                        var gap = (entry.ReviewDateTime - prev).TotalDays;
+                        var gap = (entry.ReviewUtc - prev).TotalDays;
                         category = gap < 1 ? 0 : gap >= RetentionCalculator.MatureThresholdDays ? 2 : 1;
                     }
 
@@ -3001,7 +3020,7 @@ public class StudyController(
                     }
                 }
 
-                previous = entry.ReviewDateTime;
+                previous = entry.ReviewUtc;
             }
         }
 
@@ -3047,37 +3066,42 @@ public class StudyController(
         var (todayStart, offsetHours) = ResolveTimezone(now, settings.Timezone);
         var today = now.AddHours(offsetHours).Date;
         var windowStart = today.AddDays(-83);
-        var windowStartUtc = windowStart.AddHours(-offsetHours);
 
-        var userCardIds = userContext.FsrsCards
-            .Where(c => c.UserId == userId)
-            .Select(c => c.CardId);
+        List<DateTime> allDates;
+        List<(DateTime Date, int Count)> dailyStats;
 
-        var allTimestamps = await userContext.FsrsReviewLogs
-            .AsNoTracking()
-            .Where(rl => userCardIds.Contains(rl.CardId))
-            .Select(rl => rl.ReviewDateTime)
-            .ToListAsync();
+        var rollup = await ReviewRollupHelper.TryLoadAsync(userContext, userId);
+        if (rollup != null)
+        {
+            allDates = StudyDatesFrom(rollup);
+            dailyStats = rollup.Where(d => d.LocalDate >= DateOnly.FromDateTime(windowStart))
+                               .OrderBy(d => d.LocalDate)
+                               .Select(d => (d.LocalDate.ToDateTime(TimeOnly.MinValue), d.ReviewCount))
+                               .ToList();
+        }
+        else
+        {
+            // Includes archived history, and buckets each review at its own instant's offset exactly as the
+            // rollup rebuild does, so the numbers do not shift when the backfill reaches this user.
+            var timezone = FsrsSettingsHelper.ResolveTimeZone(settings.Timezone);
+            var byDay = (await CardArchiveService.LoadAllReviewsAsync(userContext, userId))
+                        .GroupBy(r => ReviewRollupHelper.LocalDateOf(r.ReviewUtc, timezone))
+                        .ToList();
 
-        var totalReviewDays = allTimestamps
-            .Select(dt => dt.AddHours(offsetHours).Date)
-            .Distinct()
-            .Count();
+            allDates = byDay
+                .Select(g => g.Key.ToDateTime(TimeOnly.MinValue))
+                .OrderByDescending(d => d)
+                .ToList();
 
-        var allDates = allTimestamps
-            .Select(dt => dt.AddHours(offsetHours).Date)
-            .Distinct()
-            .OrderByDescending(d => d)
-            .ToList();
+            dailyStats = byDay
+                .Where(g => g.Key >= DateOnly.FromDateTime(windowStart))
+                .OrderBy(g => g.Key)
+                .Select(g => (g.Key.ToDateTime(TimeOnly.MinValue), g.Count()))
+                .ToList();
+        }
 
+        var totalReviewDays = allDates.Count;
         var (currentStreak, longestStreak) = ComputeStreaks(allDates, today);
-
-        var dailyStats = allTimestamps
-            .Where(dt => dt >= windowStartUtc)
-            .GroupBy(dt => dt.AddHours(offsetHours).Date)
-            .Select(g => new { Date = g.Key, Count = g.Count() })
-            .OrderBy(g => g.Date)
-            .ToList();
 
         return Results.Ok(new
         {
@@ -3085,7 +3109,7 @@ public class StudyController(
             longestStreak,
             isNewRecord = currentStreak > 0 && currentStreak >= longestStreak,
             totalReviewDays,
-            recentDays = dailyStats.Select(d => new { date = DateOnly.FromDateTime(d.Date).ToString("yyyy-MM-dd"), count = d.Count }),
+            recentDays = dailyStats.Select(d => new { date = DateOnly.FromDateTime(d.Date).ToString("yyyy-MM-dd"), count = d.Count }).ToList(),
         });
     }
 
@@ -3101,21 +3125,14 @@ public class StudyController(
         var (_, offsetHours) = ResolveTimezone(now, settings.Timezone);
         var today = now.AddHours(offsetHours).Date;
 
-        var userCardIds = userContext.FsrsCards
-            .Where(c => c.UserId == userId)
-            .Select(c => c.CardId);
-
-        var rawTimestamps = await userContext.FsrsReviewLogs
-            .AsNoTracking()
-            .Where(rl => userCardIds.Contains(rl.CardId))
-            .Select(rl => rl.ReviewDateTime)
-            .ToListAsync();
-
-        var recentDates = rawTimestamps
-            .Select(dt => dt.AddHours(offsetHours).Date)
-            .Distinct()
-            .OrderByDescending(d => d)
-            .ToList();
+        var rollup = await ReviewRollupHelper.TryLoadAsync(userContext, userId);
+        var recentDates = rollup != null
+            ? StudyDatesFrom(rollup)
+            : (await CardArchiveService.LoadAllReviewDatesAsync(userContext, userId,
+                                                                FsrsSettingsHelper.ResolveTimeZone(settings.Timezone)))
+              .Select(d => d.ToDateTime(TimeOnly.MinValue))
+              .OrderByDescending(d => d)
+              .ToList();
 
         var (currentStreak, longestStreak) = ComputeStreaks(recentDates, today);
 
@@ -3143,21 +3160,12 @@ public class StudyController(
             .FirstOrDefaultAsync(s => s.UserId == userId);
         var desiredRetention = userSettings?.DesiredRetention is double dr and > 0 and < 1 ? dr : FsrsConstants.DefaultDesiredRetention;
 
-        var userCardIds = userContext.FsrsCards
-            .Where(c => c.UserId == userId)
-            .Select(c => c.CardId);
 
-        var rawLogs = await userContext.FsrsReviewLogs
-            .AsNoTracking()
-            .Where(l => userCardIds.Contains(l.CardId))
-            .Select(l => new { l.CardId, l.ReviewDateTime, l.Rating, l.ReviewDuration })
-            .ToListAsync();
+        var entries = (await CardArchiveService.LoadAllReviewsAsync(userContext, userId))
+            .Select(r => new RetentionCalculator.ReviewEntry(
+                        r.CardId, r.ReviewUtc, r.Rating == FsrsRating.Again, (int)r.Rating, r.DurationMs));
 
-        var result = RetentionCalculator.Compute(
-            rawLogs.Select(l => new RetentionCalculator.ReviewEntry(
-                l.CardId, l.ReviewDateTime, l.Rating == FsrsRating.Again, (int)l.Rating, l.ReviewDuration)),
-            offsetHours,
-            now);
+        var result = RetentionCalculator.Compute(entries, offsetHours, now);
 
         return Results.Ok(new
         {
@@ -3467,6 +3475,11 @@ public class StudyController(
         return (currentStreak, Math.Max(longest, currentStreak));
     }
 
+    private static List<DateTime> StudyDatesFrom(List<UserReviewDaily> rollup)
+        => rollup.Select(d => d.LocalDate.ToDateTime(TimeOnly.MinValue))
+                 .OrderByDescending(d => d)
+                 .ToList();
+
     private static (DateTime dayStart, double offsetHours) ResolveTimezone(DateTime utcNow, string? timezone)
     {
         if (string.IsNullOrEmpty(timezone))
@@ -3568,19 +3581,20 @@ public class StudyController(
         List<int> fallbackExampleIds;
         if (isNpgsql)
         {
+            // DISTINCT ON rather than a lateral with LIMIT 1 per word: the lateral makes Postgres probe
+            // ExampleSentences once per candidate row, and a word absent from the user's decks exhausts all
+            // ~6.8k of them before returning nothing. Both sides are covered by their index, so this only
+            // touches sentences containing the requested words — its cost does not grow with deck count.
             studyExampleIds = studyDeckIdArray.Length > 0
                 ? await context.Database
                     .SqlQueryRaw<int>(@"
-                        SELECT esw.""ExampleSentenceId""
+                        SELECT DISTINCT ON (esw.""WordId"", esw.""ReadingIndex"") esw.""ExampleSentenceId""
                         FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
-                        CROSS JOIN LATERAL (
-                            SELECT esw2.""ExampleSentenceId""
-                            FROM jiten.""ExampleSentenceWords"" esw2
-                            JOIN jiten.""ExampleSentences"" es ON es.""SentenceId"" = esw2.""ExampleSentenceId""
-                            WHERE esw2.""WordId"" = v.wid AND esw2.""ReadingIndex"" = v.ri
-                              AND es.""DeckId"" = ANY({2})
-                            LIMIT 1
-                        ) esw
+                        JOIN jiten.""ExampleSentenceWords"" esw
+                          ON esw.""WordId"" = v.wid AND esw.""ReadingIndex"" = v.ri
+                        JOIN jiten.""ExampleSentences"" es ON es.""SentenceId"" = esw.""ExampleSentenceId""
+                        WHERE es.""DeckId"" = ANY({2})
+                        ORDER BY esw.""WordId"", esw.""ReadingIndex"", esw.""ExampleSentenceId""
                     ", remainingWordIds, remainingReadingIndexes, studyDeckIdArray)
                     .ToListAsync()
                 : [];
@@ -3724,12 +3738,52 @@ public class StudyController(
         };
     }
 
-    private async Task<T> CountWithFactoryContext<T>(Func<JitenDbContext, UserDbContext, ICurrentUserService, Task<T>> query)
+    private async Task<T> CountWithFactoryContext<T>(Func<JitenDbContext, UserDbContext, ICurrentUserService, Task<T>> query,
+                                                     SemaphoreSlim gate)
     {
-        await using var ctx = await contextFactory.CreateDbContextAsync();
-        await using var uCtx = await userContextFactory.CreateDbContextAsync();
-        var userService = new CurrentUserService(httpContextAccessor, ctx, uCtx, wordFormCache);
-        return await query(ctx, uCtx, userService);
+        await gate.WaitAsync();
+        try
+        {
+            await using var ctx = await contextFactory.CreateDbContextAsync();
+            await using var uCtx = await userContextFactory.CreateDbContextAsync();
+            var userService = new CurrentUserService(httpContextAccessor, ctx, uCtx, wordFormCache);
+            return await query(ctx, uCtx, userService);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    // Resolves each distinct frequency range once instead of re-running the same range scan per deck.
+    // A range wider than the hoist cap is left out, so those decks keep the in-query filter.
+    private async Task<Dictionary<(int Min, int Max), HashSet<long>>> LoadGlobalFrequencyRanges(List<UserStudyDeck> studyDecks)
+    {
+        var ranges = studyDecks
+            .Where(sd => sd.DeckType == StudyDeckType.MediaDeck
+                         && (DeckDownloadType)sd.DownloadType == DeckDownloadType.TopGlobalFrequency)
+            .Select(sd => (Min: sd.MinFrequency, Max: sd.MaxFrequency))
+            .Distinct()
+            .ToList();
+
+        var result = new Dictionary<(int Min, int Max), HashSet<long>>();
+        if (ranges.Count == 0) return result;
+
+        foreach (var range in ranges)
+        {
+            var rows = await context.WordFormFrequencies
+                .AsNoTracking()
+                .Where(wff => wff.FrequencyRank >= range.Min && wff.FrequencyRank <= range.Max)
+                .Select(wff => new { wff.WordId, wff.ReadingIndex })
+                .Take(MaxHoistedFrequencyKeys + 1)
+                .ToListAsync();
+
+            if (rows.Count > MaxHoistedFrequencyKeys) continue;
+
+            result[range] = rows.Select(r => WordFormHelper.EncodeWordKey(r.WordId, r.ReadingIndex)).ToHashSet();
+        }
+
+        return result;
     }
 
     private static bool IsValidPosFilter(string? posFilter)
@@ -4148,7 +4202,7 @@ public class StudyController(
         }
 
         var applied = (state == "mastered"
-            ? await currentUserService.AddKnownWords(resolvedWords)
+            ? await currentUserService.AddKnownWords(resolvedWords, countAsNewlyLearned: request.CountAsNewlyLearned)
             : await currentUserService.BlacklistWords(resolvedWords)).Inserted;
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);

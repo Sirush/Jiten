@@ -80,14 +80,17 @@ public class ReaderController(
             while (wordIndex < allParsedWords.Count)
             {
                 var word = allParsedWords[wordIndex];
+
+                var searchFrom = Math.Max(positionInCombined, paragraphOffsets[i]);
+
                 int wordPosition;
-                if (positionCache.Remove(wordIndex, out var cached))
+                if (positionCache.Remove(wordIndex, out var cached) && cached >= searchFrom)
                 {
                     wordPosition = cached;
                 }
                 else
                 {
-                    (wordPosition, _) = TokenPositionHelper.FindTokenInSource(combinedText, word.OriginalText, positionInCombined);
+                    (wordPosition, _) = TokenPositionHelper.FindTokenInSource(combinedText, word.OriginalText, searchFrom);
                 }
 
                 if (wordPosition < 0)
@@ -100,21 +103,21 @@ public class ReaderController(
 
                 // Check if this match might be wrong (found too far ahead)
                 // by looking for subsequent words between current position and found position
-                if (wordPosition - positionInCombined > 10)
+                if (wordPosition - searchFrom > 10)
                 {
                     var foundCloserWord = false;
                     for (var lookAhead = 1; lookAhead <= 5 && wordIndex + lookAhead < allParsedWords.Count; lookAhead++)
                     {
                         var futureIdx = wordIndex + lookAhead;
                         int futurePos;
-                        if (positionCache.TryGetValue(futureIdx, out var cachedFuture))
+                        if (positionCache.TryGetValue(futureIdx, out var cachedFuture) && cachedFuture >= searchFrom)
                         {
                             futurePos = cachedFuture;
                         }
                         else
                         {
                             var futureWord = allParsedWords[futureIdx];
-                            (futurePos, _) = TokenPositionHelper.FindTokenInSource(combinedText, futureWord.OriginalText, positionInCombined);
+                            (futurePos, _) = TokenPositionHelper.FindTokenInSource(combinedText, futureWord.OriginalText, searchFrom);
                             if (futurePos >= 0)
                                 positionCache[futureIdx] = futurePos;
                         }

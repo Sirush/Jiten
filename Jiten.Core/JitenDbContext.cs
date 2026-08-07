@@ -566,6 +566,11 @@ public class JitenDbContext : DbContext
             
             entity.HasIndex(e => e.DeckId).HasDatabaseName("IX_ExampleSentence_DeckId");
             entity.HasIndex(e => new { e.DeckId, e.Difficulty }).HasDatabaseName("IX_ExampleSentence_DeckId_Difficulty");
+
+            if (isNpgsql)
+                entity.HasIndex(e => e.SentenceId)
+                      .HasDatabaseName("IX_ExampleSentence_SentenceId_IncDeckId")
+                      .IncludeProperties(e => e.DeckId);
             
             entity.HasOne(e => e.Deck)
                   .WithMany(d => d.ExampleSentences)
@@ -582,7 +587,13 @@ public class JitenDbContext : DbContext
             entity.ToTable("ExampleSentenceWords", "jiten");
             entity.HasKey(e => new { e.ExampleSentenceId, e.WordId, e.Position });
 
-            entity.HasIndex(dw => new { dw.WordId, dw.ReadingIndex }).HasDatabaseName("IX_ExampleSentenceWord_WordIdReadingIndex");
+            var wordReadingIndex = entity.HasIndex(dw => new { dw.WordId, dw.ReadingIndex });
+
+            if (isNpgsql)
+                wordReadingIndex.HasDatabaseName("IX_ExampleSentenceWord_WordIdReadingIndex_IncSentenceId")
+                                .IncludeProperties(e => e.ExampleSentenceId);
+            else
+                wordReadingIndex.HasDatabaseName("IX_ExampleSentenceWord_WordIdReadingIndex");
 
             entity.HasOne(e => e.Word)
                   .WithMany()

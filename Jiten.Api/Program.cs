@@ -690,6 +690,7 @@ builder.Services.AddScoped<WebNovelSyncSweepJob>();
 builder.Services.AddScoped<ReparseJob>();
 builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
+builder.Services.AddScoped<ReviewRollupJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
 builder.Services.AddScoped<RecomputeVectorsJob>();
 builder.Services.AddScoped<StripeReconcileJob>();
@@ -843,6 +844,11 @@ if (!app.Environment.IsEnvironment("Testing"))
     recurringJobs.AddOrUpdate<ComputationJob>(
         "coverage-sweep",
         job => job.SweepPendingCoverageDecks(),
+        "*/15 * * * *");
+
+    recurringJobs.AddOrUpdate<ReviewRollupJob>(
+        "review-rollup-sweep",
+        job => job.RebuildDirty(),
         "*/15 * * * *");
 
     recurringJobs.AddOrUpdate<RecomputeVectorsJob>(

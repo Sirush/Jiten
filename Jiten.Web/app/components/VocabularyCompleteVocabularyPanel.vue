@@ -14,6 +14,7 @@
   const toast = useToast();
 
   const fsrsOverwriteExisting = ref(false);
+  const fsrsIncludeWordText = ref(false);
   const fsrsImportResult = ref<FsrsImportResultDto | null>(null);
   const fsrsIsLoading = ref(false);
 
@@ -22,7 +23,7 @@
       fsrsIsLoading.value = true;
       toast.add({ severity: 'info', summary: 'Exporting...', detail: 'Fetching your vocabulary data...', life: 3000 });
 
-      const data = await $api<FsrsExportDto>('user/vocabulary/export');
+      const data = await $api<FsrsExportDto>(`user/vocabulary/export?includeWordText=${fsrsIncludeWordText.value}`);
 
       const jsonContent = JSON.stringify(data, null, 2);
       const blob = new Blob([jsonContent], { type: 'application/json' });
@@ -149,6 +150,15 @@
 
       <div v-if="mode === 'export' || mode === 'both'" class="mb-4">
         <h4 v-if="mode === 'both'" class="text-md font-semibold mb-2">Export</h4>
+        <div class="mb-3 flex items-center">
+          <Checkbox id="fsrsIncludeWordText" v-model="fsrsIncludeWordText" :binary="true" />
+          <label for="fsrsIncludeWordText" class="ml-2">
+            <span>Include word readings</span>
+            <span class="text-sm text-gray-600 dark:text-gray-400 block">
+              Add the word and its reading as full text instead of just the IDs at the cost of larger files.
+            </span>
+          </label>
+        </div>
         <Button icon="pi pi-download" label="Export Complete Vocabulary" :loading="fsrsIsLoading" class="w-full md:w-auto" @click="downloadFsrsVocabulary" />
       </div>
 

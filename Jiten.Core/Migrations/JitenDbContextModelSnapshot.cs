@@ -690,6 +690,11 @@ namespace Jiten.Core.Migrations
                     b.HasIndex("DeckId")
                         .HasDatabaseName("IX_ExampleSentence_DeckId");
 
+                    b.HasIndex("SentenceId")
+                        .HasDatabaseName("IX_ExampleSentence_SentenceId_IncDeckId");
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("SentenceId"), new[] { "DeckId" });
+
                     b.HasIndex("DeckId", "Difficulty")
                         .HasDatabaseName("IX_ExampleSentence_DeckId_Difficulty");
 
@@ -716,7 +721,9 @@ namespace Jiten.Core.Migrations
                     b.HasKey("ExampleSentenceId", "WordId", "Position");
 
                     b.HasIndex("WordId", "ReadingIndex")
-                        .HasDatabaseName("IX_ExampleSentenceWord_WordIdReadingIndex");
+                        .HasDatabaseName("IX_ExampleSentenceWord_WordIdReadingIndex_IncSentenceId");
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("WordId", "ReadingIndex"), new[] { "ExampleSentenceId" });
 
                     b.ToTable("ExampleSentenceWords", "jiten");
                 });

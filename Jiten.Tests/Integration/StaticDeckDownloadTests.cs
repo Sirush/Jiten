@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
@@ -41,6 +42,8 @@ public class StaticDeckDownloadTests(JitenWebApplicationFactory factory)
         await userDb.UserStudyDecks.ExecuteDeleteAsync();
         await userDb.FsrsReviewLogs.ExecuteDeleteAsync();
         await userDb.FsrsCards.ExecuteDeleteAsync();
+        await userDb.FsrsCardArchives.ExecuteDeleteAsync();
+        await userDb.UserReviewDailies.ExecuteDeleteAsync();
 
         await jitenDb.WordFormFrequencies.ExecuteDeleteAsync();
         await jitenDb.Definitions.ExecuteDeleteAsync();
@@ -187,6 +190,46 @@ public class StaticDeckDownloadTests(JitenWebApplicationFactory factory)
         var cards = await userDb.FsrsCards.Where(c => c.UserId == TestUsers.UserA).ToListAsync();
         cards.Should().HaveCount(5);
         cards.Should().OnlyContain(c => c.State == FsrsState.Mastered);
+    }
+
+    [Fact]
+    public async Task Learn_Mastered_WritesTheWholeBatchAtOneInstant()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{_deckId}/learn")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { vocabularyState = "mastered", downloadType = 1, order = 4 });
+        (await _client.SendAsync(request)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var declared = await userDb.FsrsCards.Where(c => c.UserId == TestUsers.UserA)
+                                   .Select(c => c.LastReview!.Value).ToListAsync();
+
+        // One decision, so the coverage journey is free to read it as a single knowledge dump.
+        (declared.Max() - declared.Min()).Should().BeLessThan(CoverageJourneyService.DistinctDeclarationSpacing);
+    }
+
+    [Fact]
+    public async Task Learn_MasteredAsNewlyLearned_SpacesTheCardsPastTheClusterGap()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{_deckId}/learn")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { vocabularyState = "mastered", downloadType = 1, order = 4, countAsNewlyLearned = true });
+        (await _client.SendAsync(request)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var cards = await userDb.FsrsCards.Where(c => c.UserId == TestUsers.UserA)
+                                .OrderBy(c => c.CardId).ToListAsync();
+
+        var declared = cards.Select(c => c.LastReview!.Value).ToList();
+        declared.Should().BeInAscendingOrder().And.OnlyHaveUniqueItems();
+        for (var i = 1; i < declared.Count; i++)
+            (declared[i] - declared[i - 1]).Should().Be(CoverageJourneyService.DistinctDeclarationSpacing);
+
+        // Spread backwards, so nothing is dated in the future.
+        declared.Max().Should().BeOnOrBefore(DateTime.UtcNow);
+        cards.Should().OnlyContain(c => c.CreatedAt == c.LastReview);
     }
 
     [Fact]

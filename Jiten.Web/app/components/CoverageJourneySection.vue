@@ -32,6 +32,8 @@
 
   const asOfLabel = computed(() => (journey.value?.asOf ? formatDateShort(journey.value.asOf) : ''));
 
+  const hasPrior = computed(() => !!journey.value && hasPriorKnowledge(journey.value.points));
+
   const methodTooltip =
     'Show your historical coverage of this media over time.';
 
@@ -94,7 +96,22 @@
             {{ deltaLabel }}
           </span>
         </div>
-        <CoverageJourneyChart :points="journey!.points" :granularity="journey!.granularity" :milestones="journey!.milestones" :metric="metric" height="300px" />
+        <CoverageJourneyChart
+          :points="journey!.points"
+          :granularity="journey!.granularity"
+          :milestones="journey!.milestones"
+          :metric="metric"
+          height="300px"
+          :separate-prior="jitenStore.separatePriorKnowledge"
+        />
+        <button
+          v-if="hasPrior"
+          class="mt-2 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+          @click="jitenStore.separatePriorKnowledge = !jitenStore.separatePriorKnowledge"
+        >
+          <i :class="jitenStore.separatePriorKnowledge ? 'pi pi-check-square' : 'pi pi-stop'" class="text-[11px]" />
+          Show words marked known in bulk as a starting point
+        </button>
         <h3 class="text-lg font-bold pt-6 pb-2">Milestones</h3>
         <CoverageJourneyMilestones :milestones="journey!.milestones" :metric="metric" :granularity="journey!.granularity" />
         <p class="text-xs text-gray-500 dark:text-gray-400 pt-4">

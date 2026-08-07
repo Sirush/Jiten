@@ -24,6 +24,8 @@ public class SrsHealthTests(JitenWebApplicationFactory factory)
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         await userDb.FsrsReviewLogs.ExecuteDeleteAsync();
         await userDb.FsrsCards.ExecuteDeleteAsync();
+        await userDb.FsrsCardArchives.ExecuteDeleteAsync();
+        await userDb.UserReviewDailies.ExecuteDeleteAsync();
         await userDb.UserFsrsSettings.ExecuteDeleteAsync();
     }
 

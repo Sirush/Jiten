@@ -211,6 +211,8 @@ export const useSrsStore = defineStore('srs', () => {
   const cardShownAt = ref<number | null>(null);
   const thinkingDuration = ref<number | undefined>(undefined);
   const isBusy = ref(false);
+  // Reviews recovered from the archive by the last quickAction
+  const lastAutoRestoredCount = ref(0);
   // Set by the timed-review "fail & learn" absorption window: blocks all grading (mouse + keyboard)
   // while the answer is shown for study, until the timer auto-fails the card.
   const gradeLock = ref(false);
@@ -392,18 +394,29 @@ export const useSrsStore = defineStore('srs', () => {
 
   let refreshOverviewPromise: Promise<void> | null = null;
 
+  async function refreshStudySummary() {
+    await Promise.all([fetchDueSummary(), fetchDeckStreak(), fetchSettings(true)]);
+  }
+
   async function refreshOverview(force = false) {
     if (refreshOverviewPromise) return refreshOverviewPromise;
     refreshOverviewPromise = (async () => {
       try {
-        let serverVersion = 0;
-        try {
-          const { version } = await $api<{ version: number }>('srs/overview-version');
-          serverVersion = version;
-          if (!force && overviewVersion.value > 0 && version === overviewVersion.value) return;
-        } catch { /* fall through to full refresh */ }
-        await Promise.all([fetchStudyDecks(), fetchDueSummary(), fetchDeckStreak(), fetchSettings(true)]);
-        overviewVersion.value = serverVersion;
+        const versionRequest = $api<{ version: number }>('srs/overview-version').catch(() => null);
+
+        if (!force && overviewVersion.value > 0) {
+          const current = await versionRequest;
+          if (current && current.version === overviewVersion.value) return;
+        }
+
+        const [version] = await Promise.all([
+          versionRequest,
+          fetchStudyDecks(),
+          fetchDueSummary(),
+          fetchDeckStreak(),
+          fetchSettings(true),
+        ]);
+        overviewVersion.value = version?.version ?? 0;
       } finally {
         refreshOverviewPromise = null;
       }
@@ -1056,6 +1069,8 @@ export const useSrsStore = defineStore('srs', () => {
   async function quickAction(action: 'blacklist' | 'master' | 'forget' | 'suspend' | 'bury'): Promise<boolean> {
     const card = currentCard.value;
     if (!card || isBusy.value) return true;
+    // An unseen card has no scheduling row to push back, so burying it would silently do nothing.
+    if (action === 'bury' && card.isNewCard) return true;
     isBusy.value = true;
 
     const stateMap: Record<string, string> = {
@@ -1067,12 +1082,12 @@ export const useSrsStore = defineStore('srs', () => {
     };
 
     try {
-      // Forget permanently deletes the card and its review logs server-side — there is no restore
-      // path, so it can't be undone. Clear the stack rather than offer a misleading undo past it.
+      // Forget removes the card server-side. Its history survives under Recently Removed, but the
+      // in-session undo can't put the card back, so clear the stack rather than offer a misleading undo.
       if (action !== 'forget') takeSnapshot(card, action);
       else undoStack.value = [];
 
-      await $api('srs/set-vocabulary-state', {
+      const result = await $api<{ autoRestored?: number }>('srs/set-vocabulary-state', {
         method: 'POST',
         body: {
           wordId: card.wordId,
@@ -1080,6 +1095,8 @@ export const useSrsStore = defineStore('srs', () => {
           state: stateMap[action],
         },
       });
+
+      lastAutoRestoredCount.value = result?.autoRestored ?? 0;
 
       sessionStats.value.cardsReviewed++;
       clearedGrades.value = [...clearedGrades.value, 'action'];
@@ -1424,6 +1441,7 @@ export const useSrsStore = defineStore('srs', () => {
     hasCards,
     progress,
     refreshOverview,
+    refreshStudySummary,
     fetchStudyDecks,
     fetchDueSummary,
     fetchDeckStreak,
@@ -1449,6 +1467,7 @@ export const useSrsStore = defineStore('srs', () => {
     revealCard,
     gradeCard,
     quickAction,
+    lastAutoRestoredCount,
     undoLastAction,
     startStudyMore,
     wrapUp,

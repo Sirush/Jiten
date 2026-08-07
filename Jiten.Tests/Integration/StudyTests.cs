@@ -36,6 +36,8 @@ public class StudyTests(JitenWebApplicationFactory factory)
         await userDb.UserStudyDecks.ExecuteDeleteAsync();
         await userDb.FsrsReviewLogs.ExecuteDeleteAsync();
         await userDb.FsrsCards.ExecuteDeleteAsync();
+        await userDb.FsrsCardArchives.ExecuteDeleteAsync();
+        await userDb.UserReviewDailies.ExecuteDeleteAsync();
         await userDb.UserFsrsSettings.ExecuteDeleteAsync();
 
         await jitenDb.DeckWords.ExecuteDeleteAsync();
@@ -155,6 +157,92 @@ public class StudyTests(JitenWebApplicationFactory factory)
         body.GetArrayLength().Should().Be(1);
         body[0].GetProperty("deckId").GetInt32().Should().Be(1);
         body[0].GetProperty("title").GetString().Should().Be("Test Deck");
+    }
+
+    [Fact]
+    public async Task GetStudyDecks_TopGlobalFrequency_CountsOnlyWordsInRange()
+    {
+        await SeedFrequencyRanks();
+
+        var add = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckId = 1, downloadType = 2, order = 2, minFrequency = 2, maxFrequency = 4 });
+        (await _client.SendAsync(add)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var list = new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-decks")
+            .WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(list);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetArrayLength().Should().Be(1);
+        body[0].GetProperty("totalWords").GetInt32().Should().Be(3);
+
+        // preview-count resolves the same deck through the unhoisted query, so the two must agree.
+        var preview = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks/preview-count")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckId = 1, deckType = 0, downloadType = 2, order = 2, minFrequency = 2, maxFrequency = 4 });
+        var previewResponse = await _client.SendAsync(preview);
+        previewResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var previewBody = await previewResponse.Content.ReadFromJsonAsync<JsonElement>();
+        previewBody.GetProperty("total").GetInt32().Should().Be(3);
+    }
+
+    [Fact]
+    public async Task DueSummary_HasStudyDecks_FalseWithoutDecks()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/srs/due-summary").WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("hasStudyDecks").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DueSummary_HasStudyDecks_TrueWhenOnlyDeckIsInactive()
+    {
+        var add = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckId = 1, downloadType = 1, order = 2 });
+        var addBody = await (await _client.SendAsync(add)).Content.ReadFromJsonAsync<JsonElement>();
+        var id = addBody.GetProperty("userStudyDeckId").GetInt32();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var deck = await userDb.UserStudyDecks.FirstAsync(sd => sd.UserStudyDeckId == id);
+            deck.IsActive = false;
+            await userDb.SaveChangesAsync();
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/srs/due-summary").WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("hasStudyDecks").GetBoolean().Should().BeTrue();
+    }
+
+    private async Task SeedFrequencyRanks()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+
+        for (var i = 1; i <= 5; i++)
+        {
+            jitenDb.WordFormFrequencies.Add(new JmDictWordFormFrequency
+            {
+                WordId = i,
+                ReadingIndex = 0,
+                FrequencyRank = i,
+                FrequencyPercentage = 0.01,
+                ObservedFrequency = 100.0 / i,
+                UsedInMediaAmount = 10,
+            });
+        }
+        await jitenDb.SaveChangesAsync();
     }
 
     [Fact]

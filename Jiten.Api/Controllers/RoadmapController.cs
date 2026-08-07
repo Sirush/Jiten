@@ -88,6 +88,7 @@ public class RoadmapController(
         bool? IncludeLearningWords,
         int? AcquisitionThreshold,
         int? Steps,
+        int? GoalSteps,
         string? Preference,
         string? CandidateMode,
         double? ContentSimilarity,
@@ -542,6 +543,7 @@ public class RoadmapController(
                 includeLearningWords = definition.IncludeLearningWords,
                 acquisitionThreshold = definition.AcquisitionThreshold,
                 steps = definition.Steps,
+                goalSteps = definition.GoalSteps,
                 preference = definition.Preference.ToString().ToLowerInvariant(),
                 candidateMode = definition.CandidateMode.ToString().ToLowerInvariant(),
                 contentSimilarity = definition.ContentSimilarity,
@@ -597,6 +599,8 @@ public class RoadmapController(
         definition.IncludeLearningWords = dto.IncludeLearningWords ?? true;
         definition.AcquisitionThreshold = Math.Clamp(dto.AcquisitionThreshold ?? 5, 1, 50);
         definition.Steps = Math.Clamp(dto.Steps ?? 5, RoadmapDefinition.MinSteps, RoadmapDefinition.MaxSteps);
+        definition.GoalSteps = Math.Clamp(dto.GoalSteps ?? RoadmapDefinition.MaxGoalSteps,
+                                          RoadmapDefinition.MinSteps, RoadmapDefinition.MaxGoalSteps);
         definition.ContentSimilarity = Math.Clamp(dto.ContentSimilarity ?? 0, -3, 3);
 
         definition.Preference = string.Equals(dto.Preference, "volume", StringComparison.OrdinalIgnoreCase)

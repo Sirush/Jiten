@@ -45,7 +45,8 @@ public interface IDeckWordResolver
     Task<HashSet<long>> GetGlobalDynamicWordKeysForWordIds(int? minFreq, int? maxFreq, string? posFilter, List<int> wordIds, bool excludeKana = false);
     Task<(int Count, bool WasTruncated)> CountGlobalDynamicWords(int? minFreq, int? maxFreq, string? posFilter, bool excludeKana,
         bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false);
-    Task<(int Count, HashSet<long> WordKeys)> CountDeckWords(DeckWordResolveRequest request, bool excludeKana);
+    Task<(int Count, HashSet<long> WordKeys)> CountDeckWords(DeckWordResolveRequest request, bool excludeKana,
+                                                             HashSet<long>? globalFrequencyKeys = null);
     Task<(int Count, HashSet<long> WordKeys)> CountTargetCoverageWords(int deckId, Deck deck, float targetPercentage, bool excludeKana, string? posFilter = null, bool startFromKnown = false);
     Task<(int Count, HashSet<long> WordKeys)> CountStaticDeckWords(int studyDeckId, bool excludeKana,
         bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false);

@@ -67,6 +67,8 @@ public class RoadmapTests(JitenWebApplicationFactory factory)
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         userDb.UserRoadmaps.RemoveRange(userDb.UserRoadmaps);
         userDb.FsrsCards.RemoveRange(userDb.FsrsCards);
+        userDb.FsrsCardArchives.RemoveRange(userDb.FsrsCardArchives);
+        userDb.UserReviewDailies.RemoveRange(userDb.UserReviewDailies);
         userDb.UserDeckPreferences.RemoveRange(userDb.UserDeckPreferences);
         userDb.UserCoverageChunks.RemoveRange(userDb.UserCoverageChunks);
         await userDb.SaveChangesAsync();

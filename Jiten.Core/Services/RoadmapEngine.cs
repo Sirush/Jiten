@@ -328,10 +328,10 @@ public static class RoadmapEngine
         if (input.Goal is not null)
             blockingPrereqs.Add(input.Goal.DeckId);
 
-        // Goal mode is not bounded by the user's step count: it walks until the goal reaches its target (or a
-        // dead-end forces a drill), capped only by the safety ceiling. Discovery mode honours the chosen count.
+        // Goal mode walks until the goal reaches its target (or a dead-end forces a drill) within its own,
+        // larger budget; falling short of the target is reported rather than papered over.
         var steps = input.Goal is not null
-            ? RoadmapDefinition.MaxGoalSteps
+            ? Math.Clamp(settings.GoalSteps, RoadmapDefinition.MinSteps, RoadmapDefinition.MaxGoalSteps)
             : Math.Clamp(settings.Steps, RoadmapDefinition.MinSteps, RoadmapDefinition.MaxSteps);
         var byId = remaining.ToDictionary(c => c.DeckId);
         var stepIndex = 0;
@@ -526,11 +526,16 @@ public static class RoadmapEngine
     private const double FallbackHoursPerToken = 1.0 / 10000.0;
 
     /// <summary>
-    /// Per-title overhead floor. Finding a title, starting it and settling into it costs the same whether it
-    /// runs twenty minutes or two hours, and without a floor the efficiency ratio diverges as length tends to
-    /// zero, which hands the plan to whichever candidate happens to be shortest.
+    /// Fixed cost charged to every title on top of its running time, without which the plan fills with
+    /// snack-sized picks: a forty-minute episode really does teach more per hour than a novel, so a purely
+    /// per-hour ratio ranks a route of thirty shorts above one that reaches the goal. Two things justify it.
+    /// A plan slot is scarce (<see cref="RoadmapDefinition.MaxGoalSteps"/>) and starting a new work costs the
+    /// same effort whatever its length. And <see cref="AcquisitionSet"/> credits a deck with permanently
+    /// teaching every word met its threshold number of times, which is far more generous for five exposures
+    /// inside one short film than for five spread across a novel — so short content's yield is overstated in
+    /// the first place, roughly in proportion to how short it is.
     /// </summary>
-    private const double MinEffortHours = 0.5;
+    private const double PerTitleCommitmentHours = 5.0;
 
     /// <summary>
     /// What the efficiency preference divides yield by: hours of the user's life, not tokens. Token count is
@@ -542,7 +547,7 @@ public static class RoadmapEngine
             return 1.0;
 
         var hours = deck.LengthHours > 0 ? deck.LengthHours : deck.WordCount * FallbackHoursPerToken;
-        return Math.Max(MinEffortHours, hours);
+        return PerTitleCommitmentHours + hours;
     }
 
     private static int CountGoalWords(IReadOnlyList<RoadmapWord> acquired, IReadOnlyDictionary<long, int>? goalWeights)

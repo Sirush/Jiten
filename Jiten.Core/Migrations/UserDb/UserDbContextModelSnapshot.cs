@@ -504,6 +504,87 @@ namespace Jiten.Core.Migrations.UserDb
                     b.ToTable("FsrsCards", "user");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsCardArchive", b =>
+                {
+                    b.Property<long>("ArchiveId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ArchiveId"));
+
+                    b.Property<DateTime>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CardCreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte?>("CoveringReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<double?>("Difficulty")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("Due")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FirstReview")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("HistoryMerged")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("HistoryTruncated")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<int>("Lapses")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastReview")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("Logs")
+                        .HasColumnType("bytea");
+
+                    b.Property<byte>("ReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<byte>("Reason")
+                        .HasColumnType("smallint");
+
+                    b.Property<int>("ReviewCount")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("Stability")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Step")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ArchiveId");
+
+                    b.HasIndex("UserId", "ArchivedAt")
+                        .HasDatabaseName("IX_FsrsCardArchive_UserId_ArchivedAt");
+
+                    b.HasIndex("UserId", "WordId", "ReadingIndex")
+                        .IsUnique()
+                        .HasDatabaseName("IX_FsrsCardArchive_UserId_WordId_ReadingIndex");
+
+                    b.ToTable("FsrsCardArchives", "user");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsReviewLog", b =>
                 {
                     b.Property<long>("ReviewLogId")
@@ -530,6 +611,31 @@ namespace Jiten.Core.Migrations.UserDb
                         .IsUnique();
 
                     b.ToTable("FsrsReviewLogs", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.FSRS.UserReviewDaily", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("LocalDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("CorrectCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NewCardCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ReviewCount")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("TotalDurationMs")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("UserId", "LocalDate");
+
+                    b.ToTable("UserReviewDailies", "user");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.User.UserCardMedia", b =>
@@ -978,7 +1084,19 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<DateTime?>("LastActivity")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("ReviewRollupDirty")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("ReviewRollupRebuiltAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("UserId");
+
+                    b.HasIndex("ReviewRollupDirty")
+                        .HasDatabaseName("IX_UserMetadatas_ReviewRollupDirty")
+                        .HasFilter("\"ReviewRollupDirty\"");
 
                     b.ToTable("UserMetadatas", "user");
                 });
@@ -1218,6 +1336,15 @@ namespace Jiten.Core.Migrations.UserDb
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsCardArchive", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsReviewLog", b =>
                 {
                     b.HasOne("Jiten.Core.Data.FSRS.FsrsCard", "Card")
@@ -1227,6 +1354,15 @@ namespace Jiten.Core.Migrations.UserDb
                         .IsRequired();
 
                     b.Navigation("Card");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.FSRS.UserReviewDaily", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.User.UserCardMedia", b =>

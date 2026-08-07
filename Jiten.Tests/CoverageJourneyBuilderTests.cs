@@ -281,6 +281,49 @@ public class CoverageJourneyBuilderTests
     }
 
     [Fact]
+    public void PriorKnowledge_HoldsAcrossEveryBucketWithoutMovingTheAxis()
+    {
+        var deckWords = DeckWords((1, 40), (2, 30));
+        var segments = new Dictionary<(int WordId, byte ReadingIndex), List<KnownSegment>>
+        {
+            [(1, 0)] = [new KnownSegment(Today.AddDays(-21), null, true)],
+            [(2, 0)] = [CoverageJourneyBuilder.Prior]
+        };
+
+        var journey = CoverageJourneyBuilder.BuildDeckJourney(1, deckWords, segments, 100, 2, Today);
+
+        // Four weekly buckets from the dated word alone, with the declared word already carried in the first.
+        journey.Points.Should().HaveCount(4);
+        journey.Points.Select(p => p.Coverage).Should().AllBeEquivalentTo(70f);
+        journey.Points.Select(p => p.PriorCoverage).Should().AllBeEquivalentTo(30f);
+        journey.Points[^1].KnownWords.Should().Be(2);
+        journey.Points[^1].PriorKnownWords.Should().Be(1);
+    }
+
+    [Fact]
+    public void PriorKnowledge_WithNothingDated_OpensAtToday()
+    {
+        var journey = CoverageJourneyBuilder.BuildDeckJourney(
+            1, DeckWords((1, 40)), Timeline(1, CoverageJourneyBuilder.Prior), 100, 1, Today);
+
+        journey.Points.Should().ContainSingle();
+        journey.Points[0].PriorCoverage.Should().BeApproximately(40f, 0.01f);
+        journey.HasEnoughHistory.Should().BeFalse();
+    }
+
+    [Fact]
+    public void MergePairSegments_LetsPriorKnowledgeSubsumeTheSamePairsDatedHistory()
+    {
+        var merged = CoverageJourneyBuilder.MergePairSegments(
+        [
+            new KnownSegment(Today.AddDays(-28), null, false),
+            CoverageJourneyBuilder.Prior
+        ]);
+
+        merged.Should().Equal(CoverageJourneyBuilder.Prior);
+    }
+
+    [Fact]
     public void GlobalGrowth_CountsCardsHoldingEachStateAtTheEndOfEveryBucket()
     {
         var segments = new List<KnownSegment>
@@ -380,6 +423,34 @@ public class CoverageJourneyBuilderTests
         var growth = CoverageJourneyBuilder.BuildGlobalGrowth(segments, Today);
 
         growth.RecentGain.Should().Be(-1);
+    }
+
+    [Fact]
+    public void GlobalGrowth_RecentGain_IgnoresPriorKnowledge()
+    {
+        var segments = new List<KnownSegment>
+        {
+            CoverageJourneyBuilder.Prior,
+            CoverageJourneyBuilder.Prior,
+            new(Today.AddDays(-200), null, true),
+            new(Today.AddDays(-10), null, true)
+        };
+
+        var growth = CoverageJourneyBuilder.BuildGlobalGrowth(segments, Today);
+
+        growth.RecentGain.Should().Be(1);
+        growth.Points.Should().OnlyContain(p => p.PriorKnownWords == 2);
+        growth.Points[0].KnownWords.Should().Be(3);
+    }
+
+    [Fact]
+    public void GlobalGrowth_WithOnlyPriorKnowledge_ReportsNoJourney()
+    {
+        var growth = CoverageJourneyBuilder.BuildGlobalGrowth([CoverageJourneyBuilder.Prior], Today);
+
+        growth.Points.Should().ContainSingle();
+        growth.Points[0].PriorKnownWords.Should().Be(1);
+        growth.HasEnoughHistory.Should().BeFalse();
     }
 
     [Fact]

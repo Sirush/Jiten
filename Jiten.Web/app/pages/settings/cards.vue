@@ -399,7 +399,7 @@
   function confirmForget(card: FsrsCardWithWordDto) {
     const plain = stripRuby(card.wordText);
     confirm.require({
-      message: `Forget "${plain}"? This permanently deletes its review history and cannot be undone.`,
+      message: `Forget "${plain}"? The card leaves your collection but your review history is kept and you can restore it or delete it completely at any time from Recently Removed in your vocabulary settings.`,
       header: 'Forget Card',
       icon: 'pi pi-exclamation-triangle',
       acceptClass: 'p-button-danger',
@@ -885,27 +885,32 @@
     >
       <div class="flex flex-col gap-4">
         <div class="flex items-start gap-3">
-          <i class="pi pi-exclamation-triangle text-2xl text-red-500 shrink-0 mt-0.5" />
+          <i class="pi pi-exclamation-triangle text-2xl text-amber-500 shrink-0 mt-0.5" />
           <div class="text-sm text-surface-700 dark:text-surface-300">
             <p class="mb-2">
-              You are about to permanently forget
-              <span class="font-bold text-red-600 dark:text-red-400">{{ forgetCount }}</span>
+              You are about to forget
+              <span class="font-bold">{{ forgetCount }}</span>
               card{{ forgetCount !== 1 ? 's' : '' }}.
             </p>
+            <p class="mb-2">
+              {{ forgetCount === 1 ? 'It leaves' : 'They leave' }} your collection but your review history is kept, so your activity study chart, streaks and retention
+              stay as they are, and the FSRS optimiser still trains on it.
+            </p>
             <p>
-              This deletes all FSRS review history for {{ forgetCount === 1 ? 'this card' : 'these cards' }} and <strong>cannot be undone</strong>. Fewer review
-              logs also reduce the data available to the FSRS parameter optimiser, which can make future scheduling less accurate.
+              Restore {{ forgetCount === 1 ? 'it' : 'them' }} any time from
+              <NuxtLink to="/settings/vocabulary" class="text-blue-500 hover:underline">Recently Removed</NuxtLink>
+              in vocabulary settings, or delete the history completely there.
             </p>
           </div>
         </div>
 
         <label
           v-if="forgetNeedsAck"
-          class="flex items-start gap-2 cursor-pointer rounded-lg border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 p-3"
+          class="flex items-start gap-2 cursor-pointer rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-3"
         >
           <Checkbox v-model="forgetAck" :binary="true" class="mt-0.5" />
           <span class="text-sm text-surface-700 dark:text-surface-300">
-            I understand this permanently deletes the review history for {{ forgetCount }} cards.
+            I understand this removes {{ forgetCount }} cards from my collection.
           </span>
         </label>
       </div>

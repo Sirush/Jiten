@@ -1199,6 +1199,7 @@ export interface DueSummaryDto {
   newCardsToday: number;
   reviewBudgetLeft: number;
   nextReviewAt: string | null;
+  hasStudyDecks: boolean;
 }
 
 export interface ReviewForecastDto {
@@ -1772,6 +1773,7 @@ export interface GrowthPoint {
   date: string;
   knownWords: number;
   knownWordsCombined: number;
+  priorKnownWords?: number;
 }
 
 export interface JourneyPoint extends GrowthPoint {
@@ -1779,6 +1781,8 @@ export interface JourneyPoint extends GrowthPoint {
   combinedCoverage: number;
   uniqueCoverage: number;
   combinedUniqueCoverage: number;
+  priorCoverage?: number;
+  priorUniqueCoverage?: number;
 }
 
 export interface JourneyMilestone {

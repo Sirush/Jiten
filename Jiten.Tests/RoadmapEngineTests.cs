@@ -860,6 +860,63 @@ public class RoadmapEngineTests
     }
 
     [Fact]
+    public void Build_EfficiencyPreference_DoesNotLetShortTitlesWinOnRateAlone()
+    {
+        // The short title teaches more per hour, but a route made of these cannot reach a goal inside the
+        // step budget. Charging every title a fixed commitment on top of its runtime is what stops the plan
+        // filling with them.
+        var snack = Timed(Deck(1, (10, 4000), (20, 40), (21, 40)), 0.5);
+
+        var longWords = new List<(int, int)> { (10, 100000) };
+        for (var w = 30; w < 50; w++) longWords.Add((w, 400));
+        var substantial = Timed(Deck(2, longWords.ToArray()), 20.0);
+
+        var known = new HashSet<long> { K(10) };
+
+        var result = RoadmapEngine.Build(Input(
+                                             Settings(s => { s.Steps = 1; s.Preference = RoadmapPreference.Efficiency; }),
+                                             [snack, substantial], known));
+
+        // Per hour the snack wins outright (1.4 vs 0.35); the fixed commitment inverts it (0.13 vs 0.28).
+        result.Steps[0].DeckId.Should().Be(2);
+    }
+
+    [Fact]
+    public void Build_GoalMode_StopsAtTheGoalStepBudget()
+    {
+        var goal = Deck(99, (1, 20), (50, 20), (51, 20), (52, 20), (53, 20));
+        var known = new HashSet<long> { K(1) };
+        var stones = new[]
+        {
+            Deck(10, (1, 90), (50, 10)),
+            Deck(11, (1, 90), (51, 10)),
+            Deck(12, (1, 90), (52, 10)),
+            Deck(13, (1, 90), (53, 10))
+        };
+
+        var settings = Settings(s =>
+        {
+            s.GoalSteps = 2;
+            s.GoalComprehensionTarget = 0.95;
+        });
+
+        var result = RoadmapEngine.Build(Input(settings, stones, known, goal: goal));
+
+        result.Steps.Should().HaveCount(2, "the budget binds before the target is reached");
+        result.GoalReached.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Definition_StoredBeforeTheGoalBudgetExisted_KeepsTheOldCeiling()
+    {
+        // Plans serialised before GoalSteps existed must not silently inherit the discovery default.
+        var roadmap = new UserRoadmap { DefinitionJson = """{"Steps":5,"ComprehensionFloor":0.8}""" };
+
+        roadmap.Definition.GoalSteps.Should().Be(RoadmapDefinition.MaxGoalSteps);
+        roadmap.Definition.Steps.Should().Be(5);
+    }
+
+    [Fact]
     public void CosineSimilarity_HandlesNullAndMismatchedVectors()
     {
         RoadmapEngine.CosineSimilarity(null, [1f, 0f]).Should().Be(0);

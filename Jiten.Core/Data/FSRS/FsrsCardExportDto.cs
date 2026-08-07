@@ -37,4 +37,14 @@ public class FsrsCardExportDto
 
     [JsonPropertyName("l")]
     public List<FsrsReviewLogExportDto> ReviewLogs { get; set; } = [];
+
+    /// <summary>Surface of the exported form, written only when the backup was asked to carry word text. Ignored on import.</summary>
+    [JsonPropertyName("t")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Text { get; set; }
+
+    /// <summary>Kana reading of <see cref="Text"/>, absent when no reading could be resolved. Ignored on import.</summary>
+    [JsonPropertyName("k")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Reading { get; set; }
 }

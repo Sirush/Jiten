@@ -2,6 +2,7 @@ using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Core;
+using Jiten.Core.Data.FSRS;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
 
@@ -270,9 +271,59 @@ public class WordReplacementService(
                   )",
                 newWordId, newReadingIndex, oldWordId, oldReadingIndex);
 
-            // Count skipped FsrsCards (users who had both)
-            result.FsrsCardsSkipped = await userContext.FsrsCards
-                .CountAsync(c => c.WordId == oldWordId && c.ReadingIndex == oldReadingIndex);
+            // Step 6b: whatever the remap skipped belongs to a user who owns both sides. The old card now points
+            // at a reading JMdict no longer has, so it is archived and dropped rather than left orphaned.
+            var orphanedCards = await userContext.FsrsCards
+                .Where(c => c.WordId == oldWordId && c.ReadingIndex == oldReadingIndex)
+                .ToListAsync();
+
+            result.FsrsCardsSkipped = orphanedCards.Count;
+
+            if (orphanedCards.Count > 0)
+            {
+                foreach (var byUser in orphanedCards.GroupBy(c => c.UserId))
+                    await CardArchiveService.ArchiveCardsAsync(userContext, byUser.Key, byUser.ToList(),
+                                                               CardArchiveReason.WordReplacementMerge);
+
+                userContext.FsrsCards.RemoveRange(orphanedCards);
+                await userContext.SaveChangesAsync();
+            }
+
+            // Step 6c: archive rows need the same remap, or they rot into (WordId, ReadingIndex) pairs that fail
+            // validation on every future restore.
+            await userContext.Database.ExecuteSqlRawAsync(@"
+                UPDATE ""user"".""FsrsCardArchives"" old
+                SET ""WordId"" = {0}, ""ReadingIndex"" = {1}
+                WHERE old.""WordId"" = {2}
+                  AND old.""ReadingIndex"" = {3}
+                  AND NOT EXISTS (
+                    SELECT 1 FROM ""user"".""FsrsCardArchives"" existing
+                    WHERE existing.""UserId"" = old.""UserId""
+                      AND existing.""WordId"" = {0}
+                      AND existing.""ReadingIndex"" = {1}
+                  )",
+                newWordId, newReadingIndex, oldWordId, oldReadingIndex);
+
+            // Step 6d: users left with a row on both sides get them merged into one.
+            var staleArchives = await userContext.FsrsCardArchives
+                .Where(a => a.WordId == oldWordId && a.ReadingIndex == oldReadingIndex)
+                .ToListAsync();
+
+            if (staleArchives.Count > 0)
+            {
+                var archiveUserIds = staleArchives.Select(a => a.UserId).Distinct().ToList();
+                var targets = await userContext.FsrsCardArchives
+                    .Where(a => a.WordId == newWordId && a.ReadingIndex == newReadingIndex
+                                && archiveUserIds.Contains(a.UserId))
+                    .ToDictionaryAsync(a => a.UserId);
+
+                foreach (var stale in staleArchives)
+                    if (targets.TryGetValue(stale.UserId, out var target))
+                        CardArchiveService.MergeArchiveRows(target, stale);
+
+                userContext.FsrsCardArchives.RemoveRange(staleArchives);
+                await userContext.SaveChangesAsync();
+            }
 
             // Step 7: Update UniqueWordCount on affected decks
             if (affectedDeckIds.Count > 0)

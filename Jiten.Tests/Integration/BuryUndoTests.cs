@@ -20,6 +20,8 @@ public class BuryUndoTests(JitenWebApplicationFactory factory)
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         await userDb.FsrsReviewLogs.ExecuteDeleteAsync();
         await userDb.FsrsCards.ExecuteDeleteAsync();
+        await userDb.FsrsCardArchives.ExecuteDeleteAsync();
+        await userDb.UserReviewDailies.ExecuteDeleteAsync();
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -53,6 +55,28 @@ public class BuryUndoTests(JitenWebApplicationFactory factory)
         (await SetState(1, "bury-add")).StatusCode.Should().Be(HttpStatusCode.OK);
 
         (await GetCard(1)).Due.Should().BeAfter(DateTime.UtcNow);
+    }
+
+    [Fact]
+    public async Task Burying_PushesPastTheDayBoundaryCutoff()
+    {
+        await SeedCard(5, DateTime.UtcNow.AddDays(-3));
+
+        (await SetState(5, "bury-add")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Day-boundary scheduling treats cards due at exactly the next midnight as still due today.
+        (await GetCard(5)).Due.Should().BeAfter(DateTime.UtcNow.Date.AddDays(1));
+    }
+
+    [Fact]
+    public async Task Burying_AnUnseenWord_CreatesNoCard()
+    {
+        (await SetState(6, "bury-add")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        (await userDb.FsrsCards.AsNoTracking().AnyAsync(c => c.UserId == TestUsers.UserA && c.WordId == 6))
+            .Should().BeFalse();
     }
 
     [Fact]

@@ -61,7 +61,13 @@
           </div>
         </div>
         <div class="flex-1 min-w-0">
-          <CoverageJourneyChart :points="journey!.points" :granularity="journey!.granularity" compact height="64px" />
+          <CoverageJourneyChart
+            :points="journey!.points"
+            :granularity="journey!.granularity"
+            compact
+            height="64px"
+            :separate-prior="jitenStore.separatePriorKnowledge"
+          />
           <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
             <span>{{ rangeStart }}</span>
             <span>Today</span>

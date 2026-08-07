@@ -31,7 +31,10 @@ public class CoverageJourneyService(
     public const string MeterName = "Jiten.Api.CoverageJourney";
 
     /// <summary>Version-suffixed: entries written before the series moved from counting cards to counting words are not comparable.</summary>
-    public const string GrowthCacheKeyPrefix = "journey:growth:v2:";
+    public const string GrowthCacheKeyPrefix = "journey:growth:v3:";
+
+    /// <summary>Version-suffixed: the cached payload gained the walk stamp the prior-knowledge split reads.</summary>
+    public const string TransitionDatesKeyPrefix = "srsdates:v2:";
 
     private static readonly Meter Meter = new(MeterName);
     private static readonly Counter<long> Requests = Meter.CreateCounter<long>("jiten.journey.requests");
@@ -53,11 +56,40 @@ public class CoverageJourneyService(
     /// <summary>The walk stops here; cards past it fall back to their last review as their first.</summary>
     private const int MaxWalkableReviews = 2_000_000;
 
+    /// <summary>
+    /// Cards declared known no further apart than this belong to one bulk action: the whole batch is written
+    /// under a single <c>DateTime.UtcNow</c>, so anything beyond a clock skew is a separate decision.
+    /// </summary>
+    private static readonly TimeSpan DeclarationClusterGap = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// What a writer must space declared cards by for each to read as its own decision rather than one batch.
+    /// <see cref="CurrentUserService"/> uses it when the user says a bulk mark-known is newly learned.
+    /// </summary>
+    public static readonly TimeSpan DistinctDeclarationSpacing = DeclarationClusterGap * 1.5;
+
+    /// <summary>
+    /// Below this, marking words known in one go is a handful ticked off while reading, which is real growth and
+    /// keeps its date. Above it the batch is a knowledge dump whose date says when the user told us, not when
+    /// they learned it, so it becomes a baseline instead of a wall in the middle of the chart.
+    /// </summary>
+    private const int PriorClusterSize = 50;
+
     private const double ParityTolerancePoints = 0.5;
     private const int DriftCheckSampleRate = 100;
     private static readonly TimeSpan ColdComputeWarningThreshold = TimeSpan.FromSeconds(2);
 
     private readonly record struct TransitionDates(DateOnly FirstReview, DateOnly? Matured);
+
+    /// <summary>
+    /// The cached review-log walk. <paramref name="WalkedAt"/> and <paramref name="Complete"/> bound what absence
+    /// from <paramref name="Dates"/> proves: only a complete walk that already covered a card's last review can
+    /// establish that the card was never reviewed at all.
+    /// </summary>
+    private sealed record ReviewWalk(Dictionary<long, TransitionDates> Dates, DateTime WalkedAt, bool Complete);
+
+    private readonly record struct CardRow(
+        long CardId, int WordId, byte ReadingIndex, FsrsState State, DateTime Due, DateTime? LastReview, DateTime CreatedAt);
 
     /// <summary>
     /// Per card, without the kana expansion: a word count must not count one card twice. DirectPairs covers every
@@ -80,7 +112,7 @@ public class CoverageJourneyService(
             return null;
 
         var stamp = await GetCoverageStampAsync(userId, ct);
-        var cacheKey = $"journey:deck:{userId}:{deckId}:{StampKey(stamp)}";
+        var cacheKey = $"journey:deck:v2:{userId}:{deckId}:{StampKey(stamp)}";
 
         var cached = await ReadJsonAsync<JourneyDto>(cacheKey);
         if (cached != null)
@@ -221,7 +253,8 @@ public class CoverageJourneyService(
     {
         var cards = await userContext.FsrsCards.AsNoTracking()
                                      .Where(c => c.UserId == userId)
-                                     .Select(c => new { c.CardId, c.WordId, c.ReadingIndex, c.State, c.Due, c.LastReview, c.CreatedAt })
+                                     .Select(c => new CardRow(
+                                                c.CardId, c.WordId, c.ReadingIndex, c.State, c.Due, c.LastReview, c.CreatedAt))
                                      .ToListAsync(ct);
 
         var byCard = new List<(int, byte, List<KnownSegment>)>(cards.Count);
@@ -230,13 +263,16 @@ public class CoverageJourneyService(
         if (cards.Count == 0)
             return new CardSegments(byCard, [], directPairs);
 
-        var dates = await GetTransitionDatesAsync(userId, ct);
+        var walk = await GetTransitionDatesAsync(userId, ct);
+        var prior = FindPriorCards(cards, walk);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         foreach (var card in cards)
         {
-            TransitionDates? cached = dates.TryGetValue(card.CardId, out var cardDates) ? cardDates : null;
-            var segments = DeriveSegments(card.State, card.Due, card.LastReview, card.CreatedAt, cached, today);
+            TransitionDates? cached = walk.Dates.TryGetValue(card.CardId, out var cardDates) ? cardDates : null;
+            List<KnownSegment> segments = prior.Contains(card.CardId)
+                ? [CoverageJourneyBuilder.Prior]
+                : DeriveSegments(card.State, card.Due, card.LastReview, card.CreatedAt, cached, today);
             if (segments.Count == 0) continue;
 
             byCard.Add((card.WordId, card.ReadingIndex, segments));
@@ -252,6 +288,50 @@ public class CoverageJourneyService(
             growthFlat.AddRange(CoverageJourneyBuilder.MergePairSegments(wordSegments));
 
         return new CardSegments(byCard, growthFlat, directPairs);
+    }
+
+    /// <summary>
+    /// Cards belonging to a bulk declaration of knowledge: known outright, never reviewed here, and created
+    /// alongside enough others to rule out a few words ticked off while reading. Only Mastered and Blacklisted
+    /// qualify, so adding a pile of new cards to a study deck is not mistaken for claiming to know them.
+    /// </summary>
+    private static HashSet<long> FindPriorCards(IReadOnlyList<CardRow> cards, ReviewWalk walk)
+    {
+        // An incomplete walk cannot show that a card was never reviewed, so nothing is reclassified.
+        if (!walk.Complete)
+            return [];
+
+        var declared = new List<(long CardId, DateTime At)>();
+        foreach (var card in cards)
+        {
+            if (card.State is not (FsrsState.Mastered or FsrsState.Blacklisted)) continue;
+            if (walk.Dates.ContainsKey(card.CardId)) continue;
+            // Reviewed since the walk ran, so its absence from the dates means nothing yet.
+            if (card.LastReview > walk.WalkedAt) continue;
+
+            declared.Add((card.CardId, card.LastReview ?? card.CreatedAt));
+        }
+
+        if (declared.Count < PriorClusterSize)
+            return [];
+
+        declared.Sort((a, b) => a.At.CompareTo(b.At));
+
+        var prior = new HashSet<long>();
+        var runStart = 0;
+        for (var i = 1; i <= declared.Count; i++)
+        {
+            if (i < declared.Count && declared[i].At - declared[i - 1].At <= DeclarationClusterGap)
+                continue;
+
+            if (i - runStart >= PriorClusterSize)
+                for (var j = runStart; j < i; j++)
+                    prior.Add(declared[j].CardId);
+
+            runStart = i;
+        }
+
+        return prior;
     }
 
     private static List<KnownSegment> DeriveSegments(
@@ -357,6 +437,11 @@ public class CoverageJourneyService(
                                    .ToListAsync(ct);
 
         var setDates = setStates.ToDictionary(s => s.SetId, s => DateOnly.FromDateTime(s.CreatedAt));
+        // Held on the same terms as a bulk card declaration: one click asserting a whole list of words.
+        var priorSets = members.GroupBy(m => m.SetId)
+                               .Where(g => g.Count() >= PriorClusterSize)
+                               .Select(g => g.Key)
+                               .ToHashSet();
 
         // A held set is mastered knowledge from the day it was taken, so it counts as mature from that date on;
         // the pair's own earlier history survives, clipped by MergePairSegments. Pairs with a direct card are
@@ -369,7 +454,9 @@ public class CoverageJourneyService(
             if (!byPair.TryGetValue(pair, out var segments))
                 byPair[pair] = segments = new List<KnownSegment>(1);
 
-            segments.Add(new KnownSegment(setDates[member.SetId], null, true));
+            segments.Add(priorSets.Contains(member.SetId)
+                             ? CoverageJourneyBuilder.Prior
+                             : new KnownSegment(setDates[member.SetId], null, true));
         }
     }
 
@@ -377,11 +464,11 @@ public class CoverageJourneyService(
     /// First review and first maturity crossing per card. Both are immutable once set, so this is cached for a
     /// week; the walk that produces it is the only place the full review log is read.
     /// </summary>
-    private async Task<Dictionary<long, TransitionDates>> GetTransitionDatesAsync(string userId, CancellationToken ct)
+    private async Task<ReviewWalk> GetTransitionDatesAsync(string userId, CancellationToken ct)
     {
-        var cacheKey = $"srsdates:{userId}";
+        var cacheKey = TransitionDatesKeyPrefix + userId;
 
-        if (memoryCache.TryGetValue(cacheKey, out Dictionary<long, TransitionDates>? l1) && l1 != null)
+        if (memoryCache.TryGetValue(cacheKey, out ReviewWalk? l1) && l1 != null)
             return l1;
 
         var cached = await ReadTransitionDatesAsync(cacheKey);
@@ -391,18 +478,21 @@ public class CoverageJourneyService(
             return cached;
         }
 
-        var dates = await ComputeTransitionDatesAsync(userId, ct);
-        await WriteTransitionDatesAsync(cacheKey, dates);
-        memoryCache.Set(cacheKey, dates, SegmentsL1Ttl);
-        return dates;
+        var walk = await ComputeTransitionDatesAsync(userId, ct);
+        await WriteTransitionDatesAsync(cacheKey, walk);
+        memoryCache.Set(cacheKey, walk, SegmentsL1Ttl);
+        return walk;
     }
 
     /// <summary>
     /// Streamed in one ordered pass, counting as it goes: a separate COUNT to decide whether the walk is
     /// affordable would itself be a full scan of the rows it is guarding against.
     /// </summary>
-    private async Task<Dictionary<long, TransitionDates>> ComputeTransitionDatesAsync(string userId, CancellationToken ct)
+    private async Task<ReviewWalk> ComputeTransitionDatesAsync(string userId, CancellationToken ct)
     {
+        // Stamped before the first row is read, so a review landing mid-walk is never taken as covered.
+        var walkedAt = DateTime.UtcNow;
+
         var logs = (from log in userContext.FsrsReviewLogs.AsNoTracking()
                     join card in userContext.FsrsCards.AsNoTracking() on log.CardId equals card.CardId
                     where card.UserId == userId
@@ -450,7 +540,7 @@ public class CoverageJourneyService(
         if (overrun)
             logger.LogWarning("Stopped the maturity walk for {UserId} at {ReviewCount} reviews", userId, MaxWalkableReviews);
 
-        return dates;
+        return new ReviewWalk(dates, walkedAt, !overrun);
 
         void Flush()
         {
@@ -536,7 +626,10 @@ public class CoverageJourneyService(
         }
     }
 
-    private async Task<Dictionary<long, TransitionDates>?> ReadTransitionDatesAsync(string key)
+    /// <summary>The walk stamp and completeness lead the flat payload; card triples follow.</summary>
+    private const int TransitionDatesHeaderLength = 2;
+
+    private async Task<ReviewWalk?> ReadTransitionDatesAsync(string key)
     {
         try
         {
@@ -545,14 +638,17 @@ public class CoverageJourneyService(
                 return null;
 
             var flat = MessagePackSerializer.Deserialize<long[]>((byte[])cached!, MapOptions);
-            var dates = new Dictionary<long, TransitionDates>(flat.Length / 3);
-            for (var i = 0; i + 2 < flat.Length; i += 3)
+            if (flat.Length < TransitionDatesHeaderLength)
+                return null;
+
+            var dates = new Dictionary<long, TransitionDates>((flat.Length - TransitionDatesHeaderLength) / 3);
+            for (var i = TransitionDatesHeaderLength; i + 2 < flat.Length; i += 3)
             {
                 var matured = flat[i + 2] < 0 ? (DateOnly?)null : DateOnly.FromDayNumber((int)flat[i + 2]);
                 dates[flat[i]] = new TransitionDates(DateOnly.FromDayNumber((int)flat[i + 1]), matured);
             }
 
-            return dates;
+            return new ReviewWalk(dates, new DateTime(flat[0], DateTimeKind.Utc), flat[1] != 0);
         }
         catch (Exception ex)
         {
@@ -561,13 +657,16 @@ public class CoverageJourneyService(
         }
     }
 
-    private async Task WriteTransitionDatesAsync(string key, Dictionary<long, TransitionDates> dates)
+    private async Task WriteTransitionDatesAsync(string key, ReviewWalk walk)
     {
         try
         {
-            var flat = new long[dates.Count * 3];
-            var i = 0;
-            foreach (var (cardId, value) in dates)
+            var flat = new long[TransitionDatesHeaderLength + walk.Dates.Count * 3];
+            flat[0] = walk.WalkedAt.Ticks;
+            flat[1] = walk.Complete ? 1 : 0;
+
+            var i = TransitionDatesHeaderLength;
+            foreach (var (cardId, value) in walk.Dates)
             {
                 flat[i++] = cardId;
                 flat[i++] = value.FirstReview.DayNumber;

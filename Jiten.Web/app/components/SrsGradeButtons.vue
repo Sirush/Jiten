@@ -13,6 +13,7 @@
     showKeybinds?: boolean;
     showSwipeHints?: boolean;
     disabled?: boolean;
+    isNewCard?: boolean;
     pressedKey?: string | null;
     compact?: boolean;
     // Timed review: the "Again" grade is armed (about to auto-fire); seconds left on the grace countdown.
@@ -250,6 +251,7 @@
       <Popover ref="morePopover" :pt="{ content: { class: 'p-1' } }">
         <div class="flex flex-col gap-1 min-w-[140px]">
           <button
+            v-if="!isNewCard"
             :disabled="props.disabled"
             class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left disabled:opacity-80"
             @click="emit('bury'); morePopover?.hide()"
