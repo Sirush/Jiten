@@ -28,7 +28,8 @@
   const renewalLabel = computed(() => {
     const s = sources.value;
     if (!s || s.isLifetime || !s.subscriptionActive || !s.periodEnd) return null;
-    return `Renews ${new Date(s.periodEnd).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    const date = new Date(s.periodEnd).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    return s.cancelAtPeriodEnd ? `Access until ${date}` : `Renews ${date}`;
   });
 
   const trialDaysLabel = computed(() => {

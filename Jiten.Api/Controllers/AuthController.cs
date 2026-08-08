@@ -8,6 +8,7 @@ using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
+using Jiten.Core.Data;
 using Jiten.Core.Data.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -38,6 +39,7 @@ public class AuthController : ControllerBase
     private readonly ILogger<AuthController> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IUserActivityTracker _activityTracker;
+    private readonly Microsoft.Extensions.Options.IOptions<Services.Legal.LegalDocumentsOptions> _legalOptions;
 
     private static readonly TimeSpan EmailRequestCooldown = TimeSpan.FromMinutes(15);
 
@@ -54,8 +56,10 @@ public class AuthController : ControllerBase
         ApiKeyService apiKeyService,
         ILogger<AuthController> logger,
         IHttpClientFactory httpClientFactory,
-        IUserActivityTracker activityTracker)
+        IUserActivityTracker activityTracker,
+        Microsoft.Extensions.Options.IOptions<Services.Legal.LegalDocumentsOptions> legalOptions)
     {
+        _legalOptions = legalOptions;
         _userManager = userManager;
         _signInManager = signInManager;
         _roleManager = roleManager;
@@ -115,6 +119,7 @@ public class AuthController : ControllerBase
         }
 
         await _userManager.AddToRoleAsync(user, nameof(UserRole.User));
+        await RecordRegistrationTosAcceptanceAsync(user);
 
         var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
@@ -542,6 +547,7 @@ public class AuthController : ControllerBase
         }
 
         await _userManager.AddToRoleAsync(user, nameof(UserRole.User));
+        await RecordRegistrationTosAcceptanceAsync(user);
 
         // Clear the cache
         _memoryCache.Remove($"google_registration_{request.TempToken}");
@@ -551,6 +557,30 @@ public class AuthController : ControllerBase
         await _activityTracker.BumpAsync(user.Id);
         _logger.LogInformation("User registered via Google: UserId={UserId}, Username={Username}", user.Id, user.UserName);
         return Ok(tokens);
+    }
+
+    /// <summary>Version-stamped acceptance evidence; a failure must not undo an already-created account.</summary>
+    private async Task RecordRegistrationTosAcceptanceAsync(User user)
+    {
+        try
+        {
+            _context.UserLegalDocumentStates.Add(new UserLegalDocumentState
+            {
+                UserId = user.Id,
+                Document = LegalDocument.Cgu,
+                Version = _legalOptions.Value.CguVersion,
+                NoticeShownAt = user.TosAcceptedAt,
+                AcceptedAt = user.TosAcceptedAt,
+                Source = LegalAcceptanceSource.Registration
+            });
+            await _context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            // Clear the failed entity so a later save in the same request (e.g. refresh token) isn't poisoned.
+            _context.ChangeTracker.Clear();
+            _logger.LogError(ex, "Failed to record registration ToS acceptance for user {UserId}", user.Id);
+        }
     }
 
     private async Task<bool> ValidateRecaptcha(string recaptchaToken)

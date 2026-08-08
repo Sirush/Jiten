@@ -396,6 +396,8 @@ builder.Services.Configure<Jiten.Core.Services.JitenPlusLimitsOptions>(
 builder.Services.AddScoped<IUserLimitsService, UserLimitsService>();
 builder.Services.AddSingleton<IBillingAlertService, BillingAlertService>();
 builder.Services.Configure<Jiten.Api.Services.Stripe.StripeOptions>(builder.Configuration.GetSection("Stripe"));
+builder.Services.Configure<Jiten.Api.Services.Legal.LegalDocumentsOptions>(
+    builder.Configuration.GetSection(Jiten.Api.Services.Legal.LegalDocumentsOptions.SectionName));
 builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Api.Services.Stripe.StripeGateway>();
 builder.Services.AddScoped<Jiten.Api.Services.Stripe.StripeService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
@@ -694,6 +696,7 @@ builder.Services.AddScoped<ReviewRollupJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
 builder.Services.AddScoped<RecomputeVectorsJob>();
 builder.Services.AddScoped<StripeReconcileJob>();
+builder.Services.AddScoped<RenewalReminderJob>();
 builder.Services.AddScoped<DecrementPromoCreditsJob>();
 builder.Services.AddScoped<FrequencyListJob>();
 builder.Services.AddScoped<RoadmapJob>();
@@ -870,6 +873,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         "stripe-reconcile",
         job => job.Reconcile(),
         Cron.Daily(6));
+
+    recurringJobs.AddOrUpdate<RenewalReminderJob>(
+        "renewal-reminder",
+        job => job.Run(),
+        Cron.Daily(7));
 
     recurringJobs.AddOrUpdate<DecrementPromoCreditsJob>(
         "promo-credits-decrement",

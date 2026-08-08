@@ -147,6 +147,16 @@
           </div>
         </template>
       </Card>
+
+      <Card class="shadow-md">
+        <template #title>Legal Notices</template>
+        <template #content>
+          <p class="mb-4">Preview and send the terms-change notice to paid subscribers</p>
+          <div class="flex justify-center">
+            <Button label="Manage Notices" icon="pi pi-envelope" class="p-button-primary" @click="navigateTo('/dashboard/legal-notices')" />
+          </div>
+        </template>
+      </Card>
     </div>
   </div>
 </template>

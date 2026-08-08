@@ -20,6 +20,7 @@ export interface PromoCreditInfo {
 
 export interface JitenPlusSources {
   subscriptionActive: boolean;
+  cancelAtPeriodEnd: boolean;
   plan: string | null;
   periodEnd: string | null;
   isLifetime: boolean;

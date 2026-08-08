@@ -21,6 +21,7 @@ public class User : IdentityUser
     public string? StripeCustomerId { get; set; }
     public bool StripeSubscriptionActive { get; set; }
     public string? StripeSubscriptionId { get; set; }
+    public bool StripeCancelAtPeriodEnd { get; set; }
     public DateTime? SubscriptionPeriodEnd { get; set; }
     public SubscriptionPlan? SubscriptionPlan { get; set; }
     public bool IsLifetime { get; set; }

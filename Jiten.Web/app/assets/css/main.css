@@ -289,3 +289,81 @@ html.dark-mode .prose .shiki span {
 @media (prefers-reduced-motion: reduce) {
     .list-anchor-flash { animation: none; }
 }
+
+/* Shared typography for the legal document pages (/mentions-legales, /terms, /cgv and variants). */
+.legal-doc .section-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e5e7eb;
+    color: #111827;
+}
+
+.dark-mode .legal-doc .section-title {
+    border-bottom-color: #374151;
+    color: #f3f4f6;
+}
+
+.legal-doc .detail-list {
+    list-style: none;
+    margin: 0 0 1rem 0.25rem;
+    padding: 0;
+}
+
+.legal-doc .detail-list li {
+    margin-bottom: 0.25rem;
+}
+
+.legal-doc p {
+    margin-bottom: 1rem;
+}
+
+.legal-doc ul:not(.detail-list) {
+    list-style: disc;
+    margin: 0 0 1rem 1.5rem;
+    padding: 0;
+}
+
+.legal-doc ul:not(.detail-list) li {
+    margin-bottom: 0.5rem;
+}
+
+.legal-doc a {
+    color: #2563eb;
+}
+
+.legal-doc a:hover {
+    text-decoration: underline;
+}
+
+.dark-mode .legal-doc a {
+    color: #60a5fa;
+}
+
+.legal-doc table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+}
+
+.legal-doc th,
+.legal-doc td {
+    border: 1px solid #e5e7eb;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+}
+
+.legal-doc th {
+    font-weight: 600;
+    background-color: #f9fafb;
+}
+
+.dark-mode .legal-doc th,
+.dark-mode .legal-doc td {
+    border-color: #374151;
+}
+
+.dark-mode .legal-doc th {
+    background-color: #1f2937;
+}

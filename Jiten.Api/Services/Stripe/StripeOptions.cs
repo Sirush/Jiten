@@ -17,6 +17,13 @@ public class StripeOptions
     /// <summary>Lifetime sticker price in whole cents (tax-inclusive) — the ceiling on any upgrade credit.</summary>
     public long LifetimePriceCents { get; set; } = 15000;
 
+    // Sticker prices restated in confirmation/reminder emails (CGV arts. 5.4, 7.2); the Stripe Dashboard is the authority.
+    public long MonthlyPriceCents { get; set; } = 500;
+    public long YearlyPriceCents { get; set; } = 5000;
+
+    public long PriceCentsForPlan(SubscriptionPlan? plan) =>
+        plan == SubscriptionPlan.Yearly ? YearlyPriceCents : MonthlyPriceCents;
+
     /// <summary>Maps a Stripe price id to the local plan, or null if it matches neither subscription price.</summary>
     public SubscriptionPlan? PlanForPriceId(string? priceId)
     {

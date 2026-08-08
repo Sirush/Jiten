@@ -2,6 +2,7 @@
   import type { JitenPlusPricingInfo } from '~/types';
   import { useToast } from 'primevue/usetoast';
   import { useAuthStore } from '~/stores/authStore';
+  import { useLegalStore } from '~/stores/legalStore';
 
   const props = defineProps<{
     pricing: JitenPlusPricingInfo | null;
@@ -9,6 +10,7 @@
 
   const { $api } = useNuxtApp();
   const auth = useAuthStore();
+  const legal = useLegalStore();
   const toast = useToast();
 
   const { isFull, sources } = useJitenPlus();
@@ -28,8 +30,39 @@
 
   const checkingOut = ref<string | null>(null);
 
-  async function subscribe(plan: 'monthly' | 'yearly' | 'lifetime') {
+  type Plan = 'monthly' | 'yearly' | 'lifetime';
+
+  // A sale needs recorded acceptance of the Terms of Sale; the API refuses checkout without it.
+  const consentPlan = ref<Plan | null>(null);
+  const consentTicked = ref(false);
+  const consentEl = ref<HTMLElement | null>(null);
+
+  async function subscribe(plan: Plan) {
     if (checkingOut.value) return;
+    await legal.ensure();
+    if (!legal.cgvAccepted) {
+      consentPlan.value = plan;
+      await nextTick();
+      consentEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    await startCheckout(plan);
+  }
+
+  async function confirmConsentAndCheckout() {
+    if (!consentTicked.value || !consentPlan.value || checkingOut.value) return;
+    const plan = consentPlan.value;
+    try {
+      await legal.acceptCgv();
+    } catch {
+      toast.add({ severity: 'error', summary: 'Something went wrong', detail: 'Could not record your acceptance. Please try again.', life: 6000 });
+      return;
+    }
+    consentPlan.value = null;
+    await startCheckout(plan);
+  }
+
+  async function startCheckout(plan: Plan) {
     checkingOut.value = plan;
     try {
       const result = await $api<{ url: string }>('/stripe/checkout', {
@@ -39,8 +72,14 @@
       window.location.href = result.url;
     } catch (e) {
       const error = (e as { data?: { error?: string } })?.data?.error || 'Could not start checkout. Please try again.';
-      toast.add({ severity: 'error', summary: 'Checkout unavailable', detail: error, life: 6000 });
       checkingOut.value = null;
+      if (error === 'cgv-acceptance-required') {
+        consentPlan.value = plan;
+        await nextTick();
+        consentEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      toast.add({ severity: 'error', summary: 'Checkout unavailable', detail: error, life: 6000 });
     }
   }
 </script>
@@ -51,7 +90,7 @@
       <!-- Monthly -->
       <div class="jp-card border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
         <h2 class="jp-card__name text-gray-900 dark:text-white">Monthly</h2>
-        <div class="jp-card__price"><span class="jp-card__amount text-primary-600 dark:text-primary-300">€5</span><span class="jp-card__period text-gray-500 dark:text-gray-400">/ month</span></div>
+        <div class="jp-card__price"><span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.monthlyEur }}</span><span class="jp-card__period text-gray-500 dark:text-gray-400">/ month</span></div>
         <p class="jp-card__blurb text-gray-600 dark:text-gray-300">Stay flexible. Cancel anytime.</p>
         <ul class="jp-card__notes text-gray-600 dark:text-gray-300">
           <li>
@@ -74,7 +113,7 @@
       <div class="jp-card jp-card--featured border border-primary-400 bg-white dark:border-primary-500 dark:bg-gray-900">
         <span class="jp-card__ribbon">Best value · 2 months free</span>
         <h2 class="jp-card__name text-gray-900 dark:text-white">Yearly</h2>
-        <div class="jp-card__price"><span class="jp-card__amount text-primary-600 dark:text-primary-300">€50</span><span class="jp-card__period text-gray-500 dark:text-gray-400">/ year</span></div>
+        <div class="jp-card__price"><span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.yearlyEur }}</span><span class="jp-card__period text-gray-500 dark:text-gray-400">/ year</span></div>
         <p class="jp-card__blurb text-gray-600 dark:text-gray-300">A full year for the price of 10 months.</p>
         <ul class="jp-card__notes text-gray-600 dark:text-gray-300">
           <li>
@@ -101,7 +140,7 @@
       >
         <span v-if="showLifetimeNotice" class="jp-card__ribbon jp-card__ribbon--amber">Limited offer · until {{ lifetimeWindowEndLabel }}</span>
         <h2 class="jp-card__name text-gray-900 dark:text-white">Lifetime</h2>
-        <div class="jp-card__price"><span class="jp-card__amount text-primary-600 dark:text-primary-300">€150</span><span class="jp-card__period text-gray-500 dark:text-gray-400">once</span></div>
+        <div class="jp-card__price"><span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.lifetimeEur }}</span><span class="jp-card__period text-gray-500 dark:text-gray-400">once</span></div>
         <p class="jp-card__blurb text-gray-600 dark:text-gray-300">Pay once, access Jiten+ forever.</p>
 
         <template v-if="isFull && isLifetime">
@@ -127,6 +166,31 @@
         </template>
       </div>
     </section>
+
+    <div
+      v-if="consentPlan"
+      ref="consentEl"
+      class="max-w-xl mx-auto mt-5 rounded-lg border border-primary-300 dark:border-primary-700 bg-white dark:bg-gray-900 p-4 shadow-sm"
+    >
+      <p class="text-sm font-medium text-gray-900 dark:text-white">One step before checkout</p>
+      <div class="mt-2 flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+        <Checkbox v-model="consentTicked" binary input-id="cgv-consent" />
+        <label for="cgv-consent" class="cursor-pointer select-none">
+          I have read and accept the
+          <NuxtLink to="/cgv" target="_blank" class="underline hover:text-primary-600 dark:hover:text-primary-400">Terms of Sale</NuxtLink>
+          <template v-if="legal.cgvVersion"> (version {{ legal.cgvVersion }})</template>
+          — <NuxtLink to="/cgv-fr" target="_blank" class="underline hover:text-primary-600 dark:hover:text-primary-400">version française</NuxtLink>
+        </label>
+      </div>
+      <Button
+        :label="`Continue to ${consentPlan} checkout`"
+        class="w-full mt-3 capitalize"
+        :disabled="!consentTicked"
+        :loading="!!checkingOut"
+        @click="confirmConsentAndCheckout"
+      />
+    </div>
+
     <p class="text-center text-sm text-gray-600 dark:text-gray-300 mt-4">
       Cancel anytime. Cards, uploads, and lists are never deleted.
     </p>

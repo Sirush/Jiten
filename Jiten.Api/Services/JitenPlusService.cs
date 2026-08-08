@@ -35,6 +35,7 @@ public class JitenPlusService(UserDbContext userContext, IMemoryCache cache) : I
                                     .Select(u => new
                                     {
                                         u.StripeSubscriptionActive,
+                                        u.StripeCancelAtPeriodEnd,
                                         u.SubscriptionPlan,
                                         u.SubscriptionPeriodEnd,
                                         u.IsLifetime,
@@ -45,7 +46,7 @@ public class JitenPlusService(UserDbContext userContext, IMemoryCache cache) : I
 
         if (user is null)
         {
-            return new JitenPlusStatus(JitenPlusTier.None, false, null, null, false, null, 0, [], false);
+            return new JitenPlusStatus(JitenPlusTier.None, false, false, null, null, false, null, 0, [], false);
         }
 
         // GrantsFullTier is denormalised onto the credit (copied from the code at redemption, or set on an
@@ -75,6 +76,7 @@ public class JitenPlusService(UserDbContext userContext, IMemoryCache cache) : I
         return new JitenPlusStatus(
             tier,
             JitenPlusTierResolver.IsSubscriptionActive(input, now),
+            user.StripeCancelAtPeriodEnd,
             user.SubscriptionPlan,
             user.SubscriptionPeriodEnd,
             user.IsLifetime,

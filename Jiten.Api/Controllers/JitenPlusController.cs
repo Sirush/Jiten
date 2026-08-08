@@ -81,6 +81,7 @@ public class JitenPlusController(
             sources = new
             {
                 subscriptionActive = status.SubscriptionActive,
+                cancelAtPeriodEnd = status.CancelAtPeriodEnd,
                 plan = status.Plan?.ToString(),
                 periodEnd = status.PeriodEnd,
                 isLifetime = status.IsLifetime,

@@ -7,8 +7,10 @@ Disallow: /dashboard/
 Disallow: /dashboard/*
 Disallow: /vocabulary/*
 Disallow: /confirm-email
+Disallow: /confirm-email-change
 Disallow: /login-success
 Disallow: /reset-password
+Disallow: /settings
 Disallow: /settings/*
 Disallow: /google-registration
 Disallow: /profile
@@ -20,8 +22,10 @@ Disallow: /register
 Disallow: /forgot-password
 Disallow: /notifications
 Disallow: /parse
-Disallow: /requests/new
-Disallow: /ratings/history
+Disallow: /requests
+Disallow: /requests/*
+Disallow: /ratings
+Disallow: /ratings/*
 Allow: /decks/media/*/detail
 Allow: /decks/media/list/*
 Allow: /decks/media/*/stats

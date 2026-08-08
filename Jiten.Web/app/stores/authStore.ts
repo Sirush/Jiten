@@ -5,6 +5,7 @@ import type { CompleteGoogleRegistrationRequest, GoogleSignInResponse, GoogleReg
 import { TabSyncManager } from '~/utils/tabSync';
 import { CookieMonitor } from '~/utils/cookieMonitor';
 import { useSrsStore } from '~/stores/srsStore';
+import { useLegalStore } from '~/stores/legalStore';
 
 const dbg = (...args: unknown[]) => {
   if (import.meta.dev) console.log(...args);
@@ -123,6 +124,7 @@ export const useAuthStore = defineStore('auth', () => {
     refreshTokenCookie.value = null;
 
     useJitenPlus().reset();
+    useLegalStore().reset();
   }
 
   // Check if token is expired or about to expire (within 5 minutes)

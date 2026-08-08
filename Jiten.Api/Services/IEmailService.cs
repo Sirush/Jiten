@@ -13,10 +13,16 @@ public interface IEmailService
     Task SendPasswordSetNoticeAsync(string email);
 
     // Jiten+ billing
-    Task SendSubscriptionConfirmedAsync(string? email, SubscriptionPlan? plan);
+    Task SendSubscriptionConfirmedAsync(string? email, SubscriptionPlan? plan, DateTime? renewsAt, long amountCents, string cgvVersion);
     Task SendSubscriptionPaymentFailedAsync(string? email);
     Task SendSubscriptionEndedAsync(string? email);
-    Task SendLifetimeConfirmedAsync(string? email);
+    Task SendLifetimeConfirmedAsync(string? email, long amountCents, string cgvVersion);
+
+    /// <summary>L215-1 yearly renewal reminder (CGV art. 7.2).</summary>
+    Task SendRenewalReminderAsync(string? email, DateTime renewalDate, long amountCents);
+
+    /// <summary>CGV art. 12.2 written notice that updated terms apply from the subscriber's next renewal.</summary>
+    Task SendTermsChangeNoticeAsync(string? email, DateTime renewalDate, string cgvVersion);
 
     // Jiten+ promo codes & grants
     Task SendPromoRedeemedAsync(string? email, int days, bool grantsFullTier);

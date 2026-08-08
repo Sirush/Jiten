@@ -64,13 +64,26 @@ public class EmailService : IEmailSender, IEmailService
                              "<br/>If this wasn't you, please reset your password immediately.");
     }
 
-    public async Task SendSubscriptionConfirmedAsync(string? email, Jiten.Core.Data.Billing.SubscriptionPlan? plan)
+    // The billing confirmations restate the sale on a durable medium as CGV art. 5.4 requires: plan, amount,
+    // frequency, renewal or access date, the art. 9.2 declaration given at checkout, and the CGV version accepted.
+    public async Task SendSubscriptionConfirmedAsync(string? email, Jiten.Core.Data.Billing.SubscriptionPlan? plan, DateTime? renewsAt,
+                                                     long amountCents, string cgvVersion)
     {
         if (string.IsNullOrEmpty(email)) return;
-        var planName = plan == Jiten.Core.Data.Billing.SubscriptionPlan.Yearly ? "yearly" : "monthly";
+        var yearly = plan == Jiten.Core.Data.Billing.SubscriptionPlan.Yearly;
+        var planName = yearly ? "yearly" : "monthly";
+        var renewalLine = renewsAt.HasValue
+            ? $"<br/>Renews automatically on {renewsAt.Value:d MMMM yyyy}, then {(yearly ? "every 12 months" : "every month")}, until cancelled."
+            : $"<br/>Renews automatically {(yearly ? "every 12 months" : "every month")} until cancelled.";
         await SendEmailAsync(email, "Jiten+ - Subscription confirmed",
                              $"Your Jiten+ {planName} subscription is active. Thank you for supporting Jiten." +
-                             "<br/>You can manage or cancel your subscription any time from your account settings.");
+                             $"<br/><br/>Plan: Jiten+ {planName} — {FormatEur(amountCents)} {(yearly ? "per year" : "per month")}." +
+                             renewalLine +
+                             "<br/><br/>At checkout you gave the express declaration that you request immediate access to Jiten+ " +
+                             "and acknowledge losing your 14-day right of withdrawal once access begins (Terms of Sale, article 9)." +
+                             $"<br/>The Terms of Sale you accepted (version {cgvVersion}): {SiteUrl}/cgv" +
+                             $"<br/><br/>You can manage or cancel your subscription any time at {SiteUrl}/settings/subscription. " +
+                             "Cancellation takes effect at the end of the paid period, and Jiten+ stays fully available until then.");
     }
 
     public async Task SendSubscriptionPaymentFailedAsync(string? email)
@@ -90,20 +103,61 @@ public class EmailService : IEmailSender, IEmailService
                              "<br/>Anything you stored while subscribed is kept safe, and you can resubscribe any time from your account settings.");
     }
 
-    public async Task SendLifetimeConfirmedAsync(string? email)
+    public async Task SendLifetimeConfirmedAsync(string? email, long amountCents, string cgvVersion)
     {
         if (string.IsNullOrEmpty(email)) return;
         await SendEmailAsync(email, "Jiten+ - Lifetime access confirmed",
                              "Your Jiten+ lifetime access is now active. Thank you for supporting Jiten." +
-                             "<br/>Lifetime access is tied to this account and never expires.");
+                             $"<br/><br/>Purchase: Jiten+ lifetime — {FormatEur(amountCents)}, one-time payment, no renewal. " +
+                             "If an upgrade credit from a running subscription applied, your Stripe receipt shows the exact amount charged." +
+                             "<br/>Lifetime access is tied to this account and never expires." +
+                             "<br/><br/>At checkout you gave the express declaration that you request immediate access to Jiten+ " +
+                             "and acknowledge losing your 14-day right of withdrawal once access begins (Terms of Sale, article 9)." +
+                             $"<br/>The Terms of Sale you accepted (version {cgvVersion}): {SiteUrl}/cgv");
     }
+
+    public async Task SendRenewalReminderAsync(string? email, DateTime renewalDate, long amountCents)
+    {
+        if (string.IsNullOrEmpty(email)) return;
+        await SendEmailAsync(email, $"Jiten+ - Your yearly plan renews on {renewalDate:d MMMM yyyy}",
+                             $"Your Jiten+ yearly subscription renews automatically on {renewalDate:d MMMM yyyy} for {FormatEur(amountCents)}." +
+                             $"<br/><br/>If you do not wish to renew, cancel any time before that date at {SiteUrl}/settings/subscription — " +
+                             "online, in a minute, no contact with support needed. Cancellation takes effect at the end of the paid " +
+                             "period, and Jiten+ stays fully available until then." +
+                             "<br/>If you are happy to continue, there is nothing to do." +
+                             "<br/><br/>This reminder is sent in accordance with article L215-1 of the French Consumer Code " +
+                             "(Terms of Sale, article 7.2).");
+    }
+
+    /// <summary>Exposed separately so the admin dashboard can preview the exact email before sending.</summary>
+    public static (string Subject, string Html) BuildTermsChangeNotice(DateTime renewalDate, string cgvVersion) =>
+        ("Jiten+ - Updated Terms of Sale",
+         $"We have published updated Terms of Sale for Jiten+ (version {cgvVersion}): {SiteUrl}/cgv" +
+         $"<br/><br/>They apply to your subscription from your next renewal, on {renewalDate:d MMMM yyyy}. " +
+         "Until then, nothing changes." +
+         "<br/>They cover renewal, cancellation, refunds, your right of withdrawal, and a free consumer " +
+         "mediator you can turn to if we cannot resolve a complaint. Nothing changes about what you pay or what you get." +
+         $"<br/><br/>If you do not accept them, you can cancel free of charge before the renewal at " +
+         $"{SiteUrl}/settings/subscription. Your access continues to the end of the paid period, and nothing " +
+         "you uploaded is ever deleted." +
+         "<br/><br/>This notice is sent in accordance with article 12.4 of the Terms of Sale.");
+
+    public async Task SendTermsChangeNoticeAsync(string? email, DateTime renewalDate, string cgvVersion)
+    {
+        if (string.IsNullOrEmpty(email)) return;
+        var (subject, html) = BuildTermsChangeNotice(renewalDate, cgvVersion);
+        await SendEmailAsync(email, subject, html);
+    }
+
+    private static string FormatEur(long cents) =>
+        cents % 100 == 0 ? $"{cents / 100} EUR" : $"{cents / 100m:0.00} EUR";
 
     public async Task SendPromoRedeemedAsync(string? email, int days, bool grantsFullTier)
     {
         if (string.IsNullOrEmpty(email)) return;
         var tierLine = grantsFullTier
             ? "This unlocks Jiten+ in full."
-            : "This unlocks the Jiten+ trial containing everything except the features that permanently store data (like image and audio upload).";
+            : "This unlocks the Jiten+ trial: every Jiten+ feature, with a smaller storage allowance for card images and audio.";
         await SendEmailAsync(email, "Jiten+ - Code redeemed",
                              $"Your code is active: you now have {days} day{(days == 1 ? "" : "s")} of Jiten+." +
                              $"<br/>{tierLine}" +

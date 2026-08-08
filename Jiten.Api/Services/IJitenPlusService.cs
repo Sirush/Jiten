@@ -13,6 +13,7 @@ public record PromoCreditInfo(
 public record JitenPlusStatus(
     JitenPlusTier Tier,
     bool SubscriptionActive,
+    bool CancelAtPeriodEnd,
     SubscriptionPlan? Plan,
     DateTime? PeriodEnd,
     bool IsLifetime,

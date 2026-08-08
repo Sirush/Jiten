@@ -29,12 +29,14 @@ public class StripeService(
     IMemoryCache cache,
     IBillingAlertService alerts,
     IOptions<StripeOptions> options,
+    IOptions<Legal.LegalDocumentsOptions> legalOptions,
     ILogger<StripeService> logger)
 {
     private const string SiteUrl = "https://jiten.moe";
     private const string Currency = "eur";
 
     private readonly StripeOptions _options = options.Value;
+    private readonly Legal.LegalDocumentsOptions _legalOptions = legalOptions.Value;
 
     public async Task<CheckoutOutcome> CreateCheckoutAsync(string userId, CheckoutPlan plan, CancellationToken ct = default)
     {
@@ -245,7 +247,7 @@ public class StripeService(
             return; // already applied — idempotent
 
         await GrantLifetimeAsync(user, LifetimeSource.WindowPurchase, ct);
-        await SafeSend(() => emails.SendLifetimeConfirmedAsync(user.Email));
+        await SafeSend(() => emails.SendLifetimeConfirmedAsync(user.Email, _options.LifetimePriceCents, _legalOptions.CgvVersion));
     }
 
     private async Task HandleSubscriptionCheckoutAsync(User user, StripeWebhookEvent evt, CancellationToken ct)
@@ -257,7 +259,9 @@ public class StripeService(
         await userContext.SaveChangesAsync(ct);
 
         if (!wasActive)
-            await SafeSend(() => emails.SendSubscriptionConfirmedAsync(user.Email, user.SubscriptionPlan));
+            await SafeSend(() => emails.SendSubscriptionConfirmedAsync(user.Email, user.SubscriptionPlan, user.SubscriptionPeriodEnd,
+                                                                       _options.PriceCentsForPlan(user.SubscriptionPlan),
+                                                                       _legalOptions.CgvVersion));
     }
 
     private async Task HandleSubscriptionUpdatedAsync(User user, StripeWebhookEvent evt, CancellationToken ct)
@@ -274,6 +278,7 @@ public class StripeService(
 
         var wasActive = user.StripeSubscriptionActive;
         user.StripeSubscriptionActive = false;
+        user.StripeCancelAtPeriodEnd = false;
 
         // Clamp the stored period end to when the subscription actually ended. A normal end-of-period
         // cancellation ends at the period end (unchanged → the 3-day grace still applies); an immediate
@@ -304,6 +309,7 @@ public class StripeService(
         }
 
         user.StripeSubscriptionActive = StripeOptions.IsActiveStatus(snapshot.Status);
+        user.StripeCancelAtPeriodEnd = snapshot.CancelAtPeriodEnd;
         if (snapshot.CurrentPeriodEnd.HasValue)
             user.SubscriptionPeriodEnd = snapshot.CurrentPeriodEnd;
 
@@ -340,7 +346,10 @@ public class StripeService(
             // the state change). Log and move on.
             BillingTelemetry.EmailFailed.Add(1);
             logger.LogError(ex, "Failed to send a Jiten+ billing email");
-            await alerts.RaiseAsync("billing-email", "Jiten+ billing email failed to send", ex.Message);
+            // The alert is pushed to Discord; SMTP error messages can contain the recipient address, and the
+            // privacy policy promises no email addresses leave our infrastructure. Full detail is in the log.
+            await alerts.RaiseAsync("billing-email", "Jiten+ billing email failed to send",
+                                    $"{ex.GetType().Name} — see the server log for details.");
         }
     }
 }

@@ -57,6 +57,7 @@ public class StripeWebhookHandlingTests : IDisposable
         });
 
         _service = new StripeService(_gateway, _context, _jitenPlus, _emails, _cache, _alerts, stripeOptions,
+                                     Options.Create(new Jiten.Api.Services.Legal.LegalDocumentsOptions()),
                                      NullLogger<StripeService>.Instance);
     }
 

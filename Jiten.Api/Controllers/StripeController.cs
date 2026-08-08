@@ -1,8 +1,13 @@
 using Jiten.Api.Services;
+using Jiten.Api.Services.Legal;
 using Jiten.Api.Services.Stripe;
+using Jiten.Core;
+using Jiten.Core.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Stripe;
 
 namespace Jiten.Api.Controllers;
@@ -15,6 +20,8 @@ public class StripeController(
     IStripeGateway gateway,
     ICurrentUserService currentUserService,
     IBillingAlertService alerts,
+    UserDbContext userContext,
+    IOptions<LegalDocumentsOptions> legalOptions,
     ILogger<StripeController> logger) : ControllerBase
 {
     public record CheckoutRequest(string Plan);
@@ -30,6 +37,14 @@ public class StripeController(
 
         if (!TryParsePlan(request.Plan, out var plan))
             return Results.BadRequest(new { error = "Unknown plan. Expected monthly, yearly or lifetime." });
+
+        // A sale needs recorded CGV acceptance (evidence for CGV art. 5.3); the pricing page collects it inline.
+        var cgvVersion = legalOptions.Value.CgvVersion;
+        var cgvAccepted = await userContext.UserLegalDocumentStates
+                                           .AnyAsync(s => s.UserId == userId && s.Document == LegalDocument.Cgv &&
+                                                          s.Version == cgvVersion && s.AcceptedAt != null);
+        if (!cgvAccepted)
+            return Results.Conflict(new { error = "cgv-acceptance-required", version = cgvVersion });
 
         var outcome = await stripeService.CreateCheckoutAsync(userId, plan);
         return outcome.Success

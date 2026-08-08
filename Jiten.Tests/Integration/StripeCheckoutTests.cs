@@ -29,12 +29,15 @@ public class StripeCheckoutTests(JitenWebApplicationFactory factory)
             user.StripeCustomerId = null;
             user.StripeSubscriptionActive = false;
             user.StripeSubscriptionId = null;
+            user.StripeCancelAtPeriodEnd = false;
             user.SubscriptionPeriodEnd = null;
             user.SubscriptionPlan = null;
             user.IsLifetime = false;
             user.LifetimeSource = null;
             user.AdminPremiumOverride = false;
         }
+
+        userDb.UserLegalDocumentStates.RemoveRange(userDb.UserLegalDocumentStates);
         await userDb.SaveChangesAsync();
 
         var jitenPlus = scope.ServiceProvider.GetRequiredService<IJitenPlusService>();
@@ -50,6 +53,26 @@ public class StripeCheckoutTests(JitenWebApplicationFactory factory)
             .WithUser(userId)
             .WithJsonContent(new { plan });
         return await _client.SendAsync(request);
+    }
+
+    // Checkout refuses to start without recorded acceptance of the current CGV version.
+    private async Task AcceptCgv(string userId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var version = scope.ServiceProvider
+                           .GetRequiredService<Microsoft.Extensions.Options.IOptions<Jiten.Api.Services.Legal.LegalDocumentsOptions>>()
+                           .Value.CgvVersion;
+        userDb.UserLegalDocumentStates.Add(new Jiten.Core.Data.UserLegalDocumentState
+        {
+            UserId = userId,
+            Document = Jiten.Core.Data.LegalDocument.Cgv,
+            Version = version,
+            NoticeShownAt = DateTime.UtcNow,
+            AcceptedAt = DateTime.UtcNow,
+            Source = Jiten.Core.Data.LegalAcceptanceSource.Checkout
+        });
+        await userDb.SaveChangesAsync();
     }
 
     private async Task SetUser(string userId, Action<Jiten.Core.Data.Authentication.User> mutate)
@@ -77,8 +100,22 @@ public class StripeCheckoutTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Checkout_WithoutCgvAcceptance_Returns409WithErrorCode()
+    {
+        var response = await Checkout(TestUsers.UserA, "yearly");
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Be("cgv-acceptance-required");
+        body.GetProperty("version").GetString().Should().NotBeNullOrEmpty();
+
+        factory.Stripe.CheckoutRequests.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Checkout_Yearly_ReturnsUrlAndPersistsCustomer()
     {
+        await AcceptCgv(TestUsers.UserA);
         var response = await Checkout(TestUsers.UserA, "yearly");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -96,6 +133,7 @@ public class StripeCheckoutTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task Checkout_Lifetime_UsesPaymentMode()
     {
+        await AcceptCgv(TestUsers.UserA);
         var response = await Checkout(TestUsers.UserA, "lifetime");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -107,6 +145,7 @@ public class StripeCheckoutTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task Checkout_LifetimeWithActiveSubscription_AttachesUpgradeCreditFromActualPayments()
     {
+        await AcceptCgv(TestUsers.UserA);
         await SetUser(TestUsers.UserA, u =>
         {
             u.StripeCustomerId = "cus_existing";
@@ -137,6 +176,7 @@ public class StripeCheckoutTests(JitenWebApplicationFactory factory)
     {
         // Exact live repro: monthly (€5) → portal switch to yearly (€4.25 proration). Subscription now reads
         // yearly with a year-out period, but only €9.25 was collected — the credit must reflect that, not €50.
+        await AcceptCgv(TestUsers.UserA);
         await SetUser(TestUsers.UserA, u =>
         {
             u.StripeCustomerId = "cus_switch";
@@ -177,6 +217,7 @@ public class StripeCheckoutTests(JitenWebApplicationFactory factory)
     [InlineData("lifetime")]
     public async Task Checkout_WhenAlreadyLifetime_IsBlockedForEveryPlan(string plan)
     {
+        await AcceptCgv(TestUsers.UserA);
         await SetUser(TestUsers.UserA, u =>
         {
             u.IsLifetime = true;
