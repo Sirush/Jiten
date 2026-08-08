@@ -29,6 +29,10 @@
         : 'You have lifetime access. Thank you for supporting Jiten!';
     }
     if (s.subscriptionActive) {
+      if (s.cancelAtPeriodEnd) {
+        const until = s.periodEnd ? ` Jiten+ stays fully available until ${formatDate(s.periodEnd)}.` : '';
+        return `Your ${s.plan?.toLowerCase() ?? ''} subscription is cancelled and will not renew.${until}`;
+      }
       const renew = s.periodEnd ? `, renews on ${formatDate(s.periodEnd)}` : '';
       return `Active ${s.plan?.toLowerCase() ?? ''} subscription${renew}. Thank you for supporting Jiten!`;
     }

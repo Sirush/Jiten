@@ -33,6 +33,7 @@ public class StripeWebhookTests(JitenWebApplicationFactory factory)
             user.Email = $"{user.Id}@example.com";
             user.StripeSubscriptionActive = false;
             user.StripeSubscriptionId = null;
+            user.StripeCancelAtPeriodEnd = false;
             user.SubscriptionPeriodEnd = null;
             user.SubscriptionPlan = null;
             user.IsLifetime = false;
@@ -89,6 +90,15 @@ public class StripeWebhookTests(JitenWebApplicationFactory factory)
         {"id":"evt_sub_upd","object":"event","type":"customer.subscription.updated","data":{"object":{"id":"SUB","object":"subscription","status":"active","customer":"CUS","cancel_at_period_end":false,"metadata":{"userId":"UID"},"items":{"object":"list","data":[{"id":"si_1","object":"subscription_item","current_period_end":1924992000,"price":{"id":"price_yearly","object":"price"}}]}}}}
         """);
 
+    private static string SubscriptionCancelledAtPeriodEndPayload() => Fill("""
+        {"id":"evt_sub_cancel","object":"event","type":"customer.subscription.updated","data":{"object":{"id":"SUB","object":"subscription","status":"active","customer":"CUS","cancel_at_period_end":true,"metadata":{"userId":"UID"},"items":{"object":"list","data":[{"id":"si_1","object":"subscription_item","current_period_end":1924992000,"price":{"id":"price_yearly","object":"price"}}]}}}}
+        """);
+
+    // Distinct event id from SubscriptionUpdatedPayload: the dedupe cache is shared across tests in the class.
+    private static string SubscriptionResumedPayload() => Fill("""
+        {"id":"evt_sub_resume","object":"event","type":"customer.subscription.updated","data":{"object":{"id":"SUB","object":"subscription","status":"active","customer":"CUS","cancel_at_period_end":false,"metadata":{"userId":"UID"},"items":{"object":"list","data":[{"id":"si_1","object":"subscription_item","current_period_end":1924992000,"price":{"id":"price_yearly","object":"price"}}]}}}}
+        """);
+
     private static string SubscriptionDeletedPayload() => Fill("""
         {"id":"evt_sub_del","object":"event","type":"customer.subscription.deleted","data":{"object":{"id":"SUB","object":"subscription","status":"canceled","customer":"CUS","metadata":{"userId":"UID"},"items":{"object":"list","data":[{"id":"si_1","object":"subscription_item","current_period_end":1924992000,"price":{"id":"price_yearly","object":"price"}}]}}}}
         """);
@@ -136,6 +146,21 @@ public class StripeWebhookTests(JitenWebApplicationFactory factory)
         user.IsLifetime.Should().BeTrue();
         user.LifetimeSource.Should().Be(LifetimeSource.WindowPurchase);
         factory.Emails.Sent.Should().Contain(e => e.Method == nameof(IEmailService.SendLifetimeConfirmedAsync));
+    }
+
+    [Fact]
+    public async Task SubscriptionCancelledAtPeriodEnd_PersistsFlag_AndUncancelClearsIt()
+    {
+        var response = await PostEvent(SubscriptionCancelledAtPeriodEndPayload());
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var user = await GetUserA();
+        user.StripeSubscriptionActive.Should().BeTrue();
+        user.StripeCancelAtPeriodEnd.Should().BeTrue();
+
+        // Resuming via the Stripe portal sends another update with cancel_at_period_end back to false.
+        await PostEvent(SubscriptionResumedPayload());
+        (await GetUserA()).StripeCancelAtPeriodEnd.Should().BeFalse();
     }
 
     [Fact]

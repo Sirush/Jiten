@@ -91,6 +91,12 @@ public class StripeReconcileJob(
                 changed = true;
             }
 
+            if (user.StripeCancelAtPeriodEnd)
+            {
+                user.StripeCancelAtPeriodEnd = false;
+                changed = true;
+            }
+
             if (changed) await context.SaveChangesAsync();
             return changed;
         }
@@ -107,6 +113,14 @@ public class StripeReconcileJob(
         {
             logger.LogWarning("StripeReconcile: user {UserId} subscription id {Old} -> {New}", userId, user.StripeSubscriptionId, canonical.Id);
             user.StripeSubscriptionId = canonical.Id;
+            changed = true;
+        }
+
+        if (user.StripeCancelAtPeriodEnd != canonical.CancelAtPeriodEnd)
+        {
+            logger.LogWarning("StripeReconcile: user {UserId} cancel-at-period-end {Old} -> {New}", userId, user.StripeCancelAtPeriodEnd,
+                              canonical.CancelAtPeriodEnd);
+            user.StripeCancelAtPeriodEnd = canonical.CancelAtPeriodEnd;
             changed = true;
         }
 

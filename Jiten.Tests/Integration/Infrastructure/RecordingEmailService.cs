@@ -68,7 +68,8 @@ public class RecordingEmailService : IEmailService, IEmailSender
 
     // Jiten+ billing
 
-    public Task SendSubscriptionConfirmedAsync(string? email, Jiten.Core.Data.Billing.SubscriptionPlan? plan)
+    public Task SendSubscriptionConfirmedAsync(string? email, Jiten.Core.Data.Billing.SubscriptionPlan? plan, DateTime? renewsAt,
+                                               long amountCents, string cgvVersion)
     {
         _sent.Enqueue(new SentEmail(nameof(SendSubscriptionConfirmedAsync), email ?? "", null, null, null, plan?.ToString()));
         return Task.CompletedTask;
@@ -86,9 +87,21 @@ public class RecordingEmailService : IEmailService, IEmailSender
         return Task.CompletedTask;
     }
 
-    public Task SendLifetimeConfirmedAsync(string? email)
+    public Task SendLifetimeConfirmedAsync(string? email, long amountCents, string cgvVersion)
     {
         _sent.Enqueue(new SentEmail(nameof(SendLifetimeConfirmedAsync), email ?? "", null, null, null, null));
+        return Task.CompletedTask;
+    }
+
+    public Task SendRenewalReminderAsync(string? email, DateTime renewalDate, long amountCents)
+    {
+        _sent.Enqueue(new SentEmail(nameof(SendRenewalReminderAsync), email ?? "", null, renewalDate.ToString("O"), null, null));
+        return Task.CompletedTask;
+    }
+
+    public Task SendTermsChangeNoticeAsync(string? email, DateTime renewalDate, string cgvVersion)
+    {
+        _sent.Enqueue(new SentEmail(nameof(SendTermsChangeNoticeAsync), email ?? "", null, renewalDate.ToString("O"), null, cgvVersion));
         return Task.CompletedTask;
     }
 

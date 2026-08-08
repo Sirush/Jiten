@@ -66,6 +66,13 @@ export default defineNuxtConfig({
     public: {
       baseURL: process.env.NUXT_PUBLIC_BASE_URL || 'https://localhost:7299/api/',
       googleSignInClientId: process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID || '',
+      legal: {
+        publisherName: process.env.NUXT_PUBLIC_LEGAL_PUBLISHER_NAME || '',
+        publicationDirector: process.env.NUXT_PUBLIC_LEGAL_PUBLICATION_DIRECTOR || '',
+        siren: process.env.NUXT_PUBLIC_LEGAL_SIREN || '',
+        siret: process.env.NUXT_PUBLIC_LEGAL_SIRET || '',
+        address: process.env.NUXT_PUBLIC_LEGAL_ADDRESS || '',
+      },
       ...(process.env.NUXT_PUBLIC_RECAPTCHA_V2_SITE_KEY
         ? {
             recaptcha: {
@@ -123,6 +130,9 @@ export default defineNuxtConfig({
     '/.well-known/**': { ssr: false },
     // FAQ migrated into the Guides system; preserve existing ranking/backlinks.
     '/faq': { redirect: { to: '/guides', statusCode: 301 } },
+    '/mentions-legales': { robots: 'noindex, follow' },
+    '/cgv': { robots: 'noindex, follow' },
+    '/cgv-fr': { robots: 'noindex, follow' },
   },
   app: {
     head: {

@@ -47,6 +47,8 @@ public class UserDbContext : IdentityDbContext<User>
 
     public DbSet<PromoCode> PromoCodes { get; set; }
     public DbSet<UserPromoCredit> UserPromoCredits { get; set; }
+    public DbSet<UserLegalDocumentState> UserLegalDocumentStates { get; set; }
+    public DbSet<BillingEmailLog> BillingEmailLogs { get; set; }
     public DbSet<UserFrequencyList> UserFrequencyLists { get; set; }
     public DbSet<UserRoadmap> UserRoadmaps { get; set; }
     public DbSet<UserCardMedia> UserCardMedia { get; set; }
@@ -503,6 +505,31 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasIndex(upc => new { upc.UserId, upc.PromoCodeId })
                   .IsUnique()
                   .HasDatabaseName("IX_UserPromoCredit_UserId_PromoCodeId");
+        });
+
+        // Deliberately no FK to Users on either evidence table: the rows are proof of a past relationship
+        // (notice, acceptance, legally required sends) and must survive account deletion untouched.
+        modelBuilder.Entity<UserLegalDocumentState>(entity =>
+        {
+            entity.HasKey(s => s.Id);
+            if (isNpgsql)
+                entity.Property(s => s.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(s => s.Version).HasMaxLength(32).IsRequired();
+
+            entity.HasIndex(s => new { s.UserId, s.Document, s.Version })
+                  .IsUnique()
+                  .HasDatabaseName("IX_UserLegalDocumentState_UserId_Document_Version");
+        });
+
+        modelBuilder.Entity<BillingEmailLog>(entity =>
+        {
+            entity.HasKey(l => l.Id);
+            if (isNpgsql)
+                entity.Property(l => l.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(l => l.SubscriptionId).HasMaxLength(64);
+            entity.Property(l => l.SentAt).IsRequired();
+
+            entity.HasIndex(l => new { l.UserId, l.Kind }).HasDatabaseName("IX_BillingEmailLog_UserId_Kind");
         });
 
         modelBuilder.Entity<UserRoadmap>(entity =>

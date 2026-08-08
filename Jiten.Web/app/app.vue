@@ -47,6 +47,10 @@
     </div>
 
     <div :class="isStudyMode ? 'flex-grow flex flex-col' : 'container mx-auto pl-4 pr-4 max-w-6xl flex-grow pb-2'">
+      <!-- On the home page the banner renders inside HomeMember instead, below the study summary. -->
+      <ClientOnly>
+        <LegalUpdateBanner v-if="!isStudyMode && route.path !== '/'" class="mt-2 mb-3" />
+      </ClientOnly>
       <NuxtPage />
     </div>
     <AppFooter v-if="!isStudyMode" />

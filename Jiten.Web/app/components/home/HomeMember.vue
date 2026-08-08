@@ -18,6 +18,9 @@
       </div>
 
       <div class="order-3 flex flex-col gap-4">
+        <ClientOnly>
+          <LegalUpdateBanner />
+        </ClientOnly>
         <component :is="strip.component" v-for="strip in homeStrips" :key="strip.id" />
       </div>
     </div>
