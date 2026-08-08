@@ -792,13 +792,13 @@ export interface MediaRequestCommentDto {
 
 export interface MediaRequestUploadDto {
   id: number;
-  fileName: string;
   fileSize: number;
   originalFileCount: number;
   createdAt: string;
 }
 
 export interface MediaRequestUploadAdminDto extends MediaRequestUploadDto {
+  fileName: string;
   uploaderName?: string;
   adminReviewed: boolean;
   adminNote?: string;

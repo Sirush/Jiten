@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RequestStatus, RequestKind, MediaType } from '~/types';
-import type { MediaRequestDto, MediaRequestCommentDto, MediaRequestUploadAdminDto, MediaSuggestion } from '~/types/types';
+import type { MediaRequestDto, MediaRequestCommentDto, MediaRequestUploadDto, MediaRequestUploadAdminDto, MediaSuggestion } from '~/types/types';
 import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
 import { getRequestKindText, getRequestKindIcon } from '~/utils/requestKindMapper';
@@ -446,6 +446,11 @@ const commentsWithUploads = computed(() =>
   comments.value.filter(c => c.upload)
 );
 
+function uploadFileCountLabel(upload: MediaRequestUploadDto): string {
+  const count = Math.max(upload.originalFileCount, 1);
+  return count === 1 ? '1 file' : `${count} files`;
+}
+
 const canComment = computed(() =>
   request.value && (request.value.status === RequestStatus.Open || request.value.status === RequestStatus.InProgress)
 );
@@ -761,7 +766,7 @@ onMounted(() => loadData());
                 >
                   <div class="flex items-center gap-2 flex-wrap">
                     <i class="pi pi-paperclip text-xs" />
-                    <span class="font-medium">{{ comment.upload!.fileName }}</span>
+                    <span class="font-medium">{{ (comment.upload as MediaRequestUploadAdminDto).fileName }}</span>
                     <span class="text-muted-color">({{ formatFileSize(comment.upload!.fileSize) }})</span>
                     <Tag
                       v-if="(comment.upload as any)?.adminReviewed"
@@ -887,11 +892,17 @@ onMounted(() => loadData());
                 </template>
                 <template v-else>
                   <i class="pi pi-paperclip text-xs" />
-                  <span>{{ comment.upload.fileName }}</span>
-                  <span>({{ formatFileSize(comment.upload.fileSize) }})</span>
-                  <span v-if="comment.upload.originalFileCount > 1" class="text-xs">
-                    ({{ comment.upload.originalFileCount }} files)
-                  </span>
+                  <template v-if="authStore.isAdmin">
+                    <span>{{ (comment.upload as MediaRequestUploadAdminDto).fileName }}</span>
+                    <span>({{ formatFileSize(comment.upload.fileSize) }})</span>
+                    <span v-if="comment.upload.originalFileCount > 1" class="text-xs">
+                      ({{ comment.upload.originalFileCount }} files)
+                    </span>
+                  </template>
+                  <template v-else>
+                    <span>{{ uploadFileCountLabel(comment.upload) }}</span>
+                    <span>({{ formatFileSize(comment.upload.fileSize) }})</span>
+                  </template>
                 </template>
               </div>
 

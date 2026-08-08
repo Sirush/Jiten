@@ -123,4 +123,57 @@ public class CommentTests(JitenWebApplicationFactory factory)
         arr[0].GetProperty("role").GetString().Should().Be("Requester");
         arr[1].GetProperty("role").GetString().Should().Be("Contributor");
     }
+
+    private async Task SeedUpload(int requestId, string fileName, int originalFileCount)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+
+        var comment = new MediaRequestComment { MediaRequestId = requestId, UserId = TestUsers.UserB };
+        db.MediaRequestComments.Add(comment);
+        await db.SaveChangesAsync();
+
+        db.MediaRequestUploads.Add(new MediaRequestUpload
+        {
+            MediaRequestCommentId = comment.Id,
+            MediaRequestId = requestId,
+            FileName = fileName,
+            StoragePath = $"uploads/{requestId}/bundle.zip",
+            FileSize = 2048,
+            OriginalFileCount = originalFileCount
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private async Task<JsonElement> GetUploadDto(HttpRequestMessage getRequest)
+    {
+        var response = await _client.SendAsync(getRequest);
+        var comments = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return comments.EnumerateArray().Single().GetProperty("upload");
+    }
+
+    [Fact]
+    public async Task GetComments_AsNonAdmin_OmitsUploadFileName()
+    {
+        var id = await CreateRequest(TestUsers.UserA);
+        await SeedUpload(id, "とある作品 01-03.txt", 3);
+
+        var upload = await GetUploadDto(
+            new HttpRequestMessage(HttpMethod.Get, $"/api/requests/{id}/comments").WithUser(TestUsers.UserA));
+
+        upload.TryGetProperty("fileName", out _).Should().BeFalse();
+        upload.GetProperty("originalFileCount").GetInt32().Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GetComments_AsAdmin_IncludesUploadFileName()
+    {
+        var id = await CreateRequest(TestUsers.UserA);
+        await SeedUpload(id, "とある作品 01-03.txt", 3);
+
+        var upload = await GetUploadDto(
+            new HttpRequestMessage(HttpMethod.Get, $"/api/requests/{id}/comments").WithAdmin());
+
+        upload.GetProperty("fileName").GetString().Should().Be("とある作品 01-03.txt");
+    }
 }
