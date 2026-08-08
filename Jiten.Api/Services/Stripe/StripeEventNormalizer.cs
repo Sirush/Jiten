@@ -68,7 +68,8 @@ public static class StripeEventNormalizer
             sub.Status,
             item?.Price?.Id,
             NormalizePeriodEnd(item?.CurrentPeriodEnd),
-            sub.CancelAtPeriodEnd,
+            // Basil API versions schedule cancellations via cancel_at and leave cancel_at_period_end false.
+            sub.CancelAtPeriodEnd || sub.CancelAt.HasValue,
             NormalizePeriodEnd(sub.EndedAt),
             NormalizePeriodEnd(item?.CurrentPeriodStart));
     }
