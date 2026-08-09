@@ -18,6 +18,8 @@ export const forwardLabels: Record<number, string> = {
   [DeckRelationshipType.SideStory]: 'Source',
   [DeckRelationshipType.Adaptation]: 'Adaptation',
   [DeckRelationshipType.Alternative]: 'Alternative',
+  [DeckRelationshipType.SameSeries]: 'Same Series',
+  [DeckRelationshipType.SameSetting]: 'Same Setting',
 };
 export const inverseLabels: Record<number, string> = {
   [DeckRelationshipType.Sequel]: 'Sequel',
@@ -26,6 +28,8 @@ export const inverseLabels: Record<number, string> = {
   [DeckRelationshipType.SideStory]: 'Side Story',
   [DeckRelationshipType.Adaptation]: 'Source',
   [DeckRelationshipType.Alternative]: 'Alternative',
+  [DeckRelationshipType.SameSeries]: 'Same Series',
+  [DeckRelationshipType.SameSetting]: 'Same Setting',
 };
 
 // Shared node/edge logic for both the timeline and the constellation web view.

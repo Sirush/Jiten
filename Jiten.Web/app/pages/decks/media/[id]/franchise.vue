@@ -5,6 +5,10 @@
   import { SelectButton } from 'primevue';
   import { useApiFetch } from '~/composables/useApiFetch';
 
+  definePageMeta({
+    validate: route => /^\d+$/.test(String(route.params.id)),
+  });
+
   const route = useRoute();
   const router = useRouter();
   const deckId = computed(() => Number(route.params.id));

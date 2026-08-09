@@ -1308,7 +1308,6 @@ public partial class RequestController(
                     uploadDto = new MediaRequestUploadDto
                     {
                         Id = c.Upload.Id,
-                        FileName = c.Upload.FileName,
                         FileSize = c.Upload.FileSize,
                         OriginalFileCount = c.Upload.OriginalFileCount,
                         CreatedAt = c.Upload.CreatedAt

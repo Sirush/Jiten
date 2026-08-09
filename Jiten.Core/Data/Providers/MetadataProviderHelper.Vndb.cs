@@ -208,6 +208,8 @@ public static partial class MetadataProviderHelper
             "par" => (DeckRelationshipType.SideStory, false),
             "orig" => (DeckRelationshipType.Fandisc, false),
             "fan" => (DeckRelationshipType.Fandisc, true),
+            "ser" => (DeckRelationshipType.SameSeries, false),
+            "set" => (DeckRelationshipType.SameSetting, false),
             _ => null 
         };
     }

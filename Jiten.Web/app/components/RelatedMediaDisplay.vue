@@ -32,6 +32,8 @@ const relationshipSortOrder: DeckRelationshipType[] = [
   DeckRelationshipType.HasSpinoff,
   DeckRelationshipType.HasSideStory,
   DeckRelationshipType.SourceMaterial,
+  DeckRelationshipType.SameSeries,
+  DeckRelationshipType.SameSetting,
 ];
 
 const relationshipTypeLabels: Record<DeckRelationshipType, string> = {
@@ -46,6 +48,8 @@ const relationshipTypeLabels: Record<DeckRelationshipType, string> = {
   [DeckRelationshipType.HasSpinoff]: 'Spinoff',
   [DeckRelationshipType.HasSideStory]: 'Side Story',
   [DeckRelationshipType.SourceMaterial]: 'Source',
+  [DeckRelationshipType.SameSeries]: 'Same Series',
+  [DeckRelationshipType.SameSetting]: 'Same Setting',
 };
 
 function getRelationshipTypeLabel(type: DeckRelationshipType): string {

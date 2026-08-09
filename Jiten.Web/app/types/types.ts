@@ -133,6 +133,32 @@ export interface DeckRelationship {
   isInverse: boolean;
 }
 
+export interface DeckMetadataPatch {
+  originalTitle?: string;
+  romajiTitle?: string;
+  englishTitle?: string;
+  description?: string;
+  hideDialoguePercentage?: boolean;
+  hideAverageSentenceLength?: boolean;
+  genres?: Genre[];
+  tags?: { tagId: number; percentage: number }[];
+  links?: { linkType: LinkType; url: string }[];
+  relationships?: { sourceDeckId: number; targetDeckId: number; relationshipType: DeckRelationshipType }[];
+}
+
+export interface DeckMetadataPatchResult {
+  originalTitle: string;
+  romajiTitle: string;
+  englishTitle: string;
+  description: string;
+  hideDialoguePercentage: boolean;
+  hideAverageSentenceLength: boolean;
+  genres: Genre[];
+  tags: TagWithPercentage[];
+  links: Link[];
+  relationships: DeckRelationship[];
+}
+
 export interface FranchiseNode {
   deckId: number;
   originalTitle: string;
@@ -792,13 +818,13 @@ export interface MediaRequestCommentDto {
 
 export interface MediaRequestUploadDto {
   id: number;
-  fileName: string;
   fileSize: number;
   originalFileCount: number;
   createdAt: string;
 }
 
 export interface MediaRequestUploadAdminDto extends MediaRequestUploadDto {
+  fileName: string;
   uploaderName?: string;
   adminReviewed: boolean;
   adminNote?: string;

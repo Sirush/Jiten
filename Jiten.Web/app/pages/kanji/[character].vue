@@ -16,6 +16,12 @@
 
   const allScales: KanjiScale[] = ['jlpt', 'grade', 'kanken', 'wanikani', 'rtk', 'klc', 'tmw'];
 
+  // A route param that isn't a single character can never be a kanji; 404 before fetching so the
+  // SPA catch-all can't answer 200 for arbitrary paths (which Google then treats as soft 404s).
+  definePageMeta({
+    validate: route => [...String(route.params.character)].length === 1,
+  });
+
   const route = useRoute();
   const { $api } = useNuxtApp();
   const convertToRuby = useConvertToRuby();
@@ -25,7 +31,15 @@
     return typeof c === 'string' ? c : c[0];
   });
 
-  const { data: kanji, status } = useApiFetch<Kanji>(() => `kanji/${encodeURIComponent(character.value)}`);
+  const { data: kanji, status, error, ready } = useApiFetch<Kanji>(() => `kanji/${encodeURIComponent(character.value)}`);
+
+  // Only a definitive 404 becomes a 404 page: an SSR timeout or 5xx must keep rendering the normal
+  // error state at 200, or a slow API would deindex working pages.
+  if (import.meta.server) {
+    await ready;
+    if (isMissingResource(error.value, kanji.value))
+      throw createError({ statusCode: 404, statusMessage: 'Kanji not found', fatal: true });
+  }
 
   const scaleBadges = computed(() =>
     allScales
@@ -33,14 +47,19 @@
       .filter((b): b is { severity: BadgeSeverity; text: string } => b.text != null)
   );
 
-  const expandedReading = ref<string | null>(null);
+  // undefined = untouched, so the most-used reading renders expanded (server-side, and instead of an
+  // empty section). null = explicitly collapsed by the user.
+  const expandedReading = ref<string | null | undefined>(undefined);
+  const activeReading = computed(() => (expandedReading.value === undefined
+    ? kanji.value?.wordsByReading?.[0]?.reading ?? null
+    : expandedReading.value));
   const allReadingWords = ref<WordSummary[] | null>(null);
   const allTopWords = ref<WordSummary[] | null>(null);
   const loadingReadingWords = ref(false);
   const loadingTopWords = ref(false);
 
   const toggleReading = (reading: string) => {
-    if (expandedReading.value === reading) {
+    if (activeReading.value === reading) {
       expandedReading.value = null;
     } else {
       expandedReading.value = reading;
@@ -59,8 +78,8 @@
   };
 
   const expandedGroup = computed(() => {
-    if (!kanji.value?.wordsByReading || !expandedReading.value) return null;
-    return kanji.value.wordsByReading.find(g => g.reading === expandedReading.value) ?? null;
+    if (!kanji.value?.wordsByReading || !activeReading.value) return null;
+    return kanji.value.wordsByReading.find(g => g.reading === activeReading.value) ?? null;
   });
 
   const expandedWords = computed(() => {
@@ -76,12 +95,12 @@
   });
 
   const loadAllReadingWords = async () => {
-    if (!expandedReading.value) return;
+    if (!activeReading.value) return;
     loadingReadingWords.value = true;
     try {
       const data = await $api<{ items: WordSummary[] }>(
         `kanji/${encodeURIComponent(character.value)}/words`,
-        { query: { reading: expandedReading.value, pageSize: 5000 } }
+        { query: { reading: activeReading.value, pageSize: 5000 } }
       );
       allReadingWords.value = data.data;
     } finally {
@@ -110,16 +129,32 @@
     allTopWords.value = null;
   };
 
-  useHead(() => {
-    return {
-      title: `${character.value} - Kanji`,
-      meta: [
-        {
-          name: 'description',
-          content: kanji.value?.meanings.join(', ') || `Details for kanji ${character.value}`,
-        },
-      ],
-    };
+  const headlineMeaning = computed(() => kanji.value?.meanings.slice(0, 3).join(', ') ?? '');
+
+  const metaDescription = computed(() => {
+    const k = kanji.value;
+    if (!k) return `Meaning, readings and common words for the kanji ${character.value}.`;
+
+    const level = [
+      k.grade != null ? `grade ${k.grade}` : null,
+      k.jlptLevel != null ? `JLPT N${k.jlptLevel}` : null,
+    ].filter(Boolean).join(', ');
+
+    const readings = [...k.onReadings, ...k.kunReadings].slice(0, 4).join(', ');
+    const sentence = `${k.character} is a ${level ? `${level} ` : ''}kanji meaning ${k.meanings.slice(0, 3).join(', ')}.`;
+    const detail = `${k.strokeCount} strokes${k.frequencyRank ? `, frequency rank #${k.frequencyRank}` : ''}`;
+    return `${sentence} Readings: ${readings}. ${detail}.`;
+  });
+
+  // Two meanings keeps the title inside Google's display width; the h1 carries the fuller list.
+  const titleMeaning = computed(() => kanji.value?.meanings.slice(0, 2).join(', ') ?? '');
+
+  useSeoMeta({
+    title: () => (titleMeaning.value
+      ? `${character.value} Kanji: ${titleMeaning.value} - Readings and Common Words`
+      : `${character.value} - Kanji`),
+    description: metaDescription,
+    ogDescription: metaDescription,
   });
 </script>
 
@@ -136,7 +171,12 @@
     <div v-else-if="kanji" class="space-y-2">
       <!-- Main kanji display -->
       <div class="text-center">
-        <div class="text-9xl font-bold mb-4" lang="ja">{{ kanji.character }}</div>
+        <h1>
+          <span class="block text-9xl font-bold mb-2" lang="ja">{{ kanji.character }}</span>
+          <span v-if="headlineMeaning" class="block text-base font-normal mb-4 text-surface-600 dark:text-surface-400">
+            Kanji meaning "{{ headlineMeaning }}"
+          </span>
+        </h1>
 
         <!-- Metadata badges -->
         <div class="flex flex-wrap justify-center gap-2 mb-4">
@@ -179,7 +219,7 @@
             v-for="group in kanji.wordsByReading"
             :key="group.reading"
             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors cursor-pointer"
-            :class="expandedReading === group.reading
+            :class="activeReading === group.reading
               ? 'bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200'
               : 'bg-surface-100 dark:bg-surface-800 text-surface-700 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'"
             @click="toggleReading(group.reading)"

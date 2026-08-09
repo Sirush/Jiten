@@ -5,6 +5,10 @@
   import { useJitenStore } from '~/stores/jitenStore';
   import { formatDifficultyValue, getMaxDifficultyLabel } from '~/utils/difficultyColours';
 
+  definePageMeta({
+    validate: route => /^\d+$/.test(String(route.params.id)),
+  });
+
   const route = useRoute();
   const store = useJitenStore();
   const localiseTitle = useLocaliseTitle();
@@ -12,7 +16,13 @@
   const usePercentage = computed(() => store.difficultyValueDisplayStyle === DifficultyValueDisplayStyle.Percentage);
   const deckId = computed(() => route.params.id as string);
 
-  const { data: deckResponse, status: deckStatus, error: deckError } = await useApiFetchPaginated<DeckDetail>(`media-deck/${deckId.value}/detail`);
+  const { data: deckResponse, status: deckStatus, error: deckError, ready: deckReady } = await useApiFetchPaginated<DeckDetail>(`media-deck/${deckId.value}/detail`);
+
+  if (import.meta.server) {
+    await deckReady;
+    if (isMissingResource(deckError.value, deckResponse.value?.data))
+      throw createError({ statusCode: 404, statusMessage: 'Deck not found', fatal: true });
+  }
 
   const { data: stats, status: statsStatus, error: statsError } = await useApiFetch<DeckCoverageStats>(`media-deck/${deckId.value}/stats`);
 

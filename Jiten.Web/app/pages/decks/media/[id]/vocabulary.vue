@@ -4,6 +4,10 @@
   import { debounce } from 'perfect-debounce';
   import { parseStringArray, toBooleanOrNull } from '~/utils/queryParams';
 
+  definePageMeta({
+    validate: route => /^\d+$/.test(String(route.params.id)),
+  });
+
   const route = useRoute();
   const router = useRouter();
 

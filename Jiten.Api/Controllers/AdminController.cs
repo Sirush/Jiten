@@ -30,6 +30,7 @@ public partial class AdminController(
     IBackgroundJobClient backgroundJobs,
     JitenDbContext dbContext,
     UserDbContext userContext,
+    DeckMetadataService deckMetadata,
     ILogger<AdminController> logger)
     : ControllerBase
 {
@@ -356,14 +357,12 @@ public partial class AdminController(
 
         // Update basic properties
         deck.MediaType = model.MediaType;
-        deck.OriginalTitle = model.OriginalTitle.Trim();
-        deck.RomajiTitle = model.RomajiTitle?.Trim();
-        deck.EnglishTitle = model.EnglishTitle?.Trim();
         deck.ReleaseDate = model.ReleaseDate;
-        deck.Description = model.Description?.Trim();
         deck.DifficultyOverride = model.DifficultyOverride;
-        deck.HideDialoguePercentage = model.HideDialoguePercentage;
-        deck.HideAverageSentenceLength = model.HideAverageSentenceLength;
+
+        var metadataError = await deckMetadata.ApplyAsync(deck, BuildMetadataPatch(deck.DeckId, model));
+        if (metadataError != null)
+            return BadRequest(new { Message = metadataError });
 
         // Update cover image if provided
         if (model.CoverImage is { Length: > 0 })
@@ -397,33 +396,6 @@ public partial class AdminController(
             }
         }
 
-
-        // Update links
-        if (model.Links.Any())
-        {
-            var existingLinkIds = deck.Links.Select(l => l.LinkId).ToHashSet();
-            var newLinkIds = model.Links.Where(l => l.LinkId > 0).Select(l => l.LinkId).ToHashSet();
-
-            // Remove links that are no longer present
-            var linksToRemove = deck.Links.Where(l => !newLinkIds.Contains(l.LinkId));
-            dbContext.RemoveRange(linksToRemove);
-
-            // Update existing links and add new ones
-            var existingLinksById = deck.Links.ToDictionary(l => l.LinkId);
-            foreach (var link in model.Links)
-            {
-                if (link.LinkId > 0 && existingLinkIds.Contains(link.LinkId))
-                {
-                    var existingLink = existingLinksById[link.LinkId];
-                    existingLink.Url = link.Url;
-                    existingLink.LinkType = link.LinkType;
-                }
-                else
-                {
-                    deck.Links.Add(link);
-                }
-            }
-        }
 
         // Update aliases
         if (model.Aliases.Any())
@@ -463,61 +435,6 @@ public partial class AdminController(
                 if (deck.DictionaryEntries.All(e => e.Surface != surface))
                     deck.DictionaryEntries.Add(new DeckDictionaryEntry { DeckId = deck.DeckId, Surface = surface, EntryType = DeckDictionaryEntryType.Name });
             }
-        }
-
-        // Update genres
-        if (model.Genres != null && model.Genres.Any())
-        {
-            var newGenres = model.Genres.ToHashSet();
-            var existingGenres = deck.DeckGenres.Select(dg => (int)dg.Genre).ToHashSet();
-
-            // Remove genres no longer present
-            var genresToRemove = deck.DeckGenres.Where(dg => !newGenres.Contains((int)dg.Genre));
-            dbContext.RemoveRange(genresToRemove);
-
-            // Add new genres
-            foreach (var genreValue in model.Genres)
-            {
-                if (!existingGenres.Contains(genreValue))
-                {
-                    deck.DeckGenres.Add(new DeckGenre { DeckId = deck.DeckId, Genre = (Genre)genreValue });
-                }
-            }
-        }
-        else if (model.Genres != null)
-        {
-            // Clear all if empty list provided
-            dbContext.RemoveRange(deck.DeckGenres);
-        }
-
-        // Update tags
-        if (model.Tags != null && model.Tags.Any())
-        {
-            var newTagIds = model.Tags.Select(t => t.TagId).ToHashSet();
-            var existingTagIds = deck.DeckTags.Select(dt => dt.TagId).ToHashSet();
-
-            // Remove tags no longer present
-            var tagsToRemove = deck.DeckTags.Where(dt => !newTagIds.Contains(dt.TagId));
-            dbContext.RemoveRange(tagsToRemove);
-
-            // Update existing and add new tags
-            foreach (var tag in model.Tags)
-            {
-                var existingTag = deck.DeckTags.FirstOrDefault(dt => dt.TagId == tag.TagId);
-                if (existingTag != null)
-                {
-                    existingTag.Percentage = tag.Percentage;
-                }
-                else
-                {
-                    deck.DeckTags.Add(new DeckTag { DeckId = deck.DeckId, TagId = tag.TagId, Percentage = tag.Percentage });
-                }
-            }
-        }
-        else if (model.Tags != null)
-        {
-            // Clear all if empty list provided
-            dbContext.RemoveRange(deck.DeckTags);
         }
 
         // Update subdecks if provided
@@ -579,55 +496,6 @@ public partial class AdminController(
                 }
             }
         }
-
-        // Update relationships. Edges are stored as canonical primary edges (type 1-6) and may have
-        // this deck as either source or target, so we reconcile both directions. The frontend sends
-        // every edge touching this deck; anything missing from the payload is removed.
-        if (model.Relationships != null)
-        {
-            var currentDeckId = deck.DeckId;
-
-            var inputEdges = model.Relationships
-                .Where(r => DeckRelationship.IsPrimaryRelationship(r.RelationshipType))
-                // A missing/zero source means a legacy payload; treat the edited deck as the source.
-                .Select(r => (SourceDeckId: r.SourceDeckId == 0 ? currentDeckId : r.SourceDeckId, r.TargetDeckId, r.RelationshipType))
-                .Where(r => (r.SourceDeckId == currentDeckId || r.TargetDeckId == currentDeckId) && r.SourceDeckId != r.TargetDeckId)
-                .Distinct()
-                .ToList();
-
-            var inputKeys = inputEdges.ToHashSet();
-
-            var existingEdges = deck.RelationshipsAsSource
-                .Concat(deck.RelationshipsAsTarget)
-                .ToList();
-
-            // Remove edges no longer present in the payload
-            foreach (var existing in existingEdges)
-            {
-                if (!inputKeys.Contains((existing.SourceDeckId, existing.TargetDeckId, existing.RelationshipType)))
-                    dbContext.DeckRelationships.Remove(existing);
-            }
-
-            // Add edges not already stored
-            var existingKeys = existingEdges
-                .Select(e => (e.SourceDeckId, e.TargetDeckId, e.RelationshipType))
-                .ToHashSet();
-
-            foreach (var edge in inputEdges)
-            {
-                if (existingKeys.Contains(edge))
-                    continue;
-
-                dbContext.DeckRelationships.Add(new DeckRelationship
-                {
-                    SourceDeckId = edge.SourceDeckId,
-                    TargetDeckId = edge.TargetDeckId,
-                    RelationshipType = edge.RelationshipType
-                });
-            }
-        }
-
-        deck.LastUpdate = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync();
 

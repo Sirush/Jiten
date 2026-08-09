@@ -6,6 +6,12 @@
   import Skeleton from 'primevue/skeleton';
   import { debounce } from 'perfect-debounce';
 
+  // Without this the SPA answers 200 for any id (including the literal "*" from robots.txt patterns),
+  // which Google indexes and then reports as soft 404s.
+  definePageMeta({
+    validate: route => /^\d+$/.test(String(route.params.id)),
+  });
+
   const route = useRoute();
   const router = useRouter();
   const deckId = computed(() => route.params.id as string);
@@ -34,6 +40,15 @@
     },
     watch: [offset, deckId, appliedSubdeckFilter, subdeckSortQuery, subdeckSortOrderQuery],
   });
+
+  // A missing deck currently comes back as 200 with a null payload; 404 is accepted too so this keeps
+  // working if the endpoint is tightened. Any other error (SSR timeout, 5xx) must keep rendering at
+  // 200 rather than turning a transient API failure into a deindexed page.
+  if (import.meta.server) {
+    await detailReady;
+    if (isMissingResource(error.value, response.value?.data))
+      throw createError({ statusCode: 404, statusMessage: 'Deck not found', fatal: true });
+  }
 
   const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor } = usePagination(response);
 
@@ -179,6 +194,11 @@
       ? [{ rel: 'preload', as: 'image', href: coverUrl.value, fetchpriority: 'high' }]
       : [],
   }));
+
+  // Subdecks (episodes, volumes) differ from their siblings only by number, so Google collapses them
+  // onto the parent anyway; noindex keeps the crawl budget on parents while follow passes signal up.
+  // Parents return undefined so the site-wide rule (which carries max-image-preview/max-snippet) stands.
+  useRobotsRule(() => (parentDeck.value != null ? 'noindex, follow' : undefined));
 
   const pageUrl = computed(() => `https://jiten.moe/decks/media/${deckId.value}/detail`);
   useDeckSchema(mainDeck, pageUrl, parentDeck);

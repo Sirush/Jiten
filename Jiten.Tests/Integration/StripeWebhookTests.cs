@@ -94,6 +94,11 @@ public class StripeWebhookTests(JitenWebApplicationFactory factory)
         {"id":"evt_sub_cancel","object":"event","type":"customer.subscription.updated","data":{"object":{"id":"SUB","object":"subscription","status":"active","customer":"CUS","cancel_at_period_end":true,"metadata":{"userId":"UID"},"items":{"object":"list","data":[{"id":"si_1","object":"subscription_item","current_period_end":1924992000,"price":{"id":"price_yearly","object":"price"}}]}}}}
         """);
 
+    // Basil API cancellation shape: cancel_at set, cancel_at_period_end stays false.
+    private static string SubscriptionCancelledViaCancelAtPayload() => Fill("""
+        {"id":"evt_sub_cancel_at","object":"event","type":"customer.subscription.updated","data":{"object":{"id":"SUB","object":"subscription","status":"active","customer":"CUS","cancel_at":1924992000,"cancel_at_period_end":false,"metadata":{"userId":"UID"},"items":{"object":"list","data":[{"id":"si_1","object":"subscription_item","current_period_end":1924992000,"price":{"id":"price_yearly","object":"price"}}]}}}}
+        """);
+
     // Distinct event id from SubscriptionUpdatedPayload: the dedupe cache is shared across tests in the class.
     private static string SubscriptionResumedPayload() => Fill("""
         {"id":"evt_sub_resume","object":"event","type":"customer.subscription.updated","data":{"object":{"id":"SUB","object":"subscription","status":"active","customer":"CUS","cancel_at_period_end":false,"metadata":{"userId":"UID"},"items":{"object":"list","data":[{"id":"si_1","object":"subscription_item","current_period_end":1924992000,"price":{"id":"price_yearly","object":"price"}}]}}}}
@@ -161,6 +166,17 @@ public class StripeWebhookTests(JitenWebApplicationFactory factory)
         // Resuming via the Stripe portal sends another update with cancel_at_period_end back to false.
         await PostEvent(SubscriptionResumedPayload());
         (await GetUserA()).StripeCancelAtPeriodEnd.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SubscriptionCancelledViaCancelAt_PersistsFlag()
+    {
+        var response = await PostEvent(SubscriptionCancelledViaCancelAtPayload());
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var user = await GetUserA();
+        user.StripeSubscriptionActive.Should().BeTrue();
+        user.StripeCancelAtPeriodEnd.Should().BeTrue();
     }
 
     [Fact]

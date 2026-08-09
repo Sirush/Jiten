@@ -2226,7 +2226,7 @@ public static class JmDictHelper
 
     public static async Task SyncJmDict(IDbContextFactory<JitenDbContext> contextFactory,
                                         string dtdPath, string dictionaryPath, string furiganaPath,
-                                        bool dryRun = false, string? reportPath = null)
+                                        bool dryRun = false, string? reportPath = null, bool rebuildKanjiTables = true)
     {
         if (dryRun)
             Console.WriteLine("=== DRY RUN MODE — no changes will be saved ===");
@@ -2601,6 +2601,9 @@ public static class JmDictHelper
 
             // Refresh the dictionary-version sentinel (WordId 9999999) from the file's own entry
             await UpsertVersionSentinel(contextFactory, syncEntries, furiganaDict);
+
+            if (rebuildKanjiTables)
+                await RebuildKanjiDerivedTables(contextFactory);
         }
 
         // Print statistics
@@ -2877,6 +2880,28 @@ public static class JmDictHelper
         $"{d.SenseIndex}|{string.Join(";", d.EnglishMeanings)}|{string.Join(",", d.Pos)}" +
         $"|{string.Join(",", d.Misc)}|{string.Join(",", d.Field)}|{string.Join(",", d.Dial)}" +
         $"|{string.Join(";", d.SenseInfo)}|{string.Join(",", d.GlossTypes)}";
+
+    /// <summary>Truncates and rebuilds WordKanji and KanjiReadingWords, both pure functions of the
+    /// Kanji table and the WordForms (text + RubyText) the sync just rewrote.</summary>
+    private static async Task RebuildKanjiDerivedTables(IDbContextFactory<JitenDbContext> contextFactory)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        // Both rebuilds truncate first and validate against the Kanji table; with no kanji imported
+        // they would leave the derived tables empty instead of unchanged.
+        if (!await context.Kanjis.AnyAsync())
+        {
+            Console.WriteLine("Skipping kanji-derived rebuild: the Kanji table is empty (run --import-kanjidic first).");
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Rebuilding WordKanji...");
+        await KanjidicHelper.PopulateWordKanji(contextFactory);
+
+        Console.WriteLine("Rebuilding KanjiReadingWords...");
+        await KanjidicHelper.ComputeKanjiReadings(contextFactory);
+    }
 
     /// <summary>Truncates and rebuilds the xref join table from the parsed entries (two-pass: words are
     /// all parsed in memory, so seq# targets resolve directly to WordIds).</summary>

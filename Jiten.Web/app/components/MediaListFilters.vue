@@ -2,6 +2,7 @@
   import { useApiFetch } from '~/composables/useApiFetch';
   import { type Tag } from '~/types';
   import { getAllGenres } from '~/utils/genreMapper';
+  import { NOT_ORIGINALLY_JP_TAG_ID } from '~/utils/tags';
   import type { TagState } from '~/components/TriStateTag.vue';
   import ScrollPanel from 'primevue/scrollpanel';
 
@@ -44,8 +45,6 @@
   const uniqueCoverageMin = defineModel<number | null>('uniqueCoverageMin', { required: true });
   const uniqueCoverageMax = defineModel<number | null>('uniqueCoverageMax', { required: true });
   const excludeSequels = defineModel<boolean | null>('excludeSequels', { required: false });
-
-  const NOT_ORIGINALLY_JP_TAG_ID = 249;
 
   const excludeNotOriginallyJp = computed({
     get: () => excludeTags.value.includes(NOT_ORIGINALLY_JP_TAG_ID),

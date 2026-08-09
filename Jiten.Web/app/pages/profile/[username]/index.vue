@@ -11,6 +11,13 @@
   import { useToast } from 'primevue/usetoast';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 
+  definePageMeta({
+    validate: (route) => {
+      const name = String(route.params.username);
+      return name.length >= 2 && name.length <= 30 && /^[A-Za-z0-9._@+-]+$/.test(name);
+    },
+  });
+
   const route = useRoute();
   const auth = useAuthStore();
   const toast = useToast();

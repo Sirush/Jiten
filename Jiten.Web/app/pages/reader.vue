@@ -1,12 +1,15 @@
 <script setup lang="ts">
-  useHead({
+  const description
+    = 'A free pop-up dictionary extension for reading Japanese online. Instant lookups, per-word knowledge tracking, '
+      + 'and a readability estimate for any page. Works with Ttsu, Asbplayer and Mokuro.';
+
+  useSeoMeta({
     title: 'Jiten Reader - Browser Extension',
-    meta: [
-      {
-        name: 'description',
-        content: 'Free browser extension to parse Japanese text anywhere on the web. Track vocabulary, see coverage, and customise your reading experience.',
-      },
-    ],
+    description,
+    ogTitle: 'Jiten Reader - Free Pop-up Japanese Dictionary Extension',
+    ogDescription: description,
+    twitterTitle: 'Jiten Reader - Free Pop-up Japanese Dictionary Extension',
+    twitterDescription: description,
   });
 
   const discordUrl = getDiscordLink();

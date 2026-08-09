@@ -24,6 +24,8 @@ public class DeckRelationship
         DeckRelationshipType.SideStory => DeckRelationshipType.HasSideStory,
         DeckRelationshipType.Adaptation => DeckRelationshipType.SourceMaterial,
         DeckRelationshipType.Alternative => DeckRelationshipType.Alternative,
+        DeckRelationshipType.SameSeries => DeckRelationshipType.SameSeries,
+        DeckRelationshipType.SameSetting => DeckRelationshipType.SameSetting,
         DeckRelationshipType.HasFandisc => DeckRelationshipType.Fandisc,
         DeckRelationshipType.HasSpinoff => DeckRelationshipType.Spinoff,
         DeckRelationshipType.HasSideStory => DeckRelationshipType.SideStory,
