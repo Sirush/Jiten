@@ -185,6 +185,8 @@ export enum DeckRelationshipType {
   SideStory = 4,
   Adaptation = 5,
   Alternative = 6,
+  SameSeries = 7,
+  SameSetting = 8,
 
   // Inverse relationships
   Prequel = 101,

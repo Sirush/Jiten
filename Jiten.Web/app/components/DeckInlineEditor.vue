@@ -75,6 +75,8 @@
     if (!role || !target) return '';
     const thisTitle = draft.value.originalTitle || 'this deck';
     if (role.label === 'Alternative') return `${target} will be an alternative version of ${thisTitle}.`;
+    if (role.label === 'Same series') return `${target} will be in the same series as ${thisTitle}.`;
+    if (role.label === 'Same setting') return `${target} will share its setting with ${thisTitle}.`;
     return `${target} will be the ${role.label.toLowerCase()} of ${thisTitle}.`;
   });
 

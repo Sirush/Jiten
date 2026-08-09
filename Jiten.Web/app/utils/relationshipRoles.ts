@@ -18,6 +18,8 @@ export const relationshipRoleOptions: RelationshipRoleOption[] = [
   { label: 'Side story', primaryType: DeckRelationshipType.SideStory, flip: true },
   { label: 'Main story', primaryType: DeckRelationshipType.SideStory, flip: false },
   { label: 'Alternative', primaryType: DeckRelationshipType.Alternative, flip: false },
+  { label: 'Same series', primaryType: DeckRelationshipType.SameSeries, flip: false },
+  { label: 'Same setting', primaryType: DeckRelationshipType.SameSetting, flip: false },
 ];
 
 /**
@@ -36,6 +38,8 @@ export const relationshipTypeLabels: Record<DeckRelationshipType, string> = {
   [DeckRelationshipType.Adaptation]: 'Adaptation',
   [DeckRelationshipType.SourceMaterial]: 'Source material',
   [DeckRelationshipType.Alternative]: 'Alternative',
+  [DeckRelationshipType.SameSeries]: 'Same series',
+  [DeckRelationshipType.SameSetting]: 'Same setting',
 };
 
 export function getRelationshipRoleLabel(type: DeckRelationshipType): string {
@@ -66,7 +70,7 @@ export function getInverseRelationshipType(type: DeckRelationshipType): DeckRela
     case DeckRelationshipType.SourceMaterial:
       return DeckRelationshipType.Adaptation;
     default:
-      return type; // Alternative is symmetric
+      return type; // Symmetric types (Alternative, SameSeries, SameSetting) are their own inverse
   }
 }
 
