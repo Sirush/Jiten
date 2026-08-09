@@ -31,16 +31,14 @@ public static class CardMediaImageProcessor
 
         try
         {
-            // ImageMagick's default PNG reader returns only an APNG's first frame; the APNG coder must be
-            // selected explicitly. It reads static PNGs as a single frame too, so it's safe for all PNG input.
-            // GIF/WebP animation is read correctly under auto-detect.
-            var readSettings = extension == "png"
-                ? new MagickReadSettings { Format = MagickFormat.APng }
-                : new MagickReadSettings();
-            using var frames = new MagickImageCollection(bytes, readSettings);
+            using var frames = ReadFrames(bytes, extension, logger);
 
-            if (frames.Count == 0)
+            if (frames is null || frames.Count == 0)
+            {
+                logger?.LogWarning("Card-media image ({Extension}, {Bytes} bytes) decoded to no frames; "
+                                   + "storing the original file unmodified.", extension, bytes.Length);
                 return original;
+            }
 
             if (frames.Count > 1)
                 return NormalizeAnimated(frames, original, logger);
@@ -55,7 +53,8 @@ public static class CardMediaImageProcessor
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Card-media image normalization failed; storing the original file unmodified.");
+            logger?.LogWarning(ex, "Card-media image normalization failed ({Extension}, {Bytes} bytes); "
+                                   + "storing the original file unmodified.", extension, bytes.Length);
             return original;
         }
     }
@@ -88,4 +87,66 @@ public static class CardMediaImageProcessor
     // Greater = the ImageMagick '>' flag: only shrink when larger than the box, preserving aspect.
     private static void Shrink(IMagickImage<ushort> image) =>
         image.Resize(new MagickGeometry(MaxLongEdge, MaxLongEdge) { Greater = true });
+
+    /// <summary>
+    /// The default PNG reader returns only an APNG's first frame, so the APNG coder is named explicitly -
+    /// but only for input that actually is one. On Linux that coder is a delegate to an ffmpeg binary the API
+    /// image does not carry, and it then yields no frames at all rather than failing; forcing it on every PNG
+    /// is what stored plain screenshots raw at full resolution.
+    /// </summary>
+    /// <returns>Null for an APNG this runtime cannot decode as an animation, which must keep its original file.</returns>
+    private static MagickImageCollection? ReadFrames(byte[] bytes, string extension, ILogger? logger)
+    {
+        if (extension != "png" || !HasAnimationControlChunk(bytes))
+            return new MagickImageCollection(bytes);
+
+        MagickImageCollection? animated = null;
+        try
+        {
+            animated = new MagickImageCollection(bytes, new MagickReadSettings { Format = MagickFormat.APng });
+            if (animated.Count > 0)
+                return animated;
+        }
+        catch (MagickException ex)
+        {
+            logger?.LogWarning(ex, "APNG decode failed.");
+        }
+
+        animated?.Dispose();
+
+        // Reading it as a plain PNG would succeed and silently turn the animation into a single frame, so an
+        // undecodable APNG keeps its original file instead.
+        logger?.LogWarning("APNG could not be decoded as an animation; storing it unmodified.");
+        return null;
+    }
+
+    /// <summary>True when the PNG carries an acTL chunk, which is what makes it an APNG.</summary>
+    private static bool HasAnimationControlChunk(byte[] bytes)
+    {
+        // Chunks follow the 8-byte signature as [length:4][type:4][data][crc:4]. acTL always precedes IDAT,
+        // so the scan stops at the first one rather than walking the whole pixel stream.
+        var offset = 8;
+        while (offset + 8 <= bytes.Length)
+        {
+            var length = ((long)bytes[offset] << 24) | ((long)bytes[offset + 1] << 16)
+                                                     | ((long)bytes[offset + 2] << 8) | bytes[offset + 3];
+
+            if (IsChunkType(bytes, offset + 4, "acTL")) return true;
+            if (IsChunkType(bytes, offset + 4, "IDAT")) return false;
+
+            var next = offset + 12L + length;
+            if (next <= offset || next > bytes.Length) return false;
+            offset = (int)next;
+        }
+
+        return false;
+    }
+
+    private static bool IsChunkType(byte[] bytes, int offset, string type)
+    {
+        for (var i = 0; i < 4; i++)
+            if (bytes[offset + i] != (byte)type[i])
+                return false;
+        return true;
+    }
 }

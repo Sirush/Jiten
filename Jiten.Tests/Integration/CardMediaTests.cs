@@ -36,6 +36,14 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
         return image.ToByteArray();
     }
 
+    private static byte[] RealApng(int w = 50, int h = 50)
+    {
+        using var frames = new MagickImageCollection();
+        frames.Add(new MagickImage(MagickColors.Red, (uint)w, (uint)h) { AnimationDelay = 10 });
+        frames.Add(new MagickImage(MagickColors.Blue, (uint)w, (uint)h) { AnimationDelay = 10 });
+        return frames.ToByteArray(MagickFormat.APng);
+    }
+
     private static byte[] RealGif(int w = 50, int h = 50)
     {
         using var image = new MagickImage(MagickColors.Green, (uint)w, (uint)h);
@@ -221,6 +229,40 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
         var row = await userDb.UserCardMedia.FirstAsync(m => m.UserId == TestUsers.UserA && m.WordId == 109);
         IsUploadOf(row.StoragePath, CardMediaKind.Image, "webp").Should().BeTrue();
         row.ContentType.Should().Be("image/webp");
+    }
+
+    /// <summary>
+    /// An animated upload must never come back as a single frame. Whether it can be re-encoded at all is
+    /// platform-dependent - ImageMagick's APNG coder is an ffmpeg delegate on Linux - so the invariant is
+    /// "converted with its frames, or kept exactly as uploaded", never "silently flattened".
+    /// </summary>
+    [Fact]
+    public async Task Upload_AnimatedPng_IsNeverFlattened()
+    {
+        var apng = RealApng();
+        if (apng.Length == 0)
+            return; // no APNG encoder here, so there is nothing to upload
+
+        var cdn = factory.Services.GetRequiredService<StubCdnService>();
+        cdn.Uploads.Clear();
+
+        var resp = await Upload(TestUsers.UserA, 111, 0, apng, "anim.png");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var contentType = (await resp.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("media").GetProperty("contentType").GetString();
+
+        var stored = cdn.Uploads.Last(u => u.FileName.Contains("_image_")).File;
+
+        if (contentType == "image/webp")
+        {
+            using var storedFrames = new MagickImageCollection(stored);
+            storedFrames.Count.Should().BeGreaterThan(1);
+        }
+        else
+        {
+            contentType.Should().Be("image/png");
+            stored.Should().Equal(apng);
+        }
     }
 
     [Fact]

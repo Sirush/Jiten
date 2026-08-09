@@ -701,6 +701,7 @@ builder.Services.AddScoped<RenewalReminderJob>();
 builder.Services.AddScoped<DecrementPromoCreditsJob>();
 builder.Services.AddScoped<FrequencyListJob>();
 builder.Services.AddScoped<RoadmapJob>();
+builder.Services.AddScoped<CardMediaRenormalizeJob>();
 
 builder.Services.AddHangfire(configuration =>
                                  configuration.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
