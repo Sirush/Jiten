@@ -5,6 +5,7 @@
 
   definePageMeta({
     key: (route) => `vocab-${route.params.wordId}`,
+    validate: route => /^\d+$/.test(String(route.params.wordId)) && /^\d+$/.test(String(route.params.readingIndex)),
   });
 
   const route = useRoute();

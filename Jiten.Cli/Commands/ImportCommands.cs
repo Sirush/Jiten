@@ -105,7 +105,7 @@ public class ImportCommands(CliContext context)
         Console.WriteLine("Syncing JMDict entries with database...");
         var reportPath = options.DryRun ? (options.Output ?? "jmdict-sync-changes.txt") : null;
         await JmDictHelper.SyncJmDict(context.ContextFactory, options.XmlPath, options.DictionaryPath, options.FuriganaPath,
-            options.DryRun, reportPath);
+            options.DryRun, reportPath, rebuildKanjiTables: !options.SkipKanjiRebuild);
         Console.WriteLine("JMDict sync complete.");
     }
 
