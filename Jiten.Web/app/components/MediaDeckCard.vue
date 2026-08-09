@@ -273,6 +273,14 @@
     isDescriptionExpanded.value = !isDescriptionExpanded.value;
   };
 
+  const canEditInline = computed(() => !props.isCompact && authStore.isAdmin && displayAdminFunctions.value);
+  const isEditing = ref(false);
+
+  const onMetadataSaved = (result: import('~/types/types').DeckMetadataPatchResult) => {
+    emit('update:deck', { ...props.deck, ...result });
+    isEditing.value = false;
+  };
+
   const combinedCoverage = computed(() => Math.min(props.deck.coverage + props.deck.youngCoverage, 100));
   const combinedUniqueCoverage = computed(() => Math.min(props.deck.uniqueCoverage + props.deck.youngUniqueCoverage, 100));
 
@@ -350,6 +358,16 @@
                 {{ getDeckStatusText(deck.status) }}
               </span>
             </div>
+            <Tooltip v-if="canEditInline" :content="isEditing ? 'Stop editing' : 'Edit metadata inline'">
+              <button
+                type="button"
+                class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                :aria-pressed="isEditing"
+                @click="isEditing = !isEditing"
+              >
+                <i class="pi pi-pencil text-primary-500" />
+              </button>
+            </Tooltip>
             <ShareButton v-if="!isCompact" :path="`/decks/media/${deck.deckId}/detail`" :title="shareTitle" />
             <Tooltip content="View stats">
               <router-link
@@ -566,15 +584,21 @@
 
                 <ExampleSentenceEntry v-if="deck.exampleSentence != undefined" :example-sentence="deck.exampleSentence" />
 
-                <div v-if="deck.genres?.length || deck.tags?.length || deck.relationships?.length" class="mt-4 space-y-2">
-                  <GenreTagDisplay v-if="!store.hideGenres && deck.genres?.length" :genres="deck.genres" label="Genres" />
-                  <GenreTagDisplay v-if="!store.hideTags && deck.tags?.length" :tags="deck.tags" label="Tags" />
-                  <RelatedMediaDisplay v-if="!store.hideRelations && deck.relationships?.length" :relationships="deck.relationships" :deck-id="deck.deckId" />
-                </div>
+                <!-- Edit mode renders its own expanded chip rows: the read-only renderers measure
+                     overflow with a ResizeObserver that would thrash on every toggle. -->
+                <LazyDeckInlineEditor v-if="isEditing" :deck="deck" @saved="onMetadataSaved" @close="isEditing = false" />
 
-                <div v-if="sortedLinks.length" class="mt-4 flex flex-col md:flex-row gap-4">
-                  <a v-for="link in sortedLinks" :key="link.url" :href="link.url" target="_blank">{{ getLinkTypeText(link.linkType) }}</a>
-                </div>
+                <template v-else>
+                  <div v-if="deck.genres?.length || deck.tags?.length || deck.relationships?.length" class="mt-4 space-y-2">
+                    <GenreTagDisplay v-if="!store.hideGenres && deck.genres?.length" :genres="deck.genres" label="Genres" />
+                    <GenreTagDisplay v-if="!store.hideTags && deck.tags?.length" :tags="deck.tags" label="Tags" />
+                    <RelatedMediaDisplay v-if="!store.hideRelations && deck.relationships?.length" :relationships="deck.relationships" :deck-id="deck.deckId" />
+                  </div>
+
+                  <div v-if="sortedLinks.length" class="mt-4 flex flex-col md:flex-row gap-4">
+                    <a v-for="link in sortedLinks" :key="link.url" :href="link.url" target="_blank">{{ getLinkTypeText(link.linkType) }}</a>
+                  </div>
+                </template>
                 <template v-if="isCompact && authStore.isAuthenticated && (deck.coverage != 0 || deck.uniqueCoverage != 0)">
                   <Tooltip :content="coverageTooltip" block>
                     <div class="text-gray-600 dark:text-gray-300 truncate pr-2 font-normal">Coverage</div>

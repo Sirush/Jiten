@@ -9,8 +9,8 @@
   import DataTable from 'primevue/datatable';
   import Column from 'primevue/column';
   import { useToast } from 'primevue/usetoast';
-  import { DeckRelationshipType, LinkType } from '~/types';
-  import type { Deck, DeckDetail, DeckRelationship, Link, MediaType, MediaSuggestion, Tag, Genre } from '~/types';
+  import { LinkType } from '~/types';
+  import type { Deck, DeckDetail, DeckRelationship, DeckRelationshipType, Link, MediaType, MediaSuggestion, Tag, Genre } from '~/types';
   import { debounce } from 'perfect-debounce';
   import AutoComplete from 'primevue/autocomplete';
   import PrimeTag from 'primevue/tag';
@@ -18,6 +18,14 @@
   import WebNovelSyncPanel from '~/components/dashboard/WebNovelSyncPanel.vue';
   import { getLinkTypeText } from '~/utils/linkTypeMapper';
   import { getAllGenres } from '~/utils/genreMapper';
+  import { DEFAULT_TAG_PERCENTAGE } from '~/utils/tags';
+  import {
+    getInverseRelationshipType,
+    getRelationshipRoleLabel as getRelationshipTypeLabel,
+    relationshipRoleOptions,
+    toCanonicalEdge,
+    type RelationshipRoleOption,
+  } from '~/utils/relationshipRoles';
   import Checkbox from 'primevue/checkbox';
   import Select from 'primevue/select';
   import MultiSelect from 'primevue/multiselect';
@@ -92,7 +100,7 @@
   const showAddTagDialog = ref(false);
   const newTag = ref<{ tagId: number | null; percentage: number }>({
     tagId: null,
-    percentage: 50,
+    percentage: DEFAULT_TAG_PERCENTAGE,
   });
   const tagsLoading = ref(false);
 
@@ -115,40 +123,6 @@
   const deckSuggestions = ref<MediaSuggestion[]>([]);
   const showRecomputeDifficultyDialog = ref(false);
   const showReaggregateDifficultyDialog = ref(false);
-
-  // Options are phrased from the TARGET deck's perspective: picking "Sequel" means the
-  // target you select is THIS deck's sequel. Each maps to a canonical primary edge plus
-  // whether the stored edge points from the target back to this deck (flip).
-  type RelationshipRoleOption = { label: string; primaryType: DeckRelationshipType; flip: boolean };
-  const relationshipRoleOptions: RelationshipRoleOption[] = [
-    { label: 'Sequel', primaryType: DeckRelationshipType.Sequel, flip: true },
-    { label: 'Prequel', primaryType: DeckRelationshipType.Sequel, flip: false },
-    { label: 'Adaptation', primaryType: DeckRelationshipType.Adaptation, flip: false },
-    { label: 'Source material', primaryType: DeckRelationshipType.Adaptation, flip: true },
-    { label: 'Fandisc', primaryType: DeckRelationshipType.Fandisc, flip: true },
-    { label: 'Main release', primaryType: DeckRelationshipType.Fandisc, flip: false },
-    { label: 'Spinoff', primaryType: DeckRelationshipType.Spinoff, flip: true },
-    { label: 'Parent series', primaryType: DeckRelationshipType.Spinoff, flip: false },
-    { label: 'Side story', primaryType: DeckRelationshipType.SideStory, flip: true },
-    { label: 'Main story', primaryType: DeckRelationshipType.SideStory, flip: false },
-    { label: 'Alternative', primaryType: DeckRelationshipType.Alternative, flip: false },
-  ];
-
-  // Labels for a relationship already in the list, keyed by its type from THIS deck's
-  // perspective (the value the API returns). Describes what the target deck is.
-  const relationshipTypeLabels: Record<DeckRelationshipType, string> = {
-    [DeckRelationshipType.Sequel]: 'Prequel',
-    [DeckRelationshipType.Prequel]: 'Sequel',
-    [DeckRelationshipType.Fandisc]: 'Main release',
-    [DeckRelationshipType.HasFandisc]: 'Fandisc',
-    [DeckRelationshipType.Spinoff]: 'Parent series',
-    [DeckRelationshipType.HasSpinoff]: 'Spinoff',
-    [DeckRelationshipType.SideStory]: 'Main story',
-    [DeckRelationshipType.HasSideStory]: 'Side story',
-    [DeckRelationshipType.Adaptation]: 'Adaptation',
-    [DeckRelationshipType.SourceMaterial]: 'Source material',
-    [DeckRelationshipType.Alternative]: 'Alternative',
-  };
 
   const newSubdeckUploaderRef = ref<InstanceType<typeof FileUpload> | null>(null);
   const replaceSubdecksUploaderRef = ref<InstanceType<typeof FileUpload> | null>(null);
@@ -223,7 +197,7 @@
       relationships.value =
         mainDeck.relationships?.map((r) => ({
           targetDeckId: r.targetDeckId,
-          targetTitle: r.targetTitle,
+          targetTitle: r.targetDeck ? localiseTitle(r.targetDeck) : `#${r.targetDeckId}`,
           relationshipType: r.relationshipType,
           isInverse: r.isInverse,
         })) || [];
@@ -451,7 +425,7 @@
   }
 
   function openAddTagDialog() {
-    newTag.value = { tagId: null, percentage: 50 };
+    newTag.value = { tagId: null, percentage: DEFAULT_TAG_PERCENTAGE };
     showAddTagDialog.value = true;
   }
 
@@ -569,38 +543,6 @@
     relationships.value.splice(index, 1);
   }
 
-  function getRelationshipTypeLabel(type: DeckRelationshipType): string {
-    return relationshipTypeLabels[type] ?? 'Unknown';
-  }
-
-  // Mirrors DeckRelationship.GetInverse on the backend.
-  function getInverseRelationshipType(type: DeckRelationshipType): DeckRelationshipType {
-    switch (type) {
-      case DeckRelationshipType.Sequel:
-        return DeckRelationshipType.Prequel;
-      case DeckRelationshipType.Prequel:
-        return DeckRelationshipType.Sequel;
-      case DeckRelationshipType.Fandisc:
-        return DeckRelationshipType.HasFandisc;
-      case DeckRelationshipType.HasFandisc:
-        return DeckRelationshipType.Fandisc;
-      case DeckRelationshipType.Spinoff:
-        return DeckRelationshipType.HasSpinoff;
-      case DeckRelationshipType.HasSpinoff:
-        return DeckRelationshipType.Spinoff;
-      case DeckRelationshipType.SideStory:
-        return DeckRelationshipType.HasSideStory;
-      case DeckRelationshipType.HasSideStory:
-        return DeckRelationshipType.SideStory;
-      case DeckRelationshipType.Adaptation:
-        return DeckRelationshipType.SourceMaterial;
-      case DeckRelationshipType.SourceMaterial:
-        return DeckRelationshipType.Adaptation;
-      default:
-        return type; // Alternative is symmetric
-    }
-  }
-
   function moveSubdeckToPosition(id: number, targetPosition: number | null) {
     if (targetPosition === null) return;
 
@@ -633,7 +575,7 @@
     links.value.push({
       linkId: 0,
       url: newLink.value.url,
-      linkType: newLink.value.linkType.toString(),
+      linkType: newLink.value.linkType,
       deckId: parseInt(mediaId as string),
     });
 
@@ -645,7 +587,7 @@
     editingLink.value = {
       index,
       url: link.url,
-      linkType: parseInt(link.linkType) as LinkType,
+      linkType: Number(link.linkType) as LinkType,
     };
     showEditLinkDialog.value = true;
   }
@@ -660,7 +602,7 @@
     links.value[index] = {
       ...links.value[index],
       url: editingLink.value.url,
-      linkType: editingLink.value.linkType.toString(),
+      linkType: editingLink.value.linkType,
     };
 
     showEditLinkDialog.value = false;
@@ -814,15 +756,10 @@
         formData.append('file', parentTextFile.value);
       }
 
-      if (links.value && links.value.length > 0) {
-        for (let i = 0; i < links.value.length; i++) {
-          const link = links.value[i];
-          formData.append(`links[${i}].url`, link.url);
-          formData.append(`links[${i}].linkType`, link.linkType);
-          if (link.linkId > 0) {
-            formData.append(`links[${i}].linkId`, link.linkId.toString());
-          }
-        }
+      for (let i = 0; i < links.value.length; i++) {
+        const link = links.value[i];
+        formData.append(`links[${i}].url`, link.url);
+        formData.append(`links[${i}].linkType`, link.linkType.toString());
       }
 
       if (aliases.value && aliases.value.length > 0) {
@@ -848,17 +785,12 @@
         formData.append(`tags[${index}].percentage`, tag.percentage.toString());
       });
 
-      // Add relationships as canonical primary edges. A relationship may point from this
-      // deck to the target (direct) or from the target back to this deck (inverse); the
-      // backend reconciles edges in either direction.
       const currentDeckId = parseInt(mediaId as string);
       relationships.value.forEach((rel, index) => {
-        const sourceDeckId = rel.isInverse ? rel.targetDeckId : currentDeckId;
-        const targetDeckId = rel.isInverse ? currentDeckId : rel.targetDeckId;
-        const primaryType = rel.isInverse ? getInverseRelationshipType(rel.relationshipType) : rel.relationshipType;
-        formData.append(`relationships[${index}].sourceDeckId`, sourceDeckId.toString());
-        formData.append(`relationships[${index}].targetDeckId`, targetDeckId.toString());
-        formData.append(`relationships[${index}].relationshipType`, primaryType.toString());
+        const edge = toCanonicalEdge(currentDeckId, rel);
+        formData.append(`relationships[${index}].sourceDeckId`, edge.sourceDeckId.toString());
+        formData.append(`relationships[${index}].targetDeckId`, edge.targetDeckId.toString());
+        formData.append(`relationships[${index}].relationshipType`, edge.relationshipType.toString());
       });
 
       if (subdecks.value.length > 0) {
@@ -1011,7 +943,7 @@
                 <ul class="list-none p-0">
                   <li v-for="(link, index) in links" :key="index" class="flex justify-between items-center p-2 border-b">
                     <div>
-                      <span class="font-medium">{{ getLinkTypeText(parseInt(link.linkType)) }}:</span>
+                      <span class="font-medium">{{ getLinkTypeText(Number(link.linkType)) }}:</span>
                       <a :href="link.url" target="_blank" class="ml-2 text-blue-500 hover:underline">{{ link.url }}</a>
                     </div>
                     <div class="flex">

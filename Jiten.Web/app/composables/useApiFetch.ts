@@ -16,6 +16,14 @@ type ApiFetchResult<T> = {
   ready: Promise<void>;
 };
 
+// `useFetch` accepts a reactive request, and several callers pass a computed URL. Anything reading
+// the URL outside the fetch itself must go through this, or a ref stringifies to "[object Object]".
+type ApiFetchRequest = string | (() => string) | Ref<string>;
+
+function resolveRequest(request: ApiFetchRequest): string {
+  return typeof request === 'function' ? request() : unref(request);
+}
+
 function unwrapQuery(query: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
   if (!query) return undefined;
   const plain: Record<string, unknown> = {};
@@ -27,7 +35,7 @@ function unwrapQuery(query: Record<string, unknown> | undefined): Record<string,
 
 function revalidateOnClientAfterSsr(
   authStore: ReturnType<typeof useAuthStore>,
-  request: string | (() => string),
+  request: ApiFetchRequest,
   query: Record<string, unknown> | undefined,
   data: Ref<unknown>,
   error: Ref<Error | null | undefined>,
@@ -46,8 +54,7 @@ function revalidateOnClientAfterSsr(
       // and cancels any pending lazy hydration. SSR requests carry the auth cookie,
       // so the revalidated payload is usually byte-identical — only replace when not.
       const api = nuxtApp.$api as (url: string, opts?: { query?: Record<string, unknown> }) => Promise<unknown>;
-      const url = typeof request === 'function' ? request() : request;
-      const fresh = await api(url, { query: unwrapQuery(query) });
+      const fresh = await api(resolveRequest(request), { query: unwrapQuery(query) });
       if (JSON.stringify(fresh) !== JSON.stringify(data.value)) {
         data.value = fresh;
       }
@@ -66,7 +73,7 @@ function revalidateOnClientAfterSsr(
 function setup401ErrorHandler(
   error: Ref<Error | null | undefined>,
   execute: (opts?: any) => Promise<void>,
-  request: string | (() => string),
+  request: ApiFetchRequest,
   authStore: ReturnType<typeof useAuthStore>
 ): void {
   if (!import.meta.client) return;
@@ -84,8 +91,7 @@ function setup401ErrorHandler(
     isHandling401.value = true;
 
     try {
-      const url = typeof request === 'function' ? request() : request;
-      if (url.includes('/auth/')) return;
+      if (resolveRequest(request).includes('/auth/')) return;
 
       if (!authStore.isRefreshing) {
         const refreshSuccess = await authStore.refreshAccessToken();
@@ -114,7 +120,7 @@ function setup401ErrorHandler(
 function buildFetchOptions(
   opts: any,
   authStore: ReturnType<typeof useAuthStore>,
-  request: string | (() => string)
+  request: ApiFetchRequest
 ) {
   const tokenCheckPromise = import.meta.client && authStore.isAuthenticated
     ? authStore.ensureValidToken()
@@ -165,7 +171,7 @@ function buildFetchOptions(
 }
 
 export function useApiFetch<T>(
-  request: string | (() => string),
+  request: ApiFetchRequest,
   opts?: any
 ): ApiFetchResult<T> {
   const { revalidateOnClient, ...fetchOpts } = opts ?? {};
@@ -194,7 +200,7 @@ export function useApiFetch<T>(
 }
 
 export  function useApiFetchPaginated<T>(
-  request: string | (() => string),
+  request: ApiFetchRequest,
   opts?: any
 ): ApiFetchResult<PaginatedResponse<T>>  {
   const { revalidateOnClient, ...fetchOpts } = opts ?? {};
@@ -225,19 +231,11 @@ export  function useApiFetchPaginated<T>(
 }
 
 // Helper function to generate a safe key from request parameter
-const generateRequestKey = (request: string | (() => string)) => {
-  if (typeof request === 'string') {
-    return request;
-  } else if (typeof request === 'function') {
-    try {
-      return request();
-    } catch (e) {
-      return 'dynamic-request';
-    }
-  } else if (request && typeof request === 'object' && 'value' in request) {
-    return String(request.value);
-  } else {
-    return String(request);
+const generateRequestKey = (request: ApiFetchRequest) => {
+  try {
+    return resolveRequest(request);
+  } catch {
+    return 'dynamic-request';
   }
 };
 
