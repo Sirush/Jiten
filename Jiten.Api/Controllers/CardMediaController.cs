@@ -98,14 +98,14 @@ public class CardMediaController(
                 maxBytes = quota.MaxBytes
             });
 
-        var kindStr = sniff.Kind.ToString().ToLowerInvariant();
-        var version = Guid.NewGuid().ToString("N")[..8];
-        var storagePath = $"card-media/{userId}/{wordId}_{ri}_{kindStr}_{version}.{processed.Extension}";
+        var storagePath = CardMediaStorage.PathFor(userId, wordId, ri, sniff.Kind, processed.Extension);
 
         var existing = await userContext.UserCardMedia
                                         .FirstOrDefaultAsync(m => m.UserId == userId && m.WordId == wordId
                                                                   && m.ReadingIndex == ri && m.Kind == sniff.Kind);
         var oldStoragePath = existing?.StoragePath;
+        // Replacing the media makes any original the renormalize backfill retained unreachable too.
+        var retainedOriginal = existing?.PreviousStoragePath;
 
         string? uploadedStoragePath = null;
         await using var transaction = await userContext.Database.BeginTransactionAsync();
@@ -121,6 +121,9 @@ public class CardMediaController(
             existing.ContentType = processed.ContentType;
             existing.FileSizeBytes = bytes.Length;
             existing.CreatedAt = DateTime.UtcNow;
+            existing.PreviousStoragePath = null;
+            existing.PreviousContentType = null;
+            existing.PreviousFileSizeBytes = null;
             await userContext.SaveChangesAsync();
 
             await cdn.UploadFile(bytes, storagePath, secure: true);
@@ -136,12 +139,10 @@ public class CardMediaController(
             throw;
         }
 
-        // Once the row is durably committed the file it replaced is orphaned; removing it is best-effort.
-        if (oldStoragePath != null && oldStoragePath != storagePath)
-        {
-            try { await cdn.DeleteFile(oldStoragePath, secure: true); }
-            catch (Exception ex) { logger.LogWarning(ex, "Failed to delete replaced card-media file {Path}", oldStoragePath); }
-        }
+        // Once the row is durably committed the files it replaced are orphaned; removing them is best-effort.
+        await DeleteFilesAsync(new[] { oldStoragePath, retainedOriginal }
+                               .Where(p => p != null && p != storagePath)
+                               .Select(p => p!));
 
         return Results.Ok(new
         {
@@ -172,12 +173,11 @@ public class CardMediaController(
         if (row is null)
             return Results.NotFound();
 
-        var storagePath = row.StoragePath;
+        var paths = OwnedPaths(row).ToList();
         userContext.UserCardMedia.Remove(row);
         await userContext.SaveChangesAsync();
 
-        try { await cdn.DeleteFile(storagePath, secure: true); }
-        catch (Exception ex) { logger.LogWarning(ex, "Failed to delete card-media CDN file {Path}", storagePath); }
+        await DeleteFilesAsync(paths);
 
         return Results.Ok(new { quota = await QuotaPayloadAsync(userId) });
     }
@@ -190,16 +190,12 @@ public class CardMediaController(
             return Results.Unauthorized();
 
         var rows = await userContext.UserCardMedia.Where(m => m.UserId == userId).ToListAsync();
-        var paths = rows.Select(r => r.StoragePath).ToList();
+        var paths = rows.SelectMany(OwnedPaths).ToList();
 
         userContext.UserCardMedia.RemoveRange(rows);
         await userContext.SaveChangesAsync();
 
-        foreach (var path in paths)
-        {
-            try { await cdn.DeleteFile(path, secure: true); }
-            catch (Exception ex) { logger.LogWarning(ex, "Failed to delete card-media CDN file {Path}", path); }
-        }
+        await DeleteFilesAsync(paths);
 
         var quota = await quotaService.GetQuotaAsync(userId);
         return Results.Ok(new { quota = new { usedBytes = 0L, maxBytes = quota.MaxBytes } });
@@ -240,18 +236,26 @@ public class CardMediaController(
                                           .ToListAsync();
 
         var toDelete = candidates.Where(c => targets.Contains((c.WordId, c.ReadingIndex, c.Kind))).ToList();
-        var paths = toDelete.Select(r => r.StoragePath).ToList();
+        var paths = toDelete.SelectMany(OwnedPaths).ToList();
 
         userContext.UserCardMedia.RemoveRange(toDelete);
         await userContext.SaveChangesAsync();
 
+        await DeleteFilesAsync(paths);
+
+        return Results.Ok(new { deleted = toDelete.Count, quota = await QuotaPayloadAsync(userId) });
+    }
+
+    private static IEnumerable<string> OwnedPaths(UserCardMedia row) =>
+        row.PreviousStoragePath is null ? [row.StoragePath] : [row.StoragePath, row.PreviousStoragePath];
+
+    private async Task DeleteFilesAsync(IEnumerable<string> paths)
+    {
         foreach (var path in paths)
         {
             try { await cdn.DeleteFile(path, secure: true); }
             catch (Exception ex) { logger.LogWarning(ex, "Failed to delete card-media CDN file {Path}", path); }
         }
-
-        return Results.Ok(new { deleted = toDelete.Count, quota = await QuotaPayloadAsync(userId) });
     }
 
     private async Task<object> QuotaPayloadAsync(string userId)

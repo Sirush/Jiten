@@ -2,6 +2,8 @@
   import { ref, computed } from 'vue';
   import Card from 'primevue/card';
   import Button from 'primevue/button';
+  import DataTable from 'primevue/datatable';
+  import Column from 'primevue/column';
   import Select from 'primevue/select';
   import DatePicker from 'primevue/datepicker';
   import InputNumber from 'primevue/inputnumber';
@@ -10,6 +12,30 @@
   import { useToast } from 'primevue/usetoast';
   import { MediaType } from '~/types/enums';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { formatBytes } from '~/utils/formatBytes';
+
+  interface CardMediaRetained {
+    count: number;
+    oldBytes: number;
+    newBytes: number;
+  }
+
+  interface CardMediaPreview {
+    totalCount: number;
+    totalBytes: number;
+    byContentType: { contentType: string; count: number; bytes: number }[];
+    items: {
+      mediaId: number;
+      wordId: number;
+      readingIndex: number;
+      word: string | null;
+      contentType: string;
+      fileSizeBytes: number;
+      createdAt: string;
+    }[];
+    truncated: boolean;
+    retained: CardMediaRetained | null;
+  }
 
   interface WordReplacementResult {
     deckWordsUpdated: number;
@@ -78,6 +104,10 @@
     splitWordExecute: false,
     removeWordPreview: false,
     removeWordExecute: false,
+    cardMediaPreview: false,
+    cardMediaRun: false,
+    cardMediaRollback: false,
+    cardMediaDiscard: false,
   });
 
   const wordReplacement = ref({
@@ -483,6 +513,120 @@
     } finally {
       isLoading.value.reviewRollupBackfill = false;
     }
+  };
+
+  const cardMediaPreview = ref<CardMediaPreview | null>(null);
+
+  const loadCardMediaPreview = async () => {
+    isLoading.value.cardMediaPreview = true;
+    try {
+      cardMediaPreview.value = await $api<CardMediaPreview>('/admin/card-media/renormalize/preview?take=50');
+    } catch (error) {
+      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load card media preview', life: 5000 });
+      console.error('Error loading card media preview:', error);
+    } finally {
+      isLoading.value.cardMediaPreview = false;
+    }
+  };
+
+  const runCardMediaRenormalize = async (dryRun: boolean) => {
+    isLoading.value.cardMediaRun = true;
+    try {
+      await $api(`/admin/card-media/renormalize?dryRun=${dryRun}`, { method: 'POST' });
+      toast.add({
+        severity: 'success',
+        summary: 'Queued',
+        detail: dryRun
+          ? 'Dry run queued. Check the API logs for the measured saving.'
+          : 'Renormalize queued. Originals are kept until you discard them.',
+        life: 6000,
+      });
+    } catch (error) {
+      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to queue renormalize', life: 5000 });
+      console.error('Error queueing card media renormalize:', error);
+    } finally {
+      isLoading.value.cardMediaRun = false;
+    }
+  };
+
+  const confirmCardMediaRenormalize = () => {
+    confirm.require({
+      message:
+        `Rewrite ${cardMediaPreview.value?.totalCount ?? 0} card media files? ` +
+        'Each one is re-encoded to a new path; the original file stays on the CDN and the change can be rolled back.',
+      header: 'Run renormalize',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-primary',
+      rejectClass: 'p-button-secondary',
+      accept: () => runCardMediaRenormalize(false),
+      reject: () => {},
+    });
+  };
+
+  const rollbackCardMedia = async () => {
+    isLoading.value.cardMediaRollback = true;
+    try {
+      const data = await $api<{ eligible: number }>('/admin/card-media/renormalize/rollback', {
+        method: 'POST',
+      });
+      toast.add({
+        severity: 'success',
+        summary: 'Queued',
+        detail: `Restoring ${data.eligible} originals`,
+        life: 6000,
+      });
+    } catch (error) {
+      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to roll back', life: 5000 });
+      console.error('Error rolling back card media renormalize:', error);
+    } finally {
+      isLoading.value.cardMediaRollback = false;
+    }
+  };
+
+  const confirmCardMediaRollback = () => {
+    confirm.require({
+      message: 'Point every rewritten card back at its original file? The originals were never deleted, so this is safe.',
+      header: 'Roll back renormalize',
+      icon: 'pi pi-undo',
+      acceptClass: 'p-button-primary',
+      rejectClass: 'p-button-secondary',
+      accept: () => rollbackCardMedia(),
+      reject: () => {},
+    });
+  };
+
+  const discardCardMediaOriginals = async () => {
+    isLoading.value.cardMediaDiscard = true;
+    try {
+      const data = await $api<{ eligible: number }>('/admin/card-media/renormalize/discard-originals?confirm=true', {
+        method: 'POST',
+      });
+      toast.add({
+        severity: 'success',
+        summary: 'Queued',
+        detail: `Deleting ${data.eligible} superseded files`,
+        life: 6000,
+      });
+    } catch (error) {
+      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to queue discard', life: 5000 });
+      console.error('Error discarding card media originals:', error);
+    } finally {
+      isLoading.value.cardMediaDiscard = false;
+    }
+  };
+
+  const confirmCardMediaDiscard = () => {
+    confirm.require({
+      message:
+        `Permanently delete ${cardMediaPreview.value?.retained?.count ?? 0} superseded original files? ` +
+        'Rollback will no longer be possible.',
+      header: 'Discard originals',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-danger',
+      rejectClass: 'p-button-secondary',
+      accept: () => discardCardMediaOriginals(),
+      reject: () => {},
+    });
   };
 
   const flushRedisCache = async () => {
@@ -1235,6 +1379,101 @@
               :disabled="isLoading.reviewRollupBackfill"
               :loading="isLoading.reviewRollupBackfill"
               @click="backfillReviewRollup"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Renormalize Card Media</template>
+        <template #content>
+          <p class="mb-4">
+            Re-runs upload-time normalization over card media images that were stored unprocessed (anything not
+            <code>image/webp</code>). Each file is re-encoded to a new path and the original is left on the CDN, so the
+            rewrite can be rolled back until you discard the originals.
+          </p>
+
+          <div class="flex flex-wrap justify-center gap-2 mb-4">
+            <Button
+              label="Preview Affected"
+              icon="pi pi-search"
+              class="p-button-secondary"
+              :disabled="isLoading.cardMediaPreview"
+              :loading="isLoading.cardMediaPreview"
+              @click="loadCardMediaPreview"
+            />
+            <Button
+              label="Dry Run"
+              icon="pi pi-calculator"
+              class="p-button-secondary"
+              :disabled="isLoading.cardMediaRun"
+              :loading="isLoading.cardMediaRun"
+              @click="runCardMediaRenormalize(true)"
+            />
+            <Button
+              label="Run Renormalize"
+              icon="pi pi-refresh"
+              class="p-button-warning"
+              :disabled="isLoading.cardMediaRun || !cardMediaPreview?.totalCount"
+              :loading="isLoading.cardMediaRun"
+              @click="confirmCardMediaRenormalize"
+            />
+          </div>
+
+          <div v-if="cardMediaPreview" class="mb-4 p-4 bg-surface-100 dark:bg-surface-800 rounded-lg">
+            <h4 class="font-semibold mb-2">
+              {{ cardMediaPreview.totalCount.toLocaleString() }} unprocessed files ·
+              {{ formatBytes(cardMediaPreview.totalBytes) }}
+            </h4>
+            <ul class="text-sm">
+              <li v-for="group in cardMediaPreview.byContentType" :key="group.contentType">
+                <strong>{{ group.contentType }}:</strong> {{ group.count.toLocaleString() }} · {{ formatBytes(group.bytes) }}
+              </li>
+            </ul>
+
+            <div v-if="cardMediaPreview.retained" class="mt-3 pt-3 border-t border-surface-300 dark:border-surface-600 text-sm">
+              <p>
+                {{ cardMediaPreview.retained.count.toLocaleString() }} rewritten files still hold their original:
+                {{ formatBytes(cardMediaPreview.retained.oldBytes) }} → {{ formatBytes(cardMediaPreview.retained.newBytes) }}.
+                Rollback is possible until they are discarded.
+              </p>
+            </div>
+          </div>
+
+          <DataTable v-if="cardMediaPreview?.items.length" :value="cardMediaPreview.items" size="small" striped-rows class="mb-4">
+            <Column header="Word">
+              <template #body="{ data }">{{ data.word ?? '?' }} <span class="text-xs text-surface-400">#{{ data.wordId }}</span></template>
+            </Column>
+            <Column field="readingIndex" header="Reading" />
+            <Column field="contentType" header="Type" />
+            <Column header="Size">
+              <template #body="{ data }">{{ formatBytes(data.fileSizeBytes) }}</template>
+            </Column>
+            <Column header="Uploaded">
+              <template #body="{ data }">{{ new Date(data.createdAt).toLocaleDateString() }}</template>
+            </Column>
+          </DataTable>
+
+          <p v-if="cardMediaPreview?.truncated" class="mb-4 text-xs text-surface-500">
+            Showing the 50 largest of {{ cardMediaPreview.totalCount.toLocaleString() }}.
+          </p>
+
+          <div v-if="cardMediaPreview?.retained?.count" class="flex flex-wrap justify-center gap-2">
+            <Button
+              label="Roll Back"
+              icon="pi pi-undo"
+              class="p-button-secondary"
+              :disabled="isLoading.cardMediaRollback"
+              :loading="isLoading.cardMediaRollback"
+              @click="confirmCardMediaRollback"
+            />
+            <Button
+              label="Discard Originals"
+              icon="pi pi-trash"
+              class="p-button-danger"
+              :disabled="isLoading.cardMediaDiscard"
+              :loading="isLoading.cardMediaDiscard"
+              @click="confirmCardMediaDiscard"
             />
           </div>
         </template>

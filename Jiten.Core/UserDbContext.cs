@@ -610,6 +610,8 @@ public class UserDbContext : IdentityDbContext<User>
             entity.Property(m => m.StoragePath).HasMaxLength(512).IsRequired();
             entity.Property(m => m.ContentType).HasMaxLength(100).IsRequired();
             entity.Property(m => m.CreatedAt).IsRequired();
+            entity.Property(m => m.PreviousStoragePath).HasMaxLength(512);
+            entity.Property(m => m.PreviousContentType).HasMaxLength(100);
 
             entity.HasOne<User>()
                   .WithMany()
@@ -622,6 +624,7 @@ public class UserDbContext : IdentityDbContext<User>
                   .IsUnique()
                   .HasDatabaseName("IX_UserCardMedia_UserId_WordId_ReadingIndex_Kind");
         });
+
 
         base.OnModelCreating(modelBuilder);
     }
