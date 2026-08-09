@@ -124,6 +124,10 @@ public class CliOptions
     [Option(longName: "sync-jmdict", Required = false, HelpText = "Sync JMDict metadata on WordForms and Definitions from XML source.")]
     public bool SyncJmDict { get; set; }
 
+    [Option(longName: "skip-kanji-rebuild", Required = false,
+            HelpText = "Skip the WordKanji/KanjiReadingWords rebuild that normally closes a JMDict sync.")]
+    public bool SkipKanjiRebuild { get; set; }
+
     [Option(longName: "dry-run", Required = false, HelpText = "Preview sync changes without applying them. Exports a report to --output or jmdict-sync-changes.txt.")]
     public bool DryRun { get; set; }
 
