@@ -621,6 +621,7 @@ export interface UserAccomplishment {
   userId: string;
   mediaType: MediaType | null;
   completedDeckCount: number;
+  completedUnitCount: number;
   totalCharacterCount: number;
   totalWordCount: number;
   uniqueWordCount: number;

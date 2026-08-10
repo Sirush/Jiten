@@ -883,6 +883,27 @@ public class ComputationJob(
     private static readonly HashSet<string> AccomplishmentComputingUserIds = new();
     private const int GLOBAL_MEDIA_TYPE_KEY = -1;
 
+    internal sealed record CompletedDeckInfo(int DeckId, int? ParentDeckId, MediaType MediaType, int CharacterCount, int WordCount);
+
+    /// <summary>Effective set + leaf units per effective deck</summary>
+    internal static (List<CompletedDeckInfo> EffectiveDecks, Dictionary<int, int> UnitCounts) ResolveCompletedUnits(
+        IReadOnlyList<CompletedDeckInfo> allCompletedDecks,
+        IReadOnlyDictionary<int, int> childCounts)
+    {
+        var completedRootIds = allCompletedDecks.Where(d => d.ParentDeckId == null).Select(d => d.DeckId).ToHashSet();
+
+        var effectiveDecks = allCompletedDecks
+                             .Where(d => d.ParentDeckId == null || !completedRootIds.Contains(d.ParentDeckId.Value))
+                             .ToList();
+
+        var unitCounts = effectiveDecks.ToDictionary(d => d.DeckId,
+                                                     d => d.ParentDeckId == null
+                                                         ? Math.Max(childCounts.GetValueOrDefault(d.DeckId, 0), 1)
+                                                         : 1);
+
+        return (effectiveDecks, unitCounts);
+    }
+
     [Queue(CoverageQueues.Incremental)]
     public async Task ComputeUserAccomplishments(string userId)
     {
@@ -916,18 +937,22 @@ public class ComputationJob(
             var allCompletedDecks = await context.Decks
                                                  .AsNoTracking()
                                                  .Where(d => completedDeckIds.Contains(d.DeckId))
-                                                 .Select(d => new { d.DeckId, d.ParentDeckId, d.MediaType, d.CharacterCount, d.WordCount })
+                                                 .Select(d => new CompletedDeckInfo(d.DeckId, d.ParentDeckId, d.MediaType, d.CharacterCount,
+                                                                                    d.WordCount))
                                                  .ToListAsync();
 
-            // Build effective deck set: include parents, and children only if their parent is NOT completed
-            var completedParentIds = allCompletedDecks
-                                     .Where(d => d.ParentDeckId == null)
-                                     .Select(d => d.DeckId)
-                                     .ToHashSet();
+            var completedRootIds = allCompletedDecks.Where(d => d.ParentDeckId == null).Select(d => d.DeckId).ToList();
 
-            var completedDecks = allCompletedDecks
-                                 .Where(d => d.ParentDeckId == null || !completedParentIds.Contains(d.ParentDeckId.Value))
-                                 .ToList();
+            var childCounts = completedRootIds.Count == 0
+                ? new Dictionary<int, int>()
+                : await context.Decks
+                               .AsNoTracking()
+                               .Where(d => d.ParentDeckId != null && completedRootIds.Contains(d.ParentDeckId.Value))
+                               .GroupBy(d => d.ParentDeckId!.Value)
+                               .Select(g => new { ParentDeckId = g.Key, Count = g.Count() })
+                               .ToDictionaryAsync(g => g.ParentDeckId, g => g.Count);
+
+            var (completedDecks, unitCounts) = ResolveCompletedUnits(allCompletedDecks, childCounts);
 
             // Clear accomplishments if no effective decks remain
             if (completedDecks.Count == 0)
@@ -949,10 +974,11 @@ public class ComputationJob(
             var accomplishments = new List<UserAccomplishment>();
             var now = DateTimeOffset.UtcNow;
 
-            // Global
+            // CompletedDeckCount counts whole works (roots only); completed children of an unfinished parent feed units and totals but not the headline count.
             accomplishments.Add(new UserAccomplishment
                                 {
-                                    UserId = userId, MediaType = null, CompletedDeckCount = completedDecks.Count,
+                                    UserId = userId, MediaType = null, CompletedDeckCount = completedDecks.Count(d => d.ParentDeckId == null),
+                                    CompletedUnitCount = completedDecks.Sum(d => unitCounts[d.DeckId]),
                                     TotalCharacterCount = completedDecks.Sum(d => (long)d.CharacterCount),
                                     TotalWordCount = completedDecks.Sum(d => (long)d.WordCount),
                                     UniqueWordCount = uniqueWordCounts.GetValueOrDefault(GLOBAL_MEDIA_TYPE_KEY, 0),
@@ -966,7 +992,8 @@ public class ComputationJob(
                 var typeDecks = completedDecks.Where(d => d.MediaType == mediaType).ToList();
                 accomplishments.Add(new UserAccomplishment
                                     {
-                                        UserId = userId, MediaType = mediaType, CompletedDeckCount = typeDecks.Count,
+                                        UserId = userId, MediaType = mediaType, CompletedDeckCount = typeDecks.Count(d => d.ParentDeckId == null),
+                                        CompletedUnitCount = typeDecks.Sum(d => unitCounts[d.DeckId]),
                                         TotalCharacterCount = typeDecks.Sum(d => (long)d.CharacterCount),
                                         TotalWordCount = typeDecks.Sum(d => (long)d.WordCount),
                                         UniqueWordCount = uniqueWordCounts.GetValueOrDefault((int)mediaType, 0),

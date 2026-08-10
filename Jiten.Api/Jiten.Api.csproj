@@ -39,6 +39,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <InternalsVisibleTo Include="Jiten.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="..\Jiten.Core\Jiten.Core.csproj" />
         <ProjectReference Include="..\Jiten.Parser\Jiten.Parser.csproj" />
     </ItemGroup>

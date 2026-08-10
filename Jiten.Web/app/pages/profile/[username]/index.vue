@@ -9,7 +9,7 @@
     MediaType,
   } from '~/types';
   import { useToast } from 'primevue/usetoast';
-  import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { getCompletedDisplay, getMediaTypeText } from '~/utils/mediaTypeMapper';
 
   definePageMeta({
     validate: (route) => {
@@ -89,6 +89,12 @@
     }
     const mediaType = parseInt(selectedTab.value);
     return accomplishments.value.find((a) => a.mediaType === mediaType);
+  });
+
+  const completedDisplay = computed(() => {
+    const acc = selectedAccomplishment.value;
+    if (!acc) return null;
+    return getCompletedDisplay(acc.mediaType, acc.completedUnitCount, acc.completedDeckCount);
   });
 
   const displayUsername = computed(() => profile.value?.username ?? targetUsername.value);
@@ -263,9 +269,10 @@
           <Card class="text-center">
             <template #content>
               <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
-                {{ formatNumber(selectedAccomplishment.completedDeckCount) }}
+                {{ formatNumber(completedDisplay?.value ?? selectedAccomplishment.completedDeckCount) }}
               </div>
-              <div class="text-sm text-gray-500 mt-1">Completed</div>
+              <div class="text-sm text-gray-500 mt-1">{{ completedDisplay?.label ?? 'Completed' }}</div>
+              <div v-if="completedDisplay?.sub" class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 tabular-nums">{{ completedDisplay.sub }}</div>
             </template>
           </Card>
 
