@@ -698,11 +698,22 @@ export const useSrsStore = defineStore('srs', () => {
 
   // Decide what happens when the loaded queue runs out: finish a wrap-up, pause at a full-batch
   // checkpoint (when the setting is on), or transparently fetch the next batch as before.
-  function onBatchExhausted() {
+  async function onBatchExhausted() {
     if (isWrappingUp.value) {
       isSessionComplete.value = true;
       return;
     }
+
+    if (inFlightReviews.size > 0) {
+      const epoch = sessionEpoch;
+      isLoading.value = true;
+      await Promise.allSettled([...inFlightReviews.values()]);
+      isLoading.value = false;
+      if (epoch !== sessionEpoch) return;
+      // A review that failed to persist re-queues its card, so the batch may no longer be exhausted.
+      if (currentCardIndex.value < currentBatch.value.length) return;
+    }
+
     if (studySettings.value.pauseBetweenBatches && moreCardsLikely.value) {
       batchComplete.value = true;
       prefetchNextBatch();
@@ -963,7 +974,7 @@ export const useSrsStore = defineStore('srs', () => {
       if (inFlightReviews.get(cardKey) === promise) inFlightReviews.delete(cardKey);
     });
 
-    if (currentCardIndex.value >= currentBatch.value.length) onBatchExhausted();
+    if (currentCardIndex.value >= currentBatch.value.length) void onBatchExhausted();
     return true;
   }
 
@@ -1022,7 +1033,7 @@ export const useSrsStore = defineStore('srs', () => {
         againCardKeys.value = newSet;
         clearedGrades.value = [...clearedGrades.value, 'action'];
 
-        if (currentCardIndex.value >= currentBatch.value.length) onBatchExhausted();
+        if (currentCardIndex.value >= currentBatch.value.length) void onBatchExhausted();
       } else if (reviewResult?.intervalPreview) {
         // Patch the freshly-scheduled interval onto the re-queued card (deep-reactive via the ref).
         ctx.reinsertedAgainCard.intervalPreview = reviewResult.intervalPreview;
@@ -1106,7 +1117,7 @@ export const useSrsStore = defineStore('srs', () => {
 
       ensurePrefetched();
 
-      if (currentCardIndex.value >= currentBatch.value.length) onBatchExhausted();
+      if (currentCardIndex.value >= currentBatch.value.length) void onBatchExhausted();
     } catch (error) {
       // The action failed before mutating local state — drop the snapshot we optimistically pushed.
       undoStack.value = undoStack.value.slice(0, -1);
@@ -1357,7 +1368,7 @@ export const useSrsStore = defineStore('srs', () => {
     // end). Re-derive the boundary so the checkpoint (or transparent fetch) comes back, instead of
     // falling through to the terminal "all caught up" screen with no way to pull the next batch.
     if (currentBatch.value.length > 0 && currentCardIndex.value >= currentBatch.value.length) {
-      onBatchExhausted();
+      void onBatchExhausted();
     } else {
       await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
     }
