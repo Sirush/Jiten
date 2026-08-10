@@ -1,2 +1,5 @@
 # Always use LF for PostgreSQL configs
 *.conf text eol=lf
+
+# core.autocrlf=true would otherwise hand Docker a CRLF shebang, which fails as "not found"
+*.sh text eol=lf

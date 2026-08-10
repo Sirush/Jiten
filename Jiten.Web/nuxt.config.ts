@@ -99,6 +99,12 @@ export default defineNuxtConfig({
     // CI, or the Alpine production image (which runs Node 23).
     experimental: { sqliteConnector: 'native' },
   },
+  experimental: {
+    // Each deploy ships a fresh image, so the previous build's hashed /_nuxt chunks 404 instantly.
+    // The default 'automatic' only recovers on router navigation, leaving hydration-time preload
+    // failures to render the error page
+    emitRouteChunkError: 'automatic-immediate',
+  },
   primevue: {
     options: {
       theme: {
@@ -147,6 +153,10 @@ export default defineNuxtConfig({
         },
       ],
       link: [
+        // Build assets carry `crossorigin`, so the warmed connection must be anonymous-CORS
+        ...(process.env.NUXT_APP_CDN_URL
+          ? [{ rel: 'preconnect', href: process.env.NUXT_APP_CDN_URL, crossorigin: 'anonymous' as const }]
+          : []),
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
         { rel: 'icon', type: 'image/png', sizes: '96x96', href: '/favicon-96x96.png' },
         { rel: 'icon', type: 'image/x-icon', sizes: '48x48', href: '/favicon.ico' },
