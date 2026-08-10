@@ -1,6 +1,7 @@
 import type { KnowledgeGrowth, ProfileVocabularyStats, StudyHeatmapResponse, UserAccomplishment } from '~/types';
 import { drawCoverImage, fitCanvasText, type ExportPalette } from '~/utils/imageExport';
 import { formatBucketDated } from '~/utils/journeyFormat';
+import { getCompletedDisplay } from '~/utils/mediaTypeMapper';
 
 const SCALE = 2;
 const W = 640;
@@ -115,9 +116,11 @@ export function drawProfileShareCard(options: ProfileShareCardOptions): HTMLCanv
   const acc = options.accomplishment;
   const heat = options.heatmap && options.heatmap.totalReviews > 0 ? options.heatmap : null;
 
-  const tiles = acc
+  const completed = acc ? getCompletedDisplay(acc.mediaType, acc.completedUnitCount, acc.completedDeckCount) : null;
+
+  const tiles = acc && completed
     ? [
-        { label: 'Completed', value: acc.completedDeckCount },
+        { label: completed.sub ? `${completed.label} (${completed.sub})` : completed.label, value: completed.value },
         { label: 'Characters', value: acc.totalCharacterCount },
         { label: 'Words', value: acc.totalWordCount },
         { label: 'Unique words', value: acc.uniqueWordCount },
@@ -345,7 +348,7 @@ export function drawProfileShareCard(options: ProfileShareCardOptions): HTMLCanv
 
       ctx.font = `500 11px ${FONT}`;
       ctx.fillStyle = pal.sub;
-      ctx.fillText(tile.label, tx + tileW / 2, ty + 50);
+      ctx.fillText(fitCanvasText(ctx, tile.label, tileW - 16), tx + tileW / 2, ty + 50);
       ctx.textAlign = 'left';
     });
 
