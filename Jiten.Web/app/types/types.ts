@@ -1838,3 +1838,72 @@ export interface KnowledgeGrowth {
   hasEnoughHistory: boolean;
   recentGain: number;
 }
+
+export interface ResolvedWord {
+  word: string;
+  reading: string;
+  wordId: number;
+  readingIndex: number;
+  forms: string[];
+}
+
+export interface ResolveWordsResponse {
+  resolved: ResolvedWord[];
+}
+
+export interface ImportExampleSentenceItem {
+  index: number;
+  wordId: number;
+  readingIndex: number;
+  text: string;
+  source?: string;
+}
+
+export type ImportExampleSentenceStatus = 'ok' | 'duplicate' | 'limit_reached' | 'no_marker' | 'too_long' | 'invalid';
+
+export interface ImportExampleSentenceResult {
+  index: number;
+  status: ImportExampleSentenceStatus;
+  userExampleSentenceId?: number;
+}
+
+export interface ImportExampleSentencesResponse {
+  results: ImportExampleSentenceResult[];
+  limitPerWord: number;
+}
+
+export interface CardMediaBatchEntry {
+  kind: 'image' | 'audio';
+  url: string;
+  contentType: string;
+  fileSizeBytes: number;
+  createdAt: string;
+  inherited: boolean;
+  sourceReadingIndex: number;
+}
+
+export interface CardMediaBatchItem {
+  wordId: number;
+  readingIndex: number;
+  image: CardMediaBatchEntry | null;
+  audio: CardMediaBatchEntry | null;
+}
+
+export interface CardMediaBatchResponse {
+  items: CardMediaBatchItem[];
+}
+
+export type CardMediaImportStatus = 'ok' | 'conflict' | 'invalid' | 'too_large' | 'quota_exceeded' | 'not_tracked';
+
+export interface CardMediaImportResult {
+  index: number;
+  status: CardMediaImportStatus;
+  kind?: 'image' | 'audio';
+  storedBytes?: number;
+}
+
+export interface CardMediaImportResponse {
+  results: CardMediaImportResult[];
+  usedBytes: number;
+  maxBytes: number;
+}

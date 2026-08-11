@@ -45,6 +45,16 @@ public class UserController(
 
     private const int MaxBulkRestore = 2000;
 
+    private const int MaxResolvePairs = 2000;
+
+    private const int MaxResolveParsedPairs = 500;
+
+    private const int MaxFormsPerResolvedWord = 8;
+
+    private const int MaxSentenceImportItems = 200;
+
+    private const int MaxUserExampleSentences = 200_000;
+
     private const int PurgeCardChunkSize = 2000;
 
     /// <summary>
@@ -1280,6 +1290,92 @@ public class UserController(
         logger.LogInformation("User imported words from Anki TXT: UserId={UserId}, ParsedCount={ParsedCount}, AddedCount={AddedCount}, UpdatedCount={UpdatedCount}",
                               userId, parsedWords.Count, result.Inserted, result.Updated);
         return Results.Ok(new { parsed = parsedWords.Count, added = result.Inserted, updated = result.Updated });
+    }
+
+    /// <summary>
+    /// Resolve (word, reading) pairs to (WordId, ReadingIndex) with the word's writings, for clients that
+    /// need to address a form after an import resolved it server-side.
+    /// </summary>
+    [HttpPost("vocabulary/resolve-words")]
+    [EnableRateLimiting("fixed")]
+    public async Task<IResult> ResolveWords([FromBody] ResolveWordsRequest? request)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        if (request?.Pairs is not { Count: > 0 })
+            return Results.BadRequest("No pairs provided.");
+
+        var maxPairs = request.ParseWords ? MaxResolveParsedPairs : MaxResolvePairs;
+        if (request.Pairs.Count > maxPairs)
+            return Results.BadRequest($"Maximum of {maxPairs} pairs per request.");
+
+        var pairs = request.Pairs
+                           .Where(p => !string.IsNullOrWhiteSpace(p.Word))
+                           .Select(p => (Word: p.Word.Trim(), Reading: p.Reading?.Trim() ?? ""))
+                           .Distinct()
+                           .ToList();
+
+        if (pairs.Count == 0) return Results.Ok(new ResolveWordsResponse());
+
+        var resolved = new List<ResolvedWordDto>();
+
+        if (request.ParseWords)
+        {
+            // Surface-only, matching the ParseWords branch of ImportFromAnki: a conjugated surface
+            // resolves the same way regardless of the reading the client happened to send.
+            var combinedText = string.Join(Environment.NewLine, pairs.Select(p => p.Word).Distinct());
+            var parsedWords = await Parser.Parser.ParseText(contextFactory, combinedText);
+
+            var bySurface = new Dictionary<string, (int WordId, byte ReadingIndex)>();
+            foreach (var parsed in parsedWords)
+                bySurface.TryAdd(parsed.OriginalText, (parsed.WordId, parsed.ReadingIndex));
+
+            foreach (var (word, reading) in pairs)
+            {
+                if (!bySurface.TryGetValue(word, out var hit)) continue;
+                resolved.Add(new ResolvedWordDto
+                             { Word = word, Reading = reading, WordId = hit.WordId, ReadingIndex = hit.ReadingIndex });
+            }
+        }
+        else
+        {
+            var lookup = await Parser.Parser.GetWordsDirectLookupByReading(contextFactory, pairs);
+            foreach (var (key, word) in lookup)
+                resolved.Add(new ResolvedWordDto
+                             { Word = key.Word, Reading = key.Reading, WordId = word.WordId, ReadingIndex = word.ReadingIndex });
+        }
+
+        await AttachWordFormsAsync(resolved);
+
+        return Results.Ok(new ResolveWordsResponse { Resolved = resolved });
+    }
+
+    private async Task AttachWordFormsAsync(List<ResolvedWordDto> resolved)
+    {
+        if (resolved.Count == 0) return;
+
+        var wordIds = resolved.Select(r => r.WordId).Distinct().ToList();
+        var forms = await jitenContext.WordForms
+                                      .AsNoTracking()
+                                      .Where(f => wordIds.Contains(f.WordId) && !f.IsSearchOnly)
+                                      .OrderBy(f => f.ReadingIndex)
+                                      .Select(f => new { f.WordId, f.Text })
+                                      .ToListAsync();
+
+        var formsByWord = forms.GroupBy(f => f.WordId)
+                               .ToDictionary(g => g.Key,
+                                             g => g.Select(f => f.Text)
+                                                   .Where(t => !string.IsNullOrEmpty(t))
+                                                   .Distinct()
+                                                   .Take(MaxFormsPerResolvedWord)
+                                                   .ToList());
+
+        foreach (var word in resolved)
+        {
+            if (formsByWord.TryGetValue(word.WordId, out var texts))
+                word.Forms = texts;
+        }
     }
 
     /// <summary>
@@ -4051,6 +4147,136 @@ public class UserController(
 
         return Results.Ok(result);
     }
+
+    /// <summary>
+    /// Bulk-create custom sentences from an external import. Appends into each form's remaining slots;
+    /// never replaces, and reports per item rather than failing the request.
+    /// </summary>
+    [HttpPost("example-sentences/import-batch")]
+    [EnableRateLimiting("sentence-import")]
+    public async Task<IResult> ImportExampleSentences([FromBody] ImportExampleSentencesRequest? request)
+    {
+        var userId = userService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        if (request?.Items is not { Count: > 0 })
+            return Results.BadRequest("No sentences provided.");
+
+        if (request.Items.Count > MaxSentenceImportItems)
+            return Results.BadRequest($"Maximum of {MaxSentenceImportItems} sentences per request.");
+
+        // Sentences attach to any resolvable word, not just tracked ones, so nothing else bounds total rows.
+        // Skip/Any scans only the caller's own rows, so it costs nothing for a normal account.
+        var overCap = await userContext.UserExampleSentences
+                                       .Where(e => e.UserId == userId)
+                                       .Skip(MaxUserExampleSentences)
+                                       .AnyAsync();
+        if (overCap) return Results.BadRequest("Custom sentence storage limit reached.");
+
+        var limits = await userLimits.GetLimitsAsync(userId);
+        var wordIds = request.Items.Select(i => i.WordId).Distinct().ToList();
+
+        var existing = await userContext.UserExampleSentences
+                                        .Where(e => e.UserId == userId && wordIds.Contains(e.WordId))
+                                        .ToListAsync();
+
+        var counts = new Dictionary<(int WordId, byte ReadingIndex), int>();
+        var nextSortOrders = new Dictionary<(int WordId, byte ReadingIndex), int>();
+        var texts = new Dictionary<(int WordId, byte ReadingIndex), HashSet<string>>();
+
+        foreach (var row in existing)
+        {
+            var key = (row.WordId, row.ReadingIndex);
+            counts[key] = counts.GetValueOrDefault(key) + 1;
+            nextSortOrders[key] = Math.Max(nextSortOrders.GetValueOrDefault(key, -1), row.SortOrder);
+            if (!texts.TryGetValue(key, out var set))
+                texts[key] = set = new HashSet<string>();
+            set.Add(StripSentenceMarkers(row.Text));
+        }
+
+        var results = new List<ImportExampleSentenceResult>(request.Items.Count);
+        var pending = new List<(ImportExampleSentenceResult Result, UserExampleSentence Row)>();
+
+        foreach (var item in request.Items)
+        {
+            var result = new ImportExampleSentenceResult { Index = item.Index, Status = ImportExampleSentenceStatus.Ok };
+            results.Add(result);
+
+            var text = item.Text?.Trim() ?? "";
+            var source = item.Source?.Trim();
+
+            if (text.Length == 0 || text.Any(char.IsControl) || text.Contains('<') || text.Contains('>')
+                || source?.Length > 150)
+            {
+                result.Status = ImportExampleSentenceStatus.Invalid;
+                continue;
+            }
+
+            if (text.Length > 150)
+            {
+                result.Status = ImportExampleSentenceStatus.TooLong;
+                continue;
+            }
+
+            if (!MarkerRegex.IsMatch(text))
+            {
+                result.Status = ImportExampleSentenceStatus.NoMarker;
+                continue;
+            }
+
+            var stripped = StripSentenceMarkers(text);
+            if (stripped.Length == 0)
+            {
+                result.Status = ImportExampleSentenceStatus.Invalid;
+                continue;
+            }
+
+            var key = (item.WordId, item.ReadingIndex);
+            if (!texts.TryGetValue(key, out var seen))
+                texts[key] = seen = new HashSet<string>();
+
+            if (!seen.Add(stripped))
+            {
+                result.Status = ImportExampleSentenceStatus.Duplicate;
+                continue;
+            }
+
+            var sortOrder = nextSortOrders.GetValueOrDefault(key, -1) + 1;
+            if (counts.GetValueOrDefault(key) >= limits.CustomSentencesPerWord || sortOrder > byte.MaxValue)
+            {
+                seen.Remove(stripped);
+                result.Status = ImportExampleSentenceStatus.LimitReached;
+                continue;
+            }
+
+            var row = new UserExampleSentence
+                      {
+                          UserId = userId,
+                          WordId = item.WordId,
+                          ReadingIndex = item.ReadingIndex,
+                          Text = text,
+                          Source = string.IsNullOrEmpty(source) ? null : source,
+                          SortOrder = (byte)sortOrder
+                      };
+
+            userContext.UserExampleSentences.Add(row);
+            counts[key] = counts.GetValueOrDefault(key) + 1;
+            nextSortOrders[key] = sortOrder;
+            pending.Add((result, row));
+        }
+
+        if (pending.Count > 0)
+        {
+            await userContext.SaveChangesAsync();
+            foreach (var (result, row) in pending)
+                result.UserExampleSentenceId = row.UserExampleSentenceId;
+        }
+
+        return Results.Ok(new ImportExampleSentencesResponse
+                          { Results = results, LimitPerWord = limits.CustomSentencesPerWord });
+    }
+
+    private static string StripSentenceMarkers(string text) => text.Replace("**", "").Trim();
 
     #endregion
 

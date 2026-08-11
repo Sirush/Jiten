@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using BunnyCDN.Net.Storage;
 using Microsoft.Extensions.Configuration;
 
@@ -15,6 +16,12 @@ public class BunnyCdnHelper
     private static string? _userSecret;
     private static int _signedUrlFallbackWarned;
     private static readonly HttpClient _httpClient = new();
+
+    // BunnyCDNStorage owns an HttpClient, so a fresh instance per call leaks sockets under bulk-import throughput.
+    private static readonly ConcurrentDictionary<string, BunnyCDNStorage> _storageClients = new();
+
+    private static BunnyCDNStorage GetStorage(string zoneName, string secret) =>
+        _storageClients.GetOrAdd(zoneName, _ => new BunnyCDNStorage(zoneName, secret, "de"));
 
     static BunnyCdnHelper()
     {
@@ -55,7 +62,7 @@ public class BunnyCdnHelper
     public static async Task<string> UploadFile(byte[] file, string fileName, bool secure = false)
     {
         var (zoneName, secret, baseUrl) = ResolveTarget(secure);
-        var bunnyCDNStorage = new BunnyCDNStorage(zoneName, secret, "de");
+        var bunnyCDNStorage = GetStorage(zoneName, secret);
 
         var stream = new MemoryStream(file);
         await bunnyCDNStorage.UploadAsync(stream, $"{zoneName}/{fileName}");
@@ -66,14 +73,14 @@ public class BunnyCdnHelper
     public static async Task DeleteFile(string storagePath, bool secure = false)
     {
         var (zoneName, secret, _) = ResolveTarget(secure);
-        var bunnyCDNStorage = new BunnyCDNStorage(zoneName, secret, "de");
+        var bunnyCDNStorage = GetStorage(zoneName, secret);
         await bunnyCDNStorage.DeleteObjectAsync($"{zoneName}/{storagePath}");
     }
 
     public static async Task<byte[]?> DownloadFile(string storagePath, bool secure = false)
     {
         var (zoneName, secret, _) = ResolveTarget(secure);
-        var bunnyCDNStorage = new BunnyCDNStorage(zoneName, secret, "de");
+        var bunnyCDNStorage = GetStorage(zoneName, secret);
         try
         {
             await using var stream = await bunnyCDNStorage.DownloadObjectAsStreamAsync($"{zoneName}/{storagePath}");

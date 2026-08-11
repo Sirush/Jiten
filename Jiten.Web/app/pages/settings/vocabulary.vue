@@ -51,6 +51,7 @@
 
   const importOptions: VocabularyOption[] = [
     { key: 'anki-connect', label: 'AnkiConnect', desc: 'Import directly from Anki', icon: 'pi pi-sync' },
+    { key: 'anki-media', label: 'Anki Sentences & Media', desc: 'Import example sentences, images and audio', icon: 'pi pi-images' },
     { key: 'jpdb', label: 'JPDB', desc: 'Import from JPDB API', icon: 'pi pi-cloud-download' },
     { key: 'anki-file', label: 'Anki File', desc: 'Upload .txt or .csv', icon: 'pi pi-file' },
     { key: 'frequency', label: 'Frequency Range', desc: 'Add words by frequency rank', icon: 'pi pi-chart-bar' },
@@ -114,6 +115,7 @@
 
     <div v-if="option" id="vocabulary-transfer-panel">
       <VocabularyImportAnkiConnectPanel v-if="mode === 'import' && option === 'anki-connect'" @changed="onPanelChanged" />
+      <VocabularyImportAnkiExtrasPanel v-if="mode === 'import' && option === 'anki-media'" @changed="onPanelChanged" />
       <VocabularyImportJpdbPanel v-if="mode === 'import' && option === 'jpdb'" @changed="onPanelChanged" />
       <VocabularyImportAnkiFilePanel v-if="mode === 'import' && option === 'anki-file'" @changed="onPanelChanged" />
       <VocabularyImportFrequencyPanel v-if="mode === 'import' && option === 'frequency'" @changed="onPanelChanged" />

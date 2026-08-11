@@ -4,6 +4,10 @@ export interface AnkiDeckImportSelection {
   deckName: string;
   fieldName: string;
   readingFieldName: string; // '' = none
+  sentenceFieldName: string; // '' = none
+  imageFieldName: string; // '' = none
+  audioFieldName: string; // '' = none
+  mediaConflictMode: 'skip' | 'replace' | 'ask';
   importReviewHistory: boolean;
   overwriteExisting: boolean;
   parseWords: boolean;
@@ -21,6 +25,10 @@ export function defaultImportSelection(): AnkiDeckImportSelection {
     deckName: '',
     fieldName: '',
     readingFieldName: '',
+    sentenceFieldName: '',
+    imageFieldName: '',
+    audioFieldName: '',
+    mediaConflictMode: 'skip',
     importReviewHistory: true,
     overwriteExisting: false,
     parseWords: false,
@@ -29,7 +37,7 @@ export function defaultImportSelection(): AnkiDeckImportSelection {
 
 export const useAnkiImportStore = defineStore('ankiImport', () => {
   const STORAGE_KEY = 'ankiconnect-import-settings';
-  const VERSION = 1;
+  const VERSION = 2;
 
   const settings = ref<PersistedImportSettings>({ version: VERSION, lastDeckId: 0, decks: {} });
 
@@ -47,7 +55,23 @@ export const useAnkiImportStore = defineStore('ankiImport', () => {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const blob = JSON.parse(raw) as PersistedImportSettings;
-      if (blob && blob.version === VERSION && blob.decks) settings.value = blob;
+      if (!blob?.decks) return;
+
+      // v1 entries predate the sentence and media fields; they carry forward with those unset.
+      if (blob.version === 1) {
+        for (const deck of Object.values(blob.decks)) {
+          deck.sentenceFieldName ??= '';
+          deck.imageFieldName ??= '';
+          deck.audioFieldName ??= '';
+          deck.mediaConflictMode ??= 'skip';
+        }
+        blob.version = VERSION;
+        settings.value = blob;
+        write();
+        return;
+      }
+
+      if (blob.version === VERSION) settings.value = blob;
     } catch {
     }
   }

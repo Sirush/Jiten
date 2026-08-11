@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Jiten.Api.Controllers;
 
@@ -26,13 +27,18 @@ public class CardMediaController(
     IDbContextFactory<JitenDbContext> jitenFactory,
     ICurrentUserService currentUserService,
     ICardMediaQuotaService quotaService,
+    ICardMediaWriteService writeService,
     ICdnService cdn,
     ILogger<CardMediaController> logger) : ControllerBase
 {
-    private const long MaxFileBytes = 5L * 1024 * 1024;
+    private const long MaxFileBytes = CardMediaWriteService.MaxFileBytes;
     private const int MaxBatchItems = 500;
     private const int MaxDeleteBatchItems = 200;
+    private const int MaxImportBatchItems = 20;
+    private const long MaxImportBatchBytes = 55_000_000;
     private static readonly TimeSpan SignedUrlTtl = TimeSpan.FromMinutes(30);
+
+    private static readonly JsonSerializerOptions ManifestJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public record BatchItem(int WordId, int ReadingIndex);
 
@@ -68,87 +74,172 @@ public class CardMediaController(
             bytes = ms.ToArray();
         }
 
-        var sniff = CardMediaSniffer.Detect(bytes);
-        if (sniff is null)
-            return Results.BadRequest(new
-            {
-                error = "Unsupported file. Upload an image (JPEG, PNG, WebP, GIF, HEIC, AVIF) or audio (MP3, M4A, OGG, Opus, WebM, WAV, FLAC)."
-            });
-
-        // Normalize images (downscale to 1600px, strip metadata, re-encode to WebP; GIFs pass through). The
-        // 5 MB gate above applies to the uploaded file; quota accounting below uses the processed size.
-        var processed = CardMediaImageProcessor.Normalize(sniff.Kind, sniff.Extension, sniff.ContentType, bytes, logger);
-        bytes = processed.Bytes;
-
         var quota = await quotaService.GetQuotaAsync(userId);
+        var usedBytes = await userContext.UserCardMedia.Where(m => m.UserId == userId).SumAsync(m => m.FileSizeBytes);
 
-        // Replacing the file already on this (word, reading, kind) frees its bytes, so a user sitting at
-        // the ceiling can still swap an image for another of the same size.
-        var usedByOthers = await userContext.UserCardMedia
-                                            .Where(m => m.UserId == userId
-                                                        && !(m.WordId == wordId && m.ReadingIndex == ri && m.Kind == sniff.Kind))
-                                            .SumAsync(m => m.FileSizeBytes);
-        if (usedByOthers + bytes.Length > quota.MaxBytes)
-            return Results.BadRequest(new
-            {
-                error = quota.Tier == JitenPlusTier.Trial
-                    ? "This upload would exceed your trial storage. Delete some card media, or subscribe for the full allowance."
-                    : "This upload would exceed your storage quota. Delete some card media and try again.",
-                usedBytes = usedByOthers,
-                maxBytes = quota.MaxBytes
-            });
+        var result = await writeService.WriteAsync(userId, wordId, ri, bytes, overwrite: true, quota, usedBytes);
 
-        var storagePath = CardMediaStorage.PathFor(userId, wordId, ri, sniff.Kind, processed.Extension);
-
-        var existing = await userContext.UserCardMedia
-                                        .FirstOrDefaultAsync(m => m.UserId == userId && m.WordId == wordId
-                                                                  && m.ReadingIndex == ri && m.Kind == sniff.Kind);
-        var oldStoragePath = existing?.StoragePath;
-        // Replacing the media makes any original the renormalize backfill retained unreachable too.
-        var retainedOriginal = existing?.PreviousStoragePath;
-
-        string? uploadedStoragePath = null;
-        await using var transaction = await userContext.Database.BeginTransactionAsync();
-        try
+        switch (result.Status)
         {
-            if (existing is null)
-            {
-                existing = new UserCardMedia { UserId = userId, WordId = wordId, ReadingIndex = ri, Kind = sniff.Kind };
-                userContext.UserCardMedia.Add(existing);
-            }
-
-            existing.StoragePath = storagePath;
-            existing.ContentType = processed.ContentType;
-            existing.FileSizeBytes = bytes.Length;
-            existing.CreatedAt = DateTime.UtcNow;
-            existing.PreviousStoragePath = null;
-            existing.PreviousContentType = null;
-            existing.PreviousFileSizeBytes = null;
-            await userContext.SaveChangesAsync();
-
-            await cdn.UploadFile(bytes, storagePath, secure: true);
-            uploadedStoragePath = storagePath;
-
-            await transaction.CommitAsync();
+            case CardMediaWriteStatus.Invalid:
+                return Results.BadRequest(new
+                {
+                    error = "Unsupported file. Upload an image (JPEG, PNG, WebP, GIF, HEIC, AVIF) or audio (MP3, M4A, OGG, Opus, WebM, WAV, FLAC)."
+                });
+            case CardMediaWriteStatus.TooLarge:
+                return Results.BadRequest(new { error = $"File is too large. The maximum is {MaxFileBytes / (1024 * 1024)} MB." });
+            case CardMediaWriteStatus.QuotaExceeded:
+                return Results.BadRequest(new
+                {
+                    error = quota.Tier == JitenPlusTier.Trial
+                        ? "This upload would exceed your trial storage. Delete some card media, or subscribe for the full allowance."
+                        : "This upload would exceed your storage quota. Delete some card media and try again.",
+                    usedBytes = result.UsedBytes,
+                    maxBytes = quota.MaxBytes
+                });
         }
-        catch (Exception) when (uploadedStoragePath != null)
-        {
-            logger.LogError("Failed to commit card-media upload, cleaning up CDN file {Path}", uploadedStoragePath);
-            try { await cdn.DeleteFile(uploadedStoragePath, secure: true); }
-            catch { /* best effort */ }
-            throw;
-        }
-
-        // Once the row is durably committed the files it replaced are orphaned; removing them is best-effort.
-        await DeleteFilesAsync(new[] { oldStoragePath, retainedOriginal }
-                               .Where(p => p != null && p != storagePath)
-                               .Select(p => p!));
 
         return Results.Ok(new
         {
-            media = ToDto(existing, inherited: false, sourceReadingIndex: ri),
-            quota = new { usedBytes = usedByOthers + bytes.Length, maxBytes = quota.MaxBytes }
+            media = ToDto(result.Row!, inherited: false, sourceReadingIndex: ri),
+            quota = new { usedBytes = result.UsedBytes, maxBytes = quota.MaxBytes }
         });
+    }
+
+    // ---- Import batch -------------------------------------------------------
+
+    public record ImportBatchItem(int Index, int WordId, int ReadingIndex, bool Overwrite);
+
+    /// <summary>
+    /// Writes up to twenty files in one request, for bulk imports that would otherwise spend an hour in the
+    /// single-file endpoint's rate limit
+    /// </summary>
+    [HttpPost("import-batch")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxImportBatchBytes)]
+    [EnableRateLimiting("card-media-import")]
+    [JitenPlus(JitenPlusTier.Trial, Feature = "card-media")]
+    public async Task<IResult> ImportBatch([FromForm] string? manifest)
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        List<ImportBatchItem>? items;
+        try
+        {
+            items = string.IsNullOrWhiteSpace(manifest)
+                ? null
+                : JsonSerializer.Deserialize<List<ImportBatchItem>>(manifest, ManifestJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return Results.BadRequest(new { error = "Malformed manifest." });
+        }
+
+        if (items is not { Count: > 0 })
+            return Results.BadRequest(new { error = "No items in the manifest." });
+
+        if (items.Count > MaxImportBatchItems)
+            return Results.BadRequest(new { error = $"Maximum of {MaxImportBatchItems} files per request." });
+
+        var files = Request.Form.Files;
+        if (files.Count != items.Count)
+            return Results.BadRequest(new { error = "Manifest and file counts do not match." });
+
+        if (items.Any(i => i.ReadingIndex is < 0 or > byte.MaxValue))
+            return Results.BadRequest(new { error = "Invalid reading index." });
+
+        // Items address their file by index, so a repeat would silently write the same file twice.
+        if (items.Select(i => i.Index).Distinct().Count() != items.Count)
+            return Results.BadRequest(new { error = "Manifest indexes must be unique." });
+
+        // The real fence: media can only land on forms the caller studies, which is exactly what the
+        // import flow produces and nothing a general-purpose uploader could use.
+        var wordIds = items.Select(i => i.WordId).Distinct().ToList();
+        var tracked = (await userContext.FsrsCards
+                                        .AsNoTracking()
+                                        .Where(c => c.UserId == userId && wordIds.Contains(c.WordId))
+                                        .Select(c => new { c.WordId, c.ReadingIndex })
+                                        .ToListAsync())
+            .Select(c => (c.WordId, c.ReadingIndex))
+            .ToHashSet();
+
+        var quota = await quotaService.GetQuotaAsync(userId);
+        var usedBytes = await userContext.UserCardMedia.Where(m => m.UserId == userId).SumAsync(m => m.FileSizeBytes);
+
+        var results = new List<object>(items.Count);
+        var quotaExhausted = false;
+
+        // Sequential on purpose: the running byte tally is what keeps quota accounting exact within a
+        // request, and each item may run an ImageMagick normalization.
+        foreach (var item in items)
+        {
+            var ri = (byte)item.ReadingIndex;
+
+            if (quotaExhausted)
+            {
+                results.Add(new { index = item.Index, status = "quota_exceeded" });
+                continue;
+            }
+
+            if (!tracked.Contains((item.WordId, ri)))
+            {
+                results.Add(new { index = item.Index, status = "not_tracked" });
+                continue;
+            }
+
+            var file = files.GetFile($"file{item.Index}");
+            if (file is null || file.Length == 0)
+            {
+                results.Add(new { index = item.Index, status = "invalid" });
+                continue;
+            }
+
+            if (file.Length > CardMediaWriteService.MaxFileBytes)
+            {
+                results.Add(new { index = item.Index, status = "too_large" });
+                continue;
+            }
+
+            byte[] bytes;
+            using (var ms = new MemoryStream())
+            {
+                await file.CopyToAsync(ms);
+                bytes = ms.ToArray();
+            }
+
+            var result = await writeService.WriteAsync(userId, item.WordId, ri, bytes, item.Overwrite, quota, usedBytes);
+            usedBytes = result.UsedBytes;
+
+            switch (result.Status)
+            {
+                case CardMediaWriteStatus.Ok:
+                    results.Add(new
+                    {
+                        index = item.Index,
+                        status = "ok",
+                        kind = result.Kind?.ToString().ToLowerInvariant(),
+                        storedBytes = result.StoredBytes
+                    });
+                    break;
+                case CardMediaWriteStatus.QuotaExceeded:
+                    quotaExhausted = true;
+                    results.Add(new { index = item.Index, status = "quota_exceeded" });
+                    break;
+                case CardMediaWriteStatus.Conflict:
+                    results.Add(new { index = item.Index, status = "conflict", kind = result.Kind?.ToString().ToLowerInvariant() });
+                    break;
+                case CardMediaWriteStatus.TooLarge:
+                    results.Add(new { index = item.Index, status = "too_large" });
+                    break;
+                default:
+                    results.Add(new { index = item.Index, status = "invalid" });
+                    break;
+            }
+        }
+
+        return Results.Ok(new { results, usedBytes, maxBytes = quota.MaxBytes });
     }
 
     // ---- Delete -------------------------------------------------------------

@@ -391,6 +391,7 @@ builder.Services.AddScoped<IJitenPlusService, JitenPlusService>();
 builder.Services.Configure<Jiten.Core.Services.CardMediaStorageOptions>(
     builder.Configuration.GetSection(Jiten.Core.Services.CardMediaStorageOptions.SectionName));
 builder.Services.AddScoped<ICardMediaQuotaService, CardMediaQuotaService>();
+builder.Services.AddScoped<ICardMediaWriteService, CardMediaWriteService>();
 builder.Services.Configure<Jiten.Core.Services.JitenPlusLimitsOptions>(
     builder.Configuration.GetSection(Jiten.Core.Services.JitenPlusLimitsOptions.SectionName));
 builder.Services.AddScoped<IUserLimitsService, UserLimitsService>();
@@ -578,6 +579,36 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
+    options.AddPolicy("card-media-import", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        // Set above the client's natural pace (4 workers x ~10-13 req/min) so a normal import never
+        // 429s; the concurrency permits below are the real load bound.
+        return RateLimitPartition.GetSlidingWindowLimiter(partitionKey,
+            _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 60, Window = TimeSpan.FromSeconds(60), SegmentsPerWindow = 6,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
+    options.AddPolicy("sentence-import", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetSlidingWindowLimiter(partitionKey,
+            _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 30, Window = TimeSpan.FromSeconds(60), SegmentsPerWindow = 6,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
     options.AddPolicy("auth", context =>
     {
         var partitionKey = $"ip:{GetClientIp(context)}";
@@ -593,11 +624,21 @@ builder.Services.AddRateLimiter(options =>
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
     {
         var policy = context.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
-        if (policy != "card-media-upload")
+        if (policy is not ("card-media-upload" or "card-media-import"))
             return RateLimitPartition.GetNoLimiter("unlimited");
 
         var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        // A batch request normalizes up to twenty images, so it gets a tighter concurrency cap than
+        // single uploads and its own partition. Requests are mostly sequential-CDN-write idle time,
+        // which is why three permits stay cheap on CPU.
+        if (policy == "card-media-import")
+            return RateLimitPartition.GetConcurrencyLimiter($"import:{partitionKey}",
+                _ => new ConcurrencyLimiterOptions
+                {
+                    PermitLimit = 4, QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 4
+                });
 
         return RateLimitPartition.GetConcurrencyLimiter(partitionKey,
             _ => new ConcurrencyLimiterOptions
