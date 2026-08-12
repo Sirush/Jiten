@@ -143,7 +143,7 @@ public class JimakuDownloader
 
                 if (!filePath.EndsWith(".zip") && !filePath.EndsWith(".rar") && !filePath.EndsWith(".7z")) continue;
 
-                using (var archive = ArchiveFactory.Open(filePath))
+                using (var archive = ArchiveFactory.OpenArchive(filePath))
                 {
                     foreach (var e in archive.Entries.Where(entry => !entry.IsDirectory))
                     {
