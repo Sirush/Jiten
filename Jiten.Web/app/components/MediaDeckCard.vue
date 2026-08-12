@@ -203,12 +203,6 @@
       command: toggleIgnore,
     },
     {
-      label: 'Study with SRS',
-      icon: 'pi pi-play',
-      visible: true,
-      command: () => { showStudyDeckDialog.value = true; },
-    },
-    {
       label: 'Rate difficulty',
       icon: 'pi pi-gauge',
       visible: props.deck.status === DeckStatus.Completed && !props.deck.parentDeckId,

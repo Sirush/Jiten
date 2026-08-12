@@ -24,7 +24,6 @@
 
   const route = useRoute();
   const { $api } = useNuxtApp();
-  const convertToRuby = useConvertToRuby();
 
   const character = computed(() => {
     const c = route.params.character;
@@ -231,19 +230,7 @@
 
         <div v-if="expandedGroup" class="mt-3">
           <div class="space-y-1">
-            <NuxtLink
-              v-for="word in expandedWords"
-              :key="`${word.wordId}-${word.readingIndex}`"
-              :to="`/vocabulary/${word.wordId}/${word.readingIndex}`"
-              class="grid grid-cols-[minmax(8rem,auto)_1fr_auto] items-baseline gap-x-4 p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
-            >
-              <span class="text-xl font-medium" lang="ja" v-html="convertToRuby(word.readingFurigana)" />
-              <span v-if="word.mainDefinition" class="text-surface-600 dark:text-surface-400 text-sm truncate">
-                {{ word.mainDefinition }}
-              </span>
-              <span v-else />
-              <Tag v-if="word.frequencyRank" severity="secondary" class="text-xs shrink-0"> #{{ word.frequencyRank }} </Tag>
-            </NuxtLink>
+            <KanjiWordRow v-for="word in expandedWords" :key="`${word.wordId}-${word.readingIndex}`" :word="word" />
           </div>
           <div v-if="expandedGroup.totalWords > 10" class="mt-2">
             <button
@@ -269,19 +256,7 @@
       <div v-if="kanji.topWords && kanji.topWords.length > 0" class="border-surface-200 dark:border-surface-700 border rounded-lg p-4">
         <h2 class="text-lg font-semibold mb-4">Most common words using this kanji</h2>
         <div class="space-y-1">
-          <NuxtLink
-            v-for="word in visibleTopWords"
-            :key="`${word.wordId}-${word.readingIndex}`"
-            :to="`/vocabulary/${word.wordId}/${word.readingIndex}`"
-            class="grid grid-cols-[minmax(8rem,auto)_1fr_auto] items-baseline gap-x-4 p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
-          >
-            <span class="text-xl font-medium" lang="ja" v-html="convertToRuby(word.readingFurigana)" />
-            <span v-if="word.mainDefinition" class="text-surface-600 dark:text-surface-400 text-sm truncate">
-              {{ word.mainDefinition }}
-            </span>
-            <span v-else />
-            <Tag v-if="word.frequencyRank" severity="secondary" class="text-xs shrink-0"> #{{ word.frequencyRank }} </Tag>
-          </NuxtLink>
+          <KanjiWordRow v-for="word in visibleTopWords" :key="`${word.wordId}-${word.readingIndex}`" :word="word" />
         </div>
         <div class="mt-2">
           <button

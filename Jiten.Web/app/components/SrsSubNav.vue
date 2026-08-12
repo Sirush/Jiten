@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import { useSrsStore } from '~/stores/srsStore';
 
+  const props = withDefaults(defineProps<{ hideMobileStudy?: boolean }>(), { hideMobileStudy: false });
+
   const srsStore = useSrsStore();
   const route = useRoute();
   const { totalDue, startStudy } = useStudySummary();
@@ -42,6 +44,7 @@
     </nav>
     <!-- Mobile: icon + count only, so the tab row keeps enough room for all tabs -->
     <Button
+      v-if="!props.hideMobileStudy"
       icon="pi pi-play"
       :label="!srsStore.dueSummary ? undefined : totalDue > 0 ? String(totalDue) : undefined"
       :severity="totalDue > 0 ? 'success' : 'secondary'"

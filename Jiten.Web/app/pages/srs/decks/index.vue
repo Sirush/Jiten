@@ -366,7 +366,7 @@
 
 <template>
   <div class="container mx-auto p-2 md:p-4">
-    <SrsSubNav />
+    <SrsSubNav hide-mobile-study />
     <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
       <h1 class="text-2xl font-bold">Study Decks</h1>
       <div class="flex gap-2">
@@ -374,7 +374,13 @@
           <Button icon="pi pi-refresh" severity="secondary" :loading="refreshing" @click="refresh" />
         </Tooltip>
         <Button icon="pi pi-plus" label="Add Deck" class="!hidden sm:!inline-flex" @click="showAddDialog = true" />
-        <Button icon="pi pi-plus" class="sm:!hidden" @click="showAddDialog = true" />
+        <Button
+          icon="pi pi-play"
+          :label="totalDue > 0 ? `Study (${totalDue})` : 'Study'"
+          :severity="totalDue > 0 ? 'success' : 'secondary'"
+          class="sm:!hidden"
+          @click="startStudy"
+        />
       </div>
     </div>
 
@@ -602,6 +608,7 @@
         >
           Need more?
         </NuxtLink>
+        <Button icon="pi pi-plus" label="Add Deck" size="small" class="sm:!hidden ml-auto flex-shrink-0" @click="showAddDialog = true" />
       </div>
 
       <!-- Active Decks -->

@@ -84,28 +84,6 @@
 
 <template>
   <div class="flex flex-col w-full mx-auto" :class="compact ? 'gap-1.5' : 'gap-2 sm:gap-3'">
-    <!-- Undo (before flip) -->
-    <div v-if="!isFlipped && canUndo" class="flex justify-center">
-      <Button
-        severity="secondary"
-        size="small"
-        text
-        :disabled="props.disabled"
-        class="min-h-[36px] !px-2 sm:!px-3"
-        :class="{ 'kb-pressed': props.pressedKey === props.keybinds.undo }"
-        aria-label="Undo"
-        @click="emit('undo')"
-      >
-        <template #default>
-          <div class="flex flex-col items-center sm:flex-row sm:gap-0">
-            <Icon name="material-symbols:undo" size="16" class="sm:hidden" />
-            <span class="text-[10px] sm:text-sm sm:leading-normal">Undo</span>
-            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-80 hidden sm:inline">{{ displayKeyName(props.keybinds.undo) }}</span>
-          </div>
-        </template>
-      </Button>
-    </div>
-
     <!-- Flip button when not flipped -->
     <div v-if="!isFlipped" class="flex gap-2 justify-center">
       <Button
@@ -128,6 +106,31 @@
       >
         <Icon name="material-symbols:keyboard-double-arrow-up" size="18" />
       </button>
+    </div>
+
+    <!-- Undo (before flip). Ordered so "Show Answer" lands on the grade buttons' row across the flip:
+         below it normally (spacer holds the row when there is nothing to undo), above it in compact,
+         where the flipped state has no quick-actions row. -->
+    <div v-if="!isFlipped && (canUndo || !compact)" class="flex justify-center" :class="compact ? 'order-first' : 'min-h-[36px]'">
+      <Button
+        v-if="canUndo"
+        severity="secondary"
+        size="small"
+        text
+        :disabled="props.disabled"
+        class="min-h-[36px] !px-2 sm:!px-3"
+        :class="{ 'kb-pressed': props.pressedKey === props.keybinds.undo }"
+        aria-label="Undo"
+        @click="emit('undo')"
+      >
+        <template #default>
+          <div class="flex flex-col items-center sm:flex-row sm:gap-0">
+            <Icon name="material-symbols:undo" size="16" class="sm:hidden" />
+            <span class="text-[10px] sm:text-sm sm:leading-normal">Undo</span>
+            <span v-if="showKeybinds" class="keybind ml-1 text-xs opacity-80 hidden sm:inline">{{ displayKeyName(props.keybinds.undo) }}</span>
+          </div>
+        </template>
+      </Button>
     </div>
 
     <!-- Grade buttons when flipped -->
@@ -293,6 +296,13 @@
               </button>
             </div>
           </div>
+          <button
+            class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left md:hidden"
+            @click="emit('expand'); morePopover?.hide()"
+          >
+            <Icon name="material-symbols:keyboard-double-arrow-down" size="16" />
+            Compact bar
+          </button>
           <button
             class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left md:hidden"
             @click="emit('settings'); morePopover?.hide()"
