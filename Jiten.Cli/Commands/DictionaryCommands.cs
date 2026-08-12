@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
@@ -49,7 +50,7 @@ public class DictionaryCommands(CliContext context)
 
         foreach (var reading in wordsToAdd)
         {
-            var readingInHiragana = WanaKana.ToHiragana(reading);
+            var readingInHiragana = JapaneseTextHelper.ToHiragana(reading);
             if (!lookupDict.TryGetValue(readingInHiragana, out var lookup))
                 continue;
 

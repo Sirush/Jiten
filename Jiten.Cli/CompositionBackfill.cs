@@ -364,7 +364,7 @@ Name-only component landings: {stats["nameLanding"]:N0}/{compTotal:N0} ({100.0 *
     }
 
     private static string Hira(string s) =>
-        string.IsNullOrEmpty(s) ? "" : WanaKana.ToHiragana(s.Replace("ヮ", "わ").Replace("ゎ", "わ"));
+        string.IsNullOrEmpty(s) ? "" : JapaneseTextHelper.ToHiragana(s.Replace("ヮ", "わ").Replace("ゎ", "わ"));
 
     private static bool HasKanji(string s) => s.Any(JapaneseTextHelper.IsKanji);
 

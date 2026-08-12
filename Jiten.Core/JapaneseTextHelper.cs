@@ -1,4 +1,5 @@
 using System.Text;
+using WanaKanaShaapu;
 
 namespace Jiten.Core;
 
@@ -74,6 +75,30 @@ public static class JapaneseTextHelper
             buffer.Append(c is >= 'ァ' and <= 'ヶ' ? (char)(c - 0x60) : c);
         return buffer.ToString();
     }
+
+    /// <summary>
+    /// Katakana-to-hiragana conversion through WanaKana, guarded against its chōonpu expansion:
+    /// the vowel table it looks the preceding kana up in has no entry for ヵヶゎヮ ヷ-ヺ ヽヾヿ and
+    /// no vowel to repeat after ッ, so a following ー throws instead of converting.
+    /// </summary>
+    public static string ToHiragana(string text, bool convertLongVowelMark = true)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+
+        var input = text.Replace("ヶ", "ケ").Replace("ヵ", "カ").Replace("ゎ", "わ").Replace("ヮ", "ワ");
+
+        try
+        {
+            return WanaKana.ToHiragana(input, convertLongVowelMark ? LongVowelConversion : NoLongVowelConversion);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException)
+        {
+            return WanaKana.ToHiragana(input, NoLongVowelConversion);
+        }
+    }
+
+    private static readonly DefaultOptions LongVowelConversion = new() { ConvertLongVowelMark = true };
+    private static readonly DefaultOptions NoLongVowelConversion = new() { ConvertLongVowelMark = false };
 
     public static bool IsKanji(char c) =>
         c is (>= '一' and <= '鿿') or (>= '㐀' and <= '䶿') or (>= '豈' and <= '﫿');

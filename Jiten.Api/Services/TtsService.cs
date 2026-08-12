@@ -94,10 +94,10 @@ public class TtsService(
         // (詳しくは→"kuwashiku wa", ではない→"de wa nai").
         text = FixLeadingParticleKana(text);
 
-        var readingKana = WanaKana.ToHiragana(text ?? "");
+        var readingKana = JapaneseTextHelper.ToHiragana(text ?? "");
         var matchingKanjiRubies = wordForms
             .Where(f => f.FormType == JmDictFormType.KanjiForm && !string.IsNullOrEmpty(f.RubyText) && f.RubyText.Contains('['))
-            .Where(f => WanaKana.ToHiragana(RubyPattern.Replace(f.RubyText, m => m.Groups[1].Value)) == readingKana)
+            .Where(f => JapaneseTextHelper.ToHiragana(RubyPattern.Replace(f.RubyText, m => m.Groups[1].Value)) == readingKana)
             .Select(f => f.RubyText!)
             .ToList();
         var hasLiteralHa = matchingKanjiRubies.Any(r => r.Contains('は') && !RubyPattern.Replace(r, "").Contains('は'));
@@ -111,7 +111,7 @@ public class TtsService(
         int? pitchPosition = null;
         var distinctReadings = wordForms
             .Where(f => f.FormType == JmDictFormType.KanaForm)
-            .Select(f => WanaKana.ToHiragana(f.Text))
+            .Select(f => JapaneseTextHelper.ToHiragana(f.Text))
             .Distinct()
             .Count();
         if (distinctReadings == 1)

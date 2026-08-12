@@ -403,7 +403,7 @@ internal static class MisparseGates
             && word.PartsOfSpeech.Any(p => p is "adv" or "adv-to" or "int" or "on-mim")
             && JapaneseTextHelper.IsAllKatakana(surface))
         {
-            var folded = WanaKana.ToHiragana(surface);
+            var folded = KanaConverter.ToHiragana(surface);
             if (folded != surface && word.Forms.Any(f => f.Text == folded))
             {
                 surfaceAttestsForm = true;

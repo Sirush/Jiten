@@ -744,7 +744,7 @@ public class DiagnosticCommands(CliContext context)
     {
         await using var context1 = await context.ContextFactory.CreateDbContextAsync();
 
-        var hiraganaQuery = WanaKana.ToHiragana(query);
+        var hiraganaQuery = JapaneseTextHelper.ToHiragana(query);
 
         var lookups = await context1.Lookups
             .Where(l => l.LookupKey == query || l.LookupKey == hiraganaQuery)
@@ -907,7 +907,7 @@ public class DiagnosticCommands(CliContext context)
                 formsByWord[row.WordId] = row.Forms;
         }
 
-        static string Fold(string s) => KanaNormalizer.Normalize(WanaKana.ToHiragana(s));
+        static string Fold(string s) => KanaNormalizer.Normalize(JapaneseTextHelper.ToHiragana(s));
 
         var findings = suspects
                        .Where(kv =>

@@ -544,7 +544,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
 
     private async Task<List<int>> SearchLookupsExact(string lookupKey, int limit, int offset)
     {
-        var hiragana = WanaKana.ToHiragana(lookupKey);
+        var hiragana = JapaneseTextHelper.ToHiragana(lookupKey);
         return await context.Lookups
             .AsNoTracking()
             .Where(l => l.LookupKey == lookupKey || (hiragana != lookupKey && l.LookupKey == hiragana))

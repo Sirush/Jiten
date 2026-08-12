@@ -301,7 +301,7 @@ Top 20 unresolved components:
     private static string HiraganaReading(string yomi)
     {
         if (string.IsNullOrEmpty(yomi)) return "";
-        return WanaKana.ToHiragana(yomi.Replace("ヮ", "わ").Replace("ゎ", "わ"));
+        return JapaneseTextHelper.ToHiragana(yomi.Replace("ヮ", "わ").Replace("ゎ", "わ"));
     }
 
     private static void IncrementUnresolved(ImportReport report, string key)
