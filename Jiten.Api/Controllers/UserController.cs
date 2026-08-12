@@ -3646,6 +3646,8 @@ public class UserController(
         [FromQuery] string sortBy = "occurrences",
         [FromQuery] bool descending = true,
         [FromQuery] string displayFilter = "all",
+        [FromQuery] string? suspended = null,
+        [FromQuery] string? redundant = null,
         [FromQuery] string? search = null,
         [FromQuery] string? pos = null,
         [FromQuery] string? excludePos = null,
@@ -3753,35 +3755,16 @@ public class UserController(
                     .ToList();
         }
 
-        // Apply displayFilter if authenticated and filter is not "all"
-        if (userService.IsAuthenticated && !string.IsNullOrEmpty(displayFilter) && displayFilter != "all")
+        var displayFilterSpec = VocabularyDisplayFilter.Parse(displayFilter, suspended, redundant);
+
+        if (userService.IsAuthenticated && displayFilterSpec.IsActive)
         {
             var wordKeys = allAggregatedWords.Select(aw => (aw.WordId, aw.ReadingIndex)).ToList();
             var filterKnownStates = await userService.GetKnownWordsState(wordKeys);
 
-            var distinctWordIds = wordKeys.Select(k => k.WordId).Distinct().ToList();
-            var fsrsStates = await userContext.FsrsCards
-                                              .AsNoTracking()
-                                              .Where(uk => uk.UserId == userService.UserId && distinctWordIds.Contains(uk.WordId))
-                                              .Select(uk => new { uk.WordId, uk.ReadingIndex, uk.State })
-                                              .ToDictionaryAsync(uk => (uk.WordId, uk.ReadingIndex), uk => uk.State);
-
             allAggregatedWords = allAggregatedWords.Where(aw =>
-            {
-                var key = (aw.WordId, aw.ReadingIndex);
-                var knownState = filterKnownStates.GetValueOrDefault(key, [KnownState.New]);
-
-                return displayFilter switch
-                {
-                    "known" => !knownState.Contains(KnownState.New),
-                    "young" => knownState.Contains(KnownState.Young),
-                    "mature" => knownState.Contains(KnownState.Mature),
-                    "mastered" => knownState.Contains(KnownState.Mastered),
-                    "blacklisted" => knownState.Contains(KnownState.Blacklisted),
-                    "unknown" => !fsrsStates.ContainsKey(key) && knownState.Contains(KnownState.New),
-                    _ => true
-                };
-            }).ToList();
+                displayFilterSpec.Matches(filterKnownStates.GetValueOrDefault((aw.WordId, aw.ReadingIndex), [KnownState.New])))
+                                                   .ToList();
         }
 
         int totalCount = allAggregatedWords.Count;

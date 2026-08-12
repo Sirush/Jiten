@@ -34,7 +34,7 @@ const offset = computed(() => (route.query.offset ? Number(route.query.offset) :
 const limit = computed(() => (route.query.limit ? Number(route.query.limit) : undefined));
 const sortDescending = ref(route.query.sortOrder === '1');
 const sortBy = ref(route.query.sortBy?.toString() || sortByOptions.value[0].value);
-const display = ref(route.query.display?.toString() || 'all');
+const { tiers: displayTiers, suspended, redundant, displayFilter, suspendedParam, redundantParam, query: displayQuery } = useVocabularyDisplayFilter();
 const search = ref(route.query.search?.toString() || '');
 const debouncedSearch = ref(search.value);
 
@@ -51,12 +51,6 @@ watch(sortDescending, (newValue) => {
 watch(sortBy, (newValue) => {
   router.replace({
     query: { ...route.query, sortBy: newValue, offset: 0 },
-  });
-});
-
-watch(display, (newValue) => {
-  router.replace({
-    query: { ...route.query, display: newValue, offset: 0 },
   });
 });
 
@@ -98,14 +92,14 @@ const {
     offset: offset,
     sortBy: sortBy,
     sortOrder: computed(() => sortDescending.value ? 1 : 0),
-    displayFilter: display,
+    ...displayQuery,
     search: debouncedSearch,
     pos: computed(() => debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined),
     excludePos: computed(() => debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined),
     hideKanaOnly: debouncedHideKanaOnly,
     limit: limit,
   },
-  watch: [offset, sortBy, sortDescending, display, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly, limit],
+  watch: [offset, sortBy, sortDescending, displayFilter, suspendedParam, redundantParam, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly, limit],
 });
 
 const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor, pageSize } = usePagination(response);
@@ -276,7 +270,9 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
         <VocabularyFilters
           v-model:sort-by="sortBy"
           v-model:sort-descending="sortDescending"
-          v-model:display-filter="display"
+          v-model:display-tiers="displayTiers"
+          v-model:suspended="suspended"
+          v-model:redundant="redundant"
           v-model:search="search"
           v-model:include-pos="includePos"
           v-model:exclude-pos="excludePos"

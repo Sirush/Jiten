@@ -967,6 +967,8 @@ public class StudyController(
         [FromQuery] string sortBy = "",
         [FromQuery] SortOrder sortOrder = SortOrder.Ascending,
         [FromQuery] string displayFilter = "all",
+        [FromQuery] string? suspended = null,
+        [FromQuery] string? redundant = null,
         [FromQuery] string? search = null,
         [FromQuery] string? pos = null,
         [FromQuery] string? excludePos = null,
@@ -1212,30 +1214,16 @@ public class StudyController(
                     .ToList();
         }
 
-        bool needsKnownFilter = currentUserService.IsAuthenticated
-            && !string.IsNullOrEmpty(displayFilter)
-            && displayFilter != "all";
+        var displayFilterSpec = VocabularyDisplayFilter.Parse(displayFilter, suspended, redundant);
 
-        if (needsKnownFilter)
+        if (currentUserService.IsAuthenticated && displayFilterSpec.IsActive)
         {
             var wordKeys = allItems.Select(i => (i.WordId, (byte)i.ReadingIndex)).ToList();
             var knownStates = await currentUserService.GetKnownWordsState(wordKeys);
 
             allItems = allItems.Where(i =>
-            {
-                var key = (i.WordId, (byte)i.ReadingIndex);
-                var states = knownStates.GetValueOrDefault(key, [KnownState.New]);
-                return displayFilter switch
-                {
-                    "known" => !states.Contains(KnownState.New),
-                    "young" => states.Contains(KnownState.Young),
-                    "mature" => states.Contains(KnownState.Mature),
-                    "mastered" => states.Contains(KnownState.Mastered),
-                    "blacklisted" => states.Contains(KnownState.Blacklisted),
-                    "unknown" => states.Contains(KnownState.New),
-                    _ => true
-                };
-            }).ToList();
+                displayFilterSpec.Matches(knownStates.GetValueOrDefault((i.WordId, (byte)i.ReadingIndex), [KnownState.New])))
+                               .ToList();
         }
 
         int totalCount = allItems.Count;

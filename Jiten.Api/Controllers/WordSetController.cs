@@ -84,6 +84,8 @@ public class WordSetController(
         [FromQuery] string sortBy = "",
         [FromQuery] SortOrder sortOrder = SortOrder.Ascending,
         [FromQuery] string displayFilter = "all",
+        [FromQuery] string? suspended = null,
+        [FromQuery] string? redundant = null,
         [FromQuery] string? search = null,
         [FromQuery] string? pos = null,
         [FromQuery] string? excludePos = null,
@@ -132,17 +134,20 @@ public class WordSetController(
                            && wf.FormType != JmDictFormType.KanaForm));
         }
 
-        bool needsKnownFilter = currentUserService.IsAuthenticated
-            && !string.IsNullOrEmpty(displayFilter)
-            && displayFilter != "all";
+        var displayFilterSpec = VocabularyDisplayFilter.Parse(displayFilter, suspended, redundant);
+        bool needsKnownFilter = currentUserService.IsAuthenticated && displayFilterSpec.IsActive;
 
         List<WordSetMember> pagedItems;
         int totalCount;
 
-        if (needsKnownFilter)
+        if (needsKnownFilter && displayFilterSpec.Redundant != ModifierMode.Show)
+        {
+            (pagedItems, totalCount) = await FilterVocabularyInMemory(baseQuery, displayFilterSpec, sortBy, sortOrder, offset, limit);
+        }
+        else if (needsKnownFilter)
         {
             (pagedItems, totalCount) = await ExecuteFilteredVocabularyQuery(
-                set.SetId, currentUserService.UserId!, displayFilter, sortBy, sortOrder, offset, limit,
+                set.SetId, currentUserService.UserId!, displayFilterSpec, sortBy, sortOrder, offset, limit,
                 searchWordIds, posTags, excludePosTags, hideKanaOnly);
         }
         else if (sortBy == "globalFreq")
@@ -353,33 +358,74 @@ public class WordSetController(
         public long TotalCount { get; set; }
     }
 
+    /// <summary>
+    /// Paginates a word set through <c>GetKnownWordsState</c> instead of the SQL path. Redundancy comes from the
+    /// form-sibling and derivation caches, which SQL cannot see, so any filter touching it resolves the set in memory.
+    /// </summary>
+    private async Task<(List<WordSetMember> Items, int TotalCount)> FilterVocabularyInMemory(
+        IQueryable<WordSetMember> baseQuery, VocabularyDisplayFilter filter, string sortBy, SortOrder sortOrder, int offset, int limit)
+    {
+        var members = await baseQuery.ToListAsync();
+        var states = await currentUserService.GetKnownWordsState(members.Select(m => (m.WordId, (byte)m.ReadingIndex)));
+
+        var matching = members
+            .Where(m => filter.Matches(states.GetValueOrDefault((m.WordId, (byte)m.ReadingIndex), [KnownState.New])))
+            .ToList();
+
+        IEnumerable<WordSetMember> sorted;
+        if (sortBy == "globalFreq")
+        {
+            var freqMap = await WordFormHelper.LoadWordFormFrequencies(jitenContext, matching.Select(m => m.WordId).Distinct().ToList());
+            int RankOf(WordSetMember m) => freqMap.TryGetValue((m.WordId, m.ReadingIndex), out var f) ? f.FrequencyRank : int.MaxValue;
+            sorted = sortOrder == SortOrder.Ascending
+                ? matching.OrderBy(RankOf).ThenBy(m => m.Position)
+                : matching.OrderByDescending(RankOf).ThenBy(m => m.Position);
+        }
+        else
+        {
+            sorted = sortOrder == SortOrder.Ascending
+                ? matching.OrderBy(m => m.Position)
+                : matching.OrderByDescending(m => m.Position);
+        }
+
+        return (sorted.Skip(offset).Take(limit).ToList(), matching.Count);
+    }
+
     private async Task<(List<WordSetMember> Items, int TotalCount)> ExecuteFilteredVocabularyQuery(
-        int setId, string userId, string displayFilter, string sortBy, SortOrder sortOrder, int offset, int limit,
+        int setId, string userId, VocabularyDisplayFilter filter, string sortBy, SortOrder sortOrder, int offset, int limit,
         HashSet<int>? searchWordIds = null, string[]? posTags = null, string[]? excludePosTags = null, bool hideKanaOnly = false)
     {
         var userIdGuid = Guid.Parse(userId);
 
-        string filterClause = displayFilter switch
+        // Mirrors VocabularyDisplayFilter.ResolveTier: a card outranks word-set membership, an unreviewed card
+        // is Learning rather than Unknown, and a suspended card keeps the tier its interval earned it.
+        const string activeCard = @"f.""WordId"" IS NOT NULL AND f.""State"" NOT IN (4,5)";
+        const string interval = @"(EXTRACT(EPOCH FROM (f.""Due"" - f.""LastReview"")) / 86400.0)";
+
+        var tierClauses = filter.Tiers.Select(tier => tier switch
         {
-            "known" =>
-                @"(f.""WordId"" IS NOT NULL AND f.""State"" != 0) OR " +
-                @"(f.""WordId"" IS NULL AND (COALESCE(use_s.has_mastered, FALSE) OR COALESCE(use_s.has_blacklisted, FALSE)))",
-            "unknown" =>
-                @"(f.""WordId"" IS NULL AND NOT COALESCE(use_s.has_mastered, FALSE) AND NOT COALESCE(use_s.has_blacklisted, FALSE)) OR " +
-                @"(f.""WordId"" IS NOT NULL AND f.""State"" = 0)",
-            "young" =>
-                @"f.""WordId"" IS NOT NULL AND f.""State"" IN (1,2,3) AND f.""LastReview"" IS NOT NULL AND " +
-                @"(EXTRACT(EPOCH FROM (f.""Due"" - f.""LastReview"")) / 86400.0) < 21",
-            "mature" =>
-                @"f.""WordId"" IS NOT NULL AND f.""State"" IN (1,2,3) AND f.""LastReview"" IS NOT NULL AND " +
-                @"(EXTRACT(EPOCH FROM (f.""Due"" - f.""LastReview"")) / 86400.0) >= 21",
-            "mastered" =>
-                @"(f.""WordId"" IS NOT NULL AND f.""State"" = 5) OR " +
-                @"(f.""WordId"" IS NULL AND COALESCE(use_s.has_mastered, FALSE))",
-            "blacklisted" =>
-                @"(f.""WordId"" IS NOT NULL AND f.""State"" = 4) OR " +
-                @"(f.""WordId"" IS NULL AND COALESCE(use_s.has_blacklisted, FALSE))",
+            VocabularyTier.Unknown =>
+                @"(f.""WordId"" IS NULL AND NOT COALESCE(use_s.has_mastered, FALSE) AND NOT COALESCE(use_s.has_blacklisted, FALSE))",
+            VocabularyTier.Learning =>
+                $@"({activeCard} AND f.""LastReview"" IS NULL)",
+            VocabularyTier.Young =>
+                $@"({activeCard} AND f.""LastReview"" IS NOT NULL AND {interval} < 21)",
+            VocabularyTier.Mature =>
+                $@"({activeCard} AND f.""LastReview"" IS NOT NULL AND {interval} >= 21)",
+            VocabularyTier.Mastered =>
+                @"((f.""WordId"" IS NOT NULL AND f.""State"" = 5) OR (f.""WordId"" IS NULL AND COALESCE(use_s.has_mastered, FALSE)))",
+            VocabularyTier.Blacklisted =>
+                @"((f.""WordId"" IS NOT NULL AND f.""State"" = 4) OR (f.""WordId"" IS NULL AND COALESCE(use_s.has_blacklisted, FALSE)))",
             _ => "TRUE"
+        }).ToList();
+
+        string filterClause = tierClauses.Count > 0 ? string.Join(" OR ", tierClauses) : "TRUE";
+
+        string suspendedClause = filter.Suspended switch
+        {
+            ModifierMode.Hide => @" AND COALESCE(f.""State"", -1) != 6",
+            ModifierMode.Only => @" AND f.""State"" = 6",
+            _ => ""
         };
 
         string freqJoin = sortBy == "globalFreq"
@@ -449,7 +495,7 @@ public class WordSetController(
             LEFT JOIN user_fsrs f ON m.""WordId"" = f.""WordId"" AND m.""ReadingIndex"" = f.""ReadingIndex""
             LEFT JOIN user_set_effective use_s ON m.""WordId"" = use_s.""WordId"" AND m.""ReadingIndex"" = use_s.""ReadingIndex""
             " + freqJoin + @"
-            WHERE m.""SetId"" = {1} AND (" + filterClause + @")" + searchClause + posClause + excludePosClause + kanaClause + @"
+            WHERE m.""SetId"" = {1} AND (" + filterClause + @")" + suspendedClause + searchClause + posClause + excludePosClause + kanaClause + @"
             ORDER BY " + orderByClause + @"
             OFFSET {2} LIMIT {3}";
 

@@ -28,7 +28,7 @@
 
   const sortDescending = ref(route.query.sortOrder === String(SortOrder.Descending));
   const sortBy = ref(route.query.sortBy?.toString() || sortByOptions.value[0].value);
-  const display = ref(route.query.display?.toString() || 'all');
+  const { tiers: displayTiers, suspended, redundant, query: displayQuery } = useVocabularyDisplayFilter();
   const search = ref(route.query.search?.toString() || '');
   const debouncedSearch = ref(search.value);
 
@@ -47,12 +47,6 @@
   watch(sortBy, (newValue) => {
     router.replace({
       query: { ...route.query, sortBy: newValue },
-    });
-  });
-
-  watch(display, (newValue) => {
-    router.replace({
-      query: { ...route.query, display: newValue },
     });
   });
 
@@ -92,7 +86,7 @@
       offset: offset,
       sortBy: sortBy,
       sortOrder: sortOrder,
-      displayFilter: display,
+      ...displayQuery,
       search: debouncedSearch,
       pos: computed(() => debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined),
       excludePos: computed(() => debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined),
@@ -157,7 +151,9 @@
     <VocabularyFilters
       v-model:sort-by="sortBy"
       v-model:sort-descending="sortDescending"
-      v-model:display-filter="display"
+      v-model:display-tiers="displayTiers"
+      v-model:suspended="suspended"
+      v-model:redundant="redundant"
       v-model:search="search"
       v-model:include-pos="includePos"
       v-model:exclude-pos="excludePos"

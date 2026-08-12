@@ -1487,7 +1487,9 @@ public class MediaDeckController(
     /// <param name="sortBy">Sort by globalFreq | deckFreq | chrono.</param>
     /// <param name="sortOrder">Ascending or Descending.</param>
     /// <param name="offset">Pagination offset.</param>
-    /// <param name="displayFilter">When authenticated: all | known | young | mature | mastered | blacklisted | unknown.</param>
+    /// <param name="displayFilter">When authenticated: all, or a comma-separated set of unknown | learning | young | mature | mastered | blacklisted.</param>
+    /// <param name="suspended">Suspended cards: show | hide | only.</param>
+    /// <param name="redundant">Redundant forms: show | hide | only.</param>
     /// <param name="search">Optional text search filter (Japanese, romaji, or English).</param>
     /// <param name="limit">Page size, clamped to 1-200.</param>
     /// <returns>Paginated deck vocabulary list.</returns>
@@ -1498,6 +1500,7 @@ public class MediaDeckController(
     public async Task<PaginatedResponse<DeckVocabularyListDto?>> GetVocabulary(int id, string? sortBy = "",
                                                                                SortOrder sortOrder = SortOrder.Ascending,
                                                                                int? offset = 0, string displayFilter = "all",
+                                                                               string? suspended = null, string? redundant = null,
                                                                                string? search = null,
                                                                                string? pos = null, string? excludePos = null,
                                                                                bool hideKanaOnly = false,
@@ -1544,33 +1547,18 @@ public class MediaDeckController(
                            && wf.FormType != JmDictFormType.KanaForm));
         }
 
-        if (currentUserService.IsAuthenticated && !string.IsNullOrEmpty(displayFilter) && displayFilter != "all")
-        {
-            var userId = currentUserService.UserId!;
+        var displayFilterSpec = VocabularyDisplayFilter.Parse(displayFilter, suspended, redundant);
 
+        if (currentUserService.IsAuthenticated && displayFilterSpec.IsActive)
+        {
             var allDeckWords = await query.ToListAsync();
             var deckWordKeys = allDeckWords.Select(dw => (dw.WordId, dw.ReadingIndex)).ToList();
 
             var knownStates = await currentUserService.GetKnownWordsState(deckWordKeys);
 
-            query = allDeckWords.AsQueryable();
-
-            query = query.AsEnumerable().Where(dw =>
-            {
-                var key = (dw.WordId, dw.ReadingIndex);
-                var knownState = knownStates.GetValueOrDefault(key, [KnownState.New]);
-
-                return displayFilter switch
-                {
-                    "known" => !knownState.Contains(KnownState.New),
-                    "young" => knownState.Contains(KnownState.Young),
-                    "mature" => knownState.Contains(KnownState.Mature),
-                    "mastered" => knownState.Contains(KnownState.Mastered),
-                    "blacklisted" => knownState.Contains(KnownState.Blacklisted),
-                    "unknown" => knownState.Contains(KnownState.New),
-                    _ => true
-                };
-            }).AsQueryable();
+            query = allDeckWords.Where(dw =>
+                       displayFilterSpec.Matches(knownStates.GetValueOrDefault((dw.WordId, dw.ReadingIndex), [KnownState.New])))
+                                .AsQueryable();
         }
 
         query = sortBy switch
