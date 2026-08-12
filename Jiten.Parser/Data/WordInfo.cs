@@ -38,6 +38,23 @@ public class WordInfo
     /// ProcessWord escalation chain performs.
     public bool IsKanaExclamation { get; set; }
 
+    /// Set when Sudachi originally tagged this all-katakana token as a noun — a name/loanword
+    /// shape. Deconjugation of its hiragana conversion must not land on kanji-primary words
+    /// (ハガナ → はが+な → 剥ぐ fabricates vocabulary out of a name). Survives the POS rewrites
+    /// that the ProcessWord escalation chain performs.
+    public bool IsKatakanaNounSurface { get; set; }
+
+    /// Set when a rewrite-rule template pinned this token — a deliberate lexical decision the
+    /// misparse gates must not overrule (え|っつった). PreMatchedWordId alone can't carry this:
+    /// parser-level machinery (compound matches, fallbacks) reuses it for ordinary tokens.
+    public bool PinnedByRewriteRule { get; set; }
+
+    /// Set when a gate's pin is a final word decision that compound formation must not absorb
+    /// or override (the ぶん of a fraction frame, the ordinal 目). Soft pins — reading defaults
+    /// like the する-family — stay absorbable: an attested expression spanning them (そうした,
+    /// 臆病風に吹かれる) is the better parse.
+    public bool HardPinned { get; set; }
+
     /// Sudachi lattice segmentation margin: extra cost of the cheapest competing lattice path
     /// crossing one of this token's boundaries (clamped to 99999 = no competitor).
     /// Null when margin output was not requested. Low values = uncertain segmentation.
@@ -70,6 +87,9 @@ public class WordInfo
         ResolvedWordId = other.ResolvedWordId;
         SudachiBoundaryMargin = other.SudachiBoundaryMargin;
         IsKanaExclamation = other.IsKanaExclamation;
+        IsKatakanaNounSurface = other.IsKatakanaNounSurface;
+        PinnedByRewriteRule = other.PinnedByRewriteRule;
+        HardPinned = other.HardPinned;
     }
 
     public WordInfo(string sudachiLine)

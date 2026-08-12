@@ -51,6 +51,42 @@ public class PipelineStagePropertyTests
     }
 
     [Fact]
+    public void StructuralRepairFeatures_ShouldRecognizeEachCandidateShape()
+    {
+        var features = TokenFeatureScanner.ScanWithCandidates(
+        [
+            Token("流しっ", PartOfSpeech.Noun),
+            Token("ポン", PartOfSpeech.Noun),
+            Token("路上", PartOfSpeech.Noun),
+            Token("会", PartOfSpeech.CommonNoun)
+        ]).Features;
+
+        features.Should().HaveFlag(TokenFeatures.GeminateSuffixShape);
+        features.Should().HaveFlag(TokenFeatures.KatakanaRun);
+        features.Should().HaveFlag(TokenFeatures.CompoundBoundaryShape);
+        features.Should().HaveFlag(TokenFeatures.SingleKanjiNoun);
+    }
+
+    [Fact]
+    public void StructuralRepairStages_ShouldBeSkipped_WhenNoCandidateShapeExists()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var diagnostics = new ParserDiagnostics();
+
+        analyser.RunPipelineForTesting([Token("ordinary", PartOfSpeech.Noun)], diagnostics);
+
+        string[] stages =
+        [
+            "RepairGeminateSuffixTheft",
+            "RepairKatakanaShreds",
+            "RepairCompoundBoundaryTheft",
+            "RepairKanjiVerbShred"
+        ];
+        diagnostics.TokenStages.Where(s => stages.Contains(s.StageName))
+            .Should().OnlyContain(s => s.Skipped);
+    }
+
+    [Fact]
     public void Pipeline_ShouldPreservePunctuationBoundary_AsStandaloneToken()
     {
         var analyser = new MorphologicalAnalyser();

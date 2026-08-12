@@ -1646,6 +1646,187 @@ public class FormSelectionTests
         yield return ["ピアノはもう弾かない。", "弾かない", 1419370, (byte)0]; // negative = play
         yield return ["自力で飛んだ。", "飛んだ", 1429700, (byte)0]; // 飛ぶ past after で
         yield return ["麻雀に負けて札を渡した。", "札", 1298960, (byte)0]; // banknote: no card verb
+
+        // 話 after an ordinal/numeral is the episode counter, not はなし
+        yield return ["聞き耳ラジオ、第二話", "話", 2100460, (byte)0];
+        yield return ["１０度って言われた", "度", 1445160, (byte)0];
+        yield return ["小さな石を拾った", "石", 1382440, (byte)0];
+        // Bare す stem before explanatory ん is contracted する; the lexical 済んだ/澄んだ stay themselves
+        yield return ["なんでロボット相手に八つ当たりなんかすんだよ！", "す", 1157170, (byte)1];
+        yield return ["もう済んだことだ", "済んだ", 1295070, (byte)0];
+        yield return ["空気が澄んだ朝", "澄んだ", 1373680, (byte)0];
+        // Bare-りゃ contracted conditionals on single-mora stems (みりゃ = 見れば, すりゃ = すれば)
+        yield return ["見りゃわかるだろ", "見りゃ", 1259290, (byte)0];
+        yield return ["そんなことすりゃ怒られる", "すりゃ", 1157170, (byte)1];
+        yield return ["安くうりゃ売れる", "うりゃ", 1473950, (byte)1];
+        // Attested mimetic adverbs in the Xと+verb frame survive the SFX gate: katakana spellings
+        // of hiragana-listed entries attest via the script fold, and an adverbial sense counts
+        // even when the entry lists a noun POS first
+        yield return ["ルーシィは玄関までスタスタと出迎えに行った。", "スタスタ", 1006090, (byte)0];
+        yield return ["ぽつぽつと店頭に明かりを灯す", "ぽつぽつ", 1012010, (byte)1];
+        yield return ["からからと笑う", "からから", 1003000, (byte)0];
+        yield return ["ぽんぽんと飛び出る", "ぽんぽん", 2849068, (byte)0];
+        // OOV katakana boundaries: attested tail word survives the blob; prefix re-cuts keep
+        // attested remainders
+        yield return ["彼のガゾルニアレベルは高い", "レベル", 1145910, (byte)0];
+        yield return ["おバカメーターが振り切れた", "メーター", 1132530, (byte)0];
+        // Contracted ある before explanatory ん (あんだ = あるんだ, never 安打)
+        yield return ["可愛いとこあんだな", "あ", 1296400, (byte)2];
+        yield return ["そんなことあんの？", "あん", 1296400, (byte)2];
+        yield return ["日本国内の話", "国内", 1286930, (byte)0];
+        // ど+えれえ deconjugates through the slang ee-form to どえらい (kana form)
+        yield return ["うむ何しろどえれえ大仕事だ", "どえれえ", 1623940, (byte)1];
+        // に越したことはない matches through its slang ねえ tail
+        yield return ["用心するに越したことはねえからな", "越したことはねえ", 2195810, (byte)3];
+        yield return ["その間抜け面さ", "間抜け面", 1715260, (byte)0];
+        yield return ["鼻持ちならねえ", "鼻持ちならねえ", 1626080, (byte)0];
+        // Particle-cluster expressions attested for the full surface match whole
+        yield return ["ひと足先に参るぞ", "ひと足先に", 1164420, (byte)4];
+        yield return ["時には胸が痛みます", "時には", 1315860, (byte)0];
+        yield return ["俺の素晴らしさを天下に称えるためだとしたら、百八ごときじゃ足りんだろう。", "としたら", 2100750, (byte)0];
+        // Emphatic small-vowel insertion resolves to たっぷり, never the cross-script タプル
+        yield return ["お楽しみはたぁっぷり時間をかけて行こう。", "たぁっぷり", 1007240, (byte)0];
+        yield return ["「確か百八発鳴らすんだよな。じゃあ百八って何の数字よ？」", "じゃあ", 1005900, (byte)0];
+        // Stem+ん is the negative ぬ: 足りん folds into 足りる
+        yield return ["俺の素晴らしさを天下に称えるためだとしたら、百八ごときじゃ足りんだろう。", "足りん", 1404740, (byte)0];
+        // Contracted conditional てりゃあ (ていれば) keeps the verb chain on 相手にする — never テリア
+        yield return ["今まで田舎のシケた術屋を相手にしてりゃあよかったから、何とか隠し通せていただけで……",
+            "相手にしてりゃあ", 2572400, (byte)0];
+        yield return ["見てりゃもろバレっていうか", "見てりゃ", 1259290, (byte)0];
+        yield return ["見てりゃもろバレっていうか", "もろバレ", 2670820, (byte)1];
+        yield return ["鼓膜やばい", "やばい", 1012840, (byte)0];
+        // やべえ resolves to its own colloquial entry (and the following よ must survive)
+        yield return ["やべえよ母ちゃん", "やべえ", 2827244, (byte)1];
+        // Exact-surface expression entry beats the deconjugated する analysis
+        yield return ["もっとも僕からしてみれば、それはそれでイイんだけどね。", "してみれば", 2407670, (byte)1];
+        yield return ["もっとも僕からしてみれば、それはそれでイイんだけどね。", "イイ", 2820690, (byte)0];
+        yield return ["言い訳をするな。", "言い訳", 1587030, (byte)0];
+        // 弾き語り is its own lexeme — the flick-reading gate must not touch it
+        yield return ["彼は弾き語りが得意だ。", "弾き語り", 1801680, (byte)0];
+
+        // という-contraction family resolves to its own entry (っつう 2798260 / っちゅう 2757620),
+        // never 行く/釣る/買う/つて; the fishing verb keeps 釣る behind を
+        yield return ["いくら僕でも、そんな芸当できないっつーの", "っつー", 2798260, (byte)0];
+        yield return ["つっても、力仕事は勘弁な", "つって", 2798260, (byte)1];
+        yield return ["つーかこれ、クラウドっつっても、かなり限定的", "っつって", 2798260, (byte)1];
+        yield return ["ロボットが反乱を起こしたっちゅうわけじゃ", "っちゅう", 2757620, (byte)0];
+        // Contraction slang resolves to the standard lexeme
+        yield return ["ケガさせられちゃたまんないって思うだろ", "たまんない", 1211340, (byte)1];
+        yield return ["クリスがいるかもしんねえよな", "かもしんねえ", 1002970, (byte)1];
+        yield return ["実家が力仕事の連中ばっかだったから", "ばっか", 2857403, (byte)0];
+
+        // Numeral+分/日/月 before a temporal anchor takes the duration reading; without the
+        // anchor (or across punctuation) the idiom/fraction homograph survives
+        yield return ["十分後にまた来てください。", "十分", 1335070, (byte)1];
+        yield return ["五分待ってくれ。", "五分", 2039350, (byte)1];
+        yield return ["三分待ったら教えて。", "三分", 1814040, (byte)1];
+        yield return ["あれから一月経った。", "一月", 1162130, (byte)0];
+        yield return ["三十日間の猶予がある。", "三十日", 1300670, (byte)1];
+        yield return ["何分後に着くの?", "何分", 1189320, (byte)0];
+        yield return ["十分に注意してください。", "十分", 1335080, (byte)0];
+
+        // 弾く outside a music window is はじく in every conjugation, not just the passive
+        yield return ["この装甲は銃弾を弾く。", "弾く", 1419360, (byte)0];
+
+        yield return ["三時に集合だ。", "三時", 1300520, (byte)1];
+        yield return ["損失を被った投資家。", "被った", 1484340, (byte)0];
+        yield return ["科学技術の粋を集めた工場。", "粋を集めた", 2836958, (byte)0];
+        yield return ["粋な計らいだ。", "粋な", 1372410, (byte)0];
+
+        // Fraction frames resolve to the 分の一 suffix (2269760), never the N-minutes homograph;
+        // attested whole-fraction entries and plain durations are unaffected
+        yield return ["クリスの七分の一。", "分の一", 2269760, (byte)0];
+        yield return ["看板の４分の１の欠片だけなのだ。", "分の１", 2269760, (byte)1];
+        yield return ["全体の三分の一を占める。", "三分の一", 1949730, (byte)0];
+        yield return ["収入の十分の一を貯金する。", "十分の一", 1335100, (byte)0];
+        yield return ["４分後に着く。", "４分", 2863218, (byte)0];
+        // Hours of the clock merge under the hour entry with the clock reading (四時=よじ,
+        // 九時=くじ); the four-seasons and ふたとき homographs never survive a numeral context
+        yield return ["そして、昼の十二時十分前に、株を買った。", "十二時", 1334960, (byte)1];
+        yield return ["そして、午後四時四十七分だ。", "四時", 1307230, (byte)1];
+        yield return ["そして、午後四時四十七分だ。", "分", 1502840, (byte)0];
+        yield return ["九時に寝るつもりだ。", "九時", 2845349, (byte)1];
+        yield return ["一時的な処置だ。", "一時的な", 1162980, (byte)0];
+
+        // Geminate suffixes っぱなし/っぷり/っぽい reassemble their stems (Sudachi bleeds the っ:
+        // 流|しっ|ぱなし, 上|が|りっぱ|な|し); 立派/ちっぽけ/やっぱなし adversarials stay intact
+        yield return ["「ラジオ流しっぱなしで寝てんなよ」", "っぱなし", 1008020, (byte)1];
+        yield return ["不動産は上がりっぱなしだったのだ。", "っぱなし", 1008020, (byte)1];
+        yield return ["彼女の気力の失いっぷりはかなり激しいみたいだ。", "っぷり", 2202980, (byte)0];
+        yield return ["ざまあみやがれ山犬野郎", "ざまあみやがれ", 2868161, (byte)1];
+        yield return ["「そりゃいいこった」", "こった", 2106260, (byte)0];
+        yield return ["ミッチーのあまりの脳天気っぷりに面食らった。", "脳天気", 2027320, (byte)2];
+        yield return ["俺の皮肉っぽい言い方に、むっとしたのがわかった。", "っぽい", 2083720, (byte)0];
+        yield return ["立派な人になりたい。", "立派な", 1551790, (byte)0];
+        yield return ["ちっぽけな家に住んでいる。", "ちっぽけな", 1007570, (byte)1];
+        yield return ["やっぱなしだな。", "やっぱ", 2772780, (byte)0];
+
+        // Quotative-って mora theft: stolen morae reattach to reform the word (温室育ち, 勉強,
+        // 打ち上げ, はず); genuine te-forms and auxiliary fusions stay intact
+        yield return ["俺は温室育ちってわけだ。", "温室育ち", 1781110, (byte)0];
+        yield return ["「勉強って数学だろ？」", "勉強", 1512670, (byte)0];
+        yield return ["ロケットの打ち上げっていうイベントだ。", "打ち上げ", 1408690, (byte)0];
+        yield return ["はずって……。これでよく引率が務まるなあ。", "はず", 1476430, (byte)2];
+        yield return ["１０度？１０度って。", "度", 1445160, (byte)0];
+        yield return ["「じゃあってなによ、じゃあって」", "じゃあ", 1005900, (byte)0];
+        yield return ["と言ってくれた。", "言ってくれた", 1587040, (byte)0];
+        yield return ["花が散っていた。", "散っていた", 1303490, (byte)0];
+        yield return ["食べちゃってごめん。", "食べちゃって", 1358280, (byte)0];
+        yield return ["手を取って歩いた。", "手を取って", 2402970, (byte)0];
+
+        // って-final auxiliary before a quote-taking verb stays quotative (大袈裟だ+って+言いたい,
+        // never the 大袈裟だった-style fold); だって "even/because" survives everywhere else
+        yield return ["「要は大袈裟だって言いたいんだよ」", "大袈裟", 1588890, (byte)1];
+        // 〜だって before 言いたい is copula だ + quotative って (2086960), not the concessive conjunction.
+        yield return ["「要は大袈裟だって言いたいんだよ」", "って", 2086960, (byte)0];
+        yield return ["静かだって聞いた。", "静か", 1381820, (byte)0];
+        yield return ["だって嫌だもん。", "だって", 2643970, (byte)0];
+        yield return ["本だってさ。", "だって", 2643970, (byte)0];
+        // The っつー contraction family steals morae like って; the stem reattaches
+        yield return ["びびりすぎっつーか、逆効果っつーか", "びびりすぎ", 2096500, (byte)1];
+        yield return ["びびりすぎっつーか、逆効果っつーか", "逆効果", 1227020, (byte)0];
+
+        // Katakana-run repair: shredded OOV compounds re-merge or drop; attested compounds and
+        // injected-name-adjacent tokens are untouched
+        yield return ["[name]フラウ[line]“リア充マジ爆発すべき”", "リア充", 2625510, (byte)0];
+        yield return ["システムエラーが発生した。", "システムエラー", 2300460, (byte)0];
+        yield return ["ロケットエンジンの点火実験だ。", "ロケットエンジン", 2828078, (byte)0];
+        yield return ["テレビカメラが並んでいる。", "テレビカメラ", 1927120, (byte)0];
+        yield return ["コーヒーメーカーを買った。", "コーヒーメーカー", 2152950, (byte)0];
+
+        yield return ["彼女はピアノを弾いた", "弾いた", 1419370, (byte)0]; // piano context keeps ひく
+
+        // Demonstrative-adverb + する past before a noun is the adnominal (そうした/こうした/ああした
+        // "such"), not the した+もの archaic compound. Adversarial: そうしたら/そうしたの stay verbal.
+        yield return ["これはそうしたものに耐性がない", "そうした", 2008650, (byte)1];
+        yield return ["こうした問題が起きる", "こうした", 2008030, (byte)2];
+        yield return ["そうしたら困る", "そうしたら", 2084700, (byte)0];
+        // 共 (とも) + に is the adverb 共に "together"
+        yield return ["爾子が共におらぬので寂しい", "共に", 1234260, (byte)0];
+        // 来 + classical adnominal たる before a noun is 来たる "coming/next"
+        yield return ["来たる東征に先駆けて", "来たる", 1591270, (byte)1];
+        // ほくそ笑む: Sudachi lacks the compound and shreds it; the verb reassembles whole
+        yield return ["こういうのをほくそ笑むってんだろう", "ほくそ笑む", 2065260, (byte)0];
+        // Classical polite negative ませぬ deconjugates like ません → する, not the noun 揣摩
+        yield return ["否定はしませぬ", "しませぬ", 1157170, (byte)1];
+        // Polite かもしれません is its own expression (1002975); the plain かもしれない (1002970) still combines
+        yield return ["同じなのかもしれませんしね", "かもしれません", 1002975, (byte)1];
+        // 合 after 死 is the 合い suffix あい (死合=しあい), not the volume unit ごう
+        yield return ["竜胆はこの死合の果てに", "合", 1284320, (byte)1];
+        // 直+copula に is 直に じかに (1430690), not 直(ちょく)+に
+        yield return ["その熱量を直に感じ取ってみる", "直に", 1430690, (byte)0];
+        // bare 有り得 at a clause end is its own entry (2560320), not 有り得る
+        yield return ["終了することも充分有り得", "有り得", 2560320, (byte)0];
+        // 飛ばし after 首 is the verb 飛ばす (1485230), not the securities-fraud noun (1637130)
+        yield return ["首飛ばしの颶風", "飛ばし", 1485230, (byte)0];
+        // 段飛ばし (2746000): the numeral must release 段 to the compound, not swallow it (三段|飛ばし)
+        yield return ["三段飛ばしで登る", "段飛ばし", 2746000, (byte)0];
+        // 羽馬(surname)+車 re-cut to 羽 + 馬車 (1471780)
+        yield return ["羽馬車が降りるのを見た", "馬車", 1471780, (byte)0];
+        // ケダ(surname)+モノ作り re-cut to ケダモノ (獣, 1335590) + 作り
+        yield return ["こんなケダモノ作りやがった", "ケダモノ", 1335590, (byte)5];
+        // 虚+けど+も re-cut to 虚け (うつけ, 2674470) + ども
+        yield return ["舐めるなよこの虚けども", "虚け", 2674470, (byte)1];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

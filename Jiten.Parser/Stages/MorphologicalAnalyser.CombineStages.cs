@@ -423,7 +423,13 @@ public partial class MorphologicalAnalyser
         {
             var currentWord = new WordInfo(wordInfos[i]);
 
-            if (currentWord.PartOfSpeech == PartOfSpeech.Prefix && i + 1 < wordInfos.Count)
+            // The emphatic prefix ど is tagged Adverb (truncated どう) by Sudachi; before an
+            // i-adjective it is the intensifier (ど偉い, どでかい) — the attested-compound guards
+            // below decide whether a real compound exists.
+            bool isEmphaticDo = currentWord.Text == "ど" && currentWord.PartOfSpeech == PartOfSpeech.Adverb
+                && i + 1 < wordInfos.Count && wordInfos[i + 1].PartOfSpeech == PartOfSpeech.IAdjective;
+
+            if ((currentWord.PartOfSpeech == PartOfSpeech.Prefix || isEmphaticDo) && i + 1 < wordInfos.Count)
             {
                 var nextWord = wordInfos[i + 1];
                 bool isKanjiPrefix = IsKanjiPrefix(currentWord.Text);
@@ -432,7 +438,7 @@ public partial class MorphologicalAnalyser
                 // Kana prefixes (お, ご) should only combine with nouns/NaAdjectives
                 bool isContentWord = nextWord.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.NaAdjective
                     or PartOfSpeech.Adverb or PartOfSpeech.NominalAdjective or PartOfSpeech.CommonNoun
-                    || (isKanjiPrefix && nextWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective);
+                    || ((isKanjiPrefix || isEmphaticDo) && nextWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective);
 
                 if (isContentWord)
                 {
@@ -504,6 +510,9 @@ public partial class MorphologicalAnalyser
                     // Try partial combination: prefix + beginning of next token
                     // Only when the next token itself is NOT a valid word (Sudachi drew wrong boundaries)
                     // e.g. 相+当腹 → 相当+腹 (当腹 is not a valid word, so Sudachi mis-segmented)
+                    // The remainder must be a word too: a re-cut that strands a multi-char unattested
+                    // blob is not a boundary repair (おバ[小母] + junk). A single stray kana is fine —
+                    // the stutter filter cleans it (お+にぃ → おに + ぃ).
                     if (nextWord.Text.Length >= 2 &&
                         !PrefixCombineExclusions.Contains(combinedText) &&
                         !HasCompoundLookup(nextWord.Text))
@@ -513,7 +522,9 @@ public partial class MorphologicalAnalyser
                         {
                             var partialText = currentWord.Text + nextWord.Text[..len];
                             if (!PrefixCombineExclusions.Contains(partialText) &&
-                                HasCompoundLookup(partialText))
+                                HasCompoundLookup(partialText) &&
+                                (HasCompoundLookup(nextWord.Text[len..])
+                                 || (nextWord.Text.Length - len == 1 && JapaneseTextHelper.IsKana(nextWord.Text[len]))))
                             {
                                 var combinedWord = new WordInfo(nextWord);
                                 combinedWord.Text = partialText;
@@ -777,6 +788,11 @@ public partial class MorphologicalAnalyser
         return newList;
     }
 
+    // The quote-taking verbs that mark a preceding って as quotative — the same set the
+    // ShouldStopMerging re-cut uses (kanji and kana lemmas both: Sudachi tags 言う as いう freely).
+    private static bool IsQuoteTakingVerb(WordInfo w) =>
+        w.DictionaryForm is "思う" or "おもう" or "言う" or "いう" or "聞く" or "きく" or "考える" or "感じる";
+
     private List<WordInfo> CombineAuxiliary(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2)
@@ -849,6 +865,13 @@ public partial class MorphologicalAnalyser
                 && currentWord.Text != "やしない"
                 && currentWord.Text != "し"
                 && !(currentWord.Text == "って" && previousWord.IsImperative)
+                // A って-final copula before a quote-taking verb carries the quotative, not an
+                // inflection: 大袈裟|だって|言いたい is 大袈裟だ + って + 言いたい, never the
+                // 大袈裟だった-style fold. Only the copula だ — a volitional ようって must fold
+                // (来ようって|いう) and gets re-cut by CombineQuotativeToIu afterwards.
+                && !(currentWord.DictionaryForm == "だ"
+                     && currentWord.Text.EndsWith("って", StringComparison.Ordinal)
+                     && i + 1 < wordInfos.Count && IsQuoteTakingVerb(wordInfos[i + 1]))
                 && currentWord.Text != "なのだ"
                 && !currentWord.Text.StartsWith("なん")
                 && currentWord.Text != "だろ"
@@ -1084,11 +1107,14 @@ public partial class MorphologicalAnalyser
         {
             WordInfo currentWord = wordInfos[i];
 
-            // Combine かもしれ* (kamoshirenai, kamoshiremasen, etc.) into single expression
+            // Combine かもしれ* (kamoshirenai, kamoshiremasen, etc.) into single expression.
+            // The ん-contracted しんない/しんねえ is the same expression — the deconjugator's
+            // しんない ending-rule recovers かもしれない from the fused tail.
             if (i + 2 < wordInfos.Count &&
                 currentWord.Text == "か" &&
                 wordInfos[i + 1].Text == "も" &&
-                wordInfos[i + 2].Text.StartsWith("しれ"))
+                (wordInfos[i + 2].Text.StartsWith("しれ") ||
+                 wordInfos[i + 2].Text.StartsWith("しんな") || wordInfos[i + 2].Text.StartsWith("しんね")))
             {
                 WordInfo combinedWord = new WordInfo(currentWord);
                 combinedWord.Text = currentWord.Text + wordInfos[i + 1].Text + wordInfos[i + 2].Text;
@@ -1097,6 +1123,26 @@ public partial class MorphologicalAnalyser
                 combinedWord.PartOfSpeech = PartOfSpeech.Expression;
                 newList.Add(combinedWord);
                 i += 3;
+                changed = true;
+                continue;
+            }
+
+            // Same expression when か+も has already been fused into かも upstream (the polite
+            // かもしれません and the plain かもしれない both reach here as [かも][しれ*] once the
+            // ん-repair has glued the しれ* tail): join the remaining しれ* token.
+            if (i + 1 < wordInfos.Count &&
+                currentWord.Text == "かも" &&
+                (wordInfos[i + 1].Text.StartsWith("しれ", StringComparison.Ordinal) ||
+                 wordInfos[i + 1].Text.StartsWith("しんな", StringComparison.Ordinal) ||
+                 wordInfos[i + 1].Text.StartsWith("しんね", StringComparison.Ordinal)))
+            {
+                WordInfo combinedWord = new WordInfo(currentWord);
+                combinedWord.Text = currentWord.Text + wordInfos[i + 1].Text;
+                combinedWord.EndOffset = wordInfos[i + 1].EndOffset;
+                combinedWord.Reading = currentWord.Reading + wordInfos[i + 1].Reading;
+                combinedWord.PartOfSpeech = PartOfSpeech.Expression;
+                newList.Add(combinedWord);
+                i += 2;
                 changed = true;
                 continue;
             }

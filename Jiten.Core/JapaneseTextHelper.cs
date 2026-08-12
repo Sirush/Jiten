@@ -35,6 +35,11 @@ public static class JapaneseTextHelper
         return true;
     }
 
+    /// <summary>Katakana letter (ァ–ヺ) or the long-vowel mark ー — the characters a katakana
+    /// word is spelled with, excluding middle dots and iteration marks.</summary>
+    public static bool IsKatakanaWordChar(char c) =>
+        c is (>= 'ァ' and <= 'ヺ') or 'ー';
+
     /// <summary>Fullwidth (Ａ-Ｚ/ａ-ｚ) or halfwidth (A-Z/a-z) Latin letter.</summary>
     public static bool IsLatinLetter(char c) =>
         c is (>= '\uFF21' and <= '\uFF3A') or (>= '\uFF41' and <= '\uFF5A')  // fullwidth Ａ-Ｚ / ａ-ｚ
@@ -86,4 +91,14 @@ public static class JapaneseTextHelper
             (>= 0xF900 and <= 0xFAFF) or   // Compatibility Ideographs
             (>= 0x2F800 and <= 0x2FA1F);   // Compatibility Supplement
     }
+
+    /// <summary>
+    /// A numeral character: an ASCII or full-width digit, a kanji digit (一〜九), a kanji place
+    /// marker (十百千万億兆), or a kanji zero (〇零). Covers the counting/quantity vocabulary shared by
+    /// the numeral-context guards; contexts that need a narrower kanji-only set test IsKanji separately.
+    /// </summary>
+    public static bool IsNumeralChar(char c) =>
+        c is (>= '0' and <= '9') or (>= '０' and <= '９')
+          or '一' or '二' or '三' or '四' or '五' or '六' or '七' or '八' or '九'
+          or '十' or '百' or '千' or '万' or '億' or '兆' or '〇' or '零';
 }
