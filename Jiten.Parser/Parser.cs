@@ -2462,6 +2462,7 @@ namespace Jiten.Parser
             // いう) should still let the direct-surface candidate compete.
             bool hasMergeConfirmedDeconj = wordData.wordInfo.IsMergedInflection &&
                 matches.Any(m => m.form.Text == baseDictionaryWord && m.form.Process.Count > 0);
+            var pastFormProcess = matches.FirstOrDefault(m => m.form.Process.Contains("past")).form?.Process;
             foreach (var id in directSurfaceIds)
             {
                 if (matchedWordIds.Contains(id)) continue;
@@ -2472,6 +2473,9 @@ namespace Jiten.Parser
                 bool isPosIncompat = matches.Count > 0 &&
                                      !PosMapper.IsJmDictCompatibleWithSudachi(directWord.CachedPOS, wordData.wordInfo.PartOfSpeech);
                 if (isPosIncompat && hasMergeConfirmedDeconj)
+                    continue;
+                if (pastFormProcess != null
+                    && FormCandidateSelector.IsUnattestedInterjectionOverPastForm(directWord, pastFormProcess))
                     continue;
                 var forms = FormCandidateFactory.EnumerateCandidateForms(directWord, normalizedText, allowLooseLvmMatch: true,
                                                                          surface: wordData.wordInfo.Text);

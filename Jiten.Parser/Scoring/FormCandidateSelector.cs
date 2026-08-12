@@ -269,11 +269,31 @@ internal static class FormCandidateSelector
             if (context.Surface != candidate.Form.Text) continue;            // exact surface
             if (candidate.Word.CachedPOS.Any(p => p is not (PartOfSpeech.Interjection or PartOfSpeech.Unknown)))
                 continue;
+            if (IsUnattestedInterjectionOverPastForm(candidate.Word, best.DeconjForm.Process))
+                continue;
             if (candidate.Word.PartsOfSpeech.Any(p => p is "int"))
                 return candidate;
         }
 
         return null;
+    }
+
+    private static readonly string[] PublicFrequencyMarkers =
+        ["ichi1", "ichi2", "news1", "news2", "spec1", "spec2", "gai1", "gai2"];
+
+    /// A past form states a proposition, so an interjection homographic with one (来た int "it's here!"
+    /// against the past of 来る) may only claim the surface when public frequency evidence backs the
+    /// lexicalised use — やった "hooray" (spec1) does, 来た does not. Utterance-shaped homographs carry
+    /// no tense (来い ← imperative) and stay eligible without evidence.
+    public static bool IsUnattestedInterjectionOverPastForm(JmDictWord word, IReadOnlyList<string> deconjProcess)
+    {
+        if (!deconjProcess.Contains("past")) return false;
+        if (word.CachedPOS.Any(p => p is not (PartOfSpeech.Interjection or PartOfSpeech.Unknown))) return false;
+        if (!word.PartsOfSpeech.Any(p => p is "int")) return false;
+
+        return word.Priorities == null
+               || !word.Priorities.Any(p => PublicFrequencyMarkers.Contains(p)
+                                            || p.StartsWith("nf", StringComparison.Ordinal));
     }
 
     /// An archaic word written exactly as its surface (人にあらざる) is self-evidently

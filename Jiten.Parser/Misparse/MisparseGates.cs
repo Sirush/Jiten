@@ -334,6 +334,10 @@ internal static class MisparseGates
 
         if (ExemptFromKanaGate.Contains(ctx.Token.PartOfSpeech)) return false;
 
+        // A stem Sudachi split off its auxiliary (き|た) and the deconjugator reassembled into an
+        // inflected form is a grammatical analysis of the sentence, not a stray kana fragment.
+        if (ctx.Token.IsMergedInflection && ctx.SelectedWord.Conjugations.Count > 0) return false;
+
         // Sentence-initial OR post-punctuation two-kana interjections (ん、ああ、 / ええ、) are legitimate
         // standalone utterances even when a kanji spelling exists (嗚呼). Mid-word elongation shreds
         // (いきた+ああ) attach directly to a content word (Prev is a verb/noun) and stay gated.
