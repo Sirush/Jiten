@@ -147,6 +147,11 @@
     { label: 'Hardest', value: 'HardestFirst' },
   ];
 
+  const exampleSentenceSourceOptions = [
+    { label: 'Study decks', value: 'StudyDecks' },
+    { label: 'Random', value: 'Random' },
+  ];
+
   // The simple per-part controls read from the resolved layout and write back into it. The setters
   // always mirror the legacy field (so an old client with a null cardLayout still derives correctly)
   // and, once a concrete cardLayout exists, additionally rewrite it so the toggle keeps working.
@@ -410,6 +415,7 @@
     ['undo', 'Undo'],
     ['wrapUp', 'Wrap up'],
     ['pauseTimer', 'Pause/resume timer'],
+    ['replayAudio', 'Replay audio'],
     ['dictPrev', 'Previous dictionary'],
     ['dictNext', 'Next dictionary'],
   ];
@@ -973,9 +979,27 @@
               </div>
               <div v-if="exampleSentencePosition !== 'Hidden'">
                 <label class="text-sm mb-1 block">
+                  Sentence origin
+                  <Tooltip
+                    content="Where the card's sentence comes from.<br>**Study decks** — a sentence from one of your study decks, picked at random when several of them have one.<br>**Random** — ignores your decks and display random example sentences instead.<br>Your own custom sentences always win over both."
+                    placement="right"
+                  >
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+                <SelectButton
+                  v-model="form.exampleSentenceSource"
+                  :options="exampleSentenceSourceOptions"
+                  option-label="label"
+                  option-value="value"
+                  :allow-empty="false"
+                />
+              </div>
+              <div v-if="exampleSentencePosition !== 'Hidden'">
+                <label class="text-sm mb-1 block">
                   Sorting
                   <Tooltip
-                    content="**Random** — a random example sentence each time.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences."
+                    content="Order of the sentences under &quot;See more sentences&quot;. Sentences from your study decks come first in every mode.<br>**Random** — random sentences.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences."
                     placement="right"
                   >
                     <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
@@ -1188,7 +1212,7 @@
           <label for="autoPlayCustomAudio" class="text-sm cursor-pointer">
             Auto-play custom card audio
             <Tooltip
-              content="On cards with an uploaded audio clip, auto-play the clip. Independent of the headword audio settings above."
+              content="On cards with an uploaded audio clip, auto-play the clip. By default it replaces both the headword and the example sentence text-to-speech."
               placement="right"
             >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
@@ -1215,11 +1239,23 @@
             />
           </div>
           <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.autoPlayCustomAudioInstead" input-id="autoPlayCustomAudioInstead" />
-            <label for="autoPlayCustomAudioInstead" class="text-sm cursor-pointer">
-              Play instead of the headword
+            <ToggleSwitch v-model="form.customAudioReplacesHeadword" input-id="customAudioReplacesHeadword" />
+            <label for="customAudioReplacesHeadword" class="text-sm cursor-pointer">
+              Replace the headword audio
               <Tooltip
-                content="When the headword audio also auto-plays on the same side, play the clip instead of it."
+                content="On cards with a clip, play it instead of the headword TTS."
+                placement="right"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
+          <div class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.customAudioReplacesSentence" input-id="customAudioReplacesSentence" />
+            <label for="customAudioReplacesSentence" class="text-sm cursor-pointer">
+              Replace the example sentence audio
+              <Tooltip
+                content="On cards with a clip, play it instead of the example sentence TTS."
                 placement="right"
               >
                 <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />

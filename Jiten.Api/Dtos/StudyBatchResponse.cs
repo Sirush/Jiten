@@ -102,6 +102,18 @@ public class CardExamplesRequest
     }
 }
 
+public class WordExampleSentencesRequest
+{
+    public int WordId { get; set; }
+    public int ReadingIndex { get; set; }
+    public List<int> ExcludedDeckIds { get; set; } = new();
+    public ExampleSentenceSorting Sorting { get; set; } = ExampleSentenceSorting.Random;
+    public float MinDifficulty { get; set; }
+    public float MaxDifficulty { get; set; } = 0.5f;
+    public bool Descending { get; set; }
+    public int Take { get; set; } = 3;
+}
+
 public class CardExamplesResponse
 {
     public Dictionary<string, StudyExampleSentenceDto> Examples { get; set; } = new();

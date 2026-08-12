@@ -894,6 +894,159 @@ public class UserController(
         return true;
     }
 
+    /// <summary>
+    /// Restores the custom sentence section of a backup. Appends into each form's free slots and never replaces,
+    /// so re-importing the same file does not duplicate what is already saved.
+    /// </summary>
+    private async Task<(int Imported, int Skipped)> ImportCustomSentencesSection(string userId, List<UserExampleSentenceExportDto>? section)
+    {
+        if (section is not { Count: > 0 })
+            return (0, 0);
+
+        var wordIds = section.Select(s => s.WordId).Distinct().ToList();
+
+        var limits = await userLimits.GetLimitsAsync(userId);
+        var remainingGlobal = MaxUserExampleSentences - await userContext.UserExampleSentences.CountAsync(e => e.UserId == userId);
+
+        var existing = await userContext.UserExampleSentences
+                                        .AsNoTracking()
+                                        .Where(e => e.UserId == userId && wordIds.Contains(e.WordId))
+                                        .ToListAsync();
+
+        var counts = new Dictionary<(int WordId, byte ReadingIndex), int>();
+        var nextSortOrders = new Dictionary<(int WordId, byte ReadingIndex), int>();
+        var texts = new Dictionary<(int WordId, byte ReadingIndex), HashSet<string>>();
+
+        foreach (var row in existing)
+        {
+            var key = (row.WordId, row.ReadingIndex);
+            counts[key] = counts.GetValueOrDefault(key) + 1;
+            nextSortOrders[key] = Math.Max(nextSortOrders.GetValueOrDefault(key, -1), row.SortOrder);
+            if (!texts.TryGetValue(key, out var set))
+                texts[key] = set = [];
+            set.Add(StripSentenceMarkers(row.Text));
+        }
+
+        var imported = 0;
+        var skipped = 0;
+
+        foreach (var dto in section.OrderBy(s => s.WordId).ThenBy(s => s.ReadingIndex).ThenBy(s => s.SortOrder))
+        {
+            var text = dto.Text?.Trim() ?? "";
+            var source = dto.Source?.Trim();
+
+            if (text.Length is 0 or > 150 || text.Any(char.IsControl) || text.Contains('<') || text.Contains('>')
+                || source?.Length > 150 || !MarkerRegex.IsMatch(text))
+            {
+                skipped++;
+                continue;
+            }
+
+            var stripped = StripSentenceMarkers(text);
+            var key = (dto.WordId, dto.ReadingIndex);
+            if (!texts.TryGetValue(key, out var seen))
+                texts[key] = seen = [];
+
+            if (stripped.Length == 0 || !seen.Add(stripped))
+            {
+                skipped++;
+                continue;
+            }
+
+            var sortOrder = nextSortOrders.GetValueOrDefault(key, -1) + 1;
+            if (counts.GetValueOrDefault(key) >= limits.CustomSentencesPerWord || sortOrder > byte.MaxValue || remainingGlobal <= 0)
+            {
+                seen.Remove(stripped);
+                skipped++;
+                continue;
+            }
+
+            userContext.UserExampleSentences.Add(new UserExampleSentence
+                                                 {
+                                                     UserId = userId,
+                                                     WordId = dto.WordId,
+                                                     ReadingIndex = dto.ReadingIndex,
+                                                     Text = text,
+                                                     Source = string.IsNullOrEmpty(source) ? null : source,
+                                                     SortOrder = (byte)sortOrder,
+                                                     CreatedAt = dto.CreatedAt > 0
+                                                         ? DateTimeOffset.FromUnixTimeSeconds(dto.CreatedAt).UtcDateTime
+                                                         : DateTime.UtcNow
+                                                 });
+
+            counts[key] = counts.GetValueOrDefault(key) + 1;
+            nextSortOrders[key] = sortOrder;
+            remainingGlobal--;
+            imported++;
+        }
+
+        if (imported > 0)
+            await userContext.SaveChangesAsync();
+
+        return (imported, skipped);
+    }
+
+    /// <summary>
+    /// Restores the per-word notes of a backup. An existing note is only replaced when the import overwrites.
+    /// </summary>
+    private async Task<(int Imported, int Skipped)> ImportCustomMeaningsSection(string userId, List<UserCustomMeaningExportDto>? section, bool overwrite)
+    {
+        if (section is not { Count: > 0 })
+            return (0, 0);
+
+        var wordIds = section.Select(m => m.WordId).Distinct().ToList();
+
+        var existing = await userContext.UserCustomMeanings
+                                        .Where(m => m.UserId == userId && wordIds.Contains(m.WordId))
+                                        .ToDictionaryAsync(m => m.WordId);
+
+        var imported = 0;
+        var skipped = 0;
+
+        foreach (var dto in section)
+        {
+            var text = dto.Text?.Trim() ?? "";
+
+            if (text.Length is 0 or > CustomMeaningMaxLength)
+            {
+                skipped++;
+                continue;
+            }
+
+            if (existing.TryGetValue(dto.WordId, out var row))
+            {
+                if (!overwrite || row.Text == text)
+                {
+                    skipped++;
+                    continue;
+                }
+
+                row.Text = text;
+                row.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                row = new UserCustomMeaning
+                      {
+                          UserId = userId,
+                          WordId = dto.WordId,
+                          Text = text,
+                          CreatedAt = dto.CreatedAt > 0 ? DateTimeOffset.FromUnixTimeSeconds(dto.CreatedAt).UtcDateTime : DateTime.UtcNow,
+                          UpdatedAt = dto.UpdatedAt > 0 ? DateTimeOffset.FromUnixTimeSeconds(dto.UpdatedAt).UtcDateTime : DateTime.UtcNow
+                      };
+                userContext.UserCustomMeanings.Add(row);
+                existing[dto.WordId] = row;
+            }
+
+            imported++;
+        }
+
+        if (imported > 0)
+            await userContext.SaveChangesAsync();
+
+        return (imported, skipped);
+    }
+
     #region Card archive
 
     [HttpGet("vocabulary/archive")]
@@ -2163,10 +2316,30 @@ public class UserController(
                                             .OrderBy(d => d.LocalDate)
                                             .ToListAsync();
 
+        // Sentences and notes attach to words, not to cards, so they are exported whole rather than joined
+        // against the collection: a word the user has no card for still keeps what they wrote about it.
+        var sentenceRows = await userContext.UserExampleSentences
+                                            .AsNoTracking()
+                                            .Where(e => e.UserId == userId)
+                                            .OrderBy(e => e.WordId)
+                                            .ThenBy(e => e.ReadingIndex)
+                                            .ThenBy(e => e.SortOrder)
+                                            .ToListAsync();
+
+        var meaningRows = await userContext.UserCustomMeanings
+                                           .AsNoTracking()
+                                           .Where(m => m.UserId == userId)
+                                           .OrderBy(m => m.WordId)
+                                           .ToListAsync();
+
         Dictionary<(int, short), JmDictWordForm> wordForms = [];
         if (includeWordText)
         {
-            var textWordIds = cards.Select(c => c.WordId).Concat(archiveRows.Select(a => a.WordId)).Distinct().ToList();
+            var textWordIds = cards.Select(c => c.WordId)
+                                   .Concat(archiveRows.Select(a => a.WordId))
+                                   .Concat(sentenceRows.Select(s => s.WordId))
+                                   .Concat(meaningRows.Select(m => m.WordId))
+                                   .Distinct().ToList();
             if (textWordIds.Count > 0)
                 wordForms = await WordFormHelper.LoadWordForms(jitenContext, textWordIds);
         }
@@ -2229,12 +2402,29 @@ public class UserController(
                                                                           CorrectCount = d.CorrectCount,
                                                                           NewCardCount = d.NewCardCount,
                                                                           TotalDurationMs = d.TotalDurationMs
-                                                                      }).ToList()
+                                                                      }).ToList(),
+                            CustomSentences = sentenceRows.Select(s => new UserExampleSentenceExportDto
+                                                                       {
+                                                                           WordId = s.WordId, ReadingIndex = s.ReadingIndex,
+                                                                           Text = s.Text, Source = s.Source, SortOrder = s.SortOrder,
+                                                                           CreatedAt = new DateTimeOffset(s.CreatedAt).ToUnixTimeSeconds(),
+                                                                           WordText = FormText(s.WordId, s.ReadingIndex),
+                                                                           WordReading = FormReading(s.WordId, s.ReadingIndex)
+                                                                       }).ToList(),
+                            CustomMeanings = meaningRows.Select(m => new UserCustomMeaningExportDto
+                                                                     {
+                                                                         WordId = m.WordId, Text = m.Text,
+                                                                         CreatedAt = new DateTimeOffset(m.CreatedAt).ToUnixTimeSeconds(),
+                                                                         UpdatedAt = new DateTimeOffset(m.UpdatedAt).ToUnixTimeSeconds(),
+                                                                         WordText = FormText(m.WordId, 0),
+                                                                         WordReading = FormReading(m.WordId, 0)
+                                                                     }).ToList()
                         };
 
         logger.LogInformation(
-            "User exported vocabulary: UserId={UserId}, CardCount={CardCount}, ReviewCount={ReviewCount}, ArchiveCount={ArchiveCount}, ActivityDays={ActivityDays}, WordText={WordText}",
-            userId, exportDto.TotalCards, exportDto.TotalReviews, archiveRows.Count, activityRows.Count, includeWordText);
+            "User exported vocabulary: UserId={UserId}, CardCount={CardCount}, ReviewCount={ReviewCount}, ArchiveCount={ArchiveCount}, ActivityDays={ActivityDays}, Sentences={Sentences}, Meanings={Meanings}, WordText={WordText}",
+            userId, exportDto.TotalCards, exportDto.TotalReviews, archiveRows.Count, activityRows.Count, sentenceRows.Count,
+            meaningRows.Count, includeWordText);
 
         return Results.Ok(exportDto);
 
@@ -2423,8 +2613,13 @@ public class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        if (exportDto?.Cards == null || exportDto.Cards.Count == 0)
+        // Sentences and notes are restorable on their own: a backup carrying only them is still worth importing.
+        if (exportDto == null
+            || (exportDto.Cards is not { Count: > 0 } && exportDto.CustomSentences is not { Count: > 0 }
+                && exportDto.CustomMeanings is not { Count: > 0 }))
             return Results.BadRequest("Invalid export data");
+
+        exportDto.Cards ??= [];
 
         var result = new FsrsImportResultDto
                      {
@@ -2527,6 +2722,14 @@ public class UserController(
         // recomputing would silently re-bucket every day. A file without the section falls back to a rebuild.
         var activityImported = await ImportReviewActivitySection(userId, exportDto.ReviewActivity);
         var rollupNeedsRebuild = !activityImported;
+
+        var (sentencesImported, sentencesSkipped) = await ImportCustomSentencesSection(userId, exportDto.CustomSentences);
+        result.CustomSentencesImported = sentencesImported;
+        result.CustomSentencesSkipped = sentencesSkipped;
+
+        var (meaningsImported, meaningsSkipped) = await ImportCustomMeaningsSection(userId, exportDto.CustomMeanings, overwrite);
+        result.CustomMeaningsImported = meaningsImported;
+        result.CustomMeaningsSkipped = meaningsSkipped;
 
         if (validCards.Count == 0)
         {
@@ -2655,9 +2858,9 @@ public class UserController(
                 await MarkReviewRollupDirty(userId);
 
             logger.LogInformation(
-                                  "Import stats: Imported={Imported}, Updated={Updated}, Skipped={Skipped}, SkippedNew={SkippedNew}, SkippedRedundant={SkippedRedundant}, Archived={Archived}, Restored={Restored}, Pruned={Pruned}",
+                                  "Import stats: Imported={Imported}, Updated={Updated}, Skipped={Skipped}, SkippedNew={SkippedNew}, SkippedRedundant={SkippedRedundant}, Archived={Archived}, Restored={Restored}, Pruned={Pruned}, Sentences={Sentences}, Meanings={Meanings}",
                                   result.CardsImported, result.CardsUpdated, result.CardsSkipped, skippedNew, skippedRedundant,
-                                  archivedRedundant, restoredCards, pruned);
+                                  archivedRedundant, restoredCards, pruned, result.CustomSentencesImported, result.CustomMeaningsImported);
 
             return Results.Ok(result);
         }
@@ -3443,6 +3646,8 @@ public class UserController(
         [FromQuery] string sortBy = "occurrences",
         [FromQuery] bool descending = true,
         [FromQuery] string displayFilter = "all",
+        [FromQuery] string? suspended = null,
+        [FromQuery] string? redundant = null,
         [FromQuery] string? search = null,
         [FromQuery] string? pos = null,
         [FromQuery] string? excludePos = null,
@@ -3550,35 +3755,16 @@ public class UserController(
                     .ToList();
         }
 
-        // Apply displayFilter if authenticated and filter is not "all"
-        if (userService.IsAuthenticated && !string.IsNullOrEmpty(displayFilter) && displayFilter != "all")
+        var displayFilterSpec = VocabularyDisplayFilter.Parse(displayFilter, suspended, redundant);
+
+        if (userService.IsAuthenticated && displayFilterSpec.IsActive)
         {
             var wordKeys = allAggregatedWords.Select(aw => (aw.WordId, aw.ReadingIndex)).ToList();
             var filterKnownStates = await userService.GetKnownWordsState(wordKeys);
 
-            var distinctWordIds = wordKeys.Select(k => k.WordId).Distinct().ToList();
-            var fsrsStates = await userContext.FsrsCards
-                                              .AsNoTracking()
-                                              .Where(uk => uk.UserId == userService.UserId && distinctWordIds.Contains(uk.WordId))
-                                              .Select(uk => new { uk.WordId, uk.ReadingIndex, uk.State })
-                                              .ToDictionaryAsync(uk => (uk.WordId, uk.ReadingIndex), uk => uk.State);
-
             allAggregatedWords = allAggregatedWords.Where(aw =>
-            {
-                var key = (aw.WordId, aw.ReadingIndex);
-                var knownState = filterKnownStates.GetValueOrDefault(key, [KnownState.New]);
-
-                return displayFilter switch
-                {
-                    "known" => !knownState.Contains(KnownState.New),
-                    "young" => knownState.Contains(KnownState.Young),
-                    "mature" => knownState.Contains(KnownState.Mature),
-                    "mastered" => knownState.Contains(KnownState.Mastered),
-                    "blacklisted" => knownState.Contains(KnownState.Blacklisted),
-                    "unknown" => !fsrsStates.ContainsKey(key) && knownState.Contains(KnownState.New),
-                    _ => true
-                };
-            }).ToList();
+                displayFilterSpec.Matches(filterKnownStates.GetValueOrDefault((aw.WordId, aw.ReadingIndex), [KnownState.New])))
+                                                   .ToList();
         }
 
         int totalCount = allAggregatedWords.Count;

@@ -60,6 +60,6 @@ Coverage across the library is recalculated separately in the background, which 
 
 ## Backups
 
-**Mode → Export** offers a **Word List** as a text file split by state, and a **Complete Backup** as JSON carrying card states, review history, stability, difficulty and due dates. It is recommended to export backups regularly, especially before taking any actions that will mass import words.
+**Mode → Export** offers a **Word List** as a text file split by state, and a **Complete Backup** as JSON carrying card states, review history, stability, difficulty, due dates, your custom example sentences and your custom notes. It is recommended to export backups regularly, especially before taking any actions that will mass import words.
 
 See [Tracking what you know](/guides/tracking-known-words) for what the word states mean once your words are in, and [Migrate from JPDB to Jiten](/guides/import-from-jpdb) if you are coming from there instead.

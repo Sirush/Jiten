@@ -42,6 +42,13 @@ public enum ExampleSentenceSorting
     HardestFirst
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<ExampleSentenceSource>))]
+public enum ExampleSentenceSource
+{
+    StudyDecks,
+    Random
+}
+
 [JsonConverter(typeof(JsonStringEnumConverter<CardImageLayout>))]
 public enum CardImageLayout
 {
@@ -132,6 +139,9 @@ public class StudySettingsDto
     [JsonPropertyName("exampleSentenceSorting")]
     public ExampleSentenceSorting ExampleSentenceSorting { get; set; } = ExampleSentenceSorting.Random;
 
+    [JsonPropertyName("exampleSentenceSource")]
+    public ExampleSentenceSource ExampleSentenceSource { get; set; } = ExampleSentenceSource.StudyDecks;
+
     [JsonPropertyName("cardImageLayout")]
     public CardImageLayout CardImageLayout { get; set; } = CardImageLayout.Beside;
 
@@ -193,13 +203,23 @@ public class StudySettingsDto
     public bool AutoPlaySentenceOnFront { get; set; }
 
     [JsonPropertyName("autoPlayCustomAudio")]
-    public bool AutoPlayCustomAudio { get; set; }
+    public bool AutoPlayCustomAudio { get; set; } = true;
 
     [JsonPropertyName("autoPlayCustomAudioPosition")]
     public CardAudioAutoPlayPosition AutoPlayCustomAudioPosition { get; set; } = CardAudioAutoPlayPosition.Back;
 
-    [JsonPropertyName("autoPlayCustomAudioInstead")]
-    public bool AutoPlayCustomAudioInstead { get; set; }
+    [JsonPropertyName("customAudioReplacesHeadword")]
+    public bool CustomAudioReplacesHeadword { get; set; } = true;
+
+    [JsonPropertyName("customAudioReplacesSentence")]
+    public bool CustomAudioReplacesSentence { get; set; } = true;
+
+    /// <summary>
+    /// Below <see cref="StudySettingsMigrator.CurrentAudioDefaultsVersion"/> the custom-audio fields are not
+    /// authoritative and get overwritten with the current defaults on both read and write.
+    /// </summary>
+    [JsonPropertyName("audioDefaultsVersion")]
+    public int AudioDefaultsVersion { get; set; }
 
     [JsonPropertyName("showReviewActivity")]
     public bool ShowReviewActivity { get; set; } = true;
@@ -361,6 +381,7 @@ public class StudyKeybindsDto
     [JsonPropertyName("undo")] public string Undo { get; set; } = "z";
     [JsonPropertyName("wrapUp")] public string WrapUp { get; set; } = "w";
     [JsonPropertyName("pauseTimer")] public string PauseTimer { get; set; } = "p";
+    [JsonPropertyName("replayAudio")] public string ReplayAudio { get; set; } = "r";
     [JsonPropertyName("dictPrev")] public string DictPrev { get; set; } = "ArrowLeft";
     [JsonPropertyName("dictNext")] public string DictNext { get; set; } = "ArrowRight";
 }

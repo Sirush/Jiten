@@ -48,7 +48,7 @@ If you have studied elsewhere, import instead of clicking through thousands of w
 
 **Frequency Range** needs no history at all. Give it a range of frequency ranks, up to a maximum of 10,000, and every word in that band is marked as known. It is a rough approximation, and the more your immersion has leaned into particular genres the less global frequency will match your own vocabulary.
 
-**Complete Backup** restores a JSON file exported from Jiten, including card states, review history, stability, difficulty and due dates. **Overwrite existing cards** is off by default, so a restore adds what is missing and leaves the rest alone.
+**Complete Backup** restores a JSON file exported from Jiten, including card states, review history, stability, difficulty, due dates, custom example sentences and custom notes. Sentences and notes are carried for every word you wrote one for, whether or not you study that word. **Overwrite existing cards** is off by default, so a restore adds what is missing and leaves the rest alone.
 
 Whichever route you take, the **Vocabulary Management** card at the top of the page tells you how many words you are tracking and how they are split between young, mature, mastered and blacklisted. It updates as soon as an import finishes, so it is the quickest way to check the results.
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { CardLayoutBlock, StudyCardDto, Word } from '~/types';
+  import type { CardLayoutBlock, CardMediaDto, StudyCardDto, Word } from '~/types';
   import { useSrsStore } from '~/stores/srsStore';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
   import { displayKeyName } from '~/composables/useStudyKeyboard';
@@ -107,6 +107,7 @@
   // definitions block registers its cycler here so this delegation survives the block extraction.
   defineExpose({
     cycleDictionary: (direction: 1 | -1) => dictCycler.value?.(direction),
+    replayAudio: () => startAutoAudio(props.isFlipped ? 'flip' : 'front', true),
   });
 
   const cardExample = computed(() => srsStore.getCardExample(props.card.wordId, props.card.readingIndex));
@@ -191,98 +192,14 @@
     }
   );
 
-  const extraSentences = ref<ExampleSentence[]>([]);
-  const extraSentencesExpanded = ref(false);
-  const canLoadMoreSentences = ref(true);
-  const isLoadingMoreSentences = ref(false);
-  const bandSize = 0.5;
-  const nextBandMin = ref(0);
-  const nextBandMax = ref(bandSize);
-
-  async function loadMoreSentences() {
-    isLoadingMoreSentences.value = true;
-    const sorting = srsStore.studySettings.exampleSentenceSorting;
-
-    try {
-      const alreadyLoaded = extraSentences.value.map((s) => s.sourceDeck.deckId);
-
-      if (sorting === 'Random') {
-        const results = await $api<ExampleSentence[]>(`vocabulary/${props.card.wordId}/${props.card.readingIndex}/random-example-sentences`, {
-          method: 'POST',
-          body: alreadyLoaded,
-        });
-
-        if (results.length === 0) {
-          canLoadMoreSentences.value = false;
-          return;
-        }
-
-        extraSentences.value.push(...results);
-      } else {
-        const descending = sorting === 'HardestFirst';
-        const results = await $api<ExampleSentencesByDifficultyResponse>(
-          `vocabulary/${props.card.wordId}/${props.card.readingIndex}/example-sentences-by-difficulty?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}`,
-          { method: 'POST', body: alreadyLoaded }
-        );
-
-        if (results.sentences.length > 0) {
-          extraSentences.value.push(...results.sentences);
-        }
-
-        if (descending) {
-          nextBandMax.value = results.searchedBandMin;
-          nextBandMin.value = nextBandMax.value - bandSize;
-          if (nextBandMax.value <= results.minDifficulty) {
-            canLoadMoreSentences.value = false;
-          }
-        } else {
-          nextBandMin.value = results.searchedBandMax;
-          nextBandMax.value = nextBandMin.value + bandSize;
-          if (nextBandMin.value > results.maxDifficulty) {
-            canLoadMoreSentences.value = false;
-          }
-        }
-
-        if (results.sentences.length === 0 && canLoadMoreSentences.value) {
-          return;
-        }
-      }
-
-      extraSentencesExpanded.value = true;
-    } catch (e) {
-      const status = (e as { status?: number; statusCode?: number } | null)?.status ?? (e as { statusCode?: number } | null)?.statusCode;
-      if (status !== 429) {
-        canLoadMoreSentences.value = false;
-      }
-    } finally {
-      isLoadingMoreSentences.value = false;
-    }
-  }
-
-  function toggleExtraSentences() {
-    if (extraSentences.value.length === 0) {
-      loadMoreSentences();
-    } else {
-      extraSentencesExpanded.value = !extraSentencesExpanded.value;
-    }
-  }
-
-  watch(
-    () => `${props.card.wordId}-${props.card.readingIndex}`,
-    () => {
-      extraSentences.value = [];
-      extraSentencesExpanded.value = false;
-      canLoadMoreSentences.value = true;
-      const sorting = srsStore.studySettings.exampleSentenceSorting;
-      if (sorting === 'HardestFirst') {
-        nextBandMin.value = 999;
-        nextBandMax.value = 999 + bandSize;
-      } else {
-        nextBandMin.value = 0;
-        nextBandMax.value = bandSize;
-      }
-    }
-  );
+  const {
+    sentences: extraSentences,
+    expanded: extraSentencesExpanded,
+    canLoadMore: canLoadMoreSentences,
+    isLoading: isLoadingMoreSentences,
+    loadMore: loadMoreSentences,
+    toggle: toggleExtraSentences,
+  } = useExtraExampleSentences(() => props.card);
 
   const headWordTtsText = computed(() => {
     const raw = wordData.value?.mainReading?.text || props.card.wordText || props.card.wordTextPlain;
@@ -328,12 +245,14 @@
     tts.speakWord(props.card.wordId, props.card.readingIndex, headWordTtsText.value);
   }
 
-  function playCustomToEnd() {
+  function playCustomToEnd(media: CardMediaDto) {
     return wordAudio.playCustomToEnd({
-      media: cardAudio.value,
+      media,
       onExpired: async () => (await cardMedia.refreshOne(props.card.wordId, props.card.readingIndex))?.audio ?? null,
     });
   }
+
+  let audioGeneration = 0;
 
   // Resolves once the current word audio (TTS or custom clip) has finished. Waits briefly for playback
   // to start first, since server-side TTS fetches its audio before the playing state flips on.
@@ -358,56 +277,72 @@
     });
   }
 
-  async function playAutoWordPhase(headword: boolean, custom: boolean, instead: boolean) {
-    if (custom && (instead || !headword)) {
-      const ok = await playCustomToEnd();
-      if (ok || !headword) return;
-    }
-    if (headword) {
-      playHeadwordAudio();
-      await afterWordAudio();
-      if (custom && !instead) await playCustomToEnd();
-    }
-  }
-
   function wait(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async function startAutoAudio(mode: 'front' | 'flip') {
+  // `forced` is the manual replay: the autoplay on/off toggles and the front/back position are ignored,
+  // but the custom-audio-replaces-* composition rules still decide what the clip stands in for.
+  async function startAutoAudio(mode: 'front' | 'flip', forced = false) {
+    const generation = ++audioGeneration;
+    const current = () => generation === audioGeneration;
+
     const settings = srsStore.studySettings;
     const onFront = mode === 'front';
     if (onFront && props.isFlipped) return;
     const example = cardExample.value;
-    const hasCustom = !!cardAudio.value?.url;
+    const media = cardAudio.value;
 
-    let headword = onFront ? settings.autoPlayWordOnFront : settings.autoPlayWord;
-    if (onFront && headword && settings.autoPlayWordOnFrontNewOnly && !props.card.isNewCard) headword = false;
+    let headword = forced || (onFront ? settings.autoPlayWordOnFront : settings.autoPlayWord);
+    if (!forced && onFront && headword && settings.autoPlayWordOnFrontNewOnly && !props.card.isNewCard) headword = false;
 
     const pos = settings.autoPlayCustomAudioPosition;
-    const customThisSide = pos === 'Both' || pos === (onFront ? 'Front' : 'Back');
-    const custom = hasCustom && settings.autoPlayCustomAudio && customThisSide;
+    const customThisSide = forced || pos === 'Both' || pos === (onFront ? 'Front' : 'Back');
+    const custom = !!media?.url && (forced || settings.autoPlayCustomAudio) && customThisSide;
+    const replacesHeadword = custom && settings.customAudioReplacesHeadword;
+    const replacesSentence = custom && settings.customAudioReplacesSentence;
 
-    const playSentence =
+    let playSentence =
       !!example?.sentenceId &&
-      (onFront
-        ? frontHasSentence.value && settings.autoPlayWordOnFront && settings.autoPlaySentenceOnFront
-        : settings.autoPlaySentence && !sentenceBlurred.value);
+      (forced
+        ? onFront
+          ? frontHasSentence.value
+          : !sentenceBlurred.value
+        : onFront
+          ? frontHasSentence.value && settings.autoPlayWordOnFront && settings.autoPlaySentenceOnFront
+          : settings.autoPlaySentence && !sentenceBlurred.value);
 
     if (!headword && !custom && !playSentence) return;
 
-    const cardKey = `${props.card.wordId}-${props.card.readingIndex}`;
-    const sameCard = () => `${props.card.wordId}-${props.card.readingIndex}` === cardKey;
-
-    if (headword || custom) {
-      await playAutoWordPhase(headword, custom, settings.autoPlayCustomAudioInstead);
-      if (!playSentence || !sameCard()) return;
-      await wait(150);
-      if (!sameCard()) return;
-      playExample(example!);
-    } else if (playSentence) {
-      playExample(example!);
+    if (custom && (replacesHeadword || replacesSentence)) {
+      const played = await playCustomToEnd(media!);
+      if (!current()) return;
+      if (played) {
+        if (replacesHeadword) headword = false;
+        if (replacesSentence) playSentence = false;
+      }
+      if (headword) {
+        playHeadwordAudio();
+        await afterWordAudio();
+        if (!current()) return;
+      }
+    } else if (headword) {
+      playHeadwordAudio();
+      await afterWordAudio();
+      if (!current()) return;
+      if (custom) {
+        await playCustomToEnd(media!);
+        if (!current()) return;
+      }
+    } else if (custom) {
+      await playCustomToEnd(media!);
+      if (!current()) return;
     }
+
+    if (!playSentence) return;
+    await wait(150);
+    if (!current()) return;
+    playExample(example!);
   }
 
   async function onImageError() {
@@ -454,7 +389,10 @@
     { immediate: true }
   );
 
-  onUnmounted(() => wordAudio.stop());
+  onUnmounted(() => {
+    audioGeneration++;
+    wordAudio.stop();
+  });
 
   const sentenceBlurred = computed(() => srsStore.studySettings.blurExampleSentence && !exampleRevealed.value);
 
@@ -464,10 +402,16 @@
     else tts.speakSentence(ex.sentenceId, ex.text);
   }
 
+  // The clip stands in for the sentence text-to-speech, so unblurring must not read the sentence aloud
+  // after the clip has already played on flip.
+  const customAudioCoversSentence = computed(
+    () => !!cardAudio.value?.url && srsStore.studySettings.autoPlayCustomAudio && srsStore.studySettings.customAudioReplacesSentence
+  );
+
   function revealExample() {
     exampleRevealed.value = true;
     const example = cardExample.value;
-    if (srsStore.studySettings.autoPlaySentence && example?.sentenceId) {
+    if (srsStore.studySettings.autoPlaySentence && example?.sentenceId && !customAudioCoversSentence.value) {
       playExample(example);
     }
   }

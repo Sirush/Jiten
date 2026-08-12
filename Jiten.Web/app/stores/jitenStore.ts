@@ -66,7 +66,7 @@ export const useJitenStore = defineStore('jiten', () => {
   const hideExternalRating = createCookieState<boolean>('hide-external-rating', false);
   const hideAlternativeTitles = createCookieState<boolean>('hide-alternative-titles', false);
   const quickMasterVocabulary = createCookieState<boolean>('quick-master-vocabulary', false);
-  const ttsVoice = createCookieState<'female' | 'female2' | 'male' | 'male2' | 'asmr' | 'system'>('tts-voice', 'female');
+  const ttsVoice = createCookieState<'female' | 'female2' | 'male' | 'male2' | 'asmr' | 'system' | 'random'>('tts-voice', 'female');
   const difficultyDisplayStyle = createCookieState<DifficultyDisplayStyle>('difficulty-display-style', 0);
   const kanjiScale = createCookieState<KanjiScalePref>('kanji-scale', 'jlpt');
   const similarMediaPinnedType = createCookieState<number>('similar-media-pinned-type', 0);

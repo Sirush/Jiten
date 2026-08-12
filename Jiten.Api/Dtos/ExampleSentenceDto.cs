@@ -11,6 +11,9 @@ public class ExampleSentenceDto
     public float Difficulty { get; set; }
     public Deck? SourceDeckParent { get; set; }
     public Deck? SourceDeck { get; set; }
+
+    /// <summary>Set only by the authenticated study endpoint: the sentence comes from one of the caller's study decks.</summary>
+    public bool FromStudyDeck { get; set; }
 }
 
 public class ExampleSentencesByDifficultyResponse

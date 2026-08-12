@@ -1872,6 +1872,13 @@ public class FormSelectionTests
         // (2870991) whose secondary int sense would otherwise trigger the interjection override
         yield return ["今の姿だからこそ出来た", "出来た", 1340450, (byte)0];
         yield return ["ようやく完成品が出来た", "出来た", 1340450, (byte)0];
+
+        // 来た/きた is the past of 来る, not the pure int 2871870 "it's here!; finally!" — a tense-marked
+        // form is a proposition, so an interjection with no frequency evidence must not claim it
+        yield return ["その夜は、予感もなしに、突然来た。", "来た", 1547720, (byte)0];
+        yield return ["うちに初めて来た白乃は、当時の私の腰ほどの背丈だった。", "来た", 1547720, (byte)0];
+        yield return ["「あ、カナ子来た」", "来た", 1547720, (byte)0];
+        yield return ["と数メートル手前から手を振ってあいさつすると、「やーっときた」", "きた", 1547720, (byte)2];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

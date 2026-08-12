@@ -6,9 +6,16 @@
 
 @custom-variant dark (&:where(.dark-mode, .dark-mode *));
 
+@theme {
+    /* @fontsource-variable registers "Noto Sans JP Variable"; the unsuffixed name covers a switch back to
+       Google Fonts or a system install. Japanese system fonts precede sans-serif because bare sans-serif
+       under <html lang="en"> resolves to Simplified Chinese glyph shapes on Android. */
+    --font-noto-sans: "Noto Sans JP Variable", "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;
+}
+
 :root {
     background-color: var(--p-neutral-50);
-    font-family: "Noto Sans JP", sans-serif;
+    font-family: var(--font-noto-sans);
 }
 
 :root.dark-mode {

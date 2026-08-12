@@ -136,6 +136,7 @@ export const useSrsStore = defineStore('srs', () => {
     newCardGathering: 'TopDeck',
     reviewFrom: 'AllTracked',
     exampleSentenceSorting: 'Random',
+    exampleSentenceSource: 'StudyDecks',
     cardImageLayout: 'beside',
     cardImagePosition: 'Back',
     blurCardImage: true,
@@ -149,9 +150,11 @@ export const useSrsStore = defineStore('srs', () => {
     autoPlayWordOnFront: false,
     autoPlayWordOnFrontNewOnly: false,
     autoPlaySentenceOnFront: false,
-    autoPlayCustomAudio: false,
+    autoPlayCustomAudio: true,
     autoPlayCustomAudioPosition: 'Back',
-    autoPlayCustomAudioInstead: false,
+    customAudioReplacesHeadword: true,
+    customAudioReplacesSentence: true,
+    audioDefaultsVersion: 1,
     showReviewActivity: true,
     showReviewForecast: true,
     timezone: 'Europe/London',
@@ -579,20 +582,54 @@ export const useSrsStore = defineStore('srs', () => {
   const activeDecks = computed(() => studyDecks.value.filter(d => d.isActive));
   const inactiveDecks = computed(() => studyDecks.value.filter(d => !d.isActive));
 
-  async function reorderStudyDecks(reorderedDecks: StudyDeckDto[]) {
-    studyDecks.value = reorderedDecks;
-    const active = reorderedDecks.filter(d => d.isActive);
-    const inactive = reorderedDecks.filter(d => !d.isActive);
-    await $api('srs/study-decks/reorder', {
-      method: 'PUT',
-      body: {
-        items: [
-          ...active.map((d, i) => ({ userStudyDeckId: d.userStudyDeckId, sortOrder: i, isActive: true })),
-          ...inactive.map((d, i) => ({ userStudyDeckId: d.userStudyDeckId, sortOrder: i, isActive: false })),
-        ],
-      },
-    });
+  const REORDER_DEBOUNCE_MS = 400;
+  let reorderTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingReorderItems: { userStudyDeckId: number; sortOrder: number; isActive: boolean }[] | null = null;
+
+  function buildReorderItems(decks: StudyDeckDto[]) {
+    const active = decks.filter(d => d.isActive);
+    const inactive = decks.filter(d => !d.isActive);
+    return [
+      ...active.map((d, i) => ({ userStudyDeckId: d.userStudyDeckId, sortOrder: i, isActive: true })),
+      ...inactive.map((d, i) => ({ userStudyDeckId: d.userStudyDeckId, sortOrder: i, isActive: false })),
+    ];
+  }
+
+  function clearPendingReorder() {
+    if (reorderTimer) clearTimeout(reorderTimer);
+    reorderTimer = null;
+    const items = pendingReorderItems;
+    pendingReorderItems = null;
+    return items;
+  }
+
+  async function sendReorder(items: { userStudyDeckId: number; sortOrder: number; isActive: boolean }[]) {
+    await $api('srs/study-decks/reorder', { method: 'PUT', body: { items } });
     invalidateSession();
+  }
+
+  /// Persists any reorder still waiting on the debounce; call before leaving the deck list.
+  async function flushStudyDeckReorder() {
+    const items = clearPendingReorder();
+    if (items) await sendReorder(items);
+  }
+
+  async function reorderStudyDecks(reorderedDecks: StudyDeckDto[], options?: { debounce?: boolean }) {
+    studyDecks.value = reorderedDecks;
+    const items = buildReorderItems(reorderedDecks);
+
+    if (!options?.debounce) {
+      clearPendingReorder();
+      await sendReorder(items);
+      return;
+    }
+
+    if (reorderTimer) clearTimeout(reorderTimer);
+    pendingReorderItems = items;
+    reorderTimer = setTimeout(() => {
+      reorderTimer = null;
+      void flushStudyDeckReorder();
+    }, REORDER_DEBOUNCE_MS);
   }
 
   async function toggleDeckActive(deckId: number) {
@@ -779,6 +816,16 @@ export const useSrsStore = defineStore('srs', () => {
     return exampleCache.value.get(`${wordId}-${readingIndex}`);
   }
 
+  // In Random mode the server rerolls per request, so a card coming back this session must not
+  // redisplay its cached sentence — drop the key and let the prefetch window fetch a fresh one.
+  function evictCardExampleForReroll(cardKey: string) {
+    if (studySettings.value.exampleSentenceSource !== 'Random') return;
+    if (!exampleCache.value.has(cardKey)) return;
+    const newCache = new Map(exampleCache.value);
+    newCache.delete(cardKey);
+    exampleCache.value = newCache;
+  }
+
   // Overwrite the cached example for a card (used after favouriting/editing a sentence in-session).
   function setCardExample(wordId: number, readingIndex: number, example: StudyExampleSentenceDto | null) {
     const newCache = new Map(exampleCache.value);
@@ -937,6 +984,7 @@ export const useSrsStore = defineStore('srs', () => {
       batch.splice(currentCardIndex.value + offset, 0, reinsertedCard);
       reinsertedAgainCard = reinsertedCard;
       currentBatch.value = batch;
+      evictCardExampleForReroll(cardKey);
     } else {
       if (isRepeat) {
         const newSet = new Set(againCardKeys.value);
@@ -1069,6 +1117,7 @@ export const useSrsStore = defineStore('srs', () => {
       const offset = remaining <= 0 ? 0 : Math.min(Math.floor(Math.random() * 6) + 5, remaining);
       batch.splice(currentCardIndex.value + offset, 0, { ...ctx.card });
       currentBatch.value = batch;
+      evictCardExampleForReroll(ctx.cardKey);
       isSessionComplete.value = false;
     }
 
@@ -1470,6 +1519,7 @@ export const useSrsStore = defineStore('srs', () => {
     importPreviewText,
     importToExistingDeck,
     reorderStudyDecks,
+    flushStudyDeckReorder,
     toggleDeckActive,
     studyMoreParams,
     getCardExample,

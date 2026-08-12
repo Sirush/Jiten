@@ -36,7 +36,7 @@
   const sortDescending = ref(route.query.sortOrder !== 'false' && route.query.sortOrder !== '0');
   const sortBy = ref(route.query.sortBy?.toString() || sortByOptions.value[0].value);
   const mediaTypeFilter = ref(route.query.mediaType?.toString() || ALL_MEDIA_TYPES);
-  const display = ref(route.query.display?.toString() || 'all');
+  const { tiers: displayTiers, suspended, redundant, displayFilter, suspendedParam, redundantParam } = useVocabularyDisplayFilter();
   const search = ref(route.query.search?.toString() || '');
   const debouncedSearch = ref(search.value);
 
@@ -59,12 +59,6 @@
   watch(mediaTypeFilter, (newValue) => {
     router.replace({
       query: { ...route.query, mediaType: newValue === ALL_MEDIA_TYPES ? undefined : newValue, offset: 0 },
-    });
-  });
-
-  watch(display, (newValue) => {
-    router.replace({
-      query: { ...route.query, display: newValue, offset: 0 },
     });
   });
 
@@ -112,7 +106,9 @@
       offset: offset.value,
       sortBy: sortBy.value,
       descending: sortDescending.value,
-      displayFilter: display.value,
+      displayFilter: displayFilter.value,
+      suspended: suspendedParam.value,
+      redundant: redundantParam.value,
       search: debouncedSearch.value || undefined,
       pos: debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined,
       excludePos: debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined,
@@ -131,7 +127,7 @@
     error,
   } = await useApiFetchPaginated<AccomplishmentVocabularyDto>(`user/profile/${targetUsername.value}/accomplishments/vocabulary`, {
     query: queryParams,
-    watch: [offset, sortBy, sortDescending, mediaTypeFilter, display, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly, pageSizeQuery],
+    watch: [offset, sortBy, sortDescending, mediaTypeFilter, displayFilter, suspendedParam, redundantParam, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly, pageSizeQuery],
   });
 
   const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor, pageSize } = usePagination(response);
@@ -196,7 +192,9 @@
       <VocabularyFilters
         v-model:sort-by="sortBy"
         v-model:sort-descending="sortDescending"
-        v-model:display-filter="display"
+        v-model:display-tiers="displayTiers"
+        v-model:suspended="suspended"
+        v-model:redundant="redundant"
         v-model:search="search"
         v-model:include-pos="includePos"
         v-model:exclude-pos="excludePos"

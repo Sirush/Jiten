@@ -55,6 +55,7 @@
     { label: 'Male 2', value: 'male2' },
     { label: 'ASMR', value: 'asmr' },
     { label: 'System', value: 'system' },
+    { label: 'Random', value: 'random' },
   ]);
 
   const difficultyDisplayStyleOptions = ref([

@@ -42,6 +42,8 @@ export function stopTts() { reset(); }
 
 export type TtsType = 'word' | 'sentence';
 
+const randomVoicePool = ['female', 'female2', 'male', 'male2', 'asmr'] as const;
+
 export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
   const store = useJitenStore();
   const authStore = useAuthStore();
@@ -50,6 +52,12 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
   const resolvedText = computed(() => typeof text === 'string' ? text : text?.value ?? '');
 
   const isServerMode = computed(() => store.ttsVoice !== 'system');
+
+  // Resolved per playback so 'random' picks a different voice on every click.
+  function currentVoice() {
+    if (store.ttsVoice !== 'random') return store.ttsVoice;
+    return randomVoicePool[Math.floor(Math.random() * randomVoicePool.length)];
+  }
   const isSupported = computed(() => isServerMode.value || browserSupported.value);
   const isActive = computed(() => resolvedText.value !== '' && activeText.value === resolvedText.value);
   const isSpeaking = computed(() => isActive.value && activeState.value === 'playing');
@@ -58,7 +66,7 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
 
   function speakWord(wordId: number, readingIndex: number, fallbackText?: string) {
     if (isServerMode.value) {
-      const url = `${config.public.baseURL}tts/word/${wordId}/${readingIndex}?voice=${store.ttsVoice}`;
+      const url = `${config.public.baseURL}tts/word/${wordId}/${readingIndex}?voice=${currentVoice()}`;
       playServer(fallbackText ?? `${wordId}`, url);
     } else {
       speakBrowser(fallbackText ?? '');
@@ -67,7 +75,7 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
 
   function speakSentence(sentenceId: number, fallbackText?: string) {
     if (isServerMode.value) {
-      const url = `${config.public.baseURL}tts/sentence/${sentenceId}?voice=${store.ttsVoice}`;
+      const url = `${config.public.baseURL}tts/sentence/${sentenceId}?voice=${currentVoice()}`;
       playServer(fallbackText ?? `s${sentenceId}`, url);
     } else {
       speakBrowser(fallbackText ?? '');
@@ -76,7 +84,7 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
 
   function speakCustomSentence(userExampleSentenceId: number, fallbackText?: string) {
     if (isServerMode.value) {
-      const url = `${config.public.baseURL}tts/custom-sentence/${userExampleSentenceId}?voice=${store.ttsVoice}`;
+      const url = `${config.public.baseURL}tts/custom-sentence/${userExampleSentenceId}?voice=${currentVoice()}`;
       playServer(fallbackText ?? `c${userExampleSentenceId}`, url, true);
     } else {
       speakBrowser(fallbackText ?? '');

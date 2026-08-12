@@ -1,13 +1,10 @@
 using System.Collections.Concurrent;
-using WanaKanaShaapu;
+using Jiten.Core;
 
 namespace Jiten.Parser;
 
 internal static class KanaConverter
 {
-    private static readonly DefaultOptions LongVowelConversion = new() { ConvertLongVowelMark = true };
-    private static readonly DefaultOptions NoLongVowelConversion = new() { ConvertLongVowelMark = false };
-
     private const int MaxGen0Entries = 50_000;
 
     private static volatile ConcurrentDictionary<(string Text, bool ConvertLongVowelMark), string> _gen0 = new();
@@ -34,16 +31,7 @@ internal static class KanaConverter
             return result;
         }
 
-        var input = text.Replace("ヶ", "ケ").Replace("ヵ", "カ").Replace("ゎ", "わ").Replace("ヮ", "ワ");
-
-        try
-        {
-            result = WanaKana.ToHiragana(input, convertLongVowelMark ? LongVowelConversion : NoLongVowelConversion);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException)
-        {
-            result = WanaKana.ToHiragana(input, NoLongVowelConversion);
-        }
+        result = JapaneseTextHelper.ToHiragana(text, convertLongVowelMark);
 
         if (_gen0.TryAdd(key, result))
         {

@@ -444,6 +444,7 @@ export interface ExampleSentence {
   difficulty: number;
   sourceDeck: Deck;
   sourceDeckParent: Deck;
+  fromStudyDeck?: boolean;
 }
 
 export interface UserExampleSentenceDto {
@@ -533,12 +534,30 @@ export interface FsrsCardExportDto {
   reviewLogs: FsrsReviewLogExportDto[];
 }
 
+export interface UserExampleSentenceExportDto {
+  w: number;
+  r: number;
+  s: string;
+  src?: string;
+  o: number;
+  ca: number;
+}
+
+export interface UserCustomMeaningExportDto {
+  w: number;
+  m: string;
+  ca: number;
+  ua: number;
+}
+
 export interface FsrsExportDto {
   exportDate: Date;
   userId: string;
   totalCards: number;
   totalReviews: number;
   cards: FsrsCardExportDto[];
+  customSentences?: UserExampleSentenceExportDto[];
+  customMeanings?: UserCustomMeaningExportDto[];
 }
 
 export interface FsrsCardWithWordDto {
@@ -564,6 +583,10 @@ export interface FsrsImportResultDto {
   cardsSkipped: number;
   cardsUpdated: number;
   reviewLogsImported: number;
+  customSentencesImported: number;
+  customSentencesSkipped: number;
+  customMeaningsImported: number;
+  customMeaningsSkipped: number;
   validationErrors: string[];
 }
 
@@ -1108,6 +1131,7 @@ export type CardImageLayout = 'beside' | 'below';
 export type CardImagePosition = 'Front' | 'Back';
 export type CardAudioAutoPlayPosition = 'Front' | 'Back' | 'Both';
 export type ExampleSentenceSorting = 'Random' | 'EasiestFirst' | 'HardestFirst';
+export type ExampleSentenceSource = 'StudyDecks' | 'Random';
 
 /** "Speed Focus" timed-review preferences. Behaviour is entirely client-side; the server round-trips it. */
 export interface TimedReviewSettings {
@@ -1158,6 +1182,7 @@ export interface StudyKeybinds {
   undo: string;
   wrapUp: string;
   pauseTimer: string;
+  replayAudio: string;
   dictPrev: string;
   dictNext: string;
 }
@@ -1174,6 +1199,7 @@ export interface StudySettingsDto {
   showPitchAccent: boolean;
   exampleSentencePosition: ExampleSentencePosition;
   exampleSentenceSorting: ExampleSentenceSorting;
+  exampleSentenceSource: ExampleSentenceSource;
   blurExampleSentence: boolean;
   cardImageLayout: CardImageLayout;
   cardImagePosition: CardImagePosition;
@@ -1197,7 +1223,10 @@ export interface StudySettingsDto {
   autoPlaySentenceOnFront: boolean;
   autoPlayCustomAudio: boolean;
   autoPlayCustomAudioPosition: CardAudioAutoPlayPosition;
-  autoPlayCustomAudioInstead: boolean;
+  customAudioReplacesHeadword: boolean;
+  customAudioReplacesSentence: boolean;
+  /** Below the server's current version the custom-audio fields are overwritten with the current defaults. */
+  audioDefaultsVersion: number;
   showReviewActivity: boolean;
   showReviewForecast: boolean;
   timezone: string | null;

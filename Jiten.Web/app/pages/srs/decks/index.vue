@@ -181,21 +181,37 @@
     },
   });
 
+  function moveWithin(list: StudyDeckDto[], from: number, to: number) {
+    const decks = [...list];
+    const [moved] = decks.splice(from, 1);
+    if (!moved) return decks;
+    decks.splice(Math.min(Math.max(to, 0), decks.length), 0, moved);
+    return decks;
+  }
+
+  async function moveActiveDeckTo(from: number, to: number) {
+    const decks = moveWithin(srsStore.activeDecks, from, to);
+    await srsStore.reorderStudyDecks([...decks, ...srsStore.inactiveDecks], { debounce: true });
+  }
+
+  async function moveInactiveDeckTo(from: number, to: number) {
+    const decks = moveWithin(srsStore.inactiveDecks, from, to);
+    await srsStore.reorderStudyDecks([...srsStore.activeDecks, ...decks], { debounce: true });
+  }
+
   async function moveActiveDeck(index: number, direction: -1 | 1) {
     const target = index + direction;
     if (target < 0 || target >= srsStore.activeDecks.length) return;
-    const decks = [...srsStore.activeDecks];
-    [decks[index], decks[target]] = [decks[target], decks[index]];
-    await srsStore.reorderStudyDecks([...decks, ...srsStore.inactiveDecks]);
+    await moveActiveDeckTo(index, target);
   }
 
   async function moveInactiveDeck(index: number, direction: -1 | 1) {
     const target = index + direction;
     if (target < 0 || target >= srsStore.inactiveDecks.length) return;
-    const decks = [...srsStore.inactiveDecks];
-    [decks[index], decks[target]] = [decks[target], decks[index]];
-    await srsStore.reorderStudyDecks([...srsStore.activeDecks, ...decks]);
+    await moveInactiveDeckTo(index, target);
   }
+
+  onBeforeUnmount(() => srsStore.flushStudyDeckReorder());
 
   const { totalDue, goalReviewsDone, goalReviewsTarget, goalNewDone, goalNewTarget, nextReviewText, startStudy } = useStudySummary();
 
@@ -366,7 +382,7 @@
 
 <template>
   <div class="container mx-auto p-2 md:p-4">
-    <SrsSubNav />
+    <SrsSubNav hide-mobile-study />
     <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
       <h1 class="text-2xl font-bold">Study Decks</h1>
       <div class="flex gap-2">
@@ -374,7 +390,13 @@
           <Button icon="pi pi-refresh" severity="secondary" :loading="refreshing" @click="refresh" />
         </Tooltip>
         <Button icon="pi pi-plus" label="Add Deck" class="!hidden sm:!inline-flex" @click="showAddDialog = true" />
-        <Button icon="pi pi-plus" class="sm:!hidden" @click="showAddDialog = true" />
+        <Button
+          icon="pi pi-play"
+          :label="totalDue > 0 ? `Study (${totalDue})` : 'Study'"
+          :severity="totalDue > 0 ? 'success' : 'secondary'"
+          class="sm:!hidden"
+          @click="startStudy"
+        />
       </div>
     </div>
 
@@ -602,6 +624,7 @@
         >
           Need more?
         </NuxtLink>
+        <Button icon="pi pi-plus" label="Add Deck" size="small" class="sm:!hidden ml-auto flex-shrink-0" @click="showAddDialog = true" />
       </div>
 
       <!-- Active Decks -->
@@ -725,13 +748,20 @@
 
             <!-- Actions -->
             <div class="flex gap-1 flex-shrink-0 items-center justify-end sm:justify-start">
-              <div v-if="srsStore.activeDecks.length > 1" class="flex flex-col">
-                <Tooltip content="Move up" placement="top">
-                  <Button icon="pi pi-chevron-up" text size="small" :disabled="index === 0" @click="moveActiveDeck(index, -1)" />
-                </Tooltip>
-                <Tooltip content="Move down" placement="top">
-                  <Button icon="pi pi-chevron-down" text size="small" :disabled="index === srsStore.activeDecks.length - 1" @click="moveActiveDeck(index, 1)" />
-                </Tooltip>
+              <div v-if="srsStore.activeDecks.length > 1" class="flex items-center gap-1">
+                <SrsDeckPositionControl
+                  :index="index"
+                  :total="srsStore.activeDecks.length"
+                  @move="moveActiveDeckTo(index, $event)"
+                />
+                <div class="flex flex-col">
+                  <Tooltip content="Move up" placement="top">
+                    <Button icon="pi pi-chevron-up" text size="small" :disabled="index === 0" @click="moveActiveDeck(index, -1)" />
+                  </Tooltip>
+                  <Tooltip content="Move down" placement="top">
+                    <Button icon="pi pi-chevron-down" text size="small" :disabled="index === srsStore.activeDecks.length - 1" @click="moveActiveDeck(index, 1)" />
+                  </Tooltip>
+                </div>
               </div>
               <Tooltip content="Deactivate" placement="top">
                 <Button icon="pi pi-pause" severity="secondary" text size="small" @click="srsStore.toggleDeckActive(deck.userStudyDeckId)" />
@@ -881,19 +911,26 @@
 
             <!-- Actions -->
             <div class="flex gap-1 flex-shrink-0 items-center justify-end sm:justify-start">
-              <div v-if="srsStore.inactiveDecks.length > 1" class="flex flex-col">
-                <Tooltip content="Move up" placement="top">
-                  <Button icon="pi pi-chevron-up" text size="small" :disabled="index === 0" @click="moveInactiveDeck(index, -1)" />
-                </Tooltip>
-                <Tooltip content="Move down" placement="top">
-                  <Button
-                    icon="pi pi-chevron-down"
-                    text
-                    size="small"
-                    :disabled="index === srsStore.inactiveDecks.length - 1"
-                    @click="moveInactiveDeck(index, 1)"
-                  />
-                </Tooltip>
+              <div v-if="srsStore.inactiveDecks.length > 1" class="flex items-center gap-1">
+                <SrsDeckPositionControl
+                  :index="index"
+                  :total="srsStore.inactiveDecks.length"
+                  @move="moveInactiveDeckTo(index, $event)"
+                />
+                <div class="flex flex-col">
+                  <Tooltip content="Move up" placement="top">
+                    <Button icon="pi pi-chevron-up" text size="small" :disabled="index === 0" @click="moveInactiveDeck(index, -1)" />
+                  </Tooltip>
+                  <Tooltip content="Move down" placement="top">
+                    <Button
+                      icon="pi pi-chevron-down"
+                      text
+                      size="small"
+                      :disabled="index === srsStore.inactiveDecks.length - 1"
+                      @click="moveInactiveDeck(index, 1)"
+                    />
+                  </Tooltip>
+                </div>
               </div>
               <Tooltip content="Activate" placement="top">
                 <Button icon="pi pi-play" severity="success" text size="small" @click="srsStore.toggleDeckActive(deck.userStudyDeckId)" />

@@ -173,6 +173,8 @@ const getTitle = (suggestion: MediaSuggestion): string => {
   return suggestion.originalTitle;
 };
 
+const isOriginalTitle = (suggestion: MediaSuggestion): boolean => getTitle(suggestion) === suggestion.originalTitle;
+
 const getCoverUrl = (coverName: string): string => {
   return coverName === 'nocover.jpg' ? '/img/nocover.jpg' : coverName;
 };
@@ -192,6 +194,7 @@ const remainingCount = computed(() => {
         <InputText
           v-model="searchText"
           type="text"
+          lang="ja"
           :placeholder="placeholder || 'Search words, sentences, or media. Use * for wildcard'"
           class="w-full text-sm sm:text-base"
           maxlength="2000"
@@ -229,9 +232,9 @@ const remainingCount = computed(() => {
           @click="navigateToKanji(kanjiSearchTarget)"
           @mouseenter="highlightedIndex = 0"
         >
-          <span class="text-2xl font-bold text-purple-500">{{ kanjiSearchTarget }}</span>
+          <span class="text-2xl font-bold text-purple-500" lang="ja">{{ kanjiSearchTarget }}</span>
           <div class="min-w-0 flex-1">
-            <div class="font-medium">View kanji: {{ kanjiSearchTarget }}</div>
+            <div class="font-medium">View kanji: <span lang="ja">{{ kanjiSearchTarget }}</span></div>
             <div class="text-sm text-gray-500 dark:text-gray-400">Go to kanji details page</div>
           </div>
           <div class="text-xs text-gray-400 dark:text-gray-500">
@@ -251,7 +254,7 @@ const remainingCount = computed(() => {
         >
           <Icon name="material-symbols:search-rounded" class="text-xl text-purple-500" />
           <div class="min-w-0 flex-1">
-            <div class="font-medium">Search: "{{ searchText }}"</div>
+            <div class="font-medium">Search: "<span lang="ja">{{ searchText }}</span>"</div>
             <div class="text-sm text-gray-500 dark:text-gray-400">Search dictionary by meaning or wildcard. Use #kanji to view kanji details</div>
           </div>
           <div class="text-xs text-gray-400 dark:text-gray-500">
@@ -274,7 +277,7 @@ const remainingCount = computed(() => {
           >
             <Icon name="material-symbols:video-library-outline" class="text-lg text-gray-500" />
             <span class="flex-1">
-              View more media for "{{ searchText }}"
+              View more media for "<span lang="ja">{{ searchText }}</span>"
               <span v-if="remainingCount > 0" class="text-purple-500 font-medium">(+{{ remainingCount }})</span>
             </span>
             <Icon name="material-symbols:arrow-forward" class="text-gray-400" />
@@ -313,7 +316,9 @@ const remainingCount = computed(() => {
                   class="w-10 h-14 object-cover rounded flex-shrink-0"
                 />
                 <div class="min-w-0 flex-1">
-                  <div class="font-medium truncate">{{ getTitle(suggestion) }}</div>
+                  <div class="font-medium truncate" :lang="isOriginalTitle(suggestion) ? 'ja' : undefined">
+                    {{ getTitle(suggestion) }}
+                  </div>
                   <div class="text-sm text-gray-500 dark:text-gray-400">
                     {{ getMediaTypeText(suggestion.mediaType) }}
                   </div>
@@ -326,7 +331,7 @@ const remainingCount = computed(() => {
             v-else-if="!isLoading"
             class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700"
           >
-            No media found matching "{{ searchText }}"
+            No media found matching "<span lang="ja">{{ searchText }}</span>"
           </div>
         </template>
       </div>
