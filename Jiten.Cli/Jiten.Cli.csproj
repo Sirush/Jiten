@@ -14,7 +14,7 @@
 
     <ItemGroup>
       <PackageReference Include="CommandLineParser" Version="2.9.1" />
-      <PackageReference Include="SharpCompress" Version="0.41.0" />
+      <PackageReference Include="SharpCompress" Version="0.50.4" />
     </ItemGroup>
 
     <ItemGroup>
