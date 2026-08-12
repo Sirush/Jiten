@@ -582,20 +582,54 @@ export const useSrsStore = defineStore('srs', () => {
   const activeDecks = computed(() => studyDecks.value.filter(d => d.isActive));
   const inactiveDecks = computed(() => studyDecks.value.filter(d => !d.isActive));
 
-  async function reorderStudyDecks(reorderedDecks: StudyDeckDto[]) {
-    studyDecks.value = reorderedDecks;
-    const active = reorderedDecks.filter(d => d.isActive);
-    const inactive = reorderedDecks.filter(d => !d.isActive);
-    await $api('srs/study-decks/reorder', {
-      method: 'PUT',
-      body: {
-        items: [
-          ...active.map((d, i) => ({ userStudyDeckId: d.userStudyDeckId, sortOrder: i, isActive: true })),
-          ...inactive.map((d, i) => ({ userStudyDeckId: d.userStudyDeckId, sortOrder: i, isActive: false })),
-        ],
-      },
-    });
+  const REORDER_DEBOUNCE_MS = 400;
+  let reorderTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingReorderItems: { userStudyDeckId: number; sortOrder: number; isActive: boolean }[] | null = null;
+
+  function buildReorderItems(decks: StudyDeckDto[]) {
+    const active = decks.filter(d => d.isActive);
+    const inactive = decks.filter(d => !d.isActive);
+    return [
+      ...active.map((d, i) => ({ userStudyDeckId: d.userStudyDeckId, sortOrder: i, isActive: true })),
+      ...inactive.map((d, i) => ({ userStudyDeckId: d.userStudyDeckId, sortOrder: i, isActive: false })),
+    ];
+  }
+
+  function clearPendingReorder() {
+    if (reorderTimer) clearTimeout(reorderTimer);
+    reorderTimer = null;
+    const items = pendingReorderItems;
+    pendingReorderItems = null;
+    return items;
+  }
+
+  async function sendReorder(items: { userStudyDeckId: number; sortOrder: number; isActive: boolean }[]) {
+    await $api('srs/study-decks/reorder', { method: 'PUT', body: { items } });
     invalidateSession();
+  }
+
+  /// Persists any reorder still waiting on the debounce; call before leaving the deck list.
+  async function flushStudyDeckReorder() {
+    const items = clearPendingReorder();
+    if (items) await sendReorder(items);
+  }
+
+  async function reorderStudyDecks(reorderedDecks: StudyDeckDto[], options?: { debounce?: boolean }) {
+    studyDecks.value = reorderedDecks;
+    const items = buildReorderItems(reorderedDecks);
+
+    if (!options?.debounce) {
+      clearPendingReorder();
+      await sendReorder(items);
+      return;
+    }
+
+    if (reorderTimer) clearTimeout(reorderTimer);
+    pendingReorderItems = items;
+    reorderTimer = setTimeout(() => {
+      reorderTimer = null;
+      void flushStudyDeckReorder();
+    }, REORDER_DEBOUNCE_MS);
   }
 
   async function toggleDeckActive(deckId: number) {
@@ -1485,6 +1519,7 @@ export const useSrsStore = defineStore('srs', () => {
     importPreviewText,
     importToExistingDeck,
     reorderStudyDecks,
+    flushStudyDeckReorder,
     toggleDeckActive,
     studyMoreParams,
     getCardExample,
