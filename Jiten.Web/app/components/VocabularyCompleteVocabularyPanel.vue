@@ -40,10 +40,13 @@
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
+      const extras = (data.customSentences?.length ?? 0) + (data.customMeanings?.length ?? 0);
       toast.add({
         severity: 'success',
         summary: 'Export Successful',
-        detail: `Exported ${data.totalCards} cards with ${data.totalReviews} review logs.`,
+        detail:
+          `Exported ${data.totalCards} cards with ${data.totalReviews} review logs` +
+          (extras > 0 ? `, ${data.customSentences?.length ?? 0} custom sentences and ${data.customMeanings?.length ?? 0} notes.` : '.'),
         life: 5000,
       });
     } catch (error) {
@@ -77,7 +80,9 @@
         const text = e.target?.result as string;
         const importData: FsrsExportDto = JSON.parse(text);
 
-        if (!importData.cards || !Array.isArray(importData.cards)) {
+        const hasCards = Array.isArray(importData.cards);
+        const hasExtras = Array.isArray(importData.customSentences) || Array.isArray(importData.customMeanings);
+        if (!hasCards && !hasExtras) {
           throw new Error('Invalid file format: missing or invalid cards array');
         }
 
@@ -98,10 +103,13 @@
           });
         } else {
           const totalProcessed = result.cardsImported + result.cardsUpdated + result.cardsSkipped;
+          const extras = result.customSentencesImported + result.customMeaningsImported;
           toast.add({
             severity: 'success',
             summary: 'Import Successful',
-            detail: `Processed ${totalProcessed} cards: ${result.cardsImported} imported, ${result.cardsUpdated} updated, ${result.cardsSkipped} skipped.`,
+            detail:
+              `Processed ${totalProcessed} cards: ${result.cardsImported} imported, ${result.cardsUpdated} updated, ${result.cardsSkipped} skipped.` +
+              (extras > 0 ? ` Also restored ${result.customSentencesImported} custom sentences and ${result.customMeaningsImported} notes.` : ''),
             life: 6000,
           });
         }
@@ -137,14 +145,16 @@
     <template #content>
       <p class="mb-3">
         <template v-if="mode === 'export'">
-          Export your complete vocabulary with full data, including card states, review history, stability, difficulty, and due dates.
+          Export your complete vocabulary with full data, including card states, review history, stability, difficulty, and due dates as well as your custom example
+          sentences and custom notes.
         </template>
         <template v-else-if="mode === 'import'">
-          Import a previously exported vocabulary backup. This includes card states, review history, stability, difficulty, and due dates.
+          Import a previously exported vocabulary backup. This includes card states, review history, stability, difficulty, due dates, custom example sentences
+          and custom notes.
         </template>
         <template v-else>
-          Export and import your complete vocabulary with full data. This includes card states, review history, stability, difficulty, and due dates. Use this for
-          complete backups or transferring data between accounts.
+          Export and import your complete vocabulary with full data. This includes card states, review history, stability, difficulty, due dates, custom example
+          sentences and custom notes. Use this for complete backups or transferring data between accounts.
         </template>
       </p>
 
@@ -169,7 +179,8 @@
           <label for="fsrsOverwrite" class="ml-2">
             <span>Overwrite existing cards</span>
             <span class="text-sm text-gray-600 dark:text-gray-400 block">
-              If unchecked, only new cards will be added. If checked, existing cards will be replaced with imported data.
+              If unchecked, only new cards will be added. If checked, existing cards and custom notes will be replaced with imported data. Custom sentences are
+              always appended and never replaced.
             </span>
           </label>
         </div>
@@ -200,6 +211,18 @@
             </div>
             <div>
               Review logs imported: <strong>{{ fsrsImportResult.reviewLogsImported }}</strong>
+            </div>
+            <div>
+              Custom sentences restored: <strong class="text-green-600">{{ fsrsImportResult.customSentencesImported }}</strong>
+              <span v-if="fsrsImportResult.customSentencesSkipped" class="text-gray-600 dark:text-gray-400">
+                ({{ fsrsImportResult.customSentencesSkipped }} skipped)
+              </span>
+            </div>
+            <div>
+              Word notes restored: <strong class="text-green-600">{{ fsrsImportResult.customMeaningsImported }}</strong>
+              <span v-if="fsrsImportResult.customMeaningsSkipped" class="text-gray-600 dark:text-gray-400">
+                ({{ fsrsImportResult.customMeaningsSkipped }} skipped)
+              </span>
             </div>
             <div v-if="fsrsImportResult.validationErrors && fsrsImportResult.validationErrors.length > 0">
               <details class="mt-2">

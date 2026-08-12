@@ -16,4 +16,13 @@ public class FsrsExportDto
     /// reproduces the same heatmap rather than one recomputed under a different study timezone.
     /// </summary>
     public List<UserReviewDailyExportDto>? ReviewActivity { get; set; }
+
+    /// <summary>
+    /// Custom example sentences the user wrote or saved, for every word they attached one to, whether or not that
+    /// word is still in the collection. Absent in backups taken before they were carried.
+    /// </summary>
+    public List<UserExampleSentenceExportDto>? CustomSentences { get; set; }
+
+    /// <summary>Per-word notes the user wrote, carried for every word regardless of card state.</summary>
+    public List<UserCustomMeaningExportDto>? CustomMeanings { get; set; }
 }

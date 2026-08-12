@@ -533,12 +533,30 @@ export interface FsrsCardExportDto {
   reviewLogs: FsrsReviewLogExportDto[];
 }
 
+export interface UserExampleSentenceExportDto {
+  w: number;
+  r: number;
+  s: string;
+  src?: string;
+  o: number;
+  ca: number;
+}
+
+export interface UserCustomMeaningExportDto {
+  w: number;
+  m: string;
+  ca: number;
+  ua: number;
+}
+
 export interface FsrsExportDto {
   exportDate: Date;
   userId: string;
   totalCards: number;
   totalReviews: number;
   cards: FsrsCardExportDto[];
+  customSentences?: UserExampleSentenceExportDto[];
+  customMeanings?: UserCustomMeaningExportDto[];
 }
 
 export interface FsrsCardWithWordDto {
@@ -564,6 +582,10 @@ export interface FsrsImportResultDto {
   cardsSkipped: number;
   cardsUpdated: number;
   reviewLogsImported: number;
+  customSentencesImported: number;
+  customSentencesSkipped: number;
+  customMeaningsImported: number;
+  customMeaningsSkipped: number;
   validationErrors: string[];
 }
 
