@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import Button from 'primevue/button';
   import Popover from 'primevue/popover';
-  import { KnownState, StudyDeckType, type Word } from '~/types';
+  import { KnownState, StudyDeckType, type DerivationCoverDto, type Word } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
   import { useJitenStore } from '~/stores/jitenStore';
   import { useSrsStore } from '~/stores/srsStore';
@@ -19,6 +19,7 @@
   const props = defineProps<{
     word: Word;
     knownStatesOverride?: KnownState[];
+    redundantVia?: DerivationCoverDto | null;
   }>();
 
   const knownStates = ref([...(props.knownStatesOverride ?? props.word.knownStates ?? [])]);
@@ -42,6 +43,8 @@
   );
 
   const redundantTooltip = computed(() => {
+    // A derivation cover comes from a different entry entirely, so the form-sibling wording would mislead.
+    if (props.redundantVia) return `Covered by ${props.redundantVia.text} (${props.redundantVia.categoryLabel})`;
     if (knownStates.value.includes(KnownState.Mastered)) return 'Known via another form of this word (Mastered)';
     if (knownStates.value.includes(KnownState.Mature)) return 'Known via another form of this word (Mature)';
     if (knownStates.value.includes(KnownState.Young)) return 'Known via another form of this word (Young)';
@@ -307,6 +310,14 @@
         <template v-if="isRedundant">
           <Tooltip :content="redundantTooltip">
             <span class="text-blue-500 dark:text-blue-300 cursor-default">Redundant</span>
+          </Tooltip>
+          <Tooltip v-if="redundantVia" :content="redundantVia.categoryLabel">
+            <NuxtLink
+              :to="`/vocabulary/${redundantVia.wordId}/${redundantVia.readingIndex}`"
+              class="text-xs text-blue-500 dark:text-blue-300 hover:underline"
+            >
+              <span class="font-noto-sans" lang="ja">{{ redundantVia.text }}</span>
+            </NuxtLink>
           </Tooltip>
         </template>
         <template v-else-if="isSuspended">

@@ -109,6 +109,13 @@ public class ImportCommands(CliContext context)
         Console.WriteLine("JMDict sync complete.");
     }
 
+    public async Task BuildDerivations(CliOptions options)
+    {
+        var report = await DerivationBuilder.Build(context.ContextFactory, options.DryRun, options.Output,
+                                                   options.DerivationClassifyOutput);
+        DerivationBuilder.PrintSummary(report);
+    }
+
     public async Task CompareJMDict(CliOptions options)
     {
         if (string.IsNullOrEmpty(options.XmlPath) || string.IsNullOrEmpty(options.DictionaryPath) || options.Extra == null)

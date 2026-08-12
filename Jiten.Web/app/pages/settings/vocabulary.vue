@@ -24,6 +24,9 @@
     wordSetBlacklistedWords,
     wordSetBlacklistedForms,
     hasWordSetContributions,
+    redundantForms,
+    derivationCoveredWords,
+    derivationCoveredForms,
     archivedCards,
     fetchKnownWordsAmount,
   } = useVocabularyStats();
@@ -99,6 +102,9 @@
       :word-set-blacklisted-words="wordSetBlacklistedWords"
       :word-set-blacklisted-forms="wordSetBlacklistedForms"
       :has-word-set-contributions="hasWordSetContributions"
+      :redundant-forms="redundantForms"
+      :derivation-covered-words="derivationCoveredWords"
+      :derivation-covered-forms="derivationCoveredForms"
     />
 
     <section>
@@ -127,6 +133,8 @@
     <SettingsVocabularyMassActionsCard @changed="onPanelChanged" />
 
     <SettingsCompositionInferenceCard @changed="onPanelChanged" />
+
+    <SettingsDerivationalRedundancyCard @changed="onPanelChanged" />
 
     <SettingsRedundantFormsCard @changed="onPanelChanged" />
 

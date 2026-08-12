@@ -141,6 +141,12 @@ public class RoadmapDataLoader(
             }
         }
 
+        // Mirrors the coverage service's NOT EXISTS: a carded form counts by its own card, never by a set it
+        // belongs to or a derivation family it sits in.
+        var cardedKeys = new HashSet<long>(cards.Count);
+        foreach (var c in cards)
+            cardedKeys.Add(RoadmapEngine.PackKey(c.WordId, (int)c.ReadingIndex));
+
         var setIds = await userContext.UserWordSetStates.AsNoTracking()
                                       .Where(s => s.UserId == userId)
                                       .Select(s => s.SetId)
@@ -153,11 +159,6 @@ public class RoadmapDataLoader(
                                      .Select(m => new { m.WordId, m.ReadingIndex })
                                      .ToListAsync(ct);
 
-            // Mirrors the coverage service's NOT EXISTS: a carded set member counts by card maturity, keeping deck-page parity.
-            var cardedKeys = new HashSet<long>(cards.Count);
-            foreach (var c in cards)
-                cardedKeys.Add(RoadmapEngine.PackKey(c.WordId, (int)c.ReadingIndex));
-
             foreach (var member in members)
             {
                 var key = RoadmapEngine.PackKey(member.WordId, member.ReadingIndex);
@@ -166,7 +167,77 @@ public class RoadmapDataLoader(
             }
         }
 
+        var derivationCategoryIds = await CoverageComputeService.LoadDerivationCategoryIds(userContext, userId);
+        await ExpandThroughDerivations(jiten, known, cardedKeys, derivationCategoryIds, ct);
+
         return known;
+    }
+
+    /// <summary>Mirrors <c>CoverageComputeService.ExpandThroughDerivations</c>: conducts to a fixpoint over the
+    /// enabled categories, refuses the reverse hop on one-way and kanji-base/kana-derived rows, and only then
+    /// drops the forms whose own card decides their tier.</summary>
+    private static async Task ExpandThroughDerivations(JitenDbContext jiten, HashSet<long> known,
+                                                        HashSet<long> cardedKeys, short[] categoryIds,
+                                                        CancellationToken ct)
+    {
+        if (categoryIds.Length == 0 || known.Count == 0) return;
+
+        var categories = categoryIds.Select(id => (DerivationCategory)id).ToList();
+        var rows = await jiten.WordDerivations.AsNoTracking()
+                              .Where(d => categories.Contains(d.Category))
+                              .Select(d => new
+                              {
+                                  d.BaseWordId, d.BaseReadingIndex, d.DerivedWordId, d.DerivedReadingIndex, d.Direction
+                              })
+                              .ToListAsync(ct);
+
+        if (rows.Count == 0) return;
+
+        var wordIds = rows.Select(r => r.BaseWordId).Concat(rows.Select(r => r.DerivedWordId)).Distinct().ToList();
+        var kanaForms = await jiten.WordForms.AsNoTracking()
+                                   .Where(f => wordIds.Contains(f.WordId) && f.FormType == JmDictFormType.KanaForm)
+                                   .Select(f => new { f.WordId, f.ReadingIndex })
+                                   .ToListAsync(ct);
+
+        var kanaKeys = kanaForms.Select(f => RoadmapEngine.PackKey(f.WordId, f.ReadingIndex)).ToHashSet();
+        var neighbours = new Dictionary<long, List<long>>();
+
+        foreach (var row in rows)
+        {
+            var baseKey = RoadmapEngine.PackKey(row.BaseWordId, row.BaseReadingIndex);
+            var derivedKey = RoadmapEngine.PackKey(row.DerivedWordId, row.DerivedReadingIndex);
+            Link(baseKey, derivedKey);
+
+            if (row.Direction == DerivationDirection.Bidirectional &&
+                !(!kanaKeys.Contains(baseKey) && kanaKeys.Contains(derivedKey)))
+                Link(derivedKey, baseKey);
+        }
+
+        var queue = new Queue<long>(known);
+        var expanded = new HashSet<long>();
+
+        while (queue.Count > 0)
+        {
+            if (!neighbours.TryGetValue(queue.Dequeue(), out var next)) continue;
+
+            foreach (var key in next)
+            {
+                if (!known.Add(key)) continue;
+                expanded.Add(key);
+                queue.Enqueue(key);
+            }
+        }
+
+        foreach (var key in expanded)
+            if (cardedKeys.Contains(key))
+                known.Remove(key);
+
+        void Link(long from, long to)
+        {
+            if (!neighbours.TryGetValue(from, out var list))
+                neighbours[from] = list = [];
+            list.Add(to);
+        }
     }
 
     public async Task<RoadmapCandidateSet> LoadCandidatesAsync(string userId, RoadmapDefinition definition,

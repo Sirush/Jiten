@@ -2604,6 +2604,9 @@ public static class JmDictHelper
 
             if (rebuildKanjiTables)
                 await RebuildKanjiDerivedTables(contextFactory);
+
+            Console.WriteLine("Rebuilding derivation links...");
+            DerivationBuilder.PrintSummary(await DerivationBuilder.Build(contextFactory));
         }
 
         // Print statistics

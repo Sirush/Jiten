@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using StackExchange.Redis;
 using Swashbuckle.AspNetCore.Annotations;
 using System.Text;
@@ -31,6 +32,8 @@ public class UserController(
     UserDbContext userContext,
     IBackgroundJobClient backgroundJobs,
     IWordFormSiblingCache wordFormCache,
+    IDerivationLinkCache derivationCache,
+    IMemoryCache memoryCache,
     IConfiguration configuration,
     IConnectionMultiplexer redis,
     IDeckWordResolver deckWordResolver,
@@ -72,13 +75,16 @@ public class UserController(
         return Results.Ok(amounts);
     }
 
-    private async Task<KnownWordAmountDto> ComputeKnownWordAmountAsync(string userId)
+    private async Task<KnownWordAmountDto> ComputeKnownWordAmountAsync(string userId, bool includeDerivations = true)
     {
         var fsrsCards = await userContext.FsrsCards
                                          .AsNoTracking()
                                          .Where(uk => uk.UserId == userId)
                                          .Select(uk => new { uk.WordId, uk.ReadingIndex, uk.State, uk.Due, uk.LastReview })
                                          .ToListAsync();
+
+        // Same conductor set as new-card selection: every card plus Mastered/Blacklisted set members.
+        var derivationConductors = fsrsCards.Select(c => (c.WordId, c.ReadingIndex)).ToList();
 
         var now = DateTime.UtcNow;
 
@@ -164,6 +170,7 @@ public class UserController(
 
                 foreach (var m in masteredSetForms)
                 {
+                    derivationConductors.Add((m.WordId, (byte)m.ReadingIndex));
                     var key = (m.WordId, m.ReadingIndex);
                     if (!effectiveForms.ContainsKey(key))
                     {
@@ -185,6 +192,7 @@ public class UserController(
 
                 foreach (var m in blacklistedSetForms)
                 {
+                    derivationConductors.Add((m.WordId, (byte)m.ReadingIndex));
                     var key = (m.WordId, m.ReadingIndex);
                     if (!effectiveForms.ContainsKey(key))
                     {
@@ -205,6 +213,31 @@ public class UserController(
                 redundantForms++;
         }
 
+        int derivationCoveredForms = 0;
+        var derivationCoveredWordIds = new HashSet<int>();
+        if (includeDerivations && !derivationCache.IsEmpty)
+        {
+            var derivationCategories = await DerivationSettingsHelper.GetEnabledCategories(memoryCache, userContext, userId);
+            if (derivationCategories.Count > 0)
+            {
+                var covered = new HashSet<long>();
+                WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache, derivationCategories,
+                                                              derivationConductors, covered);
+
+                var knownWordIds = new HashSet<int>(effectiveForms.Keys.Select(k => k.WordId));
+                foreach (var key in covered)
+                {
+                    var wordId = (int)(key >> 8);
+                    var readingIndex = (int)(key & 0xFF);
+                    if (effectiveForms.ContainsKey((wordId, readingIndex))) continue;
+
+                    derivationCoveredForms++;
+                    if (!knownWordIds.Contains(wordId))
+                        derivationCoveredWordIds.Add(wordId);
+                }
+            }
+        }
+
         return new KnownWordAmountDto
                {
                    Young = youngWords,
@@ -219,7 +252,9 @@ public class UserController(
                    WordSetMasteredForm = wsMasteredForms,
                    WordSetBlacklisted = wsBlacklistedWordIds.Count,
                    WordSetBlacklistedForm = wsBlacklistedForms,
-                   RedundantForms = redundantForms
+                   RedundantForms = redundantForms,
+                   DerivationCovered = derivationCoveredWordIds.Count,
+                   DerivationCoveredForm = derivationCoveredForms
                };
     }
 
@@ -3835,7 +3870,7 @@ public class UserController(
             if (hit != null) return Results.Ok(hit);
         }
 
-        var amounts = await ComputeKnownWordAmountAsync(targetUserId);
+        var amounts = await ComputeKnownWordAmountAsync(targetUserId, includeDerivations: false);
         var dto = new ProfileVocabularyStatsDto
                   {
                       Young = amounts.Young,

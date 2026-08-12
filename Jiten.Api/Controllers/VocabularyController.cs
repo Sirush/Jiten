@@ -9,6 +9,7 @@ using Jiten.Parser;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using StackExchange.Redis;
 using Swashbuckle.AspNetCore.Annotations;
 using System.Text.Json;
@@ -23,7 +24,7 @@ namespace Jiten.Api.Controllers;
 [Route("api/vocabulary")]
 [EnableRateLimiting("fixed")]
 [Produces("application/json")]
-public class VocabularyController(JitenDbContext context, IDbContextFactory<JitenDbContext> contextFactory, ICurrentUserService currentUserService, IConnectionMultiplexer redis) : ControllerBase
+public class VocabularyController(JitenDbContext context, IDbContextFactory<JitenDbContext> contextFactory, ICurrentUserService currentUserService, IDerivationLinkCache derivationCache, UserDbContext userContext, IMemoryCache memoryCache, IConnectionMultiplexer redis) : ControllerBase
 {
     /// <summary>
     /// Gets a word by its ID and reading index, including definitions, readings, frequency and user known state.
@@ -94,6 +95,16 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         var mainFreq = formFreqs.GetValueOrDefault(mainForm.ReadingIndex);
         var mainReading = WordFormHelper.ToFormDto(mainForm, mainFreq, usedInMediaByType);
 
+        var enabledDerivations = currentUserService.UserId == null
+            ? null
+            : await DerivationSettingsHelper.GetEnabledCategories(memoryCache, userContext, currentUserService.UserId);
+        var (derivedFrom, derives) =
+            await DerivationDisplayHelper.Load(contextFactory, derivationCache, wordId, readingIndex, enabledDerivations);
+        var redundantVia = (await knownStatesTask).Contains(KnownState.Redundant)
+            ? await DerivationDisplayHelper.LoadCover(contextFactory,
+                                                      await currentUserService.GetCoveringDerivation(wordId, readingIndex))
+            : null;
+
         List<WordFormDto> alternativeReadings = wordForms
                                                    .Select(form =>
                                                    {
@@ -111,7 +122,10 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                               UsedIn = usedInTask.Result.Items,
                               UsedInTotal = usedInTask.Result.Total,
                               LanguageSources = word.LanguageSources.ToDto(),
-                              EntryInfo = word.EntryInfo.Count > 0 ? word.EntryInfo.Select(e => e.Text).ToList() : null
+                              EntryInfo = word.EntryInfo.Count > 0 ? word.EntryInfo.Select(e => e.Text).ToList() : null,
+                              DerivedFrom = derivedFrom.Count > 0 ? derivedFrom : null,
+                              Derives = derives.Count > 0 ? derives : null,
+                              RedundantVia = redundantVia
                           });
     }
 
@@ -159,6 +173,9 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         var mainFreq = formFreqs.GetValueOrDefault(mainForm.ReadingIndex);
         var mainReading = WordFormHelper.ToFormDto(mainForm, mainFreq);
 
+        var (derivedFrom, derives) =
+            await DerivationDisplayHelper.Load(contextFactory, derivationCache, wordId, readingIndex);
+
         List<WordFormDto> alternativeReadings = wordForms
                                                    .Select(form =>
                                                    {
@@ -175,7 +192,9 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                               UsedIn = usedInTask.Result.Items,
                               UsedInTotal = usedInTask.Result.Total,
                               LanguageSources = word.LanguageSources.ToDto(),
-                              EntryInfo = word.EntryInfo.Count > 0 ? word.EntryInfo.Select(e => e.Text).ToList() : null
+                              EntryInfo = word.EntryInfo.Count > 0 ? word.EntryInfo.Select(e => e.Text).ToList() : null,
+                              DerivedFrom = derivedFrom.Count > 0 ? derivedFrom : null,
+                              Derives = derives.Count > 0 ? derives : null
                           });
     }
 
@@ -217,6 +236,20 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     public async Task<List<KnownState>> GetWordKnownState([FromRoute] int wordId, [FromRoute] byte readingIndex)
     {
         return await currentUserService.GetKnownWordState(wordId, readingIndex);
+    }
+
+    /// <summary>
+    /// Which known entry makes this form redundant through a derivation the user has enabled.
+    /// </summary>
+    /// <remarks>Kept off the publicly-cached word payload because the answer is per-user.</remarks>
+    [HttpGet("{wordId}/{readingIndex}/derivation-cover")]
+    [SwaggerOperation(Summary = "Get the derivation covering a word",
+                      Description = "Returns the known family member that makes this form redundant, or null.")]
+    [ProducesResponseType(typeof(DerivationCoverDto), StatusCodes.Status200OK)]
+    public async Task<IResult> GetDerivationCover([FromRoute] int wordId, [FromRoute] byte readingIndex)
+    {
+        var cover = await currentUserService.GetCoveringDerivation(wordId, readingIndex);
+        return Results.Ok(await DerivationDisplayHelper.LoadCover(contextFactory, cover));
     }
 
     /// <summary>

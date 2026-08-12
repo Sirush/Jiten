@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  defineProps<{
+  const props = defineProps<{
     vocabStatsLoading: boolean;
     youngWordsAmount: number;
     matureWordsAmount: number;
@@ -16,7 +16,14 @@
     wordSetBlacklistedWords: number;
     wordSetBlacklistedForms: number;
     hasWordSetContributions: boolean;
+    redundantForms: number;
+    derivationCoveredWords: number;
+    derivationCoveredForms: number;
   }>();
+
+  // Kana redundancy only covers other forms of already-tracked words, so it adds forms but no words.
+  const redundantWords = computed(() => props.derivationCoveredWords);
+  const totalRedundantForms = computed(() => props.redundantForms + props.derivationCoveredForms);
 </script>
 
 <template>
@@ -72,6 +79,11 @@
             </li>
           </ul>
         </template>
+        <p v-if="totalRedundantForms > 0" class="text-gray-600 dark:text-gray-300 mt-2">
+          Redundancy covers another
+          <span class="font-extrabold text-primary-600 dark:text-primary-300">{{ redundantWords }}</span>
+          words (<b>{{ totalRedundantForms }}</b> forms).
+        </p>
       </template>
     </template>
     <template #content>

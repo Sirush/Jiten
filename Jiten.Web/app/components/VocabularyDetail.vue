@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { KnownState, type ExampleSentence, type ExampleSentencesByDifficultyResponse, type MediaType, type UserExampleSentenceDto, type Word } from '~/types';
+  import { KnownState, type DerivationCoverDto, type ExampleSentence, type ExampleSentencesByDifficultyResponse, type MediaType, type UserExampleSentenceDto, type Word } from '~/types';
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
@@ -54,6 +54,27 @@
   });
 
   const knownStatesOverride = computed(() => fetchedKnownStates.value ?? word.value?.knownStates ?? undefined);
+
+  // The word payload is publicly cached, so the covering entry — which is per-user — is fetched on its own,
+  // and only once the state actually says Redundant.
+  const derivationCover = ref<DerivationCoverDto | null>(null);
+  watch(
+    [knownStatesOverride, currentWordId, currentReadingIndex],
+    async ([states, wordId, readingIndex]) => {
+      if (!authStore.isAuthenticated || !states?.includes(KnownState.Redundant)) {
+        derivationCover.value = null;
+        return;
+      }
+      try {
+        derivationCover.value = await $api<DerivationCoverDto | null>(
+          `vocabulary/${wordId}/${readingIndex}/derivation-cover`,
+        );
+      } catch {
+        derivationCover.value = null;
+      }
+    },
+    { immediate: true },
+  );
 
   const { resolvedGroups } = useDictionaryDefinitions(
     computed(() => word.value?.mainReading?.text),
@@ -328,7 +349,7 @@
             </div>
             <div class="flex flex-col md:flex-row items-end md:hidden">
               <div class="text-gray-500 dark:text-gray-300 text-right">Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}</div>
-              <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" />
+              <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" :redundant-via="derivationCover" />
             </div>
           </div>
 
@@ -401,7 +422,7 @@
 
         <div class="md:min-w-64">
           <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">
-            <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" />
+            <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" :redundant-via="derivationCover" />
             Rank #{{ word.mainReading.frequencyRank }}
           </div>
           <div class="md:text-right pt-4 cursor-pointer" @click="selectMediaType(null)">
@@ -436,6 +457,8 @@
       </div>
 
       <WordComposition v-if="word?.composedOf?.length" :components="word.composedOf" />
+
+      <WordDerivations :derived-from="word?.derivedFrom" :derives="word?.derives" />
 
       <WordUsedIn
         v-if="word?.usedInTotal"

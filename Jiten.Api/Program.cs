@@ -402,6 +402,7 @@ builder.Services.Configure<Jiten.Api.Services.Legal.LegalDocumentsOptions>(
 builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Api.Services.Stripe.StripeGateway>();
 builder.Services.AddScoped<Jiten.Api.Services.Stripe.StripeService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
+builder.Services.AddSingleton<IDerivationLinkCache, DerivationLinkCache>();
 builder.Services.AddSingleton<Jiten.Core.Services.DeckVectorService>();
 builder.Services.AddScoped<IRoadmapDataLoader, RoadmapDataLoader>();
 builder.Services.AddScoped<ICoverageJourneyService, CoverageJourneyService>();
@@ -425,6 +426,7 @@ builder.Services.AddScoped<Jiten.Core.Services.RequestActivityService>();
 builder.Services.AddScoped<Jiten.Core.Services.NotificationService>();
 builder.Services.AddHostedService<ParserWarmupService>();
 builder.Services.AddHostedService<WordFormSiblingCacheWarmupService>();
+builder.Services.AddHostedService<DerivationLinkCacheWarmupService>();
 builder.Services.AddHostedService<DeckVectorCacheWarmupService>();
 
 // Shared secret sent by the Nuxt SSR server (X-Internal-Ssr-Key) so first-party server
