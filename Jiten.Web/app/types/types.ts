@@ -444,6 +444,7 @@ export interface ExampleSentence {
   difficulty: number;
   sourceDeck: Deck;
   sourceDeckParent: Deck;
+  fromStudyDeck?: boolean;
 }
 
 export interface UserExampleSentenceDto {
@@ -1130,6 +1131,7 @@ export type CardImageLayout = 'beside' | 'below';
 export type CardImagePosition = 'Front' | 'Back';
 export type CardAudioAutoPlayPosition = 'Front' | 'Back' | 'Both';
 export type ExampleSentenceSorting = 'Random' | 'EasiestFirst' | 'HardestFirst';
+export type ExampleSentenceSource = 'StudyDecks' | 'Random';
 
 /** "Speed Focus" timed-review preferences. Behaviour is entirely client-side; the server round-trips it. */
 export interface TimedReviewSettings {
@@ -1197,6 +1199,7 @@ export interface StudySettingsDto {
   showPitchAccent: boolean;
   exampleSentencePosition: ExampleSentencePosition;
   exampleSentenceSorting: ExampleSentenceSorting;
+  exampleSentenceSource: ExampleSentenceSource;
   blurExampleSentence: boolean;
   cardImageLayout: CardImageLayout;
   cardImagePosition: CardImagePosition;

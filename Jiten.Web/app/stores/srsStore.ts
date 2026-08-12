@@ -136,6 +136,7 @@ export const useSrsStore = defineStore('srs', () => {
     newCardGathering: 'TopDeck',
     reviewFrom: 'AllTracked',
     exampleSentenceSorting: 'Random',
+    exampleSentenceSource: 'StudyDecks',
     cardImageLayout: 'beside',
     cardImagePosition: 'Back',
     blurCardImage: true,
@@ -781,6 +782,16 @@ export const useSrsStore = defineStore('srs', () => {
     return exampleCache.value.get(`${wordId}-${readingIndex}`);
   }
 
+  // In Random mode the server rerolls per request, so a card coming back this session must not
+  // redisplay its cached sentence — drop the key and let the prefetch window fetch a fresh one.
+  function evictCardExampleForReroll(cardKey: string) {
+    if (studySettings.value.exampleSentenceSource !== 'Random') return;
+    if (!exampleCache.value.has(cardKey)) return;
+    const newCache = new Map(exampleCache.value);
+    newCache.delete(cardKey);
+    exampleCache.value = newCache;
+  }
+
   // Overwrite the cached example for a card (used after favouriting/editing a sentence in-session).
   function setCardExample(wordId: number, readingIndex: number, example: StudyExampleSentenceDto | null) {
     const newCache = new Map(exampleCache.value);
@@ -939,6 +950,7 @@ export const useSrsStore = defineStore('srs', () => {
       batch.splice(currentCardIndex.value + offset, 0, reinsertedCard);
       reinsertedAgainCard = reinsertedCard;
       currentBatch.value = batch;
+      evictCardExampleForReroll(cardKey);
     } else {
       if (isRepeat) {
         const newSet = new Set(againCardKeys.value);
@@ -1071,6 +1083,7 @@ export const useSrsStore = defineStore('srs', () => {
       const offset = remaining <= 0 ? 0 : Math.min(Math.floor(Math.random() * 6) + 5, remaining);
       batch.splice(currentCardIndex.value + offset, 0, { ...ctx.card });
       currentBatch.value = batch;
+      evictCardExampleForReroll(ctx.cardKey);
       isSessionComplete.value = false;
     }
 

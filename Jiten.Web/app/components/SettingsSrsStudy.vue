@@ -979,9 +979,27 @@
               </div>
               <div v-if="exampleSentencePosition !== 'Hidden'">
                 <label class="text-sm mb-1 block">
+                  Sentence origin
+                  <Tooltip
+                    content="Where the card's sentence comes from.<br>**Study decks** — a sentence from one of your study decks, picked at random when several of them have one.<br>**Random** — ignores your decks and display random example sentences instead.<br>Your own custom sentences always win over both."
+                    placement="right"
+                  >
+                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                  </Tooltip>
+                </label>
+                <SelectButton
+                  v-model="form.exampleSentenceSource"
+                  :options="exampleSentenceSourceOptions"
+                  option-label="label"
+                  option-value="value"
+                  :allow-empty="false"
+                />
+              </div>
+              <div v-if="exampleSentencePosition !== 'Hidden'">
+                <label class="text-sm mb-1 block">
                   Sorting
                   <Tooltip
-                    content="**Random** — a random example sentence each time.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences."
+                    content="Order of the sentences under &quot;See more sentences&quot;. Sentences from your study decks come first in every mode.<br>**Random** — random sentences.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences."
                     placement="right"
                   >
                     <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />

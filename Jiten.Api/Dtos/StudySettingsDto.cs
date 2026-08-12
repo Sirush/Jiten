@@ -42,6 +42,13 @@ public enum ExampleSentenceSorting
     HardestFirst
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<ExampleSentenceSource>))]
+public enum ExampleSentenceSource
+{
+    StudyDecks,
+    Random
+}
+
 [JsonConverter(typeof(JsonStringEnumConverter<CardImageLayout>))]
 public enum CardImageLayout
 {
@@ -131,6 +138,9 @@ public class StudySettingsDto
 
     [JsonPropertyName("exampleSentenceSorting")]
     public ExampleSentenceSorting ExampleSentenceSorting { get; set; } = ExampleSentenceSorting.Random;
+
+    [JsonPropertyName("exampleSentenceSource")]
+    public ExampleSentenceSource ExampleSentenceSource { get; set; } = ExampleSentenceSource.StudyDecks;
 
     [JsonPropertyName("cardImageLayout")]
     public CardImageLayout CardImageLayout { get; set; } = CardImageLayout.Beside;

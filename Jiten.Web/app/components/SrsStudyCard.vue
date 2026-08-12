@@ -192,98 +192,14 @@
     }
   );
 
-  const extraSentences = ref<ExampleSentence[]>([]);
-  const extraSentencesExpanded = ref(false);
-  const canLoadMoreSentences = ref(true);
-  const isLoadingMoreSentences = ref(false);
-  const bandSize = 0.5;
-  const nextBandMin = ref(0);
-  const nextBandMax = ref(bandSize);
-
-  async function loadMoreSentences() {
-    isLoadingMoreSentences.value = true;
-    const sorting = srsStore.studySettings.exampleSentenceSorting;
-
-    try {
-      const alreadyLoaded = extraSentences.value.map((s) => s.sourceDeck.deckId);
-
-      if (sorting === 'Random') {
-        const results = await $api<ExampleSentence[]>(`vocabulary/${props.card.wordId}/${props.card.readingIndex}/random-example-sentences`, {
-          method: 'POST',
-          body: alreadyLoaded,
-        });
-
-        if (results.length === 0) {
-          canLoadMoreSentences.value = false;
-          return;
-        }
-
-        extraSentences.value.push(...results);
-      } else {
-        const descending = sorting === 'HardestFirst';
-        const results = await $api<ExampleSentencesByDifficultyResponse>(
-          `vocabulary/${props.card.wordId}/${props.card.readingIndex}/example-sentences-by-difficulty?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}`,
-          { method: 'POST', body: alreadyLoaded }
-        );
-
-        if (results.sentences.length > 0) {
-          extraSentences.value.push(...results.sentences);
-        }
-
-        if (descending) {
-          nextBandMax.value = results.searchedBandMin;
-          nextBandMin.value = nextBandMax.value - bandSize;
-          if (nextBandMax.value <= results.minDifficulty) {
-            canLoadMoreSentences.value = false;
-          }
-        } else {
-          nextBandMin.value = results.searchedBandMax;
-          nextBandMax.value = nextBandMin.value + bandSize;
-          if (nextBandMin.value > results.maxDifficulty) {
-            canLoadMoreSentences.value = false;
-          }
-        }
-
-        if (results.sentences.length === 0 && canLoadMoreSentences.value) {
-          return;
-        }
-      }
-
-      extraSentencesExpanded.value = true;
-    } catch (e) {
-      const status = (e as { status?: number; statusCode?: number } | null)?.status ?? (e as { statusCode?: number } | null)?.statusCode;
-      if (status !== 429) {
-        canLoadMoreSentences.value = false;
-      }
-    } finally {
-      isLoadingMoreSentences.value = false;
-    }
-  }
-
-  function toggleExtraSentences() {
-    if (extraSentences.value.length === 0) {
-      loadMoreSentences();
-    } else {
-      extraSentencesExpanded.value = !extraSentencesExpanded.value;
-    }
-  }
-
-  watch(
-    () => `${props.card.wordId}-${props.card.readingIndex}`,
-    () => {
-      extraSentences.value = [];
-      extraSentencesExpanded.value = false;
-      canLoadMoreSentences.value = true;
-      const sorting = srsStore.studySettings.exampleSentenceSorting;
-      if (sorting === 'HardestFirst') {
-        nextBandMin.value = 999;
-        nextBandMax.value = 999 + bandSize;
-      } else {
-        nextBandMin.value = 0;
-        nextBandMax.value = bandSize;
-      }
-    }
-  );
+  const {
+    sentences: extraSentences,
+    expanded: extraSentencesExpanded,
+    canLoadMore: canLoadMoreSentences,
+    isLoading: isLoadingMoreSentences,
+    loadMore: loadMoreSentences,
+    toggle: toggleExtraSentences,
+  } = useExtraExampleSentences(() => props.card);
 
   const headWordTtsText = computed(() => {
     const raw = wordData.value?.mainReading?.text || props.card.wordText || props.card.wordTextPlain;
@@ -377,12 +293,12 @@
     const example = cardExample.value;
     const media = cardAudio.value;
 
-    let headword = onFront ? settings.autoPlayWordOnFront : settings.autoPlayWord;
-    if (onFront && headword && settings.autoPlayWordOnFrontNewOnly && !props.card.isNewCard) headword = false;
+    let headword = forced || (onFront ? settings.autoPlayWordOnFront : settings.autoPlayWord);
+    if (!forced && onFront && headword && settings.autoPlayWordOnFrontNewOnly && !props.card.isNewCard) headword = false;
 
     const pos = settings.autoPlayCustomAudioPosition;
-    const customThisSide = pos === 'Both' || pos === (onFront ? 'Front' : 'Back');
-    const custom = !!media?.url && settings.autoPlayCustomAudio && customThisSide;
+    const customThisSide = forced || pos === 'Both' || pos === (onFront ? 'Front' : 'Back');
+    const custom = !!media?.url && (forced || settings.autoPlayCustomAudio) && customThisSide;
     const replacesHeadword = custom && settings.customAudioReplacesHeadword;
     const replacesSentence = custom && settings.customAudioReplacesSentence;
 

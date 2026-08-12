@@ -43,10 +43,14 @@ public class StudyController(
     ICoverageJourneyService coverageJourneyService,
     IBackgroundJobClient backgroundJobs,
     IMemoryCache memoryCache,
+    IExampleSentenceQueryService exampleSentences,
     ILogger<StudyController> logger) : ControllerBase
 {
     private static readonly Regex SentenceMarkerRegex =
         new(@"\*\*[^*]+\*\*", RegexOptions.Compiled);
+
+    /// <summary>Sentences per form drawn for ExampleSentenceSource.Random: variety without an unbounded scan.</summary>
+    private const int RandomSourcePoolSize = 30;
 
     private const int MaxConcurrentDeckQueries = 6;
     private const int MaxHoistedFrequencyKeys = 400_000;
@@ -3623,11 +3627,19 @@ public class StudyController(
         if (remainingPairs.Count == 0)
             return Results.Ok(new CardExamplesResponse { Examples = result });
 
-        var studyDecks = await userContext.UserStudyDecks
-            .AsNoTracking()
-            .Where(sd => sd.UserId == userId)
-            .ToListAsync();
-        var studyDeckIdArray = studyDecks.Where(sd => sd.DeckId.HasValue).Select(sd => sd.DeckId!.Value).ToArray();
+        var settings = await LoadStudySettings(userId);
+        var randomSource = settings.ExampleSentenceSource == ExampleSentenceSource.Random;
+
+        var studyDeckIdArray = Array.Empty<int>();
+        if (!randomSource)
+        {
+            studyDeckIdArray = await userContext.UserStudyDecks
+                .AsNoTracking()
+                .Where(sd => sd.UserId == userId && sd.DeckId.HasValue)
+                .Select(sd => sd.DeckId!.Value)
+                .Distinct()
+                .ToArrayAsync();
+        }
 
         var remainingWordIds = remainingPairs.Select(p => p.WordId).ToArray();
         var remainingReadingIndexes = remainingPairs.Select(p => (short)p.ReadingIndex).ToArray();
@@ -3639,55 +3651,73 @@ public class StudyController(
         List<int> fallbackExampleIds;
         if (isNpgsql)
         {
-            // DISTINCT ON rather than a lateral with LIMIT 1 per word: the lateral makes Postgres probe
+            // A set-based pass rather than a lateral with LIMIT per word: the lateral makes Postgres probe
             // ExampleSentences once per candidate row, and a word absent from the user's decks exhausts all
             // ~6.8k of them before returning nothing. Both sides are covered by their index, so this only
-            // touches sentences containing the requested words — its cost does not grow with deck count.
+            // touches sentences containing the requested words - its cost does not grow with deck count.
+            // The window keeps several ids per form so a form covered by more than one study deck can be
+            // picked among in memory; taking one id here would pin every card to its lowest-id sentence.
             studyExampleIds = studyDeckIdArray.Length > 0
                 ? await context.Database
                     .SqlQueryRaw<int>(@"
-                        SELECT DISTINCT ON (esw.""WordId"", esw.""ReadingIndex"") esw.""ExampleSentenceId""
-                        FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
-                        JOIN jiten.""ExampleSentenceWords"" esw
-                          ON esw.""WordId"" = v.wid AND esw.""ReadingIndex"" = v.ri
-                        JOIN jiten.""ExampleSentences"" es ON es.""SentenceId"" = esw.""ExampleSentenceId""
-                        WHERE es.""DeckId"" = ANY({2})
-                        ORDER BY esw.""WordId"", esw.""ReadingIndex"", esw.""ExampleSentenceId""
-                    ", remainingWordIds, remainingReadingIndexes, studyDeckIdArray)
+                        SELECT t.""ExampleSentenceId""
+                        FROM (
+                            SELECT esw.""ExampleSentenceId"",
+                                   row_number() OVER (PARTITION BY esw.""WordId"", esw.""ReadingIndex""
+                                                      ORDER BY esw.""ExampleSentenceId"") AS rn
+                            FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
+                            JOIN jiten.""ExampleSentenceWords"" esw
+                              ON esw.""WordId"" = v.wid AND esw.""ReadingIndex"" = v.ri
+                            JOIN jiten.""ExampleSentences"" es ON es.""SentenceId"" = esw.""ExampleSentenceId""
+                            WHERE es.""DeckId"" = ANY({2})
+                        ) t
+                        WHERE t.rn <= {3}
+                    ", remainingWordIds, remainingReadingIndexes, studyDeckIdArray, RandomSourcePoolSize)
                     .ToListAsync()
                 : [];
 
-            if (studyExampleIds.Count >= remainingPairs.Count)
-            {
-                fallbackExampleIds = [];
-            }
-            else
-            {
-                fallbackExampleIds = await context.Database
-                    .SqlQueryRaw<int>(@"
-                        SELECT esw.""ExampleSentenceId""
-                        FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
-                        CROSS JOIN LATERAL (
-                            SELECT esw2.""ExampleSentenceId""
-                            FROM jiten.""ExampleSentenceWords"" esw2
-                            WHERE esw2.""WordId"" = v.wid AND esw2.""ReadingIndex"" = v.ri
-                            ORDER BY esw2.""ExampleSentenceId""
-                            LIMIT 1
-                        ) esw
-                    ", remainingWordIds, remainingReadingIndexes)
-                    .ToListAsync();
-
-            }
+            // Always run: the windowed query returns many ids per form, so its row count no longer tells us
+            // which forms it covered, and a form with no study-deck sentence still needs its fallback.
+            fallbackExampleIds = await context.Database
+                .SqlQueryRaw<int>(@"
+                    SELECT esw.""ExampleSentenceId""
+                    FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
+                    CROSS JOIN LATERAL (
+                        SELECT esw2.""ExampleSentenceId""
+                        FROM jiten.""ExampleSentenceWords"" esw2
+                        WHERE esw2.""WordId"" = v.wid AND esw2.""ReadingIndex"" = v.ri
+                        ORDER BY esw2.""ExampleSentenceId""
+                        LIMIT {2}
+                    ) esw
+                ", remainingWordIds, remainingReadingIndexes, randomSource ? RandomSourcePoolSize : 1)
+                .ToListAsync();
         }
         else
         {
-            studyExampleIds = [];
-            fallbackExampleIds = await context.ExampleSentenceWords
-                .AsNoTracking()
-                .Where(esw => wordIds.Contains(esw.WordId))
-                .GroupBy(esw => new { esw.WordId, esw.ReadingIndex })
-                .Select(g => g.Min(esw => esw.ExampleSentenceId))
-                .ToListAsync();
+            studyExampleIds = studyDeckIdArray.Length > 0
+                ? await context.ExampleSentenceWords
+                    .AsNoTracking()
+                    .Where(esw => wordIds.Contains(esw.WordId))
+                    .Join(context.ExampleSentences.AsNoTracking(),
+                          esw => esw.ExampleSentenceId, es => es.SentenceId,
+                          (esw, es) => new { esw.ExampleSentenceId, es.DeckId })
+                    .Where(x => studyDeckIdArray.Contains(x.DeckId))
+                    .Select(x => x.ExampleSentenceId)
+                    .ToListAsync()
+                : [];
+
+            fallbackExampleIds = randomSource
+                ? await context.ExampleSentenceWords
+                    .AsNoTracking()
+                    .Where(esw => wordIds.Contains(esw.WordId))
+                    .Select(esw => esw.ExampleSentenceId)
+                    .ToListAsync()
+                : await context.ExampleSentenceWords
+                    .AsNoTracking()
+                    .Where(esw => wordIds.Contains(esw.WordId))
+                    .GroupBy(esw => new { esw.WordId, esw.ReadingIndex })
+                    .Select(g => g.Min(esw => esw.ExampleSentenceId))
+                    .ToListAsync();
         }
 
         var exampleIds = studyExampleIds.Union(fallbackExampleIds).Distinct().ToList();
@@ -3695,16 +3725,32 @@ public class StudyController(
         if (exampleIds.Count == 0)
             return Results.Ok(new CardExamplesResponse { Examples = result });
 
-        var sentences = await context.ExampleSentences
-            .AsNoTracking()
-            .Where(es => exampleIds.Contains(es.SentenceId))
-            .ToDictionaryAsync(es => es.SentenceId);
-
         var exampleWords = await context.ExampleSentenceWords
             .AsNoTracking()
             .Where(esw => exampleIds.Contains(esw.ExampleSentenceId)
                         && wordIds.Contains(esw.WordId))
             .ToListAsync();
+
+        var studyIdSet = studyExampleIds.ToHashSet();
+
+        // One sentence per form, picked at random: over every candidate in Random mode, over the study-deck
+        // candidates otherwise, so a form several study decks cover is not always answered by the same deck.
+        exampleWords = exampleWords
+            .GroupBy(esw => (esw.WordId, esw.ReadingIndex))
+            .Select(g =>
+            {
+                var pool = randomSource ? g.ToList() : g.Where(e => studyIdSet.Contains(e.ExampleSentenceId)).ToList();
+                return pool.Count > 0
+                    ? pool[Random.Shared.Next(pool.Count)]
+                    : g.OrderBy(e => e.ExampleSentenceId).First();
+            })
+            .ToList();
+        exampleIds = exampleWords.Select(esw => esw.ExampleSentenceId).Distinct().ToList();
+
+        var sentences = await context.ExampleSentences
+            .AsNoTracking()
+            .Where(es => exampleIds.Contains(es.SentenceId))
+            .ToDictionaryAsync(es => es.SentenceId);
 
 
         var exampleDeckIds = sentences.Values.Select(s => s.DeckId).Distinct().ToList();
@@ -3726,8 +3772,7 @@ public class StudyController(
             : new();
 
 
-        var studyIdSet = studyExampleIds.ToHashSet();
-        foreach (var esw in exampleWords.OrderByDescending(e => studyIdSet.Contains(e.ExampleSentenceId)))
+        foreach (var esw in exampleWords)
         {
             if (!sentences.TryGetValue(esw.ExampleSentenceId, out var sentence)) continue;
             var key = $"{esw.WordId}-{esw.ReadingIndex}";
@@ -3735,6 +3780,41 @@ public class StudyController(
         }
 
         return Results.Ok(new CardExamplesResponse { Examples = result });
+    }
+
+    /// <summary>
+    /// Extra example sentences for one form, preferring the caller's study decks over the general corpus.
+    /// </summary>
+    [HttpPost("word-example-sentences")]
+    [EnableRateLimiting("heavy")]
+    [SwaggerOperation(Summary = "Get example sentences for a word, study decks first")]
+    [ProducesResponseType(typeof(ExampleSentencesByDifficultyResponse), StatusCodes.Status200OK)]
+    public async Task<IResult> GetWordExampleSentences([FromBody] WordExampleSentencesRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+        if (request.ExcludedDeckIds.Count > 500) return Results.BadRequest();
+
+        var studyDeckIds = await userContext.UserStudyDecks
+            .AsNoTracking()
+            .Where(sd => sd.UserId == userId && sd.DeckId.HasValue)
+            .Select(sd => sd.DeckId!.Value)
+            .Distinct()
+            .ToArrayAsync();
+
+        var take = Math.Clamp(request.Take, 1, 20);
+
+        if (request.Sorting == ExampleSentenceSorting.Random)
+        {
+            var sentences = await exampleSentences.GetRandomAsync(request.WordId, request.ReadingIndex, request.ExcludedDeckIds,
+                                                                  null, take, studyDeckIds);
+            return Results.Ok(new ExampleSentencesByDifficultyResponse { Sentences = sentences });
+        }
+
+        var byDifficulty = await exampleSentences.GetByDifficultyAsync(request.WordId, request.ReadingIndex, request.ExcludedDeckIds,
+                                                                       null, request.MinDifficulty, request.MaxDifficulty,
+                                                                       request.Descending, take, studyDeckIds);
+        return Results.Ok(byDifficulty);
     }
 
     private record DeckProjection(int DeckId, string OriginalTitle, string? RomajiTitle, string? EnglishTitle, MediaType MediaType, int? ParentDeckId);
