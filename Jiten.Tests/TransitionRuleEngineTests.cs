@@ -328,6 +328,17 @@ public class TransitionRuleEngineTests
     }
 
     [Fact]
+    public void Sfp_AfterPlainPredicate_BeforeVocative_Preserved()
+    {
+        var words = Sentence(
+            W("やべえ", PartOfSpeech.IAdjective),
+            W("よ", PartOfSpeech.Particle, "よ", PartOfSpeechSection.SentenceEndingParticle),
+            W("母ちゃん", PartOfSpeech.CommonNoun));
+        TransitionRuleEngine.ApplyHardRules(words, NoLookup);
+        words.Select(w => w.word.Text).Should().Equal("やべえ", "よ", "母ちゃん");
+    }
+
+    [Fact]
     public void Sfp_MergesWithNounPrev_PreservesNounPos_NotForcedToVerb()
     {
         // SFP merge must inherit the predecessor's POS, not force PartOfSpeech.Verb.

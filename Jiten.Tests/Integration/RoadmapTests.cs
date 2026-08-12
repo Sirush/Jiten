@@ -9,6 +9,7 @@ using Jiten.Core.Data;
 using Jiten.Core.Data.Billing;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
+using Jiten.Core.Data.User;
 using Jiten.Core.Services;
 using Jiten.Parser.Tests.Integration.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -404,6 +405,70 @@ public class RoadmapTests(JitenWebApplicationFactory factory)
         {
             Key(100, 0), Key(101, 0), Key(104, 0), Key(104, 1), Key(200, 0)
         });
+    }
+
+    /// <summary>Second half of the parity rule above: with a category enabled, a roadmap must count the same
+    /// derived forms deck coverage does, and must leave the ones the user has a card of their own on.</summary>
+    [Fact]
+    public async Task LoadKnownWords_ExpandsThroughEnabledDerivations_ExceptWhereACardOfItsOwnDecides()
+    {
+        var now = DateTime.UtcNow;
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+
+            userDb.FsrsCards.RemoveRange(userDb.FsrsCards.Where(c => c.UserId == TestUsers.UserA));
+            userDb.UserWordSetStates.RemoveRange(userDb.UserWordSetStates.Where(s => s.UserId == TestUsers.UserA));
+            userDb.UserFsrsSettings.RemoveRange(userDb.UserFsrsSettings.Where(s => s.UserId == TestUsers.UserA));
+            await userDb.SaveChangesAsync();
+
+            userDb.FsrsCards.AddRange(
+                new FsrsCard { UserId = TestUsers.UserA, WordId = 300, ReadingIndex = 0, State = FsrsState.Mastered, Due = now.AddDays(30), CreatedAt = now },
+                // Derived form the user chose to study: its own never-reviewed card decides, not the family.
+                new FsrsCard { UserId = TestUsers.UserA, WordId = 302, ReadingIndex = 0, State = FsrsState.New, Due = now.AddDays(1), CreatedAt = now });
+
+            userDb.UserFsrsSettings.Add(new UserFsrsSettings
+            {
+                UserId = TestUsers.UserA,
+                SettingsJson = """{"derivationalRedundancyCategories":["sa_i_adj"]}"""
+            });
+            await userDb.SaveChangesAsync();
+
+            jitenDb.JMDictWords.AddRange(new JmDictWord { WordId = 300 }, new JmDictWord { WordId = 301 },
+                                         new JmDictWord { WordId = 302 });
+            await jitenDb.SaveChangesAsync();
+
+            await jitenDb.WordDerivations.ExecuteDeleteAsync();
+            jitenDb.WordDerivations.AddRange(
+                new JmDictWordDerivation
+                {
+                    BaseWordId = 300, BaseReadingIndex = 0, DerivedWordId = 301, DerivedReadingIndex = 0,
+                    Category = DerivationCategory.SaNominal, Direction = DerivationDirection.Bidirectional
+                },
+                new JmDictWordDerivation
+                {
+                    BaseWordId = 300, BaseReadingIndex = 0, DerivedWordId = 302, DerivedReadingIndex = 0,
+                    Category = DerivationCategory.SaNominal, Direction = DerivationDirection.Bidirectional
+                },
+                // A category the user has not enabled must not conduct.
+                new JmDictWordDerivation
+                {
+                    BaseWordId = 300, BaseReadingIndex = 0, DerivedWordId = 303, DerivedReadingIndex = 0,
+                    Category = DerivationCategory.Potential, Direction = DerivationDirection.Bidirectional
+                });
+            await jitenDb.SaveChangesAsync();
+        }
+
+        using var readScope = factory.Services.CreateScope();
+        var loader = readScope.ServiceProvider.GetRequiredService<IRoadmapDataLoader>();
+
+        var known = await loader.LoadKnownWordsAsync(TestUsers.UserA, includeLearningWords: true);
+
+        known.Should().Contain(RoadmapEngine.PackKey(301, 0));
+        known.Should().NotContain(RoadmapEngine.PackKey(302, 0));
+        known.Should().NotContain(RoadmapEngine.PackKey(303, 0));
     }
 
     [Fact]

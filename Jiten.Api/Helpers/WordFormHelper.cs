@@ -441,6 +441,21 @@ public static class WordFormHelper
         }
     }
 
+    /// <summary>Marks every form the user's known keys make derivation-redundant, so new-card selection skips
+    /// them the same way it skips kana-redundant forms. No-op while the user has no category enabled.</summary>
+    public static void ExpandDerivationRedundancyKeys(
+        IDerivationLinkCache cache,
+        IReadOnlySet<DerivationCategory> categories,
+        IEnumerable<(int WordId, byte ReadingIndex)> knownKeys,
+        HashSet<long> target)
+    {
+        if (categories.Count == 0 || cache.IsEmpty) return;
+
+        foreach (var (wordId, readingIndex) in knownKeys)
+        foreach (var covered in cache.GetCoveredKeys(wordId, readingIndex, categories))
+            target.Add(EncodeWordKey(covered.WordId, covered.ReadingIndex));
+    }
+
     public static async Task<List<JmDictWordForm>> LoadWordFormsForWord(JitenDbContext context, int wordId)
     {
         var forms = await context.WordForms

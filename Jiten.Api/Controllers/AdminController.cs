@@ -1181,7 +1181,7 @@ public partial class AdminController(
                 if (Path.GetExtension(filePath) is ".zip" or ".rar" or ".7z")
                 {
                     var archiveFiles = new List<string>();
-                    using var archive = ArchiveFactory.Open(filePath);
+                    using var archive = ArchiveFactory.OpenArchive(filePath);
                     foreach (var e in archive.Entries.Where(currentEntry => !currentEntry.IsDirectory &&
                                                                             SubtitleExtractor.SupportedExtensions
                                                                                 .Contains(Path.GetExtension(currentEntry.Key))))

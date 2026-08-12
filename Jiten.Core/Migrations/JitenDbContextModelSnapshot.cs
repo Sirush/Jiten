@@ -989,6 +989,50 @@ namespace Jiten.Core.Migrations
                     b.ToTable("WordCompositions", "jmdict");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWordDerivation", b =>
+                {
+                    b.Property<int>("DerivationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("DerivationId"));
+
+                    b.Property<byte>("BaseReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<int>("BaseWordId")
+                        .HasColumnType("integer");
+
+                    b.Property<short>("Category")
+                        .HasColumnType("smallint");
+
+                    b.Property<byte>("DerivedReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<int>("DerivedWordId")
+                        .HasColumnType("integer");
+
+                    b.Property<short>("Direction")
+                        .HasColumnType("smallint");
+
+                    b.Property<short>("Source")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("DerivationId");
+
+                    b.HasIndex("BaseWordId", "BaseReadingIndex")
+                        .HasDatabaseName("IX_WordDerivations_Base");
+
+                    b.HasIndex("DerivedWordId", "DerivedReadingIndex")
+                        .HasDatabaseName("IX_WordDerivations_Derived");
+
+                    b.HasIndex("BaseWordId", "BaseReadingIndex", "DerivedWordId", "DerivedReadingIndex", "Category")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WordDerivations_Pair");
+
+                    b.ToTable("WordDerivations", "jmdict");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWordForm", b =>
                 {
                     b.Property<int>("WordId")

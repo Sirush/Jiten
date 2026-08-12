@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Caching.Memory;
 using Swashbuckle.AspNetCore.Annotations;
 using WanaKanaShaapu;
 
@@ -36,10 +37,12 @@ public class StudyController(
     IDeckDownloadService downloadService,
     IDeckImportService importService,
     IWordFormSiblingCache wordFormCache,
+    IDerivationLinkCache derivationCache,
     IStudySessionService sessionService,
     IUserLimitsService userLimits,
     ICoverageJourneyService coverageJourneyService,
     IBackgroundJobClient backgroundJobs,
+    IMemoryCache memoryCache,
     ILogger<StudyController> logger) : ControllerBase
 {
     private static readonly Regex SentenceMarkerRegex =
@@ -1523,6 +1526,8 @@ public class StudyController(
         // ── Phase 1: Build kanji knowledge set for kana redundancy ──
         var knownKanjiWordIds = new HashSet<int>();
         HashSet<long>? existingKeys = newCardBudget > 0 ? new HashSet<long>() : null;
+        var derivationCategories = DerivationSettingsHelper.Parse(settings.DerivationalRedundancyCategories);
+        var derivationKnownKeys = new List<(int WordId, byte ReadingIndex)>();
 
         // Both collections are only consumed during new-card selection (Phase 4, gated on
         // newCardBudget > 0), so skip the full-table scan + word-set query on pure-review fetches.
@@ -1538,6 +1543,7 @@ public class StudyController(
                     knownKanjiWordIds.Add(c.WordId);
 
                 existingKeys?.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex));
+                derivationKnownKeys.Add((c.WordId, c.ReadingIndex));
             }
 
             var wordSetStates = await userContext.UserWordSetStates
@@ -1554,6 +1560,12 @@ public class StudyController(
                     .Select(s => s.SetId)
                     .ToHashSet();
 
+                // A blacklisted base conducts onto its derivations, as runtime and coverage already have it.
+                var derivationSetIdSet = wordSetStates
+                    .Where(s => s.State is WordSetStateType.Mastered or WordSetStateType.Blacklisted)
+                    .Select(s => s.SetId)
+                    .ToHashSet();
+
                 var setMembers = await context.WordSetMembers
                     .AsNoTracking()
                     .Where(wsm => allSetIds.Contains(wsm.SetId))
@@ -1566,8 +1578,14 @@ public class StudyController(
                         && wordFormCache.GetKanaIndexesForKanji(m.WordId, (byte)m.ReadingIndex) != null)
                         knownKanjiWordIds.Add(m.WordId);
                     existingKeys?.Add(WordFormHelper.EncodeWordKey(m.WordId, (byte)m.ReadingIndex));
+                    if (derivationSetIdSet.Contains(m.SetId))
+                        derivationKnownKeys.Add((m.WordId, (byte)m.ReadingIndex));
                 }
             }
+
+            if (existingKeys != null)
+                WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache, derivationCategories,
+                                                              derivationKnownKeys, existingKeys);
         }
 
         // ── Load study decks (used by both review filtering and new card selection) ──
@@ -2149,6 +2167,15 @@ public class StudyController(
             request.CardLayoutPresets = stored.CardLayoutPresets;
 
         var previousTimezone = stored?.Timezone;
+        var previousDerivationCategories =
+            DerivationSettingsHelper.Parse(stored?.DerivationalRedundancyCategories);
+
+        // Same null-preserves rule as the layout above: a client that predates the field omits it, and must not
+        // silently switch the feature off and shrink the user's coverage.
+        var requestedDerivationCategories = request.DerivationalRedundancyCategories == null
+            ? previousDerivationCategories
+            : DerivationSettingsHelper.Parse(request.DerivationalRedundancyCategories);
+        request.DerivationalRedundancyCategories = DerivationSettingsHelper.ToKeys(requestedDerivationCategories);
 
         fsrsSettings.SettingsJson = JsonSerializer.Serialize(request);
         await userContext.SaveChangesAsync();
@@ -2156,6 +2183,12 @@ public class StudyController(
 
         if (previousTimezone != request.Timezone)
             await ReviewRollupHelper.MarkDirtyAndQueue(userContext, backgroundJobs, userId);
+
+        if (!previousDerivationCategories.SetEquals(requestedDerivationCategories))
+        {
+            DerivationSettingsHelper.Invalidate(memoryCache, userId);
+            await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        }
 
         return Results.Ok(request);
     }
@@ -2371,22 +2404,39 @@ public class StudyController(
                 cards.Where(c => c.State != FsrsState.New).Select(c => (c.WordId, c.ReadingIndex)),
                 existingKeys);
 
-            var wordSetIds = await userContext.UserWordSetStates
+            // Same known set as the selection path, or the count promises new cards the batch then filters out.
+            var derivationKnownKeys = cards.Select(c => (c.WordId, c.ReadingIndex)).ToList();
+
+            var wordSets = await userContext.UserWordSetStates
                 .AsNoTracking()
                 .Where(uwss => uwss.UserId == userId)
-                .Select(uwss => uwss.SetId)
+                .Select(uwss => new { uwss.SetId, uwss.State })
                 .ToListAsync();
 
-            if (wordSetIds.Count > 0)
+            if (wordSets.Count > 0)
             {
+                var wordSetIds = wordSets.Select(s => s.SetId).ToList();
+                var derivationSetIds = wordSets
+                    .Where(s => s.State is WordSetStateType.Mastered or WordSetStateType.Blacklisted)
+                    .Select(s => s.SetId)
+                    .ToHashSet();
+
                 var setMembers = await context.WordSetMembers
                     .AsNoTracking()
                     .Where(wsm => wordSetIds.Contains(wsm.SetId))
-                    .Select(wsm => new { wsm.WordId, wsm.ReadingIndex })
+                    .Select(wsm => new { wsm.SetId, wsm.WordId, wsm.ReadingIndex })
                     .ToListAsync();
                 foreach (var m in setMembers)
+                {
                     existingKeys.Add(WordFormHelper.EncodeWordKey(m.WordId, (byte)m.ReadingIndex));
+                    if (derivationSetIds.Contains(m.SetId))
+                        derivationKnownKeys.Add((m.WordId, (byte)m.ReadingIndex));
+                }
             }
+
+            WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache,
+                DerivationSettingsHelper.Parse(settings.DerivationalRedundancyCategories),
+                derivationKnownKeys, existingKeys);
 
             var studyDecks = await userContext.UserStudyDecks
                 .AsNoTracking()
@@ -2516,21 +2566,38 @@ public class StudyController(
                     userCards.Where(c => c.State != FsrsState.New).Select(c => (c.WordId, c.ReadingIndex)),
                     existingKeys);
 
-                var smWordSetIds = await userContext.UserWordSetStates
+                // Same known set as the selection path, or the count promises new cards the batch then filters out.
+                var derivationKnownKeys = userCards.Select(c => (c.WordId, c.ReadingIndex)).ToList();
+
+                var smWordSets = await userContext.UserWordSetStates
                     .AsNoTracking()
                     .Where(uwss => uwss.UserId == userId)
-                    .Select(uwss => uwss.SetId)
+                    .Select(uwss => new { uwss.SetId, uwss.State })
                     .ToListAsync();
-                if (smWordSetIds.Count > 0)
+                if (smWordSets.Count > 0)
                 {
+                    var smWordSetIds = smWordSets.Select(s => s.SetId).ToList();
+                    var derivationSetIds = smWordSets
+                        .Where(s => s.State is WordSetStateType.Mastered or WordSetStateType.Blacklisted)
+                        .Select(s => s.SetId)
+                        .ToHashSet();
+
                     var setMembers = await context.WordSetMembers
                         .AsNoTracking()
                         .Where(wsm => smWordSetIds.Contains(wsm.SetId))
-                        .Select(wsm => new { wsm.WordId, wsm.ReadingIndex })
+                        .Select(wsm => new { wsm.SetId, wsm.WordId, wsm.ReadingIndex })
                         .ToListAsync();
                     foreach (var m in setMembers)
+                    {
                         existingKeys.Add(WordFormHelper.EncodeWordKey(m.WordId, (byte)m.ReadingIndex));
+                        if (derivationSetIds.Contains(m.SetId))
+                            derivationKnownKeys.Add((m.WordId, (byte)m.ReadingIndex));
+                    }
                 }
+
+                WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache,
+                    DerivationSettingsHelper.Parse(settings.DerivationalRedundancyCategories),
+                    derivationKnownKeys, existingKeys);
 
                 var mediaDecks = studyDecks
                     .Where(sd => sd.DeckType == StudyDeckType.MediaDeck && sd.DeckId.HasValue)
@@ -3746,7 +3813,8 @@ public class StudyController(
         {
             await using var ctx = await contextFactory.CreateDbContextAsync();
             await using var uCtx = await userContextFactory.CreateDbContextAsync();
-            var userService = new CurrentUserService(httpContextAccessor, ctx, uCtx, wordFormCache);
+            var userService = new CurrentUserService(httpContextAccessor, ctx, uCtx, wordFormCache, derivationCache,
+                                                     memoryCache);
             return await query(ctx, uCtx, userService);
         }
         finally

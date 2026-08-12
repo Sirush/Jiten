@@ -20,6 +20,8 @@ export function useVocabularyStats() {
   const wordSetBlacklistedWords = ref(0);
   const wordSetBlacklistedForms = ref(0);
   const redundantForms = ref(0);
+  const derivationCoveredWords = ref(0);
+  const derivationCoveredForms = ref(0);
   const archivedCards = ref(0);
   const hasWordSetContributions = computed(() => wordSetMasteredWords.value > 0 || wordSetBlacklistedWords.value > 0);
 
@@ -39,6 +41,8 @@ export function useVocabularyStats() {
         wordSetBlacklisted: number;
         wordSetBlacklistedForm: number;
         redundantForms: number;
+        derivationCovered: number;
+        derivationCoveredForm: number;
         archivedCards: number;
       }>('user/vocabulary/known-ids/amount');
       youngWordsAmount.value = result.young;
@@ -54,6 +58,8 @@ export function useVocabularyStats() {
       wordSetBlacklistedWords.value = result.wordSetBlacklisted;
       wordSetBlacklistedForms.value = result.wordSetBlacklistedForm;
       redundantForms.value = result.redundantForms;
+      derivationCoveredWords.value = result.derivationCovered ?? 0;
+      derivationCoveredForms.value = result.derivationCoveredForm ?? 0;
       archivedCards.value = result.archivedCards ?? 0;
     } catch {} finally {
       vocabStatsLoading.value = false;
@@ -74,6 +80,8 @@ export function useVocabularyStats() {
     wordSetBlacklistedWords.value = 0;
     wordSetBlacklistedForms.value = 0;
     redundantForms.value = 0;
+    derivationCoveredWords.value = 0;
+    derivationCoveredForms.value = 0;
     archivedCards.value = 0;
   }
 
@@ -95,6 +103,8 @@ export function useVocabularyStats() {
     wordSetBlacklistedForms,
     hasWordSetContributions,
     redundantForms,
+    derivationCoveredWords,
+    derivationCoveredForms,
     archivedCards,
     fetchKnownWordsAmount,
     resetStats,

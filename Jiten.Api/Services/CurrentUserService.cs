@@ -4,7 +4,9 @@ using Jiten.Api.Helpers;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
+using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Jiten.Api.Services;
 
@@ -12,7 +14,9 @@ public class CurrentUserService(
     IHttpContextAccessor httpContextAccessor,
     JitenDbContext jitenDbContext,
     UserDbContext userContext,
-    IWordFormSiblingCache wordFormCache)
+    IWordFormSiblingCache wordFormCache,
+    IDerivationLinkCache derivationCache,
+    IMemoryCache memoryCache)
     : ICurrentUserService
 {
     public ClaimsPrincipal? Principal => httpContextAccessor.HttpContext?.User;
@@ -47,16 +51,32 @@ public class CurrentUserService(
 
         var wordIds = keysSet.Select(k => k.WordId).Distinct().ToList();
 
+        // Family keys are a pure function of the requested keys, so they can widen the card and word-set
+        // queries below instead of costing a second round trip.
+        var coversByKey = await ResolveDerivationCovers(keysSet);
+        var lookupWordIds = wordIds;
+        if (coversByKey.Count > 0)
+        {
+            var widened = wordIds.ToHashSet();
+            foreach (var covers in coversByKey.Values)
+            foreach (var cover in covers)
+                widened.Add(cover.WordId);
+            lookupWordIds = widened.ToList();
+        }
+
         var candidates = await userContext.FsrsCards
-                                          .Where(u => u.UserId == UserId && wordIds.Contains(u.WordId))
+                                          .Where(u => u.UserId == UserId && lookupWordIds.Contains(u.WordId))
                                           .ToListAsync();
 
-        var fsrsCardDict = candidates
-                            .Where(w => keysSet.Contains((w.WordId, w.ReadingIndex)))
-                            .DistinctBy(w => (w.WordId, w.ReadingIndex))
-                            .ToDictionary(w => (w.WordId, w.ReadingIndex));
+        var cardsByKey = candidates
+                          .DistinctBy(w => (w.WordId, w.ReadingIndex))
+                          .ToDictionary(w => (w.WordId, w.ReadingIndex));
 
-        var setDerivedStates = await GetWordSetDerivedStates(wordIds);
+        var fsrsCardDict = cardsByKey
+                            .Where(kv => keysSet.Contains(kv.Key))
+                            .ToDictionary(kv => kv.Key, kv => kv.Value);
+
+        var setDerivedStates = await GetWordSetDerivedStates(lookupWordIds);
 
         var candidatesByWordId = candidates.GroupBy(c => c.WordId)
                                            .ToDictionary(g => g.Key, g => g.ToList());
@@ -99,14 +119,124 @@ public class CurrentUserService(
                 }
             }
 
+            if (coversByKey.TryGetValue(k, out var covers))
+            {
+                var derived = ResolveFromDerivationFamily(covers, cardsByKey, setDerivedStates);
+                if (derived != null)
+                    return derived.Value.States;
+            }
+
             return [KnownState.New];
         });
     }
 
+    /// <summary>The known family member a card-less derived form is covered by, for the word-page chip.</summary>
+    public async Task<DerivationCover?> GetCoveringDerivation(int wordId, byte readingIndex)
+    {
+        if (!IsAuthenticated) return null;
+
+        var key = (wordId, readingIndex);
+        var coversByKey = await ResolveDerivationCovers([key]);
+        if (!coversByKey.TryGetValue(key, out var covers))
+            return null;
+
+        // The requested word is in the query so its own card can shadow the cover, as it does everywhere else.
+        var familyWordIds = covers.Select(c => c.WordId).Append(wordId).Distinct().ToList();
+        var cards = await userContext.FsrsCards
+                                     .Where(u => u.UserId == UserId && familyWordIds.Contains(u.WordId))
+                                     .ToListAsync();
+
+        var cardsByKey = cards.DistinctBy(c => (c.WordId, c.ReadingIndex))
+                              .ToDictionary(c => (c.WordId, c.ReadingIndex));
+
+        if (cardsByKey.ContainsKey(key))
+            return null;
+
+        var setStates = await GetWordSetDerivedStates(familyWordIds);
+        return ResolveFromDerivationFamily(covers, cardsByKey, setStates)?.Cover;
+    }
+
+    /// <summary>
+    /// Copies the best-ranked family member's tier onto a card-less derived form, exactly as the kana-sibling
+    /// path does. A card on a family key shadows that key's word-set state, matching the rest of the platform.
+    /// </summary>
+    private static (List<KnownState> States, DerivationCover Cover)? ResolveFromDerivationFamily(
+        IReadOnlyList<DerivationCover> covers,
+        Dictionary<(int WordId, byte ReadingIndex), FsrsCard> cardsByKey,
+        Dictionary<(int, byte), WordSetStateType> setDerivedStates)
+    {
+        List<KnownState>? best = null;
+        DerivationCover bestCover = default;
+        var bestRank = -1;
+
+        foreach (var cover in covers)
+        {
+            var coverKey = (cover.WordId, cover.ReadingIndex);
+            List<KnownState> states;
+            int rank;
+
+            if (cardsByKey.TryGetValue(coverKey, out var card))
+            {
+                states = GetKnownStatesFromCard(card);
+                rank = GetKnownStateRank(card);
+            }
+            else if (setDerivedStates.TryGetValue(coverKey, out var setState) &&
+                     setState is WordSetStateType.Mastered or WordSetStateType.Blacklisted)
+            {
+                var mastered = setState == WordSetStateType.Mastered;
+                states = mastered ? [KnownState.Mastered] : [KnownState.Blacklisted];
+                rank = mastered ? MasteredRank : BlacklistedRank;
+            }
+            else
+            {
+                continue;
+            }
+
+            if (rank <= bestRank) continue;
+            bestRank = rank;
+            best = states;
+            bestCover = cover;
+        }
+
+        if (best == null)
+            return null;
+
+        // Due belongs to the covering family member's card; the redundant form has nothing to review.
+        best.Remove(KnownState.Due);
+        if (best.Count == 0)
+            best.Add(KnownState.New);
+        best.Add(KnownState.Redundant);
+        return (best, bestCover);
+    }
+
+    private async Task<Dictionary<(int WordId, byte ReadingIndex), IReadOnlyList<DerivationCover>>>
+        ResolveDerivationCovers(HashSet<(int WordId, byte ReadingIndex)> keys)
+    {
+        var result = new Dictionary<(int, byte), IReadOnlyList<DerivationCover>>();
+        if (derivationCache.IsEmpty)
+            return result;
+
+        var categories = await DerivationSettingsHelper.GetEnabledCategories(memoryCache, userContext, UserId!);
+        if (categories.Count == 0)
+            return result;
+
+        foreach (var key in keys)
+        {
+            var covers = derivationCache.GetCoveringKeys(key.WordId, key.ReadingIndex, categories);
+            if (covers.Count > 0)
+                result[key] = covers;
+        }
+
+        return result;
+    }
+
+    private const int MasteredRank = 4;
+    private const int BlacklistedRank = 3;
+
     private static int GetKnownStateRank(FsrsCard card) => card.State switch
     {
-        FsrsState.Mastered => 4,
-        FsrsState.Blacklisted => 3,
+        FsrsState.Mastered => MasteredRank,
+        FsrsState.Blacklisted => BlacklistedRank,
         FsrsState.Review or FsrsState.Relearning or FsrsState.Learning or FsrsState.Suspended when
             card.LastReview != null && (card.Due - card.LastReview.Value).TotalDays >= 21 => 2,
         FsrsState.Review or FsrsState.Relearning or FsrsState.Learning or FsrsState.Suspended when card.LastReview != null => 1,

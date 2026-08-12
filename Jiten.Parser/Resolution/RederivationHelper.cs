@@ -88,7 +88,8 @@ internal static class RederivationHelper
     public static List<FormCandidate> BuildCandidatesFromWords(
         RederiveState state,
         Dictionary<int, JmDictWord> wordCache,
-        bool skipPosFilter = false)
+        bool skipPosFilter = false,
+        bool allowCounterCandidates = false)
     {
         var allCandidates = new List<FormCandidate>();
 
@@ -126,8 +127,12 @@ internal static class RederivationHelper
             if (!skipPosFilter)
             {
                 bool isNameWord = word.CachedPOS.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown);
+                // Counter (ctr) entries are never POS-compatible with Sudachi Suffix (the check is
+                // context-free); the caller sets allowCounterCandidates after numeric material so
+                // numeral-counter cohesion can select them (第二|話 → わ).
                 if (!PosMapper.IsJmDictCompatibleWithSudachi(word.CachedPOS, state.WordInfo.PartOfSpeech)
-                    && !(state.WordInfo.IsPersonNameContext && isNameWord))
+                    && !(state.WordInfo.IsPersonNameContext && isNameWord)
+                    && !(allowCounterCandidates && word.CachedPOS.Contains(PartOfSpeech.Counter)))
                     continue;
             }
 

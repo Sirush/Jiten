@@ -160,10 +160,12 @@ internal static class TransitionRuleSets
             [ScoringCondition.NextIsExplanatoryN],
             25),
 
+        // High enough that a numeral+counter pair outbids a top-priority noun homograph together
+        // with its ruby prior (第二話: the counter わ must beat はなし).
         new("numeral-counter-cohesion",
             [ScoringCondition.CandidateIsCounter],
             [ScoringCondition.PrevIsNumeral],
-            40),
+            60),
 
         new("orphan-counter-penalty",
             [ScoringCondition.CandidateIsCounter, ScoringCondition.CandidateIsNotNounLike],

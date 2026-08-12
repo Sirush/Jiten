@@ -82,7 +82,7 @@ public static class PosMapper
         // Auxiliary
         "aux",
         // Verb stem tags (should only match verbs, not nouns)
-        "stem-past", "stem-te", "stem-te-defective", "stem-te-verbal", "stem-ren-less", "stem-ren-less-v"
+        "stem-past", "stem-te", "stem-te-defective", "stem-te-verbal", "stem-ren", "stem-ren-less", "stem-ren-less-v"
     };
 
     /// <summary>
@@ -144,6 +144,9 @@ public static class PosMapper
             ["stem-te"] = DirectConjugationVerbTags,
             ["stem-te-defective"] = DirectConjugationVerbTags,
             ["stem-te-verbal"] = DirectConjugationVerbTags,
+            // ます/ません/ました attach to a 連用形, so a chain ending on a bare masu-stem needs an
+            // inflectable entry — a noun or expression spelled like the stem (ござい) cannot take it
+            ["stem-ren"] = DirectConjugationVerbTags,
             ["stem-ren-less"] = DirectConjugationVerbTags,
             ["stem-ren-less-v"] = DirectConjugationVerbTags,
         };
@@ -281,7 +284,8 @@ public static class PosMapper
     public static bool IsJmDictCompatibleWithSudachi(
         List<PartOfSpeech> convertedPosList,
         PartOfSpeech sudachiPos,
-        bool allowInterjectionFallback = false)
+        bool allowInterjectionFallback = false,
+        bool allowNounExpressionFallback = false)
     {
         // CommonNoun (orphaned suffixes reclassified by the analyser) should use Noun compatibility.
         if (sudachiPos == PartOfSpeech.CommonNoun)
@@ -291,6 +295,13 @@ public static class PosMapper
             return true;
 
         if (allowInterjectionFallback && convertedPosList.Contains(PartOfSpeech.Interjection))
+            return true;
+
+        // Sudachi has no 表現 category, so kana set phrases (そうか) come back tagged 名詞. Callers pass
+        // this only for kana surfaces Sudachi bucketed as 固有名詞 — a guess carrying no lexical
+        // evidence — so JMDict exp entries can compete there; every other noun stays strict.
+        if (allowNounExpressionFallback && sudachiPos == PartOfSpeech.Noun
+            && convertedPosList.Contains(PartOfSpeech.Expression))
             return true;
 
         // Sudachi 形状詞 (NaAdjective) includes words that JMDict tags as adj-pn (PrenounAdjectival)
@@ -350,6 +361,10 @@ public static class PosMapper
 
         // Sudachi 接尾辞 (Suffix) should match JMDict n-suf (NounSuffix) and suf (Suffix).
         // E.g. だらけ is n-suf in JMDict but 接尾辞 in Sudachi; 達 (たち) is suf in JMDict.
+        // Counter (ctr) entries are deliberately NOT compatible here: counter eligibility is
+        // contextual (needs a preceding numeral), which this context-free check cannot see —
+        // a suffix-tagged kanji inside a plain compound (結晶|石) must not prefer a counter
+        // homograph. Numeral contexts select counters in adjacent rescoring instead.
         if (sudachiPos == PartOfSpeech.Suffix &&
             (convertedPosList.Contains(PartOfSpeech.NounSuffix) || convertedPosList.Contains(PartOfSpeech.Suffix)))
             return true;

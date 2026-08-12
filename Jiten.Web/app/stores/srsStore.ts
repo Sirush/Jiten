@@ -158,6 +158,7 @@ export const useSrsStore = defineStore('srs', () => {
     dayBoundaryScheduling: false,
     loadBalancing: true,
     easyDays: null,
+    derivationalRedundancyCategories: [],
     leechThreshold: 8,
     leechAction: 'Suspend',
     timedReview: {

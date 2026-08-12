@@ -207,6 +207,10 @@ export interface Word {
   usedInTotal?: number;
   languageSources?: LanguageSource[];
   entryInfo?: string[];
+  derivedFrom?: WordDerivationDto[];
+  derives?: WordDerivationDto[];
+  /** Present only when this form has no card of its own and an enabled derivation covers it. */
+  redundantVia?: DerivationCoverDto | null;
 }
 
 export interface LanguageSource {
@@ -1202,6 +1206,8 @@ export interface StudySettingsDto {
   loadBalancing: boolean;
   /** Per-weekday Easy Days load weights, index 0=Sunday…6=Saturday, each in [0,1]. Null = off. */
   easyDays: number[] | null;
+  /** Derivation category keys treated as redundant. Empty = feature off; omitted on a save = leave unchanged. */
+  derivationalRedundancyCategories?: string[] | null;
   leechThreshold: number;
   leechAction: LeechAction;
   timedReview: TimedReviewSettings;
@@ -1214,6 +1220,83 @@ export interface StudySettingsDto {
 }
 
 export type LeechAction = 'Suspend' | 'NotifyOnly';
+
+export interface DerivationCategoryDto {
+  key: string;
+  label: string;
+  exampleBase: string;
+  exampleDerived: string;
+  explanation: string;
+  pairCount: number;
+}
+
+export interface DerivationCategoryGroupDto {
+  key: string;
+  label: string;
+  explanation: string;
+  pairCount: number;
+  categories: DerivationCategoryDto[];
+}
+
+/** Per-group marginal coverage for the viewer's own vocabulary. */
+export interface DerivationPersonalSummaryDto {
+  totalCoveredWords: number;
+  groups: DerivationGroupPersonalDto[];
+}
+
+export interface DerivationGroupPersonalDto {
+  key: string;
+  enabled: boolean;
+  /** Enabled: words covered thanks to this group; disabled: words enabling it would newly cover. */
+  coveredWords: number;
+}
+
+/** Per-user marking for one group's preview list. Keys are (wordId << 8) | readingIndex, matching a shown row. */
+export interface DerivationPersonalPairsDto {
+  /** Forms already redundant under the current selection, whichever group earns them. */
+  redundantKeys: number[];
+  /** This group's own marginal contribution, matching its count in the personal summary. */
+  addedByGroupKeys: number[];
+  /** Forms in this group that already count as known, on either side of the arrow. */
+  studiedKeys: number[];
+}
+
+/** One base→derived mapping in the settings-page preview list. */
+export interface DerivationPairDto {
+  baseWordId: number;
+  baseReadingIndex: number;
+  baseText: string;
+  baseDefinition: string | null;
+  derivedWordId: number;
+  derivedReadingIndex: number;
+  derivedText: string;
+  derivedDefinition: string | null;
+  /** The derived form's rank; 0 when unranked. */
+  frequencyRank: number;
+  categoryLabel: string;
+  /** False on one-way pairs: the base covers the derived form but not the reverse. */
+  bidirectional: boolean;
+}
+
+/** One end of a derivation link shown on the word page. */
+export interface WordDerivationDto {
+  wordId: number;
+  readingIndex: number;
+  text: string;
+  rubyText: string;
+  categoryKey: string;
+  categoryLabel: string;
+  /** True when the viewer has this category enabled, so the link currently confers knowledge; null when signed out. */
+  enabled: boolean | null;
+}
+
+export interface DerivationCoverDto {
+  wordId: number;
+  readingIndex: number;
+  text: string;
+  categoryKey: string;
+  categoryLabel: string;
+}
 
 export interface CardExamplesResponse {
   examples: Record<string, StudyExampleSentenceDto>;
@@ -1837,4 +1920,73 @@ export interface KnowledgeGrowth {
   points: GrowthPoint[];
   hasEnoughHistory: boolean;
   recentGain: number;
+}
+
+export interface ResolvedWord {
+  word: string;
+  reading: string;
+  wordId: number;
+  readingIndex: number;
+  forms: string[];
+}
+
+export interface ResolveWordsResponse {
+  resolved: ResolvedWord[];
+}
+
+export interface ImportExampleSentenceItem {
+  index: number;
+  wordId: number;
+  readingIndex: number;
+  text: string;
+  source?: string;
+}
+
+export type ImportExampleSentenceStatus = 'ok' | 'duplicate' | 'limit_reached' | 'no_marker' | 'too_long' | 'invalid';
+
+export interface ImportExampleSentenceResult {
+  index: number;
+  status: ImportExampleSentenceStatus;
+  userExampleSentenceId?: number;
+}
+
+export interface ImportExampleSentencesResponse {
+  results: ImportExampleSentenceResult[];
+  limitPerWord: number;
+}
+
+export interface CardMediaBatchEntry {
+  kind: 'image' | 'audio';
+  url: string;
+  contentType: string;
+  fileSizeBytes: number;
+  createdAt: string;
+  inherited: boolean;
+  sourceReadingIndex: number;
+}
+
+export interface CardMediaBatchItem {
+  wordId: number;
+  readingIndex: number;
+  image: CardMediaBatchEntry | null;
+  audio: CardMediaBatchEntry | null;
+}
+
+export interface CardMediaBatchResponse {
+  items: CardMediaBatchItem[];
+}
+
+export type CardMediaImportStatus = 'ok' | 'conflict' | 'invalid' | 'too_large' | 'quota_exceeded' | 'not_tracked';
+
+export interface CardMediaImportResult {
+  index: number;
+  status: CardMediaImportStatus;
+  kind?: 'image' | 'audio';
+  storedBytes?: number;
+}
+
+export interface CardMediaImportResponse {
+  results: CardMediaImportResult[];
+  usedBytes: number;
+  maxBytes: number;
 }

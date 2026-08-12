@@ -15,5 +15,8 @@ public class KnownWordAmountDto
     public int WordSetBlacklisted { get; set; }
     public int WordSetBlacklistedForm { get; set; }
     public int RedundantForms { get; set; }
+    /// <summary>Words known only via derivational redundancy: no card, no set membership on any form.</summary>
+    public int DerivationCovered { get; set; }
+    public int DerivationCoveredForm { get; set; }
     public int ArchivedCards { get; set; }
 }

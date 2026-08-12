@@ -17,6 +17,8 @@ internal static class PriorityOverrides
         2579880, // コホン/こほん (int) — cough/ahem onomatopoeia, beats 古本 こほん (secondhand book)
         1571330, // 舐る (ねぶる, uk, vt) — "to lick", beats 眠る's rare ねぶる reading (眠る's normal reading is ねむる)
         1709300, // 数度 (すうど, n) — "several times", beats JMnedict surname 数度 すどう (Sudachi guesses the name reading)
+        1467400, // 忍び (しのび, n) — shinobi/stealth, beats the fern しのぶ (2179930) on a bare 忍, whose
+                 // ruby priors are carried by the given name Shinobu rather than by the plant
     ];
 
     private static readonly HashSet<(int WordId, byte ReadingIndex)> FormLevelJitenIds =

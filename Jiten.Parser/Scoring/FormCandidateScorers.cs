@@ -242,6 +242,15 @@ internal static class FormFlagScorer
         if (isPureKanaWord && form.FormType == JmDictFormType.KanaForm && context.IsKanaSurface)
             formFlagScore += 20;
 
+        // JMDict lists a kanji entry's readings in order of prevalence, so a kana surface reaching a
+        // secondary reading (そうか as the on-reading of 草花, whose primary reading is くさばな) is weak
+        // evidence — it must not outrank an entry actually written that way (そうか "I see").
+        // Usually-kana entries are exempt: their kana forms are how the word is really written.
+        if (!isPureKanaWord && form.FormType == JmDictFormType.KanaForm && context.IsKanaSurface
+            && !word.PartsOfSpeech.Contains("uk")
+            && !IsFirstKanaReading(word, candidate.FormTextHiragana))
+            formFlagScore -= 15;
+
         // Colloquial expressions (e.g. こった = ことだ contraction, めでたいこった) are often
         // tagged [exp, col]. When the surface exactly matches such an entry's form, prefer it
         // over adjectival/nominal homographs (e.g. 1238990 こった "elaborate" adj-f) that happen
@@ -259,6 +268,19 @@ internal static class FormFlagScorer
             formFlagScore -= 100;
 
         return formFlagScore;
+    }
+
+    /// Compares against the first kana form phonetically, so a katakana spelling of the primary
+    /// reading (懐炉: かいろ then カイロ) counts as that reading rather than a secondary one.
+    private static bool IsFirstKanaReading(JmDictWord word, string formTextHiragana)
+    {
+        foreach (var f in word.Forms)
+        {
+            if (f.FormType != JmDictFormType.KanaForm) continue;
+            return KanaScoringHelpers.ToNormalizedHiragana(f.Text, convertLongVowelMark: false) == formTextHiragana;
+        }
+
+        return false;
     }
 }
 
@@ -811,6 +833,17 @@ internal static class ReadingScorer
         // homograph's exact attestation (仁も義も礼も智も = the virtue noun, not サトシ).
         if (readingMatchScore > 0 && !context.IsKanaSurface && context.Surface.Length == 1
             && !context.IsNameContext && candidate.Word.CachedPOS.Contains(PartOfSpeech.Name))
+        {
+            readingMatchScore = 0;
+        }
+
+        // Same circularity one step removed: with no honorific or injected name to go on, Sudachi's
+        // 固有名詞/人名 bucket for a bare kanji is a lemma guess, so the reading it reports there is a
+        // name reading. It must not vouch for a common-noun homograph that merely collides with it
+        // (忍/シノブ handing the fern しのぶ a win over 忍び しのび). Name entries are left to the guard
+        // above, which weighs them against surrounding name evidence (太郎と智が来た).
+        if (readingMatchScore > 0 && !context.IsKanaSurface && context.Surface.Length == 1
+            && context.IsSudachiNameGuess && !candidate.Word.CachedPOS.Contains(PartOfSpeech.Name))
         {
             readingMatchScore = 0;
         }

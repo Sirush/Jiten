@@ -227,6 +227,14 @@ public class StudySettingsDto
     [JsonPropertyName("easyDays")]
     public double[]? EasyDays { get; set; }
 
+    /// <summary>
+    /// Derivational categories (<see cref="Jiten.Core.Data.JMDict.DerivationCategories"/> keys) whose
+    /// derived entries count as known once a family member is known. Empty means the feature is off; null on a
+    /// PUT means unchanged, so a client that predates the field cannot clear it.
+    /// </summary>
+    [JsonPropertyName("derivationalRedundancyCategories")]
+    public List<string>? DerivationalRedundancyCategories { get; set; }
+
     [JsonPropertyName("leechThreshold")]
     public int LeechThreshold { get; set; } = 8;
 

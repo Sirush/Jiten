@@ -327,7 +327,11 @@ public partial class MorphologicalAnalyser
             if (word.PartOfSpeech == PartOfSpeech.IAdjective &&
                 !string.IsNullOrEmpty(dictForm) && dictForm.Length >= 3 &&
                 !HasCompoundLookup(dictForm) &&
-                (dictForm == word.Text || !HasCompoundLookup(word.Text)))
+                (dictForm == word.Text || !HasCompoundLookup(word.Text)) &&
+                // A slang surface whose NormalizedForm is the attested compound (どでけえ → どでかい)
+                // resolves through deconjugation — splitting would strand the prefix.
+                (string.IsNullOrEmpty(word.NormalizedForm) || word.NormalizedForm == dictForm ||
+                 !HasCompoundLookup(word.NormalizedForm)))
             {
                 foreach (var p in AdjectivePrefixes)
                 {
@@ -881,7 +885,9 @@ public partial class MorphologicalAnalyser
         || text.StartsWith("ねえ", StringComparison.Ordinal)
         || text.StartsWith("ねぇ", StringComparison.Ordinal);
 
-    private static readonly string[] OovGrammarMarkers = ["って", "った", "のは", "のが", "のに", "ので", "んだ", "んで", "わけ", "ない"];
+    // りゃ qualifies a noun blob as garbage on its own: no real noun contains that mora sequence —
+    // it is always a shredded conditional contraction (て|りゃもろ…) or ありゃ/こりゃ material.
+    private static readonly string[] OovGrammarMarkers = ["って", "った", "のは", "のが", "のに", "ので", "んだ", "んで", "わけ", "ない", "りゃ"];
 
     private static readonly (string text, string reading, PartOfSpeech pos, PartOfSpeechSection sec)[] GrammarTokenTable =
     [
@@ -918,6 +924,11 @@ public partial class MorphologicalAnalyser
         ("だろう", "ダロウ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
         ("だろ", "ダロ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
         ("だ", "ダ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
+        // Conditional copula closing a quoted clause (…るって|なれば, …って|ならば). Without these the
+        // ば-final conditional is dumped as a leftover CommonNoun and aborts the verb reattachment,
+        // so every 〜るってなれば blob dropped whole; longest-match keeps them ahead of bare な.
+        ("なれば", "ナレバ", PartOfSpeech.Conjunction, PartOfSpeechSection.None),
+        ("ならば", "ナラバ", PartOfSpeech.Conjunction, PartOfSpeechSection.None),
         ("な", "ナ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
         ("ね", "ネ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
         ("よ", "ヨ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
@@ -972,6 +983,7 @@ public partial class MorphologicalAnalyser
             // (のはだな → の|肌|な, ってんだ → って|んだ). The candidate must end in a う-row kana — the
             // deconjugator alone over-generates (んだ/はだ both "deconjugate" to verb pasts).
             int verbLen = 0;
+            var tailPos = PartOfSpeech.Verb;
             if (HasNonNameCompoundLookup != null)
                 for (int len = Math.Min(text.Length - i, 6); len > markerLen && len >= 2; len--)
                 {
@@ -983,6 +995,26 @@ public partial class MorphologicalAnalyser
                     break;
                 }
 
+            // A conjugated i-adjective tail (よかった inside りゃあ|よかった|から) would otherwise
+            // shred into markers (よ|か|った). Only past/conditional shapes with an attested
+            // deconjugated dictionary form qualify — the marker table still wins for
+            // grammatical clusters (んだ, はだ end in だ and never reach here). The window must
+            // reach a full かった form (ありがたかった is 7 chars) — a shorter cut strands かった.
+            if (verbLen == 0 && HasNonNameCompoundLookup != null)
+                for (int len = Math.Min(text.Length - i, 8); len > markerLen && len >= 3 && verbLen == 0; len--)
+                {
+                    var cand = text.Substring(i, len);
+                    if (cand[^1] is not ('た' or 'ば')) continue;
+                    foreach (var f in Deconjugator.Instance.Deconjugate(cand))
+                    {
+                        if (f.Text == cand || !HasNonNameCompoundLookup(f.Text)) continue;
+                        if (!f.Tags.Any(t => t.StartsWith("adj", StringComparison.Ordinal))) continue;
+                        verbLen = len;
+                        tailPos = PartOfSpeech.IAdjective;
+                        break;
+                    }
+                }
+
             if (verbLen > 0)
             {
                 var w = text.Substring(i, verbLen);
@@ -990,7 +1022,7 @@ public partial class MorphologicalAnalyser
                 {
                     Text = w, DictionaryForm = w, NormalizedForm = w,
                     Reading = WanaKanaShaapu.WanaKana.ToKatakana(NormalizeToHiragana(w)),
-                    PartOfSpeech = PartOfSpeech.Verb,
+                    PartOfSpeech = tailPos,
                     StartOffset = startOffset >= 0 ? startOffset + i : -1,
                     EndOffset = startOffset >= 0 ? startOffset + i + verbLen : -1
                 });
@@ -1075,6 +1107,61 @@ public partial class MorphologicalAnalyser
                 result.AddRange(TokenizeGrammarRemainder(word.Text[1..], boundary));
                 changed = true;
                 continue;
+            }
+
+            // ている-conditional contraction shredded into an OOV blob: [verb-stem][て/で][りゃ(あ)…blob].
+            // Reform て+りゃ(あ) as one auxiliary token (てりゃ = ていれば, which the deconjugator knows),
+            // so CombineInflections folds it into the verb chain (相手にし|て|りゃあ… → 相手にしてりゃあ),
+            // and re-tokenize the rest of the blob. Same shape as the るって repair above.
+            if (word.Text.StartsWith("りゃ", StringComparison.Ordinal)
+                && prev is { PartOfSpeech: PartOfSpeech.Particle, Text: "て" or "で" }
+                && result.Count >= 2
+                && result[^2].PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.Auxiliary)
+            {
+                int cut = word.Text.Length >= 3 && word.Text[2] == 'あ' ? 3 : 2;
+                var remainder = word.Text[cut..];
+                int boundary = word.StartOffset >= 0 ? word.StartOffset + cut : -1;
+                // A remainder the lookups attest whole (もろ in 見て|りゃもろ) is one word — the
+                // grammar tokenizer would eat its particle-homograph first mora (も|ろ).
+                var grammarTail = remainder.Length == 0
+                    ? []
+                    : HasNonNameCompoundLookup?.Invoke(remainder) == true
+                        ?
+                        [
+                            new WordInfo
+                            {
+                                Text = remainder, DictionaryForm = remainder, NormalizedForm = remainder,
+                                Reading = WanaKanaShaapu.WanaKana.ToKatakana(NormalizeToHiragana(remainder)),
+                                PartOfSpeech = PartOfSpeech.Noun,
+                                StartOffset = boundary,
+                                EndOffset = word.EndOffset
+                            }
+                        ]
+                        : TokenizeGrammarRemainder(remainder, boundary);
+                // A leftover the lookups attest (もろ in 見て|りゃもろ) is a real word, not evidence
+                // of a bad cut — only unattested leftovers abort.
+                bool badLeftover = remainder.Length > 0 &&
+                    (grammarTail.Count == 0 || grammarTail.Any(t =>
+                        t.PartOfSpeech == PartOfSpeech.Noun &&
+                        t.PartOfSpeechSection1 == PartOfSpeechSection.CommonNoun &&
+                        t.Text is not ("わけ" or "こと") &&
+                        HasNonNameCompoundLookup?.Invoke(t.Text) != true));
+                if (!badLeftover)
+                {
+                    var contraction = word.Text[..cut];
+                    result[^1] = new WordInfo(prev)
+                    {
+                        Text = prev.Text + contraction,
+                        DictionaryForm = prev.Text + contraction,
+                        NormalizedForm = prev.Text + contraction,
+                        Reading = prev.Reading + WanaKanaShaapu.WanaKana.ToKatakana(contraction),
+                        PartOfSpeech = PartOfSpeech.Auxiliary,
+                        EndOffset = boundary
+                    };
+                    result.AddRange(grammarTail);
+                    changed = true;
+                    continue;
+                }
             }
 
             // When prev is a bound Suffix (Sudachi split a verb's kanji stem, e.g. 頑|張), reattaching the

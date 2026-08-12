@@ -3,6 +3,11 @@
   import { YankiConnect } from 'yanki-connect';
   import { useToast } from 'primevue/usetoast';
   import { useAnkiImportStore, defaultImportSelection } from '~/stores/ankiImportStore';
+  import { extractSentenceFromField } from '~/utils/ankiSentenceExtract';
+  import { base64ToBytes, extractAudioRef, extractImageRef } from '~/utils/ankiMediaExtract';
+  import type { MediaConflictMode, MediaKind } from '~/composables/useAnkiMediaImport';
+
+  const props = withDefaults(defineProps<{ mediaOnly?: boolean }>(), { mediaOnly: false });
 
   const emit = defineEmits<{
     importComplete: [];
@@ -11,6 +16,7 @@
   const { $api } = useNuxtApp();
   const toast = useToast();
   const ankiImportStore = useAnkiImportStore();
+  const { limits: planLimits, isPlus } = useJitenPlus();
 
   let currentStep = ref(0);
 
@@ -68,20 +74,33 @@
     reportError(event.reason);
   };
 
+  // Closing the tab mid-import abandons the run silently; the browser confirm gives a way out.
+  const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+    if (currentStep.value !== 4) return;
+    event.preventDefault();
+  };
+
   onMounted(() => {
     window.addEventListener('error', handleWindowError);
     window.addEventListener('unhandledrejection', handleRejection);
+    window.addEventListener('beforeunload', handleBeforeUnload);
     ankiImportStore.load();
   });
   onUnmounted(() => {
     window.removeEventListener('error', handleWindowError);
     window.removeEventListener('unhandledrejection', handleRejection);
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+    clearMediaPreview('image');
+    clearMediaPreview('audio');
   });
 
   type KeptReview = { Rating: number; ReviewDateTime: Date; ReviewDuration: number };
   type CardReviews = { kept: KeptReview[]; lastReview: Date | null };
   let selectedFieldName = '';
   let selectedReadingFieldName = '';
+  let selectedSentenceFieldName = '';
+  let selectedImageFieldName = '';
+  let selectedAudioFieldName = '';
   let supportsFieldsFilter = false;
   // getReviewsOfCards (per-card review fetch) is the only memory-bounded way to pull reviews. Older
   // AnkiConnect installs lack it; when unavailable we skip review history (cards still import) and warn
@@ -180,16 +199,136 @@
 
   const fetchProgress = ref(0);
   const uploadProgress = ref(0);
-  const importPhase = ref<'fetch' | 'upload'>('fetch');
+  const importPhase = ref<'fetch' | 'upload' | 'sentences' | 'media'>('fetch');
   const importResults = ref({ imported: 0, updated: 0, skipped: 0, reviewLogs: 0 });
+
+  const sentenceImport = useAnkiSentenceImport();
+  const showSentenceSummary = ref(false);
+
+  const sentenceSkippedTotal = computed(() => {
+    const s = sentenceImport.stats.value;
+    return s.duplicate + s.limitReached + s.noHighlight + s.unresolved + s.empty + s.tooLong + s.invalid;
+  });
+
+  const mediaImport = useAnkiMediaImport();
+  const mediaConflictMode = ref<MediaConflictMode>('skip');
+  const showMediaConflicts = ref(false);
+  const showMediaSummary = ref(false);
+  const conflictsResolved = ref(0);
+  const mediaStopping = ref(false);
+
+  const stopMediaImport = () => {
+    mediaStopping.value = true;
+    mediaImport.cancel();
+  };
+
+  const mediaEtaText = computed(() => {
+    const seconds = mediaImport.etaSeconds.value;
+    if (seconds === null) return '';
+    if (seconds < 60) return `${Math.max(5, Math.ceil(seconds / 5) * 5)} seconds`;
+    const minutes = Math.ceil(seconds / 60);
+    return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+  });
+
+  const fetchAnkiMedia = (filename: string) =>
+    ankiInvoke('retrieveMediaFile', { filename }) as Promise<string | false>;
+
+  // The review dialog opens as soon as partitioning finds a conflict, while the rest keeps uploading.
+  watch(() => mediaImport.conflicts.value.length, count => {
+    if (count > 0 && mediaImport.running.value) showMediaConflicts.value = true;
+  });
+
+  const onConflictResolved = (useAnki: boolean) => {
+    conflictsResolved.value++;
+    mediaImport.resolveConflict(useAnki);
+    if (mediaImport.conflicts.value.length === 0) showMediaConflicts.value = false;
+  };
+
+  const onConflictResolveAll = (useAnki: boolean) => {
+    conflictsResolved.value += mediaImport.conflicts.value.length;
+    mediaImport.resolveAllConflicts(useAnki);
+    showMediaConflicts.value = false;
+  };
 
   const selectedDeck = ref<number>(0);
   const selectedField = ref<number>(0);
   const selectedReadingField = ref<number>(-1);
+  const selectedSentenceField = ref<number>(-1);
+  const selectedImageField = ref<number>(-1);
+  const selectedAudioField = ref<number>(-1);
   const fields = ref<Array<[string, { order: number; value: string }]>>([]);
   const overwriteExisting = ref(false);
   const parseWords = ref(false);
   const importReviewHistory = ref(true);
+
+  const mediaPreviews = reactive<Record<MediaKind, { url: string; error: string; loading: boolean }>>({
+    image: { url: '', error: '', loading: false },
+    audio: { url: '', error: '', loading: false },
+  });
+
+  // <audio> won't play a typeless blob in every browser, so the type is guessed from the extension.
+  const PREVIEW_MIME: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', bmp: 'image/bmp',
+    mp3: 'audio/mpeg', ogg: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', webm: 'audio/webm',
+  };
+
+  // The previewed file is the one named in the select's own label: the sample cards' first reference.
+  const previewFilename = (kind: MediaKind): string | null => {
+    const index = kind === 'image' ? selectedImageField.value : selectedAudioField.value;
+    const html = index >= 0 ? fields.value[index]?.[1].value || '' : '';
+    if (!html) return null;
+    const mediaRef = kind === 'image' ? extractImageRef(html) : extractAudioRef(html);
+    return mediaRef?.filename ?? null;
+  };
+
+  const imagePreviewAvailable = computed(() => previewFilename('image') !== null);
+  const audioPreviewAvailable = computed(() => previewFilename('audio') !== null);
+
+  const clearMediaPreview = (kind: MediaKind) => {
+    const preview = mediaPreviews[kind];
+    if (preview.url) URL.revokeObjectURL(preview.url);
+    preview.url = '';
+    preview.error = '';
+    preview.loading = false;
+  };
+
+  const togglePreview = async (kind: MediaKind) => {
+    const preview = mediaPreviews[kind];
+    if (preview.url || preview.error) {
+      clearMediaPreview(kind);
+      return;
+    }
+    const filename = previewFilename(kind);
+    if (!filename || preview.loading) return;
+
+    preview.loading = true;
+    try {
+      const base64 = await fetchAnkiMedia(filename);
+      if (!base64) {
+        preview.error = "File not found in Anki's media folder.";
+        return;
+      }
+      const extension = filename.split('.').pop()?.toLowerCase() ?? '';
+      const blob = new Blob([base64ToBytes(base64) as BlobPart], { type: PREVIEW_MIME[extension] ?? '' });
+      preview.url = URL.createObjectURL(blob);
+    } catch {
+      preview.error = 'Could not reach Anki.';
+    } finally {
+      preview.loading = false;
+    }
+  };
+
+  const onMediaSelectionChanged = (kind: MediaKind) => {
+    clearMediaPreview(kind);
+    onSelectionChanged();
+  };
+
+  watch(currentStep, step => {
+    if (step !== 2) {
+      clearMediaPreview('image');
+      clearMediaPreview('audio');
+    }
+  });
 
   // --- Remembered import settings (device-local; issue #402) ---
 
@@ -204,10 +343,15 @@
     if (!fieldName) return;
     const deckName = selectedDeckName.value;
     const readingFieldName = selectedReadingField.value >= 0 ? fields.value[selectedReadingField.value]?.[0] ?? '' : '';
+    const fieldNameAt = (index: number) => (index >= 0 ? fields.value[index]?.[0] ?? '' : '');
     ankiImportStore.saveDeckSelection(selectedDeck.value, {
       deckName,
       fieldName,
       readingFieldName,
+      sentenceFieldName: fieldNameAt(selectedSentenceField.value),
+      imageFieldName: fieldNameAt(selectedImageField.value),
+      audioFieldName: fieldNameAt(selectedAudioField.value),
+      mediaConflictMode: mediaConflictMode.value,
       importReviewHistory: importReviewHistory.value,
       overwriteExisting: overwriteExisting.value,
       parseWords: parseWords.value,
@@ -217,6 +361,27 @@
   // @change on the field/reading Selects and the option Checkboxes: persist this deck's selection
   // immediately on a user change, so it survives any later navigation and never leaks into another deck.
   const onSelectionChanged = () => persistImportSettings();
+
+  // First sample value appears in the select's own label; the rest feed the "view more" lists.
+  const SAMPLE_VALUES_PER_FIELD = 4;
+  const fieldSamples = ref(new Map<string, string[]>());
+  const showWordSamples = ref(false);
+  const showReadingSamples = ref(false);
+  const showSentenceSamples = ref(false);
+
+  const extraSamplesFor = (index: number, transform: (value: string) => string) => {
+    const name = index >= 0 ? fields.value[index]?.[0] : undefined;
+    if (!name) return [];
+    return (fieldSamples.value.get(name) ?? [])
+      .slice(1)
+      .map(transform)
+      .filter(value => value.length > 0)
+      .map(value => (value.length > 80 ? `${value.substring(0, 80)}…` : value));
+  };
+
+  const wordExtraSamples = computed(() => extraSamplesFor(selectedField.value, stripRuby));
+  const readingExtraSamples = computed(() => extraSamplesFor(selectedReadingField.value, furiganaToReading));
+  const sentenceExtraSamples = computed(() => extraSamplesFor(selectedSentenceField.value, html => extractSentenceFromField(html).text));
 
   const fieldsOptions = computed(() =>
     (fields.value || []).map((entry, idx) => ({
@@ -235,6 +400,43 @@
       value: idx,
     })),
   ]);
+
+  // Sentence-field options preview the cleaned sentence, since that is what would be stored, and count
+  // how much of the sample actually carries one so a mis-mapped field is obvious before importing.
+  const sentenceFieldsOptions = computed(() => [
+    { label: 'None (optional)', value: -1 },
+    ...(fields.value || []).map((entry, idx) => {
+      const preview = extractSentenceFromField(entry[1].value || '').text;
+      return { label: entry[0] + (preview ? ` (${preview.substring(0, 20)})` : ''), value: idx };
+    }),
+  ]);
+
+  // Media fields are named after what they reference, so the option shows the referenced filename.
+  const imageFieldsOptions = computed(() => [
+    { label: 'None (optional)', value: -1 },
+    ...(fields.value || []).map((entry, idx) => {
+      const ref = extractImageRef(entry[1].value || '');
+      return { label: entry[0] + (ref ? ` (${ref.filename.substring(0, 24)})` : ''), value: idx };
+    }),
+  ]);
+
+  const audioFieldsOptions = computed(() => [
+    { label: 'None (optional)', value: -1 },
+    ...(fields.value || []).map((entry, idx) => {
+      const ref = extractAudioRef(entry[1].value || '');
+      return { label: entry[0] + (ref ? ` (${ref.filename.substring(0, 24)})` : ''), value: idx };
+    }),
+  ]);
+
+  const conflictModeOptions = [
+    { label: 'Skip it', value: 'skip' },
+    { label: 'Replace it', value: 'replace' },
+    { label: 'Ask for each', value: 'ask' },
+  ];
+
+  const anyMediaFieldSelected = computed(() => selectedImageField.value >= 0 || selectedAudioField.value >= 0);
+
+  const anyExtraFieldSelected = computed(() => anyMediaFieldSelected.value || selectedSentenceField.value >= 0);
 
   const Connect = async () => {
     operationActive.value = true;
@@ -281,6 +483,32 @@
 
   type SkipStats = { suspended: number; newCard: number; missingField: number; emptyWord: number };
 
+  type AnkiCardFields = { fields: Record<string, { value?: string } | undefined> };
+
+  const collectExtras = (card: AnkiCardFields, word: string, reading: string) => {
+    if (selectedSentenceFieldName) {
+      sentenceImport.collect(word, reading, card.fields[selectedSentenceFieldName]?.value || '');
+    }
+    if (selectedImageFieldName || selectedAudioFieldName) {
+      mediaImport.collect(word, reading,
+                          selectedImageFieldName ? card.fields[selectedImageFieldName]?.value || '' : '',
+                          selectedAudioFieldName ? card.fields[selectedAudioFieldName]?.value || '' : '');
+    }
+  };
+
+  // Media-only runs import no scheduling, so suspended and unstudied cards still have media worth taking.
+  const collectFromCardUnfiltered = (card: AnkiCardFields) => {
+    const word = stripRuby(card.fields[selectedFieldName]?.value?.trim() || '');
+    if (!word) return;
+
+    let reading = '';
+    if (selectedReadingFieldName) {
+      reading = furiganaToReading(card.fields[selectedReadingFieldName]?.value?.trim() || '');
+    }
+
+    collectExtras(card, word, reading);
+  };
+
   // Helper to build a single card payload from Anki card info
   const buildCardPayload = (card: any, fieldName: string, readingFieldName: string, reviewsByCard: Map<number, CardReviews>, stats?: SkipStats) => {
     if (card.queue === -1) { if (stats) stats.suspended++; return null; } // suspended
@@ -297,6 +525,10 @@
       const readingField = card.fields[readingFieldName];
       reading = furiganaToReading(readingField?.value?.trim() || '');
     }
+
+    // In the combined flow sentences and media share the vocabulary card filter: a card whose word is
+    // not imported should not quietly contribute a sentence or a file either.
+    collectExtras(card, word, reading);
 
     const cardReviews = reviewsByCard.get(card.cardId);
     const reviews = cardReviews?.kept ?? [];
@@ -354,6 +586,56 @@
     };
   };
 
+  /** Sentence and media import without the vocabulary import, for decks whose words are already in Jiten. */
+  const RunExtrasOnly = async () => {
+    const chunkSize = supportsFieldsFilter ? 2000 : 500;
+    for (let i = 0; i < cardsIds.length; i += chunkSize) {
+      const cards = await fetchCardsInfo(cardsIds.slice(i, i + chunkSize));
+      for (const card of cards || []) collectFromCardUnfiltered(card);
+      fetchProgress.value = Math.round(Math.min(i + chunkSize, cardsIds.length) / cardsIds.length * 100);
+    }
+
+    await RunExtras();
+
+    if (sentenceImport.collectedCount() === 0 && mediaImport.collectedCount() === 0) {
+      toast.add({
+        severity: 'warn',
+        summary: 'Nothing to import',
+        detail: 'No sentences or media were found in the selected fields.',
+        life: 6000,
+      });
+    }
+
+    emit('importComplete');
+  };
+
+  /** The sentence and media phases, shared by both flows. */
+  const RunExtras = async () => {
+    if (selectedSentenceFieldName && sentenceImport.collectedCount() > 0) {
+      importPhase.value = 'sentences';
+      await sentenceImport.run({ parseWords: parseWords.value, source: `Anki: ${selectedDeckName.value}` });
+      showSentenceSummary.value = true;
+    }
+
+    // Media runs last: it is the slow, quota-bound phase, so cancelling it still keeps everything above.
+    if (mediaImport.collectedCount() > 0) {
+      importPhase.value = 'media';
+      conflictsResolved.value = 0;
+      mediaStopping.value = false;
+      try {
+        await mediaImport.run({
+          parseWords: parseWords.value,
+          mode: mediaConflictMode.value,
+          fetchMedia: fetchAnkiMedia,
+        });
+        showMediaSummary.value = true;
+      } finally {
+        // A failed run clears its conflict queue, which would otherwise strand an unclosable dialog.
+        showMediaConflicts.value = false;
+      }
+    }
+  };
+
   const NextStep = async () => {
     currentStep.value++;
 
@@ -379,23 +661,43 @@
         const sameDeckReload = selectedDeck.value === lastLoadedDeckId;
         const prevFieldName = sameDeckReload ? fields.value[selectedField.value]?.[0] : undefined;
         const prevReadingName = sameDeckReload && selectedReadingField.value >= 0 ? fields.value[selectedReadingField.value]?.[0] : '';
+        const prevNameAt = (index: number) => (sameDeckReload && index >= 0 ? fields.value[index]?.[0] ?? '' : '');
+        const prevSentenceName = prevNameAt(selectedSentenceField.value);
+        const prevImageName = prevNameAt(selectedImageField.value);
+        const prevAudioName = prevNameAt(selectedAudioField.value);
 
         selectedField.value = 0;
         selectedReadingField.value = -1;
+        selectedSentenceField.value = -1;
+        selectedImageField.value = -1;
+        selectedAudioField.value = -1;
         if (previewCards && previewCards.length > 0) {
           // Merge across the sample: keep each field's first non-empty value so every field shows a preview.
           const merged = new Map<string, { order: number; value: string }>();
+          const samples = new Map<string, string[]>();
           for (const c of previewCards) {
             for (const [name, info] of Object.entries(c.fields || {}) as Array<[string, { order: number; value: string }]>) {
               const existing = merged.get(name);
               if (!existing) merged.set(name, { order: info.order, value: info.value || '' });
               else if (!existing.value && info.value) existing.value = info.value;
+              if (info.value) {
+                const list = samples.get(name) ?? [];
+                if (list.length < SAMPLE_VALUES_PER_FIELD) {
+                  list.push(info.value);
+                  samples.set(name, list);
+                }
+              }
             }
           }
           fields.value = [...merged.entries()].sort((a, b) => a[1].order - b[1].order);
+          fieldSamples.value = samples;
         } else {
           fields.value = [];
+          fieldSamples.value = new Map();
         }
+        showWordSamples.value = false;
+        showReadingSamples.value = false;
+        showSentenceSamples.value = false;
         lastLoadedDeckId = selectedDeck.value;
 
         // Re-apply selections by NAME (the index was just rebuilt). A same-deck reload keeps the
@@ -404,10 +706,17 @@
         // stored name matches); otherwise it starts from defaults so the previous deck can't leak in.
         let wantFieldName = prevFieldName;
         let wantReadingName = prevReadingName;
+        let wantSentenceName = prevSentenceName;
+        let wantImageName = prevImageName;
+        let wantAudioName = prevAudioName;
         if (!sameDeckReload) {
           const saved = ankiImportStore.resolveDeckSelection(selectedDeck.value, selectedDeckName.value) ?? defaultImportSelection();
           wantFieldName = saved.fieldName || undefined;
           wantReadingName = saved.readingFieldName;
+          wantSentenceName = saved.sentenceFieldName;
+          wantImageName = saved.imageFieldName;
+          wantAudioName = saved.audioFieldName;
+          mediaConflictMode.value = saved.mediaConflictMode;
           importReviewHistory.value = saved.importReviewHistory;
           overwriteExisting.value = saved.overwriteExisting;
           parseWords.value = saved.parseWords;
@@ -420,6 +729,18 @@
         if (wantReadingName) {
           const readingIdx = fields.value.findIndex(([name]) => name === wantReadingName);
           if (readingIdx >= 0) selectedReadingField.value = readingIdx;
+        }
+        if (wantSentenceName) {
+          const sentenceIdx = fields.value.findIndex(([name]) => name === wantSentenceName);
+          if (sentenceIdx >= 0) selectedSentenceField.value = sentenceIdx;
+        }
+        if (wantImageName) {
+          const imageIdx = fields.value.findIndex(([name]) => name === wantImageName);
+          if (imageIdx >= 0) selectedImageField.value = imageIdx;
+        }
+        if (wantAudioName) {
+          const audioIdx = fields.value.findIndex(([name]) => name === wantAudioName);
+          if (audioIdx >= 0) selectedAudioField.value = audioIdx;
         }
       } catch (e) {
         reportError(e, 'Failed to load deck from Anki.');
@@ -441,6 +762,10 @@
       }
       const readingFieldEntry = selectedReadingField.value >= 0 ? fields.value[selectedReadingField.value] : undefined;
       selectedReadingFieldName = readingFieldEntry ? readingFieldEntry[0] : '';
+      const nameAt = (index: number) => (index >= 0 ? fields.value[index]?.[0] ?? '' : '');
+      selectedSentenceFieldName = nameAt(selectedSentenceField.value);
+      selectedImageFieldName = nameAt(selectedImageField.value);
+      selectedAudioFieldName = nameAt(selectedAudioField.value);
       // Save this deck's field mapping now, so switching between decks remembers each one even before
       // an import is run (issue #402). Options are re-saved with their final values at step 4.
       persistImportSettings();
@@ -456,12 +781,20 @@
       uploadProgress.value = 0;
       importPhase.value = 'fetch';
       importResults.value = { imported: 0, updated: 0, skipped: 0, reviewLogs: 0 };
+      showSentenceSummary.value = false;
+      sentenceImport.reset();
+      mediaImport.reset();
 
       const allSkippedWords: string[] = [];
       let skippedCountNoReviews = 0;
       const skipStats: SkipStats = { suspended: 0, newCard: 0, missingField: 0, emptyWord: 0 };
 
       try {
+        if (props.mediaOnly) {
+          await RunExtrasOnly();
+          return;
+        }
+
         // Reviews are fetched per chunk (see fetchChunkReviews), oldest first and capped, rather than
         // for the whole deck up front — so peak memory stays bounded on large decks and the raw,
         // uncapped history is never all in memory at once. Card IDs already cover subdecks (the deck
@@ -580,6 +913,9 @@
           }
         }
 
+        // These run after the vocabulary import so their words are tracked by the time they land.
+        await RunExtras();
+
         // Show final results
         const r = importResults.value;
         let message = '';
@@ -652,6 +988,17 @@
   <Card>
     <template #title>AnkiConnect</template>
     <template #content>
+      <Message
+        v-if="showSentenceSummary"
+        :severity="sentenceImport.stats.value.imported > 0 ? 'success' : 'warn'"
+        closable
+        class="mb-4"
+        @close="showSentenceSummary = false"
+      >
+        {{ sentenceImport.stats.value.imported }} example sentence{{ sentenceImport.stats.value.imported === 1 ? '' : 's' }} imported<template
+          v-if="sentenceSkippedTotal > 0"
+        >, {{ sentenceSkippedTotal }} skipped</template>.
+      </Message>
       <div v-if="cantConnect" class="text-red-800 dark:text-red-400">
         <p>Couldn't connect to Anki.</p>
         <p>
@@ -669,7 +1016,11 @@
         <img src="/assets/img/ankiconnect.jpg" alt="Anki Connect Config" class="w-full" />
       </div>
       <div v-if="currentStep == 0">
-        <p>
+        <p v-if="mediaOnly">
+          Add example sentences, images and audio from Anki using the
+          <a href="https://ankiweb.net/shared/info/2055492159" rel="nofollow" target="_blank">Anki Connect plugin</a>. Your vocabulary is left alone.
+        </p>
+        <p v-else>
           Add words directly from Anki using the <a href="https://ankiweb.net/shared/info/2055492159" rel="nofollow" target="_blank">Anki Connect plugin</a>.
         </p>
         <div class="flex flex-col gap-1 p-4 pb-0 max-w-md">
@@ -707,15 +1058,119 @@
           <ProgressSpinner style="width: 50px; height: 50px" stroke-width="8px" animation-duration=".5s" />
           <p>Loading your deck...</p>
         </div>
-        <div v-else>
-          <p>Select the correct field containing the words WITHOUT furigana</p>
-          <Select v-model="selectedField" :options="fieldsOptions" optionLabel="label" optionValue="value" placeholder="Select a field" class="w-full" @change="onSelectionChanged" />
-          <p class="mt-4">Optional: select a reading field to disambiguate words that share the same spelling but have different readings.</p>
-          <p class="text-sm text-surface-500 mb-1">Full kana or furigana (e.g. <span class="font-noto-sans">下[くだ]さる</span>) both work. The most common word matching the reading is used; if none match, the most common word is kept.</p>
-          <Select v-model="selectedReadingField" :options="readingFieldsOptions" optionLabel="label" optionValue="value" placeholder="None (optional)" class="w-full" @change="onSelectionChanged" />
-          <div class="flex flex-row gap-2 p-4">
-            <Button label="Back" :disabled="!selectedDeck" @click="PreviousStep()" />
-            <Button label="Next" @click="NextStep()" />
+        <div v-else class="flex flex-col gap-6 mt-2">
+          <section class="flex flex-col gap-3">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-500">Vocabulary</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="flex flex-col gap-1">
+                <label class="text-sm font-medium">Word field</label>
+                <Select v-model="selectedField" :options="fieldsOptions" option-label="label" option-value="value" placeholder="Select a field" class="w-full" @change="onSelectionChanged" />
+                <small class="text-surface-500">The target word, sometimes named expression.</small>
+                <button
+                  v-if="wordExtraSamples.length > 0"
+                  type="button"
+                  class="self-start text-xs text-surface-500 underline underline-offset-2 hover:text-surface-700 dark:hover:text-surface-300"
+                  @click="showWordSamples = !showWordSamples"
+                >
+                  {{ showWordSamples ? 'Hide examples' : 'View more examples' }}
+                </button>
+                <ul v-if="showWordSamples" class="flex flex-col gap-0.5 text-sm text-surface-500 font-noto-sans">
+                  <li v-for="(sample, index) in wordExtraSamples" :key="index">{{ sample }}</li>
+                </ul>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-sm font-medium">Reading field <span class="font-normal text-surface-400">· optional</span></label>
+                <Select v-model="selectedReadingField" :options="readingFieldsOptions" option-label="label" option-value="value" placeholder="None (optional)" class="w-full" @change="onSelectionChanged" />
+                <small class="text-surface-500">Used to tell apart words with the same spelling. Can be with full kana or furigana <br/> (<span class="font-noto-sans">下[くだ]さる</span>).</small>
+                <button
+                  v-if="readingExtraSamples.length > 0"
+                  type="button"
+                  class="self-start text-xs text-surface-500 underline underline-offset-2 hover:text-surface-700 dark:hover:text-surface-300"
+                  @click="showReadingSamples = !showReadingSamples"
+                >
+                  {{ showReadingSamples ? 'Hide examples' : 'View more examples' }}
+                </button>
+                <ul v-if="showReadingSamples" class="flex flex-col gap-0.5 text-sm text-surface-500 font-noto-sans">
+                  <li v-for="(sample, index) in readingExtraSamples" :key="index">{{ sample }}</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <section class="flex flex-col gap-1">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-500 mb-2">Example sentences <span class="font-normal normal-case tracking-normal text-surface-400">· optional</span></h3>
+            <Select v-model="selectedSentenceField" :options="sentenceFieldsOptions" option-label="label" option-value="value" placeholder="None (optional)" class="w-full" @change="onSelectionChanged" />
+            <small class="text-surface-500">
+              The studied word will be highlighted automatically. Words that are bolded in your note type will keep that highlight. Sentences where it can't be found
+              will be skipped.
+            </small>
+            <button
+              v-if="sentenceExtraSamples.length > 0"
+              type="button"
+              class="self-start text-xs text-surface-500 underline underline-offset-2 hover:text-surface-700 dark:hover:text-surface-300"
+              @click="showSentenceSamples = !showSentenceSamples"
+            >
+              {{ showSentenceSamples ? 'Hide examples' : 'View more examples' }}
+            </button>
+            <ul v-if="showSentenceSamples" class="flex flex-col gap-0.5 text-sm text-surface-500 font-noto-sans">
+              <li v-for="(sample, index) in sentenceExtraSamples" :key="index">{{ sample }}</li>
+            </ul>
+          </section>
+
+          <JitenPlusGate feature="card-media" feature-label="Card media import">
+            <section class="flex flex-col gap-3">
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-500">Images &amp; audio <span class="font-normal normal-case tracking-normal text-surface-400">· optional</span></h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium">Image field</label>
+                  <Select v-model="selectedImageField" :options="imageFieldsOptions" option-label="label" option-value="value" placeholder="None (optional)" class="w-full" @change="onMediaSelectionChanged('image')" />
+                  <div v-if="imagePreviewAvailable" class="flex flex-col items-start gap-1">
+                    <Button
+                      :label="mediaPreviews.image.url || mediaPreviews.image.error ? 'Hide preview' : 'Preview'"
+                      :icon="mediaPreviews.image.url || mediaPreviews.image.error ? 'pi pi-eye-slash' : 'pi pi-eye'"
+                      size="small"
+                      text
+                      :loading="mediaPreviews.image.loading"
+                      @click="togglePreview('image')"
+                    />
+                    <p v-if="mediaPreviews.image.error" class="text-sm text-red-600 dark:text-red-400">{{ mediaPreviews.image.error }}</p>
+                    <img
+                      v-if="mediaPreviews.image.url"
+                      :src="mediaPreviews.image.url"
+                      alt="Card image preview"
+                      class="max-h-48 max-w-full rounded border border-surface-200 dark:border-surface-700"
+                    >
+                  </div>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium">Audio field</label>
+                  <Select v-model="selectedAudioField" :options="audioFieldsOptions" option-label="label" option-value="value" placeholder="None (optional)" class="w-full" @change="onMediaSelectionChanged('audio')" />
+                  <div v-if="audioPreviewAvailable" class="flex flex-col items-start gap-1">
+                    <Button
+                      :label="mediaPreviews.audio.url || mediaPreviews.audio.error ? 'Hide preview' : 'Preview'"
+                      :icon="mediaPreviews.audio.url || mediaPreviews.audio.error ? 'pi pi-eye-slash' : 'pi pi-eye'"
+                      size="small"
+                      text
+                      :loading="mediaPreviews.audio.loading"
+                      @click="togglePreview('audio')"
+                    />
+                    <p v-if="mediaPreviews.audio.error" class="text-sm text-red-600 dark:text-red-400">{{ mediaPreviews.audio.error }}</p>
+                    <audio v-if="mediaPreviews.audio.url" :src="mediaPreviews.audio.url" controls class="w-full max-w-xs" />
+                  </div>
+                </div>
+              </div>
+              <small class="text-surface-500">Files are read straight from your Anki media folder. Images are recompressed and count towards your card media storage.</small>
+            </section>
+          </JitenPlusGate>
+
+          <div class="flex flex-col gap-2">
+            <div class="flex flex-row gap-2">
+              <Button label="Back" :disabled="!selectedDeck" @click="PreviousStep()" />
+              <Button label="Next" :disabled="mediaOnly && !anyExtraFieldSelected" @click="NextStep()" />
+            </div>
+            <p v-if="mediaOnly && !anyExtraFieldSelected" class="text-sm text-surface-500">
+              Select a sentence, image or audio field to continue.
+            </p>
           </div>
         </div>
       </div>
@@ -723,17 +1178,35 @@
         <p>
           This will import up to <b>{{ cardsIds.length }} cards</b>.
         </p>
-        <p class="text-sm text-surface-500 mb-4">
-          Suspended and empty cards will be skipped during import.
+        <p v-if="mediaOnly" class="text-sm text-surface-500 mb-4">
+          Only sentences and media are imported; your vocabulary and review history are untouched.
         </p>
+        <p v-else class="text-sm text-surface-500 mb-4">
+          Suspended and cards with no history will be skipped during import.
+        </p>
+        <Message v-if="selectedSentenceField >= 0" severity="info" :closable="false" class="mb-4">
+          Adds up to {{ planLimits.customSentencesPerWord }} example sentences per word{{ isPlus ? '' : ` (${planLimits.plus.customSentencesPerWord} with Jiten+)` }};
+          duplicates are skipped. Your own sentences will be displayed in priority on study cards.
+        </Message>
+        <div v-if="anyMediaFieldSelected" class="flex flex-col gap-2 px-4 pt-2">
+          <label class="text-sm font-semibold">When a card already has media in Jiten</label>
+          <SelectButton
+            v-model="mediaConflictMode"
+            :options="conflictModeOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+            @change="onSelectionChanged"
+          />
+        </div>
         <div class="flex flex-col gap-3 p-4">
-          <div class="flex items-center gap-2">
+          <div v-if="!mediaOnly" class="flex items-center gap-2">
             <Checkbox v-model="importReviewHistory" inputId="importReviewHistory" :binary="true" @change="onSelectionChanged" />
             <label for="importReviewHistory" class="cursor-pointer">
               Import review history
             </label>
           </div>
-          <div class="flex items-center gap-2">
+          <div v-if="!mediaOnly" class="flex items-center gap-2">
             <Checkbox v-model="overwriteExisting" inputId="overwrite" :binary="true" @change="onSelectionChanged" />
             <label for="overwrite" class="cursor-pointer">
               Update words you already track (adds Anki's review history to Jiten's without removing anything; whichever side you reviewed more recently sets your next review date)
@@ -747,15 +1220,57 @@
           </div>
           <div class="flex flex-row gap-2">
             <Button label="Back" :disabled="!selectedDeck" @click="PreviousStep()" />
-            <Button label="Import" :disabled="!selectedDeck" @click="NextStep()" />
+            <Button label="Import" :disabled="!selectedDeck || (mediaOnly && !anyExtraFieldSelected)" @click="NextStep()" />
           </div>
         </div>
       </div>
       <div v-if="currentStep == 4">
-        <ProgressSpinner style="width: 50px; height: 50px" stroke-width="8px" animation-duration=".5s" />
+        <ProgressSpinner
+          v-if="importPhase === 'fetch' || importPhase === 'upload'"
+          style="width: 50px; height: 50px"
+          stroke-width="8px"
+          animation-duration=".5s"
+        />
         <p v-if="importPhase === 'fetch'" class="font-semibold">Fetching cards from Anki... {{ fetchProgress }}%</p>
-        <p v-else class="font-semibold">Uploading to server... {{ uploadProgress }}%</p>
-        <p class="text-sm text-surface-500">
+        <p v-else-if="importPhase === 'upload'" class="font-semibold">Uploading to server... {{ uploadProgress }}%</p>
+        <template v-else-if="importPhase === 'sentences'">
+          <p class="font-semibold">Importing example sentences... {{ sentenceImport.done.value }}/{{ sentenceImport.total.value }}</p>
+          <ProgressBar
+            :value="sentenceImport.total.value > 0 ? Math.round((sentenceImport.done.value / sentenceImport.total.value) * 100) : 0"
+            class="my-2 max-w-md"
+          />
+        </template>
+        <template v-else>
+          <p class="font-semibold">Importing card media... {{ mediaImport.done.value }}/{{ mediaImport.total.value }} files</p>
+          <ProgressBar
+            :value="mediaImport.total.value > 0 ? Math.round((mediaImport.done.value / mediaImport.total.value) * 100) : 0"
+            class="my-2 max-w-md"
+          />
+          <p class="text-sm text-surface-500">
+            <span v-if="mediaEtaText">About {{ mediaEtaText }} remaining · </span>Please keep this tab open until the import finishes.
+          </p>
+          <p v-if="mediaImport.maxBytes.value > 0" class="text-sm text-surface-500">
+            Storage used: {{ formatBytes(mediaImport.usedBytes.value) }} / {{ formatBytes(mediaImport.maxBytes.value) }}
+          </p>
+          <p class="text-sm text-surface-500">
+            Uploaded: {{ mediaImport.stats.value.uploaded + mediaImport.stats.value.replaced }} |
+            Skipped: {{
+              mediaImport.stats.value.skippedExisting + mediaImport.stats.value.missingInAnki + mediaImport.stats.value.tooLarge
+              + mediaImport.stats.value.invalid + mediaImport.stats.value.notTracked
+            }}
+          </p>
+          <Button
+            class="mt-3"
+            :label="mediaStopping ? 'Stopping...' : 'Stop import'"
+            icon="pi pi-times"
+            severity="danger"
+            outlined
+            size="small"
+            :disabled="mediaStopping"
+            @click="stopMediaImport"
+          />
+        </template>
+        <p v-if="!mediaOnly && (importPhase === 'fetch' || importPhase === 'upload')" class="text-sm text-surface-500">
           Imported: {{ importResults.imported }} |
           Updated: {{ importResults.updated }} |
           Skipped: {{ importResults.skipped }}
@@ -783,6 +1298,57 @@
     </div>
     <template #footer>
       <Button label="Close" @click="showSkippedDialog = false" />
+    </template>
+  </Dialog>
+
+  <AnkiMediaConflictDialog
+    v-model:visible="showMediaConflicts"
+    :conflicts="mediaImport.conflicts.value"
+    :resolved="conflictsResolved"
+    :fetch-media="fetchAnkiMedia"
+    @resolve="onConflictResolved"
+    @resolve-all="onConflictResolveAll"
+  />
+
+  <Dialog
+    v-model:visible="showMediaSummary"
+    modal
+    header="Card media imported"
+    class="w-[95vw] sm:w-[90vw] md:w-[36rem]"
+  >
+    <div class="flex flex-col gap-3">
+      <Message :severity="mediaImport.stats.value.uploaded + mediaImport.stats.value.replaced > 0 ? 'success' : 'warn'" :closable="false">
+        {{ mediaImport.stats.value.uploaded }} file{{ mediaImport.stats.value.uploaded === 1 ? '' : 's' }} imported<span
+          v-if="mediaImport.stats.value.replaced > 0"
+        >, {{ mediaImport.stats.value.replaced }} replaced</span>.
+      </Message>
+      <Message v-if="mediaImport.stats.value.quotaExceeded > 0" severity="error" :closable="false">
+        Your card media storage is full, so the rest was not imported.
+        <NuxtLink to="/settings/card-media" class="underline">Manage card media</NuxtLink>
+      </Message>
+      <p v-if="mediaImport.maxBytes.value > 0" class="text-sm text-surface-500">
+        Storage used: {{ formatBytes(mediaImport.usedBytes.value) }} / {{ formatBytes(mediaImport.maxBytes.value) }}
+      </p>
+      <ul class="flex flex-col gap-1 text-sm">
+        <li v-if="mediaImport.stats.value.skippedExisting > 0">{{ mediaImport.stats.value.skippedExisting }} kept the media already in Jiten</li>
+        <li v-if="mediaImport.stats.value.missingInAnki > 0">
+          {{ mediaImport.stats.value.missingInAnki }} skipped — missing from your Anki media folder
+        </li>
+        <li v-if="mediaImport.stats.value.unresolved > 0">{{ mediaImport.stats.value.unresolved }} skipped — word not in the dictionary</li>
+        <li v-if="mediaImport.stats.value.notTracked > 0">{{ mediaImport.stats.value.notTracked }} skipped — word not in your collection</li>
+        <li v-if="mediaImport.stats.value.tooLarge > 0">{{ mediaImport.stats.value.tooLarge }} skipped — larger than 5 MB</li>
+        <li v-if="mediaImport.stats.value.invalid > 0">{{ mediaImport.stats.value.invalid }} skipped — unsupported file type</li>
+        <li v-if="mediaImport.stats.value.duplicateTarget > 0">
+          {{ mediaImport.stats.value.duplicateTarget }} skipped — another card already supplied that word's media
+        </li>
+        <li v-if="mediaImport.stats.value.extraRefsIgnored > 0">
+          {{ mediaImport.stats.value.extraRefsIgnored }} extra reference{{ mediaImport.stats.value.extraRefsIgnored === 1 ? '' : 's' }} ignored (only
+          the first per card is used)
+        </li>
+      </ul>
+    </div>
+    <template #footer>
+      <Button label="Close" @click="showMediaSummary = false" />
     </template>
   </Dialog>
 

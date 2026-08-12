@@ -157,7 +157,41 @@ internal static class FormCandidateSelector
         best = ApplySentenceFinalInterjection(best, allCandidates, context) ?? best;
         best = ApplyJitenMinorKanaReadingCap(best, allCandidates, context) ?? best;
         best = ApplyContractedCopulaExactSurface(best, allCandidates, context) ?? best;
+        best = ApplyKanaSurfaceKanjiFormRemap(best, allCandidates, context) ?? best;
         return best;
+    }
+
+    /// A kana surface whose entry was reached through Sudachi's kanji NormalizedForm (ちょっとぉ → 一寸)
+    /// carries that key into FormCandidateFactory, which admits only forms spelling the key — so the
+    /// kanji form can be the entry's ONLY candidate and takes the ReadingIndex by construction, with no
+    /// kana form ever scored against it. Fall back to the entry's primary kana form. Gated on the word
+    /// having contributed no kana candidate at all, so any contest scoring actually saw is left alone.
+    public static FormCandidate? ApplyKanaSurfaceKanjiFormRemap(
+        FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
+    {
+        if (!context.IsKanaSurface) return null;
+        if (best.Form.FormType != JmDictFormType.KanjiForm) return null;
+
+        foreach (var c in allCandidates)
+        {
+            if (c.Word.WordId == best.Word.WordId && c.Form.FormType == JmDictFormType.KanaForm)
+                return null;
+        }
+
+        JmDictWordForm? kanaForm = null;
+        foreach (var f in best.Word.Forms)
+        {
+            if (f.FormType != JmDictFormType.KanaForm || f.ReadingIndex > 255) continue;
+            if (f.IsSearchOnly || f.IsObsolete) continue;
+            if (kanaForm == null || f.ReadingIndex < kanaForm.ReadingIndex) kanaForm = f;
+        }
+
+        if (kanaForm == null) return null;
+
+        var remapped = new FormCandidate(best.Word, kanaForm, (byte)kanaForm.ReadingIndex, best.TargetHiragana,
+                                         best.DeconjForm);
+        remapped.SetScoreTrace(best.ScoreTrace);
+        return remapped;
     }
 
     /// A contracted copula surface (奢りじゃ悪い → じゃ = では) gets matched to the plain copula だ
@@ -217,6 +251,8 @@ internal static class FormCandidateSelector
     /// produces (来い ← 来る). Flip to the interjection only when (a) the sentence ends here, (b) the
     /// current pick reached the surface by deconjugating a verb, and (c) an interjection entry matches
     /// the surface directly — so 来い mid-sentence and non-homograph imperatives (食べろ) are untouched.
+    /// The entry must be a pure interjection: an idiom whose int sense is secondary to another word
+    /// class (出来た exp/adj-f/int "of fine character") is far narrower than the verb it would displace.
     public static FormCandidate? ApplySentenceFinalInterjection(
         FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
     {
@@ -231,6 +267,8 @@ internal static class FormCandidateSelector
             if (candidate.Word.WordId == best.Word.WordId) continue;
             if (candidate.DeconjForm?.Process is { Count: > 0 }) continue;   // direct surface match only
             if (context.Surface != candidate.Form.Text) continue;            // exact surface
+            if (candidate.Word.CachedPOS.Any(p => p is not (PartOfSpeech.Interjection or PartOfSpeech.Unknown)))
+                continue;
             if (candidate.Word.PartsOfSpeech.Any(p => p is "int"))
                 return candidate;
         }

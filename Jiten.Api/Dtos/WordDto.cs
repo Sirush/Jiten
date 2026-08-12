@@ -22,6 +22,12 @@ public class WordDto
 
     /// <summary>Entry-level &lt;info&gt; notes.</summary>
     public List<string>? EntryInfo { get; set; }
+
+    public List<WordDerivationDto>? DerivedFrom { get; set; }
+    public List<WordDerivationDto>? Derives { get; set; }
+
+    /// <summary>Set only when this form has no card of its own and an enabled derivation covers it.</summary>
+    public DerivationCoverDto? RedundantVia { get; set; }
 }
 
 public class LanguageSourceDto

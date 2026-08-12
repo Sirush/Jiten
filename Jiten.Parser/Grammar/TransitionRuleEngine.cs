@@ -156,21 +156,37 @@ internal static class TransitionRuleEngine
                 MatchCondition.NextIsNotQuotative =>
                     w.Next == null || !w.Next.Text.StartsWith("という"),
 
-                // Valid hosts for a sentence-final particle: auxiliaries/particles (だな, はね) plus —
-                // for な only — plain-form verbs/i-adjectives (prohibitive えぐるな, exclamatory
-                // 欲しいな), which stay valid mid-sentence because run-on speech has no punctuation.
-                // Other SFPs keep the merge: ない+か must still form ないか.
+                // Valid hosts for a sentence-final particle: auxiliaries/particles (だな, はね), plain
+                // predicates before な (prohibitive えぐるな, exclamatory 欲しいな), and plain
+                // predicates before よ/ね only when the next token looks vocative
+                // (やべえよ母ちゃん). The vocative gate keeps ordinary run-on text such as
+                // 食べるよ明日 subject to the existing merge/remove repair.
                 MatchCondition.PrevIsSfpValidHost =>
                     w.Prev?.PartOfSpeech is PartOfSpeech.Auxiliary or PartOfSpeech.Particle
                     || (w.Current.Text == "な"
                         && w.Prev is { PartOfSpeech: PartOfSpeech.Verb or PartOfSpeech.IAdjective }
-                        && w.Prev.Text == w.Prev.DictionaryForm),
+                        && w.Prev.Text == w.Prev.DictionaryForm)
+                    || (w.Current.Text is "よ" or "ね"
+                        && w.Prev is { PartOfSpeech: PartOfSpeech.Verb or PartOfSpeech.IAdjective }
+                        && w.Prev.Text == w.Prev.DictionaryForm
+                        && IsVocativeFollower(w.Next)),
 
                 _ => false
             };
             if (!ok) return false;
         }
         return true;
+    }
+
+    private static bool IsVocativeFollower(WordInfo? next)
+    {
+        if (next?.PartOfSpeech is PartOfSpeech.Name or PartOfSpeech.Pronoun)
+            return true;
+        if (next?.PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.CommonNoun))
+            return false;
+
+        return TransitionRuleSets.HonorificSuffixes.Any(
+            suffix => next.Text.EndsWith(suffix, StringComparison.Ordinal));
     }
 
     private static void ApplyViolation(

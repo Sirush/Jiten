@@ -92,6 +92,11 @@ public class Program
             await importCommands.SyncJmDict(options);
         }
 
+        if (options.BuildDerivations)
+        {
+            await importCommands.BuildDerivations(options);
+        }
+
         if (options.CompareJMDict)
         {
             await importCommands.CompareJMDict(options);

@@ -32,7 +32,8 @@ public class JitenDbContext : DbContext
     public DbSet<WordKanji> WordKanjis { get; set; }
     public DbSet<KanjiReadingWord> KanjiReadingWords { get; set; }
     public DbSet<JmDictWordComposition> WordCompositions { get; set; }
-    
+    public DbSet<JmDictWordDerivation> WordDerivations { get; set; }
+
     public DbSet<ExampleSentence> ExampleSentences { get; set; }
     public DbSet<ExampleSentenceWord> ExampleSentenceWords { get; set; }
 
@@ -555,6 +556,27 @@ public class JitenDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.ComponentWordId)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<JmDictWordDerivation>(entity =>
+        {
+            entity.ToTable("WordDerivations", "jmdict");
+            entity.HasKey(e => e.DerivationId);
+            entity.Property(e => e.DerivationId).ValueGeneratedOnAdd();
+
+            entity.Property(e => e.Category).HasColumnType("smallint");
+            entity.Property(e => e.Source).HasColumnType("smallint");
+            entity.Property(e => e.Direction).HasColumnType("smallint");
+
+            entity.HasIndex(e => new { e.DerivedWordId, e.DerivedReadingIndex })
+                  .HasDatabaseName("IX_WordDerivations_Derived");
+
+            entity.HasIndex(e => new { e.BaseWordId, e.BaseReadingIndex })
+                  .HasDatabaseName("IX_WordDerivations_Base");
+
+            entity.HasIndex(e => new { e.BaseWordId, e.BaseReadingIndex, e.DerivedWordId, e.DerivedReadingIndex, e.Category })
+                  .IsUnique()
+                  .HasDatabaseName("IX_WordDerivations_Pair");
         });
 
         modelBuilder.Entity<ExampleSentence>(entity =>

@@ -34,7 +34,7 @@ internal static class ResegmentationEngine
                 SpanPath? path;
                 if (isCompoundNumeral)
                 {
-                    path = TrySplitCompoundNumeral(span.Text, lookups);
+                    path = TrySplitCompoundNumeral(span.Text, lookups, wordMeta);
                     if (path == null)
                         continue;
                 }
@@ -55,6 +55,8 @@ internal static class ResegmentationEngine
                             "katakana conjugated-word spelling",
                         _ when HasSuruConjugationTail(path, span.Text) => "suru-conjugation tail",
                         _ when HasShortPureNameSegment(path, wordMeta) => "short pure-name segment",
+                        _ when HasNameSegmentOutsidePersonContext(path, span, sentence, wordMeta) =>
+                            "name segment outside person context",
                         _ when ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text) < 0 => "negative path score",
                         _ => null
                     };
@@ -185,7 +187,12 @@ internal static class ResegmentationEngine
 
     // Splits compound kanji numerals at the last place marker (十/百/千/万/億/兆).
     // E.g. 五十七 → 五十+七, 三十八 → 三十+八, 六十一 → 六十+一.
-    private static SpanPath? TrySplitCompoundNumeral(string text, Dictionary<string, List<int>> lookups)
+    // Pieces must be attested as non-name words: JMnedict covers some numeral surfaces as
+    // personal names (二十三, 五十六), and a number must never resolve through those. A piece
+    // attested only as a name splits recursively instead (二十三 → 二十+三), so the run still
+    // lands on real number words.
+    private static SpanPath? TrySplitCompoundNumeral(string text, Dictionary<string, List<int>> lookups,
+        Dictionary<int, JmDictWordMeta> wordMeta)
     {
         for (int i = text.Length - 1; i >= 1; i--)
         {
@@ -195,18 +202,40 @@ internal static class ResegmentationEngine
             var left = text[..i];
             var right = text[i..];
 
-            if (!lookups.TryGetValue(left, out var leftIds) || leftIds.Count == 0)
-                continue;
-            if (!lookups.TryGetValue(right, out var rightIds) || rightIds.Count == 0)
+            var leftIds = NonNameLookupIds(left, lookups, wordMeta);
+            if (leftIds == null)
                 continue;
 
-            return new SpanPath([
-                new SpanTokenCandidate(0, left.Length, leftIds),
-                new SpanTokenCandidate(i, right.Length, rightIds)
-            ]);
+            var rightIds = NonNameLookupIds(right, lookups, wordMeta);
+            if (rightIds != null)
+                return new SpanPath([
+                    new SpanTokenCandidate(0, left.Length, leftIds),
+                    new SpanTokenCandidate(i, right.Length, rightIds)
+                ]);
+
+            var sub = TrySplitCompoundNumeral(right, lookups, wordMeta);
+            if (sub != null)
+                return new SpanPath([
+                    new SpanTokenCandidate(0, left.Length, leftIds),
+                    .. sub.Segments.Select(s => new SpanTokenCandidate(i + s.StartChar, s.Length, s.WordIds)),
+                ]);
         }
 
         return null;
+    }
+
+    // Name-band means every POS is Name/Unknown — this deliberately includes JMnedict "unclass"
+    // entries (五十五 "Isoi"), which IsTrueName excludes: on a numeral surface an unclass entry is
+    // never legitimate vocabulary either.
+    private static List<int>? NonNameLookupIds(string text, Dictionary<string, List<int>> lookups,
+        Dictionary<int, JmDictWordMeta> wordMeta)
+    {
+        if (!lookups.TryGetValue(text, out var ids) || ids.Count == 0)
+            return null;
+        var filtered = ids.Where(id => !wordMeta.TryGetValue(id, out var meta)
+                                       || meta.Pos.Length == 0
+                                       || !meta.Pos.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown)).ToList();
+        return filtered.Count > 0 ? filtered : null;
     }
 
     // A short segment whose every candidate is a pure JMnedict name entry is not evidence of a
@@ -236,6 +265,62 @@ internal static class ResegmentationEngine
             }
             if (anyName && allNameLike) return true;
         }
+        return false;
+    }
+
+    // Suffixes that license a name component: person honorifics (ラムシャーリー様 →
+    // ラム+シャーリー) and geographic/administrative markers (南アルプス市 → 南アルプス+市).
+    // Without such context, a name entry inside an OOV span is a shred: a loanword that
+    // merely contains a known name (ブリタニカ → ブリ+タニカ) must not fabricate name tokens.
+    // Seeded from the shared honorific set so the person-honorific vocabulary lives in one place.
+    private static readonly HashSet<string> NameContextSuffixes =
+    [
+        .. Grammar.TransitionRuleSets.HonorificSuffixes,
+        "さま", "君", "どの", "先生", "先輩", "嬢", "卿",
+        "市", "町", "村", "区", "郡", "県", "府", "都", "駅", "山", "川", "島", "湖", "港", "橋",
+        "城", "寺", "神社", "線", "地方", "出身", "産", "語",
+    ];
+
+    private static bool HasNameSegmentOutsidePersonContext(
+        SpanPath path, UncertainSpan span, SentenceInfo sentence, Dictionary<int, JmDictWordMeta> wordMeta)
+    {
+        // A name-only span being re-split into constituent names is the intended outcome
+        // of the name respray, whatever its context.
+        if (span.NameOnly) return false;
+
+        var word = sentence.Words[span.WordIndex].word;
+        if (word.IsPersonNameContext) return false;
+
+        // A katakana-styled particle segment marks a styled sentence (ボクノナマエハ) — those
+        // spans legitimately mix vocabulary with name-looking fragments.
+        foreach (var s in path.Segments)
+            if (s.Length == 1 && ResegmentationScorer.IsKatakanaParticleChar(span.Text[s.StartChar]))
+                return false;
+
+        for (int j = 0; j < path.Segments.Count; j++)
+        {
+            var s = path.Segments[j];
+            bool anyName = false, allName = true;
+            foreach (var id in s.WordIds)
+            {
+                if (!wordMeta.TryGetValue(id, out var meta)) continue;
+                if (meta.IsTrueName) anyName = true;
+                else { allName = false; break; }
+            }
+
+            if (!anyName || !allName) continue;
+
+            // A name segment is licensed by the surface that follows it — the next segment
+            // in the path, or for a span-final segment the next token in the sentence.
+            string? following = j + 1 < path.Segments.Count
+                ? span.Text.Substring(path.Segments[j + 1].StartChar, path.Segments[j + 1].Length)
+                : span.WordIndex + 1 < sentence.Words.Count
+                    ? sentence.Words[span.WordIndex + 1].word.Text
+                    : null;
+            if (following == null || !NameContextSuffixes.Contains(following))
+                return true;
+        }
+
         return false;
     }
 

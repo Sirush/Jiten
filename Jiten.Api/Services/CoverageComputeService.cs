@@ -1,5 +1,7 @@
+using Jiten.Api.Helpers;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.User;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Services;
@@ -17,8 +19,102 @@ public static class CoverageComputeService
         public short YoungUCov { get; set; }
     }
 
+    /// <summary>Adds every form the user's known words make redundant through <c>jmdict.WordDerivations</c>. A
+    /// family can conduct over several hops, so the expansion repeats to a fixpoint. No-op with no category
+    /// enabled, which is the default.</summary>
+    private static async Task ExpandThroughDerivations(UserDbContext userContext, Guid userGuid, string table,
+                                                        short[] categoryIds, bool excludeMature)
+    {
+        if (categoryIds.Length == 0) return;
+
+        var snapshot = $"{table}_direct";
+        await userContext.Database.ExecuteSqlRawAsync(
+            $"""CREATE TEMP TABLE {snapshot} ON COMMIT DROP AS SELECT * FROM {table};""");
+        await userContext.Database.ExecuteSqlRawAsync($"""CREATE INDEX ON {snapshot} ("WordId", "ReadingIndex");""");
+
+        var matureExclusion = excludeMature
+            ? """AND NOT EXISTS (SELECT 1 FROM _mature_known mk WHERE mk."WordId" = n."WordId" AND mk."ReadingIndex" = n."ReadingIndex")"""
+            : "";
+
+        var sql = $$"""
+            INSERT INTO {{table}} ("WordId", "ReadingIndex")
+            SELECT DISTINCT n."WordId", n."ReadingIndex"
+            FROM (
+                SELECT wd."DerivedWordId" AS "WordId", wd."DerivedReadingIndex" AS "ReadingIndex"
+                FROM {{table}} src
+                JOIN "jmdict"."WordDerivations" wd
+                  ON wd."BaseWordId" = src."WordId" AND wd."BaseReadingIndex" = src."ReadingIndex"
+                WHERE wd."Category" = ANY({0})
+                UNION ALL
+                -- The reverse edge conducts only on pairs the builder judged bidirectional, and never from a
+                -- kana form onto a kanji one.
+                SELECT wd."BaseWordId", wd."BaseReadingIndex"
+                FROM {{table}} src
+                JOIN "jmdict"."WordDerivations" wd
+                  ON wd."DerivedWordId" = src."WordId" AND wd."DerivedReadingIndex" = src."ReadingIndex"
+                JOIN "jmdict"."WordForms" bf
+                  ON bf."WordId" = wd."BaseWordId" AND bf."ReadingIndex" = wd."BaseReadingIndex"
+                JOIN "jmdict"."WordForms" df
+                  ON df."WordId" = wd."DerivedWordId" AND df."ReadingIndex" = wd."DerivedReadingIndex"
+                WHERE wd."Category" = ANY({0}) AND wd."Direction" = 0
+                  AND NOT (bf."FormType" = 0 AND df."FormType" = 1)
+            ) n
+            WHERE NOT EXISTS (SELECT 1 FROM {{table}} t WHERE t."WordId" = n."WordId" AND t."ReadingIndex" = n."ReadingIndex")
+            {{matureExclusion}};
+            """;
+
+        // Runaway guard only; the deepest measured family conducts over 5 hops.
+        const int maxHops = 16;
+        for (var hop = 0; hop < maxHops; hop++)
+            if (await userContext.Database.ExecuteSqlRawAsync(sql, categoryIds) == 0)
+                break;
+
+        // A form the user has a card on takes that card's tier, never the family's, matching GetKnownWordsState.
+        // Removing them only after the fixpoint keeps them conducting to the rest of the family, as the runtime
+        // BFS does; rows the tier already held directly are exempt so nothing but the expansion is touched.
+        await userContext.Database.ExecuteSqlRawAsync($$"""
+            DELETE FROM {{table}} t
+            WHERE NOT EXISTS (SELECT 1 FROM {{snapshot}} s
+                              WHERE s."WordId" = t."WordId" AND s."ReadingIndex" = t."ReadingIndex")
+              AND EXISTS (SELECT 1 FROM "user"."FsrsCards" fc
+                          WHERE fc."UserId" = {0}::uuid AND fc."WordId" = t."WordId"
+                            AND fc."ReadingIndex" = t."ReadingIndex");
+            """, userGuid);
+    }
+
+    /// <summary>Runs before <c>_fsrs_young</c> is built, so a derived form with its own young card is not first
+    /// promoted to mature and then filtered out of the young tier.</summary>
+    public static Task ExpandMatureThroughDerivations(UserDbContext userContext, Guid userGuid, short[] categoryIds)
+        => ExpandThroughDerivations(userContext, userGuid, "_mature_known", categoryIds, excludeMature: false);
+
+    /// <summary>Runs after the mature expansion so a form reachable from both tiers still counts as mature.</summary>
+    public static Task ExpandYoungThroughDerivations(UserDbContext userContext, Guid userGuid, short[] categoryIds)
+        => ExpandThroughDerivations(userContext, userGuid, "_fsrs_young", categoryIds, excludeMature: true);
+
+    public static async Task<short[]> LoadDerivationCategoryIds(UserDbContext userContext, string userId)
+    {
+        var settingsJson = await userContext.UserFsrsSettings
+                                            .AsNoTracking()
+                                            .Where(s => s.UserId == userId)
+                                            .Select(s => s.SettingsJson)
+                                            .FirstOrDefaultAsync();
+
+        if (string.IsNullOrEmpty(settingsJson) || settingsJson == "{}")
+            return [];
+
+        var settings = FsrsSettingsHelper.GetStudySettings(new UserFsrsSettings
+        {
+            UserId = userId, SettingsJson = settingsJson
+        });
+
+        return DerivationSettingsHelper.Parse(settings.DerivationalRedundancyCategories)
+                                       .Select(c => (short)c)
+                                       .ToArray();
+    }
+
     // Creates _mature_known and _fsrs_young temp tables (ON COMMIT DROP - must be inside a transaction)
-    public static async Task CreateKnownWordsTempTablesAsync(UserDbContext userContext, Guid userGuid)
+    public static async Task CreateKnownWordsTempTablesAsync(UserDbContext userContext, Guid userGuid,
+                                                              short[]? derivationCategoryIds = null)
     {
         await userContext.Database.ExecuteSqlRawAsync("""
             CREATE TEMP TABLE _mature_known ON COMMIT DROP AS
@@ -56,6 +152,7 @@ public static class CoverageComputeService
               );
             """, userGuid);
         await userContext.Database.ExecuteSqlRawAsync("""CREATE INDEX ON _mature_known ("WordId", "ReadingIndex");""");
+        await ExpandMatureThroughDerivations(userContext, userGuid, derivationCategoryIds ?? []);
         await userContext.Database.ExecuteSqlRawAsync("ANALYZE _mature_known;");
 
         await userContext.Database.ExecuteSqlRawAsync("""
@@ -85,6 +182,7 @@ public static class CoverageComputeService
             );
             """, userGuid);
         await userContext.Database.ExecuteSqlRawAsync("""CREATE INDEX ON _fsrs_young ("WordId", "ReadingIndex");""");
+        await ExpandYoungThroughDerivations(userContext, userGuid, derivationCategoryIds ?? []);
         await userContext.Database.ExecuteSqlRawAsync("ANALYZE _fsrs_young;");
     }
 
@@ -184,9 +282,10 @@ public static class CoverageComputeService
     {
         var userGuid = Guid.Parse(userId);
         var computedAt = DateTime.UtcNow;
+        var derivationCategoryIds = await LoadDerivationCategoryIds(userContext, userId);
         await using var tx = await userContext.Database.BeginTransactionAsync();
         await userContext.Database.ExecuteSqlRawAsync("SET LOCAL work_mem = '64MB';");
-        await CreateKnownWordsTempTablesAsync(userContext, userGuid);
+        await CreateKnownWordsTempTablesAsync(userContext, userGuid, derivationCategoryIds);
         var rows = await ComputeCoverageRowsAsync(userContext, """d."DeckId" = ANY({0})""", deckIds.ToArray());
         await UpsertCoverageChunksAsync(userContext, userId, rows, computedAt);
         await tx.CommitAsync();
@@ -198,9 +297,10 @@ public static class CoverageComputeService
     {
         var userGuid = Guid.Parse(userId);
         var computedAt = DateTime.UtcNow;
+        var derivationCategoryIds = await LoadDerivationCategoryIds(userContext, userId);
         await using var tx = await userContext.Database.BeginTransactionAsync();
         await userContext.Database.ExecuteSqlRawAsync("SET LOCAL work_mem = '64MB';");
-        await CreateKnownWordsTempTablesAsync(userContext, userGuid);
+        await CreateKnownWordsTempTablesAsync(userContext, userGuid, derivationCategoryIds);
         var rows = await ComputeCoverageRowsAsync(userContext, """d."ParentDeckId" = {0}""", parentDeckId);
         await UpsertCoverageChunksAsync(userContext, userId, rows, computedAt);
         await tx.CommitAsync();

@@ -3,10 +3,10 @@ set -u
 
 ASSETS_DIR=/app/public/_nuxt
 PUBLIC_DIR=/app/public
-# The origin negotiates compression and sends Vary: Accept-Encoding, so every encoding is its own CDN
-# cache entry; warming one alone would leave the variant real clients request uncached. Newline
-# separated, and the header values mirror real browsers in case the CDN keys on the raw string.
+# The CDN keys its cache on the raw Accept-Encoding string, not on normalised buckets, so each value
+# real clients send must be warmed separately; the second line is Googlebot's and Safari's.
 ENCODINGS='gzip, deflate, br, zstd
+gzip, deflate, br
 gzip, deflate
 none'
 BATCH=8

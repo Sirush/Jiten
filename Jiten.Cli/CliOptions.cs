@@ -118,6 +118,12 @@ public class CliOptions
     [Option(longName: "backfill-compositions", Required = false, HelpText = "Fill WordCompositions for compounds with no rows via Sudachi Mode A + sense resolver (idempotent/rerunnable). Combine with --dry-run for a sampled coverage report.")]
     public bool BackfillCompositions { get; set; }
 
+    [Option(longName: "build-derivations", Required = false, HelpText = "Truncate and rebuild jmdict.WordDerivations from the derivation rules and derivation_overrides.json. Runs automatically at the end of --sync-jmdict. Combine with --dry-run to report counts without writing, and --output to dump per-pair outcomes.")]
+    public bool BuildDerivations { get; set; }
+
+    [Option(longName: "derivation-classify-output", Required = false, HelpText = "With --build-derivations, write the pairs the automatic rule demotes that no override has judged yet (derived rank above the classified slice, or unranked) to this JSON path, as input for the agent classification pass.")]
+    public string? DerivationClassifyOutput { get; set; }
+
     [Option(longName: "sync-jmnedict", Required = false, HelpText = "Sync missing JMNedict entries and update partial entries with missing readings/definitions.")]
     public string? SyncJMNedict { get; set; }
 
