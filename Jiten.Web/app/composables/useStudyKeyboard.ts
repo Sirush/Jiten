@@ -16,6 +16,7 @@ export const DEFAULT_KEYBINDS: StudyKeybinds = {
   undo: 'z',
   wrapUp: 'w',
   pauseTimer: 'p',
+  replayAudio: 'r',
   dictPrev: 'ArrowLeft',
   dictNext: 'ArrowRight',
 };
@@ -58,6 +59,7 @@ export interface StudyKeyboardCallbacks {
   onUndo: () => void;
   onWrapUp: () => void;
   onPauseTimer: () => void;
+  onReplayAudio: () => void;
   onDictPrev: () => void;
   onDictNext: () => void;
 }
@@ -135,6 +137,13 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
       const onTabHeader = e.target instanceof HTMLElement && !!e.target.closest('[role="tab"]');
       if (!onTabHeader && matchesKeybind(e, kb.dictPrev ?? DEFAULT_KEYBINDS.dictPrev)) { callbacks.onDictPrev(); return; }
       if (!onTabHeader && matchesKeybind(e, kb.dictNext ?? DEFAULT_KEYBINDS.dictNext)) { callbacks.onDictNext(); return; }
+    }
+
+    const replayKey = kb.replayAudio ?? DEFAULT_KEYBINDS.replayAudio;
+    if (matchesKeybind(e, replayKey)) {
+      flashKey(replayKey);
+      callbacks.onReplayAudio();
+      return;
     }
 
     if (matchesKeybind(e, kb.pauseTimer)) {

@@ -1180,6 +1180,7 @@ export interface StudyKeybinds {
   undo: string;
   wrapUp: string;
   pauseTimer: string;
+  replayAudio: string;
   dictPrev: string;
   dictNext: string;
 }

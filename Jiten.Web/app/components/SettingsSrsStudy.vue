@@ -147,6 +147,11 @@
     { label: 'Hardest', value: 'HardestFirst' },
   ];
 
+  const exampleSentenceSourceOptions = [
+    { label: 'Study decks', value: 'StudyDecks' },
+    { label: 'Random', value: 'Random' },
+  ];
+
   // The simple per-part controls read from the resolved layout and write back into it. The setters
   // always mirror the legacy field (so an old client with a null cardLayout still derives correctly)
   // and, once a concrete cardLayout exists, additionally rewrite it so the toggle keeps working.
@@ -410,6 +415,7 @@
     ['undo', 'Undo'],
     ['wrapUp', 'Wrap up'],
     ['pauseTimer', 'Pause/resume timer'],
+    ['replayAudio', 'Replay audio'],
     ['dictPrev', 'Previous dictionary'],
     ['dictNext', 'Next dictionary'],
   ];

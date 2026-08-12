@@ -2107,6 +2107,7 @@ public class StudyController(
         kb.Undo = SanitizeKeybind(kb.Undo, defaultKeybinds.Undo);
         kb.WrapUp = SanitizeKeybind(kb.WrapUp, defaultKeybinds.WrapUp);
         kb.PauseTimer = SanitizeKeybind(kb.PauseTimer, defaultKeybinds.PauseTimer);
+        kb.ReplayAudio = SanitizeKeybind(kb.ReplayAudio, defaultKeybinds.ReplayAudio);
         kb.DictPrev = SanitizeKeybind(kb.DictPrev, defaultKeybinds.DictPrev);
         kb.DictNext = SanitizeKeybind(kb.DictNext, defaultKeybinds.DictNext);
 

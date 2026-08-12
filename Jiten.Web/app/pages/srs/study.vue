@@ -187,7 +187,7 @@
     return segments;
   });
 
-  const studyCardRef = ref<{ cycleDictionary: (direction: 1 | -1) => void } | null>(null);
+  const studyCardRef = ref<{ cycleDictionary: (direction: 1 | -1) => void; replayAudio: () => void } | null>(null);
 
   const { pressedKey } = useStudyKeyboard({
     onGrade: handleGrade,
@@ -199,6 +199,7 @@
     onUndo: handleUndo,
     onWrapUp: handleWrapUp,
     onPauseTimer: handlePauseTimer,
+    onReplayAudio: () => studyCardRef.value?.replayAudio(),
     onDictPrev: () => studyCardRef.value?.cycleDictionary(-1),
     onDictNext: () => studyCardRef.value?.cycleDictionary(1),
   });

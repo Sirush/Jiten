@@ -107,6 +107,7 @@
   // definitions block registers its cycler here so this delegation survives the block extraction.
   defineExpose({
     cycleDictionary: (direction: 1 | -1) => dictCycler.value?.(direction),
+    replayAudio: () => startAutoAudio(props.isFlipped ? 'flip' : 'front', true),
   });
 
   const cardExample = computed(() => srsStore.getCardExample(props.card.wordId, props.card.readingIndex));
@@ -364,7 +365,9 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async function startAutoAudio(mode: 'front' | 'flip') {
+  // `forced` is the manual replay: the autoplay on/off toggles and the front/back position are ignored,
+  // but the custom-audio-replaces-* composition rules still decide what the clip stands in for.
+  async function startAutoAudio(mode: 'front' | 'flip', forced = false) {
     const generation = ++audioGeneration;
     const current = () => generation === audioGeneration;
 
@@ -385,9 +388,13 @@
 
     let playSentence =
       !!example?.sentenceId &&
-      (onFront
-        ? frontHasSentence.value && settings.autoPlayWordOnFront && settings.autoPlaySentenceOnFront
-        : settings.autoPlaySentence && !sentenceBlurred.value);
+      (forced
+        ? onFront
+          ? frontHasSentence.value
+          : !sentenceBlurred.value
+        : onFront
+          ? frontHasSentence.value && settings.autoPlayWordOnFront && settings.autoPlaySentenceOnFront
+          : settings.autoPlaySentence && !sentenceBlurred.value);
 
     if (!headword && !custom && !playSentence) return;
 
