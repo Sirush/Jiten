@@ -1560,6 +1560,9 @@ public class FormSelectionTests
         // Kana なくなる is 無くなる "to cease" (1529550, kana RI 2), never 亡くなる "to die" (1518540, kanji-spelled).
         yield return ["呼吸が出来なくなった。", "なくなった", 1529550, (byte)2];
 
+        // 〜てこなくなった resolves to the base verb via the tekuru chain, never to こない (2869408, "this kind of").
+        yield return ["二人の唇からは互いの名と喘ぎしか出てこなくなった。", "出てこなく", 1338240, (byte)0];
+
         // Fullwidth-Latin loanword ＤＡＴＡ resolves whole to データ (1081190) via its normalized form;
         // the resegmentation must not shred it into Ｄ + ＡＴＡ.
         yield return ["ＤＡＴＡ１を再生する。", "ＤＡＴＡ", 1081190, (byte)0];
@@ -1827,6 +1830,48 @@ public class FormSelectionTests
         yield return ["こんなケダモノ作りやがった", "ケダモノ", 1335590, (byte)5];
         // 虚+けど+も re-cut to 虚け (うつけ, 2674470) + ども
         yield return ["舐めるなよこの虚けども", "虚け", 2674470, (byte)1];
+        // Kana そうか is the expression "I see" (2093030), not the secondary そうか reading of
+        // 草花 (1401940) or any other kanji noun that merely shares that on-reading
+        yield return ["「…そうか毒だったのか」", "そうか", 2093030, (byte)0];
+        yield return ["そうか用がなければ行くがいい", "そうか", 2093030, (byte)0];
+        yield return ["あいつそうかあいつがおれを尾けて", "そうか", 2093030, (byte)0];
+
+        // Bare 忍 is the shinobi entry 忍び (1467400 RI2), never the fern しのぶ (2179930): Sudachi
+        // must lemmatise the isolated kanji and drops it in the 人名 bucket reading シノブ, which
+        // then vouches for whichever homograph happens to share that name reading
+        yield return ["忍の頭領でござる", "忍", 1467400, (byte)2];
+        yield return ["「ちょっと山猫回しをば忍の心理誘導術なんでありますが、」", "忍", 1467400, (byte)2];
+        yield return ["「…鬼というよりは忍だな」", "忍", 1467400, (byte)2];
+        // An honorific still hands 忍 to the JMnedict name entry
+        yield return ["忍さんがそんなリクエストをなさったのも納得だ", "忍", 5584588, (byte)0];
+
+        // ませ/ません/ました attach to a verb 連用形, so the polite forms of ござる stay that verb
+        // (1270350) — the bare masu-stem entry ござい (2870810) cannot carry a verbal inflection
+        yield return ["まさか、滅相も御座いません", "御座いません", 1270350, (byte)0];
+        yield return ["なにも、何も御座いません、王よ", "御座いません", 1270350, (byte)0];
+        yield return ["面目次第もございません", "ございません", 1270350, (byte)3];
+        yield return ["ありがとう、ございました", "ございました", 1270350, (byte)3];
+
+        // A colloquial small-vowel stretch keeps the token off its own surface, so the entry is only
+        // reachable through Sudachi's kanji normalised form and lands on the 一寸 form instead of ちょっと
+        yield return ["ちょっとぉ、聞いてる?", "ちょっと", 1163940, (byte)2];
+        yield return ["そんなぁ", "そんな", 1007130, (byte)0];
+        // Attested small-vowel surfaces are lexical and must survive the collapse
+        yield return ["すげぇ、こんなの初めて見た", "すげぇ", 2722660, (byte)1];
+
+        // A kana surface reaching its entry through Sudachi's kanji NormalizedForm enumerates only the
+        // kanji form, so the ReadingIndex must be remapped to the entry's kana form (此処 → ここ)
+        yield return ["こっ", "こっ", 1288810, (byte)5];
+
+        // Katakana ン between two nouns is the colloquial の particle (2139720), not the katakana-written
+        // n-pref ン "some" (2759530) whose script-exact form otherwise evicts every hiragana-only entry
+        yield return ["「部屋ン中で、いったい何が…。！」", "ン", 2139720, (byte)0];
+        yield return ["「とりあえず、ざっと家ン中みさしてもらっていいか？」", "ン", 2139720, (byte)0];
+
+        // Sentence-final 出来た is the past of 出来る, not the exp/adj-f idiom 出来た "of fine character"
+        // (2870991) whose secondary int sense would otherwise trigger the interjection override
+        yield return ["今の姿だからこそ出来た", "出来た", 1340450, (byte)0];
+        yield return ["ようやく完成品が出来た", "出来た", 1340450, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

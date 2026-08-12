@@ -95,8 +95,8 @@ namespace Jiten.Parser
             (1689970,3), (5257597,0), (1446210, 2), (2416380,1), (1244220,1),
             (1578010,2), (2028930,1), (2028930,2), (1579350, 6), (2821500, 2), (2821500, 3),
             (1592150, 2), (1467040, 6), (1311350, 1), (1175280, 1), (1578150, 4), (2029650, 0),
-            // 案 spelled あん: the plan/idea sense is written in kanji; a bare kana あん is a grunt
-            (1154770, 1)
+            (1154770, 1), (1401940, 2), (2264280,0), (2264280, 1), (1323350, 2), (1950890, 2),
+            (2759530, 0), (1429010, 1)
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -1969,7 +1969,13 @@ namespace Jiten.Parser
                     && KanaScoringHelpers.IsPureKatakanaToken(text)
                     && _lookups.TryGetValue(text, out var directKatakanaIds))
                 {
-                    bool hasUsableDirectCandidate = directKatakanaIds.Any(id =>
+                    // Script identity is evidence for content words only. A katakana-written function
+                    // word is colloquial orthography for its kana headword (部屋ン中 = 部屋の中), never a
+                    // gairaigo homograph, so the katakana entry must not evict the hiragana particle.
+                    bool isFunctionWordToken = wordData.wordInfo.PartOfSpeech
+                        is PartOfSpeech.Particle or PartOfSpeech.Auxiliary;
+
+                    bool hasUsableDirectCandidate = !isFunctionWordToken && directKatakanaIds.Any(id =>
                         wordCache.TryGetValue(id, out var w)
                         && w.CachedPOS.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown)));
 
@@ -1988,6 +1994,8 @@ namespace Jiten.Parser
                                                                              wordData.wordInfo.PartOfSpeechSection1,
                                                                              wordData.wordInfo.PartOfSpeechSection2,
                                                                              wordData.wordInfo.PartOfSpeechSection3);
+
+                bool isKanaSurfaceToken = WanaKana.IsKana(text);
 
                 bool hasAnyNonNameCandidate = false;
                 var compatibleNonNameMatches = new List<JmDictWord>();
@@ -2010,7 +2018,9 @@ namespace Jiten.Parser
                     bool compatible = PosMapper.IsJmDictCompatibleWithSudachi(
                                                                               word.CachedPOS,
                                                                               wordData.wordInfo.PartOfSpeech,
-                                                                              allowInterjectionFallback: isStripped);
+                                                                              allowInterjectionFallback: isStripped,
+                                                                              allowNounExpressionFallback: isKanaSurfaceToken
+                                                                                  && isNameLikeSudachiNoun);
 
                     if (compatible && hasNonNamePos)
                     {
@@ -2157,7 +2167,8 @@ namespace Jiten.Parser
                                                                diagnostics,
                                                                sudachiReading: wordData.wordInfo.Reading,
                                                                sudachiPOS: wordData.wordInfo.PartOfSpeech,
-                                                               isSudachiPossibleDependant: wordData.wordInfo.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant));
+                                                               isSudachiPossibleDependant: wordData.wordInfo.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant),
+                                                               isSudachiNameGuess: isNameLikeSudachiNoun && !wordData.wordInfo.IsPersonNameContext);
 
                 // Frequency-rank tiebreaker for resegmented tokens: when the full scorer finds no preference
                 // (margin == 0), defer to the frequency-best candidate identified at resegmentation time.
@@ -5451,7 +5462,8 @@ namespace Jiten.Parser
             ParserDiagnostics? diagnostics = null,
             string? sudachiReading = null,
             PartOfSpeech sudachiPOS = PartOfSpeech.Unknown,
-            bool isSudachiPossibleDependant = false)
+            bool isSudachiPossibleDependant = false,
+            bool isSudachiNameGuess = false)
         {
             var context = FormScoringContext.Create(
                                                     surface,
@@ -5460,7 +5472,8 @@ namespace Jiten.Parser
                                                     isNameContext,
                                                     sudachiReading,
                                                     sudachiPOS: sudachiPOS,
-                                                    isSudachiPossibleDependant: isSudachiPossibleDependant);
+                                                    isSudachiPossibleDependant: isSudachiPossibleDependant,
+                                                    isSudachiNameGuess: isSudachiNameGuess);
 
             var result = FormCandidateSelector.PickTopCandidates(allCandidates, context, ArchaicPosTypes, diagnostics);
             return (result.Best, result.MarginToSecond);

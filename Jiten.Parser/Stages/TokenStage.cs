@@ -153,8 +153,10 @@ internal static class TokenFeatureScanner
                     && text[..2] is "その" or "この" or "あの" or "どの"
                     && JapaneseTextHelper.IsKanji(text[2]))
                     AddCandidate(TokenFeatures.CompoundBoundaryShape, index);
+                // Verb-tagged bare kanji enter too: a stranded okurigana leaves the stem tagged
+                // either way (探[Noun]|しっス vs 捜[Verb]|しっ|ス).
                 if (text.Length == 1 && JapaneseTextHelper.IsKanji(text[0])
-                    && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
+                    && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Verb)
                     AddCandidate(TokenFeatures.SingleKanjiNoun, index);
             }
             // Fused-mora theft where って rides inside a kana/kanji-headed token (ケン|カって, エリ|アっての,

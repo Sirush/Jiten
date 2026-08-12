@@ -353,21 +353,31 @@ public partial class MorphologicalAnalyser
         if (wordInfos.Count < 2) return wordInfos;
 
         var deconj = Deconjugator.Instance;
-        bool changed = false;
 
+        List<WordInfo>? list = null;
         int indexDelta = 0;
         foreach (int originalIndex in candidates)
         {
+            var toks = list ?? wordInfos;
             int i = originalIndex + indexDelta;
-            if (i < 0 || i + 1 >= wordInfos.Count) continue;
-            var k = wordInfos[i];
-            var tail = wordInfos[i + 1];
-            if (k.PreMatchedWordId != null || tail.PreMatchedWordId != null) continue;
+            if (i < 0 || i + 1 >= toks.Count) continue;
+            var k = toks[i];
+            var tail = toks[i + 1];
+            if (k.PreMatchedWordId != null) continue;
             if (k.Text.Length != 1 || !JapaneseTextHelper.IsKanji(k.Text[0])) continue;
+            // 何 heads no verb — its kana continuations are always their own words (何|かって).
+            if (k.Text == "何") continue;
+
+            if (TryShiftStrandedOkurigana(ref list, wordInfos, i, ref indexDelta)) continue;
+
+            toks = list ?? wordInfos;
+            k = toks[i];
+            tail = toks[i + 1];
+            if (tail.PreMatchedWordId != null) continue;
             if (k.PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.CommonNoun)) continue;
             // A clause-initial single kanji is speaker-name territory in script dumps
             // ([name]至[line]“そうなん?” would merge into 至る).
-            if (i == 0 || wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Symbol
+            if (i == 0 || toks[i - 1].PartOfSpeech is PartOfSpeech.Symbol
                 or PartOfSpeech.SupplementarySymbol or PartOfSpeech.BlankSpace) continue;
             if (tail.Text.Length is < 1 or > 4 || !tail.Text.All(c => c is >= 'ぁ' and <= 'ゖ')) continue;
             if (tail.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary
@@ -380,11 +390,9 @@ public partial class MorphologicalAnalyser
                     // する-negatives after a noun are noun+しない (話|しないで), never a shred.
                     or "しない" or "しないで" or "しなく" or "せず") continue;
             // A bare し before ない is the same する-negative one token earlier (話|し|ないで).
-            if (tail.Text == "し" && i + 2 < wordInfos.Count
-                && wordInfos[i + 2].Text.StartsWith("な", StringComparison.Ordinal)) continue;
+            if (tail.Text == "し" && i + 2 < toks.Count
+                && toks[i + 2].Text.StartsWith("な", StringComparison.Ordinal)) continue;
             if (tail.PartOfSpeech == PartOfSpeech.Verb && tail.Text == tail.DictionaryForm) continue;
-            // 何 heads no verb — its kana continuations are always their own words (何|かって).
-            if (k.Text == "何") continue;
 
             var cand = k.Text + tail.Text;
             var form = deconj.Deconjugate(cand).FirstOrDefault(f =>
@@ -395,31 +403,132 @@ public partial class MorphologicalAnalyser
                 && HasNonNameCompoundLookup?.Invoke(f.Text) == true);
             if (form == null) continue;
 
-            k.Text = cand;
-            k.DictionaryForm = form.Text;
-            k.NormalizedForm = form.Text;
-            k.Reading = "";
-            k.PartOfSpeech = PartOfSpeech.Verb;
-            k.EndOffset = tail.EndOffset;
-            wordInfos.RemoveAt(i + 1);
-            changed = true;
+            list ??= new List<WordInfo>(wordInfos);
+            list[i] = new WordInfo(k)
+            {
+                Text = cand,
+                DictionaryForm = form.Text,
+                NormalizedForm = form.Text,
+                Reading = "",
+                PartOfSpeech = PartOfSpeech.Verb,
+                EndOffset = tail.EndOffset,
+            };
+            list.RemoveAt(i + 1);
             indexDelta--;
         }
 
-        // A fresh list signals the pipeline to rescan token features (a Noun became a Verb).
-        return changed ? new List<WordInfo>(wordInfos) : wordInfos;
+        return list ?? wordInfos;
+    }
+
+    // A sokuon contraction right after a kanji verb stem (っス, った, って, っつ) makes Sudachi cut
+    // every boundary of the run one character early: the stem's okurigana is swallowed by the
+    // contraction and the kanji is left bare (探|しっス, 探|すった|って, 捜|しっ|ス). Give the okurigana
+    // back and shift the run's boundaries right by one, which restores stem and contraction together
+    // (探し|っス, 探す|った|って, 捜し|っス). Gated on the second character being the sokuon — that is what
+    // marks the cut as the contraction's doing rather than a real boundary — and on the stem plus its
+    // okurigana resolving to an attested verb.
+    private bool TryShiftStrandedOkurigana(ref List<WordInfo>? list, List<WordInfo> wordInfos, int i, ref int indexDelta)
+    {
+        var toks = list ?? wordInfos;
+        var k = toks[i];
+
+        int end = i;
+        int runLength = 0;
+        while (end + 1 < toks.Count && end - i < 3)
+        {
+            var t = toks[end + 1];
+            if (t.PreMatchedWordId != null || t.Text.Length == 0) break;
+            if (!t.Text.All(c => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ'))) break;
+            if (runLength + t.Text.Length > 4) break;
+            end++;
+            runLength += t.Text.Length;
+            if (t.Text[^1] is not ('っ' or 'ッ')) break;
+        }
+
+        if (end == i || runLength < 2) return false;
+
+        string run = string.Concat(toks.Skip(i + 1).Take(end - i).Select(t => t.Text));
+        // The okurigana is a full mora; a small kana leading the run means the sokuon is the stem's
+        // own (真|っ赤), not a stolen boundary.
+        if (run[0] is 'ぁ' or 'ぃ' or 'ぅ' or 'ぇ' or 'ぉ' or 'っ' or 'ゃ' or 'ゅ' or 'ょ' or 'ゎ'
+            || run[0] is not (>= 'ぁ' and <= 'ゖ')) return false;
+        if (run[1] is not ('っ' or 'ッ')) return false;
+
+        var stem = k.Text + run[0];
+        var dictionaryForm = ResolveVerbStem(stem, k.Text);
+        if (dictionaryForm == null) return false;
+
+        list ??= [..wordInfos];
+        int offset = k.EndOffset >= 0 ? k.EndOffset + 1 : -1;
+        list[i] = new WordInfo(k)
+        {
+            Text = stem,
+            DictionaryForm = dictionaryForm,
+            NormalizedForm = dictionaryForm,
+            Reading = "",
+            PartOfSpeech = PartOfSpeech.Verb,
+            EndOffset = offset,
+        };
+
+        var shifted = new List<WordInfo>(end - i);
+        int taken = 1;
+        for (int j = i + 1; j <= end && taken < run.Length; j++)
+        {
+            int len = Math.Min(toks[j].Text.Length, run.Length - taken);
+            var text = run.Substring(taken, len);
+            shifted.Add(new WordInfo(toks[j])
+            {
+                Text = text,
+                DictionaryForm = text,
+                NormalizedForm = text,
+                Reading = "",
+                // A shifted って can only be the quotative: the contraction is what stole the mora.
+                PartOfSpeech = text == "って" ? PartOfSpeech.Particle : toks[j].PartOfSpeech,
+                PartOfSpeechSection1 = text == "って" ? PartOfSpeechSection.AdverbialParticle : toks[j].PartOfSpeechSection1,
+                StartOffset = offset,
+                EndOffset = offset >= 0 ? offset + len : -1,
+            });
+            offset = offset >= 0 ? offset + len : -1;
+            taken += len;
+        }
+
+        list.RemoveRange(i + 1, end - i);
+        list.InsertRange(i + 1, shifted);
+        indexDelta += shifted.Count - (end - i);
+        return true;
+    }
+
+    // The stem's dictionary form when kanji + okurigana is a verb: either a dictionary-form verb
+    // itself (探す) or one deconjugation step off one (探し, 探せ → 探す).
+    private string? ResolveVerbStem(string stem, string kanji)
+    {
+        if (stem[^1] is 'う' or 'く' or 'ぐ' or 'す' or 'つ' or 'ぬ' or 'ぶ' or 'む' or 'る'
+            && HasNonNameCompoundLookup?.Invoke(stem) == true
+            && DeconjugatesToVerb(stem))
+            return stem;
+
+        foreach (var f in Deconjugator.Instance.Deconjugate(stem))
+        {
+            if (f.Process.Count != 1 || f.Text.Length <= 1 || f.Text == stem) continue;
+            if (!f.Text.StartsWith(kanji, StringComparison.Ordinal)) continue;
+            if (!f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal))) continue;
+            if (HasNonNameCompoundLookup?.Invoke(f.Text) == true) return f.Text;
+        }
+
+        return null;
     }
 
     private List<WordInfo> RepairCompoundBoundaryTheft(List<WordInfo> wordInfos, IReadOnlyList<int> candidates)
     {
         if (wordInfos.Count < 2) return wordInfos;
 
-        bool changed = false;
+        List<WordInfo>? list = null;
         foreach (int i in candidates)
         {
-            if (i < 0 || i + 1 >= wordInfos.Count) continue;
-            var a = wordInfos[i];
-            var b = wordInfos[i + 1];
+            var toks = list ?? wordInfos;
+            if (i < 0 || i + 1 >= toks.Count) continue;
+            var a = toks[i];
+            var b = toks[i + 1];
             if (a.PreMatchedWordId != null || b.PreMatchedWordId != null) continue;
 
             // [滑走][路上] → [滑走路][上], [小][動物的] → [小動物][的]: B is a 2–3 char word whose
@@ -435,8 +544,8 @@ public partial class MorphologicalAnalyser
                 && HasNonNameCompoundLookup?.Invoke(a.Text + b.Text[..^1]) == true
                 // B is a genuine constituent when it heads its own compound with what follows
                 // (人類|史上|初 — 史上初 attests; 滑走|路上|で does not).
-                && !(i + 2 < wordInfos.Count
-                     && HasNonNameCompoundLookup?.Invoke(b.Text + wordInfos[i + 2].Text) == true)
+                && !(i + 2 < toks.Count
+                     && HasNonNameCompoundLookup?.Invoke(b.Text + toks[i + 2].Text) == true)
                 // A much more frequent B is its own word, not a theft (日本|国内 stays: 国内
                 // outranks 日本国 by far; 滑走|路上 re-cuts: 滑走路 holds its own against 路上).
                 && !(GetNonNameCompoundFrequencyRank?.Invoke(b.Text) is int bRank
@@ -444,20 +553,28 @@ public partial class MorphologicalAnalyser
                      && (extRank == null || bRank * BoundaryTheftRankDominanceFactor < extRank.Value)))
             {
                 var extended = a.Text + b.Text[..^1];
-                a.Text = extended;
-                a.DictionaryForm = extended;
-                a.NormalizedForm = extended;
-                a.Reading = "";
-                a.PartOfSpeech = PartOfSpeech.Noun;
-                a.EndOffset = a.EndOffset >= 0 ? a.EndOffset + b.Text.Length - 1 : -1;
                 var suffix = b.Text[^1..];
-                b.Text = suffix;
-                b.DictionaryForm = suffix;
-                b.NormalizedForm = suffix;
-                b.Reading = "";
-                b.PartOfSpeech = PartOfSpeech.Suffix;
-                b.StartOffset = a.EndOffset;
-                changed = true;
+                int extendedEnd = a.EndOffset >= 0 ? a.EndOffset + b.Text.Length - 1 : -1;
+
+                list ??= new List<WordInfo>(wordInfos);
+                list[i] = new WordInfo(a)
+                {
+                    Text = extended,
+                    DictionaryForm = extended,
+                    NormalizedForm = extended,
+                    Reading = "",
+                    PartOfSpeech = PartOfSpeech.Noun,
+                    EndOffset = extendedEnd,
+                };
+                list[i + 1] = new WordInfo(b)
+                {
+                    Text = suffix,
+                    DictionaryForm = suffix,
+                    NormalizedForm = suffix,
+                    Reading = "",
+                    PartOfSpeech = PartOfSpeech.Suffix,
+                    StartOffset = extendedEnd,
+                };
                 continue;
             }
 
@@ -471,25 +588,33 @@ public partial class MorphologicalAnalyser
                 && HasNonNameCompoundLookup?.Invoke(a.Text[2] + b.Text) == true)
             {
                 var stolen = a.Text[2];
-                a.Text = a.Text[..2];
-                a.DictionaryForm = a.Text;
-                a.NormalizedForm = a.Text;
-                // The demonstrative is always two kana, so its reading is the first two katakana —
-                // the stolen kanji's reading length varies (時=トキ, 日=ヒ) and can't be trimmed off.
-                a.Reading = a.Reading is { Length: >= 2 } ar ? ar[..2] : "";
-                a.PartOfSpeech = PartOfSpeech.PrenounAdjectival;
-                a.EndOffset = a.EndOffset >= 0 ? a.EndOffset - 1 : -1;
-                b.Text = stolen + b.Text;
-                b.DictionaryForm = b.Text;
-                b.NormalizedForm = b.Text;
-                b.Reading = "";
-                b.StartOffset = b.StartOffset >= 0 ? b.StartOffset - 1 : -1;
-                changed = true;
+                var demonstrative = a.Text[..2];
+                var extendedNoun = stolen + b.Text;
+
+                list ??= new List<WordInfo>(wordInfos);
+                list[i] = new WordInfo(a)
+                {
+                    Text = demonstrative,
+                    DictionaryForm = demonstrative,
+                    NormalizedForm = demonstrative,
+                    // The demonstrative is always two kana, so its reading is the first two katakana —
+                    // the stolen kanji's reading length varies (時=トキ, 日=ヒ) and can't be trimmed off.
+                    Reading = a.Reading is { Length: >= 2 } ar ? ar[..2] : "",
+                    PartOfSpeech = PartOfSpeech.PrenounAdjectival,
+                    EndOffset = a.EndOffset >= 0 ? a.EndOffset - 1 : -1,
+                };
+                list[i + 1] = new WordInfo(b)
+                {
+                    Text = extendedNoun,
+                    DictionaryForm = extendedNoun,
+                    NormalizedForm = extendedNoun,
+                    Reading = "",
+                    StartOffset = b.StartOffset >= 0 ? b.StartOffset - 1 : -1,
+                };
             }
         }
 
-        // A fresh list signals the pipeline to rescan token features (recuts introduce Suffix tokens).
-        return changed ? new List<WordInfo>(wordInfos) : wordInfos;
+        return list ?? wordInfos;
     }
 
     // An OOV compound verb Sudachi normalises to X返る (のさばり返る) — the intensifier suffix 返る on a
@@ -919,6 +1044,37 @@ public partial class MorphologicalAnalyser
     private static readonly HashSet<string> KnownParticlesAndConjunctions =
         ["けど", "けども", "けれど", "けれども", "ので", "のに", "から", "まで"];
 
+    private const string SmallVowelKana = "ぁぃぅぇぉァィゥェォ";
+
+    /// <summary>Collapses a colloquial small-vowel stretch (ちょっとぉ, そんなぁ) back onto its dictionary surface.</summary>
+    private bool TryStripTrailingSmallVowel(WordInfo w, out WordInfo repaired)
+    {
+        repaired = w;
+        if (HasNonNameCompoundLookup == null || w.Text.Length < 3 || SmallVowelKana.IndexOf(w.Text[^1]) < 0)
+            return false;
+
+        // A small vowel from a different row is a digraph (ファ, ティ) — that mora's spelling, not a stretch.
+        int row = VowelRowOf(w.Text[^1]);
+        if (row < 0 || VowelRowOf(w.Text[^2]) != row) return false;
+
+        foreach (var c in w.Text)
+        {
+            if (!JapaneseTextHelper.IsKana(c) || c == 'ー') return false;
+        }
+
+        var stripped = w.Text[..^1];
+        // An attested surface is lexical (ねぇ, もぉ, すげぇ), however same-vowel it looks.
+        if (HasNonNameCompoundLookup(w.Text) || !HasNonNameCompoundLookup(stripped)) return false;
+
+        repaired = new WordInfo(w)
+        {
+            Text = stripped,
+            DictionaryForm = w.DictionaryForm == w.Text ? stripped : w.DictionaryForm,
+            Reading = w.Reading.Length > 1 && SmallVowelKana.IndexOf(w.Reading[^1]) >= 0 ? w.Reading[..^1] : w.Reading
+        };
+        return true;
+    }
+
     private List<WordInfo> RepairVowelElongation(List<WordInfo> wordInfos)
     {
         bool changed = false;
@@ -926,6 +1082,13 @@ public partial class MorphologicalAnalyser
         for (int i = 0; i < wordInfos.Count; i++)
         {
             var w = wordInfos[i];
+
+            if (TryStripTrailingSmallVowel(w, out var deElongated))
+            {
+                wordInfos[i] = deElongated;
+                w = deElongated;
+                changed = true;
+            }
 
             // Strip trailing ー from particles/conjunctions (colloquial elongation like けどー).
             if (w.Text.Length >= 2 && w.Text[^1] == 'ー'
@@ -1847,6 +2010,20 @@ public partial class MorphologicalAnalyser
             result?.Add(w);
         }
         return result ?? wordInfos;
+    }
+
+    /// <summary>なく belongs to a bound auxiliary verb stem after a て-form (出て+こ+なく), not to a following なった.</summary>
+    private static bool IsBoundAuxiliaryNegative(WordInfo w1, List<WordInfo> emitted)
+    {
+        if (w1.Text != "なく" || emitted.Count < 2)
+            return false;
+
+        var stem = emitted[^1];
+        if (stem.PartOfSpeech != PartOfSpeech.Verb || !stem.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant))
+            return false;
+
+        var teForm = emitted[^2];
+        return teForm.Text.EndsWith('て') || teForm.Text.EndsWith('で');
     }
 
     private List<WordInfo> ProcessSpecialCases(List<WordInfo> wordInfos)
@@ -2986,7 +3163,7 @@ public partial class MorphologicalAnalyser
                 }
 
                 bool found = false;
-                if (SpecialCases3Dict.TryGetValue(w1.Text, out var sc3Candidates))
+                if (SpecialCases3Dict.TryGetValue(w1.Text, out var sc3Candidates) && !IsBoundAuxiliaryNegative(w1, newList))
                 {
                     foreach (var sc in sc3Candidates)
                     {

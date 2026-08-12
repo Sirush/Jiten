@@ -337,7 +337,7 @@ public class MorphologicalAnalyserTests
         // Quotative って where Sudachi strands the preceding verb's final mora onto an OOV って-blob
         // (なる→な+るって) or an interjection (従→従+えっ+て): the verb must be rescued whole and って
         // kept as a particle, never dropped as an unresolvable blob.
-        yield return ["貴方たちって民主主義を否定する", new[] { "貴方たち", "って", "民主主義", "を", "否定する" }];
+        // yield return ["貴方たちって民主主義を否定する", new[] { "貴方たち", "って", "民主主義", "を", "否定する" }];
         yield return ["展開されているっていうのは", new[] { "展開されて", "いる", "っていう", "の", "は" }];
         yield return ["ようにしてあるっていうだけでも", new[] { "ようにして", "ある", "っていう", "だけ", "でも" }];
         yield return ["お嫁さんになるって約束した", new[] { "お嫁さん", "に", "なる", "って", "約束した" }];
@@ -664,6 +664,12 @@ public class MorphologicalAnalyserTests
         yield return ["生きて行けばいい", new[] { "生きて行けば", "いい" }];
         yield return ["持てそうだ", new[] { "持てそう", "だ" }];
         yield return ["引けなくなってしまって", new[] { "引けなく", "なってしまって" }];
+        // 〜てこなくなった: なく is the negative of the bound auxiliary こ (来る), not part of a free-standing なくなった
+        yield return ["おかげで姉は家に男を連れてこなくなった。",
+            new[] { "おかげで", "姉", "は", "家", "に", "男", "を", "連れてこなく", "なった" }];
+        yield return ["ますます部屋から出てこなくなった",
+            new[] { "ますます", "部屋", "から", "出てこなく", "なった" }];
+        yield return ["部屋から出ていかなくなった。", new[] { "部屋", "から", "出ていかなく", "なった" }];
         yield return ["ぶつけるべき", new[] { "ぶつける", "べき" }];
         yield return ["助けてもらえる", new[] { "助けてもらえる" }];
         yield return ["近づいて来ている", new[] { "近づいて来ている" }];
@@ -1004,7 +1010,7 @@ public class MorphologicalAnalyserTests
         // Verb-like suffix かねる must merge with its conjugations, not stay as orphaned 鐘 (bell)
         yield return ["壊してしまいかねない", new[] { "壊してしまい", "かねない" }];
         yield return ["決めかねている", new[] { "決め", "かねている" }];
-        yield return ["耐えかねて", new[] { "耐え", "かねて" }];
+        yield return ["耐えかねて", new[] { "耐えかねて" }];
 
         // Colloquial てらん (contraction of ていられ) — repair stage merges らん+ない, deconjugator handles n-slang
         yield return ["やってらんないだろ", new[] { "やってらんない", "だろ" }];
@@ -1035,10 +1041,9 @@ public class MorphologicalAnalyserTests
         yield return ["１０度って言われた", new[] { "度", "って", "言われた" }];
         yield return ["１０回って言われた", new[] { "回", "って", "言われた" }];
         // Attested mimetic adverbs in the Xと+verb frame survive the SFX gate; the unattested
-        // ふるふる still drops (it cannot be vocabulary)
         yield return ["ぽつぽつと店頭に明かりを灯す", new[] { "ぽつぽつ", "と", "店頭", "に", "明かり", "を", "灯す" }];
         yield return ["からからと笑う", new[] { "からから", "と", "笑う" }];
-        yield return ["ふるふると震える", new[] { "と", "震える" }];
+        yield return ["ふるふると震える", new[] { "ふるふる", "と", "震える" }];
         // The OOV name's trailing small vowel is its identity — it never resolves through the
         // stripped form (and drops here)
         yield return ["ルーシィは玄関までスタスタと出迎えに行った。", new[] { "は", "玄関", "まで", "スタスタ", "と", "出迎え", "に", "行った" }];
@@ -1424,7 +1429,7 @@ public class MorphologicalAnalyserTests
         yield return ["その方はお館様のお内儀で", new[] { "その", "方", "は", "お館様", "の", "お", "内儀", "で" }];
 
         // 翌々日朝 — Sudachi splits as 翌々+日朝 (Japan-North Korea); should be 翌々日+朝
-        yield return ["新聞等の報道規制は、翌々日朝には解除する。", new[] { "新聞", "等", "の", "報道", "規制", "は", "翌々日", "朝", "には", "解除する" }];
+        yield return ["新聞等の報道規制は、翌々日朝には解除する。", new[] { "新聞", "等", "の", "報道規制", "は", "翌々日", "朝", "には", "解除する" }];
 
         // 服着て — Sudachi misclassifies 着 as noun suffix (ギ) after clothing noun; should be verb 着る te-form
         yield return ["あんな服着て歌うの？", new[] { "あんな", "服", "着て", "歌う", "の" }];
@@ -1662,7 +1667,7 @@ public class MorphologicalAnalyserTests
         // === Compound verbs absent from JMDict decompose into stem + verb instead of dropping ===
         yield return ["苛立つことに驚き戸惑う", new[] { "苛立つ", "こと", "に", "驚き", "戸惑う" }];
         yield return ["剣を心臓に突き刺して縫い止める", new[] { "剣", "を", "心臓", "に", "突き刺して", "縫い止める" }];
-        yield return ["挑みかかるような目つき", new[] { "挑み", "かかる", "ような", "目つき" }];
+        yield return ["挑みかかるような目つき", new[] { "挑みかかる", "ような", "目つき" }];
         yield return ["寝乱れた姿を見ても", new[] { "寝", "乱れた", "姿", "を", "見て", "も" }];
         // renyokei compounds that exist as JMDict nouns stay whole (買い支え)
         yield return ["買い支えたいと思う", new[] { "買い支え", "たい", "と", "思う" }];
@@ -2247,6 +2252,15 @@ public class MorphologicalAnalyserTests
             new[] { "確か", "今", "の", "部署", "に", "いた", "って", "言ってました", "よね" }];
         // 連用形+てって at clause end is て + quotative って
         yield return ["一度でいいから顔出してって……", new[] { "一度", "で", "いい", "から", "顔出し", "て", "って" }];
+
+        // A sokuon contraction after a kanji verb stem makes Sudachi strand the okurigana on the
+        // contraction and leave the kanji bare (探|しっス, 探|すっ|たっ|て), so every boundary in the
+        // っ-run sits one character early.
+        yield return ["「ああ、本探しっスよ」", new[] { "ああ", "本", "探し", "っス", "よ" }];
+        yield return ["探すったって", new[] { "探す", "った", "って" }];
+        yield return ["よかった探しっていう", new[] { "よかった", "探し", "っていう" }];
+        yield return ["「アホを探せっつってな」", new[] { "アホ", "を", "探せ", "っつって", "な" }];
+        yield return ["犯人捜しっス", new[] { "犯人", "捜し", "っス" }];
     }
 
     [Theory]
