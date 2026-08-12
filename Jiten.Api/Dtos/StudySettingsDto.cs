@@ -193,13 +193,23 @@ public class StudySettingsDto
     public bool AutoPlaySentenceOnFront { get; set; }
 
     [JsonPropertyName("autoPlayCustomAudio")]
-    public bool AutoPlayCustomAudio { get; set; }
+    public bool AutoPlayCustomAudio { get; set; } = true;
 
     [JsonPropertyName("autoPlayCustomAudioPosition")]
     public CardAudioAutoPlayPosition AutoPlayCustomAudioPosition { get; set; } = CardAudioAutoPlayPosition.Back;
 
-    [JsonPropertyName("autoPlayCustomAudioInstead")]
-    public bool AutoPlayCustomAudioInstead { get; set; }
+    [JsonPropertyName("customAudioReplacesHeadword")]
+    public bool CustomAudioReplacesHeadword { get; set; } = true;
+
+    [JsonPropertyName("customAudioReplacesSentence")]
+    public bool CustomAudioReplacesSentence { get; set; } = true;
+
+    /// <summary>
+    /// Below <see cref="StudySettingsMigrator.CurrentAudioDefaultsVersion"/> the custom-audio fields are not
+    /// authoritative and get overwritten with the current defaults on both read and write.
+    /// </summary>
+    [JsonPropertyName("audioDefaultsVersion")]
+    public int AudioDefaultsVersion { get; set; }
 
     [JsonPropertyName("showReviewActivity")]
     public bool ShowReviewActivity { get; set; } = true;

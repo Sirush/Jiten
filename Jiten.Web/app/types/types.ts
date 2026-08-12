@@ -1219,7 +1219,10 @@ export interface StudySettingsDto {
   autoPlaySentenceOnFront: boolean;
   autoPlayCustomAudio: boolean;
   autoPlayCustomAudioPosition: CardAudioAutoPlayPosition;
-  autoPlayCustomAudioInstead: boolean;
+  customAudioReplacesHeadword: boolean;
+  customAudioReplacesSentence: boolean;
+  /** Below the server's current version the custom-audio fields are overwritten with the current defaults. */
+  audioDefaultsVersion: number;
   showReviewActivity: boolean;
   showReviewForecast: boolean;
   timezone: string | null;

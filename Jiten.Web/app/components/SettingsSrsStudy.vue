@@ -1188,7 +1188,7 @@
           <label for="autoPlayCustomAudio" class="text-sm cursor-pointer">
             Auto-play custom card audio
             <Tooltip
-              content="On cards with an uploaded audio clip, auto-play the clip. Independent of the headword audio settings above."
+              content="On cards with an uploaded audio clip, auto-play the clip. By default it replaces both the headword and the example sentence text-to-speech."
               placement="right"
             >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
@@ -1215,11 +1215,23 @@
             />
           </div>
           <div class="flex items-center gap-2">
-            <ToggleSwitch v-model="form.autoPlayCustomAudioInstead" input-id="autoPlayCustomAudioInstead" />
-            <label for="autoPlayCustomAudioInstead" class="text-sm cursor-pointer">
-              Play instead of the headword
+            <ToggleSwitch v-model="form.customAudioReplacesHeadword" input-id="customAudioReplacesHeadword" />
+            <label for="customAudioReplacesHeadword" class="text-sm cursor-pointer">
+              Replace the headword audio
               <Tooltip
-                content="When the headword audio also auto-plays on the same side, play the clip instead of it."
+                content="On cards with a clip, play it instead of the headword TTS."
+                placement="right"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
+          <div class="flex items-center gap-2">
+            <ToggleSwitch v-model="form.customAudioReplacesSentence" input-id="customAudioReplacesSentence" />
+            <label for="customAudioReplacesSentence" class="text-sm cursor-pointer">
+              Replace the example sentence audio
+              <Tooltip
+                content="On cards with a clip, play it instead of the example sentence TTS."
                 placement="right"
               >
                 <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />

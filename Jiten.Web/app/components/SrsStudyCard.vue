@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { CardLayoutBlock, StudyCardDto, Word } from '~/types';
+  import type { CardLayoutBlock, CardMediaDto, StudyCardDto, Word } from '~/types';
   import { useSrsStore } from '~/stores/srsStore';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
   import { displayKeyName } from '~/composables/useStudyKeyboard';
@@ -328,12 +328,14 @@
     tts.speakWord(props.card.wordId, props.card.readingIndex, headWordTtsText.value);
   }
 
-  function playCustomToEnd() {
+  function playCustomToEnd(media: CardMediaDto) {
     return wordAudio.playCustomToEnd({
-      media: cardAudio.value,
+      media,
       onExpired: async () => (await cardMedia.refreshOne(props.card.wordId, props.card.readingIndex))?.audio ?? null,
     });
   }
+
+  let audioGeneration = 0;
 
   // Resolves once the current word audio (TTS or custom clip) has finished. Waits briefly for playback
   // to start first, since server-side TTS fetches its audio before the playing state flips on.
@@ -358,37 +360,30 @@
     });
   }
 
-  async function playAutoWordPhase(headword: boolean, custom: boolean, instead: boolean) {
-    if (custom && (instead || !headword)) {
-      const ok = await playCustomToEnd();
-      if (ok || !headword) return;
-    }
-    if (headword) {
-      playHeadwordAudio();
-      await afterWordAudio();
-      if (custom && !instead) await playCustomToEnd();
-    }
-  }
-
   function wait(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async function startAutoAudio(mode: 'front' | 'flip') {
+    const generation = ++audioGeneration;
+    const current = () => generation === audioGeneration;
+
     const settings = srsStore.studySettings;
     const onFront = mode === 'front';
     if (onFront && props.isFlipped) return;
     const example = cardExample.value;
-    const hasCustom = !!cardAudio.value?.url;
+    const media = cardAudio.value;
 
     let headword = onFront ? settings.autoPlayWordOnFront : settings.autoPlayWord;
     if (onFront && headword && settings.autoPlayWordOnFrontNewOnly && !props.card.isNewCard) headword = false;
 
     const pos = settings.autoPlayCustomAudioPosition;
     const customThisSide = pos === 'Both' || pos === (onFront ? 'Front' : 'Back');
-    const custom = hasCustom && settings.autoPlayCustomAudio && customThisSide;
+    const custom = !!media?.url && settings.autoPlayCustomAudio && customThisSide;
+    const replacesHeadword = custom && settings.customAudioReplacesHeadword;
+    const replacesSentence = custom && settings.customAudioReplacesSentence;
 
-    const playSentence =
+    let playSentence =
       !!example?.sentenceId &&
       (onFront
         ? frontHasSentence.value && settings.autoPlayWordOnFront && settings.autoPlaySentenceOnFront
@@ -396,18 +391,35 @@
 
     if (!headword && !custom && !playSentence) return;
 
-    const cardKey = `${props.card.wordId}-${props.card.readingIndex}`;
-    const sameCard = () => `${props.card.wordId}-${props.card.readingIndex}` === cardKey;
-
-    if (headword || custom) {
-      await playAutoWordPhase(headword, custom, settings.autoPlayCustomAudioInstead);
-      if (!playSentence || !sameCard()) return;
-      await wait(150);
-      if (!sameCard()) return;
-      playExample(example!);
-    } else if (playSentence) {
-      playExample(example!);
+    if (custom && (replacesHeadword || replacesSentence)) {
+      const played = await playCustomToEnd(media!);
+      if (!current()) return;
+      if (played) {
+        if (replacesHeadword) headword = false;
+        if (replacesSentence) playSentence = false;
+      }
+      if (headword) {
+        playHeadwordAudio();
+        await afterWordAudio();
+        if (!current()) return;
+      }
+    } else if (headword) {
+      playHeadwordAudio();
+      await afterWordAudio();
+      if (!current()) return;
+      if (custom) {
+        await playCustomToEnd(media!);
+        if (!current()) return;
+      }
+    } else if (custom) {
+      await playCustomToEnd(media!);
+      if (!current()) return;
     }
+
+    if (!playSentence) return;
+    await wait(150);
+    if (!current()) return;
+    playExample(example!);
   }
 
   async function onImageError() {
@@ -454,7 +466,10 @@
     { immediate: true }
   );
 
-  onUnmounted(() => wordAudio.stop());
+  onUnmounted(() => {
+    audioGeneration++;
+    wordAudio.stop();
+  });
 
   const sentenceBlurred = computed(() => srsStore.studySettings.blurExampleSentence && !exampleRevealed.value);
 
@@ -464,10 +479,16 @@
     else tts.speakSentence(ex.sentenceId, ex.text);
   }
 
+  // The clip stands in for the sentence text-to-speech, so unblurring must not read the sentence aloud
+  // after the clip has already played on flip.
+  const customAudioCoversSentence = computed(
+    () => !!cardAudio.value?.url && srsStore.studySettings.autoPlayCustomAudio && srsStore.studySettings.customAudioReplacesSentence
+  );
+
   function revealExample() {
     exampleRevealed.value = true;
     const example = cardExample.value;
-    if (srsStore.studySettings.autoPlaySentence && example?.sentenceId) {
+    if (srsStore.studySettings.autoPlaySentence && example?.sentenceId && !customAudioCoversSentence.value) {
       playExample(example);
     }
   }

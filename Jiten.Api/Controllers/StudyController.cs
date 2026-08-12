@@ -2097,6 +2097,8 @@ public class StudyController(
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
 
+        StudySettingsMigrator.Apply(request);
+
         request.NewCardsPerDay = Math.Clamp(request.NewCardsPerDay, 0, 9999);
         request.MaxReviewsPerDay = Math.Clamp(request.MaxReviewsPerDay, 0, 9999);
         request.BatchSize = Math.Clamp(request.BatchSize, 1, 999);
@@ -2200,15 +2202,15 @@ public class StudyController(
             .FirstOrDefaultAsync(s => s.UserId == userId);
 
         if (fsrsSettings == null || string.IsNullOrEmpty(fsrsSettings.SettingsJson) || fsrsSettings.SettingsJson == "{}")
-            return new StudySettingsDto();
+            return StudySettingsMigrator.Apply(new StudySettingsDto());
 
         try
         {
-            return JsonSerializer.Deserialize<StudySettingsDto>(fsrsSettings.SettingsJson) ?? new StudySettingsDto();
+            return StudySettingsMigrator.Apply(JsonSerializer.Deserialize<StudySettingsDto>(fsrsSettings.SettingsJson) ?? new StudySettingsDto());
         }
         catch (JsonException)
         {
-            return new StudySettingsDto();
+            return StudySettingsMigrator.Apply(new StudySettingsDto());
         }
     }
 

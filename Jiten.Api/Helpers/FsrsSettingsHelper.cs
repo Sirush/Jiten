@@ -44,11 +44,11 @@ public static class FsrsSettingsHelper
     {
         if (settings?.SettingsJson is { Length: > 2 } json)
         {
-            try { return JsonSerializer.Deserialize<StudySettingsDto>(json) ?? new StudySettingsDto(); }
+            try { return StudySettingsMigrator.Apply(JsonSerializer.Deserialize<StudySettingsDto>(json) ?? new StudySettingsDto()); }
             catch (JsonException) { }
         }
 
-        return new StudySettingsDto();
+        return StudySettingsMigrator.Apply(new StudySettingsDto());
     }
 
     public static double ResolveOffsetHours(DateTime utcNow, string? timezone)
