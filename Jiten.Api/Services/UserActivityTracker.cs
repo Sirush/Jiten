@@ -46,6 +46,7 @@ public class UserActivityTracker(
 
             var metadata = await ctx.UserMetadatas.FirstOrDefaultAsync(um => um.UserId == userId);
             var previous = metadata?.LastActivity;
+            var returningUser = previous == null || previous < inactiveThreshold;
 
             if (metadata == null)
             {
@@ -57,11 +58,18 @@ public class UserActivityTracker(
                 metadata.LastActivity = now;
             }
 
+            // ComputeUserCoverage skips clean users, so the catch-up enqueue below must mark dirty.
+            if (returningUser)
+            {
+                metadata.CoverageDirty = true;
+                metadata.CoverageDirtyAt = now;
+            }
+
             await ctx.SaveChangesAsync();
 
             // Returning user: if they were inactive (or brand new in metadata terms),
             // queue a full coverage recompute so sort-by-coverage reflects decks added while away.
-            if (previous == null || previous < inactiveThreshold)
+            if (returningUser)
             {
                 backgroundJobs.Enqueue<ComputationJob>(j => j.ComputeUserCoverage(userId));
                 logger.LogInformation(
