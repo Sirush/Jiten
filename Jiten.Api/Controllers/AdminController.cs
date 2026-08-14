@@ -2,6 +2,7 @@ using System.Net;
 using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
+using Jiten.Api.Helpers;
 using Jiten.Api.Jobs;
 using Jiten.Api.Services;
 using Jiten.Cli;
@@ -659,6 +660,11 @@ public partial class AdminController(
     {
         var userIds = await userContext.Users.AsNoTracking().Select(u => u.Id).ToListAsync();
 
+        var now = DateTime.UtcNow;
+        await userContext.UserMetadatas.ExecuteUpdateAsync(s => s
+            .SetProperty(m => m.CoverageDirty, true)
+            .SetProperty(m => m.CoverageDirtyAt, now));
+
         foreach (var userId in userIds)
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
 
@@ -691,8 +697,9 @@ public partial class AdminController(
     }
 
     [HttpPost("recompute-coverage/{userId}")]
-    public IActionResult RecomputeUserCoverage(string userId)
+    public async Task<IActionResult> RecomputeUserCoverage(string userId)
     {
+        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
         logger.LogInformation("Admin queued recompute coverage for user: UserId={UserId}", userId);
         return Ok(new { Message = $"Recomputing user coverage for user {userId} has been queued" });

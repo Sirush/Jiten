@@ -233,6 +233,54 @@
   const fetchAnkiMedia = (filename: string) =>
     ankiInvoke('retrieveMediaFile', { filename }) as Promise<string | false>;
 
+  // fetch surfaces transport failures as TypeError; an AnkiConnect action error means Anki is alive
+  // and retrying cannot change the answer.
+  const isTransportError = (error: unknown) => error instanceof TypeError;
+
+  /**
+   * A transport failure during a long run can be the OS out of socket buffers (ERR_NO_BUFFER_SPACE)
+   * while Anki is fine — so it only propagates, aborting the run, once a liveness probe fails too.
+   */
+  const withAnkiAlive = async (call: () => Promise<Array<string | false>>): Promise<Array<string | false>> => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await call();
+      } catch (error) {
+        if (!isTransportError(error) || attempt >= 2) throw error;
+        // The pause gives the OS time to release closed sockets before adding more traffic.
+        await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
+        try {
+          await ankiInvoke('version');
+        } catch {
+          throw error;
+        }
+      }
+    }
+  };
+
+  /** One multi call per batch keeps localhost connection churn low; per-file POSTs exhausted socket buffers on large decks. */
+  const fetchAnkiMediaBatch = (filenames: string[]) =>
+    withAnkiAlive(async () => {
+      const entries = await ankiInvoke('multi', {
+        actions: filenames.map(filename => ({ action: 'retrieveMediaFile', version: 6, params: { filename } })),
+      }) as unknown[];
+
+      return entries.map((entry): string | false => {
+        // Versioned sub-actions answer wrapped ({result, error}); older servers answer bare values.
+        const value = entry !== null && typeof entry === 'object'
+          ? (() => {
+              const wrapped = entry as { result?: unknown; error?: unknown };
+              if (wrapped.error) throw new Error(String(wrapped.error));
+              return wrapped.result;
+            })()
+          : entry;
+
+        if (typeof value === 'string' || value === false) return value;
+        // A malformed response must abort, not count as missing — only an explicit false means absent.
+        throw new Error('Unexpected retrieveMediaFile result from AnkiConnect.');
+      });
+    });
+
   // The review dialog opens as soon as partitioning finds a conflict, while the rest keeps uploading.
   watch(() => mediaImport.conflicts.value.length, count => {
     if (count > 0 && mediaImport.running.value) showMediaConflicts.value = true;
@@ -613,7 +661,11 @@
   const RunExtras = async () => {
     if (selectedSentenceFieldName && sentenceImport.collectedCount() > 0) {
       importPhase.value = 'sentences';
-      await sentenceImport.run({ parseWords: parseWords.value, source: `Anki: ${selectedDeckName.value}` });
+      try {
+        await sentenceImport.run({ parseWords: parseWords.value, source: `Anki: ${selectedDeckName.value}` });
+      } catch (error) {
+        reportError(error, 'Failed to import example sentences.');
+      }
       showSentenceSummary.value = true;
     }
 
@@ -626,7 +678,7 @@
         await mediaImport.run({
           parseWords: parseWords.value,
           mode: mediaConflictMode.value,
-          fetchMedia: fetchAnkiMedia,
+          fetchMedia: fetchAnkiMediaBatch,
         });
         showMediaSummary.value = true;
       } finally {
@@ -1256,7 +1308,7 @@
             Uploaded: {{ mediaImport.stats.value.uploaded + mediaImport.stats.value.replaced }} |
             Skipped: {{
               mediaImport.stats.value.skippedExisting + mediaImport.stats.value.missingInAnki + mediaImport.stats.value.tooLarge
-              + mediaImport.stats.value.invalid + mediaImport.stats.value.notTracked
+              + mediaImport.stats.value.invalid + mediaImport.stats.value.notTracked + mediaImport.stats.value.uploadFailed
             }}
           </p>
           <Button
@@ -1338,6 +1390,9 @@
         <li v-if="mediaImport.stats.value.notTracked > 0">{{ mediaImport.stats.value.notTracked }} skipped — word not in your collection</li>
         <li v-if="mediaImport.stats.value.tooLarge > 0">{{ mediaImport.stats.value.tooLarge }} skipped — larger than 5 MB</li>
         <li v-if="mediaImport.stats.value.invalid > 0">{{ mediaImport.stats.value.invalid }} skipped — unsupported file type</li>
+        <li v-if="mediaImport.stats.value.uploadFailed > 0">
+          {{ mediaImport.stats.value.uploadFailed }} failed — the storage service was unavailable; run the import again to retry them
+        </li>
         <li v-if="mediaImport.stats.value.duplicateTarget > 0">
           {{ mediaImport.stats.value.duplicateTarget }} skipped — another card already supplied that word's media
         </li>

@@ -32,6 +32,8 @@ public class CardMediaImportBatchTests(JitenWebApplicationFactory factory)
 
     public async Task InitializeAsync()
     {
+        factory.Services.GetRequiredService<StubCdnService>().FailNextUploads = 0;
+
         using var scope = factory.Services.CreateScope();
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
 
@@ -98,6 +100,39 @@ public class CardMediaImportBatchTests(JitenWebApplicationFactory factory)
         using var scope = factory.Services.CreateScope();
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         return await userDb.UserCardMedia.Where(m => m.UserId == userId).ToListAsync();
+    }
+
+    [Fact]
+    public async Task ImportBatch_TransientCdnFailure_RetriesAndStoresTheFile()
+    {
+        factory.Services.GetRequiredService<StubCdnService>().FailNextUploads = 1;
+
+        var (_, statuses) = await Import(TestUsers.UserA, File(0, RealPng(), wordId: 400));
+
+        statuses[0].Should().Be("ok");
+        (await Stored()).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ImportBatch_CdnOutage_FailsPerItemInsteadOf500ing()
+    {
+        var stub = factory.Services.GetRequiredService<StubCdnService>();
+        stub.FailNextUploads = int.MaxValue;
+        try
+        {
+            var (_, statuses) = await Import(TestUsers.UserA,
+                                             File(0, RealPng(), wordId: 400),
+                                             File(1, Mp3, wordId: 401),
+                                             File(2, RealPng(), wordId: 402));
+
+            // The first item exhausts its retries; the rest are failed without attempting.
+            statuses.Values.Should().OnlyContain(s => s == "upload_failed");
+            (await Stored()).Should().BeEmpty();
+        }
+        finally
+        {
+            stub.FailNextUploads = 0;
+        }
     }
 
     [Fact]

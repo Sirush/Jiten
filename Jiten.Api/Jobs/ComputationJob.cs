@@ -63,6 +63,14 @@ public class ComputationJob(
         {
             var computedAt = DateTime.UtcNow;
 
+            // Queued duplicates coalesce here: a burst of enqueues each marks dirty, the first job
+            // recomputes and clears the flag, and the rest land on a clean flag and exit. Every
+            // enqueue site must mark CoverageDirty first (or target a user without coverage chunks).
+            var alreadyClean = await userContext.UserMetadatas.AsNoTracking()
+                                                .AnyAsync(um => um.UserId == userId && !um.CoverageDirty);
+            if (alreadyClean && await userContext.UserCoverageChunks.AnyAsync(uc => uc.UserId == userId))
+                return;
+
             // Only compute coverage for users with at least 10 known words or any WordSet subscriptions
             var hasSufficientFsrsCards = await userContext.FsrsCards.CountAsync(fc => fc.UserId == userId) >= 10;
             var hasWordSetSubscriptions = await userContext.UserWordSetStates.AnyAsync(uwss => uwss.UserId == userId);
@@ -274,6 +282,11 @@ public class ComputationJob(
         }
 
         metadata.CoverageRefreshedAt = computedAt;
+
+        // A mark that landed mid-compute must survive the clear, or the job it enqueued would skip.
+        if (!isDirty && metadata.CoverageDirty && metadata.CoverageDirtyAt > computedAt)
+            return;
+
         metadata.CoverageDirty = isDirty;
         metadata.CoverageDirtyAt = isDirty ? computedAt : null;
     }

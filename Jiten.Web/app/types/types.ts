@@ -2005,7 +2005,7 @@ export interface CardMediaBatchResponse {
   items: CardMediaBatchItem[];
 }
 
-export type CardMediaImportStatus = 'ok' | 'conflict' | 'invalid' | 'too_large' | 'quota_exceeded' | 'not_tracked';
+export type CardMediaImportStatus = 'ok' | 'conflict' | 'invalid' | 'too_large' | 'quota_exceeded' | 'not_tracked' | 'upload_failed';
 
 export interface CardMediaImportResult {
   index: number;

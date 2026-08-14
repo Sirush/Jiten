@@ -8,8 +8,17 @@ public class StubCdnService : ICdnService
     public List<string> Deletions { get; } = [];
     public List<string> Purges { get; } = [];
 
+    /// <summary>Remaining UploadFile calls that throw, simulating a CDN outage; int.MaxValue for a total one.</summary>
+    public int FailNextUploads { get; set; }
+
     public Task<string> UploadFile(byte[] file, string fileName, bool secure = false)
     {
+        if (FailNextUploads > 0)
+        {
+            if (FailNextUploads != int.MaxValue) FailNextUploads--;
+            throw new InvalidOperationException("Stub CDN outage.");
+        }
+
         Uploads.Add((file, fileName));
         return Task.FromResult($"https://cdn.test/{fileName}");
     }

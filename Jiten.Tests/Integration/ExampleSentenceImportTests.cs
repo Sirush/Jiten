@@ -203,7 +203,7 @@ public class ExampleSentenceImportTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task ImportBatch_OverTheItemCap_ReturnsBadRequest()
     {
-        var items = Enumerable.Range(0, 201).Select(i => Item(i, $"文{i}に**猫**がいる")).ToArray();
+        var items = Enumerable.Range(0, 501).Select(i => Item(i, $"文{i}に**猫**がいる")).ToArray();
 
         var response = await Import(items);
 

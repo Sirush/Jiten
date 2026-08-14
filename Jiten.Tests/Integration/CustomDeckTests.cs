@@ -26,6 +26,7 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
         using var scope = factory.Services.CreateScope();
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         await userDb.UserStudyDeckWords.ExecuteDeleteAsync();
+        await userDb.UserExampleSentences.ExecuteDeleteAsync();
         await userDb.UserStudyDecks.ExecuteDeleteAsync();
         await userDb.FsrsReviewLogs.ExecuteDeleteAsync();
         await userDb.FsrsCards.ExecuteDeleteAsync();
@@ -176,6 +177,79 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         var count = await userDb.UserStudyDeckWords.CountAsync(w => w.UserStudyDeckId == deckId);
         count.Should().Be(50);
+    }
+
+    [Fact]
+    public async Task StaticDeck_BatchAddWords_StoresSentences()
+    {
+        await SeedJmDictWords(1, 2);
+
+        var createReq = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckType = 2, name = "Batch Sentence Test", downloadType = 1, order = 4, minFrequency = 0, maxFrequency = 0, excludeKana = false, excludeMatureMasteredBlacklisted = true, excludeAllTrackedWords = false });
+        var createRes = await _client.SendAsync(createReq);
+        var deckResult = await createRes.Content.ReadFromJsonAsync<IdResult>();
+        var deckId = deckResult!.UserStudyDeckId;
+
+        var words = new object[]
+        {
+            new { wordId = 1, readingIndex = 0, occurrences = 1, sentence = "**word1**を食べた", source = "Some Show" },
+            new { wordId = 2, readingIndex = 0, occurrences = 1, sentence = "no markers here" },
+            new { wordId = 999, readingIndex = 0, occurrences = 1, sentence = "**word999**を見た" },
+        };
+        var batchReq = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{deckId}/words/batch")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { words });
+        var batchRes = await _client.SendAsync(batchReq);
+        batchRes.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await batchRes.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("added").GetInt32().Should().Be(2);
+        body.GetProperty("sentencesStored").GetInt32().Should().Be(1);
+        body.GetProperty("sentencesSkipped").GetInt32().Should().Be(1);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var sentences = await userDb.UserExampleSentences.Where(e => e.UserId == TestUsers.UserA).ToListAsync();
+        sentences.Should().HaveCount(1);
+        sentences[0].WordId.Should().Be(1);
+        sentences[0].Text.Should().Be("**word1**を食べた");
+        sentences[0].Source.Should().Be("Some Show");
+    }
+
+    [Fact]
+    public async Task StaticDeck_BatchAddWords_SentenceLimitPerWord()
+    {
+        await SeedJmDictWords(1, 1);
+
+        var createReq = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckType = 2, name = "Sentence Limit Test", downloadType = 1, order = 4, minFrequency = 0, maxFrequency = 0, excludeKana = false, excludeMatureMasteredBlacklisted = true, excludeAllTrackedWords = false });
+        var createRes = await _client.SendAsync(createReq);
+        var deckResult = await createRes.Content.ReadFromJsonAsync<IdResult>();
+        var deckId = deckResult!.UserStudyDeckId;
+
+        for (var i = 0; i < 4; i++)
+        {
+            var batchReq = new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{deckId}/words/batch")
+                .WithUser(TestUsers.UserA)
+                .WithJsonContent(new { words = new[] { new { wordId = 1, readingIndex = 0, occurrences = 1, sentence = $"**word1**の文{i}" } } });
+            var batchRes = await _client.SendAsync(batchReq);
+            batchRes.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var body = await batchRes.Content.ReadFromJsonAsync<JsonElement>();
+            body.GetProperty("sentencesStored").GetInt32().Should().Be(i < 3 ? 1 : 0);
+            body.GetProperty("sentencesSkipped").GetInt32().Should().Be(i < 3 ? 0 : 1);
+        }
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var sentences = await userDb.UserExampleSentences
+            .Where(e => e.UserId == TestUsers.UserA && e.WordId == 1)
+            .OrderBy(e => e.SortOrder)
+            .ToListAsync();
+        sentences.Should().HaveCount(3);
+        sentences.Select(s => (int)s.SortOrder).Should().Equal(0, 1, 2);
     }
 
     [Fact]
