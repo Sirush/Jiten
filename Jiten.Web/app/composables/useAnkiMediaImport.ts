@@ -15,6 +15,12 @@ const MAX_CHUNK_BYTES = 45 * 1024 * 1024;
 /** Matches the server's import concurrency permits; requests are mostly CDN-write idle time. */
 const WORKER_COUNT = 4;
 
+/** Files per AnkiConnect multi call; ten at the 5 MB file cap is ~67 MB of base64 in one response. */
+const FETCH_BATCH = 10;
+
+/** Returns one entry per filename, in order; `false` means absent from Anki's media folder. */
+type FetchMedia = (filenames: string[]) => Promise<Array<string | false | null>>;
+
 const PRESENCE_CHUNK = 500;
 const RESOLVE_CHUNK = 2000;
 const RESOLVE_CHUNK_PARSED = 500;
@@ -35,6 +41,7 @@ export interface AnkiMediaImportStats {
   extraRefsIgnored: number;
   unresolved: number;
   quotaExceeded: number;
+  uploadFailed: number;
 }
 
 export interface MediaConflict {
@@ -75,6 +82,7 @@ function emptyStats(): AnkiMediaImportStats {
     extraRefsIgnored: 0,
     unresolved: 0,
     quotaExceeded: 0,
+    uploadFailed: 0,
   };
 }
 
@@ -246,27 +254,34 @@ export function useAnkiMediaImport() {
   }
 
   /**
-   * A transport failure here means Anki went away, which is not the same as a file being absent from its
-   * media folder — so it propagates and aborts the run instead of counting the rest as missing.
+   * A throw from the fetcher means Anki is confirmed gone (the caller probes liveness before giving up),
+   * which is not the same as a file being absent — so it propagates and aborts the run instead of
+   * counting the rest as missing.
    */
-  async function fetchFiles(targets: UploadTarget[], fetchMedia: (filename: string) => Promise<string | false | null>) {
+  async function fetchFiles(targets: UploadTarget[], fetchMedia: FetchMedia) {
     const files: Array<{ target: UploadTarget; bytes: Uint8Array }> = [];
 
-    for (const target of targets) {
-      if (cancelled) break;
-      const base64 = await fetchMedia(target.filename);
-      if (!base64) {
-        stats.value.missingInAnki++;
-        continue;
-      }
+    for (let i = 0; i < targets.length && !cancelled; i += FETCH_BATCH) {
+      const batch = targets.slice(i, i + FETCH_BATCH);
+      const results = await fetchMedia(batch.map(target => target.filename));
+      // A mismatched batch cannot say which file is which, so it must not be mapped to per-file outcomes.
+      if (results.length !== batch.length) throw new Error('Media fetch returned a mismatched batch.');
 
-      const bytes = base64ToBytes(base64);
-      if (bytes.length > MAX_FILE_BYTES) {
-        stats.value.tooLarge++;
-        continue;
-      }
+      batch.forEach((target, index) => {
+        const base64 = results[index];
+        if (!base64) {
+          stats.value.missingInAnki++;
+          return;
+        }
 
-      files.push({ target, bytes });
+        const bytes = base64ToBytes(base64);
+        if (bytes.length > MAX_FILE_BYTES) {
+          stats.value.tooLarge++;
+          return;
+        }
+
+        files.push({ target, bytes });
+      });
     }
 
     return { attempted: targets.length, files };
@@ -348,13 +363,16 @@ export function useAnkiMediaImport() {
           stats.value.quotaExceeded++;
           quotaHit = true;
           break;
+        case 'upload_failed':
+          stats.value.uploadFailed++;
+          break;
         default:
           stats.value.invalid++;
       }
     }
   }
 
-  async function drain(fetchMedia: (filename: string) => Promise<string | false | null>) {
+  async function drain(fetchMedia: FetchMedia) {
     const worker = async () => {
       try {
         while (!cancelled && !quotaHit) {
@@ -401,7 +419,7 @@ export function useAnkiMediaImport() {
   async function run(options: {
     parseWords: boolean;
     mode: MediaConflictMode;
-    fetchMedia: (filename: string) => Promise<string | false | null>;
+    fetchMedia: FetchMedia;
   }) {
     if (candidates.size === 0) return stats.value;
 

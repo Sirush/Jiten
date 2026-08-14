@@ -97,6 +97,9 @@ public class CardMediaController(
                     usedBytes = result.UsedBytes,
                     maxBytes = quota.MaxBytes
                 });
+            case CardMediaWriteStatus.UploadFailed:
+                return Results.Json(new { error = "Storing the file failed. Please try again in a moment." },
+                                    statusCode: StatusCodes.Status502BadGateway);
         }
 
         return Results.Ok(new
@@ -170,6 +173,7 @@ public class CardMediaController(
 
         var results = new List<object>(items.Count);
         var quotaExhausted = false;
+        var cdnFailed = false;
 
         // Sequential on purpose: the running byte tally is what keeps quota accounting exact within a
         // request, and each item may run an ImageMagick normalization.
@@ -180,6 +184,14 @@ public class CardMediaController(
             if (quotaExhausted)
             {
                 results.Add(new { index = item.Index, status = "quota_exceeded" });
+                continue;
+            }
+
+            // A failure that outlasted the write service's retries means the CDN is unavailable, not that
+            // the file is bad; attempting the rest would only re-pay the retry delays.
+            if (cdnFailed)
+            {
+                results.Add(new { index = item.Index, status = "upload_failed" });
                 continue;
             }
 
@@ -232,6 +244,10 @@ public class CardMediaController(
                     break;
                 case CardMediaWriteStatus.TooLarge:
                     results.Add(new { index = item.Index, status = "too_large" });
+                    break;
+                case CardMediaWriteStatus.UploadFailed:
+                    cdnFailed = true;
+                    results.Add(new { index = item.Index, status = "upload_failed" });
                     break;
                 default:
                     results.Add(new { index = item.Index, status = "invalid" });

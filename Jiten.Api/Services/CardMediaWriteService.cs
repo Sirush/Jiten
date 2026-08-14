@@ -10,7 +10,8 @@ public enum CardMediaWriteStatus
     Invalid,
     TooLarge,
     QuotaExceeded,
-    Conflict
+    Conflict,
+    UploadFailed
 }
 
 /// <param name="UsedBytes">The user's total stored bytes after this write, so a caller writing several
@@ -96,7 +97,21 @@ public sealed class CardMediaWriteService(
             existing.PreviousFileSizeBytes = null;
             await userContext.SaveChangesAsync(ct);
 
-            await cdn.UploadFile(bytes, storagePath, secure: true);
+            // Bunny's storage API fails transiently under bulk-import load; a hiccup must not cost the file.
+            for (var attempt = 1;; attempt++)
+            {
+                try
+                {
+                    await cdn.UploadFile(bytes, storagePath, secure: true);
+                    break;
+                }
+                catch (Exception ex) when (attempt < 3 && ex is not OperationCanceledException)
+                {
+                    logger.LogWarning(ex, "Card-media CDN upload attempt {Attempt} failed for {Path}, retrying", attempt, storagePath);
+                    await Task.Delay(TimeSpan.FromSeconds(attempt), ct);
+                }
+            }
+
             uploadedStoragePath = storagePath;
 
             await transaction.CommitAsync(ct);
@@ -107,6 +122,14 @@ public sealed class CardMediaWriteService(
             try { await cdn.DeleteFile(uploadedStoragePath, secure: true); }
             catch { /* best effort */ }
             throw;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The scoped context outlives this item in a batch request; the rolled-back row must not
+            // ride along with the next item's SaveChanges.
+            userContext.ChangeTracker.Clear();
+            logger.LogError(ex, "Card-media upload failed for {Path} after retries", storagePath);
+            return new CardMediaWriteResult(CardMediaWriteStatus.UploadFailed, null, sniff.Kind, 0, usedBytes);
         }
 
         // Once the row is durably committed the files it replaced are orphaned; removing them is best-effort.
