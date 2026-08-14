@@ -662,8 +662,26 @@ public class StudyController(
             .Where(w => w.UserStudyDeckId == id)
             .MaxAsync(w => (int?)w.SortOrder) ?? -1;
 
+        var sentenceWordIds = request.Words
+            .Where(w => w.Sentence is { Length: > 0 })
+            .Select(w => w.WordId).Distinct().ToList();
+        var sentenceCounts = new Dictionary<long, int>();
+        var sentenceLimit = 0;
+        if (sentenceWordIds.Count > 0)
+        {
+            sentenceLimit = (await userLimits.GetLimitsAsync(userId)).CustomSentencesPerWord;
+            sentenceCounts = (await userContext.UserExampleSentences
+                    .Where(e => e.UserId == userId && sentenceWordIds.Contains(e.WordId))
+                    .Select(e => new { e.WordId, e.ReadingIndex })
+                    .ToListAsync())
+                .GroupBy(e => WordFormHelper.EncodeWordKey(e.WordId, e.ReadingIndex))
+                .ToDictionary(g => g.Key, g => g.Count());
+        }
+
         var added = 0;
         var updated = 0;
+        var sentencesStored = 0;
+        var sentencesSkipped = 0;
         var seen = new HashSet<long>();
         foreach (var word in request.Words)
         {
@@ -689,6 +707,29 @@ public class StudyController(
                 });
                 added++;
             }
+
+            if (word.Sentence is { Length: > 0 } sentence)
+            {
+                var sentenceCount = sentenceCounts.GetValueOrDefault(key);
+                if (sentence.Length <= 150 && SentenceMarkerRegex.IsMatch(sentence) && sentenceCount < sentenceLimit)
+                {
+                    userContext.UserExampleSentences.Add(new UserExampleSentence
+                    {
+                        UserId = userId,
+                        WordId = word.WordId,
+                        ReadingIndex = (byte)word.ReadingIndex,
+                        Text = sentence,
+                        Source = word.Source?.Length > 150 ? word.Source[..150] : word.Source,
+                        SortOrder = (byte)sentenceCount
+                    });
+                    sentenceCounts[key] = sentenceCount + 1;
+                    sentencesStored++;
+                }
+                else
+                {
+                    sentencesSkipped++;
+                }
+            }
         }
 
         if (added > 0 || updated > 0)
@@ -697,7 +738,7 @@ public class StudyController(
         if (added > 0 || updated > 0)
             await sessionService.BumpStudyOverviewVersion(userId);
 
-        return Results.Ok(new { added, updated });
+        return Results.Ok(new { added, updated, sentencesStored, sentencesSkipped });
     }
 
     [HttpPost("study-decks/{id:int}/words/batch-delete")]
