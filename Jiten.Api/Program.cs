@@ -606,7 +606,7 @@ builder.Services.AddRateLimiter(options =>
         return RateLimitPartition.GetSlidingWindowLimiter(partitionKey,
             _ => new SlidingWindowRateLimiterOptions
             {
-                PermitLimit = 30, Window = TimeSpan.FromSeconds(60), SegmentsPerWindow = 6,
+                PermitLimit = 60, Window = TimeSpan.FromSeconds(60), SegmentsPerWindow = 6,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
                 AutoReplenishment = true
             });

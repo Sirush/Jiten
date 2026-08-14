@@ -613,7 +613,11 @@
   const RunExtras = async () => {
     if (selectedSentenceFieldName && sentenceImport.collectedCount() > 0) {
       importPhase.value = 'sentences';
-      await sentenceImport.run({ parseWords: parseWords.value, source: `Anki: ${selectedDeckName.value}` });
+      try {
+        await sentenceImport.run({ parseWords: parseWords.value, source: `Anki: ${selectedDeckName.value}` });
+      } catch (error) {
+        reportError(error, 'Failed to import example sentences.');
+      }
       showSentenceSummary.value = true;
     }
 

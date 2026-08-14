@@ -54,7 +54,7 @@ public class UserController(
 
     private const int MaxFormsPerResolvedWord = 8;
 
-    private const int MaxSentenceImportItems = 200;
+    private const int MaxSentenceImportItems = 500;
 
     private const int MaxUserExampleSentences = 200_000;
 
