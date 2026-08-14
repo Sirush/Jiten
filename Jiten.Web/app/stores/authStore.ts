@@ -88,16 +88,16 @@ export const useAuthStore = defineStore('auth', () => {
     });
 
     // Monitor cookie changes (fallback mechanism)
-    cookieMonitor.onChange(({ token, refreshToken }) => {
+    cookieMonitor.onChange((tokens) => {
       dbg('Cookie changed in another tab');
 
       // Only update if we're not currently refreshing
       if (!isRefreshing.value) {
-        if (token && refreshToken) {
+        if (tokens.token && tokens.refreshToken) {
           // Tokens were updated externally - sync state
-          accessToken.value = token;
-          refreshToken.value = refreshToken;
-        } else if (!token && !refreshToken) {
+          accessToken.value = tokens.token;
+          refreshToken.value = tokens.refreshToken;
+        } else if (!tokens.token && !tokens.refreshToken) {
           // Tokens were cleared externally - logout
           clearAuthData();
         }

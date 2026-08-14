@@ -19,7 +19,12 @@ export class CookieMonitor {
     const parts = value.split(`; ${name}=`);
     if (parts.length === 2) {
       const cookieValue = parts.pop()?.split(';').shift();
-      return cookieValue || null;
+      if (!cookieValue) return null;
+      try {
+        return decodeURIComponent(cookieValue);
+      } catch {
+        return cookieValue;
+      }
     }
     return null;
   }
