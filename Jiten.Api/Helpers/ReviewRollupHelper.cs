@@ -100,8 +100,35 @@ public static class ReviewRollupHelper
         backgroundJobs.Enqueue<ReviewRollupJob>(job => job.RebuildForUser(userId));
     }
 
+    /// <summary>
+    /// Clears the dirty flag and stamps the rebuild time. Touches only those two columns, so it cannot
+    /// clobber a concurrent write to the rest of the row (activity bumps, coverage flags).
+    /// </summary>
     public static async Task MarkRebuilt(UserDbContext ctx, string userId)
     {
+        var now = DateTime.UtcNow;
+
+        if (ctx.Database.ProviderName?.Contains("Npgsql") == true)
+        {
+            var userGuid = Guid.Parse(userId);
+            var rows = await ctx.Database.ExecuteSqlRawAsync("""
+                UPDATE "user"."UserMetadatas"
+                SET "ReviewRollupDirty" = FALSE, "ReviewRollupRebuiltAt" = {1}
+                WHERE "UserId" = {0}::uuid
+                """, userGuid, now);
+
+            if (rows == 0)
+            {
+                await ctx.Database.ExecuteSqlRawAsync("""
+                    INSERT INTO "user"."UserMetadatas" ("UserId", "CoverageDirty", "ReviewRollupDirty", "ReviewRollupRebuiltAt")
+                    VALUES ({0}::uuid, FALSE, FALSE, {1})
+                    ON CONFLICT DO NOTHING
+                    """, userGuid, now);
+            }
+
+            return;
+        }
+
         var metadata = await ctx.UserMetadatas.FirstOrDefaultAsync(m => m.UserId == userId);
         if (metadata == null)
         {
@@ -110,7 +137,8 @@ public static class ReviewRollupHelper
         }
 
         metadata.ReviewRollupDirty = false;
-        metadata.ReviewRollupRebuiltAt = DateTime.UtcNow;
+        metadata.ReviewRollupRebuiltAt = now;
+        await ctx.SaveChangesAsync();
     }
 
     /// <summary>

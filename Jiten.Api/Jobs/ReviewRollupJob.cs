@@ -18,6 +18,9 @@ public class ReviewRollupJob(
 {
     private const int CardBatchSize = 2000;
 
+    /// Namespaces this job's advisory locks so the per-user key cannot collide with another feature's.
+    private const int AdvisoryLockClass = 0x52564A;
+
     private sealed class DayCounters
     {
         public int ReviewCount;
@@ -34,12 +37,27 @@ public class ReviewRollupJob(
         var settings = await FsrsSettingsHelper.LoadAsync(ctx, userId);
         var timezone = FsrsSettingsHelper.ResolveTimeZone(FsrsSettingsHelper.GetStudySettings(settings).Timezone);
 
+        var startedAt = DateTime.UtcNow;
         var days = new Dictionary<DateOnly, DayCounters>();
 
-        await using var transaction = await BeginRebuildTransaction(ctx);
+        // Both passes read under one snapshot: archiving moves a card's history out of the live logs and into
+        // an archive blob, so reading them at two different instants would count that card twice or lose it.
+        await using (var snapshot = await BeginSnapshotTransaction(ctx))
+        {
+            await AccumulateLiveLogs(ctx, userId, timezone, days);
+            await AccumulateArchivedLogs(ctx, userId, timezone, days);
+            await snapshot.RollbackAsync();
+        }
 
-        await AccumulateLiveLogs(ctx, userId, timezone, days);
-        await AccumulateArchivedLogs(ctx, userId, timezone, days);
+        await using var transaction = await ctx.Database.BeginTransactionAsync();
+
+        await LockUser(ctx, userId);
+
+        if (await WasRebuiltSince(ctx, userId, startedAt))
+        {
+            logger.LogInformation("Discarded review rollup for user {UserId}: a newer rebuild landed while it ran", userId);
+            return;
+        }
 
         await ctx.UserReviewDailies.Where(d => d.UserId == userId).ExecuteDeleteAsync();
 
@@ -56,9 +74,8 @@ public class ReviewRollupJob(
                                                              }));
         }
 
-        await ReviewRollupHelper.MarkRebuilt(ctx, userId);
-
         await ctx.SaveChangesAsync();
+        await ReviewRollupHelper.MarkRebuilt(ctx, userId);
         await transaction.CommitAsync();
 
         logger.LogInformation("Rebuilt review rollup for user {UserId}: {DayCount} days", userId, days.Count);
@@ -109,10 +126,29 @@ public class ReviewRollupJob(
         logger.LogInformation("Queued review rollup backfill for {UserCount} users", userIds.Count);
     }
 
-    private static Task<IDbContextTransaction> BeginRebuildTransaction(UserDbContext ctx)
+    private static Task<IDbContextTransaction> BeginSnapshotTransaction(UserDbContext ctx)
         => ctx.Database.ProviderName?.Contains("Npgsql") == true
             ? ctx.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead)
             : ctx.Database.BeginTransactionAsync();
+
+    /// <summary>
+    /// Serialises rebuilds of one user against each other, so two overlapping jobs cannot interleave their
+    /// delete and insert halves or write results from the older snapshot last.
+    /// </summary>
+    private static Task LockUser(UserDbContext ctx, string userId)
+        => ctx.Database.ProviderName?.Contains("Npgsql") == true
+            ? ctx.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0}, hashtext({1}))", AdvisoryLockClass, userId)
+            : Task.CompletedTask;
+
+    private static async Task<bool> WasRebuiltSince(UserDbContext ctx, string userId, DateTime instant)
+    {
+        var rebuiltAt = await ctx.UserMetadatas.AsNoTracking()
+                                 .Where(m => m.UserId == userId)
+                                 .Select(m => m.ReviewRollupRebuiltAt)
+                                 .FirstOrDefaultAsync();
+
+        return rebuiltAt > instant;
+    }
 
     private static async Task AccumulateLiveLogs(
         UserDbContext ctx, string userId, TimeZoneInfo? timezone, Dictionary<DateOnly, DayCounters> days)

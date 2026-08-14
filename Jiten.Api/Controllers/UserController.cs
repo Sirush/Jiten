@@ -888,9 +888,8 @@ public class UserController(
             row.TotalDurationMs = Math.Max(0, dto.TotalDurationMs);
         }
 
-        await ReviewRollupHelper.MarkRebuilt(userContext, userId);
-
         await userContext.SaveChangesAsync();
+        await ReviewRollupHelper.MarkRebuilt(userContext, userId);
         return true;
     }
 
