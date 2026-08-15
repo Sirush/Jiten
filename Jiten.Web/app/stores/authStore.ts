@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import type { CompleteGoogleRegistrationRequest, GoogleSignInResponse, GoogleRegistrationData, LoginRequest, TokenResponse } from '~/types/types';
 import { TabSyncManager } from '~/utils/tabSync';
-import { CookieMonitor } from '~/utils/cookieMonitor';
+import { CookieMonitor, readCookie } from '~/utils/cookieMonitor';
 import { useSrsStore } from '~/stores/srsStore';
 import { useLegalStore } from '~/stores/legalStore';
 
@@ -37,6 +37,7 @@ export const useAuthStore = defineStore('auth', () => {
   const error = ref<string | null>(null);
   const isRefreshing = ref<boolean>(false);
   const refreshingTabId = ref<string | null>(null);
+  const refreshStartedAt = ref<number>(0);
   let tabSyncManager: TabSyncManager | null = null;
   let cookieMonitor: CookieMonitor | null = null;
 
@@ -59,8 +60,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (payload.accessToken && payload.refreshToken) {
         dbg('Token refreshed in another tab, syncing...');
         setTokens(payload.accessToken, payload.refreshToken);
-        isRefreshing.value = false;
-        refreshingTabId.value = null;
+        releaseRefreshLock();
       }
     });
 
@@ -69,14 +69,14 @@ export const useAuthStore = defineStore('auth', () => {
       dbg('Another tab started refreshing...');
       isRefreshing.value = true;
       refreshingTabId.value = payload.tabId;
+      refreshStartedAt.value = Date.now();
     });
 
     // Listen for refresh failures
     tabSyncManager.on('TOKEN_REFRESH_FAILED', () => {
       dbg('Token refresh failed in another tab');
       clearAuthData();
-      isRefreshing.value = false;
-      refreshingTabId.value = null;
+      releaseRefreshLock();
     });
 
     // Listen for logout events
@@ -92,11 +92,9 @@ export const useAuthStore = defineStore('auth', () => {
       dbg('Cookie changed in another tab');
 
       // Only update if we're not currently refreshing
-      if (!isRefreshing.value) {
+      if (!refreshLockActive()) {
         if (tokens.token && tokens.refreshToken) {
-          // Tokens were updated externally - sync state
-          accessToken.value = tokens.token;
-          refreshToken.value = tokens.refreshToken;
+          adoptCookieTokens();
         } else if (!tokens.token && !tokens.refreshToken) {
           // Tokens were cleared externally - logout
           clearAuthData();
@@ -120,60 +118,96 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null;
     googleRegistrationData.value = null;
 
-    tokenCookie.value = null;
-    refreshTokenCookie.value = null;
+    // Only the browser may empty the cookie jar. Nulling these during SSR emits a deletion
+    // Set-Cookie on the HTML response, which drops the session in every open tab
+    if (import.meta.client) {
+      tokenCookie.value = null;
+      refreshTokenCookie.value = null;
+    }
 
     useJitenPlus().reset();
     useLegalStore().reset();
   }
 
+  function tokenExpiry(token: string | null | undefined): number {
+    if (!token) return 0;
+    try {
+      return JSON.parse(atob(token.split('.')[1])).exp ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+
   // Check if token is expired or about to expire (within 5 minutes)
   function isTokenExpired(token: string): boolean {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const currentTime = Math.floor(Date.now() / 1000);
-      // Consider token expired if it expires within 5 minutes (300 seconds)
-      return payload.exp < currentTime + 300;
-    } catch (error) {
-      console.error('Error parsing token:', error);
-      return true; // Treat invalid tokens as expired
+    const exp = tokenExpiry(token);
+    if (!exp) return true; // Treat invalid tokens as expired
+    // Consider token expired if it expires within 5 minutes (300 seconds)
+    return exp < Math.floor(Date.now() / 1000) + 300;
+  }
+
+  /// The useCookie refs miss cookie-change events while a tab is frozen or discarded,
+  function liveCookieTokens(): { token: string | null; refreshToken: string | null } {
+    if (!import.meta.client) {
+      return { token: tokenCookie.value || null, refreshToken: refreshTokenCookie.value || null };
     }
+    return { token: readCookie('token'), refreshToken: readCookie('refreshToken') };
+  }
+
+  /// Adopts the cookie pair when another tab has issued a newer one
+  function adoptCookieTokens(): boolean {
+    const cookies = liveCookieTokens();
+    if (!cookies.token || !cookies.refreshToken) return false;
+    if (cookies.token === accessToken.value && cookies.refreshToken === refreshToken.value) return false;
+    if (tokenExpiry(cookies.token) <= tokenExpiry(accessToken.value)) return false;
+
+    dbg('Adopting newer tokens from the cookie jar');
+    setTokens(cookies.token, cookies.refreshToken);
+    return true;
+  }
+
+  /// A tab that misses the completion broadcast (frozen, or the refreshing tab was closed mid-flight)
+  /// would otherwise treat the lock as held forever and never refresh again.
+  const REFRESH_LOCK_TIMEOUT_MS = 15000;
+
+  function refreshLockActive(): boolean {
+    if (!isRefreshing.value) return false;
+    if (Date.now() - refreshStartedAt.value < REFRESH_LOCK_TIMEOUT_MS) return true;
+    releaseRefreshLock();
+    return false;
+  }
+
+  function releaseRefreshLock() {
+    isRefreshing.value = false;
+    refreshingTabId.value = null;
+    refreshStartedAt.value = 0;
   }
 
   async function refreshAccessToken(): Promise<boolean> {
     // Check if another tab is already refreshing
-    if (isRefreshing.value && refreshingTabId.value !== tabSyncManager?.tabId) {
+    if (refreshLockActive() && refreshingTabId.value !== tabSyncManager?.tabId) {
       dbg('Another tab is refreshing, waiting...');
       // Wait for the other tab to complete (max 10 seconds)
       const startTime = Date.now();
-      while (isRefreshing.value && Date.now() - startTime < 10000) {
+      while (refreshLockActive() && Date.now() - startTime < 10000) {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
+      adoptCookieTokens();
       // Check if we now have a valid token
-      return !!accessToken.value && !isTokenExpired(accessToken.value);
+      if (!!accessToken.value && !isTokenExpired(accessToken.value)) return true;
     }
 
     // Check if this tab is already refreshing
-    if (isRefreshing.value && refreshingTabId.value === tabSyncManager?.tabId) {
+    if (refreshLockActive() && refreshingTabId.value === tabSyncManager?.tabId) {
       dbg('This tab is already refreshing, waiting...');
-      while (isRefreshing.value) {
+      while (refreshLockActive()) {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
       return !!accessToken.value && !isTokenExpired(accessToken.value);
     }
 
-    // If the cookie is different, another tab has ALREADY refreshed the token.
-    const currentCookieRefToken = refreshTokenCookie.value;
-    const currentCookieToken = tokenCookie.value;
-
-    if (currentCookieRefToken && currentCookieRefToken !== refreshToken.value) {
-      dbg('Detected fresh token in cookies (Race condition avoided). Syncing state...');
-
-      // Update local state to match the cookie
-      accessToken.value = currentCookieToken;
-      refreshToken.value = currentCookieRefToken;
-
-      // We are now valid, no need to call API
+    // Another tab may have already rotated the pair; its access token is usable as-is.
+    if (adoptCookieTokens() && accessToken.value && !isTokenExpired(accessToken.value)) {
       return true;
     }
 
@@ -185,6 +219,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     isRefreshing.value = true;
     refreshingTabId.value = tabSyncManager?.tabId || null;
+    refreshStartedAt.value = Date.now();
 
     // Notify other tabs that we're starting refresh
     tabSyncManager?.broadcast('TOKEN_REFRESH_STARTED', {
@@ -192,15 +227,29 @@ export const useAuthStore = defineStore('auth', () => {
       timestamp: Date.now()
     });
 
+    const postRefresh = (access: string | null, refresh: string) => $api<TokenResponse>('/auth/refresh', {
+      method: 'POST',
+      body: { accessToken: access, refreshToken: refresh },
+    });
+
     try {
       dbg('Attempting to refresh token...');
-      const data = await $api<TokenResponse>('/auth/refresh', {
-        method: 'POST',
-        body: {
-          accessToken: accessToken.value,
-          refreshToken: refreshToken.value,
-        },
-      });
+      let data: TokenResponse;
+      try {
+        data = await postRefresh(accessToken.value, refreshToken.value);
+      } catch (firstErr: any) {
+        // The pair we hold can be a spent one this tab never saw rotated. The jar is authoritative,
+        // so retry with what it holds before treating the rejection as a dead session.
+        const firstStatus = firstErr?.status ?? firstErr?.statusCode ?? firstErr?.response?.status;
+        const cookies = liveCookieTokens();
+        const superseded = [400, 401, 403].includes(firstStatus)
+                           && !!cookies.refreshToken
+                           && cookies.refreshToken !== refreshToken.value;
+        if (!superseded) throw firstErr;
+
+        dbg('Refresh rejected with a superseded token, retrying with the cookie pair...');
+        data = await postRefresh(cookies.token, cookies.refreshToken!);
+      }
 
       if (data.accessToken && data.refreshToken) {
         setTokens(data.accessToken, data.refreshToken);
@@ -245,18 +294,19 @@ export const useAuthStore = defineStore('auth', () => {
       }
       return false;
     } finally {
-      isRefreshing.value = false;
-      refreshingTabId.value = null;
+      releaseRefreshLock();
     }
   }
 
   function syncTokensFromCookies() {
-    if (!accessToken.value && tokenCookie.value) {
-      accessToken.value = tokenCookie.value;
+    const cookies = liveCookieTokens();
+    if (!accessToken.value && cookies.token) {
+      accessToken.value = cookies.token;
     }
-    if (!refreshToken.value && refreshTokenCookie.value) {
-      refreshToken.value = refreshTokenCookie.value;
+    if (!refreshToken.value && cookies.refreshToken) {
+      refreshToken.value = cookies.refreshToken;
     }
+    adoptCookieTokens();
   }
 
   async function ensureValidToken(): Promise<boolean> {
