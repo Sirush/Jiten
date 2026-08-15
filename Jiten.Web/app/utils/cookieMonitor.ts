@@ -1,3 +1,23 @@
+export function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+
+  let found: string | null = null;
+  for (const part of document.cookie.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator === -1) continue;
+    if (part.slice(0, separator).trim() !== name) continue;
+
+    const raw = part.slice(separator + 1).trim();
+    if (!raw) continue;
+    try {
+      found = decodeURIComponent(raw);
+    } catch {
+      found = raw;
+    }
+  }
+  return found;
+}
+
 export class CookieMonitor {
   private lastTokenValue: string | null = null;
   private lastRefreshTokenValue: string | null = null;
@@ -13,20 +33,7 @@ export class CookieMonitor {
   }
 
   private getCookie(name: string): string | null {
-    if (typeof document === 'undefined') return null;
-
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) {
-      const cookieValue = parts.pop()?.split(';').shift();
-      if (!cookieValue) return null;
-      try {
-        return decodeURIComponent(cookieValue);
-      } catch {
-        return cookieValue;
-      }
-    }
-    return null;
+    return readCookie(name);
   }
 
   private checkCookies() {

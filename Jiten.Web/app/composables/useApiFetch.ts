@@ -93,20 +93,12 @@ function setup401ErrorHandler(
     try {
       if (resolveRequest(request).includes('/auth/')) return;
 
-      if (!authStore.isRefreshing) {
-        const refreshSuccess = await authStore.refreshAccessToken();
-        if (!refreshSuccess) {
+      const refreshSuccess = await authStore.refreshAccessToken();
+      if (!refreshSuccess) {
+        if (!authStore.refreshToken) {
           navigateTo('/login');
-          return;
         }
-      } else {
-        while (authStore.isRefreshing) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        if (!authStore.isAuthenticated) {
-          navigateTo('/login');
-          return;
-        }
+        return;
       }
 
       error.value = undefined;

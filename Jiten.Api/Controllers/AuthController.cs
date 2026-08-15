@@ -224,28 +224,29 @@ public class AuthController : ControllerBase
 
         var principal = _tokenService.GetPrincipalFromExpiredToken(model.AccessToken);
 
-        // When the access token is parseable, the refresh token must be bound to its jti.
-        // When it isn't (corrupted/rotated key), the 64-byte refresh token secret is the
-        // sole credential and we skip the jti binding.
-        string? jti = null;
+        string? principalUserId = null;
         if (principal != null)
         {
-            var principalUserId = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            principalUserId = principal.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(principalUserId)) return BadRequest(new { message = "Invalid token claims." });
-
-            jti = principal.Claims.FirstOrDefault(c => c.Type == System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
-            if (string.IsNullOrEmpty(jti)) return BadRequest(new { message = "Invalid token claims." });
         }
 
         var oldRefreshToken = await _context.RefreshTokens
             .FirstOrDefaultAsync(rt => rt.Token == model.RefreshToken);
 
-        // Hard failures: unknown token, not bound to the presented access token, revoked, or expired.
+        // Hard failures: unknown token, presented by a different user, revoked, or expired.
         if (oldRefreshToken == null
-            || (jti != null && oldRefreshToken.JwtId != jti)
+            || (principalUserId != null && oldRefreshToken.UserId != principalUserId)
             || oldRefreshToken.IsRevoked
             || oldRefreshToken.ExpiryDate < DateTime.UtcNow)
         {
+            _logger.LogInformation("Refresh rejected: Reason={Reason}, UserId={UserId}",
+                                   oldRefreshToken == null ? "unknown-token"
+                                   : oldRefreshToken.IsRevoked ? "revoked"
+                                   : oldRefreshToken.ExpiryDate < DateTime.UtcNow ? "expired"
+                                   : "user-mismatch",
+                                   oldRefreshToken?.UserId ?? principalUserId);
+
             if (oldRefreshToken is { IsRevoked: true })
             {
                 _context.RefreshTokens.Remove(oldRefreshToken);
@@ -262,6 +263,12 @@ public class AuthController : ControllerBase
                                && oldRefreshToken.UsedAt.Value >= DateTime.UtcNow - RefreshReuseGraceWindow;
             if (!usedRecently)
             {
+                _logger.LogInformation("Refresh rejected: Reason=reuse, UserId={UserId}, UsedAgeSeconds={UsedAge}",
+                                       oldRefreshToken.UserId,
+                                       oldRefreshToken.UsedAt.HasValue
+                                           ? (int)(DateTime.UtcNow - oldRefreshToken.UsedAt.Value).TotalSeconds
+                                           : -1);
+
                 _context.RefreshTokens.Remove(oldRefreshToken);
                 await _context.SaveChangesAsync();
                 return BadRequest(new { message = "Invalid or expired refresh token." });
