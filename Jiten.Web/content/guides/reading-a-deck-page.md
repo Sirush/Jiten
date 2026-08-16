@@ -17,9 +17,9 @@ Every title in the library has its own page, and there's a lot packed into it. T
 
 The top of the page shows the essentials at a glance:
 
-- **Your coverage** (when logged in) — two bars, **Coverage** and **Unique coverage**. Coverage weighs words by how often they appear, making it  share of the *text* you'll understand. Unique coverage counts each distinct word once. The solid part of the bar is words you know well; the lighter part is words you're still learning.
-- **Length** — character count (or speech duration for anime and dramas), word count, unique words, and how many words appear only once. This is a good indication of both the length of the work as well as the richness of the vocabulary.
-- **Kanji** — unique kanji indicated all the different kanji that will appear in words in this title, and kanji (1-occurrence) all the kanji that will be seen only a single time.
+- **Your coverage** (when logged in) — two bars under the cover, **Coverage** and **Unique**. Coverage weighs words by how often they appear, making it  share of the *text* you'll understand. Unique coverage counts each distinct word once. The solid part of the bar is words you know well; the lighter part is words you're still learning. The coloured dot beside Coverage is your rough tier for the title, from red through to green.
+- **Length** — character count (or speech duration for anime and dramas), word count, and unique words. This is a good indication of both the length of the work as well as the richness of the vocabulary.
+- **Kanji** — unique kanji indicates all the different kanji that will appear in words in this title.
 - **Speech speed** — for video media, this indicated the average speaking speed in mora per minute. This is derived from the subtitles line timing as well as the character count.
 - **Average sentence length** — for novel-type media, this is the average length in characters of sentences. Longer sentences are generally harder to read.
 - **Dialogue percentage** — for novel-type media, this is the percentage of the media that is spoken dialogue, which is anything between Japanese quotation marks such as 「」. This is a good indication of how much of the media is focused on character interaction and slice of life. Higher dialogue percentage usually means easier.
@@ -51,7 +51,7 @@ From the header card you can:
 - **Download / Learn** — download an Anki deck, text list, or CSV of the vocabulary, download an occurence-based frequency dictionary or bulk-update your known words from the deck vocabulary. See [Generating & importing Anki decks](/guides/generating-anki-decks).
 - **Study** — learn the title's vocabulary in the built-in [SRS](/guides/using-the-srs).
 - **Set a status** — Planning, Ongoing, Completed, or Dropped, from the "more options" (…) menu. Completing a title lets you rate its difficulty and adds to your profile stats.
-- **Report an issue** — if you see any issue ranging from a wrong cover to a suspicious character count. Reports go straight to the editors to review.
+- **Report an issue** — from the more options (…) menu, if you see any issue ranging from a wrong cover to a suspicious character count. Reports go straight to the editors to review.
 
 ## Related media, franchises, and subdecks
 

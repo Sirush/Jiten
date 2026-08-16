@@ -149,7 +149,7 @@
 
 <template>
   <div v-if="items.length > 0" ref="containerRef" class="flex flex-wrap gap-1.5 items-center w-full relative">
-    <span ref="labelRef" class="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1 shrink-0">
+    <span ref="labelRef" class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mr-1 shrink-0">
       {{ label }}
     </span>
 
@@ -187,11 +187,11 @@
       >
         <Tag
           :class="[
-            tagColourClasses ?? '!bg-blue-100 dark:!bg-blue-900/50 !text-blue-700 dark:!text-blue-200',
+            tagColourClasses ?? '!bg-gray-100 dark:!bg-gray-800 !text-gray-600 dark:!text-gray-300',
             '!font-normal transition-all text-xs !py-0.5 !px-2',
           ]"
           :style="{
-            opacity: 0.6 + ((item.data as TagWithPercentage).percentage / 100) * 0.4,
+            opacity: 0.8 + ((item.data as TagWithPercentage).percentage / 100) * 0.2,
           }"
           rounded
         >
