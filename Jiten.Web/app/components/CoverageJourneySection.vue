@@ -64,7 +64,7 @@
               :class="
                 metric === opt.key
                   ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
-                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               "
               @click="metric = opt.key"
             >

@@ -384,7 +384,7 @@
           </Image>
           <div
             v-else
-            class="h-12 w-12 rounded-md border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800 flex items-center justify-center text-surface-400 dark:text-surface-500"
+            class="h-12 w-12 rounded-md border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800 flex items-center justify-center text-surface-400 dark:text-surface-400"
           >
             <i class="pi pi-volume-up" />
           </div>

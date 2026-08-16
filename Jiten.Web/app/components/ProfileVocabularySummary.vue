@@ -71,7 +71,7 @@
           <span class="text-[clamp(1.5rem,6vw,2.25rem)] font-bold tabular-nums text-primary-600 dark:text-primary-300">
             {{ formatNumber(knownWords) }}
           </span>
-          <span class="text-gray-500 ml-2">{{ knownWords === 1 ? 'word known' : 'words known' }}</span>
+          <span class="text-gray-500 dark:text-gray-400 ml-2">{{ knownWords === 1 ? 'word known' : 'words known' }}</span>
         </div>
 
         <div v-if="segments.length" class="flex h-3 w-full overflow-hidden rounded-full bg-surface-200 dark:bg-surface-700">
@@ -91,7 +91,7 @@
           </div>
         </div>
 
-        <p v-if="stats && stats.wordSetMastered > 0" class="text-xs text-gray-500">
+        <p v-if="stats && stats.wordSetMastered > 0" class="text-xs text-gray-500 dark:text-gray-400">
           + {{ formatNumber(stats.wordSetMastered) }} mastered from word sets
         </p>
       </div>

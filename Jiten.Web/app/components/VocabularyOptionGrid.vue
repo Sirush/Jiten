@@ -30,7 +30,7 @@
       "
     >
       <div class="flex items-center gap-2 w-full">
-        <i :class="[opt.icon, modelValue === opt.key ? 'text-primary' : 'text-gray-400 dark:text-gray-500']" class="text-lg" />
+        <i :class="[opt.icon, modelValue === opt.key ? 'text-primary' : 'text-gray-400 dark:text-gray-400']" class="text-lg" />
         <span
           class="font-semibold text-sm"
           :class="modelValue === opt.key ? 'text-primary-900 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300'"

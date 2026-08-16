@@ -66,7 +66,7 @@
     </div>
 
     <div v-else-if="error" class="flex flex-col items-center gap-4 py-12 text-center">
-      <p class="text-surface-500">Failed to load this franchise.</p>
+      <p class="text-surface-500 dark:text-surface-400">Failed to load this franchise.</p>
       <Button label="Retry" icon="pi pi-refresh" @click="refresh()" />
     </div>
 
@@ -94,7 +94,7 @@
         <FranchiseWeb v-if="view === 'web'" :franchise="franchise" :current-deck-id="deckId" />
         <FranchiseTimeline v-else :franchise="franchise" :current-deck-id="deckId" />
       </template>
-      <p v-else class="pt-4 text-surface-500">No related media found for this title.</p>
+      <p v-else class="pt-4 text-surface-500 dark:text-surface-400">No related media found for this title.</p>
     </template>
   </div>
 </template>

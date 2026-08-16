@@ -88,7 +88,7 @@
   <div class="py-2">
     <header class="mb-6">
       <h1 class="text-3xl font-bold mb-1">Guides</h1>
-      <p class="text-surface-500">Tutorials and answers for getting the most out of Jiten.</p>
+      <p class="text-surface-500 dark:text-surface-400">Tutorials and answers for getting the most out of Jiten.</p>
     </header>
 
     <GuidesSearchBar class="mb-8 max-w-xl" />
@@ -109,7 +109,7 @@
                 {{ g.title }}
                 <span v-if="g.level === 'advanced'" class="pos-badge pos-amber ml-1 align-middle">advanced</span>
               </h3>
-              <p class="mt-1 text-sm text-surface-500 line-clamp-2">{{ g.summary }}</p>
+              <p class="mt-1 text-sm text-surface-500 dark:text-surface-400 line-clamp-2">{{ g.summary }}</p>
             </div>
           </div>
         </NuxtLink>

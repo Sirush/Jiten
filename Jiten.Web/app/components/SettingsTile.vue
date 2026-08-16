@@ -43,7 +43,7 @@
     gap: 0.75rem;
     height: 100%;
     padding: 1rem;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-lg);
     border: 1px solid var(--p-surface-200);
     background: var(--p-surface-0);
     transition:
@@ -90,7 +90,7 @@
     justify-content: center;
     width: 2.25rem;
     height: 2.25rem;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-lg);
     color: var(--p-primary-600);
     background: var(--p-primary-50);
   }

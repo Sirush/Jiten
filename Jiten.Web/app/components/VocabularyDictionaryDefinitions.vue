@@ -136,7 +136,7 @@
       <template v-else-if="resolvedGroups[0].customDefinitions && !store.hideVocabularyDefinitions">
         <span class="custom-dict-compact text-sm" v-html="definitionsToHtml(resolvedGroups[0].customDefinitions)" />
       </template>
-      <span v-if="visibleGroupCount > 1" class="text-xs text-gray-400 dark:text-gray-500 ml-1">
+      <span v-if="visibleGroupCount > 1" class="text-xs text-gray-400 dark:text-gray-400 ml-1">
         +{{ visibleGroupCount - 1 }} more {{ visibleGroupCount - 1 === 1 ? 'dictionary' : 'dictionaries' }}
       </span>
     </div>

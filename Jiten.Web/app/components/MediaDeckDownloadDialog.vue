@@ -735,7 +735,7 @@
               ]"
             >
               <div class="flex items-center gap-2 w-full">
-                <i :class="[opt.icon, !opt.disabled && format === opt.value ? 'text-primary' : 'text-gray-400 dark:text-gray-500']" class="text-lg"></i>
+                <i :class="[opt.icon, !opt.disabled && format === opt.value ? 'text-primary' : 'text-gray-400 dark:text-gray-400']" class="text-lg"></i>
                 <span class="font-semibold text-sm" :class="!opt.disabled && format === opt.value ? 'text-primary-900 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300'">{{ opt.label }}</span>
               </div>
               <span class="text-[10px] leading-tight text-gray-500 dark:text-gray-400">{{ opt.desc }}</span>
@@ -853,7 +853,7 @@
                 <div class="flex justify-between items-center mb-3">
                   <div class="flex flex-col">
                     <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Frequency Range</span>
-                    <span class="text-[10px] text-gray-400 dark:text-gray-500">Select start and end points</span>
+                    <span class="text-[10px] text-gray-400 dark:text-gray-400">Select start and end points</span>
                   </div>
                   <div class="flex items-center gap-2">
                     <InputNumber
@@ -864,7 +864,7 @@
                       :max="currentSliderMax"
                       :useGrouping="false"
                     />
-                    <span class="text-gray-400 dark:text-gray-500">-</span>
+                    <span class="text-gray-400 dark:text-gray-400">-</span>
                     <InputNumber
                       :model-value="frequencyRange?.[1] ?? 0"
                       @update:model-value="(v) => (frequencyRange = [frequencyRange?.[0] ?? 0, v ?? 0])"
@@ -1088,7 +1088,7 @@
           <span class="inline-flex items-center gap-2">
             <span>Result:{{ isOccurrences ? '' : ' approx' }}</span>
             <span class="font-bold text-gray-900 dark:text-gray-100">{{ currentCardAmount }}</span>
-            <i v-if="isCountLoading" class="pi pi-spin pi-spinner text-gray-400 dark:text-gray-500 text-xs" />
+            <i v-if="isCountLoading" class="pi pi-spin pi-spinner text-gray-400 dark:text-gray-400 text-xs" />
             <span>{{ format === DeckFormat.Anki ? 'cards' : 'words' }}</span>
           </span>
         </div>

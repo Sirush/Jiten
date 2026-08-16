@@ -58,17 +58,17 @@
         <div class="flex flex-col items-center justify-center leading-none gap-0.5">
           <template v-if="totalToStudy > 0">
             <span class="text-xl font-bold tabular-nums text-surface-700 dark:text-surface-200">{{ totalToStudy }}</span>
-            <span class="text-[10px] uppercase tracking-wide text-surface-400 dark:text-surface-500">to do</span>
+            <span class="text-[10px] uppercase tracking-wide text-surface-400 dark:text-surface-400">to do</span>
           </template>
           <template v-else>
             <Icon name="material-symbols:check-circle" size="24" class="text-green-500 dark:text-green-400" />
-            <span class="text-[10px] uppercase tracking-wide text-surface-400 dark:text-surface-500">done</span>
+            <span class="text-[10px] uppercase tracking-wide text-surface-400 dark:text-surface-400">done</span>
           </template>
         </div>
       </div>
     </div>
     <div class="flex flex-col gap-1 text-xs">
-      <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-500">Done today</span>
+      <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-400">Done today</span>
       <span class="flex items-center gap-1.5 text-surface-600 dark:text-surface-300 whitespace-nowrap">
         <span class="inline-block w-2 h-2 rounded-full bg-blue-400 dark:bg-blue-500"></span>
         <span class="tabular-nums font-medium">{{ reviewsDone }}</span> reviews

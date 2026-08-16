@@ -369,7 +369,7 @@
             <label class="block text-sm font-medium mb-1">User</label>
             <div v-if="selectedUser" class="flex items-center gap-2 p-2 bg-surface-100 dark:bg-surface-800 rounded">
               <span class="font-medium">{{ selectedUser.userName }}</span>
-              <span class="text-sm text-surface-500">({{ selectedUser.email }})</span>
+              <span class="text-sm text-surface-500 dark:text-surface-400">({{ selectedUser.email }})</span>
               <Button icon="pi pi-times" class="p-button-text p-button-sm p-button-danger ml-auto" @click="selectedUser = null" />
             </div>
             <div v-else class="flex gap-2">
@@ -384,7 +384,7 @@
                 @click="selectUser(user)"
               >
                 <span class="font-medium">{{ user.userName }}</span>
-                <span class="text-sm text-surface-500">{{ user.email }}</span>
+                <span class="text-sm text-surface-500 dark:text-surface-400">{{ user.email }}</span>
               </div>
             </div>
           </div>
@@ -410,7 +410,7 @@
           <div>
             <label class="block text-sm font-medium mb-1">Thank-you message (optional)</label>
             <Textarea v-model="thankYouMessage" rows="3" maxlength="1000" class="w-full" placeholder="A personal note the recipient will see in-app and by email" />
-            <p class="text-xs text-surface-500 mt-1">{{ thankYouMessage.length }}/1000</p>
+            <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">{{ thankYouMessage.length }}/1000</p>
           </div>
 
           <div class="flex justify-end">
@@ -643,7 +643,7 @@
             <template #body="{ data }">{{ data.fullyUsedAt ? formatDate(data.fullyUsedAt) : '—' }}</template>
           </Column>
         </DataTable>
-        <p v-if="!usage.redemptions.length" class="text-center py-6 text-surface-500">No redemptions yet.</p>
+        <p v-if="!usage.redemptions.length" class="text-center py-6 text-surface-500 dark:text-surface-400">No redemptions yet.</p>
       </div>
     </Dialog>
   </div>

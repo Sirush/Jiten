@@ -141,7 +141,7 @@
             </template>
           </Column>
           <template #empty>
-            <p class="text-center py-6 text-surface-500">
+            <p class="text-center py-6 text-surface-500 dark:text-surface-400">
               {{ loading ? '' : 'No recurring paid subscribers need a notice right now.' }}
             </p>
           </template>
@@ -164,13 +164,13 @@
     <Dialog v-model:visible="showPreview" header="Email preview" :modal="true" class="w-full md:w-2/3 lg:w-1/2">
       <div v-if="previewed" class="flex flex-col gap-3">
         <div class="text-sm">
-          <div class="flex gap-2"><span class="w-16 text-surface-500 shrink-0">To</span><span class="font-medium">{{ previewed.userName }} &lt;{{ previewed.email }}&gt;</span></div>
-          <div class="flex gap-2 mt-1"><span class="w-16 text-surface-500 shrink-0">Subject</span><span class="font-medium">{{ previewed.emailSubject }}</span></div>
+          <div class="flex gap-2"><span class="w-16 text-surface-500 dark:text-surface-400 shrink-0">To</span><span class="font-medium">{{ previewed.userName }} &lt;{{ previewed.email }}&gt;</span></div>
+          <div class="flex gap-2 mt-1"><span class="w-16 text-surface-500 dark:text-surface-400 shrink-0">Subject</span><span class="font-medium">{{ previewed.emailSubject }}</span></div>
         </div>
         <!-- Server-rendered email body; same HTML the mailer sends. -->
         <!-- eslint-disable-next-line vue/no-v-html -->
         <div class="border border-surface-200 dark:border-surface-700 rounded-lg p-4 bg-white dark:bg-surface-900 text-sm leading-relaxed" v-html="previewed.emailHtml" />
-        <p class="text-xs text-surface-500">A plain-text version is generated automatically from this HTML at send time.</p>
+        <p class="text-xs text-surface-500 dark:text-surface-400">A plain-text version is generated automatically from this HTML at send time.</p>
       </div>
       <template #footer>
         <Button label="Close" class="p-button-text" @click="showPreview = false" />

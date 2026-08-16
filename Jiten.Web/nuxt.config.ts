@@ -8,6 +8,18 @@ import * as fs from 'node:fs';
 
 // Custom theming
 const JitenPreset = definePreset(Aura, {
+  // Halved Aura scale; must stay in sync with the --radius-* overrides in main.css so that
+  // hand-built Tailwind elements match PrimeVue components sitting next to them.
+  primitive: {
+    borderRadius: {
+      none: '0',
+      xs: '1px',
+      sm: '2px',
+      md: '3px',
+      lg: '4px',
+      xl: '6px',
+    },
+  },
   semantic: {
     primary: {
       50: '{purple.50}',

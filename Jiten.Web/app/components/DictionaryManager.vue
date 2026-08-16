@@ -205,7 +205,7 @@
         </div>
       </template>
       <template v-else>
-        <i class="pi pi-upload text-3xl text-gray-400 dark:text-gray-500 mb-2" />
+        <i class="pi pi-upload text-3xl text-gray-400 dark:text-gray-400 mb-2" />
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">
           Drag and drop a Yomitan dictionary (.zip) here, or
         </p>
@@ -237,7 +237,7 @@
             <Button icon="pi pi-chevron-down" text rounded size="small" :disabled="index === dictionaries.length - 1" @click="moveDown(index)" class="!w-6 !h-6" />
           </div>
           <span class="cursor-grab active:cursor-grabbing" style="touch-action: none" @pointerdown="handleDictPointerDown($event, index)">
-            <i class="pi pi-bars text-gray-400 dark:text-gray-500 text-xs" />
+            <i class="pi pi-bars text-gray-400 dark:text-gray-400 text-xs" />
           </span>
           <span class="w-7 h-7 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 text-xs font-bold flex items-center justify-center">
             {{ index + 1 }}

@@ -2111,7 +2111,7 @@ v-if="activePayload.drill"
   /* Matches MediaDeckCard's stat rows so the step metadata reads as the same component family. */
   .stat-row {
     padding: 0.2rem;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     transition: background-color 0.2s;
   }
 

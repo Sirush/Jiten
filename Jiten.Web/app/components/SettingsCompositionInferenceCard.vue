@@ -221,7 +221,7 @@
         </div>
 
         <div>
-          <Button label="Preview" icon="pi pi-eye" severity="warn" :loading="previewLoading" @click="preview" />
+          <Button label="Preview" icon="pi pi-eye" :loading="previewLoading" @click="preview" />
         </div>
       </div>
 

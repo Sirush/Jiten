@@ -48,7 +48,7 @@
         <!-- Title and Media Type -->
         <div class="flex-grow min-w-0 basis-full sm:basis-auto">
           <div class="font-bold truncate max-w-100" :title="localiseTitle(deck)">{{ localiseTitle(deck) }}</div>
-          <div class="text-xs text-gray-500">{{ getMediaTypeText(deck.mediaType) }}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400">{{ getMediaTypeText(deck.mediaType) }}</div>
         </div>
 
         <!-- Key Stats -->

@@ -100,7 +100,7 @@
       </div>
     </div>
     <div class="flex items-center justify-between mt-1">
-      <div v-if="excludedWordIds.size > 0" class="text-xs text-gray-500">
+      <div v-if="excludedWordIds.size > 0" class="text-xs text-gray-500 dark:text-gray-400">
         {{ excludedWordIds.size }} excluded (click to re-include)
       </div>
       <div v-if="search && filteredMatched.length !== matched.length" class="text-xs text-gray-400 ml-auto">

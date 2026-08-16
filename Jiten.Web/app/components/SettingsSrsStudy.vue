@@ -512,7 +512,7 @@
     </div>
     <div v-else class="flex flex-col gap-4">
       <!-- Session -->
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Session</h3>
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Session</h3>
       <div :class="props.inline ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-3 gap-4'">
         <div class="min-w-0">
           <label class="block text-sm font-medium mb-1">
@@ -628,8 +628,8 @@
       <Divider />
 
       <!-- Modalities -->
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Modalities</h3>
-      <p class="text-sm text-surface-500 -mt-1 mb-1">
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Modalities</h3>
+      <p class="text-sm text-surface-500 dark:text-surface-400 -mt-1 mb-1">
         Choose how cards are reviewed. If you choose to have more than one modality active, each card will have a different one at random.
       </p>
 
@@ -784,7 +784,7 @@
       <Divider />
 
       <!-- Day boundary -->
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Day boundary</h3>
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Day boundary</h3>
       <div>
         <label class="block text-sm font-medium mb-1">
           Timezone
@@ -814,8 +814,8 @@
       <Divider />
 
       <!-- Review scheduling -->
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Review scheduling</h3>
-      <p class="text-sm text-surface-500 -mt-1 mb-1">
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Review scheduling</h3>
+      <p class="text-sm text-surface-500 dark:text-surface-400 -mt-1 mb-1">
         Reviews are automatically balanced — each card is placed on the least-busy day within its normal scheduling window, smoothing out spike days without
         affecting memory or retention.
       </p>
@@ -857,10 +857,10 @@
           >
             <i :class="['pi text-xs', customExpanded ? 'pi-chevron-down' : 'pi-chevron-right']" />
             <span>Per-day levels</span>
-            <span v-if="!customExpanded" class="font-normal text-surface-500">— {{ customSummary }}</span>
+            <span v-if="!customExpanded" class="font-normal text-surface-500 dark:text-surface-400">— {{ customSummary }}</span>
           </button>
           <div v-if="customExpanded" class="flex flex-col gap-2">
-            <p class="text-xs text-surface-500">Normal — full load · Reduced — about half · Minimum — avoid when possible.</p>
+            <p class="text-xs text-surface-500 dark:text-surface-400">Normal — full load · Reduced — about half · Minimum — avoid when possible.</p>
             <div v-for="day in weekdayRows" :key="day.idx" class="flex items-center justify-between gap-3">
               <span class="text-sm w-24 shrink-0">{{ day.label }}</span>
               <SelectButton
@@ -880,7 +880,7 @@
       <Divider />
 
       <!-- Card appearance -->
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Card appearance</h3>
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Card appearance</h3>
 
       <template v-if="!advancedLayout">
         <div :class="props.inline ? 'flex flex-col gap-4' : 'flex flex-col md:flex-row md:items-start md:gap-6'">
@@ -1157,7 +1157,7 @@
       <Divider />
 
       <!-- Audio -->
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Audio</h3>
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Audio</h3>
       <div class="flex flex-col gap-2">
         <div class="flex items-center gap-2">
           <ToggleSwitch v-model="form.autoPlayWord" input-id="autoPlayWord" />
@@ -1273,7 +1273,7 @@
       <Divider />
 
       <!-- Study session UI -->
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Study session UI</h3>
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Study session UI</h3>
       <div>
         <label class="block text-sm font-medium mb-1">
           Grading buttons
@@ -1329,8 +1329,8 @@
       <Divider />
 
       <!-- Timed review -->
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Timed review</h3>
-      <p class="text-sm text-surface-500 -mt-1 mb-2">
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Timed review</h3>
+      <p class="text-sm text-surface-500 dark:text-surface-400 -mt-1 mb-2">
         Focus aid mode - each card counts down and can reveal or fail itself automatically. You can toggle it per session with the stopwatch icon on the study
         screen and pause it with a keybind.
       </p>
@@ -1458,8 +1458,8 @@
       <Divider />
 
       <!-- Leeches -->
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Leeches</h3>
-      <p class="text-sm text-surface-500 -mt-1 mb-2">
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Leeches</h3>
+      <p class="text-sm text-surface-500 dark:text-surface-400 -mt-1 mb-2">
         Leeches are cards that you keep forgetting. A card becomes a leech when it reaches a certain number of lapses. A lapse is counted each time you fail a
         review card (i.e. it goes back to relearning).
       </p>
@@ -1490,8 +1490,8 @@
       <Divider />
 
       <!-- Keyboard shortcuts -->
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Keyboard shortcuts</h3>
-      <p class="text-xs text-surface-500">Click a key and press the new key to rebind. Escape cancels.</p>
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Keyboard shortcuts</h3>
+      <p class="text-xs text-surface-500 dark:text-surface-400">Click a key and press the new key to rebind. Escape cancels.</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="flex flex-col gap-2">
           <h4 class="text-xs font-medium text-surface-400 uppercase tracking-wide">Grading</h4>
@@ -1522,7 +1522,7 @@
       <Divider />
 
       <!-- Study deck page -->
-      <h3 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Study deck page</h3>
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Study deck page</h3>
       <div class="flex flex-col gap-2">
         <div class="flex items-center gap-2">
           <ToggleSwitch v-model="form.showReviewActivity" input-id="showReviewActivity" />

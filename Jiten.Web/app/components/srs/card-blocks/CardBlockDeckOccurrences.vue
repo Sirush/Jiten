@@ -35,7 +35,7 @@
     <button
       v-if="opts.collapsed"
       type="button"
-      class="flex items-center gap-1 text-xs text-surface-400 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-300"
+      class="flex items-center gap-1 text-xs text-surface-400 dark:text-surface-400 hover:text-surface-600 dark:hover:text-surface-300"
       @click.stop="sectionOpen = !sectionOpen"
     >
       <i class="pi text-[0.6rem]" :class="sectionOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
@@ -43,7 +43,7 @@
     </button>
     <template v-if="sectionOpen">
       <div
-        class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-500 overflow-hidden transition-[max-height] duration-200"
+        class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-400 overflow-hidden transition-[max-height] duration-200"
         :class="[occExpanded ? 'max-h-none' : 'max-h-[3.75rem]', { 'mt-1': opts.collapsed }]"
       >
         <template v-if="occurrences.length">

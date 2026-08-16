@@ -96,7 +96,7 @@ const chartData = computed<ChartData<'bar'>>(() => {
         backgroundColor: colours,
         borderColor: colours.map((c) => c.replace('0.8', '1')),
         borderWidth: 1,
-        borderRadius: 4,
+        borderRadius: 2,
         order: 3,
       },
       {
@@ -211,7 +211,7 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => ({
   <div class="chart-container">
     <div class="difficulty-chart-wrapper">
       <Bar v-if="progression && progression.length > 0" :data="chartData" :options="chartOptions" />
-      <div v-else class="text-center text-gray-500 py-8">No difficulty progression data available</div>
+      <div v-else class="text-center text-gray-500 dark:text-gray-400 py-8">No difficulty progression data available</div>
     </div>
   </div>
 </template>
@@ -219,7 +219,7 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => ({
 <style scoped>
 .chart-container {
   width: 100%;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding-top: 1rem;
 }
 

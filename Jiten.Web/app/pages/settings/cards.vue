@@ -578,7 +578,7 @@
       <div class="flex items-center gap-2">
         <SettingsBackLink />
         <h1 class="text-2xl font-bold">My Cards</h1>
-        <span v-if="!loading" class="text-surface-500 text-sm">({{ stats.total }})</span>
+        <span v-if="!loading" class="text-surface-500 dark:text-surface-400 text-sm">({{ stats.total }})</span>
       </div>
       <Button icon="pi pi-refresh" severity="secondary" text rounded :loading="loading" @click="fetchCards" />
     </div>
@@ -648,11 +648,11 @@
         :key="i"
         class="flex items-center gap-3 p-3 rounded-lg bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700"
       >
-        <Skeleton width="1.25rem" height="1.25rem" borderRadius="4px" />
+        <Skeleton width="1.25rem" height="1.25rem" borderRadius="2px" />
         <Skeleton width="5rem" height="1.5rem" />
         <div class="flex-1" />
         <Skeleton width="4rem" height="1rem" />
-        <Skeleton width="3.5rem" height="1.5rem" borderRadius="12px" />
+        <Skeleton width="3.5rem" height="1.5rem" borderRadius="6px" />
         <Skeleton width="1.5rem" height="1.5rem" shape="circle" />
       </div>
     </div>
@@ -663,7 +663,7 @@
       class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 p-12 text-center"
     >
       <template v-if="cards.length === 0 && hasWordSetSubscriptions">
-        <p class="text-surface-500 mb-2">No individual cards.</p>
+        <p class="text-surface-500 dark:text-surface-400 mb-2">No individual cards.</p>
         <p class="text-surface-400 text-sm mb-4">
           Your vocabulary includes ~{{ wordSetTotalWords }} words from {{ subscriptions.length }} word set{{ subscriptions.length === 1 ? '' : 's' }}.
         </p>
@@ -687,7 +687,7 @@
         <span class="font-semibold">{{ selectedIds.size }} card{{ selectedIds.size !== 1 ? 's' : '' }} selected,</span>
         including {{ hiddenSelectedCount }} on other pages. Bulk actions will affect every selected card, not just the ones you can see.
       </Message>
-      <div class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500">
+      <div class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500 dark:text-surface-400">
         <Checkbox :model-value="allOnPageSelected" :binary="true" @change="toggleSelectAll" />
         <span class="text-xs cursor-pointer select-none" @click="toggleSelectAll">
           {{ selectedCards.length > 0 ? `${selectedCards.length} selected` : `Select page (${paginatedCards.length})` }}
@@ -834,12 +834,12 @@
 
       <!-- Pagination -->
       <div v-if="totalPages > 1" class="flex items-center justify-between mt-4 px-1">
-        <span class="text-sm text-surface-500">
+        <span class="text-sm text-surface-500 dark:text-surface-400">
           {{ (page - 1) * pageSize + 1 }}&ndash;{{ Math.min(page * pageSize, sortedCards.length) }} of {{ sortedCards.length }}
         </span>
         <div class="flex gap-1">
           <Button icon="pi pi-chevron-left" severity="secondary" text size="small" :disabled="page <= 1" @click="prevPage" />
-          <span class="flex items-center px-2 text-sm text-surface-500 tabular-nums">{{ page }} / {{ totalPages }}</span>
+          <span class="flex items-center px-2 text-sm text-surface-500 dark:text-surface-400 tabular-nums">{{ page }} / {{ totalPages }}</span>
           <Button icon="pi pi-chevron-right" severity="secondary" text size="small" :disabled="page >= totalPages" @click="nextPage" />
         </div>
       </div>

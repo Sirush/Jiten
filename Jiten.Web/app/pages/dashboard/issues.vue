@@ -157,7 +157,7 @@
           </template>
           <template #content>
             <div class="text-4xl font-bold text-center">{{ totalIssues }}</div>
-            <p class="text-center text-gray-500 mt-2">Issues requiring attention</p>
+            <p class="text-center text-gray-500 dark:text-gray-400 mt-2">Issues requiring attention</p>
           </template>
         </Card>
 
@@ -220,7 +220,7 @@
     >
       <div class="p-4">
         <div v-if="selectedIssueIds.length === 0" class="text-center py-8">
-          <p class="text-gray-500">No issues found.</p>
+          <p class="text-gray-500 dark:text-gray-400">No issues found.</p>
         </div>
         <div v-else class="max-h-[70vh] overflow-y-auto">
           <h3 class="text-lg font-semibold mb-4">Media Items with Issues:</h3>

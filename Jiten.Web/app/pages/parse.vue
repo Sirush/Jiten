@@ -409,7 +409,7 @@
       >
         <Icon
           :name="directMatchesExpanded ? 'material-symbols:expand-more' : 'material-symbols:chevron-right'"
-          class="text-gray-500"
+          class="text-gray-500 dark:text-gray-400"
         />
         <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400">
           {{ directMatchesLabel.prefix }}<template v-if="directMatchesLabel.subject"> <span class="text-purple-600 dark:text-purple-400 font-noto-sans">{{ directMatchesLabel.subject }}</span></template>
@@ -439,7 +439,7 @@
 
     <div v-if="wholeStringMatches.length > 0" class="mt-4">
       <div class="flex items-center gap-2 mb-2">
-        <Icon name="material-symbols:expand-more" class="text-gray-500" />
+        <Icon name="material-symbols:expand-more" class="text-gray-500 dark:text-gray-400" />
         <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400">
           Direct matches for <span class="text-purple-600 dark:text-purple-400 font-noto-sans">{{ String(searchContent).trim() }}</span>
         </h2>
@@ -460,7 +460,7 @@
       >
         <Icon
           :name="dictionaryMatchesExpanded ? 'material-symbols:expand-more' : 'material-symbols:chevron-right'"
-          class="text-gray-500"
+          class="text-gray-500 dark:text-gray-400"
         />
         <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400">
           Dictionary results

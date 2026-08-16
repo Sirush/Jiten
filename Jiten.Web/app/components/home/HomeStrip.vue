@@ -19,7 +19,7 @@
 
     <span class="flex-1 min-w-0">
       <span class="flex items-center gap-1.5">
-        <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-500">{{ label }}</span>
+        <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-400">{{ label }}</span>
         <span v-if="marked" class="w-1.5 h-1.5 rounded-full bg-primary-500" aria-label="New" />
       </span>
       <span class="block text-sm text-gray-700 dark:text-gray-300 mt-0.5">
@@ -29,7 +29,7 @@
 
     <Icon
       name="material-symbols:chevron-right"
-      class="shrink-0 self-center text-surface-300 dark:text-surface-600 transition-transform group-hover:translate-x-0.5"
+      class="shrink-0 self-center text-surface-300 dark:text-surface-400 transition-transform group-hover:translate-x-0.5"
       size="1.25em"
     />
   </NuxtLink>

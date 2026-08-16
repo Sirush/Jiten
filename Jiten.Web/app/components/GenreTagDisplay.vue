@@ -187,7 +187,7 @@
       >
         <Tag
           :class="[
-            tagColourClasses ?? '!bg-gray-100 dark:!bg-gray-800 !text-gray-600 dark:!text-gray-300',
+            tagColourClasses ?? '!bg-gray-100 dark:!bg-gray-800 !text-gray-600 dark:text-gray-400 dark:!text-gray-300',
             '!font-normal transition-all text-xs !py-0.5 !px-2',
           ]"
           :style="{

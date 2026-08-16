@@ -1454,7 +1454,7 @@
             </Column>
           </DataTable>
 
-          <p v-if="cardMediaPreview?.truncated" class="mb-4 text-xs text-surface-500">
+          <p v-if="cardMediaPreview?.truncated" class="mb-4 text-xs text-surface-500 dark:text-surface-400">
             Showing the 50 largest of {{ cardMediaPreview.totalCount.toLocaleString() }}.
           </p>
 
@@ -1669,7 +1669,7 @@
               <li><strong>Example Sentences to Insert:</strong> {{ splitWordResult.exampleSentenceWordsInserted }}</li>
               <li><strong>Parent Decks to Recalc:</strong> {{ splitWordResult.parentDecksQueued }}</li>
             </ul>
-            <p class="text-xs mt-2 text-surface-500">Note: User vocabulary (FsrsCards) is not affected by split operations.</p>
+            <p class="text-xs mt-2 text-surface-500 dark:text-surface-400">Note: User vocabulary (FsrsCards) is not affected by split operations.</p>
           </div>
 
           <div class="flex justify-center gap-2">

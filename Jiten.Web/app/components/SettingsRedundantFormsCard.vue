@@ -114,7 +114,7 @@
       </p>
 
       <div class="flex flex-wrap items-center gap-3">
-        <Button label="Check my vocabulary" icon="pi pi-search" severity="warn" :loading="scanLoading" @click="scan" />
+        <Button label="Check my vocabulary" icon="pi pi-search" :loading="scanLoading" @click="scan" />
         <span v-if="scanned && forms.length === 0" class="text-sm text-muted-color italic">No redundant forms found.</span>
         <Button
           v-else-if="scanned"

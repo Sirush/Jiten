@@ -237,7 +237,7 @@ const remainingCount = computed(() => {
             <div class="font-medium">View kanji: <span lang="ja">{{ kanjiSearchTarget }}</span></div>
             <div class="text-sm text-gray-500 dark:text-gray-400">Go to kanji details page</div>
           </div>
-          <div class="text-xs text-gray-400 dark:text-gray-500">
+          <div class="text-xs text-gray-400 dark:text-gray-400">
             <kbd class="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded font-mono text-xs">Enter</kbd>
           </div>
         </div>
@@ -257,7 +257,7 @@ const remainingCount = computed(() => {
             <div class="font-medium">Search: "<span lang="ja">{{ searchText }}</span>"</div>
             <div class="text-sm text-gray-500 dark:text-gray-400">Search dictionary by meaning or wildcard. Use #kanji to view kanji details</div>
           </div>
-          <div class="text-xs text-gray-400 dark:text-gray-500">
+          <div class="text-xs text-gray-400 dark:text-gray-400">
             <kbd class="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded font-mono text-xs">Enter</kbd>
           </div>
         </div>
@@ -275,7 +275,7 @@ const remainingCount = computed(() => {
             @click="navigateToMediaSearch"
             @mouseenter="highlightedIndex = 1"
           >
-            <Icon name="material-symbols:video-library-outline" class="text-lg text-gray-500" />
+            <Icon name="material-symbols:video-library-outline" class="text-lg text-gray-500 dark:text-gray-400" />
             <span class="flex-1">
               View more media for "<span lang="ja">{{ searchText }}</span>"
               <span v-if="remainingCount > 0" class="text-purple-500 font-medium">(+{{ remainingCount }})</span>
@@ -288,7 +288,7 @@ const remainingCount = computed(() => {
             class="px-4 py-3 flex items-center justify-center border-t border-gray-100 dark:border-gray-700"
           >
             <ProgressSpinner style="width: 20px; height: 20px" stroke-width="4" />
-            <span class="ml-2 text-sm text-gray-500">Searching media...</span>
+            <span class="ml-2 text-sm text-gray-500 dark:text-gray-400">Searching media...</span>
           </div>
 
           <template v-else-if="suggestions.length > 0">

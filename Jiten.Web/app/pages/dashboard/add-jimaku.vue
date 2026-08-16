@@ -372,9 +372,9 @@
                 @click="moveFile(index, 1)"
               />
               <span class="cursor-grab active:cursor-grabbing px-1" style="touch-action: none" @pointerdown="handlePointerDown($event, index)">
-                <i class="pi pi-bars text-surface-400 dark:text-surface-500 text-xs" />
+                <i class="pi pi-bars text-surface-400 dark:text-surface-400 text-xs" />
               </span>
-              <span class="w-7 text-right text-xs text-surface-400 dark:text-surface-500 tabular-nums mr-1">{{ index + 1 }}</span>
+              <span class="w-7 text-right text-xs text-surface-400 dark:text-surface-400 tabular-nums mr-1">{{ index + 1 }}</span>
               <Checkbox v-model="file.selected" binary />
             </div>
 
@@ -438,7 +438,7 @@
                 </button>
               </template>
 
-              <span class="shrink-0 text-xs text-surface-400 dark:text-surface-500 tabular-nums hidden sm:inline">{{ formatSize(file.size) }}</span>
+              <span class="shrink-0 text-xs text-surface-400 dark:text-surface-400 tabular-nums hidden sm:inline">{{ formatSize(file.size) }}</span>
               <Button
                 icon="pi pi-pencil"
                 text

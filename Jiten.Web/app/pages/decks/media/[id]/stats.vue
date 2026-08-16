@@ -160,7 +160,7 @@
       </template>
       <template #content>
         <LazyCoverageChart class="hidden sm:block" v-if="curveData" :curve-data="curveData" />
-        <div v-else class="text-center text-gray-500 py-8">No curve data available</div>
+        <div v-else class="text-center text-gray-500 dark:text-gray-400 py-8">No curve data available</div>
 
         <h2 class="text-xl font-bold pt-6">Milestones</h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
@@ -223,7 +223,7 @@
               :use-percentage="usePercentage"
             />
           </template>
-          <div v-else class="text-center text-gray-500 py-8">No progression data available</div>
+          <div v-else class="text-center text-gray-500 dark:text-gray-400 py-8">No progression data available</div>
 
           <h2 class="text-xl font-bold pt-6">Deciles</h2>
           <h3 class="italic text-sm">Shows the difficulty level at or below which X% of the text falls.</h3>

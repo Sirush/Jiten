@@ -145,7 +145,7 @@
       label,
       data: groups.map((g) => g[idx] ?? 0),
       backgroundColor: color,
-      borderRadius: 3,
+      borderRadius: 2,
     });
     return {
       labels: ['Learning', 'Young', 'Mature'],
@@ -227,7 +227,7 @@
           label: 'Reviews',
           data: h.map((x) => x.count),
           backgroundColor: 'rgba(168, 85, 247, 0.6)',
-          borderRadius: 3,
+          borderRadius: 2,
           yAxisID: 'y',
           order: 2,
         },
@@ -308,7 +308,7 @@
         {
           data: (rt?.buckets ?? []).map((v) => (v === 0 ? null : v)),
           backgroundColor: 'rgba(168, 85, 247, 0.7)',
-          borderRadius: 3,
+          borderRadius: 2,
           minBarLength: 2,
         },
       ],
@@ -373,7 +373,7 @@
           label: 'Due',
           data: days.map((d) => (d.count === 0 ? null : d.count)),
           backgroundColor: days.map((_, i) => (i === 0 ? 'rgba(59, 130, 246, 0.8)' : 'rgba(168, 85, 247, 0.6)')),
-          borderRadius: 3,
+          borderRadius: 2,
           minBarLength: 2,
           yAxisID: 'y',
           order: 2,
@@ -440,7 +440,7 @@
         </div>
       </div>
       <div v-else class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4">
-        <div class="text-xs font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-500 mb-3">Today</div>
+        <div class="text-xs font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-400 mb-3">Today</div>
         <div class="flex flex-wrap gap-3">
           <div
             v-for="s in todayStats"
@@ -480,7 +480,7 @@
             </div>
           </div>
         </template>
-        <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-500">No cards yet.</div>
+        <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-400">No cards yet.</div>
       </div>
 
       <!-- 2b. Leeches -->
@@ -523,7 +523,7 @@
             </NuxtLink>
           </div>
         </template>
-        <div v-else class="py-6 text-center text-sm text-gray-400 dark:text-gray-500">
+        <div v-else class="py-6 text-center text-sm text-gray-400 dark:text-gray-400">
           No leeches currently. <span v-if="leeches!.recovered > 0">({{ leeches!.recovered }} recovered)</span>
         </div>
       </div>
@@ -599,7 +599,7 @@
               :class="
                 answerWindow === opt.key
                   ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
-                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               "
               @click="answerWindow = opt.key"
             >
@@ -627,7 +627,7 @@
             </span>
           </div>
         </template>
-        <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-500">Not enough data yet.</div>
+        <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-400">Not enough data yet.</div>
       </div>
 
       <!-- 7. Hourly breakdown -->
@@ -642,7 +642,7 @@
               :class="
                 hourlyWindow === opt.key
                   ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
-                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               "
               @click="hourlyWindow = opt.key"
             >
@@ -655,7 +655,7 @@
         <div v-else-if="hasHourly" style="height: 220px">
           <Bar :data="hourlyChartData as any" :options="hourlyChartOptions as any" />
         </div>
-        <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-500">Not enough data yet.</div>
+        <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-400">Not enough data yet.</div>
       </div>
 
       <!-- 8. Review time -->
@@ -674,7 +674,7 @@
               :class="
                 reviewTimeWindow === opt.key
                   ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
-                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               "
               @click="reviewTimeWindow = opt.key"
             >
@@ -708,7 +708,7 @@
             </span>
           </div>
         </template>
-        <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-500">Not enough data yet.</div>
+        <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-400">Not enough data yet.</div>
       </div>
 
       <LazySrsKnowledgeGrowthPanel hydrate-on-visible />
@@ -728,7 +728,7 @@
               :class="
                 forecastDays === opt.key
                   ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
-                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               "
               @click="forecastDays = opt.key"
             >
@@ -740,7 +740,7 @@
         <div v-else-if="hasForecast" style="height: 260px">
           <Bar :data="forecastChartData as any" :options="forecastChartOptions as any" :plugins="[ChartDataLabels]" />
         </div>
-        <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-500">No upcoming reviews scheduled.</div>
+        <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-400">No upcoming reviews scheduled.</div>
       </div>
     </div>
   </div>

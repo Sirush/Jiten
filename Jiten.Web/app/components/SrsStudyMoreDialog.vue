@@ -191,7 +191,7 @@
           <Icon :name="mode.icon" size="1.5rem" class="shrink-0" :class="selectedMode === mode.id ? 'text-primary-500' : 'text-surface-400'" />
           <div class="min-w-0">
             <div class="font-medium text-sm" :class="selectedMode === mode.id ? 'text-primary-700 dark:text-primary-300' : ''">{{ mode.title }}</div>
-            <div class="text-xs text-surface-500">{{ mode.description }}</div>
+            <div class="text-xs text-surface-500 dark:text-surface-400">{{ mode.description }}</div>
           </div>
         </div>
 

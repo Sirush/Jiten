@@ -109,7 +109,7 @@ function closeDialog() {
             >
           </div>
           <div class="p-3">
-            <div class="text-sm text-gray-500 mb-2">
+            <div class="text-sm text-gray-500 dark:text-gray-400 mb-2">
               {{ metadata.releaseDate ? new Date(metadata.releaseDate).toLocaleDateString() : 'Unknown date' }}
             </div>
             <div class="mb-3">
@@ -117,7 +117,7 @@ function closeDialog() {
               <div v-if="metadata.romajiTitle" class="text-sm">{{ metadata.romajiTitle }}</div>
               <div v-if="metadata.englishTitle" class="text-sm italic">{{ metadata.englishTitle }}</div>
             </div>
-            <div v-if="metadata.genres && metadata.genres.length > 0" class="text-xs text-gray-600 mb-2">
+            <div v-if="metadata.genres && metadata.genres.length > 0" class="text-xs text-gray-600 dark:text-gray-400 mb-2">
               <span
                 v-for="genre in metadata.genres.slice(0, 3)"
                 :key="genre"
@@ -125,7 +125,7 @@ function closeDialog() {
               >
                 {{ genre }}
               </span>
-              <span v-if="metadata.genres.length > 3" class="text-gray-500">+{{ metadata.genres.length - 3 }}</span>
+              <span v-if="metadata.genres.length > 3" class="text-gray-500 dark:text-gray-400">+{{ metadata.genres.length - 3 }}</span>
             </div>
             <div v-if="metadata.isAdultOnly" class="text-xs mb-2">
               <span class="inline-block bg-red-100 text-red-800 px-2 py-1 rounded">18+</span>
@@ -140,7 +140,7 @@ function closeDialog() {
 
       <!-- No results message -->
       <div v-else class="text-center py-8">
-        <p class="text-gray-500">No results found. Try a different search term.</p>
+        <p class="text-gray-500 dark:text-gray-400">No results found. Try a different search term.</p>
       </div>
     </div>
   </Dialog>

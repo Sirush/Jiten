@@ -172,7 +172,7 @@
                 <button
                   v-if="control.nullable && resolved[control.key] != null"
                   type="button"
-                  class="text-xs text-surface-400 hover:text-primary-500 dark:text-surface-500 dark:hover:text-primary-400"
+                  class="text-xs text-surface-400 hover:text-primary-500 dark:text-surface-400 dark:hover:text-primary-400"
                   :title="`Reset to ${control.placeholder ?? 'default'}`"
                   @click.stop="setOption(control.key, null)"
                 >

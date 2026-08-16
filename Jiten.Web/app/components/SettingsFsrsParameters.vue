@@ -710,7 +710,7 @@
                 :class="
                   chartMetric === opt.key
                     ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
-                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 "
                 @click="chartMetric = opt.key"
               >
@@ -800,7 +800,7 @@
           :disabled="!canOptimise || isLoading || isSaving || isRecomputing || isResetting"
           @click="confirmOptimise"
         />
-        <p v-if="!canOptimise && !isLoading" class="text-sm text-surface-500 mt-2">
+        <p v-if="!canOptimise && !isLoading" class="text-sm text-surface-500 dark:text-surface-400 mt-2">
           You have {{ reviewCount }} of {{ minimumReviews }} reviews needed. Keep studying to unlock optimisation.
         </p>
         <Message v-if="optimiseError" key="optimise-error" severity="error" :closable="false" class="mt-2">
@@ -822,7 +822,7 @@
       <h4 class="text-md font-semibold mb-1">FSRS Parameters</h4>
       <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">21 comma-separated numbers that control FSRS scheduling. These are set automatically when you optimise, but you can also edit them manually.</p>
       <Textarea v-model="parametersCsv" class="w-full" rows="3" placeholder="0.2172, 1.1771, 3.2602, ..." @update:modelValue="hasUserEdited = true" />
-      <div class="mt-2 text-sm text-surface-600">
+      <div class="mt-2 text-sm text-surface-600 dark:text-surface-400">
         Values: <b>{{ valueCount }}</b> / {{ expectedCount }}
       </div>
       <Message v-if="formError" key="fsrs-params-error" severity="error" :closable="false" class="mt-2">
@@ -851,7 +851,7 @@
                 :key="i"
                 class="border-t border-surface-100 dark:border-surface-700"
               >
-                <td class="px-3 py-1.5 text-surface-500 tabular-nums">{{ i }}</td>
+                <td class="px-3 py-1.5 text-surface-500 dark:text-surface-400 tabular-nums">{{ i }}</td>
                 <td class="px-3 py-1.5 font-medium">
                   <span class="md:hidden">
                     <Tooltip :content="desc.description">
@@ -868,7 +868,7 @@
                   {{ desc.decimals != null ? defaultParameters[i].toFixed(desc.decimals) : defaultParameters[i].toPrecision(4) }}
                   <span v-if="desc.unit" class="ml-0.5">{{ desc.unit }}</span>
                 </td>
-                <td class="px-3 py-1.5 text-surface-500 hidden md:table-cell">{{ desc.description }}</td>
+                <td class="px-3 py-1.5 text-surface-500 dark:text-surface-400 hidden md:table-cell">{{ desc.description }}</td>
               </tr>
             </tbody>
           </table>

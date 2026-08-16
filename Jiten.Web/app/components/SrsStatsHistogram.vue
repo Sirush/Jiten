@@ -56,7 +56,7 @@
       {
         data: props.buckets.map((v) => (v === 0 ? null : v)),
         backgroundColor: barColors.value,
-        borderRadius: 3,
+        borderRadius: 2,
         minBarLength: 2,
       },
     ],
@@ -100,6 +100,6 @@
         <slot name="footer" />
       </div>
     </div>
-    <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-500">Not enough data yet.</div>
+    <div v-else class="py-10 text-center text-sm text-gray-400 dark:text-gray-400">Not enough data yet.</div>
   </div>
 </template>

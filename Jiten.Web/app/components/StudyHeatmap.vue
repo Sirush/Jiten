@@ -189,8 +189,8 @@
       <Message severity="warn" :closable="false">{{ error }}</Message>
     </div>
 
-    <div v-else-if="heatmapData && heatmapData.totalReviews === 0 && heatmapData.totalReviewDays === 0" class="text-center py-6 text-gray-500">
-      <Icon name="material-symbols:calendar-month" size="2.5rem" class="mb-3 text-gray-300 dark:text-gray-600" />
+    <div v-else-if="heatmapData && heatmapData.totalReviews === 0 && heatmapData.totalReviewDays === 0" class="text-center py-6 text-gray-500 dark:text-gray-400">
+      <Icon name="material-symbols:calendar-month" size="2.5rem" class="mb-3 text-gray-300 dark:text-gray-400" />
       <p class="mb-2">No study activity yet</p>
       <NuxtLink to="/srs/decks" class="text-sm text-purple-500 hover:text-purple-600 dark:text-purple-400 dark:hover:text-purple-300">
         Start studying to see your activity here
@@ -204,19 +204,19 @@
           <Icon name="material-symbols:local-fire-department" size="1.5rem" class="text-orange-500" />
           <div>
             <span class="text-xl font-bold tabular-nums">{{ heatmapData.currentStreak }}</span>
-            <span class="text-sm text-gray-500 ml-1">day streak</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400 ml-1">day streak</span>
           </div>
         </div>
         <div>
-          <span class="text-sm text-gray-500">Longest:</span>
+          <span class="text-sm text-gray-500 dark:text-gray-400">Longest:</span>
           <span class="font-semibold tabular-nums ml-1">{{ heatmapData.longestStreak }} days</span>
         </div>
         <div>
-          <span class="text-sm text-gray-500">Days studied:</span>
+          <span class="text-sm text-gray-500 dark:text-gray-400">Days studied:</span>
           <span class="font-semibold tabular-nums ml-1">{{ heatmapData.totalReviewDays }}</span>
         </div>
         <div>
-          <span class="text-sm text-gray-500">Reviews this year:</span>
+          <span class="text-sm text-gray-500 dark:text-gray-400">Reviews this year:</span>
           <span class="font-semibold tabular-nums ml-1">{{ heatmapData.totalReviews.toLocaleString() }}</span>
         </div>
       </div>

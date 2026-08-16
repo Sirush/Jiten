@@ -155,7 +155,7 @@
           <div class="flex flex-col items-center gap-4">
             <Icon name="material-symbols:person-off" size="4rem" class="text-gray-400" />
             <h2 class="text-xl font-semibold">User not found</h2>
-            <p class="text-gray-500">This user does not exist or has been removed.</p>
+            <p class="text-gray-500 dark:text-gray-400">This user does not exist or has been removed.</p>
             <NuxtLink to="/">
               <Button label="Go Home" icon="pi pi-home" />
             </NuxtLink>
@@ -170,7 +170,7 @@
           <div class="flex flex-col items-center gap-4">
             <Icon name="material-symbols:lock" size="4rem" class="text-gray-400" />
             <h2 class="text-xl font-semibold">This profile is private</h2>
-            <p class="text-gray-500">This user has chosen to keep their profile private.</p>
+            <p class="text-gray-500 dark:text-gray-400">This user has chosen to keep their profile private.</p>
             <NuxtLink :to="`/profile/${targetUsername}`">
               <Button label="Back to Profile" icon="pi pi-arrow-left" />
             </NuxtLink>

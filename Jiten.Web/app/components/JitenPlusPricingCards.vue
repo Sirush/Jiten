@@ -207,7 +207,7 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    border-radius: 0.9rem;
+    border-radius: var(--radius-xl);
     padding: 1.5rem 1.25rem;
   }
 

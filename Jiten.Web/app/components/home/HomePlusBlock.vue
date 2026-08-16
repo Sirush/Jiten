@@ -44,7 +44,7 @@
     <!-- Links out rather than listing the perks, so /jiten-plus stays the single source for them. -->
     <HomeStrip v-if="tier === 'full'" :label="fullLabel" icon="material-symbols-light:star" to="/jiten-plus">
       View your list of perks
-      <span v-if="renewalLabel" class="text-surface-400 dark:text-surface-500">{{ renewalLabel }}</span>
+      <span v-if="renewalLabel" class="text-surface-400 dark:text-surface-400">{{ renewalLabel }}</span>
     </HomeStrip>
 
     <HomeStrip v-else-if="tier === 'trial'" label="Jiten+ trial" icon="material-symbols-light:star" to="/jiten-plus">

@@ -1076,7 +1076,7 @@
           Add words directly from Anki using the <a href="https://ankiweb.net/shared/info/2055492159" rel="nofollow" target="_blank">Anki Connect plugin</a>.
         </p>
         <div class="flex flex-col gap-1 p-4 pb-0 max-w-md">
-          <label for="ankiApiKey" class="text-sm text-surface-500">API key (optional)</label>
+          <label for="ankiApiKey" class="text-sm text-surface-500 dark:text-surface-400">API key (optional)</label>
           <InputText
             v-model="apiKey"
             inputId="ankiApiKey"
@@ -1088,7 +1088,7 @@
             class="w-full"
             @keyup.enter="Connect()"
           />
-          <small class="text-surface-500">Leave blank unless you configured an <code>apiKey</code> in AnkiConnect's config.</small>
+          <small class="text-surface-500 dark:text-surface-400">Leave blank unless you configured an <code>apiKey</code> in AnkiConnect's config.</small>
         </div>
         <div class="p-4">
           <Button label="Connect to Anki" @click="Connect()" />
@@ -1112,37 +1112,37 @@
         </div>
         <div v-else class="flex flex-col gap-6 mt-2">
           <section class="flex flex-col gap-3">
-            <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-500">Vocabulary</h3>
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Vocabulary</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="flex flex-col gap-1">
                 <label class="text-sm font-medium">Word field</label>
                 <Select v-model="selectedField" :options="fieldsOptions" option-label="label" option-value="value" placeholder="Select a field" class="w-full" @change="onSelectionChanged" />
-                <small class="text-surface-500">The target word, sometimes named expression.</small>
+                <small class="text-surface-500 dark:text-surface-400">The target word, sometimes named expression.</small>
                 <button
                   v-if="wordExtraSamples.length > 0"
                   type="button"
-                  class="self-start text-xs text-surface-500 underline underline-offset-2 hover:text-surface-700 dark:hover:text-surface-300"
+                  class="self-start text-xs text-surface-500 dark:text-surface-400 underline underline-offset-2 hover:text-surface-700 dark:hover:text-surface-300"
                   @click="showWordSamples = !showWordSamples"
                 >
                   {{ showWordSamples ? 'Hide examples' : 'View more examples' }}
                 </button>
-                <ul v-if="showWordSamples" class="flex flex-col gap-0.5 text-sm text-surface-500 font-noto-sans">
+                <ul v-if="showWordSamples" class="flex flex-col gap-0.5 text-sm text-surface-500 dark:text-surface-400 font-noto-sans">
                   <li v-for="(sample, index) in wordExtraSamples" :key="index">{{ sample }}</li>
                 </ul>
               </div>
               <div class="flex flex-col gap-1">
                 <label class="text-sm font-medium">Reading field <span class="font-normal text-surface-400">· optional</span></label>
                 <Select v-model="selectedReadingField" :options="readingFieldsOptions" option-label="label" option-value="value" placeholder="None (optional)" class="w-full" @change="onSelectionChanged" />
-                <small class="text-surface-500">Used to tell apart words with the same spelling. Can be with full kana or furigana <br/> (<span class="font-noto-sans">下[くだ]さる</span>).</small>
+                <small class="text-surface-500 dark:text-surface-400">Used to tell apart words with the same spelling. Can be with full kana or furigana <br/> (<span class="font-noto-sans">下[くだ]さる</span>).</small>
                 <button
                   v-if="readingExtraSamples.length > 0"
                   type="button"
-                  class="self-start text-xs text-surface-500 underline underline-offset-2 hover:text-surface-700 dark:hover:text-surface-300"
+                  class="self-start text-xs text-surface-500 dark:text-surface-400 underline underline-offset-2 hover:text-surface-700 dark:hover:text-surface-300"
                   @click="showReadingSamples = !showReadingSamples"
                 >
                   {{ showReadingSamples ? 'Hide examples' : 'View more examples' }}
                 </button>
-                <ul v-if="showReadingSamples" class="flex flex-col gap-0.5 text-sm text-surface-500 font-noto-sans">
+                <ul v-if="showReadingSamples" class="flex flex-col gap-0.5 text-sm text-surface-500 dark:text-surface-400 font-noto-sans">
                   <li v-for="(sample, index) in readingExtraSamples" :key="index">{{ sample }}</li>
                 </ul>
               </div>
@@ -1150,28 +1150,28 @@
           </section>
 
           <section class="flex flex-col gap-1">
-            <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-500 mb-2">Example sentences <span class="font-normal normal-case tracking-normal text-surface-400">· optional</span></h3>
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-2">Example sentences <span class="font-normal normal-case tracking-normal text-surface-400">· optional</span></h3>
             <Select v-model="selectedSentenceField" :options="sentenceFieldsOptions" option-label="label" option-value="value" placeholder="None (optional)" class="w-full" @change="onSelectionChanged" />
-            <small class="text-surface-500">
+            <small class="text-surface-500 dark:text-surface-400">
               The studied word will be highlighted automatically. Words that are bolded in your note type will keep that highlight. Sentences where it can't be found
               will be skipped.
             </small>
             <button
               v-if="sentenceExtraSamples.length > 0"
               type="button"
-              class="self-start text-xs text-surface-500 underline underline-offset-2 hover:text-surface-700 dark:hover:text-surface-300"
+              class="self-start text-xs text-surface-500 dark:text-surface-400 underline underline-offset-2 hover:text-surface-700 dark:hover:text-surface-300"
               @click="showSentenceSamples = !showSentenceSamples"
             >
               {{ showSentenceSamples ? 'Hide examples' : 'View more examples' }}
             </button>
-            <ul v-if="showSentenceSamples" class="flex flex-col gap-0.5 text-sm text-surface-500 font-noto-sans">
+            <ul v-if="showSentenceSamples" class="flex flex-col gap-0.5 text-sm text-surface-500 dark:text-surface-400 font-noto-sans">
               <li v-for="(sample, index) in sentenceExtraSamples" :key="index">{{ sample }}</li>
             </ul>
           </section>
 
           <JitenPlusGate feature="card-media" feature-label="Card media import">
             <section class="flex flex-col gap-3">
-              <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-500">Images &amp; audio <span class="font-normal normal-case tracking-normal text-surface-400">· optional</span></h3>
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Images &amp; audio <span class="font-normal normal-case tracking-normal text-surface-400">· optional</span></h3>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="flex flex-col gap-1">
                   <label class="text-sm font-medium">Image field</label>
@@ -1211,7 +1211,7 @@
                   </div>
                 </div>
               </div>
-              <small class="text-surface-500">Files are read straight from your Anki media folder. Images are recompressed and count towards your card media storage.</small>
+              <small class="text-surface-500 dark:text-surface-400">Files are read straight from your Anki media folder. Images are recompressed and count towards your card media storage.</small>
             </section>
           </JitenPlusGate>
 
@@ -1220,7 +1220,7 @@
               <Button label="Back" :disabled="!selectedDeck" @click="PreviousStep()" />
               <Button label="Next" :disabled="mediaOnly && !anyExtraFieldSelected" @click="NextStep()" />
             </div>
-            <p v-if="mediaOnly && !anyExtraFieldSelected" class="text-sm text-surface-500">
+            <p v-if="mediaOnly && !anyExtraFieldSelected" class="text-sm text-surface-500 dark:text-surface-400">
               Select a sentence, image or audio field to continue.
             </p>
           </div>
@@ -1230,10 +1230,10 @@
         <p>
           This will import up to <b>{{ cardsIds.length }} cards</b>.
         </p>
-        <p v-if="mediaOnly" class="text-sm text-surface-500 mb-4">
+        <p v-if="mediaOnly" class="text-sm text-surface-500 dark:text-surface-400 mb-4">
           Only sentences and media are imported; your vocabulary and review history are untouched.
         </p>
-        <p v-else class="text-sm text-surface-500 mb-4">
+        <p v-else class="text-sm text-surface-500 dark:text-surface-400 mb-4">
           Suspended and cards with no history will be skipped during import.
         </p>
         <Message v-if="selectedSentenceField >= 0" severity="info" :closable="false" class="mb-4">
@@ -1298,13 +1298,13 @@
             :value="mediaImport.total.value > 0 ? Math.round((mediaImport.done.value / mediaImport.total.value) * 100) : 0"
             class="my-2 max-w-md"
           />
-          <p class="text-sm text-surface-500">
+          <p class="text-sm text-surface-500 dark:text-surface-400">
             <span v-if="mediaEtaText">About {{ mediaEtaText }} remaining · </span>Please keep this tab open until the import finishes.
           </p>
-          <p v-if="mediaImport.maxBytes.value > 0" class="text-sm text-surface-500">
+          <p v-if="mediaImport.maxBytes.value > 0" class="text-sm text-surface-500 dark:text-surface-400">
             Storage used: {{ formatBytes(mediaImport.usedBytes.value) }} / {{ formatBytes(mediaImport.maxBytes.value) }}
           </p>
-          <p class="text-sm text-surface-500">
+          <p class="text-sm text-surface-500 dark:text-surface-400">
             Uploaded: {{ mediaImport.stats.value.uploaded + mediaImport.stats.value.replaced }} |
             Skipped: {{
               mediaImport.stats.value.skippedExisting + mediaImport.stats.value.missingInAnki + mediaImport.stats.value.tooLarge
@@ -1322,7 +1322,7 @@
             @click="stopMediaImport"
           />
         </template>
-        <p v-if="!mediaOnly && (importPhase === 'fetch' || importPhase === 'upload')" class="text-sm text-surface-500">
+        <p v-if="!mediaOnly && (importPhase === 'fetch' || importPhase === 'upload')" class="text-sm text-surface-500 dark:text-surface-400">
           Imported: {{ importResults.imported }} |
           Updated: {{ importResults.updated }} |
           Skipped: {{ importResults.skipped }}
@@ -1378,7 +1378,7 @@
         Your card media storage is full, so the rest was not imported.
         <NuxtLink to="/settings/card-media" class="underline">Manage card media</NuxtLink>
       </Message>
-      <p v-if="mediaImport.maxBytes.value > 0" class="text-sm text-surface-500">
+      <p v-if="mediaImport.maxBytes.value > 0" class="text-sm text-surface-500 dark:text-surface-400">
         Storage used: {{ formatBytes(mediaImport.usedBytes.value) }} / {{ formatBytes(mediaImport.maxBytes.value) }}
       </p>
       <ul class="flex flex-col gap-1 text-sm">
@@ -1415,9 +1415,9 @@
   >
     <div class="flex flex-col gap-3">
       <Message severity="error" :closable="false">{{ errorMessage }}</Message>
-      <p class="text-sm text-surface-500">Please report these details if you need assistance.</p>
+      <p class="text-sm text-surface-500 dark:text-surface-400">Please report these details if you need assistance.</p>
       <details v-if="errorDetail" class="text-sm">
-        <summary class="cursor-pointer select-none text-surface-500">Technical details</summary>
+        <summary class="cursor-pointer select-none text-surface-500 dark:text-surface-400">Technical details</summary>
         <pre
           class="mt-2 max-h-[40vh] overflow-auto whitespace-pre-wrap break-words rounded border border-surface-200 dark:border-surface-700 p-3 text-xs"
         >{{ errorDetail }}</pre>

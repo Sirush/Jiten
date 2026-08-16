@@ -338,7 +338,7 @@
         <div class="flex flex-col gap-4 max-w-2xl">
           <div class="flex justify-between">
             <div>
-              <div v-if="conjugationString != null" class="text-gray-500 text-xs font-noto-sans">(Conjugation: {{ conjugationString }})</div>
+              <div v-if="conjugationString != null" class="text-gray-500 dark:text-gray-400 text-xs font-noto-sans">(Conjugation: {{ conjugationString }})</div>
               <div class="flex items-center gap-2">
                 <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`">
                   <div class="text-3xl font-noto-sans" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
@@ -592,7 +592,7 @@
 
   :deep(.sort-mode-select:hover) {
     background: var(--p-surface-100) !important;
-    border-radius: 0.375rem;
+    border-radius: var(--radius-md);
   }
 
   :deep(.dark .sort-mode-select:hover) {

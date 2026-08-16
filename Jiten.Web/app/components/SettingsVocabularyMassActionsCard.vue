@@ -246,7 +246,7 @@
         </p>
 
         <div>
-          <Button label="Preview" icon="pi pi-eye" severity="warn" :loading="previewLoading" :disabled="!canPreview" @click="preview" />
+          <Button label="Preview" icon="pi pi-eye" :loading="previewLoading" :disabled="!canPreview" @click="preview" />
         </div>
       </div>
 

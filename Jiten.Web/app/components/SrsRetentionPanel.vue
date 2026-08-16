@@ -229,7 +229,7 @@
           :class="
             windowKey === opt.key
               ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
-              : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           "
           @click="windowKey = opt.key"
         >
@@ -245,7 +245,7 @@
         :key="tile.key"
         class="rounded-lg border border-surface-100 dark:border-surface-800 bg-surface-50 dark:bg-surface-800/40 p-3 text-center"
       >
-        <div class="text-xs text-gray-500 mb-1">{{ tile.label }}</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">{{ tile.label }}</div>
         <div
           class="text-[clamp(0.95rem,5vw,1.5rem)] font-bold tabular-nums"
           :class="tile.key === 'overall' ? overallColor : 'text-gray-800 dark:text-gray-100'"
@@ -277,7 +277,7 @@
               :class="
                 range === opt.key
                   ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
-                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               "
               @click="range = opt.key"
             >
@@ -295,7 +295,7 @@
               :class="
                 granularity === opt.key
                   ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
-                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               "
               @click="granularity = opt.key"
             >

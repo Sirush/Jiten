@@ -375,14 +375,14 @@
             fill="none"
             stroke="currentColor"
             :stroke-width="edgeActive(g.edge) ? 2.5 : 1.5"
-            :class="[edgeActive(g.edge) ? 'text-primary' : activeNode != null ? 'text-gray-300 dark:text-gray-700' : 'text-gray-400 dark:text-gray-600']"
+            :class="[edgeActive(g.edge) ? 'text-primary' : activeNode != null ? 'text-gray-300 dark:text-gray-700' : 'text-gray-400 dark:text-gray-400']"
             :style="{ opacity: activeNode != null && !edgeActive(g.edge) ? 0.25 : 1 }"
           />
         </svg>
 
         <!-- Column headers (media types) — first grid row. -->
         <div
-          class="z-10 flex items-center pl-1 text-[11px] font-semibold whitespace-nowrap text-gray-400 dark:text-gray-500"
+          class="z-10 flex items-center pl-1 text-[11px] font-semibold whitespace-nowrap text-gray-400 dark:text-gray-400"
           :style="{ gridColumn: 1, gridRow: 1 }"
         />
         <div
@@ -398,7 +398,7 @@
         <div
           v-for="(label, row) in rowYearLabels"
           :key="`year-${row}`"
-          class="z-10 flex items-center pr-1 text-xs whitespace-nowrap text-gray-400 dark:text-gray-500"
+          class="z-10 flex items-center pr-1 text-xs whitespace-nowrap text-gray-400 dark:text-gray-400"
           :style="{ gridColumn: 1, gridRow: row + 2 }"
         >
           {{ label }}

@@ -107,7 +107,7 @@
       </div>
 
       <template v-else>
-        <p class="text-sm text-surface-500">
+        <p class="text-sm text-surface-500 dark:text-surface-400">
           {{ count === 1 ? 'Choose a list to add this card to.' : `Choose a list to add the ${count} selected cards to.` }}
         </p>
 

@@ -35,14 +35,28 @@
 <template>
   <Card>
     <template #title>
-      <div class="flex justify-between">
+      <!-- Click-anywhere is a mouse convenience only; the chevron stays the real control so the
+           nested word link and status actions aren't trapped inside an interactive ancestor. -->
+      <div class="flex justify-between cursor-pointer" @click="toggleCompact">
         <div class="flex flex-row md:gap-4 flex-wrap items-center">
           <Checkbox v-if="selectable" :model-value="selected" :binary="true" class="mr-2" @change="emit('select', word)" @click.stop />
-          <router-link class="text-2xl" :to="`/vocabulary/${word.wordId}/${word.mainReading.readingIndex}`" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
-          <Button text @click="toggleCompact">{{ isCompact ? 'Expand' : 'Compact' }}</Button>
+          <router-link class="text-2xl" :to="`/vocabulary/${word.wordId}/${word.mainReading.readingIndex}`" lang="ja" @click.stop v-html="convertToRuby(word.mainReading.text)" />
+          <Button
+            text
+            rounded
+            size="small"
+            severity="secondary"
+            class="!text-surface-600 dark:!text-surface-300"
+            :icon="isCompact ? 'pi pi-chevron-down' : 'pi pi-chevron-up'"
+            :aria-label="isCompact ? 'Expand definitions' : 'Collapse definitions'"
+            :aria-expanded="!isCompact"
+            @click.stop="toggleCompact"
+          />
         </div>
         <div class="text-gray-500 dark:text-gray-300 text-sm text-right">
-          <VocabularyStatus :word="word" />
+          <span @click.stop>
+            <VocabularyStatus :word="word" />
+          </span>
           x{{ word.occurrences }} | Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}
           <Button
             v-if="removable"

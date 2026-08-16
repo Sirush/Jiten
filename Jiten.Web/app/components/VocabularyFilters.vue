@@ -51,7 +51,7 @@
 
 <template>
   <div
-    class="flex gap-2 md:w-full max-md:flex-row max-md:flex-wrap max-md:items-center md:flex-row max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:border-b max-md:border-surface-200 max-md:bg-[var(--p-neutral-50)] max-md:px-4 max-md:py-2 max-md:dark:border-surface-800 max-md:dark:bg-black"
+    class="flex gap-2 md:w-full max-md:flex-row max-md:flex-wrap max-md:items-center md:flex-row max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:border-b max-md:border-surface-200 max-md:bg-[var(--jiten-page-bg)] max-md:px-4 max-md:py-2 max-md:dark:border-surface-800"
   >
     <div class="hidden md:flex gap-2">
       <FloatLabel variant="on">

@@ -253,7 +253,7 @@
 
     switch (props.deck.status) {
       case DeckStatus.Planning:
-        return 'text-gray-500';
+        return 'text-gray-500 dark:text-gray-400';
       case DeckStatus.Ongoing:
         return 'text-yellow-500';
       case DeckStatus.Completed:
@@ -386,11 +386,11 @@
         <span class="flex items-baseline gap-1 min-w-0 text-xs pl-0.5">
           <span class="font-semibold whitespace-nowrap text-gray-800 dark:text-gray-100">{{ getMediaTypeText(deck.mediaType) }}</span>
           <template v-if="alternateTitles.length && !store.hideAlternativeTitles">
-            <span class="text-gray-400 dark:text-gray-500">·</span>
+            <span class="text-gray-400 dark:text-gray-400">·</span>
             <!-- Full text stays in the DOM (truncate only clips visually) so it remains crawlable. -->
             <span class="min-w-0 flex-1 truncate md:overflow-visible md:whitespace-normal md:break-words text-gray-600 dark:text-gray-400">
               <template v-for="(t, i) in alternateTitles" :key="i">
-                <span v-if="i > 0" class="mx-1 text-gray-400 dark:text-gray-500">·</span>
+                <span v-if="i > 0" class="mx-1 text-gray-400 dark:text-gray-400">·</span>
                 <span :lang="t.ja ? 'ja' : undefined">{{ t.text }}</span>
               </template>
             </span>
@@ -760,7 +760,7 @@
   .stat-row {
     padding: 0.2rem;
     margin-inline: -0.2rem;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     transition: background-color 0.2s;
   }
 

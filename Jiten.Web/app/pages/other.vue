@@ -147,7 +147,7 @@
       <template #title>Frequency Lists</template>
       <template #content>
         <div class="mb-3">Download frequency lists as a frequency dictionary for use with Yomitan or as a CSV.</div>
-        <div class="mb-3 text-sm text-surface-500">
+        <div class="mb-3 text-sm text-surface-500 dark:text-surface-400">
           All frequency lists are licensed under
           <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer" class="underline">CC BY-SA 4.0</a>.
         </div>
@@ -161,8 +161,10 @@
             body-class="text-center"
           >
             <template #body="slotProps">
+              <!-- Text weight, not filled: twelve rows of two downloads would otherwise read as
+                   twenty-four primary actions and leave the page without an entry point. -->
               <Button
-                severity="primary"
+                text
                 size="small"
                 class="w-full"
                 :loading="downloadingKey === downloadKey(slotProps.data.id, 'yomitan')"
@@ -183,7 +185,7 @@
           >
             <template #body="slotProps">
               <Button
-                severity="primary"
+                text
                 size="small"
                 class="w-full"
                 :loading="downloadingKey === downloadKey(slotProps.data.id, 'csv')"
@@ -203,7 +205,7 @@
               Build your own custom list
             </Button>
           </JitenPlusGate>
-          <span class="text-sm text-surface-500">
+          <span class="text-sm text-surface-500 dark:text-surface-400">
             Filter by media type, genre, tag, year or difficulty or hand-pick decks. <JitenPlusBadge />
           </span>
         </div>
@@ -214,11 +216,11 @@
       <template #title>Tools</template>
       <template #content>
         <div class="flex flex-col sm:flex-row gap-3">
-          <Button as="router-link" to="/media-updates" severity="info">
+          <Button as="router-link" to="/media-updates" severity="secondary">
             <Icon name="material-symbols-light:breaking-news-alt-1-outline" class="mr-2" />
             View Media Updates
           </Button>
-          <Button as="router-link" to="/parse-deck" severity="info">
+          <Button as="router-link" to="/parse-deck" severity="secondary">
             <Icon name="material-symbols-light:cards-star-outline" class="mr-2" />
             Create Custom Deck
           </Button>
@@ -278,7 +280,7 @@
 
 <style scoped>
   .frequency-table {
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     overflow: hidden;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   }
@@ -291,6 +293,13 @@
   .frequency-table :deep(.p-datatable-thead) tr th {
     padding: 0.75rem 1rem;
     transition: background-color 0.2s;
+  }
+
+  /* PrimeVue sets text-align on the cell at a higher specificity than the text-center utility,
+     so the Column header-class/body-class would otherwise have no effect. */
+  .frequency-table :deep(.p-datatable-thead) tr th.text-center,
+  .frequency-table :deep(.p-datatable-tbody) tr td.text-center {
+    text-align: center;
   }
 
   .frequency-table :deep(.p-datatable-tbody) tr td {

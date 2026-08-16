@@ -487,7 +487,7 @@
           #{{ card.frequencyRank.toLocaleString() }}
         </div>
         <button
-          class="text-surface-400 hover:text-surface-600 dark:text-surface-500 dark:hover:text-surface-300 p-1 -mr-1 relative"
+          class="text-surface-400 hover:text-surface-600 dark:text-surface-400 dark:hover:text-surface-300 p-1 -mr-1 relative"
           @pointerdown.stop
           @click.stop="showMenu = !showMenu"
         >
@@ -531,7 +531,7 @@
         <template v-for="block in frontBlocks" :key="block.id">
           <div
             v-if="frontBlockMasked(block)"
-            class="my-2 inline-flex items-center gap-1.5 rounded-full bg-surface-100 px-3 py-1 text-xs text-surface-400 dark:bg-surface-800 dark:text-surface-500"
+            class="my-2 inline-flex items-center gap-1.5 rounded-full bg-surface-100 px-3 py-1 text-xs text-surface-400 dark:bg-surface-800 dark:text-surface-400"
           >
             <i class="pi pi-eye-slash text-[0.7rem]" />
             Hidden during write-in

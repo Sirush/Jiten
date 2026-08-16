@@ -128,7 +128,7 @@
         </div>
         <div class="jp-tile__actions">
           <NuxtLink to="/settings/card-media">
-            <Button label="Manage uploads" size="small" severity="secondary" outlined />
+            <Button label="Manage uploads" size="small" severity="secondary" />
           </NuxtLink>
         </div>
       </div>
@@ -144,7 +144,7 @@
         </p>
         <div class="jp-tile__actions">
           <NuxtLink to="/jiten-plus/frequency-lists">
-            <Button label="Open list builder" size="small" severity="secondary" outlined />
+            <Button label="Open list builder" size="small" severity="secondary" />
           </NuxtLink>
         </div>
       </div>
@@ -159,7 +159,7 @@
         </p>
         <div class="jp-tile__actions">
           <NuxtLink to="/jiten-plus/immersion-plan">
-            <Button label="Open immersion plans" size="small" severity="secondary" outlined />
+            <Button label="Open immersion plans" size="small" severity="secondary" />
           </NuxtLink>
         </div>
       </div>
@@ -178,7 +178,7 @@
         <p class="jp-tile__body text-gray-600 dark:text-gray-300">Prioritise any open media request. Each boost counts as 5 regular votes.</p>
         <div class="jp-tile__actions">
           <NuxtLink to="/requests">
-            <Button label="Boost a request" size="small" severity="secondary" outlined />
+            <Button label="Boost a request" size="small" severity="secondary" />
           </NuxtLink>
         </div>
       </div>
@@ -214,7 +214,7 @@
   .jp-tile {
     display: flex;
     flex-direction: column;
-    border-radius: 0.75rem;
+    border-radius: var(--radius-xl);
     padding: 1.1rem;
   }
 

@@ -679,7 +679,7 @@ onMounted(() => loadData());
                     show-recent
                     @select="onEditTargetDeckSelect"
                   />
-                  <small v-if="editTargetDeckId" class="text-surface-500">Deck ID: {{ editTargetDeckId }}</small>
+                  <small v-if="editTargetDeckId" class="text-surface-500 dark:text-surface-400">Deck ID: {{ editTargetDeckId }}</small>
                 </div>
                 <div class="flex flex-col gap-1">
                   <label class="text-xs font-semibold">Media Type</label>
@@ -691,7 +691,7 @@ onMounted(() => loadData());
                     class="w-full"
                     :disabled="editIsUpdate"
                   />
-                  <small v-if="editIsUpdate" class="text-surface-500">Taken from the target media.</small>
+                  <small v-if="editIsUpdate" class="text-surface-500 dark:text-surface-400">Taken from the target media.</small>
                 </div>
                 <div class="flex flex-col gap-1">
                   <label class="text-xs font-semibold">External URL</label>
@@ -724,7 +724,7 @@ onMounted(() => loadData());
                 placeholder="Search or select recent deck..."
                 show-recent
               />
-              <small v-if="fulfilledDeckId" class="text-surface-500">Deck ID: {{ fulfilledDeckId }}</small>
+              <small v-if="fulfilledDeckId" class="text-surface-500 dark:text-surface-400">Deck ID: {{ fulfilledDeckId }}</small>
             </div>
             <div v-if="!isTerminal" class="flex gap-2 flex-wrap">
               <Button

@@ -169,19 +169,19 @@
     <div class="grid grid-cols-2 gap-6 w-full mb-6">
       <div class="text-center">
         <div class="text-[clamp(1.1rem,6vw,1.875rem)] font-bold text-primary-600 dark:text-primary-400">{{ totalReviews }}</div>
-        <div class="text-sm text-gray-500">Reviews</div>
+        <div class="text-sm text-gray-500 dark:text-gray-400">Reviews</div>
       </div>
       <div class="text-center">
         <div class="text-[clamp(1.1rem,6vw,1.875rem)] font-bold text-green-600 dark:text-green-400">{{ newCardsLearned }}</div>
-        <div class="text-sm text-gray-500">New Cards</div>
+        <div class="text-sm text-gray-500 dark:text-gray-400">New Cards</div>
       </div>
       <div class="text-center">
         <div class="text-[clamp(1.1rem,6vw,1.875rem)] font-bold text-blue-600 dark:text-blue-400">{{ passRate }}%</div>
-        <div class="text-sm text-gray-500" title="Cards recalled (anything but Again), including new cards">Pass rate</div>
+        <div class="text-sm text-gray-500 dark:text-gray-400" title="Cards recalled (anything but Again), including new cards">Pass rate</div>
       </div>
       <div class="text-center">
         <div class="text-[clamp(1.1rem,6vw,1.875rem)] font-bold text-purple-600 dark:text-purple-400">{{ duration }}</div>
-        <div class="text-sm text-gray-500">Time Spent</div>
+        <div class="text-sm text-gray-500 dark:text-gray-400">Time Spent</div>
       </div>
     </div>
 
@@ -213,7 +213,7 @@
           :title="`Easy: ${gradeCounts.easy}`"
         />
       </div>
-      <div class="flex justify-between mt-1.5 text-xs text-gray-500">
+      <div class="flex justify-between mt-1.5 text-xs text-gray-500 dark:text-gray-400">
         <div v-if="gradeCounts.again > 0" class="flex items-center gap-1">
           <span class="w-2 h-2 rounded-full bg-red-500" />{{ gradeCounts.again }} Again
         </div>

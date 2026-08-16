@@ -421,7 +421,7 @@
       </Column>
       <Column field="partsOfSpeech" header="POS" style="width: 200px">
         <template #body="{ data }">
-          <span class="text-sm text-gray-500">{{ data.partsOfSpeech.join(', ') }}</span>
+          <span class="text-sm text-gray-500 dark:text-gray-400">{{ data.partsOfSpeech.join(', ') }}</span>
         </template>
       </Column>
       <Column header="Actions" style="width: 100px">
@@ -439,7 +439,7 @@
       class="w-full md:w-2/3 lg:w-1/2"
     >
       <div class="mb-4 flex items-center justify-between">
-        <span class="text-sm text-gray-500">POS: {{ editingPartsOfSpeech.join(', ') }}</span>
+        <span class="text-sm text-gray-500 dark:text-gray-400">POS: {{ editingPartsOfSpeech.join(', ') }}</span>
         <Button
           v-if="canAutoFillAny"
           label="Auto-fill All"

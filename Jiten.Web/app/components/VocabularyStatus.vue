@@ -428,7 +428,6 @@
             </NuxtLink>
           </div>
         </Popover>
-        <span aria-hidden="true">|</span>
       </template>
     </span>
     <template #fallback>

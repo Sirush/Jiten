@@ -255,7 +255,7 @@
         <Tooltip
           content="The words will stop appearing as new cards and count towards your coverage. You can simply untick to remove their redundancy at any moment."
         >
-          <i class="pi pi-info-circle text-xs text-surface-400 dark:text-surface-500 cursor-help" />
+          <i class="pi pi-info-circle text-xs text-surface-400 dark:text-surface-400 cursor-help" />
         </Tooltip>
       </div>
 
@@ -285,7 +285,7 @@
             <div class="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
               <label :for="`deriv-${group.key}`" class="font-medium cursor-pointer">{{ group.label }}</label>
               <Tooltip :content="groupTooltip(group)">
-                <i class="pi pi-info-circle text-xs text-surface-400 dark:text-surface-500 cursor-help" />
+                <i class="pi pi-info-circle text-xs text-surface-400 dark:text-surface-400 cursor-help" />
               </Tooltip>
               <span v-if="group.categories[0]" class="text-xs text-muted-color font-noto-sans" lang="ja">
                 {{ group.categories[0].exampleBase }} → {{ group.categories[0].exampleDerived }}
@@ -394,7 +394,7 @@
                     <span lang="ja" v-html="convertToRuby(pair.baseText)" />
                   </NuxtLink>
                   <Tooltip v-if="pair.baseDefinition" :content="pair.baseDefinition">
-                    <i class="pi pi-info-circle text-[0.65rem] text-surface-400 dark:text-surface-500 cursor-help" />
+                    <i class="pi pi-info-circle text-[0.65rem] text-surface-400 dark:text-surface-400 cursor-help" />
                   </Tooltip>
                 </span>
               </template>
