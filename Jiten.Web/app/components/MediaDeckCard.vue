@@ -19,6 +19,8 @@
     // Set by list views for below-the-fold cards so their covers don't compete
     // with the LCP image. Defaults to eager (single-card pages).
     lazyCover?: boolean;
+    // Guest homepage demo: shows the coverage bars without an authenticated user; hides rating and download to keep the card short.
+    demoCoverage?: boolean;
   }>();
 
   const emit = defineEmits<{
@@ -47,9 +49,7 @@
   const readingDuration = computed(() => Math.round(props.deck.characterCount / readingSpeed.value));
   const speechSpeed = computed(() => props.deck.speechSpeed ?? 0);
 
-  const isAudioVisual = computed(() =>
-    [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio].includes(props.deck.mediaType)
-  );
+  const isAudioVisual = computed(() => [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio].includes(props.deck.mediaType));
 
   const hasChildren = computed(() => props.deck.childrenDeckCount > 0);
   const childrenLabel = computed(() => getChildrenCountText(props.deck.mediaType));
@@ -65,7 +65,7 @@
     const shown = localiseTitle(d);
     const list: { text: string; ja: boolean }[] = [];
     const push = (text: string | undefined | null, ja: boolean) => {
-      if (text && text !== shown && !list.some(e => e.text === text)) list.push({ text, ja });
+      if (text && text !== shown && !list.some((e) => e.text === text)) list.push({ text, ja });
     };
     push(d.originalTitle, true);
     push(d.romajiTitle, false);
@@ -95,7 +95,12 @@
     menu.value?.toggle(event);
   };
 
-  const { toggleFavourite, toggleIgnore: _toggleIgnore, cancelIgnore: _cancelIgnore, setStatus } = useDeckPreference(
+  const {
+    toggleFavourite,
+    toggleIgnore: _toggleIgnore,
+    cancelIgnore: _cancelIgnore,
+    setStatus,
+  } = useDeckPreference(
     () => props.deck,
     (updated) => emit('update:deck', updated)
   );
@@ -122,7 +127,9 @@
     if (oldVal && !newVal && Math.random() < 0.25) {
       showCalibrationBanner.value = true;
       clearTimeout(calibrationTimer);
-      calibrationTimer = setTimeout(() => { showCalibrationBanner.value = false; }, 8000);
+      calibrationTimer = setTimeout(() => {
+        showCalibrationBanner.value = false;
+      }, 8000);
     }
   });
 
@@ -133,14 +140,11 @@
     existingRating.value = null;
     showCompletionDialog.value = true;
     completionComparisonIndex.value = 0;
-    const [rating, suggestions] = await Promise.all([
-      fetchRating(ratingDeckId.value),
-      fetchSuggestions(ratingDeckId.value),
-    ]);
+    const [rating, suggestions] = await Promise.all([fetchRating(ratingDeckId.value), fetchSuggestions(ratingDeckId.value)]);
     existingRating.value = rating;
-    completionSuggestions.value = suggestions.slice(0, 2).map(pair =>
-      pair.deckA.id === ratingDeckId.value ? pair : { deckA: pair.deckB, deckB: pair.deckA },
-    );
+    completionSuggestions.value = suggestions
+      .slice(0, 2)
+      .map((pair) => (pair.deckA.id === ratingDeckId.value ? pair : { deckA: pair.deckB, deckB: pair.deckA }));
   };
 
   const { $api } = useNuxtApp();
@@ -170,7 +174,7 @@
         header: 'Complete Series',
         icon: 'pi pi-check-circle',
         acceptLabel: 'Yes, complete it',
-        rejectLabel: 'No, it\'s still ongoing',
+        rejectLabel: "No, it's still ongoing",
         rejectProps: { severity: 'secondary' },
         accept: () => completeParentDeck(response.parentDeckId!),
       });
@@ -184,12 +188,12 @@
   };
 
   const completionCurrentPair = computed(() =>
-    completionComparisonIndex.value < completionSuggestions.value.length
-      ? completionSuggestions.value[completionComparisonIndex.value]
-      : null
+    completionComparisonIndex.value < completionSuggestions.value.length ? completionSuggestions.value[completionComparisonIndex.value] : null
   );
 
-  const advanceCompletion = () => { completionComparisonIndex.value++; };
+  const advanceCompletion = () => {
+    completionComparisonIndex.value++;
+  };
 
   const menuItems = computed(() => [
     {
@@ -206,7 +210,9 @@
       label: 'Rate difficulty',
       icon: 'pi pi-gauge',
       visible: props.deck.status === DeckStatus.Completed && !props.deck.parentDeckId,
-      command: () => { openRatingDialog(); },
+      command: () => {
+        openRatingDialog();
+      },
     },
     {
       label: 'Set status',
@@ -244,7 +250,9 @@
       label: 'Report an issue',
       icon: 'pi pi-exclamation-triangle',
       visible: !props.isCompact,
-      command: () => { showIssueDialog.value = true; },
+      command: () => {
+        showIssueDialog.value = true;
+      },
     },
   ]);
 
@@ -308,11 +316,12 @@
 
   onBeforeUnmount(() => titleResizeObserver?.disconnect());
 
-  watch(() => localiseTitle(props.deck), () => nextTick(measureTitleClip));
+  watch(
+    () => localiseTitle(props.deck),
+    () => nextTick(measureTitleClip)
+  );
 
   const formatOnce = (count: number) => `${count.toLocaleString()} once`;
-
-
 </script>
 
 <template>
@@ -421,7 +430,7 @@
                     </Tooltip>
                   </div>
                   <DeckCoverageBars
-                    v-if="authStore.isAuthenticated && (deck.coverage != 0 || deck.uniqueCoverage != 0)"
+                    v-if="(authStore.isAuthenticated || demoCoverage) && (deck.coverage != 0 || deck.uniqueCoverage != 0)"
                     :deck="deck"
                     class="flex-1 min-w-0 @max-[17rem]:flex-none md:mt-3"
                   />
@@ -455,7 +464,9 @@
                       <Tooltip :content="'Words appearing exactly once: ' + deck.uniqueWordUsedOnceCount.toLocaleString()">
                         <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                           Unique words
-                          <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums">· {{ formatOnce(deck.uniqueWordUsedOnceCount) }}</span>
+                          <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums"
+                            >· {{ formatOnce(deck.uniqueWordUsedOnceCount) }}</span
+                          >
                         </span>
                       </Tooltip>
                       <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.uniqueWordCount.toLocaleString() }}</span>
@@ -467,13 +478,17 @@
                       <Tooltip :content="'Kanji appearing exactly once: ' + deck.uniqueKanjiUsedOnceCount.toLocaleString()">
                         <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                           Unique kanji
-                          <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums">· {{ formatOnce(deck.uniqueKanjiUsedOnceCount) }}</span>
+                          <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums"
+                            >· {{ formatOnce(deck.uniqueKanjiUsedOnceCount) }}</span
+                          >
                         </span>
                       </Tooltip>
                       <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.uniqueKanjiCount.toLocaleString() }}</span>
                     </div>
                     <div v-if="deck.averageSentenceLength !== 0 && !deck.hideAverageSentenceLength" class="flex justify-between gap-2 stat-row">
-                      <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap"><span class="@xl:hidden">Avg. sentence</span><span class="hidden @xl:inline">Average sentence length</span></span>
+                      <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap"
+                        ><span class="@xl:hidden">Avg. sentence</span><span class="hidden @xl:inline">Average sentence length</span></span
+                      >
                       <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.averageSentenceLength.toFixed(1) }}</span>
                     </div>
                     <div v-if="speechSpeed > 0" class="flex justify-between gap-2 stat-row">
@@ -490,7 +505,14 @@
                             Difficulty
                             <i class="pi pi-info-circle text-primary-400 text-xs ml-0.5" />
                           </span>
-                          <DifficultyDisplay ref="difficultyRef" :difficulty="deck.difficulty" :difficulty-raw="deck.difficultyRaw" :difficulty-algorithmic="deck.difficultyAlgorithmic" :user-adjustment="deck.userAdjustment" :vote-count="deck.distinctVoterCount || 0" />
+                          <DifficultyDisplay
+                            ref="difficultyRef"
+                            :difficulty="deck.difficulty"
+                            :difficulty-raw="deck.difficultyRaw"
+                            :difficulty-algorithmic="deck.difficultyAlgorithmic"
+                            :user-adjustment="deck.userAdjustment"
+                            :vote-count="deck.distinctVoterCount || 0"
+                          />
                         </div>
                       </Tooltip>
                     </div>
@@ -498,7 +520,7 @@
 
                   <div class="min-w-0 @max-3xl:contents">
                     <div
-                      v-if="!deck.hideDialoguePercentage && deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100"
+                      v-if="!deck.hideDialoguePercentage && deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100 && !demoCoverage"
                       class="flex justify-between gap-2 stat-row"
                     >
                       <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Dialogue</span>
@@ -510,7 +532,9 @@
                       :to="`/decks/media/${deck.deckId}/detail`"
                       class="flex justify-between gap-2 stat-row group cursor-pointer no-underline"
                     >
-                      <span class="text-primary-600 dark:text-primary-400 font-normal whitespace-nowrap underline-offset-2 group-hover:underline">{{ childrenLabel }}</span>
+                      <span class="text-primary-600 dark:text-primary-400 font-normal whitespace-nowrap underline-offset-2 group-hover:underline">{{
+                        childrenLabel
+                      }}</span>
                       <span class="tabular-nums font-semibold whitespace-nowrap text-primary-600 dark:text-primary-400">
                         {{ deck.childrenDeckCount.toLocaleString() }}
                         <i class="pi pi-arrow-right text-xs ml-0.5 transition-transform group-hover:translate-x-0.5" />
@@ -518,15 +542,18 @@
                     </router-link>
                     <div v-else-if="deck.childrenDeckCount != 0" class="flex justify-between gap-2 stat-row">
                       <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">{{ childrenLabel }}</span>
-                      <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.childrenDeckCount.toLocaleString() }}</span>
+                      <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
+                        deck.childrenDeckCount.toLocaleString()
+                      }}</span>
                     </div>
 
                     <div
                       v-if="
-                        deck.mediaType == MediaType.Novel ||
-                        deck.mediaType == MediaType.NonFiction ||
-                        deck.mediaType == MediaType.VisualNovel ||
-                        deck.mediaType == MediaType.WebNovel
+                        (deck.mediaType == MediaType.Novel ||
+                          deck.mediaType == MediaType.NonFiction ||
+                          deck.mediaType == MediaType.VisualNovel ||
+                          deck.mediaType == MediaType.WebNovel) &&
+                        !demoCoverage
                       "
                       class="flex justify-between gap-2 stat-row"
                     >
@@ -545,10 +572,12 @@
                         </span>
                       </Tooltip>
 
-                      <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ readingDuration > 0 ? readingDuration : '<1' }} h</span>
+                      <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap"
+                        >{{ readingDuration > 0 ? readingDuration : '<1' }} h</span
+                      >
                     </div>
 
-                    <div v-if="deck.externalRating != 0 && !store.hideExternalRating" class="flex justify-between gap-2 stat-row">
+                    <div v-if="deck.externalRating != 0 && !store.hideExternalRating && !demoCoverage" class="flex justify-between gap-2 stat-row">
                       <Tooltip content="Score based on user ratings from 3rd party websites, such as AniList, TMDB, VNDB or IGDB.">
                         <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                           <span class="@xl:hidden">Rating</span><span class="hidden @xl:inline">External Rating</span>
@@ -569,7 +598,12 @@
                 <div class="mt-3">
                   <div v-if="deck.description && !store.hideDescriptions" class="description-container" :class="{ expanded: isDescriptionExpanded }">
                     <p class="whitespace-pre-line mb-0 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{{ deck.description }}</p>
-                    <button v-if="deck.description.length > 50" type="button" class="text-primary-500 hover:text-primary-700 text-sm cursor-pointer" @click="toggleDescription">
+                    <button
+                      v-if="deck.description.length > 50"
+                      type="button"
+                      class="text-primary-500 hover:text-primary-700 text-sm cursor-pointer"
+                      @click="toggleDescription"
+                    >
                       {{ isDescriptionExpanded ? 'View less' : 'View more' }}
                     </button>
                   </div>
@@ -580,17 +614,14 @@
                 <div class="mt-auto">
                   <LazyDeckInlineEditor v-if="isEditing" :deck="deck" @saved="onMetadataSaved" @close="isEditing = false" />
 
-                  <div
-                    v-else-if="deck.genres?.length || deck.tags?.length || deck.relationships?.length"
-                    class="pt-5 space-y-2 max-w-[51rem]"
-                  >
+                  <div v-else-if="deck.genres?.length || deck.tags?.length || deck.relationships?.length" class="pt-5 space-y-2 max-w-[51rem]">
                     <GenreTagDisplay v-if="!store.hideGenres && deck.genres?.length" :genres="deck.genres" label="Genres" />
                     <GenreTagDisplay v-if="!store.hideTags && deck.tags?.length" :tags="deck.tags" label="Tags" />
                     <RelatedMediaDisplay v-if="!store.hideRelations && deck.relationships?.length" :relationships="deck.relationships" :deck-id="deck.deckId" />
                   </div>
                 </div>
                 <DeckCoverageBars
-                  v-if="isCompact && authStore.isAuthenticated && (deck.coverage != 0 || deck.uniqueCoverage != 0)"
+                  v-if="isCompact && (authStore.isAuthenticated || demoCoverage) && (deck.coverage != 0 || deck.uniqueCoverage != 0)"
                   :deck="deck"
                   class="mt-3"
                 />
@@ -598,11 +629,7 @@
                   v-if="!hideControl || (!isCompact && sortedLinks.length)"
                   :class="isCompact ? 'pt-4' : 'pt-4 flex flex-col @xl:flex-row @xl:items-end @xl:justify-between gap-x-6 gap-y-3'"
                 >
-                  <div
-                    v-if="!hideControl"
-                    class="gap-2"
-                    :class="[isCompact ? 'flex flex-row justify-center' : 'grid grid-cols-2 @xl:flex @xl:flex-row']"
-                  >
+                  <div v-if="!hideControl" class="gap-2" :class="[isCompact ? 'flex flex-row justify-center' : 'grid grid-cols-2 @xl:flex @xl:flex-row']">
                     <Tooltip v-if="!hideDetailButton" content="Details">
                       <Button
                         as="router-link"
@@ -624,22 +651,11 @@
                       />
                     </Tooltip>
                     <Tooltip v-if="authStore.isAuthenticated" content="Study with SRS">
-                      <Button
-                        :label="isCompact ? undefined : 'Study'"
-                        icon="pi pi-play"
-                        size="small"
-                        class="text-center"
-                        @click="showStudyDeckDialog = true"
-                      />
+                      <Button :label="isCompact ? undefined : 'Study'" icon="pi pi-play" size="small" class="text-center" @click="showStudyDeckDialog = true" />
                     </Tooltip>
-                    <Tooltip content="Download / Learn">
+                    <Tooltip v-if="!demoCoverage" content="Download / Learn">
                       <!-- Label shortens rather than wrapping: a two-line label makes this button taller than its row. -->
-                      <Button
-                        :icon="isCompact ? 'pi pi-download' : undefined"
-                        size="small"
-                        class="text-center"
-                        @click="showDownloadDialog = true"
-                      >
+                      <Button :icon="isCompact ? 'pi pi-download' : undefined" size="small" class="text-center" @click="showDownloadDialog = true">
                         <template v-if="!isCompact">
                           <i class="pi pi-download" />
                           <span class="whitespace-nowrap">
@@ -668,10 +684,21 @@
 
     <TieredMenu v-if="authStore.isAuthenticated && menuActivated" ref="menu" :model="menuItems" popup />
 
-    <Dialog v-if="showCompletionDialog" v-model:visible="showCompletionDialog" modal header="Rate Difficulty" class="w-full" style="max-width: 40rem" :closable="true">
+    <Dialog
+      v-if="showCompletionDialog"
+      v-model:visible="showCompletionDialog"
+      modal
+      header="Rate Difficulty"
+      class="w-full"
+      style="max-width: 40rem"
+      :closable="true"
+    >
       <div class="flex flex-col gap-6">
         <div>
-          <p class="text-sm text-muted-color mb-2">How difficult did you find <strong>{{ ratingDeckId === deck.deckId ? localiseTitle(deck) : 'this series' }}</strong>?</p>
+          <p class="text-sm text-muted-color mb-2">
+            How difficult did you find <strong>{{ ratingDeckId === deck.deckId ? localiseTitle(deck) : 'this series' }}</strong
+            >?
+          </p>
           <LazyDifficultyRating :deck-id="ratingDeckId" :current-rating="existingRating" @rated="() => {}" />
         </div>
 
@@ -690,10 +717,8 @@
           <div v-else class="flex flex-col items-center gap-3 py-6">
             <i class="pi pi-check-circle text-green-500 text-4xl" />
             <p class="text-sm text-muted-color text-center">
-              Thanks for helping refine the difficulties! <br/>
-              <NuxtLink to="/ratings" target="_blank" class="text-primary-500 hover:underline font-semibold">
-                Compare more media →
-              </NuxtLink>
+              Thanks for helping refine the difficulties! <br />
+              <NuxtLink to="/ratings" target="_blank" class="text-primary-500 hover:underline font-semibold"> Compare more media → </NuxtLink>
             </p>
           </div>
         </template>

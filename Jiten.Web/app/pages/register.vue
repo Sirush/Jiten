@@ -1,7 +1,39 @@
 <script setup lang="ts">
+  import { useAuthStore } from '~/stores/authStore';
+
   const { $api } = useNuxtApp();
   const runtimeConfig = useRuntimeConfig();
   const recaptchaEnabled = !!runtimeConfig.public.recaptcha?.v2SiteKey;
+  const googleSignInEnabled = !!runtimeConfig.public.googleSignInClientId;
+  const GoogleSignInButtonComponent = googleSignInEnabled ? resolveComponent('GoogleSignInButton') : null;
+
+  const authStore = useAuthStore();
+  const router = useRouter();
+  const route = useRoute();
+
+  const redirectQuery = computed(() => {
+    const redirect = safeRedirectPath(route.query.redirect);
+    return redirect ? { redirect } : {};
+  });
+
+  const handleGoogleOnSuccess = async (response: { credential?: string }) => {
+    try {
+      const result = await authStore.loginWithGoogle(response.credential);
+      if (result === 'requiresRegistration') {
+        await router.push({ path: '/google-registration', query: redirectQuery.value });
+      } else if (result === true) {
+        await router.push(safeRedirectPath(route.query.redirect) ?? '/');
+      } else {
+        error.value = authStore.error || 'Google sign-in failed. Please try again.';
+      }
+    } catch {
+      error.value = 'Google sign-in failed. Please try again.';
+    }
+  };
+
+  const handleGoogleOnError = () => {
+    error.value = 'Google sign-in failed. Please try again.';
+  };
 
   const form = reactive({
     username: '',
@@ -19,7 +51,8 @@
   const RecaptchaCheckboxComponent = recaptchaEnabled ? resolveComponent('RecaptchaCheckbox') : null;
 
   const isLoading = ref(false);
-  const message = ref<string | null>(null);
+  const registered = ref(false);
+  const registeredEmail = ref('');
   const error = ref<string | null>(null);
 
   const usernameError = ref<string | null>(null);
@@ -114,7 +147,6 @@
 
   async function handleRegister() {
     error.value = null;
-    message.value = null;
 
     const isUsernameValid = validateUsername();
     const isPasswordValid = validatePassword();
@@ -131,15 +163,12 @@
         throw new Error('Please complete the reCAPTCHA.');
       }
       await $api('/auth/register', { method: 'POST', body: { ...form, recaptchaResponse: recaptchaResponse.value || '' } });
-      message.value =
-        "Registration successful. Please check your email to confirm your account. If you don't receive the email within a few minutes, you can send it again from the login page under \"Didn't get your confirmation email?\". If it still doesn't arrive, please contact us on Discord or send an email to contact@jiten.moe from the email address you used to register for a manual confirmation.";
-    } catch (err: any) {
-      if (err.response && err.response._data) {
-        const apiMessage = err.response._data.message || 'Registration failed.';
-        error.value = `Registration failed: ${apiMessage}`;
-      } else {
-        error.value = (err as Error)?.message ? `Registration failed: ${(err as Error).message}` : 'Registration failed: An unexpected error occurred.';
-      }
+      registeredEmail.value = form.email.trim();
+      registered.value = true;
+    } catch (err) {
+      const apiMessage = (err as { response?: { _data?: { message?: string } } }).response?._data?.message;
+      const fallback = err instanceof Error && err.message ? err.message : 'An unexpected error occurred.';
+      error.value = `Registration failed: ${apiMessage || fallback}`;
     } finally {
       isLoading.value = false;
     }
@@ -148,72 +177,108 @@
 
 <template>
   <Card class="max-w-120 mx-auto p-2">
-    <template #title>Register</template>
+    <template #title>{{ registered ? 'Check your inbox' : 'Create your account' }}</template>
     <template #content>
-      <form @submit.prevent="handleRegister" class="flex flex-col gap-6 pt-4">
-        <div class="w-full">
-          <FloatLabel>
-            <InputText id="username" v-model.trim="form.username" required maxlength="30" class="w-full" @blur="validateUsername" @focus="usernameError = null" />
-            <label for="username">Username</label>
-          </FloatLabel>
-          <small v-if="usernameError" class="text-red-500">{{ usernameError }}</small>
-        </div>
-        <div class="w-full">
-          <FloatLabel>
-            <InputText id="email" v-model.trim="form.email" type="email" required class="w-full" @blur="validateEmail" @focus="emailError = null" />
-            <label for="email">Email</label>
-          </FloatLabel>
-          <small v-if="emailError" class="text-red-500">{{ emailError }}</small>
-        </div>
-        <div class="w-full">
-          <FloatLabel>
-            <Password
-              id="password"
-              v-model="form.password"
-              toggleMask
-              :feedback="true"
-              :promptLabel="'At least 10 characters including upper, lower, digit'"
-              :weakLabel="'Weak'"
-              :mediumLabel="'Medium'"
-              :strongLabel="'Strong'"
-              :inputProps="{ autocomplete: 'new-password', minlength: 10 }"
-              :inputClass="'w-full'"
-              required
-              @blur="validatePassword"
-              @focus="passwordError = null"
-            />
-            <label for="password">Password</label>
-          </FloatLabel>
-          <small v-if="passwordError" class="text-red-500">{{ passwordError }}</small>
-        </div>
-
-        <div class="flex flex-col gap-4 pt-2">
-          <div class="flex items-start gap-3">
-            <Checkbox inputId="terms" v-model="form.tosAccepted" name="terms" binary required class="mt-1" />
-            <label for="terms" class="text-sm text-gray-700 leading-relaxed cursor-pointer">
-              I agree to the
-              <NuxtLink to="/terms" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium"> Terms of Service </NuxtLink>
-              and
-              <NuxtLink to="/privacy" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium"> Privacy Policy </NuxtLink>
-            </label>
-          </div>
-
-          <div class="flex items-start gap-3">
-            <Checkbox inputId="newsletter" v-model="form.receiveNewsletter" name="newsletter" binary class="mt-1" />
-            <label for="newsletter" class="text-sm text-gray-700 leading-relaxed cursor-pointer">
-              I would like to receive occasional updates and newsletters via email
-            </label>
-          </div>
-        </div>
-
-        <component v-if="RecaptchaCheckboxComponent" :is="RecaptchaCheckboxComponent" v-model="recaptchaResponse" class="my-2" />
-        <Button type="submit" :disabled="isLoading" class="w-full">{{ isLoading ? 'Registering...' : 'Register' }}</Button>
-      </form>
-      <p v-if="message" class="text-amber-400">{{ message }}</p>
-      <p v-if="error" class="text-red-500">{{ error }}</p>
-      <div class="links">
-        <NuxtLink to="/login">Back to Login</NuxtLink>
+      <div v-if="registered" class="pt-2">
+        <p>
+          We sent a confirmation link to <b>{{ registeredEmail }}</b
+          >. Open it to finish creating your account.
+        </p>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mt-3">
+          Nothing after a few minutes? Resend it from the <NuxtLink :to="{ path: '/login', query: redirectQuery }">login page</NuxtLink> under "Didn't get your
+          confirmation email?", or email <a href="mailto:contact@jiten.moe">contact@jiten.moe</a> from that address for a manual confirmation.
+        </p>
       </div>
+      <template v-else>
+        <p class="text-sm text-gray-600 dark:text-gray-400 pt-1">See your coverage, track your vocabulary, build filtered decks, and study across devices.</p>
+        <form @submit.prevent="handleRegister" class="flex flex-col gap-6 pt-4">
+          <div class="w-full">
+            <FloatLabel>
+              <InputText
+                id="username"
+                v-model.trim="form.username"
+                required
+                maxlength="30"
+                autocomplete="username"
+                class="w-full"
+                @blur="validateUsername"
+                @focus="usernameError = null"
+              />
+              <label for="username">Username</label>
+            </FloatLabel>
+            <small v-if="usernameError" class="text-red-500">{{ usernameError }}</small>
+          </div>
+          <div class="w-full">
+            <FloatLabel>
+              <InputText
+                id="email"
+                v-model.trim="form.email"
+                type="email"
+                required
+                autocomplete="email"
+                class="w-full"
+                @blur="validateEmail"
+                @focus="emailError = null"
+              />
+              <label for="email">Email</label>
+            </FloatLabel>
+            <small v-if="emailError" class="text-red-500">{{ emailError }}</small>
+          </div>
+          <div class="w-full">
+            <FloatLabel>
+              <Password
+                id="password"
+                v-model="form.password"
+                toggleMask
+                :feedback="true"
+                :promptLabel="'At least 10 characters including upper, lower, digit'"
+                :weakLabel="'Weak'"
+                :mediumLabel="'Medium'"
+                :strongLabel="'Strong'"
+                :inputProps="{ autocomplete: 'new-password', minlength: 10 }"
+                :inputClass="'w-full'"
+                required
+                @blur="validatePassword"
+                @focus="passwordError = null"
+              />
+              <label for="password">Password</label>
+            </FloatLabel>
+            <small v-if="passwordError" class="text-red-500">{{ passwordError }}</small>
+          </div>
+
+          <div class="flex flex-col gap-4 pt-2">
+            <div class="flex items-start gap-3">
+              <Checkbox inputId="terms" v-model="form.tosAccepted" name="terms" binary required class="mt-1" />
+              <label for="terms" class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed cursor-pointer">
+                I agree to the
+                <NuxtLink to="/terms" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium"> Terms of Service </NuxtLink>
+                and
+                <NuxtLink to="/privacy" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium"> Privacy Policy </NuxtLink>
+              </label>
+            </div>
+
+            <div class="flex items-start gap-3">
+              <Checkbox inputId="newsletter" v-model="form.receiveNewsletter" name="newsletter" binary class="mt-1" />
+              <label for="newsletter" class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed cursor-pointer">
+                I would like to receive occasional updates and newsletters via email
+              </label>
+            </div>
+          </div>
+
+          <component v-if="RecaptchaCheckboxComponent" :is="RecaptchaCheckboxComponent" v-model="recaptchaResponse" class="my-2" />
+          <div class="flex flex-col gap-2">
+            <Button type="submit" :disabled="isLoading" class="w-full">{{ isLoading ? 'Creating account...' : 'Create account' }}</Button>
+            <small class="text-gray-600 dark:text-gray-400 text-center">We'll email you a confirmation link.</small>
+          </div>
+        </form>
+        <div v-if="GoogleSignInButtonComponent" class="flex justify-center mt-4">
+          <component :is="GoogleSignInButtonComponent" @success="handleGoogleOnSuccess" @error="handleGoogleOnError" />
+        </div>
+        <p v-if="error" class="text-red-500">{{ error }}</p>
+        <div class="links">
+          <NuxtLink :to="{ path: '/login', query: redirectQuery }">Back to Login</NuxtLink>
+        </div>
+      </template>
     </template>
   </Card>
 </template>

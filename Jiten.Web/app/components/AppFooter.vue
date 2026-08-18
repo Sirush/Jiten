@@ -1,8 +1,10 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+  const route = useRoute();
+</script>
 
 <template>
   <footer class="bg-indigo-900 text-white px-4 py-5 w-full">
-    <div class="max-w-6xl mx-auto flex flex-col items-center gap-3">
+    <div class="mx-auto flex flex-col items-center gap-3" :class="route.meta.wide ? 'max-w-7xl' : 'max-w-6xl'">
       <div class="flex flex-wrap justify-center items-center gap-x-6 gap-y-2">
         <NuxtLink to="/media-updates" class="!text-white text-sm" no-rel>New media updates</NuxtLink>
         <NuxtLink to="/updates" class="!text-white text-sm" no-rel>What's new</NuxtLink>

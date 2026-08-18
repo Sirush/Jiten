@@ -175,7 +175,7 @@
   // [hard floor, comfort target] — never suggest below the first, prefer at or above the second.
   const comprehension = ref<[number, number]>([80, 90]);
   const countLearningWords = ref(true);
-  const acquisitionThreshold = ref(5);
+  const acquisitionThreshold = ref(12);
   const steps = ref(5);
   const goalSteps = ref(30);
   const preference = ref<'efficiency' | 'volume'>('efficiency');
@@ -457,7 +457,7 @@
     comprehension.value = [80, 90];
     goalTarget.value = 95;
     countLearningWords.value = true;
-    acquisitionThreshold.value = 5;
+    acquisitionThreshold.value = 12;
     steps.value = 5;
     goalSteps.value = 30;
     preference.value = 'efficiency';
@@ -1452,7 +1452,7 @@
                     id="threshold"
                     v-model="acquisitionThreshold"
                     :min="1"
-                    :max="30"
+                    :max="50"
                     show-buttons
                     fluid
                     class="w-full"

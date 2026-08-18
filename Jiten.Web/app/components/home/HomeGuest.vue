@@ -1,5 +1,8 @@
 <script setup lang="ts">
   import OmniSearch from '~/components/OmniSearch.vue';
+  import { useApiFetch } from '~/composables/useApiFetch';
+  import { type GlobalStats, MediaType } from '~/types';
+  import { homeDemoDecks } from '~/data/homeDemoDecks';
 
   useHead({
     title: 'Jiten - Vocabulary Lists and Anki Decks for Japanese Media',
@@ -14,268 +17,295 @@
 
   const discordUrl = getDiscordLink();
 
-  const heroFeatures = [
+  const { data: globalStats } = await useApiFetch<GlobalStats>('stats/get-global-stats');
+
+  const statPool = [
+    { type: MediaType.Anime, label: 'anime' },
+    { type: MediaType.Drama, label: 'dramas' },
+    { type: MediaType.Novel, label: 'novels' },
+    { type: MediaType.VideoGame, label: 'video games' },
+    { type: MediaType.VisualNovel, label: 'visual novels' },
+    { type: MediaType.Manga, label: 'manga' },
+  ];
+
+  // useState so the server's random pick survives hydration
+  const featuredTypes = useState('homeFeaturedMediaTypes', () => {
+    const pool = [...statPool];
+    const first = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!;
+    const second = pool[Math.floor(Math.random() * pool.length)]!;
+    return [first, second];
+  });
+
+  const typeCount = (type: MediaType): number | undefined => (globalStats.value?.mediaByType as Record<string, number> | undefined)?.[MediaType[type]!];
+
+  const formatCharacters = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} billion` : `${Math.round(n / 1e6)} million`);
+
+  // useState so the server's random pick survives hydration
+  const demoDeck = useState('homeDemoDeck', () => homeDemoDecks[Math.floor(Math.random() * homeDemoDecks.length)]!);
+
+  const steps = [
     {
-      icon: 'material-symbols-light:library-books',
-      title: 'Comprehensive Library',
-      description: 'Thousands of anime, novels, VNs, games, manga and more.',
+      title: 'Find media at your level',
+      description:
+        'Compare length, vocabulary, and difficulty ratings refined by community votes across thousands of anime, novels, games, visual novels, and manga.',
+      linkText: 'Browse media',
+      link: '/decks/media',
     },
     {
-      icon: 'material-symbols-light:style',
-      title: 'Anki Deck Generation',
-      description: 'Generate and download Anki decks from any media in seconds.',
+      title: "See how much you'd understand",
+      description:
+        'Import your vocabulary from Anki or JPDB, or quickly mark what you already know, and see your personal coverage of any title before starting it.',
+      linkText: 'Create an account',
+      link: '/register',
     },
     {
-      icon: 'material-symbols-light:pie-chart',
-      title: 'Coverage Tracking',
-      description: 'See how much of any media you can understand at a glance.',
-    },
-    {
-      icon: 'material-symbols-light:volunteer-activism',
-      title: 'Free & Open Source',
-      description: 'Free to use and supported by the community.',
+      title: "Learn the words you're missing",
+      description:
+        "Study the missing words in Jiten's modern, customisable built-in SRS, or download a filtered Anki deck with example sentences, pitch accent, and frequency data.",
+      linkText: 'See a real vocabulary list',
+      link: {
+        path: `/decks/media/${demoDeck.value.deckId}/vocabulary`,
+        query: { sortBy: 'deckFreq', excludePos: 'prt,cop,adj-f' },
+      },
     },
   ];
 
-  const features = [
+  const companions = [
     {
-      icon: 'material-symbols-light:analytics',
-      title: 'Detailed Statistics',
-      description: 'Character count, unique word count, difficulty ratings, and much more stats for every media.',
+      kicker: 'Browser extension',
+      title: 'Read on the web with Jiten Reader',
+      description:
+        'A free browser extension with automatic parsing, lookups, reviews, instant coverage, all fully synced with your account. Works with Ttsu Reader, Mokuro, and Asbplayer and much more.',
+      linkText: 'Get Jiten Reader',
+      link: '/reader',
+      external: false,
+      image: '/img/jitenreader_colouring.webp',
+      imageAlt: 'Jiten Reader screenshot',
+      imagePosition: 'object-top',
     },
     {
-      icon: 'material-symbols-light:download',
-      title: 'Custom Anki Decks',
-      description: 'Download vocabulary decks with example sentences, pitch accent, and frequency data. Filter your already known words.',
+      kicker: 'MPV plugin',
+      title: 'Watch with JitenMPV',
+      description: 'An mpv plugin that that automatically parses your subtitles, colours them, allow you to review and mine, just like Jiten Reader.',
+      linkText: 'Download from GitHub',
+      link: 'https://github.com/Sirush/JitenMPV/releases',
+      external: true,
+      image: '/img/jitenmpv.webp',
+      imageAlt: 'JitenMPV screenshot',
+      imagePosition: 'object-bottom',
     },
     {
-      icon: 'material-symbols-light:dictionary',
-      title: 'Rich Vocabulary Lists',
-      description: 'Browse vocabulary with English definitions, frequency by media type, and example sentences in context.',
-    },
-    {
-      icon: 'material-symbols-light:trending-up',
-      title: 'Vocabulary Tracking',
-      description: 'Import from Anki or JPDB, mark words as known, and see your coverage for any media.',
-    },
-    {
-      icon: 'material-symbols-light:book-2',
-      title: 'Frequency Dictionaries',
-      description: 'Download frequency dictionaries for Yomitan based on our extensive media collection.',
-      link: '/other',
-    },
-    {
-      icon: 'material-symbols-light:thumbs-up-down',
-      title: 'Difficulty Ratings',
-      description: 'AI-powered difficulty scores refined by community votes. Find content that matches your level.',
-      link: '/ratings',
-      isNew: true,
+      kicker: 'Userscript',
+      title: 'See Jiten stats on VNDB',
+      description:
+        'An userscript that enhances VNDB pages with character counts, difficulty ratings, and an estimation of the time it will take you based on your reading speed. Works with any userscript manager such as Tampermonkey or Violentmonkey.\n' +
+        '\n',
+      linkText: 'Install the userscript',
+      link: 'https://greasyfork.org/en/scripts/549246-vndb-character-count',
+      external: true,
+      image: '/img/vndb_userscript.jpg',
+      imageAlt: 'VNDB Character Count userscript screenshot',
+      imagePosition: 'object-top',
     },
   ];
 </script>
 
 <template>
-  <div class="container mx-auto px-4 py-6">
-    <div class="max-w-5xl mx-auto">
-      <!-- Hero Section -->
-      <Card class="shadow-lg mb-4">
-        <template #content>
-          <div class="text-center">
-            <h1 class="text-4xl font-bold mb-2">Jiten</h1>
-            <p class="text-xl text-gray-600 dark:text-gray-300 mb-6">The Japanese immersion toolkit for all your favourite media</p>
+  <div>
+    <!-- Hero Section -->
+    <section class="band -mt-6 bg-primary-100/70 dark:bg-primary-950/40">
+      <div class="max-w-6xl mx-auto px-4 pt-12 pb-10 md:pt-16 md:pb-12">
+        <div class="text-center">
+          <h1 class="mb-6">
+            <span class="block text-4xl md:text-5xl font-bold mb-2">Jiten</span>
+            <span class="block text-xl font-normal text-gray-600 dark:text-gray-300">Immerse yourself in Japanese media you can understand</span>
+          </h1>
 
-            <!-- OmniSearch -->
-            <div class="max-w-2xl mx-auto mb-4">
-              <OmniSearch autofocus />
-            </div>
-
-            <!-- 4 Key Features Grid -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div
-                v-for="feature in heroFeatures"
-                :key="feature.title"
-                class="p-4 border border-gray-200 dark:border-gray-700 rounded-lg text-center hover:border-primary transition-colors"
-              >
-                <Icon :name="feature.icon" class="text-primary mb-2" size="2.5em" />
-                <h3 class="font-semibold mb-1">{{ feature.title }}</h3>
-                <p class="text-sm text-gray-600 dark:text-gray-400">{{ feature.description }}</p>
-              </div>
-            </div>
+          <!-- OmniSearch -->
+          <div class="max-w-2xl mx-auto mb-3">
+            <OmniSearch autofocus />
           </div>
-        </template>
-      </Card>
 
-      <!-- Support Section -->
-      <Card class="shadow-lg mb-4 !border-1 !border-purple-500">
-        <template #content>
-          <div class="flex flex-col md:flex-row items-center gap-6">
-            <div class="flex-1 text-center md:text-left">
-              <h2 class="text-2xl font-bold mb-2">Support Jiten</h2>
-              <p class="text-gray-600 dark:text-gray-300">
-                Jiten is free and open source. If you find it useful, <NuxtLink to="/jiten-plus">Jiten+</NuxtLink> or a donation helps cover server costs and
-                fund new features.
-              </p>
+          <p v-if="globalStats" class="text-sm text-gray-600 dark:text-gray-400 mb-5">
+            <b>{{ formatCharacters(globalStats.totalMojis) }}</b> characters analysed across <b>{{ globalStats.totalMedia.toLocaleString() }}</b> titles,
+            including
+            <template v-for="(featured, index) in featuredTypes" :key="featured.type">
+              <template v-if="index > 0"> and </template>
+              <NuxtLink :to="{ path: '/decks/media', query: { mediaType: featured.type } }"
+                >{{ typeCount(featured.type)?.toLocaleString() }} {{ featured.label }}</NuxtLink
+              >
+            </template>
+          </p>
+
+          <div class="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+            <NuxtLink to="/register" class="no-underline">
+              <Button severity="primary" size="small">
+                <Icon name="material-symbols:person-add" class="mr-2" size="1.25em" />
+                Create an account
+              </Button>
+            </NuxtLink>
+            <p class="text-sm text-gray-600 dark:text-gray-400">Track your vocabulary and see your coverage on every title.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live Demo Section -->
+    <section class="band bg-surface-0 dark:bg-surface-900/40 border-y border-surface-200 dark:border-surface-800">
+      <div class="max-w-[90rem] mx-auto px-4 py-10 md:py-12">
+        <div class="flex flex-col lg:flex-row items-center gap-6 lg:gap-10">
+          <div class="flex-1 text-center lg:text-left">
+            <h2 class="text-2xl font-bold mb-3">Your coverage on every title</h2>
+            <p class="text-gray-600 dark:text-gray-400 mb-3">
+              Import your vocabulary from Anki or JPDB, or mark what you already know, and know instantly how much you'll understand of any title present in the
+              media library. Choose what you will immerse in next based on your current knowledge.
+            </p>
+            <NuxtLink to="/decks/media" class="font-medium">
+              {{ globalStats ? `Browse ${globalStats.totalMedia.toLocaleString()} titles` : 'Browse the library' }} →
+            </NuxtLink>
+          </div>
+          <div class="w-full max-w-xl xl:max-w-2xl shrink-0">
+            <div class="relative rounded-xl ring-2 ring-primary/40">
+              <span class="absolute -top-2.5 right-4 z-10 rounded-full bg-primary text-primary-contrast text-xs font-semibold px-2.5 py-0.5 shadow"
+                >Example</span
+              >
+              <MediaDeckCard :deck="demoDeck" demo-coverage />
             </div>
-            <NuxtLink to="/donate" class="no-underline">
-              <Button severity="primary" size="large">
-                <Icon name="material-symbols-light:favorite" class="mr-2" size="1.25em" />
-                Support Us
+            <p class="text-sm text-gray-500 dark:text-gray-400 text-center mt-2 mb-0">A real title from the library with example data.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Three-step Loop Section -->
+    <section class="band">
+      <div class="max-w-6xl mx-auto px-4 py-10 md:py-12">
+        <div class="relative mb-6">
+          <h2 class="text-2xl font-bold text-center">Learn with what you love</h2>
+          <NuxtLink to="/features" class="block text-center text-sm font-medium mt-1 lg:mt-0 lg:absolute lg:right-0 lg:top-1/2 lg:-translate-y-1/2"
+            >Explore all features →</NuxtLink
+          >
+        </div>
+        <div class="flex flex-col md:flex-row items-stretch gap-3 md:gap-2">
+          <template v-for="(step, index) in steps" :key="step.title">
+            <div v-if="index > 0" class="flex items-center justify-center shrink-0" aria-hidden="true">
+              <Icon name="material-symbols-light:arrow-right-alt" class="text-primary opacity-70 rotate-90 md:rotate-0" size="1.75em" />
+            </div>
+            <div class="flex-1 min-w-0 p-4 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col bg-surface-0 dark:bg-surface-900">
+              <span class="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-contrast text-sm font-bold shrink-0 mb-3">{{
+                index + 1
+              }}</span>
+              <h3 class="text-lg font-semibold mb-2">{{ step.title }}</h3>
+              <p class="text-gray-600 dark:text-gray-400 mb-4 flex-1">{{ step.description }}</p>
+              <NuxtLink :to="step.link" class="font-medium">{{ step.linkText }} →</NuxtLink>
+            </div>
+          </template>
+        </div>
+      </div>
+    </section>
+
+    <!-- Companion Tools Section -->
+    <section class="band bg-surface-0 dark:bg-surface-900/40 border-y border-surface-200 dark:border-surface-800">
+      <div class="max-w-6xl mx-auto px-4 py-10 md:py-12">
+        <h2 class="text-2xl font-bold text-center mb-6">Bring Jiten into your immersion workflow</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div
+            v-for="companion in companions"
+            :key="companion.title"
+            class="p-4 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col bg-surface-0 dark:bg-surface-900"
+          >
+            <div class="mb-3">
+              <span class="block text-xs font-semibold uppercase tracking-wider text-primary mb-1">{{ companion.kicker }}</span>
+              <h3 class="text-lg font-semibold">{{ companion.title }}</h3>
+            </div>
+            <div class="mb-3 h-36 overflow-hidden rounded-md">
+              <Image
+                :src="companion.image"
+                :alt="companion.imageAlt"
+                class="block w-full h-full"
+                :image-class="`w-full h-full object-cover ${companion.imagePosition}`"
+                preview
+              />
+            </div>
+            <p class="text-gray-600 dark:text-gray-400 mb-4 flex-1">{{ companion.description }}</p>
+            <a v-if="companion.external" :href="companion.link" target="_blank" rel="noopener noreferrer" class="font-medium">{{ companion.linkText }} →</a>
+            <NuxtLink v-else :to="companion.link" class="font-medium">{{ companion.linkText }} →</NuxtLink>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Community Section -->
+    <section class="band">
+      <div class="max-w-6xl mx-auto px-4 py-10 md:py-12">
+        <div class="text-center">
+          <h2 class="text-2xl font-bold mb-4">Join the community</h2>
+          <p class="text-gray-600 dark:text-gray-300 mb-6">Free, open source, and built for immersion learners.</p>
+
+          <!-- Primary CTAs -->
+          <div class="flex flex-col sm:flex-row gap-4 justify-center mb-6">
+            <NuxtLink to="/decks/media" class="no-underline">
+              <Button severity="primary" size="large" class="w-full sm:w-auto">
+                <Icon name="material-symbols:search" class="mr-2" size="1.25em" />
+                Browse Media
+              </Button>
+            </NuxtLink>
+            <NuxtLink to="/register" class="no-underline">
+              <Button severity="secondary" size="large" class="w-full sm:w-auto">
+                <Icon name="material-symbols:person-add" class="mr-2" size="1.25em" />
+                Create an account
               </Button>
             </NuxtLink>
           </div>
-        </template>
-      </Card>
 
-      <!-- Features Section -->
-      <Card class="shadow-lg mb-4">
-        <template #title>
-          <div class="flex items-center">
-            <Icon name="material-symbols-light:star" class="mr-2 text-primary" size="1.5em" />
-            Features
+          <Divider />
+
+          <!-- Community Links -->
+          <div class="flex flex-col sm:flex-row gap-4 justify-center text-sm">
+            <a :href="discordUrl" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-2">
+              <Icon name="ic:baseline-discord" size="1.25em" />
+              Join our Discord
+            </a>
+            <a href="https://github.com/Sirush/Jiten" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-2">
+              <Icon name="mdi:github" size="1.25em" />
+              View on GitHub
+            </a>
           </div>
-        </template>
-        <template #content>
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <template v-for="feature in features" :key="feature.title">
-              <NuxtLink v-if="feature.link" :to="feature.link" class="no-underline !text-inherit !bg-transparent">
-                <div class="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary transition-colors h-full">
-                  <div class="flex items-center mb-3">
-                    <Icon :name="feature.icon" class="text-primary mr-3" size="1.75em" />
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ feature.title }}</h3>
-                    <span v-if="feature.isNew" class="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-500 text-white">NEW</span>
-                  </div>
-                  <p class="text-gray-600 dark:text-gray-400">{{ feature.description }}</p>
-                </div>
-              </NuxtLink>
-              <div v-else class="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary transition-colors">
-                <div class="flex items-center mb-3">
-                  <Icon :name="feature.icon" class="text-primary mr-3" size="1.75em" />
-                  <h3 class="text-lg font-semibold">{{ feature.title }}</h3>
-                  <span v-if="feature.isNew" class="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-500 text-white">NEW</span>
-                </div>
-                <p class="text-gray-600 dark:text-gray-400">{{ feature.description }}</p>
+        </div>
+
+        <!-- Support callout -->
+        <Card class="shadow-lg !border-1 !border-purple-500 mt-10 max-w-4xl mx-auto">
+          <template #content>
+            <div class="flex flex-col md:flex-row items-center gap-6">
+              <div class="flex-1 text-center md:text-left">
+                <h2 class="text-2xl font-bold mb-2">Support Jiten</h2>
+                <p class="text-gray-600 dark:text-gray-300">
+                  Jiten is free and open source. If you find it useful, <NuxtLink to="/jiten-plus">Jiten+</NuxtLink> or a donation helps cover server costs and
+                  fund new features.
+                </p>
               </div>
-            </template>
-          </div>
-        </template>
-      </Card>
-
-      <!-- Jiten Reader Section -->
-      <Card class="shadow-lg mb-4">
-        <template #title>
-          <div class="flex items-center">
-            <Icon name="material-symbols-light:extension" class="mr-2 text-primary" size="1.5em" />
-            Jiten Reader
-          </div>
-        </template>
-        <template #content>
-          <div class="flex flex-col md:flex-row items-start gap-6">
-            <div class="flex-1">
-              <p class="text-gray-700 dark:text-gray-300 mb-4">
-                A free browser extension that helps you read Japanese anywhere on the web. Compatible with apps such as
-                <strong>Ttsu Reader, Mokuro Reader, and Asbplayer</strong>.
-              </p>
-              <p class="text-gray-700 dark:text-gray-300 mb-4">
-                Look up words instantly, sync vocabulary to Jiten, see the coverage of what you're immersing in, add furigana, and more.
-              </p>
-              <p class="text-gray-700 dark:text-gray-300 mb-4">Customise everything from themes to keyboard shortcuts to make it fit your workflow.</p>
-              <NuxtLink to="/reader" class="no-underline">
+              <NuxtLink to="/donate" class="no-underline">
                 <Button severity="primary" size="large">
-                  <Icon name="material-symbols-light:download" class="mr-2" size="1.25em" />
-                  Get It Now
+                  <Icon name="material-symbols:favorite" class="mr-2" size="1.25em" />
+                  Support Us
                 </Button>
               </NuxtLink>
             </div>
-            <Image src="/img/jitenreader_screenshot.webp" alt="Jiten Reader screenshot" class="rounded-lg w-full md:w-80" preview width="320" height="200" />
-          </div>
-        </template>
-      </Card>
-
-      <!-- Jiten MPV Section -->
-      <HomeMpvCard class="mb-4" />
-
-      <!-- VNDB Character Count Userscript Section -->
-      <Card class="shadow-lg mb-4">
-        <template #title>
-          <div class="flex items-center">
-            <Icon name="material-symbols-light:code" class="mr-2 text-primary" size="1.5em" />
-            VNDB Character Count
-          </div>
-        </template>
-        <template #content>
-          <div class="flex flex-col md:flex-row items-start gap-6">
-            <div class="flex-1">
-              <p class="text-gray-700 dark:text-gray-300 mb-4">
-                A free userscript that enhances VNDB pages by displaying character count, difficulty ratings, and other useful statistics from Jiten directly on
-                visual novel entries.
-              </p>
-              <p class="text-gray-700 dark:text-gray-300 mb-4">
-                Input your own reading speed to get an estimate on how long it will take you to read. Works with any userscript manager such as Tampermonkey or
-                Violentmonkey.
-              </p>
-              <a href="https://greasyfork.org/en/scripts/549246-vndb-character-count" target="_blank" rel="noopener noreferrer" class="no-underline">
-                <Button severity="primary" size="large">
-                  <Icon name="material-symbols-light:download" class="mr-2" size="1.25em" />
-                  Install Userscript
-                </Button>
-              </a>
-            </div>
-            <Image
-              src="/img/vndb_userscript.jpg"
-              alt="VNDB Character Count userscript screenshot"
-              class="rounded-lg w-full md:w-80"
-              preview
-              width="320"
-              height="167"
-            />
-          </div>
-        </template>
-      </Card>
-
-      <!-- Community Section -->
-      <Card class="shadow-lg">
-        <template #content>
-          <div class="text-center">
-            <h2 class="text-2xl font-bold mb-4">Join the community</h2>
-            <p class="text-gray-600 dark:text-gray-300 mb-6">Free, open source, and built for immersion learners.</p>
-
-            <!-- Primary CTAs -->
-            <div class="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-              <NuxtLink to="/decks/media" class="no-underline">
-                <Button severity="primary" size="large" class="w-full sm:w-auto">
-                  <Icon name="material-symbols-light:search" class="mr-2" size="1.25em" />
-                  Browse Media
-                </Button>
-              </NuxtLink>
-              <NuxtLink to="/register" class="no-underline">
-                <Button severity="secondary" size="large" class="w-full sm:w-auto">
-                  <Icon name="material-symbols-light:person-add" class="mr-2" size="1.25em" />
-                  Create Account
-                </Button>
-              </NuxtLink>
-            </div>
-
-            <Divider />
-
-            <!-- Community Links -->
-            <div class="flex flex-col sm:flex-row gap-4 justify-center text-sm">
-              <a :href="discordUrl" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-2">
-                <Icon name="ic:baseline-discord" size="1.25em" />
-                Join our Discord
-              </a>
-              <a href="https://github.com/Sirush/Jiten" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-2">
-                <Icon name="mdi:github" size="1.25em" />
-                View on GitHub
-              </a>
-            </div>
-          </div>
-        </template>
-      </Card>
-    </div>
+          </template>
+        </Card>
+      </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
+  /* Escapes the app shell's max-w-6xl container so section backgrounds span the viewport;
+     the shell's overflow-x-clip absorbs the scrollbar-width excess of 100vw. */
+  .band {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+  }
+
   .no-underline {
     text-decoration: none !important;
   }

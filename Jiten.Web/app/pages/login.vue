@@ -71,8 +71,7 @@
   });
 
   function getSafeRedirect(): string | null {
-    const redirect = Array.isArray(route.query.redirect) ? route.query.redirect[0] : route.query.redirect;
-    return redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : null;
+    return safeRedirectPath(route.query.redirect);
   }
 
   async function handleLoginSubmit() {
@@ -89,7 +88,8 @@
       const result = await authStore.loginWithGoogle(credential);
 
       if (result === 'requiresRegistration') {
-        await router.push({ path: '/google-registration' });
+        const redirect = getSafeRedirect();
+        await router.push({ path: '/google-registration', query: redirect ? { redirect } : {} });
       } else if (result === true) {
         await router.push(getSafeRedirect() ?? '/');
       } else {
@@ -129,7 +129,7 @@
           </div>
         </div>
         <div>
-          <NuxtLink to="/register">Create an account</NuxtLink>
+          <NuxtLink :to="{ path: '/register', query: getSafeRedirect() ? { redirect: getSafeRedirect() } : {} }">Create an account</NuxtLink>
           <span> · </span>
           <NuxtLink to="/forgot-password">Forgot password?</NuxtLink>
         </div>

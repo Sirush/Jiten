@@ -142,9 +142,11 @@
 <template>
   <header>
     <div class="bg-indigo-900">
-      <div class="flex justify-between items-center mb-6 mx-auto p-4 max-w-6xl">
+      <div class="flex justify-between items-center mb-6 mx-auto p-4" :class="route.meta.wide ? 'max-w-7xl' : 'max-w-6xl'">
         <NuxtLink to="/" class="!no-underline" aria-label="Jiten home">
-          <span class="text-2xl font-bold text-white">Jiten<span v-if="isPlus" class="text-purple-400 text-sm font-black relative -top-[3px] ml-1">+</span></span>
+          <span class="text-2xl font-bold text-white"
+            >Jiten<span v-if="isPlus" class="text-purple-400 text-sm font-black relative -top-[3px] ml-1">+</span></span
+          >
         </NuxtLink>
 
         <!-- Desktop nav -->
@@ -178,7 +180,15 @@
             >Dashboard</nuxt-link
           >
           <nuxt-link v-if="!auth.isAuthenticated" to="/login" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'"
-            >Login</nuxt-link
+            >Log in</nuxt-link
+          >
+          <Button
+            v-if="!auth.isAuthenticated"
+            as="router-link"
+            to="/register"
+            size="small"
+            class="!bg-white !text-indigo-900 !border-white hover:!bg-purple-100 !font-semibold whitespace-nowrap"
+            >Create an account</Button
           >
           <Button text title="Search" aria-label="Search" class="!text-white hover:!bg-indigo-800" @click="openSearch()">
             <Icon name="material-symbols:search" size="22" />
@@ -322,14 +332,21 @@
               "
               >Logout</a
             >
-            <nuxt-link
-              v-else
-              to="/login"
-              class="py-2 px-3"
-              :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'"
-              @click="mobileMenuOpen = false"
-              >Login</nuxt-link
-            >
+            <template v-else>
+              <nuxt-link
+                to="/login"
+                class="py-2 px-3"
+                :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'"
+                @click="mobileMenuOpen = false"
+                >Log in</nuxt-link
+              >
+              <nuxt-link
+                to="/register"
+                class="mx-3 my-2 py-2 px-3 rounded-md bg-white text-center !text-indigo-900 font-semibold"
+                @click="mobileMenuOpen = false"
+                >Create an account</nuxt-link
+              >
+            </template>
           </div>
           <div class="flex items-center gap-3 py-3 px-3">
             <Button type="button" label="Display" severity="secondary" class="w-full justify-center" @click="toggleSettings($event)">
