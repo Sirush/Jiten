@@ -7,8 +7,14 @@ public readonly record struct FuriganaHint(int Offset, int Length, string Readin
 
 public static partial class FuriganaHintExtractor
 {
-    [GeneratedRegex(@"\{([^'{}]+)'([^}]+)\}")]
+    public const string AnnotationPattern = @"\{([^\u0001-\u007F]{1,32})'([^'{}\n]{1,32})\}";
+
+    [GeneratedRegex(AnnotationPattern)]
     private static partial Regex HintPattern();
+
+    /// <summary>Drops inline furigana markup ({base'reading}), keeping only the base text.</summary>
+    public static string Strip(string annotatedText) =>
+        string.IsNullOrEmpty(annotatedText) ? annotatedText : HintPattern().Replace(annotatedText, "$1");
 
     public static (string CleanText, FuriganaHint[] Hints) Extract(string annotatedText)
     {

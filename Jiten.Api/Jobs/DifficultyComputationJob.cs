@@ -1,6 +1,7 @@
 using Hangfire;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Parser;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 
@@ -371,11 +372,13 @@ public class DifficultyComputationJob(
             return null;
         }
 
-        var (thinnedText, wasThinned) = ThinTextToLimit(text, MaxPayloadChars);
+        var strippedText = FuriganaHintExtractor.Strip(text);
+
+        var (thinnedText, wasThinned) = ThinTextToLimit(strippedText, MaxPayloadChars);
         if (wasThinned)
         {
             logger.LogInformation("Text thinned from {Original} to {Thinned} chars",
-                text.Length, thinnedText.Length);
+                strippedText.Length, thinnedText.Length);
         }
 
         await ApiThrottle.WaitAsync();
