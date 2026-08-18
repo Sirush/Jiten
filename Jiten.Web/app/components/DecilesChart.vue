@@ -49,7 +49,7 @@ const chartData = computed(() => {
         backgroundColor: colours,
         borderColor: colours.map((c) => c.replace('0.8', '1')),
         borderWidth: 1,
-        borderRadius: 4,
+        borderRadius: 2,
         order: 2,
       },
       {
@@ -148,7 +148,7 @@ const chartOptions = computed(() => ({
 <template>
   <div class="deciles-chart-wrapper">
     <Bar v-if="deciles && Object.keys(deciles).length > 0" :data="chartData" :options="chartOptions" />
-    <div v-else class="text-center text-gray-500 py-8">No deciles data available</div>
+    <div v-else class="text-center text-gray-500 dark:text-gray-400 py-8">No deciles data available</div>
   </div>
 </template>
 

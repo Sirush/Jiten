@@ -96,6 +96,8 @@
     kanjiGrids: false,
     difficulties: false,
     difficultyVotes: false,
+    furiganaDifficulties: false,
+    furiganaReparse: false,
     speechSpeed: false,
     reviewRollupBackfill: false,
     wordReplacementPreview: false,
@@ -741,6 +743,105 @@
     }
   };
 
+  type FuriganaDifficultyResult = {
+    dryRun: boolean;
+    deckCount: number;
+    parentCount: number;
+    byMediaType: { mediaType: MediaType; count: number }[];
+  };
+
+  const furiganaDifficulties = ref<FuriganaDifficultyResult | null>(null);
+
+  const recomputeFuriganaDifficulties = async (dryRun: boolean) => {
+    try {
+      isLoading.value.furiganaDifficulties = true;
+      const data = await $api<FuriganaDifficultyResult>(`/admin/recompute-furigana-difficulties?dryRun=${dryRun}`, {
+        method: 'POST',
+      });
+      furiganaDifficulties.value = data;
+
+      toast.add({
+        severity: 'success',
+        summary: dryRun ? 'Dry run' : 'Queued',
+        detail: dryRun ? `${data.deckCount} decks contain furigana notation` : `Queued difficulty recomputation for ${data.deckCount} decks`,
+        life: 6000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: dryRun ? 'Failed to scan for furigana notation' : 'Failed to queue furigana difficulty recomputation',
+        life: 5000,
+      });
+      console.error('Error recomputing furigana difficulties:', error);
+    } finally {
+      isLoading.value.furiganaDifficulties = false;
+    }
+  };
+
+  const confirmRecomputeFuriganaDifficulties = () => {
+    confirm.require({
+      message: `Recompute difficulty for ${furiganaDifficulties.value?.deckCount ?? 0} decks? Each one is a paid call to the external API. Reaggregate parent difficulties once the queue has drained.`,
+      header: 'Recompute furigana-affected difficulties',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-primary',
+      rejectClass: 'p-button-secondary',
+      accept: () => recomputeFuriganaDifficulties(false),
+      reject: () => {},
+    });
+  };
+
+  type FuriganaReparseResult = {
+    dryRun: boolean;
+    deckCount: number;
+    treeCount: number;
+    totalCharsLost: number;
+    byMediaType: { mediaType: MediaType; count: number; charsLost: number }[];
+  };
+
+  const furiganaReparse = ref<FuriganaReparseResult | null>(null);
+
+  const reparseFuriganaOvermatch = async (dryRun: boolean) => {
+    try {
+      isLoading.value.furiganaReparse = true;
+      const data = await $api<FuriganaReparseResult>(`/admin/reparse-furigana-overmatch?dryRun=${dryRun}`, {
+        method: 'POST',
+      });
+      furiganaReparse.value = data;
+
+      toast.add({
+        severity: 'success',
+        summary: dryRun ? 'Dry run' : 'Queued',
+        detail: dryRun
+          ? `${data.deckCount} decks lost ${data.totalCharsLost.toLocaleString()} characters at parse time`
+          : `Queued reparse for ${data.treeCount} deck trees`,
+        life: 6000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: dryRun ? 'Failed to scan for overmatched decks' : 'Failed to queue reparse',
+        life: 5000,
+      });
+      console.error('Error reparsing furigana-overmatched decks:', error);
+    } finally {
+      isLoading.value.furiganaReparse = false;
+    }
+  };
+
+  const confirmReparseFuriganaOvermatch = () => {
+    confirm.require({
+      message: `Reparse ${furiganaReparse.value?.treeCount ?? 0} deck trees covering ${furiganaReparse.value?.deckCount ?? 0} affected decks? Word lists, counts and example sentences are rebuilt from stored raw text.`,
+      header: 'Reparse overmatched decks',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-primary',
+      rejectClass: 'p-button-secondary',
+      accept: () => reparseFuriganaOvermatch(false),
+      reject: () => {},
+    });
+  };
+
   const recomputeDifficultyVotes = async () => {
     try {
       isLoading.value.difficultyVotes = true;
@@ -1328,6 +1429,92 @@
       </Card>
 
       <Card class="shadow-md">
+        <template #title>Recompute Furigana-Affected Difficulties</template>
+        <template #content>
+          <p class="mb-4">
+            Finds leaf decks whose raw text still holds inline furigana notation (<code>{漢字'かんじ}</code>), which distorted the difficulty model before the
+            markup was stripped at call time, and recomputes them through the external API. Run the dry run first: every deck is a paid call.
+          </p>
+
+          <div class="flex flex-wrap justify-center gap-2 mb-4">
+            <Button
+              label="Dry Run"
+              icon="pi pi-search"
+              class="p-button-secondary"
+              :disabled="isLoading.furiganaDifficulties"
+              :loading="isLoading.furiganaDifficulties"
+              @click="recomputeFuriganaDifficulties(true)"
+            />
+            <Button
+              label="Recompute Affected Decks"
+              icon="pi pi-refresh"
+              class="p-button-warning"
+              :disabled="isLoading.furiganaDifficulties || !furiganaDifficulties?.deckCount"
+              :loading="isLoading.furiganaDifficulties"
+              @click="confirmRecomputeFuriganaDifficulties"
+            />
+          </div>
+
+          <div v-if="furiganaDifficulties" class="p-4 bg-surface-100 dark:bg-surface-800 rounded-lg">
+            <h4 class="font-semibold mb-2">
+              {{ furiganaDifficulties.deckCount.toLocaleString() }} decks affected across {{ furiganaDifficulties.parentCount.toLocaleString() }} parents
+            </h4>
+            <ul v-if="furiganaDifficulties.byMediaType.length" class="text-sm">
+              <li v-for="group in furiganaDifficulties.byMediaType" :key="group.mediaType">
+                <strong>{{ getMediaTypeText(group.mediaType) }}:</strong> {{ group.count.toLocaleString() }}
+              </li>
+            </ul>
+            <p class="mt-3 pt-3 border-t border-surface-300 dark:border-surface-600 text-sm">
+              Parents are not recomputed here. Run Reaggregate Parent Difficulties once the stats queue has drained.
+            </p>
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Reparse Furigana-Overmatched Decks</template>
+        <template #content>
+          <p class="mb-4">
+            The old furigana pattern had an unbounded reading half, so a stray brace in engine script or a code block matched everything up to the next
+            <code>&#125;</code> and the parser never saw the prose in between. Raw text was never modified, so a reparse rebuilds word lists, counts and
+            example sentences from it.
+          </p>
+
+          <div class="flex flex-wrap justify-center gap-2 mb-4">
+            <Button
+              label="Dry Run"
+              icon="pi pi-search"
+              class="p-button-secondary"
+              :disabled="isLoading.furiganaReparse"
+              :loading="isLoading.furiganaReparse"
+              @click="reparseFuriganaOvermatch(true)"
+            />
+            <Button
+              label="Reparse Affected Decks"
+              icon="pi pi-refresh"
+              class="p-button-warning"
+              :disabled="isLoading.furiganaReparse || !furiganaReparse?.deckCount"
+              :loading="isLoading.furiganaReparse"
+              @click="confirmReparseFuriganaOvermatch"
+            />
+          </div>
+
+          <div v-if="furiganaReparse" class="p-4 bg-surface-100 dark:bg-surface-800 rounded-lg">
+            <h4 class="font-semibold mb-2">
+              {{ furiganaReparse.deckCount.toLocaleString() }} decks in {{ furiganaReparse.treeCount.toLocaleString() }} trees ·
+              {{ furiganaReparse.totalCharsLost.toLocaleString() }} characters recovered
+            </h4>
+            <ul v-if="furiganaReparse.byMediaType.length" class="text-sm">
+              <li v-for="group in furiganaReparse.byMediaType" :key="group.mediaType">
+                <strong>{{ getMediaTypeText(group.mediaType) }}:</strong> {{ group.count.toLocaleString() }} decks ·
+                {{ group.charsLost.toLocaleString() }} chars
+              </li>
+            </ul>
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
         <template #title>Recompute Difficulty Votes</template>
         <template #content>
           <p class="mb-4">Recompute all user difficulty vote adjustments (Bradley-Terry model).</p>
@@ -1454,7 +1641,7 @@
             </Column>
           </DataTable>
 
-          <p v-if="cardMediaPreview?.truncated" class="mb-4 text-xs text-surface-500">
+          <p v-if="cardMediaPreview?.truncated" class="mb-4 text-xs text-surface-500 dark:text-surface-400">
             Showing the 50 largest of {{ cardMediaPreview.totalCount.toLocaleString() }}.
           </p>
 
@@ -1669,7 +1856,7 @@
               <li><strong>Example Sentences to Insert:</strong> {{ splitWordResult.exampleSentenceWordsInserted }}</li>
               <li><strong>Parent Decks to Recalc:</strong> {{ splitWordResult.parentDecksQueued }}</li>
             </ul>
-            <p class="text-xs mt-2 text-surface-500">Note: User vocabulary (FsrsCards) is not affected by split operations.</p>
+            <p class="text-xs mt-2 text-surface-500 dark:text-surface-400">Note: User vocabulary (FsrsCards) is not affected by split operations.</p>
           </div>
 
           <div class="flex justify-center gap-2">

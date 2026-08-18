@@ -144,7 +144,7 @@
         <div class="flex gap-2 justify-end items-center">
           <template v-if="meaning != null">
             <template v-if="confirmingDelete">
-              <span class="text-xs text-surface-500 mr-auto">Delete this note?</span>
+              <span class="text-xs text-surface-500 dark:text-surface-400 mr-auto">Delete this note?</span>
               <Button severity="danger" size="small" icon="pi pi-trash" label="Delete" :loading="deleting" @click="remove" />
               <Button text size="small" label="Keep" :disabled="deleting" @click="confirmingDelete = false" />
             </template>

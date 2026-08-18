@@ -280,7 +280,7 @@
               />
             </div>
 
-            <div v-if="results.length === 0 && query.trim() && !searching" class="flex-1 flex items-center justify-center text-gray-500">
+            <div v-if="results.length === 0 && query.trim() && !searching" class="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
               No results for "{{ query.trim() }}"
             </div>
 
@@ -358,7 +358,7 @@
             <template v-if="pasteStep === 'preview'">
               <div class="shrink-0 flex items-center justify-between">
                 <Button icon="pi pi-arrow-left" severity="secondary" text size="small" @click="pasteStep = 'input'" />
-                <span class="text-sm text-gray-500">{{ pasteTotalLines }} lines parsed</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400">{{ pasteTotalLines }} lines parsed</span>
               </div>
               <div class="flex-1 overflow-y-auto">
                 <SrsImportPreview
@@ -391,7 +391,7 @@
                   @drop.prevent="onFileDrop"
                 >
                   <Icon name="material-symbols:upload-file" size="36" class="text-gray-400" />
-                  <div class="text-sm text-gray-500 text-center">
+                  <div class="text-sm text-gray-500 dark:text-gray-400 text-center">
                     <span class="font-medium text-purple-600 dark:text-purple-400">Choose a file</span> or drag and drop
                   </div>
                   <div class="text-xs text-gray-400">{{ IMPORT_ACCEPT_EXTENSIONS.join(', ') }}</div>
@@ -441,7 +441,7 @@
             <template v-if="fileStep === 'preview'">
               <div class="shrink-0 flex items-center justify-between">
                 <Button icon="pi pi-arrow-left" severity="secondary" text size="small" @click="fileStep = 'upload'" />
-                <span class="text-sm text-gray-500">{{ fileTotalLines }} lines parsed</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400">{{ fileTotalLines }} lines parsed</span>
               </div>
               <div class="flex-1 overflow-y-auto">
                 <SrsImportPreview

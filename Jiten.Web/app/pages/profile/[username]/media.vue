@@ -195,7 +195,7 @@
           <div class="flex flex-col items-center gap-4">
             <Icon name="material-symbols:lock" size="4rem" class="text-surface-400" />
             <h2 class="text-xl font-semibold">This media list is private</h2>
-            <p class="text-surface-500">This user has chosen to keep their media list private.</p>
+            <p class="text-surface-500 dark:text-surface-400">This user has chosen to keep their media list private.</p>
             <NuxtLink :to="`/profile/${targetUsername}`">
               <Button label="Back to Profile" icon="pi pi-arrow-left" />
             </NuxtLink>

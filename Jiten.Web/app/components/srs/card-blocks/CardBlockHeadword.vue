@@ -57,6 +57,37 @@
 
   const showAudioButton = computed(() => opts.value.showAudioButton && !isPreview);
 
+  const headwordWrapRef = ref<HTMLElement | null>(null);
+  const audioButtonsRef = ref<HTMLElement | null>(null);
+  const audioBelow = ref(false);
+
+  function measureAudioPlacement() {
+    const wrap = headwordWrapRef.value;
+    const btns = audioButtonsRef.value;
+    const column = wrap?.parentElement?.parentElement;
+    if (!wrap || !btns || !column) return;
+    audioBelow.value = wrap.offsetWidth + btns.offsetWidth + 14 > column.clientWidth;
+  }
+
+  let audioObserver: ResizeObserver | null = null;
+  onMounted(() => {
+    audioObserver = new ResizeObserver(measureAudioPlacement);
+    watch(
+      [headwordWrapRef, audioButtonsRef],
+      () => {
+        audioObserver?.disconnect();
+        const wrap = headwordWrapRef.value;
+        const column = wrap?.parentElement?.parentElement;
+        for (const el of [column, wrap, audioButtonsRef.value]) {
+          if (el) audioObserver?.observe(el);
+        }
+        measureAudioPlacement();
+      },
+      { immediate: true, flush: 'post' }
+    );
+  });
+  onUnmounted(() => audioObserver?.disconnect());
+
   const frontPlain = computed(() => (isPreview ? sample!.wordPlain : (card.value?.wordTextPlain ?? '')));
   const frontRubyHtml = computed(() => convertToRuby(isPreview ? sample!.wordRuby : card.value?.wordText || card.value?.wordTextPlain || '', true));
   const backRubyHtml = computed(() =>
@@ -68,7 +99,7 @@
   <!-- Plain text before flip, ruby text after flip. -->
   <div class="mb-2 flex items-center justify-center gap-4 md:grid md:grid-cols-[1fr_auto_1fr]">
     <div class="hidden md:block" aria-hidden="true" />
-    <div class="flex items-center gap-3">
+    <div ref="headwordWrapRef" class="relative flex flex-col items-center">
       <div v-if="showRubyOnFront" class="text-center font-noto-sans head-word" :class="sizeClass" lang="ja" v-html="frontRubyHtml" />
       <div v-else-if="!isFlipped" class="text-center font-noto-sans" :class="sizeClass" lang="ja">
         {{ frontPlain }}
@@ -80,6 +111,26 @@
         lang="ja"
         v-html="backRubyHtml"
       />
+      <div
+        v-if="(showAudioButton && card) || cardAudio"
+        ref="audioButtonsRef"
+        class="flex items-center md:hidden"
+        :class="audioBelow ? 'mt-1' : 'absolute left-full top-1/2 -translate-y-1/2 ml-1.5'"
+      >
+        <TtsButton v-if="showAudioButton && card" :text="headWordTtsText" :word-id="card.wordId" :reading-index="card.readingIndex" size="lg" class="p-1.5" @click.stop />
+        <button
+          v-if="cardAudio"
+          type="button"
+          class="inline-flex items-center justify-center p-1.5 text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
+          :class="{ '!text-primary-500': customAudioPlaying }"
+          title="Play custom audio"
+          @click.stop="playCustomAudio"
+        >
+          <i class="pi pi-play-circle !text-3xl" />
+        </button>
+      </div>
+    </div>
+    <div class="hidden min-w-0 md:flex md:items-center md:gap-3">
       <TtsButton v-if="showAudioButton && card" :text="headWordTtsText" :word-id="card.wordId" :reading-index="card.readingIndex" size="md" @click.stop />
       <button
         v-if="cardAudio"
@@ -91,8 +142,6 @@
       >
         <i class="pi pi-play-circle text-base" />
       </button>
-    </div>
-    <div class="hidden min-w-0 md:flex md:items-center">
       <SrsCardImage
         v-if="showBesideImage"
         :url="cardImageUrl"

@@ -122,7 +122,7 @@
             </div>
 
             <!-- Hero Screenshot -->
-            <div class="mx-auto" style="max-width: 800px; max-height: 450px; border-radius: 6px; overflow: hidden;">
+            <div class="mx-auto" style="max-width: 800px; max-height: 450px; border-radius: var(--radius-md); overflow: hidden;">
               <Image src="/img/jitenreader_screenshot.webp" alt="Jiten Reader main interface" class="rounded-lg" preview />
             </div>
           </div>

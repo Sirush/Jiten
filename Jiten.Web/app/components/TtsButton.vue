@@ -5,9 +5,11 @@
     readingIndex?: number;
     sentenceId?: number;
     customSentenceId?: number;
-    size?: 'sm' | 'md';
+    size?: 'sm' | 'md' | 'lg';
     type?: TtsType;
   }>(), { size: 'sm', type: 'word' });
+
+  const iconSizeClass = computed(() => (props.size === 'sm' ? 'text-sm' : props.size === 'lg' ? '!text-3xl' : 'text-base'));
 
   const textRef = computed(() => props.text ?? '');
   const { speakWord, speakSentence, speakCustomSentence, speak, isSpeaking, isSupported, isLoading } = useTts(textRef, props.type);
@@ -34,7 +36,7 @@
     title="Play audio"
     @click.stop="handleClick"
   >
-    <i v-if="isLoading" class="pi pi-spin pi-spinner" :class="size === 'sm' ? 'text-sm' : 'text-base'" />
-    <i v-else class="pi pi-volume-up" :class="size === 'sm' ? 'text-sm' : 'text-base'" />
+    <i v-if="isLoading" class="pi pi-spin pi-spinner" :class="iconSizeClass" />
+    <i v-else class="pi pi-volume-up" :class="iconSizeClass" />
   </button>
 </template>

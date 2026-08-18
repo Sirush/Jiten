@@ -236,7 +236,7 @@
       </template>
 
       <button
-        class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 mt-1 ml-1 flex items-center gap-1 cursor-pointer"
+        class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-400 dark:hover:text-gray-400 mt-1 ml-1 flex items-center gap-1 cursor-pointer"
         @pointerdown.stop
         @click="toggleExtraSentences"
       >
@@ -251,7 +251,7 @@
         </div>
         <button
           v-if="extraSentences.length > 0 && canLoadMoreSentences"
-          class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 ml-1 flex items-center gap-1 cursor-pointer"
+          class="text-xs text-gray-400 hover:text-gray-500 dark:text-gray-400 dark:hover:text-gray-400 ml-1 flex items-center gap-1 cursor-pointer"
           :disabled="isLoadingMoreSentences"
           @pointerdown.stop
           @click="loadMoreSentences"

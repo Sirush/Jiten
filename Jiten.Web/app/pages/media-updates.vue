@@ -160,8 +160,8 @@
 
     <div v-else>
       <div class="flex gap-8 pl-2 mb-4">
-        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel @click="scrollToTop"> Previous </NuxtLink>
-        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel @click="scrollToTop"> Next </NuxtLink>
+        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop"> Previous </NuxtLink>
+        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop"> Next </NuxtLink>
       </div>
 
       <!-- Media updates grouped by day -->
@@ -205,8 +205,8 @@
       <div v-else class="text-center py-8">No media updates found for this time period.</div>
 
       <div class="flex gap-8 pl-2 mt-4">
-        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel @click="scrollToTop"> Previous </NuxtLink>
-        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 pointer-events-none' : ''" no-rel @click="scrollToTop"> Next </NuxtLink>
+        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop"> Previous </NuxtLink>
+        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop"> Next </NuxtLink>
       </div>
     </div>
   </div>

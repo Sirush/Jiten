@@ -199,7 +199,7 @@
           <div class="flex flex-col items-center gap-4">
             <Icon name="material-symbols:person-off" size="4rem" class="text-gray-400" />
             <h2 class="text-xl font-semibold">Profile not found</h2>
-            <p class="text-gray-500">This profile does not exist or is set to private.</p>
+            <p class="text-gray-500 dark:text-gray-400">This profile does not exist or is set to private.</p>
             <NuxtLink to="/">
               <Button label="Go Home" icon="pi pi-home" />
             </NuxtLink>
@@ -227,7 +227,7 @@
                   :accomplishment="globalAccomplishment ?? null"
                   :heatmap="shareHeatmap" />
               </div>
-              <p class="text-gray-500 text-sm">
+              <p class="text-gray-500 dark:text-gray-400 text-sm">
                 <span v-if="profile.isPublic">Public profile</span>
                 <span v-else>Private profile</span>
               </p>
@@ -271,8 +271,8 @@
               <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
                 {{ formatNumber(completedDisplay?.value ?? selectedAccomplishment.completedDeckCount) }}
               </div>
-              <div class="text-sm text-gray-500 mt-1">{{ completedDisplay?.label ?? 'Completed' }}</div>
-              <div v-if="completedDisplay?.sub" class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 tabular-nums">{{ completedDisplay.sub }}</div>
+              <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ completedDisplay?.label ?? 'Completed' }}</div>
+              <div v-if="completedDisplay?.sub" class="text-xs text-gray-400 dark:text-gray-400 mt-0.5 tabular-nums">{{ completedDisplay.sub }}</div>
             </template>
           </Card>
 
@@ -281,7 +281,7 @@
               <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
                 {{ formatNumber(selectedAccomplishment.totalCharacterCount) }}
               </div>
-              <div class="text-sm text-gray-500 mt-1">Characters</div>
+              <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Characters</div>
             </template>
           </Card>
 
@@ -290,7 +290,7 @@
               <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
                 {{ formatNumber(selectedAccomplishment.totalWordCount) }}
               </div>
-              <div class="text-sm text-gray-500 mt-1">Words</div>
+              <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Words</div>
             </template>
           </Card>
 
@@ -299,7 +299,7 @@
               <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
                 {{ formatNumber(selectedAccomplishment.uniqueWordCount) }}
               </div>
-              <div class="text-sm text-gray-500 mt-1">Unique Words</div>
+              <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Unique Words</div>
             </template>
           </Card>
 
@@ -308,7 +308,7 @@
               <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
                 {{ formatNumber(selectedAccomplishment.uniqueWordUsedOnceCount) }}
               </div>
-              <div class="text-sm text-gray-500 mt-1">1-Occurrence Words</div>
+              <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">1-Occurrence Words</div>
             </template>
           </Card>
 
@@ -317,7 +317,7 @@
               <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
                 {{ formatNumber(selectedAccomplishment.uniqueKanjiCount) }}
               </div>
-              <div class="text-sm text-gray-500 mt-1">Unique Kanji</div>
+              <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Unique Kanji</div>
             </template>
           </Card>
         </div>

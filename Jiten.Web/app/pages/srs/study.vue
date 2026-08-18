@@ -520,9 +520,9 @@
           </div>
           <div class="text-center">
             <span class="text-lg font-semibold tabular-nums text-surface-700 dark:text-surface-200">
-              {{ srsStore.progress.current }}<span class="text-surface-400 dark:text-surface-500 font-normal"> / {{ srsStore.progress.total }}</span>
+              {{ srsStore.progress.current }}<span class="text-surface-400 dark:text-surface-400 font-normal"> / {{ srsStore.progress.total }}</span>
             </span>
-            <div v-if="srsStore.studySettings.showElapsedTime" class="text-[11px] tabular-nums text-surface-400 dark:text-surface-500 -mt-0.5">{{ elapsedDisplay }}</div>
+            <div v-if="srsStore.studySettings.showElapsedTime" class="text-[11px] tabular-nums text-surface-400 dark:text-surface-400 -mt-0.5">{{ elapsedDisplay }}</div>
           </div>
           <div class="flex items-center gap-1 justify-end">
             <Tooltip :content="!timedActive ? 'Timed review off — click to turn on' : (timerPaused ? 'Timed review paused — press P to resume' : 'Timed review on — click to turn off')">
@@ -593,7 +593,7 @@
                   Easy {{ srsStore.sessionStats.gradeCounts.easy }}
                 </span>
               </div>
-              <div class="mt-1 text-gray-300 dark:text-gray-500 text-center">
+              <div class="mt-1 text-gray-300 dark:text-gray-400 text-center">
                 {{ srsStore.progress.current }}/{{ srsStore.progress.total }} completed
                 <template v-if="srsStore.againCardsAhead > 0"> · {{ srsStore.againCardsAhead }} again pending</template>
               </div>
@@ -646,12 +646,12 @@
             <!-- Direction labels (Tinder-style at edges) -->
             <div
               class="absolute top-6 right-4 font-black text-2xl uppercase tracking-widest pointer-events-none z-20 border-3 rounded-lg px-3 py-1 -rotate-12"
-              :class="isMono ? 'text-surface-500 border-surface-500' : 'text-green-500 border-green-500'"
+              :class="isMono ? 'text-surface-500 dark:text-surface-400 border-surface-500' : 'text-green-500 border-green-500'"
               :style="{ opacity: rightLabelOpacity }"
             >Good</div>
             <div
               class="absolute top-6 left-4 font-black text-2xl uppercase tracking-widest pointer-events-none z-20 border-3 rounded-lg px-3 py-1 rotate-12"
-              :class="isMono ? 'text-surface-600 border-surface-600' : 'text-red-500 border-red-500'"
+              :class="isMono ? 'text-surface-600 dark:text-surface-400 border-surface-600' : 'text-red-500 border-red-500'"
               :style="{ opacity: leftLabelOpacity }"
             >Again</div>
 
@@ -706,7 +706,7 @@
           <!-- Inline placement: the input lives in the card, so the bar just guides the user. -->
           <div
             v-else-if="writeInInputPhase"
-            class="flex items-center justify-center gap-1 text-sm text-surface-400 dark:text-surface-500"
+            class="flex items-center justify-center gap-1 text-sm text-surface-400 dark:text-surface-400"
             :class="compactBar ? 'min-h-[36px]' : 'min-h-[44px] md:min-h-[72px]'"
           >
             Type your answer in the card<span class="hidden md:inline"> · press Enter to check</span>
@@ -814,14 +814,14 @@
           :name="emptyReason === 'reviewCap' ? 'material-symbols:hourglass-top' : 'material-symbols:check-circle'"
           size="3rem"
           class="mb-4"
-          :class="emptyReason === 'reviewCap' ? 'text-amber-400 dark:text-amber-500' : 'text-gray-300 dark:text-gray-600'"
+          :class="emptyReason === 'reviewCap' ? 'text-amber-400 dark:text-amber-500' : 'text-gray-300 dark:text-gray-400'"
         />
         <div class="text-gray-400 text-lg mb-4">
           <template v-if="emptyReason === 'reviewCap'">Daily review limit reached</template>
           <template v-else-if="emptyReason === 'newLimit'">Daily new cards done</template>
           <template v-else>All caught up!</template>
         </div>
-        <p class="text-gray-500 mb-6">
+        <p class="text-gray-500 dark:text-gray-400 mb-6">
           <template v-if="emptyReason === 'reviewCap'">
             {{ srsStore.dueSummary?.reviewsDue }} review{{ srsStore.dueSummary?.reviewsDue === 1 ? '' : 's' }} waiting, but you've hit your daily cap of {{ srsStore.studySettings.maxReviewsPerDay }}. They'll be ready tomorrow or you can use Study More to push ahead.
           </template>

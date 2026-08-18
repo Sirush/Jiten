@@ -1,113 +1,100 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
-import { useAuthStore } from '~/stores/authStore';
-import type { CompleteGoogleRegistrationRequest } from '~/types/types';
+  import { ref, computed, watch, onMounted } from 'vue';
+  import { useAuthStore } from '~/stores/authStore';
+  import type { CompleteGoogleRegistrationRequest } from '~/types/types';
 
-const authStore = useAuthStore();
-const router = useRouter();
-const route = useRoute();
+  const authStore = useAuthStore();
+  const router = useRouter();
+  const route = useRoute();
 
-// Prefer data from authStore (set during loginWithGoogle), fallback to route query params
-const tempToken = ref((authStore.googleRegistrationData?.tempToken as string) || (route.query.tempToken as string) || '');
-const email = ref((authStore.googleRegistrationData?.email as string) || (route.query.email as string) || '');
-const name = ref((authStore.googleRegistrationData?.name as string) || (route.query.name as string) || '');
-const picture = ref((authStore.googleRegistrationData?.picture as string) || (route.query.picture as string) || '');
+  // Prefer data from authStore (set during loginWithGoogle), fallback to route query params
+  const tempToken = ref((authStore.googleRegistrationData?.tempToken as string) || (route.query.tempToken as string) || '');
+  const email = ref((authStore.googleRegistrationData?.email as string) || (route.query.email as string) || '');
+  const name = ref((authStore.googleRegistrationData?.name as string) || (route.query.name as string) || '');
+  const picture = ref((authStore.googleRegistrationData?.picture as string) || (route.query.picture as string) || '');
 
-// Form data
-const USERNAME_MIN = 3;
-const USERNAME_MAX = 30;
-const username = ref('');
-const acceptedTerms = ref(false);
-const acceptedEmailConsent = ref(false);
+  // Form data
+  const USERNAME_MIN = 3;
+  const USERNAME_MAX = 30;
+  const username = ref('');
+  const acceptedTerms = ref(false);
+  const acceptedEmailConsent = ref(false);
 
-// Keep only characters Identity allows, then cap to the server limit
-function sanitizeUsername(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, USERNAME_MAX);
-}
-
-// UI state
-const isCheckingUsername = ref(false);
-const usernameError = ref('');
-const step = ref(1); // 1: username, 2: terms and consent
-
-onMounted(() => {
-  // Redirect if missing required data
-  if (!tempToken.value || !email.value) {
-    router.push('/login');
-    return;
+  // Keep only characters Identity allows, then cap to the server limit
+  function sanitizeUsername(value: string): string {
+    return value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, USERNAME_MAX);
   }
 
-  // Generate suggested username from email or name, stripping punctuation and capping length
-  const raw = email.value.split('@')[0] || name.value.toLowerCase().replace(/\s+/g, '');
-  username.value = sanitizeUsername(raw);
-  checkUsername();
-});
+  // UI state
+  const usernameError = ref('');
+  const step = ref(1); // 1: username, 2: terms and consent
 
-// Debounced username checking
-let usernameCheckTimeout: NodeJS.Timeout;
-watch(username, (newUsername) => {
-  clearTimeout(usernameCheckTimeout);
-  if (newUsername.length > USERNAME_MAX) {
-    usernameError.value = `Username must be at most ${USERNAME_MAX} characters`;
-  } else if (newUsername.length >= USERNAME_MIN) {
-    usernameCheckTimeout = setTimeout(checkUsername, 500);
-  } else {
-    usernameError.value = newUsername.length > 0 ? `Username must be at least ${USERNAME_MIN} characters` : '';
+  onMounted(() => {
+    // Redirect if missing required data
+    if (!tempToken.value || !email.value) {
+      router.push('/login');
+      return;
+    }
+
+    // Generate suggested username from email or name, stripping punctuation and capping length
+    const raw = email.value.split('@')[0] || name.value.toLowerCase().replace(/\s+/g, '');
+    username.value = sanitizeUsername(raw);
+    checkUsername();
+  });
+
+  // Debounced username checking
+  let usernameCheckTimeout: NodeJS.Timeout;
+  watch(username, (newUsername) => {
+    clearTimeout(usernameCheckTimeout);
+    if (newUsername.length > USERNAME_MAX) {
+      usernameError.value = `Username must be at most ${USERNAME_MAX} characters`;
+    } else if (newUsername.length >= USERNAME_MIN) {
+      usernameCheckTimeout = setTimeout(checkUsername, 500);
+    } else {
+      usernameError.value = newUsername.length > 0 ? `Username must be at least ${USERNAME_MIN} characters` : '';
+    }
+  });
+
+  // No availability endpoint exists; Identity rejects duplicate usernames at completion.
+  function checkUsername() {
+    if (username.value.length < USERNAME_MIN) return;
+    usernameError.value = '';
   }
-});
 
-async function checkUsername() {
-  if (username.value.length < USERNAME_MIN) return;
+  const canProceedToStep2 = computed(() => {
+    return username.value.length >= USERNAME_MIN && username.value.length <= USERNAME_MAX && !usernameError.value;
+  });
 
-  isCheckingUsername.value = true;
-  usernameError.value = '';
+  const canComplete = computed(() => {
+    return canProceedToStep2.value && acceptedTerms.value;
+  });
 
-  try {
-  } catch (error) {
-    console.error('Error checking username:', error);
-    usernameError.value = 'Error checking username availability';
-  } finally {
-    isCheckingUsername.value = false;
+  function nextStep() {
+    if (canProceedToStep2.value) {
+      step.value = 2;
+    }
   }
-}
 
-const canProceedToStep2 = computed(() => {
-  return username.value.length >= USERNAME_MIN &&
-    username.value.length <= USERNAME_MAX &&
-    !usernameError.value;
-});
-
-const canComplete = computed(() => {
-  return canProceedToStep2.value &&
-    acceptedTerms.value;
-});
-
-function nextStep() {
-  if (canProceedToStep2.value) {
-    step.value = 2;
+  function previousStep() {
+    step.value = 1;
   }
-}
 
-function previousStep() {
-  step.value = 1;
-}
+  async function completeRegistration() {
+    if (!canComplete.value) return;
 
-async function completeRegistration() {
-  if (!canComplete.value) return;
+    const registrationData: CompleteGoogleRegistrationRequest = {
+      tempToken: tempToken.value,
+      username: username.value,
+      tosAccepted: acceptedTerms.value,
+      receiveNewsletter: acceptedEmailConsent.value,
+    };
 
-  const registrationData: CompleteGoogleRegistrationRequest = {
-    tempToken: tempToken.value,
-    username: username.value,
-    tosAccepted: acceptedTerms.value,
-    receiveNewsletter: acceptedEmailConsent.value,
-  };
+    const success = await authStore.completeGoogleRegistration(registrationData);
 
-  const success = await authStore.completeGoogleRegistration(registrationData);
-
-  if (success) {
-    router.push('/');
+    if (success) {
+      router.push(safeRedirectPath(route.query.redirect) ?? '/');
+    }
   }
-}
 </script>
 
 <template>
@@ -133,27 +120,16 @@ async function completeRegistration() {
             v-model="username"
             type="text"
             :maxlength="USERNAME_MAX"
-            :class="[
-              'w-full p-3 rounded-md border-2 transition-colors',
-              usernameError ? 'border-red-600' : 'border-gray-300 dark:border-gray-700'
-            ]"
+            :class="['w-full p-3 rounded-md border-2 transition-colors', usernameError ? 'border-red-600' : 'border-gray-300 dark:border-gray-700']"
             placeholder="Enter your username"
           />
           <div class="mt-2 text-sm">
-            <div v-if="usernameError" class="text-red-600">
-              <i class="pi pi-times-circle"></i> {{ usernameError }}
-            </div>
+            <div v-if="usernameError" class="text-red-600"><i class="pi pi-times-circle"></i> {{ usernameError }}</div>
           </div>
         </div>
 
         <div class="flex justify-between mt-6">
-          <Button
-            @click="nextStep"
-            :disabled="!canProceedToStep2"
-            class="ml-auto min-w-[120px]"
-          >
-            Next
-          </Button>
+          <Button @click="nextStep" :disabled="!canProceedToStep2" class="ml-auto min-w-[120px]"> Next </Button>
         </div>
       </div>
 
@@ -163,11 +139,7 @@ async function completeRegistration() {
 
         <div class="mb-6">
           <div class="flex items-start mb-4 gap-2">
-            <Checkbox
-              id="terms"
-              v-model="acceptedTerms"
-              :binary="true"
-            />
+            <Checkbox id="terms" v-model="acceptedTerms" :binary="true" />
             <label for="terms" class="leading-snug cursor-pointer">
               I have read and agree to the
               <NuxtLink to="/terms" target="_blank" class="text-blue-600 underline">Terms of Service</NuxtLink>
@@ -178,26 +150,14 @@ async function completeRegistration() {
           </div>
 
           <div class="flex items-start mb-4 gap-2">
-            <Checkbox
-              id="email-consent"
-              v-model="acceptedEmailConsent"
-              :binary="true"
-            />
-            <label for="email-consent" class="leading-snug cursor-pointer">
-              I would like to receive occasional updates and newsletters via email
-            </label>
+            <Checkbox id="email-consent" v-model="acceptedEmailConsent" :binary="true" />
+            <label for="email-consent" class="leading-snug cursor-pointer"> I would like to receive occasional updates and newsletters via email </label>
           </div>
         </div>
 
         <div class="flex justify-between mt-6">
-          <Button @click="previousStep" class="min-w-[120px]" outlined>
-            Back
-          </Button>
-          <Button
-            @click="completeRegistration"
-            :disabled="!canComplete || authStore.isLoading"
-            class="ml-auto min-w-[120px]"
-          >
+          <Button @click="previousStep" class="min-w-[120px]" outlined> Back </Button>
+          <Button @click="completeRegistration" :disabled="!canComplete || authStore.isLoading" class="ml-auto min-w-[120px]">
             {{ authStore.isLoading ? 'Creating Account...' : 'Complete Registration' }}
           </Button>
         </div>
@@ -208,5 +168,4 @@ async function completeRegistration() {
   </Card>
 </template>
 
-<style scoped>
-</style>
+<style scoped></style>

@@ -86,7 +86,7 @@
     </div>
     <div class="flex flex-col gap-4">
       <div>
-        <div class="text-sm text-gray-500 mb-2">Select an option</div>
+        <div class="text-sm text-gray-500 dark:text-gray-400 mb-2">Select an option</div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <label
             v-for="opt in options"
@@ -101,12 +101,12 @@
 
       <div class="flex flex-col gap-2">
         <div class="text-sm font-semibold">Description</div>
-        <div class="text-sm text-gray-600">{{ helperText }}</div>
+        <div class="text-sm text-gray-600 dark:text-gray-400">{{ helperText }}</div>
       </div>
 
       <div class="flex flex-col gap-2">
         <div class="flex items-center justify-between">
-          <label for="issue-comment" class="text-sm text-gray-500">Comment (required)</label>
+          <label for="issue-comment" class="text-sm text-gray-500 dark:text-gray-400">Comment (required)</label>
           <span class="text-xs text-gray-400">{{ comment.length }}/800</span>
         </div>
         <Textarea

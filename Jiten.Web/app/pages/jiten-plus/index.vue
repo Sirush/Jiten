@@ -255,13 +255,13 @@
                   <div class="flex items-baseline justify-between gap-2 mb-1">
                     <span class="text-sm font-semibold">
                       <span class="text-gray-500 dark:text-gray-400">{{ exampleJourney.startCoverage.toFixed(0) }}%</span>
-                      <span class="text-gray-400 dark:text-gray-500 mx-1">&rarr;</span>
+                      <span class="text-gray-400 dark:text-gray-400 mx-1">&rarr;</span>
                       <span class="text-primary-600 dark:text-primary-300">{{ exampleJourney.currentCoverage.toFixed(0) }}% readable</span>
                     </span>
-                    <span class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Example</span>
+                    <span class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-400">Example</span>
                   </div>
                   <LazyCoverageJourneyChart :points="exampleJourney.points" granularity="monthly" compact :tooltip="false" height="150px" hydrate-on-visible />
-                  <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                  <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-400 mt-0.5">
                     <span>{{ exampleRange.start }}</span>
                     <span>{{ exampleRange.end }}</span>
                   </div>
@@ -314,7 +314,7 @@
 
 <style scoped>
   .jp-feature {
-    border-radius: 0.75rem;
+    border-radius: var(--radius-xl);
     padding: 1.1rem;
   }
 
@@ -369,7 +369,7 @@
   }
 
   .jp-faq {
-    border-radius: 0.6rem;
+    border-radius: var(--radius-lg);
     padding: 0.85rem 1rem;
   }
 

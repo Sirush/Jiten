@@ -13,13 +13,39 @@
     --font-noto-sans: "Noto Sans JP Variable", "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;
 }
 
+/* Halved Tailwind scale; must stay in sync with the JitenPreset primitive.borderRadius in
+   nuxt.config.ts so that hand-built elements match adjacent PrimeVue components.
+   `static` keeps every tier emitted as a custom property, including those no utility class
+   references, so component <style> blocks can use them. */
+@theme static {
+    --radius: 0.125rem;
+    --radius-xs: 0.0625rem;
+    --radius-sm: 0.125rem;
+    --radius-md: 0.1875rem;
+    --radius-lg: 0.25rem;
+    --radius-xl: 0.375rem;
+    --radius-2xl: 0.5rem;
+    --radius-3xl: 0.75rem;
+    --radius-4xl: 1rem;
+}
+
 :root {
-    background-color: var(--p-neutral-50);
+    /* Scroll-fade gradients and sticky bars paint this to blend into the page; keep them on the token.
+       Must stay off the surface-100/200 steps, which Aura uses as component fills. */
+    --jiten-page-bg: var(--p-neutral-50);
+    background-color: var(--jiten-page-bg);
     font-family: var(--font-noto-sans);
 }
 
 :root.dark-mode {
-    background-color: black;
+    --jiten-page-bg: black;
+}
+
+/* A ruby box grows to fit its annotation, so an oversized reading spaces the kanji of a compound
+   apart. Half the base size makes the common two-kana reading exactly as wide as its kanji; the
+   floor keeps furigana legible where the base text is small. */
+ruby rt {
+    font-size: max(0.5em, 10px);
 }
 
 .p-card {
@@ -28,6 +54,19 @@
 
 .dark-mode .p-card {
     border: 1px solid #2d2d2d;
+}
+
+/* The kanji scale badges consume every built-in Tag severity, so one extra hue is defined here.
+   It follows the built-in convention (pale fill, saturated same-hue text) rather than PrimeVue's
+   `contrast` severity, which inverts to a solid block and breaks the row in both themes. */
+.p-tag.p-tag-teal {
+    background: rgb(204 251 241);
+    color: rgb(15 118 110);
+}
+
+.dark-mode .p-tag.p-tag-teal {
+    background: rgb(17 94 89 / 0.3);
+    color: rgb(94 234 212);
 }
 
 a:not(.p-button) {
@@ -281,7 +320,7 @@ html.dark-mode .prose .shiki span {
 
 .list-anchor-flash {
     animation: list-anchor-flash 1.2s ease-out;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-lg);
 }
 
 .dark-mode .list-anchor-flash {

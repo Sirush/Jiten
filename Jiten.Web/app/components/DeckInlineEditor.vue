@@ -220,21 +220,21 @@
 
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
       <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500" for="inline-original-title">Original title</label>
+        <label class="text-xs text-gray-500 dark:text-gray-400" for="inline-original-title">Original title</label>
         <InputText id="inline-original-title" v-model="draft.originalTitle" size="small" lang="ja" />
       </div>
       <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500" for="inline-romaji-title">Romaji title</label>
+        <label class="text-xs text-gray-500 dark:text-gray-400" for="inline-romaji-title">Romaji title</label>
         <InputText id="inline-romaji-title" v-model="draft.romajiTitle" size="small" />
       </div>
       <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500" for="inline-english-title">English title</label>
+        <label class="text-xs text-gray-500 dark:text-gray-400" for="inline-english-title">English title</label>
         <InputText id="inline-english-title" v-model="draft.englishTitle" size="small" />
       </div>
     </div>
 
     <div class="flex flex-col gap-1">
-      <label class="text-xs text-gray-500" for="inline-description">Description</label>
+      <label class="text-xs text-gray-500 dark:text-gray-400" for="inline-description">Description</label>
       <Textarea id="inline-description" v-model="draft.description" rows="2" class="w-full resize-y" />
     </div>
 
@@ -250,7 +250,7 @@
     </div>
 
     <div class="flex flex-wrap gap-1.5 items-center">
-      <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1 shrink-0 w-20">Genres</span>
+      <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-1 shrink-0 w-20">Genres</span>
       <button
         v-for="genre in draft.genres"
         :key="genre"
@@ -265,7 +265,7 @@
     </div>
 
     <div class="flex flex-wrap gap-1.5 items-center">
-      <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1 shrink-0 w-20">Tags</span>
+      <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-1 shrink-0 w-20">Tags</span>
       <button
         v-for="tag in draft.tags"
         :key="tag.tagId"
@@ -290,7 +290,7 @@
     </div>
 
     <div class="flex flex-wrap gap-1.5 items-center">
-      <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1 shrink-0 w-20">Related</span>
+      <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-1 shrink-0 w-20">Related</span>
       <button
         v-for="(rel, index) in draft.relationships"
         :key="`${rel.targetDeckId}-${rel.relationshipType}`"
@@ -306,7 +306,7 @@
     </div>
 
     <div class="flex flex-wrap gap-1.5 items-center">
-      <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1 shrink-0 w-20">Links</span>
+      <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-1 shrink-0 w-20">Links</span>
       <span v-for="(link, index) in draft.links" :key="`${link.linkType}-${link.url}`" class="inline-flex items-center rounded-full text-xs py-0.5 px-2 transition-colors bg-surface-100 dark:bg-surface-900/50 text-surface-700 dark:text-surface-200">
         <span :title="link.url">{{ getLinkTypeText(link.linkType) }}</span>
         <button type="button" class="ml-1 opacity-70 hover:opacity-100 cursor-pointer" aria-label="Edit link" @click="openLinkEdit(index)">

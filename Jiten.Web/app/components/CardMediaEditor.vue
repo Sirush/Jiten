@@ -383,7 +383,7 @@
             v-if="image.inherited"
             :content="`Inherited ${inheritedLabel(image)}. Deleting removes it from that form; uploading sets an image just for this form.`"
           >
-            <i class="pi pi-link !text-[0.65rem] px-1 text-surface-400 dark:text-surface-500" />
+            <i class="pi pi-link !text-[0.65rem] px-1 text-surface-400 dark:text-surface-400" />
           </Tooltip>
           <Button
             v-tooltip.top="'Remove image'"
@@ -412,7 +412,7 @@
             v-if="audio.inherited"
             :content="`Inherited ${inheritedLabel(audio)}. Deleting removes it from that form; uploading sets audio just for this form.`"
           >
-            <i class="pi pi-link !text-[0.65rem] px-1 text-surface-400 dark:text-surface-500" />
+            <i class="pi pi-link !text-[0.65rem] px-1 text-surface-400 dark:text-surface-400" />
           </Tooltip>
           <Button
             v-tooltip.top="'Remove audio'"
@@ -496,7 +496,7 @@
               </div>
             </div>
           </div>
-          <span v-else class="text-sm text-surface-400 dark:text-surface-500">No image</span>
+          <span v-else class="text-sm text-surface-400 dark:text-surface-400">No image</span>
         </div>
       </div>
 
@@ -527,7 +527,7 @@
               <Button size="small" text severity="danger" label="Delete" icon="pi pi-trash" :loading="deletingKind === 'audio'" @click="removeKind('audio')" />
             </div>
           </div>
-          <span v-else class="text-sm text-surface-400 dark:text-surface-500">No audio</span>
+          <span v-else class="text-sm text-surface-400 dark:text-surface-400">No audio</span>
         </div>
       </div>
 
@@ -543,9 +543,9 @@
           "
           @click="openPicker"
         >
-          <i class="pi pi-cloud-upload text-lg text-surface-400 dark:text-surface-500" />
+          <i class="pi pi-cloud-upload text-lg text-surface-400 dark:text-surface-400" />
           <span class="text-sm text-surface-600 dark:text-surface-300">Drop, paste, or click to add an image or audio clip</span>
-          <span class="text-[0.7rem] text-surface-400 dark:text-surface-500">Max 5 MB. Replaces the existing image or audio.</span>
+          <span class="text-[0.7rem] text-surface-400 dark:text-surface-400">Max 5 MB. Replaces the existing image or audio.</span>
         </button>
       </JitenPlusGate>
     </template>

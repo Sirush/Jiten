@@ -838,7 +838,7 @@
           :y2="g.y2"
           stroke="currentColor"
           :stroke-width="edgeActive(g.edge) ? 2.5 : 1.5"
-          :class="[edgeActive(g.edge) ? 'text-primary' : activeNode != null ? 'text-gray-300 dark:text-gray-700' : 'text-gray-400 dark:text-gray-600']"
+          :class="[edgeActive(g.edge) ? 'text-primary' : activeNode != null ? 'text-gray-300 dark:text-gray-700' : 'text-gray-400 dark:text-gray-400']"
           :style="{ opacity: activeNode != null && !edgeActive(g.edge) ? 0.2 : 1 }"
         />
       </svg>

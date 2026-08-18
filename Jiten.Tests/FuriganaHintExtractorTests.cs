@@ -25,6 +25,51 @@ public class FuriganaHintExtractorTests
     }
 
     [Fact]
+    public void Strip_KeepsBaseOfRealAnnotations()
+    {
+        FuriganaHintExtractor.Strip("{漢字'かんじ}を{お前'希真理}と読む")
+                             .Should().Be("漢字をお前と読む");
+    }
+
+    [Fact]
+    public void Strip_LeavesEngineScriptIntact()
+    {
+        const string script = "{ f.計算評価 = 'Ｓ';}";
+
+        FuriganaHintExtractor.Strip(script).Should().Be(script);
+    }
+
+    [Fact]
+    public void Strip_LeavesMultiLineBraceBlocksIntact()
+    {
+        var block = "{セリフ" + Environment.NewLine + "「これは'テスト」" + Environment.NewLine + "}";
+
+        FuriganaHintExtractor.Strip(block).Should().Be(block);
+    }
+
+    [Fact]
+    public void Extract_IgnoresEngineScript()
+    {
+        const string script = "素晴らしい{ f.計算評価 = 'A';}一日";
+
+        var (cleanText, hints) = FuriganaHintExtractor.Extract(script);
+
+        cleanText.Should().Be(script);
+        hints.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Extract_DoesNotSpanBraceBlocks()
+    {
+        var text = "{セリフ" + Environment.NewLine + "「これは'テスト」" + Environment.NewLine + "}";
+
+        var (cleanText, hints) = FuriganaHintExtractor.Extract(text);
+
+        cleanText.Should().Be(text);
+        hints.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Extract_NoAnnotations()
     {
         var (cleanText, hints) = FuriganaHintExtractor.Extract("普通のテキスト");
@@ -49,11 +94,11 @@ public class FuriganaHintExtractorTests
     [Fact]
     public void Extract_MalformedNotation_TreatedAsPlainText()
     {
-        var (cleanText, hints) = FuriganaHintExtractor.Extract("text {incomplete and {nested'bad}} end");
+        var (cleanText, hints) = FuriganaHintExtractor.Extract("前 {未完 と {入れ子'よみ}} 後");
 
-        hints.Where(h => h.Reading == "bad").Should().NotBeEmpty();
-        cleanText.Should().Contain("text");
-        cleanText.Should().Contain("end");
+        hints.Where(h => h.Reading == "よみ").Should().NotBeEmpty();
+        cleanText.Should().Contain("前");
+        cleanText.Should().Contain("後");
     }
 
     [Fact]

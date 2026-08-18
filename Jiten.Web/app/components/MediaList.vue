@@ -767,11 +767,11 @@
         </div>
         <div
           v-show="stripCanScrollLeft"
-          class="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[var(--p-neutral-50)] to-transparent dark:from-black"
+          class="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[var(--jiten-page-bg)] to-transparent"
         />
         <div
           v-show="stripCanScrollRight"
-          class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--p-neutral-50)] to-transparent dark:from-black"
+          class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--jiten-page-bg)] to-transparent"
         />
       </div>
 
@@ -816,7 +816,7 @@
     <!-- Below md this is the only place the controls live, so it sticks; the page header is
          static, which leaves top-0 free. -->
     <div
-      class="flex flex-col gap-2 max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:border-b max-md:border-surface-200 max-md:bg-[var(--p-neutral-50)] max-md:px-4 max-md:py-2 max-md:dark:border-surface-800 max-md:dark:bg-black"
+      class="flex flex-col gap-2 max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:border-b max-md:border-surface-200 max-md:bg-[var(--jiten-page-bg)] max-md:px-4 max-md:py-2 max-md:dark:border-surface-800"
     >
     <div class="flex gap-2 max-md:flex-row max-md:flex-wrap max-md:items-center md:flex-row">
       <div class="hidden md:flex flex-row gap-2">

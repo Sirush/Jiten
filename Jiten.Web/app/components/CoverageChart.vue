@@ -162,7 +162,7 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
     <!-- Chart -->
     <div class="coverage-chart-wrapper">
       <Line v-if="curveData && curveData.length > 0" :data="chartData" :options="chartOptions" />
-      <div v-else class="text-center text-gray-500 py-8">No coverage data available</div>
+      <div v-else class="text-center text-gray-500 dark:text-gray-400 py-8">No coverage data available</div>
     </div>
   </div>
 </template>
@@ -170,7 +170,7 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
 <style scoped>
 .chart-container {
   width: 100%;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding-top: 1rem;
 }
 

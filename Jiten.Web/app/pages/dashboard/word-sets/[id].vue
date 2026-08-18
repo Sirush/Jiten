@@ -393,7 +393,7 @@
         <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="navigateTo('/dashboard/word-sets')" />
         <div>
           <h1 class="text-3xl font-bold">{{ wordSet?.name || 'Loading...' }}</h1>
-          <p v-if="wordSet?.description" class="text-gray-500 mt-1">{{ wordSet.description }}</p>
+          <p v-if="wordSet?.description" class="text-gray-500 dark:text-gray-400 mt-1">{{ wordSet.description }}</p>
         </div>
       </div>
       <div class="flex gap-2 items-center">
@@ -450,7 +450,7 @@
                 #{{ entry.frequencyRank }}
               </Tag>
             </div>
-            <div class="text-sm text-gray-500 truncate">
+            <div class="text-sm text-gray-500 dark:text-gray-400 truncate">
               {{ entry.meanings.slice(0, 3).join('; ') }}
             </div>
             <div class="flex gap-1 mt-1">
@@ -591,7 +591,7 @@
       class="w-full md:w-2/3 lg:w-1/2"
     >
       <div v-if="formPreview" class="mb-4">
-        <div class="text-sm text-gray-500 mb-2">
+        <div class="text-sm text-gray-500 dark:text-gray-400 mb-2">
           POS: {{ formPreview.partsOfSpeech.join(', ') }}
         </div>
         <div class="text-sm mb-4">

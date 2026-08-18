@@ -310,10 +310,10 @@
     <SrsSubNav />
     <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
       <div class="flex items-center gap-2 min-w-0">
-        <NuxtLink to="/srs/decks" class="text-sm text-surface-500 hover:text-surface-700 dark:hover:text-surface-300 whitespace-nowrap">‹ Decks</NuxtLink>
-        <span class="text-surface-300 dark:text-surface-600">·</span>
+        <NuxtLink to="/srs/decks" class="text-sm text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 whitespace-nowrap">‹ Decks</NuxtLink>
+        <span class="text-surface-300 dark:text-surface-400">·</span>
         <h1 class="text-2xl font-bold truncate">{{ deckName }}</h1>
-        <span v-if="totalItems > 0" class="text-sm text-gray-500 whitespace-nowrap">{{ totalItems }} words</span>
+        <span v-if="totalItems > 0" class="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ totalItems }} words</span>
       </div>
       <div v-if="isStaticDeck" class="flex gap-2">
         <Button icon="pi pi-plus" label="Add Words" @click="showAddDialog = true" class="!hidden sm:!inline-flex" />
@@ -337,7 +337,7 @@
 
     <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="words" :page-size="pageSize" :page-size-options="[50, 100, 200]" mobile-compact />
 
-    <div v-if="pageWords.length > 0" class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500">
+    <div v-if="pageWords.length > 0" class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500 dark:text-surface-400">
       <Checkbox :model-value="allOnPageSelected" :binary="true" @change="toggleSelectAll" />
       <span class="text-xs cursor-pointer select-none" @click="toggleSelectAll">
         {{ selectedWords.length > 0 ? `${selectedWords.length} selected` : `Select page (${pageWords.length})` }}

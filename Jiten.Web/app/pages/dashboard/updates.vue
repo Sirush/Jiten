@@ -187,7 +187,7 @@
           <div>
             <label for="updateTeaser" class="block text-sm font-medium mb-1">Notification teaser (optional)</label>
             <InputText id="updateTeaser" v-model="teaser" class="w-full" maxlength="300" placeholder="A new site update has been published." />
-            <small class="text-surface-500">Shown as the notification body. Only sent on the first publish.</small>
+            <small class="text-surface-500 dark:text-surface-400">Shown as the notification body. Only sent on the first publish.</small>
           </div>
 
           <div class="grid grid-cols-1 gap-4" :class="showPreview ? 'lg:grid-cols-2' : ''">
@@ -202,10 +202,10 @@
                 <Suspense v-if="previewSource.trim()">
                   <MarkdownBody :source="previewSource" />
                   <template #fallback>
-                    <span class="text-surface-500 text-sm">Rendering...</span>
+                    <span class="text-surface-500 dark:text-surface-400 text-sm">Rendering...</span>
                   </template>
                 </Suspense>
-                <span v-else class="text-surface-500 text-sm">Nothing to preview yet.</span>
+                <span v-else class="text-surface-500 dark:text-surface-400 text-sm">Nothing to preview yet.</span>
               </div>
             </div>
           </div>
@@ -220,8 +220,8 @@
 
     <Card class="shadow-md">
       <template #content>
-        <div v-if="loading" class="text-surface-500">Loading...</div>
-        <div v-else-if="updates.length === 0" class="text-surface-500">No updates yet.</div>
+        <div v-if="loading" class="text-surface-500 dark:text-surface-400">Loading...</div>
+        <div v-else-if="updates.length === 0" class="text-surface-500 dark:text-surface-400">No updates yet.</div>
         <div v-else class="flex flex-col divide-y divide-surface-200 dark:divide-surface-700">
           <div v-for="update in updates" :key="update.id" class="py-3 flex flex-col md:flex-row md:items-center gap-2">
             <div class="flex-1 min-w-0">
@@ -230,7 +230,7 @@
                 <Tag v-else value="Draft" severity="warn" />
                 <span class="font-medium truncate">{{ update.title }}</span>
               </div>
-              <div class="text-xs text-surface-500 mt-1">
+              <div class="text-xs text-surface-500 dark:text-surface-400 mt-1">
                 Created {{ formatDate(update.createdAt) }}
                 <span v-if="update.publishedAt"> &middot; published {{ formatDate(update.publishedAt) }}</span>
                 <span v-if="update.updatedAt"> &middot; edited {{ formatDate(update.updatedAt) }}</span>

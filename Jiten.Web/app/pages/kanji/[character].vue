@@ -11,7 +11,11 @@
     wanikani: 'warn',
     rtk: 'danger',
     klc: 'primary',
-    tmw: 'contrast',
+    tmw: 'secondary',
+  };
+
+  const scaleClasses: Partial<Record<KanjiScale, string>> = {
+    tmw: 'p-tag-teal',
   };
 
   const allScales: KanjiScale[] = ['jlpt', 'grade', 'kanken', 'wanikani', 'rtk', 'klc', 'tmw'];
@@ -42,8 +46,12 @@
 
   const scaleBadges = computed(() =>
     allScales
-      .map(scale => ({ severity: scaleSeverities[scale], text: kanjiScaleMembership(character.value, scale, kanji.value?.grade) }))
-      .filter((b): b is { severity: BadgeSeverity; text: string } => b.text != null)
+      .map(scale => ({
+        severity: scaleSeverities[scale],
+        cls: scaleClasses[scale],
+        text: kanjiScaleMembership(character.value, scale, kanji.value?.grade),
+      }))
+      .filter((b): b is { severity: BadgeSeverity; cls?: string; text: string } => b.text != null)
   );
 
   // undefined = untouched, so the most-used reading renders expanded (server-side, and instead of an
@@ -164,7 +172,7 @@
     </div>
 
     <div v-else-if="status === 'error'" class="text-center py-12">
-      <p class="text-surface-500">Kanji not found</p>
+      <p class="text-surface-500 dark:text-surface-400">Kanji not found</p>
     </div>
 
     <div v-else-if="kanji" class="space-y-2">
@@ -180,8 +188,8 @@
         <!-- Metadata badges -->
         <div class="flex flex-wrap justify-center gap-2 mb-4">
           <Tag v-if="kanji.frequencyRank" severity="primary"> Jiten frequency #{{ kanji.frequencyRank }} </Tag>
-          <Tag v-for="badge in scaleBadges" :key="badge.text" :severity="badge.severity"> {{ badge.text }} </Tag>
-          <Tag severity="contrast"> {{ kanji.strokeCount }} strokes </Tag>
+          <Tag v-for="badge in scaleBadges" :key="badge.text" :severity="badge.severity" :class="badge.cls"> {{ badge.text }} </Tag>
+          <Tag severity="secondary"> {{ kanji.strokeCount }} strokes </Tag>
         </div>
       </div>
 

@@ -31,7 +31,7 @@
 </script>
 
 <template>
-  <div id="app" class="flex flex-col min-h-screen">
+  <div id="app" class="flex flex-col min-h-screen overflow-x-clip">
     <NuxtLoadingIndicator />
     <ClientOnly>
       <MaintenanceBanner />
@@ -46,7 +46,7 @@
       </div>
     </div>
 
-    <div :class="isStudyMode ? 'flex-grow flex flex-col' : 'container mx-auto pl-4 pr-4 max-w-6xl flex-grow pb-2'">
+    <div :class="isStudyMode ? 'flex-grow flex flex-col' : ['container mx-auto pl-4 pr-4 flex-grow pb-2', route.meta.wide ? 'max-w-7xl' : 'max-w-6xl']">
       <!-- On the home page the banner renders inside HomeMember instead, below the study summary. -->
       <ClientOnly>
         <LegalUpdateBanner v-if="!isStudyMode && route.path !== '/'" class="mt-2 mb-3" />

@@ -312,7 +312,7 @@
           // non-zero days keep the minBarLength floor so a 1-review day stays visible next to a 180 spike.
           data: forecast.days.map((d) => (d.count === 0 ? null : d.count)),
           backgroundColor: forecast.days.map((_, i) => (i === 0 ? 'rgba(59, 130, 246, 0.8)' : 'rgba(168, 85, 247, 0.6)')),
-          borderRadius: 3,
+          borderRadius: 2,
           minBarLength: 4,
         },
       ],
@@ -427,7 +427,7 @@
       <div class="flex flex-col md:flex-row">
         <!-- Today zone: progress ring -->
         <div class="flex flex-col items-center md:items-start gap-1.5 py-3 px-4 border-b md:border-b-0 md:border-r border-surface-200 dark:border-surface-700">
-          <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-500">Today</span>
+          <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-400">Today</span>
           <GoalRing
             :reviews-done="goalReviewsDone"
             :reviews-target="goalReviewsTarget"
@@ -439,7 +439,7 @@
 
         <!-- Due now zone: remaining queue -->
         <div class="flex-1 flex flex-col">
-          <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-500 px-3 pt-3">Due now</span>
+          <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-400 px-3 pt-3">Due now</span>
           <div class="grid grid-cols-3 divide-x divide-surface-200 dark:divide-surface-700 flex-1">
             <button
               class="flex flex-col items-center justify-center gap-0.5 py-3 px-3 transition-colors hover:bg-surface-50 dark:hover:bg-surface-800"
@@ -448,7 +448,7 @@
             >
               <span
                 class="text-[clamp(0.95rem,5vw,1.5rem)] font-bold tabular-nums"
-                :class="srsStore.dueSummary.reviewsDue > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'"
+                :class="srsStore.dueSummary.reviewsDue > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-400'"
                 >{{ srsStore.dueSummary.reviewsDue }}</span
               >
               <span class="text-xs text-gray-500 dark:text-gray-400">Reviews</span>
@@ -461,7 +461,7 @@
             >
               <span
                 class="text-[clamp(0.95rem,5vw,1.5rem)] font-bold tabular-nums"
-                :class="srsStore.dueSummary.newCardsAvailable > 0 ? 'text-green-400 dark:text-green-600' : 'text-gray-400 dark:text-gray-500'"
+                :class="srsStore.dueSummary.newCardsAvailable > 0 ? 'text-green-400 dark:text-green-600' : 'text-gray-400 dark:text-gray-400'"
                 >{{ srsStore.dueSummary.newCardsAvailable }}</span
               >
               <span class="text-xs text-gray-500 dark:text-gray-400">New</span>
@@ -492,19 +492,19 @@
             <div class="flex items-center gap-2">
               <Icon name="material-symbols:local-fire-department" size="1.5rem" class="text-orange-500" />
               <span class="text-xl font-bold tabular-nums">{{ srsStore.deckStreak.currentStreak }}</span>
-              <span class="text-sm text-gray-500">day streak</span>
+              <span class="text-sm text-gray-500 dark:text-gray-400">day streak</span>
             </div>
             <div v-if="srsStore.deckStreak.isNewRecord && srsStore.deckStreak.currentStreak > 1" class="text-xs font-semibold text-orange-500">New record!</div>
-            <div class="text-sm text-gray-500">
+            <div class="text-sm text-gray-500 dark:text-gray-400">
               Longest: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ srsStore.deckStreak.longestStreak }}</span>
             </div>
-            <div class="text-sm text-gray-500">
+            <div class="text-sm text-gray-500 dark:text-gray-400">
               Days studied: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ srsStore.deckStreak.totalReviewDays }}</span>
             </div>
           </div>
           <!-- Mini Heatmap -->
           <div v-if="miniHeatmap.length > 0" class="overflow-x-auto flex flex-col items-start">
-            <div class="text-xs text-gray-500 mb-1">Review activity</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">Review activity</div>
             <div class="relative" :style="{ width: `${WEEKS * (CELL + GAP) - GAP}px`, height: `${7 * (CELL + GAP) - GAP}px` }">
               <div
                 v-for="(day, i) in miniHeatmap"
@@ -539,10 +539,10 @@
           class="w-full md:w-1/2 flex-shrink-0 min-w-0 flex flex-col gap-3"
         >
           <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
-            <div class="text-sm text-gray-500">
+            <div class="text-sm text-gray-500 dark:text-gray-400">
               Next 7d: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ forecastNext7d }}</span>
             </div>
-            <div class="text-sm text-gray-500">
+            <div class="text-sm text-gray-500 dark:text-gray-400">
               Next 30d: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ forecastNext30d }}</span>
             </div>
           </div>
@@ -580,11 +580,11 @@
         :key="i"
         class="flex items-center gap-4 p-4 bg-surface-0 dark:bg-surface-900 rounded-xl shadow-sm border border-surface-200 dark:border-surface-700"
       >
-        <Skeleton width="64px" height="80px" borderRadius="4px" />
+        <Skeleton width="64px" height="80px" borderRadius="2px" />
         <div class="flex-1">
           <Skeleton width="60%" height="1.2rem" class="mb-2" />
           <Skeleton width="40%" height="0.9rem" class="mb-3" />
-          <Skeleton width="100%" height="1.5rem" borderRadius="8px" />
+          <Skeleton width="100%" height="1.5rem" borderRadius="4px" />
         </div>
       </div>
     </div>
@@ -598,7 +598,7 @@
     <!-- Empty state -->
     <div v-else-if="!decksLoading && srsStore.studyDecks.length === 0" class="text-center py-16">
       <div class="text-gray-400 text-lg mb-4">No study decks yet</div>
-      <p class="text-gray-500 mb-6">Add decks to start learning vocabulary with spaced repetition.</p>
+      <p class="text-gray-500 dark:text-gray-400 mb-6">Add decks to start learning vocabulary with spaced repetition.</p>
       <Button icon="pi pi-plus" label="Add Your First Deck" @click="showAddDialog = true" />
     </div>
 
@@ -692,7 +692,7 @@
 
               <!-- Info -->
               <div class="flex-1 min-w-0">
-                <div v-if="deck.parentTitle" class="text-xs text-surface-400 dark:text-surface-500 truncate">
+                <div v-if="deck.parentTitle" class="text-xs text-surface-400 dark:text-surface-400 truncate">
                   {{ localiseTitle({ originalTitle: deck.parentTitle, romajiTitle: deck.parentRomajiTitle, englishTitle: deck.parentEnglishTitle }) }}
                 </div>
                 <div class="font-semibold truncate">
@@ -708,7 +708,7 @@
                   </template>
                   <template v-else>{{ deck.name }}</template>
                 </div>
-                <div class="text-sm text-gray-500">
+                <div class="text-sm text-gray-500 dark:text-gray-400">
                   <template v-if="deck.deckType === StudyDeckType.MediaDeck">{{ getMediaTypeText(deck.mediaType) }}</template>
                   <template v-else-if="deck.deckType === StudyDeckType.GlobalDynamic">Global Frequency</template>
                   <template v-else>Word List</template>
@@ -732,13 +732,13 @@
                       </span>
                     </div>
                   </Tooltip>
-                  <div class="flex gap-3 mt-1 text-xs text-gray-500 flex-wrap">
+                  <div class="flex gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
                     <span>{{ deck.unseenCount }} unknown</span>
                     <span class="text-purple-400">{{ deck.learningCount }} learning</span>
                     <span class="text-purple-500">{{ deck.youngCount }} young</span>
                     <span class="text-purple-700 dark:text-purple-300">{{ deck.matureCount + deck.masteredCount }} mature</span>
                     <span v-if="deck.suspendedCount > 0" class="text-amber-500">{{ deck.suspendedCount }} suspended</span>
-                    <span v-if="deck.blacklistedCount > 0" class="text-gray-400 dark:text-gray-500">{{ deck.blacklistedCount }} blacklisted</span>
+                    <span v-if="deck.blacklistedCount > 0" class="text-gray-400 dark:text-gray-400">{{ deck.blacklistedCount }} blacklisted</span>
                     <span v-if="deck.dueReviewCount > 0" class="text-blue-500 font-semibold">{{ deck.dueReviewCount }} due</span>
                   </div>
                   <div v-if="deck.warning" class="text-xs text-yellow-500 mt-1">{{ deck.warning }}</div>
@@ -790,7 +790,7 @@
       </div>
 
       <!-- No active decks warning -->
-      <div v-else-if="srsStore.inactiveDecks.length > 0" class="text-center py-8 text-gray-500">
+      <div v-else-if="srsStore.inactiveDecks.length > 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
         <p>No active decks. New cards won't be added during study.</p>
       </div>
 
@@ -856,7 +856,7 @@
 
               <!-- Info -->
               <div class="flex-1 min-w-0">
-                <div v-if="deck.parentTitle" class="text-xs text-surface-400 dark:text-surface-500 truncate">
+                <div v-if="deck.parentTitle" class="text-xs text-surface-400 dark:text-surface-400 truncate">
                   {{ localiseTitle({ originalTitle: deck.parentTitle, romajiTitle: deck.parentRomajiTitle, englishTitle: deck.parentEnglishTitle }) }}
                 </div>
                 <div class="font-semibold truncate">
@@ -872,7 +872,7 @@
                   </template>
                   <template v-else>{{ deck.name }}</template>
                 </div>
-                <div class="text-sm text-gray-500">
+                <div class="text-sm text-gray-500 dark:text-gray-400">
                   <template v-if="deck.deckType === StudyDeckType.MediaDeck">{{ getMediaTypeText(deck.mediaType) }}</template>
                   <template v-else-if="deck.deckType === StudyDeckType.GlobalDynamic">Global Frequency</template>
                   <template v-else>Word List</template>
@@ -895,13 +895,13 @@
                       </span>
                     </div>
                   </Tooltip>
-                  <div class="flex gap-3 mt-1 text-xs text-gray-500 flex-wrap">
+                  <div class="flex gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
                     <span>{{ deck.unseenCount }} unknown</span>
                     <span class="text-purple-400">{{ deck.learningCount }} learning</span>
                     <span class="text-purple-500">{{ deck.youngCount }} young</span>
                     <span class="text-purple-700 dark:text-purple-300">{{ deck.matureCount + deck.masteredCount }} mature</span>
                     <span v-if="deck.suspendedCount > 0" class="text-amber-500">{{ deck.suspendedCount }} suspended</span>
-                    <span v-if="deck.blacklistedCount > 0" class="text-gray-400 dark:text-gray-500">{{ deck.blacklistedCount }} blacklisted</span>
+                    <span v-if="deck.blacklistedCount > 0" class="text-gray-400 dark:text-gray-400">{{ deck.blacklistedCount }} blacklisted</span>
                     <span v-if="deck.dueReviewCount > 0" class="text-blue-500 font-semibold">{{ deck.dueReviewCount }} due</span>
                   </div>
                   <div v-if="deck.warning" class="text-xs text-yellow-500 mt-1">{{ deck.warning }}</div>

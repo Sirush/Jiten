@@ -64,7 +64,7 @@
             {{ pos }}
           </span>
         </div>
-        <div class="text-xs text-gray-400 dark:text-gray-500 shrink-0">
+        <div class="text-xs text-gray-400 dark:text-gray-400 shrink-0">
           <span v-if="entry.frequencyRank < 2147483647">#{{ entry.frequencyRank.toLocaleString() }}</span>
         </div>
       </div>

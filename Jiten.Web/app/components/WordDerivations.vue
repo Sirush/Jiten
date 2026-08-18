@@ -30,7 +30,7 @@
           <span class="text-xl font-medium" lang="ja" v-html="convertToRuby(link.rubyText || link.text)" />
           <span class="text-surface-600 dark:text-surface-400 text-xs max-w-[14rem] line-clamp-2">
             {{ link.categoryLabel }}
-            <span v-if="link.enabled === false" class="text-surface-500 dark:text-surface-500">(not counted as known)</span>
+            <span v-if="link.enabled === false" class="text-surface-500 dark:text-surface-400">(not counted as known)</span>
           </span>
         </NuxtLink>
       </div>

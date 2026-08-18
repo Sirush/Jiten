@@ -523,7 +523,7 @@
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Selected File</label>
                   <div class="flex items-center">
-                    <span class="text-sm text-gray-600">{{ selectedFile.name }}</span>
+                    <span class="text-sm text-gray-600 dark:text-gray-400">{{ selectedFile.name }}</span>
                     <Button class="p-button-text p-button-sm ml-2" @click="selectedFile = null">
                       <Icon name="material-symbols-light:close" class="w-full" size="1.5em" />
                     </Button>
@@ -630,7 +630,7 @@
                 />
               </div>
               <div v-else class="flex items-center">
-                <span class="text-sm text-gray-600">{{ subdeck.file.name }}</span>
+                <span class="text-sm text-gray-600 dark:text-gray-400">{{ subdeck.file.name }}</span>
               </div>
             </template>
           </Card>
@@ -700,7 +700,7 @@
     justify-content: center;
     align-items: center;
     border: 2px dashed #ccc;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     transition: all 0.3s ease;
     text-align: center;
   }

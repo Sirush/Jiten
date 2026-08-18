@@ -78,8 +78,8 @@
     <div v-if="current" class="flex flex-col gap-4">
       <div>
         <span class="font-noto-sans text-lg">{{ current.word }}</span>
-        <span v-if="current.reading" class="text-sm text-surface-500 ml-2 font-noto-sans">{{ current.reading }}</span>
-        <span class="text-sm text-surface-500 ml-2">({{ current.kind }})</span>
+        <span v-if="current.reading" class="text-sm text-surface-500 dark:text-surface-400 ml-2 font-noto-sans">{{ current.reading }}</span>
+        <span class="text-sm text-surface-500 dark:text-surface-400 ml-2">({{ current.kind }})</span>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -92,7 +92,7 @@
             class="max-h-48 w-full rounded border border-surface-200 dark:border-surface-700 object-contain bg-surface-50 dark:bg-surface-800"
           />
           <audio v-else :src="current.current.url" controls class="w-full" />
-          <p class="text-xs text-surface-500">{{ formatBytes(current.current.fileSizeBytes) }}</p>
+          <p class="text-xs text-surface-500 dark:text-surface-400">{{ formatBytes(current.current.fileSizeBytes) }}</p>
         </div>
 
         <div class="flex flex-col gap-2">
@@ -113,10 +113,10 @@
             />
             <audio v-else :src="incomingUrl" controls class="w-full" />
           </template>
-          <p v-if="incomingBytes !== null" class="text-xs text-surface-500">
+          <p v-if="incomingBytes !== null" class="text-xs text-surface-500 dark:text-surface-400">
             {{ formatBytes(incomingBytes) }}<span v-if="current.kind === 'image'"> before Jiten re-compresses it</span>
           </p>
-          <p class="text-xs text-surface-500 font-noto-sans break-all">{{ current.filename }}</p>
+          <p class="text-xs text-surface-500 dark:text-surface-400 font-noto-sans break-all">{{ current.filename }}</p>
         </div>
       </div>
 
@@ -140,6 +140,6 @@
       </div>
     </div>
 
-    <p v-else class="text-sm text-surface-500">All conflicts reviewed.</p>
+    <p v-else class="text-sm text-surface-500 dark:text-surface-400">All conflicts reviewed.</p>
   </Dialog>
 </template>

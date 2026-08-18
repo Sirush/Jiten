@@ -15,7 +15,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   minVisibleItems: 1,
   buttonBuffer: 80,
-  gapSize: 6,
+  gapSize: 16,
 });
 
 const localiseTitle = useLocaliseTitle();
@@ -161,9 +161,9 @@ const toggleExpanded = () => {
   <div
     v-if="sortedRelationships.length > 0"
     ref="containerRef"
-    class="flex flex-wrap gap-1.5 items-center w-full relative"
+    class="flex flex-wrap gap-x-4 gap-y-1 items-center w-full relative"
   >
-    <span ref="labelRef" class="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1 shrink-0">
+    <span ref="labelRef" class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mr-1 shrink-0">
       Related
     </span>
 
@@ -173,10 +173,10 @@ const toggleExpanded = () => {
       :ref="(el: any) => { if (el) itemRefs[index] = el.$el || el }"
       :to="`/decks/media/${rel.targetDeckId}/detail`"
       v-show="expanded || index < visibleCount || isCalculating"
-      class="px-2 py-0.5 bg-surface-100 dark:bg-surface-900/50 text-surface-700 dark:text-surface-200 rounded-full text-xs hover:bg-surface-200 dark:hover:bg-surface-800/50 transition-colors whitespace-nowrap"
+      class="text-xs whitespace-nowrap no-underline hover:underline underline-offset-2 transition-colors"
     >
-      <span class="font-medium">{{ getRelationshipTypeLabel(rel.relationshipType) }}:</span>
-      <span class="ml-1">{{ localiseTitle(rel.targetDeck) }}</span>
+      <span class="text-gray-600 dark:text-gray-400">{{ getRelationshipTypeLabel(rel.relationshipType) }}:</span>
+      <span class="ml-1 text-primary">{{ localiseTitle(rel.targetDeck) }}</span>
     </NuxtLink>
 
     <Tag
@@ -196,7 +196,7 @@ const toggleExpanded = () => {
       v-if="deckId != null"
       ref="franchiseRef"
       :to="`/decks/media/${deckId}/franchise`"
-      class="px-2 py-0.5 rounded-full text-xs whitespace-nowrap border border-primary text-primary font-medium hover:bg-primary/10 transition-colors"
+      class="text-xs whitespace-nowrap text-primary font-medium no-underline hover:underline underline-offset-2 transition-colors"
     >
       View franchise →
     </NuxtLink>

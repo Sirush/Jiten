@@ -118,7 +118,7 @@
         <button
           v-if="canEdit"
           class="inline-flex items-center justify-center transition-colors mt-0.5 shrink-0"
-          :class="favourited ? 'text-yellow-500' : atLimit ? 'text-surface-300 dark:text-surface-600 cursor-not-allowed' : 'text-surface-400 hover:text-yellow-500'"
+          :class="favourited ? 'text-yellow-500' : atLimit ? 'text-surface-300 dark:text-surface-400 cursor-not-allowed' : 'text-surface-400 hover:text-yellow-500'"
           :disabled="favourited || atLimit"
           :title="atLimit ? sentenceLimitMessage : 'Save as custom sentence'"
           @click="favouriteSentence"
@@ -128,7 +128,7 @@
         <button
           v-if="canEdit"
           class="inline-flex items-center justify-center transition-colors mt-0.5 shrink-0"
-          :class="atLimit ? 'text-surface-300 dark:text-surface-600 cursor-not-allowed' : 'text-surface-400 hover:text-primary-500 cursor-pointer'"
+          :class="atLimit ? 'text-surface-300 dark:text-surface-400 cursor-not-allowed' : 'text-surface-400 hover:text-primary-500 cursor-pointer'"
           :disabled="atLimit"
           :title="atLimit ? sentenceLimitMessage : 'Edit sentence'"
           @click="editing = true"

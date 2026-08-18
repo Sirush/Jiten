@@ -307,7 +307,7 @@
   aspect-ratio: 1;
   font-size: 1.25rem;
   font-weight: 500;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   transition: transform 0.1s, box-shadow 0.1s;
   text-decoration: none;
 }
@@ -324,7 +324,7 @@
   padding: 0.5rem 0.75rem;
   background: var(--p-surface-800);
   color: var(--p-surface-0);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 0.875rem;
   pointer-events: none;
   white-space: nowrap;

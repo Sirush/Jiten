@@ -295,7 +295,9 @@
           :total-items="totalItems"
           item-label="decks"
         />
-        <div v-if="hasSubdecksToShow" class="flex flex-row flex-wrap items-stretch gap-2 justify-center pt-4">
+        <!-- Grid rather than flex-wrap: justify-content centres the track block while items still fill
+             left-to-right, so a final short row starts at column 1 instead of centring its orphan. -->
+        <div v-if="hasSubdecksToShow" class="grid grid-cols-[repeat(auto-fit,20rem)] items-stretch gap-2 justify-center pt-4">
           <MediaDeckCard v-for="deck in response.data.subDecks" :key="deck.deckId" :deck="deck" title-tag="h3" :is-compact="true" @update:deck="updateSubDeck" @parent-status-changed="updateParentStatus" />
         </div>
         <div v-else class="pt-6 text-center text-surface-500 dark:text-surface-400">
@@ -309,7 +311,7 @@
       </div>
     </div>
     <div v-else class="text-center py-12 flex flex-col items-center gap-4">
-      <p class="text-surface-500">Failed to load this deck.</p>
+      <p class="text-surface-500 dark:text-surface-400">Failed to load this deck.</p>
       <Button label="Retry" icon="pi pi-refresh" @click="refreshDetail()" />
     </div>
   </div>

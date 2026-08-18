@@ -447,7 +447,7 @@ onMounted(() => {
             </Column>
             <Column field="externalTagName" header="External Tag Name" />
           </DataTable>
-          <div v-else class="text-center py-8 text-gray-500">
+          <div v-else class="text-center py-8 text-gray-500 dark:text-gray-400">
             No existing mappings for this tag
           </div>
         </div>

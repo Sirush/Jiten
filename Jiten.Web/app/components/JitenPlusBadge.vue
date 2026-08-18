@@ -29,7 +29,7 @@
     display: inline-flex;
     align-items: center;
     padding: 0.1rem 0.5rem;
-    border-radius: 0.375rem;
+    border-radius: var(--radius-md);
     font-size: 0.7rem;
     font-weight: 600;
     line-height: 1.25;

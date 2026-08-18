@@ -36,7 +36,7 @@
         :class="
           tab.match(route.path)
             ? 'border-primary-500 font-semibold !text-primary-600 dark:!text-primary-400'
-            : 'border-transparent !text-surface-500 dark:!text-surface-400 hover:!text-surface-700 dark:hover:!text-surface-200'
+            : 'border-transparent !text-surface-500 dark:text-surface-400 dark:!text-surface-400 hover:!text-surface-700 dark:hover:!text-surface-200'
         "
       >
         {{ tab.label }}

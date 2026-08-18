@@ -119,7 +119,7 @@
 
 <template>
   <span :class="['tabular-nums font-bold whitespace-nowrap', difficultyClass]">
-    <span v-if="hasVotesButSmallAdjustment && !useStars" class="text-xs mr-0.5 text-gray-400 dark:text-gray-500">&asymp;</span>
+    <span v-if="hasVotesButSmallAdjustment && !useStars" class="text-xs mr-0.5 text-gray-400 dark:text-gray-400">&asymp;</span>
     <span v-else-if="arrowIndicator && !useStars" :class="['text-xs mr-0.5', arrowClass]">{{ arrowIndicator }}</span>
     {{ difficultyText }}
     <span v-if="voteCount && voteCount >= 3" class="text-xs font-normal text-muted-color ml-1"></span>

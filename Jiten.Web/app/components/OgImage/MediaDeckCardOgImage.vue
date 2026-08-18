@@ -59,7 +59,7 @@
         {{ title.slice(0, 20) }}
       </h1>
 
-      <span class="text-gray-600" style="font-size: 1.5rem; margin-bottom: 32px">
+      <span class="text-gray-600 dark:text-gray-400" style="font-size: 1.5rem; margin-bottom: 32px">
         {{ getMediaTypeText(mediaType ?? (0 as MediaType)) }}
       </span>
 
@@ -73,7 +73,7 @@
           :style="{
             marginBottom: '2px',
             padding: '2px 2px',
-            borderRadius: '4px',
+            borderRadius: '2px',
             backgroundColor: index % 2 === 0 ? '#f6f6f6' : '#e2e2e2',
           }"
         >
@@ -86,7 +86,7 @@
           class="flex justify-between mb-8 px-4 py-2 rounded-md"
           :style="{
             padding: '2px 2px',
-            borderRadius: '4px',
+            borderRadius: '2px',
             backgroundColor: '#ad45fe11',
           }"
         >
@@ -107,7 +107,7 @@
     class="bg-white text-black border border-gray-300 flex items-center justify-center"
     style="width: 1200px; height: 630px; padding: 32px; font-family: 'Noto Sans JP', sans-serif"
   >
-    <span class="text-gray-500">Loading OG Image...</span>
+    <span class="text-gray-500 dark:text-gray-400">Loading OG Image...</span>
   </div>
 </template>
 

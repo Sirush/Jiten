@@ -49,6 +49,6 @@
     @click="markSeen"
   >
     {{ update.title }}
-    <span class="text-surface-400 dark:text-surface-500">{{ publishedLabel }}</span>
+    <span class="text-surface-400 dark:text-surface-400">{{ publishedLabel }}</span>
   </HomeStrip>
 </template>

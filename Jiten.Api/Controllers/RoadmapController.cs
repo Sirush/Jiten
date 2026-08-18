@@ -597,7 +597,7 @@ public class RoadmapController(
         definition.GoalComprehensionTarget = Math.Clamp(dto.GoalComprehensionTarget ?? 0.95, 0.50, 0.99);
 
         definition.IncludeLearningWords = dto.IncludeLearningWords ?? true;
-        definition.AcquisitionThreshold = Math.Clamp(dto.AcquisitionThreshold ?? 5, 1, 50);
+        definition.AcquisitionThreshold = Math.Clamp(dto.AcquisitionThreshold ?? 12, 1, 50);
         definition.Steps = Math.Clamp(dto.Steps ?? 5, RoadmapDefinition.MinSteps, RoadmapDefinition.MaxSteps);
         definition.GoalSteps = Math.Clamp(dto.GoalSteps ?? RoadmapDefinition.MaxGoalSteps,
                                           RoadmapDefinition.MinSteps, RoadmapDefinition.MaxGoalSteps);

@@ -68,7 +68,7 @@
             height="64px"
             :separate-prior="jitenStore.separatePriorKnowledge"
           />
-          <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+          <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-400 mt-0.5">
             <span>{{ rangeStart }}</span>
             <span>Today</span>
           </div>

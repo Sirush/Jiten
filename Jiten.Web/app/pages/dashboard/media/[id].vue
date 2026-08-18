@@ -939,7 +939,7 @@
                 </Button>
               </div>
 
-              <div v-if="links.length === 0" class="p-4 border rounded text-center text-gray-500">No links available. Click "Add Link" to add one.</div>
+              <div v-if="links.length === 0" class="p-4 border rounded text-center text-gray-500 dark:text-gray-400">No links available. Click "Add Link" to add one.</div>
 
               <div v-else class="mb-4">
                 <ul class="list-none p-0">
@@ -1021,7 +1021,7 @@
                 </Button>
               </div>
 
-              <div v-if="aliases.length === 0" class="p-4 border rounded text-center text-gray-500">No aliases available. Click "Add Alias" to add one.</div>
+              <div v-if="aliases.length === 0" class="p-4 border rounded text-center text-gray-500 dark:text-gray-400">No aliases available. Click "Add Alias" to add one.</div>
 
               <div v-else class="mb-4">
                 <ul class="list-none p-0">
@@ -1064,7 +1064,7 @@
                 </Button>
               </div>
 
-              <div v-if="dictionaryEntries.length === 0" class="p-4 border rounded text-center text-gray-500">
+              <div v-if="dictionaryEntries.length === 0" class="p-4 border rounded text-center text-gray-500 dark:text-gray-400">
                 No character names. Click "Add Name" to add one, or fetch metadata to populate automatically.
               </div>
 
@@ -1144,7 +1144,7 @@
             </div>
           </template>
           <template #content>
-            <div v-if="selectedTags.length === 0" class="text-center text-gray-500 py-4">No tags added. Click "Add Tag" to add one.</div>
+            <div v-if="selectedTags.length === 0" class="text-center text-gray-500 dark:text-gray-400 py-4">No tags added. Click "Add Tag" to add one.</div>
 
             <ul v-else class="list-none p-0 space-y-2">
               <li v-for="(tag, index) in selectedTags" :key="tag.tagId" class="flex justify-between items-center p-3 border rounded">
@@ -1205,7 +1205,7 @@
             </div>
           </template>
           <template #content>
-            <div v-if="relationships.length === 0" class="text-center text-gray-500 py-4">
+            <div v-if="relationships.length === 0" class="text-center text-gray-500 dark:text-gray-400 py-4">
               No relationships defined. Click "Add Relationship" to link related media.
             </div>
 
@@ -1232,7 +1232,7 @@
         <!-- Recompute Difficulty Confirmation Dialog -->
         <Dialog v-model:visible="showRecomputeDifficultyDialog" header="Confirm Recompute Difficulty" :modal="true" class="w-full md:w-96">
           <p>Are you sure you want to recompute the difficulty for this deck?</p>
-          <p class="text-sm text-gray-500 mt-2">This will queue a background job to recalculate difficulty scores using the RunPod API.</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">This will queue a background job to recalculate difficulty scores using the RunPod API.</p>
           <template #footer>
             <Button label="Cancel" severity="secondary" text @click="showRecomputeDifficultyDialog = false" />
             <Button
@@ -1248,7 +1248,7 @@
         <!-- Reaggregate Parent Difficulty Confirmation Dialog -->
         <Dialog v-model:visible="showReaggregateDifficultyDialog" header="Confirm Reaggregate Difficulty" :modal="true" class="w-full md:w-96">
           <p>Are you sure you want to reaggregate the difficulty for this deck from its children?</p>
-          <p class="text-sm text-gray-500 mt-2">
+          <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
             This will recalculate the parent difficulty using the existing children's difficulty values without calling the external API.
           </p>
           <template #footer>
@@ -1275,7 +1275,7 @@
                 placeholder="Select relationship type"
                 class="w-full"
               />
-              <p class="mt-1 text-xs text-gray-500">
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Pick what the target is, relative to this deck. E.g. "Sequel" = the target deck is the sequel of this one.
               </p>
             </div>
@@ -1324,7 +1324,7 @@
                 <span class="font-mono">{{ parentTextFile?.name || response?.mainDeck?.originalFileName || '—' }}</span>
               </p>
               <div v-if="parentTextFile" class="flex items-center gap-2">
-                <span class="text-sm text-gray-600">{{ parentTextFile.name }}</span>
+                <span class="text-sm text-gray-600 dark:text-gray-400">{{ parentTextFile.name }}</span>
                 <Button class="p-button-danger p-button-text p-button-sm" @click="parentTextFile = null">
                   <Icon name="material-symbols-light:close" size="1.2em" />
                 </Button>
@@ -1463,7 +1463,7 @@
                   />
                 </div>
                 <div v-else-if="subdeck.file" class="flex items-center">
-                  <span class="text-sm text-gray-600">{{ subdeck.file.name }}</span>
+                  <span class="text-sm text-gray-600 dark:text-gray-400">{{ subdeck.file.name }}</span>
                 </div>
                 <div v-else-if="subdeck.mediaSubdeckId" class="flex items-center">
                   <FileUpload
@@ -1594,7 +1594,7 @@
     justify-content: center;
     align-items: center;
     border: 2px dashed #ccc;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     transition: all 0.3s ease;
     text-align: center;
   }

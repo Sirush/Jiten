@@ -53,7 +53,7 @@
           <span class="text-[clamp(1.5rem,6vw,2.25rem)] font-bold tabular-nums text-primary-600 dark:text-primary-300">
             {{ learned.toLocaleString() }}
           </span>
-          <span class="text-gray-500">{{ learned === 1 ? 'word learned' : 'words learned' }}</span>
+          <span class="text-gray-500 dark:text-gray-400">{{ learned === 1 ? 'word learned' : 'words learned' }}</span>
           <span
             v-if="recentGain !== 0"
             class="text-sm font-semibold"

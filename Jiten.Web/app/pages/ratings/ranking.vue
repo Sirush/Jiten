@@ -613,7 +613,7 @@ onUnmounted(cancelDrag);
   gap: 0.5rem;
   padding: 0.5rem;
   border: 1px solid var(--surface-200);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-lg);
   background: var(--surface-0);
   cursor: grab;
   transition: border-color 0.2s ease, background-color 0.2s ease;
@@ -639,7 +639,7 @@ onUnmounted(cancelDrag);
   width: 1.5rem;
   height: 1.5rem;
   border: none;
-  border-radius: 0.25rem;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--surface-400);
   font-size: 0.75rem;
@@ -665,7 +665,7 @@ onUnmounted(cancelDrag);
 .expand-toggle {
   background: none;
   border: 1px dashed var(--surface-300);
-  border-radius: 0.375rem;
+  border-radius: var(--radius-md);
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
   color: var(--primary-500);
@@ -730,7 +730,7 @@ onUnmounted(cancelDrag);
 .drop-gap-line {
   flex: 1;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-xs);
   background: var(--primary-300);
 }
 
@@ -768,7 +768,7 @@ onUnmounted(cancelDrag);
 
 .empty-drop {
   border: 1px dashed var(--surface-300);
-  border-radius: 0.75rem;
+  border-radius: var(--radius-xl);
   padding: 2rem;
   text-align: center;
 }
@@ -780,7 +780,7 @@ onUnmounted(cancelDrag);
 
 :deep(.is-drop-active .p-card-body) {
   border: 1px solid var(--primary-300);
-  border-radius: 0.75rem;
+  border-radius: var(--radius-xl);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
 }
 
@@ -790,7 +790,7 @@ onUnmounted(cancelDrag);
 }
 
 .rank-group {
-  border-radius: 0.5rem;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 </style>

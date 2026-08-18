@@ -66,7 +66,7 @@ async function rate(rating: number) {
 <style scoped>
 .difficulty-btn {
   padding: 0.375rem 0.75rem;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-md);
   border: 1px solid var(--diff-bg);
   background: transparent;
   color: inherit;

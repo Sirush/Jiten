@@ -129,7 +129,7 @@
     </div>
 
     <div v-if="message" class="mt-2 text-center text-sm text-red-500 dark:text-red-400">{{ message }}</div>
-    <div v-else class="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-500">
+    <div v-else class="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-400">
       <span v-if="mode === 'reading'">Romaji, kana or kanji</span>
       <span class="hidden md:inline">Press <kbd class="font-sans">Enter</kbd> to check</span>
     </div>

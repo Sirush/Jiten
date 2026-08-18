@@ -153,7 +153,7 @@
   .jiten-plus-gate__overlay:focus-visible {
     outline: 2px solid var(--p-primary-500);
     outline-offset: -2px;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-lg);
   }
 
   .jiten-plus-gate__dot {
@@ -183,6 +183,6 @@
   .jiten-plus-gate--compact:focus-visible {
     outline: 2px solid var(--p-primary-500);
     outline-offset: 2px;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-lg);
   }
 </style>

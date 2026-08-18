@@ -32,6 +32,21 @@
 
   type Plan = 'monthly' | 'yearly' | 'lifetime';
 
+  const route = useRoute();
+  const router = useRouter();
+
+  const loginLink = (plan: Plan) => ({ path: '/login', query: { redirect: `/jiten-plus?plan=${plan}` } });
+
+  // Resumes a checkout intent carried through login via ?plan=; the query is cleared so a refresh doesn't restart it.
+  onMounted(async () => {
+    const raw = Array.isArray(route.query.plan) ? route.query.plan[0] : route.query.plan;
+    if (!raw || !auth.isAuthenticated || isFull.value) return;
+    const plan = (['monthly', 'yearly', 'lifetime'] as Plan[]).find((p) => p === raw);
+    if (!plan || (plan === 'lifetime' && !lifetimeAvailable.value)) return;
+    await router.replace({ query: { ...route.query, plan: undefined } });
+    await subscribe(plan);
+  });
+
   // A sale needs recorded acceptance of the Terms of Sale; the API refuses checkout without it.
   const consentPlan = ref<Plan | null>(null);
   const consentTicked = ref(false);
@@ -90,7 +105,10 @@
       <!-- Monthly -->
       <div class="jp-card border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
         <h2 class="jp-card__name text-gray-900 dark:text-white">Monthly</h2>
-        <div class="jp-card__price"><span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.monthlyEur }}</span><span class="jp-card__period text-gray-500 dark:text-gray-400">/ month</span></div>
+        <div class="jp-card__price">
+          <span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.monthlyEur }}</span
+          ><span class="jp-card__period text-gray-500 dark:text-gray-400">/ month</span>
+        </div>
         <p class="jp-card__blurb text-gray-600 dark:text-gray-300">Stay flexible. Cancel anytime.</p>
         <ul class="jp-card__notes text-gray-600 dark:text-gray-300">
           <li>
@@ -99,8 +117,8 @@
           </li>
         </ul>
         <div class="jp-card__cta">
-          <NuxtLink v-if="!auth.isAuthenticated" to="/login" class="block">
-            <Button label="Log in to choose monthly" severity="secondary" class="w-full" />
+          <NuxtLink v-if="!auth.isAuthenticated" :to="loginLink('monthly')" class="block">
+            <Button label="Choose monthly" severity="secondary" class="w-full" />
           </NuxtLink>
           <NuxtLink v-else-if="isFull" to="/settings/subscription" class="block">
             <Button label="Manage subscription" severity="secondary" outlined class="w-full" />
@@ -113,7 +131,10 @@
       <div class="jp-card jp-card--featured border border-primary-400 bg-white dark:border-primary-500 dark:bg-gray-900">
         <span class="jp-card__ribbon">Best value · 2 months free</span>
         <h2 class="jp-card__name text-gray-900 dark:text-white">Yearly</h2>
-        <div class="jp-card__price"><span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.yearlyEur }}</span><span class="jp-card__period text-gray-500 dark:text-gray-400">/ year</span></div>
+        <div class="jp-card__price">
+          <span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.yearlyEur }}</span
+          ><span class="jp-card__period text-gray-500 dark:text-gray-400">/ year</span>
+        </div>
         <p class="jp-card__blurb text-gray-600 dark:text-gray-300">A full year for the price of 10 months.</p>
         <ul class="jp-card__notes text-gray-600 dark:text-gray-300">
           <li>
@@ -122,8 +143,8 @@
           </li>
         </ul>
         <div class="jp-card__cta">
-          <NuxtLink v-if="!auth.isAuthenticated" to="/login" class="block">
-            <Button label="Log in to choose yearly" class="w-full" />
+          <NuxtLink v-if="!auth.isAuthenticated" :to="loginLink('yearly')" class="block">
+            <Button label="Choose yearly" class="w-full" />
           </NuxtLink>
           <NuxtLink v-else-if="isFull" to="/settings/subscription" class="block">
             <Button label="Manage subscription" outlined class="w-full" />
@@ -140,7 +161,10 @@
       >
         <span v-if="showLifetimeNotice" class="jp-card__ribbon jp-card__ribbon--amber">Limited offer · until {{ lifetimeWindowEndLabel }}</span>
         <h2 class="jp-card__name text-gray-900 dark:text-white">Lifetime</h2>
-        <div class="jp-card__price"><span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.lifetimeEur }}</span><span class="jp-card__period text-gray-500 dark:text-gray-400">once</span></div>
+        <div class="jp-card__price">
+          <span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.lifetimeEur }}</span
+          ><span class="jp-card__period text-gray-500 dark:text-gray-400">once</span>
+        </div>
         <p class="jp-card__blurb text-gray-600 dark:text-gray-300">Pay once, access Jiten+ forever.</p>
 
         <template v-if="isFull && isLifetime">
@@ -158,8 +182,8 @@
             </li>
           </ul>
           <div class="jp-card__cta">
-            <NuxtLink v-if="!auth.isAuthenticated" to="/login" class="block">
-              <Button label="Log in to get lifetime" severity="warn" class="w-full" />
+            <NuxtLink v-if="!auth.isAuthenticated" :to="loginLink('lifetime')" class="block">
+              <Button label="Get lifetime access" severity="warn" class="w-full" />
             </NuxtLink>
             <Button v-else label="Get lifetime access" severity="warn" class="w-full" :loading="checkingOut === 'lifetime'" @click="subscribe('lifetime')" />
           </div>
@@ -191,9 +215,7 @@
       />
     </div>
 
-    <p class="text-center text-sm text-gray-600 dark:text-gray-300 mt-4">
-      Cancel anytime. Cards, uploads, and lists are never deleted.
-    </p>
+    <p class="text-center text-sm text-gray-600 dark:text-gray-300 mt-4">Cancel anytime. Cards, uploads, and lists are never deleted.</p>
     <p class="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">Patreon and Ko-fi contributions are donation-only and don't include Jiten+.</p>
   </div>
 </template>
@@ -207,7 +229,7 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    border-radius: 0.9rem;
+    border-radius: var(--radius-xl);
     padding: 1.5rem 1.25rem;
   }
 

@@ -477,7 +477,7 @@
         <Icon name="material-symbols:book-2" size="28" class="text-purple-500 shrink-0" />
         <div>
           <div class="font-semibold">Media Deck</div>
-          <div class="text-sm text-gray-500">Study vocabulary from anime, novels, games, etc.</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">Study vocabulary from anime, novels, games, etc.</div>
         </div>
       </button>
       <button
@@ -487,7 +487,7 @@
         <Icon name="material-symbols:language" size="28" class="text-blue-500 shrink-0" />
         <div>
           <div class="font-semibold">Global Frequency</div>
-          <div class="text-sm text-gray-500">Study words by overall Japanese frequency rank.</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">Study words by overall Japanese frequency rank.</div>
         </div>
       </button>
       <button
@@ -497,7 +497,7 @@
         <Icon name="material-symbols:list-alt" size="28" class="text-green-500 shrink-0" />
         <div>
           <div class="font-semibold">Word List</div>
-          <div class="text-sm text-gray-500">Create a custom word list or import from file. Also used for mining with Jiten Reader.</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">Create a custom word list or import from file. Also used for mining with Jiten Reader.</div>
         </div>
       </button>
     </div>
@@ -506,7 +506,7 @@
     <div v-if="step === 'search'">
       <div class="flex items-center gap-2 mb-4">
         <Button icon="pi pi-arrow-left" severity="secondary" text size="small" @click="goBack" />
-        <span class="text-sm text-gray-500">Search for a media deck</span>
+        <span class="text-sm text-gray-500 dark:text-gray-400">Search for a media deck</span>
       </div>
       <div class="mb-4">
         <InputText v-model="searchQuery" placeholder="Type to search..." class="w-full" autofocus />
@@ -533,10 +533,10 @@
           />
           <div class="flex-1 min-w-0">
             <div class="text-sm font-medium truncate">{{ localiseTitle(result) }}</div>
-            <div class="text-xs text-gray-500">{{ getMediaTypeText(result.mediaType) }}</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ getMediaTypeText(result.mediaType) }}</div>
           </div>
         </div>
-        <div v-if="searchQuery.length >= 2 && searchResults.length === 0 && !searching" class="text-center text-sm text-gray-500 py-4">
+        <div v-if="searchQuery.length >= 2 && searchResults.length === 0 && !searching" class="text-center text-sm text-gray-500 dark:text-gray-400 py-4">
           No results found
         </div>
       </div>
@@ -624,7 +624,7 @@
       <div class="flex items-center justify-between mb-3">
         <span class="text-sm text-gray-600 dark:text-gray-300 inline-flex items-center gap-2">
           <template v-if="isCountLoading">
-            <i class="pi pi-spin pi-spinner text-gray-400 dark:text-gray-500 text-xs" />
+            <i class="pi pi-spin pi-spinner text-gray-400 dark:text-gray-400 text-xs" />
             <span>Counting...</span>
           </template>
           <template v-else-if="previewCount !== null">
@@ -713,7 +713,7 @@
           <input
             type="file"
             :accept="IMPORT_ACCEPT_ATTR"
-            class="block w-full text-sm text-gray-500
+            class="block w-full text-sm text-gray-500 dark:text-gray-400
               file:mr-4 file:py-2 file:px-4
               file:rounded file:border-0
               file:text-sm file:font-semibold
@@ -777,7 +777,7 @@
     <div v-if="step === 'static-import-preview'">
       <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
         <Button icon="pi pi-arrow-left" severity="secondary" text size="small" @click="goBack" />
-        <span class="text-sm text-gray-500">{{ importTotalLines }} lines parsed</span>
+        <span class="text-sm text-gray-500 dark:text-gray-400">{{ importTotalLines }} lines parsed</span>
       </div>
 
       <SrsImportPreview

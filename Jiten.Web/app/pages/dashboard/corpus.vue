@@ -278,7 +278,7 @@
           label: 'Occ/M chars',
           data: sorted.map((m) => +m.hitsPerMillion.toFixed(1)),
           backgroundColor: '#bd93f9',
-          borderRadius: 4,
+          borderRadius: 2,
         },
       ],
     };
@@ -294,7 +294,7 @@
           label: 'Matching Decks',
           data: buckets.map((d) => d.deckCount),
           backgroundColor: '#50fa7b',
-          borderRadius: 4,
+          borderRadius: 2,
         },
       ],
     };
@@ -574,7 +574,7 @@
       <template #content>
         <div class="flex flex-col gap-5">
           <div class="flex flex-col gap-2">
-            <label class="text-xs font-medium text-surface-500">Search terms (up to 15)</label>
+            <label class="text-xs font-medium text-surface-500 dark:text-surface-400">Search terms (up to 15)</label>
             <span class="text-xs text-surface-400">Quickly add a new term by typing or pasting with these separators <code>,</code> <code>;</code> <code>；</code> <code>/</code></span>
             <span class="text-xs text-surface-400"
               >Exclude a longer form with the minus operator <code>-</code></span
@@ -604,24 +604,24 @@
 
           <div class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
             <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-medium text-surface-500">Media types</label>
+              <label class="text-xs font-medium text-surface-500 dark:text-surface-400">Media types</label>
               <MultiSelect v-model="selectedMediaTypes" :options="mediaTypeOptions" option-label="label" option-value="value" placeholder="All types" fluid />
             </div>
 
             <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-medium text-surface-500">Max snippets</label>
+              <label class="text-xs font-medium text-surface-500 dark:text-surface-400">Max snippets</label>
               <InputNumber v-model="maxSnippets" :min="1" :max="50" show-buttons fluid />
             </div>
 
             <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-medium text-surface-500">Difficulty: {{ difficultyRange[0] }}–{{ difficultyRange[1] }}</label>
+              <label class="text-xs font-medium text-surface-500 dark:text-surface-400">Difficulty: {{ difficultyRange[0] }}–{{ difficultyRange[1] }}</label>
               <div class="px-2 py-3">
                 <Slider v-model="difficultyRange" :min="0" :max="5" :step="0.5" range />
               </div>
             </div>
 
             <div class="flex flex-col gap-1.5 sm:col-span-2">
-              <label class="text-xs font-medium text-surface-500">Release year range</label>
+              <label class="text-xs font-medium text-surface-500 dark:text-surface-400">Release year range</label>
               <div class="flex items-center gap-2">
                 <InputNumber v-model="minYear" placeholder="From" :use-grouping="false" fluid />
                 <span class="text-surface-400">–</span>
@@ -655,7 +655,7 @@
             v-if="publishedUrl"
             class="flex flex-wrap items-center gap-2 rounded border border-surface-200 bg-surface-50 p-2 dark:border-surface-700 dark:bg-surface-900/40"
           >
-            <span class="text-xs font-medium text-surface-500">Published report:</span>
+            <span class="text-xs font-medium text-surface-500 dark:text-surface-400">Published report:</span>
             <a :href="publishedUrl" target="_blank" rel="noopener" class="flex-1 truncate text-sm text-primary-400 hover:underline">{{ publishedUrl }}</a>
             <Button
               :label="publishedUrlCopied ? 'Copied!' : 'Copy link'"
@@ -679,7 +679,7 @@
         class="mb-4 rounded border border-surface-200 bg-surface-50 p-3 text-sm dark:border-surface-700 dark:bg-surface-900/40"
       >
         <div class="mb-1 flex flex-wrap items-baseline gap-x-5 gap-y-1">
-          <span class="text-xs font-semibold uppercase tracking-wide text-surface-500">
+          <span class="text-xs font-semibold uppercase tracking-wide text-surface-500 dark:text-surface-400">
             {{ searchResponse.filteredScope.hasFilters ? 'Filtered scope' : 'Searchable corpus' }}
           </span>
           <span class="text-surface-700 dark:text-surface-200"
@@ -739,12 +739,12 @@
             </Column>
           </DataTable>
 
-          <p class="mt-2 text-xs text-surface-500">
+          <p class="mt-2 text-xs text-surface-500 dark:text-surface-400">
             <strong>Matching Decks</strong> counts every individual deck, including sub-decks (each chapter / episode / volume).
             <strong>Works (range)</strong> collapses those sub-decks to their parent title, so a term in all chapters of one novel counts as many decks
             but a single work — the % is the share of all works in the corpus.
           </p>
-          <p class="mt-1 text-xs text-surface-500">
+          <p class="mt-1 text-xs text-surface-500 dark:text-surface-400">
             <strong>Dispersion</strong> (Gries' Deviation of Proportions) measures how evenly the term is spread across media types relative to each
             register's size: <strong>0</strong> = used in proportion everywhere, <strong>1</strong> = concentrated in a single register (e.g. only in
             subtitles or only in novels).
@@ -764,7 +764,7 @@
               </Column>
             </DataTable>
 
-            <p class="mt-2 text-xs text-surface-500">
+            <p class="mt-2 text-xs text-surface-500 dark:text-surface-400">
               <strong>Shared Decks</strong> is the number of decks containing both terms (deck-level, like Matching Decks).
               <strong>Overlap %</strong> = shared ÷ the rarer term's decks — "what share of the less common term's decks also contain the other"
               (reaches 100% if one term's decks are a subset of the other's).
@@ -863,7 +863,7 @@
               <span>Concordance ({{ activeResult.snippets.length }} citations · one per work)</span>
               <div class="flex items-center gap-2">
                 <template v-if="kwicAvailable">
-                  <span class="text-xs text-surface-500" title="Reorder citations by the context around the match, so recurring patterns line up"
+                  <span class="text-xs text-surface-500 dark:text-surface-400" title="Reorder citations by the context around the match, so recurring patterns line up"
                     >Sort by context:</span
                   >
                   <Button
@@ -940,7 +940,7 @@
     background: var(--p-surface-200);
     color: var(--p-surface-800);
     padding: 0 4px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     font-size: 0.85em;
   }
 
