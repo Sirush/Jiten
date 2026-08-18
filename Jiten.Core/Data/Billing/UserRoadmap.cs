@@ -110,7 +110,7 @@ public class RoadmapDefinition
     public double GoalComprehensionTarget { get; set; } = 0.95;
 
     /// <summary>Occurrences of a word within one deck before it counts as acquired by reading it.</summary>
-    public int AcquisitionThreshold { get; set; } = 5;
+    public int AcquisitionThreshold { get; set; } = 12;
 
     /// <summary>Count young cards as known; true matches the site's "Total coverage" figure, false plain "Coverage".</summary>
     public bool IncludeLearningWords { get; set; } = true;
