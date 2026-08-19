@@ -9,6 +9,7 @@ public class DeckDifficultyDto
     public DateTimeOffset LastUpdated { get; set; }
     public int DistinctVoterCount { get; set; }
     public decimal UserAdjustment { get; set; }
+    public decimal AdjustmentConfidence { get; set; }
 }
 
 public class ProgressionSegmentDto

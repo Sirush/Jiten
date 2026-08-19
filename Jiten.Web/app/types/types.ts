@@ -64,6 +64,7 @@ export interface Deck {
   isIgnored?: boolean;
   distinctVoterCount: number;
   userAdjustment: number;
+  adjustmentConfidence: number;
   originalFileName?: string | null;
 }
 
@@ -747,6 +748,7 @@ export interface DeckDifficultyDto {
   lastUpdated: Date;
   distinctVoterCount: number;
   userAdjustment: number;
+  adjustmentConfidence: number;
 }
 
 // WordSet types

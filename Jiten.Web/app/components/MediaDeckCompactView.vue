@@ -119,7 +119,7 @@
             <div v-if="deck.difficulty != -1" class="flex justify-between">
               <span>Difficulty:</span>
               <Tooltip :content="difficultyRef?.tooltip ?? ''">
-                <DifficultyDisplay ref="difficultyRef" :difficulty="deck.difficulty" :difficulty-raw="deck.difficultyRaw" :difficulty-algorithmic="deck.difficultyAlgorithmic" :user-adjustment="deck.userAdjustment" :vote-count="deck.distinctVoterCount || 0" use-stars />
+                <DifficultyDisplay ref="difficultyRef" :difficulty="deck.difficulty" :difficulty-raw="deck.difficultyRaw" :difficulty-algorithmic="deck.difficultyAlgorithmic" :user-adjustment="deck.userAdjustment" :vote-count="deck.distinctVoterCount || 0" :adjustment-confidence="deck.adjustmentConfidence || 0" use-stars />
               </Tooltip>
             </div>
           </div>

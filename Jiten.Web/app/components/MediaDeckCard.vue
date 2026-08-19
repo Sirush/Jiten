@@ -512,6 +512,7 @@
                             :difficulty-algorithmic="deck.difficultyAlgorithmic"
                             :user-adjustment="deck.userAdjustment"
                             :vote-count="deck.distinctVoterCount || 0"
+                            :adjustment-confidence="deck.adjustmentConfidence || 0"
                           />
                         </div>
                       </Tooltip>

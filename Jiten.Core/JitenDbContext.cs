@@ -304,6 +304,7 @@ public class JitenDbContext : DbContext
             entity.Property(dd => dd.DistinctVoterCount).HasDefaultValue(0);
             entity.Property(dd => dd.UserAdjustment).HasPrecision(4, 2).HasDefaultValue(0m);
             entity.Property(dd => dd.NEffective).HasPrecision(6, 2).HasDefaultValue(0m);
+            entity.Property(dd => dd.AdjustmentConfidence).HasPrecision(4, 3).HasDefaultValue(0m);
 
             entity.HasOne(dd => dd.Deck)
                   .WithOne(d => d.DeckDifficulty)

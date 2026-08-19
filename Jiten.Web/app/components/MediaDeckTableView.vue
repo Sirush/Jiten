@@ -85,7 +85,7 @@
           <div class="flex flex-col items-center w-22" :class="{ 'invisible': deck.difficulty == -1 }">
             <Tooltip :content="difficultyRef?.tooltip ?? ''">
               <div class="text-xs text-gray-600 dark:text-gray-300">Difficulty</div>
-              <DifficultyDisplay ref="difficultyRef" :difficulty="deck.difficulty" :difficulty-raw="deck.difficultyRaw" :difficulty-algorithmic="deck.difficultyAlgorithmic" :user-adjustment="deck.userAdjustment" :vote-count="deck.distinctVoterCount || 0" use-stars />
+              <DifficultyDisplay ref="difficultyRef" :difficulty="deck.difficulty" :difficulty-raw="deck.difficultyRaw" :difficulty-algorithmic="deck.difficultyAlgorithmic" :user-adjustment="deck.userAdjustment" :vote-count="deck.distinctVoterCount || 0" :adjustment-confidence="deck.adjustmentConfidence || 0" use-stars />
             </Tooltip>
           </div>
         </div>

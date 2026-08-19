@@ -2390,7 +2390,8 @@ public class MediaDeckController(
                                                                     }).ToList(),
                    LastUpdated = difficulty.LastUpdated,
                    DistinctVoterCount = difficulty.DistinctVoterCount,
-                   UserAdjustment = difficulty.UserAdjustment
+                   UserAdjustment = difficulty.UserAdjustment,
+                   AdjustmentConfidence = difficulty.AdjustmentConfidence
                };
     }
 

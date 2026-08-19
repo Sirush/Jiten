@@ -33,6 +33,7 @@ public class DifficultyAdjustmentJob(
             dd.DistinctVoterCount = r.DistinctVoterCount;
             dd.UserAdjustment = r.Adjustment;
             dd.NEffective = r.Neff;
+            dd.AdjustmentConfidence = r.Confidence;
         }
 
         await context.SaveChangesAsync();
