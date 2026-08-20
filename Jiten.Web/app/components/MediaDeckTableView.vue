@@ -35,14 +35,14 @@
     return `${hours}h ${minutes}min`;
   });
 
-  const borderColor = computed(() => {
-    if (!authStore.isAuthenticated || store.hideCoverageBorders || (props.deck.coverage == 0 && props.deck.uniqueCoverage == 0)) return 'none';
-    return getCoverageBorder(props.deck.coverage);
-  });
+  const showCoverageStrip = computed(
+    () => authStore.isAuthenticated && !store.hideCoverageBorders && (props.deck.coverage != 0 || props.deck.uniqueCoverage != 0)
+  );
 </script>
 
 <template>
-  <Card :class="lazyRender ? '[content-visibility:auto] [contain-intrinsic-size:auto_4rem]' : ''" :pt="{ body: { style: 'padding: 0.5rem' } }" :style="{ border: borderColor }">
+  <div class="relative" :class="lazyRender ? '[content-visibility:auto] [contain-intrinsic-size:auto_4rem]' : ''">
+  <Card :pt="{ body: { style: 'padding: 0.5rem' } }">
     <template #content>
       <div class="flex flex-row flex-wrap items-center gap-y-2">
         <!-- Title and Media Type -->
@@ -105,6 +105,15 @@
       </div>
     </template>
   </Card>
+
+  <CoverageStrip
+    v-if="showCoverageStrip"
+    :coverage="deck.coverage"
+    :young-coverage="deck.youngCoverage"
+    with-tooltip
+    class="absolute inset-x-0 bottom-0 z-10 rounded-b-[var(--p-card-border-radius)]"
+  />
+  </div>
 
   <LazyMediaDeckDownloadDialog v-if="showDownloadDialog" :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
 </template>

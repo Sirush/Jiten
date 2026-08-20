@@ -24,9 +24,9 @@ Each change is applied immediately to your current page. These settings are stor
 
 ## Trimming down media pages
 
-**Media page sections** is a collapsed row. Click it and seven checkboxes appear: **Hide coverage borders** (logged in only), **Hide genres**, **Hide tags**, **Hide relations**, **Hide descriptions**, **Hide external ratings** and **Hide alternative titles**. This can be useful if you don't care about some info and find the media cards too busy
+**Media page sections** is a collapsed row. Click it and seven checkboxes appear: **Hide coverage indicators** (logged in only), **Hide genres**, **Hide tags**, **Hide relations**, **Hide descriptions**, **Hide external ratings** and **Hide alternative titles**. This can be useful if you don't care about some info and find the media cards too busy
 
-6 of the 7 apply to the full media card, which is what you see on a title's own page and in the card view of a list, and do nothing in the compact and table views. **Hide coverage borders** is the exception: it removes the coloured coverage outline everywhere, including compact rows, table rows and the franchise views.
+6 of the 7 apply to the full media card, which is what you see on a title's own page and in the card view of a list, and do nothing in the compact and table views. **Hide coverage indicators** is the exception: it removes the thin coverage bar along the bottom edge of cards everywhere, including compact tiles, table rows and the franchise views.
 
 ## Reading speed
 

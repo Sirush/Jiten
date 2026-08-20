@@ -322,6 +322,13 @@
   );
 
   const formatOnce = (count: number) => `${count.toLocaleString()} once`;
+
+  const showCoverageStrip = computed(
+    () =>
+      (authStore.isAuthenticated || props.demoCoverage) &&
+      !store.hideCoverageBorders &&
+      (props.deck.coverage != 0 || props.deck.uniqueCoverage != 0)
+  );
 </script>
 
 <template>
@@ -345,6 +352,8 @@
       </div>
     </div>
 
+    <!-- Own positioning context: the calibration banner below would otherwise pull the strip off the card's edge. -->
+    <div class="relative" :class="isCompact ? 'h-full' : ''">
     <Card :class="isCompact ? 'h-full' : ''" :pt="{ body: { style: 'padding: 0.75rem 1rem; gap: 0.25rem' } }">
       <template #title>
         <!-- Compact titles are clipped to a fixed two-line box so sibling cards in a row keep
@@ -422,7 +431,7 @@
                       decoding="async"
                       width="136"
                       height="192"
-                    />
+                    >
                     <Tooltip content="Release date">
                       <div class="mt-2 flex items-center md:justify-center tabular-nums text-gray-600 dark:text-gray-400">
                         {{ formatDateAsYyyyMmDd(new Date(deck.releaseDate)).replace(/-/g, '/') }}
@@ -679,9 +688,18 @@
       </template>
     </Card>
 
+    <CoverageStrip
+      v-if="showCoverageStrip"
+      :coverage="deck.coverage"
+      :young-coverage="deck.youngCoverage"
+      with-tooltip
+      class="absolute inset-x-0 bottom-0 z-10 rounded-b-[var(--p-card-border-radius)]"
+    />
+    </div>
+
     <LazyMediaDeckDownloadDialog v-if="showDownloadDialog" :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
     <LazySrsAddDeckDialog v-if="showStudyDeckDialog" :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
-    <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" @update:visible="showIssueDialog = $event" :deck="deck" />
+    <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" :deck="deck" @update:visible="showIssueDialog = $event" />
 
     <TieredMenu v-if="authStore.isAuthenticated && menuActivated" ref="menu" :model="menuItems" popup />
 
@@ -718,7 +736,7 @@
           <div v-else class="flex flex-col items-center gap-3 py-6">
             <i class="pi pi-check-circle text-green-500 text-4xl" />
             <p class="text-sm text-muted-color text-center">
-              Thanks for helping refine the difficulties! <br />
+              Thanks for helping refine the difficulties! <br >
               <NuxtLink to="/ratings" target="_blank" class="text-primary-500 hover:underline font-semibold"> Compare more media → </NuxtLink>
             </p>
           </div>
@@ -730,7 +748,7 @@
       </div>
     </Dialog>
 
-    <Message v-if="showCalibrationBanner" severity="info" :closable="true" @close="showCalibrationBanner = false" class="mt-2">
+    <Message v-if="showCalibrationBanner" severity="info" :closable="true" class="mt-2" @close="showCalibrationBanner = false">
       Help refine the difficulties -
       <NuxtLink to="/ratings" class="font-semibold underline" target="_blank">compare more media</NuxtLink>
     </Message>

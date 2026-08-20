@@ -1,5 +1,13 @@
 <script lang="ts">
   import { ref } from 'vue';
+</script>
+
+<script setup lang="ts">
+  import { type Deck, MediaType } from '~/types';
+  import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import Card from 'primevue/card';
+  import { useAuthStore } from '~/stores/authStore';
+  import { useJitenStore } from '~/stores/jitenStore';
 
   const openOverlayDeckId = ref<number | null>(null);
 
@@ -9,14 +17,6 @@
   const closeOverlayOnDocumentClick = () => {
     openOverlayDeckId.value = null;
   };
-</script>
-
-<script setup lang="ts">
-  import { type Deck, MediaType } from '~/types';
-  import { getMediaTypeText } from '~/utils/mediaTypeMapper';
-  import Card from 'primevue/card';
-  import { useAuthStore } from '~/stores/authStore';
-  import { useJitenStore } from '~/stores/jitenStore';
 
   const authStore = useAuthStore();
   const store = useJitenStore();
@@ -62,18 +62,16 @@
     if (--overlayListenerUsers === 0) document.removeEventListener('click', closeOverlayOnDocumentClick);
   });
 
-  const borderColor = computed(() => {
-    if (!authStore.isAuthenticated || store.hideCoverageBorders || (props.deck.coverage == 0 && props.deck.uniqueCoverage == 0))
-      return 'none';
-    return getCoverageBorder(props.deck.coverage, '4px');
-  });
+  const showCoverageStrip = computed(
+    () => authStore.isAuthenticated && !store.hideCoverageBorders && (props.deck.coverage != 0 || props.deck.uniqueCoverage != 0)
+  );
 </script>
 
 <template>
   <!-- content-visibility lets the browser skip layout/paint for offscreen tiles;
        the tile is fixed-size so the intrinsic size is exact (w-34 x h-48). -->
   <div class="relative group h-48 w-34 [content-visibility:auto] [contain-intrinsic-size:8.5rem_12rem]">
-    <div class="h-48 w-34 overflow-hidden rounded-md border hover:shadow-md transition-shadow duration-200"   :style="{ 'border': borderColor }">
+    <div class="h-48 w-34 overflow-hidden rounded-md hover:shadow-md transition-shadow duration-200">
       <div class="relative h-full" @click.stop="toggleOverlay">
         <!-- Cover image -->
         <img
@@ -84,7 +82,7 @@
           decoding="async"
           width="136"
           height="192"
-        />
+        >
 
         <!-- Title overlay at bottom -->
         <div class="absolute flex justify-between items-center bottom-0 left-0 right-0 bg-black/75 0 p-1 text-white">
@@ -115,6 +113,10 @@
             <div class="flex justify-between">
               <span>Uniq words:</span>
               <span class="tabular-nums">{{ deck.uniqueWordCount.toLocaleString() }}</span>
+            </div>
+            <div v-if="showCoverageStrip" class="flex justify-between">
+              <span>Coverage:</span>
+              <span class="tabular-nums">{{ deck.coverage.toFixed(1) }}%</span>
             </div>
             <div v-if="deck.difficulty != -1" class="flex justify-between">
               <span>Difficulty:</span>
@@ -148,6 +150,13 @@
             </Button>
           </div>
         </div>
+
+        <CoverageStrip
+          v-if="showCoverageStrip"
+          :coverage="deck.coverage"
+          :young-coverage="deck.youngCoverage"
+          class="absolute inset-x-0 bottom-0 z-10"
+        />
       </div>
     </div>
   </div>
