@@ -18,6 +18,9 @@
           Dictionary data is stored locally in your browser and is never uploaded to the server.
         </p>
         <DictionaryManager />
+        <div class="mt-4 pt-4 border-t border-surface-200 dark:border-surface-700">
+          <DictionaryFontSizeControl :show-label="true" />
+        </div>
       </template>
     </Card>
 

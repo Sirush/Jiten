@@ -125,6 +125,7 @@ export const useJitenStore = defineStore('jiten', () => {
 
   // Drives the unread dot on the home page's "what's new" strip.
   const lastSeenUpdateId = createLocalStorageState<number>('last-seen-update-id', 0);
+  const customDictionaryFontSize = createLocalStorageState<number>('custom-dictionary-font-size', 16);
 
   const coverageVersion = ref(0);
 
@@ -161,6 +162,7 @@ export const useJitenStore = defineStore('jiten', () => {
     hideCoverageJourney,
     separatePriorKnowledge,
     lastSeenUpdateId,
+    customDictionaryFontSize,
     coverageVersion,
     bumpCoverageVersion,
   };
