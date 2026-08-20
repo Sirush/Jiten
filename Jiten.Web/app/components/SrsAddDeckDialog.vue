@@ -132,6 +132,28 @@
   const minFrequency = ref(0);
   const maxFrequency = ref(30000);
   const targetPercentage = ref(80);
+  const targetPercentageModel = computed({
+    get: () => targetPercentage.value,
+    set: (value: number) => {
+      const clamped = Math.min(100, Math.max(1, value ?? 1));
+      targetPercentage.value = Math.round(clamped * 10) / 10;
+    },
+  });
+  const editingTargetPercentage = ref(false);
+  const targetPercentageInput = ref<{ $el?: HTMLElement } | null>(null);
+
+  async function startEditingTargetPercentage() {
+    editingTargetPercentage.value = true;
+    await nextTick();
+    const input = targetPercentageInput.value?.$el?.querySelector('input');
+    input?.focus();
+    input?.select();
+  }
+
+  function stopEditingTargetPercentage() {
+    editingTargetPercentage.value = false;
+    targetPercentageModel.value = targetPercentage.value;
+  }
   const startFromKnown = ref(false);
   const occurrenceFilterType = ref<'gte' | 'lte'>('gte');
   const occurrenceThreshold = ref(10);
@@ -390,6 +412,7 @@
     minFrequency.value = 0;
     maxFrequency.value = 30000;
     targetPercentage.value = 80;
+    editingTargetPercentage.value = false;
     startFromKnown.value = false;
     occurrenceFilterType.value = 'gte';
     occurrenceThreshold.value = 10;
@@ -573,8 +596,34 @@
 
       <template v-if="downloadMode === 'target'">
         <div class="mb-3">
-          <label class="block text-sm font-medium mb-1">Target Coverage: {{ targetPercentage }}%</label>
-          <Slider v-model="targetPercentage" :min="1" :max="100" class="w-full" />
+          <div class="flex items-center gap-1 text-sm font-medium mb-1">
+            <span>Target Coverage:</span>
+            <InputNumber
+              v-if="editingTargetPercentage"
+              ref="targetPercentageInput"
+              v-model="targetPercentageModel"
+              :min="1"
+              :max="100"
+              :step="0.1"
+              :min-fraction-digits="1"
+              :max-fraction-digits="1"
+              suffix="%"
+              class="w-24"
+              input-class="w-24 py-1"
+              @blur="stopEditingTargetPercentage"
+              @focusout="stopEditingTargetPercentage"
+              @keydown.enter.prevent="stopEditingTargetPercentage"
+            />
+            <button
+              v-else
+              type="button"
+              class="cursor-text underline decoration-dotted underline-offset-2"
+              @click="startEditingTargetPercentage"
+            >
+              {{ targetPercentage.toFixed(1) }}%
+            </button>
+          </div>
+          <Slider v-model="targetPercentageModel" :min="1" :max="100" :step="0.1" class="w-full" />
         </div>
         <div class="flex items-center gap-2 mb-3">
           <Checkbox v-model="startFromKnown" input-id="srsStartFromKnown" :binary="true" />
