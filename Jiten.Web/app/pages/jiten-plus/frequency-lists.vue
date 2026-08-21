@@ -472,8 +472,15 @@
   }
 
   onMounted(() => {
-    loadLists();
-    if (isPlus.value) runPreview(); // baseline facet counts for the whole catalogue
+    watch(
+      isPlus,
+      (plus) => {
+        if (!plus) return;
+        loadLists();
+        runPreview(); // baseline facet counts for the whole catalogue
+      },
+      { immediate: true },
+    );
   });
   onBeforeUnmount(() => {
     if (pollTimer) clearInterval(pollTimer);
