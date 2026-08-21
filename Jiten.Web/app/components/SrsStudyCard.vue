@@ -1,10 +1,12 @@
 <script setup lang="ts">
-  import type { CardLayoutBlock, CardMediaDto, StudyCardDto, Word } from '~/types';
+  import type { CardLayoutBlock, CardMediaDto, ExampleSentenceBlockOptions, StudyCardDto, Word } from '~/types';
   import { useSrsStore } from '~/stores/srsStore';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
   import { displayKeyName } from '~/composables/useStudyKeyboard';
   import { resolveCardLayout } from '~/utils/cardLayout';
+  import { buildCardAudioPlan } from '~/utils/cardAudioPlan';
   import { cardBlockRegistry } from '~/components/srs/card-blocks/cardBlockRegistry';
+  import { exampleSentenceDefaults, resolveOptions } from '~/components/srs/card-blocks/cardBlockOptions';
   import { provideCardContext, type CardContext } from '~/components/srs/card-blocks/useCardContext';
 
   const props = defineProps<{
@@ -114,6 +116,15 @@
 
   const exampleRevealed = ref(false);
   const occExpanded = ref(false);
+
+  const sentenceBlock = computed(
+    () => layout.value.front.find((b) => b.type === 'exampleSentence') ?? layout.value.back.find((b) => b.type === 'exampleSentence') ?? null
+  );
+  
+  const sentenceBlurred = computed(() => {
+    const opts = resolveOptions<ExampleSentenceBlockOptions>(exampleSentenceDefaults, sentenceBlock.value?.options);
+    return opts.blur && !exampleRevealed.value && !(opts.unblurOnFlip && props.isFlipped);
+  });
 
   // Favourite / inline-edit of the displayed example sentence.
   const editingExample = ref(false);
@@ -254,6 +265,23 @@
 
   let audioGeneration = 0;
 
+  function afterCardMediaEntry(timeoutMs = 3000): Promise<void> {
+    if (cardMediaEntry.value) return Promise.resolve();
+    return new Promise((resolve) => {
+      const stopWatch = watch(cardMediaEntry, (entry) => {
+        if (entry) {
+          stopWatch();
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+      const timer = setTimeout(() => {
+        stopWatch();
+        resolve();
+      }, timeoutMs);
+    });
+  }
+
   // Resolves once the current word audio (TTS or custom clip) has finished. Waits briefly for playback
   // to start first, since server-side TTS fetches its audio before the playing state flips on.
   function afterWordAudio(): Promise<void> {
@@ -287,62 +315,44 @@
     const generation = ++audioGeneration;
     const current = () => generation === audioGeneration;
 
-    const settings = srsStore.studySettings;
     const onFront = mode === 'front';
+    if (onFront && props.isFlipped) return;
+    await afterCardMediaEntry();
+    if (!current()) return;
     if (onFront && props.isFlipped) return;
     const example = cardExample.value;
     const media = cardAudio.value;
 
-    let headword = forced || (onFront ? settings.autoPlayWordOnFront : settings.autoPlayWord);
-    if (!forced && onFront && headword && settings.autoPlayWordOnFrontNewOnly && !props.card.isNewCard) headword = false;
+    const plan = buildCardAudioPlan(srsStore.studySettings, {
+      onFront,
+      forced,
+      hasClip: !!media?.url,
+      hasSentence: !!example?.sentenceId,
+      isNewCard: props.card.isNewCard,
+      frontHasSentence: frontHasSentence.value,
+      sentenceBlurred: sentenceBlurred.value,
+    });
 
-    const pos = settings.autoPlayCustomAudioPosition;
-    const customThisSide = forced || pos === 'Both' || pos === (onFront ? 'Front' : 'Back');
-    const custom = !!media?.url && (forced || settings.autoPlayCustomAudio) && customThisSide;
-    const replacesHeadword = custom && settings.customAudioReplacesHeadword;
-    const replacesSentence = custom && settings.customAudioReplacesSentence;
-
-    let playSentence =
-      !!example?.sentenceId &&
-      (forced
-        ? onFront
-          ? frontHasSentence.value
-          : !sentenceBlurred.value
-        : onFront
-          ? frontHasSentence.value && settings.autoPlayWordOnFront && settings.autoPlaySentenceOnFront
-          : settings.autoPlaySentence && !sentenceBlurred.value);
-
-    if (!headword && !custom && !playSentence) return;
-
-    if (custom && (replacesHeadword || replacesSentence)) {
-      const played = await playCustomToEnd(media!);
-      if (!current()) return;
-      if (played) {
-        if (replacesHeadword) headword = false;
-        if (replacesSentence) playSentence = false;
+    const slots = [...plan.slots];
+    for (let i = 0; i < slots.length; i++) {
+      if (i > 0) {
+        await wait(150);
+        if (!current()) return;
       }
-      if (headword) {
+      const slot = slots[i];
+      if (slot === 'clip') {
+        const played = await playCustomToEnd(media!);
+        if (!current()) return;
+        // A clip that never sounded stands in for nothing, so what it replaced plays after all.
+        if (!played) slots.push(...plan.fallback.filter((s) => !slots.includes(s)));
+      } else if (slot === 'headword') {
         playHeadwordAudio();
         await afterWordAudio();
         if (!current()) return;
+      } else {
+        playExample(example!);
       }
-    } else if (headword) {
-      playHeadwordAudio();
-      await afterWordAudio();
-      if (!current()) return;
-      if (custom) {
-        await playCustomToEnd(media!);
-        if (!current()) return;
-      }
-    } else if (custom) {
-      await playCustomToEnd(media!);
-      if (!current()) return;
     }
-
-    if (!playSentence) return;
-    await wait(150);
-    if (!current()) return;
-    playExample(example!);
   }
 
   async function onImageError() {
@@ -393,8 +403,6 @@
     audioGeneration++;
     wordAudio.stop();
   });
-
-  const sentenceBlurred = computed(() => srsStore.studySettings.blurExampleSentence && !exampleRevealed.value);
 
   function playExample(ex: NonNullable<typeof cardExample.value>) {
     // Custom sentences are encoded with a negated UserExampleSentenceId (see BuildCustomStudyExample).
