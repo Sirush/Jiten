@@ -10,7 +10,7 @@
     <div class="max-w-3xl mx-auto flex flex-col">
       <div class="order-2 sm:order-1 mb-4">
         <h1 class="sr-only">Jiten</h1>
-        <OmniSearch />
+        <OmniSearch autofocus />
       </div>
 
       <div class="order-1 sm:order-2 mb-4">
