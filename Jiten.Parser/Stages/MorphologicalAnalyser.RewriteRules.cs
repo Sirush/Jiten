@@ -265,6 +265,174 @@ public partial class MorphologicalAnalyser
             [new TokenTemplate("羽", DictForm: "羽", NormalizedForm: "羽", Pos: PartOfSpeech.Noun, Reading: "ハネ", Pin: 1171680),
              new TokenTemplate("馬車", DictForm: "馬車", NormalizedForm: "馬車", Pos: PartOfSpeech.Noun, Reading: "バシャ", Pin: 1471780)]),
 
+        // A causative + negative-volitional chain on a single-kanji stem (行かせまい) has no lattice
+        // support: Sudachi cuts 行|か|せまい and reads the tail as the adjective 狭い. Reassemble the
+        // chain. No Prev condition: the boundary split before 行 leaves a stop token there, and the
+        // hiragana せまい surface already excludes a genuine row-noun reading (…の行か、狭い… keeps
+        // 狭い in kanji or behind punctuation, so the three-token shape never arises).
+        new RewriteRule("ikasemai", RewritePhase.Cleanup,
+            [new TokenPattern(Text: "行", Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun]),
+             new TokenPattern(Text: "か", Pos: [PartOfSpeech.Particle]),
+             new TokenPattern(Text: "せまい")],
+            [new TokenTemplate("行かせまい", DictForm: "行く", NormalizedForm: "行く", Pos: PartOfSpeech.Verb,
+                Reading: "イカセマイ", Pin: 1578850, PinReadingIndex: 0, RecoverConjugations: true)]),
+
+        // っこない ("no way that...") after a potential/masu stem: Sudachi emits the っこ suffix and
+        // ない separately (行け|っこ|ない). The verb gate leaves nominal っこ compounds (慣れっこ,
+        // かけっこ) alone — those never sit directly on a verb token.
+        new RewriteRule("kkonai", RewritePhase.Cleanup,
+            [new TokenPattern(Text: "っこ"),
+             new TokenPattern(Text: "ない")],
+            [new TokenTemplate("っこない", DictForm: "っこない", NormalizedForm: "っこない", Pos: PartOfSpeech.Expression,
+                Reading: "ッコナイ", Pin: 2145640, PinReadingIndex: 0)],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Verb])),
+
+        // Explanatory なんです (contracted な+の+です, 2683060) after nominal content. Left alone,
+        // the compound matcher absorbs なん leftward through a kana reading (居酒屋さん+なん → 三男,
+        // 俺のせい+なん → 西南). Matched on the pre-fusion shape な|ん|です, before the resegmenter
+        // fuses the tail into ですか/ですから — one rule then covers every tail instead of one per
+        // fused shape. The noun-ish Prev gate keeps interrogatives intact: これ/それ/何 are Pronoun
+        // POS and stay out, so これはなんですか still reads 何+ですか. 名前 hosts are carved out too —
+        // (お)名前なんですか is the "what is your name?" interrogative, where なん is 何.
+        new RewriteRule("nandesu", RewritePhase.Early,
+            [new TokenPattern(Text: "な"),
+             new TokenPattern(Text: "ん"),
+             new TokenPattern(Text: "です")],
+            [new TokenTemplate("なんです", DictForm: "なんです", NormalizedForm: "なんです", Pos: PartOfSpeech.Expression,
+                Reading: "ナンデス", Pin: 2683060, PinReadingIndex: 0)],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun, PartOfSpeech.Suffix,
+                PartOfSpeech.Name, PartOfSpeech.NaAdjective]),
+            Window: new WindowCond(-1, -1, TextAnyOf: ["名前", "お名前"], Negate: true)),
+
+        // ワン公 ("doggy") is its own entry, but noun anchors only open expression windows, so the
+        // katakana bark + 公 never re-fuse at lookup (ワン "woof" + 公 "official").
+        new RewriteRule("wankou", RewritePhase.Late,
+            [new TokenPattern(Text: "ワン"),
+             new TokenPattern(Text: "公")],
+            [new TokenTemplate("ワン公", DictForm: "ワン公", NormalizedForm: "ワン公", Pos: PartOfSpeech.Noun,
+                Reading: "ワンコウ", Pin: 2582030, PinReadingIndex: 0)]),
+
+        // 見るも無残 is its own expression. The na-adjective anchor added to the lookup window can
+        // now reach it, but only after the analyser has run — these rows settle the span earlier,
+        // before the na-adjective merge absorbs the connector な.
+        new RewriteRule("mirumo-muzan", RewritePhase.Late,
+            [new TokenPattern(Text: "見るも"),
+             new TokenPattern(Text: "無残")],
+            [new TokenTemplate("見るも無残", DictForm: "見るも無残", NormalizedForm: "見るも無残", Pos: PartOfSpeech.Expression,
+                Reading: "ミルモムザン", Pin: 2871068, PinReadingIndex: 0)]),
+        // …and the shape where the na-adjective merge already absorbed the connector (無残な).
+        new RewriteRule("mirumo-muzan-na", RewritePhase.Late,
+            [new TokenPattern(Text: "見るも"),
+             new TokenPattern(Text: "無残な")],
+            [new TokenTemplate("見るも無残", DictForm: "見るも無残", NormalizedForm: "見るも無残", Pos: PartOfSpeech.Expression,
+                Reading: "ミルモムザン", Pin: 2871068, PinReadingIndex: 0),
+             new TokenTemplate("な", DictForm: "な", NormalizedForm: "な", Pos: PartOfSpeech.Auxiliary, Reading: "ナ")]),
+
+        // 養護院-style institutional compounds: JMnedict has a place entry for the exact surface,
+        // which outranks the compositional noun+院 reading; recut. Per-surface on purpose —
+        // deciding name-vs-compositional in general needs context the parser doesn't have at
+        // token time, and a blanket recut would shred genuine name surfaces.
+        new RewriteRule("yougoin", RewritePhase.Late,
+            [new TokenPattern(Text: "養護院", RequireUnpinned: false)],
+            [new TokenTemplate("養護", DictForm: "養護", NormalizedForm: "養護", Pos: PartOfSpeech.Noun,
+                Reading: "ヨウゴ", Pin: 1605847, PinReadingIndex: 0, HardPin: true),
+             new TokenTemplate("院", DictForm: "院", NormalizedForm: "院", Pos: PartOfSpeech.Noun,
+                Reading: "イン", Pin: 2414530, PinReadingIndex: 0, HardPin: true)]),
+
+        // 打ち下ろし is the deverbal use of 打ち下ろす ("to strike down"); JMDict's only noun entry
+        // for the surface is the golf term (downhill hole), which is never the prose sense.
+        // Pin the verb so the nominalised infinitive carries the right lexeme.
+        new RewriteRule("uchioroshi", RewritePhase.Cleanup,
+            [new TokenPattern(Text: "打ち下ろし", RequireUnpinned: false)],
+            [new TokenTemplate("", DictForm: "打ち下ろす", NormalizedForm: "打ち下ろす", Pos: PartOfSpeech.Verb,
+                Reading: "ウチオロシ", Pin: 1408600, PinReadingIndex: 0, RecoverConjugations: true)]),
+
+        // Sentence-final だい (casual question particle) after the explanatory ん: the fused んだ
+        // strands the い, which then drops. Recut to nominaliser ん + だい.
+        new RewriteRule("ndai", RewritePhase.Late,
+            [new TokenPattern(Text: "んだ"),
+             new TokenPattern(Text: "い", Pos: [PartOfSpeech.Particle])],
+            [new TokenTemplate("ん", DictForm: "ん", NormalizedForm: "ん", Pos: PartOfSpeech.Particle, Reading: "ン", Pin: 2139720),
+             new TokenTemplate("だい", DictForm: "だい", NormalizedForm: "だい", Pos: PartOfSpeech.Particle,
+                Reading: "ダイ", Pin: 2097680, PinReadingIndex: 0)]),
+
+        // 出ベソ: the mixed-script uk compound is in the lookups, but noun anchors only open
+        // expression windows, so 出[Verb]+ベソ never re-fuses at lookup time.
+        new RewriteRule("debeso", RewritePhase.Late,
+            [new TokenPattern(Text: "出", Pos: [PartOfSpeech.Verb]),
+             new TokenPattern(Text: "ベソ")],
+            [new TokenTemplate("出ベソ", DictForm: "出べそ", NormalizedForm: "出べそ", Pos: PartOfSpeech.Noun,
+                Reading: "デベソ", Pin: 1340770, PinReadingIndex: 0)]),
+
+        // Kinship + 上 honorific compounds: 父上 is its own entry, but Sudachi cuts お|父|上 (the
+        // prefix combine then builds お父+上) or 父|上様. Re-cut around the 父上 unit.
+        new RewriteRule("chichiue", RewritePhase.Early,
+            [new TokenPattern(Text: "父", Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun]),
+             new TokenPattern(Text: "上", Pos: [PartOfSpeech.Suffix])],
+            [new TokenTemplate("父上", DictForm: "父上", NormalizedForm: "父上", Pos: PartOfSpeech.Noun,
+                Reading: "チチウエ", Pin: 1497670, PinReadingIndex: 0)]),
+        new RewriteRule("chichiue-sama", RewritePhase.Early,
+            [new TokenPattern(Text: "父", Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun]),
+             new TokenPattern(Text: "上様")],
+            [new TokenTemplate("父上", DictForm: "父上", NormalizedForm: "父上", Pos: PartOfSpeech.Noun,
+                Reading: "チチウエ", Pin: 1497670, PinReadingIndex: 0),
+             new TokenTemplate("様", DictForm: "様", NormalizedForm: "様", Pos: PartOfSpeech.Suffix,
+                Reading: "サマ", Pin: 1545790, PinReadingIndex: 0)]),
+
+        // Rustic くだせえ (い→え slurred 下さい): with no lattice entry Sudachi shreds it into
+        // くだ+せえ; reunite and let the deconjugator's slur fold recover the ください chain.
+        new RewriteRule("kudasee", RewritePhase.Late,
+            [new TokenPattern(Text: "くだ"),
+             new TokenPattern(Text: "せえ")],
+            [new TokenTemplate("くだせえ", DictForm: "ください", NormalizedForm: "ください", Pos: PartOfSpeech.Expression,
+                Reading: "クダセエ", Pin: 1184270, PinReadingIndex: 1, RecoverConjugations: true)]),
+
+        // Dialect continuous ちょる (=ておる) after a verb: Sudachi reads the ちょっ shard as the
+        // interjection/adverb ちょっ. The verb gate keeps the standalone interjection (ちょっ、待て)
+        // intact — that shape never follows a verb token directly.
+        new RewriteRule("chotta", RewritePhase.Late,
+            [new TokenPattern(Text: "ちょっ"),
+             new TokenPattern(Text: "た", Pos: [PartOfSpeech.Auxiliary])],
+            [new TokenTemplate("ちょった", DictForm: "ちょる", NormalizedForm: "ちょる", Pos: PartOfSpeech.Auxiliary,
+                Reading: "チョッタ", Pin: 2869627, PinReadingIndex: 0, RecoverConjugations: true)],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Verb, PartOfSpeech.Auxiliary])),
+
+        // Kansai 無うなる (のうなる, "to disappear") after a subject particle: Sudachi reads
+        // の + 唸る. The particle gate leaves a genuine possessive + 唸った (彼のうなった声) alone —
+        // there the token before の is a noun, not a particle.
+        new RewriteRule("nounatta", RewritePhase.Late,
+            [new TokenPattern(Text: "の", Pos: [PartOfSpeech.Particle]),
+             new TokenPattern(TextStartsWith: "うなっ", Pos: [PartOfSpeech.Verb]),
+             new TokenPattern(Text: "た", Pos: [PartOfSpeech.Auxiliary])],
+            [new TokenTemplate("のうなった", DictForm: "のうなる", NormalizedForm: "のうなる", Pos: PartOfSpeech.Verb,
+                Reading: "ノウナッタ", Pin: 2793080, PinReadingIndex: 1, RecoverConjugations: true)],
+            // Negated nominal-host gate (same shape as tsutte-raw): a genitive/nominalising の follows
+            // nominal or predicate hosts (彼の, 見たの); after particles, adverbs, or clause-initially
+            // the の can only open のうなる (もうのうなった, 居場所がのうなった).
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Verb, PartOfSpeech.Auxiliary, PartOfSpeech.IAdjective,
+                PartOfSpeech.Noun, PartOfSpeech.CommonNoun, PartOfSpeech.Name, PartOfSpeech.Pronoun,
+                PartOfSpeech.NaAdjective, PartOfSpeech.Prefix, PartOfSpeech.Suffix, PartOfSpeech.Numeral,
+                PartOfSpeech.Counter], Negate: true)),
+
+        // Dialect past copula じゃった (=だった) directly after nominal content. After a verb te/ん
+        // shard it stays the contraction じゃう (飲んじゃった), which the noun-ish gate excludes.
+        new RewriteRule("jatta", RewritePhase.Late,
+            [new TokenPattern(Text: "じゃっ", Pos: [PartOfSpeech.Auxiliary]),
+             new TokenPattern(Text: "た", Pos: [PartOfSpeech.Auxiliary])],
+            [new TokenTemplate("じゃった", DictForm: "じゃった", NormalizedForm: "じゃった", Pos: PartOfSpeech.Expression,
+                Reading: "ジャッタ", Pin: 2850797, PinReadingIndex: 0)],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun, PartOfSpeech.Name,
+                PartOfSpeech.Pronoun, PartOfSpeech.NaAdjective, PartOfSpeech.Suffix])),
+
+        // 立とうと: the volitional 立とう has no lattice support and Sudachi cuts 立|とうと, reaching
+        // the rare adverb とうと; recut so the volitional + quotative/purposive と survive.
+        new RewriteRule("tatouto", RewritePhase.Cleanup,
+            [new TokenPattern(Text: "立", Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun, PartOfSpeech.Name]),
+             new TokenPattern(Text: "とうと")],
+            [new TokenTemplate("立とう", DictForm: "立つ", NormalizedForm: "立つ", Pos: PartOfSpeech.Verb,
+                Reading: "タトウ", Pin: 1597040, PinReadingIndex: 0, RecoverConjugations: true),
+             new TokenTemplate("と", DictForm: "と", NormalizedForm: "と", Pos: PartOfSpeech.Particle, Reading: "ト")]),
+
         // ケダ(surname)+モノ作り mis-latticed 獣作り; re-cut to ケダモノ (獣, 1335590) + 作り. (ケダモノ alone
         // resolves correctly; only the モノ作り fusion strands ケダ on the surname.)
         new RewriteRule("kedamono", RewritePhase.Cleanup,

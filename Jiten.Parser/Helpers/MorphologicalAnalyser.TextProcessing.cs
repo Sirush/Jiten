@@ -58,8 +58,11 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"([ァ-ヴ]ンッ)(?=[ァ-ヴぁ-ゔ\p{IsCJKUnifiedIdeographs}])")]
     private static partial Regex KatakanaInterjectionTsuRegex();
 
-    // Guard: in particle など (本などして) the ど is the 2nd mora of など, not colloquial どし(た/て/よ).
-    [GeneratedRegex(@"(?<!な)どし(?=[たてよ])")]
+    // Guard: in particle など (本などして) the ど is the 2nd mora of など, not colloquial どし(た/て/よ),
+    // and in a renyoukei + もどす compound (取りもどして, 押しもどして, 追いもどして) the どし belongs to
+    // 戻す — the class is the stem-final morae that front もどす; particles (でも, かも) never end
+    // in them, so those stay expandable.
+    [GeneratedRegex(@"(?<!な)(?<![りれびきちしい]も)どし(?=[たてよ])")]
     private static partial Regex ColloquialDoshiRegex();
 
     // ー followed by っ/っ after hiragana is emphatic/expressive (けどーっ → けど, 写るーっ → 写る)
@@ -293,7 +296,46 @@ public partial class MorphologicalAnalyser
             .Replace("んったら", $"ん{_stopToken}ったら")                 // ちゃ|んっ|たら → ちゃん + ったら
             .Replace("にいる", $"に{_stopToken}いる")                     // にいる(name 5408860) → に + いる(居る)
             .Replace("さっきこ", $"さっき{_stopToken}こ")                 // さっきこ→name さきこ(咲子) via sokuon-norm → さっき + こ(この/これ/ここ)
-            .Replace("ないっていう", $"ない{_stopToken}っていう");         // って must not attach left into 〜ない expr
+            .Replace("ないっていう", $"ない{_stopToken}っていう")          // って must not attach left into 〜ない expr
+            // Sudachi's lexicon has the kana-row nouns (ガ行, ハ行…); in hiragana running text the
+            // particle + 行〜 reading is the only real one (母が行かせまい, 聖域には行けっこない),
+            // and the split boundary is also correct before every other 行-word (が行方, は行事).
+            // The genuine row nouns stay reachable through their katakana spellings.
+            .Replace("が行", $"が{_stopToken}行")                         // ガ行(1040670) fusion → が + 行〜
+            .Replace("は行", $"は{_stopToken}行")                         // ハ行(1096940) fusion → は + 行〜
+            // 金のこ (金ノコ, hacksaw abbr) swallows the start of 金のこと; gated on the full のこと
+            // tail so a real hacksaw (金のこで切る) keeps its entry.
+            .Replace("金のこと", $"金{_stopToken}のこと")                  // お金のこと → 金 + の + こと
+            // 誰's だあれ kana form must not eat the copula of a preceding なんだ/何だ ("なんだあれ"
+            // = なんだ + あれ). Keyed on the full なんだ/何だ so a genuine child-speech だあれ after an
+            // ん-final nominal (お姉さんだあれ？) keeps 誰; a standalone だあれ？ is untouched too.
+            .Replace("なんだあれ", $"なんだ{_stopToken}あれ")              // なんだあれ → なんだ + あれ
+            .Replace("何だあれ", $"何だ{_stopToken}あれ")                  // 何だあれは → 何だ + あれ + は
+            // Sudachi's てく contraction steals the く of a following くだせえ (勘弁して|く|だ|せえ);
+            // the boundary keeps the te-form whole so the slurred 下さい can resolve as one token.
+            .Replace("てくだせえ", $"て{_stopToken}くだせえ")              // ~してくだせえ → ~して + くだせえ
+            // Dictionary-form verb + っす copula (わかるっす): Sudachi fuses るっす into a noun shard
+            // and the verb loses its final mora. る never ends a word before っす otherwise.
+            .Replace("るっす", $"る{_stopToken}っす")                      // わかるっすよ → わかる + っす + よ
+            // です steals the す of a following 済まして (顔ですましている); the sequence です+まし
+            // only exists as で + 澄まし/済まし in prose, never as polite です+まして.
+            .Replace("ですまし", $"で{_stopToken}すまし")                  // ~ですましている → で + すまして + いる
+            // ったらありゃしない ("nothing more ... than this") after an i-adjective: the いっ shard
+            // otherwise reads as 行ったら. The full-expression tail keeps 会いに行ったら untouched.
+            .Replace("いったらありゃしない", $"い{_stopToken}ったらありゃしない")
+            // Counter つ + もらう: Sudachi cuts ２つ|も|らって, feeding らって to the ラッテ loanword.
+            // つもらっ has no other reading (積もる's te-form is 積もって).
+            .Replace("つもらっ", $"つ{_stopToken}もらっ")
+            // Desiderative たい before a quotative って: Sudachi hands the い to 行って
+            // (知りた|いって, 会いた|いって, 見た|いって). Splitting is correct in every reading —
+            // an adjective tail (重たいって) and kana 鯛って take the same cut.
+            .Replace("たいって", $"たい{_stopToken}って")
+            // Dictionary-form verb + っていう (あるっていうなら): Sudachi fuses るっていう into a blob
+            // that drops; る never ends a word before っていう otherwise.
+            .Replace("るっていう", $"る{_stopToken}っていう")
+            // 病は気から + quotative って: Sudachi's fused からって ("just because") consumes the
+            // proverb's tail; the boundary restores から + って after the topic-marked 気.
+            .Replace("は気からって", $"は気から{_stopToken}って");
         text = TooriQuotativeRegex().Replace(text, _stopToken);
         text = VowelTailKatakanaBoundaryRegex().Replace(text, _stopToken);
         text = MoshiKatakanaBoundaryRegex().Replace(text, $"もし{_stopToken}");

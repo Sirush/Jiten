@@ -1661,6 +1661,14 @@
     "detail": "slang negative (shirenai)"
   },
   {
+    "type": "onlyfinalrule",
+    "dec_end": ["ください"],
+    "con_end": ["くだせえ"],
+    "dec_tag": ["exp"],
+    "con_tag": ["uninflectable"],
+    "detail": "rustic i->e slur (kudasai)"
+  },
+  {
     "type": "stdrule",
     "dec_end": ["らなければ"],
     "con_end": ["んなければ"],

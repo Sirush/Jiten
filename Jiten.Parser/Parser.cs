@@ -2785,10 +2785,15 @@ namespace Jiten.Parser
                 {
                     var word = wordInfos[i];
 
+                    // NaAdjective anchors expression windows too (見るも無残, 傍若無人ぶり): a span
+                    // ending on a na-adjective could otherwise never match its expression entry.
+                    // It is expression-only like the noun trigger — plain-compound absorption from a
+                    // na-adjective anchor would over-merge the same way nouns would.
                     if (word.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.Expression or PartOfSpeech.Suffix
-                        or PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Name)
+                        or PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Name or PartOfSpeech.NaAdjective)
                     {
-                        bool nounTrigger = word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Name;
+                        bool nounTrigger = word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Name
+                            or PartOfSpeech.NaAdjective;
                         var match = TryMatchCompounds(wordInfos, i, tokenHashes, forceExpressionOnly: nounTrigger);
 
                         // A hard-pinned token is a gate's final word decision; a compound must not
@@ -2861,7 +2866,7 @@ namespace Jiten.Parser
         // entry existence because many X+に pairs have genuine case-particle readings that an
         // automatic merge would destroy (それに気づいた, ことに決めた, 外に出る). Pairs whose
         // combined surface is effectively always the adverb (絶対に) are safe to list.
-        private static readonly HashSet<string> LexicalizedAdverbPairs = ["フルに", "無性に", "意地でも", "絶対に"];
+        private static readonly HashSet<string> LexicalizedAdverbPairs = ["フルに", "無性に", "意地でも", "絶対に", "徐々に"];
 
         /// Merges X+に into a single token when the combined surface is a lexicalized adverb:
         /// any X的+に (always adverbial, JMDict entry required) or a curated pair (フルに, 無性に,
@@ -3437,12 +3442,15 @@ namespace Jiten.Parser
                 var lastTag = form.Tags[^1];
                 if (!lastTag.StartsWith('v') && lastTag != "adj-i") continue;
                 if (!_lookups.TryGetValue(form.Text, out var ids)) continue;
-                // The conjugation-step requirement above is already a strong structural signal,
-                // so common (prioritized) verbs qualify alongside usually-kana ones (まねた →
-                // 真似る is ichi1 but not uk).
-                if (!ids.Any(id => IsKanaAppropriateId(id)
-                                   || (WordMeta.TryGetValue(id, out var meta)
-                                       && !meta.IsTrueName && meta.GetPriorityScore(true) > 0)))
+                // The deconjugation chain says the joined surface conjugates as a verb/adjective,
+                // so the rescued entry must itself be one — a noun that merely shares the base's
+                // kana (ひむ "hymn") is not a rescue target. Common (prioritized) verbs qualify
+                // alongside usually-kana ones (まねた → 真似る is ichi1 but not uk); fully-archaic
+                // scores never do.
+                if (!ids.Any(id => WordMeta.TryGetValue(id, out var meta)
+                                   && !meta.IsTrueName
+                                   && Array.Exists(meta.Pos, p => p is PartOfSpeech.Verb or PartOfSpeech.IAdjective)
+                                   && meta.GetPriorityScore(true) > (IsKanaAppropriateId(id) ? ArchaicOnlyPriorityFloor : 0)))
                     continue;
 
                 dictForm = form.Text;
@@ -3672,6 +3680,23 @@ namespace Jiten.Parser
 
         private static bool HasPrioritizedMeta(int id) =>
             WordMeta.TryGetValue(id, out var meta) && meta.GetPriorityScore(true) > 0;
+
+        // Fully-archaic entries with no frequency marker sit at ≈ −350 in WordMeta; nothing else
+        // scores below the name floor (−50). A compound whose entire entry set is that archaic is
+        // weaker evidence than the compositional parse it would replace (した+もの must not fuse
+        // into the archaic 下物).
+        private const int ArchaicOnlyPriorityFloor = -100;
+
+        // The same id must clear both bars: a span whose non-name entries are all archaic (or
+        // whose non-archaic entries are all names) rests on two different unusable entries.
+        private static bool HasUsableCompoundEntry(List<int> ids, bool isKana)
+        {
+            foreach (var id in ids)
+                if (!_nameOnlyWordIds.Contains(id)
+                    && WordMeta.TryGetValue(id, out var meta) && meta.GetPriorityScore(isKana) > ArchaicOnlyPriorityFloor)
+                    return true;
+            return false;
+        }
 
         // Applies a lookup-keyed query to the surface, falling back to its normalised-hiragana key
         // (katakana ゴロゴロ → ごろごろ) when the direct key yields nothing.
@@ -4050,7 +4075,7 @@ namespace Jiten.Parser
                         {
                             var combinedText = word.Text + sentence.Words[i + 1].word.Text;
                             if (_lookups.TryGetValue(combinedText, out var adjSuffixIds) && adjSuffixIds.Count > 0 &&
-                                !adjSuffixIds.All(id => _nameOnlyWordIds.Contains(id)))
+                                HasUsableCompoundEntry(adjSuffixIds, WanaKana.IsKana(combinedText)))
                             {
                                 var combinedReading = word.Reading + sentence.Words[i + 1].word.Reading;
                                 int combinedLength = length + sentence.Words[i + 1].length;
@@ -4116,10 +4141,11 @@ namespace Jiten.Parser
                         if (NounCompoundExclusions.Contains(combinedText))
                             continue;
 
-                        // Check if it exists in JMDict lookups — skip name-only matches
-                        // when none of the constituent tokens are name-like
+                        // Check if it exists in JMDict lookups — skip name-only matches when none
+                        // of the constituent tokens are name-like, and require a usable entry
+                        // (non-name, non-archaic) so a fully-archaic compound cannot absorb the span.
                         if (_lookups.TryGetValue(combinedText, out var wordIds) && wordIds.Count > 0 &&
-                            (hasNameLikeToken || !wordIds.All(id => _nameOnlyWordIds.Contains(id))))
+                            (hasNameLikeToken || HasUsableCompoundEntry(wordIds, WanaKana.IsKana(combinedText))))
                         {
                             bestMatch = windowSize;
                             matchedNounText = combinedText;
@@ -4131,7 +4157,7 @@ namespace Jiten.Parser
                                                                     convertLongVowelMark: false);
                         if (hiraganaText != combinedText &&
                             _lookups.TryGetValue(hiraganaText, out wordIds) && wordIds.Count > 0 &&
-                            (hasNameLikeToken || !wordIds.All(id => _nameOnlyWordIds.Contains(id))))
+                            (hasNameLikeToken || HasUsableCompoundEntry(wordIds, isKana: true)))
                         {
                             bestMatch = windowSize;
                             matchedNounText = combinedText;
@@ -4318,7 +4344,11 @@ namespace Jiten.Parser
              "虫を殺す", "むしをころす", "虫を殺し", "むしをころし",
              // 事を好む ("revel in trouble/discord") is vanishingly rare; こと is almost
              // always the nominalizer (関与することを好まない, 命令されることを好まぬ)
-             "ことを好む", "事を好む", "ことをこのむ"];
+             "ことを好む", "事を好む", "ことをこのむ",
+             // 男を知る ("to lose one's virginity") is rare; in prose the span is the literal
+             // "know this/that man" (この男を知っているか)
+             "男を知る", "男を知って", "男を知った", "男を知ってる", "男を知っている",
+             "男を知らない", "男を知り"];
 
         /// <summary>
         /// 2-token sequences combined into one expression. Curated: JMDict has entries for many
@@ -5152,12 +5182,24 @@ namespace Jiten.Parser
                 if (result.HasValue) return result;
             }
 
-            if (dictForm is "する" or "ある"
+            if (dictForm is "する" or "ある" or "いく" or "行く" or "なる" or "くる" or "来る"
                 && (verb.Text.Contains("ない") || verb.Text.Contains("なかっ") || verb.Text.Contains("なく")
                     || verb.Text.Contains("ねえ") || verb.Text.Contains("ねー") || verb.Text.Contains("ねぇ")
                     || verb.Text.Contains("ませ") || verb.Text.EndsWith("ん") || verb.Text.EndsWith("ず")))
             {
-                var negForm = dictForm == "する" ? "しない" : "ない";
+                // ん-negatives block idiom windows the same way ねぇ does: the candidate is built
+                // from the literal surface (一筋縄では+いかん never hits a lookup key), while the
+                // idioms are attested under ない (一筋縄ではいかない, うまくいかない).
+                var negForm = dictForm switch
+                {
+                    "する" => "しない",
+                    "いく" => "いかない",
+                    "行く" => "いかない",
+                    "なる" => "ならない",
+                    "くる" => "こない",
+                    "来る" => "こない",
+                    _ => "ない",
+                };
                 result = TryMatchCompoundWindow(wordInfos, wordIndex, lastConsumedIndex, negForm, forceExpressionOnly,
                     HiraRollingHash(negForm), prefCumHash, prefCumLen);
                 if (result.HasValue) return result;

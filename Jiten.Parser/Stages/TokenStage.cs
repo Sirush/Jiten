@@ -131,7 +131,8 @@ internal static class TokenFeatureScanner
 
             if (text.Contains('ー'))
                 f |= TokenFeatures.LongVowelMark;
-            if (text.Length > 0 && text[^1] == 'っ')
+            // ッ included: RepairClippedAdjective accepts a katakana sokuon token too.
+            if (text.Length > 0 && text[^1] is 'っ' or 'ッ')
                 f |= TokenFeatures.EndsWithTsu;
 
             // Candidate positions are needed only immediately before the structural block. Normal
