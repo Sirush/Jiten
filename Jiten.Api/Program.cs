@@ -411,6 +411,8 @@ builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
 builder.Services.AddScoped<IStudyDeckMembershipService, StudyDeckMembershipService>();
 builder.Services.AddScoped<DeckMetadataService>();
 builder.Services.AddScoped<IDeckDownloadService, DeckDownloadService>();
+builder.Services.AddSingleton<Jiten.Api.Services.ExternalMediaList.ExternalFetchGate>();
+builder.Services.AddScoped<Jiten.Api.Services.ExternalMediaList.IExternalMediaListClient, Jiten.Api.Services.ExternalMediaList.ExternalMediaListClient>();
 builder.Services.AddScoped<IDeckImportService, DeckImportService>();
 builder.Services.AddScoped<IIndexNowService, IndexNowService>();
 builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
@@ -612,6 +614,20 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
+    options.AddPolicy("external-fetch", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3, Window = TimeSpan.FromMinutes(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
     options.AddPolicy("auth", context =>
     {
         var partitionKey = $"ip:{GetClientIp(context)}";
@@ -662,13 +678,16 @@ builder.Services.AddRateLimiter(options =>
                 origin == "https://kizuna-texthooker-ui.app")
             {
                 context.HttpContext.Response.Headers.Append("Access-Control-Allow-Origin", origin);
+
+                if (!context.HttpContext.Response.Headers.ContainsKey("Access-Control-Expose-Headers"))
+                    context.HttpContext.Response.Headers.Append("Access-Control-Expose-Headers", "Retry-After");
             }
         }
 
         if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
         {
             context.HttpContext.Response.Headers.RetryAfter =
-                ((int)retryAfter.TotalSeconds).ToString(NumberFormatInfo.InvariantInfo);
+                ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(NumberFormatInfo.InvariantInfo);
         }
 
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
@@ -720,7 +739,8 @@ builder.Services.AddCors(options =>
                        origin == "https://kizuna-texthooker-ui.app";
             })
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .WithExposedHeaders("Retry-After");
     });
 });
 

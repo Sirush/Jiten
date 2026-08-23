@@ -49,6 +49,18 @@
       </div>
     </section>
 
+    <section class="mb-6" aria-labelledby="settings-media">
+      <h2 id="settings-media" class="mb-2 text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Media</h2>
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <SettingsTile
+          icon="pi pi-list"
+          title="Media List"
+          to="/settings/media-list"
+          description="Import your tracked media from AniList or VNDB, and export your list."
+        />
+      </div>
+    </section>
+
     <section class="mb-6" aria-labelledby="settings-study">
       <h2 id="settings-study" class="mb-2 text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Study</h2>
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

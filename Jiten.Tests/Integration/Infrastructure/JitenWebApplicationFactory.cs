@@ -29,6 +29,9 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
     /// <summary>The stub Stripe gateway. Singleton, so tests can configure canned responses and read recorded calls.</summary>
     public StubStripeGateway Stripe => Services.GetRequiredService<StubStripeGateway>();
 
+    /// <summary>The stub external media list client. Singleton, so tests can set canned lists.</summary>
+    public StubExternalMediaListClient ExternalLists => Services.GetRequiredService<StubExternalMediaListClient>();
+
     public JitenWebApplicationFactory()
     {
         Environment.SetEnvironmentVariable("JwtSettings__Secret", "ThisIsATestSecretKeyThatIsLongEnoughForHS256!");
@@ -134,6 +137,12 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
             services.RemoveAll<ICdnService>();
             services.AddSingleton<StubCdnService>();
             services.AddSingleton<ICdnService>(sp => sp.GetRequiredService<StubCdnService>());
+
+            // Replace the external media list client so imports never hit AniList/VNDB.
+            services.RemoveAll<Jiten.Api.Services.ExternalMediaList.IExternalMediaListClient>();
+            services.AddSingleton<StubExternalMediaListClient>();
+            services.AddSingleton<Jiten.Api.Services.ExternalMediaList.IExternalMediaListClient>(sp =>
+                sp.GetRequiredService<StubExternalMediaListClient>());
 
             // Replace the Stripe gateway with a stub (canned network, real signature verification).
             services.RemoveAll<Jiten.Api.Services.Stripe.IStripeGateway>();

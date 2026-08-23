@@ -4,6 +4,7 @@ using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
 using Jiten.Api.Jobs;
 using Jiten.Api.Services;
+using Jiten.Api.Services.ExternalMediaList;
 using Jiten.Core;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
@@ -25,7 +26,7 @@ namespace Jiten.Api.Controllers;
 [ApiController]
 [Route("api/user")]
 [Authorize]
-public class UserController(
+public partial class UserController(
     ICurrentUserService userService,
     JitenDbContext jitenContext,
     IDbContextFactory<JitenDbContext> contextFactory,
@@ -38,6 +39,7 @@ public class UserController(
     IConnectionMultiplexer redis,
     IDeckWordResolver deckWordResolver,
     IDeckDownloadService downloadService,
+    IExternalMediaListClient externalListClient,
     IUserLimitsService userLimits,
     IStudySessionService sessionService,
     ILogger<UserController> logger) : ControllerBase
@@ -2161,23 +2163,12 @@ public class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        var preference = await userContext.UserDeckPreferences
-                                          .FirstOrDefaultAsync(p => p.UserId == userId && p.DeckId == deckId);
-
-        var previousStatus = preference?.Status ?? DeckStatus.None;
-
-        if (preference == null)
-        {
-            preference = new UserDeckPreference { UserId = userId, DeckId = deckId };
-            userContext.UserDeckPreferences.Add(preference);
-        }
-
-        preference.Status = request.Status;
+        var outcome = await DeckPreferenceHelper.ApplyStatusesAsync(userContext, userId, [(deckId, request.Status)],
+                                                                    overwriteExisting: true, skipIgnored: false);
+        var preference = outcome.Preferences[deckId];
         await userContext.SaveChangesAsync();
 
-        // Trigger accomplishment recomputation if status changed to/from Completed
-        if (previousStatus != request.Status &&
-            (previousStatus == DeckStatus.Completed || request.Status == DeckStatus.Completed))
+        if (outcome.CompletedTransition)
         {
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
         }
