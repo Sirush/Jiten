@@ -826,7 +826,7 @@
                   </div>
                   <div class="flex flex-col gap-1">
                     <label class="text-xs text-gray-500 dark:text-gray-400 font-medium">Threshold</label>
-                    <InputNumber v-model="occurrenceThreshold" :min="1" :useGrouping="false" class="w-full text-sm" size="small" />
+                    <InputNumber v-model="occurrenceThreshold" :min="1" :useGrouping="false" fluid class="w-full text-sm" size="small" />
                   </div>
                 </div>
                 <div class="flex flex-col gap-1">
