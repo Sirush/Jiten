@@ -40,6 +40,7 @@ const limit = 20;
 function parseTabFromQuery() {
   if (route.query.tab === 'mine') return 1;
   if (route.query.tab === 'contributions') return 2;
+  if (route.query.tab === 'voted') return 3;
   return 0;
 }
 function parseTypeFromQuery() { return route.query.type !== undefined ? Number(route.query.type) as MediaType : undefined; }
@@ -101,7 +102,7 @@ function parseAttachmentsFromQuery() {
 }
 
 const selectedAttachments = ref<string | undefined>(parseAttachmentsFromQuery());
-const excludeOwnContributions = ref(route.query.excludeOwn === '1');
+const excludeOwnRequests = ref(route.query.excludeOwn === '1');
 
 const searchQuery = ref(typeof route.query.search === 'string' ? route.query.search : '');
 const debouncedSearch = ref(searchQuery.value);
@@ -113,7 +114,9 @@ watch(searchQuery, (val) => {
 
 const isMine = computed(() => activeTab.value === 1);
 const isContributed = computed(() => activeTab.value === 2);
+const isVoted = computed(() => activeTab.value === 3);
 const isPersonalTab = computed(() => activeTab.value === 1 || activeTab.value === 2);
+const canExcludeOwn = computed(() => isContributed.value || isVoted.value);
 
 const displaySections = computed(() => {
   return [{ title: '', items: requests.value, muted: false }];
@@ -130,7 +133,20 @@ async function loadRequests() {
       offset: 0,
       limit: 200,
       contributed: true,
-      excludeOwn: excludeOwnContributions.value,
+      excludeOwn: excludeOwnRequests.value,
+      search,
+      attachments: selectedAttachments.value,
+    });
+  } else if (isVoted.value) {
+    await fetchRequests({
+      mediaType: selectedMediaType.value,
+      status: selectedStatus.value,
+      kind: selectedKind.value,
+      sort: sortBy.value,
+      offset: offset.value,
+      limit,
+      voted: true,
+      excludeOwn: excludeOwnRequests.value,
       search,
       attachments: selectedAttachments.value,
     });
@@ -168,7 +184,8 @@ async function loadFacets() {
     kind: selectedKind.value,
     mine: isMine.value || undefined,
     contributed: isContributed.value || undefined,
-    excludeOwn: (isContributed.value && excludeOwnContributions.value) || undefined,
+    voted: isVoted.value || undefined,
+    excludeOwn: (canExcludeOwn.value && excludeOwnRequests.value) || undefined,
     search: debouncedSearch.value.trim() || undefined,
     attachments: selectedAttachments.value,
   });
@@ -186,7 +203,7 @@ watch(selectedStatus, (status) => {
   else if (sortBy.value === 'completed') sortBy.value = 'votes';
 });
 
-watch([selectedMediaType, selectedStatus, selectedKind, sortBy, activeTab, debouncedSearch, selectedAttachments, excludeOwnContributions], () => {
+watch([selectedMediaType, selectedStatus, selectedKind, sortBy, activeTab, debouncedSearch, selectedAttachments, excludeOwnRequests], () => {
   offset.value = 0;
   loadRequests();
   loadFacets();
@@ -195,15 +212,16 @@ watch([selectedMediaType, selectedStatus, selectedKind, sortBy, activeTab, debou
 
 watch(offset, () => loadRequests());
 
-watch([activeTab, selectedMediaType, selectedStatus, selectedKind, sortBy, offset, debouncedSearch, selectedAttachments, excludeOwnContributions], () => {
+watch([activeTab, selectedMediaType, selectedStatus, selectedKind, sortBy, offset, debouncedSearch, selectedAttachments, excludeOwnRequests], () => {
   const query: Record<string, string> = {};
   if (activeTab.value === 1) query.tab = 'mine';
   else if (activeTab.value === 2) query.tab = 'contributions';
+  else if (activeTab.value === 3) query.tab = 'voted';
   if (selectedMediaType.value !== undefined) query.type = String(selectedMediaType.value);
   if (selectedKind.value !== undefined) query.kind = String(selectedKind.value);
   if (debouncedSearch.value.trim()) query.search = debouncedSearch.value.trim();
   if (selectedAttachments.value) query.attachments = selectedAttachments.value;
-  if (isContributed.value && excludeOwnContributions.value) query.excludeOwn = '1';
+  if (canExcludeOwn.value && excludeOwnRequests.value) query.excludeOwn = '1';
   if (selectedStatus.value === undefined) query.status = 'all';
   else if (selectedStatus.value !== RequestStatus.Open) query.status = String(selectedStatus.value);
   if (sortBy.value !== 'votes') query.sort = sortBy.value;
@@ -303,6 +321,7 @@ watch(isPlus, (val) => {
         <Tab :value="0">All Requests</Tab>
         <Tab :value="1">My Requests</Tab>
         <Tab :value="2">My Contributions</Tab>
+        <Tab :value="3">Voted On</Tab>
       </TabList>
     </Tabs>
 
@@ -370,9 +389,9 @@ watch(isPlus, (val) => {
           class="w-full"
         />
       </div>
-      <div v-if="isContributed" class="flex items-center gap-2 h-10 col-span-2 sm:col-span-3">
-        <Checkbox v-model="excludeOwnContributions" input-id="excludeOwnContributions" :binary="true" />
-        <label for="excludeOwnContributions" class="text-sm cursor-pointer">
+      <div v-if="canExcludeOwn" class="flex items-center gap-2 h-10 col-span-2 sm:col-span-3">
+        <Checkbox v-model="excludeOwnRequests" input-id="excludeOwnRequests" :binary="true" />
+        <label for="excludeOwnRequests" class="text-sm cursor-pointer">
           Exclude my own requests
         </label>
       </div>
@@ -415,8 +434,12 @@ watch(isPlus, (val) => {
         />
       </template>
       <template v-else-if="isContributed">
-        <p v-if="excludeOwnContributions">No contributions to other people's requests yet.</p>
+        <p v-if="excludeOwnRequests">No contributions to other people's requests yet.</p>
         <p v-else>You haven't contributed to any requests yet.</p>
+      </template>
+      <template v-else-if="isVoted">
+        <p v-if="excludeOwnRequests">You haven't voted on anyone else's requests yet.</p>
+        <p v-else>You haven't voted on any requests yet.</p>
       </template>
       <p v-else>No requests found. Be the first!</p>
     </div>

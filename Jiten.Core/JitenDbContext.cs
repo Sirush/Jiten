@@ -868,6 +868,9 @@ public class JitenDbContext : DbContext
             entity.HasIndex(u => new { u.MediaRequestId, u.UserId })
                   .IsUnique()
                   .HasDatabaseName("IX_MediaRequestUpvote_RequestId_UserId");
+            // The "voted on" tab seeks by user, which the request-leading unique index cannot serve.
+            entity.HasIndex(u => new { u.UserId, u.MediaRequestId })
+                  .HasDatabaseName("IX_MediaRequestUpvote_UserId_RequestId");
         });
 
         modelBuilder.Entity<MediaRequestBoost>(entity =>
