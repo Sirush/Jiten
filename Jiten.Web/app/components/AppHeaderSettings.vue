@@ -145,6 +145,8 @@
         </button>
       </div>
 
+      <TtsVolumeControl class="py-1" @interact-start="isSettingsInteracted = true" @interact-end="isSettingsInteracted = false" />
+
       <Divider class="!my-1 md:!my-2 !mx-2" />
 
       <div class="flex items-center gap-2 py-1">

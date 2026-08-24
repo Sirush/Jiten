@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { type DifficultyDisplayStyle, DifficultyValueDisplayStyle, ThemeMode, TitleLanguage } from '~/types';
 import type { KanjiScalePref } from '~/data/kanjiGroupings';
+import { DEFAULT_TTS_VOLUME } from '~/utils/ttsVolume';
 
 const YEAR = 60 * 60 * 24 * 365;
 
@@ -127,6 +128,8 @@ export const useJitenStore = defineStore('jiten', () => {
   const lastSeenUpdateId = createLocalStorageState<number>('last-seen-update-id', 0);
   const customDictionaryFontSize = createLocalStorageState<number>('custom-dictionary-font-size', 16);
 
+  const ttsVolume = createLocalStorageState<number>('tts-volume', DEFAULT_TTS_VOLUME);
+
   const coverageVersion = ref(0);
 
   function bumpCoverageVersion() {
@@ -160,6 +163,7 @@ export const useJitenStore = defineStore('jiten', () => {
     hideAlternativeTitles,
     quickMasterVocabulary,
     ttsVoice,
+    ttsVolume,
     difficultyDisplayStyle,
     difficultyValueDisplayStyle,
     kanjiScale,

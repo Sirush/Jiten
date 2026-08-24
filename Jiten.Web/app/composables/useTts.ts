@@ -1,3 +1,5 @@
+import { isTtsMuted, resolveTtsVolume } from '~/utils/ttsVolume';
+
 const browserSupported = ref(false);
 let japaneseVoice: SpeechSynthesisVoice | null = null;
 
@@ -40,6 +42,11 @@ function reset() {
 
 export function stopTts() { reset(); }
 
+// Web Speech cannot be re-levelled once speaking, so only a server clip follows the slider live.
+export function applyTtsVolume(volume: number) {
+  if (activeAudio) activeAudio.volume = resolveTtsVolume(volume);
+}
+
 export type TtsType = 'word' | 'sentence';
 
 const randomVoicePool = ['female', 'female2', 'male', 'male2', 'asmr'] as const;
@@ -58,6 +65,12 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
     if (store.ttsVoice !== 'random') return store.ttsVoice;
     return randomVoicePool[Math.floor(Math.random() * randomVoicePool.length)];
   }
+
+  // Read per playback so a slider move applies to the very next clip.
+  function currentVolume() {
+    return resolveTtsVolume(store.ttsVolume);
+  }
+
   const isSupported = computed(() => isServerMode.value || browserSupported.value);
   const isActive = computed(() => resolvedText.value !== '' && activeText.value === resolvedText.value);
   const isSpeaking = computed(() => isActive.value && activeState.value === 'playing');
@@ -99,11 +112,13 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
 
   function speakBrowser(t: string) {
     if (!browserSupported.value || !t) return;
+    if (isTtsMuted(store.ttsVolume)) return;
     reset();
     activeText.value = t;
     activeState.value = 'playing';
     const utterance = new SpeechSynthesisUtterance(t);
     utterance.lang = 'ja-JP';
+    utterance.volume = currentVolume();
     if (japaneseVoice) utterance.voice = japaneseVoice;
     utterance.onend = () => reset();
     utterance.onerror = () => reset();
@@ -111,6 +126,8 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
   }
 
   async function playServer(textKey: string, url: string, withAuth = false) {
+    // Muted playback would still cost a synthesis request and a rate-limit slot, so it never leaves the client.
+    if (isTtsMuted(store.ttsVolume)) return;
     reset();
     const abort = new AbortController();
     activeAbort = abort;
@@ -126,6 +143,7 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
       if (abort.signal.aborted) return;
       const blobUrl = URL.createObjectURL(blob);
       const audio = new Audio(blobUrl);
+      audio.volume = currentVolume();
 
       if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
       activeAudio = audio;
