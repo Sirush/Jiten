@@ -24,7 +24,7 @@ namespace Jiten.Api.Controllers;
 [Route("api/vocabulary")]
 [EnableRateLimiting("fixed")]
 [Produces("application/json")]
-public class VocabularyController(JitenDbContext context, IDbContextFactory<JitenDbContext> contextFactory, ICurrentUserService currentUserService, IDerivationLinkCache derivationCache, UserDbContext userContext, IMemoryCache memoryCache, IConnectionMultiplexer redis, IExampleSentenceQueryService exampleSentences) : ControllerBase
+public class VocabularyController(JitenDbContext context, IDbContextFactory<JitenDbContext> contextFactory, ICurrentUserService currentUserService, IDerivationLinkCache derivationCache, UserDbContext userContext, IMemoryCache memoryCache, IConnectionMultiplexer redis, IExampleSentenceQueryService exampleSentences, IFrequencySourceResolver frequencySource) : ControllerBase
 {
     /// <summary>
     /// Gets a word by its ID and reading index, including definitions, readings, frequency and user known state.
@@ -76,6 +76,8 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
 
         await Task.WhenAll(wordTask, wordFormsTask, formFreqsTask, usedInMediaByTypeTask, knownStatesTask, composedOfTask, usedInTask);
 
+        var scope = await frequencySource.Resolve();
+
         var word = await wordTask;
         if (word == null)
             return Results.NotFound();
@@ -92,8 +94,14 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         var formFreqs = await formFreqsTask;
         var usedInMediaByType = await usedInMediaByTypeTask;
 
-        var mainFreq = formFreqs.GetValueOrDefault(mainForm.ReadingIndex);
-        var mainReading = WordFormHelper.ToFormDto(mainForm, mainFreq, usedInMediaByType);
+        // Location=Client keeps this payload out of any shared cache, so the caller's own ranking may go in it.
+        var scopedFreqs = new ScopedFormFrequencies(
+            scope,
+            formFreqs.ToDictionary(kv => (wordId, kv.Key), kv => kv.Value),
+            scope.MediaType.HasValue ? await WordFormHelper.LoadWordFormFrequencies(ctx3, [wordId], scope.MediaType) : null,
+            scope.FrequencyListId.HasValue ? await frequencySource.ListRanks(scope.FrequencyListId.Value) : null);
+
+        var mainReading = WordFormHelper.ToFormDto(mainForm, scopedFreqs.Resolve(wordId, mainForm.ReadingIndex), usedInMediaByType);
 
         var enabledDerivations = currentUserService.UserId == null
             ? null
@@ -106,11 +114,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             : null;
 
         List<WordFormDto> alternativeReadings = wordForms
-                                                   .Select(form =>
-                                                   {
-                                                       var freq = formFreqs.GetValueOrDefault(form.ReadingIndex);
-                                                       return WordFormHelper.ToPlainFormDto(form, freq);
-                                                   })
+                                                   .Select(form => WordFormHelper.ToPlainFormDto(form, scopedFreqs.Resolve(wordId, form.ReadingIndex)))
                                                    .ToList();
 
         return Results.Ok(new WordDto
@@ -228,6 +232,103 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                                       .GroupBy(mediaType => mediaType)
                                       .Select(g => new { MediaType = g.Key, Count = g.Count() })
                                       .ToDictionaryAsync(x => (int)x.MediaType, x => x.Count);
+    }
+
+    /// <summary>
+    /// Every ranking this form has: the site-wide one, one per media type that has observed it, the caller's saved
+    /// custom lists, and which of them the caller's default resolves to.
+    /// </summary>
+    /// <remarks>Deliberately uncached: the resolved rank and the list ranks are per-user, and the word payload
+    /// endpoints they overlay are publicly cached.</remarks>
+    [HttpGet("{wordId}/{readingIndex}/frequency-ranks")]
+    [SwaggerOperation(Summary = "Get every frequency ranking for a word form")]
+    [ProducesResponseType(typeof(WordFrequencyRanksDto), StatusCodes.Status200OK)]
+    public async Task<IResult> GetWordFrequencyRanks([FromRoute] int wordId, [FromRoute] byte readingIndex,
+                                                     [FromQuery] bool includeLists = false)
+    {
+        var global = await context.WordFormFrequencies.AsNoTracking()
+                                  .Where(f => f.WordId == wordId && f.ReadingIndex == readingIndex)
+                                  .FirstOrDefaultAsync();
+
+        var byTypeRows = await context.WordFormFrequenciesByType.AsNoTracking()
+                                      .Where(f => f.WordId == wordId && f.ReadingIndex == readingIndex)
+                                      .ToListAsync();
+
+        var dto = new WordFrequencyRanksDto
+        {
+            Global = new FrequencyRankEntryDto
+            {
+                Rank = global?.FrequencyRank ?? 0,
+                Percentage = global?.FrequencyPercentage ?? 0,
+                Amount = global?.UsedInMediaAmount ?? 0
+            },
+            ByType = byTypeRows.ToDictionary(f => (int)f.MediaType, f => new FrequencyRankEntryDto
+            {
+                Rank = f.FrequencyRank, Percentage = f.FrequencyPercentage, Amount = f.UsedInMediaAmount
+            })
+        };
+
+        var userId = currentUserService.UserId;
+        if (userId == null)
+        {
+            dto.Resolved = new ResolvedFrequencyRankDto { Rank = dto.Global.Rank };
+            return Results.Ok(dto);
+        }
+
+        var wordKey = WordFormHelper.EncodeWordKey(wordId, readingIndex);
+
+        if (includeLists)
+        {
+            var saved = await userContext.UserFrequencyLists.AsNoTracking()
+                                         .Where(f => f.UserId == userId && f.IsSaved && f.RankedWordsBlob != null)
+                                         .OrderBy(f => f.Name)
+                                         .Select(f => new { f.Id, f.Name })
+                                         .ToListAsync();
+
+            dto.Lists = [];
+            foreach (var list in saved)
+            {
+                var ranks = await frequencySource.ListRanks(list.Id);
+                ranks.TryGetValue(wordKey, out var listRank);
+                dto.Lists.Add(new FrequencyListRankDto { Id = list.Id, Name = list.Name, Rank = listRank });
+            }
+        }
+
+        var scope = await frequencySource.Resolve(userId);
+
+        if (scope.MediaType is { } mediaType)
+        {
+            var typed = dto.ByType.GetValueOrDefault((int)mediaType);
+            dto.Resolved = typed != null
+                ? new ResolvedFrequencyRankDto
+                {
+                    Source = FrequencyRankSources.MediaType, MediaType = (int)mediaType, Rank = typed.Rank
+                }
+                : new ResolvedFrequencyRankDto
+                {
+                    Source = FrequencyRankSources.Global, MediaType = (int)mediaType, Rank = dto.Global.Rank, IsFallback = true
+                };
+        }
+        else if (scope.FrequencyListId is { } listId)
+        {
+            var ranks = await frequencySource.ListRanks(listId);
+            ranks.TryGetValue(wordKey, out var listRank);
+            dto.Resolved = new ResolvedFrequencyRankDto
+            {
+                Source = FrequencyRankSources.List,
+                ListId = listId,
+                ListName = dto.Lists?.FirstOrDefault(l => l.Id == listId)?.Name
+                           ?? await userContext.UserFrequencyLists.AsNoTracking()
+                                               .Where(f => f.Id == listId).Select(f => f.Name).FirstOrDefaultAsync(),
+                Rank = listRank
+            };
+        }
+        else
+        {
+            dto.Resolved = new ResolvedFrequencyRankDto { Rank = dto.Global.Rank };
+        }
+
+        return Results.Ok(dto);
     }
 
     [HttpGet("{wordId}/{readingIndex}/known-state")]
@@ -437,7 +538,14 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         {
             var cachedJson = await redisDb.StringGetAsync(cacheKey);
             if (cachedJson.HasValue)
-                return Results.Ok(JsonSerializer.Deserialize<DictionarySearchResultDto>(cachedJson!));
+            {
+                var cachedDto = JsonSerializer.Deserialize<DictionarySearchResultDto>(cachedJson!);
+                if (cachedDto != null)
+                {
+                    await ApplyScopedRanks(cachedDto);
+                    return Results.Ok(cachedDto);
+                }
+            }
         }
         catch { }
 
@@ -537,7 +645,28 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         try { await redisDb.StringSetAsync(cacheKey, JsonSerializer.Serialize(dto), TimeSpan.FromDays(7)); }
         catch { }
 
+        await ApplyScopedRanks(dto);
         return Results.Ok(dto);
+    }
+
+    /// <summary>Runs after the search payload is cached in Redis: the cache is shared, the caller's ranking is not.</summary>
+    private async Task ApplyScopedRanks(DictionarySearchResultDto dto)
+    {
+        var scope = await frequencySource.Resolve();
+        if (scope.IsGlobal) return;
+
+        var entries = dto.Results.Concat(dto.DictionaryResults).ToList();
+        var wordIds = entries.Select(e => e.WordId).Distinct().ToList();
+        if (wordIds.Count == 0) return;
+
+        var scoped = await frequencySource.LoadFrequencies(context, wordIds, scope);
+        foreach (var entry in entries)
+        {
+            var resolved = scoped.Resolve(entry.WordId, entry.ReadingIndex);
+            entry.FrequencyRank = resolved.Rank == 0 ? int.MaxValue : resolved.Rank;
+            entry.FrequencyRankSource = resolved.Source;
+            entry.IsFrequencyFallback = resolved.IsFallback ? true : null;
+        }
     }
 
     #region Dictionary search helpers

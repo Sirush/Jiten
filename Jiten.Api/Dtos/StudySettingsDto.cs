@@ -279,6 +279,21 @@ public class StudySettingsDto
     public StudyKeybindsDto Keybinds { get; set; } = new();
 
     /// <summary>
+    /// Media type whose ranking replaces the site-wide one wherever a rank is displayed. Null on a PUT means
+    /// unchanged, so a client that predates the field cannot clear it; 0 is the explicit "back to global".
+    /// Mutually exclusive with <see cref="DefaultFrequencyListId"/>.
+    /// </summary>
+    [JsonPropertyName("defaultFrequencyMediaType")]
+    public int? DefaultFrequencyMediaType { get; set; }
+
+    /// <summary>
+    /// Custom frequency list whose ranking replaces the site-wide one wherever a rank is displayed. Same
+    /// null-means-unchanged and 0-means-global rules as <see cref="DefaultFrequencyMediaType"/>.
+    /// </summary>
+    [JsonPropertyName("defaultFrequencyListId")]
+    public long? DefaultFrequencyListId { get; set; }
+
+    /// <summary>
     /// User-customised ordering of the SRS card blocks per side. Null means "not customised" — the
     /// client derives the layout from the legacy display toggles. The server bounds its size but does
     /// not interpret block types; the client registry owns their semantics.

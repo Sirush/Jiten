@@ -1,22 +1,32 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Jiten.Api.Dtos;
 using Jiten.Api.Helpers;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.FSRS;
+using Jiten.Core.Data.Billing;
 using Jiten.Core.Data.User;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Jiten.Api.Services;
 
-public class DeckWordResolver(JitenDbContext context, UserDbContext userContext, ICurrentUserService currentUserService, IWordFormSiblingCache wordFormCache) : IDeckWordResolver
+public class DeckWordResolver(JitenDbContext context, UserDbContext userContext, ICurrentUserService currentUserService,
+    IWordFormSiblingCache wordFormCache, IMemoryCache memoryCache) : IDeckWordResolver
 {
+    private sealed class FormRankRow
+    {
+        public int WordId { get; set; }
+        public short ReadingIndex { get; set; }
+        public int FrequencyRank { get; set; }
+    }
+
     public async Task<(List<DeckWord>? Words, IResult? Error)> ResolveDeckWords(DeckWordResolveRequest request)
     {
         var (deckId, deck, downloadType, order, minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
-            targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown) = request;
+            targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown, frequencySource) = request;
 
         IQueryable<DeckWord> deckWordsQuery = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deckId);
 
@@ -39,11 +49,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 break;
 
             case DeckDownloadType.TopGlobalFrequency:
-                deckWordsQuery = deckWordsQuery.Where(dw => context.WordFormFrequencies
-                                                                   .Any(wff => wff.WordId == dw.WordId &&
-                                                                               wff.ReadingIndex == (short)dw.ReadingIndex &&
-                                                                               wff.FrequencyRank >= minFrequency &&
-                                                                               wff.FrequencyRank <= maxFrequency));
+                deckWordsQuery = ApplyFrequencyRankFilter(deckWordsQuery, minFrequency, maxFrequency, frequencySource);
                 break;
 
             case DeckDownloadType.TopDeckFrequency:
@@ -96,11 +102,11 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 else if (order == DeckOrder.GlobalFrequency)
                 {
                     var resultWordIds = resultWords.Select(dw => dw.WordId).Distinct().ToList();
-                    var freqMap = await WordFormHelper.LoadWordFormFrequencies(context, resultWordIds);
+                    var freqMap = await LoadFormRanks(resultWordIds, frequencySource);
 
                     deckWordsRaw = resultWords.OrderBy(dw =>
-                                                           freqMap.TryGetValue((dw.WordId, (short)dw.ReadingIndex), out var wff)
-                                                               ? wff.FrequencyRank
+                                                           freqMap.TryGetValue((dw.WordId, (short)dw.ReadingIndex), out var rank)
+                                                               ? rank
                                                                : int.MaxValue
                                                       ).ToList();
                 }
@@ -131,12 +137,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                     break;
 
                 case DeckOrder.GlobalFrequency:
-                    deckWordsQuery = deckWordsQuery.OrderBy(dw => context.WordFormFrequencies
-                                                                         .Where(wff => wff.WordId == dw.WordId &&
-                                                                                       wff.ReadingIndex == (short)dw.ReadingIndex)
-                                                                         .Select(wff => wff.FrequencyRank)
-                                                                         .FirstOrDefault()
-                                                           );
+                    deckWordsQuery = ApplyFrequencyRankOrder(deckWordsQuery, frequencySource);
                     break;
 
                 case DeckOrder.DeckFrequency:
@@ -196,9 +197,87 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return keys.ToHashSet();
     }
 
-    private IQueryable<JmDictWordFormFrequency> BuildGlobalFrequencyQuery(int? minFreq, int? maxFreq, string? posFilter)
+    private IQueryable<DeckWord> ApplyFrequencyRankFilter(IQueryable<DeckWord> query, int minFrequency, int maxFrequency,
+        MediaType? frequencySource)
     {
-        var query = context.WordFormFrequencies.AsNoTracking();
+        if (frequencySource.HasValue)
+        {
+            var source = frequencySource.Value;
+            return query.Where(dw => context.WordFormFrequenciesByType
+                                            .Any(wff => wff.MediaType == source &&
+                                                        wff.WordId == dw.WordId &&
+                                                        wff.ReadingIndex == (short)dw.ReadingIndex &&
+                                                        wff.FrequencyRank >= minFrequency &&
+                                                        wff.FrequencyRank <= maxFrequency));
+        }
+
+        return query.Where(dw => context.WordFormFrequencies
+                                        .Any(wff => wff.WordId == dw.WordId &&
+                                                    wff.ReadingIndex == (short)dw.ReadingIndex &&
+                                                    wff.FrequencyRank >= minFrequency &&
+                                                    wff.FrequencyRank <= maxFrequency));
+    }
+
+    private IQueryable<DeckWord> ApplyFrequencyRankOrder(IQueryable<DeckWord> query, MediaType? frequencySource)
+    {
+        if (frequencySource.HasValue)
+        {
+            var source = frequencySource.Value;
+            // Unobserved words rank last, not first as the global path's FirstOrDefault() zero would put them.
+            return query.OrderBy(dw => context.WordFormFrequenciesByType
+                                              .Where(wff => wff.MediaType == source &&
+                                                            wff.WordId == dw.WordId &&
+                                                            wff.ReadingIndex == (short)dw.ReadingIndex)
+                                              .Select(wff => (int?)wff.FrequencyRank)
+                                              .FirstOrDefault() ?? int.MaxValue);
+        }
+
+        return query.OrderBy(dw => context.WordFormFrequencies
+                                          .Where(wff => wff.WordId == dw.WordId &&
+                                                        wff.ReadingIndex == (short)dw.ReadingIndex)
+                                          .Select(wff => wff.FrequencyRank)
+                                          .FirstOrDefault());
+    }
+
+    private async Task<Dictionary<(int, short), int>> LoadFormRanks(List<int> wordIds, MediaType? frequencySource)
+    {
+        if (wordIds.Count == 0) return new Dictionary<(int, short), int>();
+
+        if (frequencySource.HasValue)
+        {
+            var source = frequencySource.Value;
+            return await context.WordFormFrequenciesByType.AsNoTracking()
+                                .Where(wff => wff.MediaType == source && wordIds.Contains(wff.WordId))
+                                .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex), wff => wff.FrequencyRank);
+        }
+
+        return await context.WordFormFrequencies.AsNoTracking()
+                            .Where(wff => wordIds.Contains(wff.WordId))
+                            .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex), wff => wff.FrequencyRank);
+    }
+
+    private IQueryable<FormRankRow> BuildGlobalFrequencyQuery(int? minFreq, int? maxFreq, string? posFilter,
+        MediaType? frequencySource = null)
+    {
+        IQueryable<FormRankRow> query;
+        if (frequencySource.HasValue)
+        {
+            var source = frequencySource.Value;
+            query = context.WordFormFrequenciesByType.AsNoTracking()
+                           .Where(wff => wff.MediaType == source)
+                           .Select(wff => new FormRankRow
+                           {
+                               WordId = wff.WordId, ReadingIndex = wff.ReadingIndex, FrequencyRank = wff.FrequencyRank
+                           });
+        }
+        else
+        {
+            query = context.WordFormFrequencies.AsNoTracking()
+                           .Select(wff => new FormRankRow
+                           {
+                               WordId = wff.WordId, ReadingIndex = wff.ReadingIndex, FrequencyRank = wff.FrequencyRank
+                           });
+        }
 
         if (minFreq.HasValue)
             query = query.Where(wff => wff.FrequencyRank >= minFreq.Value);
@@ -219,34 +298,136 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return query;
     }
 
-    public async Task<GlobalDynamicResult> ResolveGlobalDynamicWords(int? minFreq, int? maxFreq, string? posFilter,
-        bool excludeKana, bool excludeMatureMasteredBlacklisted, bool excludeAllTrackedWords)
+    private async Task<IReadOnlyList<(int WordId, byte ReadingIndex)>> LoadRankedListWords(long listId)
     {
-        var query = BuildGlobalFrequencyQuery(minFreq, maxFreq, posFilter);
+        var blobGeneratedAt = await userContext.UserFrequencyLists.AsNoTracking()
+                                               .Where(f => f.Id == listId)
+                                               .Select(f => f.BlobGeneratedAt)
+                                               .FirstOrDefaultAsync();
+        if (blobGeneratedAt is null) return [];
 
-        if (excludeKana)
-            query = query.Where(wff => context.WordForms
-                .Any(wf => wf.WordId == wff.WordId && wf.ReadingIndex == wff.ReadingIndex && wf.FormType != JmDictFormType.KanaForm));
+        var cacheKey = $"freqlistwords:{listId}:{blobGeneratedAt.Value.Ticks}";
+        if (memoryCache.TryGetValue(cacheKey, out IReadOnlyList<(int WordId, byte ReadingIndex)>? cached) && cached != null)
+            return cached;
 
+        var blob = await userContext.UserFrequencyLists.AsNoTracking()
+                                    .Where(f => f.Id == listId)
+                                    .Select(f => f.RankedWordsBlob)
+                                    .FirstOrDefaultAsync();
+
+        IReadOnlyList<(int WordId, byte ReadingIndex)> decoded = FrequencyListBlobPacker.Unpack(blob);
+        memoryCache.Set(cacheKey, decoded, TimeSpan.FromMinutes(30));
+        return decoded;
+    }
+
+    /// <summary>Word key to 1-based rank for a saved list. Kept apart from the unpacked list because single-word
+    /// lookups happen per page view, where scanning tens of thousands of entries would dominate the request.</summary>
+    public async Task<IReadOnlyDictionary<long, int>> GetListRankMap(long listId)
+    {
+        var blobGeneratedAt = await userContext.UserFrequencyLists.AsNoTracking()
+                                               .Where(f => f.Id == listId)
+                                               .Select(f => f.BlobGeneratedAt)
+                                               .FirstOrDefaultAsync();
+        if (blobGeneratedAt is null) return EmptyRankMap;
+
+        var cacheKey = $"freqlistranks:{listId}:{blobGeneratedAt.Value.Ticks}";
+        if (memoryCache.TryGetValue(cacheKey, out IReadOnlyDictionary<long, int>? cached) && cached != null)
+            return cached;
+
+        var ranked = await LoadRankedListWords(listId);
+        var map = new Dictionary<long, int>(ranked.Count);
+        for (var i = 0; i < ranked.Count; i++)
+        {
+            var (wordId, readingIndex) = ranked[i];
+            map.TryAdd(WordFormHelper.EncodeWordKey(wordId, readingIndex), i + 1);
+        }
+
+        memoryCache.Set(cacheKey, (IReadOnlyDictionary<long, int>)map, TimeSpan.FromMinutes(10));
+        return map;
+    }
+
+    private static readonly IReadOnlyDictionary<long, int> EmptyRankMap = new Dictionary<long, int>();
+
+    /// <summary>Rank-ordered list entries in [minRank, maxRank] after the same POS and kana filters the SQL path applies.</summary>
+    private async Task<List<(int WordId, byte ReadingIndex, int Rank)>> ResolveListWords(long listId, int? minRank, int? maxRank,
+        string? posFilter, bool excludeKana)
+    {
+        var ranked = await LoadRankedListWords(listId);
+        if (ranked.Count == 0) return [];
+
+        var entries = FrequencyListBlobPacker.Slice(ranked, minRank, maxRank);
+        if (entries.Count == 0) return entries;
+
+        if (!string.IsNullOrEmpty(posFilter))
+        {
+            var posTags = JsonSerializer.Deserialize<string[]>(posFilter);
+            if (posTags is { Length: > 0 })
+            {
+                var candidateIds = entries.Select(e => e.WordId).Distinct().ToList();
+                var matched = (await context.JMDictWords.AsNoTracking()
+                                            .Where(w => candidateIds.Contains(w.WordId) && w.PartsOfSpeech.Any(p => posTags.Contains(p)))
+                                            .Select(w => w.WordId)
+                                            .ToListAsync()).ToHashSet();
+                entries = entries.Where(e => matched.Contains(e.WordId)).ToList();
+            }
+        }
+
+        if (excludeKana && entries.Count > 0)
+        {
+            var kanaKeys = await WordFormHelper.GetKanaFormKeys(context, entries.Select(e => e.WordId).Distinct());
+            if (kanaKeys.Count > 0)
+                entries = entries.Where(e => !kanaKeys.Contains(WordFormHelper.EncodeWordKey(e.WordId, e.ReadingIndex))).ToList();
+        }
+
+        return entries;
+    }
+
+    public async Task<GlobalDynamicResult> ResolveGlobalDynamicWords(int? minFreq, int? maxFreq, string? posFilter,
+        bool excludeKana, bool excludeMatureMasteredBlacklisted, bool excludeAllTrackedWords, FrequencyScope scope = default)
+    {
         const int maxResults = 500_000;
 
         var excludedKeys = await BuildExcludedWordKeys(excludeMatureMasteredBlacklisted, excludeAllTrackedWords);
 
-        var words = await query
-            .OrderBy(wff => wff.FrequencyRank)
-            .Take(maxResults + 1)
-            .Select(wff => new ResolvedWord
-            {
-                WordId = wff.WordId,
-                ReadingIndex = (byte)wff.ReadingIndex,
-                Occurrences = 1,
-                SortOrder = wff.FrequencyRank
-            })
-            .ToListAsync();
+        List<ResolvedWord> words;
+        bool wasTruncated;
 
-        var wasTruncated = words.Count > maxResults;
-        if (wasTruncated)
-            words = words.Take(maxResults).ToList();
+        if (scope.FrequencyListId.HasValue)
+        {
+            var entries = await ResolveListWords(scope.FrequencyListId.Value, minFreq, maxFreq, posFilter, excludeKana);
+            wasTruncated = entries.Count > maxResults;
+            if (wasTruncated)
+                entries = entries.Take(maxResults).ToList();
+
+            words = entries.Select(e => new ResolvedWord
+            {
+                WordId = e.WordId, ReadingIndex = e.ReadingIndex, Occurrences = 1, SortOrder = e.Rank
+            }).ToList();
+        }
+        else
+        {
+            var query = BuildGlobalFrequencyQuery(minFreq, maxFreq, posFilter, scope.MediaType);
+
+            if (excludeKana)
+                query = query.Where(wff => context.WordForms
+                    .Any(wf => wf.WordId == wff.WordId && wf.ReadingIndex == wff.ReadingIndex && wf.FormType != JmDictFormType.KanaForm));
+
+            words = await query
+                .OrderBy(wff => wff.FrequencyRank)
+                .Take(maxResults + 1)
+                .Select(wff => new ResolvedWord
+                {
+                    WordId = wff.WordId,
+                    ReadingIndex = (byte)wff.ReadingIndex,
+                    Occurrences = 1,
+                    SortOrder = wff.FrequencyRank
+                })
+                .ToListAsync();
+
+            wasTruncated = words.Count > maxResults;
+            if (wasTruncated)
+                words = words.Take(maxResults).ToList();
+        }
 
         if (excludedKeys.Count > 0)
         {
@@ -256,6 +437,31 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         }
 
         return new GlobalDynamicResult(words, wasTruncated);
+    }
+
+    public async Task<Dictionary<(int, byte), int>> GetFrequencyRanks(List<int> wordIds, FrequencyScope scope = default)
+    {
+        var result = new Dictionary<(int, byte), int>();
+        if (wordIds.Count == 0) return result;
+
+        if (scope.FrequencyListId.HasValue)
+        {
+            var rankMap = await GetListRankMap(scope.FrequencyListId.Value);
+            var wanted = wordIds.ToHashSet();
+            foreach (var (key, rank) in rankMap)
+            {
+                var wordId = (int)(key >> 8);
+                if (wanted.Contains(wordId))
+                    result.TryAdd((wordId, (byte)(key & 0xFF)), rank);
+            }
+
+            return result;
+        }
+
+        foreach (var (key, rank) in await LoadFormRanks(wordIds, scope.MediaType))
+            result[(key.Item1, (byte)key.Item2)] = rank;
+
+        return result;
     }
 
     public async Task<List<ResolvedWord>> ResolveStaticDeckWords(int studyDeckId, int order,
@@ -382,9 +588,14 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return FilterExcludedWords(words, await BuildExcludedWordKeys(excludeMatureMasteredBlacklisted, excludeAllTrackedWords));
     }
 
-    public async Task<HashSet<long>> GetGlobalDynamicWordKeys(int? minFreq, int? maxFreq, string? posFilter)
+    public async Task<HashSet<long>> GetGlobalDynamicWordKeys(int? minFreq, int? maxFreq, string? posFilter,
+        FrequencyScope scope = default)
     {
-        var query = BuildGlobalFrequencyQuery(minFreq, maxFreq, posFilter);
+        if (scope.FrequencyListId.HasValue)
+            return FrequencyListBlobPacker.ToKeySet(
+                await ResolveListWords(scope.FrequencyListId.Value, minFreq, maxFreq, posFilter, false));
+
+        var query = BuildGlobalFrequencyQuery(minFreq, maxFreq, posFilter, scope.MediaType);
 
         var keys = await query
             .Select(wff => ((long)wff.WordId << 8) | (byte)wff.ReadingIndex)
@@ -394,11 +605,19 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return keys.ToHashSet();
     }
 
-    public async Task<HashSet<long>> GetGlobalDynamicWordKeysForWordIds(int? minFreq, int? maxFreq, string? posFilter, List<int> wordIds, bool excludeKana = false)
+    public async Task<HashSet<long>> GetGlobalDynamicWordKeysForWordIds(int? minFreq, int? maxFreq, string? posFilter, List<int> wordIds,
+        bool excludeKana = false, FrequencyScope scope = default)
     {
         if (wordIds.Count == 0) return [];
 
-        var query = BuildGlobalFrequencyQuery(minFreq, maxFreq, posFilter)
+        if (scope.FrequencyListId.HasValue)
+        {
+            var wanted = wordIds.ToHashSet();
+            var entries = await ResolveListWords(scope.FrequencyListId.Value, minFreq, maxFreq, posFilter, excludeKana);
+            return FrequencyListBlobPacker.ToKeySet(entries.Where(e => wanted.Contains(e.WordId)));
+        }
+
+        var query = BuildGlobalFrequencyQuery(minFreq, maxFreq, posFilter, scope.MediaType)
             .Where(wff => wordIds.Contains(wff.WordId));
 
         if (excludeKana)
@@ -414,9 +633,18 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
     }
 
     public async Task<(int Count, bool WasTruncated)> CountGlobalDynamicWords(int? minFreq, int? maxFreq, string? posFilter, bool excludeKana,
-        bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false)
+        bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false, FrequencyScope scope = default)
     {
-        var query = BuildGlobalFrequencyQuery(minFreq, maxFreq, posFilter);
+        if (scope.FrequencyListId.HasValue)
+        {
+            var entries = await ResolveListWords(scope.FrequencyListId.Value, minFreq, maxFreq, posFilter, excludeKana);
+            var listExcluded = await BuildExcludedWordKeys(excludeMatureMasteredBlacklisted, excludeAllTrackedWords);
+            if (listExcluded.Count == 0) return (entries.Count, false);
+
+            return (entries.Count(e => !listExcluded.Contains(WordFormHelper.EncodeWordKey(e.WordId, e.ReadingIndex))), false);
+        }
+
+        var query = BuildGlobalFrequencyQuery(minFreq, maxFreq, posFilter, scope.MediaType);
 
         if (excludeKana)
             query = query.Where(wff => context.WordForms
@@ -449,7 +677,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
     {
         var (deckId, deck, downloadType, order, minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
-            targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown) = request;
+            targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown, frequencySource) = request;
 
         IQueryable<DeckWord> query = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deckId);
 
@@ -459,11 +687,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 break;
             case DeckDownloadType.TopGlobalFrequency:
                 if (globalFrequencyKeys == null)
-                    query = query.Where(dw => context.WordFormFrequencies
-                        .Any(wff => wff.WordId == dw.WordId &&
-                                    wff.ReadingIndex == (short)dw.ReadingIndex &&
-                                    wff.FrequencyRank >= minFrequency &&
-                                    wff.FrequencyRank <= maxFrequency));
+                    query = ApplyFrequencyRankFilter(query, minFrequency, maxFrequency, frequencySource);
                 break;
             case DeckDownloadType.TopDeckFrequency:
                 query = query.OrderByDescending(dw => dw.Occurrences)

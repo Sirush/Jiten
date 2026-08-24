@@ -12,6 +12,8 @@
     removing?: boolean;
     selectable?: boolean;
     selected?: boolean;
+    /** Names the ranking the shown rank comes from ("Anime"); absent means the site-wide one. */
+    rankSourceLabel?: string;
   }>();
 
   const emit = defineEmits<{
@@ -57,7 +59,7 @@
           <span @click.stop>
             <VocabularyStatus :word="word" />
           </span>
-          x{{ word.occurrences }} | Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}
+          x{{ word.occurrences }} | Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}<span v-if="rankSourceLabel" class="text-xs whitespace-nowrap"> in {{ rankSourceLabel }}</span>
           <Button
             v-if="removable"
             icon="pi pi-trash"

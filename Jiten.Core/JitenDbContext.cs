@@ -28,6 +28,8 @@ public class JitenDbContext : DbContext
     public DbSet<JmDictLookup> Lookups { get; set; }
     public DbSet<JmDictWordForm> WordForms { get; set; }
     public DbSet<JmDictWordFormFrequency> WordFormFrequencies { get; set; }
+    public DbSet<JmDictWordFrequencyByType> WordFrequenciesByType { get; set; }
+    public DbSet<JmDictWordFormFrequencyByType> WordFormFrequenciesByType { get; set; }
     public DbSet<Kanji> Kanjis { get; set; }
     public DbSet<WordKanji> WordKanjis { get; set; }
     public DbSet<KanjiReadingWord> KanjiReadingWords { get; set; }
@@ -465,6 +467,34 @@ public class JitenDbContext : DbContext
 
             entity.HasIndex(e => e.FrequencyRank)
                   .HasDatabaseName("IX_WordFormFrequencies_FrequencyRank");
+        });
+
+        modelBuilder.Entity<JmDictWordFrequencyByType>(entity =>
+        {
+            entity.ToTable("WordFrequenciesByType", "jmdict");
+            entity.HasKey(e => new { e.MediaType, e.WordId });
+
+            entity.Property(e => e.MediaType).HasColumnType("smallint");
+
+            entity.HasIndex(e => new { e.MediaType, e.FrequencyRank })
+                  .HasDatabaseName("IX_WordFrequenciesByType_MediaType_FrequencyRank");
+
+            entity.HasIndex(e => e.WordId)
+                  .HasDatabaseName("IX_WordFrequenciesByType_WordId");
+        });
+
+        modelBuilder.Entity<JmDictWordFormFrequencyByType>(entity =>
+        {
+            entity.ToTable("WordFormFrequenciesByType", "jmdict");
+            entity.HasKey(e => new { e.MediaType, e.WordId, e.ReadingIndex });
+
+            entity.Property(e => e.MediaType).HasColumnType("smallint");
+
+            entity.HasIndex(e => new { e.MediaType, e.FrequencyRank })
+                  .HasDatabaseName("IX_WordFormFrequenciesByType_MediaType_FrequencyRank");
+
+            entity.HasIndex(e => e.WordId)
+                  .HasDatabaseName("IX_WordFormFrequenciesByType_WordId");
         });
 
         modelBuilder.Entity<Kanji>(entity =>

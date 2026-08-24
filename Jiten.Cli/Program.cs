@@ -3,6 +3,7 @@ using CommandLine;
 using Jiten.Cli;
 using Jiten.Cli.Commands;
 using Jiten.Core;
+using Jiten.Core.Data;
 using Microsoft.EntityFrameworkCore;
 
 // ReSharper disable MethodSupportsCancellation
@@ -148,6 +149,19 @@ public class Program
         if (options.ComputeFrequencies)
         {
             await JitenHelper.ComputeFrequencies(context.ContextFactory);
+
+            foreach (var mediaType in Enum.GetValues<MediaType>())
+            {
+                try
+                {
+                    var (typeWordFreqs, typeFormFreqs) = await JitenHelper.ComputeFrequencies(context.ContextFactory, mediaType);
+                    await JitenHelper.SaveFrequenciesByTypeToDatabase(context.ContextFactory, mediaType, typeWordFreqs, typeFormFreqs);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed computing {mediaType} frequencies: {ex.Message}");
+                }
+            }
         }
 
         if (options.DebugDeck != null)

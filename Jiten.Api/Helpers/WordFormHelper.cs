@@ -1,6 +1,7 @@
 using Jiten.Api.Dtos;
 using Jiten.Api.Services;
 using Jiten.Core;
+using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
@@ -21,11 +22,67 @@ public record RedundantImportResult(Dictionary<FsrsCard, byte> Covering, int Arc
     public bool Contains(FsrsCard card) => Covering.ContainsKey(card);
 }
 
+public static class FrequencyRankSources
+{
+    public const string Global = "global";
+    public const string MediaType = "mediaType";
+    public const string List = "list";
+}
+
+/// <summary>One form's frequency inside the caller's chosen source.</summary>
+public readonly record struct ScopedFrequency(JmDictWordFormFrequency? Frequency, int Rank, string? Source, bool IsFallback);
+
+public sealed class ScopedFormFrequencies
+{
+    public ScopedFormFrequencies(FrequencyScope scope,
+                                 Dictionary<(int, short), JmDictWordFormFrequency> global,
+                                 Dictionary<(int, short), JmDictWordFormFrequency>? byType,
+                                 IReadOnlyDictionary<long, int>? listRanks)
+    {
+        Scope = scope;
+        Global = global;
+        _byType = byType;
+        _listRanks = listRanks;
+    }
+
+    private readonly Dictionary<(int, short), JmDictWordFormFrequency>? _byType;
+    private readonly IReadOnlyDictionary<long, int>? _listRanks;
+
+    public FrequencyScope Scope { get; }
+
+    public Dictionary<(int, short), JmDictWordFormFrequency> Global { get; }
+
+    /// <summary>A media-type scope falls back to the global rank and flags it; a list scope does not, and words outside the list rank 0.</summary>
+    public ScopedFrequency Resolve(int wordId, short readingIndex)
+    {
+        var global = Global.GetValueOrDefault((wordId, readingIndex));
+
+        if (_byType != null)
+        {
+            var scoped = _byType.GetValueOrDefault((wordId, readingIndex));
+            return scoped != null
+                ? new ScopedFrequency(scoped, scoped.FrequencyRank, FrequencyRankSources.MediaType, false)
+                : new ScopedFrequency(global, global?.FrequencyRank ?? 0, FrequencyRankSources.Global, true);
+        }
+
+        if (_listRanks != null)
+        {
+            _listRanks.TryGetValue(WordFormHelper.EncodeWordKey(wordId, readingIndex), out var rank);
+            return new ScopedFrequency(global, rank, FrequencyRankSources.List, false);
+        }
+
+        return new ScopedFrequency(global, global?.FrequencyRank ?? 0, null, false);
+    }
+
+    public int Rank(int wordId, short readingIndex) => Resolve(wordId, readingIndex).Rank;
+}
+
 /// <summary>Everything needed to render a (WordId, ReadingIndex) pair in a list.</summary>
 public record WordPresentation(
     Dictionary<(int, short), JmDictWordForm> Forms,
     Dictionary<(int, short), JmDictWordFormFrequency> Frequencies,
-    Dictionary<int, string?> Definitions)
+    Dictionary<int, string?> Definitions,
+    ScopedFormFrequencies? Scoped = null)
 {
     public string FormText(int wordId, byte readingIndex)
     {
@@ -36,7 +93,9 @@ public record WordPresentation(
     public string? Definition(int wordId) => Definitions.GetValueOrDefault(wordId);
 
     public int FrequencyRank(int wordId, byte readingIndex)
-        => Frequencies.GetValueOrDefault((wordId, (short)readingIndex))?.FrequencyRank ?? 0;
+        => Scoped != null
+            ? Scoped.Rank(wordId, (short)readingIndex)
+            : Frequencies.GetValueOrDefault((wordId, (short)readingIndex))?.FrequencyRank ?? 0;
 }
 
 public static class WordFormHelper
@@ -370,6 +429,20 @@ public static class WordFormHelper
         };
     }
 
+    public static WordFormDto ToFormDto(JmDictWordForm form, ScopedFrequency scoped, Dictionary<int, int>? usedInMediaByType = null)
+        => ApplyScope(ToFormDto(form, scoped.Frequency, usedInMediaByType), scoped);
+
+    public static WordFormDto ToPlainFormDto(JmDictWordForm form, ScopedFrequency scoped)
+        => ApplyScope(ToPlainFormDto(form, scoped.Frequency), scoped);
+
+    private static WordFormDto ApplyScope(WordFormDto dto, ScopedFrequency scoped)
+    {
+        dto.FrequencyRank = scoped.Rank;
+        dto.FrequencyRankSource = scoped.Source;
+        dto.IsFrequencyFallback = scoped.IsFallback ? true : null;
+        return dto;
+    }
+
     public static async Task<Dictionary<(int, short), JmDictWordForm>> LoadWordForms(JitenDbContext context, List<int> wordIds)
     {
         var forms = await context.WordForms
@@ -388,10 +461,34 @@ public static class WordFormHelper
             .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex));
     }
 
-    public static async Task<WordPresentation> LoadWordPresentation(JitenDbContext context, List<int> wordIds)
+    /// <summary>Same shape as the global loader, but ranked inside one media type; unobserved readings are absent.</summary>
+    public static async Task<Dictionary<(int, short), JmDictWordFormFrequency>> LoadWordFormFrequencies(
+        JitenDbContext context, List<int> wordIds, MediaType? frequencySource)
+    {
+        if (frequencySource is null)
+            return await LoadWordFormFrequencies(context, wordIds);
+
+        var source = frequencySource.Value;
+        return await context.WordFormFrequenciesByType
+            .AsNoTracking()
+            .Where(wff => wff.MediaType == source && wordIds.Contains(wff.WordId))
+            .Select(wff => new JmDictWordFormFrequency
+            {
+                WordId = wff.WordId,
+                ReadingIndex = wff.ReadingIndex,
+                FrequencyRank = wff.FrequencyRank,
+                FrequencyPercentage = wff.FrequencyPercentage,
+                ObservedFrequency = wff.ObservedFrequency,
+                UsedInMediaAmount = wff.UsedInMediaAmount
+            })
+            .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex));
+    }
+
+    public static async Task<WordPresentation> LoadWordPresentation(JitenDbContext context, List<int> wordIds,
+                                                                    ScopedFormFrequencies? scoped = null)
     {
         var forms = await LoadWordForms(context, wordIds);
-        var frequencies = await LoadWordFormFrequencies(context, wordIds);
+        var frequencies = scoped?.Global ?? await LoadWordFormFrequencies(context, wordIds);
 
         var definitions = new Dictionary<int, string?>();
         var rows = await context.Definitions
@@ -404,7 +501,7 @@ public static class WordFormHelper
         foreach (var row in rows)
             definitions.TryAdd(row.WordId, row.Meaning);
 
-        return new WordPresentation(forms, frequencies, definitions);
+        return new WordPresentation(forms, frequencies, definitions, scoped);
     }
 
     public static long EncodeWordKey(int wordId, byte readingIndex)

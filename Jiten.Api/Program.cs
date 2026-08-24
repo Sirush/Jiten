@@ -408,6 +408,7 @@ builder.Services.AddSingleton<Jiten.Core.Services.DeckVectorService>();
 builder.Services.AddScoped<IRoadmapDataLoader, RoadmapDataLoader>();
 builder.Services.AddScoped<ICoverageJourneyService, CoverageJourneyService>();
 builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
+builder.Services.AddScoped<IFrequencySourceResolver, FrequencySourceResolver>();
 builder.Services.AddScoped<IStudyDeckMembershipService, StudyDeckMembershipService>();
 builder.Services.AddScoped<DeckMetadataService>();
 builder.Services.AddScoped<IDeckDownloadService, DeckDownloadService>();

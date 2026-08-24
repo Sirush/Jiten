@@ -24,6 +24,11 @@ public class UserStudyDeck
     public int? MaxGlobalFrequency { get; set; }
     public string? PosFilter { get; set; }
 
+    /// <summary>Frequency source for a GlobalDynamic deck; both null means the site-wide ranking.</summary>
+    public MediaType? FrequencyMediaType { get; set; }
+
+    public long? FrequencyListId { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public List<UserStudyDeckWord> Words { get; set; } = new();

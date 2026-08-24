@@ -43,6 +43,7 @@ public class MediaDeckController(
     ILogger<MediaDeckController> logger,
     IHttpClientFactory httpClientFactory,
     IDeckWordResolver deckWordResolver,
+    IFrequencySourceResolver frequencySourceResolver,
     IDeckDownloadService downloadService,
     IBackgroundJobClient backgroundJobClient,
     ICoverageJourneyService coverageJourneyService,
@@ -1501,9 +1502,12 @@ public class MediaDeckController(
                                                                                string? search = null,
                                                                                string? pos = null, string? excludePos = null,
                                                                                bool hideKanaOnly = false,
-                                                                               int limit = 100)
+                                                                               int limit = 100,
+                                                                               MediaType? frequencySource = null)
     {
         int pageSize = Math.Clamp(limit, 1, 200);
+
+        frequencySource ??= (await frequencySourceResolver.Resolve()).MediaType;
 
         var deck = await context.Decks.AsNoTracking().FirstOrDefaultAsync(d => d.DeckId == id);
 
@@ -1560,15 +1564,17 @@ public class MediaDeckController(
 
         query = sortBy switch
         {
-            "globalFreq" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => context.WordFormFrequencies
-                                            .Where(wff => wff.WordId == d.WordId && wff.ReadingIndex == (short)d.ReadingIndex)
-                                            .Select(wff => wff.FrequencyRank)
-                                            .FirstOrDefault()).ThenBy(d => d.DeckWordId)
-                : query.OrderByDescending(d => context.WordFormFrequencies
-                                                      .Where(wff => wff.WordId == d.WordId && wff.ReadingIndex == (short)d.ReadingIndex)
-                                                      .Select(wff => wff.FrequencyRank)
-                                                      .FirstOrDefault()).ThenBy(d => d.DeckWordId),
+            "globalFreq" => frequencySource.HasValue
+                ? OrderByTypeFrequency(query, frequencySource.Value, sortOrder)
+                : sortOrder == SortOrder.Ascending
+                    ? query.OrderBy(d => context.WordFormFrequencies
+                                                .Where(wff => wff.WordId == d.WordId && wff.ReadingIndex == (short)d.ReadingIndex)
+                                                .Select(wff => wff.FrequencyRank)
+                                                .FirstOrDefault()).ThenBy(d => d.DeckWordId)
+                    : query.OrderByDescending(d => context.WordFormFrequencies
+                                                          .Where(wff => wff.WordId == d.WordId && wff.ReadingIndex == (short)d.ReadingIndex)
+                                                          .Select(wff => wff.FrequencyRank)
+                                                          .FirstOrDefault()).ThenBy(d => d.DeckWordId),
             "deckFreq" => sortOrder == SortOrder.Ascending
                 ? query.OrderByDescending(d => d.Occurrences).ThenBy(d => d.DeckWordId)
                 : query.OrderBy(d => d.Occurrences).ThenBy(d => d.DeckWordId),
@@ -1602,9 +1608,9 @@ public class MediaDeckController(
                                  .ToList();
 
         var forms = await WordFormHelper.LoadWordForms(context, uniqueWordIds);
-        var formFreqs = await WordFormHelper.LoadWordFormFrequencies(context, uniqueWordIds);
+        var scopedFreqs = await frequencySourceResolver.LoadFrequencies(context, uniqueWordIds, new FrequencyScope(frequencySource, null));
 
-        DeckVocabularyListDto dto = new() { ParentDeck = parentDeckDto, Deck = deck, Words = new() };
+        DeckVocabularyListDto dto = new() { ParentDeck = parentDeckDto, Deck = deck, Words = new(), AppliedFrequencySource = frequencySource };
 
         var knownWords = await currentUserService.GetKnownWordsState(words.Select(dw => (dw.dw.WordId, dw.dw.ReadingIndex)).ToList());
 
@@ -1627,11 +1633,10 @@ public class MediaDeckController(
             List<WordFormDto> alternativeReadings = allFormsForWord
                                                     .Where(f => f.ReadingIndex != word.dw.ReadingIndex)
                                                     .Select(f =>
-                                                                WordFormHelper.ToPlainFormDto(f, formFreqs.GetValueOrDefault((f.WordId,
-                                                                    f.ReadingIndex))))
+                                                                WordFormHelper.ToPlainFormDto(f, scopedFreqs.Resolve(f.WordId, f.ReadingIndex)))
                                                     .ToList();
 
-            var mainReading = WordFormHelper.ToFormDto(mainForm, formFreqs.GetValueOrDefault(key));
+            var mainReading = WordFormHelper.ToFormDto(mainForm, scopedFreqs.Resolve(key.Item1, key.Item2));
 
             var wordDto = new WordDto
                           {
@@ -1647,6 +1652,25 @@ public class MediaDeckController(
         dto.Words.ApplyKnownWordsState(knownWords);
 
         return new PaginatedResponse<DeckVocabularyListDto?>(dto, totalCount, pageSize, offset ?? 0);
+    }
+
+    /// <summary>Words unobserved in the media type sort last in both directions rather than as rank zero.</summary>
+    private IQueryable<DeckWord> OrderByTypeFrequency(IQueryable<DeckWord> query, MediaType source, SortOrder sortOrder)
+    {
+        var ranked = query.Select(d => new
+        {
+            DeckWord = d,
+            Rank = context.WordFormFrequenciesByType
+                          .Where(wff => wff.MediaType == source && wff.WordId == d.WordId && wff.ReadingIndex == (short)d.ReadingIndex)
+                          .Select(wff => (int?)wff.FrequencyRank)
+                          .FirstOrDefault() ?? int.MaxValue
+        });
+
+        ranked = sortOrder == SortOrder.Ascending
+            ? ranked.OrderBy(r => r.Rank).ThenBy(r => r.DeckWord.DeckWordId)
+            : ranked.OrderByDescending(r => r.Rank).ThenBy(r => r.DeckWord.DeckWordId);
+
+        return ranked.Select(r => r.DeckWord);
     }
 
     private static readonly string[] FunctionWordPosTags = ["prt", "aux", "aux-v", "aux-adj", "cop", "conj", "int"];
@@ -2006,7 +2030,7 @@ public class MediaDeckController(
                                                            request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                                                            request.TargetPercentage,
                                                            request.MinOccurrences, request.MaxOccurrences,
-                                                           request.StartFromKnown);
+                                                           request.StartFromKnown, request.FrequencySource);
 
         if (error != null)
             return error;
@@ -2074,7 +2098,7 @@ public class MediaDeckController(
                                                            request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                                                            request.TargetPercentage,
                                                            request.MinOccurrences, request.MaxOccurrences,
-                                                           request.StartFromKnown);
+                                                           request.StartFromKnown, request.FrequencySource);
 
         if (error != null)
             return error;
@@ -2170,20 +2194,31 @@ public class MediaDeckController(
     /// <param name="id">Deck identifier.</param>
     /// <param name="minFrequency">Minimum global frequency rank (inclusive).</param>
     /// <param name="maxFrequency">Maximum global frequency rank (inclusive).</param>
+    /// <param name="frequencySource">Media type whose ranking to use; omitted means the site-wide ranking.</param>
     [HttpGet("{id}/vocabulary-count-frequency")]
     [SwaggerOperation(Summary = "Count vocabulary in frequency range")]
     [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
-    public IResult GetVocabularyCountByMediaFrequencyRange(int id, int minFrequency, int maxFrequency)
+    public IResult GetVocabularyCountByMediaFrequencyRange(int id, int minFrequency, int maxFrequency,
+                                                           MediaType? frequencySource = null)
     {
-        var query = context.DeckWords.AsNoTracking()
-                           .Where(dw => dw.DeckId == id &&
-                                        context.WordFormFrequencies
-                                               .Any(wff => wff.WordId == dw.WordId &&
-                                                           wff.ReadingIndex == (short)dw.ReadingIndex &&
-                                                           wff.FrequencyRank >= minFrequency &&
-                                                           wff.FrequencyRank <= maxFrequency));
+        var deckWords = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == id);
 
-        var count = query.Count();
+        if (frequencySource.HasValue)
+        {
+            var source = frequencySource.Value;
+            return Results.Ok(deckWords.Count(dw => context.WordFormFrequenciesByType
+                                                           .Any(wff => wff.MediaType == source &&
+                                                                       wff.WordId == dw.WordId &&
+                                                                       wff.ReadingIndex == (short)dw.ReadingIndex &&
+                                                                       wff.FrequencyRank >= minFrequency &&
+                                                                       wff.FrequencyRank <= maxFrequency)));
+        }
+
+        var count = deckWords.Count(dw => context.WordFormFrequencies
+                                                 .Any(wff => wff.WordId == dw.WordId &&
+                                                             wff.ReadingIndex == (short)dw.ReadingIndex &&
+                                                             wff.FrequencyRank >= minFrequency &&
+                                                             wff.FrequencyRank <= maxFrequency));
 
         return Results.Ok(count);
     }
@@ -2233,7 +2268,7 @@ public class MediaDeckController(
                                                            request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                                                            request.TargetPercentage,
                                                            request.MinOccurrences, request.MaxOccurrences,
-                                                           request.StartFromKnown);
+                                                           request.StartFromKnown, request.FrequencySource);
 
         if (error != null)
             return error;
@@ -2577,14 +2612,14 @@ public class MediaDeckController(
         bool excludeMatureMasteredBlacklisted, bool excludeAllTrackedWords,
         float? targetPercentage,
         int? minOccurrences = null, int? maxOccurrences = null,
-        bool startFromKnown = false)
+        bool startFromKnown = false, MediaType? frequencySource = null)
     {
         return await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
             deckId, deck, downloadType, order,
             minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
             targetPercentage, minOccurrences, maxOccurrences,
-            StartFromKnown: startFromKnown));
+            StartFromKnown: startFromKnown, FrequencySource: frequencySource));
     }
 
     private const string LikeEscapeCharacter = "\\";

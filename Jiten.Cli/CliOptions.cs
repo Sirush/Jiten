@@ -59,7 +59,8 @@ public class CliOptions
             HelpText = "Update the parsed deck.json into the database from a directory if it's more recent'.")]
     public bool UpdateDecks { get; set; }
 
-    [Option(longName: "compute-frequencies", Required = false, HelpText = "Compute global word frequencies")]
+    [Option(longName: "compute-frequencies", Required = false,
+            HelpText = "Compute global word frequencies, then compute and persist per-media-type frequencies")]
     public bool ComputeFrequencies { get; set; }
 
     [Option(longName: "debug-deck", Required = false, HelpText = "Debug a deck by id")]

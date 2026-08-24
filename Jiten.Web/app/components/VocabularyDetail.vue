@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { KnownState, type DerivationCoverDto, type ExampleSentence, type ExampleSentencesByDifficultyResponse, type MediaType, type UserExampleSentenceDto, type Word } from '~/types';
+  import { KnownState, type DerivationCoverDto, type ExampleSentence, type ExampleSentencesByDifficultyResponse, type MediaType, type UserExampleSentenceDto, type Word, type WordFrequencyRanks } from '~/types';
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
@@ -41,10 +41,26 @@
   const infoUrl = computed(() => `vocabulary/${currentWordId.value}/${currentReadingIndex.value}/info`);
   const mediaFreqUrl = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}/media-frequency`);
   const knownStateUrl = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}/known-state`);
+  // The /info payload is publicly cached, so the caller's own ranking is fetched separately and overlaid on it.
+  const freqRanksUrl = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}/frequency-ranks`);
 
   const { data: response, refresh: refreshInfo } = useApiFetch<Word>(infoUrl, { watch: false });
   const { data: mediaFrequency, status: mediaFreqStatus, refresh: refreshMediaFrequency } = useApiFetch<Record<string, number>>(mediaFreqUrl, { lazy: true, watch: false });
   const { data: fetchedKnownStates, refresh: refreshKnownStates } = useApiFetch<KnownState[]>(knownStateUrl, { lazy: true, watch: false });
+  const { data: frequencyRanks, refresh: refreshFrequencyRanks } = useApiFetch<WordFrequencyRanks>(freqRanksUrl, { lazy: true, watch: false });
+
+  const listsLoading = ref(false);
+
+  const loadFrequencyLists = async () => {
+    if (listsLoading.value || frequencyRanks.value?.lists) return;
+    listsLoading.value = true;
+    try {
+      frequencyRanks.value = await $api<WordFrequencyRanks>(`${freqRanksUrl.value}?includeLists=true`);
+    } catch {
+    } finally {
+      listsLoading.value = false;
+    }
+  };
 
   const word = ref<Word | null | undefined>(response.value);
   watch(response, (value) => {
@@ -141,7 +157,7 @@
     const seq = ++switchSeq;
     isTransitioning.value = true;
 
-    await Promise.all([refreshInfo(), refreshKnownStates(), refreshMediaFrequency()]);
+    await Promise.all([refreshInfo(), refreshKnownStates(), refreshMediaFrequency(), refreshFrequencyRanks()]);
 
     if (seq !== switchSeq) return;
 
@@ -348,7 +364,15 @@
               </div>
             </div>
             <div class="flex flex-col md:flex-row items-end md:hidden">
-              <div class="text-gray-500 dark:text-gray-300 text-right">Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}</div>
+              <VocabularyFrequencyRank
+                class="text-gray-500 dark:text-gray-300"
+                :ranks="frequencyRanks"
+                :fallback-rank="word.mainReading.frequencyRank"
+                :lists-loading="listsLoading"
+                align="right"
+                @request-lists="loadFrequencyLists"
+                @changed="refreshFrequencyRanks"
+              />
               <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" :redundant-via="derivationCover" />
             </div>
           </div>
@@ -423,7 +447,16 @@
         <div class="md:min-w-64">
           <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">
             <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" :redundant-via="derivationCover" />
-            Rank #{{ word.mainReading.frequencyRank }}
+            <div class="flex justify-end">
+              <VocabularyFrequencyRank
+                :ranks="frequencyRanks"
+                :fallback-rank="word.mainReading.frequencyRank"
+                :lists-loading="listsLoading"
+                align="right"
+                @request-lists="loadFrequencyLists"
+                @changed="refreshFrequencyRanks"
+              />
+            </div>
           </div>
           <div class="md:text-right pt-4 cursor-pointer" @click="selectMediaType(null)">
             Appears in <b>{{ word.mainReading.usedInMediaAmount }} media</b>

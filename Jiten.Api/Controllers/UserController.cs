@@ -38,6 +38,7 @@ public partial class UserController(
     IConfiguration configuration,
     IConnectionMultiplexer redis,
     IDeckWordResolver deckWordResolver,
+    IFrequencySourceResolver frequencySource,
     IDeckDownloadService downloadService,
     IExternalMediaListClient externalListClient,
     IUserLimitsService userLimits,
@@ -717,7 +718,8 @@ public partial class UserController(
             return Results.Ok(new { items = Array.Empty<RedundantFormDto>(), totalItems = 0 });
 
         var wordIds = found.Select(f => f.Card.WordId).Distinct().ToList();
-        var presentation = await WordFormHelper.LoadWordPresentation(jitenContext, wordIds);
+        var presentation = await WordFormHelper.LoadWordPresentation(jitenContext, wordIds,
+                                                                    await frequencySource.LoadFrequencies(jitenContext, wordIds));
 
         var items = found
                     .Select(f => new RedundantFormDto
@@ -1085,7 +1087,8 @@ public partial class UserController(
             return Results.Ok(new PaginatedResponse<List<ArchivedCardDto>>([], totalItems, limit, offset));
 
         var wordIds = rows.Select(r => r.WordId).Distinct().ToList();
-        var presentation = await WordFormHelper.LoadWordPresentation(jitenContext, wordIds);
+        var presentation = await WordFormHelper.LoadWordPresentation(jitenContext, wordIds,
+                                                                    await frequencySource.LoadFrequencies(jitenContext, wordIds));
 
         var items = rows.Select(r => new ArchivedCardDto
                                      {
@@ -2563,12 +2566,12 @@ public partial class UserController(
         var wordIds = cards.Select(c => c.WordId).Distinct().ToList();
 
         var cardForms = await WordFormHelper.LoadWordForms(jitenContext, wordIds);
-        var cardFormFreqs = await WordFormHelper.LoadWordFormFrequencies(jitenContext, wordIds);
+        var cardFormFreqs = await frequencySource.LoadFrequencies(jitenContext, wordIds);
 
         var result = cards.Select(c =>
         {
             var form = cardForms.GetValueOrDefault((c.WordId, (short)c.ReadingIndex));
-            var formFreq = cardFormFreqs.GetValueOrDefault((c.WordId, (short)c.ReadingIndex));
+            var formFreq = cardFormFreqs.Resolve(c.WordId, (short)c.ReadingIndex);
 
             return new FsrsCardWithWordDto
                    {
@@ -2576,7 +2579,7 @@ public partial class UserController(
                        Stability = EnsureValidNumber(c.Stability), Difficulty = EnsureValidNumber(c.Difficulty), Due = c.Due,
                        LastReview = c.LastReview, CreatedAt = c.CreatedAt, WordText = form?.Text ?? "",
                        ReadingType = form != null ? (JmDictReadingType)(int)form.FormType : JmDictReadingType.Reading,
-                       FrequencyRank = formFreq?.FrequencyRank ?? 0,
+                       FrequencyRank = formFreq.Rank,
                        Lapses = c.Lapses,
                    };
         }).ToList();
@@ -3296,7 +3299,7 @@ public partial class UserController(
                 request.MinFrequency, request.MaxFrequency,
                 request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                 request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                StartFromKnown: request.StartFromKnown));
+                StartFromKnown: request.StartFromKnown, FrequencySource: request.FrequencySource));
 
             if (error != null)
                 return (new(), new(), error);

@@ -23,7 +23,7 @@ public class DeckDownloadService(JitenDbContext context) : IDeckDownloadService
                                        .ToDictionaryAsync(w => w.WordId);
         var intWordIds = wordIds.Select(wid => (int)wid).ToList();
         var exportForms = await WordFormHelper.LoadWordForms(context, intWordIds);
-        var exportFormFreqs = await WordFormHelper.LoadWordFormFrequencies(context, intWordIds);
+        var exportFormFreqs = await WordFormHelper.LoadWordFormFrequencies(context, intWordIds, request.FrequencySource);
 
         var wordToSentencesMap = new Dictionary<(int WordId, byte ReadingIndex), List<(string Text, byte Position, byte Length)>>();
 

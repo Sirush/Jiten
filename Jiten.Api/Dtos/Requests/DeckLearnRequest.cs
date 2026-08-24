@@ -1,3 +1,5 @@
+﻿using Jiten.Core.Data;
+
 namespace Jiten.Api.Dtos.Requests;
 
 public class DeckLearnRequest
@@ -13,6 +15,7 @@ public class DeckLearnRequest
     public bool StartFromKnown { get; set; }
     public int? MinOccurrences { get; set; }
     public int? MaxOccurrences { get; set; }
+    public MediaType? FrequencySource { get; set; }
     public string VocabularyState { get; set; } = "mastered";
 
     /// <summary>Space the date learned of the words so they appear on the charts.</summary>
@@ -30,6 +33,7 @@ public class DeckLearnRequest
         ExcludeMatureMasteredBlacklisted = ExcludeMatureMasteredBlacklisted,
         ExcludeAllTrackedWords = ExcludeAllTrackedWords,
         TargetPercentage = TargetPercentage, StartFromKnown = StartFromKnown,
-        MinOccurrences = MinOccurrences, MaxOccurrences = MaxOccurrences
+        MinOccurrences = MinOccurrences, MaxOccurrences = MaxOccurrences,
+        FrequencySource = FrequencySource
     };
 }

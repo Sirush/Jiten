@@ -22,6 +22,8 @@ public class RoadmapController(
     IDbContextFactory<JitenDbContext> jitenFactory,
     ICurrentUserService currentUserService,
     IRoadmapDataLoader loader,
+    IDeckWordResolver deckWordResolver,
+    IFrequencySourceResolver frequencySource,
     IUserLimitsService userLimits,
     IBackgroundJobClient backgroundJobs,
     IHostEnvironment environment,
@@ -301,6 +303,7 @@ public class RoadmapController(
 
         var texts = await loader.LoadWordTextsAsync(keys);
         var ranks = await loader.LoadFrequencyRanksAsync(keys);
+        await ApplyDefaultFrequencySource(keys, ranks);
 
         // Stored order is already frequency-sorted; preserve it.
         var words = keys.Select(key =>
@@ -317,6 +320,27 @@ public class RoadmapController(
         }).ToList();
 
         return Results.Ok(new { words });
+    }
+
+    /// <summary>Overlays the caller's default ranking on the stored global ranks. The generation job keeps scoring
+    /// on the global ones, so a source change never reshuffles an existing roadmap.</summary>
+    private async Task ApplyDefaultFrequencySource(IReadOnlyCollection<long> keys, Dictionary<long, int> ranks)
+    {
+        var scope = await frequencySource.Resolve();
+        if (scope.IsGlobal || keys.Count == 0) return;
+
+        var wordIds = keys.Select(RoadmapEngine.UnpackWordId).Distinct().ToList();
+        var scopedRanks = await deckWordResolver.GetFrequencyRanks(wordIds, scope);
+
+        foreach (var key in keys)
+        {
+            var wordId = RoadmapEngine.UnpackWordId(key);
+            var readingIndex = (byte)RoadmapEngine.UnpackReadingIndex(key);
+            if (scopedRanks.TryGetValue((wordId, readingIndex), out var rank))
+                ranks[key] = rank;
+            else if (scope.FrequencyListId.HasValue)
+                ranks[key] = 0;
+        }
     }
 
     // ---- Edit ---------------------------------------------------------------

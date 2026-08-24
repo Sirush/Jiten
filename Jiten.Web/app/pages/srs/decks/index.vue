@@ -378,6 +378,20 @@
       },
     },
   };
+
+  function deckOrderLabel(deck: StudyDeckDto): string | undefined {
+    if (deck.deckType === StudyDeckType.GlobalDynamic && deck.order === DeckOrder.GlobalFrequency) return undefined;
+    return orderLabels[deck.order];
+  }
+
+  function frequencyDeckLabel(deck: StudyDeckDto): string {
+    const source = deck.frequencyMediaType
+      ? getMediaTypeText(deck.frequencyMediaType)
+      : deck.frequencySourceName;
+    const min = (deck.minGlobalFrequency ?? 1).toLocaleString();
+    const range = deck.maxGlobalFrequency ? `${min}-${deck.maxGlobalFrequency.toLocaleString()}` : `${min}+`;
+    return source ? `Rank ${range} in ${source}` : `Rank ${range}, global`;
+  }
 </script>
 
 <template>
@@ -710,10 +724,10 @@
                 </div>
                 <div class="text-sm text-gray-500 dark:text-gray-400">
                   <template v-if="deck.deckType === StudyDeckType.MediaDeck">{{ getMediaTypeText(deck.mediaType) }}</template>
-                  <template v-else-if="deck.deckType === StudyDeckType.GlobalDynamic">Global Frequency</template>
+                  <template v-else-if="deck.deckType === StudyDeckType.GlobalDynamic">{{ frequencyDeckLabel(deck) }}</template>
                   <template v-else>Word List</template>
                   <span v-if="deck.totalWords"> · {{ deck.totalWords }} words</span>
-                  <span v-if="orderLabels[deck.order]"> · {{ orderLabels[deck.order] }}</span>
+                  <span v-if="deckOrderLabel(deck)"> · {{ deckOrderLabel(deck) }}</span>
                   <span v-if="deck.description"> · {{ deck.description }}</span>
                   <span v-if="newCardDeckIds.has(deck.userStudyDeckId)" class="text-green-400 dark:text-green-600 font-medium"> · New cards from here</span>
                 </div>
@@ -874,10 +888,10 @@
                 </div>
                 <div class="text-sm text-gray-500 dark:text-gray-400">
                   <template v-if="deck.deckType === StudyDeckType.MediaDeck">{{ getMediaTypeText(deck.mediaType) }}</template>
-                  <template v-else-if="deck.deckType === StudyDeckType.GlobalDynamic">Global Frequency</template>
+                  <template v-else-if="deck.deckType === StudyDeckType.GlobalDynamic">{{ frequencyDeckLabel(deck) }}</template>
                   <template v-else>Word List</template>
                   <span v-if="deck.totalWords"> · {{ deck.totalWords }} words</span>
-                  <span v-if="orderLabels[deck.order]"> · {{ orderLabels[deck.order] }}</span>
+                  <span v-if="deckOrderLabel(deck)"> · {{ deckOrderLabel(deck) }}</span>
                   <span v-if="deck.description"> · {{ deck.description }}</span>
                 </div>
                 <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">

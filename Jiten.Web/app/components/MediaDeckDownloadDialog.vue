@@ -45,6 +45,7 @@
   const emit = defineEmits(['update:visible']);
   const { $api } = useNuxtApp();
   const authStore = useAuthStore();
+  const srsStore = useSrsStore();
   const localiseTitle = useLocaliseTitle();
   const confirm = useConfirm();
   const toast = useToast();
@@ -171,6 +172,7 @@
 
   const format = defineModel<DeckFormat>('deckFormat', { default: DeckFormat.Anki });
   const downloadType = defineModel<DeckDownloadType>('downloadType', { default: DeckDownloadType.TopDeckFrequency });
+  const frequencySource = ref(0);
   const deckOrder = defineModel<DeckOrder>('deckOrder', { default: DeckOrder.DeckFrequency });
   const frequencyRange = defineModel<number[]>('frequencyRange');
 
@@ -240,9 +242,14 @@
 
   const isCountLoading = computed(() => isFrequencyCountLoading.value || isOccurrenceCountLoading.value || isAccurateCountLoading.value);
 
-  onMounted(() => {
+  onMounted(async () => {
     if (!frequencyRange.value) {
       frequencyRange.value = [0, Math.min(wordCount.value, 5000)];
+    }
+
+    if (authStore.isAuthenticated && frequencySource.value === 0) {
+      await srsStore.fetchSettings();
+      frequencySource.value = srsStore.studySettings.defaultFrequencyMediaType ?? 0;
     }
 
     // Imported lists carry a meaningful order of their own; occurrence sort is arbitrary for hand-typed ones.
@@ -279,7 +286,7 @@
   );
 
   watch(
-    () => frequencyRange.value,
+    [() => frequencyRange.value, frequencySource],
     () => {
       if (downloadType.value == DeckDownloadType.TopGlobalFrequency) updateDebounced();
     }
@@ -347,7 +354,11 @@
 
     try {
       const response = await $api<number>(`${apiBase.value}/vocabulary-count-frequency`, {
-        query: { minFrequency: frequencyRange.value[0], maxFrequency: frequencyRange.value[1] },
+        query: {
+          minFrequency: frequencyRange.value[0],
+          maxFrequency: frequencyRange.value[1],
+          frequencySource: frequencySource.value || undefined,
+        },
       });
       if (reqId === frequencyRequestId && typeof response === 'number') {
         debouncedCurrentCardAmount.value = response;
@@ -424,6 +435,7 @@
       deckOrder,
       () => frequencyRange.value?.[0],
       () => frequencyRange.value?.[1],
+      frequencySource,
       occurrenceFilterType,
       occurrenceThreshold,
       targetPercentage,
@@ -479,6 +491,7 @@
         order: deckOrder.value,
         minFrequency: frequencyRange.value![0],
         maxFrequency: frequencyRange.value![1],
+        frequencySource: frequencySource.value || undefined,
       };
     }
 
@@ -501,6 +514,7 @@
       startFromKnown: payload.startFromKnown,
       minOccurrences: payload.minOccurrences,
       maxOccurrences: payload.maxOccurrences,
+      frequencySource: payload.frequencySource,
     };
   }
 
@@ -866,6 +880,9 @@
                   </div>
                 </div>
                 <Slider v-model="frequencyRange" range :min="0" :max="currentSliderMax" class="w-full" />
+                <div v-if="downloadType === DeckDownloadType.TopGlobalFrequency" class="mt-4">
+                  <FrequencySourceSelect v-model="frequencySource" input-id="downloadRankSource" width-class="md:w-full" />
+                </div>
               </div>
             </div>
           </section>

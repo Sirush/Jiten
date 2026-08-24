@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Jiten.Api.Controllers;
 
@@ -29,6 +30,7 @@ public class CustomFrequencyListController(
     IJitenPlusService jitenPlusService,
     IBackgroundJobClient backgroundJobs,
     ICdnService cdn,
+    IMemoryCache memoryCache,
     ILogger<CustomFrequencyListController> logger) : ControllerBase
 {
     public const int MAX_SAVED_LISTS = 25;
@@ -293,6 +295,11 @@ public class CustomFrequencyListController(
         if (mintedSlug && list.Status == FrequencyListStatus.Ready)
             await TryEmbedUpdateUrls(list);
 
+        // The generation that produced this list ran while it was transient, so it skipped the study blob.
+        if (list.RankedWordsBlob is null)
+            backgroundJobs.Enqueue<FrequencyListJob>(j => j.Generate(list.Id));
+
+        FrequencySourceResolver.Invalidate(memoryCache, userId);
         return Results.Ok(ToDto(list));
     }
 
@@ -405,6 +412,7 @@ public class CustomFrequencyListController(
         if (definitionChanged)
             backgroundJobs.Enqueue<FrequencyListJob>(j => j.Generate(list.Id));
 
+        FrequencySourceResolver.Invalidate(memoryCache, userId);
         return Results.Ok(ToDto(list));
     }
 
@@ -525,6 +533,16 @@ public class CustomFrequencyListController(
         if (list is null)
             return Results.NotFound();
 
+        var studyDeckNames = await userContext.UserStudyDecks
+                                              .Where(sd => sd.UserId == userId && sd.FrequencyListId == id)
+                                              .Select(sd => sd.Name)
+                                              .ToListAsync();
+        if (studyDeckNames.Count > 0)
+            return Results.BadRequest(new
+            {
+                error = $"This list is in use by a study deck ({string.Join(", ", studyDeckNames)}). Remove the study deck first."
+            });
+
         try
         {
             if (!string.IsNullOrEmpty(list.ZipUrl))
@@ -539,6 +557,7 @@ public class CustomFrequencyListController(
 
         userContext.UserFrequencyLists.Remove(list);
         await userContext.SaveChangesAsync();
+        FrequencySourceResolver.Invalidate(memoryCache, userId);
         return Results.Ok();
     }
 

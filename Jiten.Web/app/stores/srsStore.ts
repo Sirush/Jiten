@@ -162,6 +162,8 @@ export const useSrsStore = defineStore('srs', () => {
     loadBalancing: true,
     easyDays: null,
     derivationalRedundancyCategories: [],
+    defaultFrequencyMediaType: null,
+    defaultFrequencyListId: null,
     leechThreshold: 8,
     leechAction: 'Suspend',
     timedReview: {
@@ -453,6 +455,8 @@ export const useSrsStore = defineStore('srs', () => {
       minGlobalFrequency: request.minGlobalFrequency,
       maxGlobalFrequency: request.maxGlobalFrequency,
       posFilter: request.posFilter,
+      frequencyMediaType: request.frequencyMediaType,
+      frequencyListId: request.frequencyListId,
       totalWords: 0,
       unseenCount: 0,
       learningCount: 0,
@@ -487,6 +491,8 @@ export const useSrsStore = defineStore('srs', () => {
       deck.minGlobalFrequency = request.minGlobalFrequency;
       deck.maxGlobalFrequency = request.maxGlobalFrequency;
       deck.posFilter = request.posFilter;
+      deck.frequencyMediaType = request.frequencyMediaType;
+      deck.frequencyListId = request.frequencyListId;
     }
     refreshOverview();
     invalidateSession();

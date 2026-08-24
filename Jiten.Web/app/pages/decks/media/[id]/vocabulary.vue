@@ -20,14 +20,14 @@
   const limit = computed(() => (route.query.limit ? Number(route.query.limit) : undefined));
   const url = computed(() => `media-deck/${id}/vocabulary`);
 
-  const sortByOptions = ref([
+  const sortByOptions = computed(() => [
     { label: 'Chronological', value: 'chrono' },
     { label: 'Deck Frequency', value: 'deckFreq' },
-    { label: 'Global Frequency', value: 'globalFreq' },
+    { label: `${rankSourceName.value ?? 'Global'} Frequency`, value: 'globalFreq' },
   ]);
 
   const sortDescending = ref(route.query.sortOrder === String(SortOrder.Descending));
-  const sortBy = ref(route.query.sortBy?.toString() || sortByOptions.value[0].value);
+  const sortBy = ref(route.query.sortBy?.toString() || 'chrono');
   const { tiers: displayTiers, suspended, redundant, query: displayQuery } = useVocabularyDisplayFilter();
   const search = ref(route.query.search?.toString() || '');
   const debouncedSearch = ref(search.value);
@@ -35,6 +35,11 @@
   const includePos = ref<string[]>(parseStringArray(route.query.pos));
   const excludePos = ref<string[]>(parseStringArray(route.query.excludePos));
   const hideKanaOnly = ref(toBooleanOrNull(route.query.hideKanaOnly) ?? false);
+  const frequencySource = ref(Number(route.query.frequencySource ?? 0) || 0);
+
+  watch(frequencySource, (value) => {
+    router.replace({ query: { ...route.query, frequencySource: value || undefined, offset: undefined } });
+  });
 
   const sortOrder = computed(() => sortDescending.value ? SortOrder.Descending : SortOrder.Ascending);
 
@@ -91,12 +96,20 @@
       pos: computed(() => debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined),
       excludePos: computed(() => debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined),
       hideKanaOnly: debouncedHideKanaOnly,
+      frequencySource: computed(() => frequencySource.value || undefined),
       limit: limit,
     },
     watch: [offset, debouncedSearch, limit],
   });
 
   const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor, pageSize } = usePagination(response);
+
+  // The server fills the rank source from the account default when none is picked, so the label follows the response.
+  const rankSourceName = computed(() => {
+    const source = frequencySource.value || response.value?.data?.appliedFrequencySource || 0;
+    return source ? getMediaTypeText(source) : null;
+  });
+  const rankSourceLabel = computed(() => rankSourceName.value ?? undefined);
 
   const listContext = computed(() => ({
     label: `${title.value} - Vocabulary`,
@@ -160,9 +173,11 @@
       v-model:hide-kana-only="hideKanaOnly"
       :sort-by-options="sortByOptions"
       :show-display-filter="auth.isAuthenticated"
-    />
+    >
+      <FrequencySourceSelect v-if="sortBy === 'globalFreq'" v-model="frequencySource" input-id="deckVocabRankSource" />
+    </VocabularyFilters>
     <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="words" :page-size="pageSize" :page-size-options="[50, 100, 200]" mobile-compact />
-    <VocabularyList :words="visibleWords" :status="status" :error="error" :list-context="listContext" empty-message="Try adjusting your search or filters">
+    <VocabularyList :words="visibleWords" :status="status" :error="error" :list-context="listContext" :rank-source-label="rankSourceLabel" empty-message="Try adjusting your search or filters">
       <template #error="{ error: err }">
         <div>Error: {{ err }}</div>
       </template>

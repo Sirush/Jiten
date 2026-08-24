@@ -84,6 +84,7 @@ export interface DeckVocabularyList {
   parentDeck: Deck | null;
   deck: Deck;
   words: DeckWord[];
+  appliedFrequencySource?: MediaType | null;
 }
 
 export interface MediaSuggestion {
@@ -245,6 +246,43 @@ export interface Reading {
   frequencyPercentage: number;
   usedInMediaAmount: number;
   usedInMediaAmountByType: Record<MediaType, number>;
+  /** Absent while the caller is on the site-wide ranking. */
+  frequencyRankSource?: FrequencyRankSource;
+  /** Set only when the chosen media type had no rank and the global one stood in. */
+  isFrequencyFallback?: boolean;
+}
+
+export type FrequencyRankSource = 'global' | 'mediaType' | 'list';
+
+export interface FrequencyRankEntry {
+  rank: number;
+  percentage: number;
+  amount: number;
+}
+
+export interface FrequencyListRank {
+  id: number;
+  name: string;
+  /** 0 means the word is outside the list. */
+  rank: number;
+}
+
+export interface ResolvedFrequencyRank {
+  source: FrequencyRankSource;
+  mediaType?: MediaType;
+  listId?: number;
+  listName?: string;
+  rank: number;
+  isFallback: boolean;
+}
+
+export interface WordFrequencyRanks {
+  global: FrequencyRankEntry;
+  /** Keyed by media type id; only the types that observed the form appear. */
+  byType: Record<string, FrequencyRankEntry>;
+  /** Only present for authenticated callers who asked for it. */
+  lists?: FrequencyListRank[];
+  resolved: ResolvedFrequencyRank;
 }
 
 export interface Definition {
@@ -1024,6 +1062,9 @@ export interface StudyDeckDto {
   minGlobalFrequency?: number;
   maxGlobalFrequency?: number;
   posFilter?: string;
+  frequencyMediaType?: MediaType;
+  frequencyListId?: number;
+  frequencySourceName?: string;
   totalWords: number;
   unseenCount: number;
   learningCount: number;
@@ -1256,6 +1297,10 @@ export interface StudySettingsDto {
   easyDays: number[] | null;
   /** Derivation category keys treated as redundant. Empty = feature off; omitted on a save = leave unchanged. */
   derivationalRedundancyCategories?: string[] | null;
+  /** Media type whose ranking replaces the global one everywhere. Omitted on a save = unchanged; 0 = back to global. */
+  defaultFrequencyMediaType?: number | null;
+  /** Custom frequency list whose ranking replaces the global one. Same omitted/0 rules as the media type. */
+  defaultFrequencyListId?: number | null;
   leechThreshold: number;
   leechAction: LeechAction;
   timedReview: TimedReviewSettings;
@@ -1575,6 +1620,8 @@ export interface AddStudyDeckRequest {
   minGlobalFrequency?: number;
   maxGlobalFrequency?: number;
   posFilter?: string;
+  frequencyMediaType?: MediaType;
+  frequencyListId?: number;
 }
 
 export interface UpdateStudyDeckRequest {
@@ -1592,6 +1639,8 @@ export interface UpdateStudyDeckRequest {
   minGlobalFrequency?: number;
   maxGlobalFrequency?: number;
   posFilter?: string;
+  frequencyMediaType?: MediaType;
+  frequencyListId?: number;
 }
 
 export interface CorpusSnippet {

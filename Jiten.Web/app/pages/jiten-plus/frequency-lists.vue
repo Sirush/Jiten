@@ -519,6 +519,14 @@
     }
   }
 
+  const studyListId = ref<number | null>(null);
+  const showStudyDialog = ref(false);
+
+  function study(list: FrequencyListDto) {
+    studyListId.value = list.id;
+    showStudyDialog.value = true;
+  }
+
   function confirmDelete(list: FrequencyListDto) {
     confirm.require({
       message: `Delete "${list.name}"? This removes the generated files too.`,
@@ -899,6 +907,14 @@
                     outlined
                     @click="save(list)"
                   />
+                  <Button
+                    v-if="list.isSaved"
+                    label="Study"
+                    icon="pi pi-graduation-cap"
+                    size="small"
+                    outlined
+                    @click="study(list)"
+                  />
                   <template v-if="list.isSaved && isFull">
                     <Button
                       :label="list.autoUpdate ? 'Auto-update on' : 'Auto-update off'"
@@ -969,6 +985,9 @@
                   <Tooltip v-if="!data.isSaved && isFull" content="Keep saved">
                     <Button icon="pi pi-bookmark" text size="small" @click="save(data)" />
                   </Tooltip>
+                  <Tooltip v-if="data.isSaved" content="Study this list">
+                    <Button icon="pi pi-graduation-cap" text size="small" @click="study(data)" />
+                  </Tooltip>
                   <template v-if="data.isSaved && isFull">
                     <Tooltip :content="data.autoUpdate ? 'Auto-update on' : 'Auto-update off'">
                       <Button
@@ -1013,6 +1032,12 @@
       </Dialog>
 
       <MediaListDeckPickerDialog v-model:visible="mediaListPickerVisible" :picked-ids="pickedDeckIds" @add="onMediaListAdd" />
+
+      <SrsAddDeckDialog
+        v-if="studyListId !== null"
+        v-model:visible="showStudyDialog"
+        :preselected-frequency-list-id="studyListId"
+      />
     </template>
   </div>
 </template>

@@ -21,6 +21,7 @@ public class ReaderController(
     ICurrentUserService currentUserService,
     IParseThrottleService parseThrottle,
     IStudyDeckMembershipService deckMembership,
+    IFrequencySourceResolver frequencySource,
     ILogger<ReaderController> logger) : ControllerBase
 {
     [HttpPost("ping")]
@@ -156,7 +157,7 @@ public class ReaderController(
         var wordIds = parsedParagraphs.SelectMany(p => p).Select(w => w.WordId).Distinct().ToList();
         var jmdictWords = await context.JMDictWords.Where(w => wordIds.Contains(w.WordId)).Include(w => w.Definitions.OrderBy(d => d.SenseIndex)).ToDictionaryAsync(w => w.WordId);
         var readerForms = await WordFormHelper.LoadWordForms(context, wordIds);
-        var readerFormFreqs = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
+        var readerFormFreqs = await frequencySource.LoadFrequencies(context, wordIds);
 
         var distinctKeys = parsedParagraphs.SelectMany(p => p.Select(dw => (dw.WordId, dw.ReadingIndex))).Distinct().ToList();
         var knownStates = await currentUserService.GetKnownWordsState(distinctKeys);
@@ -183,7 +184,7 @@ public class ReaderController(
                     knownStates.TryGetValue((word.WordId, word.ReadingIndex), out var knownState);
                     deckMembershipMap.TryGetValue((word.WordId, word.ReadingIndex), out var studyDeckIds);
                     var rdrForm = readerForms.GetValueOrDefault((word.WordId, (short)word.ReadingIndex));
-                    var rdrFormFreq = readerFormFreqs.GetValueOrDefault((word.WordId, (short)word.ReadingIndex));
+                    var rdrFormFreq = readerFormFreqs.Resolve(word.WordId, (short)word.ReadingIndex);
                     var readerWord = new ReaderWord()
                                      {
                                          WordId = word.WordId, ReadingIndex = word.ReadingIndex,
@@ -192,7 +193,9 @@ public class ReaderController(
                                              jmdictWord.Definitions.Where(d => d.EnglishMeanings.Count > 0)
                                                        .Select(d => d.EnglishMeanings).ToList(),
                                          MeaningsPartOfSpeech = jmdictWord.Definitions.SelectMany(d => d.PartsOfSpeech).ToList() ?? [""],
-                                         FrequencyRank = rdrFormFreq?.FrequencyRank ?? 0,
+                                         FrequencyRank = rdrFormFreq.Rank,
+                                         FrequencyRankSource = rdrFormFreq.Source,
+                                         IsFrequencyFallback = rdrFormFreq.IsFallback ? true : null,
                                          KnownState = knownState ?? [KnownState.New],
                                          PitchAccents = jmdictWord.PitchAccents ?? new(),
                                          StudyDeckIds = studyDeckIds ?? new(),

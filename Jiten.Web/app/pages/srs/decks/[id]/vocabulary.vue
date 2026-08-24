@@ -27,6 +27,8 @@
   const deck = computed(() => srsStore.studyDecks.find((d) => d.userStudyDeckId === deckId));
   const isStaticDeck = computed(() => deck.value?.deckType === StudyDeckType.StaticWordList);
 
+  srsStore.fetchSettings();
+
   const deckName = computed(() => {
     const d = deck.value;
     if (!d) return 'Vocabulary';
@@ -40,26 +42,43 @@
 
   const sortByOptions = computed(() => {
     const d = deck.value;
-    if (!d) return [{ label: 'Global Frequency', value: 'globalFreq' }];
+    if (!d) return [{ label: frequencySortLabel.value, value: 'globalFreq' }];
 
     switch (d.deckType) {
       case StudyDeckType.MediaDeck:
         return [
           { label: 'Chronological', value: 'chrono' },
           { label: 'Deck Frequency', value: 'deckFreq' },
-          { label: 'Global Frequency', value: 'globalFreq' },
+          { label: frequencySortLabel.value, value: 'globalFreq' },
         ];
       case StudyDeckType.GlobalDynamic:
-        return [{ label: 'Global Frequency', value: 'globalFreq' }];
+        return [{ label: frequencySortLabel.value, value: 'globalFreq' }];
       case StudyDeckType.StaticWordList:
         return [
           { label: 'Import Order', value: 'importOrder' },
-          { label: 'Global Frequency', value: 'globalFreq' },
+          { label: frequencySortLabel.value, value: 'globalFreq' },
           { label: 'Occurrences', value: 'occurrences' },
         ];
       default:
-        return [{ label: 'Global Frequency', value: 'globalFreq' }];
+        return [{ label: frequencySortLabel.value, value: 'globalFreq' }];
     }
+  });
+
+  const frequencySortLabel = computed(() => {
+    const d = deck.value;
+    if (d?.frequencyMediaType) return `${getMediaTypeText(d.frequencyMediaType)} Frequency`;
+    if (d?.frequencyListId) return `${d.frequencySourceName ?? 'List'} Frequency`;
+    return 'Global Frequency';
+  });
+
+  const rankSourceLabel = computed(() => {
+    const d = deck.value;
+    if (d?.frequencyMediaType) return getMediaTypeText(d.frequencyMediaType);
+    if (d?.frequencyListId) return d.frequencySourceName ?? 'your list';
+    const settings = srsStore.studySettings;
+    if (settings?.defaultFrequencyMediaType) return getMediaTypeText(settings.defaultFrequencyMediaType);
+    if (settings?.defaultFrequencyListId) return 'your list';
+    return undefined;
   });
 
   const defaultSort = computed(() => {
@@ -347,6 +366,7 @@
     <VocabularyList
       :words="response?.data ?? []"
       :list-context="listContext"
+      :rank-source-label="rankSourceLabel"
       :status="status"
       :error="error"
       :removable="isStaticDeck"

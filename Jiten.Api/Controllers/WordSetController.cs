@@ -22,6 +22,7 @@ public class WordSetController(
     JitenDbContext jitenContext,
     UserDbContext userContext,
     ICurrentUserService currentUserService,
+    IFrequencySourceResolver frequencySource,
     IBackgroundJobClient backgroundJobs,
     ILogger<WordSetController> logger) : ControllerBase
 {
@@ -180,7 +181,7 @@ public class WordSetController(
         var pagedWordIds = pagedItems.Select(p => p.WordId).Distinct().ToList();
 
         var wsFormDict = await WordFormHelper.LoadWordForms(jitenContext, pagedWordIds);
-        var wsFormFreqDict = await WordFormHelper.LoadWordFormFrequencies(jitenContext, pagedWordIds);
+        var wsFormFreqDict = await frequencySource.LoadFrequencies(jitenContext, pagedWordIds);
 
         var words = await jitenContext.JMDictWords
             .AsNoTracking()
@@ -198,10 +199,9 @@ public class WordSetController(
                 var word = words[p.WordId];
                 var readingIndex = (byte)p.ReadingIndex;
                 var form = wsFormDict.GetValueOrDefault((p.WordId, p.ReadingIndex));
-                var formFreq = wsFormFreqDict.GetValueOrDefault((p.WordId, p.ReadingIndex));
 
                 var mainReading = form != null
-                    ? WordFormHelper.ToFormDto(form, formFreq)
+                    ? WordFormHelper.ToFormDto(form, wsFormFreqDict.Resolve(p.WordId, p.ReadingIndex))
                     : new WordFormDto { ReadingIndex = readingIndex };
 
                 return new WordDto
