@@ -1925,6 +1925,50 @@ export interface AdminSiteUpdate {
   notifiedAt?: string | null;
 }
 
+export interface PollOption {
+  id: number;
+  text: string;
+  sortOrder: number;
+  /** Null until results are visible to the caller. */
+  voteCount: number | null;
+}
+
+export interface Poll {
+  id: number;
+  question: string;
+  descriptionMarkdown?: string | null;
+  maxSelections: number;
+  publishedAt?: string | null;
+  closesAt?: string | null;
+  isClosed: boolean;
+  myOptionIds: number[];
+  resultsVisible: boolean;
+  totalVoters: number | null;
+  options: PollOption[];
+}
+
+export interface AdminPollOption {
+  id: number;
+  text: string;
+  sortOrder: number;
+  voteCount: number;
+}
+
+export interface AdminPoll {
+  id: number;
+  question: string;
+  descriptionMarkdown?: string | null;
+  maxSelections: number;
+  createdAt: string;
+  updatedAt?: string | null;
+  publishedAt?: string | null;
+  closesAt?: string | null;
+  closedAt?: string | null;
+  isClosed: boolean;
+  totalVoters: number;
+  options: AdminPollOption[];
+}
+
 export type JourneyGranularity = 'weekly' | 'monthly';
 
 export interface GrowthPoint {

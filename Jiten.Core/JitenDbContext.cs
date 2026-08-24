@@ -69,6 +69,10 @@ public class JitenDbContext : DbContext
     public DbSet<Notification> Notifications { get; set; }
     public DbSet<SiteUpdate> SiteUpdates { get; set; }
 
+    public DbSet<Poll> Polls { get; set; }
+    public DbSet<PollOption> PollOptions { get; set; }
+    public DbSet<PollVote> PollVotes { get; set; }
+
     public JitenDbContext()
     {
     }
@@ -1002,6 +1006,55 @@ public class JitenDbContext : DbContext
                 entity.HasIndex(u => u.PublishedAt)
                       .HasDatabaseName("IX_SiteUpdate_PublishedAt");
             }
+        });
+
+        modelBuilder.Entity<Poll>(entity =>
+        {
+            entity.ToTable("Polls", "jiten");
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.Id).ValueGeneratedOnAdd();
+            entity.Property(p => p.Question).IsRequired().HasMaxLength(300);
+            entity.Property(p => p.DescriptionMarkdown).HasMaxLength(2000);
+            entity.Property(p => p.MaxSelections).IsRequired().HasDefaultValue(1);
+            entity.Property(p => p.CreatedAt).IsRequired();
+
+            entity.HasMany(p => p.Options)
+                  .WithOne(o => o.Poll)
+                  .HasForeignKey(o => o.PollId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(p => p.PublishedAt).HasDatabaseName("IX_Poll_PublishedAt");
+        });
+
+        modelBuilder.Entity<PollOption>(entity =>
+        {
+            entity.ToTable("PollOptions", "jiten");
+            entity.HasKey(o => o.Id);
+            entity.Property(o => o.Id).ValueGeneratedOnAdd();
+            entity.Property(o => o.Text).IsRequired().HasMaxLength(200);
+            entity.Property(o => o.SortOrder).IsRequired();
+
+            entity.HasIndex(o => o.PollId).HasDatabaseName("IX_PollOption_PollId");
+        });
+
+        modelBuilder.Entity<PollVote>(entity =>
+        {
+            entity.ToTable("PollVotes", "jiten");
+            entity.HasKey(v => new { v.PollId, v.UserId, v.OptionId });
+            entity.Property(v => v.UserId).IsRequired().HasMaxLength(450);
+            entity.Property(v => v.CreatedAt).IsRequired();
+
+            entity.HasOne<Poll>()
+                  .WithMany()
+                  .HasForeignKey(v => v.PollId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<PollOption>()
+                  .WithMany()
+                  .HasForeignKey(v => v.OptionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(v => new { v.PollId, v.OptionId }).HasDatabaseName("IX_PollVote_PollId_OptionId");
         });
 
         modelBuilder.Entity<DifficultyVote>(entity =>

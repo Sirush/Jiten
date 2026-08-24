@@ -196,6 +196,9 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
 
         db.Notifications.RemoveRange(db.Notifications);
         db.SiteUpdates.RemoveRange(db.SiteUpdates);
+        db.PollVotes.RemoveRange(db.PollVotes);
+        db.PollOptions.RemoveRange(db.PollOptions);
+        db.Polls.RemoveRange(db.Polls);
         db.RequestActivityLogs.RemoveRange(db.RequestActivityLogs);
         db.MediaRequestUploads.RemoveRange(db.MediaRequestUploads);
         db.MediaRequestComments.RemoveRange(db.MediaRequestComments);
