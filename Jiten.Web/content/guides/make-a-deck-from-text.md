@@ -35,7 +35,7 @@ You get a stats card covering:
 
 Then press **Download Deck** for an `.apkg` you can import straight into Anki.
 
-The deck is the complete vocabulary of the text, with the cards in the order the words first appear. There are no filters here: no frequency range, no excluding words you already know, no other file formats. If you want any of that you can create a [word list](/using-the-srs) in the study tab.
+The deck is the complete vocabulary of the text, with the cards in the order the words first appear. There are no filters here: no frequency range, no excluding words you already know, no other file formats. If you want any of that you can create a [word list](/guides/using-the-srs) in the study tab.
 
 ## What happens to your text
 

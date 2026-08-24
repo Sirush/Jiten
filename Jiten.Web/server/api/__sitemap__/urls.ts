@@ -1,24 +1,25 @@
-// server/api/__sitemap__/urls.ts
 import { defineEventHandler } from 'h3';
 import type { SitemapUrl } from '@nuxtjs/sitemap/dist/runtime/types';
 import { MediaType } from '~/types/enums';
+import { getMediaTypeSlug } from '~/utils/mediaTypeMapper';
 
-// /decks/media/list/{n} hub pages, derived from the MediaType enum so new types appear automatically.
-const MEDIA_TYPE_IDS = Object.values(MediaType).filter((v): v is number => typeof v === 'number');
+// /decks/media/list/{slug} hub pages, derived from the MediaType enum so new types appear automatically.
+const MEDIA_TYPE_SLUGS = Object.values(MediaType)
+  .filter((v): v is number => typeof v === 'number')
+  .map((t) => getMediaTypeSlug(t));
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const base = config.public.baseURL;
   const urls: SitemapUrl[] = [];
 
-  // Media-type list hub pages (static set of routes).
-  for (const t of MEDIA_TYPE_IDS) {
-    urls.push({ loc: `/decks/media/list/${t}`, changefreq: 'daily', priority: 0.6, _sitemap: 'pages' });
+  for (const slug of MEDIA_TYPE_SLUGS) {
+    urls.push({ loc: `/decks/media/list/${slug}`, changefreq: 'daily', priority: 0.6, _sitemap: 'pages' });
   }
 
-  urls.push({ loc: '/updates', changefreq: 'weekly', priority: 0.5, _sitemap: 'pages' });
+  urls.push({ loc: '/frequency-dictionaries', changefreq: 'monthly', priority: 0.7, _sitemap: 'pages' });
 
-  // Guides (Nuxt Content) — published only, with lastmod from frontmatter when present.
+
   try {
     const guides = await queryCollection(event, 'guides').where('draft', '=', false).select('path', 'updated').all();
     for (const g of guides) {
@@ -40,7 +41,6 @@ export default defineEventHandler(async (event) => {
     $fetch<string[]>(`${base}kanji/sitemap-characters`),
   ]);
 
-  // Deck detail pages, enriched with lastmod (freshness signal) and the cover image.
   if (decksResult.status === 'fulfilled') {
     for (const d of decksResult.value) {
       urls.push({

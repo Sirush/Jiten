@@ -5,18 +5,36 @@
   import DataTable from 'primevue/datatable';
   import Column from 'primevue/column';
   import { useToast } from 'primevue/usetoast';
-  import { type GlobalStats, MediaType, type Word } from '~/types';
-  import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { type GlobalStats, MediaType } from '~/types';
+  import { getMediaTypePluralText, getMediaTypeSlug, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { extractApiError } from '~/utils/toast';
 
   const { $api } = useNuxtApp();
   const toast = useToast();
 
+  const description
+    = 'Free Japanese frequency dictionaries built from anime, drama, movies, novels, visual novels, manga and more. '
+      + 'Yomitan-compatible .zip and CSV downloads, licensed CC BY-SA 4.0.';
+
+  useSeoMeta({
+    title: 'Japanese Frequency Dictionaries for Yomitan (Free Download)',
+    description,
+    ogTitle: 'Japanese Frequency Dictionaries for Yomitan',
+    ogDescription: description,
+    twitterTitle: 'Japanese Frequency Dictionaries for Yomitan',
+    twitterDescription: description,
+  });
+
+  defineOgImageComponent('PageOgImage', {
+    title: 'Japanese Frequency Dictionaries',
+    category: 'Yomitan & CSV downloads',
+    description: 'Free frequency dictionaries for Yomitan, built per media type from the Jiten corpus. CC BY-SA 4.0.',
+  });
+
   const downloadingKey = ref<string | null>(null);
   const downloadKey = (mediaType: MediaType | null | 'kanji', downloadType: 'yomitan' | 'csv') =>
     `${mediaType ?? 'global'}-${downloadType}`;
 
-  // Create an array of all media types plus Global (sorted) and Kanji at the end
   const deckTypes = [
     { id: null, name: 'Global' },
     ...Object.values(MediaType)
@@ -29,6 +47,33 @@
     { id: 'kanji' as const, name: 'Kanji' },
   ];
 
+  const typePhrase = (key: string, singular: string, plural: string) => {
+    const count = response.value?.mediaByType?.[key];
+    if (!count) return plural;
+    return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
+  };
+
+  const listDescriptions = computed<{ name: string; text: string }[]>(() => [
+    {
+      name: 'Global',
+      text: 'Every media type combined into one list. This should be the default frequency dictionary you install, helping you find which words are common in Japanese media as a whole.',
+    },
+    { name: 'Anime', text: `Built from the Japanese subtitles of ${typePhrase('Anime', 'anime', 'anime')}.` },
+    { name: 'Audio', text: `Built from the transcripts of ${typePhrase('Audio', 'audio work', 'audio works')}.` },
+    { name: 'Drama', text: `Built from the subtitles of ${typePhrase('Drama', 'live-action drama', 'live-action dramas')}.` },
+    { name: 'Manga', text: `Built from the text of ${typePhrase('Manga', 'manga', 'manga')}.` },
+    { name: 'Movie', text: `Built from the subtitles of ${typePhrase('Movie', 'film', 'films')}.` },
+    { name: 'Non-Fiction', text: `Built from the text of ${typePhrase('NonFiction', 'non-fiction book', 'non-fiction books')}.` },
+    { name: 'Novel', text: `Built from the text of ${typePhrase('Novel', 'published novel', 'published novels')}.` },
+    { name: 'Video Game', text: `Built from the scripts of ${typePhrase('VideoGame', 'video game', 'video games')}.` },
+    { name: 'Visual Novel', text: `Built from the scripts of ${typePhrase('VisualNovel', 'visual novel', 'visual novels')}.` },
+    { name: 'Web Novel', text: `Built from ${typePhrase('WebNovel', 'serialized web novel', 'serialized web novels')}.` },
+    {
+      name: 'Kanji',
+      text: 'Ranks individual kanji rather than words, by how often each character appears across the corpus.',
+    },
+  ]);
+
   const downloadFrequencyList = async (mediaType: MediaType | null | 'kanji', downloadType: 'yomitan' | 'csv') => {
     if (downloadingKey.value) return;
     downloadingKey.value = downloadKey(mediaType, downloadType);
@@ -36,7 +81,6 @@
       let url = '';
       let fileName = '';
 
-      // Handle Kanji frequency list separately
       if (mediaType === 'kanji') {
         url = `frequency-list/download-kanji?downloadType=${downloadType}`;
         fileName = downloadType === 'yomitan' ? 'jiten_kanji_freq.zip' : 'jiten_kanji_freq.csv';
@@ -62,7 +106,6 @@
       }
 
       if (downloadType === 'yomitan') {
-        // For Yomitan format, use the download endpoint
         url = 'frequency-list/download?downloadType=yomitan';
         if (mediaType != null) url += `&mediaType=${mediaType}`;
         fileName = mediaType === null ? 'jiten_freq_global.zip' : `jiten_freq_${MediaType[mediaType]}.zip`;
@@ -73,10 +116,8 @@
         });
 
         if (response) {
-          // Get the response as a blob for binary data
           const blob = new Blob([response], { type: 'application/zip' });
 
-          // Create download link
           const blobUrl = window.URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = blobUrl;
@@ -85,11 +126,9 @@
           link.click();
           link.remove();
 
-          // Clean up the blob URL
           window.URL.revokeObjectURL(blobUrl);
         }
       } else {
-        // For CSV format, use the existing logic
         url = 'frequency-list/download?downloadType=csv';
         if (mediaType != null) url += `&mediaType=${mediaType}`;
         fileName = mediaType === null ? 'frequency_list_global.csv' : `frequency_list_${MediaType[mediaType]}.csv`;
@@ -136,17 +175,27 @@
     .filter((value) => typeof value === 'number')
     .map((value) => ({
       name: getMediaTypeText(value as MediaType),
+      plural: getMediaTypePluralText(value as MediaType),
+      slug: getMediaTypeSlug(value as MediaType),
       id: value as MediaType,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 </script>
 
 <template>
-  <div>
+  <div class="py-2">
+    <header class="mb-6">
+      <h1 class="text-3xl font-bold mb-2">Japanese Frequency Dictionaries (Yomitan & CSV)</h1>
+      <p class="text-sm text-surface-600 dark:text-surface-300">
+        Word frequency lists built from the Japanese media analysed on Jiten<template v-if="status === 'success' && response">, currently
+        {{ response.totalMojis?.toLocaleString() }} characters across {{ response.totalMedia?.toLocaleString() }} titles</template>.
+        There is a global list, one list per media type, and a kanji list, each available as a Yomitan frequency dictionary or a plain CSV.
+      </p>
+    </header>
+
     <Card class="mb-4">
-      <template #title>Frequency Lists</template>
+      <template #title>Downloads</template>
       <template #content>
-        <div class="mb-3">Download frequency lists as a frequency dictionary for use with Yomitan or as a CSV.</div>
         <div class="mb-3 text-sm text-surface-500 dark:text-surface-400">
           All frequency lists are licensed under
           <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer" class="underline">CC BY-SA 4.0</a>.
@@ -161,8 +210,6 @@
             body-class="text-center"
           >
             <template #body="slotProps">
-              <!-- Text weight, not filled: twelve rows of two downloads would otherwise read as
-                   twenty-four primary actions and leave the page without an entry point. -->
               <Button
                 text
                 size="small"
@@ -213,6 +260,22 @@
     </Card>
 
     <Card class="mb-4">
+      <template #title>What's in each list</template>
+      <template #content>
+        <p class="mb-4 text-surface-600 dark:text-surface-300">
+          The frequency of words can change dramatically depending on the corpus they come from. For example, a word that's common in novels can be rare in anime and the other way
+          around. Pick the list that matches what you read or watch, or even multiple of them.
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+          <section v-for="list in listDescriptions" :key="list.name">
+            <h2 class="text-base font-semibold mb-1">{{ list.name }}</h2>
+            <p class="text-sm text-surface-600 dark:text-surface-400">{{ list.text }}</p>
+          </section>
+        </div>
+      </template>
+    </Card>
+
+    <Card class="mb-4">
       <template #title>Tools</template>
       <template #content>
         <div class="flex flex-col sm:flex-row gap-3">
@@ -225,12 +288,16 @@
             Create Custom Deck
           </Button>
         </div>
-        <div>
-          <ul>
-            <li>
-              <a href="https://greasyfork.org/en/scripts/549246-vndb-character-count" target="_blank">Userscript to display character count on VNDB</a>
-            </li>
-          </ul>
+        <div class="mt-4 pt-3 border-t border-surface-200 dark:border-surface-700 text-sm">
+          <a
+            href="https://greasyfork.org/en/scripts/549246-vndb-character-count"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1"
+          >
+            <Icon name="material-symbols-light:open-in-new" size="1.2em" />
+            Userscript to display character count on VNDB
+          </a>
         </div>
       </template>
     </Card>
@@ -268,10 +335,16 @@
         </div>
       </template>
       <template #content>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div v-for="item in mediaTypesForDisplay" :key="item.id" class="p-2 border rounded-md">
-          <NuxtLink :to="`/decks/media/list/${item.id}`" target="_blank">{{ item.name }} index</NuxtLink>
-          </div>
+        <p class="mb-3 text-sm text-surface-500 dark:text-surface-400">Every title ranked from easiest to hardest.</p>
+        <div class="flex flex-wrap gap-2">
+          <NuxtLink
+            v-for="item in mediaTypesForDisplay"
+            :key="item.id"
+            :to="`/decks/media/list/${item.slug}`"
+            class="px-3 py-2 border border-surface-200 dark:border-surface-700 rounded-md !no-underline !text-inherit hover:border-primary-400 hover:!text-primary-500"
+          >
+            {{ item.plural }}
+          </NuxtLink>
         </div>
       </template>
     </Card>
@@ -295,8 +368,6 @@
     transition: background-color 0.2s;
   }
 
-  /* PrimeVue sets text-align on the cell at a higher specificity than the text-center utility,
-     so the Column header-class/body-class would otherwise have no effect. */
   .frequency-table :deep(.p-datatable-thead) tr th.text-center,
   .frequency-table :deep(.p-datatable-tbody) tr td.text-center {
     text-align: center;

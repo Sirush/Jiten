@@ -1,19 +1,22 @@
 ---
 title: Jiten vs JPDB
+seoTitle: "JPDB Alternative: Jiten vs JPDB for Japanese Immersion (2026)"
 summary: Jiten as an alternative to JPDB for Japanese learners, what each does best, and how to switch.
 category: "Coming from another app?"
 level: beginner
 order: 10
 icon: material-symbols-light:compare-arrows
 draft: false
-updated: 2026-07-28
+updated: 2026-08-23
+published: 2026-07-28
+verified: 2026-08-23
 ---
 
 If you are hesitating between Jiten and JPDB, or thinking about switching, this page will give you a quick comparison of good tools so you can make an informed decision.
 
 ## The short version
 
-Jiten is a **free, open platform** built around a large library of real media, offering you various tools to help you learn Japanese. Jiten offers most of the features of JPDB while receiving new media updates, features, and bug fixes constantly. JPDB offers many of the same functionalities but is **no longer** under active development, is completely **closed source**, and uses custom algorithms that won't work well if you want to switch to other tools like Anki in the future. 
+Jiten is a **free, open platform** built around a large library of real media, offering you various tools to help you learn Japanese. Jiten offers most of the features of JPDB while receiving new media updates, features, and bug fixes constantly. JPDB offers many of the same functionalities but sees very little development these days (a single [changelog](https://jpdb.io/changelog) entry since the start of 2025, as of August 2026), is completely **closed source**, and uses custom algorithms that won't work well if you want to switch to other tools like Anki in the future. 
 
 One of the core tenets of Jiten is that **your data is yours** and you should be able to study the way you want: you can export decks to Anki or CSV, you can **fully export your data** in multiple ways, etc. You should feel free to switch to other tools without your data being locked. 
 
@@ -42,12 +45,14 @@ One of the core tenets of Jiten is that **your data is yours** and you should be
 This list is not exhaustive as the two websites contain many more features. If you see important things to add here, please contact me.
 
 ## Media by type
-Historically, JPDB offered a strong media database, but it only received **50 new titles in 2025**. Jiten grows at a fast pace with up to **100 new media** being added **weekly** on average.
+Historically, JPDB offered a strong media database, but it only received around **50 new titles in 2025** (per its [changelog](https://jpdb.io/changelog)). Jiten grows at a fast pace with up to **100 new media** being added **weekly** on average.
 
 |       | Anime     | Aozora Bunko           | Audio  | Live Action | Manga     | Non-Fiction | Novels    | Video Games | Visual Novels | Web Novels | Youtube |
 |-------|-----------|------------------------|--------|-------------|-----------|-------------|-----------|-------------|---------------|------------|---------|
 | Jiten | **3600+** | Some are within novels | 15     | **6500+**   | **1100+** | 97          | **2000+** | **200+**    | **1700+**     | 6          | Planned |
 | JPDB  | 1399      | **577**                | **45** | 1273        | None      | **144**     | 1518      | 30          | 529           | **1053**   | **137** |
+
+JPDB counts as listed on [jpdb.io](https://jpdb.io/), as of August 2026.
 
 
 ## Switching to Jiten

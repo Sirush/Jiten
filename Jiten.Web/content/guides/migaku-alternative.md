@@ -1,12 +1,15 @@
 ---
 title: Jiten vs Migaku
+seoTitle: "Migaku Alternative: Jiten vs Migaku for Japanese Immersion (2026)"
 summary: Jiten as an alternative to Migaku, what each does best, and where they overlap.
 category: "Coming from another app?"
 level: beginner
 order: 20
 icon: material-symbols-light:compare-arrows
 draft: false
-updated: 2026-07-28
+updated: 2026-08-23
+published: 2026-07-28
+verified: 2026-08-23
 ---
 
 Migaku and Jiten both help you learn Japanese through immersion, but they are different kinds of product, so "versus" is a little misleading. This page explains how they compare so you can decide which fits your workflow — or whether to use them together.
@@ -41,7 +44,7 @@ Jiten offers most of the features of Migaku and more, for absolutely free. The b
 | Mobile apps | Website works on mobile                                                                                                                                                 | **Native iOS + Android apps**                                                         |
 | Open source / open data | **[Yes](https://github.com/Sirush/Jiten) (CC BY-SA data)**                                                                                                              | Closed platform                                                                          |
 
-This list is not exhaustive; if you see important things to add here or wrong facts, please contact me.
+This list is not exhaustive; if you see important things to add here or wrong facts, please contact me. Migaku prices as listed on [migaku.com/pricing](https://migaku.com/pricing) as of August 2026.
 
 ## Setup and learning curve
 
@@ -61,10 +64,10 @@ The extra setup buys you a level of control Migaku doesn't offer:
 - **Custom meanings and sentences.** Add custom definitions, mnemonics or example sentences to any word. See [Custom meanings and sentences](/guides/custom-meanings-and-sentences).
 - **Display customisation.** Control furigana, word colouring, and how Japanese text is displayed across the site. See [Customising the display](/guides/customising-display).
 - **Word sets and imports.** Bring your known words from [Anki](/guides/importing-known-words-from-anki), [JPDB](/guides/import-from-jpdb), or plain word lists, complete the gaps with [word sets](/guides/word-sets).
-- **A full API.** Everything on the site is available for developers, bringing to your powerful plugins. See [Using the API](/guides/using-the-api).
+- **A full API.** Everything on the site is available for developers to build powerful plugins. See [Using the API](/guides/using-the-api).
 
 ## Your data stays yours
 
 With a subscription product, it's worth asking: what happens to your reviews if you stop paying?
 
-On Jiten, you can export everything: your learned vocabulary, your reviews, all your data. Because Jiten uses FSRS, an open standard shared with Anki, your scheduling history transfers cleanly rather than starting from zero. If you stop using Jiten one day, you can easily transfer your data somewhere else, without the fear or losing anything.
+On Jiten, you can export everything: your learned vocabulary, your reviews, all your data. Because Jiten uses FSRS, an open standard shared with Anki, your scheduling history transfers cleanly rather than starting from zero. If you stop using Jiten one day, you can easily transfer your data somewhere else, without the fear of losing anything.

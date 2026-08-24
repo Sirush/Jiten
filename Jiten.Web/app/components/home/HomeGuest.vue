@@ -15,6 +15,8 @@
     ],
   });
 
+  useJitenAppSchema();
+
   const discordUrl = getDiscordLink();
 
   const { data: globalStats } = await useApiFetch<GlobalStats>('stats/get-global-stats');

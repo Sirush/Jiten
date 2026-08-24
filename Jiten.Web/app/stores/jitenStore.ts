@@ -6,13 +6,12 @@ const YEAR = 60 * 60 * 24 * 365;
 
 function createCookieState<T>(key: string, defaultValue: T): Ref<T> {
   const cookie = useCookie<T>(`jiten-${key}`, {
-    default: () => defaultValue,
     watch: true,
     maxAge: YEAR,
     path: '/',
   });
 
-  const state = ref<T>(cookie.value) as Ref<T>;
+  const state = ref<T>(cookie.value ?? defaultValue) as Ref<T>;
 
   watch(state, (newValue) => {
     cookie.value = newValue;
@@ -51,7 +50,7 @@ function createLocalStorageState<T>(key: string, defaultValue: T): Ref<T> {
 export const useJitenStore = defineStore('jiten', () => {
   const titleLanguage = createCookieState<TitleLanguage>('title-language', TitleLanguage.Romaji);
   const displayFurigana = createCookieState<boolean>('display-furigana', true);
-  let defaultTheme = ThemeMode.Auto;
+  const defaultTheme = ThemeMode.Auto;
 
   const themeMode = createCookieState<ThemeMode>('theme-mode', defaultTheme);
   const displayAdminFunctions = createCookieState<boolean>('display-admin-functions', false);
@@ -73,7 +72,6 @@ export const useJitenStore = defineStore('jiten', () => {
   const preferredDictionaryId = createCookieState<string>('preferred-dictionary-id', '');
 
   const difficultyValueDisplayStyleCookie = useCookie<DifficultyValueDisplayStyle>('jiten-difficulty-value-display-style', {
-    default: () => DifficultyValueDisplayStyle.ZeroToFive,
     watch: true,
     maxAge: YEAR,
     path: '/',
@@ -84,7 +82,9 @@ export const useJitenStore = defineStore('jiten', () => {
     difficultyValueDisplayStyleCookie.value = DifficultyValueDisplayStyle.ZeroToFive;
   }
 
-  const difficultyValueDisplayStyle = ref<DifficultyValueDisplayStyle>(difficultyValueDisplayStyleCookie.value);
+  const difficultyValueDisplayStyle = ref<DifficultyValueDisplayStyle>(
+    difficultyValueDisplayStyleCookie.value ?? DifficultyValueDisplayStyle.ZeroToFive
+  );
 
   watch(difficultyValueDisplayStyle, (newValue) => {
     difficultyValueDisplayStyleCookie.value = newValue;
@@ -136,7 +136,6 @@ export const useJitenStore = defineStore('jiten', () => {
   return {
     getKnownWordIds,
 
-    // state
     titleLanguage,
     displayFurigana,
     themeMode,

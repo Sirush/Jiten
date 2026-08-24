@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Text.Json;
@@ -108,6 +108,50 @@ public class MediaDeckController(
         }
 
         return dtos;
+    }
+
+    /// <summary>
+    /// Returns slim difficulty-ranked rows for the public media-type hub pages
+    /// </summary>
+    [HttpGet("get-media-decks-by-type-ranked/{mediaType}")]
+    [ResponseCache(Duration = 60 * 60, VaryByQueryKeys = ["page", "descending"])]
+    [SwaggerOperation(Summary = "Get difficulty-ranked media decks by type (slim rows)")]
+    [ProducesResponseType(typeof(PaginatedResponse<List<DeckRankingRowDto>>), StatusCodes.Status200OK)]
+    public async Task<PaginatedResponse<List<DeckRankingRowDto>>> GetMediaDecksByTypeRanked(MediaType mediaType, int page = 1,
+                                                                                            bool descending = false)
+    {
+        const int pageSize = 500;
+        page = Math.Max(page, 1);
+
+        var query = context.Decks.AsNoTracking()
+                           .Where(d => d.ParentDeckId == null && d.MediaType == mediaType && d.Difficulty > -1);
+
+        var totalItems = await query.CountAsync();
+
+        var ordered = descending
+            ? query.OrderByDescending(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
+                                          + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0))
+                   .ThenBy(d => d.DeckId)
+            : query.OrderBy(d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
+                                + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0))
+                   .ThenBy(d => d.DeckId);
+
+        var rows = await ordered.Skip((page - 1) * pageSize)
+                                .Take(pageSize)
+                                .Select(d => new DeckRankingRowDto
+                                {
+                                    DeckId = d.DeckId,
+                                    OriginalTitle = d.OriginalTitle,
+                                    RomajiTitle = d.RomajiTitle ?? "",
+                                    EnglishTitle = d.EnglishTitle ?? "",
+                                    Difficulty = (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
+                                                 + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0),
+                                    CharacterCount = d.CharacterCount,
+                                    ReleaseYear = d.ReleaseDate.Year > 1 ? d.ReleaseDate.Year : null,
+                                })
+                                .ToListAsync();
+
+        return new PaginatedResponse<List<DeckRankingRowDto>>(rows, totalItems, pageSize, (page - 1) * pageSize);
     }
 
     /// <summary>
@@ -529,7 +573,6 @@ public class MediaDeckController(
         if (speechDurationMax != null)
             query = query.Where(d => d.SpeechDuration <= (long)speechDurationMax * 3_600_000L);
 
-        // Genre filters
         if (!string.IsNullOrEmpty(genres))
         {
             var genreIds = genres.Split(',', StringSplitOptions.RemoveEmptyEntries)
@@ -561,7 +604,6 @@ public class MediaDeckController(
             }
         }
 
-        // Tag filters
         if (!string.IsNullOrEmpty(tags))
         {
             var tagIds = tags.Split(',', StringSplitOptions.RemoveEmptyEntries)
@@ -593,7 +635,6 @@ public class MediaDeckController(
             }
         }
 
-        // Exclude sequels and fandiscs
         if (excludeSequels == true)
         {
             query = query.Where(d =>
@@ -663,29 +704,6 @@ public class MediaDeckController(
     /// <param name="sortBy">Sort field (title, difficulty, charCount, wordCount, sentenceLength, dialoguePercentage, subtitleRate, uKanji, uWordCount, uKanjiOnce, filter, releaseDate, coverage, uCoverage, totalCoverage, uTotalCoverage, communityVotes, etc.).</param>
     /// <param name="sortOrder">Ascending or Descending.</param>
     /// <param name="status">Status (none, nostatus, fav, ignore, planning, ongoing, completed, dropped)</param>
-    /// <param name="charCountMin"></param>
-    /// <param name="charCountMax"></param>
-    /// <param name="difficultyMin"></param>
-    /// <param name="difficultyMax"></param>
-    /// <param name="releaseYearMin"></param>
-    /// <param name="releaseYearMax"></param>
-    /// <param name="uniqueKanjiMin"></param>
-    /// <param name="uniqueKanjiMax"></param>
-    /// <param name="subdeckCountMin"></param>
-    /// <param name="subdeckCountMax"></param>
-    /// <param name="extRatingMin"></param>
-    /// <param name="extRatingMax"></param>
-    /// <param name="genres"></param>
-    /// <param name="excludeGenres"></param>
-    /// <param name="tags"></param>
-    /// <param name="excludeTags"></param>
-    /// <param name="coverageMin"></param>
-    /// <param name="coverageMax"></param>
-    /// <param name="uniqueCoverageMin"></param>
-    /// <param name="uniqueCoverageMax"></param>
-    /// <param name="speechSpeedMin"></param>
-    /// <param name="speechSpeedMax"></param>
-    /// <param name="excludeSequels"></param>
     /// <returns>Paginated list of decks.</returns>
     [HttpGet("get-media-decks")]
     [ResponseCache(Duration = 300, VaryByHeader = "Authorization",
@@ -721,7 +739,7 @@ public class MediaDeckController(
                                                                       int? speechDurationMin = null, int? speechDurationMax = null,
                                                                       bool? excludeSequels = null)
     {
-        // Disable response caching for authenticated users
+        // Responses carry the viewer's coverage and preferences; they must not be shared from a cache.
         if (currentUserService.IsAuthenticated)
         {
             Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
@@ -824,14 +842,12 @@ public class MediaDeckController(
                                    speechDurationMin, speechDurationMax, genres, excludeGenres, tags, excludeTags,
                                    excludeSequels);
 
-        // Word filter
         if (wordId != 0)
         {
             query = query.Where(d => context.DeckWords
                                             .Any(dw => dw.DeckId == d.DeckId && dw.WordId == wordId && dw.ReadingIndex == readingIndex));
         }
 
-        // User preferences
         Dictionary<int, UserDeckPreference> allUserPrefs = new();
         HashSet<int> favDeckIds = new();
         HashSet<int> ignoredDeckIds = new();
@@ -891,7 +907,6 @@ public class MediaDeckController(
             }
         }
 
-        // Exclude ignored decks
         if (currentUserService.IsAuthenticated && status?.ToLowerInvariant() != "ignore")
         {
             query = query.Where(d => !ignoredDeckIds.Contains(d.DeckId));
@@ -910,7 +925,6 @@ public class MediaDeckController(
                      .ThenInclude(r => r.SourceDeck);
 
 
-        // Create projected query for word-based searches
         IQueryable<DeckWithOccurrences>? projectedQuery = null;
         if (wordId != 0)
         {
@@ -943,7 +957,6 @@ public class MediaDeckController(
             youngCoverageDict = coverages.YoungCoverage;
             youngUniqueCoverageDict = coverages.YoungUniqueCoverage;
 
-            // Apply coverage filters
             if (coverageMin != null || coverageMax != null)
             {
                 var matchingIds = coverageDict
@@ -964,7 +977,6 @@ public class MediaDeckController(
                 query = query.Where(d => matchingIds.Contains(d.DeckId));
             }
 
-            // Reuse allUserPrefs from earlier instead of querying again
 
             if (sortBy is "coverage" or "uCoverage" or "totalCoverage" or "uTotalCoverage")
             {
@@ -988,26 +1000,21 @@ public class MediaDeckController(
                                               uniqueCoverageDict, youngCoverageDict, youngUniqueCoverageDict, allUserPrefs, orderedDeckIds);
         }
 
-        // Handle regular queries
         query = ApplySorting(query, sortBy, sortOrder);
         var totalCount = await query.CountAsync();
 
         List<Deck> paginatedDecks;
         if (orderedDeckIds is { Count: > 0 } && sortBy == "filter")
         {
-            // Get IDs that pass all filters (mediaType, charCount, etc.)
             var filteredIdsSet = (await query.Select(d => d.DeckId).ToListAsync()).ToHashSet();
 
-            // Filter orderedDeckIds to only include IDs that pass all filters
             var filteredOrderedIds = orderedDeckIds.Where(id => filteredIdsSet.Contains(id)).ToList();
 
-            // Now paginate from the filtered ordered list
             var paginatedIds = filteredOrderedIds.Skip(offset ?? 0).Take(pageSize).ToList();
 
             var filteredQuery = query.Where(d => paginatedIds.Contains(d.DeckId));
             var unorderedDecks = await filteredQuery.AsSplitQuery().ToListAsync();
 
-            // Re-order based on PGroonga relevance
             var deckLookup = unorderedDecks.ToDictionary(d => d.DeckId);
             paginatedDecks = paginatedIds
                              .Where(id => deckLookup.ContainsKey(id))
@@ -1016,7 +1023,6 @@ public class MediaDeckController(
         }
         else
         {
-            // No PGroonga filter 
             paginatedDecks = await query
                                    .Skip(offset ?? 0)
                                    .Take(pageSize)
@@ -1088,7 +1094,6 @@ public class MediaDeckController(
         var orderedIds = orderedWithCoverage.Concat(idsWithoutCoverage).ToList();
         var pagedIds = orderedIds.Skip(offset).Take(pageSize).ToList();
 
-        // Use projectedQuery if it's word based
         if (projectedQuery != null)
         {
             var paginatedProjections = await projectedQuery
@@ -1351,7 +1356,6 @@ public class MediaDeckController(
         Dictionary<int, float> youngCoverageDict, Dictionary<int, float> youngUniqueCoverageDict,
         Dictionary<int, UserDeckPreference> preferencesDict, List<int>? orderedDeckIds)
     {
-        // Apply sorting to the projected query
         projectedQuery = ApplySorting(projectedQuery, sortBy, sortOrder);
 
         var totalCount = await projectedQuery.CountAsync();
@@ -1360,13 +1364,10 @@ public class MediaDeckController(
         List<int>? paginatedIds = null;
         if (orderedDeckIds is { Count: > 0 } && sortBy == "filter")
         {
-            // Get IDs that pass all filters (mediaType, charCount, etc.)
             var filteredIdsSet = (await projectedQuery.Select(p => p.Deck.DeckId).ToListAsync()).ToHashSet();
 
-            // Filter orderedDeckIds to only include IDs that pass all filters
             var filteredOrderedIds = orderedDeckIds.Where(id => filteredIdsSet.Contains(id)).ToList();
 
-            // Now paginate from the filtered ordered list
             paginatedIds = filteredOrderedIds.Skip(offset).Take(pageSize).ToList();
 
             var filteredQuery = projectedQuery.Where(p => paginatedIds.Contains(p.Deck.DeckId));
@@ -1374,7 +1375,6 @@ public class MediaDeckController(
         }
         else
         {
-            // No PGroonga filter
             paginatedProjections = await projectedQuery
                                          .Skip(offset)
                                          .Take(pageSize)
@@ -1404,7 +1404,6 @@ public class MediaDeckController(
         List<DeckWithOccurrences> paginatedResults;
         if (paginatedIds is { Count: > 0 })
         {
-            // Re-order based on PGroonga relevance
             var projectionLookup = paginatedProjections.ToDictionary(p => p.Deck.DeckId);
             paginatedResults = paginatedIds
                                .Where(id => projectionLookup.ContainsKey(id) && fullDeckMap.ContainsKey(id))
@@ -1459,7 +1458,6 @@ public class MediaDeckController(
         foreach (var (dto, result) in dtos.Zip(paginatedResults))
             dto.Relationships = DeckRelationshipDto.FromDeck(result.Deck.RelationshipsAsSource, result.Deck.RelationshipsAsTarget);
 
-        // Populate user coverage if authenticated
         if (currentUserService.IsAuthenticated)
         {
             foreach (var dto in dtos)
@@ -1494,7 +1492,6 @@ public class MediaDeckController(
     /// <param name="limit">Page size, clamped to 1-200.</param>
     /// <returns>Paginated deck vocabulary list.</returns>
     [HttpGet("{id}/vocabulary")]
-    // [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "sortBy", "sortOrder", "offset"])]
     [SwaggerOperation(Summary = "Get deck vocabulary")]
     [ProducesResponseType(typeof(PaginatedResponse<DeckVocabularyListDto?>), StatusCodes.Status200OK)]
     public async Task<PaginatedResponse<DeckVocabularyListDto?>> GetVocabulary(int id, string? sortBy = "",
@@ -1652,6 +1649,118 @@ public class MediaDeckController(
         return new PaginatedResponse<DeckVocabularyListDto?>(dto, totalCount, pageSize, offset ?? 0);
     }
 
+    private static readonly string[] FunctionWordPosTags = ["prt", "aux", "aux-v", "aux-adj", "cop", "conj", "int"];
+    private const int PreviewRareRankFloor = 30_000;
+    private static readonly HashSet<string> NamePosTags =
+    [
+        "company", "given", "place", "person", "product", "ship", "surname", "unclass", "name-fem", "name-masc", "station",
+        "group", "char", "creat", "dei", "doc", "ev", "fem", "fict", "leg", "masc", "myth", "obj",
+        "organization", "oth", "relig", "serv", "work", "unc"
+    ];
+
+    /// <summary>
+    /// Returns notable content words of a deck (most frequent plus rare long-tail), for the SSR preview on the detail page.
+    /// </summary>
+    [HttpGet("{id}/vocabulary-preview")]
+    [ResponseCache(Duration = 60 * 60, VaryByQueryKeys = ["limit"])]
+    [SwaggerOperation(Summary = "Get notable content words of a deck (slim rows)")]
+    [ProducesResponseType(typeof(List<DeckVocabularyPreviewWordDto>), StatusCodes.Status200OK)]
+    public async Task<List<DeckVocabularyPreviewWordDto>> GetVocabularyPreview(int id, int limit = 20)
+    {
+        limit = Math.Clamp(limit, 1, 50);
+        int rareTarget = limit * 2 / 5;
+
+        // Kanji-form requirement keeps kana filler (これ, こと, いい) out of the preview.
+        var baseQuery = context.DeckWords.AsNoTracking()
+                               .Where(dw => dw.DeckId == id)
+                               .Where(dw => !context.JMDictWords.Any(w => w.WordId == dw.WordId &&
+                                                                          w.PartsOfSpeech.Any(p => FunctionWordPosTags.Contains(p))))
+                               .Where(dw => context.WordForms.Any(wf => wf.WordId == dw.WordId &&
+                                                                        wf.ReadingIndex == (short)dw.ReadingIndex &&
+                                                                        wf.FormType != JmDictFormType.KanaForm));
+
+        var candidates = await baseQuery
+                               .OrderByDescending(dw => dw.Occurrences).ThenBy(dw => dw.DeckWordId)
+                               .Take(limit)
+                               .Select(dw => new { dw.DeckWordId, dw.WordId, dw.ReadingIndex, dw.Occurrences })
+                               .ToListAsync();
+
+        var frequent = candidates.Take(limit - rareTarget).ToList();
+        var takenIds = frequent.Select(f => f.DeckWordId).ToList();
+
+        // Occurrences >= 3 keeps one-off noise out of the long-tail slots.
+        var rareCandidates = await baseQuery
+                                   .Where(dw => !takenIds.Contains(dw.DeckWordId) && dw.Occurrences >= 3)
+                                   .Where(dw => !context.WordFormFrequencies.Any(f => f.WordId == dw.WordId &&
+                                                                                      f.ReadingIndex == (short)dw.ReadingIndex &&
+                                                                                      f.FrequencyRank > 0 &&
+                                                                                      f.FrequencyRank <= PreviewRareRankFloor))
+                                   .OrderByDescending(dw => dw.Occurrences).ThenBy(dw => dw.DeckWordId)
+                                   .Take(rareTarget * 3)
+                                   .Select(dw => new { dw.DeckWordId, dw.WordId, dw.ReadingIndex, dw.Occurrences })
+                                   .ToListAsync();
+
+        // Character names recur heavily and would fill every long-tail slot; cap them at half.
+        var candidateWordIds = rareCandidates.Select(c => c.WordId).Distinct().ToList();
+        var nameWordIds = (await context.JMDictWords.AsNoTracking()
+                                        .Where(w => candidateWordIds.Contains(w.WordId))
+                                        .Select(w => new { w.WordId, w.PartsOfSpeech })
+                                        .ToListAsync())
+                          .Where(w => w.PartsOfSpeech.Count > 0 && w.PartsOfSpeech.All(p => NamePosTags.Contains(p)))
+                          .Select(w => w.WordId)
+                          .ToHashSet();
+
+        int nameCap = rareTarget / 2;
+        var selectedRareIds = new HashSet<long>();
+        int namesTaken = 0;
+        foreach (var c in rareCandidates)
+        {
+            if (selectedRareIds.Count >= rareTarget) break;
+            bool isName = nameWordIds.Contains(c.WordId);
+            if (isName && namesTaken >= nameCap) continue;
+            if (isName) namesTaken++;
+            selectedRareIds.Add(c.DeckWordId);
+        }
+
+        var rare = rareCandidates.Where(c => selectedRareIds.Contains(c.DeckWordId)).ToList();
+
+        var rareIds = rare.Select(r => r.DeckWordId).ToHashSet();
+        var top = frequent.Concat(rare)
+                          .Concat(candidates.Skip(limit - rareTarget).Where(c => !rareIds.Contains(c.DeckWordId)))
+                          .Take(limit)
+                          .ToList();
+
+        var wordIds = top.Select(t => t.WordId).Distinct().ToList();
+        if (wordIds.Count == 0)
+            return [];
+
+        var words = await context.JMDictWords.AsNoTracking()
+                                 .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
+                                 .Where(w => wordIds.Contains(w.WordId))
+                                 .ToDictionaryAsync(w => w.WordId);
+        var forms = await WordFormHelper.LoadWordForms(context, wordIds);
+        var freqs = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
+
+        return top.Select(t => new
+                  {
+                      t,
+                      Form = forms.GetValueOrDefault((t.WordId, (short)t.ReadingIndex)),
+                      Freq = freqs.GetValueOrDefault((t.WordId, (short)t.ReadingIndex)),
+                  })
+                  .Where(x => x.Form != null)
+                  .Select(x => new DeckVocabularyPreviewWordDto
+                  {
+                      WordId = x.t.WordId,
+                      ReadingIndex = (byte)x.t.ReadingIndex,
+                      Reading = x.Form!.Text,
+                      ReadingFurigana = x.Form.RubyText,
+                      MainDefinition = words.GetValueOrDefault(x.t.WordId)?.Definitions.FirstOrDefault()?.EnglishMeanings.FirstOrDefault(),
+                      FrequencyRank = x.Freq?.FrequencyRank,
+                      Occurrences = x.t.Occurrences,
+                  })
+                  .ToList();
+    }
+
     /// <summary>
     /// Returns details for a media deck including parent and subdecks.
     /// </summary>
@@ -1662,7 +1771,6 @@ public class MediaDeckController(
     /// <param name="subdeckSortOrder">Direction for <paramref name="subdeckSort"/>.</param>
     /// <returns>Deck detail with subdecks.</returns>
     [HttpGet("{id}/detail")]
-    // [ResponseCache(Duration = 600, VaryByQueryKeys = ["id", "offset"])]
     [SwaggerOperation(Summary = "Get deck details")]
     [ProducesResponseType(typeof(PaginatedResponse<DeckDetailDto?>), StatusCodes.Status200OK)]
     public async Task<PaginatedResponse<DeckDetailDto?>> GetMediaDeckDetail(int id, int? offset = 0,
@@ -2215,7 +2323,6 @@ public class MediaDeckController(
             if (string.IsNullOrEmpty(input))
                 return "";
 
-            // Detect URLs (http/https)
             var urlRegex = new Regex(@"(https?:\/\/[^\s)]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
             var sb = new StringBuilder();
@@ -2223,7 +2330,6 @@ public class MediaDeckController(
 
             foreach (Match match in urlRegex.Matches(input))
             {
-                // Escape text before the URL
                 if (match.Index > lastIndex)
                 {
                     var textPart = input.Substring(lastIndex, match.Index - lastIndex);
@@ -2236,7 +2342,6 @@ public class MediaDeckController(
                 lastIndex = match.Index + match.Length;
             }
 
-            // Escape any remaining text after last URL
             if (lastIndex < input.Length)
             {
                 sb.Append(EscapeMarkdown(input.Substring(lastIndex)));

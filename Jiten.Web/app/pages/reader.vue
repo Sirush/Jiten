@@ -12,6 +12,34 @@
     twitterDescription: description,
   });
 
+  defineOgImageComponent('PageOgImage', {
+    title: 'Jiten Reader',
+    category: 'Browser extension',
+    description:
+      'A free pop-up Japanese dictionary for the web. Instant lookups, per-word knowledge tracking, and a readability estimate for any page.',
+  });
+
+  const chromeStoreUrl = 'https://chromewebstore.google.com/detail/jiten-reader/fkegmlkjkenojfiplaclhlmncfeooaeo';
+  const firefoxStoreUrl = 'https://addons.mozilla.org/en-US/firefox/addon/jiten-reader/';
+
+  // SoftwareApplication entity for the extension, tied to the store listings and the site
+  // Organization so the Reader resolves as its own installable product.
+  useSchemaOrg([
+    {
+      '@type': 'SoftwareApplication',
+      '@id': 'https://jiten.moe/reader#app',
+      name: 'Jiten Reader',
+      url: 'https://jiten.moe/reader',
+      description,
+      applicationCategory: 'BrowserApplication',
+      operatingSystem: 'Chrome, Firefox',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
+      installUrl: [chromeStoreUrl, firefoxStoreUrl],
+      sameAs: [chromeStoreUrl, firefoxStoreUrl],
+      publisher: { '@id': 'https://jiten.moe/#identity' },
+    },
+  ]);
+
   const discordUrl = getDiscordLink();
 
   const features = [
@@ -77,9 +105,9 @@
   ];
 
   const screenshots = [
-    { src: '/img/jitenreader_popup.webp', alt: 'Dictionary popup' },
-    { src: '/img/jitenreader_colouring.webp', alt: 'Coloured text' },
-    { src: '/img/jitenreader_customisation.webp', alt: 'Customisation panel' },
+    { src: '/img/jitenreader_popup.webp', alt: 'Jiten Reader Japanese popup dictionary showing a word\'s reading, definition, part of speech and frequency' },
+    { src: '/img/jitenreader_colouring.webp', alt: 'Japanese text with words coloured by knowledge state in Jiten Reader' },
+    { src: '/img/jitenreader_customisation.webp', alt: 'Jiten Reader customisation panel for colours, popup behaviour and display options' },
   ];
 </script>
 

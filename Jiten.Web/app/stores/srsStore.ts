@@ -951,6 +951,7 @@ export const useSrsStore = defineStore('srs', () => {
       duration: reviewDuration,
     };
     sessionReviews.value = [...sessionReviews.value, reviewEntry];
+    trackActivation('review');
 
     // Stats — record the exact deltas so a failed background sync can revert just this card.
     const counted = studySettings.value.countFailedReviews || !isRepeat;

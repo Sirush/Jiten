@@ -86,6 +86,11 @@
     twitterCard: 'summary_large_image',
   });
 
+  defineOgImageComponent('PageOgImage', {
+    title: 'Jiten+',
+    description: 'Get useful extras while helping support Jiten. Everything free stays free.',
+  });
+
   const faq = [
     {
       q: 'Can I cancel a subscription anytime?',

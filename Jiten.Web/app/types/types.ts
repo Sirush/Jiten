@@ -1,20 +1,20 @@
-import {
-  type ComparisonOutcome,
-  type DeckRelationshipType,
-  type DeckStatus,
-  type FsrsRating,
-  type FsrsState,
-  type Genre,
-  type KnownState,
-  type LinkType,
-  type MediaType,
-  type MediaTypeGroup,
-  type NotificationType,
-  type ReadingType,
-  type RequestAction,
-  type RequestKind,
-  type RequestStatus,
-  type WordSetStateType,
+import type {
+  ComparisonOutcome,
+  DeckRelationshipType,
+  DeckStatus,
+  FsrsRating,
+  FsrsState,
+  Genre,
+  KnownState,
+  LinkType,
+  MediaType,
+  MediaTypeGroup,
+  NotificationType,
+  ReadingType,
+  RequestAction,
+  RequestKind,
+  RequestStatus,
+  WordSetStateType,
 } from '~/types';
 
 export interface Deck {
@@ -265,6 +265,16 @@ export interface PaginatedResponse<T> {
   totalItems: number;
   pageSize: number;
   currentOffset: number;
+}
+
+export interface DeckRankingRow {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle: string;
+  englishTitle: string;
+  difficulty: number;
+  characterCount: number;
+  releaseYear: number | null;
 }
 
 export interface GlobalStats {
@@ -707,6 +717,16 @@ export interface WordSummary {
   matchSurface?: string | null;
 }
 
+export interface DeckVocabularyPreviewWord {
+  wordId: number;
+  readingIndex: number;
+  reading: string;
+  readingFurigana: string;
+  mainDefinition: string | null;
+  frequencyRank: number | null;
+  occurrences: number;
+}
+
 export interface KanjiGridReading {
   reading: string;
   known: number;
@@ -751,7 +771,6 @@ export interface DeckDifficultyDto {
   adjustmentConfidence: number;
 }
 
-// WordSet types
 export interface WordSetDto {
   setId: number;
   slug: string;
@@ -805,7 +824,6 @@ export interface DictionarySearchResult {
   hasMore: boolean;
 }
 
-// Media Request types
 export interface MediaRequestDto {
   id: number;
   title: string;
@@ -981,7 +999,6 @@ export interface DifficultyRankingSectionDto {
   unranked: DeckSummaryDto[];
 }
 
-// SRS Study types
 export interface StudyDeckDto {
   userStudyDeckId: number;
   deckType: StudyDeckType;
