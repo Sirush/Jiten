@@ -49,7 +49,7 @@ public class CustomFrequencyListController(
 
     public record UpdateRequest(string? Name, bool? AutoUpdate, string? Mode, DefinitionDto? Definition);
 
-    public record PickedDeckDto(int DeckId, string OriginalTitle, string CoverName, int MediaType);
+    public record PickedDeckDto(int DeckId, string OriginalTitle, string? RomajiTitle, string? EnglishTitle, string CoverName, int MediaType);
 
     // ---- Preview ------------------------------------------------------------
 
@@ -205,7 +205,7 @@ public class CustomFrequencyListController(
             await using var jiten = await jitenFactory.CreateDbContextAsync();
             decksById = await jiten.Decks.AsNoTracking()
                                   .Where(d => allPickedIds.Contains(d.DeckId))
-                                  .Select(d => new PickedDeckDto(d.DeckId, d.OriginalTitle, d.CoverName, (int)d.MediaType))
+                                  .Select(d => new PickedDeckDto(d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle, d.CoverName, (int)d.MediaType))
                                   .ToDictionaryAsync(d => d.DeckId);
         }
 

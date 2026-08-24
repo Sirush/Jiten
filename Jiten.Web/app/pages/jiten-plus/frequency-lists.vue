@@ -34,6 +34,7 @@
   const toast = useToast();
   const confirm = useConfirm();
   const { isPlus, isFull, isTrial } = useJitenPlus();
+  const localiseTitle = useLocaliseTitle();
 
   // ---- Builder state ------------------------------------------------------
 
@@ -130,8 +131,14 @@
 
   // ---- Live preview -------------------------------------------------------
 
+  interface SampleTitle {
+    originalTitle: string;
+    romajiTitle?: string | null;
+    englishTitle?: string | null;
+  }
+
   const previewCount = ref<number | null>(null);
-  const previewSample = ref<string[]>([]);
+  const previewSample = ref<SampleTitle[]>([]);
   const previewLoading = ref(false);
   const minDecks = 2;
 
@@ -145,7 +152,7 @@
       const def = buildDefinition();
       const res = await $api<{
         deckCount: number;
-        sampleTitles: string[];
+        sampleTitles: SampleTitle[];
         minDecks: number;
         genreCounts: Record<number, number>;
         tagCounts: Record<number, number>;
@@ -234,6 +241,14 @@
 
   function removePickedDeck(deckId: number) {
     pickedDecks.value = pickedDecks.value.filter((d) => d.deckId !== deckId);
+  }
+
+  const mediaListPickerVisible = ref(false);
+  const pickedDeckIds = computed(() => pickedDecks.value.map((d) => d.deckId));
+
+  function onMediaListAdd(decks: MediaSuggestion[]) {
+    const existing = new Set(pickedDeckIds.value);
+    pickedDecks.value = [...pickedDecks.value, ...decks.filter((d) => !existing.has(d.deckId))];
   }
 
   // ---- Saved / generated lists --------------------------------------------
@@ -682,7 +697,7 @@
                 <AutoComplete
                   v-model="selectedDeck"
                   :suggestions="deckSuggestions"
-                  option-label="originalTitle"
+                  :option-label="localiseTitle"
                   dropdown
                   placeholder="Type a title…"
                   class="w-full"
@@ -692,11 +707,19 @@
                   <template #option="{ option }">
                     <div class="flex items-center gap-2">
                       <img :src="coverUrl(option.coverName)" alt="" class="w-6 h-8 object-cover rounded" @error="(e) => ((e.target as HTMLImageElement).src = '/img/nocover.jpg')" >
-                      <span>{{ option.originalTitle }}</span>
+                      <span>{{ localiseTitle(option) }}</span>
                       <Tag :value="getMediaTypeText(option.mediaType)" severity="secondary" class="ml-auto" />
                     </div>
                   </template>
                 </AutoComplete>
+                <Button
+                  label="Add from my media list"
+                  icon="pi pi-list"
+                  size="small"
+                  outlined
+                  class="mt-2"
+                  @click="mediaListPickerVisible = true"
+                />
               </div>
               <Accordion v-if="pickedDecks.length" value="picked">
                 <AccordionPanel value="picked">
@@ -715,7 +738,7 @@
                           @error="(e) => ((e.target as HTMLImageElement).src = '/img/nocover.jpg')"
                         >
                         <div class="flex items-center gap-2 min-w-0 flex-1">
-                          <span class="font-medium truncate" :title="d.originalTitle">{{ d.originalTitle }}</span>
+                          <span class="font-medium truncate" :title="localiseTitle(d)">{{ localiseTitle(d) }}</span>
                           <Tag :value="getMediaTypeText(d.mediaType)" severity="secondary" class="shrink-0" />
                         </div>
                         <Tooltip content="Remove">
@@ -785,7 +808,7 @@
               A list needs at least {{ minDecks }} matching decks.
             </p>
             <div v-if="previewSample.length" class="text-xs text-surface-400">
-              e.g. {{ previewSample.slice(0, 5).join(', ') }}
+              e.g. {{ previewSample.slice(0, 5).map(localiseTitle).join(', ') }}
             </div>
           </div>
         </template>
@@ -988,6 +1011,8 @@
           </Tooltip>
         </div>
       </Dialog>
+
+      <MediaListDeckPickerDialog v-model:visible="mediaListPickerVisible" :picked-ids="pickedDeckIds" @add="onMediaListAdd" />
     </template>
   </div>
 </template>

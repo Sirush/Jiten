@@ -393,6 +393,35 @@ public partial class UserController
     }
 
     /// <summary>
+    /// Returns the caller's tracked media list as title/cover/status rows only, for pickers that need
+    /// to list the decks without the cost of full deck DTOs and coverage.
+    /// </summary>
+    [HttpGet("media-list")]
+    [SwaggerOperation(Summary = "Get the caller's tracked media list in a slim form")]
+    public async Task<IResult> GetOwnMediaList()
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        var entries = (await BuildMediaListAsync(userId))
+                      .OrderBy(e => e.Display.OriginalTitle)
+                      .Select(e => new
+                                   {
+                                       deckId = e.Display.DeckId,
+                                       originalTitle = e.Display.OriginalTitle,
+                                       romajiTitle = e.Display.RomajiTitle,
+                                       englishTitle = e.Display.EnglishTitle,
+                                       mediaType = e.Display.MediaType,
+                                       coverName = e.Display.CoverName,
+                                       status = e.Status,
+                                       isFavourite = e.IsFavourite,
+                                   })
+                      .ToList();
+
+        return Results.Ok(entries);
+    }
+
+    /// <summary>
     /// Exports the caller's tracked media list. CSV ships UTF-8 with BOM so Japanese titles open cleanly in Excel.
     /// </summary>
     [HttpGet("media-list/export")]
