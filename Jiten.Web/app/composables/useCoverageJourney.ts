@@ -21,7 +21,8 @@ export function useCoverageJourney(deckId: MaybeRefOrGetter<number | string>) {
   const rateLimited = ref(false);
 
   const granted = computed(() => auth.isAuthenticated && fetched.value && hasFeature('coverage-journey'));
-  const cacheKey = computed(() => `${toValue(deckId)}:${jitenStore.coverageVersion}`);
+  const versionFor = (id: number | string) => `${jitenStore.coverageVersion}:${jitenStore.deckCoverageVersions[Number(id)] ?? 0}`;
+  const cacheKey = computed(() => `${toValue(deckId)}:${versionFor(toValue(deckId))}`);
 
   async function load(force = false) {
     const id = toValue(deckId);
@@ -42,11 +43,11 @@ export function useCoverageJourney(deckId: MaybeRefOrGetter<number | string>) {
       const { $api } = useNuxtApp();
       const result = await $api<CoverageJourney>(`media-deck/${id}/coverage-journey`);
       journey.value = result;
-      // A coverage refresh strands the whole previous generation; dropping it keeps a long
+      // A coverage refresh strands the previous generation; dropping stranded keys keeps a long
       // browsing session from retaining a series per deck per refresh.
-      const suffix = `:${jitenStore.coverageVersion}`;
-      if (Object.keys(cache.value).some((k) => !k.endsWith(suffix)))
-        cache.value = Object.fromEntries(Object.entries(cache.value).filter(([k]) => k.endsWith(suffix)));
+      const isCurrent = (k: string) => k === `${k.split(':')[0]}:${versionFor(k.split(':')[0]!)}`;
+      if (Object.keys(cache.value).some((k) => !isCurrent(k)))
+        cache.value = Object.fromEntries(Object.entries(cache.value).filter(([k]) => isCurrent(k)));
       cache.value[key] = result;
     } catch (err) {
       journey.value = null;

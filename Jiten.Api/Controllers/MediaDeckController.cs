@@ -1898,6 +1898,76 @@ public class MediaDeckController(
         return new PaginatedResponse<DeckDetailDto?>(dto, totalCount, pageSize, offset ?? 0);
     }
 
+    /// <summary>Widens a deck id to its whole media: the root plus every child, whichever member was passed.</summary>
+    internal static async Task<List<int>?> ResolveMediaDeckIdsAsync(JitenDbContext context, int deckId)
+    {
+        var deck = await context.Decks.AsNoTracking()
+                                .Where(d => d.DeckId == deckId)
+                                .Select(d => new { d.DeckId, d.ParentDeckId })
+                                .FirstOrDefaultAsync();
+        if (deck == null)
+            return null;
+
+        var rootId = deck.ParentDeckId ?? deck.DeckId;
+        var ids = new List<int> { rootId };
+        ids.AddRange(await context.Decks.AsNoTracking()
+                                  .Where(d => d.ParentDeckId == rootId)
+                                  .Select(d => d.DeckId)
+                                  .ToListAsync());
+        return ids;
+    }
+
+    /// <summary>
+    /// Synchronously recomputes the viewer's coverage for a whole media (root deck plus all subdecks).
+    /// </summary>
+    /// <param name="id">Any deck of the media: the root or one of its subdecks.</param>
+    [HttpPost("{id}/coverage/refresh")]
+    [Authorize]
+    [EnableRateLimiting("coverage-refresh")]
+    [SwaggerOperation(Summary = "Refresh the viewer's coverage for a media and its subdecks")]
+    [ProducesResponseType(typeof(DeckCoverageRefreshResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IResult> RefreshDeckCoverage(int id)
+    {
+        var userId = currentUserService.UserId!;
+
+        var deckIds = await ResolveMediaDeckIdsAsync(context, id);
+        if (deckIds == null)
+            return Results.NotFound();
+
+        // Same eligibility gate as ComputationJob: a recompute for a user with almost no tracked words only writes zeroes.
+        var hasSufficientFsrsCards = await userContext.FsrsCards.CountAsync(fc => fc.UserId == userId) >= 10;
+        var hasWordSetSubscriptions = await userContext.UserWordSetStates.AnyAsync(uwss => uwss.UserId == userId);
+        if (!hasSufficientFsrsCards && !hasWordSetSubscriptions)
+            return Results.Ok(new DeckCoverageRefreshResponse { Status = "not_eligible" });
+
+        // Without a full baseline, filling individual slots would make every other deck read 0; the client offers the account-wide refresh instead.
+        if (!await userContext.UserCoverageChunks.AnyAsync(c => c.UserId == userId))
+            return Results.Ok(new DeckCoverageRefreshResponse { Status = "no_baseline" });
+
+        var previousTimeout = userContext.Database.GetCommandTimeout();
+        userContext.Database.SetCommandTimeout(TimeSpan.FromSeconds(120));
+        try
+        {
+            await CoverageComputeService.ComputeSpecificDecksAsync(userContext, userId, deckIds);
+        }
+        finally
+        {
+            userContext.Database.SetCommandTimeout(previousTimeout);
+        }
+
+        var coverage = await UserCoverageChunkHelper.GetCoverage(userContext, userId, [id]);
+        return Results.Ok(new DeckCoverageRefreshResponse
+        {
+            Status = "refreshed",
+            Coverage = coverage.MatureCoverage.GetValueOrDefault(id),
+            UniqueCoverage = coverage.MatureUniqueCoverage.GetValueOrDefault(id),
+            YoungCoverage = coverage.YoungCoverage.GetValueOrDefault(id),
+            YoungUniqueCoverage = coverage.YoungUniqueCoverage.GetValueOrDefault(id),
+        });
+    }
+
     /// <summary>
     /// Downloads a deck in the requested format and order. Supports filtering and excluding known words.
     /// </summary>

@@ -35,7 +35,7 @@
     [MediaType.WebNovel]:
       'Web novels are free to read online, which makes them an easy way to start reading at length. Each one here is ranked by difficulty measured from its actual chapters.',
     [MediaType.Manga]:
-      'Manga difficulty is measured from the text of each volumes. An easy manga can be a good way to start your Japanese journey, as the pictures can help you understand the context.
+      'Manga difficulty is measured from the text of each volumes. An easy manga can be a good way to start your Japanese journey, as the pictures can help you understand the context.',
     [MediaType.Audio]:
       'Audio works are ranked by the difficulty of their transcripts. There is no text on screen to lean on, so the vocabulary lists are a way to prepare before you press play.',
   };

@@ -133,6 +133,13 @@ export const useJitenStore = defineStore('jiten', () => {
     coverageVersion.value++;
   }
 
+  // Per-media invalidation
+  const deckCoverageVersions = ref<Record<number, number>>({});
+
+  function bumpDeckCoverageVersion(deckId: number) {
+    deckCoverageVersions.value[deckId] = (deckCoverageVersions.value[deckId] ?? 0) + 1;
+  }
+
   return {
     getKnownWordIds,
 
@@ -164,5 +171,7 @@ export const useJitenStore = defineStore('jiten', () => {
     customDictionaryFontSize,
     coverageVersion,
     bumpCoverageVersion,
+    deckCoverageVersions,
+    bumpDeckCoverageVersion,
   };
 });

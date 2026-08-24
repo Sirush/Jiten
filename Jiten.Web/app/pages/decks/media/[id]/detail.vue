@@ -107,6 +107,15 @@
     refreshDetail();
   });
 
+  // A single-media refresh bumps the media root's version; refetch so the subdeck bars repaint too.
+  const mediaRootId = computed(() => response.value?.data?.mainDeck?.parentDeckId ?? Number(deckId.value));
+  watch(
+    [mediaRootId, () => jitenStore.deckCoverageVersions[mediaRootId.value] ?? 0],
+    ([rootId, version], [prevRootId, prevVersion]) => {
+      if (rootId === prevRootId && version > prevVersion) refreshDetail();
+    }
+  );
+
   const updateMainDeck = (updatedDeck: Deck) => {
     if (response.value?.data?.mainDeck) {
       response.value = { ...response.value, data: { ...response.value.data, mainDeck: updatedDeck } };

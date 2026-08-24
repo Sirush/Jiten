@@ -9,6 +9,7 @@
   import { formatDateAsYyyyMmDd } from '~/utils/formatDateAsYyyyMmDd';
   import { useAuthStore } from '~/stores/authStore';
   import { useConfirm } from 'primevue/useconfirm';
+  import { useToast } from 'primevue/usetoast';
 
   const props = defineProps<{
     deck: Deck;
@@ -43,6 +44,7 @@
   const authStore = useAuthStore();
   const localiseTitle = useLocaliseTitle();
   const confirm = useConfirm();
+  const toast = useToast();
 
   const displayAdminFunctions = computed(() => store.displayAdminFunctions);
   const readingSpeed = computed(() => store.readingSpeed);
@@ -149,6 +151,50 @@
 
   const { $api } = useNuxtApp();
 
+  const { isRefreshing: isRefreshingCoverage, refresh: refreshDeckCoverage } = useDeckCoverageRefresh(
+    () => props.deck,
+    (updated) => emit('update:deck', updated)
+  );
+
+  const queueFullCoverageRefresh = async () => {
+    try {
+      await $api('user/coverage/refresh', { method: 'POST' });
+      showSuccessToast(toast, 'Coverage computation started', 'Your numbers will appear within a minute or two.');
+    } catch (error) {
+      console.error('Failed to queue full coverage refresh:', error);
+      showErrorToast(toast, 'Error', 'Could not start the coverage computation, please try again.');
+    }
+  };
+
+  const handleRefreshCoverage = async () => {
+    const result = await refreshDeckCoverage();
+    switch (result) {
+      case 'refreshed':
+        showSuccessToast(toast, 'Coverage refreshed');
+        break;
+      case 'not_eligible':
+        showWarnToast(toast, 'Not enough tracked words', 'Coverage needs a few words in your vocabulary first. Review or import some words, then try again.');
+        break;
+      case 'no_baseline':
+        confirm.require({
+          message: 'Your coverage has never been computed, so there is nothing to refresh yet. Compute it for your whole account now?',
+          header: 'Compute coverage',
+          icon: 'pi pi-chart-pie',
+          acceptLabel: 'Compute coverage',
+          rejectLabel: 'Not now',
+          rejectProps: { severity: 'secondary' },
+          accept: () => queueFullCoverageRefresh(),
+        });
+        break;
+      case 'rate_limited':
+        showWarnToast(toast, 'Too many refreshes', 'Please wait a few seconds and try again.');
+        break;
+      case 'error':
+        showErrorToast(toast, 'Error refreshing coverage', 'There was an error refreshing coverage, please try again.');
+        break;
+    }
+  };
+
   const completeParentDeck = async (parentDeckId: number) => {
     await $api(`/user/deck-preferences/${parentDeckId}/status`, {
       method: 'POST',
@@ -239,6 +285,12 @@
           command: () => setStatus(DeckStatus.Dropped),
         },
       ],
+    },
+    {
+      label: 'Refresh coverage',
+      icon: 'pi pi-refresh',
+      disabled: isRefreshingCoverage.value,
+      command: () => handleRefreshCoverage(),
     },
     {
       label: 'Edit',
@@ -702,6 +754,7 @@
     <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" :deck="deck" @update:visible="showIssueDialog = $event" />
 
     <TieredMenu v-if="authStore.isAuthenticated && menuActivated" ref="menu" :model="menuItems" popup />
+    <LoadingOverlay :visible="isRefreshingCoverage" message="Refreshing coverage…" />
 
     <Dialog
       v-if="showCompletionDialog"

@@ -542,6 +542,27 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
+    // Single media coverage refresh
+    options.AddPolicy("coverage-refresh", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.Get(partitionKey, _ => (RateLimiter)new ChainedRateLimiter(
+            new FixedWindowRateLimiter(new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3, Window = TimeSpan.FromSeconds(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            }),
+            new FixedWindowRateLimiter(new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30, Window = TimeSpan.FromMinutes(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            })));
+    });
+
     options.AddPolicy("journey", context =>
     {
         var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
