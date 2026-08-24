@@ -22,6 +22,7 @@
 
       <div class="flex flex-wrap justify-center items-center gap-x-4 gap-y-1 text-xs text-gray-300">
         <span>© {{ new Date().getFullYear() }} Jiten</span>
+        <NuxtLink :to="`/about`" class="!text-gray-300 hover:!text-white">About</NuxtLink>
         <NuxtLink :to="`/terms`" target="_blank" class="!text-gray-300 hover:!text-white">Terms of Use</NuxtLink>
         <NuxtLink :to="`/cgv`" target="_blank" class="!text-gray-300 hover:!text-white">Terms of Sale</NuxtLink>
         <NuxtLink :to="`/privacy`" target="_blank" class="!text-gray-300 hover:!text-white">Privacy Policy</NuxtLink>

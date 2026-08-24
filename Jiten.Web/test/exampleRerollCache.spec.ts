@@ -7,6 +7,7 @@ import type { StudyCardDto } from '../app/types';
 vi.stubGlobal('ref', ref);
 vi.stubGlobal('computed', computed);
 vi.stubGlobal('watch', watch);
+vi.stubGlobal('trackActivation', () => {});
 
 const apiCalls: string[] = [];
 let sentenceCounter = 0;

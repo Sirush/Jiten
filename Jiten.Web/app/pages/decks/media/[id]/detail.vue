@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { useApiFetchPaginated } from '~/composables/useApiFetch';
   import { useJitenStore } from '~/stores/jitenStore';
+  import { useAuthStore } from '~/stores/authStore';
   import type { DeckDetail, Deck } from '~/types';
   import Card from 'primevue/card';
   import Skeleton from 'primevue/skeleton';
@@ -16,6 +17,9 @@
   const router = useRouter();
   const deckId = computed(() => route.params.id as string);
   const localiseTitle = useLocaliseTitle();
+  const authStore = useAuthStore();
+
+  const showSeoBlocks = computed(() => !authStore.isAuthenticated);
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const url = computed(() => `media-deck/${route.params.id}/detail`);
@@ -246,6 +250,8 @@
     <div v-else-if="response?.data?.mainDeck">
       <MediaDeckCard :deck="response.data.mainDeck" title-tag="h1" hide-detail-button @update:deck="updateMainDeck" />
 
+      <DeckStudyOverview v-if="showSeoBlocks && response.data.parentDeck == null" :deck="response.data.mainDeck" />
+
       <LazyCoverageJourneyCard :deck-id="response.data.mainDeck.deckId" />
 
       <div v-if="response.data.parentDeck != null" class="pt-4">
@@ -304,11 +310,16 @@
           No subdecks match “{{ appliedSubdeckFilter }}”.
         </div>
       </div>
-      <!--      <div v-else class="pt-4">This deck has no subdecks</div>-->
 
       <div id="similar-media" class="scroll-mt-4">
         <SimilarMediaSection :deck="response.data.mainDeck" />
       </div>
+
+      <DeckVocabularyHighlights
+        v-if="showSeoBlocks && response.data.parentDeck == null"
+        :key="response.data.mainDeck.deckId"
+        :deck="response.data.mainDeck"
+      />
     </div>
     <div v-else class="text-center py-12 flex flex-col items-center gap-4">
       <p class="text-surface-500 dark:text-surface-400">Failed to load this deck.</p>

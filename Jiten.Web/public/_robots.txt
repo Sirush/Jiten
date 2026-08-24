@@ -26,6 +26,7 @@ Disallow: /requests
 Disallow: /requests/*
 Disallow: /ratings
 Disallow: /ratings/*
+Allow: /parse-deck
 Allow: /decks/media/*/detail
 Allow: /decks/media/list/*
 Allow: /decks/media/*/stats
