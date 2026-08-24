@@ -5,6 +5,8 @@
     icon: string;
     /** Renders an unread dot next to the label. */
     marked?: boolean;
+    /** Short call-to-action text shown before the chevron. */
+    cta?: string;
   }>();
 </script>
 
@@ -27,6 +29,7 @@
       </span>
     </span>
 
+    <span v-if="cta" class="shrink-0 self-center text-xs font-medium text-primary-600 dark:text-primary-300">{{ cta }}</span>
     <Icon
       name="material-symbols:chevron-right"
       class="shrink-0 self-center text-surface-300 dark:text-surface-400 transition-transform group-hover:translate-x-0.5"

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data;
 
@@ -55,4 +56,12 @@ public class WordFormDto
     public double FrequencyPercentage { get; set; }
     public int UsedInMediaAmount { get; set; }
     public Dictionary<int, int> UsedInMediaAmountByType { get; set; } = new();
+
+    /// <summary>Which ranking <see cref="FrequencyRank"/> came from; omitted while the caller is on the site-wide one.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FrequencyRankSource { get; set; }
+
+    /// <summary>Set only when a media-type default had no rank for the form and the global one stood in.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsFrequencyFallback { get; set; }
 }

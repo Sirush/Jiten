@@ -536,6 +536,139 @@ public class CustomFrequencyListTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task EditDefinition_ReplacesFiltersAndRegenerates()
+    {
+        await MakeTrial(TestUsers.UserA);
+        var (id, _) = await CreateOk(FilterBody("editable", save: false), TestUsers.UserA);
+        await RunGeneration(id);
+
+        var req = new HttpRequestMessage(HttpMethod.Patch, $"/api/frequency-lists/{id}")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new
+            {
+                mode = "handpicked",
+                definition = new { deckIds = _deckIds.Take(3) }
+            });
+        var res = await _client.SendAsync(req);
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await res.Content.ReadFromJsonAsync<JsonElement>();
+        dto.GetProperty("status").GetString().Should().Be("pending");
+        dto.GetProperty("mode").GetString().Should().Be("handpicked");
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var stored = await userDb.UserFrequencyLists.FirstAsync(f => f.Id == id);
+            stored.Mode.Should().Be(FrequencyListMode.HandPicked);
+            stored.Definition.DeckIds.Should().BeEquivalentTo(_deckIds.Take(3));
+            stored.Status.Should().Be(FrequencyListStatus.Pending);
+        }
+
+        await RunGeneration(id);
+
+        using var check = factory.Services.CreateScope();
+        var db = check.ServiceProvider.GetRequiredService<UserDbContext>();
+        var list = await db.UserFrequencyLists.FirstAsync(f => f.Id == id);
+        list.Status.Should().Be(FrequencyListStatus.Ready);
+        list.DeckCount.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task EditDefinition_BelowMinDecks_ReturnsBadRequest_AndKeepsOldDefinition()
+    {
+        await MakeTrial(TestUsers.UserA);
+        var (id, _) = await CreateOk(FilterBody("keep me", save: false), TestUsers.UserA);
+
+        var req = new HttpRequestMessage(HttpMethod.Patch, $"/api/frequency-lists/{id}")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { name = "renamed", definition = new { tagsInclude = new[] { TagIsekai } } });
+        var res = await _client.SendAsync(req);
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("deckCount").GetInt32().Should().Be(1);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var stored = await userDb.UserFrequencyLists.FirstAsync(f => f.Id == id);
+        stored.Name.Should().Be("keep me");
+        stored.Definition.MediaTypes.Should().Contain((int)MediaType.Novel);
+        stored.Definition.TagsInclude.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task EditDefinition_PreservesSlugAndSavedFlags()
+    {
+        await MakeFull(TestUsers.UserA);
+        var (id, _) = await CreateOk(FilterBody("shared edit", save: true, autoUpdate: true), TestUsers.UserA);
+        await RunGeneration(id);
+
+        var shareRes = await _client.SendAsync(Post($"/api/frequency-lists/{id}/share", new { }, TestUsers.UserA));
+        var slug = (await shareRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("slug").GetString();
+        slug.Should().NotBeNullOrEmpty();
+
+        var req = new HttpRequestMessage(HttpMethod.Patch, $"/api/frequency-lists/{id}")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { definition = new { mediaTypes = new[] { (int)MediaType.Novel }, yearFrom = 2019 } });
+        (await _client.SendAsync(req)).StatusCode.Should().Be(HttpStatusCode.OK);
+        await RunGeneration(id);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var stored = await userDb.UserFrequencyLists.FirstAsync(f => f.Id == id);
+            stored.PublicSlug.Should().Be(slug);
+            stored.IsSaved.Should().BeTrue();
+            stored.AutoUpdate.Should().BeTrue();
+            stored.Definition.YearFrom.Should().Be(2019);
+        }
+
+        var anonymous = factory.CreateClient();
+        var dl = await anonymous.GetAsync($"/api/frequency-lists/shared/{slug}");
+        dl.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await dl.Content.ReadAsByteArrayAsync()).Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task EditDefinition_OtherUsersList_Returns404()
+    {
+        await MakeTrial(TestUsers.UserA);
+        await MakeTrial(TestUsers.UserB);
+        var (id, _) = await CreateOk(FilterBody("mine", save: false), TestUsers.UserA);
+
+        var req = new HttpRequestMessage(HttpMethod.Patch, $"/api/frequency-lists/{id}")
+            .WithUser(TestUsers.UserB)
+            .WithJsonContent(new { definition = new { mediaTypes = new[] { (int)MediaType.Novel } } });
+        (await _client.SendAsync(req)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task EditDefinition_HandPicked_SwapsDeckIds()
+    {
+        await MakeTrial(TestUsers.UserA);
+        var body = new { name = "picked", mode = "handpicked", save = false, autoUpdate = false, definition = new { deckIds = _deckIds.Take(2) } };
+        var (id, _) = await CreateOk(body, TestUsers.UserA);
+
+        var swapped = _deckIds.Skip(2).Take(4).ToList();
+        var req = new HttpRequestMessage(HttpMethod.Patch, $"/api/frequency-lists/{id}")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { mode = "handpicked", definition = new { deckIds = swapped } });
+        (await _client.SendAsync(req)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var stored = await userDb.UserFrequencyLists.FirstAsync(f => f.Id == id);
+        stored.Definition.DeckIds.Should().BeEquivalentTo(swapped);
+        stored.DeckCount.Should().Be(4);
+
+        // The list endpoint resolves hand-picked ids so the builder can rehydrate the chips.
+        var listRes = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/frequency-lists").WithUser(TestUsers.UserA));
+        var dtos = await listRes.Content.ReadFromJsonAsync<JsonElement>();
+        var picked = dtos.EnumerateArray().First(d => d.GetProperty("id").GetInt64() == id).GetProperty("pickedDecks");
+        picked.GetArrayLength().Should().Be(4);
+        picked[0].GetProperty("originalTitle").GetString().Should().NotBeNullOrEmpty();
+        picked[0].GetProperty("coverName").GetString().Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
     public async Task Rename_AsTrial_Succeeds()
     {
         await MakeTrial(TestUsers.UserA);

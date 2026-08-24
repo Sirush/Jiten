@@ -91,7 +91,8 @@ public class StudyDeckMembershipService(
         foreach (var sd in studyDecks.Where(sd => sd.DeckType == StudyDeckType.GlobalDynamic))
         {
             var matched = await deckWordResolver.GetGlobalDynamicWordKeysForWordIds(
-                sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, wordIds, sd.ExcludeKana);
+                sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, wordIds, sd.ExcludeKana,
+                FrequencyScope.From(sd));
             if (matched.Count == 0)
                 continue;
 

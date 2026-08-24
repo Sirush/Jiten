@@ -1,69 +1,8 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 
-import Aura from '@primeuix/themes/aura';
-import { definePreset } from '@primeuix/styled';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 import * as fs from 'node:fs';
-
-// Custom theming
-const JitenPreset = definePreset(Aura, {
-  // Halved Aura scale; must stay in sync with the --radius-* overrides in main.css so that
-  // hand-built Tailwind elements match PrimeVue components sitting next to them.
-  primitive: {
-    borderRadius: {
-      none: '0',
-      xs: '1px',
-      sm: '2px',
-      md: '3px',
-      lg: '4px',
-      xl: '6px',
-    },
-  },
-  semantic: {
-    primary: {
-      50: '{purple.50}',
-      100: '{purple.100}',
-      200: '{purple.200}',
-      300: '{purple.300}',
-      400: '{purple.400}',
-      500: '{purple.500}',
-      600: '{purple.600}',
-      700: '{purple.700}',
-      800: '{purple.800}',
-      900: '{purple.900}',
-      950: '{purple.950}',
-    },
-    colorScheme: {
-      dark: {
-        surface: {
-          0: '#ffffff',
-          50: '{neutral.50}',
-          100: '{neutral.100}',
-          200: '{neutral.200}',
-          300: '{neutral.300}',
-          400: '{neutral.400}',
-          500: '{neutral.500}',
-          600: '{neutral.600}',
-          700: '{neutral.700}',
-          800: '{neutral.800}',
-          900: '{neutral.900}',
-          950: '{neutral.950}',
-        },
-      },
-    },
-  },
-  components: {
-    card: {
-      caption: {
-        gap: '0',
-      },
-      body: {
-        padding: '1rem',
-      },
-    },
-  },
-});
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-14',
@@ -100,9 +39,11 @@ export default defineNuxtConfig({
     '@nuxt/icon',
     '@pinia/nuxt',
     '@nuxtjs/seo',
+    '@nuxt/fonts',
     '@nuxt/content',
     '@nuxt/scripts',
-    ...(process.env.NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID ? ['nuxt-umami'] : []),
+    // Always registered so umTrackEvent exists at build time; without an id the module runs in faux mode and sends nothing.
+    'nuxt-umami',
     ...(process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID ? ['nuxt-vue3-google-signin'] : []),
     ...(process.env.NUXT_PUBLIC_RECAPTCHA_V2_SITE_KEY ? ['vue-recaptcha/nuxt'] : []),
   ],
@@ -118,14 +59,9 @@ export default defineNuxtConfig({
     emitRouteChunkError: 'automatic-immediate',
   },
   primevue: {
-    options: {
-      theme: {
-        preset: JitenPreset,
-        options: {
-          darkModeSelector: '.dark-mode',
-        },
-      },
-    },
+    // Build-time theme import; putting the preset in `options.theme` instead would serialise
+    // ~134KB of design tokens into __NUXT__.config on every SSR response.
+    importTheme: { from: '~/theme/jiten.ts' },
   },
   vite: {
     plugins: [tailwindcss()],
@@ -138,9 +74,11 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   sitemap: {
     sources: ['/api/__sitemap__/urls'],
+    // Jiten+ member tools: no search value, and thin/paywalled for crawlers.
+    exclude: ['/jiten-plus/frequency-lists', '/jiten-plus/immersion-plan'],
   },
   nitro: {
-    /// SSR is CPU-bound, so a single process caps throughput at one core; NITRO_CLUSTER_WORKERS sets the count at runtime.
+    // SSR is CPU-bound, so a single process caps throughput at one core; NITRO_CLUSTER_WORKERS sets the count at runtime.
     preset: 'node-cluster',
   },
   routeRules: {
@@ -148,6 +86,19 @@ export default defineNuxtConfig({
     '/.well-known/**': { ssr: false },
     // FAQ migrated into the Guides system; preserve existing ranking/backlinks.
     '/faq': { redirect: { to: '/guides', statusCode: 301 } },
+    // Frequency lists moved, old URL kept for Yomitan and other backlinks
+    '/other': { redirect: { to: '/frequency-dictionaries', statusCode: 301 } },
+    // Legacy numeric media-type list URLs; slugs are the canonical form. Keep in sync with mediaTypeSlugMap.
+    '/decks/media/list/1': { redirect: { to: '/decks/media/list/anime', statusCode: 301 } },
+    '/decks/media/list/2': { redirect: { to: '/decks/media/list/drama', statusCode: 301 } },
+    '/decks/media/list/3': { redirect: { to: '/decks/media/list/movies', statusCode: 301 } },
+    '/decks/media/list/4': { redirect: { to: '/decks/media/list/novels', statusCode: 301 } },
+    '/decks/media/list/5': { redirect: { to: '/decks/media/list/non-fiction', statusCode: 301 } },
+    '/decks/media/list/6': { redirect: { to: '/decks/media/list/video-games', statusCode: 301 } },
+    '/decks/media/list/7': { redirect: { to: '/decks/media/list/visual-novels', statusCode: 301 } },
+    '/decks/media/list/8': { redirect: { to: '/decks/media/list/web-novels', statusCode: 301 } },
+    '/decks/media/list/9': { redirect: { to: '/decks/media/list/manga', statusCode: 301 } },
+    '/decks/media/list/10': { redirect: { to: '/decks/media/list/audio', statusCode: 301 } },
     '/mentions-legales': { robots: 'noindex, follow' },
     '/cgv': { robots: 'noindex, follow' },
     '/cgv-fr': { robots: 'noindex, follow' },
@@ -189,7 +140,12 @@ export default defineNuxtConfig({
       name: 'Jiten',
       url: 'https://jiten.moe',
       logo: 'https://jiten.moe/web-app-manifest-512x512.png',
-      sameAs: ['https://github.com/Sirush/Jiten'],
+      sameAs: [
+        'https://github.com/Sirush/Jiten',
+        'https://discord.gg/cZWM7b4wzk',
+        'https://patreon.com/JitenMoe',
+        'https://ko-fi.com/jiten',
+      ],
     },
   },
   ogImage: {
@@ -199,25 +155,37 @@ export default defineNuxtConfig({
       max: 150,
       maxSize: 32 * 1024 * 1024,
     },
-    fonts: [
+    // OG components render Japanese deck titles; without the japanese subset Satori falls back to tofu.
+    fontSubsets: ['latin', 'japanese'],
+  },
+  fonts: {
+    // Present only for nuxt-og-image's Satori renderer, which requires @nuxt/fonts for any
+    // non-Inter font. Site text keeps loading through @fontsource-variable/noto-sans-jp in
+    // main.css; remote providers are disabled so the module cannot inject fonts of its own.
+    providers: {
+      google: false,
+      googleicons: false,
+      bunny: false,
+      fontshare: false,
+      fontsource: false,
+      adobe: false,
+    },
+    families: [
       {
         name: 'Noto Sans JP',
+        src: '/fonts/NotoSansJP-Regular.ttf',
         weight: 400,
-        path: '/fonts/NotoSansJP-Regular.ttf',
+        global: true,
       },
     ],
   },
-  ...(process.env.NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID
-    ? {
-        umami: {
-          id: process.env.NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID,
-          host: process.env.NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_HOST_URL || '',
-          autoTrack: true,
-          proxy: 'cloak',
-          ignoreLocalhost: true,
-        },
-      }
-    : {}),
+  umami: {
+    id: process.env.NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID || '',
+    host: process.env.NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_HOST_URL || '',
+    autoTrack: true,
+    proxy: 'cloak',
+    ignoreLocalhost: true,
+  },
   ...(process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID
     ? {
         googleSignIn: {

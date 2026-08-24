@@ -1,6 +1,6 @@
 import type { Ref } from 'vue';
 import { type Deck, MediaType, LinkType } from '~/types';
-import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+import { getMediaTypeSlug, getMediaTypeText } from '~/utils/mediaTypeMapper';
 import { getGenreText } from '~/utils/genreMapper';
 import { getDifficultyName } from '~/utils/difficultyColours';
 
@@ -83,7 +83,7 @@ export function useDeckSchema(
 
       const crumbs = [
         { name: 'Home', item: '/' },
-        { name: getMediaTypeText(d.mediaType), item: `/decks/media/list/${d.mediaType}` },
+        { name: getMediaTypeText(d.mediaType), item: `/decks/media/list/${getMediaTypeSlug(d.mediaType)}` },
       ];
       const parent = parentDeck?.value;
       if (parent) {

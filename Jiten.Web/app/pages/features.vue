@@ -1,14 +1,23 @@
 <script setup lang="ts">
-  useHead({
-    title: 'Features - Jiten',
-    meta: [
-      {
-        name: 'description',
-        content:
-          'Everything Jiten offers: media difficulty and statistics, personal coverage tracking, a built-in SRS, Anki deck generation, frequency dictionaries, and companion tools.',
-      },
-    ],
+  const description
+    = 'Everything Jiten offers: media difficulty and statistics, personal coverage tracking, a built-in SRS, Anki deck generation, frequency dictionaries, and companion tools.';
+
+  useSeoMeta({
+    title: 'Features',
+    description,
+    ogTitle: 'Jiten Features',
+    ogDescription: description,
+    twitterTitle: 'Jiten Features',
+    twitterDescription: description,
   });
+
+  defineOgImage('PageOgImage', {
+    title: 'Everything Jiten offers',
+    description:
+      'Media difficulty and statistics, coverage tracking, a built-in SRS, Anki deck generation, frequency dictionaries and companion tools.',
+  });
+
+  useJitenAppSchema();
 
   const groups = [
     {
@@ -105,7 +114,7 @@
           title: 'Yomitan frequency dictionaries',
           description: 'Frequency dictionaries built from the whole corpus with a global one and one for each media type.',
           linkText: 'Download dictionaries',
-          link: '/other',
+          link: '/frequency-dictionaries',
         },
         {
           icon: 'material-symbols-light:text-snippet',

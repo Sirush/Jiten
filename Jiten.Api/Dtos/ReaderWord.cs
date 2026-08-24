@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Jiten.Core.Data;
 
 namespace Jiten.Api.Dtos;
@@ -15,4 +16,12 @@ public class ReaderWord
     public List<KnownState> KnownState { get; set; } = new();
     public List<int> PitchAccents { get; set; } = new();
     public List<int> StudyDeckIds { get; set; } = new();
+
+    /// <summary>Which ranking <see cref="FrequencyRank"/> came from; omitted while the caller is on the site-wide one.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FrequencyRankSource { get; set; }
+
+    /// <summary>Set only when a media-type default had no rank for the form and the global one stood in.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsFrequencyFallback { get; set; }
 }

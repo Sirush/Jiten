@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace Jiten.Api.Dtos.Requests;
 
@@ -27,4 +27,7 @@ public class AddStudyDeckRequest
     public int? MinGlobalFrequency { get; set; }
     public int? MaxGlobalFrequency { get; set; }
     public string? PosFilter { get; set; }
+
+    public int? FrequencyMediaType { get; set; }
+    public long? FrequencyListId { get; set; }
 }

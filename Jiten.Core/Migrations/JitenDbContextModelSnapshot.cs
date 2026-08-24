@@ -221,6 +221,12 @@ namespace Jiten.Core.Migrations
                     b.Property<int>("DeckId")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("AdjustmentConfidence")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(4, 3)
+                        .HasColumnType("numeric(4,3)")
+                        .HasDefaultValue(0m);
+
                     b.Property<string>("DecilesJson")
                         .IsRequired()
                         .HasColumnType("jsonb");
@@ -1118,6 +1124,40 @@ namespace Jiten.Core.Migrations
                     b.ToTable("WordFormFrequencies", "jmdict");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWordFormFrequencyByType", b =>
+                {
+                    b.Property<short>("MediaType")
+                        .HasColumnType("smallint");
+
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.Property<short>("ReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<double>("FrequencyPercentage")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("FrequencyRank")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("ObservedFrequency")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("UsedInMediaAmount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MediaType", "WordId", "ReadingIndex");
+
+                    b.HasIndex("WordId")
+                        .HasDatabaseName("IX_WordFormFrequenciesByType_WordId");
+
+                    b.HasIndex("MediaType", "FrequencyRank")
+                        .HasDatabaseName("IX_WordFormFrequenciesByType_MediaType_FrequencyRank");
+
+                    b.ToTable("WordFormFrequenciesByType", "jmdict");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWordFrequency", b =>
                 {
                     b.Property<int>("WordId")
@@ -1135,6 +1175,34 @@ namespace Jiten.Core.Migrations
                     b.HasKey("WordId");
 
                     b.ToTable("WordFrequencies", "jmdict");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWordFrequencyByType", b =>
+                {
+                    b.Property<short>("MediaType")
+                        .HasColumnType("smallint");
+
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FrequencyRank")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("ObservedFrequency")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("UsedInMediaAmount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MediaType", "WordId");
+
+                    b.HasIndex("WordId")
+                        .HasDatabaseName("IX_WordFrequenciesByType_WordId");
+
+                    b.HasIndex("MediaType", "FrequencyRank")
+                        .HasDatabaseName("IX_WordFrequenciesByType_MediaType_FrequencyRank");
+
+                    b.ToTable("WordFrequenciesByType", "jmdict");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.JMDict.Kanji", b =>
@@ -1541,6 +1609,9 @@ namespace Jiten.Core.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_MediaRequestUpvote_RequestId_UserId");
 
+                    b.HasIndex("UserId", "MediaRequestId")
+                        .HasDatabaseName("IX_MediaRequestUpvote_UserId_RequestId");
+
                     b.ToTable("MediaRequestUpvotes", "jiten");
                 });
 
@@ -1595,6 +1666,103 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_Notification_UserId_IsRead_CreatedAt");
 
                     b.ToTable("Notifications", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Poll", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ClosesAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DescriptionMarkdown")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("MaxSelections")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublishedAt")
+                        .HasDatabaseName("IX_Poll_PublishedAt");
+
+                    b.ToTable("Polls", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.PollOption", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("PollId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PollId")
+                        .HasDatabaseName("IX_PollOption_PollId");
+
+                    b.ToTable("PollOptions", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.PollVote", b =>
+                {
+                    b.Property<int>("PollId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<int>("OptionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("PollId", "UserId", "OptionId");
+
+                    b.HasIndex("OptionId");
+
+                    b.HasIndex("PollId", "OptionId")
+                        .HasDatabaseName("IX_PollVote_PollId_OptionId");
+
+                    b.ToTable("PollVotes", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.RequestActivityLog", b =>
@@ -2301,6 +2469,32 @@ namespace Jiten.Core.Migrations
                     b.Navigation("MediaRequest");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.PollOption", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Poll", "Poll")
+                        .WithMany("Options")
+                        .HasForeignKey("PollId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Poll");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.PollVote", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.PollOption", null)
+                        .WithMany()
+                        .HasForeignKey("OptionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Jiten.Core.Data.Poll", null)
+                        .WithMany()
+                        .HasForeignKey("PollId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.WebNovel.WebNovelChapter", b =>
                 {
                     b.HasOne("Jiten.Core.Data.WebNovel.WebNovelSource", "Source")
@@ -2405,6 +2599,11 @@ namespace Jiten.Core.Migrations
                     b.Navigation("AdminComments");
 
                     b.Navigation("Upload");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Poll", b =>
+                {
+                    b.Navigation("Options");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.Tag", b =>

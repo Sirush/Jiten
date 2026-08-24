@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Jiten.Api.Controllers;
 
@@ -29,6 +30,7 @@ public class CustomFrequencyListController(
     IJitenPlusService jitenPlusService,
     IBackgroundJobClient backgroundJobs,
     ICdnService cdn,
+    IMemoryCache memoryCache,
     ILogger<CustomFrequencyListController> logger) : ControllerBase
 {
     public const int MAX_SAVED_LISTS = 25;
@@ -47,7 +49,9 @@ public class CustomFrequencyListController(
 
     public record CreateRequest(string? Name, string? Mode, bool Save, bool AutoUpdate, DefinitionDto? Definition);
 
-    public record UpdateRequest(string? Name, bool? AutoUpdate);
+    public record UpdateRequest(string? Name, bool? AutoUpdate, string? Mode, DefinitionDto? Definition);
+
+    public record PickedDeckDto(int DeckId, string OriginalTitle, string? RomajiTitle, string? EnglishTitle, string CoverName, int MediaType);
 
     // ---- Preview ------------------------------------------------------------
 
@@ -193,7 +197,23 @@ public class CustomFrequencyListController(
                                      .OrderByDescending(f => f.CreatedAt)
                                      .ToListAsync();
 
-        return Results.Ok(lists.Select(ToDto));
+        var pickedIdsPerList = lists.Where(f => f.Mode == FrequencyListMode.HandPicked)
+                                    .ToDictionary(f => f.Id, f => f.Definition.DeckIds);
+
+        var decksById = new Dictionary<int, PickedDeckDto>();
+        var allPickedIds = pickedIdsPerList.Values.SelectMany(ids => ids).Distinct().ToList();
+        if (allPickedIds.Count > 0)
+        {
+            await using var jiten = await jitenFactory.CreateDbContextAsync();
+            decksById = await jiten.Decks.AsNoTracking()
+                                  .Where(d => allPickedIds.Contains(d.DeckId))
+                                  .Select(d => new PickedDeckDto(d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle, d.CoverName, (int)d.MediaType))
+                                  .ToDictionaryAsync(d => d.DeckId);
+        }
+
+        return Results.Ok(lists.Select(f => ToDto(f, pickedIdsPerList.TryGetValue(f.Id, out var ids)
+                                                        ? ids.Where(decksById.ContainsKey).Select(id => decksById[id]).ToList()
+                                                        : null)));
     }
 
     // ---- Download -----------------------------------------------------------
@@ -275,6 +295,11 @@ public class CustomFrequencyListController(
         if (mintedSlug && list.Status == FrequencyListStatus.Ready)
             await TryEmbedUpdateUrls(list);
 
+        // The generation that produced this list ran while it was transient, so it skipped the study blob.
+        if (list.RankedWordsBlob is null)
+            backgroundJobs.Enqueue<FrequencyListJob>(j => j.Generate(list.Id));
+
+        FrequencySourceResolver.Invalidate(memoryCache, userId);
         return Results.Ok(ToDto(list));
     }
 
@@ -315,10 +340,11 @@ public class CustomFrequencyListController(
         }
     }
 
-    // ---- Rename / auto-update toggle ----------------------------------------
+    // ---- Rename / auto-update toggle / edit filters --------------------------
 
     [HttpPatch("{id:long}")]
     [JitenPlus]
+    [EnableRateLimiting("compute")]
     public async Task<IResult> Update(long id, [FromBody] UpdateRequest request)
     {
         var userId = currentUserService.UserId;
@@ -356,7 +382,37 @@ public class CustomFrequencyListController(
             list.AutoUpdate = request.AutoUpdate.Value;
         }
 
+        var definitionChanged = false;
+        if (request.Definition != null)
+        {
+            var mode = request.Mode != null ? ParseMode(request.Mode) : list.Mode;
+            var definition = ToDefinition(request.Definition);
+
+            await using var jiten = await jitenFactory.CreateDbContextAsync();
+            var deckIds = await DeckFilterHelper.ResolveDeckIdsAsync(jiten, definition, mode);
+
+            if (deckIds.Count < MIN_DECKS)
+            {
+                return Results.BadRequest(new
+                {
+                    error = $"A frequency list needs at least {MIN_DECKS} matching decks. Your current selection matches {deckIds.Count}.",
+                    deckCount = deckIds.Count
+                });
+            }
+
+            list.Mode = mode;
+            list.Definition = definition;
+            list.DeckCount = deckIds.Count;
+            list.Status = FrequencyListStatus.Pending;
+            definitionChanged = true;
+        }
+
         await userContext.SaveChangesAsync();
+
+        if (definitionChanged)
+            backgroundJobs.Enqueue<FrequencyListJob>(j => j.Generate(list.Id));
+
+        FrequencySourceResolver.Invalidate(memoryCache, userId);
         return Results.Ok(ToDto(list));
     }
 
@@ -477,6 +533,16 @@ public class CustomFrequencyListController(
         if (list is null)
             return Results.NotFound();
 
+        var studyDeckNames = await userContext.UserStudyDecks
+                                              .Where(sd => sd.UserId == userId && sd.FrequencyListId == id)
+                                              .Select(sd => sd.Name)
+                                              .ToListAsync();
+        if (studyDeckNames.Count > 0)
+            return Results.BadRequest(new
+            {
+                error = $"This list is in use by a study deck ({string.Join(", ", studyDeckNames)}). Remove the study deck first."
+            });
+
         try
         {
             if (!string.IsNullOrEmpty(list.ZipUrl))
@@ -491,6 +557,7 @@ public class CustomFrequencyListController(
 
         userContext.UserFrequencyLists.Remove(list);
         await userContext.SaveChangesAsync();
+        FrequencySourceResolver.Invalidate(memoryCache, userId);
         return Results.Ok();
     }
 
@@ -552,7 +619,7 @@ public class CustomFrequencyListController(
         return cleaned.Length > MAX_NAME_LENGTH ? cleaned[..MAX_NAME_LENGTH] : cleaned;
     }
 
-    private static object ToDto(UserFrequencyList list) => new
+    private static object ToDto(UserFrequencyList list, List<PickedDeckDto>? pickedDecks = null) => new
     {
         id = list.Id,
         name = list.Name,
@@ -565,6 +632,7 @@ public class CustomFrequencyListController(
         wordCount = list.WordCount,
         deckCount = list.DeckCount,
         createdAt = list.CreatedAt,
-        generatedAt = list.GeneratedAt
+        generatedAt = list.GeneratedAt,
+        pickedDecks
     };
 }

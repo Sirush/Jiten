@@ -27,6 +27,58 @@ export function getMediaTypeText(mediaType: MediaType): string {
   }
 }
 
+// Slugs are a public URL contract (sitemap, inbound links); renaming one needs a 301 from the old value.
+const mediaTypeSlugMap: Record<number, string> = {
+  [MediaType.Anime]: 'anime',
+  [MediaType.Drama]: 'drama',
+  [MediaType.Movie]: 'movies',
+  [MediaType.Novel]: 'novels',
+  [MediaType.NonFiction]: 'non-fiction',
+  [MediaType.VideoGame]: 'video-games',
+  [MediaType.VisualNovel]: 'visual-novels',
+  [MediaType.WebNovel]: 'web-novels',
+  [MediaType.Manga]: 'manga',
+  [MediaType.Audio]: 'audio',
+};
+
+export function getMediaTypeSlug(mediaType: MediaType): string {
+  return mediaTypeSlugMap[mediaType] ?? String(mediaType);
+}
+
+export function getMediaTypeFromSlug(slug: string): MediaType | null {
+  for (const [type, s] of Object.entries(mediaTypeSlugMap)) {
+    if (s === slug) return Number(type) as MediaType;
+  }
+  return null;
+}
+
+export function getMediaTypePluralText(mediaType: MediaType): string {
+  switch (mediaType) {
+    case MediaType.Anime:
+      return 'Anime';
+    case MediaType.Drama:
+      return 'Dramas';
+    case MediaType.Movie:
+      return 'Movies';
+    case MediaType.Novel:
+      return 'Novels';
+    case MediaType.NonFiction:
+      return 'Non-Fiction Books';
+    case MediaType.VideoGame:
+      return 'Video Games';
+    case MediaType.VisualNovel:
+      return 'Visual Novels';
+    case MediaType.WebNovel:
+      return 'Web Novels';
+    case MediaType.Manga:
+      return 'Manga';
+    case MediaType.Audio:
+      return 'Audio Works';
+    default:
+      return 'Media';
+  }
+}
+
 // Media counted by volume in everyday speech: the unit total is the headline, whole works the sub-line.
 const unitHeadlineTypes = new Set([MediaType.Novel, MediaType.Manga, MediaType.NonFiction, MediaType.WebNovel]);
 

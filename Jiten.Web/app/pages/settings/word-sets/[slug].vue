@@ -4,6 +4,7 @@ import { WordSetStateType } from '~/types';
 import { autoLinkUrls } from '~/utils/autoLinkUrls';
 import { debounce } from 'perfect-debounce';
 import { parseStringArray, toBooleanOrNull } from '~/utils/queryParams';
+import { useSrsStore } from '~/stores/srsStore';
 
 definePageMeta({
   middleware: ['auth'],
@@ -25,7 +26,18 @@ const stateOptions = [
   { label: 'Mark as Mastered', value: WordSetStateType.Mastered },
 ];
 
-const sortByOptions = ref([
+const srsStore = useSrsStore();
+srsStore.fetchSettings();
+
+// Row ranks follow the account default frequency source, so the labels must name it.
+const rankSourceLabel = computed(() => {
+  const settings = srsStore.studySettings;
+  if (settings?.defaultFrequencyMediaType) return getMediaTypeText(settings.defaultFrequencyMediaType);
+  if (settings?.defaultFrequencyListId) return 'your list';
+  return undefined;
+});
+
+const sortByOptions = computed(() => [
   { label: 'Position', value: 'position' },
   { label: 'Global Frequency', value: 'globalFreq' },
 ]);
@@ -33,7 +45,7 @@ const sortByOptions = ref([
 const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
 const limit = computed(() => (route.query.limit ? Number(route.query.limit) : undefined));
 const sortDescending = ref(route.query.sortOrder === '1');
-const sortBy = ref(route.query.sortBy?.toString() || sortByOptions.value[0].value);
+const sortBy = ref(route.query.sortBy?.toString() || 'position');
 const { tiers: displayTiers, suspended, redundant, displayFilter, suspendedParam, redundantParam, query: displayQuery } = useVocabularyDisplayFilter();
 const search = ref(route.query.search?.toString() || '');
 const debouncedSearch = ref(search.value);
@@ -288,6 +300,7 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
           :status="vocabStatus"
           :error="vocabError"
           :list-context="listContext"
+          :rank-source-label="rankSourceLabel"
         />
 
         <PaginationControls :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-navigate="true" />

@@ -1030,6 +1030,15 @@ public class ComputationJob(
             Console.WriteLine($"Computing {mediaType} frequencies...");
             (wordFrequencies, formFrequencies) = await JitenHelper.ComputeFrequencies(contextFactory, mediaType);
 
+            try
+            {
+                await JitenHelper.SaveFrequenciesByTypeToDatabase(contextFactory, mediaType, wordFrequencies, formFrequencies);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "RecomputeFrequencies: failed persisting {MediaType} frequencies", mediaType);
+            }
+
             // Save frequencies to CSV
             await SaveFrequenciesToCsv(wordFrequencies, formFrequencies, Path.Join(path, $"jiten_freq_{mediaType.ToString()}.csv"));
 

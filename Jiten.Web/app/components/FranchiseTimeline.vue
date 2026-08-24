@@ -3,7 +3,6 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
-  import { getCoverageBorder } from '~/utils/coverageBorder';
   import { useFranchiseGraph } from '~/composables/useFranchiseGraph';
 
   const props = defineProps<{
@@ -111,10 +110,8 @@
 
   const isCurrent = (id: number) => id === props.currentDeckId;
 
-  // Per-user coverage outline, matching MediaDeckCard's convention.
-  function coverageBorder(node: FranchiseNode): string {
-    if (!authStore.isAuthenticated || store.hideCoverageBorders || (node.coverage === 0 && node.uniqueCoverage === 0)) return 'none';
-    return getCoverageBorder(node.coverage);
+  function showCoverage(node: FranchiseNode): boolean {
+    return authStore.isAuthenticated && !store.hideCoverageBorders && (node.coverage !== 0 || node.uniqueCoverage !== 0);
   }
 
   // ---- Hover / focus highlighting + relations popover ----
@@ -423,10 +420,6 @@
               flashNode === node.deckId ? 'ring-2 ring-amber-400 dark:ring-amber-300' : '',
               nodeDimmed(node.deckId) ? 'opacity-30' : 'opacity-100',
             ]"
-            :style="{
-              outline: flashNode === node.deckId || activeNode === node.deckId ? 'none' : coverageBorder(node),
-              outlineOffset: '-2px',
-            }"
             @mouseenter="!isCoarsePointer && activate(node.deckId)"
             @mouseleave="!isCoarsePointer && scheduleClear()"
             @focus="!isCoarsePointer && activate(node.deckId)"
@@ -451,6 +444,7 @@
                 <DifficultyDisplay v-if="node.difficulty >= 0" :difficulty="node.difficulty" :difficulty-raw="node.difficultyRaw" class="text-[11px]" />
               </div>
             </div>
+            <CoverageStrip v-if="showCoverage(node)" :coverage="node.coverage" class="absolute inset-x-0 bottom-0 rounded-b-md" />
           </NuxtLink>
         </div>
       </div>

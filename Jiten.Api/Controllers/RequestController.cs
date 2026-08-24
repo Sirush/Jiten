@@ -61,6 +61,7 @@ public partial class RequestController(
         [FromQuery] int limit = 20,
         [FromQuery] bool mine = false,
         [FromQuery] bool contributed = false,
+        [FromQuery] bool voted = false,
         [FromQuery] bool excludeOwn = false,
         [FromQuery] string? search = null,
         [FromQuery] string? attachments = null)
@@ -69,7 +70,7 @@ public partial class RequestController(
         if (string.IsNullOrEmpty(userId))
             return Results.Unauthorized();
 
-        limit = Math.Clamp(limit, 1, mine || contributed ? 200 : 50);
+        limit = Math.Clamp(limit, 1, mine || contributed || voted ? 200 : 50);
 
         var query = context.MediaRequests.AsNoTracking().AsQueryable();
 
@@ -83,6 +84,11 @@ public partial class RequestController(
                 .Select(c => c.MediaRequestId)
                 .Distinct();
             query = query.Where(r => contributedRequestIds.Contains(r.Id) && (!excludeOwn || r.RequesterId != userId));
+        }
+        else if (voted)
+        {
+            query = query.Where(r => context.MediaRequestUpvotes.Any(u => u.MediaRequestId == r.Id && u.UserId == userId)
+                                     && (!excludeOwn || r.RequesterId != userId));
         }
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -223,6 +229,7 @@ public partial class RequestController(
         [FromQuery] MediaRequestKind? kind = null,
         [FromQuery] bool mine = false,
         [FromQuery] bool contributed = false,
+        [FromQuery] bool voted = false,
         [FromQuery] bool excludeOwn = false,
         [FromQuery] string? search = null,
         [FromQuery] string? attachments = null)
@@ -245,6 +252,11 @@ public partial class RequestController(
                     .Select(c => c.MediaRequestId)
                     .Distinct();
                 q = q.Where(r => contributedRequestIds.Contains(r.Id) && (!excludeOwn || r.RequesterId != userId));
+            }
+            else if (voted)
+            {
+                q = q.Where(r => context.MediaRequestUpvotes.Any(u => u.MediaRequestId == r.Id && u.UserId == userId)
+                                 && (!excludeOwn || r.RequesterId != userId));
             }
 
             if (!string.IsNullOrWhiteSpace(search))

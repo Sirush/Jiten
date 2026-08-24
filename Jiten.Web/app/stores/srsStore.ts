@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, DueSummaryDto, DeckStreakDto, ReviewForecast30dDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto, SessionStreakDto, ReviewForecastDto } from '~/types';
+import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, BatchAddStudyDecksRequest, BatchAddStudyDecksResult, DueSummaryDto, DeckStreakDto, ReviewForecast30dDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto, SessionStreakDto, ReviewForecastDto } from '~/types';
 import { FsrsRating } from '~/types';
 import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
 import { DEFAULT_CARD_DISPLAY_SETTINGS } from '~/utils/defaultStudySettings';
@@ -162,6 +162,8 @@ export const useSrsStore = defineStore('srs', () => {
     loadBalancing: true,
     easyDays: null,
     derivationalRedundancyCategories: [],
+    defaultFrequencyMediaType: null,
+    defaultFrequencyListId: null,
     leechThreshold: 8,
     leechAction: 'Suspend',
     timedReview: {
@@ -453,6 +455,8 @@ export const useSrsStore = defineStore('srs', () => {
       minGlobalFrequency: request.minGlobalFrequency,
       maxGlobalFrequency: request.maxGlobalFrequency,
       posFilter: request.posFilter,
+      frequencyMediaType: request.frequencyMediaType,
+      frequencyListId: request.frequencyListId,
       totalWords: 0,
       unseenCount: 0,
       learningCount: 0,
@@ -463,6 +467,16 @@ export const useSrsStore = defineStore('srs', () => {
       dueReviewCount: 0,
     });
     refreshOverview();
+    invalidateSession();
+    return result;
+  }
+
+  async function addStudyDecksBatch(request: BatchAddStudyDecksRequest) {
+    const result = await $api<BatchAddStudyDecksResult>('srs/study-decks/batch', {
+      method: 'POST',
+      body: request,
+    });
+    await refreshOverview(true);
     invalidateSession();
     return result;
   }
@@ -487,6 +501,8 @@ export const useSrsStore = defineStore('srs', () => {
       deck.minGlobalFrequency = request.minGlobalFrequency;
       deck.maxGlobalFrequency = request.maxGlobalFrequency;
       deck.posFilter = request.posFilter;
+      deck.frequencyMediaType = request.frequencyMediaType;
+      deck.frequencyListId = request.frequencyListId;
     }
     refreshOverview();
     invalidateSession();
@@ -951,6 +967,7 @@ export const useSrsStore = defineStore('srs', () => {
       duration: reviewDuration,
     };
     sessionReviews.value = [...sessionReviews.value, reviewEntry];
+    trackActivation('review');
 
     // Stats — record the exact deltas so a failed background sync can revert just this card.
     const counted = studySettings.value.countFailedReviews || !isRepeat;
@@ -1507,6 +1524,7 @@ export const useSrsStore = defineStore('srs', () => {
     fetchDueSummary,
     fetchDeckStreak,
     addStudyDeck,
+    addStudyDecksBatch,
     updateStudyDeck,
     removeStudyDeck,
     addDeckWord,

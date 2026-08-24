@@ -54,6 +54,11 @@
     twitterDescription: 'Tutorials and answers for building vocabulary, choosing media at your level, and studying Japanese with Jiten.',
   });
 
+  defineOgImage('PageOgImage', {
+    title: 'Guides',
+    description: 'Tutorials and answers for building vocabulary, choosing media at your level, and studying Japanese with Jiten.',
+  });
+
   // Typed schema graph: CollectionPage + Home › Guides breadcrumb, plus an ItemList exposing the full
   // guide set as a crawlable ordered collection (relative item URLs are resolved against site.url).
   useSchemaOrg(

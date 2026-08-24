@@ -79,6 +79,7 @@
 
   async function startCheckout(plan: Plan) {
     checkingOut.value = plan;
+    trackEvent('checkout_started', { plan });
     try {
       const result = await $api<{ url: string }>('/stripe/checkout', {
         method: 'POST',

@@ -89,16 +89,18 @@ public static class DeckFilterHelper
         return await BuildQuery(context, def, mode).Select(d => d.DeckId).ToListAsync();
     }
 
+    public sealed record SampleTitle(string OriginalTitle, string? RomajiTitle, string? EnglishTitle);
+
     /// <summary>Cheap preview for the live builder: matched count plus a small sample of titles.</summary>
-    public static async Task<(int Count, List<string> SampleTitles)> PreviewAsync(JitenDbContext context,
-                                                                                  FrequencyListDefinition def,
-                                                                                  FrequencyListMode mode, int sampleSize = 8)
+    public static async Task<(int Count, List<SampleTitle> SampleTitles)> PreviewAsync(JitenDbContext context,
+                                                                                       FrequencyListDefinition def,
+                                                                                       FrequencyListMode mode, int sampleSize = 8)
     {
         var query = BuildQuery(context, def, mode);
         var count = await query.CountAsync();
         var sample = await query.OrderByDescending(d => d.CharacterCount)
                                 .Take(sampleSize)
-                                .Select(d => d.OriginalTitle)
+                                .Select(d => new SampleTitle(d.OriginalTitle, d.RomajiTitle, d.EnglishTitle))
                                 .ToListAsync();
         return (count, sample);
     }

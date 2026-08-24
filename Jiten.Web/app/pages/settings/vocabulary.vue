@@ -130,6 +130,8 @@
       <VocabularyCompleteVocabularyPanel v-if="mode === 'export' && option === 'complete-vocabulary'" mode="export" @changed="onPanelChanged" />
     </div>
 
+    <SettingsFrequencySourceCard />
+
     <SettingsVocabularyMassActionsCard @changed="onPanelChanged" />
 
     <SettingsCompositionInferenceCard @changed="onPanelChanged" />

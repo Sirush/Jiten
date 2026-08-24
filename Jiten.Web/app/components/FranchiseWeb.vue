@@ -2,7 +2,6 @@
   import type { Franchise, FranchiseNode, FranchiseEdge } from '~/types';
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
-  import { getCoverageBorder } from '~/utils/coverageBorder';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { useFranchiseGraph, forwardLabels, inverseLabels } from '~/composables/useFranchiseGraph';
 
@@ -415,15 +414,9 @@
 
   const isCurrent = (id: number) => id === props.currentDeckId;
 
-  // Per-user coverage outline, suppressed while a node is highlighted/active (matches timeline).
-  function coverageBorder(node: FranchiseNode): string {
-    if (!authStore.isAuthenticated || store.hideCoverageBorders || (node.coverage === 0 && node.uniqueCoverage === 0)) return 'none';
-    return getCoverageBorder(node.coverage);
-  }
 
-  function nodeOutline(node: FranchiseNode): string {
-    if (activeNode.value === node.deckId || flashNode.value === node.deckId) return 'none';
-    return coverageBorder(node);
+  function showCoverage(node: FranchiseNode): boolean {
+    return authStore.isAuthenticated && !store.hideCoverageBorders && (node.coverage !== 0 || node.uniqueCoverage !== 0);
   }
 
   // ---- Projected edges + mid-edge label pills (same projection math, no DOM reads) ----
@@ -819,7 +812,7 @@
         @pointercancel="onBackgroundPointerUp"
         @wheel="onWheel"
         @click="onBackgroundClick"
-      ></div>
+      />
 
       <!-- Edge overlay: endpoints come from the same projection as the cards. -->
       <svg
@@ -872,8 +865,6 @@
           transform: `translate(-50%, -50%) scale(${p.scale})`,
           zIndex: activeNode === p.node.deckId ? 40 : Math.round((1 - p.sim.z) * 20) + 5,
           opacity: nodeDimmed(p.node.deckId) ? undefined : p.sim.z > 0.5 ? 0.6 : 1,
-          outline: nodeOutline(p.node),
-          outlineOffset: '-2px',
         }"
         @pointerdown.stop="onNodePointerDown($event, p)"
         @pointermove="onNodePointerMove($event)"
@@ -890,7 +881,7 @@
           width="112"
           height="128"
           draggable="false"
-        />
+        >
         <!-- Media type chip: the timeline shows this via column headers; here it lives on the card. -->
         <span class="absolute left-1 top-1 rounded bg-black/55 px-1 py-px text-[9px] font-semibold whitespace-nowrap text-white">
           {{ getMediaTypeText(p.node.mediaType) }}
@@ -904,6 +895,7 @@
             <DifficultyDisplay v-if="p.node.difficulty >= 0" :difficulty="p.node.difficulty" :difficulty-raw="p.node.difficultyRaw" class="truncate text-[10px]" />
           </div>
         </div>
+        <CoverageStrip v-if="showCoverage(p.node)" :coverage="p.node.coverage" class="absolute inset-x-0 bottom-0 rounded-b-md" />
       </button>
     </div>
 

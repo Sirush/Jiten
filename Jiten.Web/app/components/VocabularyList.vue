@@ -15,6 +15,7 @@
     selectable?: boolean;
     selectedKeys?: Set<string>;
     listContext?: WordListContextInput;
+    rankSourceLabel?: string;
   }>();
 
   const emit = defineEmits<{
@@ -73,6 +74,7 @@
       :removing="removingKey === entryKey(word)"
       :selectable="selectable"
       :selected="selectedKeys?.has(entryKey(word))"
+      :rank-source-label="rankSourceLabel"
       :data-list-anchor="entryKey(word)"
       :class="index >= 8 ? '[content-visibility:auto] [contain-intrinsic-size:auto_8rem]' : ''"
       @remove="emit('remove', word)"

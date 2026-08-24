@@ -314,6 +314,9 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<bool>("AutoUpdate")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTime?>("BlobGeneratedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -345,6 +348,9 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<string>("PublicSlug")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<byte[]>("RankedWordsBlob")
+                        .HasColumnType("bytea");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -882,6 +888,12 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<bool>("ExcludeKana")
                         .HasColumnType("boolean");
 
+                    b.Property<long?>("FrequencyListId")
+                        .HasColumnType("bigint");
+
+                    b.Property<short?>("FrequencyMediaType")
+                        .HasColumnType("smallint");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -927,6 +939,9 @@ namespace Jiten.Core.Migrations.UserDb
                         .HasColumnType("uuid");
 
                     b.HasKey("UserStudyDeckId");
+
+                    b.HasIndex("FrequencyListId")
+                        .HasDatabaseName("IX_UserStudyDeck_FrequencyListId");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("IX_UserStudyDeck_UserId");

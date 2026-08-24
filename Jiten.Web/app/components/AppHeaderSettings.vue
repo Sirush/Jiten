@@ -34,7 +34,7 @@
   const isSettingsInteracted = ref(false);
   const mediaSectionsOpen = ref(false);
 
-  // Coverage borders only count while its checkbox is rendered, or a logged-out visitor reads a
+  // Coverage indicators only count while its checkbox is rendered, or a logged-out visitor reads a
   // count they have no way to see or clear.
   const hiddenSectionsCount = computed(() => {
     const toggles = [hideGenres, hideTags, hideRelations, hideDescriptions, hideExternalRating, hideAlternativeTitles];
@@ -98,11 +98,11 @@
 </script>
 
 <template>
-  <Popover ref="settings" @mouseenter="onSettingsMouseEnter" @mouseleave="onSettingsMouseLeave" :pt="{ root: { class: 'w-[90vw] max-w-sm md:w-auto' }, content: { class: 'p-3 md:p-4 max-h-[80vh] overflow-y-auto' } }">
+  <Popover ref="settings" :pt="{ root: { class: 'w-[90vw] max-w-sm md:w-auto' }, content: { class: 'p-3 md:p-4 max-h-[80vh] overflow-y-auto' } }" @mouseenter="onSettingsMouseEnter" @mouseleave="onSettingsMouseLeave">
     <div class="flex flex-col gap-2">
       <div class="flex justify-between items-center mb-2">
         <span class="font-semibold text-base">Display Settings</span>
-        <Button class="md:hidden" icon="pi pi-times" text rounded size="small" @click="settings.hide()" aria-label="Close settings" />
+        <Button class="md:hidden" icon="pi pi-times" text rounded size="small" aria-label="Close settings" @click="settings.hide()" />
       </div>
       <FloatLabel variant="on" class="">
         <Select
@@ -145,6 +145,8 @@
         </button>
       </div>
 
+      <TtsVolumeControl class="py-1" @interact-start="isSettingsInteracted = true" @interact-end="isSettingsInteracted = false" />
+
       <Divider class="!my-1 md:!my-2 !mx-2" />
 
       <div class="flex items-center gap-2 py-1">
@@ -185,7 +187,7 @@
       <div v-if="mediaSectionsOpen" class="flex flex-col gap-2 pl-1">
         <div v-if="auth.isAuthenticated" class="flex items-center gap-2 py-1">
           <Checkbox v-model="hideCoverageBorders" input-id="hideCoverageBorders" name="hideCoverageBorders" :binary="true" />
-          <label for="hideCoverageBorders" class="text-sm cursor-pointer">Hide coverage borders</label>
+          <label for="hideCoverageBorders" class="text-sm cursor-pointer">Hide coverage indicators</label>
         </div>
 
         <div class="flex items-center gap-2 py-1">

@@ -10,6 +10,7 @@
     difficultyAlgorithmic?: number;
     userAdjustment?: number;
     voteCount?: number;
+    adjustmentConfidence?: number;
     useStars?: boolean;
   }>();
 
@@ -51,21 +52,28 @@
     }
   });
 
-  const hasAdjustment = computed(() => Math.abs(props.userAdjustment ?? 0) >= 0.1);
-  const hasVotesButSmallAdjustment = computed(() => (props.voteCount ?? 0) > 0 && !hasAdjustment.value);
+  const minAdjustment = 0.1;
+
+  /// Below this the adjustment came from the calculator's single-voter path, which is too thin to call a confirmation.
+  const fullGateVoters = 3;
+
+  const hasAdjustment = computed(() => Math.abs(props.userAdjustment ?? 0) >= minAdjustment);
+
+  /// Votes below the calculator's confidence gate carry a zero adjustment and must not read as agreement.
+  const votesApplied = computed(() => (props.adjustmentConfidence ?? 0) > 0 || hasAdjustment.value);
+  const hasVotesButSmallAdjustment = computed(() => (props.voteCount ?? 0) > 0 && votesApplied.value && !hasAdjustment.value);
 
   const arrowIndicator = computed(() => {
     const adj = props.userAdjustment ?? 0;
-    if (Math.abs(adj) <= 0.1) return '';
+    if (!hasAdjustment.value) return '';
     const isLarge = Math.abs(adj) >= 0.5;
     return adj > 0 ? (isLarge ? '▲▲' : '▲') : (isLarge ? '▼▼' : '▼');
   });
 
   const arrowClass = computed(() => {
     const adj = props.userAdjustment ?? 0;
-    if (adj >= 0.1) return 'text-amber-500 dark:text-amber-400';
-    if (adj <= -0.1) return 'text-sky-500 dark:text-sky-400';
-    return '';
+    if (!hasAdjustment.value) return '';
+    return adj > 0 ? 'text-amber-500 dark:text-amber-400' : 'text-sky-500 dark:text-sky-400';
   });
 
   const rawBucket = computed(() => {
@@ -101,7 +109,13 @@
         parts.push(`Based on ${props.voteCount} vote${props.voteCount !== 1 ? 's' : ''}`);
       }
     } else if (hasVotesButSmallAdjustment.value) {
-      parts.push(`Algorithmic score confirmed by ${props.voteCount} community vote${props.voteCount !== 1 ? 's' : ''}`);
+      const votes = props.voteCount ?? 0;
+      const plural = votes !== 1 ? 's' : '';
+      parts.push(votes >= fullGateVoters
+        ? `Algorithmic score confirmed by ${votes} community vote${plural}`
+        : `${votes} community vote${plural}, consistent with the algorithmic score`);
+    } else if ((props.voteCount ?? 0) > 0) {
+      parts.push('Algorithmic difficulty. Not enough community votes to adjust it yet.');
     } else {
       parts.push('Algorithmic difficulty. No community votes yet.');
     }

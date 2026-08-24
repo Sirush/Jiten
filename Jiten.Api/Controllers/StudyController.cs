@@ -33,6 +33,7 @@ public class StudyController(
     ICurrentUserService currentUserService,
     IHttpContextAccessor httpContextAccessor,
     IDeckWordResolver deckWordResolver,
+    IFrequencySourceResolver frequencySource,
     IStudyDeckMembershipService deckMembership,
     IDeckDownloadService downloadService,
     IDeckImportService importService,
@@ -142,7 +143,7 @@ public class StudyController(
         var countOnlyStats = new Dictionary<int, (int Total, int Unseen, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due, int Young, int Mature, bool WasTruncated)>();
 
         // Pre-compute shared GlobalDynamic data before the per-deck loop
-        Dictionary<(int, byte), int>? userCardFreqRanks = null;
+        Dictionary<FrequencyScope, Dictionary<(int, byte), int>>? cardFreqRanksByScope = null;
         HashSet<long>? kanaOnlyCardWords = null;
         List<int>? extraWordIds = null;
         var posFilterCache = new Dictionary<string, HashSet<int>?>();
@@ -150,7 +151,12 @@ public class StudyController(
         if (studyDecks.Any(sd => sd.DeckType == StudyDeckType.GlobalDynamic))
         {
             extraWordIds = wordSetStates.Keys.Select(k => k.Item1).Distinct().ToList();
-            userCardFreqRanks = await BuildCardFrequencyRanks(cardStateMap, extraWordIds);
+            cardFreqRanksByScope = new Dictionary<FrequencyScope, Dictionary<(int, byte), int>>();
+            var cardRankWordIds = cardStateMap.Keys.Select(k => k.Item1).Distinct().Union(extraWordIds).ToList();
+            foreach (var scope in studyDecks.Where(sd => sd.DeckType == StudyDeckType.GlobalDynamic)
+                                            .Select(FrequencyScope.From)
+                                            .Distinct())
+                cardFreqRanksByScope[scope] = await deckWordResolver.GetFrequencyRanks(cardRankWordIds, scope);
 
             if (studyDecks.Any(sd => sd.DeckType == StudyDeckType.GlobalDynamic && sd.ExcludeKana))
                 kanaOnlyCardWords = await WordFormHelper.GetKanaFormKeys(context,
@@ -214,7 +220,7 @@ public class StudyController(
                 if ((DeckDownloadType)sd.DownloadType == DeckDownloadType.TargetCoverage && sd.TargetPercentage.HasValue)
                 {
                     mediaDeckCountTasks.Add((sd.UserStudyDeckId,
-                        CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache)
+                        CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache, memoryCache)
                             .CountTargetCoverageWords(sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown),
                             deckQueryGate)));
                 }
@@ -230,7 +236,7 @@ public class StudyController(
                         sd.PosFilter, sd.StartFromKnown);
                     globalFrequencyKeysByRange.TryGetValue((sd.MinFrequency, sd.MaxFrequency), out var frequencyKeys);
                     mediaDeckCountTasks.Add((sd.UserStudyDeckId,
-                        CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache)
+                        CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache, memoryCache)
                             .CountDeckWords(request, sd.ExcludeKana, frequencyKeys),
                             deckQueryGate)));
                 }
@@ -239,8 +245,9 @@ public class StudyController(
             {
                 resolvedDecks.Add((sd, null));
                 globalDynamicCountTasks.Add((sd.UserStudyDeckId, sd,
-                    CountWithFactoryContext<(int, bool)>((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache)
-                        .CountGlobalDynamicWords(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, sd.ExcludeKana),
+                    CountWithFactoryContext<(int, bool)>((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache, memoryCache)
+                        .CountGlobalDynamicWords(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, sd.ExcludeKana,
+                                 scope: FrequencyScope.From(sd)),
                         deckQueryGate)));
             }
             else if (sd.DeckType == StudyDeckType.StaticWordList)
@@ -280,11 +287,21 @@ public class StudyController(
             var posMatchedWordIds = !string.IsNullOrEmpty(sd.PosFilter) && posFilterCache.TryGetValue(sd.PosFilter!, out var cached)
                 ? cached : null;
             var stats = ComputeGlobalDynamicCardStats(
-                sd, cardStateMap, userCardFreqRanks!, kanaOnlyCardWords, posMatchedWordIds, dueCutoff,
+                sd, cardStateMap, cardFreqRanksByScope![FrequencyScope.From(sd)], kanaOnlyCardWords, posMatchedWordIds, dueCutoff,
                 wordSetStates, redundantKanaPairs);
             countOnlyStats[studyDeckId] = (total, Math.Max(0, total - stats.Tracked),
                 stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, stats.Young, stats.Mature, wasTruncated);
         }
+
+        var frequencyListIds = studyDecks.Where(sd => sd.FrequencyListId.HasValue)
+                                         .Select(sd => sd.FrequencyListId!.Value)
+                                         .Distinct()
+                                         .ToList();
+        var frequencyListNames = frequencyListIds.Count == 0
+            ? new Dictionary<long, string>()
+            : await userContext.UserFrequencyLists.AsNoTracking()
+                               .Where(f => frequencyListIds.Contains(f.Id))
+                               .ToDictionaryAsync(f => f.Id, f => f.Name);
 
         var result = resolvedDecks.Select(entry =>
         {
@@ -314,7 +331,12 @@ public class StudyController(
                 ExcludeKana = sd.ExcludeKana,
                 MinGlobalFrequency = sd.MinGlobalFrequency,
                 MaxGlobalFrequency = sd.MaxGlobalFrequency,
-                PosFilter = sd.PosFilter
+                PosFilter = sd.PosFilter,
+                FrequencyMediaType = (int?)sd.FrequencyMediaType,
+                FrequencyListId = sd.FrequencyListId,
+                FrequencySourceName = sd.FrequencyListId.HasValue
+                    ? frequencyListNames.GetValueOrDefault(sd.FrequencyListId.Value)
+                    : sd.FrequencyMediaType?.ToString()
             };
 
             if (deck?.ParentDeckId != null && parentDecks.TryGetValue(deck.ParentDeckId.Value, out var parent))
@@ -355,8 +377,7 @@ public class StudyController(
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
 
-        var limits = await userLimits.GetLimitsAsync(userId);
-        var deckCount = await userContext.UserStudyDecks.CountAsync(sd => sd.UserId == userId);
+        var (deckCount, limits) = await GetStudyDeckUsage(userId);
         if (deckCount >= limits.StudyDecks)
             return Results.BadRequest(LimitMessages.StudyDeckCount(limits));
 
@@ -384,6 +405,9 @@ public class StudyController(
                 return Results.BadRequest("At least one frequency bound is required.");
             if (request.MaxGlobalFrequency > 0 && request.MinGlobalFrequency > request.MaxGlobalFrequency)
                 return Results.BadRequest("MinGlobalFrequency cannot exceed MaxGlobalFrequency.");
+
+            var sourceError = await ValidateFrequencySource(userId, request.FrequencyMediaType, request.FrequencyListId);
+            if (sourceError != null) return sourceError;
         }
         else if (request.DeckType == StudyDeckType.StaticWordList)
         {
@@ -398,18 +422,170 @@ public class StudyController(
         if (!IsValidPosFilter(request.PosFilter))
             return Results.BadRequest("PosFilter must be a valid JSON array of strings.");
 
-        var maxOrder = await userContext.UserStudyDecks
+        var maxOrder = await GetMaxStudyDeckSortOrder(userId);
+        var studyDeck = CreateStudyDeck(userId, request, maxOrder + 1);
+
+        userContext.UserStudyDecks.Add(studyDeck);
+        await userContext.SaveChangesAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
+        logger.LogInformation("User added study deck: DeckType={DeckType}, DeckId={DeckId}", request.DeckType, request.DeckId);
+        return Results.Ok(new { studyDeck.UserStudyDeckId });
+    }
+
+    /// <summary>Maximum number of media decks one batch call may carry, so a crafted request cannot fan out unbounded.</summary>
+    private const int MaxBatchStudyDecks = 200;
+
+    [HttpPost("study-decks/batch")]
+    [SwaggerOperation(Summary = "Add several media decks to study in one ordered batch")]
+    public async Task<IResult> BatchAddStudyDecks(BatchAddStudyDecksRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        if (request.DownloadType != (int)DeckDownloadType.OccurrenceCount)
+            return Results.BadRequest("Batch adding only supports the occurrence count filter.");
+
+        var requestedIds = request.DeckIds.Distinct().ToList();
+        if (requestedIds.Count == 0)
+            return Results.BadRequest("DeckIds cannot be empty.");
+        if (requestedIds.Count > MaxBatchStudyDecks)
+            return Results.BadRequest($"A batch can hold at most {MaxBatchStudyDecks} decks.");
+
+        var (deckCount, limits) = await GetStudyDeckUsage(userId);
+
+        var existingDeckIds = await userContext.UserStudyDecks
+            .Where(sd => sd.UserId == userId && sd.DeckId != null)
+            .Select(sd => sd.DeckId!.Value)
+            .ToListAsync();
+        var alreadyStudied = existingDeckIds.ToHashSet();
+
+        var knownDeckIds = await context.Decks
+            .Where(d => requestedIds.Contains(d.DeckId))
+            .Select(d => d.DeckId)
+            .ToListAsync();
+        var known = knownDeckIds.ToHashSet();
+
+        var skipped = new List<int>();
+        var notFound = new List<int>();
+        var addable = new List<int>();
+        foreach (var deckId in requestedIds)
+        {
+            if (alreadyStudied.Contains(deckId)) skipped.Add(deckId);
+            else if (!known.Contains(deckId)) notFound.Add(deckId);
+            else addable.Add(deckId);
+        }
+
+        var freeSlots = Math.Max(0, limits.StudyDecks - deckCount);
+        var stoppedAtCap = addable.Count > freeSlots;
+        var toAdd = addable.Take(freeSlots).ToList();
+
+        var newRows = new List<UserStudyDeck>();
+        if (toAdd.Count > 0)
+        {
+            var template = new AddStudyDeckRequest
+            {
+                DeckType = StudyDeckType.MediaDeck,
+                DownloadType = (int)DeckDownloadType.OccurrenceCount,
+                Order = (int)DeckOrder.DeckFrequency,
+                MinOccurrences = request.MinOccurrences
+            };
+
+            var sortOrder = await GetMaxStudyDeckSortOrder(userId) + 1;
+            foreach (var deckId in toAdd)
+            {
+                template.DeckId = deckId;
+                var row = CreateStudyDeck(userId, template, sortOrder++);
+                newRows.Add(row);
+                userContext.UserStudyDecks.Add(row);
+            }
+        }
+
+        // The plan set is what was added plus what was already in the list; decks cut by the cap are outside it.
+        var toAddSet = toAdd.ToHashSet();
+        var skippedSet = skipped.ToHashSet();
+        var planIds = requestedIds.Where(id => toAddSet.Contains(id) || skippedSet.Contains(id)).ToList();
+        var planIdSet = planIds.ToHashSet();
+
+        // Guarded on the plan set so a batch of only unknown ids can never deactivate or reshuffle the list.
+        var deactivateOthers = request.DeactivateOthers && planIds.Count > 0;
+        var addToTop = request.AddToTop && planIds.Count > 0;
+
+        List<UserStudyDeck>? existingRows = null;
+        if (deactivateOthers || addToTop)
+        {
+            existingRows = await userContext.UserStudyDecks
+                .Where(sd => sd.UserId == userId)
+                .OrderBy(sd => sd.SortOrder)
+                .ToListAsync();
+        }
+
+        if (deactivateOthers)
+        {
+            foreach (var row in existingRows!)
+                row.IsActive = row.DeckId != null && planIdSet.Contains(row.DeckId.Value);
+        }
+
+        if (addToTop)
+        {
+            var existingPlanRows = existingRows!
+                .Where(r => r.IsActive && r.DeckId != null && planIdSet.Contains(r.DeckId.Value))
+                .ToDictionary(r => r.DeckId!.Value);
+            var newRowsByDeck = newRows.ToDictionary(r => r.DeckId!.Value);
+
+            var planBlock = new List<UserStudyDeck>();
+            foreach (var deckId in planIds)
+            {
+                if (newRowsByDeck.TryGetValue(deckId, out var added)) planBlock.Add(added);
+                else if (existingPlanRows.TryGetValue(deckId, out var present)) planBlock.Add(present);
+            }
+
+            var blockSet = planBlock.ToHashSet();
+            var rest = existingRows!.Where(r => r.IsActive && !blockSet.Contains(r));
+            var order = 0;
+            foreach (var row in planBlock) row.SortOrder = order++;
+            foreach (var row in rest) row.SortOrder = order++;
+        }
+
+        if (toAdd.Count > 0 || deactivateOthers || addToTop)
+        {
+            await userContext.SaveChangesAsync();
+            await sessionService.BumpStudyOverviewVersion(userId);
+            logger.LogInformation("User batch added study decks: Added={Added}, Skipped={Skipped}, DeactivatedOthers={Deactivated}, AddToTop={AddToTop}",
+                                  toAdd.Count, skipped.Count, deactivateOthers, addToTop);
+        }
+
+        return Results.Ok(new
+        {
+            added = toAdd,
+            skipped,
+            notFound,
+            stoppedAtCap,
+            limit = limits.StudyDecks
+        });
+    }
+
+    private async Task<(int DeckCount, UserLimits Limits)> GetStudyDeckUsage(string userId)
+    {
+        var limits = await userLimits.GetLimitsAsync(userId);
+        var deckCount = await userContext.UserStudyDecks.CountAsync(sd => sd.UserId == userId);
+        return (deckCount, limits);
+    }
+
+    /// <summary>Inactive decks keep their own ordering space, so only active decks decide where an addition lands.</summary>
+    private async Task<int> GetMaxStudyDeckSortOrder(string userId) =>
+        await userContext.UserStudyDecks
             .Where(sd => sd.UserId == userId && sd.IsActive)
             .MaxAsync(sd => (int?)sd.SortOrder) ?? -1;
 
-        var studyDeck = new UserStudyDeck
+    private static UserStudyDeck CreateStudyDeck(string userId, AddStudyDeckRequest request, int sortOrder) =>
+        new()
         {
             UserId = userId,
             DeckType = request.DeckType,
             Name = request.Name ?? "",
             Description = request.Description,
             DeckId = request.DeckId,
-            SortOrder = maxOrder + 1,
+            SortOrder = sortOrder,
             DownloadType = request.DownloadType,
             Order = request.Order,
             MinFrequency = request.MinFrequency,
@@ -422,15 +598,10 @@ public class StudyController(
             MinGlobalFrequency = request.MinGlobalFrequency,
             MaxGlobalFrequency = request.MaxGlobalFrequency,
             PosFilter = request.PosFilter,
+            FrequencyMediaType = request.DeckType == StudyDeckType.GlobalDynamic ? (MediaType?)request.FrequencyMediaType : null,
+            FrequencyListId = request.DeckType == StudyDeckType.GlobalDynamic ? request.FrequencyListId : null,
             CreatedAt = DateTime.UtcNow
         };
-
-        userContext.UserStudyDecks.Add(studyDeck);
-        await userContext.SaveChangesAsync();
-        await sessionService.BumpStudyOverviewVersion(userId);
-        logger.LogInformation("User added study deck: DeckType={DeckType}, DeckId={DeckId}", request.DeckType, request.DeckId);
-        return Results.Ok(new { studyDeck.UserStudyDeckId });
-    }
 
     [HttpPut("study-decks/{id:int}")]
     [SwaggerOperation(Summary = "Update study deck filters")]
@@ -446,8 +617,14 @@ public class StudyController(
         if (studyDeck.DeckType == StudyDeckType.MediaDeck && request.MaxFrequency > 0 && request.MinFrequency > request.MaxFrequency)
             return Results.BadRequest("MinFrequency cannot exceed MaxFrequency.");
 
-        if (studyDeck.DeckType == StudyDeckType.GlobalDynamic && request.MaxGlobalFrequency > 0 && request.MinGlobalFrequency > request.MaxGlobalFrequency)
-            return Results.BadRequest("MinGlobalFrequency cannot exceed MaxGlobalFrequency.");
+        if (studyDeck.DeckType == StudyDeckType.GlobalDynamic)
+        {
+            if (request.MaxGlobalFrequency > 0 && request.MinGlobalFrequency > request.MaxGlobalFrequency)
+                return Results.BadRequest("MinGlobalFrequency cannot exceed MaxGlobalFrequency.");
+
+            var sourceError = await ValidateFrequencySource(userId, request.FrequencyMediaType, request.FrequencyListId);
+            if (sourceError != null) return sourceError;
+        }
 
         if (!IsValidPosFilter(request.PosFilter))
             return Results.BadRequest("PosFilter must be a valid JSON array of strings.");
@@ -475,6 +652,8 @@ public class StudyController(
             studyDeck.MaxGlobalFrequency = request.MaxGlobalFrequency;
             studyDeck.ExcludeKana = request.ExcludeKana;
             studyDeck.PosFilter = request.PosFilter;
+            studyDeck.FrequencyMediaType = (MediaType?)request.FrequencyMediaType;
+            studyDeck.FrequencyListId = request.FrequencyListId;
         }
         else if (studyDeck.DeckType == StudyDeckType.StaticWordList)
         {
@@ -950,6 +1129,9 @@ public class StudyController(
         var freqByWordReading = frequencies
             .ToDictionary(f => (f.WordId, f.ReadingIndex));
 
+        // Form selection above stays on the global ranking; only the rank each row shows follows the account default.
+        var scopedFreqs = await frequencySource.LoadFrequencies(context, pageWordIds);
+
         var wordDict = words.ToDictionary(w => w.WordId);
 
         var dtos = pageWords.Select(pw =>
@@ -960,7 +1142,6 @@ public class StudyController(
             var bestForm = forms.FirstOrDefault(f => f.ReadingIndex == pw.ReadingIndex)
                            ?? forms.OrderBy(f => f.ReadingIndex).First();
 
-            var freq = freqByWordReading.GetValueOrDefault((pw.WordId, bestForm.ReadingIndex));
             var firstDef = w.Definitions
                 .Where(d => d.EnglishMeanings.Count > 0)
                 .OrderBy(d => d.SenseIndex)
@@ -988,7 +1169,9 @@ public class StudyController(
                 PrimaryKanjiText = primaryKanjiText,
                 PartsOfSpeech = w.PartsOfSpeech,
                 Meanings = firstDef?.EnglishMeanings ?? [],
-                FrequencyRank = freq?.FrequencyRank ?? int.MaxValue,
+                FrequencyRank = scopedFreqs.Rank(pw.WordId, bestForm.ReadingIndex) is var scopedRank && scopedRank > 0
+                    ? scopedRank
+                    : int.MaxValue,
                 Occurrences = pw.Occurrences,
                 DeckSortOrder = pw.SortOrder
             };
@@ -1147,6 +1330,28 @@ public class StudyController(
 
             case StudyDeckType.GlobalDynamic:
             {
+                var scope = FrequencyScope.From(studyDeck);
+                if (!scope.IsGlobal)
+                {
+                    var scoped = await deckWordResolver.ResolveGlobalDynamicWords(
+                        studyDeck.MinGlobalFrequency, studyDeck.MaxGlobalFrequency, studyDeck.PosFilter,
+                        studyDeck.ExcludeKana, false, false, scope);
+
+                    IEnumerable<ResolvedWord> scopedWords = scoped.Words;
+                    if (!string.IsNullOrWhiteSpace(search))
+                    {
+                        var scopedSearchIds = (await SearchHelper.ResolveSearchWordIds(context, search)).ToHashSet();
+                        scopedWords = scopedWords.Where(w => scopedSearchIds.Contains(w.WordId));
+                    }
+
+                    scopedWords = sortOrder == SortOrder.Ascending
+                        ? scopedWords.OrderBy(w => w.SortOrder)
+                        : scopedWords.OrderByDescending(w => w.SortOrder);
+
+                    allItems = scopedWords.Select(w => (w.WordId, (short)w.ReadingIndex, 1)).ToList();
+                    break;
+                }
+
                 var freqQuery = context.WordFormFrequencies.AsNoTracking().AsQueryable();
                 if (studyDeck.MinGlobalFrequency.HasValue)
                     freqQuery = freqQuery.Where(wff => wff.FrequencyRank >= studyDeck.MinGlobalFrequency.Value);
@@ -1276,7 +1481,10 @@ public class StudyController(
 
         var pagedWordIds = pagedItems.Select(p => p.WordId).Distinct().ToList();
         var formDict = await WordFormHelper.LoadWordForms(context, pagedWordIds);
-        var formFreqDict = await WordFormHelper.LoadWordFormFrequencies(context, pagedWordIds);
+        // A deck that names its own ranking outranks the account default; only an unscoped deck falls through to it.
+        var vocabularyScope = FrequencyScope.From(studyDeck);
+        if (vocabularyScope.IsGlobal) vocabularyScope = await frequencySource.Resolve();
+        var formFreqDict = await frequencySource.LoadFrequencies(context, pagedWordIds, vocabularyScope);
 
         var words = await context.JMDictWords
             .AsNoTracking()
@@ -1294,10 +1502,9 @@ public class StudyController(
                 var word = words[p.WordId];
                 var readingIndex = (byte)p.ReadingIndex;
                 var form = formDict.GetValueOrDefault((p.WordId, p.ReadingIndex));
-                var formFreq = formFreqDict.GetValueOrDefault((p.WordId, p.ReadingIndex));
 
                 var mainReading = form != null
-                    ? WordFormHelper.ToFormDto(form, formFreq)
+                    ? WordFormHelper.ToFormDto(form, formFreqDict.Resolve(p.WordId, p.ReadingIndex))
                     : new WordFormDto { ReadingIndex = readingIndex };
 
                 return new WordDto
@@ -1399,9 +1606,13 @@ public class StudyController(
 
         if (request.DeckType == StudyDeckType.GlobalDynamic)
         {
+            var sourceError = await ValidateFrequencySource(userId, request.FrequencyMediaType, request.FrequencyListId);
+            if (sourceError != null) return sourceError;
+
             var result = await deckWordResolver.ResolveGlobalDynamicWords(
                 request.MinGlobalFrequency, request.MaxGlobalFrequency, request.PosFilter,
-                request.ExcludeKana, false, false);
+                request.ExcludeKana, false, false,
+                new FrequencyScope((MediaType?)request.FrequencyMediaType, request.FrequencyListId));
             wordPairs = result.Words.Select(w => (w.WordId, w.ReadingIndex)).ToList();
         }
         else if (request.DeckType == StudyDeckType.StaticWordList)
@@ -1719,7 +1930,8 @@ public class StudyController(
                         foreach (var gd in globalDynamicDecks)
                         {
                             studyDeckWordKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeysForWordIds(
-                                gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds, gd.ExcludeKana));
+                                gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds, gd.ExcludeKana,
+                                FrequencyScope.From(gd)));
                         }
                     }
                 }
@@ -1810,7 +2022,7 @@ public class StudyController(
                 {
                     var gdResult = await deckWordResolver.ResolveGlobalDynamicWords(
                         studyDeck.MinGlobalFrequency, studyDeck.MaxGlobalFrequency, studyDeck.PosFilter,
-                        studyDeck.ExcludeKana, false, false);
+                        studyDeck.ExcludeKana, false, false, FrequencyScope.From(studyDeck));
                     wordPairs = gdResult.Words.Select(w => (w.WordId, w.ReadingIndex)).ToList();
                 }
                 else if (studyDeck.DeckType == StudyDeckType.StaticWordList)
@@ -1968,7 +2180,7 @@ public class StudyController(
         RubyTextHelper.EnrichForms(wordForms);
         var wordFormsMap = wordForms.GroupBy(wf => wf.WordId)
             .ToDictionary(g => g.Key, g => g.ToList());
-        var freqs = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
+        var freqs = await frequencySource.LoadFrequencies(context, wordIds);
         var confusables = await confusablesTask;
 
         var occDeckIds = studyDecks.Where(sd => sd.DeckId.HasValue).Select(sd => sd.DeckId!.Value).ToList();
@@ -2004,7 +2216,7 @@ public class StudyController(
         {
             wordsData.TryGetValue(item.WordId, out var word);
             wordFormsMap.TryGetValue(item.WordId, out var forms);
-            freqs.TryGetValue((item.WordId, (short)item.ReadingIndex), out var freq);
+            var freq = freqs.Resolve(item.WordId, (short)item.ReadingIndex);
 
             var mainForm = forms?.FirstOrDefault(f => f.ReadingIndex == item.ReadingIndex);
             var exKey = WordFormHelper.EncodeWordKey(item.WordId, item.ReadingIndex);
@@ -2040,7 +2252,7 @@ public class StudyController(
                     }).ToList() ?? new(),
                 PartsOfSpeech = (word?.PartsOfSpeech.ToHumanReadablePartsOfSpeech() ?? []).ToArray(),
                 PitchAccents = word?.PitchAccents?.ToArray(),
-                FrequencyRank = freq?.FrequencyRank ?? 0,
+                FrequencyRank = freq.Rank,
                 DeckOccurrences = occurrenceMap.TryGetValue(exKey, out var occs)
                     ? occs
                         .OrderByDescending(o => o.Occurrences)
@@ -2206,6 +2418,19 @@ public class StudyController(
         var previousDerivationCategories =
             DerivationSettingsHelper.Parse(stored?.DerivationalRedundancyCategories);
 
+        // Same null-preserves rule as above; 0 is the explicit "back to global". Setting one source clears the other.
+        var frequencyMediaType = request.DefaultFrequencyMediaType ?? stored?.DefaultFrequencyMediaType ?? 0;
+        var frequencyListId = request.DefaultFrequencyListId ?? stored?.DefaultFrequencyListId ?? 0;
+        if (request.DefaultFrequencyMediaType is > 0) frequencyListId = 0;
+        else if (request.DefaultFrequencyListId is > 0) frequencyMediaType = 0;
+        if (frequencyMediaType > 0 && frequencyListId > 0) frequencyMediaType = 0;
+
+        request.DefaultFrequencyMediaType = frequencyMediaType > 0 ? frequencyMediaType : null;
+        request.DefaultFrequencyListId = frequencyListId > 0 ? frequencyListId : null;
+
+        var frequencySourceError = await ValidateFrequencySource(userId, request.DefaultFrequencyMediaType, request.DefaultFrequencyListId);
+        if (frequencySourceError != null) return frequencySourceError;
+
         // Same null-preserves rule as the layout above: a client that predates the field omits it, and must not
         // silently switch the feature off and shrink the user's coverage.
         var requestedDerivationCategories = request.DerivationalRedundancyCategories == null
@@ -2225,6 +2450,10 @@ public class StudyController(
             DerivationSettingsHelper.Invalidate(memoryCache, userId);
             await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         }
+
+        if (stored?.DefaultFrequencyMediaType != request.DefaultFrequencyMediaType ||
+            stored?.DefaultFrequencyListId != request.DefaultFrequencyListId)
+            FrequencySourceResolver.Invalidate(memoryCache, userId);
 
         return Results.Ok(request);
     }
@@ -2494,7 +2723,8 @@ public class StudyController(
                 candidateKeys.UnionWith(await deckWordResolver.GetStaticDeckWordKeys(staticDeckIds));
 
             foreach (var sd in studyDecks.Where(sd => sd.DeckType == StudyDeckType.GlobalDynamic))
-                candidateKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeys(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter));
+                candidateKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeys(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter,
+                                                                    FrequencyScope.From(sd)));
 
             candidateKeys.ExceptWith(existingKeys);
             newCardsAvailable = Math.Min(candidateKeys.Count, newCardBudget);
@@ -2651,7 +2881,8 @@ public class StudyController(
                     allCandidateKeys.UnionWith(await deckWordResolver.GetStaticDeckWordKeys(staticDeckIds));
 
                 foreach (var sd in studyDecks.Where(sd => sd.DeckType == StudyDeckType.GlobalDynamic))
-                    allCandidateKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeys(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter));
+                    allCandidateKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeys(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter,
+                                                                    FrequencyScope.From(sd)));
 
                 allCandidateKeys.ExceptWith(existingKeys);
                 count = Math.Min(allCandidateKeys.Count, budget);
@@ -3966,6 +4197,10 @@ public class StudyController(
         return result;
     }
 
+    /// <summary>Null when the requested frequency source is usable; otherwise the error to return.</summary>
+    private Task<IResult?> ValidateFrequencySource(string userId, int? frequencyMediaType, long? frequencyListId)
+        => FrequencySourceValidator.Validate(userContext, backgroundJobs, userId, frequencyMediaType, frequencyListId);
+
     private static bool IsValidPosFilter(string? posFilter)
     {
         if (string.IsNullOrEmpty(posFilter)) return true;
@@ -3978,24 +4213,6 @@ public class StudyController(
         {
             return false;
         }
-    }
-
-    private async Task<Dictionary<(int, byte), int>> BuildCardFrequencyRanks(
-        Dictionary<(int, byte), (FsrsState State, DateTime Due, DateTime? LastReview)> cardStateMap,
-        IEnumerable<int>? additionalWordIds = null)
-    {
-        var wordIds = cardStateMap.Keys.Select(k => k.Item1).Distinct();
-        if (additionalWordIds != null)
-            wordIds = wordIds.Union(additionalWordIds);
-        var wordIdList = wordIds.ToList();
-        var freqs = await context.WordFormFrequencies.AsNoTracking()
-            .Where(wff => wordIdList.Contains(wff.WordId))
-            .Select(wff => new { wff.WordId, wff.ReadingIndex, wff.FrequencyRank })
-            .ToListAsync();
-        var result = new Dictionary<(int, byte), int>();
-        foreach (var f in freqs)
-            result[(f.WordId, (byte)f.ReadingIndex)] = f.FrequencyRank;
-        return result;
     }
 
     private async Task<HashSet<int>?> GetPosMatchedWordIds(
@@ -4235,7 +4452,7 @@ public class StudyController(
                     request.MinFrequency, request.MaxFrequency,
                     request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                     request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                    studyDeck.PosFilter, studyDeck.StartFromKnown));
+                    studyDeck.PosFilter, studyDeck.StartFromKnown, request.FrequencySource));
                 if (error != null) return error;
 
                 deckWords = words!.Select(dw => (dw.WordId, dw.ReadingIndex, dw.Occurrences)).ToList();
@@ -4252,7 +4469,8 @@ public class StudyController(
 
                 var result = await deckWordResolver.ResolveGlobalDynamicWords(
                     studyDeck.MinGlobalFrequency, studyDeck.MaxGlobalFrequency, studyDeck.PosFilter,
-                    request.ExcludeKana, request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords);
+                    request.ExcludeKana, request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
+                    FrequencyScope.From(studyDeck));
                 deckWords = result.Words.Select(w => (w.WordId, w.ReadingIndex, Math.Max(1, w.Occurrences))).ToList();
                 deckTitle = studyDeck.Name;
                 break;
@@ -4339,7 +4557,7 @@ public class StudyController(
                     request.MinFrequency, request.MaxFrequency,
                     request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                     request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                    studyDeck.PosFilter, request.StartFromKnown));
+                    studyDeck.PosFilter, request.StartFromKnown, request.FrequencySource));
                 if (error != null) return error;
 
                 resolvedWords = words!;
@@ -4349,7 +4567,8 @@ public class StudyController(
             {
                 var result = await deckWordResolver.ResolveGlobalDynamicWords(
                     studyDeck.MinGlobalFrequency, studyDeck.MaxGlobalFrequency, studyDeck.PosFilter,
-                    request.ExcludeKana, request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords);
+                    request.ExcludeKana, request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
+                    FrequencyScope.From(studyDeck));
                 resolvedWords = result.Words.Select(w => new DeckWord { WordId = w.WordId, ReadingIndex = w.ReadingIndex }).ToList();
                 kanaAlreadyExcluded = true;
                 break;
@@ -4422,7 +4641,7 @@ public class StudyController(
                     request.MinFrequency, request.MaxFrequency,
                     request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                     request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                    studyDeck.PosFilter, studyDeck.StartFromKnown));
+                    studyDeck.PosFilter, studyDeck.StartFromKnown, request.FrequencySource));
                 if (error != null) return error;
                 if (words == null || words.Count == 0) return Results.Ok(0);
 
@@ -4444,7 +4663,8 @@ public class StudyController(
             {
                 var result = await deckWordResolver.ResolveGlobalDynamicWords(
                     studyDeck.MinGlobalFrequency, studyDeck.MaxGlobalFrequency, studyDeck.PosFilter,
-                    request.ExcludeKana, request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords);
+                    request.ExcludeKana, request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
+                    FrequencyScope.From(studyDeck));
                 count = result.Words.Count;
                 break;
             }
@@ -4596,7 +4816,8 @@ public class StudyController(
                     foreach (var gd in globalDynamicDecks)
                     {
                         wordKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeysForWordIds(
-                            gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds, gd.ExcludeKana));
+                            gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds, gd.ExcludeKana,
+                                FrequencyScope.From(gd)));
                     }
                 }
             }

@@ -43,7 +43,7 @@ You do not have to abandon your setup to use Jiten.
 
 For texthookers, manga readers and video players, the [Jiten Reader extension](/guides/browser-extension) parses the page and syncs everything back to your account.
 
-Coming from somewhere else, your can import your known words [in a few clicks](/guides/tracking-known-words).
+Coming from somewhere else, you can import your known words [in a few clicks](/guides/tracking-known-words).
 
 ## Where to go next
 

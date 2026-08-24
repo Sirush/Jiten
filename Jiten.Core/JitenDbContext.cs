@@ -28,6 +28,8 @@ public class JitenDbContext : DbContext
     public DbSet<JmDictLookup> Lookups { get; set; }
     public DbSet<JmDictWordForm> WordForms { get; set; }
     public DbSet<JmDictWordFormFrequency> WordFormFrequencies { get; set; }
+    public DbSet<JmDictWordFrequencyByType> WordFrequenciesByType { get; set; }
+    public DbSet<JmDictWordFormFrequencyByType> WordFormFrequenciesByType { get; set; }
     public DbSet<Kanji> Kanjis { get; set; }
     public DbSet<WordKanji> WordKanjis { get; set; }
     public DbSet<KanjiReadingWord> KanjiReadingWords { get; set; }
@@ -68,6 +70,10 @@ public class JitenDbContext : DbContext
     public DbSet<RequestActivityLog> RequestActivityLogs { get; set; }
     public DbSet<Notification> Notifications { get; set; }
     public DbSet<SiteUpdate> SiteUpdates { get; set; }
+
+    public DbSet<Poll> Polls { get; set; }
+    public DbSet<PollOption> PollOptions { get; set; }
+    public DbSet<PollVote> PollVotes { get; set; }
 
     public JitenDbContext()
     {
@@ -304,6 +310,7 @@ public class JitenDbContext : DbContext
             entity.Property(dd => dd.DistinctVoterCount).HasDefaultValue(0);
             entity.Property(dd => dd.UserAdjustment).HasPrecision(4, 2).HasDefaultValue(0m);
             entity.Property(dd => dd.NEffective).HasPrecision(6, 2).HasDefaultValue(0m);
+            entity.Property(dd => dd.AdjustmentConfidence).HasPrecision(4, 3).HasDefaultValue(0m);
 
             entity.HasOne(dd => dd.Deck)
                   .WithOne(d => d.DeckDifficulty)
@@ -460,6 +467,34 @@ public class JitenDbContext : DbContext
 
             entity.HasIndex(e => e.FrequencyRank)
                   .HasDatabaseName("IX_WordFormFrequencies_FrequencyRank");
+        });
+
+        modelBuilder.Entity<JmDictWordFrequencyByType>(entity =>
+        {
+            entity.ToTable("WordFrequenciesByType", "jmdict");
+            entity.HasKey(e => new { e.MediaType, e.WordId });
+
+            entity.Property(e => e.MediaType).HasColumnType("smallint");
+
+            entity.HasIndex(e => new { e.MediaType, e.FrequencyRank })
+                  .HasDatabaseName("IX_WordFrequenciesByType_MediaType_FrequencyRank");
+
+            entity.HasIndex(e => e.WordId)
+                  .HasDatabaseName("IX_WordFrequenciesByType_WordId");
+        });
+
+        modelBuilder.Entity<JmDictWordFormFrequencyByType>(entity =>
+        {
+            entity.ToTable("WordFormFrequenciesByType", "jmdict");
+            entity.HasKey(e => new { e.MediaType, e.WordId, e.ReadingIndex });
+
+            entity.Property(e => e.MediaType).HasColumnType("smallint");
+
+            entity.HasIndex(e => new { e.MediaType, e.FrequencyRank })
+                  .HasDatabaseName("IX_WordFormFrequenciesByType_MediaType_FrequencyRank");
+
+            entity.HasIndex(e => e.WordId)
+                  .HasDatabaseName("IX_WordFormFrequenciesByType_WordId");
         });
 
         modelBuilder.Entity<Kanji>(entity =>
@@ -833,6 +868,9 @@ public class JitenDbContext : DbContext
             entity.HasIndex(u => new { u.MediaRequestId, u.UserId })
                   .IsUnique()
                   .HasDatabaseName("IX_MediaRequestUpvote_RequestId_UserId");
+            // The "voted on" tab seeks by user, which the request-leading unique index cannot serve.
+            entity.HasIndex(u => new { u.UserId, u.MediaRequestId })
+                  .HasDatabaseName("IX_MediaRequestUpvote_UserId_RequestId");
         });
 
         modelBuilder.Entity<MediaRequestBoost>(entity =>
@@ -1001,6 +1039,55 @@ public class JitenDbContext : DbContext
                 entity.HasIndex(u => u.PublishedAt)
                       .HasDatabaseName("IX_SiteUpdate_PublishedAt");
             }
+        });
+
+        modelBuilder.Entity<Poll>(entity =>
+        {
+            entity.ToTable("Polls", "jiten");
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.Id).ValueGeneratedOnAdd();
+            entity.Property(p => p.Question).IsRequired().HasMaxLength(300);
+            entity.Property(p => p.DescriptionMarkdown).HasMaxLength(2000);
+            entity.Property(p => p.MaxSelections).IsRequired().HasDefaultValue(1);
+            entity.Property(p => p.CreatedAt).IsRequired();
+
+            entity.HasMany(p => p.Options)
+                  .WithOne(o => o.Poll)
+                  .HasForeignKey(o => o.PollId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(p => p.PublishedAt).HasDatabaseName("IX_Poll_PublishedAt");
+        });
+
+        modelBuilder.Entity<PollOption>(entity =>
+        {
+            entity.ToTable("PollOptions", "jiten");
+            entity.HasKey(o => o.Id);
+            entity.Property(o => o.Id).ValueGeneratedOnAdd();
+            entity.Property(o => o.Text).IsRequired().HasMaxLength(200);
+            entity.Property(o => o.SortOrder).IsRequired();
+
+            entity.HasIndex(o => o.PollId).HasDatabaseName("IX_PollOption_PollId");
+        });
+
+        modelBuilder.Entity<PollVote>(entity =>
+        {
+            entity.ToTable("PollVotes", "jiten");
+            entity.HasKey(v => new { v.PollId, v.UserId, v.OptionId });
+            entity.Property(v => v.UserId).IsRequired().HasMaxLength(450);
+            entity.Property(v => v.CreatedAt).IsRequired();
+
+            entity.HasOne<Poll>()
+                  .WithMany()
+                  .HasForeignKey(v => v.PollId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<PollOption>()
+                  .WithMany()
+                  .HasForeignKey(v => v.OptionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(v => new { v.PollId, v.OptionId }).HasDatabaseName("IX_PollVote_PollId_OptionId");
         });
 
         modelBuilder.Entity<DifficultyVote>(entity =>

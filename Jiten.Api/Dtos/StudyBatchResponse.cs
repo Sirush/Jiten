@@ -1,4 +1,4 @@
-namespace Jiten.Api.Dtos;
+﻿namespace Jiten.Api.Dtos;
 
 public class StudyBatchResponse
 {
@@ -144,6 +144,9 @@ public class StudyDeckDto
     public int? MinGlobalFrequency { get; set; }
     public int? MaxGlobalFrequency { get; set; }
     public string? PosFilter { get; set; }
+    public int? FrequencyMediaType { get; set; }
+    public long? FrequencyListId { get; set; }
+    public string? FrequencySourceName { get; set; }
     public int TotalWords { get; set; }
     public int UnseenCount { get; set; }
     public int LearningCount { get; set; }

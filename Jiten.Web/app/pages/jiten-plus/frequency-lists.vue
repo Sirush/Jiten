@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, computed, reactive, watch, onMounted, onBeforeUnmount } from 'vue';
+  import { ref, computed, reactive, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
   import { debounce } from 'perfect-debounce';
   import Card from 'primevue/card';
   import Button from 'primevue/button';
@@ -34,6 +34,7 @@
   const toast = useToast();
   const confirm = useConfirm();
   const { isPlus, isFull, isTrial } = useJitenPlus();
+  const localiseTitle = useLocaliseTitle();
 
   // ---- Builder state ------------------------------------------------------
 
@@ -46,6 +47,10 @@
   const name = ref('');
   const saveList = ref(false);
   const autoUpdate = ref(false);
+
+  const editingId = ref<number | null>(null);
+  const editingOriginalName = ref('');
+  const builderEl = ref<HTMLElement | null>(null);
 
   const currentYear = new Date().getFullYear();
   const mediaTypes = ref<number[]>([]);
@@ -126,8 +131,14 @@
 
   // ---- Live preview -------------------------------------------------------
 
+  interface SampleTitle {
+    originalTitle: string;
+    romajiTitle?: string | null;
+    englishTitle?: string | null;
+  }
+
   const previewCount = ref<number | null>(null);
-  const previewSample = ref<string[]>([]);
+  const previewSample = ref<SampleTitle[]>([]);
   const previewLoading = ref(false);
   const minDecks = 2;
 
@@ -141,7 +152,7 @@
       const def = buildDefinition();
       const res = await $api<{
         deckCount: number;
-        sampleTitles: string[];
+        sampleTitles: SampleTitle[];
         minDecks: number;
         genreCounts: Record<number, number>;
         tagCounts: Record<number, number>;
@@ -232,12 +243,34 @@
     pickedDecks.value = pickedDecks.value.filter((d) => d.deckId !== deckId);
   }
 
+  const mediaListPickerVisible = ref(false);
+  const pickedDeckIds = computed(() => pickedDecks.value.map((d) => d.deckId));
+
+  function onMediaListAdd(decks: MediaSuggestion[]) {
+    const existing = new Set(pickedDeckIds.value);
+    pickedDecks.value = [...pickedDecks.value, ...decks.filter((d) => !existing.has(d.deckId))];
+  }
+
   // ---- Saved / generated lists --------------------------------------------
+
+  interface FrequencyListDefinitionDto {
+    mediaTypes: number[];
+    yearFrom: number | null;
+    yearTo: number | null;
+    genresInclude: number[];
+    genresExclude: number[];
+    tagsInclude: number[];
+    tagsExclude: number[];
+    difficultyMin: number | null;
+    difficultyMax: number | null;
+    deckIds: number[];
+  }
 
   interface FrequencyListDto {
     id: number;
     name: string;
     mode: string;
+    definition: FrequencyListDefinitionDto | null;
     isSaved: boolean;
     autoUpdate: boolean;
     publicSlug: string | null;
@@ -246,6 +279,7 @@
     deckCount: number;
     createdAt: string;
     generatedAt: string | null;
+    pickedDecks: MediaSuggestion[] | null;
   }
 
   const lists = ref<FrequencyListDto[]>([]);
@@ -267,6 +301,8 @@
   }
 
   function resetBuilder() {
+    editingId.value = null;
+    editingOriginalName.value = '';
     name.value = '';
     mediaTypes.value = [];
     yearFrom.value = null;
@@ -383,30 +419,72 @@
     }
   }
 
-  const renameVisible = ref(false);
-  const renameTarget = ref<FrequencyListDto | null>(null);
-  const renameValue = ref('');
-  const renaming = ref(false);
+  const editingList = computed(() => lists.value.find((l) => l.id === editingId.value) ?? null);
 
-  function renameList(list: FrequencyListDto) {
-    renameTarget.value = list;
-    renameValue.value = list.name;
-    renameVisible.value = true;
+  function loadDefinition(list: FrequencyListDto) {
+    const def = list.definition;
+    editingId.value = list.id;
+    editingOriginalName.value = list.name;
+    name.value = list.name;
+    mode.value = list.mode === 'handpicked' ? 'handpicked' : 'filters';
+    mediaTypes.value = [...(def?.mediaTypes ?? [])];
+    yearFrom.value = def?.yearFrom ?? null;
+    yearTo.value = def?.yearTo ?? null;
+    difficultyRange.value = [def?.difficultyMin ?? 0, def?.difficultyMax ?? 5];
+
+    for (const k of Object.keys(genreStates)) genreStates[Number(k)] = 'neutral';
+    for (const k of Object.keys(tagStates)) tagStates[Number(k)] = 'neutral';
+    for (const id of def?.genresInclude ?? []) genreStates[id] = 'include';
+    for (const id of def?.genresExclude ?? []) genreStates[id] = 'exclude';
+    for (const id of def?.tagsInclude ?? []) tagStates[id] = 'include';
+    for (const id of def?.tagsExclude ?? []) tagStates[id] = 'exclude';
+
+    pickedDecks.value = [...(list.pickedDecks ?? [])];
+    saveList.value = list.isSaved;
+    autoUpdate.value = list.autoUpdate;
+    previewCount.value = null;
+    previewSample.value = [];
+    runPreview();
+
+    nextTick(() => builderEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }
 
-  async function confirmRename() {
-    const target = renameTarget.value;
-    const trimmed = renameValue.value.trim();
-    if (!target || !trimmed || renaming.value) return;
-    renaming.value = true;
+  function submit() {
+    if (editingId.value == null) {
+      generate();
+      return;
+    }
+    const target = editingList.value;
+    if (!target?.publicSlug) {
+      applyEdit();
+      return;
+    }
+    confirm.require({
+      message: `"${target.name}" has a share link. Everyone using it will get the update list the next time they update their dictionary.`,
+      header: 'Save changes to a shared list',
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Save changes',
+      rejectLabel: 'Cancel',
+      accept: applyEdit,
+    });
+  }
+
+  async function applyEdit() {
+    const id = editingId.value;
+    if (id == null || !canGenerate.value) return;
+    creating.value = true;
     try {
-      await $api(`frequency-lists/${target.id}`, { method: 'PATCH', body: { name: trimmed } });
-      renameVisible.value = false;
+      await $api(`frequency-lists/${id}`, {
+        method: 'PATCH',
+        body: { name: name.value.trim(), mode: mode.value, definition: buildDefinition() },
+      });
+      toast.add({ severity: 'success', summary: 'Changes saved', detail: 'Your list is being rebuilt.', life: 4000 });
+      resetBuilder();
       await loadLists();
     } catch (e) {
-      toast.add({ severity: 'error', summary: 'Rename failed', detail: extractApiError(e, 'Please try again.'), life: 5000 });
+      toast.add({ severity: 'error', summary: 'Could not save changes', detail: extractApiError(e, 'Please try again.'), life: 6000 });
     } finally {
-      renaming.value = false;
+      creating.value = false;
     }
   }
 
@@ -441,6 +519,14 @@
     }
   }
 
+  const studyListId = ref<number | null>(null);
+  const showStudyDialog = ref(false);
+
+  function study(list: FrequencyListDto) {
+    studyListId.value = list.id;
+    showStudyDialog.value = true;
+  }
+
   function confirmDelete(list: FrequencyListDto) {
     confirm.require({
       message: `Delete "${list.name}"? This removes the generated files too.`,
@@ -472,8 +558,15 @@
   }
 
   onMounted(() => {
-    loadLists();
-    if (isPlus.value) runPreview(); // baseline facet counts for the whole catalogue
+    watch(
+      isPlus,
+      (plus) => {
+        if (!plus) return;
+        loadLists();
+        runPreview(); // baseline facet counts for the whole catalogue
+      },
+      { immediate: true },
+    );
   });
   onBeforeUnmount(() => {
     if (pollTimer) clearInterval(pollTimer);
@@ -509,10 +602,22 @@
       </div>
 
       <!-- Builder -->
-      <Card class="mb-4">
-        <template #title>Build a list</template>
+      <div ref="builderEl" class="scroll-mt-4">
+      <Card class="mb-4" :class="editingId !== null ? 'ring-2 ring-primary' : ''">
+        <template #title>
+          <div class="flex flex-wrap items-center gap-2">
+            <template v-if="editingId !== null">
+              <Icon name="material-symbols-light:edit-outline" size="1.2em" class="text-primary" />
+              <span>Editing <span class="text-primary">{{ editingOriginalName }}</span></span>
+            </template>
+            <span v-else>Build a list</span>
+          </div>
+        </template>
         <template #content>
           <div class="flex flex-col gap-4">
+            <p v-if="editingId !== null" class="text-sm text-surface-500 dark:text-surface-400 -mt-1">
+              Saving rebuilds this list with the new filters but keeps the same share link.
+            </p>
             <div class="flex flex-col sm:flex-row gap-3 sm:items-end">
               <div class="flex-1">
                 <label class="block text-sm font-medium mb-1" for="list-name">
@@ -600,7 +705,7 @@
                 <AutoComplete
                   v-model="selectedDeck"
                   :suggestions="deckSuggestions"
-                  option-label="originalTitle"
+                  :option-label="localiseTitle"
                   dropdown
                   placeholder="Type a title…"
                   class="w-full"
@@ -610,11 +715,19 @@
                   <template #option="{ option }">
                     <div class="flex items-center gap-2">
                       <img :src="coverUrl(option.coverName)" alt="" class="w-6 h-8 object-cover rounded" @error="(e) => ((e.target as HTMLImageElement).src = '/img/nocover.jpg')" >
-                      <span>{{ option.originalTitle }}</span>
+                      <span>{{ localiseTitle(option) }}</span>
                       <Tag :value="getMediaTypeText(option.mediaType)" severity="secondary" class="ml-auto" />
                     </div>
                   </template>
                 </AutoComplete>
+                <Button
+                  label="Add from my media list"
+                  icon="pi pi-list"
+                  size="small"
+                  outlined
+                  class="mt-2"
+                  @click="mediaListPickerVisible = true"
+                />
               </div>
               <Accordion v-if="pickedDecks.length" value="picked">
                 <AccordionPanel value="picked">
@@ -633,7 +746,7 @@
                           @error="(e) => ((e.target as HTMLImageElement).src = '/img/nocover.jpg')"
                         >
                         <div class="flex items-center gap-2 min-w-0 flex-1">
-                          <span class="font-medium truncate" :title="d.originalTitle">{{ d.originalTitle }}</span>
+                          <span class="font-medium truncate" :title="localiseTitle(d)">{{ localiseTitle(d) }}</span>
                           <Tag :value="getMediaTypeText(d.mediaType)" severity="secondary" class="shrink-0" />
                         </div>
                         <Tooltip content="Remove">
@@ -668,22 +781,31 @@
                 <span v-else class="text-surface-400">Adjust filters to preview</span>
               </div>
 
-              <div class="flex items-center gap-3 sm:ml-auto">
-                <div class="flex items-center gap-2" :title="isFull ? '' : 'Requires Jiten+ Full'">
-                  <Checkbox v-model="saveList" input-id="save-list" binary :disabled="!isFull" />
-                  <label for="save-list" class="text-sm" :class="{ 'text-surface-400': !isFull }">Keep saved</label>
-                  <JitenPlusBadge v-if="!isFull" tier="full" />
-                </div>
-                <div v-if="saveList && isFull" class="flex items-center gap-2">
-                  <Checkbox v-model="autoUpdate" input-id="auto-update" binary />
-                  <label for="auto-update" class="text-sm">Auto-update</label>
-                </div>
+              <div class="flex flex-wrap items-center gap-3 sm:ml-auto">
+                <template v-if="editingId === null">
+                  <div class="flex items-center gap-2" :title="isFull ? '' : 'Requires Jiten+ Full'">
+                    <Checkbox v-model="saveList" input-id="save-list" binary :disabled="!isFull" />
+                    <label for="save-list" class="text-sm" :class="{ 'text-surface-400': !isFull }">Keep saved</label>
+                    <JitenPlusBadge v-if="!isFull" tier="full" />
+                  </div>
+                  <div v-if="saveList && isFull" class="flex items-center gap-2">
+                    <Checkbox v-model="autoUpdate" input-id="auto-update" binary />
+                    <label for="auto-update" class="text-sm">Auto-update</label>
+                  </div>
+                </template>
                 <Button
-                  label="Generate"
-                  icon="pi pi-bolt"
+                  v-if="editingId !== null"
+                  label="Cancel"
+                  outlined
+                  severity="secondary"
+                  @click="resetBuilder"
+                />
+                <Button
+                  :label="editingId !== null ? 'Save changes' : 'Generate'"
+                  :icon="editingId !== null ? 'pi pi-check' : 'pi pi-bolt'"
                   :loading="creating"
                   :disabled="!canGenerate"
-                  @click="generate"
+                  @click="submit"
                 />
               </div>
             </div>
@@ -694,11 +816,12 @@
               A list needs at least {{ minDecks }} matching decks.
             </p>
             <div v-if="previewSample.length" class="text-xs text-surface-400">
-              e.g. {{ previewSample.slice(0, 5).join(', ') }}
+              e.g. {{ previewSample.slice(0, 5).map(localiseTitle).join(', ') }}
             </div>
           </div>
         </template>
       </Card>
+      </div>
 
       <!-- Existing lists -->
       <Card>
@@ -768,7 +891,14 @@
                     :loading="busyId === list.id"
                     @click="regenerate(list)"
                   />
-                  <Button label="Rename" icon="pi pi-pencil" size="small" outlined @click="renameList(list)" />
+                  <Button
+                    label="Edit"
+                    icon="pi pi-pencil"
+                    size="small"
+                    outlined
+                    :severity="editingId === list.id ? 'success' : undefined"
+                    @click="loadDefinition(list)"
+                  />
                   <Button
                     v-if="!list.isSaved && isFull"
                     label="Keep saved"
@@ -776,6 +906,14 @@
                     size="small"
                     outlined
                     @click="save(list)"
+                  />
+                  <Button
+                    v-if="list.isSaved"
+                    label="Study"
+                    icon="pi pi-graduation-cap"
+                    size="small"
+                    outlined
+                    @click="study(list)"
                   />
                   <template v-if="list.isSaved && isFull">
                     <Button
@@ -835,11 +973,20 @@
                   <Tooltip content="Regenerate">
                     <Button icon="pi pi-sync" text size="small" :loading="busyId === data.id" @click="regenerate(data)" />
                   </Tooltip>
-                  <Tooltip content="Rename">
-                    <Button icon="pi pi-pencil" text size="small" @click="renameList(data)" />
+                  <Tooltip content="Edit name and filters">
+                    <Button
+                      icon="pi pi-pencil"
+                      text
+                      size="small"
+                      :severity="editingId === data.id ? 'success' : undefined"
+                      @click="loadDefinition(data)"
+                    />
                   </Tooltip>
                   <Tooltip v-if="!data.isSaved && isFull" content="Keep saved">
                     <Button icon="pi pi-bookmark" text size="small" @click="save(data)" />
+                  </Tooltip>
+                  <Tooltip v-if="data.isSaved" content="Study this list">
+                    <Button icon="pi pi-graduation-cap" text size="small" @click="study(data)" />
                   </Tooltip>
                   <template v-if="data.isSaved && isFull">
                     <Tooltip :content="data.autoUpdate ? 'Auto-update on' : 'Auto-update off'">
@@ -867,14 +1014,6 @@
         </template>
       </Card>
 
-      <Dialog v-model:visible="renameVisible" modal header="Rename list" :draggable="false" class="w-[22rem] max-w-[calc(100vw-2rem)]">
-        <InputText v-model="renameValue" maxlength="100" class="w-full" autofocus @keydown.enter="confirmRename" />
-        <template #footer>
-          <Button label="Cancel" text severity="secondary" @click="renameVisible = false" />
-          <Button label="Save" :loading="renaming" :disabled="!renameValue.trim()" @click="confirmRename" />
-        </template>
-      </Dialog>
-
       <Dialog v-model:visible="shareVisible" modal header="Share link" :draggable="false" class="w-[28rem] max-w-[calc(100vw-2rem)]">
         <p class="text-sm text-surface-500 dark:text-surface-400 mb-3">
           Anyone with this link can download the list as a Yomitan dictionary. Append <code>?format=csv</code> for the CSV version.
@@ -891,6 +1030,14 @@
           </Tooltip>
         </div>
       </Dialog>
+
+      <MediaListDeckPickerDialog v-model:visible="mediaListPickerVisible" :picked-ids="pickedDeckIds" @add="onMediaListAdd" />
+
+      <SrsAddDeckDialog
+        v-if="studyListId !== null"
+        v-model:visible="showStudyDialog"
+        :preselected-frequency-list-id="studyListId"
+      />
     </template>
   </div>
 </template>

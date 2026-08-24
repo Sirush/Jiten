@@ -13,7 +13,6 @@
   const name = ref((authStore.googleRegistrationData?.name as string) || (route.query.name as string) || '');
   const picture = ref((authStore.googleRegistrationData?.picture as string) || (route.query.picture as string) || '');
 
-  // Form data
   const USERNAME_MIN = 3;
   const USERNAME_MAX = 30;
   const username = ref('');
@@ -25,24 +24,20 @@
     return value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, USERNAME_MAX);
   }
 
-  // UI state
   const usernameError = ref('');
   const step = ref(1); // 1: username, 2: terms and consent
 
   onMounted(() => {
-    // Redirect if missing required data
     if (!tempToken.value || !email.value) {
       router.push('/login');
       return;
     }
 
-    // Generate suggested username from email or name, stripping punctuation and capping length
     const raw = email.value.split('@')[0] || name.value.toLowerCase().replace(/\s+/g, '');
     username.value = sanitizeUsername(raw);
     checkUsername();
   });
 
-  // Debounced username checking
   let usernameCheckTimeout: NodeJS.Timeout;
   watch(username, (newUsername) => {
     clearTimeout(usernameCheckTimeout);
@@ -92,6 +87,7 @@
     const success = await authStore.completeGoogleRegistration(registrationData);
 
     if (success) {
+      trackEvent('signup_completed', { method: 'google' });
       router.push(safeRedirectPath(route.query.redirect) ?? '/');
     }
   }

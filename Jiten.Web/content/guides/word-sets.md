@@ -52,5 +52,5 @@ You can **Unsubscribe** from a set at any moment. It doesn't affect your existin
 To swap a set from **Blacklist** to **Mark as Mastered** or back, unsubscribe first, then subscribe again with the other option.
 
 ::tip
-Recommended if you already have some experience with Japanese: **Mark as Mastered** for **Particles & Common Grammar** oand **Kaishi 1.5k**, **Blacklist** the **Names** ones unless you plan to study them, then [import your known words](/guides/tracking-known-words) from whatever you were using before.
+Recommended if you already have some experience with Japanese: **Mark as Mastered** for **Particles & Common Grammar** and **Kaishi 1.5k**, **Blacklist** the **Names** ones unless you plan to study them, then [import your known words](/guides/tracking-known-words) from whatever you were using before.
 ::

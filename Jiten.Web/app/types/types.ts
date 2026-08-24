@@ -1,20 +1,20 @@
-import {
-  type ComparisonOutcome,
-  type DeckRelationshipType,
-  type DeckStatus,
-  type FsrsRating,
-  type FsrsState,
-  type Genre,
-  type KnownState,
-  type LinkType,
-  type MediaType,
-  type MediaTypeGroup,
-  type NotificationType,
-  type ReadingType,
-  type RequestAction,
-  type RequestKind,
-  type RequestStatus,
-  type WordSetStateType,
+import type {
+  ComparisonOutcome,
+  DeckRelationshipType,
+  DeckStatus,
+  FsrsRating,
+  FsrsState,
+  Genre,
+  KnownState,
+  LinkType,
+  MediaType,
+  MediaTypeGroup,
+  NotificationType,
+  ReadingType,
+  RequestAction,
+  RequestKind,
+  RequestStatus,
+  WordSetStateType,
 } from '~/types';
 
 export interface Deck {
@@ -64,6 +64,7 @@ export interface Deck {
   isIgnored?: boolean;
   distinctVoterCount: number;
   userAdjustment: number;
+  adjustmentConfidence: number;
   originalFileName?: string | null;
 }
 
@@ -83,6 +84,7 @@ export interface DeckVocabularyList {
   parentDeck: Deck | null;
   deck: Deck;
   words: DeckWord[];
+  appliedFrequencySource?: MediaType | null;
 }
 
 export interface MediaSuggestion {
@@ -244,6 +246,43 @@ export interface Reading {
   frequencyPercentage: number;
   usedInMediaAmount: number;
   usedInMediaAmountByType: Record<MediaType, number>;
+  /** Absent while the caller is on the site-wide ranking. */
+  frequencyRankSource?: FrequencyRankSource;
+  /** Set only when the chosen media type had no rank and the global one stood in. */
+  isFrequencyFallback?: boolean;
+}
+
+export type FrequencyRankSource = 'global' | 'mediaType' | 'list';
+
+export interface FrequencyRankEntry {
+  rank: number;
+  percentage: number;
+  amount: number;
+}
+
+export interface FrequencyListRank {
+  id: number;
+  name: string;
+  /** 0 means the word is outside the list. */
+  rank: number;
+}
+
+export interface ResolvedFrequencyRank {
+  source: FrequencyRankSource;
+  mediaType?: MediaType;
+  listId?: number;
+  listName?: string;
+  rank: number;
+  isFallback: boolean;
+}
+
+export interface WordFrequencyRanks {
+  global: FrequencyRankEntry;
+  /** Keyed by media type id; only the types that observed the form appear. */
+  byType: Record<string, FrequencyRankEntry>;
+  /** Only present for authenticated callers who asked for it. */
+  lists?: FrequencyListRank[];
+  resolved: ResolvedFrequencyRank;
 }
 
 export interface Definition {
@@ -264,6 +303,16 @@ export interface PaginatedResponse<T> {
   totalItems: number;
   pageSize: number;
   currentOffset: number;
+}
+
+export interface DeckRankingRow {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle: string;
+  englishTitle: string;
+  difficulty: number;
+  characterCount: number;
+  releaseYear: number | null;
 }
 
 export interface GlobalStats {
@@ -706,6 +755,16 @@ export interface WordSummary {
   matchSurface?: string | null;
 }
 
+export interface DeckVocabularyPreviewWord {
+  wordId: number;
+  readingIndex: number;
+  reading: string;
+  readingFurigana: string;
+  mainDefinition: string | null;
+  frequencyRank: number | null;
+  occurrences: number;
+}
+
 export interface KanjiGridReading {
   reading: string;
   known: number;
@@ -747,9 +806,9 @@ export interface DeckDifficultyDto {
   lastUpdated: Date;
   distinctVoterCount: number;
   userAdjustment: number;
+  adjustmentConfidence: number;
 }
 
-// WordSet types
 export interface WordSetDto {
   setId: number;
   slug: string;
@@ -803,7 +862,6 @@ export interface DictionarySearchResult {
   hasMore: boolean;
 }
 
-// Media Request types
 export interface MediaRequestDto {
   id: number;
   title: string;
@@ -979,7 +1037,6 @@ export interface DifficultyRankingSectionDto {
   unranked: DeckSummaryDto[];
 }
 
-// SRS Study types
 export interface StudyDeckDto {
   userStudyDeckId: number;
   deckType: StudyDeckType;
@@ -1005,6 +1062,9 @@ export interface StudyDeckDto {
   minGlobalFrequency?: number;
   maxGlobalFrequency?: number;
   posFilter?: string;
+  frequencyMediaType?: MediaType;
+  frequencyListId?: number;
+  frequencySourceName?: string;
   totalWords: number;
   unseenCount: number;
   learningCount: number;
@@ -1237,6 +1297,10 @@ export interface StudySettingsDto {
   easyDays: number[] | null;
   /** Derivation category keys treated as redundant. Empty = feature off; omitted on a save = leave unchanged. */
   derivationalRedundancyCategories?: string[] | null;
+  /** Media type whose ranking replaces the global one everywhere. Omitted on a save = unchanged; 0 = back to global. */
+  defaultFrequencyMediaType?: number | null;
+  /** Custom frequency list whose ranking replaces the global one. Same omitted/0 rules as the media type. */
+  defaultFrequencyListId?: number | null;
   leechThreshold: number;
   leechAction: LeechAction;
   timedReview: TimedReviewSettings;
@@ -1556,6 +1620,24 @@ export interface AddStudyDeckRequest {
   minGlobalFrequency?: number;
   maxGlobalFrequency?: number;
   posFilter?: string;
+  frequencyMediaType?: MediaType;
+  frequencyListId?: number;
+}
+
+export interface BatchAddStudyDecksRequest {
+  deckIds: number[];
+  downloadType: number;
+  minOccurrences: number;
+  deactivateOthers: boolean;
+  addToTop: boolean;
+}
+
+export interface BatchAddStudyDecksResult {
+  added: number[];
+  skipped: number[];
+  notFound: number[];
+  stoppedAtCap: boolean;
+  limit: number;
 }
 
 export interface UpdateStudyDeckRequest {
@@ -1573,6 +1655,8 @@ export interface UpdateStudyDeckRequest {
   minGlobalFrequency?: number;
   maxGlobalFrequency?: number;
   posFilter?: string;
+  frequencyMediaType?: MediaType;
+  frequencyListId?: number;
 }
 
 export interface CorpusSnippet {
@@ -1904,6 +1988,50 @@ export interface AdminSiteUpdate {
   updatedAt?: string | null;
   publishedAt?: string | null;
   notifiedAt?: string | null;
+}
+
+export interface PollOption {
+  id: number;
+  text: string;
+  sortOrder: number;
+  /** Null until results are visible to the caller. */
+  voteCount: number | null;
+}
+
+export interface Poll {
+  id: number;
+  question: string;
+  descriptionMarkdown?: string | null;
+  maxSelections: number;
+  publishedAt?: string | null;
+  closesAt?: string | null;
+  isClosed: boolean;
+  myOptionIds: number[];
+  resultsVisible: boolean;
+  totalVoters: number | null;
+  options: PollOption[];
+}
+
+export interface AdminPollOption {
+  id: number;
+  text: string;
+  sortOrder: number;
+  voteCount: number;
+}
+
+export interface AdminPoll {
+  id: number;
+  question: string;
+  descriptionMarkdown?: string | null;
+  maxSelections: number;
+  createdAt: string;
+  updatedAt?: string | null;
+  publishedAt?: string | null;
+  closesAt?: string | null;
+  closedAt?: string | null;
+  isClosed: boolean;
+  totalVoters: number;
+  options: AdminPollOption[];
 }
 
 export type JourneyGranularity = 'weekly' | 'monthly';

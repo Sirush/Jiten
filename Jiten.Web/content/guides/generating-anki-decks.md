@@ -1,6 +1,6 @@
 ---
 title: Generating and importing Anki decks
-summary: Export a vocabulary deck from any title with only the words you want t ostudy
+summary: Export a vocabulary deck from any title with only the words you want to study
 category: Studying
 level: beginner
 order: 20
@@ -68,6 +68,6 @@ Keep new cards per day modest. 10 to 20 alongside actual reading is plenty, and 
 ## The Learn option
 
 **Learn** applies the same selection to your account instead of downloading a file. See [Building your starter vocabulary
-](/building-your-vocabulary#titles-you-have-already-finished) for more info.
+](/guides/building-your-vocabulary#titles-you-have-already-finished) for more info.
 
 If you would rather avoid using Anki at all, the built-in [SRS](/guides/using-the-srs) is a great and easy to use alternative.

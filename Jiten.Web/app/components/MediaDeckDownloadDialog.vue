@@ -45,6 +45,7 @@
   const emit = defineEmits(['update:visible']);
   const { $api } = useNuxtApp();
   const authStore = useAuthStore();
+  const srsStore = useSrsStore();
   const localiseTitle = useLocaliseTitle();
   const confirm = useConfirm();
   const toast = useToast();
@@ -78,7 +79,6 @@
     return Math.ceil(coverage * 10) / 10;
   });
 
-  // --- Options ---
   // Import Order only exists for word lists; word lists have no chronological position beyond it.
   const deckOrders = computed(() => {
     const orders = getEnumOptions(DeckOrder, getDeckOrderText);
@@ -170,13 +170,12 @@
     },
   ]);
 
-  // Models
   const format = defineModel<DeckFormat>('deckFormat', { default: DeckFormat.Anki });
   const downloadType = defineModel<DeckDownloadType>('downloadType', { default: DeckDownloadType.TopDeckFrequency });
+  const frequencySource = ref(0);
   const deckOrder = defineModel<DeckOrder>('deckOrder', { default: DeckOrder.DeckFrequency });
   const frequencyRange = defineModel<number[]>('frequencyRange');
 
-  // Exclusions
   const excludeKana = ref(false);
   const excludeMatureMasteredBlacklisted = ref(false);
   const excludeAllTrackedWords = ref(false);
@@ -191,7 +190,6 @@
   );
   const effectiveExcludeAllTrackedWords = computed(() => exclusionsApply.value && authStore.isAuthenticated && excludeAllTrackedWords.value);
 
-  // Stats
   const currentSliderMax = ref(wordCount.value);
   const debouncedCurrentCardAmount = ref(0);
   const accurateCardAmount = ref<number | null>(null);
@@ -203,12 +201,10 @@
   let occurrenceCountLoadingStartedAt = 0;
   let accurateCountLoadingStartedAt = 0;
 
-  // Occurrence Count mode
   const occurrenceFilterType = ref<'gte' | 'lte'>('gte');
   const occurrenceThreshold = ref(10);
   const occurrenceCount = ref(0);
 
-  // Computed for current selection details
   const currentFormatDetails = computed(() => {
     return formatOptions.value.find((f) => f.value === format.value) || formatOptions.value[0];
   });
@@ -246,10 +242,14 @@
 
   const isCountLoading = computed(() => isFrequencyCountLoading.value || isOccurrenceCountLoading.value || isAccurateCountLoading.value);
 
-  // --- Lifecycle & Watches ---
-  onMounted(() => {
+  onMounted(async () => {
     if (!frequencyRange.value) {
       frequencyRange.value = [0, Math.min(wordCount.value, 5000)];
+    }
+
+    if (authStore.isAuthenticated && frequencySource.value === 0) {
+      await srsStore.fetchSettings();
+      frequencySource.value = srsStore.studySettings.defaultFrequencyMediaType ?? 0;
     }
 
     // Imported lists carry a meaningful order of their own; occurrence sort is arbitrary for hand-typed ones.
@@ -286,7 +286,7 @@
   );
 
   watch(
-    () => frequencyRange.value,
+    [() => frequencyRange.value, frequencySource],
     () => {
       if (downloadType.value == DeckDownloadType.TopGlobalFrequency) updateDebounced();
     }
@@ -354,7 +354,11 @@
 
     try {
       const response = await $api<number>(`${apiBase.value}/vocabulary-count-frequency`, {
-        query: { minFrequency: frequencyRange.value[0], maxFrequency: frequencyRange.value[1] },
+        query: {
+          minFrequency: frequencyRange.value[0],
+          maxFrequency: frequencyRange.value[1],
+          frequencySource: frequencySource.value || undefined,
+        },
       });
       if (reqId === frequencyRequestId && typeof response === 'number') {
         debouncedCurrentCardAmount.value = response;
@@ -431,6 +435,7 @@
       deckOrder,
       () => frequencyRange.value?.[0],
       () => frequencyRange.value?.[1],
+      frequencySource,
       occurrenceFilterType,
       occurrenceThreshold,
       targetPercentage,
@@ -456,7 +461,6 @@
     }
   );
 
-  // --- Helpers ---
   function buildFilterPayload() {
     let payload: any = {
       excludeKana: effectiveExcludeKana.value,
@@ -487,6 +491,7 @@
         order: deckOrder.value,
         minFrequency: frequencyRange.value![0],
         maxFrequency: frequencyRange.value![1],
+        frequencySource: frequencySource.value || undefined,
       };
     }
 
@@ -509,6 +514,7 @@
       startFromKnown: payload.startFromKnown,
       minOccurrences: payload.minOccurrences,
       maxOccurrences: payload.maxOccurrences,
+      frequencySource: payload.frequencySource,
     };
   }
 
@@ -551,7 +557,6 @@
   };
   const fetchAccurateCardAmountDebounced = debounce(fetchAccurateCardAmount, 500);
 
-  // --- Actions ---
   const downloadFile = async () => {
     try {
       downloading.value = true;
@@ -572,6 +577,7 @@
       });
 
       if (response) {
+        trackActivation('deck_download');
         let finalBlob: Blob = response as unknown as Blob;
 
         if (useCustomDefinitions.value && format.value === DeckFormat.Anki) {
@@ -713,13 +719,12 @@
     :pt="{ content: { class: 'p-0 flex flex-col', style: 'overflow: hidden' } }"
   >
     <div class="flex flex-col min-h-0">
-      <!-- SCROLLABLE CONTENT AREA -->
+      <!-- Scrollable content -->
       <div class="p-5 overflow-y-auto min-h-0 flex flex-col gap-6">
-        <!-- 1. FORMAT SELECTION -->
+        <!-- Format selection -->
         <section>
           <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Format</div>
 
-          <!-- Grid -->
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div
               v-for="opt in formatOptions"
@@ -739,19 +744,18 @@
                 <span class="font-semibold text-sm" :class="!opt.disabled && format === opt.value ? 'text-primary-900 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300'">{{ opt.label }}</span>
               </div>
               <span class="text-[10px] leading-tight text-gray-500 dark:text-gray-400">{{ opt.desc }}</span>
-              <!-- Active Badge -->
               <i v-if="!opt.disabled && format === opt.value" class="pi pi-check-circle text-primary absolute top-2 right-2 text-sm"></i>
             </div>
           </div>
 
-          <!-- Description Box (Fixed Min-Height to prevent shift) -->
+          <!-- Fixed min-height so switching format doesn't shift the panel -->
           <div class="mt-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md p-3 text-sm text-gray-600 dark:text-gray-300 min-h-[4.5rem] flex items-center">
             <p v-html="sanitiseHtml(currentFormatDetails.longDesc)" class="leading-relaxed"></p>
           </div>
         </section>
 
         <template v-if="showStrategyAndOptions">
-          <!-- 2. STRATEGY -->
+          <!-- Strategy -->
           <section>
             <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">{{ isLearn ? 'Learn Strategy' : 'Download Strategy' }}</div>
             <div class="hidden sm:block">
@@ -775,7 +779,7 @@
               size="small"
             />
 
-            <!-- MODE A: TARGET PERCENTAGE -->
+            <!-- Target percentage mode -->
             <div v-if="downloadMode === 'target'" class="mt-4 bg-gray-50 dark:bg-gray-900 rounded-xl p-5 border border-dashed border-gray-300 dark:border-gray-600">
               <div class="flex justify-between items-end mb-4">
                 <div class="flex flex-col">
@@ -802,7 +806,7 @@
               </div>
             </div>
 
-            <!-- MODE C: OCCURRENCE COUNT -->
+            <!-- Occurrence count mode -->
             <div v-else-if="downloadMode === 'occurrence'" class="mt-4 bg-gray-50 dark:bg-gray-900 rounded-xl p-5 border border-dashed border-gray-300 dark:border-gray-600">
               <div class="flex flex-col gap-4">
                 <div class="flex flex-col">
@@ -836,7 +840,7 @@
               </div>
             </div>
 
-            <!-- MODE B: MANUAL CONTROL -->
+            <!-- Manual control mode -->
             <div v-else class="mt-4 flex flex-col gap-4">
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="flex flex-col gap-1">
@@ -876,11 +880,14 @@
                   </div>
                 </div>
                 <Slider v-model="frequencyRange" range :min="0" :max="currentSliderMax" class="w-full" />
+                <div v-if="downloadType === DeckDownloadType.TopGlobalFrequency" class="mt-4">
+                  <FrequencySourceSelect v-model="frequencySource" input-id="downloadRankSource" width-class="md:w-full" />
+                </div>
               </div>
             </div>
           </section>
 
-          <!-- 3. OPTIONS -->
+          <!-- Options -->
           <section>
             <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Options</div>
             <div class="flex flex-col gap-0">
@@ -1082,7 +1089,7 @@
         </template>
       </div>
 
-      <!-- FOOTER -->
+      <!-- Footer -->
       <div class="bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 p-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
         <div class="text-sm text-gray-600 dark:text-gray-300">
           <span class="inline-flex items-center gap-2">

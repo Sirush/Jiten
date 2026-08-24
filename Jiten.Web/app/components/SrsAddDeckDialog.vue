@@ -1,13 +1,20 @@
 <script setup lang="ts">
-  import { type Deck, type MediaSuggestion, type StudyDeckDto, DeckDownloadType, DeckOrder, StudyDeckType, MediaType } from '~/types';
+  import { type MediaSuggestion, type StudyDeckDto, DeckDownloadType, DeckOrder, StudyDeckType, MediaType } from '~/types';
   import { useSrsStore } from '~/stores/srsStore';
   import { useToast } from 'primevue/usetoast';
   import { debounce } from 'perfect-debounce';
 
+  type Mode = 'manual' | 'target' | 'occurrence';
+
+  type PreselectedDeck = { deckId: number; originalTitle: string; coverName?: string | null };
+
   const props = defineProps<{
     visible: boolean;
-    preselectedDeck?: Deck;
+    preselectedDeck?: PreselectedDeck;
     editDeck?: StudyDeckDto;
+    preselectedFrequencyListId?: number;
+    initialFilterMode?: Mode;
+    initialMinOccurrences?: number;
   }>();
 
   const emit = defineEmits(['update:visible']);
@@ -32,6 +39,7 @@
       return 'filters';
     }
     if (props.preselectedDeck) return 'filters';
+    if (props.preselectedFrequencyListId) return 'global';
     return 'type';
   }
 
@@ -88,6 +96,8 @@
       globalMaxFreq.value = deck.maxGlobalFrequency;
       globalPosFilter.value = deck.posFilter ? JSON.parse(deck.posFilter) : [];
       excludeKana.value = deck.excludeKana;
+      freqSource.value = frequencySourceKey(deck.frequencyMediaType, deck.frequencyListId);
+      globalNameTouched.value = true;
       step.value = 'global';
     } else if (deck.deckType === StudyDeckType.StaticWordList) {
       staticName.value = deck.name;
@@ -125,16 +135,37 @@
   }
 
   // Media filters
-  type Mode = 'manual' | 'target' | 'occurrence';
-  const downloadMode = ref<Mode>('manual');
+  const downloadMode = ref<Mode>(props.initialFilterMode ?? 'manual');
   const downloadType = ref(DeckDownloadType.TopGlobalFrequency);
   const deckOrder = ref(DeckOrder.DeckFrequency);
   const minFrequency = ref(0);
   const maxFrequency = ref(30000);
   const targetPercentage = ref(80);
+  const targetPercentageModel = computed({
+    get: () => targetPercentage.value,
+    set: (value: number) => {
+      const clamped = Math.min(100, Math.max(1, value ?? 1));
+      targetPercentage.value = Math.round(clamped * 10) / 10;
+    },
+  });
+  const editingTargetPercentage = ref(false);
+  const targetPercentageInput = ref<{ $el?: HTMLElement } | null>(null);
+
+  async function startEditingTargetPercentage() {
+    editingTargetPercentage.value = true;
+    await nextTick();
+    const input = targetPercentageInput.value?.$el?.querySelector('input');
+    input?.focus();
+    input?.select();
+  }
+
+  function stopEditingTargetPercentage() {
+    editingTargetPercentage.value = false;
+    targetPercentageModel.value = targetPercentage.value;
+  }
   const startFromKnown = ref(false);
   const occurrenceFilterType = ref<'gte' | 'lte'>('gte');
-  const occurrenceThreshold = ref(10);
+  const occurrenceThreshold = ref(props.initialMinOccurrences ?? 10);
   const mediaPosFilter = ref<string[]>([]);
   const excludeKana = ref(false);
   const adding = ref(false);
@@ -201,13 +232,99 @@
     },
   );
 
-  // Global Dynamic fields
+  // Frequency deck fields
   const globalName = ref('');
+  const globalNameTouched = ref(false);
   const globalDescription = ref('');
   const globalOrder = ref(DeckOrder.GlobalFrequency);
   const globalMinFreq = ref<number | undefined>(1);
   const globalMaxFreq = ref<number | undefined>(10000);
   const globalPosFilter = ref<string[]>([]);
+
+  type SavedFrequencyList = { id: number; name: string; isSaved: boolean };
+
+  function frequencySourceKey(mediaType?: number, listId?: number) {
+    if (listId) return 'list:' + listId;
+    if (mediaType) return 'type:' + mediaType;
+    return 'global';
+  }
+
+  const freqSource = ref(frequencySourceKey(undefined, props.preselectedFrequencyListId));
+  const mediaTypeDeckCounts = ref<Record<number, number>>({});
+  const savedFrequencyLists = ref<SavedFrequencyList[]>([]);
+
+  const frequencyMediaType = computed(() => freqSource.value.startsWith('type:') ? Number(freqSource.value.slice(5)) : undefined);
+  const frequencyListId = computed(() => freqSource.value.startsWith('list:') ? Number(freqSource.value.slice(5)) : undefined);
+
+  const frequencySourceLabel = computed(() => {
+    if (frequencyListId.value) return savedFrequencyLists.value.find(l => l.id === frequencyListId.value)?.name ?? 'your list';
+    if (frequencyMediaType.value) return getMediaTypeText(frequencyMediaType.value);
+    return 'Global';
+  });
+
+  const frequencySourceGroups = computed(() => {
+    const groups: { label: string; items: { label: string; value: string }[] }[] = [
+      { label: 'Everything', items: [{ label: 'Global', value: 'global' }] },
+      {
+        label: 'Media type',
+        items: (Object.values(MediaType).filter(v => typeof v === 'number') as number[]).map(type => ({
+          label: mediaTypeDeckCounts.value[type]
+            ? getMediaTypeText(type) + ' - ' + mediaTypeDeckCounts.value[type]!.toLocaleString() + ' decks'
+            : getMediaTypeText(type),
+          value: 'type:' + type,
+        })),
+      },
+    ];
+
+    if (savedFrequencyLists.value.length > 0) {
+      groups.push({
+        label: 'Your frequency lists',
+        items: savedFrequencyLists.value.map(list => ({ label: list.name, value: 'list:' + list.id })),
+      });
+    }
+
+    return groups;
+  });
+
+  const defaultFrequencyDeckName = computed(() => {
+    if (frequencyListId.value) return frequencySourceLabel.value + ' Deck';
+    if (frequencyMediaType.value) return frequencySourceLabel.value + ' Frequency Deck';
+    return 'Global Frequency Deck';
+  });
+
+  watch([freqSource, savedFrequencyLists], () => {
+    if (isEditMode.value || globalNameTouched.value) return;
+    if (freqSource.value === 'global' && !globalName.value) return;
+    if (frequencyListId.value && !savedFrequencyLists.value.some(l => l.id === frequencyListId.value)) return;
+    globalName.value = defaultFrequencyDeckName.value;
+  }, { immediate: true });
+
+  async function loadFrequencySources() {
+    try {
+      // mediaByType is keyed by enum name ("Anime"), not the numeric value.
+      const stats = await $api<{ mediaByType: Record<string, number> }>('stats/get-global-stats');
+      const counts: Record<number, number> = {};
+      for (const [name, count] of Object.entries(stats?.mediaByType ?? {})) {
+        const type = MediaType[name as keyof typeof MediaType];
+        if (typeof type === 'number') counts[type] = count;
+      }
+      mediaTypeDeckCounts.value = counts;
+    } catch {
+      mediaTypeDeckCounts.value = {};
+    }
+
+    try {
+      const lists = await $api<SavedFrequencyList[]>('frequency-lists');
+      savedFrequencyLists.value = (lists ?? []).filter(list => list.isSaved);
+    } catch {
+      // Custom lists are Jiten+ only; without them the selector offers global and media types alone.
+      savedFrequencyLists.value = [];
+    }
+  }
+
+  watch(localVisible, (open) => {
+    if (open) loadFrequencySources();
+  }, { immediate: true });
 
   // Static Word List fields
   const staticName = ref('');
@@ -291,7 +408,7 @@
     if (step.value === 'type') return 'Add Study Deck';
     if (step.value === 'search') return 'Add Media Deck';
     if (step.value === 'filters') return 'Configure Media Deck';
-    if (step.value === 'global') return isEditMode.value ? 'Edit Global Frequency Deck' : 'Add Global Frequency Deck';
+    if (step.value === 'global') return isEditMode.value ? 'Edit Frequency Deck' : 'Add Frequency Deck';
     if (step.value === 'static-import-preview') return 'Import Preview';
     if (step.value === 'static') return isEditMode.value ? 'Edit Word List' : 'Create Word List';
     return 'Add Study Deck';
@@ -335,6 +452,8 @@
           maxGlobalFrequency: globalMaxFreq.value,
           posFilter: globalPosFilter.value.length > 0 ? JSON.stringify(globalPosFilter.value) : undefined,
           excludeKana: excludeKana.value,
+          frequencyMediaType: frequencyMediaType.value,
+          frequencyListId: frequencyListId.value,
         };
 
         if (isEditMode.value && props.editDeck) {
@@ -342,7 +461,7 @@
           toast.add({ severity: 'success', summary: 'Deck updated', life: 3000 });
         } else {
           await srsStore.addStudyDeck(payload);
-          toast.add({ severity: 'success', summary: 'Global frequency deck created', life: 3000 });
+          toast.add({ severity: 'success', summary: 'Frequency deck created', life: 3000 });
         }
       } else if (step.value === 'static') {
         const payload = {
@@ -372,8 +491,7 @@
       localVisible.value = false;
       resetForm();
     } catch (error: any) {
-      const message = error?.data?.message || error?.data || 'Failed to save deck';
-      toast.add({ severity: 'error', summary: 'Error', detail: String(message), life: 5000 });
+      toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to save deck'), life: 5000 });
     } finally {
       adding.value = false;
     }
@@ -384,24 +502,27 @@
     searchQuery.value = '';
     searchResults.value = [];
     if (!props.preselectedDeck && !props.editDeck) selectedDeck.value = null;
-    downloadMode.value = 'manual';
+    downloadMode.value = props.initialFilterMode ?? 'manual';
     downloadType.value = DeckDownloadType.TopGlobalFrequency;
     deckOrder.value = DeckOrder.DeckFrequency;
     minFrequency.value = 0;
     maxFrequency.value = 30000;
     targetPercentage.value = 80;
+    editingTargetPercentage.value = false;
     startFromKnown.value = false;
     occurrenceFilterType.value = 'gte';
-    occurrenceThreshold.value = 10;
+    occurrenceThreshold.value = props.initialMinOccurrences ?? 10;
     mediaPosFilter.value = [];
     excludeKana.value = false;
     previewCount.value = null;
     globalName.value = '';
+    globalNameTouched.value = false;
     globalDescription.value = '';
     globalOrder.value = DeckOrder.GlobalFrequency;
     globalMinFreq.value = 1;
     globalMaxFreq.value = 10000;
     globalPosFilter.value = [];
+    freqSource.value = frequencySourceKey(undefined, props.preselectedFrequencyListId);
     staticName.value = '';
     staticDescription.value = '';
     staticOrder.value = DeckOrder.ImportOrder;
@@ -441,10 +562,10 @@
     { label: 'Random', value: DeckOrder.Random },
   ];
 
-  const globalOrderOptions = [
-    { label: 'Global Frequency', value: DeckOrder.GlobalFrequency },
+  const globalOrderOptions = computed(() => [
+    { label: 'Frequency rank', value: DeckOrder.GlobalFrequency },
     { label: 'Random', value: DeckOrder.Random },
-  ];
+  ]);
 
   const staticOrderOptions = [
     { label: 'Import Order', value: DeckOrder.ImportOrder },
@@ -486,8 +607,8 @@
       >
         <Icon name="material-symbols:language" size="28" class="text-blue-500 shrink-0" />
         <div>
-          <div class="font-semibold">Global Frequency</div>
-          <div class="text-sm text-gray-500 dark:text-gray-400">Study words by overall Japanese frequency rank.</div>
+          <div class="font-semibold">Frequency Deck</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">Study words by frequency rank, by global frequency, media type frequency or custom frequency.</div>
         </div>
       </button>
       <button
@@ -573,8 +694,34 @@
 
       <template v-if="downloadMode === 'target'">
         <div class="mb-3">
-          <label class="block text-sm font-medium mb-1">Target Coverage: {{ targetPercentage }}%</label>
-          <Slider v-model="targetPercentage" :min="1" :max="100" class="w-full" />
+          <div class="flex items-center gap-1 text-sm font-medium mb-1">
+            <span>Target Coverage:</span>
+            <InputNumber
+              v-if="editingTargetPercentage"
+              ref="targetPercentageInput"
+              v-model="targetPercentageModel"
+              :min="1"
+              :max="100"
+              :step="0.1"
+              :min-fraction-digits="1"
+              :max-fraction-digits="1"
+              suffix="%"
+              class="w-24"
+              input-class="w-24 py-1"
+              @blur="stopEditingTargetPercentage"
+              @focusout="stopEditingTargetPercentage"
+              @keydown.enter.prevent="stopEditingTargetPercentage"
+            />
+            <button
+              v-else
+              type="button"
+              class="cursor-text underline decoration-dotted underline-offset-2"
+              @click="startEditingTargetPercentage"
+            >
+              {{ targetPercentage.toFixed(1) }}%
+            </button>
+          </div>
+          <Slider v-model="targetPercentageModel" :min="1" :max="100" :step="0.1" class="w-full" />
         </div>
         <div class="flex items-center gap-2 mb-3">
           <Checkbox v-model="startFromKnown" input-id="srsStartFromKnown" :binary="true" />
@@ -644,8 +791,29 @@
       </div>
 
       <div class="mb-3">
+        <label for="freqSource" class="block text-sm font-medium mb-1">Frequency source</label>
+        <Select
+          id="freqSource"
+          v-model="freqSource"
+          :options="frequencySourceGroups"
+          option-group-label="label"
+          option-group-children="items"
+          option-label="label"
+          option-value="value"
+          class="w-full"
+        />
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Ranks come from {{ frequencySourceLabel }}.</p>
+      </div>
+
+      <div class="mb-3">
         <label class="block text-sm font-medium mb-1">Deck Name</label>
-        <InputText v-model="globalName" placeholder="e.g. Top 5000 words" class="w-full" :maxlength="200" />
+        <InputText
+          v-model="globalName"
+          placeholder="e.g. Top 5000 words"
+          class="w-full"
+          :maxlength="200"
+          @input="globalNameTouched = true"
+        />
       </div>
       <div class="mb-3">
         <label class="block text-sm font-medium mb-1">Description <span class="text-gray-400">(optional)</span></label>
@@ -653,11 +821,11 @@
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         <div class="min-w-0">
-          <label class="block text-xs mb-1">Min Frequency Rank</label>
+          <label class="block text-xs mb-1">Min Rank ({{ frequencySourceLabel }})</label>
           <InputNumber v-model="globalMinFreq" :min="1" class="w-full [&_input]:w-full" />
         </div>
         <div class="min-w-0">
-          <label class="block text-xs mb-1">Max Frequency Rank</label>
+          <label class="block text-xs mb-1">Max Rank ({{ frequencySourceLabel }})</label>
           <InputNumber v-model="globalMaxFreq" :min="1" class="w-full [&_input]:w-full" />
         </div>
       </div>

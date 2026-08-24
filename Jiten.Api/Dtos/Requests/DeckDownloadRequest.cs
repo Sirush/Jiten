@@ -1,3 +1,5 @@
+﻿using Jiten.Core.Data;
+
 namespace Jiten.Api.Dtos.Requests;
 
 public class DeckDownloadRequest
@@ -15,4 +17,7 @@ public class DeckDownloadRequest
     public bool StartFromKnown { get; set; }
     public int? MinOccurrences { get; set; }
     public int? MaxOccurrences { get; set; }
+
+    /// <summary>Ranking the frequency filter and sort read from; null is the site-wide ranking.</summary>
+    public MediaType? FrequencySource { get; set; }
 }

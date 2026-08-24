@@ -1,18 +1,18 @@
 import { defineStore } from 'pinia';
 import { type DifficultyDisplayStyle, DifficultyValueDisplayStyle, ThemeMode, TitleLanguage } from '~/types';
 import type { KanjiScalePref } from '~/data/kanjiGroupings';
+import { DEFAULT_TTS_VOLUME } from '~/utils/ttsVolume';
 
 const YEAR = 60 * 60 * 24 * 365;
 
 function createCookieState<T>(key: string, defaultValue: T): Ref<T> {
   const cookie = useCookie<T>(`jiten-${key}`, {
-    default: () => defaultValue,
     watch: true,
     maxAge: YEAR,
     path: '/',
   });
 
-  const state = ref<T>(cookie.value) as Ref<T>;
+  const state = ref<T>(cookie.value ?? defaultValue) as Ref<T>;
 
   watch(state, (newValue) => {
     cookie.value = newValue;
@@ -51,7 +51,7 @@ function createLocalStorageState<T>(key: string, defaultValue: T): Ref<T> {
 export const useJitenStore = defineStore('jiten', () => {
   const titleLanguage = createCookieState<TitleLanguage>('title-language', TitleLanguage.Romaji);
   const displayFurigana = createCookieState<boolean>('display-furigana', true);
-  let defaultTheme = ThemeMode.Auto;
+  const defaultTheme = ThemeMode.Auto;
 
   const themeMode = createCookieState<ThemeMode>('theme-mode', defaultTheme);
   const displayAdminFunctions = createCookieState<boolean>('display-admin-functions', false);
@@ -73,7 +73,6 @@ export const useJitenStore = defineStore('jiten', () => {
   const preferredDictionaryId = createCookieState<string>('preferred-dictionary-id', '');
 
   const difficultyValueDisplayStyleCookie = useCookie<DifficultyValueDisplayStyle>('jiten-difficulty-value-display-style', {
-    default: () => DifficultyValueDisplayStyle.ZeroToFive,
     watch: true,
     maxAge: YEAR,
     path: '/',
@@ -84,7 +83,9 @@ export const useJitenStore = defineStore('jiten', () => {
     difficultyValueDisplayStyleCookie.value = DifficultyValueDisplayStyle.ZeroToFive;
   }
 
-  const difficultyValueDisplayStyle = ref<DifficultyValueDisplayStyle>(difficultyValueDisplayStyleCookie.value);
+  const difficultyValueDisplayStyle = ref<DifficultyValueDisplayStyle>(
+    difficultyValueDisplayStyleCookie.value ?? DifficultyValueDisplayStyle.ZeroToFive
+  );
 
   watch(difficultyValueDisplayStyle, (newValue) => {
     difficultyValueDisplayStyleCookie.value = newValue;
@@ -125,6 +126,9 @@ export const useJitenStore = defineStore('jiten', () => {
 
   // Drives the unread dot on the home page's "what's new" strip.
   const lastSeenUpdateId = createLocalStorageState<number>('last-seen-update-id', 0);
+  const customDictionaryFontSize = createLocalStorageState<number>('custom-dictionary-font-size', 16);
+
+  const ttsVolume = createLocalStorageState<number>('tts-volume', DEFAULT_TTS_VOLUME);
 
   const coverageVersion = ref(0);
 
@@ -132,10 +136,16 @@ export const useJitenStore = defineStore('jiten', () => {
     coverageVersion.value++;
   }
 
+  // Per-media invalidation
+  const deckCoverageVersions = ref<Record<number, number>>({});
+
+  function bumpDeckCoverageVersion(deckId: number) {
+    deckCoverageVersions.value[deckId] = (deckCoverageVersions.value[deckId] ?? 0) + 1;
+  }
+
   return {
     getKnownWordIds,
 
-    // state
     titleLanguage,
     displayFurigana,
     themeMode,
@@ -153,6 +163,7 @@ export const useJitenStore = defineStore('jiten', () => {
     hideAlternativeTitles,
     quickMasterVocabulary,
     ttsVoice,
+    ttsVolume,
     difficultyDisplayStyle,
     difficultyValueDisplayStyle,
     kanjiScale,
@@ -161,7 +172,10 @@ export const useJitenStore = defineStore('jiten', () => {
     hideCoverageJourney,
     separatePriorKnowledge,
     lastSeenUpdateId,
+    customDictionaryFontSize,
     coverageVersion,
     bumpCoverageVersion,
+    deckCoverageVersions,
+    bumpDeckCoverageVersion,
   };
 });

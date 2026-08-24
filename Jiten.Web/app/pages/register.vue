@@ -165,6 +165,7 @@
       await $api('/auth/register', { method: 'POST', body: { ...form, recaptchaResponse: recaptchaResponse.value || '' } });
       registeredEmail.value = form.email.trim();
       registered.value = true;
+      trackEvent('signup_completed', { method: 'email' });
     } catch (err) {
       const apiMessage = (err as { response?: { _data?: { message?: string } } }).response?._data?.message;
       const fallback = err instanceof Error && err.message ? err.message : 'An unexpected error occurred.';
@@ -284,7 +285,6 @@
 </template>
 
 <style scoped>
-  /* Ensure PrimeVue Password component takes full width */
   :deep(.p-password) {
     width: 100%;
   }
@@ -293,18 +293,15 @@
     width: 100%;
   }
 
-  /* Ensure consistent input heights */
   :deep(.p-inputtext),
   :deep(.p-password input) {
     min-height: 3rem;
   }
 
-  /* Better spacing for float labels */
   :deep(.p-float-label) {
     margin-bottom: 0;
   }
 
-  /* Improve checkbox alignment */
   :deep(.p-checkbox) {
     flex-shrink: 0;
   }

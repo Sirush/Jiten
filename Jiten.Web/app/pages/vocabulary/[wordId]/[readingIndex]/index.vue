@@ -52,7 +52,7 @@
     // above doesn't block on the request).
     await wordReady;
     const w = wordData.value;
-    defineOgImageComponent(
+    defineOgImage(
       'VocabularyWordOgImage',
       {
         text: w?.mainReading?.text ?? '',

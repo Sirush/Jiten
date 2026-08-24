@@ -51,6 +51,7 @@ public class DeckDto
     public bool? IsIgnored { get; set; }
     public int DistinctVoterCount { get; set; }
     public decimal UserAdjustment { get; set; }
+    public decimal AdjustmentConfidence { get; set; }
 
     /// <summary>
     /// Original source file name
@@ -162,6 +163,7 @@ public class DeckDto
         if (dd == null) return;
         DistinctVoterCount = dd.DistinctVoterCount;
         UserAdjustment = dd.UserAdjustment;
+        AdjustmentConfidence = dd.AdjustmentConfidence;
     }
 
 }

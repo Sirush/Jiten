@@ -16,11 +16,9 @@
   const srs = useSrsStore();
   const { isPlus } = useJitenPlus();
 
-  // Mobile menu state
   const mobileMenuOpen = ref(false);
   const toggleMobileMenu = () => (mobileMenuOpen.value = !mobileMenuOpen.value);
 
-  // Close mobile menu on route change
   const route = useRoute();
   watch(
     () => route.fullPath,
@@ -165,7 +163,7 @@
               >{{ dueBadge }}</span
             >
           </nuxt-link>
-          <nuxt-link to="/other" :class="route.path === '/other' ? 'font-semibold !text-purple-200' : '!text-white'">Tools</nuxt-link>
+          <nuxt-link to="/frequency-dictionaries" :class="route.path === '/frequency-dictionaries' ? 'font-semibold !text-purple-200' : '!text-white'">Tools</nuxt-link>
           <nuxt-link to="/guides" :class="route.path.startsWith('/guides') ? 'font-semibold !text-purple-200' : '!text-white'">Guides</nuxt-link>
           <nuxt-link
             v-if="auth.isAuthenticated"
@@ -175,8 +173,8 @@
           >
           <nuxt-link
             v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions"
-            to="/Dashboard"
-            :class="route.path === '/Dashboard' ? 'font-semibold !text-purple-200' : '!text-white'"
+            to="/dashboard"
+            :class="route.path === '/dashboard' ? 'font-semibold !text-purple-200' : '!text-white'"
             >Dashboard</nuxt-link
           >
           <nuxt-link v-if="!auth.isAuthenticated" to="/login" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'"
@@ -293,9 +291,9 @@
               >Settings</nuxt-link
             >
             <nuxt-link
-              to="/other"
+              to="/frequency-dictionaries"
               class="py-2 px-3"
-              :class="route.path === '/other' ? 'font-semibold !text-purple-200' : '!text-white'"
+              :class="route.path === '/frequency-dictionaries' ? 'font-semibold !text-purple-200' : '!text-white'"
               @click="mobileMenuOpen = false"
               >Tools</nuxt-link
             >
@@ -316,9 +314,9 @@
             >
             <nuxt-link
               v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions"
-              to="/Dashboard"
+              to="/dashboard"
               class="py-2 px-3"
-              :class="route.path === '/Dashboard' ? 'font-semibold !text-purple-200' : '!text-white'"
+              :class="route.path === '/dashboard' ? 'font-semibold !text-purple-200' : '!text-white'"
               @click="mobileMenuOpen = false"
               >Dashboard</nuxt-link
             >

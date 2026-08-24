@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations.Schema;
+﻿using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 
 namespace Jiten.Core.Data.Billing;
@@ -61,6 +61,11 @@ public class UserFrequencyList
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? GeneratedAt { get; set; }
+
+    /// <summary>Rank-ordered words packed by <see cref="FrequencyListBlobPacker"/>; only saved lists get one.</summary>
+    public byte[]? RankedWordsBlob { get; set; }
+
+    public DateTime? BlobGeneratedAt { get; set; }
 
     [NotMapped]
     public FrequencyListDefinition Definition

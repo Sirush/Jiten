@@ -2,6 +2,7 @@ using Hangfire;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.Billing;
+using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Jobs;
@@ -114,6 +115,14 @@ public class FrequencyListJob(
             list.WordCount = wordFrequencies.Count(w => w.UsedInMediaAmount > 0);
             list.Status = FrequencyListStatus.Ready;
             list.GeneratedAt = generatedAt;
+
+            // Only saved lists can back a study deck, and transient files are dropped after 48h anyway.
+            if (list.IsSaved)
+            {
+                list.RankedWordsBlob = FrequencyListBlobPacker.Pack(BuildRankedWords(formFrequencies));
+                list.BlobGeneratedAt = generatedAt;
+            }
+
             await userContext.SaveChangesAsync();
 
             logger.LogInformation("FrequencyListJob: list {ListId} ready ({Decks} decks, {Words} words)",
@@ -186,6 +195,17 @@ public class FrequencyListJob(
 
         await userContext.SaveChangesAsync();
         logger.LogInformation("FrequencyListJob: expired {Count} transient lists", stale.Count);
+    }
+
+    private static List<(int WordId, byte ReadingIndex)> BuildRankedWords(List<JmDictWordFormFrequency> formFrequencies)
+    {
+        return formFrequencies
+               .Where(f => f.UsedInMediaAmount > 0 && f.ReadingIndex is >= 0 and <= byte.MaxValue)
+               .OrderBy(f => f.FrequencyRank)
+               .ThenBy(f => f.WordId)
+               .ThenBy(f => f.ReadingIndex)
+               .Select(f => (f.WordId, (byte)f.ReadingIndex))
+               .ToList();
     }
 
     private async Task DeleteCdnFiles(UserFrequencyList list)

@@ -1040,6 +1040,226 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
         deck.SortOrder.Should().NotBe(99, "UserB should not be able to reorder UserA's deck");
     }
 
+    [Fact]
+    public async Task BatchAdd_AppendsInRequestOrderAfterExistingDecks()
+    {
+        await SeedMediaDecks(301, 302, 303);
+        var firstId = (await (await CreateStaticDeck("Existing")).Content.ReadFromJsonAsync<IdResult>())!.UserStudyDeckId;
+
+        var res = await BatchAdd(TestUsers.UserA, new[] { 303, 301, 302 }, minOccurrences: 12);
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await res.Content.ReadFromJsonAsync<BatchResult>();
+        result!.Added.Should().Equal(303, 301, 302);
+        result.StoppedAtCap.Should().BeFalse();
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var existing = await userDb.UserStudyDecks.FirstAsync(sd => sd.UserStudyDeckId == firstId);
+        existing.SortOrder.Should().Be(0, "existing decks keep their order");
+
+        var added = await userDb.UserStudyDecks
+            .Where(sd => sd.UserId == TestUsers.UserA && sd.DeckId != null)
+            .OrderBy(sd => sd.SortOrder)
+            .Select(sd => new { sd.DeckId, sd.SortOrder })
+            .ToListAsync();
+        added.Select(a => a.DeckId).Should().Equal(303, 301, 302);
+        added.Select(a => a.SortOrder).Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public async Task BatchAdd_SkipsDecksAlreadyStudiedInsteadOfFailing()
+    {
+        await SeedMediaDecks(311, 312);
+
+        var addReq = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { deckType = 0, deckId = 311, downloadType = 1, order = 2, minFrequency = 0, maxFrequency = 0, excludeKana = false });
+        (await _client.SendAsync(addReq)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var res = await BatchAdd(TestUsers.UserA, new[] { 311, 312 }, minOccurrences: 5);
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await res.Content.ReadFromJsonAsync<BatchResult>();
+        result!.Added.Should().Equal(312);
+        result.Skipped.Should().Equal(311);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var rows = await userDb.UserStudyDecks.CountAsync(sd => sd.UserId == TestUsers.UserA && sd.DeckId == 311);
+        rows.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task BatchAdd_PersistsOnlyWhatFitsUnderTheCap()
+    {
+        var freeDeckLimit = new JitenPlusLimitsOptions().StudyDecks.Free;
+        for (var i = 0; i < freeDeckLimit - 2; i++)
+            await CreateStaticDeck($"Filler {i}");
+
+        var deckIds = new[] { 321, 322, 323, 324 };
+        await SeedMediaDecks(deckIds);
+
+        var res = await BatchAdd(TestUsers.UserA, deckIds, minOccurrences: 3);
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await res.Content.ReadFromJsonAsync<BatchResult>();
+        result!.Added.Should().Equal(321, 322);
+        result.StoppedAtCap.Should().BeTrue();
+        result.Limit.Should().Be(freeDeckLimit);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var total = await userDb.UserStudyDecks.CountAsync(sd => sd.UserId == TestUsers.UserA);
+        total.Should().Be(freeDeckLimit);
+    }
+
+    [Fact]
+    public async Task BatchAdd_StoresOccurrenceFilterOnEveryDeck()
+    {
+        await SeedMediaDecks(331, 332);
+
+        var res = await BatchAdd(TestUsers.UserA, new[] { 331, 332 }, minOccurrences: 17);
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var decks = await userDb.UserStudyDecks
+            .Where(sd => sd.UserId == TestUsers.UserA && sd.DeckId != null)
+            .ToListAsync();
+        decks.Should().HaveCount(2);
+        decks.Should().OnlyContain(sd => sd.DownloadType == (int)Jiten.Api.Dtos.DeckDownloadType.OccurrenceCount);
+        decks.Should().OnlyContain(sd => sd.MinOccurrences == 17);
+        decks.Should().OnlyContain(sd => sd.Order == (int)Jiten.Api.Dtos.DeckOrder.DeckFrequency);
+        decks.Should().OnlyContain(sd => sd.DeckType == StudyDeckType.MediaDeck);
+    }
+
+    [Fact]
+    public async Task BatchAdd_CannotTouchAnotherUsersList()
+    {
+        await SeedMediaDecks(341, 342);
+        await CreateStaticDeck("UserA Deck");
+
+        var res = await BatchAdd(TestUsers.UserB, new[] { 341, 342 }, minOccurrences: 4, deactivateOthers: true);
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var userADecks = await userDb.UserStudyDecks.Where(sd => sd.UserId == TestUsers.UserA).ToListAsync();
+        userADecks.Should().HaveCount(1, "the batch belongs to UserB");
+        userADecks.Should().OnlyContain(sd => sd.IsActive);
+
+        var userBDecks = await userDb.UserStudyDecks.Where(sd => sd.UserId == TestUsers.UserB).ToListAsync();
+        userBDecks.Select(sd => sd.DeckId).Should().BeEquivalentTo(new int?[] { 341, 342 });
+    }
+
+    [Fact]
+    public async Task BatchAdd_DeactivateOthersLeavesOnlyTheBatchActive()
+    {
+        await SeedMediaDecks(351, 352);
+        await CreateStaticDeck("Old A");
+        await CreateStaticDeck("Old B");
+
+        var res = await BatchAdd(TestUsers.UserA, new[] { 351, 352 }, minOccurrences: 9, deactivateOthers: true);
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var decks = await userDb.UserStudyDecks.Where(sd => sd.UserId == TestUsers.UserA).ToListAsync();
+        decks.Where(sd => sd.DeckId == null).Should().OnlyContain(sd => !sd.IsActive);
+        decks.Where(sd => sd.DeckId != null).Should().OnlyContain(sd => sd.IsActive);
+    }
+
+    [Fact]
+    public async Task BatchAdd_DeactivateOthersKeepsAlreadyStudiedPlanDecksActive()
+    {
+        await SeedMediaDecks(361, 362);
+        await CreateStaticDeck("Old");
+        (await BatchAdd(TestUsers.UserA, new[] { 361 }, minOccurrences: 9)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var studied = await userDb.UserStudyDecks.FirstAsync(sd => sd.UserId == TestUsers.UserA && sd.DeckId == 361);
+            studied.IsActive = false;
+            await userDb.SaveChangesAsync();
+        }
+
+        var res = await BatchAdd(TestUsers.UserA, new[] { 361, 362 }, minOccurrences: 9, deactivateOthers: true);
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await res.Content.ReadFromJsonAsync<BatchResult>();
+        result!.Added.Should().Equal(362);
+        result.Skipped.Should().Equal(361);
+
+        using var verifyScope = factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var decks = await verifyDb.UserStudyDecks.Where(sd => sd.UserId == TestUsers.UserA).ToListAsync();
+        decks.Where(sd => sd.DeckId == null).Should().OnlyContain(sd => !sd.IsActive, "the static deck is outside the plan");
+        decks.Where(sd => sd.DeckId != null).Should().OnlyContain(sd => sd.IsActive, "plan decks stay active, including the already-studied one");
+    }
+
+    [Fact]
+    public async Task BatchAdd_AddToTopPutsPlanFirstInPlanOrder()
+    {
+        await SeedMediaDecks(371, 372);
+        await CreateStaticDeck("Existing");
+        (await BatchAdd(TestUsers.UserA, new[] { 371 }, minOccurrences: 6)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var res = await BatchAdd(TestUsers.UserA, new[] { 372, 371 }, minOccurrences: 6, addToTop: true);
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await res.Content.ReadFromJsonAsync<BatchResult>();
+        result!.Added.Should().Equal(372);
+        result.Skipped.Should().Equal(371);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var ordered = await userDb.UserStudyDecks
+            .Where(sd => sd.UserId == TestUsers.UserA && sd.IsActive)
+            .OrderBy(sd => sd.SortOrder)
+            .Select(sd => sd.DeckId)
+            .ToListAsync();
+        ordered.Should().Equal(new int?[] { 372, 371, null });
+    }
+
+    private async Task<HttpResponseMessage> BatchAdd(string userId, IEnumerable<int> deckIds, int minOccurrences, bool deactivateOthers = false, bool addToTop = false)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks/batch")
+            .WithUser(userId)
+            .WithJsonContent(new
+            {
+                deckIds,
+                downloadType = (int)Jiten.Api.Dtos.DeckDownloadType.OccurrenceCount,
+                minOccurrences,
+                deactivateOthers,
+                addToTop
+            });
+        return await _client.SendAsync(req);
+    }
+
+    private async Task SeedMediaDecks(params int[] deckIds)
+    {
+        using var scope = factory.Services.CreateScope();
+        var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+        foreach (var deckId in deckIds)
+        {
+            if (await jitenDb.Decks.AnyAsync(d => d.DeckId == deckId)) continue;
+            jitenDb.Decks.Add(new Jiten.Core.Data.Deck
+            {
+                DeckId = deckId,
+                OriginalTitle = $"Deck {deckId}",
+                MediaType = Jiten.Core.Data.MediaType.Anime,
+                CreationDate = DateTime.UtcNow,
+                CharacterCount = 1,
+                WordCount = 1,
+                UniqueWordCount = 1
+            });
+        }
+
+        await jitenDb.SaveChangesAsync();
+    }
+
+    private record BatchResult(List<int> Added, List<int> Skipped, List<int> NotFound, bool StoppedAtCap, int Limit);
+
     private record IdResult(int UserStudyDeckId);
     private record AddedResult(int Added);
     private record PreviewCountResult(int Total, int Unlearned);

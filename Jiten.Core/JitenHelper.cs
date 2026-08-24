@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 using System.Threading;
 using ImageMagick;
@@ -1018,6 +1018,68 @@ public static class JitenHelper
         }
 
         Console.WriteLine("Database update complete.");
+    }
+
+    /// <summary>Replaces one media type's slice of the per-type tables, which hold observed entries only.</summary>
+    public static async Task SaveFrequenciesByTypeToDatabase(IDbContextFactory<JitenDbContext> contextFactory,
+        MediaType mediaType, List<JmDictWordFrequency> wordFrequencies, List<JmDictWordFormFrequency> formFrequencies)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        Console.WriteLine($"Updating {mediaType} frequencies...");
+
+        await using var conn = new NpgsqlConnection(context.Database.GetConnectionString());
+        await conn.OpenAsync();
+
+        var typeValue = (short)mediaType;
+
+        await using (var deleteCmd = new NpgsqlCommand(
+                         @"DELETE FROM jmdict.""WordFrequenciesByType"" WHERE ""MediaType"" = @mt;
+                           DELETE FROM jmdict.""WordFormFrequenciesByType"" WHERE ""MediaType"" = @mt;", conn))
+        {
+            deleteCmd.Parameters.AddWithValue("mt", NpgsqlTypes.NpgsqlDbType.Smallint, typeValue);
+            await deleteCmd.ExecuteNonQueryAsync();
+        }
+
+        await using (var writer = await conn.BeginBinaryImportAsync(
+                         @"COPY jmdict.""WordFrequenciesByType"" (""MediaType"", ""WordId"", ""FrequencyRank"", ""ObservedFrequency"", ""UsedInMediaAmount"") FROM STDIN (FORMAT BINARY)"))
+        {
+            foreach (var word in wordFrequencies)
+            {
+                if (word.ObservedFrequency <= 0) continue;
+
+                await writer.StartRowAsync();
+                await writer.WriteAsync(typeValue, NpgsqlTypes.NpgsqlDbType.Smallint);
+                await writer.WriteAsync(word.WordId);
+                await writer.WriteAsync(word.FrequencyRank);
+                await writer.WriteAsync(word.ObservedFrequency);
+                await writer.WriteAsync(word.UsedInMediaAmount);
+            }
+
+            await writer.CompleteAsync();
+        }
+
+        await using (var wffWriter = await conn.BeginBinaryImportAsync(
+                         @"COPY jmdict.""WordFormFrequenciesByType"" (""MediaType"", ""WordId"", ""ReadingIndex"", ""FrequencyRank"", ""FrequencyPercentage"", ""ObservedFrequency"", ""UsedInMediaAmount"") FROM STDIN (FORMAT BINARY)"))
+        {
+            foreach (var formFreq in formFrequencies)
+            {
+                if (formFreq.ObservedFrequency <= 0) continue;
+
+                await wffWriter.StartRowAsync();
+                await wffWriter.WriteAsync(typeValue, NpgsqlTypes.NpgsqlDbType.Smallint);
+                await wffWriter.WriteAsync(formFreq.WordId);
+                await wffWriter.WriteAsync(formFreq.ReadingIndex);
+                await wffWriter.WriteAsync(formFreq.FrequencyRank);
+                await wffWriter.WriteAsync(formFreq.FrequencyPercentage);
+                await wffWriter.WriteAsync(formFreq.ObservedFrequency);
+                await wffWriter.WriteAsync(formFreq.UsedInMediaAmount);
+            }
+
+            await wffWriter.CompleteAsync();
+        }
+
+        Console.WriteLine($"{mediaType} frequency update complete.");
     }
 
     /// <summary>

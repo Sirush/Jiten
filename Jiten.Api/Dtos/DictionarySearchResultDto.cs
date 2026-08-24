@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Jiten.Api.Dtos;
 
 public class DictionarySearchResultDto
@@ -19,4 +21,12 @@ public class DictionaryEntryDto
     public List<string> PartsOfSpeech { get; set; } = [];
     public List<string> Meanings { get; set; } = [];
     public int FrequencyRank { get; set; }
+
+    /// <summary>Which ranking <see cref="FrequencyRank"/> came from; omitted while the caller is on the site-wide one.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FrequencyRankSource { get; set; }
+
+    /// <summary>Set only when a media-type default had no rank for the form and the global one stood in.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsFrequencyFallback { get; set; }
 }

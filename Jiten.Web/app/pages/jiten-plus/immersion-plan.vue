@@ -12,12 +12,15 @@
   import Tag from 'primevue/tag';
   import SelectButton from 'primevue/selectbutton';
   import Checkbox from 'primevue/checkbox';
+  import Dialog from 'primevue/dialog';
   import Message from 'primevue/message';
   import ProgressSpinner from 'primevue/progressspinner';
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { useApiFetch } from '~/composables/useApiFetch';
   import { useAuthStore } from '~/stores/authStore';
+  import { useSrsStore } from '~/stores/srsStore';
+  import { buildPlanStudyBatch, isDeckStudied, planStepsToAdd } from '~/utils/planStudyBatch';
   import { useJitenStore } from '~/stores/jitenStore';
   import { useLocaliseTitle } from '~/composables/useLocaliseTitle';
   import { MediaType, type Tag as MediaTag, type MediaSuggestion } from '~/types';
@@ -35,9 +38,10 @@
   const { $api } = useNuxtApp();
   const toast = useToast();
   const confirm = useConfirm();
-  const { isPlus } = useJitenPlus();
+  const { isPlus, limits } = useJitenPlus();
   const auth = useAuthStore();
   const store = useJitenStore();
+  const srsStore = useSrsStore();
 
   // ---- Types --------------------------------------------------------------
 
@@ -1125,6 +1129,94 @@
     }
   }
 
+  // ---- Study decks --------------------------------------------------------
+
+  const planThreshold = computed(() => activeRoadmap.value?.definition.acquisitionThreshold ?? 10);
+  const planSteps = computed(() => activePayload.value?.steps ?? []);
+
+  const studyStep = ref<RoadmapStep | null>(null);
+
+  function stepIsStudied(step: RoadmapStep): boolean {
+    return isDeckStudied(step.deckId, srsStore.studyDecks);
+  }
+
+  function closeStepStudy(open: boolean) {
+    if (!open) studyStep.value = null;
+  }
+
+  const bulkOpen = ref(false);
+  const bulkThreshold = ref(10);
+  const bulkDeactivateOthers = ref(false);
+  const bulkAddToTop = ref(false);
+  const bulkSubmitting = ref(false);
+  const bulkSettingsLoading = ref(false);
+  const switchingGathering = ref(false);
+
+  const bulkStepsToAdd = computed(() => {
+    const ids = new Set(planStepsToAdd(planSteps.value, srsStore.studyDecks));
+    return planSteps.value.filter((step) => ids.has(step.deckId));
+  });
+  const bulkAlreadyCount = computed(() => planSteps.value.length - bulkStepsToAdd.value.length);
+  const studyDeckCap = computed(() => limits.value.studyDecks);
+  const bulkFitCount = computed(() =>
+    Math.max(0, Math.min(bulkStepsToAdd.value.length, studyDeckCap.value - srsStore.studyDecks.length)),
+  );
+  const bulkOverCap = computed(() => bulkFitCount.value < bulkStepsToAdd.value.length);
+  // Anything but TopDeck draws new cards across every deck at once, which throws away the plan's ordering.
+  const bulkGatheringWarning = computed(() => srsStore.studySettings.newCardGathering !== 'TopDeck');
+
+  async function openBulkStudy() {
+    bulkThreshold.value = planThreshold.value;
+    bulkDeactivateOthers.value = false;
+    bulkAddToTop.value = false;
+    bulkOpen.value = true;
+    // Study settings are only read by this dialog, so they load on first open rather than on every page view.
+    // fetchSettings is a no-op once loaded, so reopening costs nothing.
+    bulkSettingsLoading.value = true;
+    try {
+      await srsStore.fetchSettings();
+    } finally {
+      bulkSettingsLoading.value = false;
+    }
+  }
+
+  async function addAllToStudy() {
+    if (bulkStepsToAdd.value.length === 0) return;
+    bulkSubmitting.value = true;
+    try {
+      const result = await srsStore.addStudyDecksBatch(
+        buildPlanStudyBatch(planSteps.value, bulkThreshold.value, bulkDeactivateOthers.value, bulkAddToTop.value),
+      );
+      bulkOpen.value = false;
+      toast.add({
+        severity: 'success',
+        summary: `Added ${result.added.length} ${result.added.length === 1 ? 'deck' : 'decks'}`,
+        detail: result.stoppedAtCap
+          ? `You're at your limit of ${result.limit} study decks, so the rest were left out.`
+          : bulkAddToTop.value
+            ? 'They are at the top of your study list, in plan order.'
+            : 'They are at the bottom of your study list, in plan order.',
+        life: 6000,
+      });
+    } catch (e) {
+      toast.add({ severity: 'error', summary: "Couldn't add them", detail: extractApiError(e, 'Something went wrong.'), life: 6000 });
+    } finally {
+      bulkSubmitting.value = false;
+    }
+  }
+
+  async function useTopDeckGathering() {
+    switchingGathering.value = true;
+    try {
+      await srsStore.updateSettings({ ...srsStore.studySettings, newCardGathering: 'TopDeck' });
+      toast.add({ severity: 'success', summary: 'New cards now come from the top deck first', life: 4000 });
+    } catch (e) {
+      toast.add({ severity: 'error', summary: "Couldn't change the setting", detail: extractApiError(e, 'Something went wrong.'), life: 6000 });
+    } finally {
+      switchingGathering.value = false;
+    }
+  }
+
   // The API rejects regenerate/reset-swaps while a run is in flight; disabling matches that.
   const activeBusy = computed(
     () => activeRoadmap.value?.status === 'pending' || activeRoadmap.value?.status === 'generating',
@@ -1143,7 +1235,11 @@
     async (authed) => {
       if (!authed || loadedList) return;
       loadedList = true;
-      await loadList();
+      // The plan list marks steps already in the study list, so study decks are needed to render, unlike
+      // the study settings. The client prefetch plugin usually has them already.
+      const loads: Promise<unknown>[] = [loadList()];
+      if (srsStore.studyDecks.length === 0) loads.push(srsStore.fetchStudyDecks());
+      await Promise.all(loads);
     },
     { immediate: true },
   );
@@ -1579,6 +1675,15 @@ v-for="r in roadmaps" :key="r.id" :label="r.name"
                 </div>
                 <div class="flex flex-wrap gap-2">
                   <Button
+                    v-if="activeRoadmap.status === 'ready' && planSteps.length > 0"
+                    label="Add all to study"
+                    icon="pi pi-plus"
+                    size="small"
+                    severity="secondary"
+                    outlined
+                    @click="openBulkStudy"
+                  />
+                  <Button
                     v-if="activeRoadmap.status === 'ready'"
                     label="Export as image"
                     icon="pi pi-download"
@@ -1782,17 +1887,36 @@ v-for="r in roadmaps" :key="r.id" :label="r.name"
                       >
                         {{ stepTitle(step) }}
                       </a>
-                      <Button
-                        v-if="isPlus"
-                        v-tooltip.left="'Not this one — show me something else'"
-                        icon="pi pi-refresh"
-                        size="small"
-                        severity="secondary"
-                        text
-                        :loading="swapping === step.index"
-                        :disabled="swapping !== null"
-                        @click="swapStep(step)"
-                      />
+                      <div class="flex shrink-0 items-center gap-1">
+                        <span
+                          v-if="stepIsStudied(step)"
+                          class="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400"
+                        >
+                          <i class="pi pi-check-circle text-xs" />
+                          In your study list
+                        </span>
+                        <Tooltip v-else content="Make a study deck from this title">
+                          <Button
+                            label="Study"
+                            icon="pi pi-plus"
+                            size="small"
+                            severity="secondary"
+                            outlined
+                            @click="studyStep = step"
+                          />
+                        </Tooltip>
+                        <Tooltip v-if="isPlus" content="Not this one — show me something else" placement="left">
+                          <Button
+                            icon="pi pi-refresh"
+                            size="small"
+                            severity="secondary"
+                            text
+                            :loading="swapping === step.index"
+                            :disabled="swapping !== null"
+                            @click="swapStep(step)"
+                          />
+                        </Tooltip>
+                      </div>
                     </div>
 
                     <!-- Genres (reuses the deck card's GenreTagDisplay) -->
@@ -2104,6 +2228,108 @@ v-if="activePayload.drill"
           </Card>
       </div>
     </div>
+
+    <SrsAddDeckDialog
+      v-if="studyStep"
+      :key="studyStep.deckId"
+      :visible="true"
+      :preselected-deck="{ deckId: studyStep.deckId, originalTitle: stepTitle(studyStep), coverName: studyStep.coverName }"
+      initial-filter-mode="occurrence"
+      :initial-min-occurrences="planThreshold"
+      @update:visible="closeStepStudy"
+    />
+
+    <Dialog
+      v-model:visible="bulkOpen"
+      modal
+      header="Add this plan to your study list"
+      :style="{ width: '520px', maxWidth: '95vw' }"
+      :pt="{ content: { class: 'p-4' } }"
+    >
+      <div class="flex flex-col gap-4">
+        <p class="text-sm">
+          <span v-if="bulkStepsToAdd.length > 0">
+            This will add {{ bulkStepsToAdd.length }} {{ bulkStepsToAdd.length === 1 ? 'title' : 'titles' }} to the
+            bottom of your study list in the same order as the plan.
+          </span>
+          <span v-else>Every title in this plan is already in your study list.</span>
+          <span v-if="bulkAlreadyCount > 0" class="opacity-80">
+            {{ bulkAlreadyCount }} of {{ planSteps.length }} {{ bulkAlreadyCount === 1 ? 'is' : 'are' }} already present
+            and will be left alone.
+          </span>
+        </p>
+
+        <ul
+          v-if="bulkStepsToAdd.length > 0"
+          class="max-h-44 overflow-y-auto rounded-lg border border-surface-200 dark:border-surface-700"
+        >
+          <li
+            v-for="(planStep, i) in bulkStepsToAdd"
+            :key="planStep.deckId"
+            class="flex items-center gap-2 border-b border-surface-200 px-3 py-1.5 text-sm last:border-b-0 dark:border-surface-700"
+          >
+            <span class="w-6 shrink-0 text-right tabular-nums opacity-60">{{ i + 1 }}</span>
+            <span class="min-w-0 truncate">{{ stepTitle(planStep) }}</span>
+          </li>
+        </ul>
+
+        <div>
+          <label for="bulk-threshold" class="mb-1 block text-sm font-medium">
+            Only include words used at least this many times
+          </label>
+          <InputNumber
+            v-model="bulkThreshold"
+            input-id="bulk-threshold"
+            :min="1"
+            :use-grouping="false"
+            class="w-full"
+          />
+        </div>
+
+        <Message v-if="bulkOverCap" severity="warn" size="small" :closable="false">
+          <span class="text-xs">
+            You can only have {{ studyDeckCap }} study decks. Only the first {{ bulkFitCount }} of these will be added.
+          </span>
+        </Message>
+
+        <div class="flex items-center gap-2">
+          <Checkbox v-model="bulkAddToTop" input-id="bulk-add-top" binary />
+          <label class="cursor-pointer text-sm" for="bulk-add-top">Put them at the top of my study list</label>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <Checkbox v-model="bulkDeactivateOthers" input-id="bulk-deactivate" binary />
+          <label class="cursor-pointer text-sm" for="bulk-deactivate">Turn off my other study decks</label>
+        </div>
+
+        <Message v-if="bulkGatheringWarning" severity="warn" :closable="false">
+          <div class="flex flex-col items-start gap-2">
+            <span class="text-xs">
+              New cards are currently drawn from all your decks at once, so the plan's order won't decide what you
+              see first.
+            </span>
+            <Button
+              label="Take new cards from the top deck"
+              size="small"
+              severity="secondary"
+              outlined
+              :loading="switchingGathering"
+              @click="useTopDeckGathering"
+            />
+          </div>
+        </Message>
+      </div>
+
+      <template #footer>
+        <Button label="Cancel" severity="secondary" text :disabled="bulkSubmitting" @click="bulkOpen = false" />
+        <Button
+          :label="`Add ${bulkFitCount} ${bulkFitCount === 1 ? 'deck' : 'decks'}`"
+          :loading="bulkSubmitting || bulkSettingsLoading"
+          :disabled="bulkFitCount === 0 || bulkSettingsLoading"
+          @click="addAllToStudy"
+        />
+      </template>
+    </Dialog>
   </div>
 </template>
 

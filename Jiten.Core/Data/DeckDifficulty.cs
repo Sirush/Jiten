@@ -40,6 +40,9 @@ public class DeckDifficulty
     public decimal UserAdjustment { get; set; }
     public decimal NEffective { get; set; }
 
+    /// <summary>Zero while the votes fail the confidence gate, i.e. they are recorded but not yet applied.</summary>
+    public decimal AdjustmentConfidence { get; set; }
+
     public DateTimeOffset LastUpdated { get; set; } = DateTimeOffset.UtcNow;
 
     [JsonIgnore]

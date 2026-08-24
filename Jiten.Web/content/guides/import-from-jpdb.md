@@ -1,12 +1,15 @@
 ---
 title: Migrate from JPDB to Jiten
+seoTitle: "Export JPDB to Anki or Jiten: Migration Guide"
 summary: Bring your JPDB words and review history across so coverage and decks reflect your real level from day one.
 category: "Coming from another app?"
 level: beginner
 order: 30
 icon: material-symbols-light:move-item
 draft: false
-updated: 2026-07-28
+updated: 2026-08-23
+published: 2026-07-28
+verified: 2026-07-28
 ---
 
 Switching from JPDB only takes a few minutes. Your known words are imported, and your review history can be too, so Jiten starts pretty much where you've left off.
@@ -34,7 +37,7 @@ It's recommended to leave **Import additional readings within frequency range of
 
 To bring your history, press **Choose reviews.json** and pick the file. Then press **Import from JPDB**.
 
-## Ovewriting existing cards
+## Overwriting existing cards
 
 Above the button sits **Overwrite existing card states (mastered, blacklisted, suspended) with review history**, ticked by default. It decides whether your review history is allowed to replace a **Mastered**, **Blacklisted** or **Suspended** state that a card already has.
 
@@ -72,3 +75,7 @@ Both imports queue a coverage recalculation across the whole library which can t
 If your coverage number still look off after import, try following the steps in [Building your starter vocabulary](/guides/building-your-vocabulary).
 
 From there, you can study with the [built-in SRS](/guides/using-the-srs), or [generate Anki decks](/guides/generating-anki-decks) that filter out everything you just imported.
+
+## From JPDB to Anki
+
+JPDB has no direct Anki export, but Jiten can work as the bridge: import your JPDB words and history as described above, then [generate Anki decks](/guides/generating-anki-decks) from any media or frequency list with your known words filtered out. You can also export your full vocabulary as CSV from **Settings → Vocabulary**.

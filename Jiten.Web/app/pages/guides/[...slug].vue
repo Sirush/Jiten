@@ -19,20 +19,28 @@
 
   const discordLink = getDiscordLink();
 
-  // ISO timestamp for article freshness signals (og/twitter meta + Article dateModified).
+  // ISO timestamps for article freshness signals (og/twitter meta + Article dates).
   const updatedIso = computed(() => (page.value?.updated ? new Date(page.value.updated).toISOString() : undefined));
+  const publishedIso = computed(() => (page.value?.published ? new Date(page.value.published).toISOString() : updatedIso.value));
+  const seoTitle = computed(() => page.value?.seoTitle ?? page.value?.title);
 
   useSeoMeta({
-    title: () => page.value?.title,
+    title: () => seoTitle.value,
     description: () => page.value?.summary,
-    ogTitle: () => page.value?.title,
+    ogTitle: () => seoTitle.value,
     ogDescription: () => page.value?.summary,
     ogType: 'article',
     twitterCard: 'summary_large_image',
-    twitterTitle: () => page.value?.title,
+    twitterTitle: () => seoTitle.value,
     twitterDescription: () => page.value?.summary,
-    articlePublishedTime: () => updatedIso.value,
+    articlePublishedTime: () => publishedIso.value,
     articleModifiedTime: () => updatedIso.value,
+  });
+
+  defineOgImage('PageOgImage', {
+    title: page.value.title,
+    category: page.value.category,
+    description: page.value.summary,
   });
 
   // Per-guide structured data: Article (publisher/author auto-linked to the Organization identity)
@@ -46,7 +54,8 @@
           headline: p.title,
           description: p.summary,
           inLanguage: 'en',
-          ...(updatedIso.value ? { datePublished: updatedIso.value, dateModified: updatedIso.value } : {}),
+          ...(publishedIso.value ? { datePublished: publishedIso.value } : {}),
+          ...(updatedIso.value ? { dateModified: updatedIso.value } : {}),
         }),
         defineBreadcrumb({
           itemListElement: [
@@ -75,9 +84,16 @@
         <header class="mb-6 border-b border-surface-200 pb-4 dark:border-surface-700">
           <h1 class="text-3xl font-bold mb-2">{{ page.title }}</h1>
           <p class="text-surface-500 dark:text-surface-400">{{ page.summary }}</p>
-          <p v-if="page.updated" class="mt-2 text-xs text-surface-400">
-            Updated
-            <time :datetime="updatedIso">{{ new Date(page.updated).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) }}</time>
+          <p v-if="page.updated || page.verified" class="mt-2 text-xs text-surface-400">
+            <template v-if="page.updated">
+              Updated
+              <time :datetime="updatedIso">{{ new Date(page.updated).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) }}</time>
+            </template>
+            <template v-if="page.verified">
+              <template v-if="page.updated"> · </template>
+              Last verified
+              <time :datetime="new Date(page.verified).toISOString()">{{ new Date(page.verified).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) }}</time>
+            </template>
           </p>
         </header>
 

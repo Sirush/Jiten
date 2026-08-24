@@ -1,4 +1,4 @@
-using Jiten.Core.Data;
+﻿using Jiten.Core.Data;
 using Jiten.Core.Data.Authentication;
 using Jiten.Core.Data.Billing;
 using Jiten.Core.Data.FSRS;
@@ -372,6 +372,12 @@ public class UserDbContext : IdentityDbContext<User>
 
             entity.HasIndex(usd => usd.UserId).HasDatabaseName("IX_UserStudyDeck_UserId");
 
+            entity.Property(usd => usd.FrequencyMediaType).HasColumnType("smallint").IsRequired(false);
+            entity.Property(usd => usd.FrequencyListId).IsRequired(false);
+
+            entity.HasIndex(usd => usd.FrequencyListId)
+                  .HasDatabaseName("IX_UserStudyDeck_FrequencyListId");
+
             entity.HasOne<User>()
                   .WithMany()
                   .HasForeignKey(usd => usd.UserId)
@@ -578,6 +584,11 @@ public class UserDbContext : IdentityDbContext<User>
             entity.Property(f => f.ZipUrl).HasMaxLength(1024);
             entity.Property(f => f.CsvUrl).HasMaxLength(1024);
             entity.Property(f => f.CreatedAt).IsRequired();
+            if (isNpgsql)
+                entity.Property(f => f.RankedWordsBlob).HasColumnType("bytea").IsRequired(false);
+            else
+                entity.Property(f => f.RankedWordsBlob).IsRequired(false);
+            entity.Property(f => f.BlobGeneratedAt).IsRequired(false);
             entity.Ignore(f => f.Definition);
 
             entity.HasOne<User>()

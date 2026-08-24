@@ -50,6 +50,7 @@ export function useMediaRequests() {
     limit?: number;
     mine?: boolean;
     contributed?: boolean;
+    voted?: boolean;
     excludeOwn?: boolean;
     search?: string;
     attachments?: string;
@@ -69,6 +70,7 @@ export function useMediaRequests() {
           limit: params.limit ?? 20,
           mine: params.mine || undefined,
           contributed: params.contributed || undefined,
+          voted: params.voted || undefined,
           excludeOwn: params.excludeOwn || undefined,
           search: params.search || undefined,
           attachments: params.attachments || undefined,
@@ -385,6 +387,7 @@ export function useMediaRequests() {
     kind?: RequestKind;
     mine?: boolean;
     contributed?: boolean;
+    voted?: boolean;
     excludeOwn?: boolean;
     search?: string;
     attachments?: string;
@@ -397,6 +400,7 @@ export function useMediaRequests() {
           kind: params.kind,
           mine: params.mine || undefined,
           contributed: params.contributed || undefined,
+          voted: params.voted || undefined,
           excludeOwn: params.excludeOwn || undefined,
           search: params.search || undefined,
           attachments: params.attachments || undefined,

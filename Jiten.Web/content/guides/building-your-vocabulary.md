@@ -26,7 +26,7 @@ Leave sets you only partly know, like **Onomatopoeia** and **Counters**, alone, 
 
 ### Import what you studied elsewhere
 
-If you have an Anki or JPDB history, you can easily bring it over. See [Importing known words from Anki](/guides/importing-known-words-from-anki) or [Migrate from JPDB to Jiten](/guides/import-from-jpdb). It is a one-off manual import in both cases and only take a few seconds to sync your progress.
+If you have an Anki or JPDB history, you can easily bring it over. See [Importing known words from Anki](/guides/importing-known-words-from-anki) or [Migrate from JPDB to Jiten](/guides/import-from-jpdb). It is a one-off manual import in both cases and only takes a few seconds to sync your progress.
 
 With no history at all, **Settings → Vocabulary** has a **Frequency Range** option that marks a band of the most common words as known. It takes a start rank and an end rank, and caps at 10,000. It is a rough approximation of your knowledge, and the higher the rank the less global frequency will match you depending on the genres you immersed in, but it beats an empty account.
 
@@ -73,7 +73,7 @@ This is the part that actually teaches you Japanese. Look words up as you meet t
 
 ## Step 5: Finish a title and start again
 
-Congratulations, you now have finished a title in Japanese! You can set set it to **Completed** under **Set status** in the **More options** (...) menu on the media. This will add it to your profile stats. You might be prompted to rate the difficulty of the title (see [difficulty scores](/guides/difficulty-ratings)), don't stress it too much but try to answer honestly. This makes the experience better for the ones that will come after you.
+Congratulations, you now have finished a title in Japanese! You can set it to **Completed** under **Set status** in the **More options** (...) menu on the media. This will add it to your profile stats. You might be prompted to rate the difficulty of the title (see [difficulty scores](/guides/difficulty-ratings)), don't stress it too much but try to answer honestly. This makes the experience better for the ones that will come after you.
 
 If you didn't study it as you immersed, it might be a good idea to use the **Learn** option described above to have a more accurate coverage on your next titles.
 

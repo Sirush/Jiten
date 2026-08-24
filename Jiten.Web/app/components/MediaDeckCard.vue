@@ -9,6 +9,7 @@
   import { formatDateAsYyyyMmDd } from '~/utils/formatDateAsYyyyMmDd';
   import { useAuthStore } from '~/stores/authStore';
   import { useConfirm } from 'primevue/useconfirm';
+  import { useToast } from 'primevue/usetoast';
 
   const props = defineProps<{
     deck: Deck;
@@ -43,6 +44,7 @@
   const authStore = useAuthStore();
   const localiseTitle = useLocaliseTitle();
   const confirm = useConfirm();
+  const toast = useToast();
 
   const displayAdminFunctions = computed(() => store.displayAdminFunctions);
   const readingSpeed = computed(() => store.readingSpeed);
@@ -149,6 +151,50 @@
 
   const { $api } = useNuxtApp();
 
+  const { isRefreshing: isRefreshingCoverage, refresh: refreshDeckCoverage } = useDeckCoverageRefresh(
+    () => props.deck,
+    (updated) => emit('update:deck', updated)
+  );
+
+  const queueFullCoverageRefresh = async () => {
+    try {
+      await $api('user/coverage/refresh', { method: 'POST' });
+      showSuccessToast(toast, 'Coverage computation started', 'Your numbers will appear within a minute or two.');
+    } catch (error) {
+      console.error('Failed to queue full coverage refresh:', error);
+      showErrorToast(toast, 'Error', 'Could not start the coverage computation, please try again.');
+    }
+  };
+
+  const handleRefreshCoverage = async () => {
+    const result = await refreshDeckCoverage();
+    switch (result) {
+      case 'refreshed':
+        showSuccessToast(toast, 'Coverage refreshed');
+        break;
+      case 'not_eligible':
+        showWarnToast(toast, 'Not enough tracked words', 'Coverage needs a few words in your vocabulary first. Review or import some words, then try again.');
+        break;
+      case 'no_baseline':
+        confirm.require({
+          message: 'Your coverage has never been computed, so there is nothing to refresh yet. Compute it for your whole account now?',
+          header: 'Compute coverage',
+          icon: 'pi pi-chart-pie',
+          acceptLabel: 'Compute coverage',
+          rejectLabel: 'Not now',
+          rejectProps: { severity: 'secondary' },
+          accept: () => queueFullCoverageRefresh(),
+        });
+        break;
+      case 'rate_limited':
+        showWarnToast(toast, 'Too many refreshes', 'Please wait a few seconds and try again.');
+        break;
+      case 'error':
+        showErrorToast(toast, 'Error refreshing coverage', 'There was an error refreshing coverage, please try again.');
+        break;
+    }
+  };
+
   const completeParentDeck = async (parentDeckId: number) => {
     await $api(`/user/deck-preferences/${parentDeckId}/status`, {
       method: 'POST',
@@ -241,6 +287,12 @@
       ],
     },
     {
+      label: 'Refresh coverage',
+      icon: 'pi pi-refresh',
+      disabled: isRefreshingCoverage.value,
+      command: () => handleRefreshCoverage(),
+    },
+    {
       label: 'Edit',
       icon: 'pi pi-pencil',
       visible: !props.isCompact && authStore.isAdmin && displayAdminFunctions.value,
@@ -322,6 +374,13 @@
   );
 
   const formatOnce = (count: number) => `${count.toLocaleString()} once`;
+
+  const showCoverageStrip = computed(
+    () =>
+      (authStore.isAuthenticated || props.demoCoverage) &&
+      !store.hideCoverageBorders &&
+      (props.deck.coverage != 0 || props.deck.uniqueCoverage != 0)
+  );
 </script>
 
 <template>
@@ -345,6 +404,8 @@
       </div>
     </div>
 
+    <!-- Own positioning context: the calibration banner below would otherwise pull the strip off the card's edge. -->
+    <div class="relative" :class="isCompact ? 'h-full' : ''">
     <Card :class="isCompact ? 'h-full' : ''" :pt="{ body: { style: 'padding: 0.75rem 1rem; gap: 0.25rem' } }">
       <template #title>
         <!-- Compact titles are clipped to a fixed two-line box so sibling cards in a row keep
@@ -422,7 +483,7 @@
                       decoding="async"
                       width="136"
                       height="192"
-                    />
+                    >
                     <Tooltip content="Release date">
                       <div class="mt-2 flex items-center md:justify-center tabular-nums text-gray-600 dark:text-gray-400">
                         {{ formatDateAsYyyyMmDd(new Date(deck.releaseDate)).replace(/-/g, '/') }}
@@ -512,6 +573,7 @@
                             :difficulty-algorithmic="deck.difficultyAlgorithmic"
                             :user-adjustment="deck.userAdjustment"
                             :vote-count="deck.distinctVoterCount || 0"
+                            :adjustment-confidence="deck.adjustmentConfidence || 0"
                           />
                         </div>
                       </Tooltip>
@@ -678,11 +740,21 @@
       </template>
     </Card>
 
+    <CoverageStrip
+      v-if="showCoverageStrip"
+      :coverage="deck.coverage"
+      :young-coverage="deck.youngCoverage"
+      with-tooltip
+      class="absolute inset-x-0 bottom-0 z-10 rounded-b-[var(--p-card-border-radius)]"
+    />
+    </div>
+
     <LazyMediaDeckDownloadDialog v-if="showDownloadDialog" :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
     <LazySrsAddDeckDialog v-if="showStudyDeckDialog" :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
-    <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" @update:visible="showIssueDialog = $event" :deck="deck" />
+    <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" :deck="deck" @update:visible="showIssueDialog = $event" />
 
     <TieredMenu v-if="authStore.isAuthenticated && menuActivated" ref="menu" :model="menuItems" popup />
+    <LoadingOverlay :visible="isRefreshingCoverage" message="Refreshing coverage…" />
 
     <Dialog
       v-if="showCompletionDialog"
@@ -717,7 +789,7 @@
           <div v-else class="flex flex-col items-center gap-3 py-6">
             <i class="pi pi-check-circle text-green-500 text-4xl" />
             <p class="text-sm text-muted-color text-center">
-              Thanks for helping refine the difficulties! <br />
+              Thanks for helping refine the difficulties! <br >
               <NuxtLink to="/ratings" target="_blank" class="text-primary-500 hover:underline font-semibold"> Compare more media → </NuxtLink>
             </p>
           </div>
@@ -729,7 +801,7 @@
       </div>
     </Dialog>
 
-    <Message v-if="showCalibrationBanner" severity="info" :closable="true" @close="showCalibrationBanner = false" class="mt-2">
+    <Message v-if="showCalibrationBanner" severity="info" :closable="true" class="mt-2" @close="showCalibrationBanner = false">
       Help refine the difficulties -
       <NuxtLink to="/ratings" class="font-semibold underline" target="_blank">compare more media</NuxtLink>
     </Message>

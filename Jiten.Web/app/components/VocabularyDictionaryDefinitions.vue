@@ -12,7 +12,8 @@
     maxDefinitions?: number | null;
     wordId?: number;
     hiddenBehaviour?: 'gray' | 'hide';
-  }>(), { arrowKeyNav: true, maxDefinitions: null });
+    fontControls?: boolean;
+  }>(), { arrowKeyNav: true, maxDefinitions: null, fontControls: true });
 
   const store = useJitenStore();
 
@@ -21,8 +22,14 @@
   );
 
   const hasMultipleGroups = computed(() => props.resolvedGroups.length > 1);
+  const customFontStyle = computed(() => ({ fontSize: `${store.customDictionaryFontSize}px` }));
   const visibleGroupCount = computed(() => props.resolvedGroups.length);
   const activeTab = ref<string | undefined>(undefined);
+
+  const activeGroupIsCustom = computed(() => {
+    const active = props.resolvedGroups.find((g) => g.dictionaryId === activeTab.value);
+    return !!active && !active.isJmDict;
+  });
 
   watch(() => props.resolvedGroups, (groups) => {
     if (groups.length === 0) return;
@@ -85,6 +92,7 @@
         <Tab v-for="group in resolvedGroups" :key="group.dictionaryId" :value="group.dictionaryId">
           {{ group.dictionaryName }}
         </Tab>
+        <DictionaryFontSizeControl v-if="fontControls && activeGroupIsCustom" class="ml-1 self-center" />
       </TabList>
       <TabPanels>
         <TabPanel v-for="group in resolvedGroups" :key="group.dictionaryId" :value="group.dictionaryId">
@@ -101,7 +109,8 @@
             />
             <div
               v-else-if="group.customDefinitions"
-              class="custom-dict-content text-sm"
+              class="custom-dict-content"
+              :style="customFontStyle"
               v-html="definitionsToHtml(group.customDefinitions)"
             />
           </div>
@@ -113,8 +122,10 @@
   <!-- Single custom group expanded -->
   <template v-else-if="!isCompact">
     <div v-if="resolvedGroups.length > 0 && resolvedGroups[0].customDefinitions">
+      <DictionaryFontSizeControl v-if="fontControls" class="mb-1" />
       <div
-        class="custom-dict-content text-sm"
+        class="custom-dict-content"
+        :style="customFontStyle"
         v-html="definitionsToHtml(resolvedGroups[0].customDefinitions)"
       />
     </div>
@@ -134,7 +145,7 @@
         />
       </template>
       <template v-else-if="resolvedGroups[0].customDefinitions && !store.hideVocabularyDefinitions">
-        <span class="custom-dict-compact text-sm" v-html="definitionsToHtml(resolvedGroups[0].customDefinitions)" />
+        <span class="custom-dict-compact" :style="customFontStyle" v-html="definitionsToHtml(resolvedGroups[0].customDefinitions)" />
       </template>
       <span v-if="visibleGroupCount > 1" class="text-xs text-gray-400 dark:text-gray-400 ml-1">
         +{{ visibleGroupCount - 1 }} more {{ visibleGroupCount - 1 === 1 ? 'dictionary' : 'dictionaries' }}

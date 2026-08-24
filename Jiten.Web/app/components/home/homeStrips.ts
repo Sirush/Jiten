@@ -1,5 +1,6 @@
 import type { Component } from 'vue';
 import HomeWhatsNewStrip from './HomeWhatsNewStrip.vue';
+import HomePollCard from './HomePollCard.vue';
 import HomePlusBlock from './HomePlusBlock.vue';
 import HomeReaderCard from './HomeReaderCard.vue';
 import HomeMpvCard from './HomeMpvCard.vue';
@@ -15,6 +16,7 @@ export interface HomeStripEntry {
  */
 export const homeStrips: HomeStripEntry[] = [
   { id: 'whats-new', component: HomeWhatsNewStrip },
+  { id: 'poll', component: HomePollCard },
   { id: 'plus', component: HomePlusBlock },
   { id: 'reader', component: HomeReaderCard },
   { id: 'mpv', component: HomeMpvCard },

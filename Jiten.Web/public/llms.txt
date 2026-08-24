@@ -1,0 +1,30 @@
+# Jiten
+
+> Jiten (jiten.moe) is a free, open-source platform for learning Japanese through immersion. It analyses real Japanese media (anime and drama subtitles, visual novels, books, manga, web novels) and publishes per-title statistics: vocabulary and frequency lists, difficulty ratings, character counts, and personal comprehension coverage. Learners use it to pick media at their level, generate Anki decks, and study vocabulary with the built-in FSRS spaced-repetition system.
+
+Key facts:
+- Every title in the media library has a full vocabulary list ordered by frequency, a difficulty rating, and length statistics derived from the actual text.
+- Registered users can track known words and see what percentage of any title they can understand.
+- Jiten Reader is a companion browser extension: a pop-up dictionary with per-word knowledge tracking that works on webpages and readers such as Ttsu, Asbplayer, and Mokuro.
+- The platform code is open source under the Apache 2.0 license: https://github.com/Sirush/Jiten
+- Dictionary data comes from JMdict; site data (decks, frequency lists) has its own licensing terms, described in the licensing guide below.
+
+## Docs
+
+- [What is Jiten?](https://jiten.moe/guides/what-is-jiten): Overview of the platform
+- [Guides index](https://jiten.moe/guides): All user guides
+- [Using the API](https://jiten.moe/guides/using-the-api): Public API, keys, and rate limits
+- [API and scraping rules](https://jiten.moe/guides/api-and-scraping): What automated access is allowed
+- [Where the data comes from](https://jiten.moe/guides/data-sources): Metadata APIs, text sources, audio voices
+- [Data licensing](https://jiten.moe/guides/deck-licensing): What you can use decks and frequency lists for
+
+## Product
+
+- [Media library](https://jiten.moe/decks): Browse analysed titles
+- [Jiten Reader](https://jiten.moe/reader): Browser extension pop-up dictionary
+- [Features](https://jiten.moe/features): Feature overview
+- [Jiten Plus](https://jiten.moe/jiten-plus): Optional paid tier that funds the platform
+
+## Source
+
+- [GitHub repository](https://github.com/Sirush/Jiten): Apache 2.0, contributions welcome

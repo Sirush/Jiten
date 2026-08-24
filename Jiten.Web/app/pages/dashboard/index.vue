@@ -139,6 +139,16 @@
       </Card>
 
       <Card class="shadow-md">
+        <template #title>Polls</template>
+        <template #content>
+          <p class="mb-4">Create polls, publish them and read the results</p>
+          <div class="flex justify-center">
+            <Button label="Manage Polls" icon="pi pi-chart-bar" class="p-button-primary" @click="navigateTo('/dashboard/polls')" />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
         <template #title>Jiten+</template>
         <template #content>
           <p class="mb-4">Grant Jiten+ rewards and manage promo codes</p>

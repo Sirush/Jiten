@@ -29,6 +29,7 @@ public class SrsController(
     IStudySessionService sessionService,
     IWordFormSiblingCache wordFormCache,
     SrsRecomputeJob recomputeJob,
+    IFrequencySourceResolver frequencySource,
     IBackgroundJobClient backgroundJobs,
     ILogger<SrsController> logger) : ControllerBase
 {
@@ -1280,7 +1281,7 @@ public class SrsController(
 
         var wordIds = cards.Select(c => c.WordId).Distinct().ToList();
         var formDict = await WordFormHelper.LoadWordForms(context, wordIds);
-        var freqDict = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
+        var freqDict = await frequencySource.LoadFrequencies(context, wordIds);
         var words = await context.JMDictWords
             .AsNoTracking()
             .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
@@ -1290,7 +1291,7 @@ public class SrsController(
         var result = cards.Select(c =>
         {
             var form = formDict.GetValueOrDefault((c.WordId, (short)c.ReadingIndex));
-            var freq = freqDict.GetValueOrDefault((c.WordId, (short)c.ReadingIndex));
+            var freq = freqDict.Resolve(c.WordId, (short)c.ReadingIndex);
             var mainDef = words.GetValueOrDefault(c.WordId)?.Definitions
                 .FirstOrDefault()?.EnglishMeanings.FirstOrDefault();
 
@@ -1300,7 +1301,7 @@ public class SrsController(
                 ReadingIndex = (byte)c.ReadingIndex,
                 Reading = form?.RubyText ?? form?.Text ?? "",
                 MainDefinition = mainDef,
-                FrequencyRank = freq?.FrequencyRank ?? 0,
+                FrequencyRank = freq.Rank,
                 State = c.State,
                 Due = c.Due,
                 CreatedAt = c.CreatedAt
@@ -1695,7 +1696,7 @@ public class SrsController(
         var wordIds = pairs.Select(p => p.WordId).Distinct().ToList();
 
         var formDict = await WordFormHelper.LoadWordForms(context, wordIds);
-        var freqDict = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
+        var freqDict = await frequencySource.LoadFrequencies(context, wordIds);
         var words = await context.JMDictWords
             .AsNoTracking()
             .Include(w => w.Definitions.OrderBy(d => d.SenseIndex))
@@ -1712,7 +1713,7 @@ public class SrsController(
         return pairs.Select(p =>
         {
             var form = formDict.GetValueOrDefault((p.WordId, (short)p.ReadingIndex));
-            var freq = freqDict.GetValueOrDefault((p.WordId, (short)p.ReadingIndex));
+            var freq = freqDict.Resolve(p.WordId, (short)p.ReadingIndex);
             var mainDef = words.GetValueOrDefault(p.WordId)?.Definitions
                 .FirstOrDefault()?.EnglishMeanings.FirstOrDefault();
             var state = stateDict.GetValueOrDefault((p.WordId, p.ReadingIndex), (FsrsState)0);
@@ -1722,7 +1723,7 @@ public class SrsController(
                 ReadingIndex = p.ReadingIndex,
                 Reading = form?.RubyText ?? form?.Text ?? "",
                 MainDefinition = mainDef,
-                FrequencyRank = freq?.FrequencyRank ?? 0,
+                FrequencyRank = freq.Rank,
                 State = state,
                 Due = default,
                 CreatedAt = default,
