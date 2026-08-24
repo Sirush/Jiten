@@ -173,8 +173,8 @@
           >
           <nuxt-link
             v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions"
-            to="/Dashboard"
-            :class="route.path === '/Dashboard' ? 'font-semibold !text-purple-200' : '!text-white'"
+            to="/dashboard"
+            :class="route.path === '/dashboard' ? 'font-semibold !text-purple-200' : '!text-white'"
             >Dashboard</nuxt-link
           >
           <nuxt-link v-if="!auth.isAuthenticated" to="/login" :class="route.path === '/login' ? 'font-semibold !text-purple-200' : '!text-white'"
@@ -314,9 +314,9 @@
             >
             <nuxt-link
               v-if="auth.isAuthenticated && auth.isAdmin && store.displayAdminFunctions"
-              to="/Dashboard"
+              to="/dashboard"
               class="py-2 px-3"
-              :class="route.path === '/Dashboard' ? 'font-semibold !text-purple-200' : '!text-white'"
+              :class="route.path === '/dashboard' ? 'font-semibold !text-purple-200' : '!text-white'"
               @click="mobileMenuOpen = false"
               >Dashboard</nuxt-link
             >

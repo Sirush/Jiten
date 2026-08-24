@@ -86,7 +86,7 @@
     twitterCard: 'summary_large_image',
   });
 
-  defineOgImageComponent('PageOgImage', {
+  defineOgImage('PageOgImage', {
     title: 'Jiten+',
     description: 'Get useful extras while helping support Jiten. Everything free stays free.',
   });

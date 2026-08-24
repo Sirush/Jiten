@@ -39,6 +39,7 @@ export default defineNuxtConfig({
     '@nuxt/icon',
     '@pinia/nuxt',
     '@nuxtjs/seo',
+    '@nuxt/fonts',
     '@nuxt/content',
     '@nuxt/scripts',
     // Always registered so umTrackEvent exists at build time; without an id the module runs in faux mode and sends nothing.
@@ -154,11 +155,27 @@ export default defineNuxtConfig({
       max: 150,
       maxSize: 32 * 1024 * 1024,
     },
-    fonts: [
+    // OG components render Japanese deck titles; without the japanese subset Satori falls back to tofu.
+    fontSubsets: ['latin', 'japanese'],
+  },
+  fonts: {
+    // Present only for nuxt-og-image's Satori renderer, which requires @nuxt/fonts for any
+    // non-Inter font. Site text keeps loading through @fontsource-variable/noto-sans-jp in
+    // main.css; remote providers are disabled so the module cannot inject fonts of its own.
+    providers: {
+      google: false,
+      googleicons: false,
+      bunny: false,
+      fontshare: false,
+      fontsource: false,
+      adobe: false,
+    },
+    families: [
       {
         name: 'Noto Sans JP',
+        src: '/fonts/NotoSansJP-Regular.ttf',
         weight: 400,
-        path: '/fonts/NotoSansJP-Regular.ttf',
+        global: true,
       },
     ],
   },

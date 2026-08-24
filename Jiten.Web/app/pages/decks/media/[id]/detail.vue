@@ -222,7 +222,7 @@
   if (import.meta.server) {
     await detailReady;
     const d = mainDeck.value;
-    defineOgImageComponent(
+    defineOgImage(
       'MediaDeckCardOgImage',
       {
         title: d ? (d.originalTitle?.trim() || localiseTitle(d)) : '',

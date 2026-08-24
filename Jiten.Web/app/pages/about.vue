@@ -8,7 +8,7 @@
     ogDescription: description,
   });
 
-  defineOgImageComponent('PageOgImage', {
+  defineOgImage('PageOgImage', {
     title: 'About Jiten',
     description: 'A free, open-source platform for learning Japanese through the media you actually want to read and watch.',
   });

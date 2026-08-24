@@ -11,7 +11,7 @@
     twitterDescription: description,
   });
 
-  defineOgImageComponent('PageOgImage', {
+  defineOgImage('PageOgImage', {
     title: 'Everything Jiten offers',
     description:
       'Media difficulty and statistics, coverage tracking, a built-in SRS, Anki deck generation, frequency dictionaries and companion tools.',

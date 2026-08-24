@@ -8,7 +8,7 @@
   });
 
   // Site-wide og:image fallback; pages with a bespoke card override it.
-  defineOgImageComponent('PageOgImage', {
+  defineOgImage('PageOgImage', {
     title: 'Immerse yourself in Japanese media you can understand',
     description:
       'The open Japanese immersion platform: choose native media at your level, measure your knowledge and study the vocabulary you need.',

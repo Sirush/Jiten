@@ -12,7 +12,7 @@
     twitterDescription: description,
   });
 
-  defineOgImageComponent('PageOgImage', {
+  defineOgImage('PageOgImage', {
     title: 'Jiten Reader',
     category: 'Browser extension',
     description:

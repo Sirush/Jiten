@@ -25,7 +25,7 @@
     twitterDescription: description,
   });
 
-  defineOgImageComponent('PageOgImage', {
+  defineOgImage('PageOgImage', {
     title: 'Japanese Frequency Dictionaries',
     category: 'Yomitan & CSV downloads',
     description: 'Free frequency dictionaries for Yomitan, built per media type from the Jiten corpus. CC BY-SA 4.0.',

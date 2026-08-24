@@ -37,7 +37,7 @@
     articleModifiedTime: () => updatedIso.value,
   });
 
-  defineOgImageComponent('PageOgImage', {
+  defineOgImage('PageOgImage', {
     title: page.value.title,
     category: page.value.category,
     description: page.value.summary,
