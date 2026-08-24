@@ -377,8 +377,7 @@ public class StudyController(
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
 
-        var limits = await userLimits.GetLimitsAsync(userId);
-        var deckCount = await userContext.UserStudyDecks.CountAsync(sd => sd.UserId == userId);
+        var (deckCount, limits) = await GetStudyDeckUsage(userId);
         if (deckCount >= limits.StudyDecks)
             return Results.BadRequest(LimitMessages.StudyDeckCount(limits));
 
@@ -423,18 +422,170 @@ public class StudyController(
         if (!IsValidPosFilter(request.PosFilter))
             return Results.BadRequest("PosFilter must be a valid JSON array of strings.");
 
-        var maxOrder = await userContext.UserStudyDecks
+        var maxOrder = await GetMaxStudyDeckSortOrder(userId);
+        var studyDeck = CreateStudyDeck(userId, request, maxOrder + 1);
+
+        userContext.UserStudyDecks.Add(studyDeck);
+        await userContext.SaveChangesAsync();
+        await sessionService.BumpStudyOverviewVersion(userId);
+        logger.LogInformation("User added study deck: DeckType={DeckType}, DeckId={DeckId}", request.DeckType, request.DeckId);
+        return Results.Ok(new { studyDeck.UserStudyDeckId });
+    }
+
+    /// <summary>Maximum number of media decks one batch call may carry, so a crafted request cannot fan out unbounded.</summary>
+    private const int MaxBatchStudyDecks = 200;
+
+    [HttpPost("study-decks/batch")]
+    [SwaggerOperation(Summary = "Add several media decks to study in one ordered batch")]
+    public async Task<IResult> BatchAddStudyDecks(BatchAddStudyDecksRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        if (request.DownloadType != (int)DeckDownloadType.OccurrenceCount)
+            return Results.BadRequest("Batch adding only supports the occurrence count filter.");
+
+        var requestedIds = request.DeckIds.Distinct().ToList();
+        if (requestedIds.Count == 0)
+            return Results.BadRequest("DeckIds cannot be empty.");
+        if (requestedIds.Count > MaxBatchStudyDecks)
+            return Results.BadRequest($"A batch can hold at most {MaxBatchStudyDecks} decks.");
+
+        var (deckCount, limits) = await GetStudyDeckUsage(userId);
+
+        var existingDeckIds = await userContext.UserStudyDecks
+            .Where(sd => sd.UserId == userId && sd.DeckId != null)
+            .Select(sd => sd.DeckId!.Value)
+            .ToListAsync();
+        var alreadyStudied = existingDeckIds.ToHashSet();
+
+        var knownDeckIds = await context.Decks
+            .Where(d => requestedIds.Contains(d.DeckId))
+            .Select(d => d.DeckId)
+            .ToListAsync();
+        var known = knownDeckIds.ToHashSet();
+
+        var skipped = new List<int>();
+        var notFound = new List<int>();
+        var addable = new List<int>();
+        foreach (var deckId in requestedIds)
+        {
+            if (alreadyStudied.Contains(deckId)) skipped.Add(deckId);
+            else if (!known.Contains(deckId)) notFound.Add(deckId);
+            else addable.Add(deckId);
+        }
+
+        var freeSlots = Math.Max(0, limits.StudyDecks - deckCount);
+        var stoppedAtCap = addable.Count > freeSlots;
+        var toAdd = addable.Take(freeSlots).ToList();
+
+        var newRows = new List<UserStudyDeck>();
+        if (toAdd.Count > 0)
+        {
+            var template = new AddStudyDeckRequest
+            {
+                DeckType = StudyDeckType.MediaDeck,
+                DownloadType = (int)DeckDownloadType.OccurrenceCount,
+                Order = (int)DeckOrder.DeckFrequency,
+                MinOccurrences = request.MinOccurrences
+            };
+
+            var sortOrder = await GetMaxStudyDeckSortOrder(userId) + 1;
+            foreach (var deckId in toAdd)
+            {
+                template.DeckId = deckId;
+                var row = CreateStudyDeck(userId, template, sortOrder++);
+                newRows.Add(row);
+                userContext.UserStudyDecks.Add(row);
+            }
+        }
+
+        // The plan set is what was added plus what was already in the list; decks cut by the cap are outside it.
+        var toAddSet = toAdd.ToHashSet();
+        var skippedSet = skipped.ToHashSet();
+        var planIds = requestedIds.Where(id => toAddSet.Contains(id) || skippedSet.Contains(id)).ToList();
+        var planIdSet = planIds.ToHashSet();
+
+        // Guarded on the plan set so a batch of only unknown ids can never deactivate or reshuffle the list.
+        var deactivateOthers = request.DeactivateOthers && planIds.Count > 0;
+        var addToTop = request.AddToTop && planIds.Count > 0;
+
+        List<UserStudyDeck>? existingRows = null;
+        if (deactivateOthers || addToTop)
+        {
+            existingRows = await userContext.UserStudyDecks
+                .Where(sd => sd.UserId == userId)
+                .OrderBy(sd => sd.SortOrder)
+                .ToListAsync();
+        }
+
+        if (deactivateOthers)
+        {
+            foreach (var row in existingRows!)
+                row.IsActive = row.DeckId != null && planIdSet.Contains(row.DeckId.Value);
+        }
+
+        if (addToTop)
+        {
+            var existingPlanRows = existingRows!
+                .Where(r => r.IsActive && r.DeckId != null && planIdSet.Contains(r.DeckId.Value))
+                .ToDictionary(r => r.DeckId!.Value);
+            var newRowsByDeck = newRows.ToDictionary(r => r.DeckId!.Value);
+
+            var planBlock = new List<UserStudyDeck>();
+            foreach (var deckId in planIds)
+            {
+                if (newRowsByDeck.TryGetValue(deckId, out var added)) planBlock.Add(added);
+                else if (existingPlanRows.TryGetValue(deckId, out var present)) planBlock.Add(present);
+            }
+
+            var blockSet = planBlock.ToHashSet();
+            var rest = existingRows!.Where(r => r.IsActive && !blockSet.Contains(r));
+            var order = 0;
+            foreach (var row in planBlock) row.SortOrder = order++;
+            foreach (var row in rest) row.SortOrder = order++;
+        }
+
+        if (toAdd.Count > 0 || deactivateOthers || addToTop)
+        {
+            await userContext.SaveChangesAsync();
+            await sessionService.BumpStudyOverviewVersion(userId);
+            logger.LogInformation("User batch added study decks: Added={Added}, Skipped={Skipped}, DeactivatedOthers={Deactivated}, AddToTop={AddToTop}",
+                                  toAdd.Count, skipped.Count, deactivateOthers, addToTop);
+        }
+
+        return Results.Ok(new
+        {
+            added = toAdd,
+            skipped,
+            notFound,
+            stoppedAtCap,
+            limit = limits.StudyDecks
+        });
+    }
+
+    private async Task<(int DeckCount, UserLimits Limits)> GetStudyDeckUsage(string userId)
+    {
+        var limits = await userLimits.GetLimitsAsync(userId);
+        var deckCount = await userContext.UserStudyDecks.CountAsync(sd => sd.UserId == userId);
+        return (deckCount, limits);
+    }
+
+    /// <summary>Inactive decks keep their own ordering space, so only active decks decide where an addition lands.</summary>
+    private async Task<int> GetMaxStudyDeckSortOrder(string userId) =>
+        await userContext.UserStudyDecks
             .Where(sd => sd.UserId == userId && sd.IsActive)
             .MaxAsync(sd => (int?)sd.SortOrder) ?? -1;
 
-        var studyDeck = new UserStudyDeck
+    private static UserStudyDeck CreateStudyDeck(string userId, AddStudyDeckRequest request, int sortOrder) =>
+        new()
         {
             UserId = userId,
             DeckType = request.DeckType,
             Name = request.Name ?? "",
             Description = request.Description,
             DeckId = request.DeckId,
-            SortOrder = maxOrder + 1,
+            SortOrder = sortOrder,
             DownloadType = request.DownloadType,
             Order = request.Order,
             MinFrequency = request.MinFrequency,
@@ -451,13 +602,6 @@ public class StudyController(
             FrequencyListId = request.DeckType == StudyDeckType.GlobalDynamic ? request.FrequencyListId : null,
             CreatedAt = DateTime.UtcNow
         };
-
-        userContext.UserStudyDecks.Add(studyDeck);
-        await userContext.SaveChangesAsync();
-        await sessionService.BumpStudyOverviewVersion(userId);
-        logger.LogInformation("User added study deck: DeckType={DeckType}, DeckId={DeckId}", request.DeckType, request.DeckId);
-        return Results.Ok(new { studyDeck.UserStudyDeckId });
-    }
 
     [HttpPut("study-decks/{id:int}")]
     [SwaggerOperation(Summary = "Update study deck filters")]

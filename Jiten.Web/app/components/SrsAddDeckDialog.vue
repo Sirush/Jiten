@@ -1,14 +1,20 @@
 <script setup lang="ts">
-  import { type Deck, type MediaSuggestion, type StudyDeckDto, DeckDownloadType, DeckOrder, StudyDeckType, MediaType } from '~/types';
+  import { type MediaSuggestion, type StudyDeckDto, DeckDownloadType, DeckOrder, StudyDeckType, MediaType } from '~/types';
   import { useSrsStore } from '~/stores/srsStore';
   import { useToast } from 'primevue/usetoast';
   import { debounce } from 'perfect-debounce';
 
+  type Mode = 'manual' | 'target' | 'occurrence';
+
+  type PreselectedDeck = { deckId: number; originalTitle: string; coverName?: string | null };
+
   const props = defineProps<{
     visible: boolean;
-    preselectedDeck?: Deck;
+    preselectedDeck?: PreselectedDeck;
     editDeck?: StudyDeckDto;
     preselectedFrequencyListId?: number;
+    initialFilterMode?: Mode;
+    initialMinOccurrences?: number;
   }>();
 
   const emit = defineEmits(['update:visible']);
@@ -129,8 +135,7 @@
   }
 
   // Media filters
-  type Mode = 'manual' | 'target' | 'occurrence';
-  const downloadMode = ref<Mode>('manual');
+  const downloadMode = ref<Mode>(props.initialFilterMode ?? 'manual');
   const downloadType = ref(DeckDownloadType.TopGlobalFrequency);
   const deckOrder = ref(DeckOrder.DeckFrequency);
   const minFrequency = ref(0);
@@ -160,7 +165,7 @@
   }
   const startFromKnown = ref(false);
   const occurrenceFilterType = ref<'gte' | 'lte'>('gte');
-  const occurrenceThreshold = ref(10);
+  const occurrenceThreshold = ref(props.initialMinOccurrences ?? 10);
   const mediaPosFilter = ref<string[]>([]);
   const excludeKana = ref(false);
   const adding = ref(false);
@@ -497,7 +502,7 @@
     searchQuery.value = '';
     searchResults.value = [];
     if (!props.preselectedDeck && !props.editDeck) selectedDeck.value = null;
-    downloadMode.value = 'manual';
+    downloadMode.value = props.initialFilterMode ?? 'manual';
     downloadType.value = DeckDownloadType.TopGlobalFrequency;
     deckOrder.value = DeckOrder.DeckFrequency;
     minFrequency.value = 0;
@@ -506,7 +511,7 @@
     editingTargetPercentage.value = false;
     startFromKnown.value = false;
     occurrenceFilterType.value = 'gte';
-    occurrenceThreshold.value = 10;
+    occurrenceThreshold.value = props.initialMinOccurrences ?? 10;
     mediaPosFilter.value = [];
     excludeKana.value = false;
     previewCount.value = null;

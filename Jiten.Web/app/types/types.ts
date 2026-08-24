@@ -1624,6 +1624,22 @@ export interface AddStudyDeckRequest {
   frequencyListId?: number;
 }
 
+export interface BatchAddStudyDecksRequest {
+  deckIds: number[];
+  downloadType: number;
+  minOccurrences: number;
+  deactivateOthers: boolean;
+  addToTop: boolean;
+}
+
+export interface BatchAddStudyDecksResult {
+  added: number[];
+  skipped: number[];
+  notFound: number[];
+  stoppedAtCap: boolean;
+  limit: number;
+}
+
 export interface UpdateStudyDeckRequest {
   name?: string;
   description?: string;

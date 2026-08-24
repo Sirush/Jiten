@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, DueSummaryDto, DeckStreakDto, ReviewForecast30dDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto, SessionStreakDto, ReviewForecastDto } from '~/types';
+import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, BatchAddStudyDecksRequest, BatchAddStudyDecksResult, DueSummaryDto, DeckStreakDto, ReviewForecast30dDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto, SessionStreakDto, ReviewForecastDto } from '~/types';
 import { FsrsRating } from '~/types';
 import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
 import { DEFAULT_CARD_DISPLAY_SETTINGS } from '~/utils/defaultStudySettings';
@@ -467,6 +467,16 @@ export const useSrsStore = defineStore('srs', () => {
       dueReviewCount: 0,
     });
     refreshOverview();
+    invalidateSession();
+    return result;
+  }
+
+  async function addStudyDecksBatch(request: BatchAddStudyDecksRequest) {
+    const result = await $api<BatchAddStudyDecksResult>('srs/study-decks/batch', {
+      method: 'POST',
+      body: request,
+    });
+    await refreshOverview(true);
     invalidateSession();
     return result;
   }
@@ -1514,6 +1524,7 @@ export const useSrsStore = defineStore('srs', () => {
     fetchDueSummary,
     fetchDeckStreak,
     addStudyDeck,
+    addStudyDecksBatch,
     updateStudyDeck,
     removeStudyDeck,
     addDeckWord,
