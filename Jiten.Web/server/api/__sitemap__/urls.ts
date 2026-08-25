@@ -17,9 +17,6 @@ export default defineEventHandler(async (event) => {
     urls.push({ loc: `/decks/media/list/${slug}`, changefreq: 'daily', priority: 0.6, _sitemap: 'pages' });
   }
 
-  urls.push({ loc: '/frequency-dictionaries', changefreq: 'monthly', priority: 0.7, _sitemap: 'pages' });
-
-
   try {
     const guides = await queryCollection(event, 'guides').where('draft', '=', false).select('path', 'updated').all();
     for (const g of guides) {
@@ -59,7 +56,7 @@ export default defineEventHandler(async (event) => {
   // Kanji pages (corpus kanji appearing in >=10 distinct words).
   if (kanjiResult.status === 'fulfilled') {
     for (const c of kanjiResult.value) {
-      urls.push({ loc: `/kanji/${encodeURIComponent(c)}`, changefreq: 'monthly', priority: 0.5, _sitemap: 'pages' });
+      urls.push({ loc: `/kanji/${c}`, changefreq: 'monthly', priority: 0.5, _sitemap: 'pages' });
     }
   } else {
     console.error('Error fetching kanji sitemap data:', kanjiResult.reason);

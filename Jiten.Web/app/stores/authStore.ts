@@ -47,7 +47,8 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!accessToken.value);
   const isAdmin = computed(() => user.value?.roles?.includes('Administrator') || false);
 
-  const { $api } = useNuxtApp();
+  const nuxtApp = useNuxtApp();
+  const { $api } = nuxtApp;
 
   // Initialise tab synchronisation (client-side only)
   if (import.meta.client) {
@@ -125,8 +126,10 @@ export const useAuthStore = defineStore('auth', () => {
       refreshTokenCookie.value = null;
     }
 
-    useJitenPlus().reset();
-    useLegalStore().reset();
+    nuxtApp.runWithContext(() => {
+      useJitenPlus().reset();
+      useLegalStore().reset();
+    });
   }
 
   function tokenExpiry(token: string | null | undefined): number {
@@ -457,10 +460,10 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function onLoginSuccess() {
-    const srs = useSrsStore();
-    srs.refreshOverview(true);
-
-    useJitenPlus().refresh();
+    nuxtApp.runWithContext(() => {
+      useSrsStore().refreshOverview(true);
+      useJitenPlus().refresh();
+    });
   }
 
   function initializeAuth() {

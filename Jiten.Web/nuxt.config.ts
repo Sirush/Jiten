@@ -46,6 +46,22 @@ export default defineNuxtConfig({
     'nuxt-umami',
     ...(process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID ? ['nuxt-vue3-google-signin'] : []),
     ...(process.env.NUXT_PUBLIC_RECAPTCHA_V2_SITE_KEY ? ['vue-recaptcha/nuxt'] : []),
+    // @nuxtjs/mdc marks its `#mdc-imports`/`#mdc-configs` imports @vite-ignore, so the browser receives
+    // the bare specifier and throws. Nuxt escalates that to app:chunkError and hard-reloads the page.
+    (_options, nuxt) => {
+      nuxt.hook('vite:extendConfig', (config, { isClient }) => {
+        if (!isClient) return;
+        config.plugins ||= [];
+        config.plugins.push({
+          name: 'jiten:mdc-resolve-virtual-imports',
+          enforce: 'pre',
+          transform(code: string, id: string) {
+            if (!id.includes('@nuxtjs/mdc') || !id.includes('runtime/parser/index')) return;
+            return { code: code.replace(/\s*\/\* @vite-ignore \*\//g, ''), map: null };
+          },
+        });
+      });
+    },
   ],
   content: {
     // Use Node 22.5+ built-in node:sqlite — no native better-sqlite3 build needed in dev,
@@ -74,12 +90,17 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   sitemap: {
     sources: ['/api/__sitemap__/urls'],
-    // Jiten+ member tools: no search value, and thin/paywalled for crawlers.
-    exclude: ['/jiten-plus/frequency-lists', '/jiten-plus/immersion-plan'],
+    // Member-only tools: thin or login-gated for crawlers, so a sitemap entry only earns a redirect report.
+    exclude: ['/jiten-plus/frequency-lists', '/jiten-plus/immersion-plan', '/polls'],
   },
   nitro: {
     // SSR is CPU-bound, so a single process caps throughput at one core; NITRO_CLUSTER_WORKERS sets the count at runtime.
     preset: 'node-cluster',
+    externals: {
+      // satori loads hb.wasm through a runtime string, so the build trace misses it and og-image 500s.
+      // harfbuzzjs is a direct dependency only so this specifier resolves; keep it pinned to satori's version.
+      traceInclude: ['harfbuzzjs/hb.wasm'],
+    },
   },
   routeRules: {
     '/_nuxt/**': { ssr: false },
