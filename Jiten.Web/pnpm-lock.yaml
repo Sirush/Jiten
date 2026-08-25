@@ -76,6 +76,9 @@ importers:
       fontless:
         specifier: 0.2.1
         version: 0.2.1(@netlify/blobs@9.1.2)(db0@0.3.4(better-sqlite3@12.11.1))(ioredis@5.11.1)(vite@8.2.2(@types/node@25.9.3)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0))
+      harfbuzzjs:
+        specifier: 0.10.0
+        version: 0.10.0
       hatsuon:
         specifier: 2.0.0
         version: 2.0.0

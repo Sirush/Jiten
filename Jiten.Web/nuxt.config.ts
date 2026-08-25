@@ -74,12 +74,17 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   sitemap: {
     sources: ['/api/__sitemap__/urls'],
-    // Jiten+ member tools: no search value, and thin/paywalled for crawlers.
-    exclude: ['/jiten-plus/frequency-lists', '/jiten-plus/immersion-plan'],
+    // Member-only tools: thin or login-gated for crawlers, so a sitemap entry only earns a redirect report.
+    exclude: ['/jiten-plus/frequency-lists', '/jiten-plus/immersion-plan', '/polls'],
   },
   nitro: {
     // SSR is CPU-bound, so a single process caps throughput at one core; NITRO_CLUSTER_WORKERS sets the count at runtime.
     preset: 'node-cluster',
+    externals: {
+      // satori loads hb.wasm through a runtime string, so the build trace misses it and og-image 500s.
+      // harfbuzzjs is a direct dependency only so this specifier resolves; keep it pinned to satori's version.
+      traceInclude: ['harfbuzzjs/hb.wasm'],
+    },
   },
   routeRules: {
     '/_nuxt/**': { ssr: false },

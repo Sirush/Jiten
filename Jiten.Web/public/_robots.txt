@@ -21,6 +21,7 @@ Disallow: /login
 Disallow: /register
 Disallow: /forgot-password
 Disallow: /notifications
+Disallow: /polls
 Disallow: /parse
 Disallow: /requests
 Disallow: /requests/*
