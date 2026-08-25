@@ -39,9 +39,7 @@ public class FetchMetadataJob(
             if (link == null)
                 throw new Exception($"No Anilist link found for deck with ID {deckId}.");
 
-            var url = link.Url.TrimEnd('/');
-            var lastSlashIndex = url.LastIndexOf('/');
-            var id = int.Parse(url.Substring(lastSlashIndex + 1));
+            var id = int.Parse(ParseLink(link, LinkType.Anilist, deckId).Id);
 
             var metadata = await MetadataProviderHelper.AnilistApi(id);
 
@@ -99,9 +97,7 @@ public class FetchMetadataJob(
             if (link == null)
                 throw new Exception($"No Google Books link found for deck with ID {deckId}.");
 
-            var url = link.Url.TrimEnd('/');
-            var lastSlashIndex = url.LastIndexOf('/');
-            var id = url.Substring(lastSlashIndex + 1);
+            var id = ParseLink(link, LinkType.GoogleBooks, deckId).Id;
 
             var metadata = await MetadataProviderHelper.GoogleBooksApi(id);
 
@@ -152,9 +148,7 @@ public class FetchMetadataJob(
             if (link == null)
                 throw new Exception($"No VNDB link found for deck with ID {deckId}.");
 
-            var url = link.Url.TrimEnd('/');
-            var lastSlashIndex = url.LastIndexOf('/');
-            var id = url.Substring(lastSlashIndex + 1);
+            var id = ParseLink(link, LinkType.Vndb, deckId).Id;
 
             var metadata = await MetadataProviderHelper.VndbApi(id);
 
@@ -219,14 +213,20 @@ public class FetchMetadataJob(
             if (link == null)
                 throw new Exception($"No TMDB link found for deck with ID {deckId}.");
 
-            var url = link.Url.TrimEnd('/');
-            var lastSlashIndex = url.LastIndexOf('/');
-            var id = url.Substring(lastSlashIndex + 1);
+            var parsed = ParseLink(link, LinkType.Tmdb, deckId);
+            var id = parsed.Id;
 
             string apiKey = configuration["TmdbApiKey"]!;
 
+            var isMovie = parsed.Kind switch
+            {
+                ExternalUrlKind.Movie => true,
+                ExternalUrlKind.Tv => false,
+                _ => deck.MediaType == MediaType.Movie
+            };
+
             Metadata metadata;
-            if (deck.MediaType == MediaType.Movie)
+            if (isMovie)
                 metadata = await MetadataProviderHelper.TmdbMovieApi(id, apiKey);
             else
                 metadata = await MetadataProviderHelper.TmdbTvApi(id, apiKey);
@@ -277,7 +277,7 @@ public class FetchMetadataJob(
             if (link == null)
                 throw new Exception($"No IGDB link found for deck with ID {deckId}.");
 
-            var url = link.Url.TrimEnd('/');
+            var url = ParseLink(link, LinkType.Igdb, deckId).Id;
 
             Metadata? metadata = await MetadataProviderHelper.IgdbApi(url,configuration["IgdbClientId"]!, configuration["IgdbClientSecret"]!);
             if (metadata == null)
@@ -327,11 +327,10 @@ public class FetchMetadataJob(
             if (link == null)
                 throw new Exception($"No MAL link found for deck with ID {deckId}.");
 
-            var url = link.Url.TrimEnd('/');
-            var lastSlashIndex = url.LastIndexOf('/');
-            var malId = int.Parse(url.Substring(lastSlashIndex + 1));
+            var parsed = ParseLink(link, LinkType.Mal, deckId);
+            var malId = int.Parse(parsed.Id);
 
-            var isAnime = url.Contains("/anime/");
+            var isAnime = parsed.Kind == ExternalUrlKind.Anime;
             var metadata = isAnime
                 ? await MetadataProviderHelper.JikanAnimeApi(malId)
                 : await MetadataProviderHelper.JikanMangaApi(malId);
@@ -427,6 +426,14 @@ public class FetchMetadataJob(
             throw new Exception($"Syosetsu link '{link.Url}' on deck {deck.DeckId} is not a work URL.");
 
         return (provider, sourceId);
+    }
+
+    private static ExternalUrlRef ParseLink(Link link, LinkType expected, int deckId)
+    {
+        if (!ExternalUrlParser.TryParse(link.Url, out var parsed) || parsed.LinkType != expected)
+            throw new Exception($"{expected} link '{link.Url}' on deck {deckId} is not a work URL.");
+
+        return parsed;
     }
 
     private static void MergeDictionaryEntries(Deck deck, List<DeckDictionaryEntry> entries)

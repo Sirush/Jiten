@@ -118,6 +118,52 @@ public partial class AdminController(
         });
     }
 
+    /// <summary>Same payload as search-media, but resolved from a link instead of a search term.</summary>
+    [HttpGet("metadata-from-url")]
+    public async Task<IActionResult> GetMetadataFromUrl([FromQuery] string url, [FromQuery] MediaType? mediaType)
+    {
+        if (!ExternalUrlParser.TryParse(url, out var parsed))
+            return BadRequest(new { Message = "This link is not from a metadata source we can read." });
+
+        try
+        {
+            Metadata? metadata = parsed.LinkType switch
+            {
+                LinkType.Vndb => await MetadataProviderHelper.VndbApi(parsed.Id),
+                LinkType.GoogleBooks => await MetadataProviderHelper.GoogleBooksApi(parsed.Id),
+                LinkType.Igdb => await MetadataProviderHelper.IgdbApi(parsed.Id, config["IgdbClientId"]!, config["IgdbClientSecret"]!),
+                LinkType.Anilist => parsed.Kind == ExternalUrlKind.Anime
+                    ? await MetadataProviderHelper.AnilistAnimeApi(int.Parse(parsed.Id))
+                    : await MetadataProviderHelper.AnilistApi(int.Parse(parsed.Id)),
+                LinkType.Mal => parsed.Kind == ExternalUrlKind.Anime
+                    ? await MetadataProviderHelper.JikanAnimeApi(int.Parse(parsed.Id))
+                    : await MetadataProviderHelper.JikanMangaApi(int.Parse(parsed.Id)),
+                LinkType.Tmdb => IsTmdbMovie(parsed.Kind, mediaType)
+                    ? await MetadataProviderHelper.TmdbMovieApi(parsed.Id, config["TmdbApiKey"]!)
+                    : await MetadataProviderHelper.TmdbTvApi(parsed.Id, config["TmdbApiKey"]!),
+                _ => null
+            };
+
+            if (metadata == null)
+                return BadRequest(new { Message = "The source has no entry for this link." });
+
+            logger.LogInformation("Admin resolved metadata from URL: Url={Url}, Provider={Provider}", url, parsed.LinkType);
+            return Ok(metadata);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Metadata lookup failed for {Url}", url);
+            return StatusCode(StatusCodes.Status502BadGateway, new { Message = "Could not read metadata from the source." });
+        }
+    }
+
+    private static bool IsTmdbMovie(ExternalUrlKind kind, MediaType? mediaType) => kind switch
+    {
+        ExternalUrlKind.Movie => true,
+        ExternalUrlKind.Tv => false,
+        _ => mediaType == MediaType.Movie
+    };
+
     [HttpPost("add-deck")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(254857600)]
@@ -254,16 +300,16 @@ public partial class AdminController(
                     metadata.Children.Add(subdeckMetadata);
                 }
             }
-            else
-            {
-                // Return error if no files provided
-                return BadRequest("No media files provided. Please upload at least one file.");
-            }
 
-            backgroundJobs.Enqueue<ParseJob>(job => job.Parse(metadata, model.MediaType, bool.Parse(config["StoreRawText"] ?? "false")));
+            // InsertDeck dedupes on (OriginalTitle, MediaType) by silently skipping, so a collision has to be caught here
+            if (await dbContext.Decks.AnyAsync(d => d.OriginalTitle == metadata.OriginalTitle && d.MediaType == model.MediaType))
+                return Conflict(new { Message = "A deck with this exact title and media type already exists. Change the title, or edit the existing deck." });
 
-            logger.LogInformation("Admin added new deck: Title={Title}, MediaType={MediaType}, SubdeckCount={SubdeckCount}",
-                                  model.OriginalTitle, model.MediaType, metadata.Children?.Count ?? 0);
+            backgroundJobs.Enqueue<ParseJob>(job =>
+                job.Parse(metadata, model.MediaType, bool.Parse(config["StoreRawText"] ?? "false"), model.RequestId));
+
+            logger.LogInformation("Admin added new deck: Title={Title}, MediaType={MediaType}, SubdeckCount={SubdeckCount}, RequestId={RequestId}",
+                                  model.OriginalTitle, model.MediaType, metadata.Children?.Count ?? 0, model.RequestId);
 
             return Ok(new
                       {
@@ -381,11 +427,25 @@ public partial class AdminController(
         string path = Path.Join(config["StaticFilesPath"], "tmp", Guid.NewGuid().ToString());
         Directory.CreateDirectory(path);
 
+        var deckWasEmpty = deck.Children.Count == 0 && deck.CharacterCount == 0;
+        var newSubdecksWithFiles = model.Subdecks?.Where(s => s.DeckId <= 0 && s.File is { Length: > 0 }).ToList() ?? [];
+
+        // An empty deck's single first file becomes its own text, not a lone subdeck
+        var promotedFile = deckWasEmpty && model.File is not { Length: > 0 }
+                                        && newSubdecksWithFiles.Count == 1 && model.Subdecks!.Count == 1
+            ? newSubdecksWithFiles[0].File
+            : null;
+
+        if (promotedFile != null)
+            model.Subdecks!.Clear();
+
+        var parentFile = model.File is { Length: > 0 } ? model.File : promotedFile;
+
         // Update text if provided
-        if (model.File is { Length: > 0 })
+        if (parentFile is { Length: > 0 })
         {
-            var (text, stats) = await GetTextFromFile(model.File);
-            deck.OriginalFileName = model.File.FileName;
+            var (text, stats) = await GetTextFromFile(parentFile);
+            deck.OriginalFileName = parentFile.FileName;
             if (deck.RawText != null)
                 deck.RawText.RawText = text;
             else
@@ -397,6 +457,8 @@ public partial class AdminController(
             }
         }
 
+        // An empty deck's first text is parsed straight away; there are no stats to preserve by waiting for an explicit reparse
+        var reparse = model.Reparse || (deckWasEmpty && parentFile is { Length: > 0 });
 
         // Update aliases
         if (model.Aliases.Any())
@@ -508,15 +570,15 @@ public partial class AdminController(
             .Select(d => d.DeckId)
             .Concat(updatedChildIdsWithText)
             .ToList();
-        if (childIdsToParse.Count > 0 && !model.Reparse)
+        if (childIdsToParse.Count > 0 && !reparse)
             backgroundJobs.Enqueue<ParseNewSubdecksJob>(
                 job => job.ParseNewSubdecks(deck.DeckId, childIdsToParse));
 
-        if (model.Reparse)
+        if (reparse)
             backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId));
 
         logger.LogInformation("Admin updated deck: DeckId={DeckId}, Title={Title}, Reparse={Reparse}",
-                              deck.DeckId, deck.OriginalTitle, model.Reparse);
+                              deck.DeckId, deck.OriginalTitle, reparse);
 
         return Ok(new { Message = $"Media deck {deck.DeckId} updated successfully" });
 
