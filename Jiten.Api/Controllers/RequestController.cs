@@ -1935,6 +1935,8 @@ public partial class RequestController(
             if (host.Contains("imdb.com")) return LinkType.Imdb;
             if (host.Contains("igdb.com")) return LinkType.Igdb;
             if (host.Contains("syosetu.com")) return LinkType.Syosetsu;
+            if (host.Contains("bookmeter.com")) return LinkType.Bookmeter;
+            if (host.Contains("amazon.")) return LinkType.Amazon;
             if (host.Contains("google.") && uri.AbsolutePath.Contains("/books/")) return LinkType.GoogleBooks;
 
             return LinkType.Web;

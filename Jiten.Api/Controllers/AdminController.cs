@@ -141,6 +141,9 @@ public partial class AdminController(
                 LinkType.Tmdb => IsTmdbMovie(parsed.Kind, mediaType)
                     ? await MetadataProviderHelper.TmdbMovieApi(parsed.Id, config["TmdbApiKey"]!)
                     : await MetadataProviderHelper.TmdbTvApi(parsed.Id, config["TmdbApiKey"]!),
+                LinkType.Imdb => await MetadataProviderHelper.TmdbFindByImdbApi(parsed.Id, config["TmdbApiKey"]!,
+                    IsTmdbMovie(parsed.Kind, mediaType)),
+                LinkType.Bookmeter => await MetadataProviderHelper.BookmeterApi(parsed.Id),
                 _ => null
             };
 

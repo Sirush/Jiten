@@ -117,6 +117,45 @@ public class ExternalUrlParserTests
     }
 
     [Theory]
+    [InlineData("https://bookmeter.com/books/642866", "642866")]
+    [InlineData("https://bookmeter.com/books/642866/", "642866")]
+    [InlineData("https://www.bookmeter.com/books/642866?review=1", "642866")]
+    public void Bookmeter_ReturnsBookId(string url, string expected)
+    {
+        ExternalUrlParser.TryParse(url, out var result).Should().BeTrue();
+        result.LinkType.Should().Be(LinkType.Bookmeter);
+        result.Id.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("https://bookmeter.com/users/12345")]
+    [InlineData("https://bookmeter.com/books/not-a-number")]
+    [InlineData("https://bookmeter.com/books")]
+    public void Bookmeter_NonBookPaths_ReturnFalse(string url)
+    {
+        ExternalUrlParser.TryParse(url, out _).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("https://www.imdb.com/title/tt0111161/", "tt0111161")]
+    [InlineData("https://imdb.com/title/tt0111161", "tt0111161")]
+    [InlineData("https://www.imdb.com/title/TT0111161/fullcredits", "tt0111161")]
+    public void Imdb_ReturnsTitleId(string url, string expected)
+    {
+        ExternalUrlParser.TryParse(url, out var result).Should().BeTrue();
+        result.LinkType.Should().Be(LinkType.Imdb);
+        result.Id.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("https://www.imdb.com/name/nm0000151/")]
+    [InlineData("https://www.imdb.com/title/notatitle/")]
+    public void Imdb_NonTitlePaths_ReturnFalse(string url)
+    {
+        ExternalUrlParser.TryParse(url, out _).Should().BeFalse();
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
@@ -126,7 +165,6 @@ public class ExternalUrlParserTests
     [InlineData("javascript:alert(1)")]
     [InlineData("https://example.com/anime/123")]
     [InlineData("https://ncode.syosetu.com/n9669bk/")]
-    [InlineData("https://www.imdb.com/title/tt0111161/")]
     [InlineData("https://www.amazon.co.jp/dp/B0000")]
     public void UnsupportedInput_ReturnsFalse(string? url)
     {

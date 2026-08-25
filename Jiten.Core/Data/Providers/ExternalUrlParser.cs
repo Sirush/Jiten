@@ -48,6 +48,12 @@ public static class ExternalUrlParser
         if (HostMatches(host, "igdb.com"))
             return TryIgdb(trimmed, segments, out result);
 
+        if (HostMatches(host, "bookmeter.com"))
+            return TryBookmeter(segments, out result);
+
+        if (HostMatches(host, "imdb.com"))
+            return TryImdb(segments, out result);
+
         if (IsGoogleBooksHost(host, uri.AbsolutePath))
             return TryGoogleBooks(uri, segments, out result);
 
@@ -139,6 +145,32 @@ public static class ExternalUrlParser
             return false;
 
         result = new ExternalUrlRef(LinkType.Igdb, url.TrimEnd('/'), ExternalUrlKind.Unknown);
+        return true;
+    }
+
+    private static bool TryBookmeter(string[] segments, out ExternalUrlRef result)
+    {
+        result = default;
+
+        if (segments.Length < 2 || !segments[0].Equals("books", StringComparison.OrdinalIgnoreCase) || !IsAllDigits(segments[1]))
+            return false;
+
+        result = new ExternalUrlRef(LinkType.Bookmeter, segments[1], ExternalUrlKind.Unknown);
+        return true;
+    }
+
+    private static bool TryImdb(string[] segments, out ExternalUrlRef result)
+    {
+        result = default;
+
+        if (segments.Length < 2 || !segments[0].Equals("title", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var id = segments[1].ToLowerInvariant();
+        if (id.Length < 3 || !id.StartsWith("tt", StringComparison.Ordinal) || !IsAllDigits(id.AsSpan(2)))
+            return false;
+
+        result = new ExternalUrlRef(LinkType.Imdb, id, ExternalUrlKind.Unknown);
         return true;
     }
 
