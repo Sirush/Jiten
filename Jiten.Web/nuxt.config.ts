@@ -46,6 +46,22 @@ export default defineNuxtConfig({
     'nuxt-umami',
     ...(process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID ? ['nuxt-vue3-google-signin'] : []),
     ...(process.env.NUXT_PUBLIC_RECAPTCHA_V2_SITE_KEY ? ['vue-recaptcha/nuxt'] : []),
+    // @nuxtjs/mdc marks its `#mdc-imports`/`#mdc-configs` imports @vite-ignore, so the browser receives
+    // the bare specifier and throws. Nuxt escalates that to app:chunkError and hard-reloads the page.
+    (_options, nuxt) => {
+      nuxt.hook('vite:extendConfig', (config, { isClient }) => {
+        if (!isClient) return;
+        config.plugins ||= [];
+        config.plugins.push({
+          name: 'jiten:mdc-resolve-virtual-imports',
+          enforce: 'pre',
+          transform(code: string, id: string) {
+            if (!id.includes('@nuxtjs/mdc') || !id.includes('runtime/parser/index')) return;
+            return { code: code.replace(/\s*\/\* @vite-ignore \*\//g, ''), map: null };
+          },
+        });
+      });
+    },
   ],
   content: {
     // Use Node 22.5+ built-in node:sqlite — no native better-sqlite3 build needed in dev,
