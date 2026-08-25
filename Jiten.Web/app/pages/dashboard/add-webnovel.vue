@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, computed, watch, onBeforeUnmount } from 'vue';
+  import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue';
   import Button from 'primevue/button';
   import InputText from 'primevue/inputtext';
   import InputNumber from 'primevue/inputnumber';
@@ -39,6 +39,7 @@
   }
 
   const toast = useToast();
+  const route = useRoute();
   const { $api } = useNuxtApp();
 
   const url = ref('');
@@ -155,6 +156,16 @@
       submitting.value = false;
     }
   };
+
+  // Arrived from a media request's fulfil link
+  onMounted(() => {
+    const queryUrl = route.query.url;
+    const initial = Array.isArray(queryUrl) ? queryUrl[0] : queryUrl;
+    if (!initial) return;
+
+    url.value = initial;
+    fetchPreview();
+  });
 
   const formatNumber = (value: number) => value.toLocaleString('en-US');
   const formatDate = (value: string | null) => (value ? new Date(value).toLocaleDateString() : '—');

@@ -21,6 +21,9 @@ public class AddMediaRequest
     public bool IsNotOriginallyJapanese { get; set; }
     public List<AddMediaRequestRelation> Relations { get; set; } = new List<AddMediaRequestRelation>();
     public List<string> DictionaryEntries { get; set; } = new List<string>();
+
+    /// <summary>Media request this deck fulfils. Set only when the add form was opened from a request.</summary>
+    public int? RequestId { get; set; }
 }
 
 public class AddMediaRequestSubdeck

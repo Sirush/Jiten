@@ -1458,14 +1458,17 @@ public partial class RequestController(
         if (!allowed.Contains(model.Status))
             return Results.Conflict($"Cannot transition from {request.Status} to {model.Status}");
 
+        // A deck created from this request is already linked, so completing it needs no payload deck id
+        var fulfilledDeckId = model.FulfilledDeckId ?? request.FulfilledDeckId;
+
         // Validate payload rules
         if (model.Status == MediaRequestStatus.Completed)
         {
-            if (!model.FulfilledDeckId.HasValue)
+            if (!fulfilledDeckId.HasValue)
                 return Results.BadRequest("fulfilledDeckId is required when completing a request");
 
             var deckExists = await context.Decks.AsNoTracking()
-                .AnyAsync(d => d.DeckId == model.FulfilledDeckId.Value);
+                .AnyAsync(d => d.DeckId == fulfilledDeckId.Value);
             if (!deckExists)
                 return Results.BadRequest("Referenced deck does not exist");
         }
@@ -1481,7 +1484,8 @@ public partial class RequestController(
 
         request.Status = model.Status;
         request.AdminNote = model.AdminNote;
-        request.FulfilledDeckId = model.FulfilledDeckId;
+        if (model.Status == MediaRequestStatus.Completed)
+            request.FulfilledDeckId = fulfilledDeckId;
         request.UpdatedAt = DateTime.UtcNow;
         if (model.Status is MediaRequestStatus.Completed or MediaRequestStatus.Rejected)
             request.CompletedAt = DateTime.UtcNow;
@@ -1497,7 +1501,7 @@ public partial class RequestController(
 
         var detail = model.Status switch
         {
-            MediaRequestStatus.Completed => JsonSerializer.Serialize(new { deckId = model.FulfilledDeckId, model.AdminNote }),
+            MediaRequestStatus.Completed => JsonSerializer.Serialize(new { deckId = fulfilledDeckId, model.AdminNote }),
             MediaRequestStatus.Rejected => JsonSerializer.Serialize(new { model.AdminNote }),
             _ => null
         };
@@ -1537,8 +1541,8 @@ public partial class RequestController(
                 ? NotificationType.RequestCompleted
                 : NotificationType.RequestStatusChanged;
 
-            var linkUrl = model.Status == MediaRequestStatus.Completed && model.FulfilledDeckId.HasValue
-                ? $"/decks/media/{model.FulfilledDeckId.Value}/detail"
+            var linkUrl = model.Status == MediaRequestStatus.Completed && fulfilledDeckId.HasValue
+                ? $"/decks/media/{fulfilledDeckId.Value}/detail"
                 : $"/requests/{id}";
 
             if (model.Status == MediaRequestStatus.Open || model.Status == MediaRequestStatus.InProgress)

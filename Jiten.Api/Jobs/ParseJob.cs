@@ -17,16 +17,19 @@ public class ParseJob(
     IIndexNowService indexNow)
 {
     [Queue("parse")]
-    public async Task Parse(Metadata metadata, MediaType deckType, bool storeRawText = false)
+    public Task Parse(Metadata metadata, MediaType deckType, bool storeRawText) => Parse(metadata, deckType, storeRawText, null);
+
+    [Queue("parse")]
+    public async Task Parse(Metadata metadata, MediaType deckType, bool storeRawText, int? requestId)
     {
-        await ParseAndGetDeckId(metadata, deckType, storeRawText);
+        await ParseAndGetDeckId(metadata, deckType, storeRawText, requestId);
     }
 
     /// <summary>
     /// Same as <see cref="Parse"/>, but hands back the created deck. Callers that need to attach their own
     /// rows to the new deck tree (webnovel ledger) run it inline instead of enqueuing it.
     /// </summary>
-    public async Task<int> ParseAndGetDeckId(Metadata metadata, MediaType deckType, bool storeRawText = false)
+    public async Task<int> ParseAndGetDeckId(Metadata metadata, MediaType deckType, bool storeRawText = false, int? requestId = null)
     {
         Deck deck = new();
         string filePath = metadata.FilePath!;
@@ -144,6 +147,9 @@ public class ParseJob(
         // Insert the deck into the database
         await JitenHelper.InsertDeck(contextFactory, deck, coverImage, false);
 
+        if (requestId is > 0)
+            await LinkFulfilledRequest(requestId.Value, deck.DeckId);
+
         // Process relations from metadata
         if (metadata.Relations.Count > 0)
         {
@@ -168,6 +174,23 @@ public class ParseJob(
         await indexNow.SubmitDeckAsync(deck.DeckId);
 
         return deck.DeckId;
+    }
+
+    private async Task LinkFulfilledRequest(int requestId, int deckId)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        var request = await context.MediaRequests.FirstOrDefaultAsync(r => r.Id == requestId);
+        if (request == null)
+            return;
+
+        request.FulfilledDeckId = deckId;
+        request.UpdatedAt = DateTime.UtcNow;
+
+        if (request.Status == MediaRequestStatus.Open)
+            request.Status = MediaRequestStatus.InProgress;
+
+        await context.SaveChangesAsync();
     }
 
     /// <summary>

@@ -1,13 +1,15 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, ref, watch } from 'vue'; // Added watch and onBeforeUnmount
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import Card from 'primevue/card';
   import Button from 'primevue/button';
   import FileUpload from 'primevue/fileupload';
   import InputText from 'primevue/inputtext';
+  import Message from 'primevue/message';
   import SplitButton from 'primevue/splitbutton';
   import Toast from 'primevue/toast';
   import { useToast } from 'primevue/usetoast';
   import type { Metadata, DuplicateCheckDeckDto } from '~/types';
+  import type { MediaRequestDto } from '~/types/types';
   import { MediaType } from '~/types';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getLinkTypeText } from '~/utils/linkTypeMapper';
@@ -19,7 +21,7 @@
   });
 
   definePageMeta({
-    middleware: ['auth'],
+    middleware: ['auth-admin'],
   });
 
   const SCREEN_MEDIA_TYPE = 'media-type';
@@ -28,7 +30,12 @@
 
   const selectedMediaType = ref<MediaType | null>(null);
   const toast = useToast();
+  const route = useRoute();
   const { $api } = useNuxtApp();
+  const { fetchRequest } = useMediaRequests();
+
+  const fulfillingRequest = ref<MediaRequestDto | null>(null);
+  const isPrefilling = ref(false);
 
   function showToast(severity: 'success' | 'info' | 'warn' | 'error', summary: string, detail: string = '') {
     toast.add({ severity, summary, detail, life: 3000 });
@@ -253,6 +260,38 @@
 
   const currentProvider = ref('');
 
+  onMounted(async () => {
+    const raw = route.query.requestId;
+    const requestId = Number(Array.isArray(raw) ? raw[0] : raw);
+    if (!Number.isInteger(requestId) || requestId <= 0) return;
+
+    isPrefilling.value = true;
+    try {
+      const request = await fetchRequest(requestId);
+      if (!request) {
+        showToast('warn', 'Request not found', 'Fill the form in by hand.');
+        return;
+      }
+
+      fulfillingRequest.value = request;
+      selectedMediaType.value = request.mediaType;
+      currentScreen.value = SCREEN_FILE_UPLOAD;
+      searchQuery.value = request.title;
+      originalTitle.value = request.title;
+
+      if (!request.externalUrl) return;
+
+      const metadata = await $api<Metadata>('admin/metadata-from-url', {
+        query: { url: request.externalUrl, mediaType: request.mediaType },
+      });
+      handleSelectMetadata(metadata);
+    } catch {
+      showToast('warn', 'Could not read the request link', 'Search for the metadata instead.');
+    } finally {
+      isPrefilling.value = false;
+    }
+  });
+
   async function autoRomanize() {
     if (!originalTitle.value) return;
     romanizing.value = true;
@@ -312,6 +351,9 @@
       formData.append('releaseDate', formatDateAsYyyyMmDd(releaseDate.value));
       formData.append('description', description.value);
       formData.append('rating', rating.value);
+      if (fulfillingRequest.value) {
+        formData.append('requestId', String(fulfillingRequest.value.id));
+      }
 
       // Handle cover image
       if (coverImage.value) {
@@ -403,10 +445,10 @@
       });
 
       showToast('success', 'Success', 'Media added successfully!');
-      navigateTo('/dashboard');
+      navigateTo(fulfillingRequest.value ? `/requests/${fulfillingRequest.value.id}` : '/dashboard');
     } catch (error) {
       console.error('Error submitting media:', error);
-      showToast('error', 'Submission Error', 'An error occurred while submitting. Please try again.');
+      showToast('error', 'Submission Error', extractApiError(error, 'An error occurred while submitting. Please try again.'));
     }
   }
 </script>
@@ -418,6 +460,12 @@
         <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="navigateTo('/dashboard')" />
         <h1 class="text-3xl font-bold">Add Media</h1>
       </div>
+
+      <Message v-if="fulfillingRequest" severity="info" :closable="false" class="mb-6">
+        Fulfilling request #{{ fulfillingRequest.id }}:
+        <NuxtLink :to="`/requests/${fulfillingRequest.id}`" target="_blank" class="underline">{{ fulfillingRequest.title }}</NuxtLink>
+        <span v-if="isPrefilling" class="ml-2 text-sm">Loading metadata...</span>
+      </Message>
 
       <!-- Media Type Selection Screen -->
       <div v-if="currentScreen === SCREEN_MEDIA_TYPE" class="mt-6">
@@ -443,31 +491,41 @@
         </div>
 
         <!-- Main file upload -->
-        <Card v-if="!selectedFile" class="mb-6 p-4">
+        <Card class="mb-6">
+          <template #title>Main File</template>
           <template #content>
-            <FileUpload
-              mode="advanced"
-              :auto="true"
-              choose-label="Select Main File"
-              :multiple="false"
-              class="w-full main-file-upload"
-              :custom-upload="true"
-              :show-upload-button="false"
-              :show-cancel-button="false"
-              @select="handleFileUpload"
-            >
-              <template #empty>
-                <div class="flex items-center justify-center flex-col">
-                  <Icon name="material-symbols-light:arrow-upload-progress" class="!border-2 !rounded-full !p-8 !text-4xl !text-muted-color" />
-                  <p class="mt-6 mb-0">Drag and drop file to here to upload.</p>
-                </div>
-              </template>
-            </FileUpload>
+            <div v-if="selectedFile" class="flex items-center gap-2">
+              <span class="text-sm text-gray-600 dark:text-gray-400">{{ selectedFile.name }}</span>
+              <Button class="p-button-text p-button-sm" @click="selectedFile = null">
+                <Icon name="material-symbols-light:close" class="w-full" size="1.5em" />
+              </Button>
+            </div>
+            <template v-else>
+              <FileUpload
+                mode="advanced"
+                :auto="true"
+                choose-label="Select Main File"
+                :multiple="false"
+                class="w-full main-file-upload"
+                :custom-upload="true"
+                :show-upload-button="false"
+                :show-cancel-button="false"
+                @select="handleFileUpload"
+              >
+                <template #empty>
+                  <div class="flex items-center justify-center flex-col">
+                    <Icon name="material-symbols-light:arrow-upload-progress" class="!border-2 !rounded-full !p-8 !text-4xl !text-muted-color" />
+                    <p class="mt-6 mb-0">Drag and drop file to here to upload.</p>
+                  </div>
+                </template>
+              </FileUpload>
+              <p class="mt-3 text-sm text-muted-color">No file yet. The deck will be created empty and you can add files later.</p>
+            </template>
           </template>
         </Card>
 
         <!-- File details card -->
-        <Card v-else class="mb-6">
+        <Card class="mb-6">
           <template #title>Media Details</template>
           <template #content>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -519,15 +577,6 @@
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Description</label>
                   <Textarea v-model="description" class="w-full" :rows="6" />
-                </div>
-                <div class="mb-4">
-                  <label class="block text-sm font-medium mb-1">Selected File</label>
-                  <div class="flex items-center">
-                    <span class="text-sm text-gray-600 dark:text-gray-400">{{ selectedFile.name }}</span>
-                    <Button class="p-button-text p-button-sm ml-2" @click="selectedFile = null">
-                      <Icon name="material-symbols-light:close" class="w-full" size="1.5em" />
-                    </Button>
-                  </div>
                 </div>
               </div>
 
@@ -665,7 +714,7 @@
           </Card>
         </div>
 
-        <div v-if="selectedFile" class="mt-6 flex justify-center">
+        <div class="mt-6 flex justify-center">
           <Button label="Submit" class="p-button-lg p-button-success" :disabled="!originalTitle.trim() || (!coverImage && !coverImageUrl)" @click="submitMedia">
             <Icon name="material-symbols-light:check-circle" class="w-full" size="2em" />
             Submit

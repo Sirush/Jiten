@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RequestStatus, RequestKind, MediaType } from '~/types';
+import { RequestStatus, RequestKind, MediaType, LinkType } from '~/types';
 import type { MediaRequestDto, MediaRequestCommentDto, MediaRequestUploadDto, MediaRequestUploadAdminDto, MediaSuggestion } from '~/types/types';
 import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
@@ -116,8 +116,11 @@ async function loadData() {
     editExternalUrl.value = req.externalUrl || '';
     editDescription.value = req.description || '';
 
-    // Completing an update request almost always fulfils it with the deck it targets.
-    if (req.kind === RequestKind.Update && req.targetDeckId && fulfilledDeckId.value === null) {
+    if (req.fulfilledDeckId) {
+      fulfilledDeckId.value = req.fulfilledDeckId;
+      fulfilledDeckLabel.value = req.fulfilledDeckTitle ?? String(req.fulfilledDeckId);
+    } else if (req.kind === RequestKind.Update && req.targetDeckId && fulfilledDeckId.value === null) {
+      // Completing an update request almost always fulfils it with the deck it targets.
       fulfilledDeckId.value = req.targetDeckId;
       fulfilledDeckLabel.value = req.targetDeckTitle ?? String(req.targetDeckId);
     }
@@ -459,6 +462,17 @@ const isTerminal = computed(() =>
   request.value && (request.value.status === RequestStatus.Completed || request.value.status === RequestStatus.Rejected)
 );
 
+const canCreateDeck = computed(() => !!request.value && !isTerminal.value && !request.value.fulfilledDeckId);
+
+// Syosetsu novels are imported chapter by chapter, so they go through the webnovel page instead
+const createDeckHref = computed(() => {
+  const req = request.value;
+  if (!req) return '';
+  if (req.externalLinkType === LinkType.Syosetsu && req.externalUrl)
+    return `/dashboard/add-webnovel?url=${encodeURIComponent(req.externalUrl)}`;
+  return `/dashboard/add-media?requestId=${req.id}`;
+});
+
 function formatTimeAgo(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
@@ -726,6 +740,20 @@ onMounted(() => loadData());
               />
               <small v-if="fulfilledDeckId" class="text-surface-500 dark:text-surface-400">Deck ID: {{ fulfilledDeckId }}</small>
             </div>
+            <div v-if="canCreateDeck" class="flex flex-col gap-1">
+              <NuxtLink
+                :to="createDeckHref"
+                target="_blank"
+                class="inline-flex items-center gap-2 w-fit text-primary hover:underline font-medium text-sm"
+              >
+                <i class="pi pi-plus-circle" />
+                Create deck from this request
+              </NuxtLink>
+              <small class="text-surface-500 dark:text-surface-400">
+                Opens prefilled form and put the request to In Progress.
+              </small>
+            </div>
+
             <div v-if="!isTerminal" class="flex gap-2 flex-wrap">
               <Button
                 v-if="request.status === RequestStatus.Open"

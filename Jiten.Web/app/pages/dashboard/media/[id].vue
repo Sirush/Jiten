@@ -53,7 +53,6 @@
     toast.add({ severity, summary, detail, life: 3000 });
   }
 
-  const selectedFile = ref<File | null>(null);
   const parentTextFile = ref<File | null>(null);
   const originalTitle = ref('');
   const romajiTitle = ref('');
@@ -216,10 +215,12 @@
           titleEdited: true,
         }));
       }
-
-      selectedFile.value = new File([], 'dummy.file');
     }
   });
+
+  const deckHasNoContent = computed(
+    () => !response.value?.subDecks?.length && (response.value?.mainDeck?.characterCount ?? 0) === 0
+  );
 
   function handleParentTextFileUpload(event: { files: File[] }) {
     if (event.files && event.files.length > 0) {
@@ -1319,6 +1320,9 @@
           <h3 class="text-lg font-medium mb-4">Text File</h3>
           <Card>
             <template #content>
+              <p v-if="deckHasNoContent" class="text-sm text-muted-color mb-3">
+                This deck has no text yet. The file you add here becomes the deck's own content, and it is parsed as soon as you save.
+              </p>
               <p class="text-xs text-muted-color mb-3 truncate" :title="response?.mainDeck?.originalFileName || undefined">
                 Origin file:
                 <span class="font-mono">{{ parentTextFile?.name || response?.mainDeck?.originalFileName || '—' }}</span>
@@ -1333,7 +1337,7 @@
                 v-else
                 mode="advanced"
                 :auto="true"
-                choose-label="Replace current text file"
+                :choose-label="deckHasNoContent ? 'Select text file' : 'Replace current text file'"
                 :multiple="false"
                 class="w-full subdeck-file-upload"
                 :custom-upload="true"

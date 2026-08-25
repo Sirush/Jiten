@@ -19,6 +19,7 @@ export function extractApiError(err: unknown, fallback: string): string {
   if (typeof data === 'string' && data.length > 0 && data.length < 400) return data;
   if (typeof data?.error === 'string' && data.error.length > 0) return data.error;
   if (typeof data?.detail === 'string' && data.detail.length > 0) return data.detail;
+  if (typeof data?.message === 'string' && data.message.length > 0) return data.message;
   // ValidationProblemDetails: flatten the errors dictionary into readable messages
   if (data?.errors && typeof data.errors === 'object') {
     const messages = (Object.values(data.errors) as string[][]).flat().filter(Boolean);
