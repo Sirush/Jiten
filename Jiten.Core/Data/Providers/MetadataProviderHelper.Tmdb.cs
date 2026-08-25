@@ -7,6 +7,31 @@ namespace Jiten.Core;
 
 public static partial class MetadataProviderHelper
 {
+    /// <summary>Resolves an IMDB title id to its TMDB entry; preferMovie only breaks the tie when IMDB matches both a movie and a show.</summary>
+    public static async Task<Metadata?> TmdbFindByImdbApi(string imdbId, string tmdbApiKey, bool preferMovie)
+    {
+        var http = new HttpClient();
+
+        var response = await http.GetAsync($"https://api.themoviedb.org/3/find/{imdbId}?api_key={tmdbApiKey}&external_source=imdb_id");
+        if (!response.IsSuccessStatusCode) return null;
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        string? GetFirstId(string property) =>
+            doc.RootElement.TryGetProperty(property, out var results) && results.GetArrayLength() > 0
+                ? results[0].GetProperty("id").GetInt32().ToString()
+                : null;
+
+        var movieId = GetFirstId("movie_results");
+        var tvId = GetFirstId("tv_results");
+
+        if (preferMovie && movieId != null) return await TmdbMovieApi(movieId, tmdbApiKey);
+        if (tvId != null) return await TmdbTvApi(tvId, tmdbApiKey);
+        if (movieId != null) return await TmdbMovieApi(movieId, tmdbApiKey);
+
+        return null;
+    }
+
     public static async Task<Metadata> TmdbMovieApi(string tmdbId, string tmdbApiKey)
     {
         var http = new HttpClient();

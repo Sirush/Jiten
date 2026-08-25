@@ -234,7 +234,7 @@
     romajiTitle.value = metadata.romajiTitle || '';
     englishTitle.value = metadata.englishTitle || '';
     description.value = metadata.description || '';
-    releaseDate.value = new Date(metadata.releaseDate) || new Date();
+    releaseDate.value = metadata.releaseDate ? new Date(metadata.releaseDate) : new Date();
     rating.value = metadata.rating || 0;
 
     if (metadata.image) {
@@ -259,6 +259,40 @@
   }
 
   const currentProvider = ref('');
+
+  function handleAmazonPaste(event: ClipboardEvent) {
+    const target = event.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+
+    const text = event.clipboardData?.getData('text/plain');
+    if (!text || !text.includes('"jiten-amazon"')) return;
+
+    try {
+      const data = JSON.parse(text);
+      if (data.source !== 'jiten-amazon') return;
+      event.preventDefault();
+
+      const filled: string[] = [];
+      if (typeof data.description === 'string' && data.description.trim()) {
+        description.value = data.description.trim();
+        filled.push('description');
+      }
+      if (typeof data.releaseDate === 'string') {
+        const parsed = new Date(data.releaseDate);
+        if (!Number.isNaN(parsed.getTime())) {
+          releaseDate.value = parsed;
+          filled.push('release date');
+        }
+      }
+
+      if (filled.length) showToast('success', 'Pasted from Amazon', `Filled ${filled.join(' and ')}.`);
+      else showToast('warn', 'Pasted from Amazon', 'The copied data was empty.');
+    } catch {
+    }
+  }
+
+  onMounted(() => window.addEventListener('paste', handleAmazonPaste));
+  onBeforeUnmount(() => window.removeEventListener('paste', handleAmazonPaste));
 
   onMounted(async () => {
     const raw = route.query.requestId;

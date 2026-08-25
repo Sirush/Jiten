@@ -70,6 +70,33 @@ public static partial class MetadataProviderHelper
         return metadatas.OfType<Metadata>().ToList();
     }
 
+    public static async Task<Metadata?> BookmeterApi(string bookId)
+    {
+        using var http = new HttpClient();
+        http.DefaultRequestHeaders.Add("User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+        var bookmeterUrl = $"https://bookmeter.com/books/{bookId}";
+        var details = await BookmeterGetDetails(http, bookmeterUrl);
+
+        if (details.CleanTitle == null)
+            return null;
+
+        List<Link> links = [new Link { LinkType = LinkType.Bookmeter, Url = bookmeterUrl }];
+        if (details.Asin != null)
+            links.Add(new Link { LinkType = LinkType.Amazon, Url = $"https://www.amazon.co.jp/dp/{details.Asin}" });
+
+        return new Metadata
+        {
+            OriginalTitle = details.CleanTitle,
+            Image = details.ImageUrl,
+            Links = links,
+            Description = details.Description,
+            Rating = details.Rating,
+            ReleaseDate = details.ReleaseDate
+        };
+    }
+
     private record BookmeterSearchItem(string BookPath, string FallbackTitle, string ImageUrl);
 
     private static async Task<List<BookmeterSearchItem>> BookmeterFetchSearchItems(HttpClient http, string url)
@@ -110,14 +137,15 @@ public static partial class MetadataProviderHelper
         string? Asin,
         string? Description,
         int? Rating,
-        DateTime? ReleaseDate);
+        DateTime? ReleaseDate,
+        string? ImageUrl);
 
     private static async Task<BookmeterDetails> BookmeterGetDetails(HttpClient http, string bookmeterUrl)
     {
         try
         {
             var response = await http.GetAsync(bookmeterUrl);
-            if (!response.IsSuccessStatusCode) return new(null, null, null, null, null);
+            if (!response.IsSuccessStatusCode) return new(null, null, null, null, null, null);
 
             var html = await response.Content.ReadAsStringAsync();
 
@@ -126,9 +154,16 @@ public static partial class MetadataProviderHelper
             var ogTitleMatch = Regex.Match(html, @"property=""og:title"" content=""([^""]+)""");
             if (ogTitleMatch.Success)
             {
-                var m = BookmeterOgTitleRegex.Match(ogTitleMatch.Groups[1].Value);
-                if (m.Success) cleanTitle = m.Groups[1].Value.Trim();
+                var ogTitle = WebUtility.HtmlDecode(ogTitleMatch.Groups[1].Value);
+                var m = BookmeterOgTitleRegex.Match(ogTitle);
+                cleanTitle = m.Success
+                    ? m.Groups[1].Value.Trim()
+                    : ogTitle.Split('｜')[0].Replace("- 読書メーター", "").Trim();
+                if (cleanTitle.Length == 0) cleanTitle = null;
             }
+
+            var ogImageMatch = Regex.Match(html, @"property=""og:image"" content=""([^""]+)""");
+            var imageUrl = ogImageMatch.Success ? WebUtility.HtmlDecode(ogImageMatch.Groups[1].Value) : null;
 
             var asin = BookmeterAsinRegex.Match(html) is { Success: true } am
                 ? am.Groups[1].Value
@@ -157,11 +192,11 @@ public static partial class MetadataProviderHelper
                 ? await OpenBdGetPubdate(http, asin)
                 : null;
 
-            return new(cleanTitle, asin, description, rating, releaseDate);
+            return new(cleanTitle, asin, description, rating, releaseDate, imageUrl);
         }
         catch
         {
-            return new(null, null, null, null, null);
+            return new(null, null, null, null, null, null);
         }
     }
 
