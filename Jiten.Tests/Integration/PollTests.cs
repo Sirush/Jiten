@@ -265,6 +265,32 @@ public class PollTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task HomePick_ExcludeSkipsPolls_AndNeverResurfacesThemAsFallback()
+    {
+        var firstId = await CreatePublishedPoll("First poll");
+        var secondId = await CreatePublishedPoll("Second poll");
+
+        var afterSkip = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, $"/api/polls/home?exclude={firstId}").WithUser(TestUsers.UserA));
+        afterSkip.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await afterSkip.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32().Should().Be(secondId);
+
+        var bothSkipped = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, $"/api/polls/home?exclude={firstId}&exclude={secondId}").WithUser(TestUsers.UserA));
+        bothSkipped.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var secondOptions = await OptionIds(secondId);
+        await Vote(TestUsers.UserA, secondId, secondOptions[0]);
+
+        var votedFallback = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, $"/api/polls/home?exclude={firstId}").WithUser(TestUsers.UserA));
+        votedFallback.StatusCode.Should().Be(HttpStatusCode.OK);
+        var fallback = await votedFallback.Content.ReadFromJsonAsync<JsonElement>();
+        fallback.GetProperty("id").GetInt32().Should().Be(secondId);
+        fallback.GetProperty("myOptionIds").GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
     public async Task Reopen_RestoresVoting_ForBothClosePaths()
     {
         var manualId = await CreatePublishedPoll("Closed by hand");

@@ -67,7 +67,7 @@ public class PollController(
     }
 
     [HttpGet("home")]
-    public async Task<IResult> GetHomePoll()
+    public async Task<IResult> GetHomePoll([FromQuery] int[]? exclude = null)
     {
         var userId = currentUserService.UserId;
         if (string.IsNullOrEmpty(userId))
@@ -89,10 +89,20 @@ public class PollController(
                                     .Distinct()
                                     .ToListAsync();
 
-        var unvoted = active.Where(p => !votedIds.Contains(p.Id)).ToList();
-        var pick = unvoted.Count > 0
-            ? unvoted[Random.Shared.Next(unvoted.Count)]
-            : active.OrderByDescending(p => p.PublishedAt).First();
+        var excluded = exclude ?? [];
+        var unvoted = active.Where(p => !votedIds.Contains(p.Id) && !excluded.Contains(p.Id)).ToList();
+        Poll pick;
+        if (unvoted.Count > 0)
+        {
+            pick = unvoted[Random.Shared.Next(unvoted.Count)];
+        }
+        else
+        {
+            var voted = active.Where(p => votedIds.Contains(p.Id)).OrderByDescending(p => p.PublishedAt).FirstOrDefault();
+            if (voted == null)
+                return Results.NoContent();
+            pick = voted;
+        }
 
         var dtos = await MapPolls([pick], userId, now);
         return Results.Ok(dtos[0]);
