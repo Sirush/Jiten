@@ -133,7 +133,7 @@ services:
       - "traefik.http.middlewares.jiten-errors.errors.query=/503.html"
 
   umami:
-    image: ghcr.io/umami-software/umami:3.1
+    image: ghcr.io/umami-software/umami:3.3.0
     restart: unless-stopped
     depends_on:
       postgres:
