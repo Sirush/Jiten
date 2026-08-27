@@ -29,3 +29,17 @@ export function getLinkTypeText(linkType: LinkType): string {
       return 'Unknown';
   }
 }
+
+const vndbReleasePath = /^\/r\d+/;
+
+export function getLinkLabel(link: { linkType: LinkType | number; url?: string | null }): string {
+  const text = getLinkTypeText(link.linkType as LinkType);
+
+  if (link.linkType !== LinkType.Vndb || !link.url) return text;
+
+  try {
+    return vndbReleasePath.test(new URL(link.url).pathname) ? `${text} (release)` : text;
+  } catch {
+    return text;
+  }
+}

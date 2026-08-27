@@ -16,7 +16,7 @@
   import PrimeTag from 'primevue/tag';
   import { getMediaTypeText, getChildrenCountText } from '~/utils/mediaTypeMapper';
   import WebNovelSyncPanel from '~/components/dashboard/WebNovelSyncPanel.vue';
-  import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { getLinkLabel, getLinkTypeText } from '~/utils/linkTypeMapper';
   import { getAllGenres } from '~/utils/genreMapper';
   import { DEFAULT_TAG_PERCENTAGE } from '~/utils/tags';
   import {
@@ -946,7 +946,7 @@
                 <ul class="list-none p-0">
                   <li v-for="(link, index) in links" :key="index" class="flex justify-between items-center p-2 border-b">
                     <div>
-                      <span class="font-medium">{{ getLinkTypeText(Number(link.linkType)) }}:</span>
+                      <span class="font-medium">{{ getLinkLabel({ linkType: Number(link.linkType), url: link.url }) }}:</span>
                       <a :href="link.url" target="_blank" class="ml-2 text-blue-500 hover:underline">{{ link.url }}</a>
                     </div>
                     <div class="flex">

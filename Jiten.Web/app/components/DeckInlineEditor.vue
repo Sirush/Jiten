@@ -4,7 +4,7 @@
   import type { Deck, DeckMetadataPatchResult, MediaSuggestion, Tag } from '~/types';
   import { LinkType } from '~/types';
   import { getAllGenres, getGenreText } from '~/utils/genreMapper';
-  import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { getLinkLabel, getLinkTypeText } from '~/utils/linkTypeMapper';
   import { getRelationshipRoleLabel, relationshipRoleOptions, type RelationshipRoleOption } from '~/utils/relationshipRoles';
   import { DEFAULT_TAG_PERCENTAGE, NOT_ORIGINALLY_JP_FALLBACK_NAME, NOT_ORIGINALLY_JP_TAG_ID } from '~/utils/tags';
 
@@ -308,7 +308,7 @@
     <div class="flex flex-wrap gap-1.5 items-center">
       <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-1 shrink-0 w-20">Links</span>
       <span v-for="(link, index) in draft.links" :key="`${link.linkType}-${link.url}`" class="inline-flex items-center rounded-full text-xs py-0.5 px-2 transition-colors bg-surface-100 dark:bg-surface-900/50 text-surface-700 dark:text-surface-200">
-        <span :title="link.url">{{ getLinkTypeText(link.linkType) }}</span>
+        <span :title="link.url">{{ getLinkLabel(link) }}</span>
         <button type="button" class="ml-1 opacity-70 hover:opacity-100 cursor-pointer" aria-label="Edit link" @click="openLinkEdit(index)">
           <i class="pi pi-pencil text-[10px]" />
         </button>

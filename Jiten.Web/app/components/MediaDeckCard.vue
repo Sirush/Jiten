@@ -3,7 +3,7 @@
   import Card from 'primevue/card';
   import TieredMenu from 'primevue/tieredmenu';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
-  import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { getLinkLabel } from '~/utils/linkTypeMapper';
   import { getDeckStatusText } from '~/utils/deckStatusMapper';
   import { useJitenStore } from '~/stores/jitenStore';
   import { formatDateAsYyyyMmDd } from '~/utils/formatDateAsYyyyMmDd';
@@ -329,8 +329,8 @@
     if (!props.deck.links || props.deck.links.length === 0) return [];
 
     return [...props.deck.links].sort((a, b) => {
-      const textA = getLinkTypeText(a.linkType);
-      const textB = getLinkTypeText(b.linkType);
+      const textA = getLinkLabel(a);
+      const textB = getLinkLabel(b);
       return textA.localeCompare(textB);
     });
   });
@@ -730,7 +730,7 @@
 
                   <div v-if="!isCompact && sortedLinks.length" class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:justify-end">
                     <span class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider shrink-0">Sources</span>
-                    <a v-for="link in sortedLinks" :key="link.url" :href="link.url" target="_blank" class="text-sm">{{ getLinkTypeText(link.linkType) }}</a>
+                    <a v-for="link in sortedLinks" :key="link.url" :href="link.url" target="_blank" class="text-sm">{{ getLinkLabel(link) }}</a>
                   </div>
                 </div>
               </div>

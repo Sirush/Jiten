@@ -12,7 +12,7 @@
   import type { MediaRequestDto } from '~/types/types';
   import { MediaType } from '~/types';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
-  import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { getLinkLabel } from '~/utils/linkTypeMapper';
   import SearchDialog from '~/components/dashboard/SearchDialog.vue';
   import CoverImageField from '~/components/dashboard/CoverImageField.vue';
 
@@ -604,7 +604,7 @@
                       target="_blank"
                       rel="noopener noreferrer"
                       class="text-sm text-primary underline"
-                      >{{ getLinkTypeText(link.linkType) }}</a
+                      >{{ getLinkLabel(link) }}</a
                     >
                   </div>
                 </div>
