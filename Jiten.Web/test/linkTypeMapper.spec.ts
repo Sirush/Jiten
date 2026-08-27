@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getLinkLabel, getLinkTypeText } from '../app/utils/linkTypeMapper';
+import { detectLinkTypeFromUrl, getLinkLabel, getLinkTypeText } from '../app/utils/linkTypeMapper';
 import { LinkType } from '../app/types/enums';
 
 const vndb = (url: string) => getLinkLabel({ linkType: LinkType.Vndb, url });
@@ -44,5 +44,49 @@ describe('getLinkTypeText', () => {
   it('stays a plain enum label', () => {
     expect(getLinkTypeText(LinkType.Vndb)).toBe('VNDB');
     expect(getLinkTypeText(99 as LinkType)).toBe('Unknown');
+  });
+});
+
+describe('detectLinkTypeFromUrl', () => {
+  it('detects each provider from its host', () => {
+    expect(detectLinkTypeFromUrl('https://vndb.org/v12345')).toBe(LinkType.Vndb);
+    expect(detectLinkTypeFromUrl('https://www.themoviedb.org/tv/12345-slug')).toBe(LinkType.Tmdb);
+    expect(detectLinkTypeFromUrl('https://anilist.co/anime/1')).toBe(LinkType.Anilist);
+    expect(detectLinkTypeFromUrl('https://myanimelist.net/anime/1')).toBe(LinkType.Mal);
+    expect(detectLinkTypeFromUrl('https://www.imdb.com/title/tt0111161/')).toBe(LinkType.Imdb);
+    expect(detectLinkTypeFromUrl('https://www.igdb.com/games/clannad')).toBe(LinkType.Igdb);
+    expect(detectLinkTypeFromUrl('https://ncode.syosetu.com/n2267be/')).toBe(LinkType.Syosetsu);
+    expect(detectLinkTypeFromUrl('https://bookmeter.com/books/548199')).toBe(LinkType.Bookmeter);
+  });
+
+  it('detects Amazon across TLDs and short links', () => {
+    expect(detectLinkTypeFromUrl('https://www.amazon.co.jp/dp/B00ABC1234')).toBe(LinkType.Amazon);
+    expect(detectLinkTypeFromUrl('https://amazon.com/dp/B00ABC1234')).toBe(LinkType.Amazon);
+    expect(detectLinkTypeFromUrl('https://amazon.de/dp/B00ABC1234')).toBe(LinkType.Amazon);
+    expect(detectLinkTypeFromUrl('https://amzn.to/3xYz')).toBe(LinkType.Amazon);
+    expect(detectLinkTypeFromUrl('https://amzn.asia/d/abc')).toBe(LinkType.Amazon);
+    expect(detectLinkTypeFromUrl('https://notamazon.com/dp/B00ABC1234')).toBe(LinkType.Web);
+  });
+
+  it('detects Google Books only on book hosts or /books/ paths', () => {
+    expect(detectLinkTypeFromUrl('https://books.google.com/books?id=abc')).toBe(LinkType.GoogleBooks);
+    expect(detectLinkTypeFromUrl('https://books.google.co.jp/books?id=abc')).toBe(LinkType.GoogleBooks);
+    expect(detectLinkTypeFromUrl('https://www.google.com/books/edition/_/abc')).toBe(LinkType.GoogleBooks);
+    expect(detectLinkTypeFromUrl('https://www.google.com/search?q=x')).toBe(LinkType.Web);
+  });
+
+  it('is case-insensitive on the host and tolerates surrounding whitespace', () => {
+    expect(detectLinkTypeFromUrl('  HTTPS://VNDB.ORG/v11 ')).toBe(LinkType.Vndb);
+  });
+
+  it('falls back to Web for valid URLs on unknown hosts', () => {
+    expect(detectLinkTypeFromUrl('https://example.com/whatever')).toBe(LinkType.Web);
+  });
+
+  it('returns null for unusable input so the current selection is kept', () => {
+    expect(detectLinkTypeFromUrl('')).toBeNull();
+    expect(detectLinkTypeFromUrl('vndb.org/v123')).toBeNull();
+    expect(detectLinkTypeFromUrl('not a url')).toBeNull();
+    expect(detectLinkTypeFromUrl('ftp://vndb.org/v123')).toBeNull();
   });
 });

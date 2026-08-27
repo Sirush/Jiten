@@ -16,7 +16,7 @@
   import PrimeTag from 'primevue/tag';
   import { getMediaTypeText, getChildrenCountText } from '~/utils/mediaTypeMapper';
   import WebNovelSyncPanel from '~/components/dashboard/WebNovelSyncPanel.vue';
-  import { getLinkLabel, getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { detectLinkTypeFromUrl, getLinkLabel, getLinkTypeText } from '~/utils/linkTypeMapper';
   import { getAllGenres } from '~/utils/genreMapper';
   import { DEFAULT_TAG_PERCENTAGE } from '~/utils/tags';
   import {
@@ -567,6 +567,17 @@
     showAddLinkDialog.value = true;
   }
 
+  function onNewLinkUrlInput(value: string | undefined) {
+    const detected = detectLinkTypeFromUrl(value ?? '');
+    if (detected !== null) newLink.value.linkType = detected;
+  }
+
+  function onEditLinkUrlInput(value: string | undefined) {
+    if (!editingLink.value) return;
+    const detected = detectLinkTypeFromUrl(value ?? '');
+    if (detected !== null) editingLink.value.linkType = detected;
+  }
+
   function addLink() {
     if (!newLink.value.url.trim()) {
       showToast('warn', 'Validation Error', 'URL is required');
@@ -1000,7 +1011,12 @@
                   </div>
                   <div class="mb-4">
                     <label class="block text-sm font-medium mb-1">URL</label>
-                    <InputText v-model="newLink.url" placeholder="Enter URL" class="w-full" />
+                    <InputText
+                      v-model="newLink.url"
+                      placeholder="Enter URL"
+                      class="w-full"
+                      @update:model-value="onNewLinkUrlInput"
+                    />
                   </div>
                 </div>
                 <template #footer>
@@ -1025,7 +1041,12 @@
                   </div>
                   <div class="mb-4">
                     <label class="block text-sm font-medium mb-1">URL</label>
-                    <InputText v-model="editingLink.url" placeholder="Enter URL" class="w-full" />
+                    <InputText
+                      v-model="editingLink.url"
+                      placeholder="Enter URL"
+                      class="w-full"
+                      @update:model-value="onEditLinkUrlInput"
+                    />
                   </div>
                 </div>
                 <template #footer>

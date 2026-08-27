@@ -43,3 +43,43 @@ export function getLinkLabel(link: { linkType: LinkType | number; url?: string |
     return text;
   }
 }
+
+const hostedDomains: Array<{ domains: string[]; type: LinkType }> = [
+  { domains: ['vndb.org'], type: LinkType.Vndb },
+  { domains: ['themoviedb.org'], type: LinkType.Tmdb },
+  { domains: ['anilist.co'], type: LinkType.Anilist },
+  { domains: ['myanimelist.net'], type: LinkType.Mal },
+  { domains: ['imdb.com'], type: LinkType.Imdb },
+  { domains: ['igdb.com'], type: LinkType.Igdb },
+  { domains: ['syosetu.com'], type: LinkType.Syosetsu },
+  { domains: ['bookmeter.com'], type: LinkType.Bookmeter },
+  { domains: ['amzn.to', 'amzn.asia'], type: LinkType.Amazon },
+];
+
+const amazonHost = /(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$/;
+
+export function detectLinkTypeFromUrl(url: string): LinkType | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url.trim());
+  } catch {
+    return null;
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+
+  const host = parsed.hostname.toLowerCase();
+
+  for (const { domains, type } of hostedDomains) {
+    if (domains.some((domain) => host === domain || host.endsWith(`.${domain}`))) return type;
+  }
+
+  if (amazonHost.test(host)) return LinkType.Amazon;
+
+  // Mirrors ExternalUrlParser.IsGoogleBooksHost: google.* is Books only on a /books/ path
+  if (host.startsWith('books.google.')) return LinkType.GoogleBooks;
+  if ((host.startsWith('google.') || host.startsWith('www.google.')) && parsed.pathname.toLowerCase().includes('/books/'))
+    return LinkType.GoogleBooks;
+
+  return LinkType.Web;
+}
