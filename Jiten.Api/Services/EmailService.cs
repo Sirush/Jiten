@@ -272,7 +272,27 @@ public class EmailService : IEmailSender, IEmailService
                           useStartTls: true);
     }
 
+    // Delays stay short: billing sends run inside Stripe webhook handling, and a slow response makes Stripe
+    // retry the webhook and re-run the state change.
+    private static readonly TimeSpan[] RetryDelays = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3)];
+
     private static async Task SendViaSmtp(MimeMessage message, string host, int port, string? username, string? password, bool useStartTls)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await SendViaSmtpOnce(message, host, port, username, password, useStartTls);
+                return;
+            }
+            catch (Exception) when (attempt < RetryDelays.Length)
+            {
+                await Task.Delay(RetryDelays[attempt]);
+            }
+        }
+    }
+
+    private static async Task SendViaSmtpOnce(MimeMessage message, string host, int port, string? username, string? password, bool useStartTls)
     {
         using var client = new SmtpClient();
         var secure = useStartTls ? SecureSocketOptions.StartTls : SecureSocketOptions.Auto;

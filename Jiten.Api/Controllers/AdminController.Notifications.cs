@@ -18,7 +18,8 @@ public partial class AdminController
 
         var users = await userContext.Users.AsNoTracking()
             .Where(u => u.UserName!.ToLower().Contains(normalised) ||
-                        u.Email!.ToLower().Contains(normalised))
+                        u.Email!.ToLower().Contains(normalised) ||
+                        u.Id.ToLower() == normalised)
             .OrderBy(u => u.UserName)
             .Take(10)
             .Select(u => new { userId = u.Id, userName = u.UserName, email = u.Email })

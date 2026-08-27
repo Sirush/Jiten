@@ -168,6 +168,62 @@
     }
   }
 
+  // ---- Resend billing email ----
+  const resendQuery = ref('');
+  const resendResults = ref<UserResult[]>([]);
+  const resendUser = ref<UserResult | null>(null);
+  const resendSearching = ref(false);
+  const resendKind = ref<'lifetime-confirmed' | 'subscription-confirmed'>('lifetime-confirmed');
+  const resendKindOptions = [
+    { label: 'Lifetime purchase confirmation', value: 'lifetime-confirmed' },
+    { label: 'Subscription confirmation', value: 'subscription-confirmed' },
+  ];
+  const resending = ref(false);
+
+  async function searchResendUsers() {
+    if (resendQuery.value.trim().length < 2) return;
+    try {
+      resendSearching.value = true;
+      resendResults.value = await $api<UserResult[]>(`/admin/search-users?query=${encodeURIComponent(resendQuery.value.trim())}`);
+    } catch (e) {
+      toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(e, 'Failed to search users'), life: 5000 });
+    } finally {
+      resendSearching.value = false;
+    }
+  }
+
+  function selectResendUser(user: UserResult) {
+    resendUser.value = user;
+    resendResults.value = [];
+    resendQuery.value = '';
+  }
+
+  function confirmResend() {
+    const label = resendKindOptions.find((o) => o.value === resendKind.value)!.label.toLowerCase();
+    confirm.require({
+      message: `Resend the ${label} email to ${resendUser.value?.userName} (${resendUser.value?.email})?\n\nIt is rebuilt from their current account data.`,
+      header: 'Resend billing email',
+      icon: 'pi pi-envelope',
+      accept: doResend,
+    });
+  }
+
+  async function doResend() {
+    resending.value = true;
+    try {
+      await $api('/admin/jiten-plus/resend-email', {
+        method: 'POST',
+        body: { userIdOrName: resendUser.value!.userId, kind: resendKind.value },
+      });
+      toast.add({ severity: 'success', summary: 'Sent', detail: `Email sent to ${resendUser.value!.userName}.`, life: 5000 });
+      resendUser.value = null;
+    } catch (e) {
+      toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(e, 'Resend failed'), life: 8000 });
+    } finally {
+      resending.value = false;
+    }
+  }
+
   // ---- Promo codes ----
   const codes = ref<PromoCode[]>([]);
   const loadingCodes = ref(false);
@@ -426,6 +482,63 @@
 
           <div class="flex justify-end">
             <Button label="Grant Jiten+" icon="pi pi-gift" :loading="granting" :disabled="!canGrant || granting" @click="confirmGrant" />
+          </div>
+        </div>
+      </template>
+    </Card>
+
+    <!-- Resend billing email -->
+    <Card class="shadow-md mb-6">
+      <template #title>
+        <h2 class="text-xl font-semibold">Resend billing email</h2>
+      </template>
+      <template #content>
+        <div class="flex flex-col gap-4 max-w-2xl">
+          <p class="text-sm text-surface-500 dark:text-surface-400">
+            For when a purchase confirmation failed to send (see the billing-email alert for the user id). The email is rebuilt from the
+            user's current billing data.
+          </p>
+          <div>
+            <label class="block text-sm font-medium mb-1">User</label>
+            <div v-if="resendUser" class="flex items-center gap-2 p-2 bg-surface-100 dark:bg-surface-800 rounded">
+              <span class="font-medium">{{ resendUser.userName }}</span>
+              <span class="text-sm text-surface-500 dark:text-surface-400">({{ resendUser.email }})</span>
+              <Button icon="pi pi-times" class="p-button-text p-button-sm p-button-danger ml-auto" @click="resendUser = null" />
+            </div>
+            <div v-else class="flex gap-2">
+              <InputText v-model="resendQuery" placeholder="Search by username, email or user id" class="flex-1" @keydown.enter="searchResendUsers" />
+              <Button
+                label="Search"
+                icon="pi pi-search"
+                :loading="resendSearching"
+                :disabled="resendQuery.trim().length < 2"
+                @click="searchResendUsers"
+              />
+            </div>
+            <div v-if="resendResults.length" class="mt-2 border border-surface-200 dark:border-surface-700 rounded overflow-hidden">
+              <div
+                v-for="user in resendResults"
+                :key="user.userId"
+                class="p-2 hover:bg-surface-100 dark:hover:bg-surface-800 cursor-pointer flex justify-between items-center"
+                @click="selectResendUser(user)"
+              >
+                <span class="font-medium">{{ user.userName }}</span>
+                <span class="text-sm text-surface-500 dark:text-surface-400">{{ user.email }}</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Email</label>
+            <Select v-model="resendKind" :options="resendKindOptions" option-label="label" option-value="value" class="w-full" />
+          </div>
+          <div class="flex justify-end">
+            <Button
+              label="Resend email"
+              icon="pi pi-envelope"
+              :loading="resending"
+              :disabled="!resendUser || resending"
+              @click="confirmResend"
+            />
           </div>
         </div>
       </template>
