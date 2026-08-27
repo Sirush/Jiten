@@ -88,6 +88,7 @@
   }
 
   function onVoted() {
+    voteTimestamps.push(Date.now());
     const pair = currentPair.value;
     if (pair) sessionVotedKeys.add(pairKey(pair.deckA.id, pair.deckB.id));
     if (stats.value) stats.value.totalComparisons++;
@@ -186,6 +187,7 @@
   }
 
   function onSkippedVoted(id: number) {
+    voteTimestamps.push(Date.now());
     const skip = skippedPairs.value.find((s) => s.id === id);
     if (skip) sessionVotedKeys.add(pairKey(skip.deckA.id, skip.deckB.id));
     if (stats.value) stats.value.totalComparisons++;
@@ -238,6 +240,7 @@
   }
 
   function onManualVoted() {
+    voteTimestamps.push(Date.now());
     if (manualDeckA.value && manualDeckB.value) {
       const key = pairKey(manualDeckA.value.id, manualDeckB.value.id);
       votedPairSet.value.add(key);

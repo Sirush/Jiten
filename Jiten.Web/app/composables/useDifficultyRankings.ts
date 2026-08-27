@@ -1,5 +1,5 @@
 import type { DifficultyRankingSectionDto } from '~/types/types';
-import { DifficultyRankingMoveMode, type MediaTypeGroup } from '~/types';
+import type { DifficultyRankingMoveMode, MediaTypeGroup } from '~/types';
 
 export function useDifficultyRankings() {
   const { $api } = useNuxtApp();

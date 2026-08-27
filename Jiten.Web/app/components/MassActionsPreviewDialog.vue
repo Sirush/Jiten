@@ -108,7 +108,7 @@
         </template>
       </Column>
       <Column header="Word" style="min-width: 150px">
-        <template #body="{ data: card, index }">
+        <template #body="{ data: card }">
           <template v-if="card">
             <NuxtLink
               v-tooltip.top="card.mainDefinition"

@@ -11,7 +11,7 @@ function parseFurigana(furiganaText: string): { expression: string; reading: str
   if (!furiganaText) return { expression: '', reading: '' };
 
   const expression = furiganaText.replace(/\[.*?\]/g, '');
-  const reading = furiganaText.replace(/([^\[\]]+)\[([^\]]+)\]/g, '$2').replace(/\[|\]/g, '');
+  const reading = furiganaText.replace(/([^[\]]+)\[([^\]]+)\]/g, '$2').replace(/\[|\]/g, '');
 
   return { expression, reading };
 }

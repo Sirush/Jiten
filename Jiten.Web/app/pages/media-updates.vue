@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { useApiFetchPaginated } from '~/composables/useApiFetch';
-  import { type Deck, MediaType } from '~/types';
+  import type { Deck, MediaType } from '~/types';
   import Card from 'primevue/card';
   import Skeleton from 'primevue/skeleton';
   import Button from 'primevue/button';

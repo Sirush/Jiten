@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { useApiFetch } from '~/composables/useApiFetch';
-  import { type Tag } from '~/types';
+  import type { Tag } from '~/types';
   import { getAllGenres } from '~/utils/genreMapper';
   import { NOT_ORIGINALLY_JP_TAG_ID } from '~/utils/tags';
   import type { TagState } from '~/components/TriStateTag.vue';

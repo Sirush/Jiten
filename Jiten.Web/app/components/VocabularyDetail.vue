@@ -109,10 +109,10 @@
   );
 
   const sortedReadings = computed(() => {
-    return word.value?.alternativeReadings.sort((a, b) => b.frequencyPercentage - a.frequencyPercentage) || [];
+    return [...(word.value?.alternativeReadings ?? [])].sort((a, b) => b.frequencyPercentage - a.frequencyPercentage);
   });
 
-  const mediaReadings = computed(() => toMediaReadings(word.value?.alternativeReadings));
+  const mediaReadings = computed(() => toMediaReadings(sortedReadings.value));
 
   const LANG_NAMES: Record<string, string> = {
     eng: 'English',

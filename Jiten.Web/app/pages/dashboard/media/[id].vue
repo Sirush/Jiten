@@ -172,7 +172,7 @@
       romajiTitle.value = mainDeck.romajiTitle || '';
       englishTitle.value = mainDeck.englishTitle || '';
       description.value = mainDeck.description || '';
-      releaseDate.value = new Date(mainDeck.releaseDate) || new Date();
+      releaseDate.value = mainDeck.releaseDate ? new Date(mainDeck.releaseDate) : new Date();
       difficultyOverride.value = mainDeck.difficultyOverride || 0;
       hideDialoguePercentage.value = mainDeck.hideDialoguePercentage || false;
       hideAverageSentenceLength.value = mainDeck.hideAverageSentenceLength || false;
@@ -672,7 +672,6 @@
         life: 5000,
       });
       console.error('Error fetching metadata:', error);
-    } finally {
     }
   }
 

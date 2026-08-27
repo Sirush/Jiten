@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
-  import { MediaType } from '~/types/enums';
+  import type { MediaType } from '~/types/enums';
 
   const props = defineProps<{
     title?: string;

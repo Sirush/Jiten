@@ -8,11 +8,13 @@ interface TabSyncMessage {
   };
 }
 
+type TabSyncListener = (payload: TabSyncMessage['payload']) => void;
+
 export class TabSyncManager {
   private channel: BroadcastChannel | null = null;
   private readonly channelName = 'jiten-auth-sync';
   public readonly tabId: string;
-  private listeners: Map<string, Set<Function>> = new Map();
+  private listeners: Map<string, Set<TabSyncListener>> = new Map();
   private useFallback: boolean = false;
 
   constructor() {
@@ -67,14 +69,14 @@ export class TabSyncManager {
     }
   }
 
-  on(type: TabSyncMessage['type'], callback: (payload: any) => void) {
+  on(type: TabSyncMessage['type'], callback: TabSyncListener) {
     if (!this.listeners.has(type)) {
       this.listeners.set(type, new Set());
     }
     this.listeners.get(type)!.add(callback);
   }
 
-  off(type: TabSyncMessage['type'], callback: (payload: any) => void) {
+  off(type: TabSyncMessage['type'], callback: TabSyncListener) {
     const listeners = this.listeners.get(type);
     if (listeners) {
       listeners.delete(callback);

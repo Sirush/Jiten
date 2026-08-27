@@ -7,7 +7,7 @@ import type {
   DeckSummaryDto,
   BlacklistedDeckDto,
 } from '~/types/types';
-import { type ComparisonOutcome } from '~/types';
+import type { ComparisonOutcome } from '~/types';
 
 export function useDifficultyVotes() {
   const { $api } = useNuxtApp();

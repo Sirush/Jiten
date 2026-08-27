@@ -102,7 +102,8 @@ export const useAnkiImportStore = defineStore('ankiImport', () => {
     const entry = Object.entries(settings.value.decks).find(([, d]) => d.deckName === deckName);
     if (!entry) return undefined;
     if (entry[0] !== String(deckId)) {
-      delete settings.value.decks[entry[0]];
+      const { [entry[0]]: _removed, ...rest } = settings.value.decks;
+      settings.value.decks = rest;
       settings.value.decks[deckId] = entry[1];
       settings.value.lastDeckId = deckId;
       write();

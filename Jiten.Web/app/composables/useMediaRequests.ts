@@ -7,7 +7,7 @@ import type {
   RequestUserSummaryDto,
   MediaRequestUploadAdminDto,
 } from '~/types/types';
-import { type MediaType, type RequestAction, type RequestKind, type RequestStatus } from '~/types';
+import type { MediaType, RequestAction, RequestKind, RequestStatus } from '~/types';
 
 export interface RequestFacets {
   mediaTypes: Record<string, number>;

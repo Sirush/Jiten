@@ -44,7 +44,7 @@
   const hatsuonResult = computed(() => {
     if (props.reading && props.pitchAccent !== -1) {
       try {
-        const regex = /[\u4E00-\u9FFF\u3400-\u4DBF\uFF10-\uFF5A\[\]A-Za-z0-9]/g;
+        const regex = /[\u4E00-\u9FFF\u3400-\u4DBF\uFF10-\uFF5A[\]A-Za-z0-9]/g;
         const reading = props.reading.replace(regex, '');
 
         return hatsuon({ reading: reading, pitchNum: props.pitchAccent });
@@ -53,10 +53,11 @@
         return null;
       }
     }
+    return null;
   });
 
-  const effectiveMorae = computed(() => hatsuonResult.value.morae);
-  const patternName = computed(() => hatsuonResult.value.patternName as keyof ColorPalette);
+  const effectiveMorae = computed(() => hatsuonResult.value?.morae);
+  const patternName = computed(() => hatsuonResult.value?.patternName as keyof ColorPalette);
 
   const patternNameEn = computed(() => {
     try {
@@ -205,10 +206,6 @@
     <div v-if="showLabel" class="pitch-label">
       <span lang="ja">{{ patternName }}</span>
       <small>({{ patternNameEn }})</small>
-    </div>
-    <div v-else-if="showLabel" class="pitch-label">
-      <span lang="ja">不詳</span>
-      <small>(unknown)</small>
     </div>
   </div>
 </template>

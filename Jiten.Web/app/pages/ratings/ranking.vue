@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import type { DeckSummaryDto, DifficultyRankingSectionDto } from '~/types/types';
-  import { DifficultyRankingMoveMode, MediaTypeGroup, TitleLanguage } from '~/types';
+  import { DifficultyRankingMoveMode, type MediaTypeGroup, TitleLanguage } from '~/types';
   import { getMediaTypeGroupText } from '~/utils/mediaTypeMapper';
   import { createBitmapLoader, drawCoverImage, fitCanvasText, saveCanvasPng } from '~/utils/imageExport';
 

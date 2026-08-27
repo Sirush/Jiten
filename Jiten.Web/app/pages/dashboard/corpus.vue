@@ -497,7 +497,7 @@
   function copyCitation(s: CorpusSnippet) {
     const src = s.parentTitle ? `${s.parentTitle} — ${s.deckTitle}` : s.deckTitle;
     const year = s.releaseYear ? ` (${s.releaseYear})` : '';
-    void navigator.clipboard?.writeText(`${s.text}　【${src}${year}】`);
+    void navigator.clipboard?.writeText(`${s.text}\u3000【${src}${year}】`);
   }
 
   function downloadCitations() {

@@ -73,7 +73,6 @@
     isSubmitting.value = false;
 
     if (success) {
-      props.voteTimestamps.push(Date.now());
       toast.add({
         severity: 'success',
         summary: 'Vote recorded!',

@@ -487,7 +487,6 @@
         life: 5000,
       });
       console.error('Error fetching metadata:', error);
-    } finally {
     }
   };
 
@@ -647,7 +646,6 @@
         life: 5000,
       });
       console.error('Error with FLUSHALL:', error);
-    } finally {
     }
   };
 
@@ -671,7 +669,6 @@
         life: 5000,
       });
       console.error('Error with deck stats recomputation:', error);
-    } finally {
     }
   };
 

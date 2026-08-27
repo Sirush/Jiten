@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { type UserMetadata } from '~/types';
+  import type { UserMetadata } from '~/types';
   import { useToast } from 'primevue/usetoast';
 
   interface CoverageRefreshResponse {

@@ -1,5 +1,5 @@
 import type { WordSetDto, UserWordSetSubscriptionDto, WordSetSubscribeRequest, Word, PaginatedResponse } from '~/types/types';
-import { WordSetStateType } from '~/types';
+import type { WordSetStateType } from '~/types';
 
 export function useWordSets() {
   const { $api } = useNuxtApp();
