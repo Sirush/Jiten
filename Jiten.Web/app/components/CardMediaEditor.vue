@@ -464,13 +464,17 @@
         <div class="w-14 shrink-0 text-xs font-medium text-surface-500 dark:text-surface-400 pt-1">Image</div>
         <div class="flex-1 min-w-0">
           <div v-if="image" class="flex items-start gap-3">
-            <SrsCardImage :url="image.url" img-class="max-h-20 min-w-20 max-w-full w-auto rounded-md object-contain border border-surface-200 dark:border-surface-700" />
+            <SrsCardImage
+              :url="image.url"
+              img-class="max-h-20 min-w-20 max-w-full w-auto rounded-md object-contain border border-surface-200 dark:border-surface-700"
+            />
             <div class="flex flex-col gap-1.5 min-w-0">
               <span
                 v-if="image.inherited"
                 class="inline-flex items-center gap-1 text-[0.7rem] px-1.5 py-0.5 rounded bg-surface-100 dark:bg-surface-800 text-surface-500 dark:text-surface-400 w-fit"
               >
-                <i class="pi pi-link !text-[0.6rem]" /> Inherited {{ inheritedLabel(image) }}
+                <i class="pi pi-link !text-[0.6rem]" />
+                Inherited {{ inheritedLabel(image) }}
               </span>
               <p v-if="image.inherited" class="text-[0.7rem] text-surface-500 dark:text-surface-400">
                 Delete removes it from {{ formText(image.sourceReadingIndex) || 'that form' }}. Upload a new one to set an image just for this form.
@@ -510,7 +514,8 @@
               v-if="audio.inherited"
               class="inline-flex items-center gap-1 text-[0.7rem] px-1.5 py-0.5 rounded bg-surface-100 dark:bg-surface-800 text-surface-500 dark:text-surface-400 w-fit"
             >
-              <i class="pi pi-link !text-[0.6rem]" /> Inherited {{ inheritedLabel(audio) }}
+              <i class="pi pi-link !text-[0.6rem]" />
+              Inherited {{ inheritedLabel(audio) }}
             </span>
             <p v-if="audio.inherited" class="text-[0.7rem] text-surface-500 dark:text-surface-400">
               Delete removes it from {{ formText(audio.sourceReadingIndex) || 'that form' }}. Upload a new one to set audio just for this form.

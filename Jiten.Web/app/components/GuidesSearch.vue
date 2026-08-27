@@ -185,17 +185,17 @@
           @mousemove="activeIndex = i"
         >
           <div class="font-medium">
-            <template v-for="(seg, si) in r.titleSegments" :key="si"
-              ><mark v-if="seg.hl" class="search-hl">{{ seg.text }}</mark
-              ><span v-else>{{ seg.text }}</span></template
-            >
+            <template v-for="(seg, si) in r.titleSegments" :key="si">
+              <mark v-if="seg.hl" class="search-hl">{{ seg.text }}</mark>
+              <span v-else>{{ seg.text }}</span>
+            </template>
           </div>
           <div v-if="r.crumb" class="text-xs text-surface-400">{{ r.crumb }}</div>
           <p v-if="r.snippet.length" class="mt-0.5 text-sm text-surface-500 dark:text-surface-400">
-            <template v-for="(seg, si) in r.snippet" :key="si"
-              ><mark v-if="seg.hl" class="search-hl">{{ seg.text }}</mark
-              ><span v-else>{{ seg.text }}</span></template
-            >
+            <template v-for="(seg, si) in r.snippet" :key="si">
+              <mark v-if="seg.hl" class="search-hl">{{ seg.text }}</mark>
+              <span v-else>{{ seg.text }}</span>
+            </template>
           </p>
         </button>
       </li>

@@ -18,10 +18,15 @@
       mobileCompact?: boolean;
     }>(),
     {
-      showSummary: true, currentPage: 0, totalPages: 0, pageLinkFor: undefined,
-      pageSize: 0, pageSizeOptions: undefined, pageSizeParam: 'limit',
+      showSummary: true,
+      currentPage: 0,
+      totalPages: 0,
+      pageLinkFor: undefined,
+      pageSize: 0,
+      pageSizeOptions: undefined,
+      pageSizeParam: 'limit',
       mobileCompact: false,
-    },
+    }
   );
 
   const router = useRouter();
@@ -102,10 +107,7 @@
 </script>
 
 <template>
-  <div
-    class="flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-    :class="mobileCompact ? 'max-md:hidden md:flex' : 'flex'"
-  >
+  <div class="flex-col gap-2 sm:flex-row sm:items-center sm:justify-between" :class="mobileCompact ? 'max-md:hidden md:flex' : 'flex'">
     <div class="flex flex-wrap items-center gap-2">
       <nav class="flex flex-wrap items-center gap-1" aria-label="Pagination">
         <Button
@@ -128,13 +130,7 @@
         <template v-if="hasPageNumbers">
           <span v-for="(page, index) in pageItems" :key="`${page ?? 'gap'}-${index}`" :class="numbersClass">
             <span v-if="page === null" :class="slotWidthClass" class="inline-flex justify-center text-surface-400 select-none">…</span>
-            <Button
-              v-else-if="page === currentPage"
-              size="small"
-              :class="slotWidthClass"
-              aria-current="page"
-              :aria-label="`Page ${page}`"
-            >
+            <Button v-else-if="page === currentPage" size="small" :class="slotWidthClass" aria-current="page" :aria-label="`Page ${page}`">
               {{ page }}
             </Button>
             <Button
@@ -196,7 +192,10 @@
         aria-label="Items per page"
         @update:model-value="onPageSizeChange"
       >
-        <template #value="{ value }">{{ value }}<span class="hidden sm:inline"> / page</span></template>
+        <template #value="{ value }">
+          {{ value }}
+          <span class="hidden sm:inline">/ page</span>
+        </template>
         <template #option="{ option }">{{ option }} / page</template>
       </Select>
     </div>
@@ -204,7 +203,8 @@
     <p v-if="showSummary" class="text-sm text-surface-500 dark:text-surface-400">
       Showing
       <span class="font-medium text-surface-700 dark:text-surface-200">{{ start.toLocaleString() }}-{{ end.toLocaleString() }}</span>
-      of <span class="font-medium text-surface-700 dark:text-surface-200">{{ totalItems.toLocaleString() }}</span>
+      of
+      <span class="font-medium text-surface-700 dark:text-surface-200">{{ totalItems.toLocaleString() }}</span>
       {{ label }}
     </p>
   </div>
@@ -215,14 +215,34 @@
       {{ label }}
     </span>
     <div v-if="totalPages > 1" class="flex items-center gap-0.5">
-      <Button v-if="previousLink" as="router-link" :to="previousLink" severity="secondary" text size="small" class="min-w-8!" aria-label="Previous page" @click="onNavigate">
+      <Button
+        v-if="previousLink"
+        as="router-link"
+        :to="previousLink"
+        severity="secondary"
+        text
+        size="small"
+        class="min-w-8!"
+        aria-label="Previous page"
+        @click="onNavigate"
+      >
         <Icon name="material-symbols:chevron-left-rounded" size="1.25em" />
       </Button>
       <Button v-else severity="secondary" text size="small" disabled class="min-w-8!" aria-label="Previous page">
         <Icon name="material-symbols:chevron-left-rounded" size="1.25em" />
       </Button>
       <span class="tabular-nums">{{ currentPage }} / {{ totalPages.toLocaleString() }}</span>
-      <Button v-if="nextLink" as="router-link" :to="nextLink" severity="secondary" text size="small" class="min-w-8!" aria-label="Next page" @click="onNavigate">
+      <Button
+        v-if="nextLink"
+        as="router-link"
+        :to="nextLink"
+        severity="secondary"
+        text
+        size="small"
+        class="min-w-8!"
+        aria-label="Next page"
+        @click="onNavigate"
+      >
         <Icon name="material-symbols:chevron-right-rounded" size="1.25em" />
       </Button>
       <Button v-else severity="secondary" text size="small" disabled class="min-w-8!" aria-label="Next page">

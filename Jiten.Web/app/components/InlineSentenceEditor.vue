@@ -35,11 +35,9 @@
     return /\*\*[^*]+\*\*/.test(t);
   }
 
-  const markerHint = computed(() =>
-    !text.value || hasValidMarkers(text.value) ? null : 'Mark words to highlight with **, e.g. **食べる**');
+  const markerHint = computed(() => (!text.value || hasValidMarkers(text.value) ? null : 'Mark words to highlight with **, e.g. **食べる**'));
 
-  const previewHtml = computed(() =>
-    hasValidMarkers(text.value) ? parseCustomSentenceHtml(text.value) : sanitiseHtml(text.value));
+  const previewHtml = computed(() => (hasValidMarkers(text.value) ? parseCustomSentenceHtml(text.value) : sanitiseHtml(text.value)));
 
   const canSave = computed(() => hasValidMarkers(text.value) && text.value.length <= 150 && !saving.value);
 
@@ -48,19 +46,15 @@
     saving.value = true;
     try {
       const body = { text: text.value, source: source.value || undefined };
-      const dto = props.userSentenceId != null
-        ? await $api<UserExampleSentenceDto>(`user/example-sentences/${props.userSentenceId}`, { method: 'PUT', body })
-        : await $api<UserExampleSentenceDto>(
-          `user/example-sentences/${props.wordId}/${props.readingIndex}/favourite`,
-          { method: 'POST', body },
-        );
+      const dto =
+        props.userSentenceId != null
+          ? await $api<UserExampleSentenceDto>(`user/example-sentences/${props.userSentenceId}`, { method: 'PUT', body })
+          : await $api<UserExampleSentenceDto>(`user/example-sentences/${props.wordId}/${props.readingIndex}/favourite`, { method: 'POST', body });
       emit('saved', dto);
     } catch {
       toast.add({
         severity: 'error',
-        summary: props.userSentenceId != null
-          ? 'Failed to save sentence'
-          : `Maximum of ${planLimits.value.customSentencesPerWord} custom sentences reached`,
+        summary: props.userSentenceId != null ? 'Failed to save sentence' : `Maximum of ${planLimits.value.customSentencesPerWord} custom sentences reached`,
         life: 3000,
       });
     } finally {
@@ -90,14 +84,7 @@
   >
     <div class="mb-2">
       <label class="text-xs text-surface-400 block mb-1">Sentence</label>
-      <Textarea
-        v-model="text"
-        rows="2"
-        class="w-full"
-        lang="ja"
-        :maxlength="150"
-        placeholder="彼は毎日**走る**ことにしている"
-      />
+      <Textarea v-model="text" rows="2" class="w-full" lang="ja" :maxlength="150" placeholder="彼は毎日**走る**ことにしている" />
       <div class="flex justify-between">
         <div v-if="markerHint" class="text-xs text-orange-500">{{ markerHint }}</div>
         <div v-else />
@@ -106,12 +93,7 @@
     </div>
     <div class="mb-2">
       <label class="text-xs text-surface-400 block mb-1">Source</label>
-      <InputText
-        v-model="source"
-        class="w-full"
-        :maxlength="150"
-        placeholder="Naruto - Episode 1"
-      />
+      <InputText v-model="source" class="w-full" :maxlength="150" placeholder="Naruto - Episode 1" />
     </div>
     <div v-if="hasValidMarkers(text)" class="mb-3">
       <label class="text-xs text-surface-400 block mb-1">Preview</label>
@@ -120,30 +102,9 @@
       </blockquote>
     </div>
     <div class="flex gap-2 justify-end">
-      <Button
-        v-if="userSentenceId != null"
-        severity="danger"
-        text
-        size="small"
-        icon="pi pi-trash"
-        label="Delete"
-        :loading="deleting"
-        @click="remove"
-      />
-      <Button
-        text
-        size="small"
-        label="Cancel"
-        @click="emit('cancel')"
-      />
-      <Button
-        size="small"
-        icon="pi pi-check"
-        label="Save"
-        :loading="saving"
-        :disabled="!canSave"
-        @click="save"
-      />
+      <Button v-if="userSentenceId != null" severity="danger" text size="small" icon="pi pi-trash" label="Delete" :loading="deleting" @click="remove" />
+      <Button text size="small" label="Cancel" @click="emit('cancel')" />
+      <Button size="small" icon="pi pi-check" label="Save" :loading="saving" :disabled="!canSave" @click="save" />
     </div>
   </div>
 </template>

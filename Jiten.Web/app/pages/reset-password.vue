@@ -1,30 +1,30 @@
 <script setup lang="ts">
-const route = useRoute();
-const { $api } = useNuxtApp();
+  const route = useRoute();
+  const { $api } = useNuxtApp();
 
-const email = ref<string>((route.query.email as string) || '');
-const token = ref<string>((route.query.code as string) || (route.query.token as string) || '');
-const newPassword = ref('');
-const isLoading = ref(false);
-const message = ref<string | null>(null);
-const error = ref<string | null>(null);
+  const email = ref<string>((route.query.email as string) || '');
+  const token = ref<string>((route.query.code as string) || (route.query.token as string) || '');
+  const newPassword = ref('');
+  const isLoading = ref(false);
+  const message = ref<string | null>(null);
+  const error = ref<string | null>(null);
 
-async function submit() {
-  isLoading.value = true;
-  message.value = null;
-  error.value = null;
-  try {
-    await $api('/auth/reset-password', {
-      method: 'POST',
-      body: { email: email.value, token: token.value, newPassword: newPassword.value },
-    });
-    message.value = 'Password has been reset successfully. You may now log in.';
-  } catch (err: unknown) {
-    error.value = 'Password reset failed.';
-  } finally {
-    isLoading.value = false;
+  async function submit() {
+    isLoading.value = true;
+    message.value = null;
+    error.value = null;
+    try {
+      await $api('/auth/reset-password', {
+        method: 'POST',
+        body: { email: email.value, token: token.value, newPassword: newPassword.value },
+      });
+      message.value = 'Password has been reset successfully. You may now log in.';
+    } catch (err: unknown) {
+      error.value = 'Password reset failed.';
+    } finally {
+      isLoading.value = false;
+    }
   }
-}
 </script>
 
 <template>
@@ -42,7 +42,15 @@ async function submit() {
         </div>
         <div class="field">
           <FloatLabel for="password">New Password</FloatLabel>
-          <Password id="password" v-model="newPassword" toggleMask :feedback="true" :promptLabel="'At least 10 chars incl. upper, lower, digit'" :inputProps="{ autocomplete: 'new-password', minlength: 10 }" required />
+          <Password
+            id="password"
+            v-model="newPassword"
+            toggle-mask
+            :feedback="true"
+            :prompt-label="'At least 10 chars incl. upper, lower, digit'"
+            :input-props="{ autocomplete: 'new-password', minlength: 10 }"
+            required
+          />
         </div>
         <Button type="submit" :disabled="isLoading">{{ isLoading ? 'Resetting...' : 'Reset Password' }}</Button>
       </form>
@@ -56,9 +64,23 @@ async function submit() {
 </template>
 
 <style scoped>
-.auth-card{max-width:420px;margin:40px auto;padding:20px}
-.field{margin-bottom:16px}
-.error{color:#c0392b;margin-top:8px}
-.info{color:#2c3e50;margin-top:8px}
-.links{margin-top:12px}
+  .auth-card {
+    max-width: 420px;
+    margin: 40px auto;
+    padding: 20px;
+  }
+  .field {
+    margin-bottom: 16px;
+  }
+  .error {
+    color: #c0392b;
+    margin-top: 8px;
+  }
+  .info {
+    color: #2c3e50;
+    margin-top: 8px;
+  }
+  .links {
+    margin-top: 12px;
+  }
 </style>

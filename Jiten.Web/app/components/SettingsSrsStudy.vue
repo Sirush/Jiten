@@ -158,7 +158,14 @@
   const resolvedLayout = computed(() => resolveCardLayout(form as StudySettingsDto));
   const layoutIsCustom = computed(() => !!form.cardLayout && hasCustomArrangement(form.cardLayout));
 
-  type PresenceKey = 'showCardStatus' | 'showConfusableReadings' | 'showPitchAccent' | 'showFrequencyRank' | 'showKanjiBreakdown' | 'showWordComposition' | 'showWordUsedIn';
+  type PresenceKey =
+    | 'showCardStatus'
+    | 'showConfusableReadings'
+    | 'showPitchAccent'
+    | 'showFrequencyRank'
+    | 'showKanjiBreakdown'
+    | 'showWordComposition'
+    | 'showWordUsedIn';
   function presenceToggle(key: PresenceKey, type: CardBlockType) {
     return computed<boolean>({
       get: () => layoutHasBlock(resolvedLayout.value, type),
@@ -443,7 +450,12 @@
     clearTimeout(saveTimer);
     saveState.value = 'saving';
     try {
-      await srsStore.updateSettings({ ...form, keybinds: { ...form.keybinds }, timedReview: { ...form.timedReview }, writeInReview: { ...form.writeInReview } });
+      await srsStore.updateSettings({
+        ...form,
+        keybinds: { ...form.keybinds },
+        timedReview: { ...form.timedReview },
+        writeInReview: { ...form.writeInReview },
+      });
       saveState.value = 'saved';
       clearTimeout(savedClearTimer);
       savedClearTimer = setTimeout(() => {
@@ -667,7 +679,10 @@
         <div>
           <label class="block text-sm font-medium mb-1">
             Input placement
-            <Tooltip content="**Bottom bar** — the input replaces the Show Answer bar at the bottom.<br>**Inline in card** — the input sits inside the card, under the word." placement="top">
+            <Tooltip
+              content="**Bottom bar** — the input replaces the Show Answer bar at the bottom.<br>**Inline in card** — the input sits inside the card, under the word."
+              placement="top"
+            >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>
@@ -683,7 +698,10 @@
         <div>
           <label class="block text-sm font-medium mb-1">
             When the answer is wrong
-            <Tooltip content="**Reveal answer** — flip to the answer and suggest Again.<br>**Shake & retry** — keep the input open so you can try again if you get it wrong." placement="top">
+            <Tooltip
+              content="**Reveal answer** — flip to the answer and suggest Again.<br>**Shake & retry** — keep the input open so you can try again if you get it wrong."
+              placement="top"
+            >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>
@@ -700,7 +718,10 @@
           <ToggleSwitch v-model="form.writeInReview.autoAdvance" input-id="writeInAutoAdvance" />
           <label for="writeInAutoAdvance" class="text-sm cursor-pointer">
             Auto-advance after answering
-            <Tooltip content="The suggested grade will be submitted automatically after a delay. You can override by choosing a different grade." placement="right">
+            <Tooltip
+              content="The suggested grade will be submitted automatically after a delay. You can override by choosing a different grade."
+              placement="right"
+            >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>
@@ -710,7 +731,10 @@
             <ToggleSwitch v-model="form.writeInReview.autoAdvanceWrong" input-id="writeInAutoAdvanceWrong" />
             <label for="writeInAutoAdvanceWrong" class="text-sm cursor-pointer">
               Also auto-advance wrong answers
-              <Tooltip content="When off, only correct answers auto-advance; wrong answers wait for you to grade. When on, wrong answers will be graded Again after the delay." placement="right">
+              <Tooltip
+                content="When off, only correct answers auto-advance; wrong answers wait for you to grade. When on, wrong answers will be graded Again after the delay."
+                placement="right"
+              >
                 <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
               </Tooltip>
             </label>
@@ -734,7 +758,10 @@
           <ToggleSwitch v-model="form.writeInReview.skipNewCards" input-id="writeInSkipNew" />
           <label for="writeInSkipNew" class="text-sm cursor-pointer">
             Disable for new cards
-            <Tooltip content="New cards you haven't learned yet just reveal normally (standard card) instead of asking you to type an answer." placement="right">
+            <Tooltip
+              content="New cards you haven't learned yet just reveal normally (standard card) instead of asking you to type an answer."
+              placement="right"
+            >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>
@@ -754,7 +781,10 @@
           <ToggleSwitch v-model="form.writeInReview.meaningShowReading" input-id="writeInMeaningReading" />
           <label for="writeInMeaningReading" class="text-sm cursor-pointer">
             Show the reading in meaning mode
-            <Tooltip content="Show the word's reading (furigana) on the front when typing the meaning, so only the meaning is tested. Turn off to hide it and test yourself on both at once." placement="right">
+            <Tooltip
+              content="Show the word's reading (furigana) on the front when typing the meaning, so only the meaning is tested. Turn off to hide it and test yourself on both at once."
+              placement="right"
+            >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>
@@ -891,225 +921,221 @@
               <i class="pi pi-info-circle mr-1" />
               Your card arrangement has been customised. Reordering and per-block options are managed in the advanced editor.
             </p>
-            <Button
-              type="button"
-              outlined
-              icon="pi pi-sliders-h"
-              label="Customise layout (advanced)"
-              class="mt-3 w-full"
-              @click="advancedLayout = true"
-            />
+            <Button type="button" outlined icon="pi pi-sliders-h" label="Customise layout (advanced)" class="mt-3 w-full" @click="advancedLayout = true" />
           </div>
           <!-- Toggle groups -->
           <div class="flex-1 min-w-0 md:order-1 flex flex-col gap-4">
-          <div>
-            <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card front</label>
-            <div class="flex flex-col gap-2">
-              <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="showCardStatus" input-id="showCardStatus" />
-                <label for="showCardStatus" class="text-sm cursor-pointer">
-                  Show card learning status
-                  <Tooltip content="Display the card status (New, Review, Again) at the top of the card." placement="right">
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-              </div>
-              <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="showFuriganaOnFront" input-id="showFuriganaOnFront" />
-                <label for="showFuriganaOnFront" class="text-sm cursor-pointer">
-                  Show furigana
-                  <Tooltip content="Display furigana (reading hints) above kanji on the card front." placement="right">
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-              </div>
-              <div v-if="showFuriganaOnFront" class="flex items-center gap-2 ml-6">
-                <ToggleSwitch v-model="furiganaOnFrontNewOnly" input-id="furiganaOnFrontNewOnly" />
-                <label for="furiganaOnFrontNewOnly" class="text-sm cursor-pointer">
-                  New cards only
-                  <Tooltip content="Only show furigana on cards you haven't seen before. Review cards will show plain kanji." placement="right">
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-              </div>
-              <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="showConfusableReadings" input-id="showConfusableReadings" />
-                <label for="showConfusableReadings" class="text-sm cursor-pointer">
-                  Show confusable readings
-                  <Tooltip
-                    content="When a kanji has multiple dictionary entries with different readings (e.g. 音 → おと/おん), show the other readings to help avoid mix-ups."
-                    placement="right"
-                  >
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
+            <div>
+              <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card front</label>
+              <div class="flex flex-col gap-2">
+                <div class="flex items-center gap-2">
+                  <ToggleSwitch v-model="showCardStatus" input-id="showCardStatus" />
+                  <label for="showCardStatus" class="text-sm cursor-pointer">
+                    Show card learning status
+                    <Tooltip content="Display the card status (New, Review, Again) at the top of the card." placement="right">
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                </div>
+                <div class="flex items-center gap-2">
+                  <ToggleSwitch v-model="showFuriganaOnFront" input-id="showFuriganaOnFront" />
+                  <label for="showFuriganaOnFront" class="text-sm cursor-pointer">
+                    Show furigana
+                    <Tooltip content="Display furigana (reading hints) above kanji on the card front." placement="right">
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                </div>
+                <div v-if="showFuriganaOnFront" class="flex items-center gap-2 ml-6">
+                  <ToggleSwitch v-model="furiganaOnFrontNewOnly" input-id="furiganaOnFrontNewOnly" />
+                  <label for="furiganaOnFrontNewOnly" class="text-sm cursor-pointer">
+                    New cards only
+                    <Tooltip content="Only show furigana on cards you haven't seen before. Review cards will show plain kanji." placement="right">
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                </div>
+                <div class="flex items-center gap-2">
+                  <ToggleSwitch v-model="showConfusableReadings" input-id="showConfusableReadings" />
+                  <label for="showConfusableReadings" class="text-sm cursor-pointer">
+                    Show confusable readings
+                    <Tooltip
+                      content="When a kanji has multiple dictionary entries with different readings (e.g. 音 → おと/おん), show the other readings to help avoid mix-ups."
+                      placement="right"
+                    >
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div>
-            <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Example sentence</label>
-            <div class="flex flex-col gap-2">
-              <div>
-                <label class="text-sm mb-1 block">
-                  Position
-                  <Tooltip
-                    content="Show an example sentence from the media where the word appears.<br>**Hidden** — no sentence shown.<br>**Front** — sentence visible before you flip the card (sentence card).<br>**Back** — sentence shown only after you flip."
-                    placement="right"
-                  >
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-                <SelectButton
-                  v-model="exampleSentencePosition"
-                  :options="exampleSentenceOptions"
-                  option-label="label"
-                  option-value="value"
-                  :allow-empty="false"
-                />
-              </div>
-              <div v-if="exampleSentencePosition !== 'Hidden'" class="flex items-center gap-2">
-                <ToggleSwitch v-model="blurExampleSentence" input-id="blurExampleSentence" />
-                <label for="blurExampleSentence" class="text-sm cursor-pointer">
-                  Blur until clicked
-                  <Tooltip content="Example sentence is blurred by default. Click it to reveal." placement="right">
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-              </div>
-              <div v-if="exampleSentencePosition !== 'Hidden'">
-                <label class="text-sm mb-1 block">
-                  Sentence origin
-                  <Tooltip
-                    content="Where the card's sentence comes from.<br>**Study decks** — a sentence from one of your study decks, picked at random when several of them have one.<br>**Random** — ignores your decks and display random example sentences instead.<br>Your own custom sentences always win over both."
-                    placement="right"
-                  >
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-                <SelectButton
-                  v-model="form.exampleSentenceSource"
-                  :options="exampleSentenceSourceOptions"
-                  option-label="label"
-                  option-value="value"
-                  :allow-empty="false"
-                />
-              </div>
-              <div v-if="exampleSentencePosition !== 'Hidden'">
-                <label class="text-sm mb-1 block">
-                  Sorting
-                  <Tooltip
-                    content="Order of the sentences under &quot;See more sentences&quot;. Sentences from your study decks come first in every mode.<br>**Random** — random sentences.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences."
-                    placement="right"
-                  >
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-                <SelectButton
-                  v-model="form.exampleSentenceSorting"
-                  :options="exampleSentenceSortingOptions"
-                  option-label="label"
-                  option-value="value"
-                  :allow-empty="false"
-                />
+            <div>
+              <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Example sentence</label>
+              <div class="flex flex-col gap-2">
+                <div>
+                  <label class="text-sm mb-1 block">
+                    Position
+                    <Tooltip
+                      content="Show an example sentence from the media where the word appears.<br>**Hidden** — no sentence shown.<br>**Front** — sentence visible before you flip the card (sentence card).<br>**Back** — sentence shown only after you flip."
+                      placement="right"
+                    >
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                  <SelectButton
+                    v-model="exampleSentencePosition"
+                    :options="exampleSentenceOptions"
+                    option-label="label"
+                    option-value="value"
+                    :allow-empty="false"
+                  />
+                </div>
+                <div v-if="exampleSentencePosition !== 'Hidden'" class="flex items-center gap-2">
+                  <ToggleSwitch v-model="blurExampleSentence" input-id="blurExampleSentence" />
+                  <label for="blurExampleSentence" class="text-sm cursor-pointer">
+                    Blur until clicked
+                    <Tooltip content="Example sentence is blurred by default. Click it to reveal." placement="right">
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                </div>
+                <div v-if="exampleSentencePosition !== 'Hidden'">
+                  <label class="text-sm mb-1 block">
+                    Sentence origin
+                    <Tooltip
+                      content="Where the card's sentence comes from.<br>**Study decks** — a sentence from one of your study decks, picked at random when several of them have one.<br>**Random** — ignores your decks and display random example sentences instead.<br>Your own custom sentences always win over both."
+                      placement="right"
+                    >
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                  <SelectButton
+                    v-model="form.exampleSentenceSource"
+                    :options="exampleSentenceSourceOptions"
+                    option-label="label"
+                    option-value="value"
+                    :allow-empty="false"
+                  />
+                </div>
+                <div v-if="exampleSentencePosition !== 'Hidden'">
+                  <label class="text-sm mb-1 block">
+                    Sorting
+                    <Tooltip
+                      content='Order of the sentences under "See more sentences". Sentences from your study decks come first in every mode.<br>**Random** — random sentences.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences.'
+                      placement="right"
+                    >
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                  <SelectButton
+                    v-model="form.exampleSentenceSorting"
+                    :options="exampleSentenceSortingOptions"
+                    option-label="label"
+                    option-value="value"
+                    :allow-empty="false"
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div>
-            <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card back</label>
-            <div class="flex flex-col gap-2">
-              <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="showPitchAccent" input-id="showPitchAccent" />
-                <label for="showPitchAccent" class="text-sm cursor-pointer">
-                  Pitch accent
-                  <Tooltip content="Show the pitch accent pattern on the card back." placement="right">
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-              </div>
-              <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="showFrequencyRank" input-id="showFrequencyRank" />
-                <label for="showFrequencyRank" class="text-sm cursor-pointer">
-                  Frequency rank
-                  <Tooltip content="Show how common the word is in Japanese, based on overall word frequency data." placement="right">
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-              </div>
-              <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="showKanjiBreakdown" input-id="showKanjiBreakdown" />
-                <label for="showKanjiBreakdown" class="text-sm cursor-pointer">
-                  Kanji breakdown
-                  <Tooltip content="Show the individual kanji that make up the word along with their usual meaning." placement="right">
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-              </div>
-              <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="showWordComposition" input-id="showWordComposition" />
-                <label for="showWordComposition" class="text-sm cursor-pointer">
-                  Word composition
-                  <Tooltip content="Show the component words that compose this word." placement="right">
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-              </div>
-              <div class="flex items-center gap-2">
-                <ToggleSwitch v-model="showWordUsedIn" input-id="showWordUsedIn" />
-                <label for="showWordUsedIn" class="text-sm cursor-pointer">
-                  Word used in
-                  <Tooltip content="Show other words that contain this word." placement="right">
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
+            <div>
+              <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card back</label>
+              <div class="flex flex-col gap-2">
+                <div class="flex items-center gap-2">
+                  <ToggleSwitch v-model="showPitchAccent" input-id="showPitchAccent" />
+                  <label for="showPitchAccent" class="text-sm cursor-pointer">
+                    Pitch accent
+                    <Tooltip content="Show the pitch accent pattern on the card back." placement="right">
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                </div>
+                <div class="flex items-center gap-2">
+                  <ToggleSwitch v-model="showFrequencyRank" input-id="showFrequencyRank" />
+                  <label for="showFrequencyRank" class="text-sm cursor-pointer">
+                    Frequency rank
+                    <Tooltip content="Show how common the word is in Japanese, based on overall word frequency data." placement="right">
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                </div>
+                <div class="flex items-center gap-2">
+                  <ToggleSwitch v-model="showKanjiBreakdown" input-id="showKanjiBreakdown" />
+                  <label for="showKanjiBreakdown" class="text-sm cursor-pointer">
+                    Kanji breakdown
+                    <Tooltip content="Show the individual kanji that make up the word along with their usual meaning." placement="right">
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                </div>
+                <div class="flex items-center gap-2">
+                  <ToggleSwitch v-model="showWordComposition" input-id="showWordComposition" />
+                  <label for="showWordComposition" class="text-sm cursor-pointer">
+                    Word composition
+                    <Tooltip content="Show the component words that compose this word." placement="right">
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                </div>
+                <div class="flex items-center gap-2">
+                  <ToggleSwitch v-model="showWordUsedIn" input-id="showWordUsedIn" />
+                  <label for="showWordUsedIn" class="text-sm cursor-pointer">
+                    Word used in
+                    <Tooltip content="Show other words that contain this word." placement="right">
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div>
-            <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card image</label>
-            <div class="flex flex-col gap-2">
-              <div>
-                <label class="text-sm mb-1 block">
-                  Layout
-                  <Tooltip
-                    content="Where your uploaded card image appears.<br>**Beside word** — to the right of the word on wider screens (stacks below on mobile).<br>**Below word** — centred under the word."
-                    placement="right"
-                  >
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-                <SelectButton v-model="cardImageLayout" :options="cardImageLayoutOptions" option-label="label" option-value="value" :allow-empty="false" />
+            <div>
+              <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Card image</label>
+              <div class="flex flex-col gap-2">
+                <div>
+                  <label class="text-sm mb-1 block">
+                    Layout
+                    <Tooltip
+                      content="Where your uploaded card image appears.<br>**Beside word** — to the right of the word on wider screens (stacks below on mobile).<br>**Below word** — centred under the word."
+                      placement="right"
+                    >
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                  <SelectButton v-model="cardImageLayout" :options="cardImageLayoutOptions" option-label="label" option-value="value" :allow-empty="false" />
+                </div>
+                <div>
+                  <label class="text-sm mb-1 block">
+                    Position
+                    <Tooltip content="**Front** — image visible before you flip the card.<br>**Back** — image shown only after you flip." placement="right">
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                  <SelectButton
+                    v-model="cardImagePosition"
+                    :options="cardImagePositionOptions"
+                    option-label="label"
+                    option-value="value"
+                    :allow-empty="false"
+                  />
+                </div>
+                <div v-if="cardImagePosition === 'Front'" class="flex items-center gap-2">
+                  <ToggleSwitch v-model="blurCardImage" input-id="blurCardImage" />
+                  <label for="blurCardImage" class="text-sm cursor-pointer">
+                    Blur image before reveal
+                    <Tooltip content="Image is blurred until you flip the card or click it." placement="right">
+                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+                    </Tooltip>
+                  </label>
+                </div>
+                <p class="text-xs text-surface-500 dark:text-surface-400">
+                  Card images are a
+                  <NuxtLink to="/jiten-plus" class="underline font-medium">Jiten+</NuxtLink>
+                  feature.
+                </p>
               </div>
-              <div>
-                <label class="text-sm mb-1 block">
-                  Position
-                  <Tooltip
-                    content="**Front** — image visible before you flip the card.<br>**Back** — image shown only after you flip."
-                    placement="right"
-                  >
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-                <SelectButton v-model="cardImagePosition" :options="cardImagePositionOptions" option-label="label" option-value="value" :allow-empty="false" />
-              </div>
-              <div v-if="cardImagePosition === 'Front'" class="flex items-center gap-2">
-                <ToggleSwitch v-model="blurCardImage" input-id="blurCardImage" />
-                <label for="blurCardImage" class="text-sm cursor-pointer">
-                  Blur image before reveal
-                  <Tooltip content="Image is blurred until you flip the card or click it." placement="right">
-                    <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                  </Tooltip>
-                </label>
-              </div>
-              <p class="text-xs text-surface-500 dark:text-surface-400">
-                Card images are a
-                <NuxtLink to="/jiten-plus" class="underline font-medium">Jiten+</NuxtLink>
-                feature.
-              </p>
             </div>
-          </div>
           </div>
         </div>
       </template>
@@ -1117,14 +1143,7 @@
       <template v-else>
         <div class="flex flex-col gap-3">
           <div class="flex items-center justify-between gap-2">
-            <Button
-              type="button"
-              severity="secondary"
-              size="small"
-              icon="pi pi-arrow-left"
-              label="Back to simple settings"
-              @click="advancedLayout = false"
-            />
+            <Button type="button" severity="secondary" size="small" icon="pi pi-arrow-left" label="Back to simple settings" @click="advancedLayout = false" />
             <Button
               type="button"
               severity="secondary"
@@ -1242,10 +1261,7 @@
             <ToggleSwitch v-model="form.customAudioReplacesHeadword" input-id="customAudioReplacesHeadword" />
             <label for="customAudioReplacesHeadword" class="text-sm cursor-pointer">
               Replace the headword audio
-              <Tooltip
-                content="On cards with a clip, play it instead of the headword TTS."
-                placement="right"
-              >
+              <Tooltip content="On cards with a clip, play it instead of the headword TTS." placement="right">
                 <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
               </Tooltip>
             </label>
@@ -1254,10 +1270,7 @@
             <ToggleSwitch v-model="form.customAudioReplacesSentence" input-id="customAudioReplacesSentence" />
             <label for="customAudioReplacesSentence" class="text-sm cursor-pointer">
               Replace the example sentence audio
-              <Tooltip
-                content="On cards with a clip, play it instead of the example sentence TTS."
-                placement="right"
-              >
+              <Tooltip content="On cards with a clip, play it instead of the example sentence TTS." placement="right">
                 <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
               </Tooltip>
             </label>
@@ -1382,7 +1395,15 @@
         <div v-if="form.timedReview.revealEnabled" :class="props.inline ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'">
           <div class="min-w-0">
             <label class="block text-sm font-medium mb-1">Seconds before it fires</label>
-            <InputNumber v-model="form.timedReview.revealSeconds" :min="1" :max="600" :step="0.5" :max-fraction-digits="1" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
+            <InputNumber
+              v-model="form.timedReview.revealSeconds"
+              :min="1"
+              :max="600"
+              :step="0.5"
+              :max-fraction-digits="1"
+              :show-buttons="!props.inline"
+              class="w-full [&_input]:w-full"
+            />
           </div>
           <div class="min-w-0">
             <label class="block text-sm font-medium mb-1">
@@ -1422,7 +1443,15 @@
                 <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
               </Tooltip>
             </label>
-            <InputNumber v-model="form.timedReview.answerSeconds" :min="0" :max="600" :step="0.5" :max-fraction-digits="1" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
+            <InputNumber
+              v-model="form.timedReview.answerSeconds"
+              :min="0"
+              :max="600"
+              :step="0.5"
+              :max-fraction-digits="1"
+              :show-buttons="!props.inline"
+              class="w-full [&_input]:w-full"
+            />
           </div>
           <div class="min-w-0">
             <label class="block text-sm font-medium mb-1">

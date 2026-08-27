@@ -10,10 +10,7 @@ interface SetStatusResponse {
   allChildrenCompleted: boolean;
 }
 
-export function useDeckPreference(
-  deck: () => Deck,
-  onUpdate: (updated: Deck) => void
-) {
+export function useDeckPreference(deck: () => Deck, onUpdate: (updated: Deck) => void) {
   const { $api } = useNuxtApp();
 
   const toggleFavourite = async () => {

@@ -42,9 +42,9 @@ export default defineNitroPlugin((nitroApp) => {
     const mem = process.memoryUsage();
 
     console.log(
-      `[perf ${WORKER}] lag p50=${toMs(loopDelay.percentile(50))}ms p99=${toMs(loopDelay.percentile(99))}ms max=${toMs(loopDelay.max)}ms`
-      + ` | gc n=${gcCount} total=${Math.round(gcTotalMs)}ms max=${Math.round(gcMaxMs)}ms major=${Math.round(gcMaxMajorMs)}ms`
-      + ` | heap ${toMb(heap.used_heap_size)}/${toMb(heap.heap_size_limit)}MB rss=${toMb(mem.rss)}MB ext=${toMb(mem.external)}MB`,
+      `[perf ${WORKER}] lag p50=${toMs(loopDelay.percentile(50))}ms p99=${toMs(loopDelay.percentile(99))}ms max=${toMs(loopDelay.max)}ms` +
+        ` | gc n=${gcCount} total=${Math.round(gcTotalMs)}ms max=${Math.round(gcMaxMs)}ms major=${Math.round(gcMaxMajorMs)}ms` +
+        ` | heap ${toMb(heap.used_heap_size)}/${toMb(heap.heap_size_limit)}MB rss=${toMb(mem.rss)}MB ext=${toMb(mem.external)}MB`
     );
 
     loopDelay.reset();

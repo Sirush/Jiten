@@ -12,7 +12,7 @@
     [
       { heading: 'Derived from', links: props.derivedFrom ?? [] },
       { heading: 'Derived forms', links: props.derives ?? [] },
-    ].filter((section) => section.links.length > 0),
+    ].filter((section) => section.links.length > 0)
   );
 </script>
 

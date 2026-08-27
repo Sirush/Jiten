@@ -109,14 +109,14 @@
 
     <section>
       <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Mode</div>
-      <SelectButton :model-value="mode" @update:model-value="mode = $event" :options="modeOptions" option-value="value" option-label="label" />
+      <SelectButton :model-value="mode" :options="modeOptions" option-value="value" option-label="label" @update:model-value="mode = $event" />
     </section>
 
     <section>
       <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">
         {{ mode === 'export' ? 'Export Method' : 'Import Method' }}
       </div>
-      <VocabularyOptionGrid :options="mode === 'export' ? exportOptions : importOptions" v-model="option" />
+      <VocabularyOptionGrid v-model="option" :options="mode === 'export' ? exportOptions : importOptions" />
     </section>
 
     <div v-if="option" id="vocabulary-transfer-panel">

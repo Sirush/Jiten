@@ -46,47 +46,57 @@
 <template>
   <div
     v-if="wordText"
-    style="width: 1200px; height: 630px; display: flex; flex-direction: column; font-family: 'Noto Sans JP', sans-serif; background: white; border-left: 6px solid #9333ea; padding: 32px 48px; justify-content: center; gap: 24px;"
+    style="
+      width: 1200px;
+      height: 630px;
+      display: flex;
+      flex-direction: column;
+      font-family: 'Noto Sans JP', sans-serif;
+      background: white;
+      border-left: 6px solid #9333ea;
+      padding: 32px 48px;
+      justify-content: center;
+      gap: 24px;
+    "
   >
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span style="font-size: 1.8rem; font-weight: 700; color: #9333ea;">jiten.moe</span>
-      <span style="font-size: 1.6rem; color: #6b7280;">{{ rankText }}</span>
+    <div style="display: flex; justify-content: space-between; align-items: center">
+      <span style="font-size: 1.8rem; font-weight: 700; color: #9333ea">jiten.moe</span>
+      <span style="font-size: 1.6rem; color: #6b7280">{{ rankText }}</span>
     </div>
 
-    <div style="display: flex; flex-direction: column; align-items: center; width: 100%;">
-      <div
-        v-if="readingText"
-        style="font-size: 2.2rem; color: #9ca3af; width: 100%; text-align: center;"
-      >
+    <div style="display: flex; flex-direction: column; align-items: center; width: 100%">
+      <div v-if="readingText" style="font-size: 2.2rem; color: #9ca3af; width: 100%; text-align: center">
         {{ readingText }}
       </div>
 
-      <div style="font-size: 5.5rem; font-weight: 700; line-height: 1.2; width: 100%; text-align: center;">{{ wordText }}</div>
+      <div style="font-size: 5.5rem; font-weight: 700; line-height: 1.2; width: 100%; text-align: center">{{ wordText }}</div>
 
-      <div
-        v-if="posText"
-        style="font-size: 1.6rem; color: #9ca3af; margin-top: 8px; width: 100%; text-align: center;"
-      >
+      <div v-if="posText" style="font-size: 1.6rem; color: #9ca3af; margin-top: 8px; width: 100%; text-align: center">
         {{ posText }}
       </div>
 
-      <div
-        v-if="definitionText"
-        style="font-size: 1.8rem; color: #4b5563; margin-top: 8px; width: 100%; text-align: center;"
-      >
+      <div v-if="definitionText" style="font-size: 1.8rem; color: #4b5563; margin-top: 8px; width: 100%; text-align: center">
         {{ definitionText }}
       </div>
     </div>
 
-    <div style="border-top: 1px solid #e5e7eb; padding-top: 12px;">
-      <span style="font-size: 1.5rem; color: #6b7280;">{{ mediaCountText }}</span>
+    <div style="border-top: 1px solid #e5e7eb; padding-top: 12px">
+      <span style="font-size: 1.5rem; color: #6b7280">{{ mediaCountText }}</span>
     </div>
   </div>
 
   <div
     v-else
-    style="width: 1200px; height: 630px; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans JP', sans-serif; background: white;"
+    style="
+      width: 1200px;
+      height: 630px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Noto Sans JP', sans-serif;
+      background: white;
+    "
   >
-    <span style="color: #6b7280;">Loading...</span>
+    <span style="color: #6b7280">Loading...</span>
   </div>
 </template>

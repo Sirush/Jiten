@@ -1,5 +1,13 @@
-import type { MediaRequestDto, MediaRequestCommentDto, DuplicateCheckResultDto, PaginatedResponse, RequestActivityLogDto, RequestUserSummaryDto, MediaRequestUploadAdminDto } from '~/types/types';
-import { type MediaType, type RequestAction, type RequestKind, type RequestStatus } from '~/types';
+import type {
+  MediaRequestDto,
+  MediaRequestCommentDto,
+  DuplicateCheckResultDto,
+  PaginatedResponse,
+  RequestActivityLogDto,
+  RequestUserSummaryDto,
+  MediaRequestUploadAdminDto,
+} from '~/types/types';
+import type { MediaType, RequestAction, RequestKind, RequestStatus } from '~/types';
 
 export interface RequestFacets {
   mediaTypes: Record<string, number>;
@@ -41,20 +49,22 @@ export function useMediaRequests() {
   const error = ref<Error | null>(null);
   let fetchVersion = 0;
 
-  const fetchRequests = async (params: {
-    mediaType?: MediaType;
-    status?: RequestStatus;
-    kind?: RequestKind;
-    sort?: string;
-    offset?: number;
-    limit?: number;
-    mine?: boolean;
-    contributed?: boolean;
-    voted?: boolean;
-    excludeOwn?: boolean;
-    search?: string;
-    attachments?: string;
-  } = {}) => {
+  const fetchRequests = async (
+    params: {
+      mediaType?: MediaType;
+      status?: RequestStatus;
+      kind?: RequestKind;
+      sort?: string;
+      offset?: number;
+      limit?: number;
+      mine?: boolean;
+      contributed?: boolean;
+      voted?: boolean;
+      excludeOwn?: boolean;
+      search?: string;
+      attachments?: string;
+    } = {}
+  ) => {
     const version = ++fetchVersion;
     const showLoading = requests.value.length === 0;
     if (showLoading) isLoading.value = true;
@@ -187,7 +197,7 @@ export function useMediaRequests() {
   const fetchComments = async (id: number): Promise<MediaRequestCommentDto[]> => {
     error.value = null;
     try {
-      return await $api<MediaRequestCommentDto[]>(`requests/${id}/comments`) ?? [];
+      return (await $api<MediaRequestCommentDto[]>(`requests/${id}/comments`)) ?? [];
     } catch (e) {
       error.value = e as Error;
       return [];
@@ -305,14 +315,17 @@ export function useMediaRequests() {
     }
   };
 
-  const editRequest = async (id: number, data: {
-    title: string;
-    mediaType: MediaType;
-    kind?: RequestKind;
-    targetDeckId?: number;
-    externalUrl?: string;
-    description?: string;
-  }): Promise<boolean> => {
+  const editRequest = async (
+    id: number,
+    data: {
+      title: string;
+      mediaType: MediaType;
+      kind?: RequestKind;
+      targetDeckId?: number;
+      externalUrl?: string;
+      description?: string;
+    }
+  ): Promise<boolean> => {
     error.value = null;
     try {
       await $api(`requests/${id}/edit`, {
@@ -326,11 +339,14 @@ export function useMediaRequests() {
     }
   };
 
-  const updateStatus = async (id: number, data: {
-    status: RequestStatus;
-    adminNote?: string;
-    fulfilledDeckId?: number;
-  }): Promise<boolean> => {
+  const updateStatus = async (
+    id: number,
+    data: {
+      status: RequestStatus;
+      adminNote?: string;
+      fulfilledDeckId?: number;
+    }
+  ): Promise<boolean> => {
     error.value = null;
     try {
       await $api(`requests/${id}/status`, {
@@ -347,19 +363,21 @@ export function useMediaRequests() {
   const fetchActivityLog = async (id: number): Promise<RequestActivityLogDto[]> => {
     error.value = null;
     try {
-      return await $api<RequestActivityLogDto[]>(`requests/${id}/activity-log`) ?? [];
+      return (await $api<RequestActivityLogDto[]>(`requests/${id}/activity-log`)) ?? [];
     } catch (e) {
       error.value = e as Error;
       return [];
     }
   };
 
-  const fetchGlobalActivityLog = async (params: {
-    userId?: string;
-    action?: RequestAction;
-    offset?: number;
-    limit?: number;
-  } = {}): Promise<PaginatedResponse<RequestActivityLogDto[]> | null> => {
+  const fetchGlobalActivityLog = async (
+    params: {
+      userId?: string;
+      action?: RequestAction;
+      offset?: number;
+      limit?: number;
+    } = {}
+  ): Promise<PaginatedResponse<RequestActivityLogDto[]> | null> => {
     error.value = null;
     try {
       return await $api<PaginatedResponse<RequestActivityLogDto[]>>('admin/request-activity', {
@@ -381,17 +399,19 @@ export function useMediaRequests() {
     }
   };
 
-  const fetchFacets = async (params: {
-    mediaType?: MediaType;
-    status?: RequestStatus;
-    kind?: RequestKind;
-    mine?: boolean;
-    contributed?: boolean;
-    voted?: boolean;
-    excludeOwn?: boolean;
-    search?: string;
-    attachments?: string;
-  } = {}): Promise<RequestFacets | null> => {
+  const fetchFacets = async (
+    params: {
+      mediaType?: MediaType;
+      status?: RequestStatus;
+      kind?: RequestKind;
+      mine?: boolean;
+      contributed?: boolean;
+      voted?: boolean;
+      excludeOwn?: boolean;
+      search?: string;
+      attachments?: string;
+    } = {}
+  ): Promise<RequestFacets | null> => {
     try {
       return await $api<RequestFacets>('requests/facets', {
         query: {
@@ -414,7 +434,7 @@ export function useMediaRequests() {
   const fetchMyQuota = async (): Promise<MediaRequestQuota> => {
     const fallback: MediaRequestQuota = { activeCount: 0, limit: 20, plusLimit: 30, isPlus: false };
     try {
-      return await $api<MediaRequestQuota>('requests/my-quota') ?? fallback;
+      return (await $api<MediaRequestQuota>('requests/my-quota')) ?? fallback;
     } catch {
       return fallback;
     }

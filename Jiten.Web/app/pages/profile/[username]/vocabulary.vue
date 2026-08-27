@@ -127,7 +127,20 @@
     error,
   } = await useApiFetchPaginated<AccomplishmentVocabularyDto>(`user/profile/${targetUsername.value}/accomplishments/vocabulary`, {
     query: queryParams,
-    watch: [offset, sortBy, sortDescending, mediaTypeFilter, displayFilter, suspendedParam, redundantParam, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly, pageSizeQuery],
+    watch: [
+      offset,
+      sortBy,
+      sortDescending,
+      mediaTypeFilter,
+      displayFilter,
+      suspendedParam,
+      redundantParam,
+      debouncedSearch,
+      debouncedIncludePos,
+      debouncedExcludePos,
+      debouncedHideKanaOnly,
+      pageSizeQuery,
+    ],
   });
 
   const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor, pageSize } = usePagination(response);
@@ -218,7 +231,22 @@
         </FloatLabel>
       </VocabularyFilters>
 
-      <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="words" :page-size="pageSize" :page-size-options="[25, 50, 100]" page-size-param="pageSize" mobile-compact />
+      <PaginationControls
+        v-if="response?.data?.words?.length"
+        :previous-link="previousLink"
+        :next-link="nextLink"
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :page-link-for="pageLinkFor"
+        :start="start"
+        :end="end"
+        :total-items="totalItems"
+        item-label="words"
+        :page-size="pageSize"
+        :page-size-options="[25, 50, 100]"
+        page-size-param="pageSize"
+        mobile-compact
+      />
 
       <VocabularyList
         :words="response?.data?.words ?? []"
@@ -228,7 +256,18 @@
         empty-message="Complete some media to see your vocabulary!"
       />
 
-      <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" :scroll-to-top-on-navigate="true" />
+      <PaginationControls
+        v-if="response?.data?.words?.length"
+        :previous-link="previousLink"
+        :next-link="nextLink"
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :page-link-for="pageLinkFor"
+        :start="start"
+        :end="end"
+        :total-items="totalItems"
+        :scroll-to-top-on-navigate="true"
+      />
     </div>
   </div>
 </template>

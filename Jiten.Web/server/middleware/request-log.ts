@@ -53,14 +53,16 @@ export default defineEventHandler((event) => {
   if (import.meta.prerender || process.env.PERF_MONITOR === 'off') return;
 
   const path = (event.path || '').split('?')[0] ?? '';
-  if (SKIP_PREFIXES.some(p => path.startsWith(p)) || SKIP_EXTENSIONS.test(path)) return;
+  if (SKIP_PREFIXES.some((p) => path.startsWith(p)) || SKIP_EXTENSIONS.test(path)) return;
 
   if (!aggregateTimer) startAggregate();
 
   const req = event.node.req;
   const res = event.node.res;
   const userAgent = String(req.headers['user-agent'] ?? 'none').slice(0, 100);
-  const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',')[0]?.trim();
+  const forwarded = String(req.headers['x-forwarded-for'] ?? '')
+    .split(',')[0]
+    ?.trim();
   const ip = forwarded || req.socket?.remoteAddress || 'unknown';
   const start = performance.now();
 
@@ -72,8 +74,6 @@ export default defineEventHandler((event) => {
   res.once('finish', () => {
     const duration = performance.now() - start;
     if (duration < SLOW_MS) return;
-    console.log(
-      `[slow ${WORKER}] ${duration.toFixed(0)}ms ${req.method} ${path} status=${res.statusCode} ip=${ip} ua="${userAgent}"`,
-    );
+    console.log(`[slow ${WORKER}] ${duration.toFixed(0)}ms ${req.method} ${path} status=${res.statusCode} ip=${ip} ua="${userAgent}"`);
   });
 });

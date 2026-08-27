@@ -129,13 +129,15 @@
           </div>
 
           <p v-if="globalStats" class="text-sm text-gray-600 dark:text-gray-400 mb-5">
-            <b>{{ formatCharacters(globalStats.totalMojis) }}</b> characters analysed across <b>{{ globalStats.totalMedia.toLocaleString() }}</b> titles,
-            including
+            <b>{{ formatCharacters(globalStats.totalMojis) }}</b>
+            characters analysed across
+            <b>{{ globalStats.totalMedia.toLocaleString() }}</b>
+            titles, including
             <template v-for="(featured, index) in featuredTypes" :key="featured.type">
-              <template v-if="index > 0"> and </template>
-              <NuxtLink :to="{ path: '/decks/media', query: { mediaType: featured.type } }"
-                >{{ typeCount(featured.type)?.toLocaleString() }} {{ featured.label }}</NuxtLink
-              >
+              <template v-if="index > 0">and</template>
+              <NuxtLink :to="{ path: '/decks/media', query: { mediaType: featured.type } }">
+                {{ typeCount(featured.type)?.toLocaleString() }} {{ featured.label }}
+              </NuxtLink>
             </template>
           </p>
 
@@ -168,9 +170,9 @@
           </div>
           <div class="w-full max-w-xl xl:max-w-2xl shrink-0">
             <div class="relative rounded-xl ring-2 ring-primary/40">
-              <span class="absolute -top-2.5 right-4 z-10 rounded-full bg-primary text-primary-contrast text-xs font-semibold px-2.5 py-0.5 shadow"
-                >Example</span
-              >
+              <span class="absolute -top-2.5 right-4 z-10 rounded-full bg-primary text-primary-contrast text-xs font-semibold px-2.5 py-0.5 shadow">
+                Example
+              </span>
               <MediaDeckCard :deck="demoDeck" demo-coverage />
             </div>
             <p class="text-sm text-gray-500 dark:text-gray-400 text-center mt-2 mb-0">A real title from the library with example data.</p>
@@ -184,9 +186,9 @@
       <div class="max-w-6xl mx-auto px-4 py-10 md:py-12">
         <div class="relative mb-6">
           <h2 class="text-2xl font-bold text-center">Learn with what you love</h2>
-          <NuxtLink to="/features" class="block text-center text-sm font-medium mt-1 lg:mt-0 lg:absolute lg:right-0 lg:top-1/2 lg:-translate-y-1/2"
-            >Explore all features →</NuxtLink
-          >
+          <NuxtLink to="/features" class="block text-center text-sm font-medium mt-1 lg:mt-0 lg:absolute lg:right-0 lg:top-1/2 lg:-translate-y-1/2">
+            Explore all features →
+          </NuxtLink>
         </div>
         <div class="flex flex-col md:flex-row items-stretch gap-3 md:gap-2">
           <template v-for="(step, index) in steps" :key="step.title">
@@ -194,9 +196,9 @@
               <Icon name="material-symbols-light:arrow-right-alt" class="text-primary opacity-70 rotate-90 md:rotate-0" size="1.75em" />
             </div>
             <div class="flex-1 min-w-0 p-4 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col bg-surface-0 dark:bg-surface-900">
-              <span class="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-contrast text-sm font-bold shrink-0 mb-3">{{
-                index + 1
-              }}</span>
+              <span class="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-contrast text-sm font-bold shrink-0 mb-3">
+                {{ index + 1 }}
+              </span>
               <h3 class="text-lg font-semibold mb-2">{{ step.title }}</h3>
               <p class="text-gray-600 dark:text-gray-400 mb-4 flex-1">{{ step.description }}</p>
               <NuxtLink :to="step.link" class="font-medium">{{ step.linkText }} →</NuxtLink>
@@ -282,8 +284,9 @@
               <div class="flex-1 text-center md:text-left">
                 <h2 class="text-2xl font-bold mb-2">Support Jiten</h2>
                 <p class="text-gray-600 dark:text-gray-300">
-                  Jiten is free and open source. If you find it useful, <NuxtLink to="/jiten-plus">Jiten+</NuxtLink> or a donation helps cover server costs and
-                  fund new features.
+                  Jiten is free and open source. If you find it useful,
+                  <NuxtLink to="/jiten-plus">Jiten+</NuxtLink>
+                  or a donation helps cover server costs and fund new features.
                 </p>
               </div>
               <NuxtLink to="/donate" class="no-underline">

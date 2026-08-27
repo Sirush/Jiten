@@ -524,7 +524,8 @@
           </div>
         </template>
         <div v-else class="py-6 text-center text-sm text-gray-400 dark:text-gray-400">
-          No leeches currently. <span v-if="leeches!.recovered > 0">({{ leeches!.recovered }} recovered)</span>
+          No leeches currently.
+          <span v-if="leeches!.recovered > 0">({{ leeches!.recovered }} recovered)</span>
         </div>
       </div>
 
@@ -545,7 +546,7 @@
           title="Card Difficulty"
           subtitle="The higher the difficulty, the slower stability will increase."
         >
-          <template #footer> Median difficulty: {{ difficulty.medianPct != null ? `${Math.round(difficulty.medianPct)}%` : '—' }} </template>
+          <template #footer>Median difficulty: {{ difficulty.medianPct != null ? `${Math.round(difficulty.medianPct)}%` : '—' }}</template>
         </SrsStatsHistogram>
 
         <div v-if="loadingStats" class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4">
@@ -584,7 +585,7 @@
         title="Card Stability"
         subtitle="How long a card can go before it needs reviewing."
       >
-        <template #footer> Median stability: {{ stability.medianDays != null ? `${Math.round(stability.medianDays * 10) / 10} days` : '—' }} </template>
+        <template #footer>Median stability: {{ stability.medianDays != null ? `${Math.round(stability.medianDays * 10) / 10} days` : '—' }}</template>
       </SrsStatsHistogram>
 
       <!-- 6. Answer buttons -->
@@ -615,15 +616,18 @@
           </div>
           <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
             <span v-for="f in answerFooter" :key="f.label">
-              {{ f.label }} correct: <span class="font-semibold text-gray-700 dark:text-gray-300">{{ f.pct != null ? `${f.pct}%` : '—' }}</span>
+              {{ f.label }} correct:
+              <span class="font-semibold text-gray-700 dark:text-gray-300">{{ f.pct != null ? `${f.pct}%` : '—' }}</span>
             </span>
           </div>
           <div v-if="answerDelta" class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
             <span>
-              Again rate (30d): <span class="font-semibold text-gray-700 dark:text-gray-300">{{ answerDelta.r30 }}%</span>
+              Again rate (30d):
+              <span class="font-semibold text-gray-700 dark:text-gray-300">{{ answerDelta.r30 }}%</span>
             </span>
             <span>
-              Again rate (all time): <span class="font-semibold text-gray-700 dark:text-gray-300">{{ answerDelta.rAll }}%</span>
+              Again rate (all time):
+              <span class="font-semibold text-gray-700 dark:text-gray-300">{{ answerDelta.rAll }}%</span>
             </span>
           </div>
         </template>
@@ -690,10 +694,12 @@
           <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
             <template v-if="reviewTimeDelta">
               <span>
-                Average (30d): <span class="font-semibold text-gray-700 dark:text-gray-300">{{ reviewTimeDelta.s30 }}s</span>
+                Average (30d):
+                <span class="font-semibold text-gray-700 dark:text-gray-300">{{ reviewTimeDelta.s30 }}s</span>
               </span>
               <span>
-                Average (all time): <span class="font-semibold text-gray-700 dark:text-gray-300">{{ reviewTimeDelta.sAll }}s</span>
+                Average (all time):
+                <span class="font-semibold text-gray-700 dark:text-gray-300">{{ reviewTimeDelta.sAll }}s</span>
               </span>
             </template>
             <span v-else>

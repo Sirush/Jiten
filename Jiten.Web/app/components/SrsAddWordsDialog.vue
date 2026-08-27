@@ -12,8 +12,15 @@
   const emit = defineEmits(['update:visible', 'words-added']);
 
   const localVisible = ref(props.visible);
-  watch(() => props.visible, (v) => { localVisible.value = v; });
-  watch(localVisible, (v) => { emit('update:visible', v); });
+  watch(
+    () => props.visible,
+    (v) => {
+      localVisible.value = v;
+    }
+  );
+  watch(localVisible, (v) => {
+    emit('update:visible', v);
+  });
 
   const srsStore = useSrsStore();
   const toast = useToast();
@@ -36,7 +43,9 @@
       const set = new Set<string>();
       for (const k of keys) set.add(`${k.wordId}-${k.readingIndex}`);
       addedKeys.value = set;
-    } catch { /* non-critical */ }
+    } catch {
+      /* non-critical */
+    }
   }
 
   function wordKey(entry: DictionaryEntry) {
@@ -48,15 +57,21 @@
   }
 
   const doSearch = debounce(async (q: string) => {
-    if (!q.trim()) { results.value = []; return; }
+    if (!q.trim()) {
+      results.value = [];
+      return;
+    }
     searching.value = true;
     try {
       const data = await $api<DictionarySearchResult>('vocabulary/search', {
         params: { query: q.trim(), limit: 20 },
       });
       results.value = data.results.length > 0 ? data.results : data.dictionaryResults;
-    } catch { results.value = []; }
-    finally { searching.value = false; }
+    } catch {
+      results.value = [];
+    } finally {
+      searching.value = false;
+    }
   }, 400);
 
   watch(query, (v) => doSearch(v));
@@ -71,7 +86,9 @@
       toast.add({ severity: 'success', summary: `Added "${entry.text}"`, life: 1500 });
     } catch {
       toast.add({ severity: 'error', summary: 'Failed to add word', life: 3000 });
-    } finally { addingKey.value = null; }
+    } finally {
+      addingKey.value = null;
+    }
   }
 
   // Paste tab
@@ -81,8 +98,8 @@
   const pasteText = ref('');
 
   const looksLikeFullText = computed(() => {
-    const lines = pasteText.value.split('\n').filter(l => l.trim().length > 0);
-    return lines.filter(l => l.trim().length > 20).length >= 3;
+    const lines = pasteText.value.split('\n').filter((l) => l.trim().length > 0);
+    return lines.filter((l) => l.trim().length > 20).length >= 3;
   });
 
   watch(looksLikeFullText, (isFullText) => {
@@ -99,13 +116,20 @@
 
   function togglePasteExclude(wordId: number) {
     const s = new Set(pasteExcludedWordIds.value);
-    if (s.has(wordId)) s.delete(wordId); else s.add(wordId);
+    if (s.has(wordId)) s.delete(wordId);
+    else s.add(wordId);
     pasteExcludedWordIds.value = s;
   }
 
   async function previewPasteList() {
-    const lines = pasteText.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length === 0) { toast.add({ severity: 'warn', summary: 'No words entered', life: 2000 }); return; }
+    const lines = pasteText.value
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+    if (lines.length === 0) {
+      toast.add({ severity: 'warn', summary: 'No words entered', life: 2000 });
+      return;
+    }
     pasteUploading.value = true;
     try {
       const result = await srsStore.importPreviewText(lines, pasteParseFullText.value);
@@ -116,7 +140,9 @@
       pasteStep.value = 'preview';
     } catch (error: any) {
       toast.add({ severity: 'error', summary: 'Preview failed', detail: String(error?.data || error?.message || 'Unknown error'), life: 5000 });
-    } finally { pasteUploading.value = false; }
+    } finally {
+      pasteUploading.value = false;
+    }
   }
 
   async function commitPasteImport() {
@@ -129,7 +155,9 @@
       resetPaste();
     } catch (error: any) {
       toast.add({ severity: 'error', summary: 'Import failed', detail: String(error?.data || error?.message || 'Unknown error'), life: 5000 });
-    } finally { pasteCommitting.value = false; }
+    } finally {
+      pasteCommitting.value = false;
+    }
   }
 
   function resetPaste() {
@@ -159,11 +187,12 @@
 
   function toggleFileExclude(wordId: number) {
     const s = new Set(fileExcludedWordIds.value);
-    if (s.has(wordId)) s.delete(wordId); else s.add(wordId);
+    if (s.has(wordId)) s.delete(wordId);
+    else s.add(wordId);
     fileExcludedWordIds.value = s;
   }
 
-  const fileIsFullTextOnly = computed(() => importFile.value ? isFullTextOnlyFile(importFile.value.name) : false);
+  const fileIsFullTextOnly = computed(() => (importFile.value ? isFullTextOnlyFile(importFile.value.name) : false));
 
   const dragging = ref(false);
 
@@ -197,7 +226,9 @@
       fileStep.value = 'preview';
     } catch (error: any) {
       toast.add({ severity: 'error', summary: 'Upload failed', detail: String(error?.data || error?.message || 'Unknown error'), life: 5000 });
-    } finally { fileUploading.value = false; }
+    } finally {
+      fileUploading.value = false;
+    }
   }
 
   async function commitFileImport() {
@@ -210,7 +241,9 @@
       resetFile();
     } catch (error: any) {
       toast.add({ severity: 'error', summary: 'Import failed', detail: String(error?.data || error?.message || 'Unknown error'), life: 5000 });
-    } finally { fileCommitting.value = false; }
+    } finally {
+      fileCommitting.value = false;
+    }
   }
 
   function resetFile() {
@@ -228,7 +261,10 @@
     if (v) {
       loadExistingKeys();
     } else {
-      if (addedAny) { emit('words-added'); addedAny = false; }
+      if (addedAny) {
+        emit('words-added');
+        addedAny = false;
+      }
       query.value = '';
       results.value = [];
       addedKeys.value = new Set();
@@ -269,15 +305,8 @@
           <!-- Search -->
           <TabPanel value="search" class="flex flex-col gap-3 h-full overflow-hidden pt-4">
             <div class="relative shrink-0">
-              <InputText
-                v-model="query"
-                placeholder="Search Japanese, romaji, or English..."
-                class="w-full"
-              />
-              <ProgressSpinner
-                v-if="searching"
-                style="width: 20px; height: 20px; position: absolute; right: 12px; top: 50%; transform: translateY(-50%)"
-              />
+              <InputText v-model="query" placeholder="Search Japanese, romaji, or English..." class="w-full" />
+              <ProgressSpinner v-if="searching" style="width: 20px; height: 20px; position: absolute; right: 12px; top: 50%; transform: translateY(-50%)" />
             </div>
 
             <div v-if="results.length === 0 && query.trim() && !searching" class="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
@@ -293,17 +322,15 @@
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-3 flex-wrap">
                     <span v-if="entry.primaryKanjiText" class="text-lg font-noto-sans font-medium" lang="ja" v-html="convertToRuby(entry.primaryKanjiText)" />
-                    <span
-                      v-if="entry.primaryKanjiText"
-                      class="text-sm text-gray-500 dark:text-gray-400 font-noto-sans"
-                      lang="ja"
-                    >{{ entry.text }}</span>
+                    <span v-if="entry.primaryKanjiText" class="text-sm text-gray-500 dark:text-gray-400 font-noto-sans" lang="ja">{{ entry.text }}</span>
                     <span v-else class="text-lg font-noto-sans font-medium" lang="ja" v-html="convertToRuby(entry.rubyText)" />
                     <span
                       v-for="pos in entry.partsOfSpeech.slice(0, 2)"
                       :key="pos"
                       class="inline-block rounded-full px-2 py-0.5 text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
-                    >{{ pos }}</span>
+                    >
+                      {{ pos }}
+                    </span>
                   </div>
                   <div class="text-sm text-gray-600 dark:text-gray-400 line-clamp-1 mt-0.5">
                     {{ entry.meanings.join('; ') }}
@@ -330,7 +357,8 @@
               <Textarea
                 v-model="pasteText"
                 placeholder="Paste Japanese words here, one per line..."
-                class="w-full font-noto-sans flex-1 !resize-none" lang="ja"
+                class="w-full font-noto-sans flex-1 !resize-none"
+                lang="ja"
                 :style="{ minHeight: '120px' }"
               />
               <div class="shrink-0 flex flex-col gap-3">
@@ -340,18 +368,11 @@
                     :options="parseModeOptions"
                     option-label="label"
                     option-value="value"
-                    @update:model-value="(v: string) => pasteParseFullText = v === 'fulltext'"
+                    @update:model-value="(v: string) => (pasteParseFullText = v === 'fulltext')"
                   />
                   <p class="text-xs text-gray-400 mt-1">{{ pasteParseFullText ? 'Extracts all vocabulary from sentences' : 'One word per line' }}</p>
                 </div>
-                <Button
-                  label="Preview"
-                  icon="pi pi-eye"
-                  class="w-full"
-                  :loading="pasteUploading"
-                  :disabled="!pasteText.trim()"
-                  @click="previewPasteList"
-                />
+                <Button label="Preview" icon="pi pi-eye" class="w-full" :loading="pasteUploading" :disabled="!pasteText.trim()" @click="previewPasteList" />
               </div>
             </template>
 
@@ -383,8 +404,12 @@
             <template v-if="fileStep === 'upload'">
               <div class="flex-1 flex flex-col justify-center gap-4">
                 <div
-                  :class="['flex flex-col items-center justify-center gap-2 sm:gap-3 p-5 sm:p-8 rounded-xl border-2 border-dashed transition-colors cursor-pointer',
-                    dragging ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-300 dark:border-gray-600 hover:border-purple-400 dark:hover:border-purple-500']"
+                  :class="[
+                    'flex flex-col items-center justify-center gap-2 sm:gap-3 p-5 sm:p-8 rounded-xl border-2 border-dashed transition-colors cursor-pointer',
+                    dragging
+                      ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                      : 'border-gray-300 dark:border-gray-600 hover:border-purple-400 dark:hover:border-purple-500',
+                  ]"
                   @click="($refs.fileInput as HTMLInputElement)?.click()"
                   @dragover.prevent="dragging = true"
                   @dragleave="dragging = false"
@@ -392,25 +417,32 @@
                 >
                   <Icon name="material-symbols:upload-file" size="36" class="text-gray-400" />
                   <div class="text-sm text-gray-500 dark:text-gray-400 text-center">
-                    <span class="font-medium text-purple-600 dark:text-purple-400">Choose a file</span> or drag and drop
+                    <span class="font-medium text-purple-600 dark:text-purple-400">Choose a file</span>
+                    or drag and drop
                   </div>
                   <div class="text-xs text-gray-400">{{ IMPORT_ACCEPT_EXTENSIONS.join(', ') }}</div>
-                  <input
-                    ref="fileInput"
-                    type="file"
-                    :accept="IMPORT_ACCEPT_ATTR"
-                    class="hidden"
-                    @change="onFileSelect"
-                  />
+                  <input ref="fileInput" type="file" :accept="IMPORT_ACCEPT_ATTR" class="hidden" @change="onFileSelect" />
                 </div>
 
-                <div v-if="importFile" class="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div
+                  v-if="importFile"
+                  class="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-3 rounded-lg border border-gray-200 dark:border-gray-700"
+                >
                   <Icon name="material-symbols:description" size="20" class="text-gray-400 shrink-0" />
                   <div class="flex-1 min-w-0">
                     <div class="text-sm font-medium truncate">{{ importFile.name }}</div>
                     <div class="text-xs text-gray-400">{{ (importFile.size / 1024).toFixed(1) }} KB</div>
                   </div>
-                  <Button icon="pi pi-times" severity="secondary" text size="small" @click="importFile = null; fileParseFullText = false" />
+                  <Button
+                    icon="pi pi-times"
+                    severity="secondary"
+                    text
+                    size="small"
+                    @click="
+                      importFile = null;
+                      fileParseFullText = false;
+                    "
+                  />
                 </div>
 
                 <div v-if="importFile && !fileIsFullTextOnly">
@@ -419,13 +451,11 @@
                     :options="parseModeOptions"
                     option-label="label"
                     option-value="value"
-                    @update:model-value="(v: string) => fileParseFullText = v === 'fulltext'"
+                    @update:model-value="(v: string) => (fileParseFullText = v === 'fulltext')"
                   />
                   <p class="text-xs text-gray-400 mt-1">{{ fileParseFullText ? 'Extracts all vocabulary from sentences' : 'One word per line' }}</p>
                 </div>
-                <p v-if="importFile && fileIsFullTextOnly" class="text-xs text-gray-400">
-                  All vocabulary will be extracted from this file.
-                </p>
+                <p v-if="importFile && fileIsFullTextOnly" class="text-xs text-gray-400">All vocabulary will be extracted from this file.</p>
               </div>
 
               <Button

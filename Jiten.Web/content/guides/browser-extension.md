@@ -1,7 +1,7 @@
 ---
 title: Reading anywhere with Jiten Reader
 summary: Use the browser extension to parse Japanese on any page, look up words, and see i+1 highlighting.
-category: "Using Jiten"
+category: 'Using Jiten'
 level: beginner
 order: 40
 icon: material-symbols-light:extension-outline
@@ -28,6 +28,7 @@ Everywhere else, select some Japanese text and either right-click → **Jiten Re
 Hold **Shift** and hover over any parsed word to open the pop-up. It shows the word's reading, definitions, frequency rank, pitch accents and more.
 
 You can interact with the word from the same pop-up by:
+
 - **Grading it** as an SRS review (Again / Hard / Good / Easy, or pass/fail if you turn on the 2-point grading scale.
 - **Mining it** into one of your Jiten study decks along with its sentence.
 - **Blacklisting** or marking it as **mastered**.

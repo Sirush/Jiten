@@ -72,7 +72,7 @@ export const posCategories: PosCategory[] = [
     label: 'Adverbs',
     tags: [
       { value: 'adv', label: 'Adverb' },
-      { value: 'adv-to', label: "Adverb (to)" },
+      { value: 'adv-to', label: 'Adverb (to)' },
     ],
   },
   {

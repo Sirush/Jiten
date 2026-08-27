@@ -27,15 +27,10 @@
     isLoading.value = true;
     error.value = null;
     try {
-      heatmapData.value = await $api<StudyHeatmapResponse>(
-        `user/profile/${props.username}/study-heatmap`,
-        { query: { year: selectedYear.value } }
-      );
+      heatmapData.value = await $api<StudyHeatmapResponse>(`user/profile/${props.username}/study-heatmap`, { query: { year: selectedYear.value } });
     } catch (err: unknown) {
       const fetchError = err as { response?: { status?: number } };
-      error.value = fetchError?.response?.status === 404
-        ? 'Study data not available'
-        : 'Failed to load study heatmap';
+      error.value = fetchError?.response?.status === 404 ? 'Study data not available' : 'Failed to load study heatmap';
       heatmapData.value = null;
     } finally {
       isLoading.value = false;
@@ -113,7 +108,6 @@
     return labels;
   });
 
-
   const thresholds = computed<[number, number, number]>(() => {
     if (!heatmapData.value) return [1, 2, 3];
     const counts = heatmapData.value.days
@@ -163,9 +157,7 @@
     const point = 'touches' in event ? event.touches[0] : event;
     tooltip.value = {
       visible: true,
-      text: day.count === 0
-        ? `${dateStr}: No reviews`
-        : `${dateStr}: ${day.count} reviews (${passRate}% pass rate)`,
+      text: day.count === 0 ? `${dateStr}: No reviews` : `${dateStr}: ${day.count} reviews (${passRate}% pass rate)`,
       x: point.clientX,
       y: point.clientY,
     };
@@ -189,7 +181,10 @@
       <Message severity="warn" :closable="false">{{ error }}</Message>
     </div>
 
-    <div v-else-if="heatmapData && heatmapData.totalReviews === 0 && heatmapData.totalReviewDays === 0" class="text-center py-6 text-gray-500 dark:text-gray-400">
+    <div
+      v-else-if="heatmapData && heatmapData.totalReviews === 0 && heatmapData.totalReviewDays === 0"
+      class="text-center py-6 text-gray-500 dark:text-gray-400"
+    >
       <Icon name="material-symbols:calendar-month" size="2.5rem" class="mb-3 text-gray-300 dark:text-gray-400" />
       <p class="mb-2">No study activity yet</p>
       <NuxtLink to="/srs/decks" class="text-sm text-purple-500 hover:text-purple-600 dark:text-purple-400 dark:hover:text-purple-300">
@@ -223,10 +218,7 @@
 
       <!-- Year selector -->
       <div class="flex items-center gap-2 mb-3">
-        <button
-          class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-          @click="selectedYear--"
-        >
+        <button class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" @click="selectedYear--">
           <Icon name="material-symbols:chevron-left" size="1.25rem" />
         </button>
         <span class="font-semibold tabular-nums min-w-12 text-center">{{ selectedYear }}</span>
@@ -256,25 +248,15 @@
 
           <!-- Day rows -->
           <div class="flex flex-col" :style="{ gap: `${CELL_GAP}px` }">
-            <div
-              v-for="dayIndex in 7"
-              :key="dayIndex"
-              class="flex items-center"
-              :style="{ gap: `${CELL_GAP}px` }"
-            >
-              <span
-                class="text-[10px] text-gray-400 text-right shrink-0 leading-none"
-                :style="{ width: `${LABEL_WIDTH - 4}px` }"
-              >
+            <div v-for="dayIndex in 7" :key="dayIndex" class="flex items-center" :style="{ gap: `${CELL_GAP}px` }">
+              <span class="text-[10px] text-gray-400 text-right shrink-0 leading-none" :style="{ width: `${LABEL_WIDTH - 4}px` }">
                 {{ dayIndex === 1 ? 'Mon' : dayIndex === 3 ? 'Wed' : dayIndex === 5 ? 'Fri' : '' }}
               </span>
               <template v-for="(week, wi) in weeks" :key="wi">
                 <div
                   class="rounded-sm cursor-default"
                   :style="{ width: `${CELL_SIZE}px`, height: `${CELL_SIZE}px` }"
-                  :class="week[dayIndex - 1].count === -1
-                    ? 'bg-transparent'
-                    : getIntensityClass(week[dayIndex - 1].count)"
+                  :class="week[dayIndex - 1].count === -1 ? 'bg-transparent' : getIntensityClass(week[dayIndex - 1].count)"
                   @mouseenter="showTooltip($event, week[dayIndex - 1])"
                   @mouseleave="hideTooltip"
                   @touchstart.prevent="showTooltip($event, week[dayIndex - 1])"

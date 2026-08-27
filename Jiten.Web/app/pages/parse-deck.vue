@@ -136,7 +136,8 @@
             placeholder="Paste your Japanese text here..."
           />
           <div class="mt-2 text-right text-sm text-gray-600 dark:text-gray-400">
-            Characters left: <b>{{ (200000 - userText.length).toLocaleString() }}</b>
+            Characters left:
+            <b>{{ (200000 - userText.length).toLocaleString() }}</b>
           </div>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 items-center justify-center">

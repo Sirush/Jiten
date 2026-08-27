@@ -10,7 +10,7 @@
       status?: string | null;
       plus?: boolean;
     }>(),
-    { to: undefined, description: undefined, status: undefined, plus: false },
+    { to: undefined, description: undefined, status: undefined, plus: false }
   );
 
   const root = computed(() => (props.to ? NuxtLink : 'div'));

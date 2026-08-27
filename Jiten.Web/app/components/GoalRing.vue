@@ -1,14 +1,17 @@
 <script setup lang="ts">
-  const props = withDefaults(defineProps<{
-    reviewsDone: number;
-    reviewsTarget: number;
-    newDone: number;
-    newTarget: number;
-    totalToStudy: number;
-    size?: number;
-  }>(), {
-    size: 96,
-  });
+  const props = withDefaults(
+    defineProps<{
+      reviewsDone: number;
+      reviewsTarget: number;
+      newDone: number;
+      newTarget: number;
+      totalToStudy: number;
+      size?: number;
+    }>(),
+    {
+      size: 96,
+    }
+  );
 
   const OUTER_R = 34;
   const INNER_R = 28;
@@ -37,21 +40,33 @@
     <div class="relative flex-shrink-0" :style="{ width: `${size}px`, height: `${size}px` }">
       <svg viewBox="0 0 80 80" class="w-full h-full -rotate-90">
         <!-- Outer track (reviews) -->
-        <circle :cx="CENTER" :cy="CENTER" :r="OUTER_R" fill="none" :stroke-width="STROKE"
-          class="stroke-surface-200 dark:stroke-surface-700" />
+        <circle :cx="CENTER" :cy="CENTER" :r="OUTER_R" fill="none" :stroke-width="STROKE" class="stroke-surface-200 dark:stroke-surface-700" />
         <!-- Outer arc (reviews) -->
-        <circle :cx="CENTER" :cy="CENTER" :r="OUTER_R" fill="none" :stroke-width="STROKE" stroke-linecap="round"
+        <circle
+          :cx="CENTER"
+          :cy="CENTER"
+          :r="OUTER_R"
+          fill="none"
+          :stroke-width="STROKE"
+          stroke-linecap="round"
           :stroke-dasharray="reviewsDash"
           class="transition-[stroke-dasharray] duration-700"
-          :class="reviewsMet ? 'stroke-blue-500 dark:stroke-blue-400' : 'stroke-blue-400 dark:stroke-blue-500'" />
+          :class="reviewsMet ? 'stroke-blue-500 dark:stroke-blue-400' : 'stroke-blue-400 dark:stroke-blue-500'"
+        />
         <!-- Inner track (new) -->
-        <circle :cx="CENTER" :cy="CENTER" :r="INNER_R" fill="none" :stroke-width="STROKE"
-          class="stroke-surface-200 dark:stroke-surface-700" />
+        <circle :cx="CENTER" :cy="CENTER" :r="INNER_R" fill="none" :stroke-width="STROKE" class="stroke-surface-200 dark:stroke-surface-700" />
         <!-- Inner arc (new) -->
-        <circle :cx="CENTER" :cy="CENTER" :r="INNER_R" fill="none" :stroke-width="STROKE" stroke-linecap="round"
+        <circle
+          :cx="CENTER"
+          :cy="CENTER"
+          :r="INNER_R"
+          fill="none"
+          :stroke-width="STROKE"
+          stroke-linecap="round"
           :stroke-dasharray="newDash"
           class="transition-[stroke-dasharray] duration-700"
-          :class="newMet ? 'stroke-green-500 dark:stroke-green-400' : 'stroke-green-400 dark:stroke-green-500'" />
+          :class="newMet ? 'stroke-green-500 dark:stroke-green-400' : 'stroke-green-400 dark:stroke-green-500'"
+        />
       </svg>
       <!-- Center label (total to study) -->
       <div class="absolute inset-0 flex items-center justify-center">
@@ -70,12 +85,14 @@
     <div class="flex flex-col gap-1 text-xs">
       <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-400">Done today</span>
       <span class="flex items-center gap-1.5 text-surface-600 dark:text-surface-300 whitespace-nowrap">
-        <span class="inline-block w-2 h-2 rounded-full bg-blue-400 dark:bg-blue-500"></span>
-        <span class="tabular-nums font-medium">{{ reviewsDone }}</span> reviews
+        <span class="inline-block w-2 h-2 rounded-full bg-blue-400 dark:bg-blue-500" />
+        <span class="tabular-nums font-medium">{{ reviewsDone }}</span>
+        reviews
       </span>
       <span class="flex items-center gap-1.5 text-surface-600 dark:text-surface-300 whitespace-nowrap">
-        <span class="inline-block w-2 h-2 rounded-full bg-green-400 dark:bg-green-500"></span>
-        <span class="tabular-nums font-medium">{{ newDone }}</span> new
+        <span class="inline-block w-2 h-2 rounded-full bg-green-400 dark:bg-green-500" />
+        <span class="tabular-nums font-medium">{{ newDone }}</span>
+        new
       </span>
     </div>
   </div>

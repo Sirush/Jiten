@@ -14,8 +14,15 @@
   const toast = useToast();
 
   const localVisible = ref(props.visible);
-  watch(() => props.visible, (v) => { localVisible.value = v; });
-  watch(localVisible, (v) => { emit('update:visible', v); });
+  watch(
+    () => props.visible,
+    (v) => {
+      localVisible.value = v;
+    }
+  );
+  watch(localVisible, (v) => {
+    emit('update:visible', v);
+  });
 
   const loadingDecks = ref(false);
   const addingTo = ref<number | null>(null);
@@ -23,9 +30,7 @@
   const showCreate = ref(false);
   const newName = ref('');
 
-  const staticDecks = computed(() =>
-    srsStore.studyDecks.filter(d => d.deckType === StudyDeckType.StaticWordList)
-  );
+  const staticDecks = computed(() => srsStore.studyDecks.filter((d) => d.deckType === StudyDeckType.StaticWordList));
 
   const count = computed(() => props.cards.length);
 
@@ -139,24 +144,10 @@
             @click="showCreate = true"
           />
           <div v-else class="flex flex-col gap-2">
-            <InputText
-              v-model="newName"
-              placeholder="List name (e.g. Mining)"
-              class="w-full"
-              :maxlength="200"
-              autofocus
-              @keyup.enter="createAndAdd"
-            />
+            <InputText v-model="newName" placeholder="List name (e.g. Mining)" class="w-full" :maxlength="200" autofocus @keyup.enter="createAndAdd" />
             <div class="flex justify-end gap-2">
               <Button label="Cancel" severity="secondary" text size="small" :disabled="creating" @click="showCreate = false" />
-              <Button
-                label="Create & add"
-                icon="pi pi-check"
-                size="small"
-                :loading="creating"
-                :disabled="!newName.trim()"
-                @click="createAndAdd"
-              />
+              <Button label="Create & add" icon="pi pi-check" size="small" :loading="creating" :disabled="!newName.trim()" @click="createAndAdd" />
             </div>
           </div>
         </div>

@@ -34,7 +34,7 @@ const $api = vi.fn((path: string) => {
   apiCalls.push(path);
 
   if (path.startsWith('srs/study-batch')) {
-    const first = apiCalls.filter(p => p.startsWith('srs/study-batch')).length === 1;
+    const first = apiCalls.filter((p) => p.startsWith('srs/study-batch')).length === 1;
     return Promise.resolve({
       sessionId: 'session-1',
       cards: first ? [card(1), card(2)] : [],
@@ -46,7 +46,7 @@ const $api = vi.fn((path: string) => {
   }
 
   if (path === 'srs/review') {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       pendingReview = () => resolve({});
     });
   }
@@ -60,8 +60,8 @@ vi.stubGlobal('useNuxtApp', () => ({ $api }));
 
 const { useSrsStore } = await import('../app/stores/srsStore');
 
-const flush = () => new Promise(resolve => setTimeout(resolve, 0));
-const batchCalls = () => apiCalls.filter(p => p.startsWith('srs/study-batch')).length;
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+const batchCalls = () => apiCalls.filter((p) => p.startsWith('srs/study-batch')).length;
 
 describe('batch boundary', () => {
   beforeEach(() => {
@@ -101,8 +101,6 @@ describe('batch boundary', () => {
     await flush();
 
     expect(batchCalls()).toBe(2);
-    expect(apiCalls.lastIndexOf('srs/review')).toBeLessThan(
-      apiCalls.findIndex((p, i) => p.startsWith('srs/study-batch') && i > 0)
-    );
+    expect(apiCalls.lastIndexOf('srs/review')).toBeLessThan(apiCalls.findIndex((p, i) => p.startsWith('srs/study-batch') && i > 0));
   });
 });

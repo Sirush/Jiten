@@ -14,16 +14,13 @@
     };
   });
 
-  const {
-    data: response,
-    status,
-  } = await useApiFetch<ParseNormalisedResult>('vocabulary/parse-normalised', {
+  const { data: response, status } = await useApiFetch<ParseNormalisedResult>('vocabulary/parse-normalised', {
     query: { text: searchContent },
     watch: [searchContent],
   });
 
   const words = computed<DeckWord[]>(() => response.value?.words || []);
-  const hasMeaningfulParseResults = computed(() => words.value.some(w => w.wordId !== 0));
+  const hasMeaningfulParseResults = computed(() => words.value.some((w) => w.wordId !== 0));
 
   const isLikelyEnglish = computed(() => {
     const text = String(searchContent.value).trim();
@@ -32,9 +29,9 @@
     if (hasJapanese) return false;
     if (text.includes(' ')) return true;
 
-    const matched = words.value.filter(w => w.wordId !== 0);
-    const unmatched = words.value.filter(w => w.wordId === 0);
-    if (matched.length > 0 && matched.every(w => w.originalText.length === 1) && unmatched.length > 0) return true;
+    const matched = words.value.filter((w) => w.wordId !== 0);
+    const unmatched = words.value.filter((w) => w.wordId === 0);
+    if (matched.length > 0 && matched.every((w) => w.originalText.length === 1) && unmatched.length > 0) return true;
 
     return false;
   });
@@ -90,8 +87,7 @@
   );
 
   const hasAnyDictionaryResults = computed(() => {
-    return (searchResponse.value?.results?.length ?? 0) > 0
-      || (searchResponse.value?.dictionaryResults?.length ?? 0) > 0;
+    return (searchResponse.value?.results?.length ?? 0) > 0 || (searchResponse.value?.dictionaryResults?.length ?? 0) > 0;
   });
 
   const showParseResultsManually = ref(route.query.parsed === 'true');
@@ -123,9 +119,7 @@
         const data = await $api<DictionarySearchResult>('vocabulary/search', {
           query: { query: word.originalText },
         });
-        wordDirectMatches.value = (data.results || []).filter(
-          r => !(r.wordId === word.wordId && r.readingIndex === word.readingIndex)
-        );
+        wordDirectMatches.value = (data.results || []).filter((r) => !(r.wordId === word.wordId && r.readingIndex === word.readingIndex));
         canLoadMoreWordResults.value = data.hasMore;
       } catch {
         wordDirectMatches.value = [];
@@ -154,15 +148,9 @@
     canLoadMoreDictResults.value = (resp?.dictionaryResults?.length ?? 0) >= 50;
   });
 
-  const allResults = computed(() => [
-    ...(searchResponse.value?.results || []),
-    ...extraResults.value,
-  ]);
+  const allResults = computed(() => [...(searchResponse.value?.results || []), ...extraResults.value]);
 
-  const allDictResults = computed(() => [
-    ...(searchResponse.value?.dictionaryResults || []),
-    ...extraDictResults.value,
-  ]);
+  const allDictResults = computed(() => [...(searchResponse.value?.dictionaryResults || []), ...extraDictResults.value]);
 
   // Direct matches: word-specific results when a word is selected, otherwise main search results
   const directMatches = computed(() => {
@@ -170,9 +158,7 @@
       return wordDirectMatches.value;
     }
     if (!selectedWord.value) return allResults.value;
-    return allResults.value.filter(
-      r => !(r.wordId === selectedWord.value!.wordId && r.readingIndex === selectedWord.value!.readingIndex)
-    );
+    return allResults.value.filter((r) => !(r.wordId === selectedWord.value!.wordId && r.readingIndex === selectedWord.value!.readingIndex));
   });
 
   const wholeStringMatches = computed(() => {
@@ -188,9 +174,7 @@
     const englishMainResults = searchQueryType.value === 'english' ? allResults.value : [];
     const combined = [...englishMainResults, ...allDictResults.value];
     if (!selectedWord.value) return combined;
-    return combined.filter(
-      r => !(r.wordId === selectedWord.value!.wordId && r.readingIndex === selectedWord.value!.readingIndex)
-    );
+    return combined.filter((r) => !(r.wordId === selectedWord.value!.wordId && r.readingIndex === selectedWord.value!.readingIndex));
   });
 
   const searchQueryType = computed(() => searchResponse.value?.queryType || '');
@@ -227,14 +211,15 @@
         });
         if (data.results.length > 0) {
           const word = selectedWord.value;
-          const filtered = data.results.filter(
-            r => !(r.wordId === word.wordId && r.readingIndex === word.readingIndex)
-          );
+          const filtered = data.results.filter((r) => !(r.wordId === word.wordId && r.readingIndex === word.readingIndex));
           wordDirectMatches.value.push(...filtered);
         }
         canLoadMoreWordResults.value = data.hasMore;
-      } catch { canLoadMoreWordResults.value = false; }
-      finally { isLoadingMoreResults.value = false; }
+      } catch {
+        canLoadMoreWordResults.value = false;
+      } finally {
+        isLoadingMoreResults.value = false;
+      }
     } else {
       if (isLoadingMoreResults.value || !canLoadMoreResults.value) return;
       isLoadingMoreResults.value = true;
@@ -247,8 +232,11 @@
           extraResults.value.push(...data.results);
         }
         canLoadMoreResults.value = data.hasMore;
-      } catch { canLoadMoreResults.value = false; }
-      finally { isLoadingMoreResults.value = false; }
+      } catch {
+        canLoadMoreResults.value = false;
+      } finally {
+        isLoadingMoreResults.value = false;
+      }
     }
   }
 
@@ -264,8 +252,11 @@
         extraDictResults.value.push(...data.dictionaryResults);
       }
       canLoadMoreDictResults.value = data.dictionaryResults.length >= 50;
-    } catch { canLoadMoreDictResults.value = false; }
-    finally { isLoadingMoreDictResults.value = false; }
+    } catch {
+      canLoadMoreDictResults.value = false;
+    } finally {
+      isLoadingMoreDictResults.value = false;
+    }
   }
 
   // IntersectionObserver for infinite scroll
@@ -274,13 +265,16 @@
   let observer: IntersectionObserver | undefined;
 
   onMounted(() => {
-    observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        if (entry.target === resultsSentinel.value) loadMoreResults();
-        if (entry.target === dictSentinel.value) loadMoreDictResults();
-      }
-    }, { rootMargin: '300px' });
+    observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          if (entry.target === resultsSentinel.value) loadMoreResults();
+          if (entry.target === dictSentinel.value) loadMoreDictResults();
+        }
+      },
+      { rootMargin: '300px' }
+    );
 
     if (resultsSentinel.value) observer.observe(resultsSentinel.value);
     if (dictSentinel.value) observer.observe(dictSentinel.value);
@@ -333,12 +327,10 @@
   const dictionaryMatchesExpanded = ref(true);
 
   const directMatchesLimit = 10;
-  const directMatchesTruncated = computed(() =>
-    dictionaryMatches.value.length > 0 && !directMatchesShowAll.value && directMatches.value.length > directMatchesLimit
+  const directMatchesTruncated = computed(
+    () => dictionaryMatches.value.length > 0 && !directMatchesShowAll.value && directMatches.value.length > directMatchesLimit
   );
-  const visibleDirectMatches = computed(() =>
-    directMatchesTruncated.value ? directMatches.value.slice(0, directMatchesLimit) : directMatches.value
-  );
+  const visibleDirectMatches = computed(() => (directMatchesTruncated.value ? directMatches.value.slice(0, directMatchesLimit) : directMatches.value));
 </script>
 
 <template>
@@ -358,7 +350,10 @@
     <div v-if="showParseLink" class="mt-2 mb-2">
       <button
         class="inline-flex items-center gap-2 text-purple-600 dark:text-purple-400 hover:underline text-sm"
-        @click="navigateTo({ query: { ...route.query, parsed: 'true' } }, { replace: true }); showParseResultsManually = true"
+        @click="
+          navigateTo({ query: { ...route.query, parsed: 'true' } }, { replace: true });
+          showParseResultsManually = true;
+        "
       >
         <Icon name="material-symbols:frame-inspect" class="text-lg" />
         View parse results for "{{ String(searchContent).trim() }}"
@@ -403,17 +398,14 @@
     </div>
 
     <div v-if="directMatches.length > 0" class="mt-4">
-      <div
-        class="flex items-center gap-2 cursor-pointer select-none mb-2"
-        @click="directMatchesExpanded = !directMatchesExpanded"
-      >
-        <Icon
-          :name="directMatchesExpanded ? 'material-symbols:expand-more' : 'material-symbols:chevron-right'"
-          class="text-gray-500 dark:text-gray-400"
-        />
+      <div class="flex items-center gap-2 cursor-pointer select-none mb-2" @click="directMatchesExpanded = !directMatchesExpanded">
+        <Icon :name="directMatchesExpanded ? 'material-symbols:expand-more' : 'material-symbols:chevron-right'" class="text-gray-500 dark:text-gray-400" />
         <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-          {{ directMatchesLabel.prefix }}<template v-if="directMatchesLabel.subject"> <span class="text-purple-600 dark:text-purple-400 font-noto-sans">{{ directMatchesLabel.subject }}</span></template>
-          <span class="text-xs"> ({{ resultsTotalLabel }})</span>
+          {{ directMatchesLabel.prefix }}
+          <template v-if="directMatchesLabel.subject">
+            <span class="text-purple-600 dark:text-purple-400 font-noto-sans">{{ directMatchesLabel.subject }}</span>
+          </template>
+          <span class="text-xs">({{ resultsTotalLabel }})</span>
         </h2>
       </div>
 
@@ -431,7 +423,11 @@
         >
           + View {{ directMatches.length - directMatchesLimit }} more
         </button>
-        <div v-if="!directMatchesTruncated && (showParseResults ? canLoadMoreWordResults : canLoadMoreResults)" ref="resultsSentinel" class="flex justify-center py-4">
+        <div
+          v-if="!directMatchesTruncated && (showParseResults ? canLoadMoreWordResults : canLoadMoreResults)"
+          ref="resultsSentinel"
+          class="flex justify-center py-4"
+        >
           <ProgressSpinner v-if="isLoadingMoreResults" style="width: 30px; height: 30px" stroke-width="4" />
         </div>
       </div>
@@ -441,27 +437,18 @@
       <div class="flex items-center gap-2 mb-2">
         <Icon name="material-symbols:expand-more" class="text-gray-500 dark:text-gray-400" />
         <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400">
-          Direct matches for <span class="text-purple-600 dark:text-purple-400 font-noto-sans">{{ String(searchContent).trim() }}</span>
+          Direct matches for
+          <span class="text-purple-600 dark:text-purple-400 font-noto-sans">{{ String(searchContent).trim() }}</span>
         </h2>
       </div>
       <div class="flex flex-col gap-2">
-        <DictionaryResultEntry
-          v-for="entry in wholeStringMatches"
-          :key="`whole-${entry.wordId}-${entry.readingIndex}`"
-          :entry="entry"
-        />
+        <DictionaryResultEntry v-for="entry in wholeStringMatches" :key="`whole-${entry.wordId}-${entry.readingIndex}`" :entry="entry" />
       </div>
     </div>
 
     <div v-if="dictionaryMatches.length > 0" class="mt-4">
-      <div
-        class="flex items-center gap-2 cursor-pointer select-none mb-2"
-        @click="dictionaryMatchesExpanded = !dictionaryMatchesExpanded"
-      >
-        <Icon
-          :name="dictionaryMatchesExpanded ? 'material-symbols:expand-more' : 'material-symbols:chevron-right'"
-          class="text-gray-500 dark:text-gray-400"
-        />
+      <div class="flex items-center gap-2 cursor-pointer select-none mb-2" @click="dictionaryMatchesExpanded = !dictionaryMatchesExpanded">
+        <Icon :name="dictionaryMatchesExpanded ? 'material-symbols:expand-more' : 'material-symbols:chevron-right'" class="text-gray-500 dark:text-gray-400" />
         <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400">
           Dictionary results
           <span class="text-xs">({{ dictResultsTotalLabel }})</span>
@@ -469,11 +456,7 @@
       </div>
 
       <div v-if="dictionaryMatchesExpanded" class="flex flex-col gap-2">
-        <DictionaryResultEntry
-          v-for="entry in dictionaryMatches"
-          :key="`dict-${entry.wordId}-${entry.readingIndex}`"
-          :entry="entry"
-        />
+        <DictionaryResultEntry v-for="entry in dictionaryMatches" :key="`dict-${entry.wordId}-${entry.readingIndex}`" :entry="entry" />
         <div v-if="canLoadMoreDictResults" ref="dictSentinel" class="flex justify-center py-4">
           <ProgressSpinner v-if="isLoadingMoreDictResults" style="width: 30px; height: 30px" stroke-width="4" />
         </div>
@@ -481,7 +464,16 @@
     </div>
 
     <div
-      v-if="searchStatus !== 'pending' && searchStatus !== 'error' && !searchTooLong && status !== 'pending' && !showParseResults && directMatches.length === 0 && dictionaryMatches.length === 0 && String(searchContent).trim().length > 0"
+      v-if="
+        searchStatus !== 'pending' &&
+        searchStatus !== 'error' &&
+        !searchTooLong &&
+        status !== 'pending' &&
+        !showParseResults &&
+        directMatches.length === 0 &&
+        dictionaryMatches.length === 0 &&
+        String(searchContent).trim().length > 0
+      "
       class="text-center py-8 text-gray-500 dark:text-gray-400"
     >
       No results found for "{{ activeSearchQuery }}"

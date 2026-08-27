@@ -30,7 +30,6 @@ export function recordSkippedPollId(id: number): number[] {
   const next = appendSkippedPollId(readSkippedPollIds(), id);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  } catch {
-  }
+  } catch {}
   return next;
 }

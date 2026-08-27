@@ -26,8 +26,11 @@
         </p>
 
         <Message severity="info" :closable="false" class="mb-6">
-          Donations are purely extra and do not include <NuxtLink to="/jiten-plus">Jiten+</NuxtLink>. If you want the Jiten+ features, subscribe
-          <NuxtLink to="/jiten-plus">there instead</NuxtLink>.
+          Donations are purely extra and do not include
+          <NuxtLink to="/jiten-plus">Jiten+</NuxtLink>
+          . If you want the Jiten+ features, subscribe
+          <NuxtLink to="/jiten-plus">there instead</NuxtLink>
+          .
         </Message>
 
         <Divider />
@@ -56,8 +59,9 @@
         </div>
 
         <p class="text-sm text-gray-500 dark:text-gray-400 text-center">
-          Can't donate? No worries! You can simply share Jiten with your fellow learners, or why not <NuxtLink to="/contribute">contribute</NuxtLink> to the
-          media database?
+          Can't donate? No worries! You can simply share Jiten with your fellow learners, or why not
+          <NuxtLink to="/contribute">contribute</NuxtLink>
+          to the media database?
         </p>
       </template>
     </Card>

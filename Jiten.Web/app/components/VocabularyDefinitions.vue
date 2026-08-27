@@ -16,7 +16,10 @@
 
   const { hiddenFor, ensureLoaded, toggle, isEditing } = useHiddenDefinitions();
   onMounted(() => ensureLoaded(props.wordId));
-  watch(() => props.wordId, (id) => ensureLoaded(id));
+  watch(
+    () => props.wordId,
+    (id) => ensureLoaded(id)
+  );
 
   const hiddenIndices = computed(() => new Set(hiddenFor(props.wordId)));
   const editingVisibility = computed(() => isEditing(props.wordId));
@@ -45,9 +48,7 @@
 
   function restrictedLabel(definition: Definition): string | null {
     if (!definition.restrictedToReadingIndices || definition.restrictedToReadingIndices.length === 0) return null;
-    const names = definition.restrictedToReadingIndices
-      .map((idx) => readingTextByIndex.value.get(idx) ?? `form ${idx}`)
-      .join(', ');
+    const names = definition.restrictedToReadingIndices.map((idx) => readingTextByIndex.value.get(idx) ?? `form ${idx}`).join(', ');
     return `only applies to ${names}`;
   }
 
@@ -152,9 +153,7 @@
 
     // Dropped senses must not take part in the POS-header dedupe, or the first surviving sense of a
     // group loses its header. Editing always shows everything so hidden senses can be brought back.
-    const source = props.hiddenBehaviour === 'hide' && !editingVisibility.value
-      ? props.definitions.filter((d) => !isHidden(d))
-      : props.definitions;
+    const source = props.hiddenBehaviour === 'hide' && !editingVisibility.value ? props.definitions.filter((d) => !isHidden(d)) : props.definitions;
 
     return source.map((definition) => {
       // JMdict's per-sense POS order is inconsistent; normalise to a canonical order so it reads
@@ -199,10 +198,7 @@
       >
         <div v-if="definition.isDifferentPartOfSpeech" class="flex flex-wrap gap-1 mt-1 mb-0.5">
           <Tooltip v-for="pos in definition.partsOfSpeech" :key="pos" :content="pos" placement="top">
-            <span
-              class="pos-badge"
-              :class="`pos-${posColorClass(abbreviatePos(pos))}`"
-            >{{ abbreviatePos(pos) }}</span>
+            <span class="pos-badge" :class="`pos-${posColorClass(abbreviatePos(pos))}`">{{ abbreviatePos(pos) }}</span>
           </Tooltip>
         </div>
         <Checkbox
@@ -219,23 +215,49 @@
         <span class="text-gray-400 mr-1">{{ definition.index }}.</span>
         <!-- plain meanings inline (trademarks get a ™) -->
         <template v-for="(seg, i) in meaningSegments(definition).inline" :key="'inl' + i">
-          <span v-if="i > 0" class="text-gray-400">; </span><span>{{ seg.text }}<span v-if="seg.tm" class="text-gray-400">™</span></span>
+          <span v-if="i > 0" class="text-gray-400">;</span>
+          <span>
+            {{ seg.text }}
+            <span v-if="seg.tm" class="text-gray-400">™</span>
+          </span>
         </template>
         <!-- trailing tag badges (misc / field / dial / restriction), grouped at the end like genre tags -->
         <Tooltip v-for="m in definition.misc" :key="'m' + m" :content="miscLabel(m)" placement="top">
           <span
             class="ml-1 inline-block rounded-full px-2 py-0.5 text-xs"
-            :class="isWarningMisc(m)
-              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-              : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'"
-          >{{ m }}</span>
+            :class="
+              isWarningMisc(m)
+                ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+            "
+          >
+            {{ m }}
+          </span>
         </Tooltip>
-        <span v-for="f in definition.field" :key="f" class="ml-1 inline-block rounded-full px-2 py-0.5 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">{{ f }}</span>
-        <span v-for="d in definition.dial" :key="d" class="ml-1 inline-block rounded-full px-2 py-0.5 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{{ d }}</span>
-        <span v-if="restrictedLabel(definition)" class="ml-1 inline-block rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">{{ restrictedLabel(definition) }}</span>
+        <span
+          v-for="f in definition.field"
+          :key="f"
+          class="ml-1 inline-block rounded-full px-2 py-0.5 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+        >
+          {{ f }}
+        </span>
+        <span
+          v-for="d in definition.dial"
+          :key="d"
+          class="ml-1 inline-block rounded-full px-2 py-0.5 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+        >
+          {{ d }}
+        </span>
+        <span
+          v-if="restrictedLabel(definition)"
+          class="ml-1 inline-block rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+        >
+          {{ restrictedLabel(definition) }}
+        </span>
         <!-- typed glosses (literally / figuratively / explanation) on their own indented line -->
         <div v-for="(blk, i) in meaningSegments(definition).blocks" :key="'blk' + i" class="ml-4 text-sm italic text-gray-500 dark:text-gray-400">
-          <span v-if="blk.prefix" class="not-italic text-gray-400">{{ blk.prefix }}</span>{{ blk.text }}
+          <span v-if="blk.prefix" class="not-italic text-gray-400">{{ blk.prefix }}</span>
+          {{ blk.text }}
         </div>
         <!-- s_inf usage notes -->
         <div v-for="(note, i) in definition.senseInfo" :key="'si' + i" class="ml-4 text-sm italic text-gray-500 dark:text-gray-400">
@@ -250,12 +272,18 @@
               :to="`/vocabulary/${x.targetWordId}/0`"
               :title="x.targetSenseIndex ? `sense ${x.targetSenseIndex}` : undefined"
               class="inline-block rounded-full px-2 py-0.5 text-xs bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50"
-            >{{ xrefBaseText(x) }}<sup v-if="x.targetSenseIndex" class="text-[0.65em] opacity-60">{{ x.targetSenseIndex }}</sup></NuxtLink>
+            >
+              {{ xrefBaseText(x) }}
+              <sup v-if="x.targetSenseIndex" class="text-[0.65em] opacity-60">{{ x.targetSenseIndex }}</sup>
+            </NuxtLink>
             <span
               v-else
               :title="x.targetSenseIndex ? `sense ${x.targetSenseIndex}` : undefined"
               class="inline-block rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-            >{{ xrefBaseText(x) }}<sup v-if="x.targetSenseIndex" class="text-[0.65em] opacity-60">{{ x.targetSenseIndex }}</sup></span>
+            >
+              {{ xrefBaseText(x) }}
+              <sup v-if="x.targetSenseIndex" class="text-[0.65em] opacity-60">{{ x.targetSenseIndex }}</sup>
+            </span>
           </template>
         </div>
       </li>
@@ -272,19 +300,33 @@
 
   <div v-if="isCompact && !hideDefinition">
     <template v-for="(definition, di) in definitionsWithPartsOfSpeech.slice(0, 10)" :key="definition.index">
-      <span v-if="di > 0" class="text-gray-400">; </span>
+      <span v-if="di > 0" class="text-gray-400">;</span>
       <span :class="{ 'opacity-40': isRestricted(definition) || isHidden(definition) }">{{ definition.meanings.join('; ') }}</span>
       <!-- glanceable tag badges (misc / field / dial); verbose s_inf/g_type/xref stay on the detail + SRS views -->
       <Tooltip v-for="m in definition.misc" :key="'cm' + m" :content="miscLabel(m)" placement="top">
         <span
           class="ml-1 inline-block rounded-full px-1.5 py-0 text-[0.65rem] align-middle"
-          :class="isWarningMisc(m)
-            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-            : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'"
-        >{{ m }}</span>
+          :class="
+            isWarningMisc(m) ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+          "
+        >
+          {{ m }}
+        </span>
       </Tooltip>
-      <span v-for="f in definition.field" :key="'cf' + f" class="ml-1 inline-block rounded-full px-1.5 py-0 text-[0.65rem] align-middle bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">{{ f }}</span>
-      <span v-for="d in definition.dial" :key="'cd' + d" class="ml-1 inline-block rounded-full px-1.5 py-0 text-[0.65rem] align-middle bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{{ d }}</span>
+      <span
+        v-for="f in definition.field"
+        :key="'cf' + f"
+        class="ml-1 inline-block rounded-full px-1.5 py-0 text-[0.65rem] align-middle bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+      >
+        {{ f }}
+      </span>
+      <span
+        v-for="d in definition.dial"
+        :key="'cd' + d"
+        class="ml-1 inline-block rounded-full px-1.5 py-0 text-[0.65rem] align-middle bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+      >
+        {{ d }}
+      </span>
     </template>
   </div>
 </template>

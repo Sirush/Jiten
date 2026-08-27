@@ -12,9 +12,9 @@
   const { $api } = useNuxtApp();
   const toast = useToast();
 
-  const description
-    = 'Free Japanese frequency dictionaries built from anime, drama, movies, novels, visual novels, manga and more. '
-      + 'Yomitan-compatible .zip and CSV downloads, licensed CC BY-SA 4.0.';
+  const description =
+    'Free Japanese frequency dictionaries built from anime, drama, movies, novels, visual novels, manga and more. ' +
+    'Yomitan-compatible .zip and CSV downloads, licensed CC BY-SA 4.0.';
 
   useSeoMeta({
     title: 'Japanese Frequency Dictionaries for Yomitan (Free Download)',
@@ -32,8 +32,7 @@
   });
 
   const downloadingKey = ref<string | null>(null);
-  const downloadKey = (mediaType: MediaType | null | 'kanji', downloadType: 'yomitan' | 'csv') =>
-    `${mediaType ?? 'global'}-${downloadType}`;
+  const downloadKey = (mediaType: MediaType | null | 'kanji', downloadType: 'yomitan' | 'csv') => `${mediaType ?? 'global'}-${downloadType}`;
 
   const deckTypes = [
     { id: null, name: 'Global' },
@@ -187,9 +186,11 @@
     <header class="mb-6">
       <h1 class="text-3xl font-bold mb-2">Japanese Frequency Dictionaries (Yomitan & CSV)</h1>
       <p class="text-sm text-surface-600 dark:text-surface-300">
-        Word frequency lists built from the Japanese media analysed on Jiten<template v-if="status === 'success' && response">, currently
-        {{ response.totalMojis?.toLocaleString() }} characters across {{ response.totalMedia?.toLocaleString() }} titles</template>.
-        There is a global list, one list per media type, and a kanji list, each available as a Yomitan frequency dictionary or a plain CSV.
+        Word frequency lists built from the Japanese media analysed on Jiten
+        <template v-if="status === 'success' && response">
+          , currently {{ response.totalMojis?.toLocaleString() }} characters across {{ response.totalMedia?.toLocaleString() }} titles
+        </template>
+        . There is a global list, one list per media type, and a kanji list, each available as a Yomitan frequency dictionary or a plain CSV.
       </p>
     </header>
 
@@ -198,7 +199,8 @@
       <template #content>
         <div class="mb-3 text-sm text-surface-500 dark:text-surface-400">
           All frequency lists are licensed under
-          <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer" class="underline">CC BY-SA 4.0</a>.
+          <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer" class="underline">CC BY-SA 4.0</a>
+          .
         </div>
         <DataTable :value="deckTypes" class="p-datatable-sm frequency-table" striped-rows responsive-layout="scroll" show-gridlines row-hover>
           <Column field="name" header="Type" class="font-medium" header-style="background-color: var(--surface-100); font-weight: 600;" />
@@ -253,7 +255,8 @@
             </Button>
           </JitenPlusGate>
           <span class="text-sm text-surface-500 dark:text-surface-400">
-            Filter by media type, genre, tag, year or difficulty or hand-pick decks. <JitenPlusBadge />
+            Filter by media type, genre, tag, year or difficulty or hand-pick decks.
+            <JitenPlusBadge />
           </span>
         </div>
       </template>
@@ -263,8 +266,8 @@
       <template #title>What's in each list</template>
       <template #content>
         <p class="mb-4 text-surface-600 dark:text-surface-300">
-          The frequency of words can change dramatically depending on the corpus they come from. For example, a word that's common in novels can be rare in anime and the other way
-          around. Pick the list that matches what you read or watch, or even multiple of them.
+          The frequency of words can change dramatically depending on the corpus they come from. For example, a word that's common in novels can be rare in
+          anime and the other way around. Pick the list that matches what you read or watch, or even multiple of them.
         </p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
           <section v-for="list in listDescriptions" :key="list.name">
@@ -311,7 +314,10 @@
       </template>
       <template #content>
         <div class="mb-3">
-          <b>{{ response.totalMojis?.toLocaleString() }}</b> characters in <b>{{ response.totalMedia?.toLocaleString() }}</b> media
+          <b>{{ response.totalMojis?.toLocaleString() }}</b>
+          characters in
+          <b>{{ response.totalMedia?.toLocaleString() }}</b>
+          media
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

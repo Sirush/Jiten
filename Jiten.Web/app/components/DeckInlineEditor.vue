@@ -4,7 +4,7 @@
   import type { Deck, DeckMetadataPatchResult, MediaSuggestion, Tag } from '~/types';
   import { LinkType } from '~/types';
   import { getAllGenres, getGenreText } from '~/utils/genreMapper';
-  import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { getLinkLabel, getLinkTypeText } from '~/utils/linkTypeMapper';
   import { getRelationshipRoleLabel, relationshipRoleOptions, type RelationshipRoleOption } from '~/utils/relationshipRoles';
   import { DEFAULT_TAG_PERCENTAGE, NOT_ORIGINALLY_JP_FALLBACK_NAME, NOT_ORIGINALLY_JP_TAG_ID } from '~/utils/tags';
 
@@ -307,8 +307,12 @@
 
     <div class="flex flex-wrap gap-1.5 items-center">
       <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-1 shrink-0 w-20">Links</span>
-      <span v-for="(link, index) in draft.links" :key="`${link.linkType}-${link.url}`" class="inline-flex items-center rounded-full text-xs py-0.5 px-2 transition-colors bg-surface-100 dark:bg-surface-900/50 text-surface-700 dark:text-surface-200">
-        <span :title="link.url">{{ getLinkTypeText(link.linkType) }}</span>
+      <span
+        v-for="(link, index) in draft.links"
+        :key="`${link.linkType}-${link.url}`"
+        class="inline-flex items-center rounded-full text-xs py-0.5 px-2 transition-colors bg-surface-100 dark:bg-surface-900/50 text-surface-700 dark:text-surface-200"
+      >
+        <span :title="link.url">{{ getLinkLabel(link) }}</span>
         <button type="button" class="ml-1 opacity-70 hover:opacity-100 cursor-pointer" aria-label="Edit link" @click="openLinkEdit(index)">
           <i class="pi pi-pencil text-[10px]" />
         </button>
@@ -326,9 +330,11 @@
           :key="genre.value"
           type="button"
           class="inline-flex items-center rounded-full text-xs py-0.5 px-2 transition-colors cursor-pointer"
-          :class="hasGenre(genre.value)
-            ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-200'
-            : 'bg-surface-100 dark:bg-surface-900/50 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-800/60'"
+          :class="
+            hasGenre(genre.value)
+              ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-200'
+              : 'bg-surface-100 dark:bg-surface-900/50 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-800/60'
+          "
           @click="toggleGenre(genre.value)"
         >
           {{ genre.label }}
@@ -338,21 +344,11 @@
 
     <Popover ref="tagPopover" class="w-[min(26rem,calc(100vw_-_2rem))]">
       <div class="flex flex-col gap-2 p-1">
-        <InputText
-          v-model="tagSearchQuery"
-          placeholder="Search tags..."
-          size="small"
-          autofocus
-          @keydown.enter.prevent="commitTopTagMatch"
-        />
+        <InputText v-model="tagSearchQuery" placeholder="Search tags..." size="small" autofocus @keydown.enter.prevent="commitTopTagMatch" />
         <div v-if="tagsLoading" class="text-sm text-muted-color py-2">Loading tags...</div>
         <div v-else class="max-h-[50vh] overflow-y-auto flex flex-col gap-1">
           <div v-if="!filteredTags.length" class="text-sm text-muted-color py-2">No tags match.</div>
-          <div
-            v-for="tag in filteredTags"
-            :key="tag.tagId"
-            class="flex items-center gap-2 rounded px-2 py-1 hover:bg-surface-100 dark:hover:bg-surface-800"
-          >
+          <div v-for="tag in filteredTags" :key="tag.tagId" class="flex items-center gap-2 rounded px-2 py-1 hover:bg-surface-100 dark:hover:bg-surface-800">
             <button type="button" class="flex-1 text-left text-sm cursor-pointer" @click="onTagRowToggle(tag)">
               <i :class="['pi mr-2 text-xs', hasTag(tag.tagId) ? 'pi-check-square text-primary-500' : 'pi-stop text-gray-400']" />
               {{ tag.name }}
@@ -375,13 +371,7 @@
     <Dialog v-model:visible="showRelationDialog" modal header="Add relationship" class="w-full" style="max-width: 32rem">
       <div class="flex flex-col gap-3">
         <MediaDeckPicker v-model="relationTargetId" show-recent placeholder="Search media..." @select="onRelationSelect" />
-        <Select
-          v-model="relationRole"
-          :options="relationshipRoleOptions"
-          option-label="label"
-          placeholder="Relationship type"
-          class="w-full"
-        />
+        <Select v-model="relationRole" :options="relationshipRoleOptions" option-label="label" placeholder="Relationship type" class="w-full" />
         <p v-if="relationshipPreview" class="text-sm rounded bg-surface-100 dark:bg-surface-800 p-2 border-l-4 border-primary m-0">
           {{ relationshipPreview }}
         </p>
@@ -392,13 +382,7 @@
       </template>
     </Dialog>
 
-    <Dialog
-      v-model:visible="showLinkDialog"
-      modal
-      :header="linkEditIndex === null ? 'Add link' : 'Edit link'"
-      class="w-full"
-      style="max-width: 32rem"
-    >
+    <Dialog v-model:visible="showLinkDialog" modal :header="linkEditIndex === null ? 'Add link' : 'Edit link'" class="w-full" style="max-width: 32rem">
       <div class="flex flex-col gap-3">
         <Select v-model="linkType" :options="linkTypeOptions" option-label="label" option-value="value" class="w-full" />
         <InputText v-model="linkUrl" placeholder="https://..." autofocus @keydown.enter.prevent="commitLink" />

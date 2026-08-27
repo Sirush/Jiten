@@ -19,7 +19,7 @@ function scoreVoice(v: SpeechSynthesisVoice): number {
 
 function findJapaneseVoice() {
   const voices = speechSynthesis.getVoices();
-  const jaVoices = voices.filter(v => v.lang.startsWith('ja'));
+  const jaVoices = voices.filter((v) => v.lang.startsWith('ja'));
   if (jaVoices.length === 0) return;
   jaVoices.sort((a, b) => scoreVoice(b) - scoreVoice(a));
   japaneseVoice = jaVoices[0];
@@ -32,15 +32,28 @@ if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
 }
 
 function reset() {
-  if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
-  if (activeAbort) { activeAbort.abort(); activeAbort = null; }
-  if (activeAudio) { activeAudio.onended = null; activeAudio.onerror = null; activeAudio.pause(); activeAudio = null; }
+  if (loadingTimer) {
+    clearTimeout(loadingTimer);
+    loadingTimer = null;
+  }
+  if (activeAbort) {
+    activeAbort.abort();
+    activeAbort = null;
+  }
+  if (activeAudio) {
+    activeAudio.onended = null;
+    activeAudio.onerror = null;
+    activeAudio.pause();
+    activeAudio = null;
+  }
   if (browserSupported.value) speechSynthesis.cancel();
   activeText.value = null;
   activeState.value = null;
 }
 
-export function stopTts() { reset(); }
+export function stopTts() {
+  reset();
+}
 
 // Web Speech cannot be re-levelled once speaking, so only a server clip follows the slider live.
 export function applyTtsVolume(volume: number) {
@@ -56,7 +69,7 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
   const authStore = useAuthStore();
   const config = useRuntimeConfig();
 
-  const resolvedText = computed(() => typeof text === 'string' ? text : text?.value ?? '');
+  const resolvedText = computed(() => (typeof text === 'string' ? text : (text?.value ?? '')));
 
   const isServerMode = computed(() => store.ttsVoice !== 'system');
 
@@ -132,7 +145,9 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
     const abort = new AbortController();
     activeAbort = abort;
     activeText.value = textKey;
-    loadingTimer = setTimeout(() => { activeState.value = 'loading'; }, 200);
+    loadingTimer = setTimeout(() => {
+      activeState.value = 'loading';
+    }, 200);
 
     try {
       const headers: Record<string, string> = {};
@@ -145,11 +160,20 @@ export function useTts(text?: Ref<string> | string, type: TtsType = 'word') {
       const audio = new Audio(blobUrl);
       audio.volume = currentVolume();
 
-      if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
+      if (loadingTimer) {
+        clearTimeout(loadingTimer);
+        loadingTimer = null;
+      }
       activeAudio = audio;
       activeState.value = 'playing';
-      audio.onended = () => { reset(); URL.revokeObjectURL(blobUrl); };
-      audio.onerror = () => { reset(); URL.revokeObjectURL(blobUrl); };
+      audio.onended = () => {
+        reset();
+        URL.revokeObjectURL(blobUrl);
+      };
+      audio.onerror = () => {
+        reset();
+        URL.revokeObjectURL(blobUrl);
+      };
       await audio.play();
     } catch (e: any) {
       if (e?.name === 'AbortError') return;

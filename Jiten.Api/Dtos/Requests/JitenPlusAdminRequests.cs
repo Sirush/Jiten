@@ -22,6 +22,17 @@ public class GrantJitenPlusRequest
     public string? ThankYouMessage { get; set; }
 }
 
+/// <summary>Resend a purchase confirmation email that failed to deliver, rebuilt from the user's current billing state.</summary>
+public class ResendBillingEmailRequest
+{
+    [Required]
+    public required string UserIdOrName { get; set; }
+
+    /// <summary>"lifetime-confirmed" or "subscription-confirmed".</summary>
+    [Required]
+    public required string Kind { get; set; }
+}
+
 /// <summary>Revoke a mistakenly-granted contributor lifetime (never a purchased one).</summary>
 public class RevokeLifetimeRequest
 {

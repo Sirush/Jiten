@@ -38,24 +38,24 @@
       @cancel="editing = false"
     />
     <template v-else>
-    <blockquote class="relative inline-block border-l-4 border-yellow-500 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r shadow-sm overflow-hidden">
-      <div class="flex items-start gap-2">
-        <div class="md:text-lg text-sm flex-1" lang="ja" v-html="formattedText" />
-        <TtsButton :text="plainText" :custom-sentence-id="sentence.userExampleSentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
-        <button
-          v-if="canEdit"
-          class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors mt-0.5 shrink-0 cursor-pointer"
-          title="Edit sentence"
-          @click="editing = true"
-        >
-          <i class="pi pi-pencil text-sm" />
-        </button>
+      <blockquote class="relative inline-block border-l-4 border-yellow-500 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r shadow-sm overflow-hidden">
+        <div class="flex items-start gap-2">
+          <div class="md:text-lg text-sm flex-1" lang="ja" v-html="formattedText" />
+          <TtsButton :text="plainText" :custom-sentence-id="sentence.userExampleSentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
+          <button
+            v-if="canEdit"
+            class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors mt-0.5 shrink-0 cursor-pointer"
+            title="Edit sentence"
+            @click="editing = true"
+          >
+            <i class="pi pi-pencil text-sm" />
+          </button>
+        </div>
+      </blockquote>
+      <div v-if="sentence.source" class="flex items-center mb-2">
+        <span class="text-xs italic mr-2 ml-4">Source:</span>
+        <span class="text-xs">{{ sentence.source }}</span>
       </div>
-    </blockquote>
-    <div v-if="sentence.source" class="flex items-center mb-2">
-      <span class="text-xs italic mr-2 ml-4">Source:</span>
-      <span class="text-xs">{{ sentence.source }}</span>
-    </div>
     </template>
   </div>
 </template>

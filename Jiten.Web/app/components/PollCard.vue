@@ -137,7 +137,7 @@
       <div class="mt-1 flex flex-wrap items-center justify-between gap-2">
         <span class="text-xs text-surface-500 dark:text-surface-400">
           {{ votersLabel }}
-          <template v-if="poll.maxSelections > 1"> &middot; up to {{ poll.maxSelections }} picks each</template>
+          <template v-if="poll.maxSelections > 1">&middot; up to {{ poll.maxSelections }} picks each</template>
         </span>
         <Button v-if="!poll.isClosed" label="Change vote" text size="small" @click="editing = true" />
       </div>

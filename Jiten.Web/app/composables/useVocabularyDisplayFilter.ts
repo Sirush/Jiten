@@ -42,17 +42,21 @@ export function useVocabularyDisplayFilter() {
   const suspended = ref<VocabularyModifierMode>(parseMode(route.query.suspended));
   const redundant = ref<VocabularyModifierMode>(parseMode(route.query.redundant));
 
-  watch([tiers, suspended, redundant], () => {
-    router.replace({
-      query: {
-        ...route.query,
-        display: tiers.value.length > 0 ? tiers.value.join(',') : undefined,
-        suspended: suspended.value === 'show' ? undefined : suspended.value,
-        redundant: redundant.value === 'show' ? undefined : redundant.value,
-        offset: 0,
-      },
-    });
-  }, { deep: true });
+  watch(
+    [tiers, suspended, redundant],
+    () => {
+      router.replace({
+        query: {
+          ...route.query,
+          display: tiers.value.length > 0 ? tiers.value.join(',') : undefined,
+          suspended: suspended.value === 'show' ? undefined : suspended.value,
+          redundant: redundant.value === 'show' ? undefined : redundant.value,
+          offset: 0,
+        },
+      });
+    },
+    { deep: true }
+  );
 
   const displayFilter = computed(() => (tiers.value.length > 0 ? tiers.value.join(',') : 'all'));
   const suspendedParam = computed(() => (suspended.value === 'show' ? undefined : suspended.value));

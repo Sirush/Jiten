@@ -357,7 +357,14 @@ describe('hasCustomArrangement', () => {
       { showFuriganaOnFront: true },
       { exampleSentencePosition: 'Front' },
       { exampleSentencePosition: 'Back', blurExampleSentence: true },
-      { showConfusableReadings: true, showFrequencyRank: true, showPitchAccent: true, showKanjiBreakdown: true, showWordComposition: true, showWordUsedIn: true },
+      {
+        showConfusableReadings: true,
+        showFrequencyRank: true,
+        showPitchAccent: true,
+        showKanjiBreakdown: true,
+        showWordComposition: true,
+        showWordUsedIn: true,
+      },
     ];
     for (const v of variants) {
       expect(hasCustomArrangement(buildLayoutFromLegacySettings(settings(v)))).toBe(false);

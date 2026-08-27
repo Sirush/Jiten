@@ -123,7 +123,11 @@
   }
 
   const dictListRef = ref<HTMLElement | null>(null);
-  const { dragIndex, dropIndex, handlePointerDown: handleDictPointerDown } = useTouchReorder({
+  const {
+    dragIndex,
+    dropIndex,
+    handlePointerDown: handleDictPointerDown,
+  } = useTouchReorder({
     containerRef: dictListRef,
     async onReorder(from, to) {
       const ids = dictionaries.value.map((d) => d.id);
@@ -190,9 +194,7 @@
     <!-- Desktop: drag & drop zone -->
     <div
       class="hidden sm:block border-2 border-dashed rounded-xl p-6 text-center transition-colors"
-      :class="dragOver
-        ? 'border-primary bg-primary-50 dark:bg-primary-900/20'
-        : 'border-surface-300 dark:border-surface-600'"
+      :class="dragOver ? 'border-primary bg-primary-50 dark:bg-primary-900/20' : 'border-surface-300 dark:border-surface-600'"
       @dragover.prevent="dragOver = true"
       @dragleave.prevent="dragOver = false"
       @drop.prevent="onDrop"
@@ -206,94 +208,109 @@
       </template>
       <template v-else>
         <i class="pi pi-upload text-3xl text-gray-400 dark:text-gray-400 mb-2" />
-        <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">
-          Drag and drop a Yomitan dictionary (.zip) here, or
-        </p>
+        <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">Drag and drop a Yomitan dictionary (.zip) here, or</p>
         <Button label="Select File" icon="pi pi-folder-open" severity="secondary" outlined size="small" @click="openFilePicker" />
       </template>
     </div>
 
     <!-- Dictionary List -->
     <div class="flex flex-col gap-3">
-      <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-        Dictionaries ({{ dictionaries.length }})
-      </div>
+      <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Dictionaries ({{ dictionaries.length }})</div>
 
       <div ref="dictListRef" class="flex flex-col gap-3">
-      <div
-        v-for="(dict, index) in dictionaries"
-        :key="dict.id"
-        class="border rounded-lg p-4 bg-surface-0 dark:bg-surface-900 flex flex-col sm:flex-row sm:items-center gap-3 transition-colors"
-        :class="{
-          'border-primary bg-primary-50/50 dark:bg-primary-900/20': dropIndex === index && dragIndex !== index,
-          'opacity-50': dragIndex === index,
-          'border-surface-200 dark:border-surface-700': dropIndex !== index && dragIndex !== index,
-        }"
-      >
-        <!-- Arrows + drag handle + priority badge -->
-        <div class="flex items-center gap-1 shrink-0">
-          <div class="flex flex-col gap-0.5">
-            <Button icon="pi pi-chevron-up" text rounded size="small" :disabled="index === 0" @click="moveUp(index)" class="!w-6 !h-6" />
-            <Button icon="pi pi-chevron-down" text rounded size="small" :disabled="index === dictionaries.length - 1" @click="moveDown(index)" class="!w-6 !h-6" />
-          </div>
-          <span class="cursor-grab active:cursor-grabbing" style="touch-action: none" @pointerdown="handleDictPointerDown($event, index)">
-            <i class="pi pi-bars text-gray-400 dark:text-gray-400 text-xs" />
-          </span>
-          <span class="w-7 h-7 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 text-xs font-bold flex items-center justify-center">
-            {{ index + 1 }}
-          </span>
-        </div>
-
-        <!-- Info -->
-        <div class="flex-1 min-w-0">
-          <div class="font-semibold text-sm text-gray-800 dark:text-gray-200 truncate flex items-center gap-2">
-            <template v-if="renamingId === dict.id">
-              <InputText
-                v-model="renameValue"
-                class="text-sm !py-0.5 !px-1.5 w-48"
+        <div
+          v-for="(dict, index) in dictionaries"
+          :key="dict.id"
+          class="border rounded-lg p-4 bg-surface-0 dark:bg-surface-900 flex flex-col sm:flex-row sm:items-center gap-3 transition-colors"
+          :class="{
+            'border-primary bg-primary-50/50 dark:bg-primary-900/20': dropIndex === index && dragIndex !== index,
+            'opacity-50': dragIndex === index,
+            'border-surface-200 dark:border-surface-700': dropIndex !== index && dragIndex !== index,
+          }"
+        >
+          <!-- Arrows + drag handle + priority badge -->
+          <div class="flex items-center gap-1 shrink-0">
+            <div class="flex flex-col gap-0.5">
+              <Button icon="pi pi-chevron-up" text rounded size="small" :disabled="index === 0" class="!w-6 !h-6" @click="moveUp(index)" />
+              <Button
+                icon="pi pi-chevron-down"
+                text
+                rounded
                 size="small"
-                autofocus
-                @keydown.enter="confirmRename"
-                @keydown.escape="cancelRename"
+                :disabled="index === dictionaries.length - 1"
+                class="!w-6 !h-6"
+                @click="moveDown(index)"
               />
-              <Button icon="pi pi-check" text rounded size="small" class="!w-6 !h-6" @click="confirmRename" />
-              <Button icon="pi pi-times" text rounded size="small" class="!w-6 !h-6" @click="cancelRename" />
-            </template>
-            <template v-else>
-              {{ dict.name }}
-              <span v-if="isJmDict(dict)" class="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                Built-in
-              </span>
-              <Button v-if="!isJmDict(dict)" icon="pi pi-pencil" text rounded size="small" class="!w-5 !h-5 opacity-40 hover:opacity-100" @click="startRename(dict)" />
-            </template>
+            </div>
+            <span class="cursor-grab active:cursor-grabbing" style="touch-action: none" @pointerdown="handleDictPointerDown($event, index)">
+              <i class="pi pi-bars text-gray-400 dark:text-gray-400 text-xs" />
+            </span>
+            <span
+              class="w-7 h-7 rounded-full bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 text-xs font-bold flex items-center justify-center"
+            >
+              {{ index + 1 }}
+            </span>
           </div>
-          <div class="text-xs text-gray-500 dark:text-gray-400">
-            <template v-if="!isJmDict(dict)">
-              {{ dict.entryCount.toLocaleString() }} entries
-              <span v-if="dict.revision"> · {{ dict.revision }}</span>
-              · Added {{ formatDate(dict.addedAt) }}
-            </template>
-            <template v-else>
-              Default Japanese-English dictionary based on JMDict.
-            </template>
-          </div>
-        </div>
 
-        <!-- Controls -->
-        <div class="flex items-center gap-2 shrink-0">
-          <Select
-            :modelValue="dict.mode"
-            @update:modelValue="(v: any) => onModeChange(dict, v)"
-            :options="modeOptions"
-            optionLabel="label"
-            optionValue="value"
-            class="text-xs w-48"
-            size="small"
-          />
-          <Button v-if="!isJmDict(dict)" icon="pi pi-trash" severity="danger" text rounded size="small" @click="confirmRemove(dict)" />
-          <div v-else class="w-8" />
+          <!-- Info -->
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-sm text-gray-800 dark:text-gray-200 truncate flex items-center gap-2">
+              <template v-if="renamingId === dict.id">
+                <InputText
+                  v-model="renameValue"
+                  class="text-sm !py-0.5 !px-1.5 w-48"
+                  size="small"
+                  autofocus
+                  @keydown.enter="confirmRename"
+                  @keydown.escape="cancelRename"
+                />
+                <Button icon="pi pi-check" text rounded size="small" class="!w-6 !h-6" @click="confirmRename" />
+                <Button icon="pi pi-times" text rounded size="small" class="!w-6 !h-6" @click="cancelRename" />
+              </template>
+              <template v-else>
+                {{ dict.name }}
+                <span
+                  v-if="isJmDict(dict)"
+                  class="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                >
+                  Built-in
+                </span>
+                <Button
+                  v-if="!isJmDict(dict)"
+                  icon="pi pi-pencil"
+                  text
+                  rounded
+                  size="small"
+                  class="!w-5 !h-5 opacity-40 hover:opacity-100"
+                  @click="startRename(dict)"
+                />
+              </template>
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">
+              <template v-if="!isJmDict(dict)">
+                {{ dict.entryCount.toLocaleString() }} entries
+                <span v-if="dict.revision">· {{ dict.revision }}</span>
+                · Added {{ formatDate(dict.addedAt) }}
+              </template>
+              <template v-else>Default Japanese-English dictionary based on JMDict.</template>
+            </div>
+          </div>
+
+          <!-- Controls -->
+          <div class="flex items-center gap-2 shrink-0">
+            <Select
+              :model-value="dict.mode"
+              :options="modeOptions"
+              option-label="label"
+              option-value="value"
+              class="text-xs w-48"
+              size="small"
+              @update:model-value="(v: any) => onModeChange(dict, v)"
+            />
+            <Button v-if="!isJmDict(dict)" icon="pi pi-trash" severity="danger" text rounded size="small" @click="confirmRemove(dict)" />
+            <div v-else class="w-8" />
+          </div>
         </div>
-      </div>
       </div>
     </div>
   </div>

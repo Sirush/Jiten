@@ -120,7 +120,8 @@
               :disabled="index === 0"
               @click="emit('moveUp')"
             >
-              <i class="pi pi-arrow-up text-[0.65rem]" /> Up
+              <i class="pi pi-arrow-up text-[0.65rem]" />
+              Up
             </button>
             <button
               type="button"
@@ -128,7 +129,8 @@
               :disabled="index >= listLength - 1"
               @click="emit('moveDown')"
             >
-              <i class="pi pi-arrow-down text-[0.65rem]" /> Down
+              <i class="pi pi-arrow-down text-[0.65rem]" />
+              Down
             </button>
             <button
               type="button"
@@ -146,11 +148,7 @@
           <div class="flex flex-col gap-2">
             <div v-for="control in schema" :key="control.key" class="flex items-center justify-between gap-2">
               <label class="shrink-0 text-xs">{{ control.label }}</label>
-              <ToggleSwitch
-                v-if="control.type === 'toggle'"
-                :model-value="!!resolved[control.key]"
-                @update:model-value="setOption(control.key, $event)"
-              />
+              <ToggleSwitch v-if="control.type === 'toggle'" :model-value="!!resolved[control.key]" @update:model-value="setOption(control.key, $event)" />
               <Select
                 v-else-if="control.type === 'select'"
                 :model-value="resolved[control.key]"
@@ -162,7 +160,7 @@
               />
               <div v-else-if="control.type === 'number'" class="flex items-center gap-1">
                 <InputNumber
-                  :model-value="(resolved[control.key] as number | null)"
+                  :model-value="resolved[control.key] as number | null"
                   :min="control.min"
                   :max="control.max"
                   :placeholder="control.placeholder"

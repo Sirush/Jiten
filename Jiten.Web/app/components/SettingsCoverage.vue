@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { type UserMetadata } from '~/types';
+  import type { UserMetadata } from '~/types';
   import { useToast } from 'primevue/usetoast';
 
   interface CoverageRefreshResponse {
@@ -21,7 +21,7 @@
   });
 
   const status = computed(() =>
-    lastRefresh.value ? `Refreshed ${lastRefresh.value.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : 'Never refreshed',
+    lastRefresh.value ? `Refreshed ${lastRefresh.value.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : 'Never refreshed'
   );
 
   const isRefreshing = ref(false);

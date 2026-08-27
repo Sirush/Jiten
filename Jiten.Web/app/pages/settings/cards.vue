@@ -648,11 +648,11 @@
         :key="i"
         class="flex items-center gap-3 p-3 rounded-lg bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700"
       >
-        <Skeleton width="1.25rem" height="1.25rem" borderRadius="2px" />
+        <Skeleton width="1.25rem" height="1.25rem" border-radius="2px" />
         <Skeleton width="5rem" height="1.5rem" />
         <div class="flex-1" />
         <Skeleton width="4rem" height="1rem" />
-        <Skeleton width="3.5rem" height="1.5rem" borderRadius="6px" />
+        <Skeleton width="3.5rem" height="1.5rem" border-radius="6px" />
         <Skeleton width="1.5rem" height="1.5rem" shape="circle" />
       </div>
     </div>
@@ -726,8 +726,8 @@
                 :to="`/vocabulary/${card.wordId}/${card.readingIndex}`"
                 target="_blank"
                 class="font-medium text-primary-600 dark:text-primary-400 hover:underline truncate min-w-0 hidden sm:inline sm:order-1 sm:shrink"
-                v-html="sanitiseHtml(card.wordText)"
                 @click.stop
+                v-html="sanitiseHtml(card.wordText)"
               />
 
               <span v-if="card.frequencyRank" class="text-xs text-surface-400 tabular-nums row-start-1 col-start-1 sm:order-2 sm:shrink-0">
@@ -795,7 +795,8 @@
                 target="_blank"
                 class="inline-flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 hover:underline pl-9 mb-1.5 sm:hidden"
               >
-                View word <i class="pi pi-external-link text-xs" />
+                View word
+                <i class="pi pi-external-link text-xs" />
               </NuxtLink>
               <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm pl-9">
                 <div>
@@ -893,8 +894,8 @@
               card{{ forgetCount !== 1 ? 's' : '' }}.
             </p>
             <p class="mb-2">
-              {{ forgetCount === 1 ? 'It leaves' : 'They leave' }} your collection but your review history is kept, so your activity study chart, streaks and retention
-              stay as they are, and the FSRS optimiser still trains on it.
+              {{ forgetCount === 1 ? 'It leaves' : 'They leave' }} your collection but your review history is kept, so your activity study chart, streaks and
+              retention stay as they are, and the FSRS optimiser still trains on it.
             </p>
             <p>
               Restore {{ forgetCount === 1 ? 'it' : 'them' }} any time from
@@ -909,9 +910,7 @@
           class="flex items-start gap-2 cursor-pointer rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-3"
         >
           <Checkbox v-model="forgetAck" :binary="true" class="mt-0.5" />
-          <span class="text-sm text-surface-700 dark:text-surface-300">
-            I understand this removes {{ forgetCount }} cards from my collection.
-          </span>
+          <span class="text-sm text-surface-700 dark:text-surface-300">I understand this removes {{ forgetCount }} cards from my collection.</span>
         </label>
       </div>
 

@@ -57,10 +57,12 @@ function decodeEntities(raw: string): string {
 function isHighlightTag(name: string, attrs: string): boolean {
   if (HIGHLIGHT_TAGS.has(name)) return true;
   if (name !== 'span' && name !== 'font') return false;
-  return /style\s*=\s*"[^"]*(color|background)/i.test(attrs)
-    || /style\s*=\s*'[^']*(color|background)/i.test(attrs)
-    || /class\s*=\s*["'][^"']*(highlight|target|focus|expression)/i.test(attrs)
-    || /\scolor\s*=/i.test(attrs);
+  return (
+    /style\s*=\s*"[^"]*(color|background)/i.test(attrs) ||
+    /style\s*=\s*'[^']*(color|background)/i.test(attrs) ||
+    /class\s*=\s*["'][^"']*(highlight|target|focus|expression)/i.test(attrs) ||
+    /\scolor\s*=/i.test(attrs)
+  );
 }
 
 /**
@@ -108,7 +110,7 @@ function tokenise(html: string): MarkedChar[] {
       const selfClosing = body.trimEnd().endsWith('/');
 
       if (closing) {
-        const at = open.findLastIndex(e => e.name === name);
+        const at = open.findLastIndex((e) => e.name === name);
         if (at >= 0) {
           for (let depth = open.length - 1; depth >= at; depth--) {
             const entry = open.pop()!;
@@ -132,7 +134,7 @@ function tokenise(html: string): MarkedChar[] {
 }
 
 function applyCloze(chars: MarkedChar[]): MarkedChar[] {
-  const text = chars.map(x => x.c).join('');
+  const text = chars.map((x) => x.c).join('');
   const pattern = /\{\{c\d+::(.*?)(?:::.*?)?\}\}/g;
   const out: MarkedChar[] = [];
   let last = 0;
@@ -193,7 +195,7 @@ function normalise(chars: MarkedChar[]): MarkedChar[] {
 
 export function extractSentenceFromField(html: string): ExtractedSentence {
   const chars = normalise(stripBracketed(applyCloze(tokenise(html ?? ''))));
-  const text = chars.map(x => x.c).join('');
+  const text = chars.map((x) => x.c).join('');
 
   const markedRanges: Array<[number, number]> = [];
   let start = -1;
@@ -368,9 +370,7 @@ export function buildSentenceForImport(html: string, candidates: string[]): Sent
   const fitted = truncateAroundWord(extracted.text, located[0], located[1]);
   if (!fitted) return { skipped: 'tooLong' };
 
-  const marked = fitted.text.slice(0, fitted.start)
-    + '**' + fitted.text.slice(fitted.start, fitted.end) + '**'
-    + fitted.text.slice(fitted.end);
+  const marked = fitted.text.slice(0, fitted.start) + '**' + fitted.text.slice(fitted.start, fitted.end) + '**' + fitted.text.slice(fitted.end);
 
   return { text: marked, truncated: fitted.text.length !== extracted.text.length };
 }

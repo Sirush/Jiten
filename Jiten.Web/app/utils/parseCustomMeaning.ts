@@ -5,17 +5,11 @@
 // defense-in-depth pass.
 
 function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function inlineFormat(text: string): string {
-  return text
-    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+  return text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
 }
 
 export function parseCustomMeaningHtml(text: string): string {
@@ -33,11 +27,7 @@ export function parseCustomMeaningHtml(text: string): string {
   };
   const flushList = () => {
     if (listItems.length) {
-      blocks.push(
-        '<ul class="list-disc pl-5 my-1 space-y-0.5">'
-        + listItems.map(i => `<li>${i}</li>`).join('')
-        + '</ul>',
-      );
+      blocks.push('<ul class="list-disc pl-5 my-1 space-y-0.5">' + listItems.map((i) => `<li>${i}</li>`).join('') + '</ul>');
       listItems = [];
     }
   };

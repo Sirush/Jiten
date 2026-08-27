@@ -67,7 +67,7 @@
     const adj = props.userAdjustment ?? 0;
     if (!hasAdjustment.value) return '';
     const isLarge = Math.abs(adj) >= 0.5;
-    return adj > 0 ? (isLarge ? '▲▲' : '▲') : (isLarge ? '▼▼' : '▼');
+    return adj > 0 ? (isLarge ? '▲▲' : '▲') : isLarge ? '▼▼' : '▼';
   });
 
   const arrowClass = computed(() => {
@@ -111,9 +111,11 @@
     } else if (hasVotesButSmallAdjustment.value) {
       const votes = props.voteCount ?? 0;
       const plural = votes !== 1 ? 's' : '';
-      parts.push(votes >= fullGateVoters
-        ? `Algorithmic score confirmed by ${votes} community vote${plural}`
-        : `${votes} community vote${plural}, consistent with the algorithmic score`);
+      parts.push(
+        votes >= fullGateVoters
+          ? `Algorithmic score confirmed by ${votes} community vote${plural}`
+          : `${votes} community vote${plural}, consistent with the algorithmic score`
+      );
     } else if ((props.voteCount ?? 0) > 0) {
       parts.push('Algorithmic difficulty. Not enough community votes to adjust it yet.');
     } else {
@@ -136,7 +138,7 @@
     <span v-if="hasVotesButSmallAdjustment && !useStars" class="text-xs mr-0.5 text-gray-400 dark:text-gray-400">&asymp;</span>
     <span v-else-if="arrowIndicator && !useStars" :class="['text-xs mr-0.5', arrowClass]">{{ arrowIndicator }}</span>
     {{ difficultyText }}
-    <span v-if="voteCount && voteCount >= 3" class="text-xs font-normal text-muted-color ml-1"></span>
+    <span v-if="voteCount && voteCount >= 3" class="text-xs font-normal text-muted-color ml-1" />
   </span>
 </template>
 

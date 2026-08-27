@@ -1,10 +1,5 @@
 import type { Deck, DeckMetadataPatchResult, Genre, LinkType, Tag } from '~/types';
-import {
-  buildDeckMetadataPatch,
-  isDeckMetadataPatchEmpty,
-  relationshipExists,
-  type DeckMetadataDraft,
-} from '~/utils/deckMetadataPatch';
+import { buildDeckMetadataPatch, isDeckMetadataPatchEmpty, relationshipExists, type DeckMetadataDraft } from '~/utils/deckMetadataPatch';
 import { fromRole, type PerspectiveRelationship, type RelationshipRoleOption } from '~/utils/relationshipRoles';
 import { DEFAULT_TAG_PERCENTAGE } from '~/utils/tags';
 
@@ -122,8 +117,7 @@ export function useDeckInlineEdit(getDeck: () => Deck) {
     if (targetDeckId === getDeck().deckId) return 'A deck cannot be related to itself';
 
     const relationship = { ...fromRole(targetDeckId, role), targetTitle };
-    if (relationshipExists(draft.value.relationships, targetDeckId, relationship.relationshipType))
-      return 'This relationship already exists';
+    if (relationshipExists(draft.value.relationships, targetDeckId, relationship.relationshipType)) return 'This relationship already exists';
 
     draft.value.relationships.push(relationship);
     return null;

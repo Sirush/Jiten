@@ -11,7 +11,7 @@ export interface StudiedDeckRef {
 }
 
 export function isDeckStudied(deckId: number, studyDecks: StudiedDeckRef[]): boolean {
-  return studyDecks.some(d => d.deckType === StudyDeckType.MediaDeck && d.deckId === deckId);
+  return studyDecks.some((d) => d.deckType === StudyDeckType.MediaDeck && d.deckId === deckId);
 }
 
 export function planStepsToAdd(steps: PlanStudyStep[], studyDecks: StudiedDeckRef[]): number[] {
@@ -38,12 +38,7 @@ export function planDeckIds(steps: PlanStudyStep[]): number[] {
   return result;
 }
 
-export function buildPlanStudyBatch(
-  steps: PlanStudyStep[],
-  minOccurrences: number,
-  deactivateOthers: boolean,
-  addToTop: boolean,
-): BatchAddStudyDecksRequest {
+export function buildPlanStudyBatch(steps: PlanStudyStep[], minOccurrences: number, deactivateOthers: boolean, addToTop: boolean): BatchAddStudyDecksRequest {
   return {
     deckIds: planDeckIds(steps),
     downloadType: DeckDownloadType.OccurrenceCount,

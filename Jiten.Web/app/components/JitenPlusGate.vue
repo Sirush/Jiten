@@ -77,12 +77,7 @@
       </div>
     </div>
 
-    <Dialog
-      v-model:visible="showUpsell"
-      modal
-      :style="{ width: '400px' }"
-      :breakpoints="{ '480px': '92vw' }"
-    >
+    <Dialog v-model:visible="showUpsell" modal :style="{ width: '400px' }" :breakpoints="{ '480px': '92vw' }">
       <template #header>
         <div class="flex items-center gap-2">
           <JitenPlusBadge :link="false" :tier="showFullChip ? 'full' : 'any'" />
@@ -91,15 +86,13 @@
       </template>
       <div class="flex flex-col gap-2 text-sm">
         <p>
-          <span class="font-semibold">{{ featureLabel ?? 'This feature' }}</span> is part of Jiten+.
+          <span class="font-semibold">{{ featureLabel ?? 'This feature' }}</span>
+          is part of Jiten+.
         </p>
         <p v-if="showFullChip">
-          It isn't included in the trial because it permanently stores your data. It unlocks with any
-          paid plan, and your data stays even if you cancel later.
+          It isn't included in the trial because it permanently stores your data. It unlocks with any paid plan, and your data stays even if you cancel later.
         </p>
-        <p v-else class="text-muted-color">
-          Jiten+ unlocks useful extras while helping support Jiten.
-        </p>
+        <p v-else class="text-muted-color">Jiten+ unlocks useful extras while helping support Jiten.</p>
       </div>
       <template #footer>
         <Button label="Maybe later" severity="secondary" text @click="showUpsell = false" />

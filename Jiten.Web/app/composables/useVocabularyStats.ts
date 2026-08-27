@@ -61,7 +61,8 @@ export function useVocabularyStats() {
       derivationCoveredWords.value = result.derivationCovered ?? 0;
       derivationCoveredForms.value = result.derivationCoveredForm ?? 0;
       archivedCards.value = result.archivedCards ?? 0;
-    } catch {} finally {
+    } catch {
+    } finally {
       vocabStatsLoading.value = false;
     }
   }

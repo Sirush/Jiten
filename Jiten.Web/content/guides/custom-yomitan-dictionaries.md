@@ -1,7 +1,7 @@
 ---
 title: Using custom Yomitan dictionaries
 summary: Import your own Yomitan dictionaries so their definitions appear across the Jiten website and in your exported decks.
-category: "Advanced & tools"
+category: 'Advanced & tools'
 level: advanced
 order: 30
 icon: material-symbols-light:menu-book-outline
@@ -32,7 +32,7 @@ Each row has a mode:
 - **Disabled**: never used, without deleting it.
 
 ::tip
-The list works top to bottom. If you want to avoid English definitions as much as possible, then put the built-in dictionary last as a **Fallback**, in case your other dictionaries don't have an entry for the word. 
+The list works top to bottom. If you want to avoid English definitions as much as possible, then put the built-in dictionary last as a **Fallback**, in case your other dictionaries don't have an entry for the word.
 ::
 
 ## Seeing the definitions

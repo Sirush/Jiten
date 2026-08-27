@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
-  import { type ApiKeyInfo, type CreateApiKeyResponse } from '~/types/types';
+  import type { ApiKeyInfo, CreateApiKeyResponse } from '~/types/types';
 
   const { $api } = useNuxtApp();
   const toast = useToast();

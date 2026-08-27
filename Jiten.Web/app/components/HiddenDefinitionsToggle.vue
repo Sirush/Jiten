@@ -8,10 +8,13 @@
   const { hiddenFor, ensureLoaded, isEditing, startEditing, stopEditing } = useHiddenDefinitions();
 
   onMounted(() => ensureLoaded(props.wordId));
-  watch(() => props.wordId, (id) => {
-    stopEditing();
-    ensureLoaded(id);
-  });
+  watch(
+    () => props.wordId,
+    (id) => {
+      stopEditing();
+      ensureLoaded(id);
+    }
+  );
   onUnmounted(() => stopEditing(props.wordId));
 
   const editing = computed(() => isEditing(props.wordId));

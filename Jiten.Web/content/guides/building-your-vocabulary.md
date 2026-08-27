@@ -19,7 +19,7 @@ Coverage is the best way to navigate between media you can immerse in. Setting u
 
 Word sets are way to update your knowledge on whole categories, or ignore ones you don't plan to study.
 
-You can find them in **Settings → Word Sets**. The **Particles & Common Grammar** set is highly recommended unless you're just an early beginner in Japanese. If you've finished the **Kaishi 1.5k** deck then click on **Mark as Mastered** next to it. You can also master it if you didn't do it but have done a similar core deck or already have intermediate knowledge of Japanese. 
+You can find them in **Settings → Word Sets**. The **Particles & Common Grammar** set is highly recommended unless you're just an early beginner in Japanese. If you've finished the **Kaishi 1.5k** deck then click on **Mark as Mastered** next to it. You can also master it if you didn't do it but have done a similar core deck or already have intermediate knowledge of Japanese.
 The **Names** one can be interesting to blacklist if you don't care to be learning names individually, as they can represent large parts of some decks and mess with your coverage. Each set can be set to **Blacklist** or **Mark as Mastered**, and both count towards coverage, so the choice is about whether you consider you know the words or you just don't want to see them.
 
 Leave sets you only partly know, like **Onomatopoeia** and **Counters**, alone, unless you want to completely ignore them. See [Word sets](/guides/word-sets).

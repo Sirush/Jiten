@@ -7,19 +7,14 @@
     {
       tier: 'any',
       link: true,
-    },
+    }
   );
 
   const label = computed(() => (props.tier === 'trial' ? 'Jiten+ Trial' : 'Jiten+'));
 </script>
 
 <template>
-  <component
-    :is="link ? 'NuxtLink' : 'span'"
-    :to="link ? '/jiten-plus' : undefined"
-    class="jiten-plus-badge"
-    :class="{ 'jiten-plus-badge--link': link }"
-  >
+  <component :is="link ? 'NuxtLink' : 'span'" :to="link ? '/jiten-plus' : undefined" class="jiten-plus-badge" :class="{ 'jiten-plus-badge--link': link }">
     {{ label }}
   </component>
 </template>

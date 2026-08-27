@@ -231,7 +231,8 @@
         </div>
 
         <Message v-if="action === 'delete-cards'" severity="warn" :closable="false">
-          The matching cards leave your collection but their review history is kept and can be restored at any time from Recently Removed below, or deleted completely from the same place.
+          The matching cards leave your collection but their review history is kept and can be restored at any time from Recently Removed below, or deleted
+          completely from the same place.
         </Message>
         <Message v-if="action === 'reset-schedule'" severity="info" :closable="false">
           This will reset scheduling data (stability, difficulty) and set cards back to Learning. Review history is preserved.
@@ -256,8 +257,8 @@
         :action-description="actionDescription"
         :push-days="action === 'push-due' ? pushDays : null"
         :stagger-batch-size="action === 'push-due' ? staggerBatchSize : null"
-        @load-range="loadRange"
         :on-execute="execute"
+        @load-range="loadRange"
       />
     </template>
   </Card>

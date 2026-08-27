@@ -21,6 +21,6 @@
       {{ word.mainDefinition }}
     </span>
     <span v-else class="hidden sm:block" />
-    <Tag v-if="word.frequencyRank" severity="secondary" class="text-xs shrink-0"> #{{ word.frequencyRank }} </Tag>
+    <Tag v-if="word.frequencyRank" severity="secondary" class="text-xs shrink-0">#{{ word.frequencyRank }}</Tag>
   </NuxtLink>
 </template>

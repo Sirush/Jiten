@@ -74,8 +74,12 @@
   <div v-if="page" class="py-2 lg:flex lg:gap-10">
     <div class="min-w-0 flex-1">
       <div class="mb-4 flex items-center justify-between gap-3">
-        <NuxtLink to="/guides" class="inline-flex shrink-0 items-center gap-1 text-sm text-surface-500 dark:text-surface-400 !no-underline hover:!text-primary-500">
-          <Icon name="material-symbols-light:arrow-back" /> All guides
+        <NuxtLink
+          to="/guides"
+          class="inline-flex shrink-0 items-center gap-1 text-sm text-surface-500 dark:text-surface-400 !no-underline hover:!text-primary-500"
+        >
+          <Icon name="material-symbols-light:arrow-back" />
+          All guides
         </NuxtLink>
         <GuidesSearchBar class="max-w-xs flex-1" />
       </div>
@@ -90,9 +94,11 @@
               <time :datetime="updatedIso">{{ new Date(page.updated).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) }}</time>
             </template>
             <template v-if="page.verified">
-              <template v-if="page.updated"> · </template>
+              <template v-if="page.updated">·</template>
               Last verified
-              <time :datetime="new Date(page.verified).toISOString()">{{ new Date(page.verified).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) }}</time>
+              <time :datetime="new Date(page.verified).toISOString()">
+                {{ new Date(page.verified).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) }}
+              </time>
             </template>
           </p>
         </header>
@@ -121,7 +127,8 @@
 
           <div class="rounded-lg bg-surface-100 p-4 text-sm dark:bg-surface-800">
             Was this helpful, or is something unclear? Ask on
-            <a :href="discordLink" target="_blank" rel="noopener noreferrer">Discord</a>, we're happy to help!
+            <a :href="discordLink" target="_blank" rel="noopener noreferrer">Discord</a>
+            , we're happy to help!
           </div>
         </footer>
       </article>

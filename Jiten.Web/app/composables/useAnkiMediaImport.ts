@@ -1,9 +1,4 @@
-import type {
-  CardMediaBatchEntry,
-  CardMediaBatchResponse,
-  CardMediaImportResponse,
-  ResolveWordsResponse,
-} from '~/types';
+import type { CardMediaBatchEntry, CardMediaBatchResponse, CardMediaImportResponse, ResolveWordsResponse } from '~/types';
 import { base64ToBytes, extractAudioRef, extractImageRef } from '~/utils/ankiMediaExtract';
 
 /** Matches the server's per-request manifest cap. */
@@ -110,7 +105,7 @@ export function useAnkiMediaImport() {
     if (!running.value || startedAt.value === 0 || done.value === 0) return null;
     const remaining = total.value - done.value;
     if (remaining <= 0) return null;
-    return ((Date.now() - startedAt.value) / done.value) * remaining / 1000;
+    return (((Date.now() - startedAt.value) / done.value) * remaining) / 1000;
   });
 
   let candidates = new Map<string, Candidate>();
@@ -120,7 +115,7 @@ export function useAnkiMediaImport() {
   const wakers: Array<() => void> = [];
 
   function wakeWorkers() {
-    wakers.splice(0).forEach(resolve => resolve());
+    wakers.splice(0).forEach((resolve) => resolve());
   }
 
   function reset() {
@@ -183,7 +178,7 @@ export function useAnkiMediaImport() {
   }
 
   async function resolveAll(parseWords: boolean) {
-    const pairs = [...candidates.values()].map(c => ({ word: c.word, reading: c.reading }));
+    const pairs = [...candidates.values()].map((c) => ({ word: c.word, reading: c.reading }));
     const chunkSize = parseWords ? RESOLVE_CHUNK_PARSED : RESOLVE_CHUNK;
     const resolved = new Map<string, { wordId: number; readingIndex: number }>();
 
@@ -233,14 +228,16 @@ export function useAnkiMediaImport() {
 
     if (useAnki) {
       const [wordId, readingIndex] = conflict.key.split('-').map(Number);
-      push([{
-        key: conflict.key,
-        wordId: wordId!,
-        readingIndex: readingIndex!,
-        kind: conflict.kind,
-        filename: conflict.filename,
-        overwrite: true,
-      }]);
+      push([
+        {
+          key: conflict.key,
+          wordId: wordId!,
+          readingIndex: readingIndex!,
+          kind: conflict.kind,
+          filename: conflict.filename,
+          overwrite: true,
+        },
+      ]);
     } else {
       stats.value.skippedExisting++;
     }
@@ -263,7 +260,7 @@ export function useAnkiMediaImport() {
 
     for (let i = 0; i < targets.length && !cancelled; i += FETCH_BATCH) {
       const batch = targets.slice(i, i + FETCH_BATCH);
-      const results = await fetchMedia(batch.map(target => target.filename));
+      const results = await fetchMedia(batch.map((target) => target.filename));
       // A mismatched batch cannot say which file is which, so it must not be mapped to per-file outcomes.
       if (results.length !== batch.length) throw new Error('Media fetch returned a mismatched batch.');
 
@@ -289,12 +286,17 @@ export function useAnkiMediaImport() {
 
   async function uploadChunk(files: Array<{ target: UploadTarget; bytes: Uint8Array }>) {
     const form = new FormData();
-    form.append('manifest', JSON.stringify(files.map((f, index) => ({
-      index,
-      wordId: f.target.wordId,
-      readingIndex: f.target.readingIndex,
-      overwrite: f.target.overwrite,
-    }))));
+    form.append(
+      'manifest',
+      JSON.stringify(
+        files.map((f, index) => ({
+          index,
+          wordId: f.target.wordId,
+          readingIndex: f.target.readingIndex,
+          overwrite: f.target.overwrite,
+        }))
+      )
+    );
 
     files.forEach((f, index) => {
       form.append(`file${index}`, new Blob([f.bytes as BlobPart]), f.target.filename);
@@ -310,7 +312,7 @@ export function useAnkiMediaImport() {
         if (status !== 429 || attempt === 4) throw error;
         const retryAfter = Number(err.response?.headers?.get?.('Retry-After'));
         const delay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 2000 * (attempt + 1);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
     return null;
@@ -379,7 +381,9 @@ export function useAnkiMediaImport() {
           if (pending.length === 0) {
             // The clear queue can run dry while conflicts are still being reviewed; wait for the next answer.
             if (conflicts.value.length === 0) break;
-            await new Promise<void>(resolve => { wakers.push(resolve); });
+            await new Promise<void>((resolve) => {
+              wakers.push(resolve);
+            });
             continue;
           }
 
@@ -405,10 +409,14 @@ export function useAnkiMediaImport() {
     // One worker per server permit keeps them all busy; a worker's AnkiConnect fetch overlaps the
     // others' uploads, replacing the old single-worker prefetch. Staggered starts keep the workers
     // from hitting the rate window in lockstep, where they would 429 and sleep as a convoy.
-    await Promise.all(Array.from({ length: WORKER_COUNT }, (_, index) => (async () => {
-      if (index > 0) await new Promise(resolve => setTimeout(resolve, index * 400));
-      return worker();
-    })()));
+    await Promise.all(
+      Array.from({ length: WORKER_COUNT }, (_, index) =>
+        (async () => {
+          if (index > 0) await new Promise((resolve) => setTimeout(resolve, index * 400));
+          return worker();
+        })()
+      )
+    );
 
     if (quotaHit) {
       conflicts.value = [];
@@ -416,11 +424,7 @@ export function useAnkiMediaImport() {
     }
   }
 
-  async function run(options: {
-    parseWords: boolean;
-    mode: MediaConflictMode;
-    fetchMedia: FetchMedia;
-  }) {
+  async function run(options: { parseWords: boolean; mode: MediaConflictMode; fetchMedia: FetchMedia }) {
     if (candidates.size === 0) return stats.value;
 
     running.value = true;
@@ -453,7 +457,7 @@ export function useAnkiMediaImport() {
 
       if (targets.length === 0) return stats.value;
 
-      const forms = [...new Map(targets.map(t => [t.key, { wordId: t.wordId, readingIndex: t.readingIndex }])).values()];
+      const forms = [...new Map(targets.map((t) => [t.key, { wordId: t.wordId, readingIndex: t.readingIndex }])).values()];
       const present = await scanPresence(forms);
 
       const clear: UploadTarget[] = [];

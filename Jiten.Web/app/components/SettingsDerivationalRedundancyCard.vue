@@ -1,10 +1,5 @@
 <script setup lang="ts">
-  import type {
-    DerivationCategoryGroupDto,
-    DerivationPairDto,
-    DerivationPersonalPairsDto,
-    DerivationPersonalSummaryDto,
-  } from '~/types/types';
+  import type { DerivationCategoryGroupDto, DerivationPairDto, DerivationPersonalPairsDto, DerivationPersonalSummaryDto } from '~/types/types';
 
   const emit = defineEmits<{ changed: [] }>();
 
@@ -54,16 +49,13 @@
   const isKnown = (pair: DerivationPairDto) => studiedKeys.value.has(derivedKey(pair));
   const isRedundant = (pair: DerivationPairDto) => !isKnown(pair) && redundantKeys.value.has(derivedKey(pair));
   // Only ever shown for a group that is off: once it is on, its share is already redundant.
-  const isAdded = (pair: DerivationPairDto) =>
-    !isKnown(pair) && !isRedundant(pair) && addedByGroupKeys.value.has(derivedKey(pair));
+  const isAdded = (pair: DerivationPairDto) => !isKnown(pair) && !isRedundant(pair) && addedByGroupKeys.value.has(derivedKey(pair));
   const isUnknown = (pair: DerivationPairDto) => !isKnown(pair) && !isRedundant(pair) && !isAdded(pair);
 
-  const isBaseKnown = (pair: DerivationPairDto) =>
-    studiedKeys.value.has(wordKey(pair.baseWordId, pair.baseReadingIndex));
+  const isBaseKnown = (pair: DerivationPairDto) => studiedKeys.value.has(wordKey(pair.baseWordId, pair.baseReadingIndex));
 
   // Distinct forms, not rows: one derived form can appear under several bases.
-  const countForms = (predicate: (pair: DerivationPairDto) => boolean) =>
-    new Set(previewPairs.value.filter(predicate).map(derivedKey)).size;
+  const countForms = (predicate: (pair: DerivationPairDto) => boolean) => new Set(previewPairs.value.filter(predicate).map(derivedKey)).size;
 
   const redundantCount = computed(() => countForms(isRedundant));
   const addedCount = computed(() => countForms(isAdded));
@@ -71,9 +63,7 @@
   const unknownCount = computed(() => countForms(isUnknown));
 
   const previewGroupEnabled = computed(() => !!enabledGroups.value[previewGroup.value?.key ?? '']);
-  const hasPersonalMarking = computed(
-    () => redundantKeys.value.size > 0 || addedByGroupKeys.value.size > 0 || studiedKeys.value.size > 0,
-  );
+  const hasPersonalMarking = computed(() => redundantKeys.value.size > 0 || addedByGroupKeys.value.size > 0 || studiedKeys.value.size > 0);
 
   // Form counts throughout, so the states add up to the total rather than to the row count.
   const previewChips = computed(() =>
@@ -103,7 +93,7 @@
         count: unknownCount.value,
         color: 'text-gray-500 dark:text-gray-400',
       },
-    ].filter((chip) => chip.key === 'all' || chip.count > 0),
+    ].filter((chip) => chip.key === 'all' || chip.count > 0)
   );
 
   // The settings row credits this group with every word ticking it unlocks, including ones whose last derivation
@@ -125,9 +115,7 @@
 
   async function fetchPersonalPairs(groupKey: string) {
     try {
-      const personal = await $api<DerivationPersonalPairsDto>(
-        `derivations/pairs-personal?group=${encodeURIComponent(groupKey)}`,
-      );
+      const personal = await $api<DerivationPersonalPairsDto>(`derivations/pairs-personal?group=${encodeURIComponent(groupKey)}`);
       if (previewGroup.value?.key !== groupKey) return;
       redundantKeys.value = new Set(personal.redundantKeys);
       addedByGroupKeys.value = new Set(personal.addedByGroupKeys);
@@ -172,15 +160,11 @@
 
   function groupTooltip(group: DerivationCategoryGroupDto) {
     if (group.categories.length < 2) return group.explanation;
-    const lines = group.categories.map(
-      (c) => `**${c.exampleBase} → ${c.exampleDerived}** — ${c.explanation}`,
-    );
+    const lines = group.categories.map((c) => `**${c.exampleBase} → ${c.exampleDerived}** — ${c.explanation}`);
     return `${group.explanation}\n\n${lines.join('\n')}`;
   }
 
-  const totalEnabledPairs = computed(() =>
-    groups.value.filter((g) => enabledGroups.value[g.key]).reduce((sum, g) => sum + g.pairCount, 0),
-  );
+  const totalEnabledPairs = computed(() => groups.value.filter((g) => enabledGroups.value[g.key]).reduce((sum, g) => sum + g.pairCount, 0));
 
   function syncFromSettings() {
     const enabled = new Set(srsStore.studySettings.derivationalRedundancyCategories ?? []);
@@ -251,7 +235,8 @@
     </template>
     <template #content>
       <div class="text-sm text-muted-color mb-4">
-        Some dictionary entries are inflection of words you know, polite forms, or other forms that you can easily guess if you know the base form. You can tick any category here and all the words in it will be marked as redundant to give you more accurate coverage and avoid showing up in your reviews.
+        Some dictionary entries are inflection of words you know, polite forms, or other forms that you can easily guess if you know the base form. You can tick
+        any category here and all the words in it will be marked as redundant to give you more accurate coverage and avoid showing up in your reviews.
         <Tooltip
           content="The words will stop appearing as new cards and count towards your coverage. You can simply untick to remove their redundancy at any moment."
         >
@@ -263,14 +248,9 @@
         <Skeleton v-for="i in 8" :key="i" height="2.2rem" />
       </div>
 
-      <div v-else-if="groups.length === 0" class="text-sm text-muted-color italic py-4 text-center">
-        No derived words are available yet.
-      </div>
+      <div v-else-if="groups.length === 0" class="text-sm text-muted-color italic py-4 text-center">No derived words are available yet.</div>
 
-      <div
-        v-else
-        class="rounded-md border border-surface-200 dark:border-surface-700 divide-y divide-surface-200 dark:divide-surface-700"
-      >
+      <div v-else class="rounded-md border border-surface-200 dark:border-surface-700 divide-y divide-surface-200 dark:divide-surface-700">
         <div v-for="group in groups" :key="group.key" class="flex items-start gap-2 px-3 py-2">
           <Checkbox
             :model-value="enabledGroups[group.key]"
@@ -304,9 +284,7 @@
                     : `would include ${personalByGroup[group.key]!.toLocaleString()} words you know`
                 }}
               </span>
-              <button type="button" class="text-blue-500 hover:underline" @click="openPreview(group)">
-                view list
-              </button>
+              <button type="button" class="text-blue-500 hover:underline" @click="openPreview(group)">view list</button>
             </div>
           </div>
         </div>
@@ -315,7 +293,7 @@
       <p v-if="!loading && personalTotal > 0" class="text-xs text-muted-color mt-4">
         Your selected choices will make
         <span class="font-bold text-green-600 dark:text-green-300">{{ personalTotal.toLocaleString() }}</span>
-        words  redundant.
+        words redundant.
       </p>
 
       <Dialog
@@ -326,18 +304,15 @@
       >
         <p class="text-sm text-muted-color mb-3 italic">{{ previewGroup?.explanation }}</p>
         <p class="text-xs text-muted-color mb-3">
-          Sorted by frequency (most common first). ↔ means knowing either word covers the other; → means the base
-          word on the left covers the entry on the right, but not the reverse — the left word has meanings of its
-          own that the derived entry doesn't share.
+          Sorted by frequency (most common first). ↔ means knowing either word covers the other; → means the base word on the left covers the entry on the
+          right, but not the reverse — the left word has meanings of its own that the derived entry doesn't share.
         </p>
 
         <div v-if="previewLoading" class="flex flex-col gap-2">
           <Skeleton v-for="i in 8" :key="i" height="2.2rem" />
         </div>
 
-        <div v-else-if="previewPairs.length === 0" class="text-sm text-muted-color italic py-4 text-center">
-          No entries found.
-        </div>
+        <div v-else-if="previewPairs.length === 0" class="text-sm text-muted-color italic py-4 text-center">No entries found.</div>
 
         <template v-else>
           <div v-if="hasPersonalMarking" class="flex gap-2 overflow-x-auto pb-2 mb-3 no-scrollbar">
@@ -361,15 +336,12 @@
           </div>
 
           <p v-if="hasPersonalMarking && coveredElsewhere > 0" class="text-xs text-muted-color mb-3">
-            {{ coveredElsewhere.toLocaleString() }} further
-            {{ coveredElsewhere === 1 ? 'entry counts' : 'entries count' }} towards this grammar point's total but
-            {{ coveredElsewhere === 1 ? 'is' : 'are' }} reached through a chain ending in another one, so
+            {{ coveredElsewhere.toLocaleString() }} further {{ coveredElsewhere === 1 ? 'entry counts' : 'entries count' }} towards this grammar point's total
+            but {{ coveredElsewhere === 1 ? 'is' : 'are' }} reached through a chain ending in another one, so
             {{ coveredElsewhere === 1 ? 'it is' : 'they are' }} listed there instead.
           </p>
 
-          <div v-if="filteredPairs.length === 0" class="text-sm text-muted-color italic py-4 text-center">
-            Nothing here yet.
-          </div>
+          <div v-if="filteredPairs.length === 0" class="text-sm text-muted-color italic py-4 text-center">Nothing here yet.</div>
 
           <DataTable
             v-else
@@ -402,11 +374,7 @@
             <Column header="" style="width: 44px">
               <template #body="{ data: pair }">
                 <Tooltip
-                  :content="
-                    pair.bidirectional
-                      ? 'Knowing either word covers the other'
-                      : 'Only the base word covers the derived entry, not the reverse'
-                  "
+                  :content="pair.bidirectional ? 'Knowing either word covers the other' : 'Only the base word covers the derived entry, not the reverse'"
                 >
                   <span class="text-muted-color cursor-help">{{ pair.bidirectional ? '↔' : '→' }}</span>
                 </Tooltip>
@@ -431,20 +399,13 @@
                 <Tooltip
                   v-else-if="isRedundant(pair)"
                   :content="
-                    previewGroupEnabled
-                      ? 'Covered by a word you know, so it is not shown as a new card'
-                      : 'Already covered through a category you have ticked'
+                    previewGroupEnabled ? 'Covered by a word you know, so it is not shown as a new card' : 'Already covered through a category you have ticked'
                   "
                 >
                   <span class="text-xs text-blue-500 dark:text-blue-300 cursor-default">Redundant</span>
                 </Tooltip>
-                <Tooltip
-                  v-else-if="isAdded(pair)"
-                  content="Ticking this category would make this form redundant for you"
-                >
-                  <span class="text-xs text-primary-600 dark:text-primary-300 cursor-default">
-                    Would be redundant
-                  </span>
+                <Tooltip v-else-if="isAdded(pair)" content="Ticking this category would make this form redundant for you">
+                  <span class="text-xs text-primary-600 dark:text-primary-300 cursor-default">Would be redundant</span>
                 </Tooltip>
               </template>
             </Column>

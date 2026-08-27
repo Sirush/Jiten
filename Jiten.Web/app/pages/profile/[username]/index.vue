@@ -1,13 +1,6 @@
 <script setup lang="ts">
   import { useAuthStore } from '~/stores/authStore';
-  import {
-    type UserProfile,
-    type UserAccomplishment,
-    type ProfileVocabularyStats,
-    type StudyHeatmapResponse,
-    type KnowledgeGrowth,
-    MediaType,
-  } from '~/types';
+  import { type UserProfile, type UserAccomplishment, type ProfileVocabularyStats, type StudyHeatmapResponse, type KnowledgeGrowth, MediaType } from '~/types';
   import { useToast } from 'primevue/usetoast';
   import { getCompletedDisplay, getMediaTypeText } from '~/utils/mediaTypeMapper';
 
@@ -34,15 +27,11 @@
     data: profile,
     error: profileError,
     status: profileStatus,
-  } = await useApiFetch<UserProfile>(
-    () => `user/profile/${targetUsername.value}`,
-    { watch: [targetUsername], deep: true }
-  );
+  } = await useApiFetch<UserProfile>(() => `user/profile/${targetUsername.value}`, { watch: [targetUsername], deep: true });
 
-  const { data: accomplishmentsData } = await useApiFetch<UserAccomplishment[]>(
-    () => `user/profile/${targetUsername.value}/accomplishments`,
-    { watch: [targetUsername] }
-  );
+  const { data: accomplishmentsData } = await useApiFetch<UserAccomplishment[]>(() => `user/profile/${targetUsername.value}/accomplishments`, {
+    watch: [targetUsername],
+  });
 
   const shareVocabulary = ref<ProfileVocabularyStats | null>(null);
   const shareGrowth = ref<KnowledgeGrowth | null>(null);
@@ -225,7 +214,8 @@
                   :vocabulary="shareVocabulary"
                   :growth="shareGrowth"
                   :accomplishment="globalAccomplishment ?? null"
-                  :heatmap="shareHeatmap" />
+                  :heatmap="shareHeatmap"
+                />
               </div>
               <p class="text-gray-500 dark:text-gray-400 text-sm">
                 <span v-if="profile.isPublic">Public profile</span>
@@ -239,7 +229,12 @@
               </div>
               <div v-if="profileIsPublic" class="flex items-center justify-end gap-3">
                 <label for="media-list-visibility-toggle" class="text-sm">Public media list</label>
-                <ToggleSwitch v-model="profileMediaListIsPublic" input-id="media-list-visibility-toggle" :disabled="isUpdatingMediaListVisibility" @change="toggleMediaListVisibility" />
+                <ToggleSwitch
+                  v-model="profileMediaListIsPublic"
+                  input-id="media-list-visibility-toggle"
+                  :disabled="isUpdatingMediaListVisibility"
+                  @change="toggleMediaListVisibility"
+                />
               </div>
             </div>
           </div>

@@ -20,10 +20,7 @@ interface ProgressiveListOptions<T> {
  * Infinity), so there is no hydration mismatch and the first paint is unchanged.
  * Chunking only kicks in for client-side list changes after mount.
  */
-export function useProgressiveList<T>(
-  source: Ref<T[] | null | undefined> | ComputedRef<T[] | null | undefined>,
-  options: ProgressiveListOptions<T> = {},
-) {
+export function useProgressiveList<T>(source: Ref<T[] | null | undefined> | ComputedRef<T[] | null | undefined>, options: ProgressiveListOptions<T> = {}) {
   const initial = options.initial ?? 12;
   const batch = options.batch ?? 8;
   const keyOf = options.keyOf;

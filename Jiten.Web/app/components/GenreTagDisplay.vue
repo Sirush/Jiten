@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
   import Tag from 'primevue/tag';
-  import { Genre, type TagWithPercentage } from '~/types';
+  import type { Genre, TagWithPercentage } from '~/types';
   import { getGenreText } from '~/utils/genreMapper';
 
   interface Props {
@@ -210,7 +210,7 @@
     >
       <span class="flex items-center gap-1">
         {{ expanded ? 'Less' : `+${hiddenCount}` }}
-        <i :class="['pi text-[10px]', expanded ? 'pi-chevron-up' : 'pi-chevron-down']"></i>
+        <i :class="['pi text-[10px]', expanded ? 'pi-chevron-up' : 'pi-chevron-down']" />
       </span>
     </Tag>
   </div>

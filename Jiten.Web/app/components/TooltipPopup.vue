@@ -93,47 +93,42 @@
   const arrowY = computed(() => middlewareData.value.arrow?.y);
 
   const arrowStyle = computed(() => {
-    const side = computedPlacement.value.split('-')[0]
+    const side = computedPlacement.value.split('-')[0];
     switch (side) {
       case 'top':
-        return { bottom: '-6px' }
+        return { bottom: '-6px' };
       case 'bottom':
-        return { top: '-6px' }
+        return { top: '-6px' };
       case 'left':
-        return { right: '-6px' }
+        return { right: '-6px' };
       case 'right':
-        return { left: '-6px' }
+        return { left: '-6px' };
       default:
-        return {}
+        return {};
     }
-  })
+  });
 
   const arrowClasses = computed(() => {
-    const side = computedPlacement.value.split('-')[0]
-    const baseColor = 'border-gray-900 dark:border-gray-800'
+    const side = computedPlacement.value.split('-')[0];
+    const baseColor = 'border-gray-900 dark:border-gray-800';
 
     switch (side) {
       case 'bottom':
-        return `${baseColor} border-b-8 border-x-8 border-x-transparent border-b-gray-900 dark:border-b-gray-800 top-0`
+        return `${baseColor} border-b-8 border-x-8 border-x-transparent border-b-gray-900 dark:border-b-gray-800 top-0`;
       case 'top':
-        return `${baseColor} border-t-8 border-x-8 border-x-transparent border-t-gray-900 dark:border-t-gray-800 bottom-0`
+        return `${baseColor} border-t-8 border-x-8 border-x-transparent border-t-gray-900 dark:border-t-gray-800 bottom-0`;
       case 'right':
-        return `${baseColor} border-r-8 border-y-8 border-y-transparent border-r-gray-900 dark:border-r-gray-800 left-0`
+        return `${baseColor} border-r-8 border-y-8 border-y-transparent border-r-gray-900 dark:border-r-gray-800 left-0`;
       case 'left':
-        return `${baseColor} border-l-8 border-y-8 border-y-transparent border-l-gray-900 dark:border-l-gray-800 right-0`
+        return `${baseColor} border-l-8 border-y-8 border-y-transparent border-l-gray-900 dark:border-l-gray-800 right-0`;
       default:
-        return ''
+        return '';
     }
-  })
+  });
 
   // Mobile dismissal: tapping outside the trigger or popup closes it.
   const handleClickOutside = (e: Event) => {
-    if (
-      props.referenceEl &&
-      floatingRef.value &&
-      !props.referenceEl.contains(e.target as Node) &&
-      !floatingRef.value.contains(e.target as Node)
-    ) {
+    if (props.referenceEl && floatingRef.value && !props.referenceEl.contains(e.target as Node) && !floatingRef.value.contains(e.target as Node)) {
       emit('requestHide');
     }
   };

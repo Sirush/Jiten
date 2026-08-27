@@ -12,7 +12,7 @@
   import type { MediaRequestDto } from '~/types/types';
   import { MediaType } from '~/types';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
-  import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { getLinkLabel } from '~/utils/linkTypeMapper';
   import SearchDialog from '~/components/dashboard/SearchDialog.vue';
   import CoverImageField from '~/components/dashboard/CoverImageField.vue';
 
@@ -287,8 +287,7 @@
 
       if (filled.length) showToast('success', 'Pasted from Amazon', `Filled ${filled.join(' and ')}.`);
       else showToast('warn', 'Pasted from Amazon', 'The copied data was empty.');
-    } catch {
-    }
+    } catch {}
   }
 
   onMounted(() => window.addEventListener('paste', handleAmazonPaste));
@@ -604,8 +603,9 @@
                       target="_blank"
                       rel="noopener noreferrer"
                       class="text-sm text-primary underline"
-                      >{{ getLinkTypeText(link.linkType) }}</a
                     >
+                      {{ getLinkLabel(link) }}
+                    </a>
                   </div>
                 </div>
                 <div class="mb-4">

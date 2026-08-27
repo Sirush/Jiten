@@ -52,12 +52,7 @@
 
 <template>
   <span>
-    <button
-      type="button"
-      aria-label="Share"
-      class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-      @click="toggle"
-    >
+    <button type="button" aria-label="Share" class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer" @click="toggle">
       <i class="pi pi-share-alt text-surface-400 hover:text-primary transition-colors" />
     </button>
     <Popover ref="op">

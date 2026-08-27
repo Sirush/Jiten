@@ -107,8 +107,8 @@
       <div class="jp-card border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
         <h2 class="jp-card__name text-gray-900 dark:text-white">Monthly</h2>
         <div class="jp-card__price">
-          <span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.monthlyEur }}</span
-          ><span class="jp-card__period text-gray-500 dark:text-gray-400">/ month</span>
+          <span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.monthlyEur }}</span>
+          <span class="jp-card__period text-gray-500 dark:text-gray-400">/ month</span>
         </div>
         <p class="jp-card__blurb text-gray-600 dark:text-gray-300">Stay flexible. Cancel anytime.</p>
         <ul class="jp-card__notes text-gray-600 dark:text-gray-300">
@@ -133,8 +133,8 @@
         <span class="jp-card__ribbon">Best value · 2 months free</span>
         <h2 class="jp-card__name text-gray-900 dark:text-white">Yearly</h2>
         <div class="jp-card__price">
-          <span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.yearlyEur }}</span
-          ><span class="jp-card__period text-gray-500 dark:text-gray-400">/ year</span>
+          <span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.yearlyEur }}</span>
+          <span class="jp-card__period text-gray-500 dark:text-gray-400">/ year</span>
         </div>
         <p class="jp-card__blurb text-gray-600 dark:text-gray-300">A full year for the price of 10 months.</p>
         <ul class="jp-card__notes text-gray-600 dark:text-gray-300">
@@ -163,8 +163,8 @@
         <span v-if="showLifetimeNotice" class="jp-card__ribbon jp-card__ribbon--amber">Limited offer · until {{ lifetimeWindowEndLabel }}</span>
         <h2 class="jp-card__name text-gray-900 dark:text-white">Lifetime</h2>
         <div class="jp-card__price">
-          <span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.lifetimeEur }}</span
-          ><span class="jp-card__period text-gray-500 dark:text-gray-400">once</span>
+          <span class="jp-card__amount text-primary-600 dark:text-primary-300">€{{ JITEN_PLUS_PRICES.lifetimeEur }}</span>
+          <span class="jp-card__period text-gray-500 dark:text-gray-400">once</span>
         </div>
         <p class="jp-card__blurb text-gray-600 dark:text-gray-300">Pay once, access Jiten+ forever.</p>
 
@@ -203,8 +203,9 @@
         <label for="cgv-consent" class="cursor-pointer select-none">
           I have read and accept the
           <NuxtLink to="/cgv" target="_blank" class="underline hover:text-primary-600 dark:hover:text-primary-400">Terms of Sale</NuxtLink>
-          <template v-if="legal.cgvVersion"> (version {{ legal.cgvVersion }})</template>
-          — <NuxtLink to="/cgv-fr" target="_blank" class="underline hover:text-primary-600 dark:hover:text-primary-400">version française</NuxtLink>
+          <template v-if="legal.cgvVersion">(version {{ legal.cgvVersion }})</template>
+          —
+          <NuxtLink to="/cgv-fr" target="_blank" class="underline hover:text-primary-600 dark:hover:text-primary-400">version française</NuxtLink>
         </label>
       </div>
       <Button

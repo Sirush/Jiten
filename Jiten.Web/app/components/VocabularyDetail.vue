@@ -1,5 +1,14 @@
 <script setup lang="ts">
-  import { KnownState, type DerivationCoverDto, type ExampleSentence, type ExampleSentencesByDifficultyResponse, type MediaType, type UserExampleSentenceDto, type Word, type WordFrequencyRanks } from '~/types';
+  import {
+    KnownState,
+    type DerivationCoverDto,
+    type ExampleSentence,
+    type ExampleSentencesByDifficultyResponse,
+    type MediaType,
+    type UserExampleSentenceDto,
+    type Word,
+    type WordFrequencyRanks,
+  } from '~/types';
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
@@ -45,7 +54,11 @@
   const freqRanksUrl = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}/frequency-ranks`);
 
   const { data: response, refresh: refreshInfo } = useApiFetch<Word>(infoUrl, { watch: false });
-  const { data: mediaFrequency, status: mediaFreqStatus, refresh: refreshMediaFrequency } = useApiFetch<Record<string, number>>(mediaFreqUrl, { lazy: true, watch: false });
+  const {
+    data: mediaFrequency,
+    status: mediaFreqStatus,
+    refresh: refreshMediaFrequency,
+  } = useApiFetch<Record<string, number>>(mediaFreqUrl, { lazy: true, watch: false });
   const { data: fetchedKnownStates, refresh: refreshKnownStates } = useApiFetch<KnownState[]>(knownStateUrl, { lazy: true, watch: false });
   const { data: frequencyRanks, refresh: refreshFrequencyRanks } = useApiFetch<WordFrequencyRanks>(freqRanksUrl, { lazy: true, watch: false });
 
@@ -82,32 +95,50 @@
         return;
       }
       try {
-        derivationCover.value = await $api<DerivationCoverDto | null>(
-          `vocabulary/${wordId}/${readingIndex}/derivation-cover`,
-        );
+        derivationCover.value = await $api<DerivationCoverDto | null>(`vocabulary/${wordId}/${readingIndex}/derivation-cover`);
       } catch {
         derivationCover.value = null;
       }
     },
-    { immediate: true },
+    { immediate: true }
   );
 
   const { resolvedGroups } = useDictionaryDefinitions(
     computed(() => word.value?.mainReading?.text),
-    computed(() => word.value?.definitions),
+    computed(() => word.value?.definitions)
   );
 
   const sortedReadings = computed(() => {
-    return word.value?.alternativeReadings.sort((a, b) => b.frequencyPercentage - a.frequencyPercentage) || [];
+    return [...(word.value?.alternativeReadings ?? [])].sort((a, b) => b.frequencyPercentage - a.frequencyPercentage);
   });
 
-  const mediaReadings = computed(() => toMediaReadings(word.value?.alternativeReadings));
+  const mediaReadings = computed(() => toMediaReadings(sortedReadings.value));
 
   const LANG_NAMES: Record<string, string> = {
-    eng: 'English', por: 'Portuguese', dut: 'Dutch', fre: 'French', ger: 'German', ita: 'Italian',
-    spa: 'Spanish', rus: 'Russian', chi: 'Chinese', kor: 'Korean', lat: 'Latin', gre: 'Greek',
-    ara: 'Arabic', heb: 'Hebrew', san: 'Sanskrit', tha: 'Thai', vie: 'Vietnamese', tur: 'Turkish',
-    pol: 'Polish', swe: 'Swedish', nor: 'Norwegian', hun: 'Hungarian', haw: 'Hawaiian', afr: 'Afrikaans',
+    eng: 'English',
+    por: 'Portuguese',
+    dut: 'Dutch',
+    fre: 'French',
+    ger: 'German',
+    ita: 'Italian',
+    spa: 'Spanish',
+    rus: 'Russian',
+    chi: 'Chinese',
+    kor: 'Korean',
+    lat: 'Latin',
+    gre: 'Greek',
+    ara: 'Arabic',
+    heb: 'Hebrew',
+    san: 'Sanskrit',
+    tha: 'Thai',
+    vie: 'Vietnamese',
+    tur: 'Turkish',
+    pol: 'Polish',
+    swe: 'Swedish',
+    nor: 'Norwegian',
+    hun: 'Hungarian',
+    haw: 'Hawaiian',
+    afr: 'Afrikaans',
   };
   const langName = (code: string) => LANG_NAMES[code] ?? code;
 
@@ -224,15 +255,13 @@
   async function loadCustomSentences() {
     if (!authStore.isAuthenticated) return;
     try {
-      customSentences.value = await $api<UserExampleSentenceDto[]>(
-        `user/example-sentences/${props.wordId}/${currentReadingIndex.value}`,
-      );
+      customSentences.value = await $api<UserExampleSentenceDto[]>(`user/example-sentences/${props.wordId}/${currentReadingIndex.value}`);
     } catch {
       customSentences.value = [];
     }
   }
 
-  const customSentenceTexts = computed(() => customSentences.value.map(s => s.text));
+  const customSentenceTexts = computed(() => customSentences.value.map((s) => s.text));
 
   const exampleSentences = ref<ExampleSentence[]>([]);
   const canLoadExampleSentences = ref(true);
@@ -317,7 +346,7 @@
     try {
       const results = await $api<ExampleSentencesByDifficultyResponse>(
         `${url}?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}`,
-        { method: 'POST', body: alreadyLoaded },
+        { method: 'POST', body: alreadyLoaded }
       );
 
       if (results.sentences.length > 0) {
@@ -377,12 +406,17 @@
             </div>
           </div>
 
-          <div v-if="(word.languageSources && word.languageSources.length > 0) || (word.entryInfo && word.entryInfo.length > 0)" class="flex flex-wrap items-center gap-2">
+          <div
+            v-if="(word.languageSources && word.languageSources.length > 0) || (word.entryInfo && word.entryInfo.length > 0)"
+            class="flex flex-wrap items-center gap-2"
+          >
             <span
               v-if="hasWasei"
               class="inline-block rounded-full px-2 py-0.5 text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
               title="Japanese-made — constructed in Japanese from foreign words, not a real foreign phrase"
-            >和製 wasei</span>
+            >
+              和製 wasei
+            </span>
             <span v-if="etymologyLine" class="text-sm text-gray-500 dark:text-gray-400">{{ etymologyLine }}</span>
             <div v-for="(note, i) in word.entryInfo" :key="'ei' + i" class="w-full text-sm italic text-gray-500 dark:text-gray-400">
               {{ note }}
@@ -393,9 +427,21 @@
             <h1 class="text-gray-500 dark:text-gray-300 text-sm">Meanings</h1>
             <div class="pl-2">
               <ClientOnly>
-                <VocabularyDictionaryDefinitions :resolved-groups="resolvedGroups" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" :word-id="props.wordId" />
+                <VocabularyDictionaryDefinitions
+                  :resolved-groups="resolvedGroups"
+                  :is-compact="false"
+                  :current-reading-index="currentReadingIndex"
+                  :readings="word.alternativeReadings"
+                  :word-id="props.wordId"
+                />
                 <template #fallback>
-                  <VocabularyDefinitions :definitions="word.definitions" :is-compact="false" :current-reading-index="currentReadingIndex" :readings="word.alternativeReadings" :word-id="props.wordId" />
+                  <VocabularyDefinitions
+                    :definitions="word.definitions"
+                    :is-compact="false"
+                    :current-reading-index="currentReadingIndex"
+                    :readings="word.alternativeReadings"
+                    :word-id="props.wordId"
+                  />
                 </template>
               </ClientOnly>
               <HiddenDefinitionsToggle :word-id="props.wordId" class="mt-2" />
@@ -459,7 +505,8 @@
             </div>
           </div>
           <div class="md:text-right pt-4 cursor-pointer" @click="selectMediaType(null)">
-            Appears in <b>{{ word.mainReading.usedInMediaAmount }} media</b>
+            Appears in
+            <b>{{ word.mainReading.usedInMediaAmount }} media</b>
             ({{ totalMediaCount > 0 ? ((word.mainReading.usedInMediaAmount / totalMediaCount) * 100).toFixed(0) : '0' }}%)
           </div>
           <ClientOnly>
@@ -532,8 +579,8 @@
                   >
                     <template #value="{ value }">
                       <div class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
-                        <i :class="sortModeOptions.find(o => o.value === value)?.icon" class="text-xs" />
-                        <span>{{ sortModeOptions.find(o => o.value === value)?.label }}</span>
+                        <i :class="sortModeOptions.find((o) => o.value === value)?.icon" class="text-xs" />
+                        <span>{{ sortModeOptions.find((o) => o.value === value)?.label }}</span>
                       </div>
                     </template>
                     <template #option="{ option }">
@@ -548,14 +595,30 @@
               <AccordionContent>
                 <div v-if="exampleSentences.length > 0" class="text-xs pb-2">
                   Quotations belong to their original creators and are presented here for educational purposes only, as per the
-                  <NuxtLink :to="`/terms`" target="_blank" class="hover:underline text-primary-600"> terms of service.</NuxtLink>
+                  <NuxtLink :to="`/terms`" target="_blank" class="hover:underline text-primary-600">terms of service.</NuxtLink>
                 </div>
                 <template v-if="customSentences.length > 0">
-                  <CustomExampleSentenceEntry v-for="sentence in customSentences" :key="`custom-${sentence.userExampleSentenceId}`" :sentence="sentence" editable @changed="loadCustomSentences()" />
+                  <CustomExampleSentenceEntry
+                    v-for="sentence in customSentences"
+                    :key="`custom-${sentence.userExampleSentenceId}`"
+                    :sentence="sentence"
+                    editable
+                    @changed="loadCustomSentences()"
+                  />
                   <div v-if="exampleSentences.length > 0" class="border-b border-surface-200 dark:border-surface-700 my-2" />
                 </template>
                 <template v-if="exampleSentences.length > 0">
-                  <ExampleSentenceEntry v-for="(exampleSentence, index) in exampleSentences" :key="index" :example-sentence="exampleSentence" :show-source="true" :word-id="props.wordId" :reading-index="currentReadingIndex" :at-limit="customSentences.length >= planLimits.customSentencesPerWord" :saved-texts="customSentenceTexts" @favourited="loadCustomSentences()" />
+                  <ExampleSentenceEntry
+                    v-for="(exampleSentence, index) in exampleSentences"
+                    :key="index"
+                    :example-sentence="exampleSentence"
+                    :show-source="true"
+                    :word-id="props.wordId"
+                    :reading-index="currentReadingIndex"
+                    :at-limit="customSentences.length >= planLimits.customSentencesPerWord"
+                    :saved-texts="customSentenceTexts"
+                    @favourited="loadCustomSentences()"
+                  />
                 </template>
                 <template v-else-if="isLoadingExampleSentences">
                   <div v-for="i in 3" :key="i" class="flex flex-col mb-2">
@@ -570,10 +633,16 @@
                 <template v-else-if="customSentences.length === 0">
                   <div class="text-sm text-surface-400 py-2">
                     No example sentences for this word.
-                    <NuxtLink v-if="authStore.isAuthenticated" :to="`/vocabulary/${props.wordId}/${currentReadingIndex}/custom-sentences`" class="text-primary-500 hover:underline">Add a custom one</NuxtLink>
+                    <NuxtLink
+                      v-if="authStore.isAuthenticated"
+                      :to="`/vocabulary/${props.wordId}/${currentReadingIndex}/custom-sentences`"
+                      class="text-primary-500 hover:underline"
+                    >
+                      Add a custom one
+                    </NuxtLink>
                   </div>
                 </template>
-                <Button v-if="exampleSentences.length > 0" @click="loadExampleSentences()" :disabled="!canLoadExampleSentences">Load more</Button>
+                <Button v-if="exampleSentences.length > 0" :disabled="!canLoadExampleSentences" @click="loadExampleSentences()">Load more</Button>
               </AccordionContent>
             </AccordionPanel>
           </Accordion>
@@ -584,7 +653,9 @@
         <AccordionPanel value="1">
           <AccordionHeader>
             <div class="cursor-pointer">
-              View the <b>{{ word.mainReading.usedInMediaAmount }}</b> media it appears in
+              View the
+              <b>{{ word.mainReading.usedInMediaAmount }}</b>
+              media it appears in
             </div>
           </AccordionHeader>
           <AccordionContent>

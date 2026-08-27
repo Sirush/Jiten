@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { useApiFetchPaginated } from '~/composables/useApiFetch';
-  import { type Deck, MediaType } from '~/types';
+  import type { Deck, MediaType } from '~/types';
   import Card from 'primevue/card';
   import Skeleton from 'primevue/skeleton';
   import Button from 'primevue/button';
@@ -126,18 +126,17 @@
     meta: [
       {
         name: 'description',
-        content: 'Here\'s the latest media added to Jiten',
+        content: "Here's the latest media added to Jiten",
       },
     ],
   });
 
-
   const previousLink = computed(() => {
-    return offset.value > 0 ? { query: { ...route.query, offset: offset.value -1 } } : null;
+    return offset.value > 0 ? { query: { ...route.query, offset: offset.value - 1 } } : null;
   });
 
   const nextLink = computed(() => {
-    return response.value?.data.length > 0 ? { query: { ...route.query, offset: offset.value+1 } } : null;
+    return response.value?.data.length > 0 ? { query: { ...route.query, offset: offset.value + 1 } } : null;
   });
 </script>
 
@@ -160,8 +159,12 @@
 
     <div v-else>
       <div class="flex gap-8 pl-2 mb-4">
-        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop"> Previous </NuxtLink>
-        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop"> Next </NuxtLink>
+        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop">
+          Previous
+        </NuxtLink>
+        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop">
+          Next
+        </NuxtLink>
       </div>
 
       <!-- Media updates grouped by day -->
@@ -185,7 +188,9 @@
               <!-- Media types with their respective items -->
               <div v-for="(typeDecks, mediaType) in groupDecksByMediaType(group.decks)" :key="mediaType" class="mb-4">
                 <div class="ml-4 mb-1">
-                  Added <strong>{{ typeDecks.length }}</strong> {{ getMediaTypeText(Number(mediaType)) }}{{ typeDecks.length > 1 ? 's' : '' }}:
+                  Added
+                  <strong>{{ typeDecks.length }}</strong>
+                  {{ getMediaTypeText(Number(mediaType)) }}{{ typeDecks.length > 1 ? 's' : '' }}:
                 </div>
 
                 <!-- Media list for this type -->
@@ -205,8 +210,12 @@
       <div v-else class="text-center py-8">No media updates found for this time period.</div>
 
       <div class="flex gap-8 pl-2 mt-4">
-        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop"> Previous </NuxtLink>
-        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop"> Next </NuxtLink>
+        <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop">
+          Previous
+        </NuxtLink>
+        <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop">
+          Next
+        </NuxtLink>
       </div>
     </div>
   </div>

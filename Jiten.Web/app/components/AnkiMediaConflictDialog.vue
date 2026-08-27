@@ -51,10 +51,14 @@
     }
   }
 
-  watch(current, conflict => {
-    if (conflict) loadIncoming(conflict);
-    else revokeIncoming();
-  }, { immediate: true });
+  watch(
+    current,
+    (conflict) => {
+      if (conflict) loadIncoming(conflict);
+      else revokeIncoming();
+    },
+    { immediate: true }
+  );
 
   onUnmounted(revokeIncoming);
 
@@ -101,9 +105,7 @@
             v-if="loadingIncoming"
             class="h-48 w-full animate-pulse rounded border border-surface-200 dark:border-surface-700 bg-surface-100 dark:bg-surface-800"
           />
-          <Message v-else-if="incomingFailed" severity="warn" :closable="false">
-            This file is missing from your Anki media folder.
-          </Message>
+          <Message v-else-if="incomingFailed" severity="warn" :closable="false">This file is missing from your Anki media folder.</Message>
           <template v-else-if="incomingUrl">
             <img
               v-if="current.kind === 'image'"
@@ -114,7 +116,8 @@
             <audio v-else :src="incomingUrl" controls class="w-full" />
           </template>
           <p v-if="incomingBytes !== null" class="text-xs text-surface-500 dark:text-surface-400">
-            {{ formatBytes(incomingBytes) }}<span v-if="current.kind === 'image'"> before Jiten re-compresses it</span>
+            {{ formatBytes(incomingBytes) }}
+            <span v-if="current.kind === 'image'">before Jiten re-compresses it</span>
           </p>
           <p class="text-xs text-surface-500 dark:text-surface-400 font-noto-sans break-all">{{ current.filename }}</p>
         </div>
@@ -131,9 +134,7 @@
           <Button label="Use Anki's for all remaining" severity="secondary" text size="small" @click="confirmingAll = 'anki'" />
         </template>
         <template v-else>
-          <span class="text-sm self-center">
-            Apply to all {{ conflicts.length }} remaining conflict{{ conflicts.length === 1 ? '' : 's' }}?
-          </span>
+          <span class="text-sm self-center">Apply to all {{ conflicts.length }} remaining conflict{{ conflicts.length === 1 ? '' : 's' }}?</span>
           <Button label="Confirm" size="small" @click="resolveAll(confirmingAll === 'anki')" />
           <Button label="Cancel" severity="secondary" text size="small" @click="confirmingAll = null" />
         </template>

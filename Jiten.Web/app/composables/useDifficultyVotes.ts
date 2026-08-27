@@ -1,5 +1,13 @@
-import type { ComparisonSuggestionDto, CompletedDecksResponse, DifficultyVoteDto, DifficultyRatingDto, VotingStatsDto, DeckSummaryDto, BlacklistedDeckDto } from '~/types/types';
-import { type ComparisonOutcome } from '~/types';
+import type {
+  ComparisonSuggestionDto,
+  CompletedDecksResponse,
+  DifficultyVoteDto,
+  DifficultyRatingDto,
+  VotingStatsDto,
+  DeckSummaryDto,
+  BlacklistedDeckDto,
+} from '~/types/types';
+import type { ComparisonOutcome } from '~/types';
 
 export function useDifficultyVotes() {
   const { $api } = useNuxtApp();
@@ -8,9 +16,11 @@ export function useDifficultyVotes() {
   const fetchSuggestions = async (deckId?: number): Promise<ComparisonSuggestionDto[]> => {
     error.value = null;
     try {
-      return await $api<ComparisonSuggestionDto[]>('difficulty-votes/suggestions', {
-        query: deckId ? { deckId } : undefined,
-      }) ?? [];
+      return (
+        (await $api<ComparisonSuggestionDto[]>('difficulty-votes/suggestions', {
+          query: deckId ? { deckId } : undefined,
+        })) ?? []
+      );
     } catch (e) {
       error.value = e as Error;
       return [];
@@ -20,7 +30,7 @@ export function useDifficultyVotes() {
   const fetchCompletedDecks = async (): Promise<CompletedDecksResponse> => {
     error.value = null;
     try {
-      return await $api<CompletedDecksResponse>('difficulty-votes/completed-decks') ?? { decks: [], votedPairs: [] };
+      return (await $api<CompletedDecksResponse>('difficulty-votes/completed-decks')) ?? { decks: [], votedPairs: [] };
     } catch (e) {
       error.value = e as Error;
       return { decks: [], votedPairs: [] };
@@ -30,7 +40,7 @@ export function useDifficultyVotes() {
   const fetchUnratedDecks = async (): Promise<DeckSummaryDto[]> => {
     error.value = null;
     try {
-      return await $api<DeckSummaryDto[]>('difficulty-votes/unrated-decks') ?? [];
+      return (await $api<DeckSummaryDto[]>('difficulty-votes/unrated-decks')) ?? [];
     } catch (e) {
       error.value = e as Error;
       return [];
@@ -75,11 +85,13 @@ export function useDifficultyVotes() {
     }
   };
 
-  const fetchMyVotes = async (params: {
-    type?: string;
-    offset?: number;
-    limit?: number;
-  } = {}): Promise<{ data: DifficultyVoteDto[]; totalItems: number } | null> => {
+  const fetchMyVotes = async (
+    params: {
+      type?: string;
+      offset?: number;
+      limit?: number;
+    } = {}
+  ): Promise<{ data: DifficultyVoteDto[]; totalItems: number } | null> => {
     error.value = null;
     try {
       return await $api<{ data: DifficultyVoteDto[]; totalItems: number }>('difficulty-votes/mine', {
@@ -152,10 +164,12 @@ export function useDifficultyVotes() {
     }
   };
 
-  const fetchMySkipped = async (params: {
-    offset?: number;
-    limit?: number;
-  } = {}): Promise<{ data: DifficultyVoteDto[]; totalItems: number } | null> => {
+  const fetchMySkipped = async (
+    params: {
+      offset?: number;
+      limit?: number;
+    } = {}
+  ): Promise<{ data: DifficultyVoteDto[]; totalItems: number } | null> => {
     return fetchMyVotes({ type: 'skipped', ...params });
   };
 
@@ -181,10 +195,12 @@ export function useDifficultyVotes() {
     }
   };
 
-  const fetchBlockedDecks = async (params: {
-    offset?: number;
-    limit?: number;
-  } = {}): Promise<{ data: BlacklistedDeckDto[]; totalItems: number } | null> => {
+  const fetchBlockedDecks = async (
+    params: {
+      offset?: number;
+      limit?: number;
+    } = {}
+  ): Promise<{ data: BlacklistedDeckDto[]; totalItems: number } | null> => {
     error.value = null;
     try {
       return await $api<{ data: BlacklistedDeckDto[]; totalItems: number }>('difficulty-votes/blacklist', {

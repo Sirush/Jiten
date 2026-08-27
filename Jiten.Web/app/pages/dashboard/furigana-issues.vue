@@ -161,13 +161,13 @@
       const wordId = editingWordId.value!;
       const updatedRubyTexts = { ...editingRubyTexts.value };
 
-      const updatedAllForms = editingForms.value.map(f => ({
+      const updatedAllForms = editingForms.value.map((f) => ({
         ...f,
         rubyText: updatedRubyTexts[f.readingIndex] ?? f.rubyText,
       }));
 
       let removedCount = 0;
-      items.value = items.value.filter(item => {
+      items.value = items.value.filter((item) => {
         if (item.wordId !== wordId) return true;
         const newRuby = updatedRubyTexts[item.readingIndex];
         if (newRuby !== undefined && newRuby.includes('[')) {
@@ -185,12 +185,12 @@
 
   function isKana(ch: string): boolean {
     const code = ch.charCodeAt(0);
-    return (code >= 0x3040 && code <= 0x309F) || (code >= 0x30A0 && code <= 0x30FF);
+    return (code >= 0x3040 && code <= 0x309f) || (code >= 0x30a0 && code <= 0x30ff);
   }
 
   function toHiragana(ch: string): string {
     const code = ch.charCodeAt(0);
-    if (code >= 0x30A1 && code <= 0x30F6) return String.fromCharCode(code - 0x60);
+    if (code >= 0x30a1 && code <= 0x30f6) return String.fromCharCode(code - 0x60);
     return ch;
   }
 
@@ -203,15 +203,14 @@
     const kana = [...kanaText];
 
     let prefixKana = 0;
-    while (prefixKana < chars.length && prefixKana < kana.length && isKana(chars[prefixKana]) && kanaEqual(chars[prefixKana], kana[prefixKana]))
-      prefixKana++;
+    while (prefixKana < chars.length && prefixKana < kana.length && isKana(chars[prefixKana]) && kanaEqual(chars[prefixKana], kana[prefixKana])) prefixKana++;
 
     let suffixKana = 0;
     while (
-      suffixKana < chars.length - prefixKana
-      && suffixKana < kana.length - prefixKana
-      && isKana(chars[chars.length - 1 - suffixKana])
-      && kanaEqual(chars[chars.length - 1 - suffixKana], kana[kana.length - 1 - suffixKana])
+      suffixKana < chars.length - prefixKana &&
+      suffixKana < kana.length - prefixKana &&
+      isKana(chars[chars.length - 1 - suffixKana]) &&
+      kanaEqual(chars[chars.length - 1 - suffixKana], kana[kana.length - 1 - suffixKana])
     )
       suffixKana++;
 
@@ -234,7 +233,7 @@
 
     if (kanjiRuns.length === 0) return null;
 
-    if (kanjiRuns.length === 1 && midKanji.every(ch => !isKana(ch))) {
+    if (kanjiRuns.length === 1 && midKanji.every((ch) => !isKana(ch))) {
       const prefix = chars.slice(0, prefixKana).join('');
       const suffix = chars.slice(chars.length - suffixKana).join('');
       const kanjiPart = midKanji.join('');
@@ -259,17 +258,20 @@
     for (const sep of kanaSegments) {
       const normalizedSep = [...sep].map(toHiragana).join('');
       const idx = remaining.indexOf(normalizedSep);
-      if (idx === -1) { valid = false; break; }
+      if (idx === -1) {
+        valid = false;
+        break;
+      }
       parts.push(remaining.slice(0, idx));
       remaining = remaining.slice(idx + normalizedSep.length);
     }
     if (valid) parts.push(remaining);
 
     if (!valid || parts.length !== kanjiRuns.length) return null;
-    if (parts.some(p => p.length === 0)) return null;
+    if (parts.some((p) => p.length === 0)) return null;
 
     let result = chars.slice(0, prefixKana).join('');
-    let midIdx = 0;
+    const midIdx = 0;
     let runIdx = 0;
     for (let j = 0; j < midKanji.length; j++) {
       if (!isKana(midKanji[j])) {
@@ -289,10 +291,10 @@
 
   function findBestGuess(form: WordFormSummary): string | null {
     if (form.formType !== 0) return null;
-    const kanaForms = editingForms.value.filter(f => f.formType === 1);
+    const kanaForms = editingForms.value.filter((f) => f.formType === 1);
     if (kanaForms.length === 0) return null;
 
-    const sameIndex = kanaForms.find(f => f.readingIndex === form.readingIndex);
+    const sameIndex = kanaForms.find((f) => f.readingIndex === form.readingIndex);
     if (sameIndex) {
       const guess = guessRubyText(form.text, sameIndex.text);
       if (guess) return guess;
@@ -324,7 +326,7 @@
   }
 
   const canAutoFillAny = computed(() =>
-    editingForms.value.some(f => f.formType === 0 && !editingRubyTexts.value[f.readingIndex]?.includes('[') && canAutoFill(f)),
+    editingForms.value.some((f) => f.formType === 0 && !editingRubyTexts.value[f.readingIndex]?.includes('[') && canAutoFill(f))
   );
 
   function getFormTypeLabel(formType: number) {
@@ -347,23 +349,9 @@
 
     <!-- Stats -->
     <div class="mb-4 flex items-center gap-4">
-      <Tag severity="warn" class="text-base px-3 py-1">
-        {{ totalCount }} kanji forms missing furigana
-      </Tag>
-      <InputText
-        v-model="searchQuery"
-        placeholder="Search by kanji text..."
-        class="w-64"
-        @input="debouncedSearch"
-      />
-      <Select
-        v-model="sortBy"
-        :options="sortOptions"
-        optionLabel="label"
-        optionValue="value"
-        class="w-48"
-        @change="onSortChange"
-      />
+      <Tag severity="warn" class="text-base px-3 py-1">{{ totalCount }} kanji forms missing furigana</Tag>
+      <InputText v-model="searchQuery" placeholder="Search by kanji text..." class="w-64" @input="debouncedSearch" />
+      <Select v-model="sortBy" :options="sortOptions" option-label="label" option-value="value" class="w-48" @change="onSortChange" />
     </div>
 
     <!-- Loading -->
@@ -380,10 +368,10 @@
       :lazy="true"
       :paginator="true"
       :rows="rowsPerPage"
-      :totalRecords="totalCount"
-      :rowsPerPageOptions="[25, 50, 100]"
+      :total-records="totalCount"
+      :rows-per-page-options="[25, 50, 100]"
       :first="currentPage * rowsPerPage"
-      stripedRows
+      striped-rows
       class="shadow-md"
       @page="onPage"
     >
@@ -402,11 +390,7 @@
       <Column header="All Forms" style="min-width: 250px">
         <template #body="{ data }">
           <div class="flex flex-wrap gap-1">
-            <Tag
-              v-for="form in data.allForms"
-              :key="form.readingIndex"
-              :severity="getFormTypeSeverity(form.formType)"
-            >
+            <Tag v-for="form in data.allForms" :key="form.readingIndex" :severity="getFormTypeSeverity(form.formType)">
               {{ form.text }}
               <span v-if="form.rubyText" class="ml-1 opacity-70">({{ form.rubyText }})</span>
             </Tag>
@@ -432,30 +416,14 @@
     </DataTable>
 
     <!-- Edit Dialog -->
-    <Dialog
-      v-model:visible="showEditDialog"
-      :header="`Edit Furigana — Word ${editingWordId}`"
-      :modal="true"
-      class="w-full md:w-2/3 lg:w-1/2"
-    >
+    <Dialog v-model:visible="showEditDialog" :header="`Edit Furigana — Word ${editingWordId}`" :modal="true" class="w-full md:w-2/3 lg:w-1/2">
       <div class="mb-4 flex items-center justify-between">
         <span class="text-sm text-gray-500 dark:text-gray-400">POS: {{ editingPartsOfSpeech.join(', ') }}</span>
-        <Button
-          v-if="canAutoFillAny"
-          label="Auto-fill All"
-          icon="pi pi-sparkles"
-          size="small"
-          severity="help"
-          @click="autoFillAll"
-        />
+        <Button v-if="canAutoFillAny" label="Auto-fill All" icon="pi pi-sparkles" size="small" severity="help" @click="autoFillAll" />
       </div>
 
       <div class="flex flex-col gap-4">
-        <div
-          v-for="form in editingForms"
-          :key="form.readingIndex"
-          class="border rounded-lg p-3"
-        >
+        <div v-for="form in editingForms" :key="form.readingIndex" class="border rounded-lg p-3">
           <div class="flex items-center gap-3 mb-2">
             <Tag :severity="getFormTypeSeverity(form.formType)">
               {{ getFormTypeLabel(form.formType) }}
@@ -466,24 +434,17 @@
           <div>
             <label class="block text-sm font-medium mb-1">Ruby Text</label>
             <div class="flex gap-2">
-              <InputText
-                v-model="editingRubyTexts[form.readingIndex]"
-                :placeholder="`e.g. ${form.text}`"
-                class="w-full"
-              />
+              <InputText v-model="editingRubyTexts[form.readingIndex]" :placeholder="`e.g. ${form.text}`" class="w-full" />
               <Button
                 v-if="canAutoFill(form)"
+                v-tooltip.top="'Guess furigana from kana form'"
                 icon="pi pi-sparkles"
                 size="small"
                 severity="help"
-                v-tooltip.top="'Guess furigana from kana form'"
                 @click="autoFillRubyText(form)"
               />
             </div>
-            <div
-              v-if="editingRubyTexts[form.readingIndex] !== originalRubyTexts[form.readingIndex]"
-              class="text-xs mt-1 text-orange-500"
-            >
+            <div v-if="editingRubyTexts[form.readingIndex] !== originalRubyTexts[form.readingIndex]" class="text-xs mt-1 text-orange-500">
               Changed from: "{{ originalRubyTexts[form.readingIndex] || '(empty)' }}"
             </div>
           </div>
@@ -492,13 +453,7 @@
 
       <template #footer>
         <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showEditDialog = false" />
-        <Button
-          label="Save Changes"
-          icon="pi pi-check"
-          :loading="saving"
-          :disabled="!hasChanges || saving"
-          @click="saveChanges"
-        />
+        <Button label="Save Changes" icon="pi pi-check" :loading="saving" :disabled="!hasChanges || saving" @click="saveChanges" />
       </template>
     </Dialog>
   </div>

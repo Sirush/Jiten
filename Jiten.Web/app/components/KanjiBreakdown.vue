@@ -19,14 +19,11 @@
     },
   });
 
-  const { data: kanjis, status } = useApiFetch<KanjiList[]>(
-    () => `vocabulary/${props.wordId}/${props.readingIndex}/kanji`
-  );
+  const { data: kanjis, status } = useApiFetch<KanjiList[]>(() => `vocabulary/${props.wordId}/${props.readingIndex}/kanji`);
 
   const { kanjiScale } = storeToRefs(useJitenStore());
 
-  const scaleLabel = (kanji: KanjiList) =>
-    kanjiScale.value === 'none' ? null : kanjiScaleMembership(kanji.character, kanjiScale.value, kanji.grade);
+  const scaleLabel = (kanji: KanjiList) => (kanjiScale.value === 'none' ? null : kanjiScaleMembership(kanji.character, kanjiScale.value, kanji.grade));
 
   // On touch devices the hover tooltip is unreachable, so the first tap reveals it
   // and only a second tap follows the link.
@@ -54,9 +51,7 @@
       >
         <span class="text-2xl font-medium" lang="ja">{{ kanji.character }}</span>
         <div class="flex flex-col text-xs">
-          <span class="text-surface-600 dark:text-surface-400 text-[10px]">
-            {{ kanji.strokeCount }} strokes
-          </span>
+          <span class="text-surface-600 dark:text-surface-400 text-[10px]">{{ kanji.strokeCount }} strokes</span>
           <span v-if="kanji.meanings?.length" class="text-surface-700 dark:text-surface-300 text-sm max-w-[10rem] truncate">
             {{ kanji.meanings[0] }}
           </span>
@@ -71,7 +66,7 @@
           :class="{ 'opacity-100': activeKanji === kanji.character }"
         >
           {{ kanji.meanings.slice(0, 3).join(', ') }}
-          <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-surface-800 dark:border-t-surface-100"></div>
+          <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-surface-800 dark:border-t-surface-100" />
         </div>
       </NuxtLink>
     </div>

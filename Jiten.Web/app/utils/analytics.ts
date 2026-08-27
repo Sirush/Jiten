@@ -2,8 +2,7 @@ export function trackEvent(name: string, data?: Record<string, string | number |
   if (import.meta.server) return;
   try {
     umTrackEvent(name, data);
-  } catch {
-  }
+  } catch {}
 }
 
 const ACTIVATION_KEY = 'jiten.activated';

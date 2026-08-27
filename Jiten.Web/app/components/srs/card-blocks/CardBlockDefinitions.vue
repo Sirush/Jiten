@@ -26,12 +26,14 @@
     const hidden = new Set(hiddenFor(wordId.value));
     const showAll = isEditing(wordId.value);
     let previousPos: string | null = null;
-    return (card.value?.definitions ?? []).filter((def) => showAll || !hidden.has(def.index)).map((def) => {
-      const posKey = JSON.stringify(def.partsOfSpeech);
-      const showPos = def.partsOfSpeech.length > 0 && posKey !== previousPos;
-      previousPos = posKey;
-      return { ...def, showPos };
-    });
+    return (card.value?.definitions ?? [])
+      .filter((def) => showAll || !hidden.has(def.index))
+      .map((def) => {
+        const posKey = JSON.stringify(def.partsOfSpeech);
+        const showPos = def.partsOfSpeech.length > 0 && posKey !== previousPos;
+        previousPos = posKey;
+        return { ...def, showPos };
+      });
   });
 
   // Client-side "Show N more" for the pre-load fallback list; resets whenever the card changes.
@@ -70,7 +72,10 @@
       <div class="flex flex-wrap gap-1 mt-2 mb-0.5">
         <span class="pos-badge pos-blue">{{ sample!.pos }}</span>
       </div>
-      <div v-for="(def, i) in visiblePreview" :key="i"><span class="text-gray-400">{{ i + 1 }}.</span> {{ def }}</div>
+      <div v-for="(def, i) in visiblePreview" :key="i">
+        <span class="text-gray-400">{{ i + 1 }}.</span>
+        {{ def }}
+      </div>
       <button
         v-if="previewHiddenCount > 0"
         type="button"
@@ -115,7 +120,8 @@
             </Tooltip>
           </div>
           <div>
-            <span class="text-gray-400">{{ def.index }}.</span> {{ def.meanings.join('; ') }}
+            <span class="text-gray-400">{{ def.index }}.</span>
+            {{ def.meanings.join('; ') }}
           </div>
         </div>
         <button

@@ -98,7 +98,12 @@
 </script>
 
 <template>
-  <Popover ref="settings" :pt="{ root: { class: 'w-[90vw] max-w-sm md:w-auto' }, content: { class: 'p-3 md:p-4 max-h-[80vh] overflow-y-auto' } }" @mouseenter="onSettingsMouseEnter" @mouseleave="onSettingsMouseLeave">
+  <Popover
+    ref="settings"
+    :pt="{ root: { class: 'w-[90vw] max-w-sm md:w-auto' }, content: { class: 'p-3 md:p-4 max-h-[80vh] overflow-y-auto' } }"
+    @mouseenter="onSettingsMouseEnter"
+    @mouseleave="onSettingsMouseLeave"
+  >
     <div class="flex flex-col gap-2">
       <div class="flex justify-between items-center mb-2">
         <span class="font-semibold text-base">Display Settings</span>

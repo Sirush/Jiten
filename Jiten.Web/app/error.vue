@@ -10,9 +10,11 @@
   const isNotFound = computed(() => Number(props.error?.statusCode) === 404);
 
   const heading = computed(() => (isNotFound.value ? 'Page not found' : 'Something went wrong'));
-  const message = computed(() => (isNotFound.value
-    ? "This page doesn't exist, or the media it pointed to has been removed."
-    : 'An unexpected error occurred. Trying again in a moment usually helps.'));
+  const message = computed(() =>
+    isNotFound.value
+      ? "This page doesn't exist, or the media it pointed to has been removed."
+      : 'An unexpected error occurred. Trying again in a moment usually helps.'
+  );
 
   // Not useRobotsRule: it throws here (nuxt-robots has no per-route context on the error render), and
   // an uncaught throw in this setup silently blanks every binding in the template.
@@ -41,10 +43,7 @@
 
       <div class="mt-8 flex flex-wrap justify-center gap-3">
         <!-- Global anchor colouring overrides plain text-white, hence the ! utilities (as in AppFooter). -->
-        <NuxtLink
-          to="/"
-          class="bg-primary-500 hover:bg-primary-600 !text-white !no-underline rounded-md px-4 py-2 text-sm font-medium transition-colors"
-        >
+        <NuxtLink to="/" class="bg-primary-500 hover:bg-primary-600 !text-white !no-underline rounded-md px-4 py-2 text-sm font-medium transition-colors">
           Back to Jiten
         </NuxtLink>
         <NuxtLink

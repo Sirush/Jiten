@@ -75,8 +75,7 @@
   const isAllCaughtUp = computed(() => {
     if (!forecast.value) return false;
     const f = forecast.value;
-    if (f.dayBoundaryScheduling)
-      return f.dueWithinHour === 0 && f.dueToday === 0 && f.dueTomorrow === 0;
+    if (f.dayBoundaryScheduling) return f.dueWithinHour === 0 && f.dueToday === 0 && f.dueTomorrow === 0;
     return f.dueWithinHour === 0 && f.dueToday === 0;
   });
 
@@ -112,20 +111,13 @@
   const streakMessage = computed(() => {
     if (!streak.value || streak.value.currentStreak === 0) return null;
     const s = streak.value;
-    if (s.isNewRecord && s.currentStreak > 1)
-      return `New personal best! ${s.currentStreak} days and counting.`;
-    if (s.currentStreak >= 365)
-      return `${s.currentStreak} days. A full year of dedication — incredible.`;
-    if (s.currentStreak >= 100)
-      return `${s.currentStreak} days strong. Triple digits!`;
-    if (s.currentStreak >= 30)
-      return `${s.currentStreak} day streak. A whole month of consistency!`;
-    if (s.currentStreak >= 14)
-      return `${s.currentStreak} days in a row — you're building a real habit.`;
-    if (s.currentStreak >= 7)
-      return `${s.currentStreak} day streak! One full week down.`;
-    if (s.currentStreak >= 3)
-      return `${s.currentStreak} days in a row. Keep it going!`;
+    if (s.isNewRecord && s.currentStreak > 1) return `New personal best! ${s.currentStreak} days and counting.`;
+    if (s.currentStreak >= 365) return `${s.currentStreak} days. A full year of dedication — incredible.`;
+    if (s.currentStreak >= 100) return `${s.currentStreak} days strong. Triple digits!`;
+    if (s.currentStreak >= 30) return `${s.currentStreak} day streak. A whole month of consistency!`;
+    if (s.currentStreak >= 14) return `${s.currentStreak} days in a row — you're building a real habit.`;
+    if (s.currentStreak >= 7) return `${s.currentStreak} day streak! One full week down.`;
+    if (s.currentStreak >= 3) return `${s.currentStreak} days in a row. Keep it going!`;
     return `${s.currentStreak} day streak — great start!`;
   });
 
@@ -158,9 +150,11 @@
     <div
       v-else-if="streakMessage"
       class="w-full mb-6 flex items-center gap-2.5 px-4 py-3 rounded-xl"
-      :class="streak?.isNewRecord && streak.currentStreak > 1
-        ? 'bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30 ring-1 ring-orange-200 dark:ring-orange-800/50'
-        : 'bg-orange-50 dark:bg-orange-950/20'"
+      :class="
+        streak?.isNewRecord && streak.currentStreak > 1
+          ? 'bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30 ring-1 ring-orange-200 dark:ring-orange-800/50'
+          : 'bg-orange-50 dark:bg-orange-950/20'
+      "
     >
       <Icon name="material-symbols:local-fire-department" size="1.75rem" class="text-orange-500 shrink-0" />
       <span class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ streakMessage }}</span>
@@ -215,16 +209,20 @@
       </div>
       <div class="flex justify-between mt-1.5 text-xs text-gray-500 dark:text-gray-400">
         <div v-if="gradeCounts.again > 0" class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-red-500" />{{ gradeCounts.again }} Again
+          <span class="w-2 h-2 rounded-full bg-red-500" />
+          {{ gradeCounts.again }} Again
         </div>
         <div v-if="gradeCounts.hard > 0" class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-orange-400" />{{ gradeCounts.hard }} Hard
+          <span class="w-2 h-2 rounded-full bg-orange-400" />
+          {{ gradeCounts.hard }} Hard
         </div>
         <div v-if="gradeCounts.good > 0" class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-green-500" />{{ gradeCounts.good }} Good
+          <span class="w-2 h-2 rounded-full bg-green-500" />
+          {{ gradeCounts.good }} Good
         </div>
         <div v-if="gradeCounts.easy > 0" class="flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-blue-500" />{{ gradeCounts.easy }} Easy
+          <span class="w-2 h-2 rounded-full bg-blue-500" />
+          {{ gradeCounts.easy }} Easy
         </div>
       </div>
     </div>
@@ -238,11 +236,7 @@
           :key="`${leech.wordId}-${leech.readingIndex}`"
           class="flex items-center justify-between px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20"
         >
-          <NuxtLink
-            :to="`/vocabulary/${leech.wordId}/${leech.readingIndex}`"
-            target="_blank"
-            class="flex items-center gap-2 min-w-0 hover:underline"
-          >
+          <NuxtLink :to="`/vocabulary/${leech.wordId}/${leech.readingIndex}`" target="_blank" class="flex items-center gap-2 min-w-0 hover:underline">
             <span class="font-medium text-gray-800 dark:text-gray-200 truncate" lang="ja">{{ leech.wordText }}</span>
             <span v-if="leech.reading !== leech.wordText" class="text-xs text-gray-400 truncate" lang="ja">{{ leech.reading }}</span>
           </NuxtLink>
@@ -278,9 +272,7 @@
             <span v-if="card.reading !== card.wordText" class="text-xs text-gray-400 truncate" lang="ja">{{ card.reading }}</span>
           </div>
           <div class="flex items-center gap-2 shrink-0 ml-2">
-            <span class="text-xs px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300">
-              Again ×{{ card.againCount }}
-            </span>
+            <span class="text-xs px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300">Again ×{{ card.againCount }}</span>
             <span v-if="card.avgDuration > 0" class="text-xs text-gray-400">
               {{ formatDuration(card.avgDuration) }}
             </span>

@@ -49,12 +49,10 @@
         <template v-if="occurrences.length">
           <span v-for="occ in occurrences" :key="occ.deckId">
             ×{{ occ.occurrences }}
-            <template v-if="occ.parentOriginalTitle"
-              >{{
-                localiseTitle({ originalTitle: occ.parentOriginalTitle, romajiTitle: occ.parentRomajiTitle, englishTitle: occ.parentEnglishTitle })
-              }}
-              - </template
-            >{{ localiseTitle(occ) }}
+            <template v-if="occ.parentOriginalTitle">
+              {{ localiseTitle({ originalTitle: occ.parentOriginalTitle, romajiTitle: occ.parentRomajiTitle, englishTitle: occ.parentEnglishTitle }) }} -
+            </template>
+            {{ localiseTitle(occ) }}
           </span>
         </template>
         <span v-else-if="sourceDeckName">{{ sourceDeckName }}</span>

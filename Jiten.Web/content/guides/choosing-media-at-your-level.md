@@ -9,7 +9,6 @@ draft: false
 updated: 2026-07-28
 ---
 
-
 When you're just starting to learn Japanese, choosing what to read can be a challenge. Jiten offers many tools to help make this choice easier. The essential thing to remember is that your **motivation** to consume a title is **more important** than any score. If you think you'll enjoy it, then **try it** even if the difficulty seems higher than what you're used to.
 
 ## Difficulty score

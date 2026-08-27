@@ -97,7 +97,7 @@
     loadingSet.value = true;
     try {
       const sets = await $api<WordSetInfo[]>('/admin/word-sets');
-      wordSet.value = sets.find(s => s.setId === setId) || null;
+      wordSet.value = sets.find((s) => s.setId === setId) || null;
     } catch (error: any) {
       toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to load word set'), life: 5000 });
     } finally {
@@ -107,10 +107,8 @@
 
   async function loadAllMemberKeys() {
     try {
-      const keys = await $api<{ wordId: number; readingIndex: number }[]>(
-        `/admin/word-sets/${setId}/member-keys`
-      );
-      memberKeySet.value = new Set(keys.map(k => `${k.wordId}-${k.readingIndex}`));
+      const keys = await $api<{ wordId: number; readingIndex: number }[]>(`/admin/word-sets/${setId}/member-keys`);
+      memberKeySet.value = new Set(keys.map((k) => `${k.wordId}-${k.readingIndex}`));
     } catch {}
   }
 
@@ -123,10 +121,8 @@
       params.append('sortBy', sortBy.value);
       params.append('sortOrder', sortOrder.value);
 
-      const result = await $api<{ data: WordSetMember[]; totalItems: number }>(
-        `/admin/word-sets/${setId}/members?${params.toString()}`
-      );
-      members.value = result.data.map(m => ({ ...m, key: `${m.wordId}-${m.readingIndex}` }));
+      const result = await $api<{ data: WordSetMember[]; totalItems: number }>(`/admin/word-sets/${setId}/members?${params.toString()}`);
+      members.value = result.data.map((m) => ({ ...m, key: `${m.wordId}-${m.readingIndex}` }));
       totalMembers.value = result.totalItems;
     } catch (error: any) {
       if (!silent) toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to load members'), life: 5000 });
@@ -171,11 +167,9 @@
   // Add word flow
   async function addWord(entry: DictionaryEntry) {
     try {
-      const preview = await $api<WordFormsPreview>(
-        `/admin/word-sets/${setId}/word-forms/${entry.wordId}`
-      );
+      const preview = await $api<WordFormsPreview>(`/admin/word-sets/${setId}/word-forms/${entry.wordId}`);
 
-      const eligibleForms = preview.forms.filter(f => !f.alreadyInSet);
+      const eligibleForms = preview.forms.filter((f) => !f.alreadyInSet);
 
       if (eligibleForms.length === 0) {
         toast.add({ severity: 'info', summary: 'Info', detail: 'All forms already in set', life: 3000 });
@@ -189,7 +183,7 @@
 
       // Multiple forms: open selection dialog
       formPreview.value = preview;
-      selectedForms.value = new Set(eligibleForms.map(f => f.readingIndex));
+      selectedForms.value = new Set(eligibleForms.map((f) => f.readingIndex));
       showFormDialog.value = true;
     } catch (error: any) {
       toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to load word forms'), life: 5000 });
@@ -204,11 +198,9 @@
     }
     addingByWordId.value = true;
     try {
-      const preview = await $api<WordFormsPreview>(
-        `/admin/word-sets/${setId}/word-forms/${id}`
-      );
+      const preview = await $api<WordFormsPreview>(`/admin/word-sets/${setId}/word-forms/${id}`);
 
-      const eligibleForms = preview.forms.filter(f => !f.alreadyInSet);
+      const eligibleForms = preview.forms.filter((f) => !f.alreadyInSet);
 
       if (eligibleForms.length === 0) {
         toast.add({ severity: 'info', summary: 'Info', detail: 'All forms already in set', life: 3000 });
@@ -222,7 +214,7 @@
       }
 
       formPreview.value = preview;
-      selectedForms.value = new Set(eligibleForms.map(f => f.readingIndex));
+      selectedForms.value = new Set(eligibleForms.map((f) => f.readingIndex));
       showFormDialog.value = true;
       wordIdInput.value = '';
     } catch (error: any) {
@@ -236,7 +228,7 @@
     if (!formPreview.value || selectedForms.value.size === 0) return;
 
     addingForms.value = true;
-    const members = Array.from(selectedForms.value).map(ri => ({
+    const members = Array.from(selectedForms.value).map((ri) => ({
       wordId: formPreview.value!.wordId,
       readingIndex: ri,
     }));
@@ -248,10 +240,7 @@
 
   async function addMembersToSet(membersToAdd: { wordId: number; readingIndex: number }[]) {
     try {
-      const result = await $api<{ added: number; skipped: number }>(
-        `/admin/word-sets/${setId}/members`,
-        { method: 'POST', body: { members: membersToAdd } }
-      );
+      const result = await $api<{ added: number; skipped: number }>(`/admin/word-sets/${setId}/members`, { method: 'POST', body: { members: membersToAdd } });
       toast.add({
         severity: 'success',
         summary: 'Added',
@@ -278,10 +267,7 @@
   async function doRemoveMembers(membersToRemove: { wordId: number; readingIndex: number }[]) {
     removing.value = true;
     try {
-      const result = await $api<{ removed: number }>(
-        `/admin/word-sets/${setId}/members/remove`,
-        { method: 'POST', body: { members: membersToRemove } }
-      );
+      const result = await $api<{ removed: number }>(`/admin/word-sets/${setId}/members/remove`, { method: 'POST', body: { members: membersToRemove } });
       const removed = result?.removed ?? 0;
       toast.add({
         severity: removed > 0 ? 'success' : 'warn',
@@ -290,8 +276,8 @@
         life: 3000,
       });
       if (removed > 0) {
-        const removeKeys = new Set(membersToRemove.map(m => `${m.wordId}-${m.readingIndex}`));
-        members.value = members.value.filter(m => !removeKeys.has(m.key));
+        const removeKeys = new Set(membersToRemove.map((m) => `${m.wordId}-${m.readingIndex}`));
+        members.value = members.value.filter((m) => !removeKeys.has(m.key));
         totalMembers.value = Math.max(0, totalMembers.value - removed);
         selectedMembers.value = [];
         const updatedKeys = new Set(memberKeySet.value);
@@ -311,7 +297,7 @@
 
   function confirmRemoveSelected() {
     if (selectedMembers.value.length === 0) return;
-    const membersToRemove = selectedMembers.value.map(m => ({
+    const membersToRemove = selectedMembers.value.map((m) => ({
       wordId: m.wordId,
       readingIndex: m.readingIndex,
     }));
@@ -397,12 +383,8 @@
         </div>
       </div>
       <div class="flex gap-2 items-center">
-        <Tag severity="info" class="text-sm px-3 py-1">
-          {{ wordSet?.wordCount ?? 0 }} words
-        </Tag>
-        <Tag severity="secondary" class="text-sm px-3 py-1">
-          {{ wordSet?.formCount ?? 0 }} forms
-        </Tag>
+        <Tag severity="info" class="text-sm px-3 py-1">{{ wordSet?.wordCount ?? 0 }} words</Tag>
+        <Tag severity="secondary" class="text-sm px-3 py-1">{{ wordSet?.formCount ?? 0 }} forms</Tag>
         <Button icon="pi pi-pencil" label="Edit" severity="secondary" size="small" @click="openEditMetadata" />
       </div>
     </div>
@@ -411,25 +393,10 @@
     <div class="border rounded-lg p-4 mb-6 bg-white dark:bg-gray-900">
       <h2 class="text-lg font-semibold mb-3">Search & Add Words</h2>
       <div class="flex gap-3 mb-3">
-        <InputText
-          v-model="searchQuery"
-          placeholder="Search by Japanese, reading, or English..."
-          class="flex-1"
-          @input="onSearchInput"
-        />
+        <InputText v-model="searchQuery" placeholder="Search by Japanese, reading, or English..." class="flex-1" @input="onSearchInput" />
         <div class="flex gap-1">
-          <InputText
-            v-model="wordIdInput"
-            placeholder="WordId"
-            class="w-32"
-            @keyup.enter="addByWordId"
-          />
-          <Button
-            icon="pi pi-plus"
-            severity="success"
-            :loading="addingByWordId"
-            @click="addByWordId"
-          />
+          <InputText v-model="wordIdInput" placeholder="WordId" class="w-32" @keyup.enter="addByWordId" />
+          <Button icon="pi pi-plus" severity="success" :loading="addingByWordId" @click="addByWordId" />
         </div>
       </div>
 
@@ -446,9 +413,7 @@
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <span class="text-lg font-bold">{{ entry.text }}</span>
-              <Tag v-if="entry.frequencyRank > 0" severity="secondary" class="text-xs">
-                #{{ entry.frequencyRank }}
-              </Tag>
+              <Tag v-if="entry.frequencyRank > 0" severity="secondary" class="text-xs">#{{ entry.frequencyRank }}</Tag>
             </div>
             <div class="text-sm text-gray-500 dark:text-gray-400 truncate">
               {{ entry.meanings.slice(0, 3).join('; ') }}
@@ -467,20 +432,11 @@
             class="ml-3 flex-shrink-0"
             @click="removeFromSearch(entry)"
           />
-          <Button
-            v-else
-            icon="pi pi-plus"
-            size="small"
-            severity="success"
-            class="ml-3 flex-shrink-0"
-            @click="addWord(entry)"
-          />
+          <Button v-else icon="pi pi-plus" size="small" severity="success" class="ml-3 flex-shrink-0" @click="addWord(entry)" />
         </div>
       </div>
 
-      <div v-else-if="searchQuery.trim().length > 0 && !searchLoading" class="text-center text-gray-400 py-4">
-        No results found
-      </div>
+      <div v-else-if="searchQuery.trim().length > 0 && !searchLoading" class="text-center text-gray-400 py-4">No results found</div>
     </div>
 
     <!-- Members Table -->
@@ -494,8 +450,8 @@
               { label: 'Position', value: 'position' },
               { label: 'Frequency Rank', value: 'globalFreq' },
             ]"
-            optionLabel="label"
-            optionValue="value"
+            option-label="label"
+            option-value="value"
             class="w-44"
             @change="onSortChange"
           />
@@ -505,8 +461,8 @@
               { label: 'Ascending', value: 'asc' },
               { label: 'Descending', value: 'desc' },
             ]"
-            optionLabel="label"
-            optionValue="value"
+            option-label="label"
+            option-value="value"
             class="w-36"
             @change="onSortChange"
           />
@@ -528,27 +484,22 @@
         :lazy="true"
         :paginator="true"
         :rows="rowsPerPage"
-        :totalRecords="totalMembers"
-        :rowsPerPageOptions="[25, 50, 100]"
+        :total-records="totalMembers"
+        :rows-per-page-options="[25, 50, 100]"
         :first="currentPage * rowsPerPage"
-        dataKey="key"
-        stripedRows
+        data-key="key"
+        striped-rows
         class="shadow-md"
         @page="onPage"
       >
-        <Column selectionMode="multiple" style="width: 50px" />
+        <Column selection-mode="multiple" style="width: 50px" />
         <Column field="position" header="#" style="width: 70px" />
         <Column header="Word" style="min-width: 200px">
           <template #body="{ data }">
-            <NuxtLink
-              :to="`/vocabulary/${data.wordId}/${data.readingIndex}`"
-              target="_blank"
-              class="text-blue-500 hover:underline"
-            >
+            <NuxtLink :to="`/vocabulary/${data.wordId}/${data.readingIndex}`" target="_blank" class="text-blue-500 hover:underline">
               <span class="text-lg font-bold">{{ data.text }}</span>
             </NuxtLink>
             <div v-if="data.rubyText && data.text !== data.rubyText" class="text-xs text-gray-400" v-html="data.rubyText" />
-
           </template>
         </Column>
         <Column header="Meanings" style="min-width: 250px">
@@ -571,29 +522,16 @@
         </Column>
         <Column header="" style="width: 60px">
           <template #body="{ data }">
-            <Button
-              icon="pi pi-trash"
-              size="small"
-              severity="danger"
-              text
-              @click="removeSingleMember(data)"
-            />
+            <Button icon="pi pi-trash" size="small" severity="danger" text @click="removeSingleMember(data)" />
           </template>
         </Column>
       </DataTable>
     </div>
 
     <!-- Form Selection Dialog -->
-    <Dialog
-      v-model:visible="showFormDialog"
-      header="Select Forms to Add"
-      :modal="true"
-      class="w-full md:w-2/3 lg:w-1/2"
-    >
+    <Dialog v-model:visible="showFormDialog" header="Select Forms to Add" :modal="true" class="w-full md:w-2/3 lg:w-1/2">
       <div v-if="formPreview" class="mb-4">
-        <div class="text-sm text-gray-500 dark:text-gray-400 mb-2">
-          POS: {{ formPreview.partsOfSpeech.join(', ') }}
-        </div>
+        <div class="text-sm text-gray-500 dark:text-gray-400 mb-2">POS: {{ formPreview.partsOfSpeech.join(', ') }}</div>
         <div class="text-sm mb-4">
           {{ formPreview.meanings.slice(0, 5).join('; ') }}
         </div>
@@ -606,15 +544,17 @@
             :class="{ 'opacity-50': form.alreadyInSet }"
           >
             <Checkbox
-              :modelValue="selectedForms.has(form.readingIndex)"
+              :model-value="selectedForms.has(form.readingIndex)"
               :binary="true"
               :disabled="form.alreadyInSet"
-              @update:modelValue="(val: boolean) => {
-                const s = new Set(selectedForms);
-                if (val) s.add(form.readingIndex);
-                else s.delete(form.readingIndex);
-                selectedForms = s;
-              }"
+              @update:model-value="
+                (val: boolean) => {
+                  const s = new Set(selectedForms);
+                  if (val) s.add(form.readingIndex);
+                  else s.delete(form.readingIndex);
+                  selectedForms = s;
+                }
+              "
             />
             <Tag :severity="getFormTypeSeverity(form.formType)">
               {{ getFormTypeLabel(form.formType) }}
@@ -623,9 +563,7 @@
             <span v-if="form.rubyText && form.rubyText !== form.text" class="text-sm text-gray-400">
               {{ form.rubyText }}
             </span>
-            <Tag v-if="form.frequencyRank > 0" severity="secondary" class="text-xs">
-              #{{ form.frequencyRank }}
-            </Tag>
+            <Tag v-if="form.frequencyRank > 0" severity="secondary" class="text-xs">#{{ form.frequencyRank }}</Tag>
             <Tag v-if="form.alreadyInSet" severity="warn" class="text-xs">Already in set</Tag>
           </div>
         </div>
@@ -633,23 +571,12 @@
 
       <template #footer>
         <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showFormDialog = false" />
-        <Button
-          label="Add Selected"
-          icon="pi pi-check"
-          :loading="addingForms"
-          :disabled="selectedForms.size === 0"
-          @click="addSelectedForms"
-        />
+        <Button label="Add Selected" icon="pi pi-check" :loading="addingForms" :disabled="selectedForms.size === 0" @click="addSelectedForms" />
       </template>
     </Dialog>
 
     <!-- Edit Metadata Dialog -->
-    <Dialog
-      v-model:visible="showEditDialog"
-      header="Edit Word Set"
-      :modal="true"
-      class="w-full md:w-1/2"
-    >
+    <Dialog v-model:visible="showEditDialog" header="Edit Word Set" :modal="true" class="w-full md:w-1/2">
       <div class="flex flex-col gap-4">
         <div>
           <label class="block text-sm font-medium mb-1">Name</label>

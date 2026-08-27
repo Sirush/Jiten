@@ -96,7 +96,7 @@
         break; // one split per pass; the mutation re-triggers this watcher
       }
     },
-    { deep: true },
+    { deep: true }
   );
 
   function addTerm() {
@@ -444,9 +444,7 @@
   const comparisonCopied = ref(false);
 
   // Total occurrences across all searched terms — denominator for each term's share %.
-  const totalOccurrencesAllTerms = computed(() =>
-    (searchResponse.value?.results ?? []).reduce((sum, r) => sum + r.totalOccurrences, 0),
-  );
+  const totalOccurrencesAllTerms = computed(() => (searchResponse.value?.results ?? []).reduce((sum, r) => sum + r.totalOccurrences, 0));
 
   function occurrenceShare(occurrences: number): number {
     const total = totalOccurrencesAllTerms.value;
@@ -499,7 +497,7 @@
   function copyCitation(s: CorpusSnippet) {
     const src = s.parentTitle ? `${s.parentTitle} — ${s.deckTitle}` : s.deckTitle;
     const year = s.releaseYear ? ` (${s.releaseYear})` : '';
-    void navigator.clipboard?.writeText(`${s.text}　【${src}${year}】`);
+    void navigator.clipboard?.writeText(`${s.text}\u3000【${src}${year}】`);
   }
 
   function downloadCitations() {
@@ -536,36 +534,84 @@
       <summary class="cursor-pointer font-semibold text-surface-700 dark:text-surface-200">Search syntax & tips</summary>
       <ul class="mt-2 list-disc space-y-1 pl-5">
         <li>
-          Phrase search (PGroonga <code>&amp;@</code>): the box is <strong>one keyword</strong> matched against the bigram index — it finds that exact run of
-          characters anywhere in the text, e.g. <code>について</code>, <code>かもしれない</code>.
+          Phrase search (PGroonga
+          <code>&amp;@</code>
+          ): the box is
+          <strong>one keyword</strong>
+          matched against the bigram index — it finds that exact run of characters anywhere in the text, e.g.
+          <code>について</code>
+          ,
+          <code>かもしれない</code>
+          .
         </li>
         <li>
-          <strong>No operators:</strong> <code>AND</code>/<code>OR</code>, <code>*</code>, <code>"…"</code>, regex and SQL <code>%</code> are matched
-          literally, not interpreted — so don't use them. (Spaces are special only for exclusions, below.)
+          <strong>No operators:</strong>
+          <code>AND</code>
+          /
+          <code>OR</code>
+          ,
+          <code>*</code>
+          ,
+          <code>"…"</code>
+          , regex and SQL
+          <code>%</code>
+          are matched literally, not interpreted — so don't use them. (Spaces are special only for exclusions, below.)
         </li>
         <li>
-          <strong>Exclusions (<code>-</code>):</strong> append a space-separated <code>-phrase</code> to subtract occurrences where the term only appears as part
-          of that longer phrase, e.g. <code>ヘアアクセ -ヘアアクセサリー</code> counts ヘアアクセ but not the ヘアアクセ inside ヘアアクセサリー. The excluded phrase
-          <strong>must contain the term</strong> as a substring; you can add several (<code>雨 -梅雨 -雨具</code>). Matching, counts and citations are all corrected.
+          <strong>
+            Exclusions (
+            <code>-</code>
+            ):
+          </strong>
+          append a space-separated
+          <code>-phrase</code>
+          to subtract occurrences where the term only appears as part of that longer phrase, e.g.
+          <code>ヘアアクセ -ヘアアクセサリー</code>
+          counts ヘアアクセ but not the ヘアアクセ inside ヘアアクセサリー. The excluded phrase
+          <strong>must contain the term</strong>
+          as a substring; you can add several (
+          <code>雨 -梅雨 -雨具</code>
+          ). Matching, counts and citations are all corrected.
         </li>
         <li>
-          Latin letters, digits and symbols are tokenised <strong>separately</strong> from kana/kanji, and 1-character queries are imprecise (bigrams need ≥2
-          chars).
+          Latin letters, digits and symbols are tokenised
+          <strong>separately</strong>
+          from kana/kanji, and 1-character queries are imprecise (bigrams need ≥2 chars).
         </li>
         <li>
-          <strong>Not lemmatised</strong> — inflected forms are separate strings (食べた ≠ 食べる). Enter each form you care about as its own term (up to 15) to
-          count and compare them side by side, e.g. <code>食べた</code> · <code>食べて</code> · <code>食べます</code>.
+          <strong>Not lemmatised</strong>
+          — inflected forms are separate strings (食べた ≠ 食べる). Enter each form you care about as its own term (up to 15) to count and compare them side by
+          side, e.g.
+          <code>食べた</code>
+          ·
+          <code>食べて</code>
+          ·
+          <code>食べます</code>
+          .
         </li>
-        <li>Inline furigana <code>{漢字'かんじ}</code> is stripped before matching: searching <code>漢字</code> matches and the reading is ignored.</li>
         <li>
-          <strong>Matching Decks vs Works (range):</strong> a deck is a single entry, but long media is split into sub-decks (chapters / episodes /
-          volumes). <strong>Matching Decks</strong> counts every sub-deck; <strong>Works (range)</strong> collapses them to the parent title — so 500 hits
-          across one 30-chapter novel are 30 decks but 1 work. Works (range) is the honest "how many distinct titles use this" signal.
+          Inline furigana
+          <code>{漢字'かんじ}</code>
+          is stripped before matching: searching
+          <code>漢字</code>
+          matches and the reading is ignored.
         </li>
         <li>
-          <strong>Dispersion</strong> (Gries' Deviation of Proportions) measures how evenly the term is spread across media types relative to each
-          register's size: <strong>0</strong> = used everywhere in proportion to corpus size, <strong>1</strong> = concentrated in a single register. A
-          common word with low dispersion is register-specific (e.g. slang mostly in subtitles).
+          <strong>Matching Decks vs Works (range):</strong>
+          a deck is a single entry, but long media is split into sub-decks (chapters / episodes / volumes).
+          <strong>Matching Decks</strong>
+          counts every sub-deck;
+          <strong>Works (range)</strong>
+          collapses them to the parent title — so 500 hits across one 30-chapter novel are 30 decks but 1 work. Works (range) is the honest "how many distinct
+          titles use this" signal.
+        </li>
+        <li>
+          <strong>Dispersion</strong>
+          (Gries' Deviation of Proportions) measures how evenly the term is spread across media types relative to each register's size:
+          <strong>0</strong>
+          = used everywhere in proportion to corpus size,
+          <strong>1</strong>
+          = concentrated in a single register. A common word with low dispersion is register-specific (e.g. slang mostly in subtitles).
         </li>
       </ul>
     </details>
@@ -575,23 +621,25 @@
         <div class="flex flex-col gap-5">
           <div class="flex flex-col gap-2">
             <label class="text-xs font-medium text-surface-500 dark:text-surface-400">Search terms (up to 15)</label>
-            <span class="text-xs text-surface-400">Quickly add a new term by typing or pasting with these separators <code>,</code> <code>;</code> <code>；</code> <code>/</code></span>
-            <span class="text-xs text-surface-400"
-              >Exclude a longer form with the minus operator <code>-</code></span
-            >
+            <span class="text-xs text-surface-400">
+              Quickly add a new term by typing or pasting with these separators
+              <code>,</code>
+              <code>;</code>
+              <code>；</code>
+              <code>/</code>
+            </span>
+            <span class="text-xs text-surface-400">
+              Exclude a longer form with the minus operator
+              <code>-</code>
+            </span>
             <div v-for="(_, i) in terms" :key="i" class="flex flex-col gap-0.5">
               <div class="flex items-center gap-2">
-                <InputText
-                  :ref="(el) => setTermRef(el, i)"
-                  v-model="terms[i]"
-                  :placeholder="`Term ${i + 1}`"
-                  class="w-full max-w-md"
-                  @keydown.enter="search"
-                />
+                <InputText :ref="(el) => setTermRef(el, i)" v-model="terms[i]" :placeholder="`Term ${i + 1}`" class="w-full max-w-md" @keydown.enter="search" />
                 <Button v-if="terms.length > 1" icon="pi pi-times" severity="danger" text rounded size="small" @click="removeTerm(i)" />
               </div>
               <span v-if="termParses[i]?.excludes.length" class="pl-1 text-xs text-surface-400">
-                excluding <span class="font-medium text-surface-500 dark:text-surface-300">{{ termParses[i].excludes.join(', ') }}</span>
+                excluding
+                <span class="font-medium text-surface-500 dark:text-surface-300">{{ termParses[i].excludes.join(', ') }}</span>
               </span>
               <span v-if="termParses[i]?.ignored.length" class="pl-1 text-xs text-amber-600 dark:text-amber-500">
                 ignored (must contain “{{ termParses[i].positive }}”): {{ termParses[i].ignored.join(', ') }}
@@ -633,9 +681,7 @@
           <div class="flex flex-col gap-3 border-t border-surface-200 pt-4 dark:border-surface-700">
             <div class="flex items-center gap-2">
               <Checkbox v-model="sortByOccurrence" input-id="sortByOccurrence" :binary="true" />
-              <label for="sortByOccurrence" class="cursor-pointer text-sm text-surface-600 dark:text-surface-300"
-                >Order results by occurrence count</label
-              >
+              <label for="sortByOccurrence" class="cursor-pointer text-sm text-surface-600 dark:text-surface-300">Order results by occurrence count</label>
             </div>
             <div class="flex flex-wrap gap-2">
               <Button label="Search" icon="pi pi-search" :loading="loading" @click="search" />
@@ -675,27 +721,27 @@
     </div>
 
     <template v-if="searchResponse && !loading">
-      <div
-        class="mb-4 rounded border border-surface-200 bg-surface-50 p-3 text-sm dark:border-surface-700 dark:bg-surface-900/40"
-      >
+      <div class="mb-4 rounded border border-surface-200 bg-surface-50 p-3 text-sm dark:border-surface-700 dark:bg-surface-900/40">
         <div class="mb-1 flex flex-wrap items-baseline gap-x-5 gap-y-1">
           <span class="text-xs font-semibold uppercase tracking-wide text-surface-500 dark:text-surface-400">
             {{ searchResponse.filteredScope.hasFilters ? 'Filtered scope' : 'Searchable corpus' }}
           </span>
-          <span class="text-surface-700 dark:text-surface-200"
-            ><strong>{{ searchResponse.filteredScope.decks.toLocaleString() }}</strong> decks</span
-          >
-          <span class="text-surface-700 dark:text-surface-200"
-            ><strong>{{ searchResponse.filteredScope.works.toLocaleString() }}</strong> works</span
-          >
-          <span class="text-surface-700 dark:text-surface-200"
-            ><strong>{{ searchResponse.filteredScope.characters.toLocaleString() }}</strong> characters</span
-          >
+          <span class="text-surface-700 dark:text-surface-200">
+            <strong>{{ searchResponse.filteredScope.decks.toLocaleString() }}</strong>
+            decks
+          </span>
+          <span class="text-surface-700 dark:text-surface-200">
+            <strong>{{ searchResponse.filteredScope.works.toLocaleString() }}</strong>
+            works
+          </span>
+          <span class="text-surface-700 dark:text-surface-200">
+            <strong>{{ searchResponse.filteredScope.characters.toLocaleString() }}</strong>
+            characters
+          </span>
         </div>
         <p v-if="searchResponse.filteredScope.hasFilters" class="text-xs text-surface-400">
           Narrowed by your filters (year / difficulty / media type) from
-          {{ searchResponse.corpusStats.decksWithRawText.toLocaleString() }} decks ·
-          {{ searchResponse.corpusStats.totalWorks.toLocaleString() }} works ·
+          {{ searchResponse.corpusStats.decksWithRawText.toLocaleString() }} decks · {{ searchResponse.corpusStats.totalWorks.toLocaleString() }} works ·
           {{ searchResponse.corpusStats.totalCharacters.toLocaleString() }} characters total. All stats below are relative to this scope.
         </p>
       </div>
@@ -740,14 +786,19 @@
           </DataTable>
 
           <p class="mt-2 text-xs text-surface-500 dark:text-surface-400">
-            <strong>Matching Decks</strong> counts every individual deck, including sub-decks (each chapter / episode / volume).
-            <strong>Works (range)</strong> collapses those sub-decks to their parent title, so a term in all chapters of one novel counts as many decks
-            but a single work — the % is the share of all works in the corpus.
+            <strong>Matching Decks</strong>
+            counts every individual deck, including sub-decks (each chapter / episode / volume).
+            <strong>Works (range)</strong>
+            collapses those sub-decks to their parent title, so a term in all chapters of one novel counts as many decks but a single work — the % is the share
+            of all works in the corpus.
           </p>
           <p class="mt-1 text-xs text-surface-500 dark:text-surface-400">
-            <strong>Dispersion</strong> (Gries' Deviation of Proportions) measures how evenly the term is spread across media types relative to each
-            register's size: <strong>0</strong> = used in proportion everywhere, <strong>1</strong> = concentrated in a single register (e.g. only in
-            subtitles or only in novels).
+            <strong>Dispersion</strong>
+            (Gries' Deviation of Proportions) measures how evenly the term is spread across media types relative to each register's size:
+            <strong>0</strong>
+            = used in proportion everywhere,
+            <strong>1</strong>
+            = concentrated in a single register (e.g. only in subtitles or only in novels).
           </p>
 
           <div v-if="coOccurrences.length > 0" class="mt-4">
@@ -765,10 +816,13 @@
             </DataTable>
 
             <p class="mt-2 text-xs text-surface-500 dark:text-surface-400">
-              <strong>Shared Decks</strong> is the number of decks containing both terms (deck-level, like Matching Decks).
-              <strong>Overlap %</strong> = shared ÷ the rarer term's decks — "what share of the less common term's decks also contain the other"
-              (reaches 100% if one term's decks are a subset of the other's).
-              <strong>Jaccard %</strong> = shared ÷ decks containing either term — symmetric, but pulled low when one term is far more common.
+              <strong>Shared Decks</strong>
+              is the number of decks containing both terms (deck-level, like Matching Decks).
+              <strong>Overlap %</strong>
+              = shared ÷ the rarer term's decks — "what share of the less common term's decks also contain the other" (reaches 100% if one term's decks are a
+              subset of the other's).
+              <strong>Jaccard %</strong>
+              = shared ÷ decks containing either term — symmetric, but pulled low when one term is far more common.
             </p>
           </div>
         </template>
@@ -800,9 +854,9 @@
         <Card class="mb-4">
           <template #title>
             {{ activeResult.term }}
-            <span v-if="activeResult.excludedTerms?.length" class="text-base font-normal text-surface-400"
-              >· excluding {{ activeResult.excludedTerms.join(', ') }}</span
-            >
+            <span v-if="activeResult.excludedTerms?.length" class="text-base font-normal text-surface-400">
+              · excluding {{ activeResult.excludedTerms.join(', ') }}
+            </span>
           </template>
           <template #subtitle>
             {{ activeResult.totalOccurrences.toLocaleString() }} occurrences · {{ activeResult.hitsPerMillion.toFixed(2) }} occ/M chars · in
@@ -840,7 +894,8 @@
               <Column header="Source">
                 <template #body="{ data }">
                   <NuxtLink :to="`/decks/media/${data.deckId}/detail`" class="text-primary-400 hover:underline">
-                    <template v-if="data.parentTitle">{{ data.parentTitle }} — </template>{{ data.title }}
+                    <template v-if="data.parentTitle">{{ data.parentTitle }} —</template>
+                    {{ data.title }}
                   </NuxtLink>
                 </template>
               </Column>
@@ -863,9 +918,12 @@
               <span>Concordance ({{ activeResult.snippets.length }} citations · one per work)</span>
               <div class="flex items-center gap-2">
                 <template v-if="kwicAvailable">
-                  <span class="text-xs text-surface-500 dark:text-surface-400" title="Reorder citations by the context around the match, so recurring patterns line up"
-                    >Sort by context:</span
+                  <span
+                    class="text-xs text-surface-500 dark:text-surface-400"
+                    title="Reorder citations by the context around the match, so recurring patterns line up"
                   >
+                    Sort by context:
+                  </span>
                   <Button
                     label="Off"
                     size="small"
@@ -906,7 +964,8 @@
               <Column header="Source">
                 <template #body="{ data }">
                   <NuxtLink :to="`/decks/media/${data.deckId}/detail`" class="text-primary-400 hover:underline">
-                    <template v-if="data.parentTitle">{{ data.parentTitle }} — </template>{{ data.deckTitle }}
+                    <template v-if="data.parentTitle">{{ data.parentTitle }} —</template>
+                    {{ data.deckTitle }}
                   </NuxtLink>
                 </template>
               </Column>

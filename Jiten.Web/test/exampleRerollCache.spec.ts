@@ -34,7 +34,7 @@ const $api = vi.fn((path: string, opts?: { body?: { pairs?: { wordId: number; re
   apiCalls.push(path);
 
   if (path.startsWith('srs/study-batch')) {
-    const first = apiCalls.filter(p => p.startsWith('srs/study-batch')).length === 1;
+    const first = apiCalls.filter((p) => p.startsWith('srs/study-batch')).length === 1;
     return Promise.resolve({
       sessionId: 'session-1',
       cards: first ? [card(1), card(2)] : [],
@@ -66,8 +66,8 @@ vi.stubGlobal('useNuxtApp', () => ({ $api }));
 
 const { useSrsStore } = await import('../app/stores/srsStore');
 
-const flush = () => new Promise(resolve => setTimeout(resolve, 0));
-const exampleCalls = () => apiCalls.filter(p => p === 'srs/card-examples').length;
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+const exampleCalls = () => apiCalls.filter((p) => p === 'srs/card-examples').length;
 
 describe('example reroll cache', () => {
   beforeEach(() => {

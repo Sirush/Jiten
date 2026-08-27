@@ -179,8 +179,8 @@
             <Select
               v-model="mediaType"
               :options="mediaTypeOptions"
-              optionLabel="label"
-              optionValue="value"
+              option-label="label"
+              option-value="value"
               placeholder="Select media type"
               class="w-full"
               :disabled="isUpdate"
@@ -265,7 +265,8 @@
               You have reached the limit of {{ quota.limit }} active requests. Wait for existing requests to be fulfilled or rejected before submitting a new
               one.
               <template v-if="showPlusUpsell">
-                <NuxtLink to="/jiten-plus" class="underline">Jiten+</NuxtLink> raises this to {{ quota.plusLimit }} slots.
+                <NuxtLink to="/jiten-plus" class="underline">Jiten+</NuxtLink>
+                raises this to {{ quota.plusLimit }} slots.
               </template>
             </Message>
             <small v-else class="text-muted-color">
@@ -274,7 +275,7 @@
             </small>
           </template>
 
-          <Button label="Submit Request" icon="pi pi-send" :loading="isSubmitting" :disabled="!canSubmit" @click="handleSubmit" class="w-full" />
+          <Button label="Submit Request" icon="pi pi-send" :loading="isSubmitting" :disabled="!canSubmit" class="w-full" @click="handleSubmit" />
         </div>
       </template>
     </Card>

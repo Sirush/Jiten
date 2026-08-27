@@ -157,8 +157,8 @@
       sortOrder: sortOrder,
       ...displayQuery,
       search: debouncedSearch,
-      pos: computed(() => debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined),
-      excludePos: computed(() => debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined),
+      pos: computed(() => (debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined)),
+      excludePos: computed(() => (debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined)),
       hideKanaOnly: debouncedHideKanaOnly,
       limit: limit,
     },
@@ -195,10 +195,13 @@
     try {
       await srsStore.removeDeckWord(deckId, word.wordId, word.mainReading.readingIndex);
       if (response.value) {
-        const filtered = response.value.data.filter(
-          (w) => !(w.wordId === word.wordId && w.mainReading.readingIndex === word.mainReading.readingIndex),
-        );
-        response.value = { data: filtered, totalItems: response.value.totalItems - 1, pageSize: response.value.pageSize, currentOffset: response.value.currentOffset };
+        const filtered = response.value.data.filter((w) => !(w.wordId === word.wordId && w.mainReading.readingIndex === word.mainReading.readingIndex));
+        response.value = {
+          data: filtered,
+          totalItems: response.value.totalItems - 1,
+          pageSize: response.value.pageSize,
+          currentOffset: response.value.currentOffset,
+        };
       }
       toast.add({ severity: 'info', summary: 'Word removed', life: 2000 });
     } catch {
@@ -223,7 +226,7 @@
 
   watch(
     () => response.value?.data,
-    () => selectedKeys.value.clear(),
+    () => selectedKeys.value.clear()
   );
 
   function toggleSelect(word: Word) {
@@ -301,7 +304,7 @@
         try {
           const result = await srsStore.removeDeckWordsBatch(
             deckId,
-            words.map((w) => ({ wordId: w.wordId, readingIndex: w.mainReading.readingIndex })),
+            words.map((w) => ({ wordId: w.wordId, readingIndex: w.mainReading.readingIndex }))
           );
           if (response.value) {
             const removedKeys = new Set(words.map(wordKey));
@@ -329,14 +332,16 @@
     <SrsSubNav />
     <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
       <div class="flex items-center gap-2 min-w-0">
-        <NuxtLink to="/srs/decks" class="text-sm text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 whitespace-nowrap">‹ Decks</NuxtLink>
+        <NuxtLink to="/srs/decks" class="text-sm text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 whitespace-nowrap">
+          ‹ Decks
+        </NuxtLink>
         <span class="text-surface-300 dark:text-surface-400">·</span>
         <h1 class="text-2xl font-bold truncate">{{ deckName }}</h1>
         <span v-if="totalItems > 0" class="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ totalItems }} words</span>
       </div>
       <div v-if="isStaticDeck" class="flex gap-2">
-        <Button icon="pi pi-plus" label="Add Words" @click="showAddDialog = true" class="!hidden sm:!inline-flex" />
-        <Button icon="pi pi-plus" @click="showAddDialog = true" class="sm:!hidden" />
+        <Button icon="pi pi-plus" label="Add Words" class="!hidden sm:!inline-flex" @click="showAddDialog = true" />
+        <Button icon="pi pi-plus" class="sm:!hidden" @click="showAddDialog = true" />
       </div>
     </div>
 
@@ -354,7 +359,21 @@
       :show-display-filter="auth.isAuthenticated"
     />
 
-    <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="words" :page-size="pageSize" :page-size-options="[50, 100, 200]" mobile-compact />
+    <PaginationControls
+      v-if="response?.data?.length"
+      :previous-link="previousLink"
+      :next-link="nextLink"
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      :page-link-for="pageLinkFor"
+      :start="start"
+      :end="end"
+      :total-items="totalItems"
+      item-label="words"
+      :page-size="pageSize"
+      :page-size-options="[50, 100, 200]"
+      mobile-compact
+    />
 
     <div v-if="pageWords.length > 0" class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500 dark:text-surface-400">
       <Checkbox :model-value="allOnPageSelected" :binary="true" @change="toggleSelectAll" />
@@ -382,7 +401,8 @@
       </template>
     </VocabularyList>
 
-    <PaginationControls v-if="response?.data?.length"
+    <PaginationControls
+      v-if="response?.data?.length"
       :previous-link="previousLink"
       :next-link="nextLink"
       :current-page="currentPage"

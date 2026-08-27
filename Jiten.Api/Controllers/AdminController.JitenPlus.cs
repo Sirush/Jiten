@@ -86,6 +86,52 @@ public partial class AdminController
         return Ok(new { Message = "Grant delivered.", UserId = user.Id, UserName = user.UserName, Kind = kind });
     }
 
+    [HttpPost("jiten-plus/resend-email")]
+    public async Task<IActionResult> ResendBillingEmail(
+        [FromBody] ResendBillingEmailRequest request,
+        [FromServices] StripeService stripeService)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var idOrName = request.UserIdOrName.Trim();
+        var user = await userContext.Users
+                                    .FirstOrDefaultAsync(u => u.Id == idOrName || u.UserName == idOrName);
+        if (user is null)
+            return NotFound(new { Message = "User not found" });
+        if (string.IsNullOrEmpty(user.Email))
+            return BadRequest(new { Message = "User has no email address." });
+
+        var kind = request.Kind.Trim().ToLowerInvariant();
+        try
+        {
+            switch (kind)
+            {
+                case "lifetime-confirmed":
+                    // The confirmation restates a sale (price, withdrawal waiver); contributor grantees never bought anything.
+                    if (!user.IsLifetime || user.LifetimeSource != LifetimeSource.WindowPurchase)
+                        return BadRequest(new { Message = "User has no purchased lifetime." });
+                    await stripeService.ResendLifetimeConfirmedEmailAsync(user);
+                    break;
+                case "subscription-confirmed":
+                    if (!user.StripeSubscriptionActive)
+                        return BadRequest(new { Message = "User has no active subscription." });
+                    await stripeService.ResendSubscriptionConfirmedEmailAsync(user);
+                    break;
+                default:
+                    return BadRequest(new { Message = "Kind must be 'lifetime-confirmed' or 'subscription-confirmed'." });
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Admin resend of {Kind} email failed for user {UserId}", kind, user.Id);
+            return StatusCode(502, new { Message = $"Send failed: {ex.GetType().Name} — {ex.Message}" });
+        }
+
+        logger.LogInformation("Admin resent {Kind} email to user {UserId}", kind, user.Id);
+        return Ok(new { Message = "Email sent.", UserName = user.UserName, Kind = kind });
+    }
+
     [HttpGet("jiten-plus/grants")]
     public async Task<IActionResult> GetJitenPlusGrants()
     {

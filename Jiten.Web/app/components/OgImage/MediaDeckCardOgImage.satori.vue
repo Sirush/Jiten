@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
-  import { MediaType } from '~/types/enums';
+  import type { MediaType } from '~/types/enums';
 
   const props = defineProps<{
     title?: string;
@@ -55,7 +55,7 @@
     </div>
 
     <div class="flex flex-col flex-grow">
-      <h1 class="font-bold truncate" style="font-size: 2rem; margin-bottom: 8px; line-height: 1.2; ">
+      <h1 class="font-bold truncate" style="font-size: 2rem; margin-bottom: 8px; line-height: 1.2">
         {{ title.slice(0, 20) }}
       </h1>
 
@@ -63,7 +63,7 @@
         {{ getMediaTypeText(mediaType ?? (0 as MediaType)) }}
       </span>
 
-      <div class="flex-grow"></div>
+      <div class="flex-grow" />
 
       <div class="flex flex-col" style="font-size: 1.5rem">
         <div
@@ -91,12 +91,12 @@
           }"
         >
           <span class="text-gray-700">Difficulty:</span>
-          <span v-if="difficulty == 0" class="font-mono text-green-700 dark:text-green-300"> ★☆☆☆☆ </span>
-          <span v-else-if="difficulty == 1" class="font-mono text-green-500"> ★★☆☆☆ </span>
-          <span v-else-if="difficulty == 2" class="font-mono text-cyan-500"> ★★★☆☆ </span>
-          <span v-else-if="difficulty == 3" class="font-mono text-amber-600"> ★★★★☆ </span>
-          <span v-else-if="difficulty == 4" class="font-mono text-orange-600"> ★★★★★ </span>
-          <span v-else-if="difficulty == 5" class="font-mono text-red-600"> ★★★★★ </span>
+          <span v-if="difficulty == 0" class="font-mono text-green-700 dark:text-green-300">★☆☆☆☆</span>
+          <span v-else-if="difficulty == 1" class="font-mono text-green-500">★★☆☆☆</span>
+          <span v-else-if="difficulty == 2" class="font-mono text-cyan-500">★★★☆☆</span>
+          <span v-else-if="difficulty == 3" class="font-mono text-amber-600">★★★★☆</span>
+          <span v-else-if="difficulty == 4" class="font-mono text-orange-600">★★★★★</span>
+          <span v-else-if="difficulty == 5" class="font-mono text-red-600">★★★★★</span>
         </div>
       </div>
     </div>

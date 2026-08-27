@@ -10,11 +10,11 @@
 <template>
   <template v-if="opts.style === 'line'">
     <div v-if="label" class="my-4 flex items-center gap-2">
-      <hr class="flex-1 border-surface-200 dark:border-surface-700" >
+      <hr class="flex-1 border-surface-200 dark:border-surface-700" />
       <span class="text-xs text-surface-400 dark:text-surface-400">{{ label }}</span>
-      <hr class="flex-1 border-surface-200 dark:border-surface-700" >
+      <hr class="flex-1 border-surface-200 dark:border-surface-700" />
     </div>
-    <hr v-else class="my-4 border-surface-200 dark:border-surface-700" >
+    <hr v-else class="my-4 border-surface-200 dark:border-surface-700" />
   </template>
   <template v-else>
     <div v-if="label" class="h-6 flex items-center justify-center">

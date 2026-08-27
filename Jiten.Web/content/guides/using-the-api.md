@@ -1,7 +1,7 @@
 ---
 title: Using the API
 summary: Create a key, call the public endpoints, and stay inside the rate limits
-category: "Advanced & tools"
+category: 'Advanced & tools'
 level: advanced
 order: 20
 icon: material-symbols-light:api
@@ -77,6 +77,6 @@ That is plain text rather than JSON, so a client that parses every response will
 
 While the endpoints are generally stable, they are not versioned and can change at any moment without notice.
 
-What you can do with the data you pull is covered by [What can I use the data for?](/guides/deck-licensing). 
+What you can do with the data you pull is covered by [What can I use the data for?](/guides/deck-licensing).
 
 If you are unsure whether your use case is fine, ask on [Discord](https://discord.gg/cZWM7b4wzk).

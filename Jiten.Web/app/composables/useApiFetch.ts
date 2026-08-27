@@ -38,7 +38,7 @@ function revalidateOnClientAfterSsr(
   request: ApiFetchRequest,
   query: Record<string, unknown> | undefined,
   data: Ref<unknown>,
-  error: Ref<Error | null | undefined>,
+  error: Ref<Error | null | undefined>
 ): void {
   if (!import.meta.client || !authStore.isAuthenticated) return;
 
@@ -109,14 +109,8 @@ function setup401ErrorHandler(
   });
 }
 
-function buildFetchOptions(
-  opts: any,
-  authStore: ReturnType<typeof useAuthStore>,
-  request: ApiFetchRequest
-) {
-  const tokenCheckPromise = import.meta.client && authStore.isAuthenticated
-    ? authStore.ensureValidToken()
-    : Promise.resolve(true);
+function buildFetchOptions(opts: any, authStore: ReturnType<typeof useAuthStore>, request: ApiFetchRequest) {
+  const tokenCheckPromise = import.meta.client && authStore.isAuthenticated ? authStore.ensureValidToken() : Promise.resolve(true);
 
   const key = generateRequestKey(request);
   const uniqueKey = `api-${key}-${safeStringifyQuery(opts?.query)}`;
@@ -150,7 +144,7 @@ function buildFetchOptions(
     timeout: opts?.timeout ?? (import.meta.server ? 8000 : undefined),
     // Never retry on the server — retries multiply held connections exactly when the API is already
     // slow, accelerating the exhaustion above. The client still retries transient blips (deploys etc.).
-    retry: opts?.retry ?? (import.meta.server ? 0 : (isIdempotent ? 2 : 0)),
+    retry: opts?.retry ?? (import.meta.server ? 0 : isIdempotent ? 2 : 0),
     retryDelay: opts?.retryDelay ?? 500,
     retryStatusCodes: opts?.retryStatusCodes ?? [408, 425, 429, 500, 502, 503, 504],
     async onRequest({ options }: any) {
@@ -158,21 +152,18 @@ function buildFetchOptions(
       if (authStore.accessToken) {
         options.headers.set('Authorization', `Bearer ${authStore.accessToken}`);
       }
-    }
+    },
   };
 }
 
-export function useApiFetch<T>(
-  request: ApiFetchRequest,
-  opts?: any
-): ApiFetchResult<T> {
+export function useApiFetch<T>(request: ApiFetchRequest, opts?: any): ApiFetchResult<T> {
   const { revalidateOnClient, ...fetchOpts } = opts ?? {};
   const authStore = useAuthStore();
   const options = buildFetchOptions(fetchOpts, authStore, request);
 
   const result = useFetch<T>(request, {
     baseURL: useRuntimeConfig().public.baseURL,
-    ...options
+    ...options,
   });
 
   setup401ErrorHandler(result.error, result.execute, request, authStore);
@@ -187,14 +178,14 @@ export function useApiFetch<T>(
     error: result.error,
     refresh: result.refresh,
     execute: result.execute,
-    ready: Promise.resolve(result).then(() => undefined, () => undefined),
+    ready: Promise.resolve(result).then(
+      () => undefined,
+      () => undefined
+    ),
   } as unknown as ApiFetchResult<T>;
 }
 
-export  function useApiFetchPaginated<T>(
-  request: ApiFetchRequest,
-  opts?: any
-): ApiFetchResult<PaginatedResponse<T>>  {
+export function useApiFetchPaginated<T>(request: ApiFetchRequest, opts?: any): ApiFetchResult<PaginatedResponse<T>> {
   const { revalidateOnClient, ...fetchOpts } = opts ?? {};
   const config = useRuntimeConfig();
   const authStore = useAuthStore();
@@ -218,7 +209,10 @@ export  function useApiFetchPaginated<T>(
     error: result.error,
     refresh: result.refresh,
     execute: result.execute,
-    ready: Promise.resolve(result).then(() => undefined, () => undefined),
+    ready: Promise.resolve(result).then(
+      () => undefined,
+      () => undefined
+    ),
   } as unknown as ApiFetchResult<PaginatedResponse<T>>;
 }
 

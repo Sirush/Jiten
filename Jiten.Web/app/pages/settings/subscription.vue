@@ -47,7 +47,7 @@
   const showCreditBreakdown = computed(() => {
     const s = sources.value;
     if (!s || s.credits.length === 0) return false;
-    
+
     if (s.isLifetime) return false;
     if (s.subscriptionActive) return true;
     return s.credits.length > 1;
@@ -66,8 +66,8 @@
 
   const thankYouMessages = computed(() =>
     (sources.value?.credits ?? [])
-      .filter(c => !!c.thankYouMessage?.trim())
-      .map(c => ({ id: c.userPromoCreditId, html: parseCustomMeaningHtml(c.thankYouMessage!) })),
+      .filter((c) => !!c.thankYouMessage?.trim())
+      .map((c) => ({ id: c.userPromoCreditId, html: parseCustomMeaningHtml(c.thankYouMessage!) }))
   );
 
   const showSubscribeCta = computed(() => !sources.value?.subscriptionActive && !sources.value?.isLifetime);
@@ -132,7 +132,7 @@
   // Checkout success can land here before the Stripe webhook has flipped the tier — poll briefly.
   async function pollForFull() {
     for (let i = 0; i < 3 && !isFull.value; i++) {
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 1500));
       await refresh();
     }
   }
@@ -198,18 +198,23 @@
                 :class="sources?.isLifetime ? 'text-surface-400' : 'text-primary-500'"
               />
               <span v-if="sources?.isLifetime">
-                You also have an active <span class="font-medium capitalize">{{ planName }}</span> subscription. Lifetime
-                access already covers everything. You can cancel it below to avoid further charges.
+                You also have an active
+                <span class="font-medium capitalize">{{ planName }}</span>
+                subscription. Lifetime access already covers everything. You can cancel it below to avoid further charges.
               </span>
               <span v-else-if="sources?.cancelAtPeriodEnd">
-                Your <span class="font-medium capitalize">{{ planName }}</span> subscription is cancelled and will not
-                renew<span v-if="sources?.periodEnd">. Jiten+ stays fully available until {{ formatDate(sources.periodEnd) }}</span
-                >.
+                Your
+                <span class="font-medium capitalize">{{ planName }}</span>
+                subscription is cancelled and will not renew
+                <span v-if="sources?.periodEnd">. Jiten+ stays fully available until {{ formatDate(sources.periodEnd) }}</span>
+                .
               </span>
               <span v-else>
-                Active <span class="font-medium capitalize">{{ planName }}</span> subscription<span v-if="sources?.periodEnd">,
-                  renews on {{ formatDate(sources.periodEnd) }}</span
-                >.
+                Active
+                <span class="font-medium capitalize">{{ planName }}</span>
+                subscription
+                <span v-if="sources?.periodEnd">, renews on {{ formatDate(sources.periodEnd) }}</span>
+                .
               </span>
             </li>
             <li v-if="trialLine" class="flex items-start gap-2">
@@ -232,8 +237,8 @@
             <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
               <li v-for="credit in sources!.credits" :key="credit.userPromoCreditId" class="flex items-center gap-2">
                 <Icon name="material-symbols:card-giftcard-rounded" class="text-primary-400 shrink-0" />
-                {{ credit.remainingDays }} day{{ credit.remainingDays === 1 ? '' : 's' }} of
-                {{ credit.grantsFullTier ? 'Full' : 'Trial' }}, granted {{ formatDate(credit.grantedAt) }}
+                {{ credit.remainingDays }} day{{ credit.remainingDays === 1 ? '' : 's' }} of {{ credit.grantsFullTier ? 'Full' : 'Trial' }}, granted
+                {{ formatDate(credit.grantedAt) }}
               </li>
             </ul>
           </div>

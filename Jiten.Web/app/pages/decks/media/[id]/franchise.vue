@@ -6,7 +6,7 @@
   import { useApiFetch } from '~/composables/useApiFetch';
 
   definePageMeta({
-    validate: route => /^\d+$/.test(String(route.params.id)),
+    validate: (route) => /^\d+$/.test(String(route.params.id)),
   });
 
   const route = useRoute();
@@ -54,9 +54,7 @@
 
 <template>
   <div>
-    <NuxtLink :to="`/decks/media/${deckId}/detail`" class="text-primary text-sm">
-      ← Back to {{ title || 'deck' }}
-    </NuxtLink>
+    <NuxtLink :to="`/decks/media/${deckId}/detail`" class="text-primary text-sm">← Back to {{ title || 'deck' }}</NuxtLink>
 
     <div v-if="status === 'pending'" class="pt-4">
       <Skeleton width="40%" height="2rem" />
@@ -73,7 +71,10 @@
     <template v-else-if="franchise">
       <div class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-2 pt-2">
         <div class="flex flex-wrap items-baseline gap-x-2">
-          <h1 class="text-xl font-bold">{{ title }} <span class="font-normal">Franchise</span></h1>
+          <h1 class="text-xl font-bold">
+            {{ title }}
+            <span class="font-normal">Franchise</span>
+          </h1>
           <span class="text-sm text-gray-500 dark:text-gray-400">
             {{ franchise.nodes.length }} entries
             <template v-if="franchise.truncated">(showing first {{ franchise.nodes.length }})</template>

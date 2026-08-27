@@ -7,9 +7,7 @@
 
   const convertToRuby = useConvertToRuby();
 
-  const { data: previewWords } = useApiFetch<DeckVocabularyPreviewWord[]>(
-    `media-deck/${props.deck.deckId}/vocabulary-preview`,
-  );
+  const { data: previewWords } = useApiFetch<DeckVocabularyPreviewWord[]>(`media-deck/${props.deck.deckId}/vocabulary-preview`);
 
   const vocabularyLink = computed(() => `/decks/media/${props.deck.deckId}/vocabulary?sortBy=deckFreq`);
 </script>
@@ -39,7 +37,9 @@
       </li>
     </ul>
     <NuxtLink :to="vocabularyLink" class="inline-block pt-2 text-primary text-sm">
-      See the full vocabulary list<template v-if="deck.uniqueWordCount"> ({{ deck.uniqueWordCount.toLocaleString('en-US') }} words)</template> →
+      See the full vocabulary list
+      <template v-if="deck.uniqueWordCount">({{ deck.uniqueWordCount.toLocaleString('en-US') }} words)</template>
+      →
     </NuxtLink>
   </details>
 </template>

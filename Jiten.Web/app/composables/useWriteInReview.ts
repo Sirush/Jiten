@@ -1,15 +1,7 @@
 import { useSrsStore } from '~/stores/srsStore';
 import { FsrsRating } from '~/types';
 import type { StudyCardDto } from '~/types';
-import {
-  checkMeaning,
-  checkReading,
-  hasKanji,
-  playWriteInChime,
-  shuffleInPlace,
-  type WriteInMode,
-  type WriteInResult,
-} from '~/utils/srsWriteIn';
+import { checkMeaning, checkReading, hasKanji, playWriteInChime, shuffleInPlace, type WriteInMode, type WriteInResult } from '~/utils/srsWriteIn';
 
 /**
  * Write-in review session logic: per-card modality assignment (equal-split shuffled bag), the
@@ -17,10 +9,7 @@ import {
  * Behaviour is entirely client-side — grading still goes through the normal optimistic flow via
  * the `commitGrade` callback.
  */
-export function useWriteInReview(opts: {
-  commitGrade: (rating: FsrsRating) => void;
-  reveal: () => void;
-}) {
+export function useWriteInReview(opts: { commitGrade: (rating: FsrsRating) => void; reveal: () => void }) {
   const srsStore = useSrsStore();
   const settings = computed(() => srsStore.studySettings.writeInReview);
 
@@ -33,7 +22,7 @@ export function useWriteInReview(opts: {
   });
 
   // Any write-in modality on at all? When only standard cards are enabled the feature is fully inert.
-  const writeInActive = computed(() => enabledModes.value.some(m => m !== 'srs'));
+  const writeInActive = computed(() => enabledModes.value.some((m) => m !== 'srs'));
 
   // Equal-split shuffled assignment: draw modes from a bag that refills (reshuffled) when empty,
   // so the rotation is balanced across a batch without being a fixed cycle. Assignments are cached
@@ -53,7 +42,8 @@ export function useWriteInReview(opts: {
     if (cached) return cached;
     let mode: WriteInMode;
     if (!writeInActive.value) mode = 'srs';
-    else if (card.isNewCard && settings.value.skipNewCards) mode = 'srs'; // never consumes the bag
+    else if (card.isNewCard && settings.value.skipNewCards)
+      mode = 'srs'; // never consumes the bag
     else mode = drawMode();
     // Reading mode is pointless for words with no kanji (the shown surface already is the reading).
     // Re-route to meaning if enabled, else fall back to a standard card.
@@ -70,9 +60,7 @@ export function useWriteInReview(opts: {
     bag = [];
   });
 
-  const currentMode = computed<WriteInMode>(() =>
-    srsStore.currentCard ? modeFor(srsStore.currentCard) : 'srs'
-  );
+  const currentMode = computed<WriteInMode>(() => (srsStore.currentCard ? modeFor(srsStore.currentCard) : 'srs'));
   const isWriteInCard = computed(() => currentMode.value !== 'srs');
   // Input phase: a write-in card that hasn't been revealed yet.
   const isInputPhase = computed(() => isWriteInCard.value && !srsStore.isFlipped);
@@ -142,7 +130,9 @@ export function useWriteInReview(opts: {
     void nextTick(() => {
       shake.value = true;
       if (shakeTimer) clearTimeout(shakeTimer);
-      shakeTimer = setTimeout(() => { shake.value = false; }, 500);
+      shakeTimer = setTimeout(() => {
+        shake.value = false;
+      }, 500);
     });
   }
 
@@ -194,13 +184,19 @@ export function useWriteInReview(opts: {
     gaveUp.value = false;
     shake.value = false;
     message.value = null;
-    if (shakeTimer) { clearTimeout(shakeTimer); shakeTimer = null; }
+    if (shakeTimer) {
+      clearTimeout(shakeTimer);
+      shakeTimer = null;
+    }
   }
 
   // New card → clear transient per-card state.
-  watch(() => srsStore.currentCard && `${srsStore.currentCard.wordId}-${srsStore.currentCard.readingIndex}`, () => {
-    resetCard();
-  });
+  watch(
+    () => srsStore.currentCard && `${srsStore.currentCard.wordId}-${srsStore.currentCard.readingIndex}`,
+    () => {
+      resetCard();
+    }
+  );
 
   onScopeDispose(() => {
     cancelAutoAdvance();

@@ -13,11 +13,13 @@ export function useNotifications() {
   const isLoading = ref(false);
   const error = ref<Error | null>(null);
 
-  const fetchNotifications = async (params: {
-    unreadOnly?: boolean;
-    offset?: number;
-    limit?: number;
-  } = {}) => {
+  const fetchNotifications = async (
+    params: {
+      unreadOnly?: boolean;
+      offset?: number;
+      limit?: number;
+    } = {}
+  ) => {
     isLoading.value = true;
     error.value = null;
     try {
@@ -51,7 +53,7 @@ export function useNotifications() {
   const markAsRead = async (id: number): Promise<boolean> => {
     try {
       await $api(`notifications/${id}/read`, { method: 'POST' });
-      const notification = notifications.value.find(n => n.id === id);
+      const notification = notifications.value.find((n) => n.id === id);
       if (notification) {
         notification.isRead = true;
         notification.readAt = new Date().toISOString();
@@ -67,7 +69,7 @@ export function useNotifications() {
   const markAllAsRead = async (): Promise<boolean> => {
     try {
       await $api('notifications/read-all', { method: 'POST' });
-      notifications.value.forEach(n => {
+      notifications.value.forEach((n) => {
         n.isRead = true;
         n.readAt = new Date().toISOString();
       });
@@ -82,7 +84,7 @@ export function useNotifications() {
   const deleteNotification = async (id: number): Promise<boolean> => {
     try {
       await $api(`notifications/${id}`, { method: 'DELETE' });
-      const idx = notifications.value.findIndex(n => n.id === id);
+      const idx = notifications.value.findIndex((n) => n.id === id);
       if (idx !== -1) {
         const removed = notifications.value[idx];
         if (!removed.isRead) unreadCount.value = Math.max(0, unreadCount.value - 1);

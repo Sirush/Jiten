@@ -77,7 +77,7 @@ export function useExtraExampleSentences(target: MaybeRefOrGetter<ExtraSentenceT
     const sorting = srsStore.studySettings.exampleSentenceSorting;
 
     try {
-      const alreadyLoaded = sentences.value.map(s => s.sourceDeck.deckId);
+      const alreadyLoaded = sentences.value.map((s) => s.sourceDeck.deckId);
       const results = await fetchPage(card, sorting, alreadyLoaded);
 
       if (sorting === 'Random') {
@@ -133,13 +133,10 @@ export function useExtraExampleSentences(target: MaybeRefOrGetter<ExtraSentenceT
     }
   }
 
-  watch(
-    () => {
-      const card = toValue(target);
-      return card ? `${card.wordId}-${card.readingIndex}` : '';
-    },
-    reset
-  );
+  watch(() => {
+    const card = toValue(target);
+    return card ? `${card.wordId}-${card.readingIndex}` : '';
+  }, reset);
 
   return { sentences, expanded, canLoadMore, isLoading, loadMore, toggle, reset };
 }

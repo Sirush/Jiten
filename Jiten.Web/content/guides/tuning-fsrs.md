@@ -1,7 +1,7 @@
 ---
 title: Tuning FSRS
-summary: "Set a retention target, fit the scheduler to your own history, and lighten the days you choose"
-category: "Advanced & tools"
+summary: 'Set a retention target, fit the scheduler to your own history, and lighten the days you choose'
+category: 'Advanced & tools'
 level: advanced
 order: 10
 icon: material-symbols-light:tune

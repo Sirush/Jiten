@@ -19,9 +19,7 @@ export function autoLinkUrls(text: string): string {
 
     const url = match[0];
     const escapedUrl = escapeHtml(url);
-    parts.push(
-      `<a href="${escapedUrl}" target="_blank" rel="nofollow noopener" class="text-primary hover:underline">${escapedUrl}</a>`
-    );
+    parts.push(`<a href="${escapedUrl}" target="_blank" rel="nofollow noopener" class="text-primary hover:underline">${escapedUrl}</a>`);
 
     lastIndex = match.index + url.length;
   }

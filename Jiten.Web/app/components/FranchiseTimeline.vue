@@ -122,7 +122,7 @@
   const popoverStyle = ref<Record<string, string>>({});
   let clearTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const activeNodeData = computed(() => (activeNode.value == null ? null : nodeById.value.get(activeNode.value) ?? null));
+  const activeNodeData = computed(() => (activeNode.value == null ? null : (nodeById.value.get(activeNode.value) ?? null)));
   const activeCaptions = computed(() => (activeNode.value == null ? [] : captionsFor(activeNode.value)));
 
   function cancelClear() {
@@ -434,7 +434,7 @@
               decoding="async"
               width="136"
               height="160"
-            >
+            />
             <div class="flex flex-col gap-0.5 p-1.5">
               <span class="line-clamp-2 text-xs font-medium leading-tight" :title="localiseTitle(node)">
                 {{ localiseTitle(node) }}

@@ -181,13 +181,7 @@
     <div class="max-w-2xl mb-6">
       <label for="novelUrl" class="block mb-2 font-medium">Novel URL</label>
       <InputGroup>
-        <InputText
-          id="novelUrl"
-          v-model="url"
-          placeholder="https://ncode.syosetu.com/n9669bk/"
-          :disabled="fetching"
-          @keydown.enter="fetchPreview"
-        />
+        <InputText id="novelUrl" v-model="url" placeholder="https://ncode.syosetu.com/n9669bk/" :disabled="fetching" @keydown.enter="fetchPreview" />
         <Button label="Fetch" icon="pi pi-search" :loading="fetching" :disabled="!url.trim()" @click="fetchPreview" />
       </InputGroup>
     </div>
@@ -201,9 +195,7 @@
               <i class="pi pi-external-link text-sm align-middle text-surface-400" />
             </a>
           </h2>
-          <div class="text-sm text-surface-500 dark:text-surface-400 mb-3">
-            {{ preview.author }} · {{ preview.sourceId }}
-          </div>
+          <div class="text-sm text-surface-500 dark:text-surface-400 mb-3">{{ preview.author }} · {{ preview.sourceId }}</div>
 
           <div class="flex flex-wrap gap-2 mb-4">
             <Tag v-if="preview.isCompleted" value="Completed" severity="success" />
@@ -256,11 +248,7 @@
             <label for="romajiTitle" class="block text-sm font-medium mb-1">Romaji Title</label>
             <div class="flex gap-2">
               <InputText id="romajiTitle" v-model="romajiTitle" class="flex-1" />
-              <Button
-                v-tooltip.top="'Auto-romanize from original title'"
-                :disabled="!originalTitle.trim() || romanizing"
-                @click="autoRomanize"
-              >
+              <Button v-tooltip.top="'Auto-romanize from original title'" :disabled="!originalTitle.trim() || romanizing" @click="autoRomanize">
                 <Icon v-if="!romanizing" name="material-symbols-light:translate" size="1.5em" />
                 <Icon v-else name="line-md:loading-loop" size="1.5em" />
               </Button>
@@ -273,39 +261,24 @@
         </div>
 
         <Message v-if="titleConflict" severity="error" :closable="false" class="mt-4">
-          A webnovel deck titled “{{ originalTitle.trim() }}” already exists. Rename it or remove the other deck — importing would
-          otherwise be skipped.
+          A webnovel deck titled “{{ originalTitle.trim() }}” already exists. Rename it or remove the other deck — importing would otherwise be skipped.
         </Message>
 
         <Message severity="info" :closable="false" class="mt-4">
-          Roughly {{ preview.estimatedSubdecks }} subdeck{{ preview.estimatedSubdecks === 1 ? '' : 's' }}. Fetching takes about
-          {{ estimatedMinutes }} minute{{ estimatedMinutes === 1 ? '' : 's' }} at a polite request rate, so the import runs in the background.
+          Roughly {{ preview.estimatedSubdecks }} subdeck{{ preview.estimatedSubdecks === 1 ? '' : 's' }}. Fetching takes about {{ estimatedMinutes }} minute{{
+            estimatedMinutes === 1 ? '' : 's'
+          }}
+          at a polite request rate, so the import runs in the background.
         </Message>
       </div>
 
       <div>
-        <CoverImageField
-          v-model:file="coverImage"
-          v-model:url="coverImageUrl"
-          :title="originalTitle"
-          :subtitle="romajiTitle || preview.author || ''"
-        />
-        <p class="mt-2 text-xs text-surface-500 dark:text-surface-400">
-          Syosetu works have no cover art — upload one or generate it from the title.
-        </p>
+        <CoverImageField v-model:file="coverImage" v-model:url="coverImageUrl" :title="originalTitle" :subtitle="romajiTitle || preview.author || ''" />
+        <p class="mt-2 text-xs text-surface-500 dark:text-surface-400">Syosetu works have no cover art — upload one or generate it from the title.</p>
 
         <div class="mt-4">
           <label for="chunkChars" class="block mb-1 text-sm font-medium">Subdeck size (characters)</label>
-          <InputNumber
-            id="chunkChars"
-            v-model="chunkCharBudget"
-            placeholder="150000"
-            :min="10000"
-            :max="1000000"
-            :step="10000"
-            class="w-full"
-            show-buttons
-          />
+          <InputNumber id="chunkChars" v-model="chunkCharBudget" placeholder="150000" :min="10000" :max="1000000" :step="10000" class="w-full" show-buttons />
           <p class="mt-1 text-xs text-surface-500 dark:text-surface-400">Leave empty for the default (150,000 — roughly one volume).</p>
         </div>
 

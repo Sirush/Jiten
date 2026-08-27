@@ -45,8 +45,7 @@ export const useAnkiImportStore = defineStore('ankiImport', () => {
     if (!import.meta.client) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings.value));
-    } catch {
-    }
+    } catch {}
   }
 
   function load() {
@@ -72,8 +71,7 @@ export const useAnkiImportStore = defineStore('ankiImport', () => {
       }
 
       if (blob.version === VERSION) settings.value = blob;
-    } catch {
-    }
+    } catch {}
   }
 
   // Persist one deck's full selection, keyed by id, and remember it as the last-used deck.
@@ -104,7 +102,8 @@ export const useAnkiImportStore = defineStore('ankiImport', () => {
     const entry = Object.entries(settings.value.decks).find(([, d]) => d.deckName === deckName);
     if (!entry) return undefined;
     if (entry[0] !== String(deckId)) {
-      delete settings.value.decks[entry[0]];
+      const { [entry[0]]: _removed, ...rest } = settings.value.decks;
+      settings.value.decks = rest;
       settings.value.decks[deckId] = entry[1];
       settings.value.lastDeckId = deckId;
       write();

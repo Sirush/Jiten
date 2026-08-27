@@ -1,6 +1,6 @@
 <script setup lang="ts">
-  const description
-    = 'Everything Jiten offers: media difficulty and statistics, personal coverage tracking, a built-in SRS, Anki deck generation, frequency dictionaries, and companion tools.';
+  const description =
+    'Everything Jiten offers: media difficulty and statistics, personal coverage tracking, a built-in SRS, Anki deck generation, frequency dictionaries, and companion tools.';
 
   useSeoMeta({
     title: 'Features',
@@ -13,8 +13,7 @@
 
   defineOgImage('PageOgImage', {
     title: 'Everything Jiten offers',
-    description:
-      'Media difficulty and statistics, coverage tracking, a built-in SRS, Anki deck generation, frequency dictionaries and companion tools.',
+    description: 'Media difficulty and statistics, coverage tracking, a built-in SRS, Anki deck generation, frequency dictionaries and companion tools.',
   });
 
   useJitenAppSchema();
@@ -175,8 +174,8 @@
                 <JitenPlusBadge />
               </div>
               <p class="text-sm text-gray-600 dark:text-gray-400 mb-0">
-                Jiten+ enhances your cards with your own images and audio that you can easily mine with JitenMPV, custom frequency lists, personalised immersion plans, your coverage journey, and higher limits.
-                It also helps keep everything else free.
+                Jiten+ enhances your cards with your own images and audio that you can easily mine with JitenMPV, custom frequency lists, personalised immersion
+                plans, your coverage journey, and higher limits. It also helps keep everything else free.
               </p>
             </div>
             <NuxtLink to="/jiten-plus" class="no-underline shrink-0">

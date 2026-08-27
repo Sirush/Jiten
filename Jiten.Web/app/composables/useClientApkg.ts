@@ -104,18 +104,12 @@ function stripDataAttributes(html: string): string {
 export function useClientApkg() {
   const { dictionaries, loadDictionaries, lookupWord } = useYomitanDictionary();
 
-  async function processApkg(
-    apkgBlob: Blob,
-    onProgress?: (progress: ApkgProcessingProgress) => void,
-  ): Promise<Blob> {
+  async function processApkg(apkgBlob: Blob, onProgress?: (progress: ApkgProcessingProgress) => void): Promise<Blob> {
     onProgress?.({ phase: 'unzipping', current: 0, total: 1 });
 
     const zip = await JSZip.loadAsync(apkgBlob);
 
-    const collectionFile =
-      zip.file('collection.anki21') ||
-      zip.file('collection.anki21b') ||
-      zip.file('collection.anki2');
+    const collectionFile = zip.file('collection.anki21') || zip.file('collection.anki21b') || zip.file('collection.anki2');
 
     if (!collectionFile) {
       throw new Error('Invalid APKG: no collection database found');
@@ -196,9 +190,7 @@ export function useClientApkg() {
       if (visibleGroups.length === 1) {
         combinedHtml = visibleGroups[0].html;
       } else {
-        combinedHtml = visibleGroups
-          .map((g) => `<div class="dict-group"><div class="dict-name"><b>${g.name}</b></div>${g.html}</div>`)
-          .join('');
+        combinedHtml = visibleGroups.map((g) => `<div class="dict-group"><div class="dict-name"><b>${g.name}</b></div>${g.html}</div>`).join('');
       }
 
       fields[FIELD_INDEX_DEFINITION] = stripDataAttributes(stripLinks(combinedHtml));
@@ -223,10 +215,7 @@ export function useClientApkg() {
     return result;
   }
 
-  async function processCsv(
-    csvBlob: Blob,
-    onProgress?: (progress: CsvProcessingProgress) => void,
-  ): Promise<Blob> {
+  async function processCsv(csvBlob: Blob, onProgress?: (progress: CsvProcessingProgress) => void): Promise<Blob> {
     onProgress?.({ phase: 'parsing', current: 0, total: 1 });
 
     const text = await csvBlob.text();

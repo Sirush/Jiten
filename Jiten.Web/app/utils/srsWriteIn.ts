@@ -50,9 +50,7 @@ export function hasKanji(text: string): boolean {
 }
 
 function primaryReading(card: StudyCardDto): string {
-  return card.readings.find(r => r.formType === 1)?.text
-    ?? card.readings[0]?.text
-    ?? card.wordTextPlain;
+  return card.readings.find((r) => r.formType === 1)?.text ?? card.readings[0]?.text ?? card.wordTextPlain;
 }
 
 /** Reading mode: any registered reading (or the surface form), compared exactly as hiragana. */
@@ -62,21 +60,22 @@ export function checkReading(input: string, card: StudyCardDto): WriteInResult {
   const accepted = new Set<string>();
   for (const r of card.readings) if (r.text) accepted.add(canon(r.text));
   if (card.wordTextPlain) accepted.add(canon(card.wordTextPlain));
-  const ok = candidates.some(c => c.length > 0 && accepted.has(c));
+  const ok = candidates.some((c) => c.length > 0 && accepted.has(c));
   return { ok, normalized: norm, expected: primaryReading(card) };
 }
 
 // Function words and dictionary-note tokens that don't count as a "content word" answer.
-const STOPWORDS = new Set([
-  'the', 'a', 'an', 'to', 'of', 'for', 'in', 'on', 'at', 'by', 'and', 'or', 'as',
-]);
+const STOPWORDS = new Set(['the', 'a', 'an', 'to', 'of', 'for', 'in', 'on', 'at', 'by', 'and', 'or', 'as']);
 
 /** Content words in a piece of English text: lowercased, parenthetical notes & function words removed. */
 function contentTokens(text: string): string[] {
   const cleaned = (text ?? '').replace(/\([^)]*\)/g, ' ').toLowerCase();
   const out: string[] = [];
   for (const raw of cleaned.split(/[^a-z'’-]+/)) {
-    const w = raw.replace(/['’]s$/, '').replace(/^-+|-+$/g, '').trim();
+    const w = raw
+      .replace(/['’]s$/, '')
+      .replace(/^-+|-+$/g, '')
+      .trim();
     if (w.length >= 2 && !STOPWORDS.has(w)) out.push(w);
   }
   return out;
@@ -85,9 +84,7 @@ function contentTokens(text: string): string[] {
 /** All content words across a card's meanings. */
 export function extractContentWords(card: StudyCardDto): Set<string> {
   const set = new Set<string>();
-  for (const def of card.definitions ?? [])
-    for (const gloss of def.meanings ?? [])
-      for (const w of contentTokens(gloss)) set.add(w);
+  for (const def of card.definitions ?? []) for (const gloss of def.meanings ?? []) for (const w of contentTokens(gloss)) set.add(w);
   return set;
 }
 
@@ -103,7 +100,7 @@ export function checkMeaning(input: string, card: StudyCardDto): WriteInResult {
   const norm = (input ?? '').trim().toLowerCase();
   const expected = card.definitions?.[0]?.meanings?.[0] ?? '';
   if (typed.length === 0) return { ok: false, invalid: true, normalized: norm, expected };
-  return { ok: typed.some(t => accepted.has(t)), normalized: norm, expected };
+  return { ok: typed.some((t) => accepted.has(t)), normalized: norm, expected };
 }
 
 /** Fisher–Yates shuffle (in place), returning the array for convenience. */

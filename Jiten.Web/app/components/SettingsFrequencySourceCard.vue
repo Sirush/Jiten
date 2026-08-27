@@ -77,8 +77,8 @@
     </template>
     <template #content>
       <div class="text-sm text-muted-color mb-4">
-        By default, the frequency ranks are shown from the global corpus, which is an average of the frequency across the whole catalogue.
-        You can choose a media type you often immerse in or one of your saved frequency lists (Jiten+ feature) to rank words in the way that matters the most for your learning.
+        By default, the frequency ranks are shown from the global corpus, which is an average of the frequency across the whole catalogue. You can choose a
+        media type you often immerse in or one of your saved frequency lists (Jiten+ feature) to rank words in the way that matters the most for your learning.
       </div>
 
       <Skeleton v-if="loading" height="2.6rem" class="md:!w-72" />
@@ -94,7 +94,8 @@
       />
 
       <p class="text-xs text-muted-color mt-3">
-        If the frequency for a word doesn't exist in your chosen source, it will keep its global rank. For custom lists, if your Jiten+ subscription lapses or you delete it, your rank will go back to the Global one by default.
+        If the frequency for a word doesn't exist in your chosen source, it will keep its global rank. For custom lists, if your Jiten+ subscription lapses or
+        you delete it, your rank will go back to the Global one by default.
       </p>
     </template>
   </Card>

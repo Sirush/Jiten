@@ -215,7 +215,7 @@ public class StripeService(
                 await HandleSubscriptionDeletedAsync(user, evt, ct);
                 break;
             case StripeWebhookKind.PaymentFailed:
-                await SafeSend(() => emails.SendSubscriptionPaymentFailedAsync(user.Email));
+                await SafeSend("payment-failed", user.Id, () => emails.SendSubscriptionPaymentFailedAsync(user.Email));
                 break;
         }
 
@@ -247,7 +247,7 @@ public class StripeService(
             return; // already applied — idempotent
 
         await GrantLifetimeAsync(user, LifetimeSource.WindowPurchase, ct);
-        await SafeSend(() => emails.SendLifetimeConfirmedAsync(user.Email, _options.LifetimePriceCents, _legalOptions.CgvVersion));
+        await SafeSend("lifetime-confirmed", user.Id, () => ResendLifetimeConfirmedEmailAsync(user));
     }
 
     private async Task HandleSubscriptionCheckoutAsync(User user, StripeWebhookEvent evt, CancellationToken ct)
@@ -259,9 +259,7 @@ public class StripeService(
         await userContext.SaveChangesAsync(ct);
 
         if (!wasActive)
-            await SafeSend(() => emails.SendSubscriptionConfirmedAsync(user.Email, user.SubscriptionPlan, user.SubscriptionPeriodEnd,
-                                                                       _options.PriceCentsForPlan(user.SubscriptionPlan),
-                                                                       _legalOptions.CgvVersion));
+            await SafeSend("subscription-confirmed", user.Id, () => ResendSubscriptionConfirmedEmailAsync(user));
     }
 
     private async Task HandleSubscriptionUpdatedAsync(User user, StripeWebhookEvent evt, CancellationToken ct)
@@ -291,7 +289,7 @@ public class StripeService(
         await userContext.SaveChangesAsync(ct);
 
         if (wasActive)
-            await SafeSend(() => emails.SendSubscriptionEndedAsync(user.Email));
+            await SafeSend("subscription-ended", user.Id, () => emails.SendSubscriptionEndedAsync(user.Email));
     }
 
     /// <summary>Writes subscription fields from a snapshot. When no snapshot is available, only the id and an
@@ -334,7 +332,7 @@ public class StripeService(
                                 .Select(u => u.Id).FirstOrDefaultAsync(ct);
     }
 
-    private async Task SafeSend(Func<Task> send)
+    private async Task SafeSend(string kind, string userId, Func<Task> send)
     {
         try
         {
@@ -345,11 +343,21 @@ public class StripeService(
             // A billing email failure must not fail the webhook (which would trigger a Stripe retry and re-run
             // the state change). Log and move on.
             BillingTelemetry.EmailFailed.Add(1);
-            logger.LogError(ex, "Failed to send a Jiten+ billing email");
+            logger.LogError(ex, "Failed to send a Jiten+ {Kind} email to user {UserId}", kind, userId);
             // The alert is pushed to Discord; SMTP error messages can contain the recipient address, and the
-            // privacy policy promises no email addresses leave our infrastructure. Full detail is in the log.
+            // privacy policy promises no email addresses leave our infrastructure. The user id lets an admin
+            // resend from the dashboard without opening the log.
             await alerts.RaiseAsync("billing-email", "Jiten+ billing email failed to send",
-                                    $"{ex.GetType().Name} — see the server log for details.");
+                                    $"{ex.GetType().Name} — {kind} email for user {userId}. Resend from /dashboard/jiten-plus.");
         }
     }
+
+    /// <summary>Admin resend of the lifetime purchase confirmation, rebuilt from current options. Throws on failure.</summary>
+    public Task ResendLifetimeConfirmedEmailAsync(User user) =>
+        emails.SendLifetimeConfirmedAsync(user.Email, _options.LifetimePriceCents, _legalOptions.CgvVersion);
+
+    /// <summary>Admin resend of the subscription confirmation, rebuilt from the user's stored plan and period end. Throws on failure.</summary>
+    public Task ResendSubscriptionConfirmedEmailAsync(User user) =>
+        emails.SendSubscriptionConfirmedAsync(user.Email, user.SubscriptionPlan, user.SubscriptionPeriodEnd,
+                                              _options.PriceCentsForPlan(user.SubscriptionPlan), _legalOptions.CgvVersion);
 }

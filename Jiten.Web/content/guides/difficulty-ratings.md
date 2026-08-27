@@ -1,7 +1,7 @@
 ---
 title: Difficulty ratings
 summary: Understand how difficulty ratings work and vote to adjust them
-category: "Advanced & tools"
+category: 'Advanced & tools'
 level: advanced
 order: 50
 icon: material-symbols-light:balance
@@ -32,13 +32,13 @@ Below each cover, you'll find several buttons:
 Both skip buttons add an entry in **Review skipped pairs** on the ratings page and in the **Skipped** tab of your history, so you can restore it at any time if you've made a mistake.
 
 ::note
-Voting on the same pair a second time will replace your old answer. 
+Voting on the same pair a second time will replace your old answer.
 You can choose a pair manually with the **Compare specific titles** block on the same page.
 ::
 
 ## Ranking in bulk
 
-The [ranking page](/ratings/ranking) presents your completed titles out as a tier list, with a tab per group that don't mix well: **Prose**, **Visual Text**, **Audio Visual** and **Non-Fiction**. Drag a title out of **Unranked** onto a rank for title with a similar difficulty, or into a gap between ranks to give it a rank of its own. 
+The [ranking page](/ratings/ranking) presents your completed titles out as a tier list, with a tab per group that don't mix well: **Prose**, **Visual Text**, **Audio Visual** and **Non-Fiction**. Drag a title out of **Unranked** onto a rank for title with a similar difficulty, or into a gap between ranks to give it a rank of its own.
 
 A pair you compared manually will always outrank comparisons realised in bulk. This is a quick way to rank your list if you have hundreds of titles, but since it's less precise, it also has less weight in the voting system.
 

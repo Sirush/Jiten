@@ -82,7 +82,8 @@
 <template>
   <Dialog v-model:visible="localVisible" modal header="Report an issue" :style="{ width: '36rem', maxWidth: '90vw' }">
     <div>
-      You're reporting an issue with the deck <b>{{ localiseTitle(deck) }}</b>
+      You're reporting an issue with the deck
+      <b>{{ localiseTitle(deck) }}</b>
     </div>
     <div class="flex flex-col gap-4">
       <div>
@@ -93,7 +94,7 @@
             :key="opt.value"
             class="flex items-center gap-2 rounded border p-2 cursor-pointer hover:bg-surface-50 hover:dark:bg-surface-800"
           >
-            <RadioButton :input-id="'issue-' + opt.value" :value="opt.value" v-model="selectedType" />
+            <RadioButton v-model="selectedType" :input-id="'issue-' + opt.value" :value="opt.value" />
             <span :for="'issue-' + opt.value">{{ opt.label }}</span>
           </label>
         </div>

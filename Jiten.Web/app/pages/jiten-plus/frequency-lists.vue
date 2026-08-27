@@ -189,7 +189,7 @@
     () => {
       if (isPlus.value) runPreview();
     },
-    { deep: true },
+    { deep: true }
   );
 
   const hasFilters = computed(() => {
@@ -206,9 +206,7 @@
     );
   });
 
-  const canGenerate = computed(
-    () => (previewCount.value ?? 0) >= minDecks && name.value.trim().length > 0 && hasFilters.value,
-  );
+  const canGenerate = computed(() => (previewCount.value ?? 0) >= minDecks && name.value.trim().length > 0 && hasFilters.value);
 
   // ---- Deck picker --------------------------------------------------------
 
@@ -549,11 +547,16 @@
 
   function statusSeverity(status: string): string {
     switch (status) {
-      case 'ready': return 'success';
-      case 'failed': return 'danger';
-      case 'generating': return 'info';
-      case 'expired': return 'secondary';
-      default: return 'warn';
+      case 'ready':
+        return 'success';
+      case 'failed':
+        return 'danger';
+      case 'generating':
+        return 'info';
+      case 'expired':
+        return 'secondary';
+      default:
+        return 'warn';
     }
   }
 
@@ -565,7 +568,7 @@
         loadLists();
         runPreview(); // baseline facet counts for the whole catalogue
       },
-      { immediate: true },
+      { immediate: true }
     );
   });
   onBeforeUnmount(() => {
@@ -586,8 +589,8 @@
         <div class="text-center py-6">
           <Icon name="material-symbols-light:workspace-premium-outline" size="2.5em" class="text-primary mb-2" />
           <p class="mb-4 text-surface-600 dark:text-surface-300">
-            Build custom frequency dictionaries from any slice of the catalogue. Filter by media type, genre, tag, year or difficulty,
-            or from a hand-picked set of decks. This is a Jiten+ feature.
+            Build custom frequency dictionaries from any slice of the catalogue. Filter by media type, genre, tag, year or difficulty, or from a hand-picked set
+            of decks. This is a Jiten+ feature.
           </p>
           <Button as="router-link" to="/jiten-plus" label="Learn about Jiten+" severity="primary" />
         </div>
@@ -603,224 +606,208 @@
 
       <!-- Builder -->
       <div ref="builderEl" class="scroll-mt-4">
-      <Card class="mb-4" :class="editingId !== null ? 'ring-2 ring-primary' : ''">
-        <template #title>
-          <div class="flex flex-wrap items-center gap-2">
-            <template v-if="editingId !== null">
-              <Icon name="material-symbols-light:edit-outline" size="1.2em" class="text-primary" />
-              <span>Editing <span class="text-primary">{{ editingOriginalName }}</span></span>
-            </template>
-            <span v-else>Build a list</span>
-          </div>
-        </template>
-        <template #content>
-          <div class="flex flex-col gap-4">
-            <p v-if="editingId !== null" class="text-sm text-surface-500 dark:text-surface-400 -mt-1">
-              Saving rebuilds this list with the new filters but keeps the same share link.
-            </p>
-            <div class="flex flex-col sm:flex-row gap-3 sm:items-end">
-              <div class="flex-1">
-                <label class="block text-sm font-medium mb-1" for="list-name">
-                  List name <span class="text-primary">*</span>
-                  <span class="text-xs font-normal text-surface-400">(required)</span>
-                </label>
-                <InputText
-                  id="list-name"
-                  v-model="name"
-                  maxlength="100"
-                  placeholder="e.g. Slice of Life anime"
-                  class="w-full"
-                  aria-required="true"
-                />
-              </div>
-              <SelectButton v-model="mode" :options="modeOptions" option-label="label" option-value="value" :allow-empty="false" />
+        <Card class="mb-4" :class="editingId !== null ? 'ring-2 ring-primary' : ''">
+          <template #title>
+            <div class="flex flex-wrap items-center gap-2">
+              <template v-if="editingId !== null">
+                <Icon name="material-symbols-light:edit-outline" size="1.2em" class="text-primary" />
+                <span>
+                  Editing
+                  <span class="text-primary">{{ editingOriginalName }}</span>
+                </span>
+              </template>
+              <span v-else>Build a list</span>
             </div>
+          </template>
+          <template #content>
+            <div class="flex flex-col gap-4">
+              <p v-if="editingId !== null" class="text-sm text-surface-500 dark:text-surface-400 -mt-1">
+                Saving rebuilds this list with the new filters but keeps the same share link.
+              </p>
+              <div class="flex flex-col sm:flex-row gap-3 sm:items-end">
+                <div class="flex-1">
+                  <label class="block text-sm font-medium mb-1" for="list-name">
+                    List name
+                    <span class="text-primary">*</span>
+                    <span class="text-xs font-normal text-surface-400">(required)</span>
+                  </label>
+                  <InputText id="list-name" v-model="name" maxlength="100" placeholder="e.g. Slice of Life anime" class="w-full" aria-required="true" />
+                </div>
+                <SelectButton v-model="mode" :options="modeOptions" option-label="label" option-value="value" :allow-empty="false" />
+              </div>
 
-            <!-- Filter mode -->
-            <div v-if="mode === 'filters'" class="flex flex-col gap-4">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Filter mode -->
+              <div v-if="mode === 'filters'" class="flex flex-col gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium mb-1">Media types</label>
+                    <MultiSelect
+                      v-model="mediaTypes"
+                      :options="mediaTypeOptions"
+                      option-label="name"
+                      option-value="id"
+                      display="chip"
+                      placeholder="Any"
+                      class="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-1">Release year</label>
+                    <div class="flex items-center gap-2 min-w-0">
+                      <InputNumber v-model="yearFrom" :use-grouping="false" :min="1900" :max="currentYear" placeholder="From" fluid class="w-full min-w-0" />
+                      <span class="text-surface-400 shrink-0">–</span>
+                      <InputNumber v-model="yearTo" :use-grouping="false" :min="1900" :max="currentYear" placeholder="To" fluid class="w-full min-w-0" />
+                    </div>
+                  </div>
+                </div>
+
                 <div>
-                  <label class="block text-sm font-medium mb-1">Media types</label>
-                  <MultiSelect
-                    v-model="mediaTypes"
-                    :options="mediaTypeOptions"
-                    option-label="name"
-                    option-value="id"
-                    display="chip"
-                    placeholder="Any"
+                  <label class="block text-sm font-medium mb-1">Difficulty ({{ difficultyRange[0] }} – {{ difficultyRange[1] }})</label>
+                  <Slider v-model="difficultyRange" range :min="0" :max="5" :step="0.5" class="mt-2" />
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium mb-1">
+                      Genres
+                      <span class="text-xs text-surface-400">(click to include / exclude)</span>
+                    </label>
+                    <InputText v-model="genreSearch" placeholder="Search genres" class="w-full mb-2" />
+                    <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                      <TriStateTag
+                        v-for="g in filteredGenres"
+                        :key="g.value"
+                        :label="genreLabel(g.value, g.label)"
+                        :state="genreStates[g.value] ?? 'neutral'"
+                        @update:state="(s) => (genreStates[g.value] = s)"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-1">
+                      Tags
+                      <span class="text-xs text-surface-400">(click to include / exclude)</span>
+                    </label>
+                    <InputText v-model="tagSearch" placeholder="Search tags" class="w-full mb-2" />
+                    <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                      <TriStateTag
+                        v-for="t in filteredTags"
+                        :key="t.tagId"
+                        :label="tagLabel(t.tagId, t.name)"
+                        :state="tagStates[t.tagId] ?? 'neutral'"
+                        @update:state="(s) => (tagStates[t.tagId] = s)"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Hand-picked mode -->
+              <div v-else class="flex flex-col gap-3">
+                <div>
+                  <label class="block text-sm font-medium mb-1">Search decks</label>
+                  <AutoComplete
+                    v-model="selectedDeck"
+                    :suggestions="deckSuggestions"
+                    :option-label="localiseTitle"
+                    dropdown
+                    placeholder="Type a title…"
                     class="w-full"
-                  />
+                    @complete="onDeckComplete"
+                    @item-select="onDeckSelect"
+                  >
+                    <template #option="{ option }">
+                      <div class="flex items-center gap-2">
+                        <img
+                          :src="coverUrl(option.coverName)"
+                          alt=""
+                          class="w-6 h-8 object-cover rounded"
+                          @error="(e) => ((e.target as HTMLImageElement).src = '/img/nocover.jpg')"
+                        />
+                        <span>{{ localiseTitle(option) }}</span>
+                        <Tag :value="getMediaTypeText(option.mediaType)" severity="secondary" class="ml-auto" />
+                      </div>
+                    </template>
+                  </AutoComplete>
+                  <Button label="Add from my media list" icon="pi pi-list" size="small" outlined class="mt-2" @click="mediaListPickerVisible = true" />
                 </div>
-                <div>
-                  <label class="block text-sm font-medium mb-1">Release year</label>
-                  <div class="flex items-center gap-2 min-w-0">
-                    <InputNumber v-model="yearFrom" :use-grouping="false" :min="1900" :max="currentYear" placeholder="From" fluid class="w-full min-w-0" />
-                    <span class="text-surface-400 shrink-0">–</span>
-                    <InputNumber v-model="yearTo" :use-grouping="false" :min="1900" :max="currentYear" placeholder="To" fluid class="w-full min-w-0" />
-                  </div>
-                </div>
+                <Accordion v-if="pickedDecks.length" value="picked">
+                  <AccordionPanel value="picked">
+                    <AccordionHeader>Selected decks ({{ pickedDecks.length }})</AccordionHeader>
+                    <AccordionContent>
+                      <div class="flex flex-col gap-2 pt-1">
+                        <div
+                          v-for="d in pickedDecks"
+                          :key="d.deckId"
+                          class="flex items-center gap-3 min-w-0 border border-surface-200 dark:border-surface-700 rounded-lg p-2"
+                        >
+                          <img
+                            :src="coverUrl(d.coverName)"
+                            alt=""
+                            class="h-16 w-11 object-cover rounded shrink-0"
+                            @error="(e) => ((e.target as HTMLImageElement).src = '/img/nocover.jpg')"
+                          />
+                          <div class="flex items-center gap-2 min-w-0 flex-1">
+                            <span class="font-medium truncate" :title="localiseTitle(d)">{{ localiseTitle(d) }}</span>
+                            <Tag :value="getMediaTypeText(d.mediaType)" severity="secondary" class="shrink-0" />
+                          </div>
+                          <Tooltip content="Remove">
+                            <Button icon="pi pi-times" text rounded size="small" severity="danger" class="shrink-0" @click="removePickedDeck(d.deckId)" />
+                          </Tooltip>
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionPanel>
+                </Accordion>
+                <p class="text-xs text-surface-400">Pick at least {{ minDecks }} decks.</p>
               </div>
 
-              <div>
-                <label class="block text-sm font-medium mb-1">
-                  Difficulty ({{ difficultyRange[0] }} – {{ difficultyRange[1] }})
-                </label>
-                <Slider v-model="difficultyRange" range :min="0" :max="5" :step="0.5" class="mt-2" />
-              </div>
-
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-sm font-medium mb-1">Genres <span class="text-xs text-surface-400">(click to include / exclude)</span></label>
-                  <InputText v-model="genreSearch" placeholder="Search genres" class="w-full mb-2" />
-                  <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-                    <TriStateTag
-                      v-for="g in filteredGenres"
-                      :key="g.value"
-                      :label="genreLabel(g.value, g.label)"
-                      :state="genreStates[g.value] ?? 'neutral'"
-                      @update:state="(s) => (genreStates[g.value] = s)"
-                    />
-                  </div>
+              <!-- Preview + generate -->
+              <div class="flex flex-col sm:flex-row sm:items-center gap-3 border-t border-surface-200 dark:border-surface-700 pt-3">
+                <div class="flex items-center gap-2 text-sm">
+                  <template v-if="previewCount !== null">
+                    <span :class="{ 'opacity-50 transition-opacity': previewLoading }">
+                      <b :class="previewCount < minDecks ? 'text-red-500' : 'text-primary'">{{ previewCount.toLocaleString() }}</b>
+                      decks match
+                    </span>
+                    <ProgressSpinner v-if="previewLoading" style="width: 1rem; height: 1rem" stroke-width="6" />
+                  </template>
+                  <ProgressSpinner v-else-if="previewLoading" style="width: 1rem; height: 1rem" stroke-width="6" />
+                  <span v-else class="text-surface-400">Adjust filters to preview</span>
                 </div>
-                <div>
-                  <label class="block text-sm font-medium mb-1">Tags <span class="text-xs text-surface-400">(click to include / exclude)</span></label>
-                  <InputText v-model="tagSearch" placeholder="Search tags" class="w-full mb-2" />
-                  <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-                    <TriStateTag
-                      v-for="t in filteredTags"
-                      :key="t.tagId"
-                      :label="tagLabel(t.tagId, t.name)"
-                      :state="tagStates[t.tagId] ?? 'neutral'"
-                      @update:state="(s) => (tagStates[t.tagId] = s)"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <!-- Hand-picked mode -->
-            <div v-else class="flex flex-col gap-3">
-              <div>
-                <label class="block text-sm font-medium mb-1">Search decks</label>
-                <AutoComplete
-                  v-model="selectedDeck"
-                  :suggestions="deckSuggestions"
-                  :option-label="localiseTitle"
-                  dropdown
-                  placeholder="Type a title…"
-                  class="w-full"
-                  @complete="onDeckComplete"
-                  @item-select="onDeckSelect"
-                >
-                  <template #option="{ option }">
-                    <div class="flex items-center gap-2">
-                      <img :src="coverUrl(option.coverName)" alt="" class="w-6 h-8 object-cover rounded" @error="(e) => ((e.target as HTMLImageElement).src = '/img/nocover.jpg')" >
-                      <span>{{ localiseTitle(option) }}</span>
-                      <Tag :value="getMediaTypeText(option.mediaType)" severity="secondary" class="ml-auto" />
+                <div class="flex flex-wrap items-center gap-3 sm:ml-auto">
+                  <template v-if="editingId === null">
+                    <div class="flex items-center gap-2" :title="isFull ? '' : 'Requires Jiten+ Full'">
+                      <Checkbox v-model="saveList" input-id="save-list" binary :disabled="!isFull" />
+                      <label for="save-list" class="text-sm" :class="{ 'text-surface-400': !isFull }">Keep saved</label>
+                      <JitenPlusBadge v-if="!isFull" tier="full" />
+                    </div>
+                    <div v-if="saveList && isFull" class="flex items-center gap-2">
+                      <Checkbox v-model="autoUpdate" input-id="auto-update" binary />
+                      <label for="auto-update" class="text-sm">Auto-update</label>
                     </div>
                   </template>
-                </AutoComplete>
-                <Button
-                  label="Add from my media list"
-                  icon="pi pi-list"
-                  size="small"
-                  outlined
-                  class="mt-2"
-                  @click="mediaListPickerVisible = true"
-                />
+                  <Button v-if="editingId !== null" label="Cancel" outlined severity="secondary" @click="resetBuilder" />
+                  <Button
+                    :label="editingId !== null ? 'Save changes' : 'Generate'"
+                    :icon="editingId !== null ? 'pi pi-check' : 'pi pi-bolt'"
+                    :loading="creating"
+                    :disabled="!canGenerate"
+                    @click="submit"
+                  />
+                </div>
               </div>
-              <Accordion v-if="pickedDecks.length" value="picked">
-                <AccordionPanel value="picked">
-                  <AccordionHeader>Selected decks ({{ pickedDecks.length }})</AccordionHeader>
-                  <AccordionContent>
-                    <div class="flex flex-col gap-2 pt-1">
-                      <div
-                        v-for="d in pickedDecks"
-                        :key="d.deckId"
-                        class="flex items-center gap-3 min-w-0 border border-surface-200 dark:border-surface-700 rounded-lg p-2"
-                      >
-                        <img
-                          :src="coverUrl(d.coverName)"
-                          alt=""
-                          class="h-16 w-11 object-cover rounded shrink-0"
-                          @error="(e) => ((e.target as HTMLImageElement).src = '/img/nocover.jpg')"
-                        >
-                        <div class="flex items-center gap-2 min-w-0 flex-1">
-                          <span class="font-medium truncate" :title="localiseTitle(d)">{{ localiseTitle(d) }}</span>
-                          <Tag :value="getMediaTypeText(d.mediaType)" severity="secondary" class="shrink-0" />
-                        </div>
-                        <Tooltip content="Remove">
-                          <Button
-                            icon="pi pi-times"
-                            text
-                            rounded
-                            size="small"
-                            severity="danger"
-                            class="shrink-0"
-                            @click="removePickedDeck(d.deckId)"
-                          />
-                        </Tooltip>
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionPanel>
-              </Accordion>
-              <p class="text-xs text-surface-400">Pick at least {{ minDecks }} decks.</p>
+              <p v-if="!hasFilters" class="text-xs text-surface-400 -mt-2">
+                {{ mode === 'handpicked' ? `Pick at least ${minDecks} decks to generate a list.` : 'Select at least one filter to generate a list.' }}
+              </p>
+              <p v-else-if="previewCount !== null && previewCount < minDecks" class="text-xs text-red-500 -mt-2">
+                A list needs at least {{ minDecks }} matching decks.
+              </p>
+              <div v-if="previewSample.length" class="text-xs text-surface-400">e.g. {{ previewSample.slice(0, 5).map(localiseTitle).join(', ') }}</div>
             </div>
-
-            <!-- Preview + generate -->
-            <div class="flex flex-col sm:flex-row sm:items-center gap-3 border-t border-surface-200 dark:border-surface-700 pt-3">
-              <div class="flex items-center gap-2 text-sm">
-                <template v-if="previewCount !== null">
-                  <span :class="{ 'opacity-50 transition-opacity': previewLoading }">
-                    <b :class="previewCount < minDecks ? 'text-red-500' : 'text-primary'">{{ previewCount.toLocaleString() }}</b> decks match
-                  </span>
-                  <ProgressSpinner v-if="previewLoading" style="width: 1rem; height: 1rem" stroke-width="6" />
-                </template>
-                <ProgressSpinner v-else-if="previewLoading" style="width: 1rem; height: 1rem" stroke-width="6" />
-                <span v-else class="text-surface-400">Adjust filters to preview</span>
-              </div>
-
-              <div class="flex flex-wrap items-center gap-3 sm:ml-auto">
-                <template v-if="editingId === null">
-                  <div class="flex items-center gap-2" :title="isFull ? '' : 'Requires Jiten+ Full'">
-                    <Checkbox v-model="saveList" input-id="save-list" binary :disabled="!isFull" />
-                    <label for="save-list" class="text-sm" :class="{ 'text-surface-400': !isFull }">Keep saved</label>
-                    <JitenPlusBadge v-if="!isFull" tier="full" />
-                  </div>
-                  <div v-if="saveList && isFull" class="flex items-center gap-2">
-                    <Checkbox v-model="autoUpdate" input-id="auto-update" binary />
-                    <label for="auto-update" class="text-sm">Auto-update</label>
-                  </div>
-                </template>
-                <Button
-                  v-if="editingId !== null"
-                  label="Cancel"
-                  outlined
-                  severity="secondary"
-                  @click="resetBuilder"
-                />
-                <Button
-                  :label="editingId !== null ? 'Save changes' : 'Generate'"
-                  :icon="editingId !== null ? 'pi pi-check' : 'pi pi-bolt'"
-                  :loading="creating"
-                  :disabled="!canGenerate"
-                  @click="submit"
-                />
-              </div>
-            </div>
-            <p v-if="!hasFilters" class="text-xs text-surface-400 -mt-2">
-              {{ mode === 'handpicked' ? `Pick at least ${minDecks} decks to generate a list.` : 'Select at least one filter to generate a list.' }}
-            </p>
-            <p v-else-if="previewCount !== null && previewCount < minDecks" class="text-xs text-red-500 -mt-2">
-              A list needs at least {{ minDecks }} matching decks.
-            </p>
-            <div v-if="previewSample.length" class="text-xs text-surface-400">
-              e.g. {{ previewSample.slice(0, 5).map(localiseTitle).join(', ') }}
-            </div>
-          </div>
-        </template>
-      </Card>
+          </template>
+        </Card>
       </div>
 
       <!-- Existing lists -->
@@ -837,25 +824,23 @@
               content="Saved lists are kept permanently. Auto-update refreshes a saved list whenever site-wide frequencies are recomputed. These limits are subject to change."
               placement="bottom"
             >
-            <span class="flex items-center gap-3">
-              <span :class="usageColor(savedListsUsage, maxSavedLists)">
-                <span class="font-semibold tabular-nums">{{ savedListsUsage }}</span><span class="opacity-60">/{{ maxSavedLists }} saved lists</span>
+              <span class="flex items-center gap-3">
+                <span :class="usageColor(savedListsUsage, maxSavedLists)">
+                  <span class="font-semibold tabular-nums">{{ savedListsUsage }}</span>
+                  <span class="opacity-60">/{{ maxSavedLists }} saved lists</span>
+                </span>
+                <span :class="usageColor(autoUpdateUsage, maxAutoUpdateLists)">
+                  <span class="font-semibold tabular-nums">{{ autoUpdateUsage }}</span>
+                  <span class="opacity-60">/{{ maxAutoUpdateLists }} auto-updating</span>
+                </span>
               </span>
-              <span :class="usageColor(autoUpdateUsage, maxAutoUpdateLists)">
-                <span class="font-semibold tabular-nums">{{ autoUpdateUsage }}</span><span class="opacity-60">/{{ maxAutoUpdateLists }} auto-updating</span>
-              </span>
-            </span>
             </Tooltip>
           </div>
           <div v-if="!lists.length" class="text-surface-400 text-sm py-4">You haven't generated any lists yet.</div>
           <template v-else>
             <!-- Mobile: stacked cards -->
             <div class="flex flex-col gap-3 sm:hidden">
-              <div
-                v-for="list in lists"
-                :key="list.id"
-                class="border border-surface-200 dark:border-surface-700 rounded-lg p-3 flex flex-col gap-2"
-              >
+              <div v-for="list in lists" :key="list.id" class="border border-surface-200 dark:border-surface-700 rounded-lg p-3 flex flex-col gap-2">
                 <div class="flex items-start justify-between gap-2">
                   <span class="font-medium break-words min-w-0">{{ list.name }}</span>
                   <Tag :value="list.status" :severity="statusSeverity(list.status)" class="shrink-0" />
@@ -867,30 +852,9 @@
                   <span v-else-if="!list.isSaved">temporary</span>
                 </div>
                 <div class="flex flex-wrap gap-2 pt-1">
-                  <Button
-                    label="Yomitan"
-                    icon="pi pi-download"
-                    size="small"
-                    outlined
-                    :disabled="list.status !== 'ready'"
-                    @click="download(list, 'zip')"
-                  />
-                  <Button
-                    label="CSV"
-                    icon="pi pi-file"
-                    size="small"
-                    outlined
-                    :disabled="list.status !== 'ready'"
-                    @click="download(list, 'csv')"
-                  />
-                  <Button
-                    label="Regenerate"
-                    icon="pi pi-sync"
-                    size="small"
-                    outlined
-                    :loading="busyId === list.id"
-                    @click="regenerate(list)"
-                  />
+                  <Button label="Yomitan" icon="pi pi-download" size="small" outlined :disabled="list.status !== 'ready'" @click="download(list, 'zip')" />
+                  <Button label="CSV" icon="pi pi-file" size="small" outlined :disabled="list.status !== 'ready'" @click="download(list, 'csv')" />
+                  <Button label="Regenerate" icon="pi pi-sync" size="small" outlined :loading="busyId === list.id" @click="regenerate(list)" />
                   <Button
                     label="Edit"
                     icon="pi pi-pencil"
@@ -899,22 +863,8 @@
                     :severity="editingId === list.id ? 'success' : undefined"
                     @click="loadDefinition(list)"
                   />
-                  <Button
-                    v-if="!list.isSaved && isFull"
-                    label="Keep saved"
-                    icon="pi pi-bookmark"
-                    size="small"
-                    outlined
-                    @click="save(list)"
-                  />
-                  <Button
-                    v-if="list.isSaved"
-                    label="Study"
-                    icon="pi pi-graduation-cap"
-                    size="small"
-                    outlined
-                    @click="study(list)"
-                  />
+                  <Button v-if="!list.isSaved && isFull" label="Keep saved" icon="pi pi-bookmark" size="small" outlined @click="save(list)" />
+                  <Button v-if="list.isSaved" label="Study" icon="pi pi-graduation-cap" size="small" outlined @click="study(list)" />
                   <template v-if="list.isSaved && isFull">
                     <Button
                       :label="list.autoUpdate ? 'Auto-update on' : 'Auto-update off'"
@@ -924,91 +874,65 @@
                       :severity="list.autoUpdate ? 'success' : 'secondary'"
                       @click="toggleAutoUpdate(list)"
                     />
-                    <Button
-                      label="Share"
-                      icon="pi pi-share-alt"
-                      size="small"
-                      outlined
-                      :loading="busyId === list.id"
-                      @click="openShare(list)"
-                    />
+                    <Button label="Share" icon="pi pi-share-alt" size="small" outlined :loading="busyId === list.id" @click="openShare(list)" />
                   </template>
-                  <Button
-                    label="Delete"
-                    icon="pi pi-trash"
-                    size="small"
-                    outlined
-                    severity="danger"
-                    @click="confirmDelete(list)"
-                  />
+                  <Button label="Delete" icon="pi pi-trash" size="small" outlined severity="danger" @click="confirmDelete(list)" />
                 </div>
               </div>
             </div>
             <!-- Desktop: table -->
             <div class="hidden sm:block">
               <DataTable :value="lists" class="p-datatable-sm" responsive-layout="scroll">
-            <Column field="name" header="Name" />
-            <Column header="Status">
-              <template #body="{ data }">
-                <Tag :value="data.status" :severity="statusSeverity(data.status)" />
-                <span v-if="data.status === 'expired'" class="ml-2 text-xs text-surface-400">regenerate to rebuild</span>
-                <span v-else-if="!data.isSaved" class="ml-2 text-xs text-surface-400">temporary</span>
-              </template>
-            </Column>
-            <Column header="Decks">
-              <template #body="{ data }">{{ data.deckCount.toLocaleString() }}</template>
-            </Column>
-            <Column header="Words">
-              <template #body="{ data }">{{ data.wordCount.toLocaleString() }}</template>
-            </Column>
-            <Column header="Actions">
-              <template #body="{ data }">
-                <div class="flex flex-wrap items-center gap-1">
-                  <Tooltip content="Download Yomitan">
-                    <Button icon="pi pi-download" text size="small" :disabled="data.status !== 'ready'" @click="download(data, 'zip')" />
-                  </Tooltip>
-                  <Tooltip content="Download CSV">
-                    <Button icon="pi pi-file" text size="small" :disabled="data.status !== 'ready'" @click="download(data, 'csv')" />
-                  </Tooltip>
-                  <Tooltip content="Regenerate">
-                    <Button icon="pi pi-sync" text size="small" :loading="busyId === data.id" @click="regenerate(data)" />
-                  </Tooltip>
-                  <Tooltip content="Edit name and filters">
-                    <Button
-                      icon="pi pi-pencil"
-                      text
-                      size="small"
-                      :severity="editingId === data.id ? 'success' : undefined"
-                      @click="loadDefinition(data)"
-                    />
-                  </Tooltip>
-                  <Tooltip v-if="!data.isSaved && isFull" content="Keep saved">
-                    <Button icon="pi pi-bookmark" text size="small" @click="save(data)" />
-                  </Tooltip>
-                  <Tooltip v-if="data.isSaved" content="Study this list">
-                    <Button icon="pi pi-graduation-cap" text size="small" @click="study(data)" />
-                  </Tooltip>
-                  <template v-if="data.isSaved && isFull">
-                    <Tooltip :content="data.autoUpdate ? 'Auto-update on' : 'Auto-update off'">
-                      <Button
-                        icon="pi pi-clock"
-                        text
-                        size="small"
-                        :severity="data.autoUpdate ? 'success' : 'secondary'"
-                        @click="toggleAutoUpdate(data)"
-                      />
-                    </Tooltip>
-                    <Tooltip content="Share link">
-                      <Button icon="pi pi-share-alt" text size="small" :loading="busyId === data.id" @click="openShare(data)" />
-                    </Tooltip>
+                <Column field="name" header="Name" />
+                <Column header="Status">
+                  <template #body="{ data }">
+                    <Tag :value="data.status" :severity="statusSeverity(data.status)" />
+                    <span v-if="data.status === 'expired'" class="ml-2 text-xs text-surface-400">regenerate to rebuild</span>
+                    <span v-else-if="!data.isSaved" class="ml-2 text-xs text-surface-400">temporary</span>
                   </template>
-                  <Tooltip content="Delete">
-                    <Button icon="pi pi-trash" text size="small" severity="danger" @click="confirmDelete(data)" />
-                  </Tooltip>
-                </div>
-              </template>
-            </Column>
-            </DataTable>
+                </Column>
+                <Column header="Decks">
+                  <template #body="{ data }">{{ data.deckCount.toLocaleString() }}</template>
+                </Column>
+                <Column header="Words">
+                  <template #body="{ data }">{{ data.wordCount.toLocaleString() }}</template>
+                </Column>
+                <Column header="Actions">
+                  <template #body="{ data }">
+                    <div class="flex flex-wrap items-center gap-1">
+                      <Tooltip content="Download Yomitan">
+                        <Button icon="pi pi-download" text size="small" :disabled="data.status !== 'ready'" @click="download(data, 'zip')" />
+                      </Tooltip>
+                      <Tooltip content="Download CSV">
+                        <Button icon="pi pi-file" text size="small" :disabled="data.status !== 'ready'" @click="download(data, 'csv')" />
+                      </Tooltip>
+                      <Tooltip content="Regenerate">
+                        <Button icon="pi pi-sync" text size="small" :loading="busyId === data.id" @click="regenerate(data)" />
+                      </Tooltip>
+                      <Tooltip content="Edit name and filters">
+                        <Button icon="pi pi-pencil" text size="small" :severity="editingId === data.id ? 'success' : undefined" @click="loadDefinition(data)" />
+                      </Tooltip>
+                      <Tooltip v-if="!data.isSaved && isFull" content="Keep saved">
+                        <Button icon="pi pi-bookmark" text size="small" @click="save(data)" />
+                      </Tooltip>
+                      <Tooltip v-if="data.isSaved" content="Study this list">
+                        <Button icon="pi pi-graduation-cap" text size="small" @click="study(data)" />
+                      </Tooltip>
+                      <template v-if="data.isSaved && isFull">
+                        <Tooltip :content="data.autoUpdate ? 'Auto-update on' : 'Auto-update off'">
+                          <Button icon="pi pi-clock" text size="small" :severity="data.autoUpdate ? 'success' : 'secondary'" @click="toggleAutoUpdate(data)" />
+                        </Tooltip>
+                        <Tooltip content="Share link">
+                          <Button icon="pi pi-share-alt" text size="small" :loading="busyId === data.id" @click="openShare(data)" />
+                        </Tooltip>
+                      </template>
+                      <Tooltip content="Delete">
+                        <Button icon="pi pi-trash" text size="small" severity="danger" @click="confirmDelete(data)" />
+                      </Tooltip>
+                    </div>
+                  </template>
+                </Column>
+              </DataTable>
             </div>
           </template>
         </template>
@@ -1016,15 +940,12 @@
 
       <Dialog v-model:visible="shareVisible" modal header="Share link" :draggable="false" class="w-[28rem] max-w-[calc(100vw-2rem)]">
         <p class="text-sm text-surface-500 dark:text-surface-400 mb-3">
-          Anyone with this link can download the list as a Yomitan dictionary. Append <code>?format=csv</code> for the CSV version.
+          Anyone with this link can download the list as a Yomitan dictionary. Append
+          <code>?format=csv</code>
+          for the CSV version.
         </p>
         <div class="flex items-center gap-2">
-          <InputText
-            :model-value="shareUrl"
-            readonly
-            class="w-full text-sm"
-            @focus="(e) => (e.target as HTMLInputElement).select()"
-          />
+          <InputText :model-value="shareUrl" readonly class="w-full text-sm" @focus="(e) => (e.target as HTMLInputElement).select()" />
           <Tooltip content="Copy">
             <Button icon="pi pi-copy" outlined aria-label="Copy link" @click="copyShareUrl" />
           </Tooltip>
@@ -1033,11 +954,7 @@
 
       <MediaListDeckPickerDialog v-model:visible="mediaListPickerVisible" :picked-ids="pickedDeckIds" @add="onMediaListAdd" />
 
-      <SrsAddDeckDialog
-        v-if="studyListId !== null"
-        v-model:visible="showStudyDialog"
-        :preselected-frequency-list-id="studyListId"
-      />
+      <SrsAddDeckDialog v-if="studyListId !== null" v-model:visible="showStudyDialog" :preselected-frequency-list-id="studyListId" />
     </template>
   </div>
 </template>

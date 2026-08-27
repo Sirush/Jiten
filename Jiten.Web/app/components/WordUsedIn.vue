@@ -69,10 +69,13 @@
 
   const remaining = computed(() => Math.max(0, props.total - collapsedCount));
 
-  watch(() => [props.wordId, props.readingIndex], () => {
-    expanded.value = false;
-    fetchedItems.value = null;
-  });
+  watch(
+    () => [props.wordId, props.readingIndex],
+    () => {
+      expanded.value = false;
+      fetchedItems.value = null;
+    }
+  );
 
   const { $api } = useNuxtApp();
 
@@ -81,9 +84,7 @@
     if (props.total <= (fetchedItems.value ?? props.initialItems).length) return;
     loading.value = true;
     try {
-      const data = await ($api as typeof $fetch)<UsedInPage>(
-        `vocabulary/${props.wordId}/${props.readingIndex}/used-in`
-      );
+      const data = await ($api as typeof $fetch)<UsedInPage>(`vocabulary/${props.wordId}/${props.readingIndex}/used-in`);
       if (data) fetchedItems.value = data.items;
     } finally {
       loading.value = false;
@@ -93,13 +94,8 @@
 
 <template>
   <div v-if="total > 0" class="mt-4">
-    <h3 v-if="!hideHeading" class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm mb-2">
-      Used in {{ total }} word{{ total === 1 ? '' : 's' }}
-    </h3>
-    <div
-      class="flex flex-wrap gap-x-6 gap-y-3 transition-opacity"
-      :class="{ 'opacity-60': loading }"
-    >
+    <h3 v-if="!hideHeading" class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm mb-2">Used in {{ total }} word{{ total === 1 ? '' : 's' }}</h3>
+    <div class="flex flex-wrap gap-x-6 gap-y-3 transition-opacity" :class="{ 'opacity-60': loading }">
       <div
         v-for="component in visibleItems"
         :key="`${component.wordId}-${component.readingIndex}`"
@@ -112,16 +108,10 @@
           <span lang="ja" v-html="renderParent(component)" />
         </NuxtLink>
         <div class="flex-1 min-w-0 flex flex-col">
-          <span
-            v-if="component.frequencyRank"
-            class="text-[10px] text-surface-500 dark:text-surface-400 leading-none self-end"
-          >
+          <span v-if="component.frequencyRank" class="text-[10px] text-surface-500 dark:text-surface-400 leading-none self-end">
             #{{ component.frequencyRank.toLocaleString() }}
           </span>
-          <span
-            v-if="component.mainDefinition"
-            class="text-surface-600 dark:text-surface-400 text-xs line-clamp-2 mt-0.5"
-          >
+          <span v-if="component.mainDefinition" class="text-surface-600 dark:text-surface-400 text-xs line-clamp-2 mt-0.5">
             {{ component.mainDefinition }}
           </span>
         </div>

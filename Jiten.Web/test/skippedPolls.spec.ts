@@ -27,11 +27,11 @@ describe('appendSkippedPollId', () => {
     expect(appendSkippedPollId([1, 2, 3], 2)).toEqual([1, 3, 2]);
   });
 
-  it('caps the list at 50, dropping the oldest', () => {
-    const full = Array.from({ length: 50 }, (_, i) => i + 1);
+  it('caps the list at 500, dropping the oldest', () => {
+    const full = Array.from({ length: 500 }, (_, i) => i + 1);
     const next = appendSkippedPollId(full, 999);
-    expect(next).toHaveLength(50);
+    expect(next).toHaveLength(500);
     expect(next[0]).toBe(2);
-    expect(next[49]).toBe(999);
+    expect(next[499]).toBe(999);
   });
 });

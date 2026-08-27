@@ -117,10 +117,9 @@
       </template>
       <template #content>
         <p class="mb-4 text-surface-600 dark:text-surface-400 text-sm">
-          Written notice to recurring paid subscribers that updated Terms of Sale apply from their next renewal. Only
-          accounts with a live paid Stripe subscription qualify — grant and promo-credit recipients, lifetime holders and
-          cancelled subscribers are never emailed. Sends are logged per (subscriber, renewal date), so re-running is
-          always safe — run it again after a new subscriber appears or after a terms version bump.
+          Written notice to recurring paid subscribers that updated Terms of Sale apply from their next renewal. Only accounts with a live paid Stripe
+          subscription qualify — grant and promo-credit recipients, lifetime holders and cancelled subscribers are never emailed. Sends are logged per
+          (subscriber, renewal date), so re-running is always safe — run it again after a new subscriber appears or after a terms version bump.
         </p>
 
         <DataTable :value="result?.subscribers ?? []" :loading="loading" striped-rows>
@@ -164,12 +163,21 @@
     <Dialog v-model:visible="showPreview" header="Email preview" :modal="true" class="w-full md:w-2/3 lg:w-1/2">
       <div v-if="previewed" class="flex flex-col gap-3">
         <div class="text-sm">
-          <div class="flex gap-2"><span class="w-16 text-surface-500 dark:text-surface-400 shrink-0">To</span><span class="font-medium">{{ previewed.userName }} &lt;{{ previewed.email }}&gt;</span></div>
-          <div class="flex gap-2 mt-1"><span class="w-16 text-surface-500 dark:text-surface-400 shrink-0">Subject</span><span class="font-medium">{{ previewed.emailSubject }}</span></div>
+          <div class="flex gap-2">
+            <span class="w-16 text-surface-500 dark:text-surface-400 shrink-0">To</span>
+            <span class="font-medium">{{ previewed.userName }} &lt;{{ previewed.email }}&gt;</span>
+          </div>
+          <div class="flex gap-2 mt-1">
+            <span class="w-16 text-surface-500 dark:text-surface-400 shrink-0">Subject</span>
+            <span class="font-medium">{{ previewed.emailSubject }}</span>
+          </div>
         </div>
         <!-- Server-rendered email body; same HTML the mailer sends. -->
         <!-- eslint-disable-next-line vue/no-v-html -->
-        <div class="border border-surface-200 dark:border-surface-700 rounded-lg p-4 bg-white dark:bg-surface-900 text-sm leading-relaxed" v-html="previewed.emailHtml" />
+        <div
+          class="border border-surface-200 dark:border-surface-700 rounded-lg p-4 bg-white dark:bg-surface-900 text-sm leading-relaxed"
+          v-html="previewed.emailHtml"
+        />
         <p class="text-xs text-surface-500 dark:text-surface-400">A plain-text version is generated automatically from this HTML at send time.</p>
       </div>
       <template #footer>

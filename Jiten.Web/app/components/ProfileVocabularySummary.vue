@@ -26,7 +26,10 @@
     }
   };
 
-  watch(() => props.username, () => fetchStats());
+  watch(
+    () => props.username,
+    () => fetchStats()
+  );
   onMounted(() => fetchStats());
 
   const knownWords = computed(() => {
@@ -80,7 +83,8 @@
             :key="segment.key"
             :class="segment.bar"
             :style="{ width: `${percent(segment.count)}%`, minWidth: '3px' }"
-            class="h-full" />
+            class="h-full"
+          />
         </div>
 
         <div v-if="segments.length" class="flex flex-wrap gap-x-6 gap-y-2">

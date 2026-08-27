@@ -16,7 +16,7 @@
   import PrimeTag from 'primevue/tag';
   import { getMediaTypeText, getChildrenCountText } from '~/utils/mediaTypeMapper';
   import WebNovelSyncPanel from '~/components/dashboard/WebNovelSyncPanel.vue';
-  import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { detectLinkTypeFromUrl, getLinkLabel, getLinkTypeText } from '~/utils/linkTypeMapper';
   import { getAllGenres } from '~/utils/genreMapper';
   import { DEFAULT_TAG_PERCENTAGE } from '~/utils/tags';
   import {
@@ -172,7 +172,7 @@
       romajiTitle.value = mainDeck.romajiTitle || '';
       englishTitle.value = mainDeck.englishTitle || '';
       description.value = mainDeck.description || '';
-      releaseDate.value = new Date(mainDeck.releaseDate) || new Date();
+      releaseDate.value = mainDeck.releaseDate ? new Date(mainDeck.releaseDate) : new Date();
       difficultyOverride.value = mainDeck.difficultyOverride || 0;
       hideDialoguePercentage.value = mainDeck.hideDialoguePercentage || false;
       hideAverageSentenceLength.value = mainDeck.hideAverageSentenceLength || false;
@@ -218,9 +218,7 @@
     }
   });
 
-  const deckHasNoContent = computed(
-    () => !response.value?.subDecks?.length && (response.value?.mainDeck?.characterCount ?? 0) === 0
-  );
+  const deckHasNoContent = computed(() => !response.value?.subDecks?.length && (response.value?.mainDeck?.characterCount ?? 0) === 0);
 
   function handleParentTextFileUpload(event: { files: File[] }) {
     if (event.files && event.files.length > 0) {
@@ -569,6 +567,17 @@
     showAddLinkDialog.value = true;
   }
 
+  function onNewLinkUrlInput(value: string | undefined) {
+    const detected = detectLinkTypeFromUrl(value ?? '');
+    if (detected !== null) newLink.value.linkType = detected;
+  }
+
+  function onEditLinkUrlInput(value: string | undefined) {
+    if (!editingLink.value) return;
+    const detected = detectLinkTypeFromUrl(value ?? '');
+    if (detected !== null) editingLink.value.linkType = detected;
+  }
+
   function addLink() {
     if (!newLink.value.url.trim()) {
       showToast('warn', 'Validation Error', 'URL is required');
@@ -674,7 +683,6 @@
         life: 5000,
       });
       console.error('Error fetching metadata:', error);
-    } finally {
     }
   }
 
@@ -915,16 +923,40 @@
               <div class="p-4 border rounded mb-4">
                 <div class="grid grid-cols-2 gap-4">
                   <div>
-                    <p><strong>Media Type:</strong> {{ getMediaTypeText(response.mainDeck.mediaType) }}</p>
-                    <p><strong>Deck ID:</strong> {{ response.mainDeck.deckId }}</p>
-                    <p><strong>Word Count:</strong> {{ response.mainDeck.wordCount }}</p>
-                    <p><strong>Unique Words:</strong> {{ response.mainDeck.uniqueWordCount }}</p>
+                    <p>
+                      <strong>Media Type:</strong>
+                      {{ getMediaTypeText(response.mainDeck.mediaType) }}
+                    </p>
+                    <p>
+                      <strong>Deck ID:</strong>
+                      {{ response.mainDeck.deckId }}
+                    </p>
+                    <p>
+                      <strong>Word Count:</strong>
+                      {{ response.mainDeck.wordCount }}
+                    </p>
+                    <p>
+                      <strong>Unique Words:</strong>
+                      {{ response.mainDeck.uniqueWordCount }}
+                    </p>
                   </div>
                   <div>
-                    <p><strong>Character Count:</strong> {{ response.mainDeck.characterCount }}</p>
-                    <p><strong>Unique Kanji:</strong> {{ response.mainDeck.uniqueKanjiCount }}</p>
-                    <p><strong>Difficulty:</strong> {{ response.mainDeck.difficultyRaw.toFixed(2) }}</p>
-                    <p><strong>Avg. Sentence Length:</strong> {{ response.mainDeck.averageSentenceLength.toFixed(2) }}</p>
+                    <p>
+                      <strong>Character Count:</strong>
+                      {{ response.mainDeck.characterCount }}
+                    </p>
+                    <p>
+                      <strong>Unique Kanji:</strong>
+                      {{ response.mainDeck.uniqueKanjiCount }}
+                    </p>
+                    <p>
+                      <strong>Difficulty:</strong>
+                      {{ response.mainDeck.difficultyRaw.toFixed(2) }}
+                    </p>
+                    <p>
+                      <strong>Avg. Sentence Length:</strong>
+                      {{ response.mainDeck.averageSentenceLength.toFixed(2) }}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -940,13 +972,15 @@
                 </Button>
               </div>
 
-              <div v-if="links.length === 0" class="p-4 border rounded text-center text-gray-500 dark:text-gray-400">No links available. Click "Add Link" to add one.</div>
+              <div v-if="links.length === 0" class="p-4 border rounded text-center text-gray-500 dark:text-gray-400">
+                No links available. Click "Add Link" to add one.
+              </div>
 
               <div v-else class="mb-4">
                 <ul class="list-none p-0">
                   <li v-for="(link, index) in links" :key="index" class="flex justify-between items-center p-2 border-b">
                     <div>
-                      <span class="font-medium">{{ getLinkTypeText(Number(link.linkType)) }}:</span>
+                      <span class="font-medium">{{ getLinkLabel({ linkType: Number(link.linkType), url: link.url }) }}:</span>
                       <a :href="link.url" target="_blank" class="ml-2 text-blue-500 hover:underline">{{ link.url }}</a>
                     </div>
                     <div class="flex">
@@ -977,7 +1011,12 @@
                   </div>
                   <div class="mb-4">
                     <label class="block text-sm font-medium mb-1">URL</label>
-                    <InputText v-model="newLink.url" placeholder="Enter URL" class="w-full" />
+                    <InputText
+                      v-model="newLink.url"
+                      placeholder="Enter URL"
+                      class="w-full"
+                      @update:model-value="onNewLinkUrlInput"
+                    />
                   </div>
                 </div>
                 <template #footer>
@@ -1002,7 +1041,12 @@
                   </div>
                   <div class="mb-4">
                     <label class="block text-sm font-medium mb-1">URL</label>
-                    <InputText v-model="editingLink.url" placeholder="Enter URL" class="w-full" />
+                    <InputText
+                      v-model="editingLink.url"
+                      placeholder="Enter URL"
+                      class="w-full"
+                      @update:model-value="onEditLinkUrlInput"
+                    />
                   </div>
                 </div>
                 <template #footer>
@@ -1022,7 +1066,9 @@
                 </Button>
               </div>
 
-              <div v-if="aliases.length === 0" class="p-4 border rounded text-center text-gray-500 dark:text-gray-400">No aliases available. Click "Add Alias" to add one.</div>
+              <div v-if="aliases.length === 0" class="p-4 border rounded text-center text-gray-500 dark:text-gray-400">
+                No aliases available. Click "Add Alias" to add one.
+              </div>
 
               <div v-else class="mb-4">
                 <ul class="list-none p-0">
@@ -1125,7 +1171,7 @@
                 class="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white rounded-full text-sm"
               >
                 {{ genreOptions.find((g) => g.value === genre)?.label }}
-                <button type="button" @click="selectedGenres = selectedGenres.filter((g) => g !== genre)" class="hover:opacity-75">
+                <button type="button" class="hover:opacity-75" @click="selectedGenres = selectedGenres.filter((g) => g !== genre)">
                   <Icon name="material-symbols-light:close" size="1em" />
                 </button>
               </span>
@@ -1138,7 +1184,7 @@
           <template #title>
             <div class="flex justify-between items-center">
               <span>Tags</span>
-              <Button @click="openAddTagDialog" :loading="tagsLoading" size="small">
+              <Button :loading="tagsLoading" size="small" @click="openAddTagDialog">
                 <Icon name="material-symbols-light:add-circle-outline" size="1.25em" class="mr-1" />
                 Add Tag
               </Button>
@@ -1199,7 +1245,7 @@
           <template #title>
             <div class="flex justify-between items-center">
               <span>Related Media</span>
-              <Button @click="openAddRelationshipDialog" size="small">
+              <Button size="small" @click="openAddRelationshipDialog">
                 <Icon name="material-symbols-light:add-circle-outline" size="1.25em" class="mr-1" />
                 Add Relationship
               </Button>
@@ -1311,7 +1357,7 @@
           </div>
           <template #footer>
             <Button label="Cancel" severity="secondary" text @click="showAddRelationshipDialog = false" />
-            <Button label="Add" @click="addRelationship" :disabled="!newRelationship.targetDeckId || !newRelationship.role || !newRelationship.targetTitle" />
+            <Button label="Add" :disabled="!newRelationship.targetDeckId || !newRelationship.role || !newRelationship.targetTitle" @click="addRelationship" />
           </template>
         </Dialog>
 
@@ -1395,14 +1441,14 @@
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-3">
                       <div class="flex flex-col gap-1">
-                        <Button class="p-button-text p-button-sm h-6" :disabled="index === 0" @click="moveSubdeckUp(subdeck.id)" title="Move up">
+                        <Button class="p-button-text p-button-sm h-6" :disabled="index === 0" title="Move up" @click="moveSubdeckUp(subdeck.id)">
                           <Icon name="material-symbols-light:arrow-upward" size="1.2em" />
                         </Button>
                         <Button
                           class="p-button-text p-button-sm h-6"
                           :disabled="index === subdecks.length - 1"
-                          @click="moveSubdeckDown(subdeck.id)"
                           title="Move down"
+                          @click="moveSubdeckDown(subdeck.id)"
                         >
                           <Icon name="material-symbols-light:arrow-downward" size="1.2em" />
                         </Button>
@@ -1418,8 +1464,8 @@
                             :step="1"
                             class="w-16"
                             :allow-empty="false"
-                            @update:model-value="(val) => moveSubdeckToPosition(subdeck.id, val)"
                             title="Jump to position"
+                            @update:model-value="(val) => moveSubdeckToPosition(subdeck.id, val)"
                           />
                         </div>
                       </div>
@@ -1525,8 +1571,8 @@
             <template #content>
               <p class="text-sm text-muted-color mb-3">
                 Drop the complete new set of files here to replace all {{ subdecks.length }} subdeck(s) above in one go. Files are ordered by filename and
-                matched onto the existing subdecks by position, so those keep their identity and user progress — only their text is replaced and reparsed.
-                Extra files are appended as new subdecks; if you drop fewer files, the trailing subdecks are deleted when you click Update.
+                matched onto the existing subdecks by position, so those keep their identity and user progress — only their text is replaced and reparsed. Extra
+                files are appended as new subdecks; if you drop fewer files, the trailing subdecks are deleted when you click Update.
               </p>
               <FileUpload
                 ref="replaceSubdecksUploaderRef"

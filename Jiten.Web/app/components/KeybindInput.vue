@@ -45,17 +45,17 @@
     <button
       ref="btnRef"
       class="keybind-btn px-3 py-1.5 rounded border text-sm font-mono min-w-[80px] text-center transition-all duration-150"
-      :class="listening
-        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 animate-pulse'
-        : 'border-surface-300 dark:border-surface-600 bg-surface-50 dark:bg-surface-800 hover:border-surface-400 dark:hover:border-surface-500'"
+      :class="
+        listening
+          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 animate-pulse'
+          : 'border-surface-300 dark:border-surface-600 bg-surface-50 dark:bg-surface-800 hover:border-surface-400 dark:hover:border-surface-500'
+      "
       @click="startListening"
       @keydown="handleKeydown"
       @blur="stopListening"
     >
       {{ listening ? 'Press a key...' : displayKeyName(modelValue) }}
     </button>
-    <span v-if="conflict" class="text-xs text-orange-500 dark:text-orange-400">
-      Conflicts with {{ conflict }}
-    </span>
+    <span v-if="conflict" class="text-xs text-orange-500 dark:text-orange-400">Conflicts with {{ conflict }}</span>
   </div>
 </template>

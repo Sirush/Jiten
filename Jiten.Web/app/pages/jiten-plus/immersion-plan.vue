@@ -54,7 +54,6 @@
     frequencyRank: number;
   }
 
-
   interface FrequencyBands {
     band0To3k: number;
     band3kTo10k: number;
@@ -218,12 +217,8 @@
 
   // The two difficulty models are adapted to different training data, so a band is only meaningful
   // within its own family. Each slider is shown only when its family is actually in scope.
-  const showsInScope = computed(
-    () => mediaTypes.value.length === 0 || mediaTypes.value.some((t) => AUDIO_VISUAL_TYPES.includes(t)),
-  );
-  const novelsInScope = computed(
-    () => mediaTypes.value.length === 0 || mediaTypes.value.some((t) => !AUDIO_VISUAL_TYPES.includes(t)),
-  );
+  const showsInScope = computed(() => mediaTypes.value.length === 0 || mediaTypes.value.some((t) => AUDIO_VISUAL_TYPES.includes(t)));
+  const novelsInScope = computed(() => mediaTypes.value.length === 0 || mediaTypes.value.some((t) => !AUDIO_VISUAL_TYPES.includes(t)));
 
   const similarityLabel = computed(() => {
     const v = contentSimilarity.value;
@@ -258,10 +253,8 @@
         maxRoadmaps: number;
       }>('roadmaps/defaults');
 
-      if (res.showsDifficultyMin != null && res.showsDifficultyMax != null)
-        showsDifficulty.value = [res.showsDifficultyMin, res.showsDifficultyMax];
-      if (res.novelsDifficultyMin != null && res.novelsDifficultyMax != null)
-        novelsDifficulty.value = [res.novelsDifficultyMin, res.novelsDifficultyMax];
+      if (res.showsDifficultyMin != null && res.showsDifficultyMax != null) showsDifficulty.value = [res.showsDifficultyMin, res.showsDifficultyMax];
+      if (res.novelsDifficultyMin != null && res.novelsDifficultyMax != null) novelsDifficulty.value = [res.novelsDifficultyMin, res.novelsDifficultyMax];
 
       hasSuggestedBands.value = res.hasBands;
       if (res.maxRoadmaps) maxRoadmaps.value = res.maxRoadmaps;
@@ -291,9 +284,7 @@
     }
   }
 
-  const goalDeckId = computed(() =>
-    goalDeck.value && typeof goalDeck.value !== 'string' ? goalDeck.value.deckId : null,
-  );
+  const goalDeckId = computed(() => (goalDeck.value && typeof goalDeck.value !== 'string' ? goalDeck.value.deckId : null));
 
   // ---- Build & submit -----------------------------------------------------
 
@@ -381,7 +372,7 @@
     () => {
       if (isPlus.value) runPreview();
     },
-    { deep: true },
+    { deep: true }
   );
 
   // Below this the search is picking whatever fits rather than the best of several, and swapping a step
@@ -687,9 +678,7 @@
     if ((goalDeckId.value ?? null) !== (roadmap.goalDeckId ?? null)) return true;
 
     const current = buildDefinition() as Record<string, unknown>;
-    const saved = Object.fromEntries(
-      Object.keys(current).map((key) => [key, (roadmap.definition as unknown as Record<string, unknown>)[key] ?? null]),
-    );
+    const saved = Object.fromEntries(Object.keys(current).map((key) => [key, (roadmap.definition as unknown as Record<string, unknown>)[key] ?? null]));
 
     return comparableDefinition(current) !== comparableDefinition(saved);
   });
@@ -744,15 +733,11 @@
     return localiseTitle(option);
   }
 
-  const goalTitleText = computed(() =>
-    goalDeck.value && typeof goalDeck.value !== 'string' ? localiseTitle(goalDeck.value) : 'the title',
-  );
+  const goalTitleText = computed(() => (goalDeck.value && typeof goalDeck.value !== 'string' ? localiseTitle(goalDeck.value) : 'the title'));
 
   // Comes from the precomputed coverage chunks the preview reads, so it can differ by a fraction of a percent
   // from the figure the generated plan reports off the live known-word walk.
-  const goalCurrentCoverage = computed(() =>
-    mode.value === 'goal' && goalDeckId.value != null ? preview.value?.goalCoverage ?? null : null,
-  );
+  const goalCurrentCoverage = computed(() => (mode.value === 'goal' && goalDeckId.value != null ? (preview.value?.goalCoverage ?? null) : null));
 
   function stepTitle(step: RoadmapStep): string {
     return localiseTitle({
@@ -872,12 +857,28 @@
   const loadExportBitmap = createBitmapLoader();
 
   const EXPORT_LIGHT = {
-    bg: '#ffffff', card: '#f4f5f7', text: '#1f2937', sub: '#6b7280', foot: '#9ca3af',
-    brand: '#9333ea', words: '#16a34a', goal: '#d97706', goalBg: '#fffbeb', onAccent: '#ffffff',
+    bg: '#ffffff',
+    card: '#f4f5f7',
+    text: '#1f2937',
+    sub: '#6b7280',
+    foot: '#9ca3af',
+    brand: '#9333ea',
+    words: '#16a34a',
+    goal: '#d97706',
+    goalBg: '#fffbeb',
+    onAccent: '#ffffff',
   };
   const EXPORT_DARK = {
-    bg: '#18181b', card: '#27272a', text: '#e5e7eb', sub: '#a1a1aa', foot: '#71717a',
-    brand: '#c084fc', words: '#4ade80', goal: '#fbbf24', goalBg: '#2c2410', onAccent: '#18181b',
+    bg: '#18181b',
+    card: '#27272a',
+    text: '#e5e7eb',
+    sub: '#a1a1aa',
+    foot: '#71717a',
+    brand: '#c084fc',
+    words: '#4ade80',
+    goal: '#fbbf24',
+    goalBg: '#2c2410',
+    onAccent: '#18181b',
   };
 
   // Layout constants (CSS px; the canvas is scaled by EXPORT_SCALE for crispness).
@@ -964,10 +965,7 @@
       ctx.fillStyle = pal.text;
       ctx.fillText(fitCanvasText(ctx, roadmap.name, EXPORT_INNER), EXPORT_PAD, y + 44);
 
-      const totals = [
-        `${exportSteps.length} ${exportSteps.length === 1 ? 'title' : 'titles'}`,
-        `${payload.totalNewWords.toLocaleString()} new words`,
-      ];
+      const totals = [`${exportSteps.length} ${exportSteps.length === 1 ? 'title' : 'titles'}`, `${payload.totalNewWords.toLocaleString()} new words`];
       if (payload.totalGoalNewWords != null) {
         totals.push(`${payload.totalGoalNewWords.toLocaleString()} your goal uses`);
       }
@@ -996,19 +994,14 @@
         ctx.fillText(String(step.index), cx, cy + 4.5);
         ctx.textAlign = 'left';
 
-        drawCoverImage(
-          ctx, stepBitmaps[i] ?? null,
-          EXPORT_PAD + 50, y + (EXPORT_ROW_H - EXPORT_COVER_H) / 2, EXPORT_COVER_W, EXPORT_COVER_H, pal.sub,
-        );
+        drawCoverImage(ctx, stepBitmaps[i] ?? null, EXPORT_PAD + 50, y + (EXPORT_ROW_H - EXPORT_COVER_H) / 2, EXPORT_COVER_W, EXPORT_COVER_H, pal.sub);
 
         const wordsLabel = `+${step.newWords.toLocaleString()} words`;
         // Named explicitly: a bare "% known" reads as a running total of the user's own knowledge, which it
         // isn't — it is comprehension of this one title, and so moves around as the titles change.
         const knownLabel = `${(step.coverage * 100).toFixed(1)}% of this title`;
         // The one figure that does accumulate. Without it the column above looks like progress going backwards.
-        const goalLabel = step.goalCoverageAfter != null
-          ? `→ ${(step.goalCoverageAfter * 100).toFixed(1)}% of goal`
-          : null;
+        const goalLabel = step.goalCoverageAfter != null ? `→ ${(step.goalCoverageAfter * 100).toFixed(1)}% of goal` : null;
 
         ctx.font = `700 15px ${FONT}`;
         let rightW = ctx.measureText(wordsLabel).width;
@@ -1069,10 +1062,7 @@
         ctx.fillStyle = pal.onAccent;
         drawExportFlag(ctx, cx - 3, cy, 7);
 
-        drawCoverImage(
-          ctx, goalBitmap,
-          EXPORT_PAD + 50, y + (EXPORT_ROW_H - EXPORT_COVER_H) / 2, EXPORT_COVER_W, EXPORT_COVER_H, pal.sub,
-        );
+        drawCoverImage(ctx, goalBitmap, EXPORT_PAD + 50, y + (EXPORT_ROW_H - EXPORT_COVER_H) / 2, EXPORT_COVER_W, EXPORT_COVER_H, pal.sub);
 
         const pctLabel = `${(goal.coverage * 100).toFixed(1)}%`;
         const endLabel = 'by the end';
@@ -1158,9 +1148,7 @@
   });
   const bulkAlreadyCount = computed(() => planSteps.value.length - bulkStepsToAdd.value.length);
   const studyDeckCap = computed(() => limits.value.studyDecks);
-  const bulkFitCount = computed(() =>
-    Math.max(0, Math.min(bulkStepsToAdd.value.length, studyDeckCap.value - srsStore.studyDecks.length)),
-  );
+  const bulkFitCount = computed(() => Math.max(0, Math.min(bulkStepsToAdd.value.length, studyDeckCap.value - srsStore.studyDecks.length)));
   const bulkOverCap = computed(() => bulkFitCount.value < bulkStepsToAdd.value.length);
   // Anything but TopDeck draws new cards across every deck at once, which throws away the plan's ordering.
   const bulkGatheringWarning = computed(() => srsStore.studySettings.newCardGathering !== 'TopDeck');
@@ -1185,7 +1173,7 @@
     bulkSubmitting.value = true;
     try {
       const result = await srsStore.addStudyDecksBatch(
-        buildPlanStudyBatch(planSteps.value, bulkThreshold.value, bulkDeactivateOthers.value, bulkAddToTop.value),
+        buildPlanStudyBatch(planSteps.value, bulkThreshold.value, bulkDeactivateOthers.value, bulkAddToTop.value)
       );
       bulkOpen.value = false;
       toast.add({
@@ -1218,9 +1206,7 @@
   }
 
   // The API rejects regenerate/reset-swaps while a run is in flight; disabling matches that.
-  const activeBusy = computed(
-    () => activeRoadmap.value?.status === 'pending' || activeRoadmap.value?.status === 'generating',
-  );
+  const activeBusy = computed(() => activeRoadmap.value?.status === 'pending' || activeRoadmap.value?.status === 'generating');
 
   watch(activeId, () => {
     expandedStep.value = null;
@@ -1241,7 +1227,7 @@
       if (srsStore.studyDecks.length === 0) loads.push(srsStore.fetchStudyDecks());
       await Promise.all(loads);
     },
-    { immediate: true },
+    { immediate: true }
   );
 
   // The builder (difficulty bands) is Plus-only; fetch its defaults once the tier resolves.
@@ -1254,7 +1240,7 @@
       await loadDefaults();
       runPreview();
     },
-    { immediate: true },
+    { immediate: true }
   );
 
   onBeforeUnmount(() => {
@@ -1270,8 +1256,8 @@
         Immersion plans
       </h1>
       <p class="mt-1 max-w-3xl text-sm opacity-80">
-        Find what to immerse in next or forge a path towards a title you really care about.
-        The algorithm will try to find the ideal picks according to your preferences.
+        Find what to immerse in next or forge a path towards a title you really care about. The algorithm will try to find the ideal picks according to your
+        preferences.
       </p>
     </header>
 
@@ -1279,953 +1265,841 @@
       <!-- Builder — Jiten+ only. Lapsed viewers see it locked, but keep read/delete on their lists. -->
       <div class="self-start">
         <JitenPlusGate feature="immersion-plan-generate" feature-label="Immersion plans">
-        <Card>
-          <template #title>
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <span class="text-lg">{{ editingId !== null ? 'Edit plan' : 'Make a plan' }}</span>
-              <div class="flex flex-wrap gap-2">
-                <Button
-                  v-if="editingId !== null && builderDirty"
-                  label="Discard changes"
-                  icon="pi pi-undo"
-                  size="small"
-                  severity="secondary"
-                  outlined
-                  :disabled="creating"
-                  @click="discardBuilderChanges"
-                />
-                <Button
-                  v-if="editingId !== null"
-                  label="New plan"
-                  icon="pi pi-plus"
-                  size="small"
-                  severity="secondary"
-                  outlined
-                  :disabled="creating"
-                  @click="resetBuilder"
-                />
+          <Card>
+            <template #title>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-lg">{{ editingId !== null ? 'Edit plan' : 'Make a plan' }}</span>
+                <div class="flex flex-wrap gap-2">
+                  <Button
+                    v-if="editingId !== null && builderDirty"
+                    label="Discard changes"
+                    icon="pi pi-undo"
+                    size="small"
+                    severity="secondary"
+                    outlined
+                    :disabled="creating"
+                    @click="discardBuilderChanges"
+                  />
+                  <Button
+                    v-if="editingId !== null"
+                    label="New plan"
+                    icon="pi pi-plus"
+                    size="small"
+                    severity="secondary"
+                    outlined
+                    :disabled="creating"
+                    @click="resetBuilder"
+                  />
+                </div>
               </div>
-            </div>
-          </template>
-          <template #content>
-            <div class="flex flex-col gap-5">
-              <div>
-                <label class="mb-1 block text-sm font-medium" for="roadmap-name">Name</label>
-                <InputText id="roadmap-name" v-model="name" class="w-full" placeholder="e.g. Anime fluency plan" />
-              </div>
+            </template>
+            <template #content>
+              <div class="flex flex-col gap-5">
+                <div>
+                  <label class="mb-1 block text-sm font-medium" for="roadmap-name">Name</label>
+                  <InputText id="roadmap-name" v-model="name" class="w-full" placeholder="e.g. Anime fluency plan" />
+                </div>
 
-              <div>
-                <label class="mb-2 block text-sm font-medium">
-                  Goal
-                  <Tooltip
-                    content="'Next picks' suggests what to read or watch next. 'Target media' builds a path towards a specific title you pick."
-                    placement="top"
+                <div>
+                  <label class="mb-2 block text-sm font-medium">
+                    Goal
+                    <Tooltip
+                      content="'Next picks' suggests what to read or watch next. 'Target media' builds a path towards a specific title you pick."
+                      placement="top"
+                    >
+                      <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
+                    </Tooltip>
+                  </label>
+                  <SelectButton v-model="mode" :options="modeOptions" option-label="label" option-value="value" :allow-empty="false" class="w-full" />
+                </div>
+
+                <div v-if="mode === 'goal'">
+                  <label class="mb-1 block text-sm font-medium" for="goal-deck">Target media</label>
+                  <AutoComplete
+                    id="goal-deck"
+                    v-model="goalDeck"
+                    :suggestions="deckSuggestions"
+                    :option-label="deckOptionLabel"
+                    class="w-full"
+                    input-class="w-full"
+                    placeholder="Search for a media title"
+                    @complete="searchDecks"
                   >
-                    <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
-                  </Tooltip>
-                </label>
-                <SelectButton
-                  v-model="mode"
-                  :options="modeOptions"
-                  option-label="label"
-                  option-value="value"
-                  :allow-empty="false"
-                  class="w-full"
-                />
-              </div>
-
-              <div v-if="mode === 'goal'">
-                <label class="mb-1 block text-sm font-medium" for="goal-deck">Target media</label>
-                <AutoComplete
-                  id="goal-deck"
-                  v-model="goalDeck"
-                  :suggestions="deckSuggestions"
-                  :option-label="deckOptionLabel"
-                  class="w-full"
-                  input-class="w-full"
-                  placeholder="Search for a media title"
-                  @complete="searchDecks"
-                >
-                  <template #option="{ option }">
-                    <div class="flex items-center gap-3">
-                      <img
-                        :src="coverUrl(option.coverName)"
-                        :alt="localiseTitle(option)"
-                        class="h-14 w-10 shrink-0 rounded object-cover"
-                      >
-                      <div class="min-w-0">
-                        <div class="truncate text-sm font-medium">{{ localiseTitle(option) }}</div>
-                        <div class="text-xs opacity-70">{{ getMediaTypeText(option.mediaType) }}</div>
+                    <template #option="{ option }">
+                      <div class="flex items-center gap-3">
+                        <img :src="coverUrl(option.coverName)" :alt="localiseTitle(option)" class="h-14 w-10 shrink-0 rounded object-cover" />
+                        <div class="min-w-0">
+                          <div class="truncate text-sm font-medium">{{ localiseTitle(option) }}</div>
+                          <div class="text-xs opacity-70">{{ getMediaTypeText(option.mediaType) }}</div>
+                        </div>
                       </div>
-                    </div>
-                  </template>
-                </AutoComplete>
-                <p class="mt-1 text-xs opacity-70">
-                  You will be suggested titles that build up to the vocabulary of the target media.
-                </p>
+                    </template>
+                  </AutoComplete>
+                  <p class="mt-1 text-xs opacity-70">You will be suggested titles that build up to the vocabulary of the target media.</p>
 
-                <div class="mt-4">
+                  <div class="mt-4">
+                    <div class="mb-1 flex items-baseline justify-between gap-2">
+                      <label class="text-sm font-medium">
+                        Comprehension goal
+                        <Tooltip
+                          content="Set the target coverage you want to achieve by reading all the suggested titles up to the target media."
+                          placement="top"
+                        >
+                          <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
+                        </Tooltip>
+                      </label>
+                      <span class="shrink-0 text-sm font-semibold">{{ goalTarget }}%</span>
+                    </div>
+                    <div class="px-2 py-2">
+                      <Slider v-model="goalTarget" :min="60" :max="99" :step="1" class="w-full" />
+                    </div>
+                    <p class="text-xs opacity-70">
+                      The plan lines up as many titles as it takes to get you to {{ goalTarget }}% coverage of {{ goalTitleText }}.
+                      <template v-if="goalCurrentCoverage != null">You're at {{ pct(goalCurrentCoverage) }} of it right now.</template>
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="mb-1 block text-sm font-medium">Media types</label>
+                  <MultiSelect
+                    v-model="mediaTypes"
+                    :options="mediaTypeOptions"
+                    option-label="name"
+                    option-value="id"
+                    placeholder="All types"
+                    display="chip"
+                    class="w-full"
+                    filter
+                  />
+                </div>
+
+                <!-- px-2: the slider thumb is centred on the track ends, so a value at either extreme would
+                   otherwise be clipped by the card edge. py-2 keeps the thumb clear of the label above. -->
+                <div>
                   <div class="mb-1 flex items-baseline justify-between gap-2">
                     <label class="text-sm font-medium">
-                      Comprehension goal
+                      Count as known
                       <Tooltip
-                        content="Set the target coverage you want to achieve by reading all the suggested titles up to the target media."
+                        content="'Mature + Young' counts every word you've learned, including ones you're still reviewing, the same as Total coverage on deck pages. 'Only mature' counts just the words you know well, so percentages come out lower."
                         placement="top"
                       >
                         <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
                       </Tooltip>
                     </label>
-                    <span class="shrink-0 text-sm font-semibold">{{ goalTarget }}%</span>
                   </div>
-                  <div class="px-2 py-2">
-                    <Slider v-model="goalTarget" :min="60" :max="99" :step="1" class="w-full" />
-                  </div>
-                  <p class="text-xs opacity-70">
-                    The plan lines up as many titles as it takes to get you to {{ goalTarget }}% coverage of
-                    {{ goalTitleText }}.
-                    <template v-if="goalCurrentCoverage != null">
-                      You're at {{ pct(goalCurrentCoverage) }} of it right now.
-                    </template>
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <label class="mb-1 block text-sm font-medium">Media types</label>
-                <MultiSelect
-                  v-model="mediaTypes"
-                  :options="mediaTypeOptions"
-                  option-label="name"
-                  option-value="id"
-                  placeholder="All types"
-                  display="chip"
-                  class="w-full"
-                  filter
-                />
-              </div>
-
-              <!-- px-2: the slider thumb is centred on the track ends, so a value at either extreme would
-                   otherwise be clipped by the card edge. py-2 keeps the thumb clear of the label above. -->
-              <div>
-                <div class="mb-1 flex items-baseline justify-between gap-2">
-                  <label class="text-sm font-medium">
-                    Count as known
-                    <Tooltip
-                      content="'Mature + Young' counts every word you've learned, including ones you're still reviewing, the same as Total coverage on deck pages. 'Only mature' counts just the words you know well, so percentages come out lower."
-                      placement="top"
-                    >
-                      <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
-                    </Tooltip>
-                  </label>
-                </div>
-                <SelectButton
-                  v-model="countLearningWords"
-                  :options="coverageBasisOptions"
-                  option-label="label"
-                  option-value="value"
-                  :allow-empty="false"
-                  class="w-full"
-                />
-              </div>
-
-              <div>
-                <div class="mb-1 flex items-baseline justify-between gap-2">
-                  <label class="text-sm font-medium">
-                    {{ mode === 'goal' ? 'Steps comprehension goal' : 'Comprehension goal' }}
-                    <Tooltip
-                      :content="mode === 'goal'
-                        ? 'Applies to the titles suggested on the way to your goal. The left handle is absolute, nothing below it will be suggested. The right handle is your minimum comfort zone, titles above it will be preferred.'
-                        : 'The left handle is absolute, nothing below it will be suggested. The right handle is your minimum comfort zone, titles above it will be preferred.'"
-                      placement="top"
-                    >
-                      <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
-                    </Tooltip>
-                  </label>
-                  <span class="shrink-0 text-sm font-semibold">
-                    {{ comprehension[0] }}–{{ comprehension[1] }}%
-                  </span>
-                </div>
-                <div class="px-2 py-2">
-                  <Slider v-model="comprehension" range :min="60" :max="98" :step="1" class="w-full" />
-                </div>
-                <p class="text-xs opacity-70">
-                  Nothing below {{ comprehension[0] }}% is suggested. Titles at {{ comprehension[1] }}% or
-                  above are preferred, and lower ones are only selected when they will teach you a lot more words.
-                </p>
-
-                <!-- Counts come from stored coverage, not the live known-word set generation walks, so they
-                     can lag by a recompute. -->
-                <Message v-if="previewWarning" severity="warn" size="small" :closable="false" class="mt-2">
-                  <span class="text-xs">{{ previewWarning }}</span>
-                </Message>
-                <p v-else-if="previewSummary" class="mt-2 text-xs opacity-70">
-                  <i v-if="previewLoading" class="pi pi-spin pi-spinner mr-1 text-[10px]" />{{ previewSummary }}
-                </p>
-              </div>
-
-              <div>
-                <div class="mb-1 flex items-baseline justify-between gap-2">
-                  <label class="text-sm font-medium">
-                    Variety
-                    <Tooltip
-                      content="More to the right to have similar content to your list, more to the left to have completely different content."
-                      placement="top"
-                    >
-                      <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
-                    </Tooltip>
-                  </label>
-                  <span class="shrink-0 text-xs opacity-80">{{ similarityLabel }}</span>
-                </div>
-                <div class="px-2 py-2">
-                  <Slider v-model="contentSimilarity" :min="-3" :max="3" :step="0.5" class="w-full" />
-                </div>
-              </div>
-
-              <div v-if="showsInScope">
-                <div class="mb-1 flex items-baseline justify-between gap-2">
-                  <label class="text-sm font-medium">
-                    Difficulty — watching
-                    <Tooltip
-                      content="Only suggest anime, movies, drama and audio within this difficulty range (0–5). Automatically set fit your current level."
-                      placement="top"
-                    >
-                      <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
-                    </Tooltip>
-                  </label>
-                  <span class="shrink-0 text-xs opacity-80">{{ showsDifficulty[0] }} – {{ showsDifficulty[1] }}</span>
-                </div>
-                <div class="px-2 py-2">
-                  <Slider v-model="showsDifficulty" range :min="0" :max="5" :step="0.1" class="w-full" />
-                </div>
-              </div>
-
-              <div v-if="novelsInScope">
-                <div class="mb-1 flex items-baseline justify-between gap-2">
-                  <label class="text-sm font-medium">
-                    Difficulty — reading
-                    <Tooltip
-                      content="Only suggest novels, visual novels, manga and games within this difficulty range (0–5). Automatically set to fit your current level."
-                      placement="top"
-                    >
-                      <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
-                    </Tooltip>
-                  </label>
-                  <span class="shrink-0 text-xs opacity-80">{{ novelsDifficulty[0] }} – {{ novelsDifficulty[1] }}</span>
-                </div>
-                <div class="px-2 py-2">
-                  <Slider v-model="novelsDifficulty" range :min="0" :max="5" :step="0.1" class="w-full" />
-                </div>
-              </div>
-
-              <div class="grid grid-cols-2 gap-3">
-                <div v-if="mode === 'goal'" class="min-w-0">
-                  <label class="mb-1 block text-sm font-medium" for="goalSteps">
-                    Max titles
-                    <Tooltip
-                      content="How many titles the route may use at most. It stops early once you reach your target; if the budget runs out first, you'll be told how close it got."
-                      placement="top"
-                    >
-                      <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
-                    </Tooltip>
-                  </label>
-                  <InputNumber id="goalSteps" v-model="goalSteps" :min="1" :max="30" show-buttons fluid class="w-full" />
-                </div>
-                <div v-else class="min-w-0">
-                  <label class="mb-1 block text-sm font-medium" for="steps">Suggestion count</label>
-                  <InputNumber id="steps" v-model="steps" :min="1" :max="15" show-buttons fluid class="w-full" />
-                </div>
-                <div class="min-w-0">
-                  <label class="mb-1 block text-sm font-medium" for="threshold">
-                    Min. occurrences
-                    <Tooltip
-                      content="How many times a word must appear in a title to consider it as known. Raise it for a more cautious estimate."
-                      placement="top"
-                    >
-                      <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
-                    </Tooltip>
-                  </label>
-                  <InputNumber
-                    id="threshold"
-                    v-model="acquisitionThreshold"
-                    :min="1"
-                    :max="50"
-                    show-buttons
-                    fluid
+                  <SelectButton
+                    v-model="countLearningWords"
+                    :options="coverageBasisOptions"
+                    option-label="label"
+                    option-value="value"
+                    :allow-empty="false"
                     class="w-full"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label class="mb-2 block text-sm font-medium">
-                  Learn the most words
-                  <Tooltip
-                    content="'By time spent' favours shorter titles with the most new words per hour. 'Per title' favours longer titles that teach the most in total."
-                    placement="top"
-                  >
-                    <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
-                  </Tooltip>
-                </label>
-                <SelectButton
-                  v-model="preference"
-                  :options="preferenceOptions"
-                  option-label="label"
-                  option-value="value"
-                  :allow-empty="false"
+                <div>
+                  <div class="mb-1 flex items-baseline justify-between gap-2">
+                    <label class="text-sm font-medium">
+                      {{ mode === 'goal' ? 'Steps comprehension goal' : 'Comprehension goal' }}
+                      <Tooltip
+                        :content="
+                          mode === 'goal'
+                            ? 'Applies to the titles suggested on the way to your goal. The left handle is absolute, nothing below it will be suggested. The right handle is your minimum comfort zone, titles above it will be preferred.'
+                            : 'The left handle is absolute, nothing below it will be suggested. The right handle is your minimum comfort zone, titles above it will be preferred.'
+                        "
+                        placement="top"
+                      >
+                        <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
+                      </Tooltip>
+                    </label>
+                    <span class="shrink-0 text-sm font-semibold">{{ comprehension[0] }}–{{ comprehension[1] }}%</span>
+                  </div>
+                  <div class="px-2 py-2">
+                    <Slider v-model="comprehension" range :min="60" :max="98" :step="1" class="w-full" />
+                  </div>
+                  <p class="text-xs opacity-70">
+                    Nothing below {{ comprehension[0] }}% is suggested. Titles at {{ comprehension[1] }}% or above are preferred, and lower ones are only
+                    selected when they will teach you a lot more words.
+                  </p>
+
+                  <!-- Counts come from stored coverage, not the live known-word set generation walks, so they
+                     can lag by a recompute. -->
+                  <Message v-if="previewWarning" severity="warn" size="small" :closable="false" class="mt-2">
+                    <span class="text-xs">{{ previewWarning }}</span>
+                  </Message>
+                  <p v-else-if="previewSummary" class="mt-2 text-xs opacity-70">
+                    <i v-if="previewLoading" class="pi pi-spin pi-spinner mr-1 text-[10px]" />
+                    {{ previewSummary }}
+                  </p>
+                </div>
+
+                <div>
+                  <div class="mb-1 flex items-baseline justify-between gap-2">
+                    <label class="text-sm font-medium">
+                      Variety
+                      <Tooltip
+                        content="More to the right to have similar content to your list, more to the left to have completely different content."
+                        placement="top"
+                      >
+                        <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
+                      </Tooltip>
+                    </label>
+                    <span class="shrink-0 text-xs opacity-80">{{ similarityLabel }}</span>
+                  </div>
+                  <div class="px-2 py-2">
+                    <Slider v-model="contentSimilarity" :min="-3" :max="3" :step="0.5" class="w-full" />
+                  </div>
+                </div>
+
+                <div v-if="showsInScope">
+                  <div class="mb-1 flex items-baseline justify-between gap-2">
+                    <label class="text-sm font-medium">
+                      Difficulty — watching
+                      <Tooltip
+                        content="Only suggest anime, movies, drama and audio within this difficulty range (0–5). Automatically set fit your current level."
+                        placement="top"
+                      >
+                        <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
+                      </Tooltip>
+                    </label>
+                    <span class="shrink-0 text-xs opacity-80">{{ showsDifficulty[0] }} – {{ showsDifficulty[1] }}</span>
+                  </div>
+                  <div class="px-2 py-2">
+                    <Slider v-model="showsDifficulty" range :min="0" :max="5" :step="0.1" class="w-full" />
+                  </div>
+                </div>
+
+                <div v-if="novelsInScope">
+                  <div class="mb-1 flex items-baseline justify-between gap-2">
+                    <label class="text-sm font-medium">
+                      Difficulty — reading
+                      <Tooltip
+                        content="Only suggest novels, visual novels, manga and games within this difficulty range (0–5). Automatically set to fit your current level."
+                        placement="top"
+                      >
+                        <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
+                      </Tooltip>
+                    </label>
+                    <span class="shrink-0 text-xs opacity-80">{{ novelsDifficulty[0] }} – {{ novelsDifficulty[1] }}</span>
+                  </div>
+                  <div class="px-2 py-2">
+                    <Slider v-model="novelsDifficulty" range :min="0" :max="5" :step="0.1" class="w-full" />
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div v-if="mode === 'goal'" class="min-w-0">
+                    <label class="mb-1 block text-sm font-medium" for="goalSteps">
+                      Max titles
+                      <Tooltip
+                        content="How many titles the route may use at most. It stops early once you reach your target; if the budget runs out first, you'll be told how close it got."
+                        placement="top"
+                      >
+                        <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
+                      </Tooltip>
+                    </label>
+                    <InputNumber id="goalSteps" v-model="goalSteps" :min="1" :max="30" show-buttons fluid class="w-full" />
+                  </div>
+                  <div v-else class="min-w-0">
+                    <label class="mb-1 block text-sm font-medium" for="steps">Suggestion count</label>
+                    <InputNumber id="steps" v-model="steps" :min="1" :max="15" show-buttons fluid class="w-full" />
+                  </div>
+                  <div class="min-w-0">
+                    <label class="mb-1 block text-sm font-medium" for="threshold">
+                      Min. occurrences
+                      <Tooltip
+                        content="How many times a word must appear in a title to consider it as known. Raise it for a more cautious estimate."
+                        placement="top"
+                      >
+                        <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
+                      </Tooltip>
+                    </label>
+                    <InputNumber id="threshold" v-model="acquisitionThreshold" :min="1" :max="50" show-buttons fluid class="w-full" />
+                  </div>
+                </div>
+
+                <div>
+                  <label class="mb-2 block text-sm font-medium">
+                    Learn the most words
+                    <Tooltip
+                      content="'By time spent' favours shorter titles with the most new words per hour. 'Per title' favours longer titles that teach the most in total."
+                      placement="top"
+                    >
+                      <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
+                    </Tooltip>
+                  </label>
+                  <SelectButton
+                    v-model="preference"
+                    :options="preferenceOptions"
+                    option-label="label"
+                    option-value="value"
+                    :allow-empty="false"
+                    class="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label class="mb-2 block text-sm font-medium">
+                    Pick titles from
+                    <Tooltip
+                      content="'My list & similar' picks from titles you marked Planning, plus titles similar to the ones you marked Ongoing or Completed. 'Everything' searches the whole catalogue. Either way, Ongoing, Completed, Dropped and ignored titles are never suggested."
+                      placement="top"
+                    >
+                      <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
+                    </Tooltip>
+                  </label>
+                  <SelectButton
+                    v-model="candidateMode"
+                    :options="candidateModeOptions"
+                    option-label="label"
+                    option-value="value"
+                    :allow-empty="false"
+                    class="w-full"
+                  />
+                </div>
+
+                <div class="flex flex-col gap-2">
+                  <div class="flex items-center gap-2">
+                    <Checkbox v-model="includeAdultOnly" input-id="adult" binary />
+                    <label class="text-sm" for="adult">Include adult-only titles</label>
+                  </div>
+                  <div v-if="includeAdultOnly" class="ml-6 flex items-center gap-2">
+                    <Checkbox v-model="adultOnlyExclusive" input-id="adult-only" binary />
+                    <label class="text-sm" for="adult-only">Adult-only titles only</label>
+                  </div>
+                </div>
+
+                <Message v-if="atCap && editingId === null" severity="warn" size="small" :closable="false">
+                  <span class="text-xs">You've reached {{ maxRoadmaps }} plans. Delete one to make room for a new one.</span>
+                </Message>
+
+                <Button
+                  v-if="editingId !== null"
+                  :label="creating ? 'Saving…' : 'Save & regenerate'"
+                  icon="pi pi-save"
+                  :loading="creating"
+                  :disabled="!canSubmit || creating"
                   class="w-full"
+                  @click="saveAndRegenerate"
+                />
+                <Button
+                  v-else
+                  :label="creating ? 'Working…' : 'Make my plan'"
+                  icon="pi pi-compass"
+                  :loading="creating"
+                  :disabled="!canSubmit || creating || atCap"
+                  class="w-full"
+                  @click="create"
                 />
               </div>
-
-              <div>
-                <label class="mb-2 block text-sm font-medium">
-                  Pick titles from
-                  <Tooltip
-                    content="'My list & similar' picks from titles you marked Planning, plus titles similar to the ones you marked Ongoing or Completed. 'Everything' searches the whole catalogue. Either way, Ongoing, Completed, Dropped and ignored titles are never suggested."
-                    placement="top"
-                  >
-                    <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
-                  </Tooltip>
-                </label>
-                <SelectButton
-                  v-model="candidateMode"
-                  :options="candidateModeOptions"
-                  option-label="label"
-                  option-value="value"
-                  :allow-empty="false"
-                  class="w-full"
-                />
-              </div>
-
-              <div class="flex flex-col gap-2">
-                <div class="flex items-center gap-2">
-                  <Checkbox v-model="includeAdultOnly" input-id="adult" binary />
-                  <label class="text-sm" for="adult">Include adult-only titles</label>
-                </div>
-                <div v-if="includeAdultOnly" class="ml-6 flex items-center gap-2">
-                  <Checkbox v-model="adultOnlyExclusive" input-id="adult-only" binary />
-                  <label class="text-sm" for="adult-only">Adult-only titles only</label>
-                </div>
-              </div>
-
-              <Message v-if="atCap && editingId === null" severity="warn" size="small" :closable="false">
-                <span class="text-xs">
-                  You've reached {{ maxRoadmaps }} plans. Delete one to make room for a new one.
-                </span>
-              </Message>
-
-              <Button
-                v-if="editingId !== null"
-                :label="creating ? 'Saving…' : 'Save & regenerate'"
-                icon="pi pi-save"
-                :loading="creating"
-                :disabled="!canSubmit || creating"
-                class="w-full"
-                @click="saveAndRegenerate"
-              />
-              <Button
-                v-else
-                :label="creating ? 'Working…' : 'Make my plan'"
-                icon="pi pi-compass"
-                :loading="creating"
-                :disabled="!canSubmit || creating || atCap"
-                class="w-full"
-                @click="create"
-              />
-            </div>
-          </template>
-        </Card>
+            </template>
+          </Card>
         </JitenPlusGate>
       </div>
 
       <!-- Results — always visible to the owner, even after Jiten+ lapses -->
       <div class="flex flex-col gap-4">
-          <Card v-if="roadmaps.length > 0">
-            <template #content>
-              <div class="mb-3 flex items-center justify-between gap-2">
-                <span class="text-sm font-medium">Your plans</span>
-                <span class="text-xs opacity-70">{{ roadmaps.length }} / {{ maxRoadmaps }}</span>
+        <Card v-if="roadmaps.length > 0">
+          <template #content>
+            <div class="mb-3 flex items-center justify-between gap-2">
+              <span class="text-sm font-medium">Your plans</span>
+              <span class="text-xs opacity-70">{{ roadmaps.length }} / {{ maxRoadmaps }}</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <Button
+                v-for="r in roadmaps"
+                :key="r.id"
+                :label="r.name"
+                :severity="r.id === activeId ? 'primary' : 'secondary'"
+                :outlined="r.id !== activeId"
+                size="small"
+                @click="selectPlan(r)"
+              >
+                <template #icon>
+                  <i v-if="r.status === 'generating' || r.status === 'pending'" class="pi pi-spin pi-spinner mr-2" />
+                  <i v-else-if="r.status === 'failed'" class="pi pi-exclamation-circle mr-2" />
+                  <i v-else class="pi pi-compass mr-2" />
+                </template>
+              </Button>
+            </div>
+          </template>
+        </Card>
+
+        <Card v-if="activeRoadmap">
+          <template #content>
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-xl font-semibold">{{ activeRoadmap.name }}</h2>
+                <p class="text-sm opacity-70">
+                  <span v-if="activeRoadmap.mode === 'goal'">Path towards your target media</span>
+                  <span v-else>Your next picks</span>
+                  <span v-if="activeRoadmap.candidateCount > 0">· picked from {{ activeRoadmap.candidateCount.toLocaleString() }} titles</span>
+                  <span v-if="activeRoadmap.swappedCount > 0">· {{ activeRoadmap.swappedCount }} skipped</span>
+                </p>
               </div>
-              <div class="flex flex-wrap items-center gap-2">
+              <div class="flex flex-wrap gap-2">
                 <Button
-v-for="r in roadmaps" :key="r.id" :label="r.name"
-                        :severity="r.id === activeId ? 'primary' : 'secondary'"
-                        :outlined="r.id !== activeId" size="small" @click="selectPlan(r)">
-                  <template #icon>
-                    <i v-if="r.status === 'generating' || r.status === 'pending'" class="pi pi-spin pi-spinner mr-2" />
-                    <i v-else-if="r.status === 'failed'" class="pi pi-exclamation-circle mr-2" />
-                    <i v-else class="pi pi-compass mr-2" />
-                  </template>
-                </Button>
+                  v-if="activeRoadmap.status === 'ready' && planSteps.length > 0"
+                  label="Add all to study"
+                  icon="pi pi-plus"
+                  size="small"
+                  severity="secondary"
+                  outlined
+                  @click="openBulkStudy"
+                />
+                <Button
+                  v-if="activeRoadmap.status === 'ready'"
+                  label="Export as image"
+                  icon="pi pi-download"
+                  size="small"
+                  severity="secondary"
+                  outlined
+                  :loading="isExporting"
+                  :disabled="!activePayload || activePayload.steps.length === 0"
+                  @click="exportPng"
+                />
+                <Button
+                  v-if="isPlus && activeRoadmap.swappedCount > 0"
+                  label="Undo skips"
+                  icon="pi pi-undo"
+                  size="small"
+                  severity="secondary"
+                  outlined
+                  :disabled="activeBusy"
+                  @click="resetSwaps"
+                />
+                <Button
+                  v-if="isPlus"
+                  :label="editingId === activeRoadmap.id && builderDirty ? 'Save & start over' : 'Start over'"
+                  icon="pi pi-refresh"
+                  size="small"
+                  severity="secondary"
+                  outlined
+                  :disabled="activeBusy || creating"
+                  @click="startOver(activeRoadmap.id)"
+                />
+                <Button icon="pi pi-trash" size="small" severity="danger" outlined @click="confirmDelete(activeRoadmap)" />
               </div>
-            </template>
-          </Card>
+            </div>
 
-          <Card v-if="activeRoadmap">
-            <template #content>
-              <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 class="text-xl font-semibold">{{ activeRoadmap.name }}</h2>
-                  <p class="text-sm opacity-70">
-                    <span v-if="activeRoadmap.mode === 'goal'">Path towards your target media</span>
-                    <span v-else>Your next picks</span>
-                    <span v-if="activeRoadmap.candidateCount > 0">
-                      · picked from {{ activeRoadmap.candidateCount.toLocaleString() }} titles</span>
-                    <span v-if="activeRoadmap.swappedCount > 0"> · {{ activeRoadmap.swappedCount }} skipped</span>
-                  </p>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                  <Button
-                    v-if="activeRoadmap.status === 'ready' && planSteps.length > 0"
-                    label="Add all to study"
-                    icon="pi pi-plus"
-                    size="small"
-                    severity="secondary"
-                    outlined
-                    @click="openBulkStudy"
-                  />
-                  <Button
-                    v-if="activeRoadmap.status === 'ready'"
-                    label="Export as image"
-                    icon="pi pi-download"
-                    size="small"
-                    severity="secondary"
-                    outlined
-                    :loading="isExporting"
-                    :disabled="!activePayload || activePayload.steps.length === 0"
-                    @click="exportPng"
-                  />
-                  <Button
-                    v-if="isPlus && activeRoadmap.swappedCount > 0"
-                    label="Undo skips"
-                    icon="pi pi-undo"
-                    size="small"
-                    severity="secondary"
-                    outlined
-                    :disabled="activeBusy"
-                    @click="resetSwaps"
-                  />
-                  <Button
-                    v-if="isPlus"
-                    :label="editingId === activeRoadmap.id && builderDirty ? 'Save & start over' : 'Start over'"
-                    icon="pi pi-refresh"
-                    size="small"
-                    severity="secondary"
-                    outlined
-                    :disabled="activeBusy || creating"
-                    @click="startOver(activeRoadmap.id)"
-                  />
-                  <Button
-                    icon="pi pi-trash"
-                    size="small"
-                    severity="danger"
-                    outlined
-                    @click="confirmDelete(activeRoadmap)"
-                  />
-                </div>
-              </div>
+            <Message v-if="!isPlus" severity="secondary" size="small" :closable="false" class="mb-4">
+              <span class="text-xs">
+                Your Jiten+ has lapsed. You can still read and delete your plans, but making new ones or changing them needs an active Jiten+.
+              </span>
+            </Message>
 
-              <Message v-if="!isPlus" severity="secondary" size="small" :closable="false" class="mb-4">
-                <span class="text-xs">
-                  Your Jiten+ has lapsed. You can still read and delete your plans, but making new ones or
-                  changing them needs an active Jiten+.
+            <div v-if="activeRoadmap.status === 'pending' || activeRoadmap.status === 'generating'" class="flex flex-col items-center gap-3 py-12">
+              <ProgressSpinner style="width: 48px; height: 48px" />
+              <p class="text-sm opacity-80">Picking your titles…</p>
+            </div>
+
+            <Message v-else-if="activeRoadmap.status === 'failed'" severity="error" :closable="false">
+              {{ activeRoadmap.failureReason ?? "We couldn't put this plan together." }}
+            </Message>
+
+            <div v-else-if="loadingDetail" class="flex justify-center py-12">
+              <ProgressSpinner style="width: 40px; height: 40px" />
+            </div>
+
+            <div v-else-if="activePayload" class="flex flex-col gap-4">
+              <Message v-if="activeRoadmap.mode === 'goal' && activePayload.goalReached" severity="success" :closable="false">
+                <span v-if="activePayload.steps.length === 0">
+                  You can already follow this — you know {{ pct(activePayload.goalCoverageFinal ?? 0) }} of the words. Go for it.
+                </span>
+                <span v-else>
+                  Go through these {{ activePayload.steps.length }} first and you'll know {{ pct(activePayload.goalCoverageFinal ?? 0) }} of the words in the
+                  title you picked.
                 </span>
               </Message>
 
-              <div
-                v-if="activeRoadmap.status === 'pending' || activeRoadmap.status === 'generating'"
-                class="flex flex-col items-center gap-3 py-12"
-              >
-                <ProgressSpinner style="width: 48px; height: 48px" />
-                <p class="text-sm opacity-80">Picking your titles…</p>
-              </div>
-
-              <Message v-else-if="activeRoadmap.status === 'failed'" severity="error" :closable="false">
-                {{ activeRoadmap.failureReason ?? "We couldn't put this plan together." }}
+              <Message v-else-if="activeRoadmap.mode === 'goal' && activePayload.goalCeilingReached" severity="success" :closable="false">
+                As far as other titles can take you — you'll know
+                {{ pct(activePayload.goalCoverageFinal ?? 0) }} of {{ activePayload.goal ? goalCardTitle(activePayload.goal) : 'the title' }}. The last
+                {{ activePayload.goalUnreachableWords.toLocaleString() }} words appear only in it, so no other title can teach them — you'll pick them up by
+                reading it.
               </Message>
 
-              <div v-else-if="loadingDetail" class="flex justify-center py-12">
-                <ProgressSpinner style="width: 40px; height: 40px" />
-              </div>
+              <Message v-else-if="activeRoadmap.mode === 'goal' && !activePayload.goalReached" severity="warn" :closable="false">
+                These get you to {{ pct(activePayload.goalCoverageFinal ?? 0) }} of the words in the title you picked, about
+                {{ (activePayload.goalWordsRemaining ?? 0).toLocaleString() }} short of your target, using all {{ activePayload.steps.length }} of the titles it
+                was allowed. Raise the title limit to let it go further. This can also happen because the frequent words of this title are very specific, in
+                which case lowering the target percentage helps more.
+              </Message>
 
-              <div v-else-if="activePayload" class="flex flex-col gap-4">
-                <Message
-                  v-if="activeRoadmap.mode === 'goal' && activePayload.goalReached"
-                  severity="success"
-                  :closable="false"
-                >
-                  <span v-if="activePayload.steps.length === 0">
-                    You can already follow this — you know {{ pct(activePayload.goalCoverageFinal ?? 0) }} of
-                    the words. Go for it.
-                  </span>
-                  <span v-else>
-                    Go through these {{ activePayload.steps.length }} first and you'll know
-                    {{ pct(activePayload.goalCoverageFinal ?? 0) }} of the words in the title you picked.
-                  </span>
-                </Message>
-
-                <Message
-                  v-else-if="activeRoadmap.mode === 'goal' && activePayload.goalCeilingReached"
-                  severity="success"
-                  :closable="false"
-                >
-                  As far as other titles can take you — you'll know
-                  {{ pct(activePayload.goalCoverageFinal ?? 0) }} of
-                  {{ activePayload.goal ? goalCardTitle(activePayload.goal) : 'the title' }}. The last
-                  {{ activePayload.goalUnreachableWords.toLocaleString() }} words appear only in it, so no other
-                  title can teach them — you'll pick them up by reading it.
-                </Message>
-
-                <Message
-                  v-else-if="activeRoadmap.mode === 'goal' && !activePayload.goalReached"
-                  severity="warn"
-                  :closable="false"
-                >
-                  These get you to {{ pct(activePayload.goalCoverageFinal ?? 0) }} of the words in the title you
-                  picked, about {{ (activePayload.goalWordsRemaining ?? 0).toLocaleString() }} short of your
-                  target, using all {{ activePayload.steps.length }} of the titles it was allowed. Raise the title
-                  limit to let it go further. This can also happen because the frequent words of this title are
-                  very specific, in which case lowering the target percentage helps more.
-                </Message>
-
-                <!-- Plan summary -->
-                <div
-                  v-if="activePayload.steps.length > 0"
-                  class="rounded-lg bg-surface-50 px-4 py-3 dark:bg-surface-800/50"
-                >
-                  <div class="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-                    <div>
-                      <div class="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Titles</div>
-                      <div class="text-lg font-semibold tabular-nums">{{ activePayload.steps.length }}</div>
-                    </div>
-                    <div>
-                      <div class="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">
-                        New words
-                        <Tooltip
-                          v-if="activePayload.totalGoalNewWords != null"
-                          content="Everything these titles teach, whether or not your goal uses it. The amber figure is the part that counts toward the goal."
-                          placement="top"
-                        >
-                          <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
-                        </Tooltip>
-                      </div>
-                      <div class="text-lg font-semibold tabular-nums text-green-600 dark:text-green-400">
-                        {{ activePayload.totalNewWords.toLocaleString() }}
-                      </div>
-                      <div
+              <!-- Plan summary -->
+              <div v-if="activePayload.steps.length > 0" class="rounded-lg bg-surface-50 px-4 py-3 dark:bg-surface-800/50">
+                <div class="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Titles</div>
+                    <div class="text-lg font-semibold tabular-nums">{{ activePayload.steps.length }}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                      New words
+                      <Tooltip
                         v-if="activePayload.totalGoalNewWords != null"
-                        class="text-sm font-semibold tabular-nums text-amber-600 dark:text-amber-400"
+                        content="Everything these titles teach, whether or not your goal uses it. The amber figure is the part that counts toward the goal."
+                        placement="top"
                       >
-                        {{ activePayload.totalGoalNewWords.toLocaleString() }} your goal uses
-                      </div>
+                        <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
+                      </Tooltip>
                     </div>
-                    <div v-if="planTotals.characters > 0">
-                      <div class="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Characters</div>
-                      <div class="text-lg font-semibold tabular-nums">
-                        {{ planTotals.characters.toLocaleString() }}
-                      </div>
+                    <div class="text-lg font-semibold tabular-nums text-green-600 dark:text-green-400">
+                      {{ activePayload.totalNewWords.toLocaleString() }}
                     </div>
-                    <div v-if="planTotals.hours > 0">
-                      <div class="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">
-                        Time
-                        <Tooltip
-                          :content="`Anime, film, drama and audio are timed by their speech duration; everything else by your reading speed of ${store.readingSpeed.toLocaleString()} characters per hour, which you can change in the quick settings cog at the top right.`"
-                          placement="top"
-                        >
-                          <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
-                        </Tooltip>
-                      </div>
-                      <div class="text-lg font-semibold tabular-nums">{{ formatHours(planTotals.hours) }}</div>
+                    <div v-if="activePayload.totalGoalNewWords != null" class="text-sm font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                      {{ activePayload.totalGoalNewWords.toLocaleString() }} your goal uses
                     </div>
                   </div>
-                  <p class="mt-2 text-sm opacity-80">Get through all of these and that's what you'll have covered.</p>
-                  <p v-if="activePayload.goalWordsAtStart" class="mt-1 text-sm opacity-80">
-                    Studied on their own, the
-                    <strong class="tabular-nums">{{ activePayload.goalWordsAtStart.toLocaleString() }}</strong>
-                    most-used words you're still missing from {{ goalTitleText }} would get you there too. No real
-                    title teaches only those, so a reading route always costs more words than the bare minimum.
-                  </p>
+                  <div v-if="planTotals.characters > 0">
+                    <div class="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Characters</div>
+                    <div class="text-lg font-semibold tabular-nums">
+                      {{ planTotals.characters.toLocaleString() }}
+                    </div>
+                  </div>
+                  <div v-if="planTotals.hours > 0">
+                    <div class="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                      Time
+                      <Tooltip
+                        :content="`Anime, film, drama and audio are timed by their speech duration; everything else by your reading speed of ${store.readingSpeed.toLocaleString()} characters per hour, which you can change in the quick settings cog at the top right.`"
+                        placement="top"
+                      >
+                        <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
+                      </Tooltip>
+                    </div>
+                    <div class="text-lg font-semibold tabular-nums">{{ formatHours(planTotals.hours) }}</div>
+                  </div>
+                </div>
+                <p class="mt-2 text-sm opacity-80">Get through all of these and that's what you'll have covered.</p>
+                <p v-if="activePayload.goalWordsAtStart" class="mt-1 text-sm opacity-80">
+                  Studied on their own, the
+                  <strong class="tabular-nums">{{ activePayload.goalWordsAtStart.toLocaleString() }}</strong>
+                  most-used words you're still missing from {{ goalTitleText }} would get you there too. No real title teaches only those, so a reading route
+                  always costs more words than the bare minimum.
+                </p>
+              </div>
+
+              <!-- Steps -->
+              <div
+                v-for="step in activePayload.steps"
+                :key="step.index"
+                class="flex flex-col gap-3 rounded-lg border border-surface-200 p-3 sm:flex-row dark:border-surface-700"
+              >
+                <div class="flex shrink-0 items-start gap-3">
+                  <span class="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-contrast">
+                    {{ step.index }}
+                  </span>
+                  <div class="flex shrink-0 flex-col items-center gap-1">
+                    <Tag
+                      :value="getMediaTypeText(step.mediaType)"
+                      severity="secondary"
+                      rounded
+                      class="!px-2 !py-0.5 !text-[0.65rem] !font-semibold !uppercase !tracking-wider"
+                    />
+                    <a :href="`/decks/media/${step.deckId}/detail`" target="_blank" rel="noopener">
+                      <img :src="coverUrl(step.coverName)" :alt="stepTitle(step)" class="h-28 w-20 rounded object-cover" loading="lazy" />
+                    </a>
+                  </div>
                 </div>
 
-                <!-- Steps -->
-                <div
-                  v-for="step in activePayload.steps"
-                  :key="step.index"
-                  class="flex flex-col gap-3 rounded-lg border border-surface-200 p-3 sm:flex-row dark:border-surface-700"
-                >
-                  <div class="flex shrink-0 items-start gap-3">
-                    <span
-                      class="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-contrast"
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-start justify-between gap-2">
+                    <a
+                      :href="`/decks/media/${step.deckId}/detail`"
+                      target="_blank"
+                      rel="noopener"
+                      :title="stepTitle(step)"
+                      class="line-clamp-1 min-w-0 flex-1 font-semibold break-words hover:underline"
                     >
-                      {{ step.index }}
-                    </span>
-                    <div class="flex shrink-0 flex-col items-center gap-1">
-                      <Tag
-                        :value="getMediaTypeText(step.mediaType)"
-                        severity="secondary"
-                        rounded
-                        class="!px-2 !py-0.5 !text-[0.65rem] !font-semibold !uppercase !tracking-wider"
-                      />
-                      <a :href="`/decks/media/${step.deckId}/detail`" target="_blank" rel="noopener">
-                        <img
-                          :src="coverUrl(step.coverName)"
-                          :alt="stepTitle(step)"
-                          class="h-28 w-20 rounded object-cover"
-                          loading="lazy"
-                        >
-                      </a>
+                      {{ stepTitle(step) }}
+                    </a>
+                    <div class="flex shrink-0 items-center gap-1">
+                      <span v-if="stepIsStudied(step)" class="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400">
+                        <i class="pi pi-check-circle text-xs" />
+                        In your study list
+                      </span>
+                      <Tooltip v-else content="Make a study deck from this title">
+                        <Button label="Study" icon="pi pi-plus" size="small" severity="secondary" outlined @click="studyStep = step" />
+                      </Tooltip>
+                      <Tooltip v-if="isPlus" content="Not this one — show me something else" placement="left">
+                        <Button
+                          icon="pi pi-refresh"
+                          size="small"
+                          severity="secondary"
+                          text
+                          :loading="swapping === step.index"
+                          :disabled="swapping !== null"
+                          @click="swapStep(step)"
+                        />
+                      </Tooltip>
                     </div>
                   </div>
 
-                  <div class="min-w-0 flex-1">
-                    <div class="flex flex-wrap items-start justify-between gap-2">
-                      <a
-                        :href="`/decks/media/${step.deckId}/detail`"
-                        target="_blank"
-                        rel="noopener"
-                        :title="stepTitle(step)"
-                        class="line-clamp-1 min-w-0 flex-1 font-semibold break-words hover:underline"
-                      >
-                        {{ stepTitle(step) }}
-                      </a>
-                      <div class="flex shrink-0 items-center gap-1">
-                        <span
-                          v-if="stepIsStudied(step)"
-                          class="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400"
-                        >
-                          <i class="pi pi-check-circle text-xs" />
-                          In your study list
-                        </span>
-                        <Tooltip v-else content="Make a study deck from this title">
-                          <Button
-                            label="Study"
-                            icon="pi pi-plus"
-                            size="small"
-                            severity="secondary"
-                            outlined
-                            @click="studyStep = step"
-                          />
-                        </Tooltip>
-                        <Tooltip v-if="isPlus" content="Not this one — show me something else" placement="left">
-                          <Button
-                            icon="pi pi-refresh"
-                            size="small"
-                            severity="secondary"
-                            text
-                            :loading="swapping === step.index"
-                            :disabled="swapping !== null"
-                            @click="swapStep(step)"
-                          />
-                        </Tooltip>
-                      </div>
-                    </div>
+                  <!-- Genres (reuses the deck card's GenreTagDisplay) -->
+                  <GenreTagDisplay v-if="step.genres.length > 0" :genres="step.genres" label="Genres" class="mt-1.5" />
 
-                    <!-- Genres (reuses the deck card's GenreTagDisplay) -->
-                    <GenreTagDisplay v-if="step.genres.length > 0" :genres="step.genres" label="Genres" class="mt-1.5" />
+                  <!-- Difficulty — matches the deck card's stat row -->
+                  <div class="stat-row mt-1 flex items-center justify-between">
+                    <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">Difficulty</span>
+                    <DifficultyDisplay :difficulty="step.difficulty" />
+                  </div>
 
-                    <!-- Difficulty — matches the deck card's stat row -->
-                    <div class="stat-row mt-1 flex items-center justify-between">
-                      <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">Difficulty</span>
-                      <DifficultyDisplay :difficulty="step.difficulty" />
-                    </div>
-
-                    <div v-if="stepHours(step) > 0" class="stat-row flex items-center justify-between">
-                      <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
-                        Length
-                        <Tooltip
-                          :content="step.speechDuration > 0
+                  <div v-if="stepHours(step) > 0" class="stat-row flex items-center justify-between">
+                    <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
+                      Length
+                      <Tooltip
+                        :content="
+                          step.speechDuration > 0
                             ? 'Total duration of speech, excluding silence.'
-                            : `At your reading speed of ${store.readingSpeed.toLocaleString()} characters per hour.`"
-                          placement="top"
-                        >
-                          <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
-                        </Tooltip>
-                      </span>
-                      <span class="tabular-nums font-semibold">
-                        {{ formatHours(stepHours(step)) }}
-                        <span v-if="step.characterCount > 0" class="ml-1 text-xs font-normal opacity-60">
-                          {{ step.characterCount.toLocaleString() }} chars
-                        </span>
-                      </span>
-                    </div>
-
-                    <div class="stat-row flex items-center justify-between">
-                      <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
-                        You know of this title
-                        <Tooltip
-                          content="How much of this title's text you will be able to read when you reach it if you follow the exact steps."
-                          placement="top"
-                        >
-                          <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
-                        </Tooltip>
-                      </span>
-                      <span class="tabular-nums font-semibold">{{ pct(step.coverage) }} of the words</span>
-                    </div>
-
-                    <div class="stat-row flex items-center justify-between">
-                      <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
-                        Teaches
-                        <Tooltip
-                          content="New words that appear often enough here to actually stick, assuming you've read the steps above first."
-                          placement="top"
-                        >
-                          <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
-                        </Tooltip>
-                      </span>
-                      <span class="tabular-nums font-semibold text-green-600 dark:text-green-400">
-                        {{ step.newWords.toLocaleString() }} new words
-                        <span v-if="step.goalNewWords != null" class="ml-1 text-xs font-normal opacity-70">
-                          ({{ step.goalNewWords.toLocaleString() }} your goal uses)
-                        </span>
-                      </span>
-                    </div>
-
-                    <div v-if="step.goalCoverageAfter != null" class="stat-row flex items-center justify-between">
-                      <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
-                        Then, of your goal
-                        <Tooltip
-                          content="Your coverage of the title you're aiming for, after this step. This one only ever goes up."
-                          placement="top"
-                        >
-                          <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
-                        </Tooltip>
-                      </span>
-                      <span class="tabular-nums font-semibold text-amber-600 dark:text-amber-400">
-                        {{ pct(step.goalCoverageAfter) }}
-                      </span>
-                    </div>
-
-                    <!-- Frequency mix: how useful the new words are -->
-                    <div v-if="bandTotal(step.frequencyBands) > 0" class="mt-2">
-                      <div class="mb-1 flex items-center justify-between text-xs">
-                        <span class="text-gray-600 dark:text-gray-300">
-                          {{ Math.round(usefulShare(step.frequencyBands) * 100) }}% are common, everyday words
-                        </span>
-                        <button
-                          type="button"
-                          class="font-semibold text-primary-500 hover:text-primary-700 hover:underline"
-                          @click="toggleWords(step.index)"
-                        >
-                          {{ expandedStep === step.index ? 'Hide words' : 'See all words' }}
-                        </button>
-                      </div>
-                      <div class="flex h-2 overflow-hidden rounded-full">
-                        <Tooltip
-                          v-for="b in bandDefs"
-                          :key="b.key"
-                          :content="`${b.label}: ${step.frequencyBands[b.key].toLocaleString()} words`"
-                          placement="top"
-                        >
-                          <div
-                            v-if="step.frequencyBands[b.key] > 0"
-                            :class="b.cls"
-                            :style="{ width: `${(step.frequencyBands[b.key] / bandTotal(step.frequencyBands)) * 100}%` }"
-                            class="h-full"
-                          />
-                        </Tooltip>
-                      </div>
-                    </div>
-
-                    <!-- Expandable word list — resolved lazily on first expand -->
-                    <div v-if="expandedStep === step.index" class="mt-3">
-                      <div
-                        v-if="stepWordsStatus(step.index) === 'loading'"
-                        class="flex items-center gap-2 py-3 text-sm opacity-70"
+                            : `At your reading speed of ${store.readingSpeed.toLocaleString()} characters per hour.`
+                        "
+                        placement="top"
                       >
-                        <i class="pi pi-spin pi-spinner" /> Loading words…
-                      </div>
-                      <div
-                        v-else-if="stepWordsStatus(step.index) === 'error'"
-                        class="py-3 text-sm text-red-500 dark:text-red-400"
-                      >
-                        Couldn't load the words.
-                        <button
-                          type="button"
-                          class="font-semibold underline"
-                          @click="loadStepWords(step.index)"
-                        >
-                          Try again
-                        </button>
-                      </div>
-                      <template v-else-if="stepWordsStatus(step.index) === 'ready'">
-                        <div class="max-h-64 overflow-y-auto rounded border border-surface-200 dark:border-surface-700">
-                          <a
-                            v-for="w in stepWords(step.index)"
-                            :key="`${w.wordId}-${w.readingIndex}`"
-                            :href="`/vocabulary/${w.wordId}/${w.readingIndex}`"
-                            target="_blank"
-                            rel="noopener"
-                            class="flex items-baseline justify-between gap-3 border-b border-surface-100 px-3 py-1.5 text-sm last:border-0 hover:bg-surface-50 dark:border-surface-800 dark:hover:bg-surface-800/50"
-                          >
-                            <span>
-                              {{ w.text }}
-                              <span v-if="w.reading && w.reading !== w.text" class="ml-1 text-xs opacity-60">
-                                {{ w.reading }}
-                              </span>
-                            </span>
-                            <span class="shrink-0 text-xs opacity-50">
-                              {{ w.frequencyRank > 0 ? `#${w.frequencyRank.toLocaleString()}` : 'rare' }}
-                            </span>
-                          </a>
-                        </div>
-                        <p v-if="step.newWords > stepWords(step.index).length" class="mt-1 text-xs opacity-60">
-                          Showing the {{ stepWords(step.index).length.toLocaleString() }} most common of
-                          {{ step.newWords.toLocaleString() }}.
-                          <a
-                            :href="`/decks/media/${step.deckId}/vocabulary?display=unknown&sortBy=deckFreq`"
-                            target="_blank"
-                            rel="noopener"
-                            class="font-medium hover:underline"
-                          >See them all</a>.
-                        </p>
-                      </template>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Drill step -->
-                <div
-v-if="activePayload.drill"
-                     class="rounded-lg border border-dashed border-surface-300 p-4 dark:border-surface-600">
-                  <h3 class="font-semibold">
-                    <span v-if="activePayload.steps.length === 0">Start here</span>
-                    <span v-else>After that</span>
-                  </h3>
-                  <p class="mt-1 text-sm opacity-80">
-                    Nothing else is easy enough for you yet. Learn
-                    <strong>{{ activePayload.drill.wordsNeeded.toLocaleString() }}</strong> more words and
-                    <a
-                      :href="`/decks/media/${activePayload.drill.deckId}/detail`"
-                      target="_blank"
-                      rel="noopener"
-                      class="font-medium hover:underline"
-                    >
-                      {{ activePayload.drill.title }}
-                    </a>
-                    opens up — you know {{ pct(activePayload.drill.coverage) }} of it right now.
-                  </p>
-                  <div class="mt-2 flex flex-wrap gap-1">
-                    <a
-                      v-for="w in activePayload.drill.words"
-                      :key="`${w.wordId}-${w.readingIndex}`"
-                      :href="`/vocabulary/${w.wordId}/${w.readingIndex}`"
-                      target="_blank"
-                      rel="noopener"
-                      class="rounded bg-surface-100 px-2 py-0.5 text-sm hover:underline dark:bg-surface-800"
-                    >
-                      {{ w.text }}
-                    </a>
-                  </div>
-                </div>
-
-                <!-- Goal destination — the target title itself, closing the sequence -->
-                <div
-                  v-if="activePayload.goal"
-                  class="flex flex-col gap-3 rounded-lg border-2 border-amber-400 bg-amber-50/60 p-3 sm:flex-row dark:border-amber-500/60 dark:bg-amber-500/10"
-                >
-                  <div class="flex shrink-0 items-start gap-3">
-                    <span
-                      class="flex h-8 w-8 items-center justify-center rounded-full bg-amber-400 text-white dark:bg-amber-500"
-                    >
-                      <i class="pi pi-flag-fill text-sm" />
+                        <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
+                      </Tooltip>
                     </span>
-                    <div class="flex shrink-0 flex-col items-center gap-1">
-                      <Tag
-                        value="Goal"
-                        rounded
-                        class="!bg-amber-400 !px-2 !py-0.5 !text-[0.65rem] !font-semibold !uppercase !tracking-wider !text-white dark:!bg-amber-500"
-                      />
-                      <a :href="`/decks/media/${activePayload.goal.deckId}/detail`" target="_blank" rel="noopener">
-                        <img
-                          :src="coverUrl(activePayload.goal.coverName)"
-                          :alt="goalCardTitle(activePayload.goal)"
-                          class="h-28 w-20 rounded object-cover"
-                          loading="lazy"
-                        >
-                      </a>
+                    <span class="tabular-nums font-semibold">
+                      {{ formatHours(stepHours(step)) }}
+                      <span v-if="step.characterCount > 0" class="ml-1 text-xs font-normal opacity-60">{{ step.characterCount.toLocaleString() }} chars</span>
+                    </span>
+                  </div>
+
+                  <div class="stat-row flex items-center justify-between">
+                    <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
+                      You know of this title
+                      <Tooltip
+                        content="How much of this title's text you will be able to read when you reach it if you follow the exact steps."
+                        placement="top"
+                      >
+                        <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
+                      </Tooltip>
+                    </span>
+                    <span class="tabular-nums font-semibold">{{ pct(step.coverage) }} of the words</span>
+                  </div>
+
+                  <div class="stat-row flex items-center justify-between">
+                    <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
+                      Teaches
+                      <Tooltip content="New words that appear often enough here to actually stick, assuming you've read the steps above first." placement="top">
+                        <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
+                      </Tooltip>
+                    </span>
+                    <span class="tabular-nums font-semibold text-green-600 dark:text-green-400">
+                      {{ step.newWords.toLocaleString() }} new words
+                      <span v-if="step.goalNewWords != null" class="ml-1 text-xs font-normal opacity-70">
+                        ({{ step.goalNewWords.toLocaleString() }} your goal uses)
+                      </span>
+                    </span>
+                  </div>
+
+                  <div v-if="step.goalCoverageAfter != null" class="stat-row flex items-center justify-between">
+                    <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
+                      Then, of your goal
+                      <Tooltip content="Your coverage of the title you're aiming for, after this step. This one only ever goes up." placement="top">
+                        <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
+                      </Tooltip>
+                    </span>
+                    <span class="tabular-nums font-semibold text-amber-600 dark:text-amber-400">
+                      {{ pct(step.goalCoverageAfter) }}
+                    </span>
+                  </div>
+
+                  <!-- Frequency mix: how useful the new words are -->
+                  <div v-if="bandTotal(step.frequencyBands) > 0" class="mt-2">
+                    <div class="mb-1 flex items-center justify-between text-xs">
+                      <span class="text-gray-600 dark:text-gray-300">{{ Math.round(usefulShare(step.frequencyBands) * 100) }}% are common, everyday words</span>
+                      <button type="button" class="font-semibold text-primary-500 hover:text-primary-700 hover:underline" @click="toggleWords(step.index)">
+                        {{ expandedStep === step.index ? 'Hide words' : 'See all words' }}
+                      </button>
+                    </div>
+                    <div class="flex h-2 overflow-hidden rounded-full">
+                      <Tooltip v-for="b in bandDefs" :key="b.key" :content="`${b.label}: ${step.frequencyBands[b.key].toLocaleString()} words`" placement="top">
+                        <div
+                          v-if="step.frequencyBands[b.key] > 0"
+                          :class="b.cls"
+                          :style="{ width: `${(step.frequencyBands[b.key] / bandTotal(step.frequencyBands)) * 100}%` }"
+                          class="h-full"
+                        />
+                      </Tooltip>
                     </div>
                   </div>
 
-                  <div class="min-w-0 flex-1">
-                    <div class="flex flex-wrap items-start justify-between gap-2">
-                      <a
-                        :href="`/decks/media/${activePayload.goal.deckId}/detail`"
-                        target="_blank"
-                        rel="noopener"
-                        :title="goalCardTitle(activePayload.goal)"
-                        class="line-clamp-1 min-w-0 flex-1 font-semibold break-words hover:underline"
-                      >
-                        {{ goalCardTitle(activePayload.goal) }}
-                      </a>
-                      <span class="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                        Your goal
-                      </span>
+                  <!-- Expandable word list — resolved lazily on first expand -->
+                  <div v-if="expandedStep === step.index" class="mt-3">
+                    <div v-if="stepWordsStatus(step.index) === 'loading'" class="flex items-center gap-2 py-3 text-sm opacity-70">
+                      <i class="pi pi-spin pi-spinner" />
+                      Loading words…
                     </div>
-
-                    <div class="stat-row mt-1 flex items-center justify-between">
-                      <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">Difficulty</span>
-                      <DifficultyDisplay :difficulty="activePayload.goal.difficulty" />
+                    <div v-else-if="stepWordsStatus(step.index) === 'error'" class="py-3 text-sm text-red-500 dark:text-red-400">
+                      Couldn't load the words.
+                      <button type="button" class="font-semibold underline" @click="loadStepWords(step.index)">Try again</button>
                     </div>
+                    <template v-else-if="stepWordsStatus(step.index) === 'ready'">
+                      <div class="max-h-64 overflow-y-auto rounded border border-surface-200 dark:border-surface-700">
+                        <a
+                          v-for="w in stepWords(step.index)"
+                          :key="`${w.wordId}-${w.readingIndex}`"
+                          :href="`/vocabulary/${w.wordId}/${w.readingIndex}`"
+                          target="_blank"
+                          rel="noopener"
+                          class="flex items-baseline justify-between gap-3 border-b border-surface-100 px-3 py-1.5 text-sm last:border-0 hover:bg-surface-50 dark:border-surface-800 dark:hover:bg-surface-800/50"
+                        >
+                          <span>
+                            {{ w.text }}
+                            <span v-if="w.reading && w.reading !== w.text" class="ml-1 text-xs opacity-60">
+                              {{ w.reading }}
+                            </span>
+                          </span>
+                          <span class="shrink-0 text-xs opacity-50">
+                            {{ w.frequencyRank > 0 ? `#${w.frequencyRank.toLocaleString()}` : 'rare' }}
+                          </span>
+                        </a>
+                      </div>
+                      <p v-if="step.newWords > stepWords(step.index).length" class="mt-1 text-xs opacity-60">
+                        Showing the {{ stepWords(step.index).length.toLocaleString() }} most common of {{ step.newWords.toLocaleString() }}.
+                        <a
+                          :href="`/decks/media/${step.deckId}/vocabulary?display=unknown&sortBy=deckFreq`"
+                          target="_blank"
+                          rel="noopener"
+                          class="font-medium hover:underline"
+                        >
+                          See them all
+                        </a>
+                        .
+                      </p>
+                    </template>
+                  </div>
+                </div>
+              </div>
 
-                    <div class="stat-row flex items-center justify-between">
-                      <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
-                        {{ activePayload.goal.reached ? "By the end you'll understand" : "By the end you'll reach" }}
-                      </span>
-                      <span
-                        class="tabular-nums font-semibold"
-                        :class="activePayload.goal.reached || activePayload.goalCeilingReached
-                          ? 'text-green-600 dark:text-green-400'
-                          : 'text-amber-600 dark:text-amber-400'"
-                      >
-                        {{ pct(activePayload.goal.coverage) }} of the words
-                      </span>
-                    </div>
+              <!-- Drill step -->
+              <div v-if="activePayload.drill" class="rounded-lg border border-dashed border-surface-300 p-4 dark:border-surface-600">
+                <h3 class="font-semibold">
+                  <span v-if="activePayload.steps.length === 0">Start here</span>
+                  <span v-else>After that</span>
+                </h3>
+                <p class="mt-1 text-sm opacity-80">
+                  Nothing else is easy enough for you yet. Learn
+                  <strong>{{ activePayload.drill.wordsNeeded.toLocaleString() }}</strong>
+                  more words and
+                  <a :href="`/decks/media/${activePayload.drill.deckId}/detail`" target="_blank" rel="noopener" class="font-medium hover:underline">
+                    {{ activePayload.drill.title }}
+                  </a>
+                  opens up — you know {{ pct(activePayload.drill.coverage) }} of it right now.
+                </p>
+                <div class="mt-2 flex flex-wrap gap-1">
+                  <a
+                    v-for="w in activePayload.drill.words"
+                    :key="`${w.wordId}-${w.readingIndex}`"
+                    :href="`/vocabulary/${w.wordId}/${w.readingIndex}`"
+                    target="_blank"
+                    rel="noopener"
+                    class="rounded bg-surface-100 px-2 py-0.5 text-sm hover:underline dark:bg-surface-800"
+                  >
+                    {{ w.text }}
+                  </a>
+                </div>
+              </div>
 
-                    <p
-                      v-if="activePayload.goal.reached"
-                      class="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-green-600 dark:text-green-400"
-                    >
-                      <i class="pi pi-check-circle" />
-                      Target reached — this is what the plan builds you up to.
-                    </p>
-                    <p
-                      v-else-if="activePayload.goalCeilingReached"
-                      class="mt-2 inline-flex items-start gap-1.5 text-sm font-medium text-green-600 dark:text-green-400"
-                    >
-                      <i class="pi pi-check-circle mt-0.5" />
-                      <span>
-                        As far as other titles reach — the last
-                        {{ activePayload.goalUnreachableWords.toLocaleString() }} words appear only here, so you'll
-                        pick them up by reading it.
-                      </span>
-                    </p>
-                    <p v-else class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                      Still about
-                      <strong>{{ activePayload.goal.wordsRemaining.toLocaleString() }}</strong> words short of your
-                      target.
-                    </p>
+              <!-- Goal destination — the target title itself, closing the sequence -->
+              <div
+                v-if="activePayload.goal"
+                class="flex flex-col gap-3 rounded-lg border-2 border-amber-400 bg-amber-50/60 p-3 sm:flex-row dark:border-amber-500/60 dark:bg-amber-500/10"
+              >
+                <div class="flex shrink-0 items-start gap-3">
+                  <span class="flex h-8 w-8 items-center justify-center rounded-full bg-amber-400 text-white dark:bg-amber-500">
+                    <i class="pi pi-flag-fill text-sm" />
+                  </span>
+                  <div class="flex shrink-0 flex-col items-center gap-1">
+                    <Tag
+                      value="Goal"
+                      rounded
+                      class="!bg-amber-400 !px-2 !py-0.5 !text-[0.65rem] !font-semibold !uppercase !tracking-wider !text-white dark:!bg-amber-500"
+                    />
+                    <a :href="`/decks/media/${activePayload.goal.deckId}/detail`" target="_blank" rel="noopener">
+                      <img
+                        :src="coverUrl(activePayload.goal.coverName)"
+                        :alt="goalCardTitle(activePayload.goal)"
+                        class="h-28 w-20 rounded object-cover"
+                        loading="lazy"
+                      />
+                    </a>
                   </div>
                 </div>
 
-                <Message
-                  v-if="activeRoadmap.mode !== 'goal' && activePayload.steps.length === 0 && !activePayload.drill"
-                  severity="info"
-                  :closable="false"
-                >
-                  Nothing matched. Try adding media types, widening the difficulty range, or lowering how much
-                  you want to understand.
-                </Message>
-              </div>
-            </template>
-          </Card>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-start justify-between gap-2">
+                    <a
+                      :href="`/decks/media/${activePayload.goal.deckId}/detail`"
+                      target="_blank"
+                      rel="noopener"
+                      :title="goalCardTitle(activePayload.goal)"
+                      class="line-clamp-1 min-w-0 flex-1 font-semibold break-words hover:underline"
+                    >
+                      {{ goalCardTitle(activePayload.goal) }}
+                    </a>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">Your goal</span>
+                  </div>
 
-          <Card v-else-if="!loadingList">
-            <template #content>
-              <div class="py-10 text-center">
-                <i class="pi pi-compass mb-3 text-4xl opacity-40" />
-                <p class="opacity-80">Make your first plan to see what you should pick up next.</p>
+                  <div class="stat-row mt-1 flex items-center justify-between">
+                    <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">Difficulty</span>
+                    <DifficultyDisplay :difficulty="activePayload.goal.difficulty" />
+                  </div>
+
+                  <div class="stat-row flex items-center justify-between">
+                    <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
+                      {{ activePayload.goal.reached ? "By the end you'll understand" : "By the end you'll reach" }}
+                    </span>
+                    <span
+                      class="tabular-nums font-semibold"
+                      :class="
+                        activePayload.goal.reached || activePayload.goalCeilingReached
+                          ? 'text-green-600 dark:text-green-400'
+                          : 'text-amber-600 dark:text-amber-400'
+                      "
+                    >
+                      {{ pct(activePayload.goal.coverage) }} of the words
+                    </span>
+                  </div>
+
+                  <p v-if="activePayload.goal.reached" class="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-green-600 dark:text-green-400">
+                    <i class="pi pi-check-circle" />
+                    Target reached — this is what the plan builds you up to.
+                  </p>
+                  <p
+                    v-else-if="activePayload.goalCeilingReached"
+                    class="mt-2 inline-flex items-start gap-1.5 text-sm font-medium text-green-600 dark:text-green-400"
+                  >
+                    <i class="pi pi-check-circle mt-0.5" />
+                    <span>
+                      As far as other titles reach — the last
+                      {{ activePayload.goalUnreachableWords.toLocaleString() }} words appear only here, so you'll pick them up by reading it.
+                    </span>
+                  </p>
+                  <p v-else class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                    Still about
+                    <strong>{{ activePayload.goal.wordsRemaining.toLocaleString() }}</strong>
+                    words short of your target.
+                  </p>
+                </div>
               </div>
-            </template>
-          </Card>
+
+              <Message v-if="activeRoadmap.mode !== 'goal' && activePayload.steps.length === 0 && !activePayload.drill" severity="info" :closable="false">
+                Nothing matched. Try adding media types, widening the difficulty range, or lowering how much you want to understand.
+              </Message>
+            </div>
+          </template>
+        </Card>
+
+        <Card v-else-if="!loadingList">
+          <template #content>
+            <div class="py-10 text-center">
+              <i class="pi pi-compass mb-3 text-4xl opacity-40" />
+              <p class="opacity-80">Make your first plan to see what you should pick up next.</p>
+            </div>
+          </template>
+        </Card>
       </div>
     </div>
 
@@ -2249,20 +2123,16 @@ v-if="activePayload.drill"
       <div class="flex flex-col gap-4">
         <p class="text-sm">
           <span v-if="bulkStepsToAdd.length > 0">
-            This will add {{ bulkStepsToAdd.length }} {{ bulkStepsToAdd.length === 1 ? 'title' : 'titles' }} to the
-            bottom of your study list in the same order as the plan.
+            This will add {{ bulkStepsToAdd.length }} {{ bulkStepsToAdd.length === 1 ? 'title' : 'titles' }} to the bottom of your study list in the same order
+            as the plan.
           </span>
           <span v-else>Every title in this plan is already in your study list.</span>
           <span v-if="bulkAlreadyCount > 0" class="opacity-80">
-            {{ bulkAlreadyCount }} of {{ planSteps.length }} {{ bulkAlreadyCount === 1 ? 'is' : 'are' }} already present
-            and will be left alone.
+            {{ bulkAlreadyCount }} of {{ planSteps.length }} {{ bulkAlreadyCount === 1 ? 'is' : 'are' }} already present and will be left alone.
           </span>
         </p>
 
-        <ul
-          v-if="bulkStepsToAdd.length > 0"
-          class="max-h-44 overflow-y-auto rounded-lg border border-surface-200 dark:border-surface-700"
-        >
+        <ul v-if="bulkStepsToAdd.length > 0" class="max-h-44 overflow-y-auto rounded-lg border border-surface-200 dark:border-surface-700">
           <li
             v-for="(planStep, i) in bulkStepsToAdd"
             :key="planStep.deckId"
@@ -2274,22 +2144,12 @@ v-if="activePayload.drill"
         </ul>
 
         <div>
-          <label for="bulk-threshold" class="mb-1 block text-sm font-medium">
-            Only include words used at least this many times
-          </label>
-          <InputNumber
-            v-model="bulkThreshold"
-            input-id="bulk-threshold"
-            :min="1"
-            :use-grouping="false"
-            class="w-full"
-          />
+          <label for="bulk-threshold" class="mb-1 block text-sm font-medium">Only include words used at least this many times</label>
+          <InputNumber v-model="bulkThreshold" input-id="bulk-threshold" :min="1" :use-grouping="false" class="w-full" />
         </div>
 
         <Message v-if="bulkOverCap" severity="warn" size="small" :closable="false">
-          <span class="text-xs">
-            You can only have {{ studyDeckCap }} study decks. Only the first {{ bulkFitCount }} of these will be added.
-          </span>
+          <span class="text-xs">You can only have {{ studyDeckCap }} study decks. Only the first {{ bulkFitCount }} of these will be added.</span>
         </Message>
 
         <div class="flex items-center gap-2">
@@ -2304,10 +2164,7 @@ v-if="activePayload.drill"
 
         <Message v-if="bulkGatheringWarning" severity="warn" :closable="false">
           <div class="flex flex-col items-start gap-2">
-            <span class="text-xs">
-              New cards are currently drawn from all your decks at once, so the plan's order won't decide what you
-              see first.
-            </span>
+            <span class="text-xs">New cards are currently drawn from all your decks at once, so the plan's order won't decide what you see first.</span>
             <Button
               label="Take new cards from the top deck"
               size="small"

@@ -360,12 +360,7 @@
         class="flex items-center gap-3 rounded-lg border border-surface-200 dark:border-surface-700 p-2.5"
         :class="selected.has(rowKey(item)) ? 'bg-primary-50/60 dark:bg-primary-950/30 border-primary-300 dark:border-primary-800' : ''"
       >
-        <Checkbox
-          :model-value="selected.has(rowKey(item))"
-          :binary="true"
-          class="shrink-0"
-          @update:model-value="(v: boolean) => toggleRow(item, v)"
-        />
+        <Checkbox :model-value="selected.has(rowKey(item))" :binary="true" class="shrink-0" @update:model-value="(v: boolean) => toggleRow(item, v)" />
 
         <!-- Thumbnail -->
         <div class="shrink-0">
@@ -401,10 +396,12 @@
           </NuxtLink>
           <div class="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-surface-500 dark:text-surface-400">
             <span v-if="item.image" class="inline-flex items-center gap-1">
-              <i class="pi pi-image" /> {{ formatBytes(item.image.fileSizeBytes) }} · {{ formatDateShort(item.image.createdAt) }}
+              <i class="pi pi-image" />
+              {{ formatBytes(item.image.fileSizeBytes) }} · {{ formatDateShort(item.image.createdAt) }}
             </span>
             <span v-if="item.audio" class="inline-flex items-center gap-1">
-              <i class="pi pi-volume-up" /> {{ formatBytes(item.audio.fileSizeBytes) }} · {{ formatDateShort(item.audio.createdAt) }}
+              <i class="pi pi-volume-up" />
+              {{ formatBytes(item.audio.fileSizeBytes) }} · {{ formatDateShort(item.audio.createdAt) }}
             </span>
           </div>
         </div>

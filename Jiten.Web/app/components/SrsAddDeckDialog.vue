@@ -25,8 +25,15 @@
   const router = useRouter();
 
   const localVisible = ref(props.visible);
-  watch(() => props.visible, (v) => { localVisible.value = v; });
-  watch(localVisible, (v) => { emit('update:visible', v); });
+  watch(
+    () => props.visible,
+    (v) => {
+      localVisible.value = v;
+    }
+  );
+  watch(localVisible, (v) => {
+    emit('update:visible', v);
+  });
 
   const isEditMode = computed(() => !!props.editDeck);
 
@@ -49,15 +56,18 @@
       ? { deckId: props.editDeck.deckId!, title: props.editDeck.title, coverName: props.editDeck.coverName }
       : props.preselectedDeck
         ? { deckId: props.preselectedDeck.deckId, title: props.preselectedDeck.originalTitle, coverName: props.preselectedDeck.coverName ?? undefined }
-        : null,
+        : null
   );
 
-  watch(() => props.preselectedDeck, (deck) => {
-    if (deck) {
-      selectedDeck.value = { deckId: deck.deckId, title: deck.originalTitle, coverName: deck.coverName ?? undefined };
-      step.value = 'filters';
+  watch(
+    () => props.preselectedDeck,
+    (deck) => {
+      if (deck) {
+        selectedDeck.value = { deckId: deck.deckId, title: deck.originalTitle, coverName: deck.coverName ?? undefined };
+        step.value = 'filters';
+      }
     }
-  });
+  );
 
   function modeFromDownloadType(dt: number): Mode {
     if (dt === DeckDownloadType.TargetCoverage) return 'target';
@@ -65,47 +75,55 @@
     return 'manual';
   }
 
-  watch(() => props.editDeck, (deck) => {
-    if (!deck) return;
-    if (deck.deckType === StudyDeckType.MediaDeck) {
-      selectedDeck.value = { deckId: deck.deckId!, title: deck.title, coverName: deck.coverName };
-      downloadMode.value = modeFromDownloadType(deck.downloadType);
-      downloadType.value = [DeckDownloadType.Full, DeckDownloadType.TopGlobalFrequency, DeckDownloadType.TopDeckFrequency, DeckDownloadType.TopChronological].includes(deck.downloadType)
-        ? deck.downloadType
-        : DeckDownloadType.TopGlobalFrequency;
-      deckOrder.value = deck.order;
-      minFrequency.value = deck.minFrequency;
-      maxFrequency.value = deck.maxFrequency;
-      targetPercentage.value = deck.targetPercentage ?? 80;
-      startFromKnown.value = deck.startFromKnown ?? false;
-      if (deck.minOccurrences) {
-        occurrenceFilterType.value = 'gte';
-        occurrenceThreshold.value = deck.minOccurrences;
-      } else if (deck.maxOccurrences) {
-        occurrenceFilterType.value = 'lte';
-        occurrenceThreshold.value = deck.maxOccurrences;
+  watch(
+    () => props.editDeck,
+    (deck) => {
+      if (!deck) return;
+      if (deck.deckType === StudyDeckType.MediaDeck) {
+        selectedDeck.value = { deckId: deck.deckId!, title: deck.title, coverName: deck.coverName };
+        downloadMode.value = modeFromDownloadType(deck.downloadType);
+        downloadType.value = [
+          DeckDownloadType.Full,
+          DeckDownloadType.TopGlobalFrequency,
+          DeckDownloadType.TopDeckFrequency,
+          DeckDownloadType.TopChronological,
+        ].includes(deck.downloadType)
+          ? deck.downloadType
+          : DeckDownloadType.TopGlobalFrequency;
+        deckOrder.value = deck.order;
+        minFrequency.value = deck.minFrequency;
+        maxFrequency.value = deck.maxFrequency;
+        targetPercentage.value = deck.targetPercentage ?? 80;
+        startFromKnown.value = deck.startFromKnown ?? false;
+        if (deck.minOccurrences) {
+          occurrenceFilterType.value = 'gte';
+          occurrenceThreshold.value = deck.minOccurrences;
+        } else if (deck.maxOccurrences) {
+          occurrenceFilterType.value = 'lte';
+          occurrenceThreshold.value = deck.maxOccurrences;
+        }
+        mediaPosFilter.value = deck.posFilter ? JSON.parse(deck.posFilter) : [];
+        excludeKana.value = deck.excludeKana;
+        step.value = 'filters';
+      } else if (deck.deckType === StudyDeckType.GlobalDynamic) {
+        globalName.value = deck.name;
+        globalDescription.value = deck.description ?? '';
+        globalOrder.value = deck.order;
+        globalMinFreq.value = deck.minGlobalFrequency;
+        globalMaxFreq.value = deck.maxGlobalFrequency;
+        globalPosFilter.value = deck.posFilter ? JSON.parse(deck.posFilter) : [];
+        excludeKana.value = deck.excludeKana;
+        freqSource.value = frequencySourceKey(deck.frequencyMediaType, deck.frequencyListId);
+        globalNameTouched.value = true;
+        step.value = 'global';
+      } else if (deck.deckType === StudyDeckType.StaticWordList) {
+        staticName.value = deck.name;
+        staticDescription.value = deck.description ?? '';
+        staticOrder.value = deck.order;
+        step.value = 'static';
       }
-      mediaPosFilter.value = deck.posFilter ? JSON.parse(deck.posFilter) : [];
-      excludeKana.value = deck.excludeKana;
-      step.value = 'filters';
-    } else if (deck.deckType === StudyDeckType.GlobalDynamic) {
-      globalName.value = deck.name;
-      globalDescription.value = deck.description ?? '';
-      globalOrder.value = deck.order;
-      globalMinFreq.value = deck.minGlobalFrequency;
-      globalMaxFreq.value = deck.maxGlobalFrequency;
-      globalPosFilter.value = deck.posFilter ? JSON.parse(deck.posFilter) : [];
-      excludeKana.value = deck.excludeKana;
-      freqSource.value = frequencySourceKey(deck.frequencyMediaType, deck.frequencyListId);
-      globalNameTouched.value = true;
-      step.value = 'global';
-    } else if (deck.deckType === StudyDeckType.StaticWordList) {
-      staticName.value = deck.name;
-      staticDescription.value = deck.description ?? '';
-      staticOrder.value = deck.order;
-      step.value = 'static';
     }
-  });
+  );
 
   // Step: Search (media)
   const searchQuery = ref('');
@@ -113,7 +131,10 @@
   const searching = ref(false);
 
   const debouncedSearch = debounce(async (query: string) => {
-    if (query.length < 2) { searchResults.value = []; return; }
+    if (query.length < 2) {
+      searchResults.value = [];
+      return;
+    }
     searching.value = true;
     try {
       const response = await $api<{ suggestions: MediaSuggestion[] }>('media-deck/search-suggestions', {
@@ -218,10 +239,19 @@
 
   watch(
     [
-      step, () => selectedDeck.value?.deckId,
-      computedDownloadType, downloadType, deckOrder,
-      minFrequency, maxFrequency, targetPercentage, startFromKnown,
-      occurrenceFilterType, occurrenceThreshold, mediaPosFilter, excludeKana,
+      step,
+      () => selectedDeck.value?.deckId,
+      computedDownloadType,
+      downloadType,
+      deckOrder,
+      minFrequency,
+      maxFrequency,
+      targetPercentage,
+      startFromKnown,
+      occurrenceFilterType,
+      occurrenceThreshold,
+      mediaPosFilter,
+      excludeKana,
     ],
     () => {
       if (step.value !== 'filters' || !selectedDeck.value) {
@@ -229,7 +259,7 @@
         return;
       }
       fetchPreviewCountDebounced();
-    },
+    }
   );
 
   // Frequency deck fields
@@ -253,11 +283,11 @@
   const mediaTypeDeckCounts = ref<Record<number, number>>({});
   const savedFrequencyLists = ref<SavedFrequencyList[]>([]);
 
-  const frequencyMediaType = computed(() => freqSource.value.startsWith('type:') ? Number(freqSource.value.slice(5)) : undefined);
-  const frequencyListId = computed(() => freqSource.value.startsWith('list:') ? Number(freqSource.value.slice(5)) : undefined);
+  const frequencyMediaType = computed(() => (freqSource.value.startsWith('type:') ? Number(freqSource.value.slice(5)) : undefined));
+  const frequencyListId = computed(() => (freqSource.value.startsWith('list:') ? Number(freqSource.value.slice(5)) : undefined));
 
   const frequencySourceLabel = computed(() => {
-    if (frequencyListId.value) return savedFrequencyLists.value.find(l => l.id === frequencyListId.value)?.name ?? 'your list';
+    if (frequencyListId.value) return savedFrequencyLists.value.find((l) => l.id === frequencyListId.value)?.name ?? 'your list';
     if (frequencyMediaType.value) return getMediaTypeText(frequencyMediaType.value);
     return 'Global';
   });
@@ -267,7 +297,7 @@
       { label: 'Everything', items: [{ label: 'Global', value: 'global' }] },
       {
         label: 'Media type',
-        items: (Object.values(MediaType).filter(v => typeof v === 'number') as number[]).map(type => ({
+        items: (Object.values(MediaType).filter((v) => typeof v === 'number') as number[]).map((type) => ({
           label: mediaTypeDeckCounts.value[type]
             ? getMediaTypeText(type) + ' - ' + mediaTypeDeckCounts.value[type]!.toLocaleString() + ' decks'
             : getMediaTypeText(type),
@@ -279,7 +309,7 @@
     if (savedFrequencyLists.value.length > 0) {
       groups.push({
         label: 'Your frequency lists',
-        items: savedFrequencyLists.value.map(list => ({ label: list.name, value: 'list:' + list.id })),
+        items: savedFrequencyLists.value.map((list) => ({ label: list.name, value: 'list:' + list.id })),
       });
     }
 
@@ -292,12 +322,16 @@
     return 'Global Frequency Deck';
   });
 
-  watch([freqSource, savedFrequencyLists], () => {
-    if (isEditMode.value || globalNameTouched.value) return;
-    if (freqSource.value === 'global' && !globalName.value) return;
-    if (frequencyListId.value && !savedFrequencyLists.value.some(l => l.id === frequencyListId.value)) return;
-    globalName.value = defaultFrequencyDeckName.value;
-  }, { immediate: true });
+  watch(
+    [freqSource, savedFrequencyLists],
+    () => {
+      if (isEditMode.value || globalNameTouched.value) return;
+      if (freqSource.value === 'global' && !globalName.value) return;
+      if (frequencyListId.value && !savedFrequencyLists.value.some((l) => l.id === frequencyListId.value)) return;
+      globalName.value = defaultFrequencyDeckName.value;
+    },
+    { immediate: true }
+  );
 
   async function loadFrequencySources() {
     try {
@@ -315,16 +349,20 @@
 
     try {
       const lists = await $api<SavedFrequencyList[]>('frequency-lists');
-      savedFrequencyLists.value = (lists ?? []).filter(list => list.isSaved);
+      savedFrequencyLists.value = (lists ?? []).filter((list) => list.isSaved);
     } catch {
       // Custom lists are Jiten+ only; without them the selector offers global and media types alone.
       savedFrequencyLists.value = [];
     }
   }
 
-  watch(localVisible, (open) => {
-    if (open) loadFrequencySources();
-  }, { immediate: true });
+  watch(
+    localVisible,
+    (open) => {
+      if (open) loadFrequencySources();
+    },
+    { immediate: true }
+  );
 
   // Static Word List fields
   const staticName = ref('');
@@ -351,7 +389,7 @@
     importExcludedWordIds.value = s;
   }
 
-  const importIsFullTextOnly = computed(() => importFile.value ? isFullTextOnlyFile(importFile.value.name) : false);
+  const importIsFullTextOnly = computed(() => (importFile.value ? isFullTextOnlyFile(importFile.value.name) : false));
 
   function onImportFileSelect(event: any) {
     const files = event.target?.files || event.files;
@@ -608,7 +646,9 @@
         <Icon name="material-symbols:language" size="28" class="text-blue-500 shrink-0" />
         <div>
           <div class="font-semibold">Frequency Deck</div>
-          <div class="text-sm text-gray-500 dark:text-gray-400">Study words by frequency rank, by global frequency, media type frequency or custom frequency.</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            Study words by frequency rank, by global frequency, media type frequency or custom frequency.
+          </div>
         </div>
       </button>
       <button
@@ -712,12 +752,7 @@
               @focusout="stopEditingTargetPercentage"
               @keydown.enter.prevent="stopEditingTargetPercentage"
             />
-            <button
-              v-else
-              type="button"
-              class="cursor-text underline decoration-dotted underline-offset-2"
-              @click="startEditingTargetPercentage"
-            >
+            <button v-else type="button" class="cursor-text underline decoration-dotted underline-offset-2" @click="startEditingTargetPercentage">
               {{ targetPercentage.toFixed(1) }}%
             </button>
           </div>
@@ -746,13 +781,16 @@
           </div>
           <div class="min-w-0">
             <label class="block text-xs mb-1">Threshold</label>
-            <InputNumber v-model="occurrenceThreshold" :min="1" :useGrouping="false" class="w-full [&_input]:w-full" />
+            <InputNumber v-model="occurrenceThreshold" :min="1" :use-grouping="false" class="w-full [&_input]:w-full" />
           </div>
         </div>
       </template>
 
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">Only include words tagged <span class="text-gray-400">(optional)</span></label>
+        <label class="block text-sm font-medium mb-1">
+          Only include words tagged
+          <span class="text-gray-400">(optional)</span>
+        </label>
         <PosFilterSelect v-model="mediaPosFilter" />
       </div>
 
@@ -775,8 +813,15 @@
             <span>Counting...</span>
           </template>
           <template v-else-if="previewCount !== null">
-            <span>~<span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.total.toLocaleString() }}</span> words match
-              <span v-if="previewCount.unlearned !== previewCount.total" class="text-gray-500">(<span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.unlearned.toLocaleString() }}</span> unknown)</span>
+            <span>
+              ~
+              <span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.total.toLocaleString() }}</span>
+              words match
+              <span v-if="previewCount.unlearned !== previewCount.total" class="text-gray-500">
+                (
+                <span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.unlearned.toLocaleString() }}</span>
+                unknown)
+              </span>
             </span>
           </template>
         </span>
@@ -807,16 +852,13 @@
 
       <div class="mb-3">
         <label class="block text-sm font-medium mb-1">Deck Name</label>
-        <InputText
-          v-model="globalName"
-          placeholder="e.g. Top 5000 words"
-          class="w-full"
-          :maxlength="200"
-          @input="globalNameTouched = true"
-        />
+        <InputText v-model="globalName" placeholder="e.g. Top 5000 words" class="w-full" :maxlength="200" @input="globalNameTouched = true" />
       </div>
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">Description <span class="text-gray-400">(optional)</span></label>
+        <label class="block text-sm font-medium mb-1">
+          Description
+          <span class="text-gray-400">(optional)</span>
+        </label>
         <Textarea v-model="globalDescription" class="w-full" rows="2" :maxlength="2000" />
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
@@ -831,7 +873,10 @@
       </div>
 
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">Only include words tagged <span class="text-gray-400">(optional)</span></label>
+        <label class="block text-sm font-medium mb-1">
+          Only include words tagged
+          <span class="text-gray-400">(optional)</span>
+        </label>
         <PosFilterSelect v-model="globalPosFilter" />
       </div>
 
@@ -847,13 +892,7 @@
         </div>
       </div>
 
-      <Button
-        :label="isEditMode ? 'Save Changes' : 'Create Deck'"
-        class="w-full"
-        :loading="adding"
-        :disabled="!globalName.trim()"
-        @click="addDeck"
-      />
+      <Button :label="isEditMode ? 'Save Changes' : 'Create Deck'" class="w-full" :loading="adding" :disabled="!globalName.trim()" @click="addDeck" />
     </div>
 
     <!-- Step: Static Word List form -->
@@ -867,7 +906,10 @@
         <InputText v-model="staticName" placeholder="e.g. JLPT N2 Vocabulary" class="w-full" :maxlength="200" />
       </div>
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">Description <span class="text-gray-400">(optional)</span></label>
+        <label class="block text-sm font-medium mb-1">
+          Description
+          <span class="text-gray-400">(optional)</span>
+        </label>
         <Textarea v-model="staticDescription" class="w-full" rows="2" :maxlength="2000" />
       </div>
       <div class="mb-4">
@@ -877,38 +919,34 @@
 
       <template v-if="!isEditMode">
         <div class="mb-4">
-          <label class="block text-sm font-medium mb-2">Import from file <span class="text-gray-400">(optional)</span></label>
+          <label class="block text-sm font-medium mb-2">
+            Import from file
+            <span class="text-gray-400">(optional)</span>
+          </label>
           <input
             type="file"
             :accept="IMPORT_ACCEPT_ATTR"
-            class="block w-full text-sm text-gray-500 dark:text-gray-400
-              file:mr-4 file:py-2 file:px-4
-              file:rounded file:border-0
-              file:text-sm file:font-semibold
-              file:bg-purple-50 file:text-purple-700
-              dark:file:bg-purple-900/30 dark:file:text-purple-300
-              hover:file:bg-purple-100 dark:hover:file:bg-purple-800/40"
+            class="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 dark:file:bg-purple-900/30 dark:file:text-purple-300 hover:file:bg-purple-100 dark:hover:file:bg-purple-800/40"
             @change="onImportFileSelect"
           />
-          <p class="text-xs text-gray-400 mt-1">
-            Supports {{ IMPORT_ACCEPT_EXTENSIONS.join(', ') }}
-          </p>
+          <p class="text-xs text-gray-400 mt-1">Supports {{ IMPORT_ACCEPT_EXTENSIONS.join(', ') }}</p>
         </div>
 
         <div v-if="importFile && !importIsFullTextOnly" class="mb-4">
           <label class="block text-sm font-medium mb-1">Input mode</label>
           <SelectButton
             :model-value="importParseFullText ? 'fulltext' : 'wordlist'"
-            :options="[{ label: 'Word list', value: 'wordlist' }, { label: 'Full text', value: 'fulltext' }]"
+            :options="[
+              { label: 'Word list', value: 'wordlist' },
+              { label: 'Full text', value: 'fulltext' },
+            ]"
             option-label="label"
             option-value="value"
-            @update:model-value="(v: string) => importParseFullText = v === 'fulltext'"
+            @update:model-value="(v: string) => (importParseFullText = v === 'fulltext')"
           />
           <p class="text-xs text-gray-400 mt-1">{{ importParseFullText ? 'Extracts all vocabulary from sentences' : 'One word per line' }}</p>
         </div>
-        <div v-if="importFile && importIsFullTextOnly" class="text-xs text-gray-400 mb-4">
-          All vocabulary will be extracted from this file.
-        </div>
+        <div v-if="importFile && importIsFullTextOnly" class="text-xs text-gray-400 mb-4">All vocabulary will be extracted from this file.</div>
 
         <div class="flex gap-2">
           <Button
@@ -931,13 +969,7 @@
         </div>
       </template>
       <template v-else>
-        <Button
-          label="Save Changes"
-          class="w-full"
-          :loading="adding"
-          :disabled="!staticName.trim()"
-          @click="addDeck"
-        />
+        <Button label="Save Changes" class="w-full" :loading="adding" :disabled="!staticName.trim()" @click="addDeck" />
       </template>
     </div>
 

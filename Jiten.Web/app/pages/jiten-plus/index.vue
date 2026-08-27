@@ -140,8 +140,9 @@
           <JitenPlusBadge :link="false" class="!text-sm !px-3 !py-1 mb-4" />
           <h1 class="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">Get more from Jiten and help it grow</h1>
           <p class="text-lg text-gray-600 dark:text-gray-300 leading-relaxed">
-            <span class="font-semibold text-gray-800 dark:text-gray-100">Jiten+</span> gives you extra tools to personalize your learning while helping cover
-            server costs and keep Jiten growing. Everything that's free today stays free, forever.
+            <span class="font-semibold text-gray-800 dark:text-gray-100">Jiten+</span>
+            gives you extra tools to personalize your learning while helping cover server costs and keep Jiten growing. Everything that's free today stays free,
+            forever.
           </p>
           <ul class="mt-5 flex flex-wrap items-center justify-center gap-y-2.5 gap-x-6 text-sm font-medium text-gray-700 dark:text-gray-200">
             <li class="inline-flex items-center gap-1.5">

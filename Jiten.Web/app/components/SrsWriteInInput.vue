@@ -65,10 +65,13 @@
   }
 
   // New card: clear the field, refocus.
-  watch(() => props.cardKey, () => {
-    if (inputRef.value) inputRef.value.value = '';
-    focus();
-  });
+  watch(
+    () => props.cardKey,
+    () => {
+      if (inputRef.value) inputRef.value.value = '';
+      focus();
+    }
+  );
 
   watch(imeBound, applyBinding);
 
@@ -79,23 +82,22 @@
   onBeforeUnmount(() => {
     const el = inputRef.value;
     if (el?.hasAttribute('data-wanakana-id')) {
-      try { unbind(el); } catch { /* already gone */ }
+      try {
+        unbind(el);
+      } catch {
+        /* already gone */
+      }
     }
   });
 
   // Kept short so it doesn't clip in the narrow inline field; the romaji/kana hint lives below.
-  const placeholder = computed(() =>
-    props.mode === 'reading' ? 'Type the reading' : 'Type the meaning'
-  );
+  const placeholder = computed(() => (props.mode === 'reading' ? 'Type the reading' : 'Type the meaning'));
   const isBar = computed(() => props.placement === 'bar');
 </script>
 
 <template>
   <div class="w-full" :class="isBar ? '' : 'flex flex-col items-center'">
-    <div
-      class="relative"
-      :class="[isBar ? 'w-full' : 'w-full max-w-[24rem]', { 'writein-shake': shake }]"
-    >
+    <div class="relative" :class="[isBar ? 'w-full' : 'w-full max-w-[24rem]', { 'writein-shake': shake }]">
       <input
         ref="inputRef"
         type="text"
@@ -115,7 +117,7 @@
             : 'border-surface-300 dark:border-surface-600 focus:border-primary-500 focus:bg-surface-0 dark:focus:bg-surface-900 focus:ring-4 focus:ring-primary-500/15',
         ]"
         @keydown="onKeydown"
-      >
+      />
       <button
         type="button"
         :disabled="disabled"
@@ -131,7 +133,11 @@
     <div v-if="message" class="mt-2 text-center text-sm text-red-500 dark:text-red-400">{{ message }}</div>
     <div v-else class="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-surface-400 dark:text-surface-400">
       <span v-if="mode === 'reading'">Romaji, kana or kanji</span>
-      <span class="hidden md:inline">Press <kbd class="font-sans">Enter</kbd> to check</span>
+      <span class="hidden md:inline">
+        Press
+        <kbd class="font-sans">Enter</kbd>
+        to check
+      </span>
     </div>
 
     <div class="mt-3 flex justify-center">
@@ -151,11 +157,22 @@
 
 <style scoped>
   @keyframes writein-shake {
-    0%, 100% { transform: translateX(0); }
-    20% { transform: translateX(-7px); }
-    40% { transform: translateX(6px); }
-    60% { transform: translateX(-4px); }
-    80% { transform: translateX(3px); }
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20% {
+      transform: translateX(-7px);
+    }
+    40% {
+      transform: translateX(6px);
+    }
+    60% {
+      transform: translateX(-4px);
+    }
+    80% {
+      transform: translateX(3px);
+    }
   }
   .writein-shake {
     animation: writein-shake 0.45s ease;

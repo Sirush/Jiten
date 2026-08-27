@@ -6,17 +6,8 @@
   const props = defineProps<{ block: CardLayoutBlock; side: 'front' | 'back' }>();
   const opts = computed(() => resolveOptions<CardImageBlockOptions>(cardImageDefaults, props.block.options));
 
-  const {
-    cardImage,
-    cardImageUrl,
-    imageBlurred,
-    imageBesideLayout,
-    hasCardMedia,
-    canEditCardMedia,
-    openMediaEditor,
-    onImageError,
-    revealImage,
-  } = useCardContext();
+  const { cardImage, cardImageUrl, imageBlurred, imageBesideLayout, hasCardMedia, canEditCardMedia, openMediaEditor, onImageError, revealImage } =
+    useCardContext();
 
   const showEditButton = computed(() => opts.value.showEditButton && canEditCardMedia.value);
 </script>

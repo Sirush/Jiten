@@ -22,9 +22,7 @@
   const filteredMatched = computed(() => {
     if (!search.value.trim()) return props.matched;
     const q = search.value.trim().toLowerCase();
-    return props.matched.filter(w =>
-      w.text.toLowerCase().includes(q) || w.reading.toLowerCase().includes(q),
-    );
+    return props.matched.filter((w) => w.text.toLowerCase().includes(q) || w.reading.toLowerCase().includes(q));
   });
 
   const includedCount = computed(() => props.matched.length - props.excludedWordIds.size);
@@ -78,16 +76,15 @@
             v-for="(word, i) in visibleItems"
             :key="`${word.wordId}-${word.readingIndex}`"
             class="flex items-center justify-between px-3 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50"
-            :class="[
-              excludedWordIds.has(word.wordId) ? 'opacity-40 line-through' : '',
-              (startIndex + i) % 2 === 1 ? 'bg-gray-50 dark:bg-gray-800/50' : '',
-            ]"
+            :class="[excludedWordIds.has(word.wordId) ? 'opacity-40 line-through' : '', (startIndex + i) % 2 === 1 ? 'bg-gray-50 dark:bg-gray-800/50' : '']"
             :style="{ height: `${ITEM_HEIGHT}px` }"
             @click="emit('toggleExclude', word.wordId)"
           >
             <span class="font-noto-sans truncate" lang="ja">{{ word.text }}</span>
             <div class="flex items-center gap-2 shrink-0">
-              <span v-if="word.occurrences && word.occurrences > 1" class="text-xs text-purple-500 dark:text-purple-400 tabular-nums">{{ word.occurrences }}x</span>
+              <span v-if="word.occurrences && word.occurrences > 1" class="text-xs text-purple-500 dark:text-purple-400 tabular-nums">
+                {{ word.occurrences }}x
+              </span>
               <span class="text-gray-400 font-noto-sans" lang="ja">{{ word.reading }}</span>
               <Icon
                 :name="excludedWordIds.has(word.wordId) ? 'material-symbols:add-circle-outline' : 'material-symbols:remove-circle-outline'"
@@ -100,9 +97,7 @@
       </div>
     </div>
     <div class="flex items-center justify-between mt-1">
-      <div v-if="excludedWordIds.size > 0" class="text-xs text-gray-500 dark:text-gray-400">
-        {{ excludedWordIds.size }} excluded (click to re-include)
-      </div>
+      <div v-if="excludedWordIds.size > 0" class="text-xs text-gray-500 dark:text-gray-400">{{ excludedWordIds.size }} excluded (click to re-include)</div>
       <div v-if="search && filteredMatched.length !== matched.length" class="text-xs text-gray-400 ml-auto">
         {{ filteredMatched.length }} of {{ matched.length }} shown
       </div>
@@ -112,16 +107,10 @@
   <div v-if="unmatched.length > 0" class="mb-3">
     <div class="text-sm font-medium mb-1 text-red-500">Unmatched ({{ unmatched.length }})</div>
     <div class="max-h-[100px] overflow-y-auto rounded border border-red-200 dark:border-red-800">
-      <div
-        v-for="(word, i) in unmatched.slice(0, 50)"
-        :key="i"
-        class="px-3 py-1 text-sm text-red-400 font-noto-sans" lang="ja"
-      >
+      <div v-for="(word, i) in unmatched.slice(0, 50)" :key="i" class="px-3 py-1 text-sm text-red-400 font-noto-sans" lang="ja">
         {{ word }}
       </div>
-      <div v-if="unmatched.length > 50" class="px-3 py-1 text-xs text-gray-400 text-center">
-        ... and {{ unmatched.length - 50 }} more
-      </div>
+      <div v-if="unmatched.length > 50" class="px-3 py-1 text-xs text-gray-400 text-center">... and {{ unmatched.length - 50 }} more</div>
     </div>
   </div>
 </template>

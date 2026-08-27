@@ -19,8 +19,8 @@
       <span>
         Do not confuse with:
         <template v-for="(cr, i) in readings" :key="i">
-          <strong>{{ cr }}</strong
-          ><span v-if="i < readings.length - 1">,&ensp;</span>
+          <strong>{{ cr }}</strong>
+          <span v-if="i < readings.length - 1">,&ensp;</span>
         </template>
       </span>
     </div>

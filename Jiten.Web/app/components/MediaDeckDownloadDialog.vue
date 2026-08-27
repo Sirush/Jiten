@@ -26,17 +26,17 @@
         : `media-deck/${props.deck!.deckId}`
   );
   const wordCount = computed(() =>
-    isMediaListMode.value
-      ? props.mediaList!.totalWords
-      : isStudyDeckMode.value
-        ? props.studyDeck!.totalWords
-        : props.deck!.uniqueWordCount
+    isMediaListMode.value ? props.mediaList!.totalWords : isStudyDeckMode.value ? props.studyDeck!.totalWords : props.deck!.uniqueWordCount
   );
   const baseFileName = computed(() => {
     if (isMediaListMode.value) return props.mediaList!.title.substring(0, 40);
     if (isStudyDeckMode.value) {
       return isMediaStudyDeck.value
-        ? localiseTitle({ originalTitle: props.studyDeck!.title, romajiTitle: props.studyDeck!.romajiTitle, englishTitle: props.studyDeck!.englishTitle }).substring(0, 30)
+        ? localiseTitle({
+            originalTitle: props.studyDeck!.title,
+            romajiTitle: props.studyDeck!.romajiTitle,
+            englishTitle: props.studyDeck!.englishTitle,
+          }).substring(0, 30)
         : props.studyDeck!.name.substring(0, 30);
     }
     return localiseTitle(props.deck!).substring(0, 30);
@@ -82,9 +82,7 @@
   // Import Order only exists for word lists; word lists have no chronological position beyond it.
   const deckOrders = computed(() => {
     const orders = getEnumOptions(DeckOrder, getDeckOrderText);
-    return isStaticStudyDeck.value
-      ? orders.filter((o) => o.value !== DeckOrder.Chronological)
-      : orders.filter((o) => o.value !== DeckOrder.ImportOrder);
+    return isStaticStudyDeck.value ? orders.filter((o) => o.value !== DeckOrder.Chronological) : orders.filter((o) => o.value !== DeckOrder.ImportOrder);
   });
   const downloadTypes = computed(() =>
     getEnumOptions(DeckDownloadType, getDownloadTypeText).filter(
@@ -285,12 +283,9 @@
     }
   );
 
-  watch(
-    [() => frequencyRange.value, frequencySource],
-    () => {
-      if (downloadType.value == DeckDownloadType.TopGlobalFrequency) updateDebounced();
-    }
-  );
+  watch([() => frequencyRange.value, frequencySource], () => {
+    if (downloadType.value == DeckDownloadType.TopGlobalFrequency) updateDebounced();
+  });
 
   watch(
     () => authStore.isAuthenticated,
@@ -422,9 +417,12 @@
   watch(downloadMode, (mode) => {
     if (mode === 'occurrence') fetchOccurrenceCount();
   });
-  watch(() => props.visible, (visible) => {
-    if (visible && downloadMode.value === 'occurrence') fetchOccurrenceCount();
-  });
+  watch(
+    () => props.visible,
+    (visible) => {
+      if (visible && downloadMode.value === 'occurrence') fetchOccurrenceCount();
+    }
+  );
 
   watch(
     [
@@ -729,7 +727,6 @@
             <div
               v-for="opt in formatOptions"
               :key="opt.value"
-              @click="!opt.disabled && (format = opt.value)"
               class="border rounded-lg p-3 transition-all duration-200 flex flex-col gap-1 items-start relative"
               :class="[
                 opt.disabled
@@ -738,26 +735,36 @@
                     ? 'bg-primary-50 dark:bg-gray-600 border-primary dark:border-gray-700 ring-1 ring-primary cursor-pointer hover:border-gray-400 hover:dark:border-gray-500 hover:shadow-sm'
                     : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 cursor-pointer hover:border-gray-400 hover:dark:border-gray-500 hover:shadow-sm',
               ]"
+              @click="!opt.disabled && (format = opt.value)"
             >
               <div class="flex items-center gap-2 w-full">
-                <i :class="[opt.icon, !opt.disabled && format === opt.value ? 'text-primary' : 'text-gray-400 dark:text-gray-400']" class="text-lg"></i>
-                <span class="font-semibold text-sm" :class="!opt.disabled && format === opt.value ? 'text-primary-900 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300'">{{ opt.label }}</span>
+                <i :class="[opt.icon, !opt.disabled && format === opt.value ? 'text-primary' : 'text-gray-400 dark:text-gray-400']" class="text-lg" />
+                <span
+                  class="font-semibold text-sm"
+                  :class="!opt.disabled && format === opt.value ? 'text-primary-900 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300'"
+                >
+                  {{ opt.label }}
+                </span>
               </div>
               <span class="text-[10px] leading-tight text-gray-500 dark:text-gray-400">{{ opt.desc }}</span>
-              <i v-if="!opt.disabled && format === opt.value" class="pi pi-check-circle text-primary absolute top-2 right-2 text-sm"></i>
+              <i v-if="!opt.disabled && format === opt.value" class="pi pi-check-circle text-primary absolute top-2 right-2 text-sm" />
             </div>
           </div>
 
           <!-- Fixed min-height so switching format doesn't shift the panel -->
-          <div class="mt-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md p-3 text-sm text-gray-600 dark:text-gray-300 min-h-[4.5rem] flex items-center">
-            <p v-html="sanitiseHtml(currentFormatDetails.longDesc)" class="leading-relaxed"></p>
+          <div
+            class="mt-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md p-3 text-sm text-gray-600 dark:text-gray-300 min-h-[4.5rem] flex items-center"
+          >
+            <p class="leading-relaxed" v-html="sanitiseHtml(currentFormatDetails.longDesc)" />
           </div>
         </section>
 
         <template v-if="showStrategyAndOptions">
           <!-- Strategy -->
           <section>
-            <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">{{ isLearn ? 'Learn Strategy' : 'Download Strategy' }}</div>
+            <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">
+              {{ isLearn ? 'Learn Strategy' : 'Download Strategy' }}
+            </div>
             <div class="hidden sm:block">
               <SelectButton
                 v-model="downloadMode"
@@ -780,7 +787,10 @@
             />
 
             <!-- Target percentage mode -->
-            <div v-if="downloadMode === 'target'" class="mt-4 bg-gray-50 dark:bg-gray-900 rounded-xl p-5 border border-dashed border-gray-300 dark:border-gray-600">
+            <div
+              v-if="downloadMode === 'target'"
+              class="mt-4 bg-gray-50 dark:bg-gray-900 rounded-xl p-5 border border-dashed border-gray-300 dark:border-gray-600"
+            >
               <div class="flex justify-between items-end mb-4">
                 <div class="flex flex-col">
                   <span class="font-bold text-gray-800 dark:text-gray-200 text-lg">Deck Coverage</span>
@@ -794,9 +804,11 @@
                 <div>
                   <label for="startFromKnown" class="text-sm font-medium text-gray-800 dark:text-gray-200 cursor-pointer">Start from my current coverage</label>
                   <div class="text-xs text-gray-500 dark:text-gray-400">
-                    {{ startFromKnown
-                      ? 'Only the words you still need to learn to reach this coverage.'
-                      : 'All words required for this coverage, as if starting from zero.' }}
+                    {{
+                      startFromKnown
+                        ? 'Only the words you still need to learn to reach this coverage.'
+                        : 'All words required for this coverage, as if starting from zero.'
+                    }}
                   </div>
                 </div>
               </div>
@@ -807,7 +819,10 @@
             </div>
 
             <!-- Occurrence count mode -->
-            <div v-else-if="downloadMode === 'occurrence'" class="mt-4 bg-gray-50 dark:bg-gray-900 rounded-xl p-5 border border-dashed border-gray-300 dark:border-gray-600">
+            <div
+              v-else-if="downloadMode === 'occurrence'"
+              class="mt-4 bg-gray-50 dark:bg-gray-900 rounded-xl p-5 border border-dashed border-gray-300 dark:border-gray-600"
+            >
               <div class="flex flex-col gap-4">
                 <div class="flex flex-col">
                   <span class="font-bold text-gray-800 dark:text-gray-200 text-lg">Occurrence Count</span>
@@ -830,7 +845,7 @@
                   </div>
                   <div class="flex flex-col gap-1">
                     <label class="text-xs text-gray-500 dark:text-gray-400 font-medium">Threshold</label>
-                    <InputNumber v-model="occurrenceThreshold" :min="1" :useGrouping="false" class="w-full text-sm" size="small" />
+                    <InputNumber v-model="occurrenceThreshold" :min="1" :use-grouping="false" class="w-full text-sm" size="small" />
                   </div>
                 </div>
                 <div class="flex flex-col gap-1">
@@ -862,20 +877,20 @@
                   <div class="flex items-center gap-2">
                     <InputNumber
                       :model-value="frequencyRange?.[0] ?? 0"
-                      @update:model-value="(v) => (frequencyRange = [v ?? 0, frequencyRange?.[1] ?? 0])"
-                      inputClass="text-center p-1 text-xs w-16 h-7"
+                      input-class="text-center p-1 text-xs w-16 h-7"
                       :min="0"
                       :max="currentSliderMax"
-                      :useGrouping="false"
+                      :use-grouping="false"
+                      @update:model-value="(v) => (frequencyRange = [v ?? 0, frequencyRange?.[1] ?? 0])"
                     />
                     <span class="text-gray-400 dark:text-gray-400">-</span>
                     <InputNumber
                       :model-value="frequencyRange?.[1] ?? 0"
-                      @update:model-value="(v) => (frequencyRange = [frequencyRange?.[0] ?? 0, v ?? 0])"
-                      inputClass="text-center p-1 text-xs w-16 h-7"
+                      input-class="text-center p-1 text-xs w-16 h-7"
                       :min="0"
                       :max="currentSliderMax"
-                      :useGrouping="false"
+                      :use-grouping="false"
+                      @update:model-value="(v) => (frequencyRange = [frequencyRange?.[0] ?? 0, v ?? 0])"
                     />
                   </div>
                 </div>
@@ -906,9 +921,11 @@
               <div
                 v-if="!isLearn"
                 class="flex items-start gap-3 p-3 rounded-lg border border-transparent transition-colors"
-                :class="hasExampleSentences
-                  ? 'hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 cursor-pointer'
-                  : 'opacity-50 cursor-not-allowed'"
+                :class="
+                  hasExampleSentences
+                    ? 'hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 cursor-pointer'
+                    : 'opacity-50 cursor-not-allowed'
+                "
                 @click="hasExampleSentences && (excludeExampleSentences = !excludeExampleSentences)"
               >
                 <Checkbox v-model="excludeExampleSentences" binary class="mt-1" :disabled="!hasExampleSentences" @click.stop />
@@ -952,21 +969,19 @@
               <div
                 v-if="showCustomDefinitions"
                 class="flex items-start gap-3 p-3 rounded-lg border border-transparent transition-colors"
-                :class="hasCustomDictionaries
-                  ? 'hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 cursor-pointer'
-                  : 'opacity-60'"
+                :class="
+                  hasCustomDictionaries
+                    ? 'hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 cursor-pointer'
+                    : 'opacity-60'
+                "
                 @click="hasCustomDictionaries && (useCustomDefinitions = !useCustomDefinitions)"
               >
                 <Checkbox v-model="useCustomDefinitions" binary class="mt-1" :disabled="!hasCustomDictionaries" @click.stop />
                 <div class="flex-1">
                   <div class="text-sm font-medium text-gray-800 dark:text-gray-200">Use Custom Dictionaries</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">
-                    <template v-if="hasCustomDictionaries">
-                      Add the definitions from your custom dictionaries.
-                    </template>
-                    <template v-else>
-                      No custom dictionaries imported.
-                    </template>
+                    <template v-if="hasCustomDictionaries">Add the definitions from your custom dictionaries.</template>
+                    <template v-else>No custom dictionaries imported.</template>
                     <NuxtLink to="/settings/dictionaries" class="text-primary hover:underline" @click.stop>Manage dictionaries</NuxtLink>
                   </div>
                 </div>
@@ -979,9 +994,7 @@
                 <div v-if="learnState === 'mastered'" class="flex items-start gap-3 mt-3">
                   <Checkbox v-model="countAsNewlyLearned" input-id="countAsNewlyLearned" :binary="true" class="mt-1" />
                   <div>
-                    <label for="countAsNewlyLearned" class="text-sm font-medium text-gray-800 dark:text-gray-200 cursor-pointer">
-                      I just learned these
-                    </label>
+                    <label for="countAsNewlyLearned" class="text-sm font-medium text-gray-800 dark:text-gray-200 cursor-pointer">I just learned these</label>
                     <div class="text-xs text-gray-500 dark:text-gray-400">
                       Counts them as recent progress on your charts instead of knowledge you already had.
                     </div>
@@ -1009,9 +1022,11 @@
               <div
                 v-if="!isLearn"
                 class="flex items-start gap-3 p-3 rounded-lg border border-transparent transition-colors"
-                :class="hasExampleSentences
-                  ? 'hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 cursor-pointer'
-                  : 'opacity-50 cursor-not-allowed'"
+                :class="
+                  hasExampleSentences
+                    ? 'hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 cursor-pointer'
+                    : 'opacity-50 cursor-not-allowed'
+                "
                 @click="hasExampleSentences && (excludeExampleSentences = !excludeExampleSentences)"
               >
                 <Checkbox v-model="excludeExampleSentences" binary class="mt-1" :disabled="!hasExampleSentences" @click.stop />
@@ -1048,21 +1063,19 @@
               <div
                 v-if="showCustomDefinitions"
                 class="flex items-start gap-3 p-3 rounded-lg border border-transparent transition-colors"
-                :class="hasCustomDictionaries
-                  ? 'hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 cursor-pointer'
-                  : 'opacity-60'"
+                :class="
+                  hasCustomDictionaries
+                    ? 'hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 cursor-pointer'
+                    : 'opacity-60'
+                "
                 @click="hasCustomDictionaries && (useCustomDefinitions = !useCustomDefinitions)"
               >
                 <Checkbox v-model="useCustomDefinitions" binary class="mt-1" :disabled="!hasCustomDictionaries" @click.stop />
                 <div class="flex-1">
                   <div class="text-sm font-medium text-gray-800 dark:text-gray-200">Use Custom Dictionaries</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">
-                    <template v-if="hasCustomDictionaries">
-                      Add the definitions from your custom dictionaries.
-                    </template>
-                    <template v-else>
-                      No custom dictionaries imported.
-                    </template>
+                    <template v-if="hasCustomDictionaries">Add the definitions from your custom dictionaries.</template>
+                    <template v-else>No custom dictionaries imported.</template>
                     <NuxtLink to="/settings/dictionaries" class="text-primary hover:underline" @click.stop>Manage dictionaries</NuxtLink>
                   </div>
                 </div>
@@ -1075,9 +1088,7 @@
                 <div v-if="learnState === 'mastered'" class="flex items-start gap-3 mt-3">
                   <Checkbox v-model="countAsNewlyLearned" input-id="countAsNewlyLearned" :binary="true" class="mt-1" />
                   <div>
-                    <label for="countAsNewlyLearned" class="text-sm font-medium text-gray-800 dark:text-gray-200 cursor-pointer">
-                      I just learned these
-                    </label>
+                    <label for="countAsNewlyLearned" class="text-sm font-medium text-gray-800 dark:text-gray-200 cursor-pointer">I just learned these</label>
                     <div class="text-xs text-gray-500 dark:text-gray-400">
                       Counts them as recent progress on your charts instead of knowledge you already had.
                     </div>
@@ -1090,7 +1101,9 @@
       </div>
 
       <!-- Footer -->
-      <div class="bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 p-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
+      <div
+        class="bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 p-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0"
+      >
         <div class="text-sm text-gray-600 dark:text-gray-300">
           <span class="inline-flex items-center gap-2">
             <span>Result:{{ isOccurrences ? '' : ' approx' }}</span>
@@ -1102,9 +1115,9 @@
         <Button
           :label="isLearn ? 'Apply to Vocabulary' : 'Download Deck'"
           :icon="isLearn ? 'pi pi-check' : 'pi pi-download'"
-          @click="onAction()"
           :loading="downloading"
           class="w-full sm:w-auto"
+          @click="onAction()"
         />
       </div>
     </div>

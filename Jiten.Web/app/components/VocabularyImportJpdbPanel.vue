@@ -146,13 +146,9 @@
         <div>
           <h4 class="font-medium mb-2">API Import</h4>
           <p class="mb-2 text-sm">
-            You can find your API key on the bottom of the settings page (<a
-              href="https://jpdb.io/settings"
-              target="_blank"
-              rel="nofollow"
-              class="text-primary-500 hover:underline"
-              >https://jpdb.io/settings</a
-            >)
+            You can find your API key on the bottom of the settings page (
+            <a href="https://jpdb.io/settings" target="_blank" rel="nofollow" class="text-primary-500 hover:underline">https://jpdb.io/settings</a>
+            )
           </p>
           <p class="mb-3 text-sm text-gray-600 dark:text-gray-400">
             Your API key will only be used for the import and won't be saved anywhere. Only the word list is sent to the server.
@@ -166,7 +162,9 @@
         <div class="flex flex-col gap-2">
           <div class="flex items-center">
             <Checkbox id="importAdditionalReadings" v-model="importAdditionalReadings" :binary="true" />
-            <label for="importAdditionalReadings" class="ml-2">Import additional readings within frequency range of the imported reading (only the most frequent reading by default)</label>
+            <label for="importAdditionalReadings" class="ml-2">
+              Import additional readings within frequency range of the imported reading (only the most frequent reading by default)
+            </label>
           </div>
           <div v-if="importAdditionalReadings" class="ml-6 flex items-center gap-2">
             <label for="frequencyThreshold" class="text-sm">Frequency range:</label>
@@ -179,21 +177,20 @@
           <p class="mb-3 text-sm text-gray-600 dark:text-gray-400">
             Upload a reviews.json file exported from JPDB to import your review history. This can be used alongside the API import or on its own.
           </p>
-          <FileUpload
-            mode="basic"
-            accept=".json"
-            :auto="false"
-            choose-label="Choose reviews.json"
-            @select="onReviewsFileSelect"
-            @clear="onReviewsFileClear"
-          />
+          <FileUpload mode="basic" accept=".json" :auto="false" choose-label="Choose reviews.json" @select="onReviewsFileSelect" @clear="onReviewsFileClear" />
           <div class="flex items-center mt-2">
             <Checkbox id="overwriteCardStates" v-model="overwriteCardStates" :binary="true" />
             <label for="overwriteCardStates" class="ml-2">Overwrite existing card states (mastered, blacklisted, suspended) with review history</label>
           </div>
         </div>
 
-        <Button label="Import from JPDB" icon="pi pi-download" :disabled="(!jpdbApiKey && !reviewsFile) || isLoading" class="w-full md:w-auto" @click="importFromJpdb" />
+        <Button
+          label="Import from JPDB"
+          icon="pi pi-download"
+          :disabled="(!jpdbApiKey && !reviewsFile) || isLoading"
+          class="w-full md:w-auto"
+          @click="importFromJpdb"
+        />
       </div>
     </template>
   </Card>

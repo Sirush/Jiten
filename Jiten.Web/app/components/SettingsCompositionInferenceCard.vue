@@ -48,9 +48,7 @@
   const counts = ref({ new: 0, learning: 0, mature: 0 });
   const anyFilterOn = computed(() => showNew.value || showLearning.value || showMature.value);
 
-  const directionDescription = computed(
-    () => directionOptions.find((o) => o.value === direction.value)?.description ?? '',
-  );
+  const directionDescription = computed(() => directionOptions.find((o) => o.value === direction.value)?.description ?? '');
 
   async function loadChunk(offset: number, limit: number) {
     try {
@@ -175,13 +173,16 @@
 
   function categoryTag(card: InferredCard): { value: string; severity: string } {
     switch (card.category) {
-      case 'new': return { value: 'New', severity: 'secondary' };
-      case 'learning': return { value: 'Learning', severity: 'info' };
-      case 'mature': return { value: 'Mature', severity: 'success' };
-      default: return fsrsStateLabel(card.state);
+      case 'new':
+        return { value: 'New', severity: 'secondary' };
+      case 'learning':
+        return { value: 'Learning', severity: 'info' };
+      case 'mature':
+        return { value: 'Mature', severity: 'success' };
+      default:
+        return fsrsStateLabel(card.state);
     }
   }
-
 
   watch(direction, () => {
     allCards.value = [];
@@ -203,20 +204,13 @@
     </template>
     <template #content>
       <p class="text-sm text-muted-color mb-4">
-        If you know a compound word, you're likely to know its parts too.
-        Preview the results, then master or blacklist them individually or all at once.
+        If you know a compound word, you're likely to know its parts too. Preview the results, then master or blacklist them individually or all at once.
       </p>
 
       <div class="flex flex-col gap-4">
         <div>
           <label class="block text-sm font-medium mb-1">Direction</label>
-          <SelectButton
-            v-model="direction"
-            :options="directionOptions"
-            option-label="label"
-            option-value="value"
-            :allow-empty="false"
-          />
+          <SelectButton v-model="direction" :options="directionOptions" option-label="label" option-value="value" :allow-empty="false" />
           <p class="text-xs text-muted-color mt-2 italic">{{ directionDescription }}</p>
         </div>
 
@@ -237,28 +231,34 @@
           <span class="text-sm font-medium">Show:</span>
           <div class="flex items-center gap-2">
             <Checkbox v-model="showNew" input-id="ci-new" binary />
-            <label for="ci-new" class="text-sm cursor-pointer">New <span class="text-muted-color">({{ counts.new.toLocaleString() }})</span></label>
+            <label for="ci-new" class="text-sm cursor-pointer">
+              New
+              <span class="text-muted-color">({{ counts.new.toLocaleString() }})</span>
+            </label>
           </div>
           <div class="flex items-center gap-2">
             <Checkbox v-model="showLearning" input-id="ci-learning" binary />
-            <label for="ci-learning" class="text-sm cursor-pointer">Learning <span class="text-muted-color">({{ counts.learning.toLocaleString() }})</span></label>
+            <label for="ci-learning" class="text-sm cursor-pointer">
+              Learning
+              <span class="text-muted-color">({{ counts.learning.toLocaleString() }})</span>
+            </label>
           </div>
           <div class="flex items-center gap-2">
             <Checkbox v-model="showMature" input-id="ci-mature" binary />
-            <label for="ci-mature" class="text-sm cursor-pointer">Mature <span class="text-muted-color">({{ counts.mature.toLocaleString() }})</span></label>
+            <label for="ci-mature" class="text-sm cursor-pointer">
+              Mature
+              <span class="text-muted-color">({{ counts.mature.toLocaleString() }})</span>
+            </label>
           </div>
         </div>
         <p class="text-xs text-muted-color mb-3">
-          Sorted by frequency (most common first). <strong>Mature</strong> words are already known via SRS —
-          mastering them resets their review schedule, so they're hidden by default.
+          Sorted by frequency (most common first).
+          <strong>Mature</strong>
+          words are already known via SRS — mastering them resets their review schedule, so they're hidden by default.
         </p>
 
-        <div v-if="!anyFilterOn" class="text-sm text-muted-color italic py-4 text-center">
-          Select at least one category to show.
-        </div>
-        <div v-else-if="totalCount === 0" class="text-sm text-muted-color italic py-4 text-center">
-          No words found for the selected categories.
-        </div>
+        <div v-if="!anyFilterOn" class="text-sm text-muted-color italic py-4 text-center">Select at least one category to show.</div>
+        <div v-else-if="totalCount === 0" class="text-sm text-muted-color italic py-4 text-center">No words found for the selected categories.</div>
 
         <DataTable
           v-else

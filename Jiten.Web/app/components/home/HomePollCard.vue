@@ -88,7 +88,7 @@
   <PollCard v-else-if="poll" :poll="poll" labeled @update:poll="onVoted">
     <template #footer>
       <div class="flex items-center justify-between gap-2">
-        <NuxtLink to="/polls" class="text-sm text-primary-600 dark:text-primary-300 no-underline! hover:underline!"> All polls </NuxtLink>
+        <NuxtLink to="/polls" class="text-sm text-primary-600 dark:text-primary-300 no-underline! hover:underline!">All polls</NuxtLink>
         <Button v-if="nextPoll" label="Next poll" icon="pi pi-arrow-right" icon-pos="right" text size="small" @click="showNext" />
         <Button v-else-if="canSkip" label="Skip" text size="small" severity="secondary" :loading="skipping" @click="skip" />
       </div>
