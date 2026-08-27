@@ -62,6 +62,8 @@ export interface StudyKeyboardCallbacks {
   onReplayAudio: () => void;
   onDictPrev: () => void;
   onDictNext: () => void;
+  onContinueBatch: () => void;
+  onEndSession: () => void;
 }
 
 const RATINGS_4 = [FsrsRating.Again, FsrsRating.Hard, FsrsRating.Good, FsrsRating.Easy];
@@ -76,6 +78,15 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
   // so a double-tapped reveal can't silently grade Good.
   const REVEAL_DWELL_MS = 350;
   let revealedAt = 0;
+
+  let batchCompletedAt = 0;
+  const stopBatchWatch = watch(
+    () => store.batchComplete,
+    complete => {
+      if (complete) batchCompletedAt = Date.now();
+    },
+    { flush: 'sync', immediate: true }
+  );
 
   function flashKey(key: string) {
     pressedKey.value = key;
@@ -97,6 +108,18 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
       ? [kb.grade1, kb.grade2, kb.grade3, kb.grade4]
       : [kb.grade1, kb.grade2];
     const ratings = is4Btn ? RATINGS_4 : RATINGS_2;
+
+    // Swallows every other study key: replayAudio, pauseTimer, undo and wrapUp are not card-gated and would fire against a finished batch.
+    if (store.batchComplete) {
+      if (e.key === 'Enter') {
+        // Owns Enter outright so the focused Continue button cannot activate a second time.
+        e.preventDefault();
+        if (Date.now() - batchCompletedAt >= REVEAL_DWELL_MS) callbacks.onContinueBatch();
+      } else if (e.key === 'Escape' || matchesKeybind(e, kb.wrapUp)) {
+        callbacks.onEndSession();
+      }
+      return;
+    }
 
     if (e.key === 'Escape') {
       flashKey(kb.wrapUp);
@@ -171,6 +194,7 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
 
   onUnmounted(() => {
     window.removeEventListener('keydown', handleKeydown);
+    stopBatchWatch();
   });
 
   return { pressedKey: readonly(pressedKey) };

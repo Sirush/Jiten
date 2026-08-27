@@ -202,6 +202,8 @@
     onReplayAudio: () => studyCardRef.value?.replayAudio(),
     onDictPrev: () => studyCardRef.value?.cycleDictionary(-1),
     onDictNext: () => studyCardRef.value?.cycleDictionary(1),
+    onContinueBatch: handleContinueBatch,
+    onEndSession: handleEndSession,
   });
 
   // Write-in review: per-card modality, input/reveal phase, suggested grade and auto-advance.
@@ -409,6 +411,17 @@
   function handleEndSession() {
     srsStore.endSessionFromBatch();
   }
+
+  const continueButtonRef = ref<{ $el?: HTMLElement } | null>(null);
+
+  watch(
+    () => srsStore.batchComplete,
+    async complete => {
+      if (!complete) return;
+      await nextTick();
+      continueButtonRef.value?.$el?.focus();
+    }
+  );
 
   async function exitStudy() {
     stopElapsedTimer();
@@ -799,10 +812,25 @@
       <div class="flex flex-col items-center text-center p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-lg max-w-md mx-auto w-full">
         <div class="text-2xl font-bold mb-2">Batch complete</div>
         <p class="text-gray-500 dark:text-gray-400 mb-6">You have completed the current batch! Would you like to stop here?</p>
-        <!-- Continue is the emphasised default action (right + wider); End Session is the quieter escape. -->
-        <div class="flex gap-3 w-full">
-          <Button label="End Session" severity="secondary" size="large" class="flex-1" @click="handleEndSession" />
-          <Button label="Continue" icon="pi pi-arrow-right" icon-pos="right" size="large" class="flex-[2]" @click="handleContinueBatch" />
+        <!-- Continue is the emphasised default action (right); End Session is the quieter escape. -->
+        <div class="flex flex-col sm:flex-row gap-3 w-full">
+          <Button label="End Session" severity="secondary" size="large" class="flex-1" @click="handleEndSession">
+            <template #default>
+              <span class="inline-flex items-center justify-center gap-2 w-full whitespace-nowrap">
+                <span>End Session</span>
+                <span v-if="srsStore.studySettings.showKeybinds" class="text-xs opacity-80 hidden md:inline">Esc</span>
+              </span>
+            </template>
+          </Button>
+          <Button ref="continueButtonRef" label="Continue" size="large" class="flex-1" @click="handleContinueBatch">
+            <template #default>
+              <span class="inline-flex items-center justify-center gap-2 w-full whitespace-nowrap">
+                <span>Continue</span>
+                <span v-if="srsStore.studySettings.showKeybinds" class="text-xs opacity-80 hidden md:inline">Enter</span>
+                <i class="pi pi-arrow-right" />
+              </span>
+            </template>
+          </Button>
         </div>
       </div>
     </div>
