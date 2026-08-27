@@ -18,9 +18,7 @@
   const toast = useToast();
   const studyHeaderVisible = inject<Ref<boolean>>('studyHeaderVisible', ref(false));
 
-  const hasActiveSession = computed(() =>
-    srsStore.sessionStats.cardsReviewed > 0 && !srsStore.isSessionComplete
-  );
+  const hasActiveSession = computed(() => srsStore.sessionStats.cardsReviewed > 0 && !srsStore.isSessionComplete);
 
   onBeforeRouteLeave(() => {
     if (hasActiveSession.value) {
@@ -32,7 +30,9 @@
   const settingsRef = ref<{ saveState: 'idle' | 'saving' | 'saved' | 'error'; save: () => void } | null>(null);
   const showProgressTooltip = ref(false);
 
-  function dismissProgressTooltip() { showProgressTooltip.value = false; }
+  function dismissProgressTooltip() {
+    showProgressTooltip.value = false;
+  }
 
   onMounted(() => {
     window.addEventListener('beforeunload', onBeforeUnload);
@@ -77,18 +77,10 @@
 
   const OVERLAY_MAX = 0.15;
   const LABEL_MAX = 0.9;
-  const rightOverlayOpacity = computed(() =>
-    swipe.swipeDirection.value === 'right' ? swipe.swipeProgress.value * OVERLAY_MAX : 0
-  );
-  const leftOverlayOpacity = computed(() =>
-    swipe.swipeDirection.value === 'left' ? swipe.swipeProgress.value * OVERLAY_MAX : 0
-  );
-  const rightLabelOpacity = computed(() =>
-    swipe.swipeDirection.value === 'right' ? Math.max(0, (swipe.swipeProgress.value - 0.4) / 0.6) * LABEL_MAX : 0
-  );
-  const leftLabelOpacity = computed(() =>
-    swipe.swipeDirection.value === 'left' ? Math.max(0, (swipe.swipeProgress.value - 0.4) / 0.6) * LABEL_MAX : 0
-  );
+  const rightOverlayOpacity = computed(() => (swipe.swipeDirection.value === 'right' ? swipe.swipeProgress.value * OVERLAY_MAX : 0));
+  const leftOverlayOpacity = computed(() => (swipe.swipeDirection.value === 'left' ? swipe.swipeProgress.value * OVERLAY_MAX : 0));
+  const rightLabelOpacity = computed(() => (swipe.swipeDirection.value === 'right' ? Math.max(0, (swipe.swipeProgress.value - 0.4) / 0.6) * LABEL_MAX : 0));
+  const leftLabelOpacity = computed(() => (swipe.swipeDirection.value === 'left' ? Math.max(0, (swipe.swipeProgress.value - 0.4) / 0.6) * LABEL_MAX : 0));
 
   const cardKey = computed(() => {
     const c = srsStore.currentCard;
@@ -100,7 +92,9 @@
     swipe.resetInstant();
     if (wasDismissing) {
       cardEntering.value = true;
-      setTimeout(() => { cardEntering.value = false; }, 250);
+      setTimeout(() => {
+        cardEntering.value = false;
+      }, 250);
     }
   });
 
@@ -126,14 +120,14 @@
   const isMono = computed(() => studyTheme.value === 'mono');
   onMounted(() => {
     const stored = localStorage.getItem('srs-study-theme') as StudyThemeId | null;
-    if (stored && studyThemes.some(t => t.id === stored)) studyTheme.value = stored;
+    if (stored && studyThemes.some((t) => t.id === stored)) studyTheme.value = stored;
   });
   function setStudyTheme(id: StudyThemeId) {
     studyTheme.value = id;
     localStorage.setItem('srs-study-theme', id);
   }
   function selectStudyTheme(id: string) {
-    if (studyThemes.some(t => t.id === id)) setStudyTheme(id as StudyThemeId);
+    if (studyThemes.some((t) => t.id === id)) setStudyTheme(id as StudyThemeId);
   }
 
   const compactBar = ref(false);
@@ -159,7 +153,10 @@
   });
   watch(bottomBarRef, (el, oldEl) => {
     if (oldEl) barObserver?.unobserve(oldEl);
-    if (el) { barObserver?.observe(el); bottomBarHeight.value = el.offsetHeight; }
+    if (el) {
+      barObserver?.observe(el);
+      bottomBarHeight.value = el.offsetHeight;
+    }
   });
   onUnmounted(() => barObserver?.disconnect());
 
@@ -247,9 +244,7 @@
   }
   // Timed review is suppressed on write-in cards (the question timer would auto-reveal before you can
   // type) unless the user opts to keep it on. Standard cards stay timed normally.
-  const effectiveTimedActive = computed(() =>
-    timedActive.value && (!isWriteInCard.value || srsStore.studySettings.writeInReview.timed)
-  );
+  const effectiveTimedActive = computed(() => timedActive.value && (!isWriteInCard.value || srsStore.studySettings.writeInReview.timed));
   const {
     phase: timerPhase,
     fraction: timerFraction,
@@ -274,8 +269,8 @@
     return 'bg-red-400';
   });
   // Whether the countdown bar should render (respects the "show countdown bar" setting).
-  const showTimerBar = computed(() =>
-    effectiveTimedActive.value && srsStore.studySettings.timedReview.showTimer && timerPhase.value !== 'idle' && !!srsStore.currentCard
+  const showTimerBar = computed(
+    () => effectiveTimedActive.value && srsStore.studySettings.timedReview.showTimer && timerPhase.value !== 'idle' && !!srsStore.currentCard
   );
   function handlePauseTimer() {
     if (!timedActive.value) return;
@@ -293,17 +288,23 @@
     }, 1000);
   }
   function stopElapsedTimer() {
-    if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+    if (elapsedTimer) {
+      clearInterval(elapsedTimer);
+      elapsedTimer = null;
+    }
   }
   const elapsedDisplay = computed(() => {
     const s = elapsedSeconds.value;
     const m = Math.floor(s / 60);
     const sec = s % 60;
-    return m >= 60
-      ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
-      : `${m}:${String(sec).padStart(2, '0')}`;
+    return m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
   });
-  watch(() => srsStore.isSessionComplete, (done) => { if (done) stopElapsedTimer(); });
+  watch(
+    () => srsStore.isSessionComplete,
+    (done) => {
+      if (done) stopElapsedTimer();
+    }
+  );
   onUnmounted(stopElapsedTimer);
 
   const loading = ref(true);
@@ -338,21 +339,29 @@
     swipe.resetInstant();
     if (wasDismissing) {
       cardEntering.value = true;
-      setTimeout(() => { cardEntering.value = false; }, 250);
+      setTimeout(() => {
+        cardEntering.value = false;
+      }, 250);
     }
     if (!ok) toast.add({ severity: 'error', summary: 'Review failed', detail: 'Your grade was not saved. Try again.', life: 5000 });
   }
 
-  watch(() => srsStore.lastLeechEvent, (event) => {
-    if (!event) return;
-    const summary = event.suspended ? 'Card marked as leech and suspended' : 'Card marked as leech';
-    toast.add({ severity: 'warn', summary, life: 3000 });
-  });
+  watch(
+    () => srsStore.lastLeechEvent,
+    (event) => {
+      if (!event) return;
+      const summary = event.suspended ? 'Card marked as leech and suspended' : 'Card marked as leech';
+      toast.add({ severity: 'warn', summary, life: 3000 });
+    }
+  );
 
-  watch(() => srsStore.lastReviewError, (err) => {
-    if (!err) return;
-    toast.add({ severity: 'error', summary: 'Review not saved due to an error', detail: `“${err.wordText}” will be shown again.`, life: 5000 });
-  });
+  watch(
+    () => srsStore.lastReviewError,
+    (err) => {
+      if (!err) return;
+      toast.add({ severity: 'error', summary: 'Review not saved due to an error', detail: `“${err.wordText}” will be shown again.`, life: 5000 });
+    }
+  );
 
   function handleFlip() {
     srsStore.revealCard();
@@ -382,7 +391,8 @@
 
   function handleForget() {
     confirm.require({
-      message: 'Forget this card? The card will leave your collection, but your review history will be kept and can be restored ay any time from Recently Removed in your vocabulary settings, or deleted completely there.',
+      message:
+        'Forget this card? The card will leave your collection, but your review history will be kept and can be restored ay any time from Recently Removed in your vocabulary settings, or deleted completely there.',
       header: 'Forget Card',
       acceptLabel: 'Forget',
       rejectLabel: 'Cancel',
@@ -416,7 +426,7 @@
 
   watch(
     () => srsStore.batchComplete,
-    async complete => {
+    async (complete) => {
       if (!complete) return;
       await nextTick();
       continueButtonRef.value?.$el?.focus();
@@ -523,51 +533,78 @@
     <!-- Study mode -->
     <template v-else-if="srsStore.currentCard || srsStore.isLoading">
       <!-- Scrollable content area -->
-      <div class="flex-1 overflow-y-auto min-h-0 flex flex-col items-center px-2 pt-4 md:pt-8" :style="{ paddingBottom: `${bottomBarHeight + 16}px`, minHeight: `${bottomBarHeight + 200}px` }">
+      <div
+        class="flex-1 overflow-y-auto min-h-0 flex flex-col items-center px-2 pt-4 md:pt-8"
+        :style="{ paddingBottom: `${bottomBarHeight + 16}px`, minHeight: `${bottomBarHeight + 200}px` }"
+      >
         <!-- Progress info -->
         <div class="w-full mb-4 grid grid-cols-[1fr_auto_1fr] items-center" :class="cardWidthClass">
           <div class="flex items-center gap-2">
-            <span class="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 tabular-nums">{{ srsStore.remainingByType.new }} new</span>
-            <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300 tabular-nums">{{ srsStore.remainingByType.review }} review</span>
-            <span v-if="srsStore.isWrappingUp" class="text-xs px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 tabular-nums">{{ srsStore.progress.remaining }} left</span>
+            <span class="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 tabular-nums">
+              {{ srsStore.remainingByType.new }} new
+            </span>
+            <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300 tabular-nums">
+              {{ srsStore.remainingByType.review }} review
+            </span>
+            <span
+              v-if="srsStore.isWrappingUp"
+              class="text-xs px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 tabular-nums"
+            >
+              {{ srsStore.progress.remaining }} left
+            </span>
           </div>
           <div class="text-center">
             <span class="text-lg font-semibold tabular-nums text-surface-700 dark:text-surface-200">
-              {{ srsStore.progress.current }}<span class="text-surface-400 dark:text-surface-400 font-normal"> / {{ srsStore.progress.total }}</span>
+              {{ srsStore.progress.current }}
+              <span class="text-surface-400 dark:text-surface-400 font-normal">/ {{ srsStore.progress.total }}</span>
             </span>
-            <div v-if="srsStore.studySettings.showElapsedTime" class="text-[11px] tabular-nums text-surface-400 dark:text-surface-400 -mt-0.5">{{ elapsedDisplay }}</div>
+            <div v-if="srsStore.studySettings.showElapsedTime" class="text-[11px] tabular-nums text-surface-400 dark:text-surface-400 -mt-0.5">
+              {{ elapsedDisplay }}
+            </div>
           </div>
           <div class="flex items-center gap-1 justify-end">
-            <Tooltip :content="!timedActive ? 'Timed review off — click to turn on' : (timerPaused ? 'Timed review paused — press P to resume' : 'Timed review on — click to turn off')">
-              <button
-                @click="toggleTimed()"
-                class="p-2 rounded-lg transition-colors"
-                :class="!timedActive
-                  ? 'bg-gray-200/60 dark:bg-gray-800/60 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+            <Tooltip
+              :content="
+                !timedActive
+                  ? 'Timed review off — click to turn on'
                   : timerPaused
-                    ? 'bg-amber-500 text-white hover:bg-amber-600'
-                    : 'bg-indigo-500 text-white hover:bg-indigo-600'"
+                    ? 'Timed review paused — press P to resume'
+                    : 'Timed review on — click to turn off'
+              "
+            >
+              <button
+                class="p-2 rounded-lg transition-colors"
+                :class="
+                  !timedActive
+                    ? 'bg-gray-200/60 dark:bg-gray-800/60 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    : timerPaused
+                      ? 'bg-amber-500 text-white hover:bg-amber-600'
+                      : 'bg-indigo-500 text-white hover:bg-indigo-600'
+                "
                 :aria-label="timedActive ? 'Turn off timed review' : 'Turn on timed review'"
+                @click="toggleTimed()"
               >
-                <Icon :name="!timedActive ? 'material-symbols:timer-outline' : (timerPaused ? 'material-symbols:pause' : 'material-symbols:timer')" size="18" />
+                <Icon :name="!timedActive ? 'material-symbols:timer-outline' : timerPaused ? 'material-symbols:pause' : 'material-symbols:timer'" size="18" />
               </button>
             </Tooltip>
             <Tooltip :content="srsStore.isWrappingUp ? 'Cancel wrap-up' : 'Finish learning cards then end'">
               <button
-                @click="handleWrapUp()"
                 class="p-2 rounded-lg transition-colors"
-                :class="srsStore.isWrappingUp
-                  ? 'bg-amber-500 text-white hover:bg-amber-600'
-                  : 'bg-gray-200/60 dark:bg-gray-800/60 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+                :class="
+                  srsStore.isWrappingUp
+                    ? 'bg-amber-500 text-white hover:bg-amber-600'
+                    : 'bg-gray-200/60 dark:bg-gray-800/60 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                "
                 :aria-label="srsStore.isWrappingUp ? 'Cancel wrap-up' : 'Wrap up session'"
+                @click="handleWrapUp()"
               >
                 <Icon :name="srsStore.isWrappingUp ? 'material-symbols:undo' : 'material-symbols:exit-to-app'" size="18" />
               </button>
             </Tooltip>
             <button
-              @click="studyHeaderVisible = !studyHeaderVisible"
               class="p-2 rounded-lg bg-gray-200/60 dark:bg-gray-800/60 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
               aria-label="Toggle navigation"
+              @click="studyHeaderVisible = !studyHeaderVisible"
             >
               <Icon :name="studyHeaderVisible ? 'material-symbols:close' : 'material-symbols:menu'" size="18" />
             </button>
@@ -587,30 +624,33 @@
               />
             </div>
             <!-- Hover/tap tooltip -->
-            <div class="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-3 py-2 bg-gray-800 dark:bg-gray-100 text-white dark:text-gray-900 text-xs rounded-lg transition-opacity pointer-events-none z-10 whitespace-nowrap" :class="showProgressTooltip ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'">
+            <div
+              class="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-3 py-2 bg-gray-800 dark:bg-gray-100 text-white dark:text-gray-900 text-xs rounded-lg transition-opacity pointer-events-none z-10 whitespace-nowrap"
+              :class="showProgressTooltip ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+            >
               <div class="flex items-center gap-3">
                 <span class="flex items-center gap-1">
-                  <span class="inline-block w-2 h-2 rounded-full" :class="dotColors[studyTheme].again"></span>
+                  <span class="inline-block w-2 h-2 rounded-full" :class="dotColors[studyTheme].again" />
                   Again {{ srsStore.sessionStats.gradeCounts.again }}
                 </span>
                 <span v-if="srsStore.studySettings.gradingButtons === 4" class="flex items-center gap-1">
-                  <span class="inline-block w-2 h-2 rounded-full" :class="dotColors[studyTheme].hard"></span>
+                  <span class="inline-block w-2 h-2 rounded-full" :class="dotColors[studyTheme].hard" />
                   Hard {{ srsStore.sessionStats.gradeCounts.hard }}
                 </span>
                 <span class="flex items-center gap-1">
-                  <span class="inline-block w-2 h-2 rounded-full" :class="dotColors[studyTheme].good"></span>
+                  <span class="inline-block w-2 h-2 rounded-full" :class="dotColors[studyTheme].good" />
                   Good {{ srsStore.sessionStats.gradeCounts.good }}
                 </span>
                 <span class="flex items-center gap-1">
-                  <span class="inline-block w-2 h-2 rounded-full" :class="dotColors[studyTheme].easy"></span>
+                  <span class="inline-block w-2 h-2 rounded-full" :class="dotColors[studyTheme].easy" />
                   Easy {{ srsStore.sessionStats.gradeCounts.easy }}
                 </span>
               </div>
               <div class="mt-1 text-gray-300 dark:text-gray-400 text-center">
                 {{ srsStore.progress.current }}/{{ srsStore.progress.total }} completed
-                <template v-if="srsStore.againCardsAhead > 0"> · {{ srsStore.againCardsAhead }} again pending</template>
+                <template v-if="srsStore.againCardsAhead > 0">· {{ srsStore.againCardsAhead }} again pending</template>
               </div>
-              <div class="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-800 dark:border-b-gray-100"></div>
+              <div class="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-800 dark:border-b-gray-100" />
             </div>
           </div>
         </div>
@@ -661,12 +701,16 @@
               class="absolute top-6 right-4 font-black text-2xl uppercase tracking-widest pointer-events-none z-20 border-3 rounded-lg px-3 py-1 -rotate-12"
               :class="isMono ? 'text-surface-500 dark:text-surface-400 border-surface-500' : 'text-green-500 border-green-500'"
               :style="{ opacity: rightLabelOpacity }"
-            >Good</div>
+            >
+              Good
+            </div>
             <div
               class="absolute top-6 left-4 font-black text-2xl uppercase tracking-widest pointer-events-none z-20 border-3 rounded-lg px-3 py-1 rotate-12"
               :class="isMono ? 'text-surface-600 dark:text-surface-400 border-surface-600' : 'text-red-500 border-red-500'"
               :style="{ opacity: leftLabelOpacity }"
-            >Again</div>
+            >
+              Again
+            </div>
 
             <SrsStudyCard
               ref="studyCardRef"
@@ -701,7 +745,11 @@
       </div>
 
       <!-- Fixed bottom buttons -->
-      <div ref="bottomBarRef" class="border-t border-surface-200 dark:border-surface-800 bg-surface-0 dark:bg-surface-900 fixed bottom-0 left-0 right-0 z-40 isolate" :class="compactBar ? 'px-3 pt-1.5 pb-2' : 'px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]'">
+      <div
+        ref="bottomBarRef"
+        class="border-t border-surface-200 dark:border-surface-800 bg-surface-0 dark:bg-surface-900 fixed bottom-0 left-0 right-0 z-40 isolate"
+        :class="compactBar ? 'px-3 pt-1.5 pb-2' : 'px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]'"
+      >
         <div class="w-full mx-auto" :class="cardWidthClass">
           <SrsWriteInInput
             v-if="writeInInputPhase && writeInPlacement === 'bar'"
@@ -722,7 +770,8 @@
             class="flex items-center justify-center gap-1 text-sm text-surface-400 dark:text-surface-400"
             :class="compactBar ? 'min-h-[36px]' : 'min-h-[44px] md:min-h-[72px]'"
           >
-            Type your answer in the card<span class="hidden md:inline"> · press Enter to check</span>
+            Type your answer in the card
+            <span class="hidden md:inline">· press Enter to check</span>
           </div>
           <SrsGradeButtons
             v-else
@@ -762,11 +811,13 @@
               <button
                 v-for="(label, i) in cardWidthLabels"
                 :key="label"
-                @click="setCardWidth(i)"
                 class="px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer"
-                :class="cardWidthIndex === i
-                  ? 'bg-indigo-500 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'"
+                :class="
+                  cardWidthIndex === i
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'
+                "
+                @click="setCardWidth(i)"
               >
                 {{ label }}
               </button>
@@ -775,12 +826,14 @@
               <button
                 v-for="theme in studyThemes"
                 :key="theme.id"
-                @click="setStudyTheme(theme.id)"
                 class="p-1 rounded transition-colors cursor-pointer"
-                :class="studyTheme === theme.id
-                  ? 'bg-indigo-500 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'"
+                :class="
+                  studyTheme === theme.id
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'
+                "
                 :aria-label="theme.id + ' theme'"
+                @click="setStudyTheme(theme.id)"
               >
                 <Icon :name="theme.icon" size="14" />
               </button>
@@ -851,12 +904,13 @@
         </div>
         <p class="text-gray-500 dark:text-gray-400 mb-6">
           <template v-if="emptyReason === 'reviewCap'">
-            {{ srsStore.dueSummary?.reviewsDue }} review{{ srsStore.dueSummary?.reviewsDue === 1 ? '' : 's' }} waiting, but you've hit your daily cap of {{ srsStore.studySettings.maxReviewsPerDay }}. They'll be ready tomorrow or you can use Study More to push ahead.
+            {{ srsStore.dueSummary?.reviewsDue }} review{{ srsStore.dueSummary?.reviewsDue === 1 ? '' : 's' }} waiting, but you've hit your daily cap of
+            {{ srsStore.studySettings.maxReviewsPerDay }}. They'll be ready tomorrow or you can use Study More to push ahead.
           </template>
           <template v-else-if="emptyReason === 'newLimit'">
             You've added your {{ srsStore.studySettings.newCardsPerDay }} new card{{ srsStore.studySettings.newCardsPerDay === 1 ? '' : 's' }} for today.
-            <template v-if="nextReviewText"> Next review in {{ nextReviewText }}.</template>
-            <template v-else> Reviews are all caught up.</template>
+            <template v-if="nextReviewText">Next review in {{ nextReviewText }}.</template>
+            <template v-else>Reviews are all caught up.</template>
           </template>
           <template v-else>
             <template v-if="nextReviewText">You're all caught up — next review in {{ nextReviewText }}.</template>
@@ -893,26 +947,36 @@
 </template>
 
 <style scoped>
-.swipe-snap {
-  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.4s ease;
-}
-.swipe-dismiss {
-  transition: transform 0.15s ease-in, opacity 0.15s ease-in;
-}
-@keyframes card-enter {
-  from { opacity: 0; transform: scale(0.95) translateY(8px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-.card-entering {
-  animation: card-enter 0.2s ease-out;
-}
-@media (prefers-reduced-motion: reduce) {
-  .swipe-snap,
+  .swipe-snap {
+    transition:
+      transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+      opacity 0.4s ease;
+  }
   .swipe-dismiss {
-    transition: none;
+    transition:
+      transform 0.15s ease-in,
+      opacity 0.15s ease-in;
+  }
+  @keyframes card-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.95) translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
   }
   .card-entering {
-    animation: none;
+    animation: card-enter 0.2s ease-out;
   }
-}
+  @media (prefers-reduced-motion: reduce) {
+    .swipe-snap,
+    .swipe-dismiss {
+      transition: none;
+    }
+    .card-entering {
+      animation: none;
+    }
+  }
 </style>

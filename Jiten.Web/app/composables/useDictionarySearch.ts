@@ -28,8 +28,8 @@ export function useDictionarySearch() {
       });
       const primary = result?.results || [];
       const secondary = result?.dictionaryResults || [];
-      const seenIds = new Set(primary.map(e => `${e.wordId}-${e.readingIndex}`));
-      results.value = [...primary, ...secondary.filter(e => !seenIds.has(`${e.wordId}-${e.readingIndex}`))];
+      const seenIds = new Set(primary.map((e) => `${e.wordId}-${e.readingIndex}`));
+      results.value = [...primary, ...secondary.filter((e) => !seenIds.has(`${e.wordId}-${e.readingIndex}`))];
       queryType.value = result?.queryType || '';
       hasMore.value = result?.hasMore || false;
     } catch (e) {

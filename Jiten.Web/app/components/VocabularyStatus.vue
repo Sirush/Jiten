@@ -38,9 +38,7 @@
   const isRedundant = computed(() => knownStates.value.includes(KnownState.Redundant));
   const isSuspended = computed(() => knownStates.value.includes(KnownState.Suspended));
 
-  const staticDecks = computed(() =>
-    srsStore.studyDecks.filter(d => d.deckType === StudyDeckType.StaticWordList)
-  );
+  const staticDecks = computed(() => srsStore.studyDecks.filter((d) => d.deckType === StudyDeckType.StaticWordList));
 
   const redundantTooltip = computed(() => {
     // A derivation cover comes from a different entry entirely, so the form-sibling wording would mislead.
@@ -68,8 +66,9 @@
       const result = await $api<{ restored: number; restoredReviews: number }>(`user/vocabulary/add/${wordPath.value}`, { method: 'POST' });
       knownStates.value = [KnownState.Mastered];
       notifyRestored(result?.restoredReviews ?? 0);
+    } catch {
+      /* state unchanged on failure */
     }
-    catch { /* state unchanged on failure */ }
   };
 
   const blacklistWord = async () => {
@@ -77,8 +76,9 @@
     try {
       await $api<boolean>(`user/vocabulary/blacklist/${wordPath.value}`, { method: 'POST' });
       knownStates.value = [KnownState.Blacklisted];
+    } catch {
+      /* state unchanged on failure */
     }
-    catch { /* state unchanged on failure */ }
   };
 
   interface ArchivedEntry {
@@ -94,18 +94,22 @@
     try {
       const res = await $api<{ found: boolean } & ArchivedEntry>(`user/vocabulary/archive/${wordPath.value}`);
       archived.value = res?.found ? res : null;
+    } catch {
+      archived.value = null;
     }
-    catch { archived.value = null; }
   };
 
   const restoreWord = async () => {
     restoring.value = true;
     const reviews = archived.value?.reviewCount ?? 0;
     try {
-      const result = await $api<{ restored: number; results: { error: string | null; knownStates: KnownState[] | null }[] }>('user/vocabulary/archive/restore', {
-        method: 'POST',
-        body: { forms: [{ wordId: props.word.wordId, readingIndex: props.word.mainReading.readingIndex }] },
-      });
+      const result = await $api<{ restored: number; results: { error: string | null; knownStates: KnownState[] | null }[] }>(
+        'user/vocabulary/archive/restore',
+        {
+          method: 'POST',
+          body: { forms: [{ wordId: props.word.wordId, readingIndex: props.word.mainReading.readingIndex }] },
+        }
+      );
 
       if ((result?.restored ?? 0) === 0) {
         toast.add({
@@ -125,11 +129,11 @@
         detail: reviews > 0 ? `Brought back ${reviews.toLocaleString()} review${reviews === 1 ? '' : 's'}.` : 'The card is back in your collection.',
         life: 5000,
       });
-    }
-    catch (e) {
+    } catch (e) {
       toast.add({ severity: 'error', summary: 'Restore failed', detail: extractApiError(e, 'Could not restore this card.'), life: 5000 });
+    } finally {
+      restoring.value = false;
     }
-    finally { restoring.value = false; }
   };
 
   const deckMembership = ref<Set<number>>(new Set());
@@ -142,13 +146,14 @@
         body: { words: [[props.word.wordId, props.word.mainReading.readingIndex]] },
       });
       deckMembership.value = new Set(res.decks?.[0] ?? []);
+    } catch {
+    } finally {
+      membershipLoaded.value = true;
     }
-    catch {}
-    finally { membershipLoaded.value = true; }
   };
 
-  const decksContaining = computed(() => staticDecks.value.filter(d => deckMembership.value.has(d.userStudyDeckId)));
-  const decksNotContaining = computed(() => staticDecks.value.filter(d => !deckMembership.value.has(d.userStudyDeckId)));
+  const decksContaining = computed(() => staticDecks.value.filter((d) => deckMembership.value.has(d.userStudyDeckId)));
+  const decksNotContaining = computed(() => staticDecks.value.filter((d) => !deckMembership.value.has(d.userStudyDeckId)));
 
   const addToDeck = async (deckId: number) => {
     addingToDeck.value = deckId;
@@ -207,8 +212,9 @@
     try {
       await $api<boolean>(`user/vocabulary/remove/${wordPath.value}`, { method: 'POST' });
       knownStates.value = [KnownState.New];
+    } catch {
+      /* state unchanged on failure */
     }
-    catch { /* state unchanged on failure */ }
   };
 
   const plainText = computed(() => stripRubyMarkup(props.word.mainReading.text));
@@ -230,8 +236,9 @@
         body: { wordId: props.word.wordId, readingIndex: props.word.mainReading.readingIndex, state: action },
       });
       knownStates.value = optimistic;
+    } catch {
+      /* state unchanged on failure */
     }
-    catch { /* state unchanged on failure */ }
   };
 
   const resumeWord = () => srsAction('suspend-remove', [KnownState.Young]);
@@ -259,12 +266,14 @@
     archived.value === null
       ? null
       : {
-          label: archived.value.reviewCount > 0
-            ? `Restore ${archived.value.reviewCount.toLocaleString()} review${archived.value.reviewCount === 1 ? '' : 's'}`
-            : 'Restore removed card',
+          label:
+            archived.value.reviewCount > 0
+              ? `Restore ${archived.value.reviewCount.toLocaleString()} review${archived.value.reviewCount === 1 ? '' : 's'}`
+              : 'Restore removed card',
           icon: 'pi pi-replay',
           run: restoreWord,
-        });
+        }
+  );
 
   const stateActions = computed<StateAction[]>(() => {
     if (isRedundant.value) return restoreAction.value ? [restoreAction.value] : [];
@@ -312,10 +321,7 @@
             <span class="text-blue-500 dark:text-blue-300 cursor-default">Redundant</span>
           </Tooltip>
           <Tooltip v-if="redundantVia" :content="redundantVia.categoryLabel">
-            <NuxtLink
-              :to="`/vocabulary/${redundantVia.wordId}/${redundantVia.readingIndex}`"
-              class="text-xs text-blue-500 dark:text-blue-300 hover:underline"
-            >
+            <NuxtLink :to="`/vocabulary/${redundantVia.wordId}/${redundantVia.readingIndex}`" class="text-xs text-blue-500 dark:text-blue-300 hover:underline">
               <span class="font-noto-sans" lang="ja">{{ redundantVia.text }}</span>
             </NuxtLink>
           </Tooltip>
@@ -345,17 +351,30 @@
           <Button icon="pi pi-minus" size="small" text severity="danger" @click="confirmForget" />
         </template>
         <template v-else>
-          <Tooltip :content="(quickMasterVocabulary ? 'Click: Master\nCtrl+Click: Blacklist' : 'Shift+Click: Master\nCtrl+Click: Blacklist') + '\n(Change in the quick cog settings with the Master in 1 click option)'">
+          <Tooltip
+            :content="
+              (quickMasterVocabulary ? 'Click: Master\nCtrl+Click: Blacklist' : 'Shift+Click: Master\nCtrl+Click: Blacklist') +
+              '\n(Change in the quick cog settings with the Master in 1 click option)'
+            "
+          >
             <Button icon="pi pi-plus" size="small" text severity="success" @click="onPlusClick" />
           </Tooltip>
         </template>
         <Popover v-if="opActivated" ref="op" :pt="{ content: { class: 'p-1' } }">
           <div class="flex flex-col">
-            <button class="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer" @click="masterWord">
-              <i class="pi pi-check w-4 text-center" /><span>Master</span>
+            <button
+              class="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer"
+              @click="masterWord"
+            >
+              <i class="pi pi-check w-4 text-center" />
+              <span>Master</span>
             </button>
-            <button class="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700 cursor-pointer" @click="blacklistWord">
-              <i class="pi pi-ban w-4 text-center" /><span>Blacklist</span>
+            <button
+              class="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700 cursor-pointer"
+              @click="blacklistWord"
+            >
+              <i class="pi pi-ban w-4 text-center" />
+              <span>Blacklist</span>
             </button>
           </div>
         </Popover>
@@ -375,7 +394,8 @@
                 "
                 @click="runStateAction(action)"
               >
-                <i :class="action.icon" class="w-4 text-center" /><span>{{ action.label }}</span>
+                <i :class="action.icon" class="w-4 text-center" />
+                <span>{{ action.label }}</span>
               </button>
               <div class="border-t border-surface-200 dark:border-surface-700 my-1" />
             </template>
@@ -431,7 +451,7 @@
       </template>
     </span>
     <template #fallback>
-      <span class="inline-flex items-center gap-1" aria-hidden="true"></span>
+      <span class="inline-flex items-center gap-1" aria-hidden="true" />
     </template>
   </ClientOnly>
 </template>

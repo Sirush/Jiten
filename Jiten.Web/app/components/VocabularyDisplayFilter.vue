@@ -19,9 +19,7 @@
     return `${tiers.value.length} statuses`;
   });
 
-  const activeCount = computed(
-    () => tiers.value.length + (suspended.value === 'show' ? 0 : 1) + (redundant.value === 'show' ? 0 : 1),
-  );
+  const activeCount = computed(() => tiers.value.length + (suspended.value === 'show' ? 0 : 1) + (redundant.value === 'show' ? 0 : 1));
 
   const reset = () => {
     tiers.value = [];
@@ -62,28 +60,12 @@
 
       <div class="flex flex-col gap-1">
         <label class="text-sm">Suspended cards</label>
-        <SelectButton
-          v-model="suspended"
-          :options="modeOptions"
-          option-label="label"
-          option-value="value"
-          :allow-empty="false"
-          size="small"
-          class="w-full"
-        />
+        <SelectButton v-model="suspended" :options="modeOptions" option-label="label" option-value="value" :allow-empty="false" size="small" class="w-full" />
       </div>
 
       <div class="flex flex-col gap-1">
         <label class="text-sm">Redundant forms</label>
-        <SelectButton
-          v-model="redundant"
-          :options="modeOptions"
-          option-label="label"
-          option-value="value"
-          :allow-empty="false"
-          size="small"
-          class="w-full"
-        />
+        <SelectButton v-model="redundant" :options="modeOptions" option-label="label" option-value="value" :allow-empty="false" size="small" class="w-full" />
         <span class="text-xs text-gray-500 dark:text-gray-400">Forms already covered by another form you study</span>
       </div>
 

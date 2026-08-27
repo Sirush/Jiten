@@ -58,7 +58,10 @@
   const parsedValues = computed(() => {
     const raw = parametersCsv.value.trim();
     if (!raw) return null;
-    const parts = raw.split(',').map((p) => p.trim()).filter((p) => p.length > 0);
+    const parts = raw
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
     if (parts.length !== expectedCount) return null;
     const nums = parts.map(Number);
     if (nums.some((n) => Number.isNaN(n) || !Number.isFinite(n))) return null;
@@ -66,8 +69,8 @@
   });
 
   const defaultParameters = [
-    0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796,
-    1.4835, 0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, 0.1542,
+    0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796, 1.4835, 0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658,
+    0.1542,
   ];
 
   const parameterDescriptions: { label: string; description: string; unit?: string; decimals?: number }[] = [
@@ -182,7 +185,8 @@
 
   const confirmResetParameters = () => {
     confirm.require({
-      message: 'This will reset your FSRS parameters and desired retention to the defaults. You will need to reschedule your cards for the changes to take effect.',
+      message:
+        'This will reset your FSRS parameters and desired retention to the defaults. You will need to reschedule your cards for the changes to take effect.',
       header: 'Reset to default',
       icon: 'pi pi-exclamation-triangle',
       rejectProps: {
@@ -301,7 +305,7 @@
       optimiseError.value = null;
       const result = await $api<{ parameters: string; loss: number; reviewCount: number; desiredRetention: number; rescheduled: boolean }>(
         `srs/settings/optimize?reschedule=${rescheduleAfterOptimise.value}`,
-        { method: 'POST' },
+        { method: 'POST' }
       );
       parametersCsv.value = result.parameters;
       desiredRetention.value = result.desiredRetention;
@@ -396,11 +400,12 @@
         body: { reschedule: true },
       });
       await Promise.all([loadHealth(), loadParameters(true)]);
-      const detail = result.remapped === 0
-        ? 'No Hard reviews found to remap.'
-        : result.rescheduled
-          ? `${result.remapped} Hard reviews remapped to Again and cards rescheduled.`
-          : `${result.remapped} Hard reviews remapped to Again.`;
+      const detail =
+        result.remapped === 0
+          ? 'No Hard reviews found to remap.'
+          : result.rescheduled
+            ? `${result.remapped} Hard reviews remapped to Again and cards rescheduled.`
+            : `${result.remapped} Hard reviews remapped to Again.`;
       toast.add({
         severity: result.remapped === 0 ? 'info' : 'success',
         summary: result.remapped === 0 ? 'Nothing to remap' : 'Remap complete',
@@ -424,9 +429,7 @@
   const loadWorkloadCurve = async () => {
     try {
       workloadLoading.value = true;
-      workloadCurve.value = await $api<FsrsWorkloadCurveResponse>(
-        `srs/workload-curve?includeNewCards=${includeNewCards.value}`,
-      );
+      workloadCurve.value = await $api<FsrsWorkloadCurveResponse>(`srs/workload-curve?includeNewCards=${includeNewCards.value}`);
     } catch {
       workloadCurve.value = null;
     } finally {
@@ -653,7 +656,16 @@
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">Target recall rate. Higher means you remember more, but review more often.</p>
         <div class="flex flex-wrap items-center gap-3">
           <Slider v-model="desiredRetention" :min="sliderMin" :max="sliderMax" :step="0.01" class="w-full sm:w-64" />
-          <InputNumber v-model="desiredRetention" class="w-28" input-class="w-28" :min="0.01" :max="0.99" :step="0.01" :min-fraction-digits="2" :max-fraction-digits="4" />
+          <InputNumber
+            v-model="desiredRetention"
+            class="w-28"
+            input-class="w-28"
+            :min="0.01"
+            :max="0.99"
+            :step="0.01"
+            :min-fraction-digits="2"
+            :max-fraction-digits="4"
+          />
           <Button label="Save" :loading="isSaving" :disabled="!!formError || isLoading || isRecomputing || isResetting" @click="saveParameters" />
         </div>
         <Message v-if="retentionError" key="retention-error" severity="error" :closable="false" class="mt-2">
@@ -668,39 +680,39 @@
           </div>
 
           <div class="flex items-center gap-2 mt-3">
-            <ToggleSwitch v-model="includeNewCards" inputId="includeNewCards" :disabled="workloadLoading" />
+            <ToggleSwitch v-model="includeNewCards" input-id="includeNewCards" :disabled="workloadLoading" />
             <label for="includeNewCards" class="text-sm cursor-pointer text-gray-600 dark:text-gray-300">Include future new cards in the estimate</label>
             <span v-if="workloadLoading" class="flex items-center gap-1 text-xs text-gray-400">
-              <i class="pi pi-spin pi-spinner text-xs" /> Updating…
+              <i class="pi pi-spin pi-spinner text-xs" />
+              Updating…
             </span>
           </div>
 
-          <Button
-            label="Simulate"
-            icon="pi pi-chart-line"
-            :loading="workloadLoading"
-            class="mt-3"
-            @click="loadWorkloadCurve"
-          />
+          <Button label="Simulate" icon="pi pi-chart-line" :loading="workloadLoading" class="mt-3" @click="loadWorkloadCurve" />
 
           <template v-if="hasWorkloadData && liveWorkload">
             <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-3">
               <div class="text-sm">
                 <span class="font-semibold text-lg tabular-nums" :class="multiplierColor">{{ multiplierLabel }}×</span>
-                <span class="text-gray-500 dark:text-gray-400"> your current reviews</span>
+                <span class="text-gray-500 dark:text-gray-400">your current reviews</span>
               </div>
               <div class="text-sm text-gray-600 dark:text-gray-300">
-                ≈ <span class="font-semibold tabular-nums">{{ reviewsPerDayLabel }}</span> reviews/day,
-                <span class="font-semibold tabular-nums">{{ minutesPerDayLabel }}</span> min/day,
-                <span class="font-semibold tabular-nums">{{ recallPctLabel }}%</span> recall
+                ≈
+                <span class="font-semibold tabular-nums">{{ reviewsPerDayLabel }}</span>
+                reviews/day,
+                <span class="font-semibold tabular-nums">{{ minutesPerDayLabel }}</span>
+                min/day,
+                <span class="font-semibold tabular-nums">{{ recallPctLabel }}%</span>
+                recall
               </div>
             </div>
             <p class="text-[11px] text-gray-400 mt-1">
-              Relative to your current setting ({{ Math.round(baseRetention * 100) }}%). Projected demand from your current cards{{ includeNewCards ? ' plus future new cards' : '' }} — not capped by your daily limit.
+              Relative to your current setting ({{ Math.round(baseRetention * 100) }}%). Projected demand from your current cards{{
+                includeNewCards ? ' plus future new cards' : ''
+              }}
+              — not capped by your daily limit.
             </p>
-            <p v-if="speedBreakdown" class="text-[11px] text-gray-400 mt-0.5">
-              Time uses your measured review speed: {{ speedBreakdown }}.
-            </p>
+            <p v-if="speedBreakdown" class="text-[11px] text-gray-400 mt-0.5">Time uses your measured review speed: {{ speedBreakdown }}.</p>
 
             <div class="flex rounded-lg bg-surface-100 dark:bg-surface-800 p-0.5 text-xs mt-3 w-fit">
               <button
@@ -730,12 +742,18 @@
       <div class="mb-5">
         <h4 class="text-md font-semibold mb-1">Optimise parameters</h4>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">
-          Analyse your review history to find the optimal FSRS parameters for your memory patterns. <br /> The more reviews you have, the more accurate the optimisation will be. It is recommended to optimise every time your number of reviews doubles.
-          <br />You currently have {{reviewCount}} reviews.
+          Analyse your review history to find the optimal FSRS parameters for your memory patterns.
+          <br />
+          The more reviews you have, the more accurate the optimisation will be. It is recommended to optimise every time your number of reviews doubles.
+          <br />
+          You currently have {{ reviewCount }} reviews.
         </p>
 
         <!-- Review-history health check: a quick read on whether the history is fit to train on -->
-        <div v-if="health && health.totalReviews > 0" class="mb-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/40 p-3">
+        <div
+          v-if="health && health.totalReviews > 0"
+          class="mb-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/40 p-3"
+        >
           <div class="flex items-center gap-2">
             <i class="pi pi-heart text-sm text-gray-500 dark:text-gray-400" />
             <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Review history health</span>
@@ -767,30 +785,42 @@
 
           <!-- Insights -->
           <div v-if="hasHealthInsight" class="mt-3 flex flex-col gap-2">
-            <div v-if="health.likelyHardAsFail" class="flex flex-wrap items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 px-3 py-2">
+            <div
+              v-if="health.likelyHardAsFail"
+              class="flex flex-wrap items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 px-3 py-2"
+            >
               <i class="pi pi-exclamation-triangle text-amber-600 dark:text-amber-400 text-sm" />
               <span class="text-sm text-amber-800 dark:text-amber-200">
-                You press <b>Hard</b> often but almost never <b>Again</b>. If Hard is your "I failed" button, it skews optimisation. Hard should mean "recalled, but with difficulty".
+                You press
+                <b>Hard</b>
+                often but almost never
+                <b>Again</b>
+                . If Hard is your "I failed" button, it skews optimisation. Hard should mean "recalled, but with difficulty".
               </span>
               <Button label="Remap Hard → Again" size="small" severity="warn" outlined class="ml-auto" :loading="isRemapping" @click="confirmRemapHard" />
             </div>
             <div v-if="health.neverUsesHard" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <i class="pi pi-info-circle text-sky-500 text-sm" />
-              You have never pressed <b>Hard</b>. Using it for cards you barely recalled gives the optimiser more to work with.
+              You have never pressed
+              <b>Hard</b>
+              . Using it for cards you barely recalled gives the optimiser more to work with.
             </div>
             <div v-if="health.neverUsesEasy" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <i class="pi pi-info-circle text-sky-500 text-sm" />
-              You have never pressed <b>Easy</b>. Reserve it for cards that felt effortless.
+              You have never pressed
+              <b>Easy</b>
+              . Reserve it for cards that felt effortless.
             </div>
             <div v-if="sameDayPct >= 40 && !health.likelyHardAsFail" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <i class="pi pi-info-circle text-sky-500 text-sm" />
-              {{ Math.round(sameDayPct) }}% of your reviews repeat a card the same day. Heavy same-day cramming can make optimisation less representative of long-term memory.
+              {{ Math.round(sameDayPct) }}% of your reviews repeat a card the same day. Heavy same-day cramming can make optimisation less representative of
+              long-term memory.
             </div>
           </div>
         </div>
 
         <div class="flex items-center gap-2 mb-2">
-          <Checkbox v-model="rescheduleAfterOptimise" inputId="rescheduleAfterOptimise" :binary="true" :disabled="!canOptimise" />
+          <Checkbox v-model="rescheduleAfterOptimise" input-id="rescheduleAfterOptimise" :binary="true" :disabled="!canOptimise" />
           <label for="rescheduleAfterOptimise" class="text-sm cursor-pointer">Also reschedule all my cards after optimisation</label>
         </div>
         <Button
@@ -809,84 +839,81 @@
       </div>
 
       <div class="border-t border-surface-200 dark:border-surface-700 pt-4">
-        <button
-          class="flex items-center gap-2 text-sm font-medium text-surface-700 dark:text-surface-200 cursor-pointer"
-          @click="showAdvanced = !showAdvanced"
-        >
+        <button class="flex items-center gap-2 text-sm font-medium text-surface-700 dark:text-surface-200 cursor-pointer" @click="showAdvanced = !showAdvanced">
           <i :class="showAdvanced ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" class="text-xs" />
           Advanced: edit raw parameters
         </button>
       </div>
 
       <div v-if="showAdvanced" class="mt-4">
-      <h4 class="text-md font-semibold mb-1">FSRS Parameters</h4>
-      <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">21 comma-separated numbers that control FSRS scheduling. These are set automatically when you optimise, but you can also edit them manually.</p>
-      <Textarea v-model="parametersCsv" class="w-full" rows="3" placeholder="0.2172, 1.1771, 3.2602, ..." @update:modelValue="hasUserEdited = true" />
-      <div class="mt-2 text-sm text-surface-600 dark:text-surface-400">
-        Values: <b>{{ valueCount }}</b> / {{ expectedCount }}
-      </div>
-      <Message v-if="formError" key="fsrs-params-error" severity="error" :closable="false" class="mt-2">
-        {{ formError }}
-      </Message>
-      <Message v-else-if="isDefault" key="fsrs-params-default" severity="info" :closable="false" class="mt-2"> Using default FSRS settings. </Message>
-
-      <div v-if="parsedValues" class="mt-3">
-        <button class="text-sm text-primary cursor-pointer underline" @click="showBreakdown = !showBreakdown">
-          {{ showBreakdown ? 'Hide' : 'Show' }} parameter breakdown
-        </button>
-        <div v-if="showBreakdown" class="mt-2 rounded border border-surface-200 dark:border-surface-700 overflow-hidden">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="bg-surface-50 dark:bg-surface-800">
-                <th class="text-left px-3 py-2 font-medium">#</th>
-                <th class="text-left px-3 py-2 font-medium">Parameter</th>
-                <th class="text-right px-3 py-2 font-medium">Value</th>
-                <th class="text-right px-3 py-2 font-medium">Default</th>
-                <th class="text-left px-3 py-2 font-medium hidden md:table-cell">Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="(desc, i) in parameterDescriptions"
-                :key="i"
-                class="border-t border-surface-100 dark:border-surface-700"
-              >
-                <td class="px-3 py-1.5 text-surface-500 dark:text-surface-400 tabular-nums">{{ i }}</td>
-                <td class="px-3 py-1.5 font-medium">
-                  <span class="md:hidden">
-                    <Tooltip :content="desc.description">
-                      <span class="cursor-help">{{ desc.label }}</span>
-                    </Tooltip>
-                  </span>
-                  <span class="hidden md:inline">{{ desc.label }}</span>
-                </td>
-                <td class="px-3 py-1.5 text-right tabular-nums">
-                  {{ desc.decimals != null ? parsedValues![i].toFixed(desc.decimals) : parsedValues![i].toPrecision(4) }}
-                  <span v-if="desc.unit" class="text-surface-400 ml-0.5">{{ desc.unit }}</span>
-                </td>
-                <td class="px-3 py-1.5 text-right tabular-nums text-surface-400">
-                  {{ desc.decimals != null ? defaultParameters[i].toFixed(desc.decimals) : defaultParameters[i].toPrecision(4) }}
-                  <span v-if="desc.unit" class="ml-0.5">{{ desc.unit }}</span>
-                </td>
-                <td class="px-3 py-1.5 text-surface-500 dark:text-surface-400 hidden md:table-cell">{{ desc.description }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <h4 class="text-md font-semibold mb-1">FSRS Parameters</h4>
+        <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">
+          21 comma-separated numbers that control FSRS scheduling. These are set automatically when you optimise, but you can also edit them manually.
+        </p>
+        <Textarea v-model="parametersCsv" class="w-full" rows="3" placeholder="0.2172, 1.1771, 3.2602, ..." @update:model-value="hasUserEdited = true" />
+        <div class="mt-2 text-sm text-surface-600 dark:text-surface-400">
+          Values:
+          <b>{{ valueCount }}</b>
+          / {{ expectedCount }}
         </div>
-      </div>
+        <Message v-if="formError" key="fsrs-params-error" severity="error" :closable="false" class="mt-2">
+          {{ formError }}
+        </Message>
+        <Message v-else-if="isDefault" key="fsrs-params-default" severity="info" :closable="false" class="mt-2">Using default FSRS settings.</Message>
 
-      <div class="mt-4 flex flex-wrap gap-2">
-        <Button label="Save" :loading="isSaving" :disabled="!!formError || isLoading || isRecomputing || isResetting" @click="saveParameters" />
-        <Button label="Reload" severity="secondary" outlined :disabled="isLoading || isRecomputing || isResetting" @click="loadParameters(true)" />
-        <Button
-          label="Reset to default"
-          severity="secondary"
-          outlined
-          :loading="isResetting"
-          :disabled="isLoading || isRecomputing || isSaving"
-          @click="confirmResetParameters"
-        />
-      </div>
+        <div v-if="parsedValues" class="mt-3">
+          <button class="text-sm text-primary cursor-pointer underline" @click="showBreakdown = !showBreakdown">
+            {{ showBreakdown ? 'Hide' : 'Show' }} parameter breakdown
+          </button>
+          <div v-if="showBreakdown" class="mt-2 rounded border border-surface-200 dark:border-surface-700 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-surface-50 dark:bg-surface-800">
+                  <th class="text-left px-3 py-2 font-medium">#</th>
+                  <th class="text-left px-3 py-2 font-medium">Parameter</th>
+                  <th class="text-right px-3 py-2 font-medium">Value</th>
+                  <th class="text-right px-3 py-2 font-medium">Default</th>
+                  <th class="text-left px-3 py-2 font-medium hidden md:table-cell">Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(desc, i) in parameterDescriptions" :key="i" class="border-t border-surface-100 dark:border-surface-700">
+                  <td class="px-3 py-1.5 text-surface-500 dark:text-surface-400 tabular-nums">{{ i }}</td>
+                  <td class="px-3 py-1.5 font-medium">
+                    <span class="md:hidden">
+                      <Tooltip :content="desc.description">
+                        <span class="cursor-help">{{ desc.label }}</span>
+                      </Tooltip>
+                    </span>
+                    <span class="hidden md:inline">{{ desc.label }}</span>
+                  </td>
+                  <td class="px-3 py-1.5 text-right tabular-nums">
+                    {{ desc.decimals != null ? parsedValues![i].toFixed(desc.decimals) : parsedValues![i].toPrecision(4) }}
+                    <span v-if="desc.unit" class="text-surface-400 ml-0.5">{{ desc.unit }}</span>
+                  </td>
+                  <td class="px-3 py-1.5 text-right tabular-nums text-surface-400">
+                    {{ desc.decimals != null ? defaultParameters[i].toFixed(desc.decimals) : defaultParameters[i].toPrecision(4) }}
+                    <span v-if="desc.unit" class="ml-0.5">{{ desc.unit }}</span>
+                  </td>
+                  <td class="px-3 py-1.5 text-surface-500 dark:text-surface-400 hidden md:table-cell">{{ desc.description }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <Button label="Save" :loading="isSaving" :disabled="!!formError || isLoading || isRecomputing || isResetting" @click="saveParameters" />
+          <Button label="Reload" severity="secondary" outlined :disabled="isLoading || isRecomputing || isResetting" @click="loadParameters(true)" />
+          <Button
+            label="Reset to default"
+            severity="secondary"
+            outlined
+            :loading="isResetting"
+            :disabled="isLoading || isRecomputing || isSaving"
+            @click="confirmResetParameters"
+          />
+        </div>
       </div>
       <div class="mt-4">
         <h4 class="text-md font-semibold mb-1">Reschedule</h4>

@@ -5,7 +5,7 @@
   import { parseStringArray, toBooleanOrNull } from '~/utils/queryParams';
 
   definePageMeta({
-    validate: route => /^\d+$/.test(String(route.params.id)),
+    validate: (route) => /^\d+$/.test(String(route.params.id)),
   });
 
   const route = useRoute();
@@ -41,7 +41,7 @@
     router.replace({ query: { ...route.query, frequencySource: value || undefined, offset: undefined } });
   });
 
-  const sortOrder = computed(() => sortDescending.value ? SortOrder.Descending : SortOrder.Ascending);
+  const sortOrder = computed(() => (sortDescending.value ? SortOrder.Descending : SortOrder.Ascending));
 
   watch(sortDescending, () => {
     router.replace({
@@ -93,8 +93,8 @@
       sortOrder: sortOrder,
       ...displayQuery,
       search: debouncedSearch,
-      pos: computed(() => debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined),
-      excludePos: computed(() => debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined),
+      pos: computed(() => (debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined)),
+      excludePos: computed(() => (debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined)),
       hideKanaOnly: debouncedHideKanaOnly,
       frequencySource: computed(() => frequencySource.value || undefined),
       limit: limit,
@@ -123,7 +123,7 @@
   // Stream entries in over a few frames instead of mounting all ~100 at once.
   const { visibleItems: visibleWords } = useProgressiveList(
     computed(() => response.value?.data?.words ?? []),
-    { initial: 20, batch: 12, keyOf: (w) => `${w.wordId}-${w.mainReading.readingIndex}` },
+    { initial: 20, batch: 12, keyOf: (w) => `${w.wordId}-${w.mainReading.readingIndex}` }
   );
 
   const title = computed(() => {
@@ -150,17 +150,15 @@
       ],
     };
   });
-
 </script>
 
 <template>
   <div class="flex flex-col gap-2">
-    <DeckBreadcrumb
-      :deck="response?.data?.deck"
-      :parent-deck="response?.data?.parentDeck"
-      current="Vocabulary"
-    />
-    <h1 v-if="title" class="text-lg font-bold md:text-2xl">{{ title }}<span class="hidden md:inline"> - Vocabulary List</span></h1>
+    <DeckBreadcrumb :deck="response?.data?.deck" :parent-deck="response?.data?.parentDeck" current="Vocabulary" />
+    <h1 v-if="title" class="text-lg font-bold md:text-2xl">
+      {{ title }}
+      <span class="hidden md:inline">- Vocabulary List</span>
+    </h1>
     <VocabularyFilters
       v-model:sort-by="sortBy"
       v-model:sort-descending="sortDescending"
@@ -176,13 +174,46 @@
     >
       <FrequencySourceSelect v-if="sortBy === 'globalFreq'" v-model="frequencySource" input-id="deckVocabRankSource" />
     </VocabularyFilters>
-    <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="words" :page-size="pageSize" :page-size-options="[50, 100, 200]" mobile-compact />
-    <VocabularyList :words="visibleWords" :status="status" :error="error" :list-context="listContext" :rank-source-label="rankSourceLabel" empty-message="Try adjusting your search or filters">
+    <PaginationControls
+      v-if="response?.data?.words?.length"
+      :previous-link="previousLink"
+      :next-link="nextLink"
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      :page-link-for="pageLinkFor"
+      :start="start"
+      :end="end"
+      :total-items="totalItems"
+      item-label="words"
+      :page-size="pageSize"
+      :page-size-options="[50, 100, 200]"
+      mobile-compact
+    />
+    <VocabularyList
+      :words="visibleWords"
+      :status="status"
+      :error="error"
+      :list-context="listContext"
+      :rank-source-label="rankSourceLabel"
+      empty-message="Try adjusting your search or filters"
+    >
       <template #error="{ error: err }">
         <div>Error: {{ err }}</div>
       </template>
     </VocabularyList>
-    <PaginationControls v-if="response?.data?.words?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-navigate="true" />
+    <PaginationControls
+      v-if="response?.data?.words?.length"
+      :previous-link="previousLink"
+      :next-link="nextLink"
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      :page-link-for="pageLinkFor"
+      :start="start"
+      :end="end"
+      :total-items="totalItems"
+      :show-summary="false"
+      :scroll-to-top-on-navigate="true"
+    />
   </div>
 </template>
 

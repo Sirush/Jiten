@@ -111,8 +111,8 @@
       </Message>
 
       <Message v-if="source.pendingRevisionCount > 0" severity="warn" :closable="false" class="mb-4">
-        {{ source.pendingRevisionCount }} episode{{ source.pendingRevisionCount === 1 ? '' : 's' }} revised at the source. Rebuild the
-        subdeck holding them to pick the changes up.
+        {{ source.pendingRevisionCount }} episode{{ source.pendingRevisionCount === 1 ? '' : 's' }} revised at the source. Rebuild the subdeck holding them to
+        pick the changes up.
       </Message>
 
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">

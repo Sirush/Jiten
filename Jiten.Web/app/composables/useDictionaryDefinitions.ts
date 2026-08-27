@@ -18,7 +18,7 @@ function parseFurigana(furiganaText: string): { expression: string; reading: str
 
 export function useDictionaryDefinitions(
   furiganaText: Ref<string | undefined> | ComputedRef<string | undefined>,
-  jmDictDefinitions: Ref<Definition[] | undefined> | ComputedRef<Definition[] | undefined>,
+  jmDictDefinitions: Ref<Definition[] | undefined> | ComputedRef<Definition[] | undefined>
 ) {
   const { resolveDefinitions, hasCustomDictionaries, loadDictionaries, dictionaries } = useYomitanDictionary();
 
@@ -36,12 +36,14 @@ export function useDictionaryDefinitions(
     if (!hasCustomDictionaries.value) {
       const defs = unref(jmDictDefinitions);
       if (defs && defs.length > 0) {
-        return [{
-          dictionaryId: JMDICT_DICTIONARY_ID,
-          dictionaryName: 'Default',
-          isJmDict: true,
-          jmDictDefinitions: defs,
-        }];
+        return [
+          {
+            dictionaryId: JMDICT_DICTIONARY_ID,
+            dictionaryName: 'Default',
+            isJmDict: true,
+            jmDictDefinitions: defs,
+          },
+        ];
       }
       return [];
     }

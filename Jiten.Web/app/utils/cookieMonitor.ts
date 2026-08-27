@@ -22,7 +22,7 @@ export class CookieMonitor {
   private lastTokenValue: string | null = null;
   private lastRefreshTokenValue: string | null = null;
   private pollingInterval: number | null = null;
-  private onChangeCallback: ((tokens: { token: string | null, refreshToken: string | null }) => void) | null = null;
+  private onChangeCallback: ((tokens: { token: string | null; refreshToken: string | null }) => void) | null = null;
 
   constructor(private useBroadcastChannel: boolean) {
     if (!useBroadcastChannel) {
@@ -51,7 +51,7 @@ export class CookieMonitor {
     if (!document.hidden) {
       this.checkCookies();
     }
-  }
+  };
 
   private startPolling() {
     this.pollingInterval = window.setInterval(() => {
@@ -59,7 +59,7 @@ export class CookieMonitor {
     }, 5000);
   }
 
-  onChange(callback: (tokens: { token: string | null, refreshToken: string | null }) => void) {
+  onChange(callback: (tokens: { token: string | null; refreshToken: string | null }) => void) {
     this.onChangeCallback = callback;
     this.lastTokenValue = this.getCookie('token');
     this.lastRefreshTokenValue = this.getCookie('refreshToken');

@@ -1,209 +1,224 @@
 <script setup lang="ts">
-import type { WordSetDto, Word } from '~/types/types';
-import { WordSetStateType } from '~/types';
-import { autoLinkUrls } from '~/utils/autoLinkUrls';
-import { debounce } from 'perfect-debounce';
-import { parseStringArray, toBooleanOrNull } from '~/utils/queryParams';
-import { useSrsStore } from '~/stores/srsStore';
+  import type { WordSetDto, Word } from '~/types/types';
+  import { WordSetStateType } from '~/types';
+  import { autoLinkUrls } from '~/utils/autoLinkUrls';
+  import { debounce } from 'perfect-debounce';
+  import { parseStringArray, toBooleanOrNull } from '~/utils/queryParams';
+  import { useSrsStore } from '~/stores/srsStore';
 
-definePageMeta({
-  middleware: ['auth'],
-});
-
-const route = useRoute();
-const router = useRouter();
-const slug = route.params.slug as string;
-
-const { fetchSubscriptions, subscriptions, subscribe, unsubscribe, isSubscribed, getSubscriptionState } = useWordSets();
-const authStore = useAuthStore();
-const toast = useToast();
-
-const subscribingSetId = ref<number | null>(null);
-const selectedState = ref<WordSetStateType>(WordSetStateType.Blacklisted);
-
-const stateOptions = [
-  { label: 'Blacklist', value: WordSetStateType.Blacklisted },
-  { label: 'Mark as Mastered', value: WordSetStateType.Mastered },
-];
-
-const srsStore = useSrsStore();
-srsStore.fetchSettings();
-
-// Row ranks follow the account default frequency source, so the labels must name it.
-const rankSourceLabel = computed(() => {
-  const settings = srsStore.studySettings;
-  if (settings?.defaultFrequencyMediaType) return getMediaTypeText(settings.defaultFrequencyMediaType);
-  if (settings?.defaultFrequencyListId) return 'your list';
-  return undefined;
-});
-
-const sortByOptions = computed(() => [
-  { label: 'Position', value: 'position' },
-  { label: 'Global Frequency', value: 'globalFreq' },
-]);
-
-const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
-const limit = computed(() => (route.query.limit ? Number(route.query.limit) : undefined));
-const sortDescending = ref(route.query.sortOrder === '1');
-const sortBy = ref(route.query.sortBy?.toString() || 'position');
-const { tiers: displayTiers, suspended, redundant, displayFilter, suspendedParam, redundantParam, query: displayQuery } = useVocabularyDisplayFilter();
-const search = ref(route.query.search?.toString() || '');
-const debouncedSearch = ref(search.value);
-
-const includePos = ref<string[]>(parseStringArray(route.query.pos));
-const excludePos = ref<string[]>(parseStringArray(route.query.excludePos));
-const hideKanaOnly = ref(toBooleanOrNull(route.query.hideKanaOnly) ?? false);
-
-watch(sortDescending, (newValue) => {
-  router.replace({
-    query: { ...route.query, sortOrder: newValue ? '1' : '0', offset: 0 },
+  definePageMeta({
+    middleware: ['auth'],
   });
-});
 
-watch(sortBy, (newValue) => {
-  router.replace({
-    query: { ...route.query, sortBy: newValue, offset: 0 },
+  const route = useRoute();
+  const router = useRouter();
+  const slug = route.params.slug as string;
+
+  const { fetchSubscriptions, subscriptions, subscribe, unsubscribe, isSubscribed, getSubscriptionState } = useWordSets();
+  const authStore = useAuthStore();
+  const toast = useToast();
+
+  const subscribingSetId = ref<number | null>(null);
+  const selectedState = ref<WordSetStateType>(WordSetStateType.Blacklisted);
+
+  const stateOptions = [
+    { label: 'Blacklist', value: WordSetStateType.Blacklisted },
+    { label: 'Mark as Mastered', value: WordSetStateType.Mastered },
+  ];
+
+  const srsStore = useSrsStore();
+  srsStore.fetchSettings();
+
+  // Row ranks follow the account default frequency source, so the labels must name it.
+  const rankSourceLabel = computed(() => {
+    const settings = srsStore.studySettings;
+    if (settings?.defaultFrequencyMediaType) return getMediaTypeText(settings.defaultFrequencyMediaType);
+    if (settings?.defaultFrequencyListId) return 'your list';
+    return undefined;
   });
-});
 
-const updateSearch = debounce((val: string) => {
-  debouncedSearch.value = val;
-  router.replace({ query: { ...route.query, search: val || undefined, offset: undefined } });
-}, 300);
-watch(search, updateSearch);
+  const sortByOptions = computed(() => [
+    { label: 'Position', value: 'position' },
+    { label: 'Global Frequency', value: 'globalFreq' },
+  ]);
 
-const debouncedIncludePos = ref([...includePos.value]);
-const debouncedExcludePos = ref([...excludePos.value]);
-const debouncedHideKanaOnly = ref(hideKanaOnly.value);
+  const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
+  const limit = computed(() => (route.query.limit ? Number(route.query.limit) : undefined));
+  const sortDescending = ref(route.query.sortOrder === '1');
+  const sortBy = ref(route.query.sortBy?.toString() || 'position');
+  const { tiers: displayTiers, suspended, redundant, displayFilter, suspendedParam, redundantParam, query: displayQuery } = useVocabularyDisplayFilter();
+  const search = ref(route.query.search?.toString() || '');
+  const debouncedSearch = ref(search.value);
 
-const updateAdvancedFilters = debounce(() => {
-  debouncedIncludePos.value = [...includePos.value];
-  debouncedExcludePos.value = [...excludePos.value];
-  debouncedHideKanaOnly.value = hideKanaOnly.value;
-  router.replace({
+  const includePos = ref<string[]>(parseStringArray(route.query.pos));
+  const excludePos = ref<string[]>(parseStringArray(route.query.excludePos));
+  const hideKanaOnly = ref(toBooleanOrNull(route.query.hideKanaOnly) ?? false);
+
+  watch(sortDescending, (newValue) => {
+    router.replace({
+      query: { ...route.query, sortOrder: newValue ? '1' : '0', offset: 0 },
+    });
+  });
+
+  watch(sortBy, (newValue) => {
+    router.replace({
+      query: { ...route.query, sortBy: newValue, offset: 0 },
+    });
+  });
+
+  const updateSearch = debounce((val: string) => {
+    debouncedSearch.value = val;
+    router.replace({ query: { ...route.query, search: val || undefined, offset: undefined } });
+  }, 300);
+  watch(search, updateSearch);
+
+  const debouncedIncludePos = ref([...includePos.value]);
+  const debouncedExcludePos = ref([...excludePos.value]);
+  const debouncedHideKanaOnly = ref(hideKanaOnly.value);
+
+  const updateAdvancedFilters = debounce(() => {
+    debouncedIncludePos.value = [...includePos.value];
+    debouncedExcludePos.value = [...excludePos.value];
+    debouncedHideKanaOnly.value = hideKanaOnly.value;
+    router.replace({
+      query: {
+        ...route.query,
+        pos: includePos.value.length > 0 ? includePos.value.join(',') : undefined,
+        excludePos: excludePos.value.length > 0 ? excludePos.value.join(',') : undefined,
+        hideKanaOnly: hideKanaOnly.value ? 'true' : undefined,
+        offset: 0,
+      },
+    });
+  }, 500);
+
+  watch([includePos, excludePos, hideKanaOnly], updateAdvancedFilters, { deep: true });
+
+  const { data: wordSet, status: wordSetStatus, error: wordSetError } = await useApiFetch<WordSetDto>(`word-sets/${slug}`);
+
+  const {
+    data: response,
+    status: vocabStatus,
+    error: vocabError,
+  } = await useApiFetchPaginated<Word[]>(`word-sets/${slug}/vocabulary`, {
     query: {
-      ...route.query,
-      pos: includePos.value.length > 0 ? includePos.value.join(',') : undefined,
-      excludePos: excludePos.value.length > 0 ? excludePos.value.join(',') : undefined,
-      hideKanaOnly: hideKanaOnly.value ? 'true' : undefined,
-      offset: 0,
+      offset: offset,
+      sortBy: sortBy,
+      sortOrder: computed(() => (sortDescending.value ? 1 : 0)),
+      ...displayQuery,
+      search: debouncedSearch,
+      pos: computed(() => (debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined)),
+      excludePos: computed(() => (debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined)),
+      hideKanaOnly: debouncedHideKanaOnly,
+      limit: limit,
     },
+    watch: [
+      offset,
+      sortBy,
+      sortDescending,
+      displayFilter,
+      suspendedParam,
+      redundantParam,
+      debouncedSearch,
+      debouncedIncludePos,
+      debouncedExcludePos,
+      debouncedHideKanaOnly,
+      limit,
+    ],
   });
-}, 500);
 
-watch([includePos, excludePos, hideKanaOnly], updateAdvancedFilters, { deep: true });
+  const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor, pageSize } = usePagination(response);
 
-const { data: wordSet, status: wordSetStatus, error: wordSetError } = await useApiFetch<WordSetDto>(`word-sets/${slug}`);
+  const listContext = computed(() => ({
+    label: wordSet.value?.name ?? 'Word set',
+    sortLabel: sortByOptions.value.find((o) => o.value === sortBy.value)?.label,
+    sortDescending: sortDescending.value,
+    offset: offset.value,
+    totalItems: totalItems.value,
+    pageSize: pageSize.value,
+  }));
 
-const {
-  data: response,
-  status: vocabStatus,
-  error: vocabError,
-} = await useApiFetchPaginated<Word[]>(`word-sets/${slug}/vocabulary`, {
-  query: {
-    offset: offset,
-    sortBy: sortBy,
-    sortOrder: computed(() => sortDescending.value ? 1 : 0),
-    ...displayQuery,
-    search: debouncedSearch,
-    pos: computed(() => debouncedIncludePos.value.length > 0 ? debouncedIncludePos.value.join(',') : undefined),
-    excludePos: computed(() => debouncedExcludePos.value.length > 0 ? debouncedExcludePos.value.join(',') : undefined),
-    hideKanaOnly: debouncedHideKanaOnly,
-    limit: limit,
-  },
-  watch: [offset, sortBy, sortDescending, displayFilter, suspendedParam, redundantParam, debouncedSearch, debouncedIncludePos, debouncedExcludePos, debouncedHideKanaOnly, limit],
-});
+  async function handleSubscribe(state: WordSetStateType) {
+    if (!authStore.isAuthenticated) {
+      navigateTo('/login');
+      return;
+    }
 
-const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor, pageSize } = usePagination(response);
+    if (!wordSet.value) return;
 
-const listContext = computed(() => ({
-  label: wordSet.value?.name ?? 'Word set',
-  sortLabel: sortByOptions.value.find((o) => o.value === sortBy.value)?.label,
-  sortDescending: sortDescending.value,
-  offset: offset.value,
-  totalItems: totalItems.value,
-  pageSize: pageSize.value,
-}));
+    subscribingSetId.value = wordSet.value.setId;
+    const success = await subscribe(wordSet.value.setId, state);
+    subscribingSetId.value = null;
 
-async function handleSubscribe(state: WordSetStateType) {
-  if (!authStore.isAuthenticated) {
-    navigateTo('/login');
-    return;
+    if (success) {
+      await fetchSubscriptions();
+      const stateLabel = state === WordSetStateType.Blacklisted ? 'blacklisted' : 'mastered';
+      toast.add({
+        severity: 'success',
+        summary: 'Subscribed',
+        detail: `${wordSet.value.name} words marked as ${stateLabel}`,
+        life: 3000,
+      });
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to subscribe to word set',
+        life: 5000,
+      });
+    }
   }
 
-  if (!wordSet.value) return;
+  async function handleUnsubscribe() {
+    if (!wordSet.value) return;
 
-  subscribingSetId.value = wordSet.value.setId;
-  const success = await subscribe(wordSet.value.setId, state);
-  subscribingSetId.value = null;
+    subscribingSetId.value = wordSet.value.setId;
+    const success = await unsubscribe(wordSet.value.setId);
+    subscribingSetId.value = null;
 
-  if (success) {
-    await fetchSubscriptions();
-    const stateLabel = state === WordSetStateType.Blacklisted ? 'blacklisted' : 'mastered';
-    toast.add({
-      severity: 'success',
-      summary: 'Subscribed',
-      detail: `${wordSet.value.name} words marked as ${stateLabel}`,
-      life: 3000,
-    });
-  } else {
-    toast.add({
-      severity: 'error',
-      summary: 'Error',
-      detail: 'Failed to subscribe to word set',
-      life: 5000,
-    });
+    if (success) {
+      await fetchSubscriptions();
+      toast.add({
+        severity: 'success',
+        summary: 'Unsubscribed',
+        detail: `Removed ${wordSet.value.name} subscription`,
+        life: 3000,
+      });
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to unsubscribe from word set',
+        life: 5000,
+      });
+    }
   }
-}
 
-async function handleUnsubscribe() {
-  if (!wordSet.value) return;
-
-  subscribingSetId.value = wordSet.value.setId;
-  const success = await unsubscribe(wordSet.value.setId);
-  subscribingSetId.value = null;
-
-  if (success) {
-    await fetchSubscriptions();
-    toast.add({
-      severity: 'success',
-      summary: 'Unsubscribed',
-      detail: `Removed ${wordSet.value.name} subscription`,
-      life: 3000,
-    });
-  } else {
-    toast.add({
-      severity: 'error',
-      summary: 'Error',
-      detail: 'Failed to unsubscribe from word set',
-      life: 5000,
-    });
+  function getStateLabel(state: WordSetStateType): string {
+    return state === WordSetStateType.Blacklisted ? 'Blacklisted' : 'Mastered';
   }
-}
 
-function getStateLabel(state: WordSetStateType): string {
-  return state === WordSetStateType.Blacklisted ? 'Blacklisted' : 'Mastered';
-}
-
-function getStateSeverity(state: WordSetStateType): string {
-  return state === WordSetStateType.Blacklisted ? 'secondary' : 'success';
-}
-
-useHead(() => ({
-  title: wordSet.value ? `${wordSet.value.name} - Word Sets - Jiten` : 'Word Set - Jiten',
-}));
-
-onMounted(async () => {
-  if (authStore.isAuthenticated) {
-    await fetchSubscriptions();
+  function getStateSeverity(state: WordSetStateType): string {
+    return state === WordSetStateType.Blacklisted ? 'secondary' : 'success';
   }
-});
 
-watch(() => authStore.isAuthenticated, (isAuth) => {
-  if (isAuth) {
-    fetchSubscriptions();
-  }
-});
+  useHead(() => ({
+    title: wordSet.value ? `${wordSet.value.name} - Word Sets - Jiten` : 'Word Set - Jiten',
+  }));
+
+  onMounted(async () => {
+    if (authStore.isAuthenticated) {
+      await fetchSubscriptions();
+    }
+  });
+
+  watch(
+    () => authStore.isAuthenticated,
+    (isAuth) => {
+      if (isAuth) {
+        fetchSubscriptions();
+      }
+    }
+  );
 </script>
 
 <template>
@@ -238,30 +253,14 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
           </div>
         </template>
         <template #subtitle>
-          <span class="text-muted-color">
-            {{ wordSet.wordCount.toLocaleString() }} words &middot; {{ wordSet.formCount.toLocaleString() }} forms
-          </span>
+          <span class="text-muted-color">{{ wordSet.wordCount.toLocaleString() }} words &middot; {{ wordSet.formCount.toLocaleString() }} forms</span>
         </template>
         <template #content>
-          <p
-            v-if="wordSet.description"
-            class="text-sm mb-4"
-            v-html="sanitiseHtml(autoLinkUrls(wordSet.description))"
-          />
+          <p v-if="wordSet.description" class="text-sm mb-4" v-html="sanitiseHtml(autoLinkUrls(wordSet.description))" />
           <div class="flex gap-2 flex-wrap">
             <template v-if="!isSubscribed(wordSet.setId)">
-              <Select
-                v-model="selectedState"
-                :options="stateOptions"
-                optionLabel="label"
-                optionValue="value"
-              />
-              <Button
-                label="Subscribe"
-                icon="pi pi-plus"
-                :loading="subscribingSetId === wordSet.setId"
-                @click="handleSubscribe(selectedState)"
-              />
+              <Select v-model="selectedState" :options="stateOptions" option-label="label" option-value="value" />
+              <Button label="Subscribe" icon="pi pi-plus" :loading="subscribingSetId === wordSet.setId" @click="handleSubscribe(selectedState)" />
             </template>
             <template v-else>
               <Button
@@ -293,7 +292,20 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
           :show-display-filter="authStore.isAuthenticated"
         />
 
-        <PaginationControls :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="words" :page-size="pageSize" :page-size-options="[25, 50, 100]" mobile-compact />
+        <PaginationControls
+          :previous-link="previousLink"
+          :next-link="nextLink"
+          :current-page="currentPage"
+          :total-pages="totalPages"
+          :page-link-for="pageLinkFor"
+          :start="start"
+          :end="end"
+          :total-items="totalItems"
+          item-label="words"
+          :page-size="pageSize"
+          :page-size-options="[25, 50, 100]"
+          mobile-compact
+        />
 
         <VocabularyList
           :words="response?.data ?? []"
@@ -303,7 +315,18 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
           :rank-source-label="rankSourceLabel"
         />
 
-        <PaginationControls :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-navigate="true" />
+        <PaginationControls
+          :previous-link="previousLink"
+          :next-link="nextLink"
+          :current-page="currentPage"
+          :total-pages="totalPages"
+          :page-link-for="pageLinkFor"
+          :start="start"
+          :end="end"
+          :total-items="totalItems"
+          :show-summary="false"
+          :scroll-to-top-on-navigate="true"
+        />
       </div>
     </template>
   </div>

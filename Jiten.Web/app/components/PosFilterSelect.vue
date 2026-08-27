@@ -87,11 +87,7 @@
             :input-id="`pos-cat-${cat.key}`"
             @update:model-value="toggleCategory(cat)"
           />
-          <button
-            type="button"
-            class="flex flex-1 items-center justify-between min-w-0 cursor-pointer text-left"
-            @click="toggleExpand(cat.key)"
-          >
+          <button type="button" class="flex flex-1 items-center justify-between min-w-0 cursor-pointer text-left" @click="toggleExpand(cat.key)">
             <span class="text-sm font-medium truncate">
               {{ cat.label }}
               <span class="text-gray-400 font-normal">({{ cat.tags.length }})</span>
@@ -100,11 +96,7 @@
               <span v-if="categorySelectedCount(cat.key) > 0" class="text-xs text-purple-600 dark:text-purple-400">
                 {{ categorySelectedCount(cat.key) }}
               </span>
-              <Icon
-                :name="expanded[cat.key] ? 'material-symbols:expand-less' : 'material-symbols:expand-more'"
-                size="1.25em"
-                class="text-gray-400"
-              />
+              <Icon :name="expanded[cat.key] ? 'material-symbols:expand-less' : 'material-symbols:expand-more'" size="1.25em" class="text-gray-400" />
             </span>
           </button>
         </div>
@@ -117,9 +109,7 @@
         </div>
       </div>
 
-      <p v-if="filteredCategories.length === 0" class="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-        No tags match "{{ searchQuery }}"
-      </p>
+      <p v-if="filteredCategories.length === 0" class="py-4 text-center text-sm text-gray-500 dark:text-gray-400">No tags match "{{ searchQuery }}"</p>
     </div>
   </div>
 </template>

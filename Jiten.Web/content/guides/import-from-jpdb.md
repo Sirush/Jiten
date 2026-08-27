@@ -1,8 +1,8 @@
 ---
 title: Migrate from JPDB to Jiten
-seoTitle: "Export JPDB to Anki or Jiten: Migration Guide"
+seoTitle: 'Export JPDB to Anki or Jiten: Migration Guide'
 summary: Bring your JPDB words and review history across so coverage and decks reflect your real level from day one.
-category: "Coming from another app?"
+category: 'Coming from another app?'
 level: beginner
 order: 30
 icon: material-symbols-light:move-item

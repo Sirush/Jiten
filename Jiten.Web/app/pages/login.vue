@@ -130,7 +130,7 @@
         </div>
         <div>
           <NuxtLink :to="{ path: '/register', query: getSafeRedirect() ? { redirect: getSafeRedirect() } : {} }">Create an account</NuxtLink>
-          <span> · </span>
+          <span>·</span>
           <NuxtLink to="/forgot-password">Forgot password?</NuxtLink>
         </div>
       </form>
@@ -142,7 +142,7 @@
         <div v-else class="flex flex-col gap-2">
           <p class="resend-hint">Enter the address you registered with and we'll send a new confirmation link.</p>
           <InputText v-model="resendEmail" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email address" />
-          <component v-if="RecaptchaCheckboxComponent" :is="RecaptchaCheckboxComponent" v-model="recaptchaResponse" class="my-2" />
+          <component :is="RecaptchaCheckboxComponent" v-if="RecaptchaCheckboxComponent" v-model="recaptchaResponse" class="my-2" />
           <div class="flex">
             <Button type="button" severity="secondary" :disabled="resendLoading || !resendEmailValid" @click="resendConfirmation">
               {{ resendLoading ? 'Sending...' : 'Resend confirmation email' }}
@@ -152,7 +152,8 @@
             <p class="info-message text-green-700 dark:text-green-400">{{ resendMessage }}</p>
             <p class="resend-hint text-gray-600 dark:text-gray-400">
               Nothing after a few minutes? The address on your account may have a typo, which looks identical to success here. Email
-              <a href="mailto:contact@jiten.moe">contact@jiten.moe</a> from the address you meant to use and ask for manual confirmation.
+              <a href="mailto:contact@jiten.moe">contact@jiten.moe</a>
+              from the address you meant to use and ask for manual confirmation.
             </p>
           </template>
         </div>

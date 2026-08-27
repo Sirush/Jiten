@@ -186,11 +186,7 @@
         </template>
         <template #content>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div
-              v-for="issue in issueTypes"
-              :key="issue.id"
-              class="border rounded-lg p-4 hover:shadow-md transition-shadow"
-            >
+            <div v-for="issue in issueTypes" :key="issue.id" class="border rounded-lg p-4 hover:shadow-md transition-shadow">
               <div class="flex justify-between items-center mb-2">
                 <h3 class="font-bold text-lg">{{ issue.name }}</h3>
                 <Tag :class="getSeverityClass(issue.severity)">{{ issue.count }}</Tag>
@@ -225,11 +221,7 @@
         <div v-else class="max-h-[70vh] overflow-y-auto">
           <h3 class="text-lg font-semibold mb-4">Media Items with Issues:</h3>
           <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            <div
-              v-for="id in selectedIssueIds"
-              :key="id"
-              class="border rounded-lg p-3 hover:shadow-md transition-shadow"
-            >
+            <div v-for="id in selectedIssueIds" :key="id" class="border rounded-lg p-3 hover:shadow-md transition-shadow">
               <NuxtLink
                 :to="`/dashboard/media/${id}`"
                 class="flex items-center justify-center w-full p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"

@@ -44,19 +44,11 @@
         autocapitalize="characters"
         @keydown.enter="redeem"
       />
-      <Button
-        label="Redeem"
-        icon="pi pi-gift"
-        :loading="submitting"
-        :disabled="!code.trim() || submitting"
-        class="w-full sm:w-auto"
-        @click="redeem"
-      />
+      <Button label="Redeem" icon="pi pi-gift" :loading="submitting" :disabled="!code.trim() || submitting" class="w-full sm:w-auto" @click="redeem" />
     </div>
 
     <Message v-if="success" severity="success" :closable="false" class="mt-3">
-      Code redeemed! You now have Jiten+ {{ success.tier === 'full' ? 'Full' : 'Trial' }} for {{ success.days }}
-      day{{ success.days === 1 ? '' : 's' }}.
+      Code redeemed! You now have Jiten+ {{ success.tier === 'full' ? 'Full' : 'Trial' }} for {{ success.days }} day{{ success.days === 1 ? '' : 's' }}.
     </Message>
     <Message v-if="errorMessage" severity="error" :closable="false" class="mt-3">
       {{ errorMessage }}

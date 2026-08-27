@@ -13,13 +13,13 @@ There are a lot of good tools for learning Japanese, and Jiten is built to work 
 
 ## Built around real media
 
-Jiten starts from the things you actually want to read and watch. Anime,  novels, manga, visual novels, video games, and more, each analysed and turned into a vocabulary list along with stats. New titles are added constantly. You can see the latest additions on the [media updates page](/media-updates).
+Jiten starts from the things you actually want to read and watch. Anime, novels, manga, visual novels, video games, and more, each analysed and turned into a vocabulary list along with stats. New titles are added constantly. You can see the latest additions on the [media updates page](/media-updates).
 
-Instead of working through an abstract "core6k" deck, you study the words of *this* show or *this* novel, and learn the words you'll actually meet.
+Instead of working through an abstract "core6k" deck, you study the words of _this_ show or _this_ novel, and learn the words you'll actually meet.
 
 ## Coverage you can trust
 
-The most useful number on the site is **coverage**: the share of a title's words you already know. It is worked out against your own knowledge, so you can open any media in the library and see how comfortable it will be *for you* before committing several hours to it. Knowing when you're ready for it is one of the hardest part of immersion learning, and coverage makes this question easier to solve. [Choosing media at your level](/guides/choosing-media-at-your-level) covers strategies to find appropriate media for you.
+The most useful number on the site is **coverage**: the share of a title's words you already know. It is worked out against your own knowledge, so you can open any media in the library and see how comfortable it will be _for you_ before committing several hours to it. Knowing when you're ready for it is one of the hardest part of immersion learning, and coverage makes this question easier to solve. [Choosing media at your level](/guides/choosing-media-at-your-level) covers strategies to find appropriate media for you.
 
 ## Difficulty you can compare
 

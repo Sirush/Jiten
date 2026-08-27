@@ -57,7 +57,7 @@ export enum Genre {
   Sports = 15,
   Supernatural = 16,
   Thriller = 17,
-  AdultOnly = 18
+  AdultOnly = 18,
 }
 
 export enum ReadingType {
@@ -122,13 +122,13 @@ export enum KnownState {
   Due = 4,
   Mastered = 5,
   Redundant = 6,
-  Suspended = 7
+  Suspended = 7,
 }
 
 export enum DifficultyDisplayStyle {
   Name = 0,
   NameAndValue = 1,
-  Value = 2
+  Value = 2,
 }
 
 export enum DifficultyValueDisplayStyle {
@@ -193,7 +193,7 @@ export enum DeckRelationshipType {
   HasFandisc = 102,
   HasSpinoff = 103,
   HasSideStory = 104,
-  SourceMaterial = 105
+  SourceMaterial = 105,
 }
 
 export enum WordSetStateType {
@@ -250,9 +250,7 @@ const nonFictionTypes = new Set([MediaType.NonFiction]);
 const allTextTypes = new Set([...proseTypes, ...visualTextTypes, ...nonFictionTypes]);
 
 export function areComparable(a: MediaType, b: MediaType): boolean {
-  if ((allTextTypes.has(a) && audioVisualTypes.has(b)) ||
-      (audioVisualTypes.has(a) && allTextTypes.has(b)))
-    return false;
+  if ((allTextTypes.has(a) && audioVisualTypes.has(b)) || (audioVisualTypes.has(a) && allTextTypes.has(b))) return false;
   return true;
 }
 
@@ -261,5 +259,5 @@ export enum ComparisonOutcome {
   Easier = -1,
   Same = 0,
   Harder = 1,
-  MuchHarder = 2
+  MuchHarder = 2,
 }

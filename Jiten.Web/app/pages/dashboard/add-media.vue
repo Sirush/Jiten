@@ -287,8 +287,7 @@
 
       if (filled.length) showToast('success', 'Pasted from Amazon', `Filled ${filled.join(' and ')}.`);
       else showToast('warn', 'Pasted from Amazon', 'The copied data was empty.');
-    } catch {
-    }
+    } catch {}
   }
 
   onMounted(() => window.addEventListener('paste', handleAmazonPaste));
@@ -604,8 +603,9 @@
                       target="_blank"
                       rel="noopener noreferrer"
                       class="text-sm text-primary underline"
-                      >{{ getLinkLabel(link) }}</a
                     >
+                      {{ getLinkLabel(link) }}
+                    </a>
                   </div>
                 </div>
                 <div class="mb-4">

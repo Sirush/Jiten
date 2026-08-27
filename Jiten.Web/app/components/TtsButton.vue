@@ -1,13 +1,16 @@
 <script setup lang="ts">
-  const props = withDefaults(defineProps<{
-    text?: string;
-    wordId?: number;
-    readingIndex?: number;
-    sentenceId?: number;
-    customSentenceId?: number;
-    size?: 'sm' | 'md' | 'lg';
-    type?: TtsType;
-  }>(), { size: 'sm', type: 'word' });
+  const props = withDefaults(
+    defineProps<{
+      text?: string;
+      wordId?: number;
+      readingIndex?: number;
+      sentenceId?: number;
+      customSentenceId?: number;
+      size?: 'sm' | 'md' | 'lg';
+      type?: TtsType;
+    }>(),
+    { size: 'sm', type: 'word' }
+  );
 
   const iconSizeClass = computed(() => (props.size === 'sm' ? 'text-sm' : props.size === 'lg' ? '!text-3xl' : 'text-base'));
 

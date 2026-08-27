@@ -294,8 +294,8 @@
       </h2>
       <div class="text-sm text-surface-500 dark:text-surface-400 mb-4">
         Jimaku ID {{ currentId }}
-        <span v-if="jimakuData.entry.japanese_name"> · {{ jimakuData.entry.japanese_name }}</span>
-        <span v-if="jimakuData.entry.english_name"> · {{ jimakuData.entry.english_name }}</span>
+        <span v-if="jimakuData.entry.japanese_name">· {{ jimakuData.entry.japanese_name }}</span>
+        <span v-if="jimakuData.entry.english_name">· {{ jimakuData.entry.english_name }}</span>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
@@ -330,7 +330,7 @@
           :disabled="selectedCount < 2"
           @click="sortByDetectedNumber"
         />
-        <span class="ml-auto text-sm text-surface-600 dark:text-surface-300 font-medium"> {{ selectedCount }} / {{ files.length }} selected </span>
+        <span class="ml-auto text-sm text-surface-600 dark:text-surface-300 font-medium">{{ selectedCount }} / {{ files.length }} selected</span>
       </div>
 
       <div
@@ -434,7 +434,8 @@
                   "
                   @click.stop="startTitleEdit(file)"
                 >
-                  <i :class="!file.title && detectedTitles.has(file.url) ? 'pi pi-sparkles' : 'pi pi-tag'" class="text-[10px] mr-1" />{{ effectiveTitle(file) }}
+                  <i :class="!file.title && detectedTitles.has(file.url) ? 'pi pi-sparkles' : 'pi pi-tag'" class="text-[10px] mr-1" />
+                  {{ effectiveTitle(file) }}
                 </button>
               </template>
 

@@ -52,9 +52,9 @@
     confirm.require({
       header: 'Rebuild activity history',
       message:
-      'Recalculates your heatmap, streaks and activity totals from your existing reviews. ' +
-      'Your reviews and cards are untouched, but the recalculated days will be under your current study timezone, ' +
-      'so they can look different from your historical stats if you\'ve changed timezone in-between.',
+        'Recalculates your heatmap, streaks and activity totals from your existing reviews. ' +
+        'Your reviews and cards are untouched, but the recalculated days will be under your current study timezone, ' +
+        "so they can look different from your historical stats if you've changed timezone in-between.",
       icon: 'pi pi-exclamation-triangle',
       acceptLabel: 'Rebuild',
       rejectLabel: 'Cancel',
@@ -149,8 +149,8 @@
       <Message severity="warn" :closable="false" class="mb-4">
         <div class="flex flex-col sm:flex-row sm:items-center gap-3">
           <span class="flex-1">
-            Every button leads to irreversible changes. Before you press any of them, export a complete backup and keep it somewhere safe. It
-            is the only way to get your vocabulary back if the result is not what you expected. Use them at your own risk.
+            Every button leads to irreversible changes. Before you press any of them, export a complete backup and keep it somewhere safe. It is the only way to
+            get your vocabulary back if the result is not what you expected. Use them at your own risk.
           </span>
           <Button
             label="Export a full backup"
@@ -164,8 +164,9 @@
       </Message>
 
       <p class="mb-3">
-        Clicking this button will <b>delete ALL your known words</b>. This action cannot be undone, and unlike removing individual cards, nothing is kept under
-        Recently Removed.
+        Clicking this button will
+        <b>delete ALL your known words</b>
+        . This action cannot be undone, and unlike removing individual cards, nothing is kept under Recently Removed.
       </p>
       <div class="flex">
         <Button severity="danger" icon="pi pi-trash" label="Clear All Known Words" @click="clearKnownWords" />
@@ -175,8 +176,9 @@
 
       <p class="mb-3">
         Recalculates your heatmap, streaks and activity totals from your existing reviews. Use it if a day or a streak looks wrong. Your reviews and cards are
-        untouched, but the recalculated days will be under your <b>current</b> study timezone, so they can look different from your historical stats if you've
-        changed timezone in-between.
+        untouched, but the recalculated days will be under your
+        <b>current</b>
+        study timezone, so they can look different from your historical stats if you've changed timezone in-between.
       </p>
       <div class="flex">
         <Button severity="danger" outlined icon="pi pi-refresh" label="Rebuild Activity History" :loading="rebuildBusy" @click="confirmRebuildActivity" />
@@ -185,10 +187,11 @@
       <Divider />
 
       <p class="mb-3">
-        Deletes <b>all of your reviews</b> in a selected period of time, including the ones in your history (Recently Removed). They disappear from your
-        heatmap, streaks and retention. Cards that keep part of their history are rescheduled from what is left; cards left with no review at all are removed,
-        since a card without history is a word you have never studied. Words you marked as known, blacklisted or suspended are not affected. This cannot be
-        undone.
+        Deletes
+        <b>all of your reviews</b>
+        in a selected period of time, including the ones in your history (Recently Removed). They disappear from your heatmap, streaks and retention. Cards that
+        keep part of their history are rescheduled from what is left; cards left with no review at all are removed, since a card without history is a word you
+        have never studied. Words you marked as known, blacklisted or suspended are not affected. This cannot be undone.
       </p>
       <div class="flex">
         <Button severity="danger" outlined icon="pi pi-calendar-times" label="Erase Review History" @click="showPurgeDialog = true" />

@@ -6,5 +6,7 @@ export default withNuxt({
     '@typescript-eslint/no-unused-vars': 'off',
     'vue/no-v-text-v-html-on-component': 'off',
     'vue/no-v-html': 'off',
+    'vue/html-self-closing': ['warn', { html: { void: 'always', normal: 'always', component: 'always' } }],
+    'vue/no-deprecated-filter': 'off',
   },
 });

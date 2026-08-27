@@ -227,13 +227,14 @@ export const useAuthStore = defineStore('auth', () => {
     // Notify other tabs that we're starting refresh
     tabSyncManager?.broadcast('TOKEN_REFRESH_STARTED', {
       tabId: tabSyncManager.tabId,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
-    const postRefresh = (access: string | null, refresh: string) => $api<TokenResponse>('/auth/refresh', {
-      method: 'POST',
-      body: { accessToken: access, refreshToken: refresh },
-    });
+    const postRefresh = (access: string | null, refresh: string) =>
+      $api<TokenResponse>('/auth/refresh', {
+        method: 'POST',
+        body: { accessToken: access, refreshToken: refresh },
+      });
 
     try {
       dbg('Attempting to refresh token...');
@@ -245,9 +246,7 @@ export const useAuthStore = defineStore('auth', () => {
         // so retry with what it holds before treating the rejection as a dead session.
         const firstStatus = firstErr?.status ?? firstErr?.statusCode ?? firstErr?.response?.status;
         const cookies = liveCookieTokens();
-        const superseded = [400, 401, 403].includes(firstStatus)
-                           && !!cookies.refreshToken
-                           && cookies.refreshToken !== refreshToken.value;
+        const superseded = [400, 401, 403].includes(firstStatus) && !!cookies.refreshToken && cookies.refreshToken !== refreshToken.value;
         if (!superseded) throw firstErr;
 
         dbg('Refresh rejected with a superseded token, retrying with the cookie pair...');
@@ -261,7 +260,7 @@ export const useAuthStore = defineStore('auth', () => {
         tabSyncManager?.broadcast('TOKEN_REFRESHED', {
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
 
         dbg('Token refreshed successfully');
@@ -291,7 +290,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (isAuthRejection) {
         // Only tell other tabs to drop their session on a real rejection.
         tabSyncManager?.broadcast('TOKEN_REFRESH_FAILED', {
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
         clearAuthData();
       }
@@ -529,6 +528,6 @@ export const useAuthStore = defineStore('auth', () => {
     $dispose() {
       tabSyncManager?.destroy();
       cookieMonitor?.destroy();
-    }
+    },
   };
 });

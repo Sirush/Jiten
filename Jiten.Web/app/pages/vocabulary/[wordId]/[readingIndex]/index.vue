@@ -5,7 +5,7 @@
 
   definePageMeta({
     key: (route) => `vocab-${route.params.wordId}`,
-    validate: route => /^\d+$/.test(String(route.params.wordId)) && /^\d+$/.test(String(route.params.readingIndex)),
+    validate: (route) => /^\d+$/.test(String(route.params.wordId)) && /^\d+$/.test(String(route.params.readingIndex)),
   });
 
   const route = useRoute();
@@ -32,7 +32,6 @@
   });
 
   const onReadingSelected = (newIndex: number) => {
-
     router.replace({ path: `/vocabulary/${wordId.value}/${newIndex}` });
   };
 
@@ -42,8 +41,9 @@
       meta: [
         {
           name: 'description',
-          content: `Detail for the word ${title.value}`
-        }]
+          content: `Detail for the word ${title.value}`,
+        },
+      ],
     };
   });
 
@@ -62,7 +62,7 @@
         usedInMediaAmount: w?.mainReading?.usedInMediaAmount,
       },
       // Never cache a placeholder render if the SSR data fetch failed (e.g. transient rate limit).
-      w ? {} : { cacheMaxAgeSeconds: 0 },
+      w ? {} : { cacheMaxAgeSeconds: 0 }
     );
   }
 </script>

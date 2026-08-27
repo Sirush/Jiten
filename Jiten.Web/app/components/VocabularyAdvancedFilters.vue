@@ -20,9 +20,7 @@
     return posCategories
       .map((cat) => ({
         ...cat,
-        tags: cat.tags.filter(
-          (tag) => tag.label.toLowerCase().includes(query) || tag.value.toLowerCase().includes(query),
-        ),
+        tags: cat.tags.filter((tag) => tag.label.toLowerCase().includes(query) || tag.value.toLowerCase().includes(query)),
       }))
       .filter((cat) => cat.tags.length > 0);
   });
@@ -97,7 +95,9 @@
   </div>
 
   <Popover ref="popover">
-    <div class="flex flex-col overflow-hidden w-[min(32rem,calc(100vw_-_2rem))] max-md:gap-2 max-md:p-2 max-md:max-h-[65vh] md:gap-3 md:p-3 md:max-h-[min(56rem,90vh)]">
+    <div
+      class="flex flex-col overflow-hidden w-[min(32rem,calc(100vw_-_2rem))] max-md:gap-2 max-md:p-2 max-md:max-h-[65vh] md:gap-3 md:p-3 md:max-h-[min(56rem,90vh)]"
+    >
       <div class="flex items-center gap-2">
         <Checkbox v-model="hideKanaOnly" class="flex-shrink-0" input-id="hideKanaOnly" binary />
         <label for="hideKanaOnly" class="text-sm font-medium text-gray-600 dark:text-gray-300">Hide kana-only words</label>
@@ -133,11 +133,7 @@
             <AccordionHeader class="max-md:py-1.5! md:py-2.5!">
               <span class="flex flex-1 items-center justify-between gap-2 pr-2">
                 <span class="text-sm">{{ category.label }}</span>
-                <Badge
-                  v-if="categorySelectedCount(category.key) > 0"
-                  :value="categorySelectedCount(category.key)"
-                  severity="secondary"
-                />
+                <Badge v-if="categorySelectedCount(category.key) > 0" :value="categorySelectedCount(category.key)" severity="secondary" />
               </span>
             </AccordionHeader>
             <AccordionContent>
@@ -154,9 +150,7 @@
           </AccordionPanel>
         </Accordion>
 
-        <p v-if="filteredCategories.length === 0" class="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-          No tags match "{{ searchQuery }}"
-        </p>
+        <p v-if="filteredCategories.length === 0" class="py-4 text-center text-sm text-gray-500 dark:text-gray-400">No tags match "{{ searchQuery }}"</p>
       </div>
 
       <div class="flex justify-end border-t border-gray-200 dark:border-gray-700 max-md:pt-2 md:pt-3">

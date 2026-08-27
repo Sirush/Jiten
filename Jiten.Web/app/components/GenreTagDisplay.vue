@@ -210,7 +210,7 @@
     >
       <span class="flex items-center gap-1">
         {{ expanded ? 'Less' : `+${hiddenCount}` }}
-        <i :class="['pi text-[10px]', expanded ? 'pi-chevron-up' : 'pi-chevron-down']"></i>
+        <i :class="['pi text-[10px]', expanded ? 'pi-chevron-up' : 'pi-chevron-down']" />
       </span>
     </Tag>
   </div>

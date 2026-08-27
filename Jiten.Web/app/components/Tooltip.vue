@@ -37,9 +37,7 @@
   });
 
   const wrapperRef = ref<HTMLElement | null>(null);
-  const referenceEl = computed<HTMLElement | null>(() =>
-    props.block ? wrapperRef.value : wrapperRef.value?.firstElementChild as HTMLElement | null
-  );
+  const referenceEl = computed<HTMLElement | null>(() => (props.block ? wrapperRef.value : (wrapperRef.value?.firstElementChild as HTMLElement | null)));
   const isVisible = ref(false);
   const isMobile = ref(false);
   // Becomes true on the first interaction, mounting TooltipPopup (and its

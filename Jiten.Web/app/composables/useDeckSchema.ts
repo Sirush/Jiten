@@ -29,9 +29,7 @@ function toDateOnly(value: Date | string | undefined): string | undefined {
 // (metadata, not visible body text) so every deck has a unique entity description for search engines.
 function synthDescription(d: Deck): string {
   const type = getMediaTypeText(d.mediaType).toLowerCase();
-  const counts = d.characterCount
-    ? ` with ${d.characterCount.toLocaleString()} characters and ${d.uniqueWordCount.toLocaleString()} unique words`
-    : '';
+  const counts = d.characterCount ? ` with ${d.characterCount.toLocaleString()} characters and ${d.uniqueWordCount.toLocaleString()} unique words` : '';
   const difficulty = d.difficulty >= 0 ? ` Difficulty: ${getDifficultyName(d.difficulty)}.` : '';
   return `Vocabulary list, difficulty analysis and a downloadable Anki deck for ${d.originalTitle}, a Japanese ${type}${counts}.${difficulty}`;
 }
@@ -41,11 +39,7 @@ function synthDescription(d: Deck): string {
  * SSR by default. Intentionally omits aggregateRating: the on-page external rating is sourced
  * from third-party databases and the page's vote count is difficulty votes, not rating votes.
  */
-export function useDeckSchema(
-  deck: Ref<Deck | undefined>,
-  pageUrl: Ref<string>,
-  parentDeck?: Ref<Deck | null | undefined>,
-) {
+export function useDeckSchema(deck: Ref<Deck | undefined>, pageUrl: Ref<string>, parentDeck?: Ref<Deck | null | undefined>) {
   useSchemaOrg(
     computed(() => {
       const d = deck.value;

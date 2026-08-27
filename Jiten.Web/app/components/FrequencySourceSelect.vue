@@ -20,7 +20,7 @@
     (Object.values(MediaType).filter((v) => typeof v === 'number') as MediaType[]).map((type) => ({
       label: getMediaTypeText(type),
       value: type as number,
-    })),
+    }))
   );
 
   const options = computed(() => [{ label: 'Global', value: 0 }, ...mediaTypeOptions.value]);

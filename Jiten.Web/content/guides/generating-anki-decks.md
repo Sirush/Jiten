@@ -17,13 +17,13 @@ You can **Download / Learn** on any media page to open the dialog.
 
 **Anki** will produce an `.apkg` built on the community [Lapis](https://github.com/donkuri/lapis) template that you can directly import inside Anki. Other formats are available:
 
-| Format | What you get |
-|---|---|
-| **Text** | One word per line, nothing else |
-| **Text (Rep)** | The same, with each word repeated once per occurrence |
-| **CSV** | Nine columns: the word, its furigana and kana, occurrences, frequency, pitch, definitions, an example sentence and its dictionary id |
-| **Yomitan** | A dictionary showing how often each word occurs in this title |
-| **Learn** | No file. Applies the selection to your known words instead |
+| Format         | What you get                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Text**       | One word per line, nothing else                                                                                                      |
+| **Text (Rep)** | The same, with each word repeated once per occurrence                                                                                |
+| **CSV**        | Nine columns: the word, its furigana and kana, occurrences, frequency, pitch, definitions, an example sentence and its dictionary id |
+| **Yomitan**    | A dictionary showing how often each word occurs in this title                                                                        |
+| **Learn**      | No file. Applies the selection to your known words instead                                                                           |
 
 **Yomitan** will export a frequency dictionary, [Yomitan frequency dictionaries](/guides/yomitan-frequency-dictionaries) covers what to do with the file.
 
@@ -40,7 +40,7 @@ If you have selected one of the top options, you'll get access to a slider which
 
 **Occurrences** takes every word appearing **Over or equal to (≥)** or **Under or equal to (≤)** a **Threshold** in the media.
 
-**Coverage %** works out the fewest words needed to reach a coverage target for the title, and needs you to be logged in. **Start from my current coverage**  counts what you already know towards the target and gives you only the remainder. The target opens at 80%, or at your current coverage of the title when that is already higher, since it cannot be set below where you are.
+**Coverage %** works out the fewest words needed to reach a coverage target for the title, and needs you to be logged in. **Start from my current coverage** counts what you already know towards the target and gives you only the remainder. The target opens at 80%, or at your current coverage of the title when that is already higher, since it cannot be set below where you are.
 
 Untick **Start from my current coverage** and the target is worked out from zero, useful if you want to share it with someone else.
 

@@ -16,7 +16,7 @@ Each change is applied immediately to your current page. These settings are stor
 ## The main controls
 
 - **Titles Language**: **Japanese**, **Romaji** or **English**. Changes the default title displayed on media. If no English title is available, then it will displayed in Romaji anyway.
-- **TTS Voice**: Change the artifical voice playing next to words and exampel sentences.  The speaker button next to it previews the voice. System is your device own voice, which can be pretty good depending on your operating system or browser.
+- **TTS Voice**: Change the artifical voice playing next to words and exampel sentences. The speaker button next to it previews the voice. System is your device own voice, which can be pretty good depending on your operating system or browser.
 - **Display Furigana**: Whether to display the furigana above the words or not.
 - **Hide Vocabulary Definitions**: hides the English glosses when browsing vocabulary lists. Useful to test yourself.
 - **Master in 1 click**: makes a plain click on the green **+** master a word instead of opening the menu. **Ctrl+Click** still blacklists. Only shown when you are logged in.

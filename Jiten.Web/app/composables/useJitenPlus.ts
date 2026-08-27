@@ -2,13 +2,7 @@ import { useAuthStore } from '~/stores/authStore';
 
 export type JitenPlusTier = 'none' | 'trial' | 'full';
 
-export type JitenPlusFeature =
-  | 'card-media'
-  | 'freq-list-save'
-  | 'freq-list-generate'
-  | 'request-boosts'
-  | 'immersion-plan-generate'
-  | 'coverage-journey';
+export type JitenPlusFeature = 'card-media' | 'freq-list-save' | 'freq-list-generate' | 'request-boosts' | 'immersion-plan-generate' | 'coverage-journey';
 
 export interface PromoCreditInfo {
   userPromoCreditId: number;

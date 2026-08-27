@@ -170,20 +170,10 @@
       <Button label="Create Word Set" icon="pi pi-plus" @click="openCreateDialog" />
     </div>
 
-    <DataTable
-      :value="wordSets"
-      :loading="loading"
-      :paginator="wordSets.length > 25"
-      :rows="25"
-      stripedRows
-      class="shadow-md"
-    >
+    <DataTable :value="wordSets" :loading="loading" :paginator="wordSets.length > 25" :rows="25" striped-rows class="shadow-md">
       <Column field="name" header="Name" :sortable="true">
         <template #body="{ data }">
-          <NuxtLink
-            :to="`/dashboard/word-sets/${data.setId}`"
-            class="text-blue-500 hover:underline font-semibold"
-          >
+          <NuxtLink :to="`/dashboard/word-sets/${data.setId}`" class="text-blue-500 hover:underline font-semibold">
             {{ data.name }}
           </NuxtLink>
         </template>
@@ -194,77 +184,34 @@
       <Column header="Actions" style="width: 200px">
         <template #body="{ data }">
           <div class="flex gap-2">
-            <Button
-              icon="pi pi-pencil"
-              size="small"
-              severity="secondary"
-              v-tooltip.top="'Edit'"
-              @click="openEditDialog(data)"
-            />
-            <Button
-              icon="pi pi-eye"
-              size="small"
-              severity="info"
-              v-tooltip.top="'View members'"
-              @click="navigateTo(`/dashboard/word-sets/${data.setId}`)"
-            />
-            <Button
-              icon="pi pi-trash"
-              size="small"
-              severity="danger"
-              v-tooltip.top="'Delete'"
-              @click="confirmDelete(data)"
-            />
+            <Button v-tooltip.top="'Edit'" icon="pi pi-pencil" size="small" severity="secondary" @click="openEditDialog(data)" />
+            <Button v-tooltip.top="'View members'" icon="pi pi-eye" size="small" severity="info" @click="navigateTo(`/dashboard/word-sets/${data.setId}`)" />
+            <Button v-tooltip.top="'Delete'" icon="pi pi-trash" size="small" severity="danger" @click="confirmDelete(data)" />
           </div>
         </template>
       </Column>
     </DataTable>
 
     <!-- Create/Edit Dialog -->
-    <Dialog
-      v-model:visible="showDialog"
-      :header="dialogMode === 'create' ? 'Create Word Set' : 'Edit Word Set'"
-      :modal="true"
-      class="w-full md:w-1/2"
-    >
+    <Dialog v-model:visible="showDialog" :header="dialogMode === 'create' ? 'Create Word Set' : 'Edit Word Set'" :modal="true" class="w-full md:w-1/2">
       <div class="flex flex-col gap-4">
         <div>
           <label class="block text-sm font-medium mb-1">Name</label>
-          <InputText
-            v-model="formName"
-            placeholder="e.g. JLPT N3"
-            class="w-full"
-            @keyup.enter="saveWordSet"
-          />
+          <InputText v-model="formName" placeholder="e.g. JLPT N3" class="w-full" @keyup.enter="saveWordSet" />
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Slug</label>
-          <InputText
-            v-model="formSlug"
-            placeholder="e.g. jlpt-n3"
-            class="w-full"
-            @keyup.enter="saveWordSet"
-          />
+          <InputText v-model="formSlug" placeholder="e.g. jlpt-n3" class="w-full" @keyup.enter="saveWordSet" />
           <div class="text-xs text-gray-400 mt-1">Lowercase letters, numbers, and hyphens only</div>
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Description</label>
-          <Textarea
-            v-model="formDescription"
-            placeholder="Optional description"
-            class="w-full"
-            rows="3"
-          />
+          <Textarea v-model="formDescription" placeholder="Optional description" class="w-full" rows="3" />
         </div>
       </div>
       <template #footer>
         <Button label="Cancel" icon="pi pi-times" class="p-button-text" @click="showDialog = false" />
-        <Button
-          :label="dialogMode === 'create' ? 'Create' : 'Save'"
-          icon="pi pi-check"
-          :loading="saving"
-          @click="saveWordSet"
-        />
+        <Button :label="dialogMode === 'create' ? 'Create' : 'Save'" icon="pi pi-check" :loading="saving" @click="saveWordSet" />
       </template>
     </Dialog>
   </div>

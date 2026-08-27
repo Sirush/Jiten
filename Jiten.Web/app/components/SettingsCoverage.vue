@@ -21,7 +21,7 @@
   });
 
   const status = computed(() =>
-    lastRefresh.value ? `Refreshed ${lastRefresh.value.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : 'Never refreshed',
+    lastRefresh.value ? `Refreshed ${lastRefresh.value.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : 'Never refreshed'
   );
 
   const isRefreshing = ref(false);

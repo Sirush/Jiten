@@ -120,12 +120,15 @@
             placeholder="Enter your username"
           />
           <div class="mt-2 text-sm">
-            <div v-if="usernameError" class="text-red-600"><i class="pi pi-times-circle"></i> {{ usernameError }}</div>
+            <div v-if="usernameError" class="text-red-600">
+              <i class="pi pi-times-circle" />
+              {{ usernameError }}
+            </div>
           </div>
         </div>
 
         <div class="flex justify-between mt-6">
-          <Button @click="nextStep" :disabled="!canProceedToStep2" class="ml-auto min-w-[120px]"> Next </Button>
+          <Button :disabled="!canProceedToStep2" class="ml-auto min-w-[120px]" @click="nextStep">Next</Button>
         </div>
       </div>
 
@@ -147,13 +150,13 @@
 
           <div class="flex items-start mb-4 gap-2">
             <Checkbox id="email-consent" v-model="acceptedEmailConsent" :binary="true" />
-            <label for="email-consent" class="leading-snug cursor-pointer"> I would like to receive occasional updates and newsletters via email </label>
+            <label for="email-consent" class="leading-snug cursor-pointer">I would like to receive occasional updates and newsletters via email</label>
           </div>
         </div>
 
         <div class="flex justify-between mt-6">
-          <Button @click="previousStep" class="min-w-[120px]" outlined> Back </Button>
-          <Button @click="completeRegistration" :disabled="!canComplete || authStore.isLoading" class="ml-auto min-w-[120px]">
+          <Button class="min-w-[120px]" outlined @click="previousStep">Back</Button>
+          <Button :disabled="!canComplete || authStore.isLoading" class="ml-auto min-w-[120px]" @click="completeRegistration">
             {{ authStore.isLoading ? 'Creating Account...' : 'Complete Registration' }}
           </Button>
         </div>

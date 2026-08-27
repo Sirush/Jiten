@@ -73,11 +73,16 @@
   function getIntervalForRating(rating: FsrsRating): string | null {
     if (!props.intervalPreview) return null;
     switch (rating) {
-      case FsrsRating.Again: return formatInterval(props.intervalPreview.againSeconds);
-      case FsrsRating.Hard: return formatInterval(props.intervalPreview.hardSeconds);
-      case FsrsRating.Good: return formatInterval(props.intervalPreview.goodSeconds);
-      case FsrsRating.Easy: return formatInterval(props.intervalPreview.easySeconds);
-      default: return null;
+      case FsrsRating.Again:
+        return formatInterval(props.intervalPreview.againSeconds);
+      case FsrsRating.Hard:
+        return formatInterval(props.intervalPreview.hardSeconds);
+      case FsrsRating.Good:
+        return formatInterval(props.intervalPreview.goodSeconds);
+      case FsrsRating.Easy:
+        return formatInterval(props.intervalPreview.easySeconds);
+      default:
+        return null;
     }
   }
 </script>
@@ -136,14 +141,22 @@
     <!-- Grade buttons when flipped -->
     <div v-if="isFlipped" class="flex gap-2 justify-center">
       <Button
-        v-for="btn in (gradingButtons === 4 ? buttons4 : buttons2)"
+        v-for="btn in gradingButtons === 4 ? buttons4 : buttons2"
         :key="`${btn.rating}-${props.monochrome}`"
         :severity="props.monochrome ? 'secondary' : btn.severity"
         outlined
         :disabled="props.disabled"
         :aria-label="`Grade: ${btn.label}`"
         class="grade-btn flex-1"
-        :class="[{ 'kb-pressed': props.pressedKey === btn.key, 'armed-again': props.armedAgain && btn.rating === FsrsRating.Again, 'suggested': props.suggestedRating === btn.rating && !(props.armedAgain && btn.rating === FsrsRating.Again) }, props.monochrome ? btn.mono : '', compact ? 'min-h-[36px]' : 'min-h-[44px] md:min-h-[72px]']"
+        :class="[
+          {
+            'kb-pressed': props.pressedKey === btn.key,
+            'armed-again': props.armedAgain && btn.rating === FsrsRating.Again,
+            suggested: props.suggestedRating === btn.rating && !(props.armedAgain && btn.rating === FsrsRating.Again),
+          },
+          props.monochrome ? btn.mono : '',
+          compact ? 'min-h-[36px]' : 'min-h-[44px] md:min-h-[72px]',
+        ]"
         @click="emit('grade', btn.rating)"
       >
         <template #default>
@@ -158,7 +171,9 @@
               <span class="text-[11px] tabular-nums opacity-90">auto in {{ Math.max(0, props.armedSeconds ?? 0) }}s</span>
             </template>
             <template v-else>
-              <span v-if="!compact && getIntervalForRating(btn.rating)" class="interval-hint text-[11px] opacity-80">{{ getIntervalForRating(btn.rating) }}</span>
+              <span v-if="!compact && getIntervalForRating(btn.rating)" class="interval-hint text-[11px] opacity-80">
+                {{ getIntervalForRating(btn.rating) }}
+              </span>
               <span>{{ btn.label }}</span>
               <span v-if="showKeybinds && !compact" class="keybind text-xs opacity-80">{{ displayKeyName(btn.key) }}</span>
               <span v-if="btn.swipe && props.showSwipeHints" class="swipe-hint text-[10px] opacity-80">{{ btn.swipe }}</span>
@@ -236,14 +251,7 @@
         </template>
       </Button>
       <!-- More button -->
-      <Button
-        severity="secondary"
-        size="small"
-        outlined
-        class="min-h-[36px] !px-2 sm:!px-3"
-        aria-label="More actions"
-        @click="toggleMore"
-      >
+      <Button severity="secondary" size="small" outlined class="min-h-[36px] !px-2 sm:!px-3" aria-label="More actions" @click="toggleMore">
         <template #default>
           <div class="flex flex-col items-center sm:flex-row sm:gap-0">
             <Icon name="material-symbols:more-horiz" size="16" class="sm:hidden" />
@@ -257,7 +265,10 @@
             v-if="!isNewCard"
             :disabled="props.disabled"
             class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left disabled:opacity-80"
-            @click="emit('bury'); morePopover?.hide()"
+            @click="
+              emit('bury');
+              morePopover?.hide();
+            "
           >
             <Icon name="material-symbols:visibility-off-outline" size="16" />
             Bury for a day
@@ -265,7 +276,10 @@
           <button
             :disabled="props.disabled"
             class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left disabled:opacity-80"
-            @click="emit('suspend'); morePopover?.hide()"
+            @click="
+              emit('suspend');
+              morePopover?.hide();
+            "
           >
             <Icon name="material-symbols:pause-circle-outline" size="16" />
             Suspend
@@ -273,7 +287,10 @@
           <button
             :disabled="props.disabled"
             class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left disabled:opacity-80"
-            @click="emit('forget', $event); morePopover?.hide()"
+            @click="
+              emit('forget', $event);
+              morePopover?.hide();
+            "
           >
             <Icon name="material-symbols:refresh" size="16" />
             Forget
@@ -286,9 +303,11 @@
                 v-for="t in themes"
                 :key="t.id"
                 class="p-1 rounded transition-colors cursor-pointer"
-                :class="activeTheme === t.id
-                  ? 'bg-indigo-500 text-white'
-                  : 'bg-surface-200 dark:bg-surface-700 text-surface-500 dark:text-surface-400 hover:bg-surface-300 dark:hover:bg-surface-600'"
+                :class="
+                  activeTheme === t.id
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-surface-200 dark:bg-surface-700 text-surface-500 dark:text-surface-400 hover:bg-surface-300 dark:hover:bg-surface-600'
+                "
                 :aria-label="t.id + ' theme'"
                 @click="emit('setTheme', t.id)"
               >
@@ -298,14 +317,20 @@
           </div>
           <button
             class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left md:hidden"
-            @click="emit('expand'); morePopover?.hide()"
+            @click="
+              emit('expand');
+              morePopover?.hide();
+            "
           >
             <Icon name="material-symbols:keyboard-double-arrow-down" size="16" />
             Compact bar
           </button>
           <button
             class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-100 dark:hover:bg-surface-800 text-sm w-full text-left md:hidden"
-            @click="emit('settings'); morePopover?.hide()"
+            @click="
+              emit('settings');
+              morePopover?.hide();
+            "
           >
             <Icon name="material-symbols:settings-outline" size="16" />
             Settings
@@ -317,80 +342,89 @@
 </template>
 
 <style scoped>
-.grade-btn.p-button {
-  font-weight: 900 !important;
-  border-width: 3px !important;
-  position: relative;
-  overflow: hidden;
-}
+  .grade-btn.p-button {
+    font-weight: 900 !important;
+    border-width: 3px !important;
+    position: relative;
+    overflow: hidden;
+  }
 
-/* Write-in: the suggested grade gets a glow + ring so the eye lands on it, without auto-committing. */
-.grade-btn.suggested.p-button {
-  border-width: 3.5px !important;
-  box-shadow: 0 8px 22px -8px currentColor, 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
-  transform: translateY(-2px);
-}
+  /* Write-in: the suggested grade gets a glow + ring so the eye lands on it, without auto-committing. */
+  .grade-btn.suggested.p-button {
+    border-width: 3.5px !important;
+    box-shadow:
+      0 8px 22px -8px currentColor,
+      0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
+    transform: translateY(-2px);
+  }
 
-/* Write-in auto-advance: a left-anchored fill that grows over the delay, then commits the grade. */
-.grade-btn .auto-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  z-index: 0;
-  background-color: color-mix(in srgb, currentColor 16%, transparent);
-  pointer-events: none;
-}
+  /* Write-in auto-advance: a left-anchored fill that grows over the delay, then commits the grade. */
+  .grade-btn .auto-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 0;
+    background-color: color-mix(in srgb, currentColor 16%, transparent);
+    pointer-events: none;
+  }
 
-/* Monochrome theme: differentiate the grade buttons by fill/border instead of colour. */
-.grade-btn.mono-1.p-button {
-  background-color: light-dark(var(--p-surface-300), var(--p-surface-600)) !important;
-}
-.grade-btn.mono-2.p-button {
-  background-color: light-dark(var(--p-surface-100), var(--p-surface-800)) !important;
-}
-.grade-btn.mono-3.p-button {
-  background-color: transparent !important;
-}
-.grade-btn.mono-4.p-button {
-  background-color: transparent !important;
-  border-style: dashed !important;
-}
+  /* Monochrome theme: differentiate the grade buttons by fill/border instead of colour. */
+  .grade-btn.mono-1.p-button {
+    background-color: light-dark(var(--p-surface-300), var(--p-surface-600)) !important;
+  }
+  .grade-btn.mono-2.p-button {
+    background-color: light-dark(var(--p-surface-100), var(--p-surface-800)) !important;
+  }
+  .grade-btn.mono-3.p-button {
+    background-color: transparent !important;
+  }
+  .grade-btn.mono-4.p-button {
+    background-color: transparent !important;
+    border-style: dashed !important;
+  }
 
-.kb-pressed.p-button {
-  transform: scale(0.93);
-  filter: brightness(0.85);
-  transition: transform 0.08s ease-out, filter 0.08s ease-out;
-}
+  .kb-pressed.p-button {
+    transform: scale(0.93);
+    filter: brightness(0.85);
+    transition:
+      transform 0.08s ease-out,
+      filter 0.08s ease-out;
+  }
 
-/* Timed review: the "Again" button is armed and about to auto-fire — make it unmistakable. */
-.grade-btn.armed-again.p-button {
-  background-color: var(--p-red-500) !important;
-  border-color: var(--p-red-500) !important;
-  color: #fff !important;
-  opacity: 1 !important;
-  animation: armed-pulse 0.9s ease-in-out infinite;
-}
-@keyframes armed-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
-  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
-}
-@media (prefers-reduced-motion: reduce) {
+  /* Timed review: the "Again" button is armed and about to auto-fire — make it unmistakable. */
   .grade-btn.armed-again.p-button {
-    animation: none;
+    background-color: var(--p-red-500) !important;
+    border-color: var(--p-red-500) !important;
+    color: #fff !important;
+    opacity: 1 !important;
+    animation: armed-pulse 0.9s ease-in-out infinite;
   }
-}
+  @keyframes armed-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+    }
+    50% {
+      box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .grade-btn.armed-again.p-button {
+      animation: none;
+    }
+  }
 
-.keybind {
-  display: none;
-}
-
-@media (min-width: 768px) {
   .keybind {
-    display: inline;
-  }
-  .swipe-hint {
     display: none;
   }
-}
+
+  @media (min-width: 768px) {
+    .keybind {
+      display: inline;
+    }
+    .swipe-hint {
+      display: none;
+    }
+  }
 </style>

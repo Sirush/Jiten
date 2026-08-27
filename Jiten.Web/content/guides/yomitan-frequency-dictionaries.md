@@ -1,7 +1,7 @@
 ---
 title: Install Jiten's frequency dictionaries in Yomitan
 summary: Add Jiten's global, per-media-type and kanji frequency data to Yomitan so every lookup shows a rank.
-category: "Advanced & tools"
+category: 'Advanced & tools'
 level: beginner
 order: 40
 icon: material-symbols-light:sort

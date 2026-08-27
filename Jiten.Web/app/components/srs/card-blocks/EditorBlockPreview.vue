@@ -8,7 +8,13 @@
 
   // Each preview instance pins its own front/back context so both editor panels can render at once.
   const isFlipped = computed(() => props.side === 'back');
-  provideCardContext(createSampleCardContext(computed(() => props.settings), isFlipped, { isolated: true }));
+  provideCardContext(
+    createSampleCardContext(
+      computed(() => props.settings),
+      isFlipped,
+      { isolated: true }
+    )
+  );
 </script>
 
 <template>

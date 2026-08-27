@@ -18,7 +18,9 @@
       <template #content>
         <p v-if="!isFull" class="mb-4 flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400">
           <i class="pi pi-exclamation-triangle mt-0.5 shrink-0" />
-          <span>Without an active Jiten+ subscription you can view and delete your existing card media, but can't add new media. Resubscribe to add media again.</span>
+          <span>
+            Without an active Jiten+ subscription you can view and delete your existing card media, but can't add new media. Resubscribe to add media again.
+          </span>
         </p>
         <CardMediaManager />
       </template>

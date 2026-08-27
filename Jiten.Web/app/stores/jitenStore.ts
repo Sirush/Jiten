@@ -83,9 +83,7 @@ export const useJitenStore = defineStore('jiten', () => {
     difficultyValueDisplayStyleCookie.value = DifficultyValueDisplayStyle.ZeroToFive;
   }
 
-  const difficultyValueDisplayStyle = ref<DifficultyValueDisplayStyle>(
-    difficultyValueDisplayStyleCookie.value ?? DifficultyValueDisplayStyle.ZeroToFive
-  );
+  const difficultyValueDisplayStyle = ref<DifficultyValueDisplayStyle>(difficultyValueDisplayStyleCookie.value ?? DifficultyValueDisplayStyle.ZeroToFive);
 
   watch(difficultyValueDisplayStyle, (newValue) => {
     difficultyValueDisplayStyleCookie.value = newValue;

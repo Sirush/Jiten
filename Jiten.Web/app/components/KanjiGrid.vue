@@ -23,16 +23,11 @@
     error.value = null;
 
     try {
-      const data = await $api<KanjiGridResponse>(
-        `user/profile/${props.username}/kanji-grid`,
-        { query: { onlySeen: onlySeen.value } }
-      );
+      const data = await $api<KanjiGridResponse>(`user/profile/${props.username}/kanji-grid`, { query: { onlySeen: onlySeen.value } });
       gridData.value = data;
     } catch (err: unknown) {
       const fetchError = err as { response?: { status?: number } };
-      error.value = fetchError?.response?.status === 404
-        ? 'Kanji data not available'
-        : 'Failed to load kanji grid';
+      error.value = fetchError?.response?.status === 404 ? 'Kanji data not available' : 'Failed to load kanji grid';
     } finally {
       isLoading.value = false;
     }
@@ -75,9 +70,9 @@
   });
 
   const groupStats = computed(() => {
-    return groups.value.map(g => {
-      const seen = g.kanji.filter(k => k.score > 0).length;
-      const mastered = g.kanji.filter(k => k.score >= 0.9).length;
+    return groups.value.map((g) => {
+      const seen = g.kanji.filter((k) => k.score > 0).length;
+      const mastered = g.kanji.filter((k) => k.score >= 0.9).length;
       return { total: g.kanji.length, seen, mastered };
     });
   });
@@ -99,7 +94,7 @@
         const masteredPct = stats.total > 0 ? ((stats.mastered / stats.total) * 100).toFixed(0) : '0';
         header.innerHTML = sanitiseHtml(
           `<span class="kanji-group-title">${group.name}</span>` +
-          `<span class="kanji-group-stats">${stats.seen}/${stats.total} seen (${seenPct}%) · ${stats.mastered} mastered (${masteredPct}%)</span>`
+            `<span class="kanji-group-stats">${stats.seen}/${stats.total} seen (${seenPct}%) · ${stats.mastered} mastered (${masteredPct}%)</span>`
         );
         container.appendChild(header);
       }
@@ -107,12 +102,14 @@
       const grid = document.createElement('div');
       grid.className = 'kanji-grid';
 
-      const html = group.kanji.map(k => {
-        const bg = getKanjiColour(k.score);
-        const fg = k.score > 0 ? 'white' : 'inherit';
-        const tooltipText = buildTooltipData(k).replace(/"/g, '&quot;');
-        return `<a href="/kanji/${k.character}" class="kanji-cell" style="background:${bg};color:${fg}" data-tooltip="${tooltipText}" lang="ja">${k.character}</a>`;
-      }).join('');
+      const html = group.kanji
+        .map((k) => {
+          const bg = getKanjiColour(k.score);
+          const fg = k.score > 0 ? 'white' : 'inherit';
+          const tooltipText = buildTooltipData(k).replace(/"/g, '&quot;');
+          return `<a href="/kanji/${k.character}" class="kanji-cell" style="background:${bg};color:${fg}" data-tooltip="${tooltipText}" lang="ja">${k.character}</a>`;
+        })
+        .join('');
 
       grid.innerHTML = sanitiseHtml(html);
       container.appendChild(grid);
@@ -131,7 +128,7 @@
 
   const masteredCount = computed(() => {
     if (!gridData.value?.kanji) return 0;
-    return gridData.value.kanji.filter(k => k.score >= 0.9).length;
+    return gridData.value.kanji.filter((k) => k.score >= 0.9).length;
   });
 
   const masteredPercentage = computed(() => {
@@ -146,7 +143,7 @@
         visible: true,
         html: (target.dataset.tooltip || '').replace(/\n/g, '<br>'),
         x: e.clientX + 10,
-        y: e.clientY + 10
+        y: e.clientY + 10,
       };
     }
   };
@@ -196,13 +193,7 @@
         </div>
 
         <div class="flex items-center gap-3">
-          <Select
-            v-model="displayType"
-            :options="displayTypeOptions"
-            option-label="label"
-            option-value="value"
-            class="w-48"
-          />
+          <Select v-model="displayType" :options="displayTypeOptions" option-label="label" option-value="value" class="w-48" />
           <div class="flex items-center gap-2">
             <Checkbox v-model="onlySeen" input-id="only-seen" :binary="true" />
             <label for="only-seen" class="text-sm cursor-pointer">Only tracked</label>
@@ -221,113 +212,104 @@
           />
         </span>
         <div class="flex items-center gap-1">
-          <div class="w-4 h-4 rounded" style="background: rgb(128, 128, 128)"></div>
+          <div class="w-4 h-4 rounded" style="background: rgb(128, 128, 128)" />
           <span>0%</span>
         </div>
         <span class="mx-1">→</span>
         <div class="flex items-center gap-1">
-          <div class="w-4 h-4 rounded" style="background: rgb(220, 38, 38)"></div>
+          <div class="w-4 h-4 rounded" style="background: rgb(220, 38, 38)" />
           <span>50%</span>
         </div>
         <span class="mx-1">→</span>
         <div class="flex items-center gap-1">
-          <div class="w-4 h-4 rounded" style="background: rgb(34, 197, 94)"></div>
+          <div class="w-4 h-4 rounded" style="background: rgb(34, 197, 94)" />
           <span>100%</span>
         </div>
       </div>
 
       <Teleport to="body">
-        <div
-          v-show="tooltip.visible"
-          class="kanji-tooltip"
-          :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
-          v-html="tooltip.html"
-        ></div>
+        <div v-show="tooltip.visible" class="kanji-tooltip" :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }" v-html="tooltip.html" />
       </Teleport>
 
-      <div
-        ref="gridRef"
-        class="kanji-groups-container"
-        @mouseover="showTooltip"
-        @mousemove="moveTooltip"
-        @mouseleave="hideTooltip"
-      ></div>
+      <div ref="gridRef" class="kanji-groups-container" @mouseover="showTooltip" @mousemove="moveTooltip" @mouseleave="hideTooltip" />
     </div>
   </div>
 </template>
 
 <style scoped>
-.kanji-groups-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
+  .kanji-groups-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
 </style>
 
 <style>
-.kanji-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(2rem, 1fr));
-  gap: 2px;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 500px;
-}
+  .kanji-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(2rem, 1fr));
+    gap: 2px;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 500px;
+  }
 
-.kanji-group-header {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  padding: 0.5rem 0 0.25rem;
-  border-bottom: 1px solid var(--p-surface-200);
-}
+  .kanji-group-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.5rem 0 0.25rem;
+    border-bottom: 1px solid var(--p-surface-200);
+  }
 
-:root.dark-mode .kanji-group-header {
-  border-bottom-color: var(--p-surface-700);
-}
+  :root.dark-mode .kanji-group-header {
+    border-bottom-color: var(--p-surface-700);
+  }
 
-.kanji-group-title {
-  font-weight: 600;
-  font-size: 0.95rem;
-  color: var(--p-surface-800);
-}
+  .kanji-group-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--p-surface-800);
+  }
 
-:root.dark-mode .kanji-group-title {
-  color: var(--p-surface-100);
-}
+  :root.dark-mode .kanji-group-title {
+    color: var(--p-surface-100);
+  }
 
-.kanji-group-stats {
-  font-size: 0.8rem;
-  color: var(--p-surface-500);
-}
+  .kanji-group-stats {
+    font-size: 0.8rem;
+    color: var(--p-surface-500);
+  }
 
-.kanji-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  aspect-ratio: 1;
-  font-size: 1.25rem;
-  font-weight: 500;
-  border-radius: var(--radius-sm);
-  transition: transform 0.1s, box-shadow 0.1s;
-  text-decoration: none;
-}
+  .kanji-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    font-size: 1.25rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    transition:
+      transform 0.1s,
+      box-shadow 0.1s;
+    text-decoration: none;
+  }
 
-.kanji-cell:hover {
-  transform: scale(1.1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  z-index: 1;
-}
+  .kanji-cell:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1;
+  }
 
-.kanji-tooltip {
-  position: fixed;
-  z-index: 9999;
-  padding: 0.5rem 0.75rem;
-  background: var(--p-surface-800);
-  color: var(--p-surface-0);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  pointer-events: none;
-  white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
+  .kanji-tooltip {
+    position: fixed;
+    z-index: 9999;
+    padding: 0.5rem 0.75rem;
+    background: var(--p-surface-800);
+    color: var(--p-surface-0);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
 </style>

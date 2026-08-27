@@ -81,9 +81,10 @@
         <span class="flex-grow text-sm text-gray-700 dark:text-gray-300 min-w-48">
           We've updated our terms.
           <template v-if="effectiveDateLabel">
-            They apply to your account from <span class="font-medium">{{ effectiveDateLabel }}</span
-            >; nothing changes for you before then.</template
-          >
+            They apply to your account from
+            <span class="font-medium">{{ effectiveDateLabel }}</span>
+            ; nothing changes for you before then.
+          </template>
         </span>
         <div class="flex items-center gap-2">
           <Button :label="expanded ? 'Hide details' : 'Review changes'" size="small" outlined @click="expanded = !expanded" />
@@ -95,7 +96,8 @@
         <h3 class="font-semibold text-base text-gray-900 dark:text-white mt-2">We have updated our terms</h3>
         <p class="mt-1.5">
           Jiten now has a paid option, Jiten+, so we’ve updated the terms to reflect it. We also corrected a few outdated provisions. Most of the changes do not
-          affect ordinary use of Jiten; the changes that are more restrictive are called out explicitly below. <br />
+          affect ordinary use of Jiten; the changes that are more restrictive are called out explicitly below.
+          <br />
           Here is the short version:
         </p>
 

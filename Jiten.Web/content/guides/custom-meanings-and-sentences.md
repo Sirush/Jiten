@@ -1,5 +1,5 @@
 ---
-title: "Personalising cards: custom meanings & sentences"
+title: 'Personalising cards: custom meanings & sentences'
 summary: Customise words with custom meanings and sentences.
 category: Studying
 level: beginner
@@ -18,7 +18,7 @@ Both need you to be logged in.
 Open a word page and look under **Meanings** for **Add your own notes**. Fill in what you don't get from the dictionaries: a nuance, a mnemonic, anything hthat will help you remember it.
 
 - Up to **500 characters**.
- You can format it with `**bold**`, `*italic*` and lines starting with `- ` for a list. A **Preview** appears under the box as you type.
+  You can format it with `**bold**`, `*italic*` and lines starting with `- ` for a list. A **Preview** appears under the box as you type.
 - The note belongs to the word, so every form of it shows the same note.
 
 Saving again overwrites the note, and you can **Delete** it at any time.

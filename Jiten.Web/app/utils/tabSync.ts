@@ -52,7 +52,7 @@ export class TabSyncManager {
   private handleMessage(message: TabSyncMessage) {
     const listeners = this.listeners.get(message.type);
     if (listeners) {
-      listeners.forEach(callback => callback(message.payload));
+      listeners.forEach((callback) => callback(message.payload));
     }
   }
 

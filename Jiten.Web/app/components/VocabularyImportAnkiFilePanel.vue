@@ -33,7 +33,7 @@
 
       const result = await $api<{ parsed: number; added: number; updated: number }>(
         `user/vocabulary/import-from-anki-txt?parseWords=${parseWordsAnkiTxt.value}&overwriteExisting=${overwriteExisting.value}`,
-        { method: 'POST', body: formData },
+        { method: 'POST', body: formData }
       );
 
       if (result) {
@@ -74,7 +74,9 @@
         <Checkbox id="parseWordsAnkiTxt" v-model="parseWordsAnkiTxt" :binary="true" />
         <label for="parseWordsAnkiTxt" class="ml-2">
           <span>Parse words instead of importing directly</span>
-          <span class="text-sm text-gray-600 dark:text-gray-400 block"> Only use if you have conjugated verbs instead of the dictionary form (less accurate) </span>
+          <span class="text-sm text-gray-600 dark:text-gray-400 block">
+            Only use if you have conjugated verbs instead of the dictionary form (less accurate)
+          </span>
         </label>
       </div>
 
@@ -88,17 +90,30 @@
         </label>
       </div>
 
-      <FileUpload mode="basic" name="ankiFile" accept=".txt, .csv" :custom-upload="true" :auto="true" :choose-label="'Select .txt or .csv File'" :disabled="isLoading" class="mb-3" @select="handleAnkiFileSelect" />
+      <FileUpload
+        mode="basic"
+        name="ankiFile"
+        accept=".txt, .csv"
+        :custom-upload="true"
+        :auto="true"
+        :choose-label="'Select .txt or .csv File'"
+        :disabled="isLoading"
+        class="mb-3"
+        @select="handleAnkiFileSelect"
+      />
 
       <div v-if="addedCount !== null || uploadedCount !== null" class="text-sm text-gray-700 dark:text-gray-300">
         <div v-if="uploadedCount !== null">
-          Parsed from file: <strong>{{ uploadedCount }}</strong>
+          Parsed from file:
+          <strong>{{ uploadedCount }}</strong>
         </div>
         <div v-if="addedCount !== null">
-          Added: <strong class="text-green-600 dark:text-green-400">{{ addedCount }}</strong>
+          Added:
+          <strong class="text-green-600 dark:text-green-400">{{ addedCount }}</strong>
         </div>
         <div v-if="updatedCount">
-          Overwritten: <strong class="text-amber-600 dark:text-amber-400">{{ updatedCount }}</strong>
+          Overwritten:
+          <strong class="text-amber-600 dark:text-amber-400">{{ updatedCount }}</strong>
         </div>
       </div>
     </template>

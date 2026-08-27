@@ -182,17 +182,21 @@
     <template #content>
       <div v-if="registered" class="pt-2">
         <p>
-          We sent a confirmation link to <b>{{ registeredEmail }}</b
-          >. Open it to finish creating your account.
+          We sent a confirmation link to
+          <b>{{ registeredEmail }}</b>
+          . Open it to finish creating your account.
         </p>
         <p class="text-sm text-gray-600 dark:text-gray-400 mt-3">
-          Nothing after a few minutes? Resend it from the <NuxtLink :to="{ path: '/login', query: redirectQuery }">login page</NuxtLink> under "Didn't get your
-          confirmation email?", or email <a href="mailto:contact@jiten.moe">contact@jiten.moe</a> from that address for a manual confirmation.
+          Nothing after a few minutes? Resend it from the
+          <NuxtLink :to="{ path: '/login', query: redirectQuery }">login page</NuxtLink>
+          under "Didn't get your confirmation email?", or email
+          <a href="mailto:contact@jiten.moe">contact@jiten.moe</a>
+          from that address for a manual confirmation.
         </p>
       </div>
       <template v-else>
         <p class="text-sm text-gray-600 dark:text-gray-400 pt-1">See your coverage, track your vocabulary, build filtered decks, and study across devices.</p>
-        <form @submit.prevent="handleRegister" class="flex flex-col gap-6 pt-4">
+        <form class="flex flex-col gap-6 pt-4" @submit.prevent="handleRegister">
           <div class="w-full">
             <FloatLabel>
               <InputText
@@ -230,14 +234,14 @@
               <Password
                 id="password"
                 v-model="form.password"
-                toggleMask
+                toggle-mask
                 :feedback="true"
-                :promptLabel="'At least 10 characters including upper, lower, digit'"
-                :weakLabel="'Weak'"
-                :mediumLabel="'Medium'"
-                :strongLabel="'Strong'"
-                :inputProps="{ autocomplete: 'new-password', minlength: 10 }"
-                :inputClass="'w-full'"
+                :prompt-label="'At least 10 characters including upper, lower, digit'"
+                :weak-label="'Weak'"
+                :medium-label="'Medium'"
+                :strong-label="'Strong'"
+                :input-props="{ autocomplete: 'new-password', minlength: 10 }"
+                :input-class="'w-full'"
                 required
                 @blur="validatePassword"
                 @focus="passwordError = null"
@@ -249,24 +253,24 @@
 
           <div class="flex flex-col gap-4 pt-2">
             <div class="flex items-start gap-3">
-              <Checkbox inputId="terms" v-model="form.tosAccepted" name="terms" binary required class="mt-1" />
+              <Checkbox v-model="form.tosAccepted" input-id="terms" name="terms" binary required class="mt-1" />
               <label for="terms" class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed cursor-pointer">
                 I agree to the
-                <NuxtLink to="/terms" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium"> Terms of Service </NuxtLink>
+                <NuxtLink to="/terms" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium">Terms of Service</NuxtLink>
                 and
-                <NuxtLink to="/privacy" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium"> Privacy Policy </NuxtLink>
+                <NuxtLink to="/privacy" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium">Privacy Policy</NuxtLink>
               </label>
             </div>
 
             <div class="flex items-start gap-3">
-              <Checkbox inputId="newsletter" v-model="form.receiveNewsletter" name="newsletter" binary class="mt-1" />
+              <Checkbox v-model="form.receiveNewsletter" input-id="newsletter" name="newsletter" binary class="mt-1" />
               <label for="newsletter" class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed cursor-pointer">
                 I would like to receive occasional updates and newsletters via email
               </label>
             </div>
           </div>
 
-          <component v-if="RecaptchaCheckboxComponent" :is="RecaptchaCheckboxComponent" v-model="recaptchaResponse" class="my-2" />
+          <component :is="RecaptchaCheckboxComponent" v-if="RecaptchaCheckboxComponent" v-model="recaptchaResponse" class="my-2" />
           <div class="flex flex-col gap-2">
             <Button type="submit" :disabled="isLoading" class="w-full">{{ isLoading ? 'Creating account...' : 'Create account' }}</Button>
             <small class="text-gray-600 dark:text-gray-400 text-center">We'll email you a confirmation link.</small>

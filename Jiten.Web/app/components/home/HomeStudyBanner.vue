@@ -52,7 +52,8 @@
         <div class="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
           <span v-if="streak > 0" class="inline-flex items-center gap-1 whitespace-nowrap">
             <Icon name="material-symbols:local-fire-department-rounded" class="text-orange-500" size="1.15em" />
-            <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ streak }}</span> day streak
+            <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ streak }}</span>
+            day streak
           </span>
           <span v-if="totalDue > 0 && nextReviewText" class="inline-flex items-center gap-1 whitespace-nowrap">
             <Icon name="material-symbols:schedule-outline-rounded" size="1.15em" />
@@ -60,7 +61,8 @@
           </span>
           <span v-else-if="totalDue === 0 && dueTomorrow > 0" class="inline-flex items-center gap-1 whitespace-nowrap">
             <Icon name="material-symbols:schedule-outline-rounded" size="1.15em" />
-            <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ dueTomorrow }}</span> due tomorrow
+            <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ dueTomorrow }}</span>
+            due tomorrow
           </span>
         </div>
       </div>

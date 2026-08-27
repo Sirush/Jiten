@@ -76,8 +76,7 @@ export function useWordListContext() {
     return Object.fromEntries(kept.map((id) => [id, byEntry[id]!]));
   };
 
-  const isUsable = (context?: WordListContext): context is WordListContext =>
-    !!context?.listPath && Array.isArray(context.items) && context.items.length > 0;
+  const isUsable = (context?: WordListContext): context is WordListContext => !!context?.listPath && Array.isArray(context.items) && context.items.length > 0;
 
   const writeContext = (input: WordListContextInput, items: WordListItem[]) => {
     if (!import.meta.client) return;

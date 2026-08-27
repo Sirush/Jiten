@@ -17,14 +17,14 @@ export async function stripEpubImages(file: File): Promise<File> {
 
     if (deletedImages.length === 0) return file;
 
-    const deletedBasenames = new Set(deletedImages.map(p => p.split('/').pop()!));
+    const deletedBasenames = new Set(deletedImages.map((p) => p.split('/').pop()!));
 
     // Strip <img> tags from HTML/XHTML content files
     for (const [path, entry] of Object.entries(zip.files)) {
       if (entry.dir || !htmlExtensionRe.test(path)) continue;
       const text = await entry.async('text');
       const doc = new DOMParser().parseFromString(text, 'application/xhtml+xml');
-      doc.querySelectorAll('img, image').forEach(el => el.remove());
+      doc.querySelectorAll('img, image').forEach((el) => el.remove());
       // Remove <svg> wrappers that only contained an <image> child and are now empty
       doc.querySelectorAll('svg').forEach((svg) => {
         if (svg.children.length === 0) svg.remove();
@@ -85,8 +85,7 @@ export async function stripEpubImages(file: File): Promise<File> {
       compressionOptions: { level: 6 },
     });
     return new File([blob], file.name, { type: 'application/epub+zip', lastModified: file.lastModified });
-  }
-  catch {
+  } catch {
     return file;
   }
 }

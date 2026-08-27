@@ -51,6 +51,6 @@
       {{ trialDaysLabel }}
     </HomeStrip>
 
-    <HomeStrip v-else label="Jiten+" icon="material-symbols-light:star" to="/jiten-plus"> Adds {{ PITCHES[pitchIndex] }}, and more. </HomeStrip>
+    <HomeStrip v-else label="Jiten+" icon="material-symbols-light:star" to="/jiten-plus">Adds {{ PITCHES[pitchIndex] }}, and more.</HomeStrip>
   </template>
 </template>

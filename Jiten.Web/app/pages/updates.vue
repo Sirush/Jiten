@@ -93,7 +93,7 @@
                   <time :datetime="update.publishedAt" class="block text-sm font-medium text-surface-600 dark:text-surface-300">
                     {{ formatDate(update.publishedAt) }}
                   </time>
-                  <span v-if="wasEdited(update)" class="text-xs text-surface-400 dark:text-surface-400"> edited {{ formatDate(update.updatedAt!) }} </span>
+                  <span v-if="wasEdited(update)" class="text-xs text-surface-400 dark:text-surface-400">edited {{ formatDate(update.updatedAt!) }}</span>
                 </div>
               </div>
 

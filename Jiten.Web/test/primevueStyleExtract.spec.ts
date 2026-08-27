@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  currentPrimevueStylesheet,
-  insertStylesheetLink,
-  mergePrimevueStyles,
-  stripPrimevueStyles,
-} from '../server/utils/primevueStyles';
+import { currentPrimevueStylesheet, insertStylesheetLink, mergePrimevueStyles, stripPrimevueStyles } from '../server/utils/primevueStyles';
 
-const tag = (name: string, css: string, attrs = ' type="text/css" ') =>
-  `<style${attrs}data-primevue-style-id="${name}">${css}</style>`;
+const tag = (name: string, css: string, attrs = ' type="text/css" ') => `<style${attrs}data-primevue-style-id="${name}">${css}</style>`;
 
 describe('primevue style extraction', () => {
   it('strips inline css but keeps stub tags with their attributes', () => {
@@ -40,9 +34,7 @@ describe('primevue style extraction', () => {
     const head = [`<link rel="preload" href="x">${tag('base', '')}${tag('badge-style', '')}`];
     stripPrimevueStyles(head);
     insertStylesheetLink(head, '/pv-styles/abc.css');
-    expect(head[0]).toMatch(
-      /<link rel="preload" href="x"><link rel="stylesheet" href="\/pv-styles\/abc\.css"><style[^>]*data-primevue-style-id="base"/,
-    );
+    expect(head[0]).toMatch(/<link rel="preload" href="x"><link rel="stylesheet" href="\/pv-styles\/abc\.css"><style[^>]*data-primevue-style-id="base"/);
   });
 
   it('grows the superset across renders and keeps first-seen order and a stable hash', () => {

@@ -5,7 +5,7 @@
     defineProps<{
       mode?: 'export' | 'import' | 'both';
     }>(),
-    { mode: 'both' },
+    { mode: 'both' }
   );
 
   const emit = defineEmits<{ changed: [] }>();
@@ -145,8 +145,8 @@
     <template #content>
       <p class="mb-3">
         <template v-if="mode === 'export'">
-          Export your complete vocabulary with full data, including card states, review history, stability, difficulty, and due dates as well as your custom example
-          sentences and custom notes.
+          Export your complete vocabulary with full data, including card states, review history, stability, difficulty, and due dates as well as your custom
+          example sentences and custom notes.
         </template>
         <template v-else-if="mode === 'import'">
           Import a previously exported vocabulary backup. This includes card states, review history, stability, difficulty, due dates, custom example sentences
@@ -201,25 +201,31 @@
           <h5 class="font-semibold mb-2">Import Results</h5>
           <div class="text-sm space-y-1">
             <div>
-              Cards imported: <strong class="text-green-600">{{ fsrsImportResult.cardsImported }}</strong>
+              Cards imported:
+              <strong class="text-green-600">{{ fsrsImportResult.cardsImported }}</strong>
             </div>
             <div>
-              Cards updated: <strong class="text-blue-600">{{ fsrsImportResult.cardsUpdated }}</strong>
+              Cards updated:
+              <strong class="text-blue-600">{{ fsrsImportResult.cardsUpdated }}</strong>
             </div>
             <div>
-              Cards skipped: <strong class="text-amber-600">{{ fsrsImportResult.cardsSkipped }}</strong>
+              Cards skipped:
+              <strong class="text-amber-600">{{ fsrsImportResult.cardsSkipped }}</strong>
             </div>
             <div>
-              Review logs imported: <strong>{{ fsrsImportResult.reviewLogsImported }}</strong>
+              Review logs imported:
+              <strong>{{ fsrsImportResult.reviewLogsImported }}</strong>
             </div>
             <div>
-              Custom sentences restored: <strong class="text-green-600">{{ fsrsImportResult.customSentencesImported }}</strong>
+              Custom sentences restored:
+              <strong class="text-green-600">{{ fsrsImportResult.customSentencesImported }}</strong>
               <span v-if="fsrsImportResult.customSentencesSkipped" class="text-gray-600 dark:text-gray-400">
                 ({{ fsrsImportResult.customSentencesSkipped }} skipped)
               </span>
             </div>
             <div>
-              Word notes restored: <strong class="text-green-600">{{ fsrsImportResult.customMeaningsImported }}</strong>
+              Word notes restored:
+              <strong class="text-green-600">{{ fsrsImportResult.customMeaningsImported }}</strong>
               <span v-if="fsrsImportResult.customMeaningsSkipped" class="text-gray-600 dark:text-gray-400">
                 ({{ fsrsImportResult.customMeaningsSkipped }} skipped)
               </span>

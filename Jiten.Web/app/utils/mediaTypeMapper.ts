@@ -101,18 +101,14 @@ export function getCompletedDisplay(mediaType: MediaType | null, completedUnitCo
     return {
       value: units,
       label: `${unitLabel(units, mediaType)} Completed`,
-      sub: units === completedDeckCount
-        ? null
-        : `${completedDeckCount.toLocaleString()} ${completedDeckCount === 1 ? 'work' : 'works'} completed`,
+      sub: units === completedDeckCount ? null : `${completedDeckCount.toLocaleString()} ${completedDeckCount === 1 ? 'work' : 'works'} completed`,
     };
   }
 
   return {
     value: completedDeckCount,
     label: 'Completed',
-    sub: mediaType !== MediaType.VisualNovel && units > completedDeckCount
-      ? `${units.toLocaleString()} ${unitLabel(units, mediaType)}`
-      : null,
+    sub: mediaType !== MediaType.VisualNovel && units > completedDeckCount ? `${units.toLocaleString()} ${unitLabel(units, mediaType)}` : null,
   };
 }
 

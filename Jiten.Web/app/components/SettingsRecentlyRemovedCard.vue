@@ -165,9 +165,7 @@
   function selectionBody(row: ArchivedRow | undefined, everythingKey: 'all' | 'emptyForms') {
     if (row) return { forms: [formOf(row)] };
     if (!selectAllMatching.value) return { forms: selected.value.map(formOf) };
-    return everythingKey === 'all'
-      ? { all: true, reason: reasonFilter.value ?? undefined }
-      : { forms: [], reason: reasonFilter.value ?? undefined };
+    return everythingKey === 'all' ? { all: true, reason: reasonFilter.value ?? undefined } : { forms: [], reason: reasonFilter.value ?? undefined };
   }
 
   async function restore(row?: ArchivedRow) {
@@ -251,7 +249,6 @@
       busy.value = false;
     }
   }
-
 </script>
 
 <template>
@@ -261,8 +258,8 @@
     </template>
     <template #content>
       <p class="text-sm text-muted-color mb-4">
-        Cards that left your collection keep their review history here, whether you removed them yourself or they were replaced automatically with another form of the
-        same word. Restoring one brings its schedule and every review back. You can also restore them individually on vocabulary pages.
+        Cards that left your collection keep their review history here, whether you removed them yourself or they were replaced automatically with another form
+        of the same word. Restoring one brings its schedule and every review back. You can also restore them individually on vocabulary pages.
       </p>
 
       <div class="flex flex-wrap items-center gap-3">
@@ -277,7 +274,8 @@
         <Skeleton v-if="countLoading" width="7rem" height="1.2rem" />
         <span v-else-if="archivedCount === 0" class="text-sm text-muted-color italic">Nothing has been removed.</span>
         <span v-else class="text-sm text-muted-color">
-          <strong>{{ archivedCount.toLocaleString() }}</strong> card{{ archivedCount === 1 ? '' : 's' }} kept here
+          <strong>{{ archivedCount.toLocaleString() }}</strong>
+          card{{ archivedCount === 1 ? '' : 's' }} kept here
         </span>
       </div>
 
@@ -289,7 +287,9 @@
       >
         <p class="text-sm text-muted-color mb-3">
           Every card here kept the review history it had when it left your collection, and restoring one brings its schedule and reviews back with it. Newest
-          first. <strong>Forgetting</strong> an entry deletes those reviews and cannot be undone.
+          first.
+          <strong>Forgetting</strong>
+          an entry deletes those reviews and cannot be undone.
         </p>
 
         <div class="flex flex-wrap items-center gap-2 mb-3">
@@ -313,18 +313,13 @@
             v-if="selectAllMatching"
             class="mb-2 rounded border border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-200"
           >
-            <strong>All {{ totalItems.toLocaleString() }} matching entries are selected,</strong> including the ones on other pages. Restore and Forget will act
-            on every one of them.
+            <strong>All {{ totalItems.toLocaleString() }} matching entries are selected,</strong>
+            including the ones on other pages. Restore and Forget will act on every one of them.
           </div>
 
           <div class="flex items-center justify-between gap-3 border-b border-surface-200 dark:border-surface-700 pb-2 mb-1">
             <label class="flex items-center gap-2 cursor-pointer select-none">
-              <Checkbox
-                :model-value="pageFullySelected"
-                binary
-                :indeterminate="!pageFullySelected && selected.length > 0"
-                @update:model-value="togglePage"
-              />
+              <Checkbox :model-value="pageFullySelected" binary :indeterminate="!pageFullySelected && selected.length > 0" @update:model-value="togglePage" />
               <span class="text-sm">Select all</span>
             </label>
             <div class="flex items-center gap-3 text-xs">

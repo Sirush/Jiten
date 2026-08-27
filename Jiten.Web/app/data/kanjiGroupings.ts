@@ -57,7 +57,13 @@ const scaleGroups: Record<Exclude<KanjiScale, 'grade'>, { name: string; characte
 };
 
 const scalePrefix: Record<KanjiScale, string> = {
-  jlpt: 'JLPT', grade: 'Grade', kanken: 'Kanken', wanikani: 'WaniKani', rtk: 'RTK', klc: 'KLC', tmw: 'TMW',
+  jlpt: 'JLPT',
+  grade: 'Grade',
+  kanken: 'Kanken',
+  wanikani: 'WaniKani',
+  rtk: 'RTK',
+  klc: 'KLC',
+  tmw: 'TMW',
 };
 
 const scaleCharMaps = new Map<Exclude<KanjiScale, 'grade'>, Map<string, string>>();
@@ -106,15 +112,18 @@ export const displayTypeOptions: { label: string; value: DisplayType }[] = [
 ];
 
 const gradeNames: Record<number, string> = {
-  1: 'Grade 1', 2: 'Grade 2', 3: 'Grade 3', 4: 'Grade 4',
-  5: 'Grade 5', 6: 'Grade 6', 8: 'Secondary', 9: 'Jinmeiyou', 10: 'Jinmeiyou (variant)',
+  1: 'Grade 1',
+  2: 'Grade 2',
+  3: 'Grade 3',
+  4: 'Grade 4',
+  5: 'Grade 5',
+  6: 'Grade 6',
+  8: 'Secondary',
+  9: 'Jinmeiyou',
+  10: 'Jinmeiyou (variant)',
 };
 
-function groupByExternalData(
-  kanji: KanjiGridItem[],
-  groups: { name: string; characters: string }[],
-  leftoverName: string,
-): KanjiGroup[] {
+function groupByExternalData(kanji: KanjiGridItem[], groups: { name: string; characters: string }[], leftoverName: string): KanjiGroup[] {
   const charToGroup = new Map<string, number>();
   for (let i = 0; i < groups.length; i++) {
     for (const ch of groups[i].characters) {
@@ -148,7 +157,7 @@ function groupByProperty(
   keyFn: (k: KanjiGridItem) => string | number | null,
   nameMap: Record<string | number, string>,
   sortKeys: (string | number)[],
-  leftoverName: string,
+  leftoverName: string
 ): KanjiGroup[] {
   const buckets = new Map<string | number | null, KanjiGridItem[]>();
   for (const k of kanji) {
@@ -182,7 +191,7 @@ export function groupKanji(kanji: KanjiGridItem[], displayType: DisplayType): Ka
 
   if (displayType === 'grade') {
     const keys = [1, 2, 3, 4, 5, 6, 8, 9, 10];
-    return groupByProperty(kanji, k => k.grade, gradeNames, keys, 'Ungraded');
+    return groupByProperty(kanji, (k) => k.grade, gradeNames, keys, 'Ungraded');
   }
 
   if (displayType === 'frequency') {
@@ -192,7 +201,10 @@ export function groupKanji(kanji: KanjiGridItem[], displayType: DisplayType): Ka
     const unranked: KanjiGridItem[] = [];
 
     for (const k of kanji) {
-      if (k.frequencyRank == null) { unranked.push(k); continue; }
+      if (k.frequencyRank == null) {
+        unranked.push(k);
+        continue;
+      }
       let placed = false;
       for (let i = 0; i < ranges.length; i++) {
         const lo = i === 0 ? 1 : ranges[i - 1] + 1;

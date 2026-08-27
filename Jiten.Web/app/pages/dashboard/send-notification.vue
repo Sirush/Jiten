@@ -38,7 +38,7 @@
     try {
       searching.value = true;
       searchResults.value = await $api<{ userId: string; userName: string; email: string }[]>(
-        `/admin/search-users?query=${encodeURIComponent(searchQuery.value.trim())}`,
+        `/admin/search-users?query=${encodeURIComponent(searchQuery.value.trim())}`
       );
     } catch (e) {
       toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(e, 'Failed to search users'), life: 5000 });
@@ -131,19 +131,8 @@
               <Button icon="pi pi-times" class="p-button-text p-button-sm p-button-danger ml-auto" @click="clearUser" />
             </div>
             <div v-else class="flex gap-2">
-              <InputText
-                v-model="searchQuery"
-                placeholder="Search by username or email"
-                class="flex-1"
-                @keydown.enter="searchUsers"
-              />
-              <Button
-                label="Search"
-                icon="pi pi-search"
-                :loading="searching"
-                :disabled="searchQuery.trim().length < 2"
-                @click="searchUsers"
-              />
+              <InputText v-model="searchQuery" placeholder="Search by username or email" class="flex-1" @keydown.enter="searchUsers" />
+              <Button label="Search" icon="pi pi-search" :loading="searching" :disabled="searchQuery.trim().length < 2" @click="searchUsers" />
             </div>
             <div v-if="searchResults.length" class="mt-2 border border-surface-200 dark:border-surface-700 rounded overflow-hidden">
               <div
@@ -174,14 +163,7 @@
           </div>
 
           <div class="flex justify-end">
-            <Button
-              label="Send"
-              icon="pi pi-send"
-              class="p-button-primary"
-              :loading="sending"
-              :disabled="!isValid || sending"
-              @click="send"
-            />
+            <Button label="Send" icon="pi pi-send" class="p-button-primary" :loading="sending" :disabled="!isValid || sending" @click="send" />
           </div>
         </div>
       </template>

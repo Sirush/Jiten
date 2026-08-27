@@ -1,501 +1,502 @@
 <script setup lang="ts">
-import { RequestStatus, RequestKind, MediaType, LinkType } from '~/types';
-import type { MediaRequestDto, MediaRequestCommentDto, MediaRequestUploadDto, MediaRequestUploadAdminDto, MediaSuggestion } from '~/types/types';
-import { getMediaTypeText } from '~/utils/mediaTypeMapper';
-import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
-import { getRequestKindText, getRequestKindIcon } from '~/utils/requestKindMapper';
-import { getLinkTypeText } from '~/utils/linkTypeMapper';
-import { stripEpubImages } from '~/utils/epubStripper';
-import { useAuthStore } from '~/stores/authStore';
-import { useJitenStore } from '~/stores/jitenStore';
+  import { RequestStatus, RequestKind, MediaType, LinkType } from '~/types';
+  import type { MediaRequestDto, MediaRequestCommentDto, MediaRequestUploadDto, MediaRequestUploadAdminDto, MediaSuggestion } from '~/types/types';
+  import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
+  import { getRequestKindText, getRequestKindIcon } from '~/utils/requestKindMapper';
+  import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { stripEpubImages } from '~/utils/epubStripper';
+  import { useAuthStore } from '~/stores/authStore';
+  import { useJitenStore } from '~/stores/jitenStore';
 
-definePageMeta({
-  middleware: ['auth'],
-});
+  definePageMeta({
+    middleware: ['auth'],
+  });
 
-const route = useRoute();
-const router = useRouter();
-const toast = useToast();
-const authStore = useAuthStore();
-const jitenStore = useJitenStore();
+  const route = useRoute();
+  const router = useRouter();
+  const toast = useToast();
+  const authStore = useAuthStore();
+  const jitenStore = useJitenStore();
 
-const requestId = computed(() => Number(route.params.id));
-const {
-  fetchRequest, toggleUpvote, subscribe, unsubscribe, fetchComments, addComment, editComment, addAdminComment,
-  editRequestDescription, deleteRequest, updateStatus, editRequest, deleteUpload, reviewUpload,
-  getUploadDownloadUrl, error: apiError,
-} = useMediaRequests();
+  const requestId = computed(() => Number(route.params.id));
+  const {
+    fetchRequest,
+    toggleUpvote,
+    subscribe,
+    unsubscribe,
+    fetchComments,
+    addComment,
+    editComment,
+    addAdminComment,
+    editRequestDescription,
+    deleteRequest,
+    updateStatus,
+    editRequest,
+    deleteUpload,
+    reviewUpload,
+    getUploadDownloadUrl,
+    error: apiError,
+  } = useMediaRequests();
 
-const request = ref<MediaRequestDto | null>(null);
-const comments = ref<MediaRequestCommentDto[]>([]);
-const isLoading = ref(true);
-const commentText = ref('');
-const isSubmittingComment = ref(false);
-const showDeleteDialog = ref(false);
-const isDeleting = ref(false);
+  const request = ref<MediaRequestDto | null>(null);
+  const comments = ref<MediaRequestCommentDto[]>([]);
+  const isLoading = ref(true);
+  const commentText = ref('');
+  const isSubmittingComment = ref(false);
+  const showDeleteDialog = ref(false);
+  const isDeleting = ref(false);
 
-// File upload
-const selectedFiles = ref<File[]>([]);
-const isStrippingEpub = ref(false);
-const allowedExtensions = ['.srt', '.ass', '.ssa', '.epub', '.zip', '.rar', '.7z', '.txt', '.mokuro'];
-const dragOver = ref(false);
-const fileInputRef = ref<HTMLInputElement | null>(null);
+  // File upload
+  const selectedFiles = ref<File[]>([]);
+  const isStrippingEpub = ref(false);
+  const allowedExtensions = ['.srt', '.ass', '.ssa', '.epub', '.zip', '.rar', '.7z', '.txt', '.mokuro'];
+  const dragOver = ref(false);
+  const fileInputRef = ref<HTMLInputElement | null>(null);
 
-// Admin fields
-const displayAdminFunctions = computed(() => jitenStore.displayAdminFunctions);
-const showAdminPanel = ref(false);
-const adminNote = ref('');
-const fulfilledDeckId = ref<number | null>(null);
-const fulfilledDeckLabel = ref('');
-const isUpdatingStatus = ref(false);
-const reviewingUploadId = ref<number | null>(null);
+  // Admin fields
+  const displayAdminFunctions = computed(() => jitenStore.displayAdminFunctions);
+  const showAdminPanel = ref(false);
+  const adminNote = ref('');
+  const fulfilledDeckId = ref<number | null>(null);
+  const fulfilledDeckLabel = ref('');
+  const isUpdatingStatus = ref(false);
+  const reviewingUploadId = ref<number | null>(null);
 
-// Admin edit fields
-const editTitle = ref('');
-const editMediaType = ref<MediaType>(MediaType.Anime);
-const editIsUpdate = ref(false);
-const editTargetDeckId = ref<number | null>(null);
-const editTargetDeckLabel = ref('');
-const editExternalUrl = ref('');
-const editDescription = ref('');
-const isSavingEdit = ref(false);
+  // Admin edit fields
+  const editTitle = ref('');
+  const editMediaType = ref<MediaType>(MediaType.Anime);
+  const editIsUpdate = ref(false);
+  const editTargetDeckId = ref<number | null>(null);
+  const editTargetDeckLabel = ref('');
+  const editExternalUrl = ref('');
+  const editDescription = ref('');
+  const isSavingEdit = ref(false);
 
-watch(editIsUpdate, (val) => {
-  if (!val) editTargetDeckId.value = null;
-});
+  watch(editIsUpdate, (val) => {
+    if (!val) editTargetDeckId.value = null;
+  });
 
-function onEditTargetDeckSelect(suggestion: MediaSuggestion | null) {
-  if (suggestion) editMediaType.value = suggestion.mediaType;
-}
-const mediaTypeOptions = Object.entries(MediaType)
-  .filter(([key]) => isNaN(Number(key)))
-  .map(([key, value]) => ({ label: key, value: value as MediaType }));
+  function onEditTargetDeckSelect(suggestion: MediaSuggestion | null) {
+    if (suggestion) editMediaType.value = suggestion.mediaType;
+  }
+  const mediaTypeOptions = Object.entries(MediaType)
+    .filter(([key]) => isNaN(Number(key)))
+    .map(([key, value]) => ({ label: key, value: value as MediaType }));
 
-// Comment editing
-const editingCommentId = ref<number | null>(null);
-const editCommentText = ref('');
-const isSavingComment = ref(false);
+  // Comment editing
+  const editingCommentId = ref<number | null>(null);
+  const editCommentText = ref('');
+  const isSavingComment = ref(false);
 
-// Admin note composer (per parent comment)
-const adminNoteForId = ref<number | null>(null);
-const adminNoteText = ref('');
-const isSavingAdminNote = ref(false);
+  // Admin note composer (per parent comment)
+  const adminNoteForId = ref<number | null>(null);
+  const adminNoteText = ref('');
+  const isSavingAdminNote = ref(false);
 
-// Description editing (by requester)
-const isEditingDescription = ref(false);
-const editOwnDescription = ref('');
-const editOwnExternalUrl = ref('');
-const editOwnTargetDeckId = ref<number | null>(null);
-const editOwnTargetDeckLabel = ref('');
-const isSavingDescription = ref(false);
-const isOwnUpdateRequest = computed(() => request.value?.kind === RequestKind.Update);
+  // Description editing (by requester)
+  const isEditingDescription = ref(false);
+  const editOwnDescription = ref('');
+  const editOwnExternalUrl = ref('');
+  const editOwnTargetDeckId = ref<number | null>(null);
+  const editOwnTargetDeckLabel = ref('');
+  const isSavingDescription = ref(false);
+  const isOwnUpdateRequest = computed(() => request.value?.kind === RequestKind.Update);
 
-// Delete upload confirmation
-const showDeleteUploadDialog = ref(false);
-const pendingDeleteUploadId = ref<number | null>(null);
+  // Delete upload confirmation
+  const showDeleteUploadDialog = ref(false);
+  const pendingDeleteUploadId = ref<number | null>(null);
 
-useHead({
-  title: computed(() => request.value ? `${request.value.title} - Requests - Jiten` : 'Request - Jiten'),
-});
+  useHead({
+    title: computed(() => (request.value ? `${request.value.title} - Requests - Jiten` : 'Request - Jiten')),
+  });
 
-async function loadData() {
-  isLoading.value = true;
-  const [req, comms] = await Promise.all([
-    fetchRequest(requestId.value),
-    fetchComments(requestId.value),
-  ]);
-  request.value = req;
-  comments.value = comms;
-  if (req?.adminNote) adminNote.value = req.adminNote;
-  if (req) {
-    editTitle.value = req.title;
-    editMediaType.value = req.mediaType;
-    editIsUpdate.value = req.kind === RequestKind.Update;
-    editTargetDeckId.value = req.targetDeckId ?? null;
-    editTargetDeckLabel.value = req.targetDeckTitle ?? '';
-    editExternalUrl.value = req.externalUrl || '';
-    editDescription.value = req.description || '';
+  async function loadData() {
+    isLoading.value = true;
+    const [req, comms] = await Promise.all([fetchRequest(requestId.value), fetchComments(requestId.value)]);
+    request.value = req;
+    comments.value = comms;
+    if (req?.adminNote) adminNote.value = req.adminNote;
+    if (req) {
+      editTitle.value = req.title;
+      editMediaType.value = req.mediaType;
+      editIsUpdate.value = req.kind === RequestKind.Update;
+      editTargetDeckId.value = req.targetDeckId ?? null;
+      editTargetDeckLabel.value = req.targetDeckTitle ?? '';
+      editExternalUrl.value = req.externalUrl || '';
+      editDescription.value = req.description || '';
 
-    if (req.fulfilledDeckId) {
-      fulfilledDeckId.value = req.fulfilledDeckId;
-      fulfilledDeckLabel.value = req.fulfilledDeckTitle ?? String(req.fulfilledDeckId);
-    } else if (req.kind === RequestKind.Update && req.targetDeckId && fulfilledDeckId.value === null) {
-      // Completing an update request almost always fulfils it with the deck it targets.
-      fulfilledDeckId.value = req.targetDeckId;
-      fulfilledDeckLabel.value = req.targetDeckTitle ?? String(req.targetDeckId);
+      if (req.fulfilledDeckId) {
+        fulfilledDeckId.value = req.fulfilledDeckId;
+        fulfilledDeckLabel.value = req.fulfilledDeckTitle ?? String(req.fulfilledDeckId);
+      } else if (req.kind === RequestKind.Update && req.targetDeckId && fulfilledDeckId.value === null) {
+        // Completing an update request almost always fulfils it with the deck it targets.
+        fulfilledDeckId.value = req.targetDeckId;
+        fulfilledDeckLabel.value = req.targetDeckTitle ?? String(req.targetDeckId);
+      }
     }
+    isLoading.value = false;
   }
-  isLoading.value = false;
-}
 
-function toastApiError(summary: string, fallback: string) {
-  toast.add({ severity: 'error', summary, detail: extractApiError(apiError.value, fallback), life: 6000 });
-}
-
-async function handleUpvote() {
-  if (!request.value) return;
-  const result = await toggleUpvote(request.value.id);
-  if (result) {
-    request.value.hasUserUpvoted = result.upvoted;
-    request.value.upvoteCount = result.upvoteCount;
-    request.value.isSubscribed = result.subscribed;
-  } else {
-    toastApiError('Vote failed', 'Failed to update your vote. Please try again.');
+  function toastApiError(summary: string, fallback: string) {
+    toast.add({ severity: 'error', summary, detail: extractApiError(apiError.value, fallback), life: 6000 });
   }
-}
 
-const isBoostable = computed(() =>
-  !!request.value && (request.value.status === RequestStatus.Open || request.value.status === RequestStatus.InProgress)
-);
-
-function handleBoosted(payload: { boostCount: number }) {
-  if (!request.value) return;
-  request.value.boostCount = payload.boostCount;
-  request.value.hasUserBoosted = true;
-}
-
-async function handleSubscribe() {
-  if (!request.value) return;
-  if (request.value.isSubscribed) {
-    const success = await unsubscribe(request.value.id);
-    if (success) request.value.isSubscribed = false;
-    else toastApiError('Unsubscribe failed', 'Failed to unsubscribe. Please try again.');
-  } else {
-    const success = await subscribe(request.value.id);
-    if (success) request.value.isSubscribed = true;
-    else toastApiError('Subscribe failed', 'Failed to subscribe. Please try again.');
-  }
-}
-
-async function processFiles(files: File[]) {
-  for (const file of files) {
-    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-    if (!allowedExtensions.includes(ext)) {
-      toast.add({ severity: 'warn', summary: `File type ${ext} is not allowed`, life: 5000 });
-      continue;
-    }
-
-    if (ext === '.epub') {
-      isStrippingEpub.value = true;
-      const stripped = await stripEpubImages(file);
-      isStrippingEpub.value = false;
-      selectedFiles.value.push(stripped);
+  async function handleUpvote() {
+    if (!request.value) return;
+    const result = await toggleUpvote(request.value.id);
+    if (result) {
+      request.value.hasUserUpvoted = result.upvoted;
+      request.value.upvoteCount = result.upvoteCount;
+      request.value.isSubscribed = result.subscribed;
     } else {
-      selectedFiles.value.push(file);
+      toastApiError('Vote failed', 'Failed to update your vote. Please try again.');
     }
   }
-}
 
-async function handleFileSelect(event: Event) {
-  const input = event.target as HTMLInputElement;
-  if (!input.files) return;
-  await processFiles(Array.from(input.files));
-  input.value = '';
-}
+  const isBoostable = computed(() => !!request.value && (request.value.status === RequestStatus.Open || request.value.status === RequestStatus.InProgress));
 
-async function onDrop(event: DragEvent) {
-  dragOver.value = false;
-  const files = event.dataTransfer?.files;
-  if (files) await processFiles(Array.from(files));
-}
-
-function removeFile(index: number) {
-  selectedFiles.value.splice(index, 1);
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-const maxUploadBytes = 104_857_600;
-const totalFileSize = computed(() => selectedFiles.value.reduce((sum, f) => sum + f.size, 0));
-const isOverUploadLimit = computed(() => totalFileSize.value > maxUploadBytes);
-const hasContent = computed(() => commentText.value.trim().length > 0 || selectedFiles.value.length > 0);
-
-async function handleAddComment() {
-  if (!hasContent.value || isOverUploadLimit.value || !request.value) return;
-  isSubmittingComment.value = true;
-  const text = commentText.value.trim() || undefined;
-  const files = selectedFiles.value.length > 0 ? selectedFiles.value : undefined;
-  const success = await addComment(request.value.id, text, files);
-  isSubmittingComment.value = false;
-  if (success) {
-    commentText.value = '';
-    selectedFiles.value = [];
-    comments.value = await fetchComments(request.value.id);
-    toast.add({ severity: 'success', summary: 'Comment posted', life: 3000 });
-  } else {
-    const detail = extractApiError(apiError.value, 'Failed to post comment. Please try again.');
-    toast.add({ severity: 'error', summary: 'Failed to post comment', detail, life: 6000 });
-  }
-}
-
-async function handleDelete() {
-  if (!request.value) return;
-  isDeleting.value = true;
-  const success = await deleteRequest(request.value.id);
-  isDeleting.value = false;
-  showDeleteDialog.value = false;
-  if (success) {
-    toast.add({ severity: 'success', summary: 'Request deleted', life: 3000 });
-    router.push('/requests');
-  } else {
-    const detail = extractApiError(apiError.value, 'Failed to delete request. Please try again.');
-    toast.add({ severity: 'error', summary: 'Failed to delete request', detail, life: 5000 });
-  }
-}
-
-async function handleStatusChange(newStatus: RequestStatus) {
-  if (!request.value) return;
-
-  if (newStatus === RequestStatus.Completed && !fulfilledDeckId.value) {
-    toast.add({ severity: 'warn', summary: 'Deck ID is required when completing a request', life: 5000 });
-    return;
-  }
-  if (newStatus === RequestStatus.Rejected && !adminNote.value.trim()) {
-    toast.add({ severity: 'warn', summary: 'A reason is required when rejecting a request', life: 5000 });
-    return;
+  function handleBoosted(payload: { boostCount: number }) {
+    if (!request.value) return;
+    request.value.boostCount = payload.boostCount;
+    request.value.hasUserBoosted = true;
   }
 
-  isUpdatingStatus.value = true;
-  const success = await updateStatus(request.value.id, {
-    status: newStatus,
-    adminNote: adminNote.value.trim() || undefined,
-    fulfilledDeckId: newStatus === RequestStatus.Completed ? fulfilledDeckId.value ?? undefined : undefined,
-  });
-  isUpdatingStatus.value = false;
-
-  if (success) {
-    toast.add({ severity: 'success', summary: `Status updated to ${getRequestStatusText(newStatus)}`, life: 3000 });
-    await loadData();
-  } else {
-    const detail = extractApiError(apiError.value, 'Failed to update status. Please try again.');
-    toast.add({ severity: 'error', summary: 'Failed to update status', detail, life: 6000 });
-  }
-}
-
-// Admin upload handlers
-async function handleAdminDownload(uploadId: number) {
-  if (!request.value) return;
-  const url = await getUploadDownloadUrl(request.value.id, uploadId);
-  if (url) {
-    window.open(url, '_blank');
-  } else {
-    toast.add({ severity: 'error', summary: 'Failed to get download URL', life: 5000 });
-  }
-}
-
-function confirmDeleteUpload(uploadId: number) {
-  pendingDeleteUploadId.value = uploadId;
-  showDeleteUploadDialog.value = true;
-}
-
-async function handleAdminDeleteUpload(uploadId: number) {
-  if (!request.value) return;
-  const success = await deleteUpload(request.value.id, uploadId);
-  showDeleteUploadDialog.value = false;
-  pendingDeleteUploadId.value = null;
-  if (success) {
-    toast.add({ severity: 'success', summary: 'Upload deleted', life: 3000 });
-    comments.value = await fetchComments(request.value.id);
-  } else {
-    const detail = extractApiError(apiError.value, 'Failed to delete upload. Please try again.');
-    toast.add({ severity: 'error', summary: 'Failed to delete upload', detail, life: 6000 });
-  }
-}
-
-async function handleSaveEdit() {
-  if (!request.value) return;
-  if (!editTitle.value.trim()) {
-    toast.add({ severity: 'warn', summary: 'Title is required', life: 5000 });
-    return;
-  }
-  if (editIsUpdate.value && editTargetDeckId.value === null) {
-    toast.add({ severity: 'warn', summary: 'Select the media this request updates', life: 5000 });
-    return;
-  }
-  isSavingEdit.value = true;
-  const success = await editRequest(request.value.id, {
-    title: editTitle.value.trim(),
-    mediaType: editMediaType.value,
-    kind: editIsUpdate.value ? RequestKind.Update : RequestKind.New,
-    targetDeckId: editIsUpdate.value ? editTargetDeckId.value ?? undefined : undefined,
-    externalUrl: editExternalUrl.value.trim() || undefined,
-    description: editDescription.value.trim() || undefined,
-  });
-  isSavingEdit.value = false;
-  if (success) {
-    toast.add({ severity: 'success', summary: 'Request updated', life: 3000 });
-    await loadData();
-  } else {
-    const detail = extractApiError(apiError.value, 'Failed to update request. Please try again.');
-    toast.add({ severity: 'error', summary: 'Failed to update request', detail, life: 6000 });
-  }
-}
-
-async function handleAdminReviewUpload(uploadId: number, reviewed: boolean) {
-  if (!request.value || reviewingUploadId.value !== null) return;
-  reviewingUploadId.value = uploadId;
-  const success = await reviewUpload(request.value.id, uploadId, reviewed);
-  if (success) {
-    toast.add({ severity: 'success', summary: reviewed ? 'Marked as reviewed' : 'Unmarked', life: 3000 });
-    const comment = comments.value.find(c => c.upload?.id === uploadId);
-    if (comment?.upload) {
-      (comment.upload as any).adminReviewed = reviewed;
+  async function handleSubscribe() {
+    if (!request.value) return;
+    if (request.value.isSubscribed) {
+      const success = await unsubscribe(request.value.id);
+      if (success) request.value.isSubscribed = false;
+      else toastApiError('Unsubscribe failed', 'Failed to unsubscribe. Please try again.');
+    } else {
+      const success = await subscribe(request.value.id);
+      if (success) request.value.isSubscribed = true;
+      else toastApiError('Subscribe failed', 'Failed to subscribe. Please try again.');
     }
-  } else {
-    const detail = extractApiError(apiError.value, 'Failed to update review status.');
-    toast.add({ severity: 'error', summary: 'Failed to update review status', detail, life: 5000 });
   }
-  reviewingUploadId.value = null;
-}
 
-function startEditComment(comment: MediaRequestCommentDto) {
-  editingCommentId.value = comment.id;
-  editCommentText.value = comment.text || '';
-}
+  async function processFiles(files: File[]) {
+    for (const file of files) {
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      if (!allowedExtensions.includes(ext)) {
+        toast.add({ severity: 'warn', summary: `File type ${ext} is not allowed`, life: 5000 });
+        continue;
+      }
 
-function cancelEditComment() {
-  editingCommentId.value = null;
-  editCommentText.value = '';
-}
+      if (ext === '.epub') {
+        isStrippingEpub.value = true;
+        const stripped = await stripEpubImages(file);
+        isStrippingEpub.value = false;
+        selectedFiles.value.push(stripped);
+      } else {
+        selectedFiles.value.push(file);
+      }
+    }
+  }
 
-async function handleSaveComment() {
-  if (!request.value || editingCommentId.value === null) return;
-  const trimmed = editCommentText.value.trim();
-  if (!trimmed) return;
-  isSavingComment.value = true;
-  const success = await editComment(request.value.id, editingCommentId.value, trimmed);
-  isSavingComment.value = false;
-  if (success) {
+  async function handleFileSelect(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files) return;
+    await processFiles(Array.from(input.files));
+    input.value = '';
+  }
+
+  async function onDrop(event: DragEvent) {
+    dragOver.value = false;
+    const files = event.dataTransfer?.files;
+    if (files) await processFiles(Array.from(files));
+  }
+
+  function removeFile(index: number) {
+    selectedFiles.value.splice(index, 1);
+  }
+
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  const maxUploadBytes = 104_857_600;
+  const totalFileSize = computed(() => selectedFiles.value.reduce((sum, f) => sum + f.size, 0));
+  const isOverUploadLimit = computed(() => totalFileSize.value > maxUploadBytes);
+  const hasContent = computed(() => commentText.value.trim().length > 0 || selectedFiles.value.length > 0);
+
+  async function handleAddComment() {
+    if (!hasContent.value || isOverUploadLimit.value || !request.value) return;
+    isSubmittingComment.value = true;
+    const text = commentText.value.trim() || undefined;
+    const files = selectedFiles.value.length > 0 ? selectedFiles.value : undefined;
+    const success = await addComment(request.value.id, text, files);
+    isSubmittingComment.value = false;
+    if (success) {
+      commentText.value = '';
+      selectedFiles.value = [];
+      comments.value = await fetchComments(request.value.id);
+      toast.add({ severity: 'success', summary: 'Comment posted', life: 3000 });
+    } else {
+      const detail = extractApiError(apiError.value, 'Failed to post comment. Please try again.');
+      toast.add({ severity: 'error', summary: 'Failed to post comment', detail, life: 6000 });
+    }
+  }
+
+  async function handleDelete() {
+    if (!request.value) return;
+    isDeleting.value = true;
+    const success = await deleteRequest(request.value.id);
+    isDeleting.value = false;
+    showDeleteDialog.value = false;
+    if (success) {
+      toast.add({ severity: 'success', summary: 'Request deleted', life: 3000 });
+      router.push('/requests');
+    } else {
+      const detail = extractApiError(apiError.value, 'Failed to delete request. Please try again.');
+      toast.add({ severity: 'error', summary: 'Failed to delete request', detail, life: 5000 });
+    }
+  }
+
+  async function handleStatusChange(newStatus: RequestStatus) {
+    if (!request.value) return;
+
+    if (newStatus === RequestStatus.Completed && !fulfilledDeckId.value) {
+      toast.add({ severity: 'warn', summary: 'Deck ID is required when completing a request', life: 5000 });
+      return;
+    }
+    if (newStatus === RequestStatus.Rejected && !adminNote.value.trim()) {
+      toast.add({ severity: 'warn', summary: 'A reason is required when rejecting a request', life: 5000 });
+      return;
+    }
+
+    isUpdatingStatus.value = true;
+    const success = await updateStatus(request.value.id, {
+      status: newStatus,
+      adminNote: adminNote.value.trim() || undefined,
+      fulfilledDeckId: newStatus === RequestStatus.Completed ? (fulfilledDeckId.value ?? undefined) : undefined,
+    });
+    isUpdatingStatus.value = false;
+
+    if (success) {
+      toast.add({ severity: 'success', summary: `Status updated to ${getRequestStatusText(newStatus)}`, life: 3000 });
+      await loadData();
+    } else {
+      const detail = extractApiError(apiError.value, 'Failed to update status. Please try again.');
+      toast.add({ severity: 'error', summary: 'Failed to update status', detail, life: 6000 });
+    }
+  }
+
+  // Admin upload handlers
+  async function handleAdminDownload(uploadId: number) {
+    if (!request.value) return;
+    const url = await getUploadDownloadUrl(request.value.id, uploadId);
+    if (url) {
+      window.open(url, '_blank');
+    } else {
+      toast.add({ severity: 'error', summary: 'Failed to get download URL', life: 5000 });
+    }
+  }
+
+  function confirmDeleteUpload(uploadId: number) {
+    pendingDeleteUploadId.value = uploadId;
+    showDeleteUploadDialog.value = true;
+  }
+
+  async function handleAdminDeleteUpload(uploadId: number) {
+    if (!request.value) return;
+    const success = await deleteUpload(request.value.id, uploadId);
+    showDeleteUploadDialog.value = false;
+    pendingDeleteUploadId.value = null;
+    if (success) {
+      toast.add({ severity: 'success', summary: 'Upload deleted', life: 3000 });
+      comments.value = await fetchComments(request.value.id);
+    } else {
+      const detail = extractApiError(apiError.value, 'Failed to delete upload. Please try again.');
+      toast.add({ severity: 'error', summary: 'Failed to delete upload', detail, life: 6000 });
+    }
+  }
+
+  async function handleSaveEdit() {
+    if (!request.value) return;
+    if (!editTitle.value.trim()) {
+      toast.add({ severity: 'warn', summary: 'Title is required', life: 5000 });
+      return;
+    }
+    if (editIsUpdate.value && editTargetDeckId.value === null) {
+      toast.add({ severity: 'warn', summary: 'Select the media this request updates', life: 5000 });
+      return;
+    }
+    isSavingEdit.value = true;
+    const success = await editRequest(request.value.id, {
+      title: editTitle.value.trim(),
+      mediaType: editMediaType.value,
+      kind: editIsUpdate.value ? RequestKind.Update : RequestKind.New,
+      targetDeckId: editIsUpdate.value ? (editTargetDeckId.value ?? undefined) : undefined,
+      externalUrl: editExternalUrl.value.trim() || undefined,
+      description: editDescription.value.trim() || undefined,
+    });
+    isSavingEdit.value = false;
+    if (success) {
+      toast.add({ severity: 'success', summary: 'Request updated', life: 3000 });
+      await loadData();
+    } else {
+      const detail = extractApiError(apiError.value, 'Failed to update request. Please try again.');
+      toast.add({ severity: 'error', summary: 'Failed to update request', detail, life: 6000 });
+    }
+  }
+
+  async function handleAdminReviewUpload(uploadId: number, reviewed: boolean) {
+    if (!request.value || reviewingUploadId.value !== null) return;
+    reviewingUploadId.value = uploadId;
+    const success = await reviewUpload(request.value.id, uploadId, reviewed);
+    if (success) {
+      toast.add({ severity: 'success', summary: reviewed ? 'Marked as reviewed' : 'Unmarked', life: 3000 });
+      const comment = comments.value.find((c) => c.upload?.id === uploadId);
+      if (comment?.upload) {
+        (comment.upload as any).adminReviewed = reviewed;
+      }
+    } else {
+      const detail = extractApiError(apiError.value, 'Failed to update review status.');
+      toast.add({ severity: 'error', summary: 'Failed to update review status', detail, life: 5000 });
+    }
+    reviewingUploadId.value = null;
+  }
+
+  function startEditComment(comment: MediaRequestCommentDto) {
+    editingCommentId.value = comment.id;
+    editCommentText.value = comment.text || '';
+  }
+
+  function cancelEditComment() {
     editingCommentId.value = null;
     editCommentText.value = '';
-    comments.value = await fetchComments(request.value.id);
-    toast.add({ severity: 'success', summary: 'Comment updated', life: 3000 });
-  } else {
-    const detail = extractApiError(apiError.value, 'Failed to update comment.');
-    toast.add({ severity: 'error', summary: 'Failed to update comment', detail, life: 6000 });
   }
-}
 
-function startAdminNote(commentId: number) {
-  adminNoteForId.value = commentId;
-  adminNoteText.value = '';
-}
+  async function handleSaveComment() {
+    if (!request.value || editingCommentId.value === null) return;
+    const trimmed = editCommentText.value.trim();
+    if (!trimmed) return;
+    isSavingComment.value = true;
+    const success = await editComment(request.value.id, editingCommentId.value, trimmed);
+    isSavingComment.value = false;
+    if (success) {
+      editingCommentId.value = null;
+      editCommentText.value = '';
+      comments.value = await fetchComments(request.value.id);
+      toast.add({ severity: 'success', summary: 'Comment updated', life: 3000 });
+    } else {
+      const detail = extractApiError(apiError.value, 'Failed to update comment.');
+      toast.add({ severity: 'error', summary: 'Failed to update comment', detail, life: 6000 });
+    }
+  }
 
-function cancelAdminNote() {
-  adminNoteForId.value = null;
-  adminNoteText.value = '';
-}
+  function startAdminNote(commentId: number) {
+    adminNoteForId.value = commentId;
+    adminNoteText.value = '';
+  }
 
-async function handleSaveAdminNote() {
-  if (!request.value || adminNoteForId.value === null) return;
-  const trimmed = adminNoteText.value.trim();
-  if (!trimmed) return;
-  isSavingAdminNote.value = true;
-  const success = await addAdminComment(request.value.id, adminNoteForId.value, trimmed);
-  isSavingAdminNote.value = false;
-  if (success) {
+  function cancelAdminNote() {
     adminNoteForId.value = null;
     adminNoteText.value = '';
-    comments.value = await fetchComments(request.value.id);
-    toast.add({ severity: 'success', summary: 'Admin note added', life: 3000 });
-  } else {
-    const detail = extractApiError(apiError.value, 'Failed to add admin note.');
-    toast.add({ severity: 'error', summary: 'Failed to add admin note', detail, life: 6000 });
   }
-}
 
-function startEditDescription() {
-  if (!request.value) return;
-  editOwnDescription.value = request.value.description || '';
-  editOwnExternalUrl.value = request.value.externalUrl || '';
-  editOwnTargetDeckId.value = request.value.targetDeckId ?? null;
-  editOwnTargetDeckLabel.value = request.value.targetDeckTitle ?? '';
-  isEditingDescription.value = true;
-}
-
-function cancelEditDescription() {
-  isEditingDescription.value = false;
-}
-
-async function handleSaveDescription() {
-  if (!request.value) return;
-  if (isOwnUpdateRequest.value && editOwnTargetDeckId.value === null) {
-    toast.add({ severity: 'warn', summary: 'Select the media this request updates', life: 5000 });
-    return;
+  async function handleSaveAdminNote() {
+    if (!request.value || adminNoteForId.value === null) return;
+    const trimmed = adminNoteText.value.trim();
+    if (!trimmed) return;
+    isSavingAdminNote.value = true;
+    const success = await addAdminComment(request.value.id, adminNoteForId.value, trimmed);
+    isSavingAdminNote.value = false;
+    if (success) {
+      adminNoteForId.value = null;
+      adminNoteText.value = '';
+      comments.value = await fetchComments(request.value.id);
+      toast.add({ severity: 'success', summary: 'Admin note added', life: 3000 });
+    } else {
+      const detail = extractApiError(apiError.value, 'Failed to add admin note.');
+      toast.add({ severity: 'error', summary: 'Failed to add admin note', detail, life: 6000 });
+    }
   }
-  isSavingDescription.value = true;
-  const success = await editRequestDescription(
-    request.value.id,
-    editOwnDescription.value.trim() || undefined,
-    editOwnExternalUrl.value.trim() || undefined,
-    isOwnUpdateRequest.value ? editOwnTargetDeckId.value ?? undefined : undefined,
-  );
-  isSavingDescription.value = false;
-  if (success) {
+
+  function startEditDescription() {
+    if (!request.value) return;
+    editOwnDescription.value = request.value.description || '';
+    editOwnExternalUrl.value = request.value.externalUrl || '';
+    editOwnTargetDeckId.value = request.value.targetDeckId ?? null;
+    editOwnTargetDeckLabel.value = request.value.targetDeckTitle ?? '';
+    isEditingDescription.value = true;
+  }
+
+  function cancelEditDescription() {
     isEditingDescription.value = false;
-    toast.add({ severity: 'success', summary: 'Request updated', life: 3000 });
-    await loadData();
-  } else {
-    const detail = extractApiError(apiError.value, 'Failed to update request.');
-    toast.add({ severity: 'error', summary: 'Failed to update request', detail, life: 6000 });
   }
-}
 
-const commentsWithUploads = computed(() =>
-  comments.value.filter(c => c.upload)
-);
+  async function handleSaveDescription() {
+    if (!request.value) return;
+    if (isOwnUpdateRequest.value && editOwnTargetDeckId.value === null) {
+      toast.add({ severity: 'warn', summary: 'Select the media this request updates', life: 5000 });
+      return;
+    }
+    isSavingDescription.value = true;
+    const success = await editRequestDescription(
+      request.value.id,
+      editOwnDescription.value.trim() || undefined,
+      editOwnExternalUrl.value.trim() || undefined,
+      isOwnUpdateRequest.value ? (editOwnTargetDeckId.value ?? undefined) : undefined
+    );
+    isSavingDescription.value = false;
+    if (success) {
+      isEditingDescription.value = false;
+      toast.add({ severity: 'success', summary: 'Request updated', life: 3000 });
+      await loadData();
+    } else {
+      const detail = extractApiError(apiError.value, 'Failed to update request.');
+      toast.add({ severity: 'error', summary: 'Failed to update request', detail, life: 6000 });
+    }
+  }
 
-function uploadFileCountLabel(upload: MediaRequestUploadDto): string {
-  const count = Math.max(upload.originalFileCount, 1);
-  return count === 1 ? '1 file' : `${count} files`;
-}
+  const commentsWithUploads = computed(() => comments.value.filter((c) => c.upload));
 
-const canComment = computed(() =>
-  request.value && (request.value.status === RequestStatus.Open || request.value.status === RequestStatus.InProgress)
-);
+  function uploadFileCountLabel(upload: MediaRequestUploadDto): string {
+    const count = Math.max(upload.originalFileCount, 1);
+    return count === 1 ? '1 file' : `${count} files`;
+  }
 
-const isTerminal = computed(() =>
-  request.value && (request.value.status === RequestStatus.Completed || request.value.status === RequestStatus.Rejected)
-);
+  const canComment = computed(() => request.value && (request.value.status === RequestStatus.Open || request.value.status === RequestStatus.InProgress));
 
-const canCreateDeck = computed(() => !!request.value && !isTerminal.value && !request.value.fulfilledDeckId);
+  const isTerminal = computed(() => request.value && (request.value.status === RequestStatus.Completed || request.value.status === RequestStatus.Rejected));
 
-// Syosetsu novels are imported chapter by chapter, so they go through the webnovel page instead
-const createDeckHref = computed(() => {
-  const req = request.value;
-  if (!req) return '';
-  if (req.externalLinkType === LinkType.Syosetsu && req.externalUrl)
-    return `/dashboard/add-webnovel?url=${encodeURIComponent(req.externalUrl)}`;
-  return `/dashboard/add-media?requestId=${req.id}`;
-});
+  const canCreateDeck = computed(() => !!request.value && !isTerminal.value && !request.value.fulfilledDeckId);
 
-function formatTimeAgo(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 30) return `${diffDays}d ago`;
-  return new Date(dateString).toLocaleDateString();
-}
+  // Syosetsu novels are imported chapter by chapter, so they go through the webnovel page instead
+  const createDeckHref = computed(() => {
+    const req = request.value;
+    if (!req) return '';
+    if (req.externalLinkType === LinkType.Syosetsu && req.externalUrl) return `/dashboard/add-webnovel?url=${encodeURIComponent(req.externalUrl)}`;
+    return `/dashboard/add-media?requestId=${req.id}`;
+  });
 
-function formatCompletedAt(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000);
-  if (diffDays < 30) return `${diffDays || 1}d ago`;
-  return `on ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined })}`;
-}
+  function formatTimeAgo(dateString: string): string {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 30) return `${diffDays}d ago`;
+    return new Date(dateString).toLocaleDateString();
+  }
 
-onMounted(() => loadData());
+  function formatCompletedAt(dateString: string): string {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000);
+    if (diffDays < 30) return `${diffDays || 1}d ago`;
+    return `on ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined })}`;
+  }
+
+  onMounted(() => loadData());
 </script>
 
 <template>
@@ -523,23 +524,17 @@ onMounted(() => loadData());
           <div class="mb-4">
             <h1 class="text-2xl font-bold mb-2">{{ request.title }}</h1>
             <div class="flex items-center gap-2 flex-wrap">
-              <Tag
-                v-if="request.kind === RequestKind.Update"
-                :value="getRequestKindText(request.kind)"
-                :icon="getRequestKindIcon(request.kind)"
-              />
+              <Tag v-if="request.kind === RequestKind.Update" :value="getRequestKindText(request.kind)" :icon="getRequestKindIcon(request.kind)" />
               <Tag :value="getMediaTypeText(request.mediaType)" severity="secondary" />
-              <Tag
-                :value="getRequestStatusText(request.status)"
-                :severity="getRequestStatusSeverity(request.status)"
-              />
+              <Tag :value="getRequestStatusText(request.status)" :severity="getRequestStatusSeverity(request.status)" />
               <span class="text-sm text-muted-color">{{ formatTimeAgo(request.createdAt) }}</span>
               <span v-if="request.completedAt" class="text-sm text-muted-color flex items-center gap-1">
                 <i class="pi pi-check-circle" />
                 completed {{ formatCompletedAt(request.completedAt) }}
               </span>
               <span v-if="request.requesterName && authStore.isAdmin" class="text-sm text-muted-color">
-                by <span class="font-medium">{{ request.requesterName }}</span>
+                by
+                <span class="font-medium">{{ request.requesterName }}</span>
               </span>
             </div>
           </div>
@@ -586,12 +581,7 @@ onMounted(() => loadData());
           <div v-else class="mb-4 flex flex-col gap-2">
             <div v-if="isOwnUpdateRequest" class="flex flex-col gap-1">
               <label class="text-xs font-semibold">Media to update</label>
-              <MediaDeckPicker
-                v-model="editOwnTargetDeckId"
-                :label="editOwnTargetDeckLabel"
-                placeholder="Search the media on Jiten..."
-                :allow-raw-id="false"
-              />
+              <MediaDeckPicker v-model="editOwnTargetDeckId" :label="editOwnTargetDeckLabel" placeholder="Search the media on Jiten..." :allow-raw-id="false" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-xs font-semibold">Description</label>
@@ -608,7 +598,10 @@ onMounted(() => loadData());
             </div>
           </div>
 
-          <div v-if="request.adminNote && isTerminal" class="mb-4 p-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800">
+          <div
+            v-if="request.adminNote && isTerminal"
+            class="mb-4 p-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800"
+          >
             <p class="text-sm font-semibold mb-1">Admin note:</p>
             <p class="text-sm">{{ request.adminNote }}</p>
           </div>
@@ -621,12 +614,7 @@ onMounted(() => loadData());
           </div>
 
           <div class="flex items-center gap-3 flex-wrap">
-            <UpvoteButton
-              :has-upvoted="request.hasUserUpvoted"
-              :upvote-count="request.upvoteCount"
-              :boost-count="request.boostCount"
-              @toggle="handleUpvote"
-            />
+            <UpvoteButton :has-upvoted="request.hasUserUpvoted" :upvote-count="request.upvoteCount" :boost-count="request.boostCount" @toggle="handleUpvote" />
             <RequestBoostButton
               :request-id="request.id"
               :boost-count="request.boostCount"
@@ -634,18 +622,8 @@ onMounted(() => loadData());
               :boostable="isBoostable"
               @boosted="handleBoosted"
             />
-            <RequestSubscribeButton
-              :is-subscribed="request.isSubscribed"
-              @toggle="handleSubscribe"
-            />
-            <Button
-              v-if="request.isOwnRequest"
-              icon="pi pi-trash"
-              label="Delete"
-              severity="danger"
-              outlined
-              @click="showDeleteDialog = true"
-            />
+            <RequestSubscribeButton :is-subscribed="request.isSubscribed" @toggle="handleSubscribe" />
+            <Button v-if="request.isOwnRequest" icon="pi pi-trash" label="Delete" severity="danger" outlined @click="showDeleteDialog = true" />
           </div>
 
           <div v-if="isTerminal" class="mt-4">
@@ -715,14 +693,7 @@ onMounted(() => loadData());
                   <label class="text-xs font-semibold">Description</label>
                   <Textarea v-model="editDescription" rows="2" class="w-full" />
                 </div>
-                <Button
-                  label="Save Changes"
-                  icon="pi pi-save"
-                  severity="info"
-                  :loading="isSavingEdit"
-                  class="w-fit"
-                  @click="handleSaveEdit"
-                />
+                <Button label="Save Changes" icon="pi pi-save" severity="info" :loading="isSavingEdit" class="w-fit" @click="handleSaveEdit" />
               </div>
             </div>
 
@@ -732,26 +703,15 @@ onMounted(() => loadData());
             </div>
             <div class="flex flex-col gap-2">
               <label class="font-semibold text-sm">Fulfilled Deck (for completion)</label>
-              <MediaDeckPicker
-                v-model="fulfilledDeckId"
-                :label="fulfilledDeckLabel"
-                placeholder="Search or select recent deck..."
-                show-recent
-              />
+              <MediaDeckPicker v-model="fulfilledDeckId" :label="fulfilledDeckLabel" placeholder="Search or select recent deck..." show-recent />
               <small v-if="fulfilledDeckId" class="text-surface-500 dark:text-surface-400">Deck ID: {{ fulfilledDeckId }}</small>
             </div>
             <div v-if="canCreateDeck" class="flex flex-col gap-1">
-              <NuxtLink
-                :to="createDeckHref"
-                target="_blank"
-                class="inline-flex items-center gap-2 w-fit text-primary hover:underline font-medium text-sm"
-              >
+              <NuxtLink :to="createDeckHref" target="_blank" class="inline-flex items-center gap-2 w-fit text-primary hover:underline font-medium text-sm">
                 <i class="pi pi-plus-circle" />
                 Create deck from this request
               </NuxtLink>
-              <small class="text-surface-500 dark:text-surface-400">
-                Opens prefilled form and put the request to In Progress.
-              </small>
+              <small class="text-surface-500 dark:text-surface-400">Opens prefilled form and put the request to In Progress.</small>
             </div>
 
             <div v-if="!isTerminal" class="flex gap-2 flex-wrap">
@@ -762,26 +722,11 @@ onMounted(() => loadData());
                 :loading="isUpdatingStatus"
                 @click="handleStatusChange(RequestStatus.InProgress)"
               />
-              <Button
-                label="Complete"
-                severity="success"
-                :loading="isUpdatingStatus"
-                @click="handleStatusChange(RequestStatus.Completed)"
-              />
-              <Button
-                label="Reject"
-                severity="danger"
-                :loading="isUpdatingStatus"
-                @click="handleStatusChange(RequestStatus.Rejected)"
-              />
+              <Button label="Complete" severity="success" :loading="isUpdatingStatus" @click="handleStatusChange(RequestStatus.Completed)" />
+              <Button label="Reject" severity="danger" :loading="isUpdatingStatus" @click="handleStatusChange(RequestStatus.Rejected)" />
             </div>
             <div v-else class="flex gap-2 flex-wrap">
-              <Button
-                label="Reopen"
-                severity="info"
-                :loading="isUpdatingStatus"
-                @click="handleStatusChange(RequestStatus.Open)"
-              />
+              <Button label="Reopen" severity="info" :loading="isUpdatingStatus" @click="handleStatusChange(RequestStatus.Open)" />
             </div>
 
             <div v-if="commentsWithUploads.length > 0" class="border-t border-surface-200 dark:border-surface-700 pt-3 mt-2">
@@ -796,18 +741,8 @@ onMounted(() => loadData());
                     <i class="pi pi-paperclip text-xs" />
                     <span class="font-medium">{{ (comment.upload as MediaRequestUploadAdminDto).fileName }}</span>
                     <span class="text-muted-color">({{ formatFileSize(comment.upload!.fileSize) }})</span>
-                    <Tag
-                      v-if="(comment.upload as any)?.adminReviewed"
-                      value="Reviewed"
-                      severity="success"
-                      class="text-xs"
-                    />
-                    <Tag
-                      v-if="(comment.upload as any)?.fileDeleted"
-                      value="Deleted"
-                      severity="danger"
-                      class="text-xs"
-                    />
+                    <Tag v-if="(comment.upload as any)?.adminReviewed" value="Reviewed" severity="success" class="text-xs" />
+                    <Tag v-if="(comment.upload as any)?.fileDeleted" value="Deleted" severity="danger" class="text-xs" />
                   </div>
                   <div v-if="(comment.upload as any)?.uploaderName" class="text-xs text-muted-color mt-1">
                     Uploader: {{ (comment.upload as MediaRequestUploadAdminDto).uploaderName }}
@@ -871,22 +806,12 @@ onMounted(() => loadData());
             <span v-if="comments.length > 0" class="text-muted-color font-normal">({{ comments.length }})</span>
           </h2>
 
-          <div v-if="comments.length === 0" class="text-center py-6 text-muted-color">
-            No comments yet.
-          </div>
+          <div v-if="comments.length === 0" class="text-center py-6 text-muted-color">No comments yet.</div>
 
           <div v-else class="flex flex-col gap-3 mb-4">
-            <div
-              v-for="comment in comments"
-              :key="comment.id"
-              class="p-3 rounded-lg border border-surface-200 dark:border-surface-700"
-            >
+            <div v-for="comment in comments" :key="comment.id" class="p-3 rounded-lg border border-surface-200 dark:border-surface-700">
               <div class="flex items-center gap-2 mb-1">
-                <Tag
-                  :value="comment.role"
-                  :severity="comment.role === 'Requester' ? 'info' : 'secondary'"
-                  class="text-xs"
-                />
+                <Tag :value="comment.role" :severity="comment.role === 'Requester' ? 'info' : 'secondary'" class="text-xs" />
                 <span v-if="comment.userName && authStore.isAdmin" class="text-xs font-medium">{{ comment.userName }}</span>
                 <span v-if="comment.isOwnComment" class="text-xs text-muted-color italic">You</span>
                 <span class="text-xs text-muted-color ml-auto">
@@ -908,7 +833,14 @@ onMounted(() => loadData());
                 <Textarea v-model="editCommentText" rows="2" class="w-full text-sm" :maxlength="500" />
                 <div class="flex items-center gap-2 mt-1">
                   <small class="text-muted-color">{{ editCommentText.length }}/500</small>
-                  <Button label="Save" icon="pi pi-check" size="small" :loading="isSavingComment" :disabled="!editCommentText.trim()" @click="handleSaveComment" />
+                  <Button
+                    label="Save"
+                    icon="pi pi-check"
+                    size="small"
+                    :loading="isSavingComment"
+                    :disabled="!editCommentText.trim()"
+                    @click="handleSaveComment"
+                  />
                   <Button label="Cancel" severity="secondary" size="small" @click="cancelEditComment" />
                 </div>
               </template>
@@ -923,9 +855,7 @@ onMounted(() => loadData());
                   <template v-if="authStore.isAdmin">
                     <span>{{ (comment.upload as MediaRequestUploadAdminDto).fileName }}</span>
                     <span>({{ formatFileSize(comment.upload.fileSize) }})</span>
-                    <span v-if="comment.upload.originalFileCount > 1" class="text-xs">
-                      ({{ comment.upload.originalFileCount }} files)
-                    </span>
+                    <span v-if="comment.upload.originalFileCount > 1" class="text-xs">({{ comment.upload.originalFileCount }} files)</span>
                   </template>
                   <template v-else>
                     <span>{{ uploadFileCountLabel(comment.upload) }}</span>
@@ -963,7 +893,14 @@ onMounted(() => loadData());
                   <Textarea v-model="editCommentText" rows="2" class="w-full text-sm" :maxlength="500" />
                   <div class="flex items-center gap-2 mt-1">
                     <small class="text-muted-color">{{ editCommentText.length }}/500</small>
-                    <Button label="Save" icon="pi pi-check" size="small" :loading="isSavingComment" :disabled="!editCommentText.trim()" @click="handleSaveComment" />
+                    <Button
+                      label="Save"
+                      icon="pi pi-check"
+                      size="small"
+                      :loading="isSavingComment"
+                      :disabled="!editCommentText.trim()"
+                      @click="handleSaveComment"
+                    />
                     <Button label="Cancel" severity="secondary" size="small" @click="cancelEditComment" />
                   </div>
                 </template>
@@ -976,7 +913,15 @@ onMounted(() => loadData());
                   <Textarea v-model="adminNoteText" rows="2" placeholder="Add an admin note..." class="w-full text-sm" :maxlength="500" />
                   <div class="flex items-center gap-2 mt-1">
                     <small class="text-muted-color">{{ adminNoteText.length }}/500</small>
-                    <Button label="Save note" icon="pi pi-check" severity="danger" size="small" :loading="isSavingAdminNote" :disabled="!adminNoteText.trim()" @click="handleSaveAdminNote" />
+                    <Button
+                      label="Save note"
+                      icon="pi pi-check"
+                      severity="danger"
+                      size="small"
+                      :loading="isSavingAdminNote"
+                      :disabled="!adminNoteText.trim()"
+                      @click="handleSaveAdminNote"
+                    />
                     <Button label="Cancel" severity="secondary" size="small" @click="cancelAdminNote" />
                   </div>
                 </div>
@@ -998,39 +943,17 @@ onMounted(() => loadData());
             <Message severity="secondary" :closable="false" class="text-sm">
               Your username is not visible to other users, but is visible to administrators to avoid abuse.
             </Message>
-            <Textarea
-              v-model="commentText"
-              placeholder="Add a comment..."
-              rows="3"
-              :maxlength="500"
-              class="w-full"
-            />
+            <Textarea v-model="commentText" placeholder="Add a comment..." rows="3" :maxlength="500" class="w-full" />
             <small class="text-muted-color">{{ commentText.length }}/500</small>
 
             <div class="flex flex-col gap-2">
-              <Message severity="warn" :closable="false" class="text-sm">
-                Do not zip EPUBs - they are automatically optimised when uploaded directly.
-              </Message>
+              <Message severity="warn" :closable="false" class="text-sm">Do not zip EPUBs - they are automatically optimised when uploaded directly.</Message>
 
-              <input
-                ref="fileInputRef"
-                type="file"
-                :accept="allowedExtensions.join(',')"
-                multiple
-                class="hidden"
-                @change="handleFileSelect"
-              />
+              <input ref="fileInputRef" type="file" :accept="allowedExtensions.join(',')" multiple class="hidden" @change="handleFileSelect" />
 
               <!-- Mobile: button only -->
               <div class="sm:hidden flex items-center gap-2">
-                <Button
-                  icon="pi pi-paperclip"
-                  label="Attach Files"
-                  severity="secondary"
-                  outlined
-                  size="small"
-                  @click="fileInputRef?.click()"
-                />
+                <Button icon="pi pi-paperclip" label="Attach Files" severity="secondary" outlined size="small" @click="fileInputRef?.click()" />
                 <span v-if="isStrippingEpub" class="text-xs text-muted-color flex items-center gap-1">
                   <ProgressSpinner style="width: 14px; height: 14px" />
                   Optimising epub...
@@ -1040,9 +963,7 @@ onMounted(() => loadData());
               <!-- Desktop: drag & drop zone -->
               <div
                 class="hidden sm:flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-5 text-center transition-colors cursor-pointer"
-                :class="dragOver
-                  ? 'border-primary bg-primary-50 dark:bg-primary-900/20'
-                  : 'border-surface-300 dark:border-surface-600'"
+                :class="dragOver ? 'border-primary bg-primary-50 dark:bg-primary-900/20' : 'border-surface-300 dark:border-surface-600'"
                 @dragover.prevent="dragOver = true"
                 @dragleave.prevent="dragOver = false"
                 @drop.prevent="onDrop"
@@ -1050,14 +971,7 @@ onMounted(() => loadData());
               >
                 <i class="pi pi-upload text-2xl text-muted-color mb-2" />
                 <p class="text-sm text-muted-color mb-2">Drag and drop files here, or</p>
-                <Button
-                  icon="pi pi-paperclip"
-                  label="Attach Files"
-                  severity="secondary"
-                  outlined
-                  size="small"
-                  @click.stop="fileInputRef?.click()"
-                />
+                <Button icon="pi pi-paperclip" label="Attach Files" severity="secondary" outlined size="small" @click.stop="fileInputRef?.click()" />
                 <span v-if="isStrippingEpub" class="text-xs text-muted-color flex items-center gap-1 mt-2">
                   <ProgressSpinner style="width: 14px; height: 14px" />
                   Optimising epub...
@@ -1067,22 +981,11 @@ onMounted(() => loadData());
               <small class="text-muted-color">Max 100MB. Accepted: {{ allowedExtensions.join(' ') }}</small>
 
               <div v-if="selectedFiles.length > 0" class="flex flex-col gap-1">
-                <div
-                  v-for="(file, index) in selectedFiles"
-                  :key="index"
-                  class="flex items-center gap-2 text-sm p-1 rounded bg-surface-50 dark:bg-surface-800"
-                >
+                <div v-for="(file, index) in selectedFiles" :key="index" class="flex items-center gap-2 text-sm p-1 rounded bg-surface-50 dark:bg-surface-800">
                   <i class="pi pi-file text-xs" />
                   <span class="flex-1 truncate">{{ file.name }}</span>
                   <span class="text-muted-color text-xs">{{ formatFileSize(file.size) }}</span>
-                  <Button
-                    icon="pi pi-times"
-                    severity="secondary"
-                    text
-                    size="small"
-                    rounded
-                    @click="removeFile(index)"
-                  />
+                  <Button icon="pi pi-times" severity="secondary" text size="small" rounded @click="removeFile(index)" />
                 </div>
                 <small :class="isOverUploadLimit ? 'text-red-500' : 'text-muted-color'">
                   Total: {{ formatFileSize(totalFileSize) }}
@@ -1109,12 +1012,7 @@ onMounted(() => loadData());
     </div>
 
     <!-- Delete confirmation dialog -->
-    <Dialog
-      v-model:visible="showDeleteDialog"
-      header="Delete Request"
-      :modal="true"
-      :style="{ width: '400px' }"
-    >
+    <Dialog v-model:visible="showDeleteDialog" header="Delete Request" :modal="true" :style="{ width: '400px' }">
       <p>Are you sure you want to delete this request? This action cannot be undone.</p>
       <template #footer>
         <Button label="Cancel" severity="secondary" @click="showDeleteDialog = false" />
@@ -1123,12 +1021,7 @@ onMounted(() => loadData());
     </Dialog>
 
     <!-- Delete upload confirmation dialog -->
-    <Dialog
-      v-model:visible="showDeleteUploadDialog"
-      header="Delete File"
-      :modal="true"
-      :style="{ width: '400px' }"
-    >
+    <Dialog v-model:visible="showDeleteUploadDialog" header="Delete File" :modal="true" :style="{ width: '400px' }">
       <p>Are you sure you want to delete this uploaded file? This action cannot be undone.</p>
       <template #footer>
         <Button label="Cancel" severity="secondary" @click="showDeleteUploadDialog = false" />

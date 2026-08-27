@@ -41,7 +41,9 @@
 </template>
 
 <style scoped>
-.size-btn {
-  transition: background-color 0.15s, color 0.15s;
-}
+  .size-btn {
+    transition:
+      background-color 0.15s,
+      color 0.15s;
+  }
 </style>

@@ -62,7 +62,8 @@
     </template>
     <template #content>
       <p class="mb-3">
-        Export your vocabulary as a text file organised by learning state. <br />
+        Export your vocabulary as a text file organised by learning state.
+        <br />
         Each line contains a single word.
       </p>
 
@@ -73,38 +74,58 @@
           <div class="flex items-center">
             <Checkbox id="exportKanaOnly" v-model="exportKanaOnly" :binary="true" />
             <label for="exportKanaOnly" class="ml-2">
-              <span>Export <strong>kana only</strong> words</span>
-              <span class="text-sm text-gray-600 dark:text-gray-400 block"> Include words that are written entirely in hiragana or katakana </span>
+              <span>
+                Export
+                <strong>kana only</strong>
+                words
+              </span>
+              <span class="text-sm text-gray-600 dark:text-gray-400 block">Include words that are written entirely in hiragana or katakana</span>
             </label>
           </div>
 
           <div class="flex items-center">
             <Checkbox id="exportMastered" v-model="exportMastered" :binary="true" />
             <label for="exportMastered" class="ml-2">
-              <span>Export <strong>mastered</strong> words</span>
+              <span>
+                Export
+                <strong>mastered</strong>
+                words
+              </span>
             </label>
           </div>
 
           <div class="flex items-center">
             <Checkbox id="exportMature" v-model="exportMature" :binary="true" />
             <label for="exportMature" class="ml-2">
-              <span>Export <strong>mature</strong> words</span>
-              <span class="text-sm text-gray-600 dark:text-gray-400 block"> Cards in review with interval ≥ 21 days </span>
+              <span>
+                Export
+                <strong>mature</strong>
+                words
+              </span>
+              <span class="text-sm text-gray-600 dark:text-gray-400 block">Cards in review with interval ≥ 21 days</span>
             </label>
           </div>
 
           <div class="flex items-center">
             <Checkbox id="exportYoung" v-model="exportYoung" :binary="true" />
             <label for="exportYoung" class="ml-2">
-              <span>Export <strong>young</strong> words</span>
-              <span class="text-sm text-gray-600 dark:text-gray-400 block"> New, learning, relearning, or review with interval &lt; 21 days </span>
+              <span>
+                Export
+                <strong>young</strong>
+                words
+              </span>
+              <span class="text-sm text-gray-600 dark:text-gray-400 block">New, learning, relearning, or review with interval &lt; 21 days</span>
             </label>
           </div>
 
           <div class="flex items-center">
             <Checkbox id="exportBlacklisted" v-model="exportBlacklisted" :binary="true" />
             <label for="exportBlacklisted" class="ml-2">
-              <span>Export <strong>blacklisted</strong> words</span>
+              <span>
+                Export
+                <strong>blacklisted</strong>
+                words
+              </span>
             </label>
           </div>
         </div>

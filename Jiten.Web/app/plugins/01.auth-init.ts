@@ -17,7 +17,9 @@ export default defineNuxtPlugin(async (nuxtApp) => {
           if (error?.status === 401 && authStore.refreshToken) {
             const refreshed = await authStore.refreshAccessToken();
             if (refreshed) {
-              try { await authStore.fetchCurrentUser(); } catch {}
+              try {
+                await authStore.fetchCurrentUser();
+              } catch {}
             }
           }
         }
@@ -34,5 +36,4 @@ export default defineNuxtPlugin(async (nuxtApp) => {
       console.error('Error initialising auth in plugin:', error);
     }
   }
-
 });

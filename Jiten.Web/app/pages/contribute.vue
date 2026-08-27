@@ -10,13 +10,14 @@
 <template>
   <div class="container mx-auto px-4 py-10">
     <Card class="mx-auto shadow-lg">
-      <template #title> Contribute to Jiten </template>
-      <template #subtitle> Help us grow our library of Japanese content </template>
+      <template #title>Contribute to Jiten</template>
+      <template #subtitle>Help us grow our library of Japanese content</template>
       <template #content>
         <p class="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">Want to contribute to Jiten? Please join our community Discord and say hi!</p>
 
         <Message severity="info" class="mb-4">
-          We're especially looking for new Visual Novels and Video Games. <br />
+          We're especially looking for new Visual Novels and Video Games.
+          <br />
           If you are able to extract new scripts, please help us by contributing!
         </Message>
 
@@ -60,7 +61,8 @@
           <div class="flex-1 text-center md:text-left">
             <h2 class="text-2xl font-bold mb-2">Support Jiten</h2>
             <p class="text-gray-600 dark:text-gray-300">
-              Jiten is free and open source. If you find it useful, consider supporting the project to help cover server costs and fund the continued development of new features.
+              Jiten is free and open source. If you find it useful, consider supporting the project to help cover server costs and fund the continued
+              development of new features.
             </p>
           </div>
           <NuxtLink to="/donate" class="no-underline">
@@ -82,7 +84,10 @@
       </template>
       <template #content>
         <div class="mb-3">
-          <b>{{ response.totalMojis?.toLocaleString() }}</b> characters in <b>{{ response.totalMedia?.toLocaleString() }}</b> media
+          <b>{{ response.totalMojis?.toLocaleString() }}</b>
+          characters in
+          <b>{{ response.totalMedia?.toLocaleString() }}</b>
+          media
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

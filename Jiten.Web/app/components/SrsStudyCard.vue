@@ -45,7 +45,9 @@
 
   // The rank is chrome, not a body block: its presence and its onlyAfterFlip option come from the
   // layout, not the legacy toggle, so an advanced-added block still shows.
-  const frequencyRankBlock = computed(() => layout.value.front.find((b) => b.type === 'frequencyRank') ?? layout.value.back.find((b) => b.type === 'frequencyRank'));
+  const frequencyRankBlock = computed(
+    () => layout.value.front.find((b) => b.type === 'frequencyRank') ?? layout.value.back.find((b) => b.type === 'frequencyRank')
+  );
   const showFrequencyRankChrome = computed(() => {
     const blk = frequencyRankBlock.value;
     if (!blk) return false;
@@ -120,7 +122,7 @@
   const sentenceBlock = computed(
     () => layout.value.front.find((b) => b.type === 'exampleSentence') ?? layout.value.back.find((b) => b.type === 'exampleSentence') ?? null
   );
-  
+
   const sentenceBlurred = computed(() => {
     const opts = resolveOptions<ExampleSentenceBlockOptions>(exampleSentenceDefaults, sentenceBlock.value?.options);
     return opts.blur && !exampleRevealed.value && !(opts.unblurOnFlip && props.isFlipped);
@@ -233,7 +235,9 @@
   const cardImageUrl = computed(() => cardImage.value?.url ?? '');
   // The card-image block, if present anywhere, drives image rendering: its list decides the side, its
   // options decide beside/below and blur. An absent block means no image is shown at all.
-  const cardImageBlock = computed(() => layout.value.front.find((b) => b.type === 'cardImage') ?? layout.value.back.find((b) => b.type === 'cardImage') ?? null);
+  const cardImageBlock = computed(
+    () => layout.value.front.find((b) => b.type === 'cardImage') ?? layout.value.back.find((b) => b.type === 'cardImage') ?? null
+  );
   const imageBesideLayout = computed(() => (cardImageBlock.value?.options?.layout ?? 'beside') === 'beside');
   const imageOnFront = computed(() => layout.value.front.some((b) => b.type === 'cardImage'));
   const imageBlurEnabled = computed(() => cardImageBlock.value?.options?.blur ?? true);
@@ -491,9 +495,7 @@
 
       <!-- Top bar: frequency rank + menu -->
       <div class="flex justify-end items-center gap-2 min-h-[1.25rem]">
-        <div v-if="showFrequencyRankChrome && card.frequencyRank > 0" class="text-xs text-gray-400">
-          #{{ card.frequencyRank.toLocaleString() }}
-        </div>
+        <div v-if="showFrequencyRankChrome && card.frequencyRank > 0" class="text-xs text-gray-400">#{{ card.frequencyRank.toLocaleString() }}</div>
         <button
           class="text-surface-400 hover:text-surface-600 dark:text-surface-400 dark:hover:text-surface-300 p-1 -mr-1 relative"
           @pointerdown.stop

@@ -1,16 +1,16 @@
-@import "@fontsource-variable/noto-sans-jp";
-@import "tailwindcss";
-@import "tailwindcss-primeui";
+@import '@fontsource-variable/noto-sans-jp';
+@import 'tailwindcss';
+@import 'tailwindcss-primeui';
 @import 'primeicons/primeicons.css';
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:where(.dark-mode, .dark-mode *));
 
 @theme {
-    /* @fontsource-variable registers "Noto Sans JP Variable"; the unsuffixed name covers a switch back to
+  /* @fontsource-variable registers "Noto Sans JP Variable"; the unsuffixed name covers a switch back to
        Google Fonts or a system install. Japanese system fonts precede sans-serif because bare sans-serif
        under <html lang="en"> resolves to Simplified Chinese glyph shapes on Android. */
-    --font-noto-sans: "Noto Sans JP Variable", "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;
+  --font-noto-sans: 'Noto Sans JP Variable', 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', Meiryo, sans-serif;
 }
 
 /* Halved Tailwind scale; must stay in sync with the JitenPreset primitive.borderRadius in
@@ -18,206 +18,278 @@
    `static` keeps every tier emitted as a custom property, including those no utility class
    references, so component <style> blocks can use them. */
 @theme static {
-    --radius: 0.125rem;
-    --radius-xs: 0.0625rem;
-    --radius-sm: 0.125rem;
-    --radius-md: 0.1875rem;
-    --radius-lg: 0.25rem;
-    --radius-xl: 0.375rem;
-    --radius-2xl: 0.5rem;
-    --radius-3xl: 0.75rem;
-    --radius-4xl: 1rem;
+  --radius: 0.125rem;
+  --radius-xs: 0.0625rem;
+  --radius-sm: 0.125rem;
+  --radius-md: 0.1875rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.375rem;
+  --radius-2xl: 0.5rem;
+  --radius-3xl: 0.75rem;
+  --radius-4xl: 1rem;
 }
 
 :root {
-    /* Scroll-fade gradients and sticky bars paint this to blend into the page; keep them on the token.
+  /* Scroll-fade gradients and sticky bars paint this to blend into the page; keep them on the token.
        Must stay off the surface-100/200 steps, which Aura uses as component fills. */
-    --jiten-page-bg: var(--p-neutral-50);
-    background-color: var(--jiten-page-bg);
-    font-family: var(--font-noto-sans);
+  --jiten-page-bg: var(--p-neutral-50);
+  background-color: var(--jiten-page-bg);
+  font-family: var(--font-noto-sans);
 }
 
 :root.dark-mode {
-    --jiten-page-bg: black;
+  --jiten-page-bg: black;
 }
 
 /* A ruby box grows to fit its annotation, so an oversized reading spaces the kanji of a compound
    apart. Half the base size makes the common two-kana reading exactly as wide as its kanji; the
    floor keeps furigana legible where the base text is small. */
 ruby rt {
-    font-size: max(0.5em, 10px);
+  font-size: max(0.5em, 10px);
 }
 
 .p-card {
-    border: 1px solid #e6e6e6;
+  border: 1px solid #e6e6e6;
 }
 
 .dark-mode .p-card {
-    border: 1px solid #2d2d2d;
+  border: 1px solid #2d2d2d;
 }
 
 /* The kanji scale badges consume every built-in Tag severity, so one extra hue is defined here.
    It follows the built-in convention (pale fill, saturated same-hue text) rather than PrimeVue's
    `contrast` severity, which inverts to a solid block and breaks the row in both themes. */
 .p-tag.p-tag-teal {
-    background: rgb(204 251 241);
-    color: rgb(15 118 110);
+  background: rgb(204 251 241);
+  color: rgb(15 118 110);
 }
 
 .dark-mode .p-tag.p-tag-teal {
-    background: rgb(17 94 89 / 0.3);
-    color: rgb(94 234 212);
+  background: rgb(17 94 89 / 0.3);
+  color: rgb(94 234 212);
 }
 
 a:not(.p-button) {
-    @apply text-blue-500 hover:underline
+  @apply text-blue-500 hover:underline;
 }
 
 .dark-mode a:not(.p-button) {
-    @apply text-blue-300 hover:underline
+  @apply text-blue-300 hover:underline;
 }
 
 :root {
-    visibility: hidden;
-    opacity: 0;
-    transition: opacity 0.2s ease-in-out;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
 }
 
 :root.loaded {
-    visibility: visible;
-    opacity: 1;
+  visibility: visible;
+  opacity: 1;
 }
 
 .fade-enter-active,
 .fade-leave-active {
-    transition: opacity 0.1s ease;
+  transition: opacity 0.1s ease;
 }
 
 .fade-enter-from,
 .fade-leave-to {
-    opacity: 0;
+  opacity: 0;
 }
 
 .p-inputnumber {
-    inset-inline-end: auto !important;
+  inset-inline-end: auto !important;
 }
 
 .p-inputnumber-stacked {
-    inset-inline-end: auto !important;
+  inset-inline-end: auto !important;
 }
 
 .p-button-label {
-    font-weight: 400 !important;
+  font-weight: 400 !important;
 }
 
 .p-confirmdialog {
-    max-width: min(41rem, calc(100vw - 2rem));
+  max-width: min(41rem, calc(100vw - 2rem));
 }
 
 .p-confirmdialog .p-dialog-content {
-    align-items: flex-start;
+  align-items: flex-start;
 }
 
 .p-confirmdialog-icon {
-    flex-shrink: 0;
+  flex-shrink: 0;
 }
 
 .pos-badge {
-    display: inline-block;
-    padding: 0.05rem 0.4rem;
-    border-radius: 9999px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    line-height: 1.4;
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
-.pos-blue { background: rgb(219 234 254); color: rgb(29 78 216); }
-.pos-green { background: rgb(220 252 231); color: rgb(21 128 61); }
-.pos-purple { background: rgb(237 233 254); color: rgb(109 40 217); }
-.pos-amber { background: rgb(254 243 199); color: rgb(180 83 9); }
-.pos-teal { background: rgb(204 251 241); color: rgb(15 118 110); }
-.pos-gray { background: rgb(243 244 246); color: rgb(75 85 99); }
-
-.dark-mode .pos-blue { background: rgb(30 58 138 / 0.3); color: rgb(147 197 253); }
-.dark-mode .pos-green { background: rgb(20 83 45 / 0.3); color: rgb(134 239 172); }
-.dark-mode .pos-purple { background: rgb(76 29 149 / 0.3); color: rgb(196 181 253); }
-.dark-mode .pos-amber { background: rgb(120 53 15 / 0.3); color: rgb(252 211 77); }
-.dark-mode .pos-teal { background: rgb(17 94 89 / 0.3); color: rgb(94 234 212); }
-.dark-mode .pos-gray { background: rgb(55 65 81 / 0.3); color: rgb(156 163 175); }
-
-.p-select-list-container, .p-select-overlay .p-virtualscroller { --scroll-shadow-bg: var(--p-select-overlay-background, var(--p-content-background)); }
-.p-multiselect-list-container, .p-multiselect-overlay .p-virtualscroller { --scroll-shadow-bg: var(--p-multiselect-overlay-background, var(--p-content-background)); }
-.p-autocomplete-list-container, .p-autocomplete-overlay .p-virtualscroller { --scroll-shadow-bg: var(--p-autocomplete-overlay-background, var(--p-content-background)); }
-.p-cascadeselect-list-container, .p-cascadeselect-overlay .p-virtualscroller { --scroll-shadow-bg: var(--p-cascadeselect-overlay-background, var(--p-content-background)); }
-
-.p-select-list-container, .p-select-overlay .p-virtualscroller,
-.p-multiselect-list-container, .p-multiselect-overlay .p-virtualscroller,
-.p-autocomplete-list-container, .p-autocomplete-overlay .p-virtualscroller,
-.p-cascadeselect-list-container, .p-cascadeselect-overlay .p-virtualscroller {
-    --scroll-chevron-up: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='18'%20height='11'%20viewBox='0%200%2018%2011'%3E%3Cpath%20d='M3%208l6-5%206%205'%20fill='none'%20stroke='%23808080'%20stroke-opacity='0.5'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
-    --scroll-chevron-down: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='18'%20height='11'%20viewBox='0%200%2018%2011'%3E%3Cpath%20d='M3%203l6%205%206-5'%20fill='none'%20stroke='%23808080'%20stroke-opacity='0.5'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
-    scrollbar-width: thin;
-    scrollbar-color: var(--p-primary-color) transparent;
-    background:
-        linear-gradient(var(--scroll-shadow-bg) 55%, transparent) top / 100% 2rem no-repeat local,
-        linear-gradient(transparent, var(--scroll-shadow-bg) 45%) bottom / 100% 2rem no-repeat local,
-        var(--scroll-chevron-up) 50% 0.4rem / 18px 11px no-repeat,
-        var(--scroll-chevron-down) 50% calc(100% - 0.4rem) / 18px 11px no-repeat;
+.pos-blue {
+  background: rgb(219 234 254);
+  color: rgb(29 78 216);
+}
+.pos-green {
+  background: rgb(220 252 231);
+  color: rgb(21 128 61);
+}
+.pos-purple {
+  background: rgb(237 233 254);
+  color: rgb(109 40 217);
+}
+.pos-amber {
+  background: rgb(254 243 199);
+  color: rgb(180 83 9);
+}
+.pos-teal {
+  background: rgb(204 251 241);
+  color: rgb(15 118 110);
+}
+.pos-gray {
+  background: rgb(243 244 246);
+  color: rgb(75 85 99);
 }
 
-.dark-mode .p-select-list-container, .dark-mode .p-select-overlay .p-virtualscroller,
-.dark-mode .p-multiselect-list-container, .dark-mode .p-multiselect-overlay .p-virtualscroller,
-.dark-mode .p-autocomplete-list-container, .dark-mode .p-autocomplete-overlay .p-virtualscroller,
-.dark-mode .p-cascadeselect-list-container, .dark-mode .p-cascadeselect-overlay .p-virtualscroller {
-    --scroll-chevron-up: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='18'%20height='11'%20viewBox='0%200%2018%2011'%3E%3Cpath%20d='M3%208l6-5%206%205'%20fill='none'%20stroke='%23ffffff'%20stroke-opacity='0.4'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
-    --scroll-chevron-down: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='18'%20height='11'%20viewBox='0%200%2018%2011'%3E%3Cpath%20d='M3%203l6%205%206-5'%20fill='none'%20stroke='%23ffffff'%20stroke-opacity='0.4'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
+.dark-mode .pos-blue {
+  background: rgb(30 58 138 / 0.3);
+  color: rgb(147 197 253);
+}
+.dark-mode .pos-green {
+  background: rgb(20 83 45 / 0.3);
+  color: rgb(134 239 172);
+}
+.dark-mode .pos-purple {
+  background: rgb(76 29 149 / 0.3);
+  color: rgb(196 181 253);
+}
+.dark-mode .pos-amber {
+  background: rgb(120 53 15 / 0.3);
+  color: rgb(252 211 77);
+}
+.dark-mode .pos-teal {
+  background: rgb(17 94 89 / 0.3);
+  color: rgb(94 234 212);
+}
+.dark-mode .pos-gray {
+  background: rgb(55 65 81 / 0.3);
+  color: rgb(156 163 175);
 }
 
-.p-select-list-container::-webkit-scrollbar, .p-select-overlay .p-virtualscroller::-webkit-scrollbar,
-.p-multiselect-list-container::-webkit-scrollbar, .p-multiselect-overlay .p-virtualscroller::-webkit-scrollbar,
-.p-autocomplete-list-container::-webkit-scrollbar, .p-autocomplete-overlay .p-virtualscroller::-webkit-scrollbar,
-.p-cascadeselect-list-container::-webkit-scrollbar, .p-cascadeselect-overlay .p-virtualscroller::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-    -webkit-appearance: none;
+.p-select-list-container,
+.p-select-overlay .p-virtualscroller {
+  --scroll-shadow-bg: var(--p-select-overlay-background, var(--p-content-background));
+}
+.p-multiselect-list-container,
+.p-multiselect-overlay .p-virtualscroller {
+  --scroll-shadow-bg: var(--p-multiselect-overlay-background, var(--p-content-background));
+}
+.p-autocomplete-list-container,
+.p-autocomplete-overlay .p-virtualscroller {
+  --scroll-shadow-bg: var(--p-autocomplete-overlay-background, var(--p-content-background));
+}
+.p-cascadeselect-list-container,
+.p-cascadeselect-overlay .p-virtualscroller {
+  --scroll-shadow-bg: var(--p-cascadeselect-overlay-background, var(--p-content-background));
 }
 
-.p-select-list-container::-webkit-scrollbar-thumb, .p-select-overlay .p-virtualscroller::-webkit-scrollbar-thumb,
-.p-multiselect-list-container::-webkit-scrollbar-thumb, .p-multiselect-overlay .p-virtualscroller::-webkit-scrollbar-thumb,
-.p-autocomplete-list-container::-webkit-scrollbar-thumb, .p-autocomplete-overlay .p-virtualscroller::-webkit-scrollbar-thumb,
-.p-cascadeselect-list-container::-webkit-scrollbar-thumb, .p-cascadeselect-overlay .p-virtualscroller::-webkit-scrollbar-thumb {
-    background-color: var(--p-primary-color);
-    border-radius: 9999px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
+.p-select-list-container,
+.p-select-overlay .p-virtualscroller,
+.p-multiselect-list-container,
+.p-multiselect-overlay .p-virtualscroller,
+.p-autocomplete-list-container,
+.p-autocomplete-overlay .p-virtualscroller,
+.p-cascadeselect-list-container,
+.p-cascadeselect-overlay .p-virtualscroller {
+  --scroll-chevron-up: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='18'%20height='11'%20viewBox='0%200%2018%2011'%3E%3Cpath%20d='M3%208l6-5%206%205'%20fill='none'%20stroke='%23808080'%20stroke-opacity='0.5'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
+  --scroll-chevron-down: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='18'%20height='11'%20viewBox='0%200%2018%2011'%3E%3Cpath%20d='M3%203l6%205%206-5'%20fill='none'%20stroke='%23808080'%20stroke-opacity='0.5'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
+  scrollbar-width: thin;
+  scrollbar-color: var(--p-primary-color) transparent;
+  background:
+    linear-gradient(var(--scroll-shadow-bg) 55%, transparent) top / 100% 2rem no-repeat local,
+    linear-gradient(transparent, var(--scroll-shadow-bg) 45%) bottom / 100% 2rem no-repeat local,
+    var(--scroll-chevron-up) 50% 0.4rem / 18px 11px no-repeat,
+    var(--scroll-chevron-down) 50% calc(100% - 0.4rem) / 18px 11px no-repeat;
 }
 
-.p-select-list-container::-webkit-scrollbar-track, .p-select-overlay .p-virtualscroller::-webkit-scrollbar-track,
-.p-multiselect-list-container::-webkit-scrollbar-track, .p-multiselect-overlay .p-virtualscroller::-webkit-scrollbar-track,
-.p-autocomplete-list-container::-webkit-scrollbar-track, .p-autocomplete-overlay .p-virtualscroller::-webkit-scrollbar-track,
-.p-cascadeselect-list-container::-webkit-scrollbar-track, .p-cascadeselect-overlay .p-virtualscroller::-webkit-scrollbar-track {
-    background: transparent;
+.dark-mode .p-select-list-container,
+.dark-mode .p-select-overlay .p-virtualscroller,
+.dark-mode .p-multiselect-list-container,
+.dark-mode .p-multiselect-overlay .p-virtualscroller,
+.dark-mode .p-autocomplete-list-container,
+.dark-mode .p-autocomplete-overlay .p-virtualscroller,
+.dark-mode .p-cascadeselect-list-container,
+.dark-mode .p-cascadeselect-overlay .p-virtualscroller {
+  --scroll-chevron-up: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='18'%20height='11'%20viewBox='0%200%2018%2011'%3E%3Cpath%20d='M3%208l6-5%206%205'%20fill='none'%20stroke='%23ffffff'%20stroke-opacity='0.4'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
+  --scroll-chevron-down: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='18'%20height='11'%20viewBox='0%200%2018%2011'%3E%3Cpath%20d='M3%203l6%205%206-5'%20fill='none'%20stroke='%23ffffff'%20stroke-opacity='0.4'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.p-select-list-container::-webkit-scrollbar,
+.p-select-overlay .p-virtualscroller::-webkit-scrollbar,
+.p-multiselect-list-container::-webkit-scrollbar,
+.p-multiselect-overlay .p-virtualscroller::-webkit-scrollbar,
+.p-autocomplete-list-container::-webkit-scrollbar,
+.p-autocomplete-overlay .p-virtualscroller::-webkit-scrollbar,
+.p-cascadeselect-list-container::-webkit-scrollbar,
+.p-cascadeselect-overlay .p-virtualscroller::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  -webkit-appearance: none;
+}
+
+.p-select-list-container::-webkit-scrollbar-thumb,
+.p-select-overlay .p-virtualscroller::-webkit-scrollbar-thumb,
+.p-multiselect-list-container::-webkit-scrollbar-thumb,
+.p-multiselect-overlay .p-virtualscroller::-webkit-scrollbar-thumb,
+.p-autocomplete-list-container::-webkit-scrollbar-thumb,
+.p-autocomplete-overlay .p-virtualscroller::-webkit-scrollbar-thumb,
+.p-cascadeselect-list-container::-webkit-scrollbar-thumb,
+.p-cascadeselect-overlay .p-virtualscroller::-webkit-scrollbar-thumb {
+  background-color: var(--p-primary-color);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.p-select-list-container::-webkit-scrollbar-track,
+.p-select-overlay .p-virtualscroller::-webkit-scrollbar-track,
+.p-multiselect-list-container::-webkit-scrollbar-track,
+.p-multiselect-overlay .p-virtualscroller::-webkit-scrollbar-track,
+.p-autocomplete-list-container::-webkit-scrollbar-track,
+.p-autocomplete-overlay .p-virtualscroller::-webkit-scrollbar-track,
+.p-cascadeselect-list-container::-webkit-scrollbar-track,
+.p-cascadeselect-overlay .p-virtualscroller::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Guides (Nuxt Content) prose. Body links inherit the global blue a:not(.p-button) rule (it
    out-specifies the typography :where() selectors and is already dark-mode aware). We only
    re-theme the parts the plugin would otherwise leave invisible on the dark background. */
 .prose {
-    --tw-prose-headings: var(--p-primary-700);
-    /* Typography ships a near-black code block even in light mode, which the light Shiki
+  --tw-prose-headings: var(--p-primary-700);
+  /* Typography ships a near-black code block even in light mode, which the light Shiki
        palette is unreadable on. */
-    --tw-prose-pre-bg: var(--p-surface-100);
-    --tw-prose-pre-code: var(--p-surface-800);
-    max-width: none;
+  --tw-prose-pre-bg: var(--p-surface-100);
+  --tw-prose-pre-code: var(--p-surface-800);
+  max-width: none;
 }
 
-.prose :where(pre) { border: 1px solid var(--p-surface-200); }
-.dark-mode .prose :where(pre) { border-color: var(--p-surface-700); }
+.prose :where(pre) {
+  border: 1px solid var(--p-surface-200);
+}
+.dark-mode .prose :where(pre) {
+  border-color: var(--p-surface-700);
+}
 
 /* Shiki emits both palettes as --shiki-default/--shiki-dark and swaps them on a `.dark`
    ancestor, which never exists here: the dark class is `.dark-mode`, and it sits on <html>. */
 html.dark-mode .prose .shiki span {
-    color: var(--shiki-dark);
+  color: var(--shiki-dark);
 }
 
 /* MDC wraps each heading's text in an anchor link; without this it picks up the global blue
@@ -225,191 +297,243 @@ html.dark-mode .prose .shiki span {
    Both selectors are needed: the dark-mode global link rule out-specifies the light one. */
 .prose :is(h1, h2, h3, h4, h5, h6) a,
 .dark-mode .prose :is(h1, h2, h3, h4, h5, h6) a {
-    color: inherit;
-    font-weight: inherit;
-    text-decoration: none;
+  color: inherit;
+  font-weight: inherit;
+  text-decoration: none;
 }
 
 /* Tighten the default typography vertical rhythm and shrink headings — the out-of-the-box
    spacing is loose and the h2/h3 sizes run large for short guide sections. */
-.prose :where(p, ul, ol, blockquote) { margin-top: 0.6em; margin-bottom: 0.6em; }
-.prose :where(h2) { margin-top: 1.3em; margin-bottom: 0.35em; font-size: 1.3em; }
-.prose :where(h3) { margin-top: 1em; margin-bottom: 0.3em; font-size: 1.1em; }
-.prose :where(li) { margin-top: 0.15em; margin-bottom: 0.15em; }
+.prose :where(p, ul, ol, blockquote) {
+  margin-top: 0.6em;
+  margin-bottom: 0.6em;
+}
+.prose :where(h2) {
+  margin-top: 1.3em;
+  margin-bottom: 0.35em;
+  font-size: 1.3em;
+}
+.prose :where(h3) {
+  margin-top: 1em;
+  margin-bottom: 0.3em;
+  font-size: 1.1em;
+}
+.prose :where(li) {
+  margin-top: 0.15em;
+  margin-bottom: 0.15em;
+}
 
 .dark-mode .prose .guide-attribution {
-    color: var(--p-neutral-400);
+  color: var(--p-neutral-400);
 }
 
 .dark-mode .prose {
-    --tw-prose-body: var(--p-neutral-300);
-    --tw-prose-headings: var(--p-primary-300);
-    --tw-prose-bold: var(--p-neutral-100);
-    --tw-prose-counters: var(--p-neutral-400);
-    --tw-prose-bullets: var(--p-neutral-600);
-    --tw-prose-hr: var(--p-neutral-800);
-    --tw-prose-quotes: var(--p-neutral-200);
-    --tw-prose-quote-borders: var(--p-neutral-700);
-    --tw-prose-captions: var(--p-neutral-400);
-    --tw-prose-code: var(--p-neutral-100);
-    --tw-prose-pre-code: var(--p-neutral-200);
-    --tw-prose-pre-bg: var(--p-neutral-900);
-    --tw-prose-th-borders: var(--p-neutral-700);
-    --tw-prose-td-borders: var(--p-neutral-800);
+  --tw-prose-body: var(--p-neutral-300);
+  --tw-prose-headings: var(--p-primary-300);
+  --tw-prose-bold: var(--p-neutral-100);
+  --tw-prose-counters: var(--p-neutral-400);
+  --tw-prose-bullets: var(--p-neutral-600);
+  --tw-prose-hr: var(--p-neutral-800);
+  --tw-prose-quotes: var(--p-neutral-200);
+  --tw-prose-quote-borders: var(--p-neutral-700);
+  --tw-prose-captions: var(--p-neutral-400);
+  --tw-prose-code: var(--p-neutral-100);
+  --tw-prose-pre-code: var(--p-neutral-200);
+  --tw-prose-pre-bg: var(--p-neutral-900);
+  --tw-prose-th-borders: var(--p-neutral-700);
+  --tw-prose-td-borders: var(--p-neutral-800);
 }
 
 /* Attribution logos sit inline with the body copy, not as full-width figures. */
 .prose img.guide-logo {
-    display: block;
-    max-width: min(200px, 100%);
-    height: auto;
-    margin: 0.4em 0 0.15em;
+  display: block;
+  max-width: min(200px, 100%);
+  height: auto;
+  margin: 0.4em 0 0.15em;
 }
 
 .prose .guide-attribution {
-    display: block;
-    font-size: 0.75rem;
-    line-height: 1.1rem;
-    color: var(--p-neutral-500);
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.1rem;
+  color: var(--p-neutral-500);
 }
 
 /* The callout body slots a fresh prose context so nested markdown stays styled but
    loses the outer top/bottom margins. */
-.prose-callout > :first-child { margin-top: 0; }
-.prose-callout > :last-child { margin-bottom: 0; }
+.prose-callout > :first-child {
+  margin-top: 0;
+}
+.prose-callout > :last-child {
+  margin-bottom: 0;
+}
 
-.guide-callout--tip { background: rgb(220 252 231); border-color: rgb(34 197 94); color: rgb(22 101 52); }
-.guide-callout--note { background: rgb(237 233 254); border-color: rgb(139 92 246); color: rgb(91 33 182); }
-.guide-callout--warning { background: rgb(254 243 199); border-color: rgb(245 158 11); color: rgb(146 64 14); }
+.guide-callout--tip {
+  background: rgb(220 252 231);
+  border-color: rgb(34 197 94);
+  color: rgb(22 101 52);
+}
+.guide-callout--note {
+  background: rgb(237 233 254);
+  border-color: rgb(139 92 246);
+  color: rgb(91 33 182);
+}
+.guide-callout--warning {
+  background: rgb(254 243 199);
+  border-color: rgb(245 158 11);
+  color: rgb(146 64 14);
+}
 
-.dark-mode .guide-callout--tip { background: rgb(20 83 45 / 0.25); border-color: rgb(34 197 94); color: rgb(134 239 172); }
-.dark-mode .guide-callout--note { background: rgb(76 29 149 / 0.25); border-color: rgb(139 92 246); color: rgb(196 181 253); }
-.dark-mode .guide-callout--warning { background: rgb(120 53 15 / 0.25); border-color: rgb(245 158 11); color: rgb(252 211 77); }
+.dark-mode .guide-callout--tip {
+  background: rgb(20 83 45 / 0.25);
+  border-color: rgb(34 197 94);
+  color: rgb(134 239 172);
+}
+.dark-mode .guide-callout--note {
+  background: rgb(76 29 149 / 0.25);
+  border-color: rgb(139 92 246);
+  color: rgb(196 181 253);
+}
+.dark-mode .guide-callout--warning {
+  background: rgb(120 53 15 / 0.25);
+  border-color: rgb(245 158 11);
+  color: rgb(252 211 77);
+}
 
 /* On phones the default PrimeVue toast keeps its fixed 25rem width anchored to a screen
    edge, so on narrow viewports the opposite edge (and its text/icon) clips off-screen.
    Pin every toast to full-width-with-gutters, respecting the safe-area insets. */
 @media (max-width: 480px) {
-    .p-toast {
-        width: auto !important;
-        max-width: none !important;
-        left: 0.75rem !important;
-        right: 0.75rem !important;
-        transform: none !important;
-    }
+  .p-toast {
+    width: auto !important;
+    max-width: none !important;
+    left: 0.75rem !important;
+    right: 0.75rem !important;
+    transform: none !important;
+  }
 
-    .p-toast-top-right,
-    .p-toast-top-left,
-    .p-toast-top-center {
-        top: calc(env(safe-area-inset-top, 0px) + 0.75rem) !important;
-    }
+  .p-toast-top-right,
+  .p-toast-top-left,
+  .p-toast-top-center {
+    top: calc(env(safe-area-inset-top, 0px) + 0.75rem) !important;
+  }
 
-    .p-toast-bottom-right,
-    .p-toast-bottom-left,
-    .p-toast-bottom-center {
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem) !important;
-    }
+  .p-toast-bottom-right,
+  .p-toast-bottom-left,
+  .p-toast-bottom-center {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem) !important;
+  }
 }
 
 /* Marks the row a list restored its scroll position to, so the jump is legible
    rather than looking like a mis-scroll. */
 @keyframes list-anchor-flash {
-    from { background-color: var(--p-primary-100); }
-    to { background-color: transparent; }
+  from {
+    background-color: var(--p-primary-100);
+  }
+  to {
+    background-color: transparent;
+  }
 }
 
 .list-anchor-flash {
-    animation: list-anchor-flash 1.2s ease-out;
-    border-radius: var(--radius-lg);
+  animation: list-anchor-flash 1.2s ease-out;
+  border-radius: var(--radius-lg);
 }
 
 .dark-mode .list-anchor-flash {
-    animation-name: list-anchor-flash-dark;
+  animation-name: list-anchor-flash-dark;
 }
 
 @keyframes list-anchor-flash-dark {
-    from { background-color: color-mix(in srgb, var(--p-primary-color) 22%, transparent); }
-    to { background-color: transparent; }
+  from {
+    background-color: color-mix(in srgb, var(--p-primary-color) 22%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .list-anchor-flash { animation: none; }
+  .list-anchor-flash {
+    animation: none;
+  }
 }
 
 /* Shared typography for the legal document pages (/mentions-legales, /terms, /cgv and variants). */
 .legal-doc .section-title {
-    font-size: 1.5rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid #e5e7eb;
-    color: #111827;
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  color: #111827;
 }
 
 .dark-mode .legal-doc .section-title {
-    border-bottom-color: #374151;
-    color: #f3f4f6;
+  border-bottom-color: #374151;
+  color: #f3f4f6;
 }
 
 .legal-doc .detail-list {
-    list-style: none;
-    margin: 0 0 1rem 0.25rem;
-    padding: 0;
+  list-style: none;
+  margin: 0 0 1rem 0.25rem;
+  padding: 0;
 }
 
 .legal-doc .detail-list li {
-    margin-bottom: 0.25rem;
+  margin-bottom: 0.25rem;
 }
 
 .legal-doc p {
-    margin-bottom: 1rem;
+  margin-bottom: 1rem;
 }
 
 .legal-doc ul:not(.detail-list) {
-    list-style: disc;
-    margin: 0 0 1rem 1.5rem;
-    padding: 0;
+  list-style: disc;
+  margin: 0 0 1rem 1.5rem;
+  padding: 0;
 }
 
 .legal-doc ul:not(.detail-list) li {
-    margin-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .legal-doc a {
-    color: #2563eb;
+  color: #2563eb;
 }
 
 .legal-doc a:hover {
-    text-decoration: underline;
+  text-decoration: underline;
 }
 
 .dark-mode .legal-doc a {
-    color: #60a5fa;
+  color: #60a5fa;
 }
 
 .legal-doc table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 1rem;
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
 }
 
 .legal-doc th,
 .legal-doc td {
-    border: 1px solid #e5e7eb;
-    padding: 0.5rem 0.75rem;
-    text-align: left;
+  border: 1px solid #e5e7eb;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
 }
 
 .legal-doc th {
-    font-weight: 600;
-    background-color: #f9fafb;
+  font-weight: 600;
+  background-color: #f9fafb;
 }
 
 .dark-mode .legal-doc th,
 .dark-mode .legal-doc td {
-    border-color: #374151;
+  border-color: #374151;
 }
 
 .dark-mode .legal-doc th {
-    background-color: #1f2937;
+  background-color: #1f2937;
 }

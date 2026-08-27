@@ -4,8 +4,8 @@
  * failure during SSR must not become a 404 page, which would deindex a working URL.
  */
 export function isMissingResource(error: unknown, data: unknown): boolean {
-  const status = (error as { status?: number; statusCode?: number } | null | undefined)?.status
-    ?? (error as { statusCode?: number } | null | undefined)?.statusCode;
+  const status =
+    (error as { status?: number; statusCode?: number } | null | undefined)?.status ?? (error as { statusCode?: number } | null | undefined)?.statusCode;
 
   if (status === 404) return true;
   return !error && data == null;

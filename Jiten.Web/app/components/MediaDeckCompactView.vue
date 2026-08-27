@@ -30,9 +30,7 @@
   const showDownloadDialog = ref(false);
   const difficultyRef = ref<{ tooltip: string }>();
 
-  const isAudioVisual = computed(() =>
-    [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio].includes(props.deck.mediaType)
-  );
+  const isAudioVisual = computed(() => [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio].includes(props.deck.mediaType));
 
   const formattedSpeechDuration = computed(() => {
     if (props.deck.speechDuration <= 0) return '';
@@ -82,13 +80,16 @@
           decoding="async"
           width="136"
           height="192"
-        >
+        />
 
         <!-- Title overlay at bottom -->
         <div class="absolute flex justify-between items-center bottom-0 left-0 right-0 bg-black/75 0 p-1 text-white">
-<!--          <div class="font-bold text-sm truncate">{{ localiseTitle(deck) }}</div>-->
+          <!--          <div class="font-bold text-sm truncate">{{ localiseTitle(deck) }}</div>-->
           <div class="text-xs text-gray-300">{{ getMediaTypeText(deck.mediaType) }}</div>
-          <div v-if="deck.selectedWordOccurrences != 0" class="bg-purple-500 dark:bg-purple-300 border-1 border-purple-200 dark:border-purple-800 text-white dark:text-black px-2 py-1 rounded-full text-xs font-bold">
+          <div
+            v-if="deck.selectedWordOccurrences != 0"
+            class="bg-purple-500 dark:bg-purple-300 border-1 border-purple-200 dark:border-purple-800 text-white dark:text-black px-2 py-1 rounded-full text-xs font-bold"
+          >
             x{{ deck.selectedWordOccurrences.toLocaleString() }}
           </div>
         </div>
@@ -121,28 +122,25 @@
             <div v-if="deck.difficulty != -1" class="flex justify-between">
               <span>Difficulty:</span>
               <Tooltip :content="difficultyRef?.tooltip ?? ''">
-                <DifficultyDisplay ref="difficultyRef" :difficulty="deck.difficulty" :difficulty-raw="deck.difficultyRaw" :difficulty-algorithmic="deck.difficultyAlgorithmic" :user-adjustment="deck.userAdjustment" :vote-count="deck.distinctVoterCount || 0" :adjustment-confidence="deck.adjustmentConfidence || 0" use-stars />
+                <DifficultyDisplay
+                  ref="difficultyRef"
+                  :difficulty="deck.difficulty"
+                  :difficulty-raw="deck.difficultyRaw"
+                  :difficulty-algorithmic="deck.difficultyAlgorithmic"
+                  :user-adjustment="deck.userAdjustment"
+                  :vote-count="deck.distinctVoterCount || 0"
+                  :adjustment-confidence="deck.adjustmentConfidence || 0"
+                  use-stars
+                />
               </Tooltip>
             </div>
           </div>
 
           <div class="mt-2 flex gap-1">
-            <Button
-              v-tooltip="'View details'"
-              as="router-link"
-              :to="`/decks/media/${deck.deckId}/detail`"
-              size="small"
-              class="p-button-sm"
-            >
+            <Button v-tooltip="'View details'" as="router-link" :to="`/decks/media/${deck.deckId}/detail`" size="small" class="p-button-sm">
               <Icon name="material-symbols:info-outline" size="1.5em" />
             </Button>
-            <Button
-              v-tooltip="'View vocabulary'"
-              as="router-link"
-              :to="`/decks/media/${deck.deckId}/vocabulary`"
-              size="small"
-              class="p-button-sm"
-            >
+            <Button v-tooltip="'View vocabulary'" as="router-link" :to="`/decks/media/${deck.deckId}/vocabulary`" size="small" class="p-button-sm">
               <Icon name="material-symbols:menu-book-outline" size="1.5em" />
             </Button>
             <Button v-tooltip="'Download / Learn'" size="small" class="p-button-sm" @click="showDownloadDialog = true">
@@ -151,12 +149,7 @@
           </div>
         </div>
 
-        <CoverageStrip
-          v-if="showCoverageStrip"
-          :coverage="deck.coverage"
-          :young-coverage="deck.youngCoverage"
-          class="absolute inset-x-0 bottom-0 z-10"
-        />
+        <CoverageStrip v-if="showCoverageStrip" :coverage="deck.coverage" :young-coverage="deck.youngCoverage" class="absolute inset-x-0 bottom-0 z-10" />
       </div>
     </div>
   </div>

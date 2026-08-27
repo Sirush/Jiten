@@ -75,19 +75,22 @@
     });
   }
 
-  watch(() => props.visible, (v) => {
-    if (v) loadedRanges.value = new Set([0]);
-  });
+  watch(
+    () => props.visible,
+    (v) => {
+      if (v) loadedRanges.value = new Set([0]);
+    }
+  );
 </script>
 
 <template>
   <Dialog
     :visible="visible"
-    @update:visible="emit('update:visible', $event)"
     modal
     :header="`Preview — ${data?.totalCount.toLocaleString() ?? 0} card(s)`"
     :style="{ width: '900px', maxWidth: '95vw' }"
     :closable="true"
+    @update:visible="emit('update:visible', $event)"
   >
     <p class="text-sm text-muted-color mb-3 italic">{{ actionDescription }}</p>
 
@@ -107,7 +110,12 @@
       <Column header="Word" style="min-width: 150px">
         <template #body="{ data: card, index }">
           <template v-if="card">
-            <NuxtLink v-tooltip.top="card.mainDefinition" :to="`/vocabulary/${card.wordId}/${card.readingIndex}`" target="_blank" class="text-blue-500 hover:underline">
+            <NuxtLink
+              v-tooltip.top="card.mainDefinition"
+              :to="`/vocabulary/${card.wordId}/${card.readingIndex}`"
+              target="_blank"
+              class="text-blue-500 hover:underline"
+            >
               <span class="text-base font-bold" lang="ja" v-html="convertToRuby(card.reading)" />
             </NuxtLink>
           </template>

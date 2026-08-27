@@ -69,8 +69,9 @@
     </div>
 
     <p class="text-sm text-gray-600 dark:text-gray-400">
-      Sync your <NuxtLink :to="mediaListLink">media list</NuxtLink> from AniList or VNDB with what is present on Jiten, restore a file you exported before, or
-      export it.
+      Sync your
+      <NuxtLink :to="mediaListLink">media list</NuxtLink>
+      from AniList or VNDB with what is present on Jiten, restore a file you exported before, or export it.
     </p>
 
     <section>

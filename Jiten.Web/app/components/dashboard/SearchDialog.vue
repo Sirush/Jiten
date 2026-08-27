@@ -1,81 +1,84 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import Button from 'primevue/button';
-import Dialog from 'primevue/dialog';
-import Toast from 'primevue/toast';
-import { useToast } from 'primevue/usetoast';
-import ProgressSpinner from 'primevue/progressspinner';
-import type { Metadata } from '~/types';
+  import { ref, watch } from 'vue';
+  import Button from 'primevue/button';
+  import Dialog from 'primevue/dialog';
+  import Toast from 'primevue/toast';
+  import { useToast } from 'primevue/usetoast';
+  import ProgressSpinner from 'primevue/progressspinner';
+  import type { Metadata } from '~/types';
 
-const props = defineProps<{
-  visible: boolean;
-  query: string;
-  author?: string;
-  provider: string;
-}>();
+  const props = defineProps<{
+    visible: boolean;
+    query: string;
+    author?: string;
+    provider: string;
+  }>();
 
-const searchResults = ref<Metadata[]>([]);
-const isLoading = ref(false);
-const toast = useToast();
-const { $api } = useNuxtApp();
+  const searchResults = ref<Metadata[]>([]);
+  const isLoading = ref(false);
+  const toast = useToast();
+  const { $api } = useNuxtApp();
 
-const emit = defineEmits<{
-  'update:visible': [value: boolean];
-  'select-metadata': [metadata: Metadata];
-  'link-metadata': [metadata: Metadata];
-}>();
+  const emit = defineEmits<{
+    'update:visible': [value: boolean];
+    'select-metadata': [metadata: Metadata];
+    'link-metadata': [metadata: Metadata];
+  }>();
 
-const searchAPI = async () => {
-  isLoading.value = true;
+  const searchAPI = async () => {
+    isLoading.value = true;
 
-  try {
-    const url = 'admin/search-media';
-    const response = await $api<Metadata[]>(url, {
-      query: {
-        provider: props.provider,
-        query: props.query,
-        author: props.author || '',
-      },
-    });
+    try {
+      const url = 'admin/search-media';
+      const response = await $api<Metadata[]>(url, {
+        query: {
+          provider: props.provider,
+          query: props.query,
+          author: props.author || '',
+        },
+      });
 
-    console.log(response);
-    searchResults.value = response || [];
+      console.log(response);
+      searchResults.value = response || [];
 
-    if (!response || response.length === 0) {
-      console.log('No results found');
+      if (!response || response.length === 0) {
+        console.log('No results found');
+      }
+    } catch (error) {
+      console.error('Error searching API:', error);
+      showToast('error', 'Search Error', 'An error occurred while searching. Please try again.');
+      searchResults.value = [];
+    } finally {
+      isLoading.value = false;
     }
-  } catch (error) {
-    console.error('Error searching API:', error);
-    showToast('error', 'Search Error', 'An error occurred while searching. Please try again.');
-    searchResults.value = [];
-  } finally {
-    isLoading.value = false;
+  };
+
+  watch(
+    () => props.visible,
+    async (newValue) => {
+      if (newValue && props.query) {
+        await searchAPI();
+      }
+    }
+  );
+
+  function showToast(severity: 'success' | 'info' | 'warn' | 'error', summary: string, detail: string = '') {
+    toast.add({ severity, summary, detail, life: 3000 });
   }
-};
 
-watch(() => props.visible, async (newValue) => {
-  if (newValue && props.query) {
-    await searchAPI();
+  function selectMetadata(metadata: Metadata) {
+    emit('select-metadata', metadata);
+    emit('update:visible', false);
   }
-});
 
-function showToast(severity: 'success' | 'info' | 'warn' | 'error', summary: string, detail: string = '') {
-  toast.add({ severity, summary, detail, life: 3000 });
-}
+  function linkMetadata(metadata: Metadata) {
+    emit('link-metadata', metadata);
+    emit('update:visible', false);
+  }
 
-function selectMetadata(metadata: Metadata) {
-  emit('select-metadata', metadata);
-  emit('update:visible', false);
-}
-
-function linkMetadata(metadata: Metadata) {
-  emit('link-metadata', metadata);
-  emit('update:visible', false);
-}
-
-function closeDialog() {
-  emit('update:visible', false);
-}
+  function closeDialog() {
+    emit('update:visible', false);
+  }
 </script>
 
 <template>
@@ -96,17 +99,9 @@ function closeDialog() {
 
       <!-- Results grid -->
       <div v-else-if="searchResults.length > 0" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[70vh] overflow-y-auto">
-        <div
-          v-for="(metadata, index) in searchResults"
-          :key="index"
-          class="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
-        >
+        <div v-for="(metadata, index) in searchResults" :key="index" class="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
           <div class="h-48 bg-gray-200 flex items-center justify-center overflow-hidden">
-            <img
-              :src="metadata.image"
-              :alt="metadata.englishTitle || metadata.romajiTitle || metadata.originalTitle"
-              class="w-full h-full object-cover"
-            >
+            <img :src="metadata.image" :alt="metadata.englishTitle || metadata.romajiTitle || metadata.originalTitle" class="w-full h-full object-cover" />
           </div>
           <div class="p-3">
             <div class="text-sm text-gray-500 dark:text-gray-400 mb-2">
@@ -118,11 +113,7 @@ function closeDialog() {
               <div v-if="metadata.englishTitle" class="text-sm italic">{{ metadata.englishTitle }}</div>
             </div>
             <div v-if="metadata.genres && metadata.genres.length > 0" class="text-xs text-gray-600 dark:text-gray-400 mb-2">
-              <span
-                v-for="genre in metadata.genres.slice(0, 3)"
-                :key="genre"
-                class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded mr-1 mb-1"
-              >
+              <span v-for="genre in metadata.genres.slice(0, 3)" :key="genre" class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded mr-1 mb-1">
                 {{ genre }}
               </span>
               <span v-if="metadata.genres.length > 3" class="text-gray-500 dark:text-gray-400">+{{ metadata.genres.length - 3 }}</span>

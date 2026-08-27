@@ -15,14 +15,19 @@
   const layout = computed(() => resolveCardLayout(props.settings));
   const frontBlocks = computed(() => layout.value.front.filter((b) => b.type !== 'frequencyRank'));
   const backBlocks = computed(() => layout.value.back.filter((b) => b.type !== 'frequencyRank'));
-  const frequencyRankBlock = computed(() => layout.value.front.find((b) => b.type === 'frequencyRank') ?? layout.value.back.find((b) => b.type === 'frequencyRank'));
+  const frequencyRankBlock = computed(
+    () => layout.value.front.find((b) => b.type === 'frequencyRank') ?? layout.value.back.find((b) => b.type === 'frequencyRank')
+  );
   const showFrequencyRankChrome = computed(() => {
     const blk = frequencyRankBlock.value;
     if (!blk) return false;
     return (blk.options?.onlyAfterFlip ?? true) ? isFlipped.value : true;
   });
 
-  const context = createSampleCardContext(computed(() => props.settings), isFlipped);
+  const context = createSampleCardContext(
+    computed(() => props.settings),
+    isFlipped
+  );
   // Blur reveal — reset whenever the blur toggle changes so the effect is demonstrable both ways.
   watch(
     () => props.settings.blurExampleSentence,

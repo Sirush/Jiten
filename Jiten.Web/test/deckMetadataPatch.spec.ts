@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DeckRelationshipType, Genre, LinkType } from '../app/types/enums';
-import {
-  fromRole,
-  getInverseRelationshipType,
-  relationshipRoleOptions,
-  toCanonicalEdge,
-} from '../app/utils/relationshipRoles';
+import { fromRole, getInverseRelationshipType, relationshipRoleOptions, toCanonicalEdge } from '../app/utils/relationshipRoles';
 import { buildDeckMetadataPatch, type DeckMetadataDraft } from '../app/utils/deckMetadataPatch';
 
 const DECK_ID = 7;
@@ -107,10 +102,7 @@ describe('buildDeckMetadataPatch', () => {
 
   it('sends relationships as canonical edges', () => {
     const draft = baseDraft();
-    draft.relationships = [
-      ...draft.relationships,
-      { targetDeckId: 12, relationshipType: DeckRelationshipType.SourceMaterial, isInverse: true },
-    ];
+    draft.relationships = [...draft.relationships, { targetDeckId: 12, relationshipType: DeckRelationshipType.SourceMaterial, isInverse: true }];
     expect(buildDeckMetadataPatch(DECK_ID, baseDraft(), draft)).toEqual({
       relationships: [
         { sourceDeckId: DECK_ID, targetDeckId: 9, relationshipType: DeckRelationshipType.Sequel },

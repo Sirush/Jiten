@@ -33,15 +33,18 @@
     [() => props.words, () => props.listContext],
     ([words, listContext]) => {
       if (!listContext || words.length === 0) return;
-      writeContext(listContext, words.map((word): WordListItem => [word.wordId, word.mainReading.readingIndex]));
+      writeContext(
+        listContext,
+        words.map((word): WordListItem => [word.wordId, word.mainReading.readingIndex])
+      );
     },
-    { immediate: true },
+    { immediate: true }
   );
 </script>
 
 <template>
   <div v-if="status === 'pending'" class="flex flex-col gap-2">
-    <Card v-for="i in (skeletonCount ?? 10)" :key="i" class="p-2">
+    <Card v-for="i in skeletonCount ?? 10" :key="i" class="p-2">
       <template #content>
         <Skeleton width="100%" height="50px" />
       </template>

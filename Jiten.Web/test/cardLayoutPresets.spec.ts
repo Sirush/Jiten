@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  BUILT_IN_PRESETS,
-  SHARE_CODE_PREFIX,
-  decodeLayoutShareCode,
-  encodeLayoutShareCode,
-  instantiatePreset,
-} from '../app/utils/cardLayoutPresets';
+import { BUILT_IN_PRESETS, SHARE_CODE_PREFIX, decodeLayoutShareCode, encodeLayoutShareCode, instantiatePreset } from '../app/utils/cardLayoutPresets';
 import { buildLayoutFromLegacySettings, newBlockId } from '../app/utils/cardLayout';
 import { DEFAULT_CARD_DISPLAY_SETTINGS } from '../app/utils/defaultStudySettings';
 import type { CardBlockType, CardLayout, CardLayoutBlock, StudySettingsDto } from '../app/types/types';
@@ -22,11 +16,7 @@ function layout(front: CardLayoutBlock[], back: CardLayoutBlock[]): CardLayout {
 
 // Reproduces the util's url-safe base64 so tests can forge arbitrary payloads.
 function makeCode(payload: unknown): string {
-  const b64 = Buffer.from(JSON.stringify(payload), 'utf-8')
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  const b64 = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   return SHARE_CODE_PREFIX + b64;
 }
 
@@ -114,9 +104,7 @@ describe('malformed share codes', () => {
 
 describe('validation on decode', () => {
   it('drops unknown types and reports them', () => {
-    const decoded = decodeLayoutShareCode(
-      makeCode({ version: 1, front: [{ type: 'headword' }, { type: 'futureBlock' }], back: [{ type: 'anotherFuture' }] })
-    );
+    const decoded = decodeLayoutShareCode(makeCode({ version: 1, front: [{ type: 'headword' }, { type: 'futureBlock' }], back: [{ type: 'anotherFuture' }] }));
     expect(types(decoded!.layout.front)).toEqual(['headword']);
     expect(types(decoded!.layout.back)).toEqual([]);
     expect(decoded!.droppedTypes.sort()).toEqual(['anotherFuture', 'futureBlock']);

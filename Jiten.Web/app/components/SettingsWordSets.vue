@@ -5,7 +5,7 @@
   const subscriptionCount = computed(() => subscriptions.value.length);
 
   const status = computed(() =>
-    subscriptionCount.value > 0 ? `${subscriptionCount.value} active subscription${subscriptionCount.value === 1 ? '' : 's'}` : null,
+    subscriptionCount.value > 0 ? `${subscriptionCount.value} active subscription${subscriptionCount.value === 1 ? '' : 's'}` : null
   );
 
   onMounted(() => {

@@ -1,62 +1,62 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import type { ProgressionSegmentDto } from '~/types';
-import { MediaType } from '~/types';
-import { getDifficultyTextClass, peakColour, formatDifficultyValue } from '~/utils/difficultyColours';
+  import { computed } from 'vue';
+  import type { ProgressionSegmentDto } from '~/types';
+  import { MediaType } from '~/types';
+  import { getDifficultyTextClass, peakColour, formatDifficultyValue } from '~/utils/difficultyColours';
 
-const props = defineProps<{
-  progression: ProgressionSegmentDto[];
-  overallDifficulty: number;
-  overallPeak: number;
-  mediaType?: MediaType;
-  isParentDeck?: boolean;
-  usePercentage?: boolean;
-}>();
+  const props = defineProps<{
+    progression: ProgressionSegmentDto[];
+    overallDifficulty: number;
+    overallPeak: number;
+    mediaType?: MediaType;
+    isParentDeck?: boolean;
+    usePercentage?: boolean;
+  }>();
 
-const getMediaTypePrefix = (mediaType?: MediaType): string => {
-  switch (mediaType) {
-    case MediaType.Anime:
-    case MediaType.Drama:
-    case MediaType.Movie:
-    case MediaType.Audio:
-      return 'Ep';
-    case MediaType.Novel:
-    case MediaType.NonFiction:
-    case MediaType.WebNovel:
-    case MediaType.Manga:
-      return 'Vol';
-    case MediaType.VisualNovel:
-    case MediaType.VideoGame:
-      return 'Part';
-    default:
-      return '#';
-  }
-};
-
-const tableRows = computed(() => {
-  const sorted = [...props.progression].sort((a, b) => a.segment - b.segment);
-
-  return sorted.map((s) => {
-    let label: string;
-    if (!props.isParentDeck || s.childStartOrder == null || s.childEndOrder == null) {
-      label = `${s.segment * 10}%`;
-    } else {
-      const prefix = getMediaTypePrefix(props.mediaType);
-      if (s.childStartOrder === s.childEndOrder) {
-        label = `${prefix} ${s.childStartOrder}`;
-      } else {
-        label = `${prefix} ${s.childStartOrder}-${s.childEndOrder}`;
-      }
+  const getMediaTypePrefix = (mediaType?: MediaType): string => {
+    switch (mediaType) {
+      case MediaType.Anime:
+      case MediaType.Drama:
+      case MediaType.Movie:
+      case MediaType.Audio:
+        return 'Ep';
+      case MediaType.Novel:
+      case MediaType.NonFiction:
+      case MediaType.WebNovel:
+      case MediaType.Manga:
+        return 'Vol';
+      case MediaType.VisualNovel:
+      case MediaType.VideoGame:
+        return 'Part';
+      default:
+        return '#';
     }
+  };
 
-    return {
-      label,
-      difficulty: s.difficulty,
-      peak: s.peak,
-      difficultyClass: getDifficultyTextClass(s.difficulty),
-    };
+  const tableRows = computed(() => {
+    const sorted = [...props.progression].sort((a, b) => a.segment - b.segment);
+
+    return sorted.map((s) => {
+      let label: string;
+      if (!props.isParentDeck || s.childStartOrder == null || s.childEndOrder == null) {
+        label = `${s.segment * 10}%`;
+      } else {
+        const prefix = getMediaTypePrefix(props.mediaType);
+        if (s.childStartOrder === s.childEndOrder) {
+          label = `${prefix} ${s.childStartOrder}`;
+        } else {
+          label = `${prefix} ${s.childStartOrder}-${s.childEndOrder}`;
+        }
+      }
+
+      return {
+        label,
+        difficulty: s.difficulty,
+        peak: s.peak,
+        difficultyClass: getDifficultyTextClass(s.difficulty),
+      };
+    });
   });
-});
 </script>
 
 <template>

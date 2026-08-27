@@ -66,7 +66,7 @@
         />
         <label for="sortBy">Sort by</label>
       </FloatLabel>
-      <Button @click="emit('update:sortDescending', !sortDescending)" class="min-w-12 w-12">
+      <Button class="min-w-12 w-12" @click="emit('update:sortDescending', !sortDescending)">
         <Icon v-if="sortDescending" name="mingcute:az-sort-descending-letters-line" size="1.25em" />
         <Icon v-else name="mingcute:az-sort-ascending-letters-line" size="1.25em" />
       </Button>
@@ -76,7 +76,7 @@
       <InputIcon>
         <Icon name="material-symbols:search-rounded" />
       </InputIcon>
-      <InputText :model-value="search" @update:model-value="$emit('update:search', $event)" placeholder="Search words or definitions..." class="w-full" />
+      <InputText :model-value="search" placeholder="Search words or definitions..." class="w-full" @update:model-value="$emit('update:search', $event)" />
       <InputIcon v-if="search" class="cursor-pointer" @click="$emit('update:search', '')">
         <Icon name="material-symbols:close" />
       </InputIcon>
@@ -92,7 +92,10 @@
       <div class="flex w-56 flex-col gap-3">
         <SelectButton
           :model-value="sortDescending"
-          :options="[{ label: 'Ascending', value: false }, { label: 'Descending', value: true }]"
+          :options="[
+            { label: 'Ascending', value: false },
+            { label: 'Descending', value: true },
+          ]"
           option-label="label"
           option-value="value"
           :allow-empty="false"
@@ -116,12 +119,7 @@
       <slot />
     </div>
 
-    <VocabularyDisplayFilter
-      v-if="showDisplayFilter"
-      v-model:tiers="displayTiers"
-      v-model:suspended="suspended"
-      v-model:redundant="redundant"
-    />
+    <VocabularyDisplayFilter v-if="showDisplayFilter" v-model:tiers="displayTiers" v-model:suspended="suspended" v-model:redundant="redundant" />
 
     <VocabularyAdvancedFilters
       v-model:include-pos="includePos"

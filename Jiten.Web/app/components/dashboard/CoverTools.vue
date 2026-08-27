@@ -52,7 +52,6 @@
   let currentCanvas: HTMLCanvasElement | null = null;
   let rafId: number | null = null;
 
-
   const styleOptions = computed<{ label: string; value: BackgroundStyle }[]>(() => [
     { label: 'Gradient', value: 'gradient' },
     { label: 'Solid', value: 'solid' },
@@ -136,7 +135,6 @@
     sourceImage = null;
     currentCanvas = null;
     try {
-
       if (props.source) {
         const blob = await resolveBlob(props.source);
         sourceImage = await loadImage(blob);
@@ -254,13 +252,25 @@
               />
             </div>
             <div class="flex flex-wrap items-center gap-3 text-sm">
-              <label class="flex items-center gap-1">BG 1 <input v-model="options.bgColor1" type="color" /></label>
-              <label v-if="options.style === 'gradient'" class="flex items-center gap-1">BG 2 <input v-model="options.bgColor2" type="color" /></label>
-              <label class="flex items-center gap-1">Text <input v-model="options.textColor" type="color" /></label>
+              <label class="flex items-center gap-1">
+                BG 1
+                <input v-model="options.bgColor1" type="color" />
+              </label>
+              <label v-if="options.style === 'gradient'" class="flex items-center gap-1">
+                BG 2
+                <input v-model="options.bgColor2" type="color" />
+              </label>
+              <label class="flex items-center gap-1">
+                Text
+                <input v-model="options.textColor" type="color" />
+              </label>
             </div>
           </div>
           <div v-else class="flex items-center gap-1 text-sm">
-            <label class="flex items-center gap-1">Text color <input v-model="options.textColor" type="color" /></label>
+            <label class="flex items-center gap-1">
+              Text color
+              <input v-model="options.textColor" type="color" />
+            </label>
           </div>
 
           <!-- Gradient angle -->

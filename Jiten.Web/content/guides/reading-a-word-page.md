@@ -27,7 +27,7 @@ Most words in Japanese can be written more than one way: kanji, kana, alternativ
 
 ## Pitch accents and kanji breakdown
 
-**Pitch accents** are drawn as diagrams over the kana, one per attested pattern. Below, the **kanji breakdown** shows each kanji in the word with its stroke count, mnemonic, and level on your preferred scale (JLPT by default, you can  [customize it](/guides/customising-display)); each button links to the full kanji page with even more info.
+**Pitch accents** are drawn as diagrams over the kana, one per attested pattern. Below, the **kanji breakdown** shows each kanji in the word with its stroke count, mnemonic, and level on your preferred scale (JLPT by default, you can [customize it](/guides/customising-display)); each button links to the full kanji page with even more info.
 
 ## Where the word appears
 

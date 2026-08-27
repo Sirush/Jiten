@@ -347,7 +347,10 @@
   function fitZoom() {
     const ns = simNodes.value;
     if (!ns.length || !svgSize.w || !svgSize.h) return;
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
     for (const s of ns) {
       minX = Math.min(minX, s.x);
       maxX = Math.max(maxX, s.x);
@@ -401,7 +404,7 @@
   const activeNode = ref<number | null>(null);
   const adjacentNodes = useAdjacentNodes(activeNode);
 
-  const activeNodeData = computed(() => (activeNode.value == null ? null : nodeById.value.get(activeNode.value) ?? null));
+  const activeNodeData = computed(() => (activeNode.value == null ? null : (nodeById.value.get(activeNode.value) ?? null)));
   const activeCaptions = computed(() => (activeNode.value == null ? [] : captionsFor(activeNode.value)));
 
   function edgeActive(e: FranchiseEdge): boolean {
@@ -413,7 +416,6 @@
   }
 
   const isCurrent = (id: number) => id === props.currentDeckId;
-
 
   function showCoverage(node: FranchiseNode): boolean {
     return authStore.isAuthenticated && !store.hideCoverageBorders && (node.coverage !== 0 || node.uniqueCoverage !== 0);
@@ -815,13 +817,7 @@
       />
 
       <!-- Edge overlay: endpoints come from the same projection as the cards. -->
-      <svg
-        class="pointer-events-none absolute inset-0"
-        :width="svgSize.w"
-        :height="svgSize.h"
-        :viewBox="`0 0 ${svgSize.w} ${svgSize.h}`"
-        aria-hidden="true"
-      >
+      <svg class="pointer-events-none absolute inset-0" :width="svgSize.w" :height="svgSize.h" :viewBox="`0 0 ${svgSize.w} ${svgSize.h}`" aria-hidden="true">
         <line
           v-for="(g, i) in edgeGeoms"
           :key="i"
@@ -881,7 +877,7 @@
           width="112"
           height="128"
           draggable="false"
-        >
+        />
         <!-- Media type chip: the timeline shows this via column headers; here it lives on the card. -->
         <span class="absolute left-1 top-1 rounded bg-black/55 px-1 py-px text-[9px] font-semibold whitespace-nowrap text-white">
           {{ getMediaTypeText(p.node.mediaType) }}
@@ -892,7 +888,12 @@
           </span>
           <div class="flex items-center justify-between gap-1 text-[10px]">
             <span class="shrink-0 text-gray-500 dark:text-gray-400">{{ releaseYear(p.node) ?? '?' }}</span>
-            <DifficultyDisplay v-if="p.node.difficulty >= 0" :difficulty="p.node.difficulty" :difficulty-raw="p.node.difficultyRaw" class="truncate text-[10px]" />
+            <DifficultyDisplay
+              v-if="p.node.difficulty >= 0"
+              :difficulty="p.node.difficulty"
+              :difficulty-raw="p.node.difficultyRaw"
+              class="truncate text-[10px]"
+            />
           </div>
         </div>
         <CoverageStrip v-if="showCoverage(p.node)" :coverage="p.node.coverage" class="absolute inset-x-0 bottom-0 rounded-b-md" />

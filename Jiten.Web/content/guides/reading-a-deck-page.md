@@ -17,7 +17,7 @@ Every title in the library has its own page, and there's a lot packed into it. T
 
 The top of the page shows the essentials at a glance:
 
-- **Your coverage** (when logged in) — two bars under the cover, **Coverage** and **Unique**. Coverage weighs words by how often they appear, making it  share of the *text* you'll understand. Unique coverage counts each distinct word once. The solid part of the bar is words you know well; the lighter part is words you're still learning. The coloured dot beside Coverage is your rough tier for the title, from red through to green.
+- **Your coverage** (when logged in) — two bars under the cover, **Coverage** and **Unique**. Coverage weighs words by how often they appear, making it share of the _text_ you'll understand. Unique coverage counts each distinct word once. The solid part of the bar is words you know well; the lighter part is words you're still learning. The coloured dot beside Coverage is your rough tier for the title, from red through to green.
 - **Length** — character count (or speech duration for anime and dramas), word count, and unique words. This is a good indication of both the length of the work as well as the richness of the vocabulary.
 - **Kanji** — unique kanji indicates all the different kanji that will appear in words in this title.
 - **Speech speed** — for video media, this indicated the average speaking speed in mora per minute. This is derived from the subtitles line timing as well as the character count.
@@ -25,7 +25,7 @@ The top of the page shows the essentials at a glance:
 - **Dialogue percentage** — for novel-type media, this is the percentage of the media that is spoken dialogue, which is anything between Japanese quotation marks such as 「」. This is a good indication of how much of the media is focused on character interaction and slice of life. Higher dialogue percentage usually means easier.
 - **Difficulty** — the algorithmic score, possibly adjusted by community votes. More below.
 - **Subdeck counts** — indicated as episodes, volumes, etc. You can click them or click the Details button to see the exact same details and actions on every volumes or episodes of the media. For example, you could download the deck of a single episode.
-- **Duration** — for novel-type media, you can get an estimated duration of how long it will take *you* to read it, based on your reading speed from the quick settings.
+- **Duration** — for novel-type media, you can get an estimated duration of how long it will take _you_ to read it, based on your reading speed from the quick settings.
 - **Additional statistics** — by clicking the chart button at the top right, you can see additional advanced statistics about the media such as the number of words required to reach certain coverages, the difficulty over the length of the text, etc.
 - **Genres, tags and related** — those help you find what a title is about as well as easily filter them and find other media that are related to them (prequels, sequels, adaptations…)
 
@@ -38,7 +38,7 @@ The little marks next to the difficulty are community input: **▲** means reade
 The **Vocabulary** button opens the title's full vocabulary list. Three sort orders are available:
 
 - **Chronological** (the default) — the order words first appear in the work.
-- **Deck Frequency** — most frequent in *this title* first. The **x12** style number is how many times the word appears in it.
+- **Deck Frequency** — most frequent in _this title_ first. The **x12** style number is how many times the word appears in it.
 - **Global Frequency** — by corpus-wide rank (the **Rank #** number), so you can spot which of the title's words are broadly useful.
 
 You can search the list, filter by your own word states (only unknown, only mature, and so on), hide kana-only words, and include or exclude parts of speech. Each word's status control lets you [mark it known or blacklist it](/guides/tracking-known-words) right from the list.

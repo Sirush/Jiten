@@ -67,11 +67,7 @@ export const SAMPLE_CARD: CardSampleData = {
  * there the image always renders below (no beside/mobile split) and is never blurred, so a beside-layout
  * card-image row still shows its placeholder on wide screens.
  */
-export function createSampleCardContext(
-  settings: ComputedRef<StudySettingsDto>,
-  isFlipped: Ref<boolean>,
-  opts: { isolated?: boolean } = {}
-): CardContext {
+export function createSampleCardContext(settings: ComputedRef<StudySettingsDto>, isFlipped: Ref<boolean>, opts: { isolated?: boolean } = {}): CardContext {
   const exampleRevealed = ref(false);
   const isolated = !!opts.isolated;
 
@@ -86,10 +82,12 @@ export function createSampleCardContext(
   });
 
   const sampleLayout = computed(() => resolveCardLayout(settings.value));
-  const imageBlock = computed(() => sampleLayout.value.front.find((b) => b.type === 'cardImage') ?? sampleLayout.value.back.find((b) => b.type === 'cardImage'));
+  const imageBlock = computed(
+    () => sampleLayout.value.front.find((b) => b.type === 'cardImage') ?? sampleLayout.value.back.find((b) => b.type === 'cardImage')
+  );
   const imageOnFront = computed(() => sampleLayout.value.front.some((b) => b.type === 'cardImage'));
   const besideLayout = computed(() => !isolated && (imageBlock.value?.options?.layout ?? 'beside') === 'beside');
-  const blurEnabled = computed(() => (imageBlock.value?.options?.blur ?? true));
+  const blurEnabled = computed(() => imageBlock.value?.options?.blur ?? true);
 
   return {
     card: computed(() => null),

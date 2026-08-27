@@ -121,9 +121,7 @@
   // that requires typing the recipient's username. Day grants keep the lightweight confirm.
   const showLifetimeConfirm = ref(false);
   const lifetimeConfirmName = ref('');
-  const canConfirmLifetime = computed(
-    () => !!selectedUser.value && lifetimeConfirmName.value.trim() === selectedUser.value.userName,
-  );
+  const canConfirmLifetime = computed(() => !!selectedUser.value && lifetimeConfirmName.value.trim() === selectedUser.value.userName);
 
   function confirmGrant() {
     if (grantType.value === 'lifetime') {
@@ -187,7 +185,14 @@
 
   // Create single
   const showCreate = ref(false);
-  const newCode = reactive({ code: '', description: '', durationDays: 7, maxUses: null as number | null, expiresAt: null as Date | null, grantsFullTier: false });
+  const newCode = reactive({
+    code: '',
+    description: '',
+    durationDays: 7,
+    maxUses: null as number | null,
+    expiresAt: null as Date | null,
+    grantsFullTier: false,
+  });
   const creating = ref(false);
 
   function openCreate() {
@@ -392,7 +397,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium mb-1">Grant</label>
-              <Select v-model="grantType" :options="grantTypeOptions" optionLabel="label" optionValue="value" class="w-full" />
+              <Select v-model="grantType" :options="grantTypeOptions" option-label="label" option-value="value" class="w-full" />
             </div>
             <div v-if="grantType === 'custom'">
               <label class="block text-sm font-medium mb-1">Days</label>
@@ -409,7 +414,13 @@
 
           <div>
             <label class="block text-sm font-medium mb-1">Thank-you message (optional)</label>
-            <Textarea v-model="thankYouMessage" rows="3" maxlength="1000" class="w-full" placeholder="A personal note the recipient will see in-app and by email" />
+            <Textarea
+              v-model="thankYouMessage"
+              rows="3"
+              maxlength="1000"
+              class="w-full"
+              placeholder="A personal note the recipient will see in-app and by email"
+            />
             <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">{{ thankYouMessage.length }}/1000</p>
           </div>
 
@@ -432,7 +443,7 @@
         </div>
       </template>
       <template #content>
-        <DataTable :value="codes" :loading="loadingCodes" :paginator="codes.length > 10" :rows="10" stripedRows>
+        <DataTable :value="codes" :loading="loadingCodes" :paginator="codes.length > 10" :rows="10" striped-rows>
           <Column field="code" header="Code" :sortable="true">
             <template #body="{ data }">
               <code class="font-mono">{{ data.code }}</code>
@@ -459,8 +470,15 @@
           <Column header="Actions" style="width: 130px">
             <template #body="{ data }">
               <div class="flex gap-2">
-                <Button icon="pi pi-chart-bar" size="small" severity="info" v-tooltip.top="'Usage'" @click="viewUsage(data)" />
-                <Button icon="pi pi-ban" size="small" severity="danger" :disabled="!data.isActive" v-tooltip.top="'Deactivate'" @click="confirmDeactivate(data)" />
+                <Button v-tooltip.top="'Usage'" icon="pi pi-chart-bar" size="small" severity="info" @click="viewUsage(data)" />
+                <Button
+                  v-tooltip.top="'Deactivate'"
+                  icon="pi pi-ban"
+                  size="small"
+                  severity="danger"
+                  :disabled="!data.isActive"
+                  @click="confirmDeactivate(data)"
+                />
               </div>
             </template>
           </Column>
@@ -475,7 +493,7 @@
       </template>
       <template #content>
         <h3 class="font-semibold mb-2">Day grants</h3>
-        <DataTable :value="dayGrants" :loading="loadingGrants" :paginator="dayGrants.length > 10" :rows="10" stripedRows class="mb-6">
+        <DataTable :value="dayGrants" :loading="loadingGrants" :paginator="dayGrants.length > 10" :rows="10" striped-rows class="mb-6">
           <Column field="userName" header="User" />
           <Column field="days" header="Days" style="width: 90px" />
           <Column header="Tier" style="width: 90px">
@@ -491,7 +509,7 @@
         </DataTable>
 
         <h3 class="font-semibold mb-2">Contributor lifetime grants</h3>
-        <DataTable :value="lifetimeGrants" :loading="loadingGrants" :paginator="lifetimeGrants.length > 10" :rows="10" stripedRows>
+        <DataTable :value="lifetimeGrants" :loading="loadingGrants" :paginator="lifetimeGrants.length > 10" :rows="10" striped-rows>
           <Column field="userName" header="User" />
           <Column header="Type">
             <template #body>
@@ -538,7 +556,7 @@
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Expires at (optional)</label>
-          <DatePicker v-model="newCode.expiresAt" showTime hourFormat="24" class="w-full" />
+          <DatePicker v-model="newCode.expiresAt" show-time hour-format="24" class="w-full" />
         </div>
         <div class="flex items-center gap-3">
           <ToggleSwitch v-model="newCode.grantsFullTier" input-id="createFull" />
@@ -574,7 +592,7 @@
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Expires at (optional)</label>
-          <DatePicker v-model="bulk.expiresAt" showTime hourFormat="24" class="w-full" />
+          <DatePicker v-model="bulk.expiresAt" show-time hour-format="24" class="w-full" />
         </div>
         <div class="flex items-center gap-3">
           <ToggleSwitch v-model="bulk.grantsFullTier" input-id="bulkFull" />
@@ -602,13 +620,17 @@
       <div class="flex flex-col gap-4">
         <Message severity="error" :closable="false">
           <span class="font-semibold">This is irreversible by the recipient.</span>
-          You are about to grant <span class="font-semibold">permanent</span> lifetime Jiten+ to
-          <span class="font-semibold">{{ selectedUser?.userName }}</span>. It can only be undone by an admin revoke,
-          and only for contributor grants. Make sure you didn't mean to grant a fixed number of days.
+          You are about to grant
+          <span class="font-semibold">permanent</span>
+          lifetime Jiten+ to
+          <span class="font-semibold">{{ selectedUser?.userName }}</span>
+          . It can only be undone by an admin revoke, and only for contributor grants. Make sure you didn't mean to grant a fixed number of days.
         </Message>
         <div>
           <label class="block text-sm font-medium mb-1">
-            Type <span class="font-mono font-semibold">{{ selectedUser?.userName }}</span> to confirm
+            Type
+            <span class="font-mono font-semibold">{{ selectedUser?.userName }}</span>
+            to confirm
           </label>
           <InputText v-model="lifetimeConfirmName" placeholder="Recipient username" class="w-full" autocomplete="off" />
         </div>
@@ -631,9 +653,10 @@
       <div v-if="loadingUsage" class="flex justify-center py-8"><ProgressSpinner style="width: 50px; height: 50px" /></div>
       <div v-else-if="usage">
         <p class="mb-4">
-          <code class="font-mono">{{ usage.code }}</code> — {{ usage.currentUses }}{{ usage.maxUses ? ` / ${usage.maxUses}` : '' }} uses
+          <code class="font-mono">{{ usage.code }}</code>
+          — {{ usage.currentUses }}{{ usage.maxUses ? ` / ${usage.maxUses}` : '' }} uses
         </p>
-        <DataTable :value="usage.redemptions" :paginator="usage.redemptions.length > 10" :rows="10" stripedRows>
+        <DataTable :value="usage.redemptions" :paginator="usage.redemptions.length > 10" :rows="10" striped-rows>
           <Column field="userName" header="User" />
           <Column header="Redeemed">
             <template #body="{ data }">{{ formatDate(data.redeemedAt) }}</template>

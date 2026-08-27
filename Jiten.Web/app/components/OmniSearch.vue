@@ -235,7 +235,8 @@
           <span class="text-2xl font-bold text-purple-500" lang="ja">{{ kanjiSearchTarget }}</span>
           <div class="min-w-0 flex-1">
             <div class="font-medium">
-              View kanji: <span lang="ja">{{ kanjiSearchTarget }}</span>
+              View kanji:
+              <span lang="ja">{{ kanjiSearchTarget }}</span>
             </div>
             <div class="text-sm text-gray-500 dark:text-gray-400">Go to kanji details page</div>
           </div>
@@ -255,8 +256,9 @@
           <Icon name="material-symbols:search-rounded" class="text-xl text-purple-500" />
           <div class="min-w-0 flex-1">
             <div class="font-medium">
-              Search: "<span lang="ja">{{ searchText }}</span
-              >"
+              Search: "
+              <span lang="ja">{{ searchText }}</span>
+              "
             </div>
             <div class="text-sm text-gray-500 dark:text-gray-400">Search dictionary by meaning or wildcard. Use #kanji to view kanji details</div>
           </div>
@@ -278,8 +280,9 @@
           >
             <Icon name="material-symbols:video-library-outline" class="text-lg text-gray-500 dark:text-gray-400" />
             <span class="flex-1">
-              View more media for "<span lang="ja">{{ searchText }}</span
-              >"
+              View more media for "
+              <span lang="ja">{{ searchText }}</span>
+              "
               <span v-if="remainingCount > 0" class="text-purple-500 font-medium">(+{{ remainingCount }})</span>
             </span>
             <Icon name="material-symbols:arrow-forward" class="text-gray-400" />
@@ -317,8 +320,9 @@
           </template>
 
           <div v-else-if="!isLoading" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700">
-            No media found matching "<span lang="ja">{{ searchText }}</span
-            >"
+            No media found matching "
+            <span lang="ja">{{ searchText }}</span>
+            "
           </div>
         </template>
       </div>

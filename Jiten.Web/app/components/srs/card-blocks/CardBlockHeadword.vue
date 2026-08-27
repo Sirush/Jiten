@@ -117,7 +117,15 @@
         class="flex items-center md:hidden"
         :class="audioBelow ? 'mt-1' : 'absolute left-full top-1/2 -translate-y-1/2 ml-1.5'"
       >
-        <TtsButton v-if="showAudioButton && card" :text="headWordTtsText" :word-id="card.wordId" :reading-index="card.readingIndex" size="lg" class="p-1.5" @click.stop />
+        <TtsButton
+          v-if="showAudioButton && card"
+          :text="headWordTtsText"
+          :word-id="card.wordId"
+          :reading-index="card.readingIndex"
+          size="lg"
+          class="p-1.5"
+          @click.stop
+        />
         <button
           v-if="cardAudio"
           type="button"

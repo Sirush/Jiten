@@ -1,5 +1,22 @@
 import { defineStore } from 'pinia';
-import type { StudyDeckDto, StudyBatchResponse, StudyCardDto, StudySettingsDto, AddStudyDeckRequest, UpdateStudyDeckRequest, BatchAddStudyDecksRequest, BatchAddStudyDecksResult, DueSummaryDto, DeckStreakDto, ReviewForecast30dDto, StudyMoreParams, CardExamplesResponse, StudyExampleSentenceDto, SessionStreakDto, ReviewForecastDto } from '~/types';
+import type {
+  StudyDeckDto,
+  StudyBatchResponse,
+  StudyCardDto,
+  StudySettingsDto,
+  AddStudyDeckRequest,
+  UpdateStudyDeckRequest,
+  BatchAddStudyDecksRequest,
+  BatchAddStudyDecksResult,
+  DueSummaryDto,
+  DeckStreakDto,
+  ReviewForecast30dDto,
+  StudyMoreParams,
+  CardExamplesResponse,
+  StudyExampleSentenceDto,
+  SessionStreakDto,
+  ReviewForecastDto,
+} from '~/types';
 import { FsrsRating } from '~/types';
 import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
 import { DEFAULT_CARD_DISPLAY_SETTINGS } from '~/utils/defaultStudySettings';
@@ -248,8 +265,16 @@ export const useSrsStore = defineStore('srs', () => {
   function prefetchSessionSummary() {
     if (summaryPrefetched) return;
     summaryPrefetched = true;
-    $api<SessionStreakDto>('srs/session-streak').then(r => { sessionStreak.value = r; }).catch(() => {});
-    $api<ReviewForecastDto>('srs/review-forecast').then(r => { sessionForecast.value = r; }).catch(() => {});
+    $api<SessionStreakDto>('srs/session-streak')
+      .then((r) => {
+        sessionStreak.value = r;
+      })
+      .catch(() => {});
+    $api<ReviewForecastDto>('srs/review-forecast')
+      .then((r) => {
+        sessionForecast.value = r;
+      })
+      .catch(() => {});
   }
 
   function invalidateSession() {
@@ -258,11 +283,7 @@ export const useSrsStore = defineStore('srs', () => {
 
   const canUndo = computed(() => undoStack.value.length > 0);
 
-  const currentCard = computed(() =>
-    currentCardIndex.value < currentBatch.value.length
-      ? currentBatch.value[currentCardIndex.value]
-      : null
-  );
+  const currentCard = computed(() => (currentCardIndex.value < currentBatch.value.length ? currentBatch.value[currentCardIndex.value] : null));
 
   const hasCards = computed(() => currentBatch.value.length > 0 && currentCardIndex.value < currentBatch.value.length);
 
@@ -317,7 +338,7 @@ export const useSrsStore = defineStore('srs', () => {
       if (card.reviewCount > 0) card.avgDuration = Math.round(card.avgDuration / card.reviewCount);
     }
     return [...grouped.values()]
-      .filter(c => c.againCount > 0)
+      .filter((c) => c.againCount > 0)
       .sort((a, b) => b.againCount - a.againCount || b.avgDuration - a.avgDuration)
       .slice(0, 5);
   });
@@ -415,13 +436,7 @@ export const useSrsStore = defineStore('srs', () => {
           if (current && current.version === overviewVersion.value) return;
         }
 
-        const [version] = await Promise.all([
-          versionRequest,
-          fetchStudyDecks(),
-          fetchDueSummary(),
-          fetchDeckStreak(),
-          fetchSettings(true),
-        ]);
+        const [version] = await Promise.all([versionRequest, fetchStudyDecks(), fetchDueSummary(), fetchDeckStreak(), fetchSettings(true)]);
         overviewVersion.value = version?.version ?? 0;
       } finally {
         refreshOverviewPromise = null;
@@ -486,7 +501,7 @@ export const useSrsStore = defineStore('srs', () => {
       method: 'PUT',
       body: request,
     });
-    const deck = studyDecks.value.find(d => d.userStudyDeckId === id);
+    const deck = studyDecks.value.find((d) => d.userStudyDeckId === id);
     if (deck) {
       if (request.name != null) deck.name = request.name;
       if (request.description != null) deck.description = request.description;
@@ -510,7 +525,7 @@ export const useSrsStore = defineStore('srs', () => {
 
   async function removeStudyDeck(id: number) {
     await $api(`srs/study-decks/${id}`, { method: 'DELETE' });
-    studyDecks.value = studyDecks.value.filter(d => d.userStudyDeckId !== id);
+    studyDecks.value = studyDecks.value.filter((d) => d.userStudyDeckId !== id);
     invalidateSession();
     refreshOverview();
   }
@@ -526,7 +541,7 @@ export const useSrsStore = defineStore('srs', () => {
   async function addDeckWordsBatch(deckId: number, words: { wordId: number; readingIndex: number; occurrences?: number }[]) {
     const result = await $api<{ added: number; updated: number }>(`srs/study-decks/${deckId}/words/batch`, {
       method: 'POST',
-      body: { words: words.map(w => ({ wordId: w.wordId, readingIndex: w.readingIndex, occurrences: w.occurrences ?? 1 })) },
+      body: { words: words.map((w) => ({ wordId: w.wordId, readingIndex: w.readingIndex, occurrences: w.occurrences ?? 1 })) },
     });
     refreshOverview();
     return result;
@@ -595,16 +610,16 @@ export const useSrsStore = defineStore('srs', () => {
     return result;
   }
 
-  const activeDecks = computed(() => studyDecks.value.filter(d => d.isActive));
-  const inactiveDecks = computed(() => studyDecks.value.filter(d => !d.isActive));
+  const activeDecks = computed(() => studyDecks.value.filter((d) => d.isActive));
+  const inactiveDecks = computed(() => studyDecks.value.filter((d) => !d.isActive));
 
   const REORDER_DEBOUNCE_MS = 400;
   let reorderTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingReorderItems: { userStudyDeckId: number; sortOrder: number; isActive: boolean }[] | null = null;
 
   function buildReorderItems(decks: StudyDeckDto[]) {
-    const active = decks.filter(d => d.isActive);
-    const inactive = decks.filter(d => !d.isActive);
+    const active = decks.filter((d) => d.isActive);
+    const inactive = decks.filter((d) => !d.isActive);
     return [
       ...active.map((d, i) => ({ userStudyDeckId: d.userStudyDeckId, sortOrder: i, isActive: true })),
       ...inactive.map((d, i) => ({ userStudyDeckId: d.userStudyDeckId, sortOrder: i, isActive: false })),
@@ -649,7 +664,7 @@ export const useSrsStore = defineStore('srs', () => {
   }
 
   async function toggleDeckActive(deckId: number) {
-    const deck = studyDecks.value.find(d => d.userStudyDeckId === deckId);
+    const deck = studyDecks.value.find((d) => d.userStudyDeckId === deckId);
     if (!deck) return;
     deck.isActive = !deck.isActive;
     await reorderStudyDecks([...studyDecks.value]);
@@ -688,8 +703,7 @@ export const useSrsStore = defineStore('srs', () => {
       fetchError.value = null;
 
       // Prefetch example sentences for first 4 cards (await so the first card has its example ready)
-      if (currentBatch.value.length > 0)
-        await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
+      if (currentBatch.value.length > 0) await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
       prefetchCardMedia();
     } catch (error) {
       console.error('Failed to fetch study batch:', error);
@@ -737,8 +751,7 @@ export const useSrsStore = defineStore('srs', () => {
     // A full batch alone can't tell "more batches remain" from "this was the last full batch", so
     // also require the server to report cards still waiting beyond it. Avoids a checkpoint whose
     // "Continue" immediately dead-ends into the session summary.
-    moreCardsLikely.value =
-      response.cards.length >= effectiveLimit && (response.reviewsRemaining > 0 || response.newCardsRemaining > 0);
+    moreCardsLikely.value = response.cards.length >= effectiveLimit && (response.reviewsRemaining > 0 || response.newCardsRemaining > 0);
     isFlipped.value = false;
     cardShownAt.value = Date.now();
     newCardsRemaining.value = response.newCardsRemaining;
@@ -807,8 +820,7 @@ export const useSrsStore = defineStore('srs', () => {
       if (result) {
         applyBatchResponse(result.response, result.effectiveLimit);
         fetchError.value = null;
-        if (currentBatch.value.length > 0)
-          await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
+        if (currentBatch.value.length > 0) await prefetchExamples(currentCardIndex.value, EXAMPLE_PREFETCH_AHEAD);
         prefetchCardMedia();
         return;
       }
@@ -872,14 +884,13 @@ export const useSrsStore = defineStore('srs', () => {
     for (let i = start; i < end; i++) {
       const c = currentBatch.value[i];
       const key = cardExampleKey(c);
-      if (!exampleCache.value.has(key) && !inFlightExampleKeys.has(key))
-        pairs.push({ wordId: c.wordId, readingIndex: c.readingIndex });
+      if (!exampleCache.value.has(key) && !inFlightExampleKeys.has(key)) pairs.push({ wordId: c.wordId, readingIndex: c.readingIndex });
     }
 
     if (pairs.length === 0) return;
 
-    const keys = pairs.map(p => `${p.wordId}-${p.readingIndex}`);
-    keys.forEach(k => inFlightExampleKeys.add(k));
+    const keys = pairs.map((p) => `${p.wordId}-${p.readingIndex}`);
+    keys.forEach((k) => inFlightExampleKeys.add(k));
     try {
       let response: CardExamplesResponse | null = null;
       for (let attempt = 0; attempt < 3 && !response; attempt++) {
@@ -889,7 +900,7 @@ export const useSrsStore = defineStore('srs', () => {
             body: { pairs },
           });
         } catch {
-          if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
         }
       }
       if (!response) return;
@@ -900,7 +911,7 @@ export const useSrsStore = defineStore('srs', () => {
       }
       exampleCache.value = newCache;
     } finally {
-      keys.forEach(k => inFlightExampleKeys.delete(k));
+      keys.forEach((k) => inFlightExampleKeys.delete(k));
     }
   }
 
@@ -913,8 +924,10 @@ export const useSrsStore = defineStore('srs', () => {
   // then start byte downloads for the first few cards once the URLs are cached.
   function prefetchCardMedia() {
     if (!import.meta.client || currentBatch.value.length === 0) return;
-    const pairs = currentBatch.value.map(c => ({ wordId: c.wordId, readingIndex: c.readingIndex }));
-    useCardMedia().prefetch(pairs).then(() => warmCardMedia(currentCardIndex.value));
+    const pairs = currentBatch.value.map((c) => ({ wordId: c.wordId, readingIndex: c.readingIndex }));
+    useCardMedia()
+      .prefetch(pairs)
+      .then(() => warmCardMedia(currentCardIndex.value));
   }
 
   // Download media bytes for the current card and the next few. The current card is included because
@@ -951,12 +964,11 @@ export const useSrsStore = defineStore('srs', () => {
     takeSnapshot(card, 'grade', rating);
 
     const AFK_THRESHOLD = 60_000;
-    const reviewDuration = thinkingDuration.value !== undefined
-      ? Math.min(thinkingDuration.value, AFK_THRESHOLD) : undefined;
+    const reviewDuration = thinkingDuration.value !== undefined ? Math.min(thinkingDuration.value, AFK_THRESHOLD) : undefined;
 
     const cardKey = `${card.wordId}-${card.readingIndex}`;
     const isRepeat = againCardKeys.value.has(cardKey);
-    const kanaReading = card.readings.find(r => r.formType === 1)?.text ?? card.wordTextPlain;
+    const kanaReading = card.readings.find((r) => r.formType === 1)?.text ?? card.wordTextPlain;
 
     const reviewEntry: SessionReview = {
       wordId: card.wordId,
@@ -974,9 +986,7 @@ export const useSrsStore = defineStore('srs', () => {
     const wasNew = card.isNewCard && !isRepeat;
     const correct = rating >= FsrsRating.Good;
     const gradeKey: 'again' | 'hard' | 'good' | 'easy' =
-      rating === FsrsRating.Again ? 'again'
-        : rating === FsrsRating.Hard ? 'hard'
-          : rating === FsrsRating.Easy ? 'easy' : 'good';
+      rating === FsrsRating.Again ? 'again' : rating === FsrsRating.Hard ? 'hard' : rating === FsrsRating.Easy ? 'easy' : 'good';
     if (counted) sessionStats.value.cardsReviewed++;
     if (wasNew) sessionStats.value.newCardsLearned++;
     if (correct) sessionStats.value.correctCount++;
@@ -1074,14 +1084,17 @@ export const useSrsStore = defineStore('srs', () => {
   function applyReviewResult(reviewResult: any, ctx: PendingReview): void {
     if (reviewResult?.leechDetected || reviewResult?.leechSuspended) {
       lastLeechEvent.value = { detected: true, suspended: !!reviewResult.leechSuspended };
-      if (!sessionLeeches.value.some(l => `${l.wordId}-${l.readingIndex}` === ctx.cardKey)) {
-        sessionLeeches.value = [...sessionLeeches.value, {
-          wordId: ctx.card.wordId,
-          readingIndex: ctx.card.readingIndex,
-          wordText: ctx.card.wordTextPlain,
-          reading: ctx.reviewEntry.reading,
-          suspended: !!reviewResult.leechSuspended,
-        }];
+      if (!sessionLeeches.value.some((l) => `${l.wordId}-${l.readingIndex}` === ctx.cardKey)) {
+        sessionLeeches.value = [
+          ...sessionLeeches.value,
+          {
+            wordId: ctx.card.wordId,
+            readingIndex: ctx.card.readingIndex,
+            wordText: ctx.card.wordTextPlain,
+            reading: ctx.reviewEntry.reading,
+            suspended: !!reviewResult.leechSuspended,
+          },
+        ];
       }
     }
 
@@ -1116,7 +1129,7 @@ export const useSrsStore = defineStore('srs', () => {
     if (ctx.deltas.correct) s.correctCount = Math.max(0, s.correctCount - 1);
     s.gradeCounts[ctx.deltas.gradeKey] = Math.max(0, s.gradeCounts[ctx.deltas.gradeKey] - 1);
 
-    sessionReviews.value = sessionReviews.value.filter(r => r !== ctx.reviewEntry);
+    sessionReviews.value = sessionReviews.value.filter((r) => r !== ctx.reviewEntry);
 
     if (ctx.deltas.clearedGrade) {
       const i = clearedGrades.value.indexOf(ctx.deltas.clearedGrade);
@@ -1202,9 +1215,7 @@ export const useSrsStore = defineStore('srs', () => {
         method: 'POST',
         body: { wordId, readingIndex, state: 'suspend-add' },
       });
-      sessionLeeches.value = sessionLeeches.value.map(l =>
-        l.wordId === wordId && l.readingIndex === readingIndex ? { ...l, suspended: true } : l,
-      );
+      sessionLeeches.value = sessionLeeches.value.map((l) => (l.wordId === wordId && l.readingIndex === readingIndex ? { ...l, suspended: true } : l));
       return true;
     } catch {
       return false;
@@ -1283,11 +1294,7 @@ export const useSrsStore = defineStore('srs', () => {
     });
 
     const current = currentBatch.value[currentCardIndex.value];
-    currentBatch.value = [
-      ...currentBatch.value.slice(0, currentCardIndex.value),
-      ...(current ? [current] : []),
-      ...keptAgain,
-    ];
+    currentBatch.value = [...currentBatch.value.slice(0, currentCardIndex.value), ...(current ? [current] : []), ...keptAgain];
 
     if (currentCardIndex.value >= currentBatch.value.length) {
       isSessionComplete.value = true;
@@ -1367,7 +1374,9 @@ export const useSrsStore = defineStore('srs', () => {
     if (!import.meta.client) return;
     try {
       localStorage.removeItem(sessionCacheKey());
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   // Restore a cached session if one is present, fresh and still has ungraded cards. Returns true
@@ -1383,15 +1392,16 @@ export const useSrsStore = defineStore('srs', () => {
       return false;
     }
 
-    const valid = blob
-      && blob.version === SESSION_CACHE_VERSION
-      && typeof blob.savedAt === 'number'
-      && Date.now() - blob.savedAt <= SESSION_CACHE_TTL_MS
-      && Array.isArray(blob.currentBatch)
-      && blob.currentBatch.length > 0
+    const valid =
+      blob &&
+      blob.version === SESSION_CACHE_VERSION &&
+      typeof blob.savedAt === 'number' &&
+      Date.now() - blob.savedAt <= SESSION_CACHE_TTL_MS &&
+      Array.isArray(blob.currentBatch) &&
+      blob.currentBatch.length > 0 &&
       // `<=` (not `<`) so a session parked at the batch checkpoint — cursor exactly past the end —
       // still restores; onBatchExhausted() below re-derives the checkpoint instead of losing progress.
-      && blob.currentCardIndex <= blob.currentBatch.length;
+      blob.currentCardIndex <= blob.currentBatch.length;
 
     if (!valid) {
       clearPersistedSession();

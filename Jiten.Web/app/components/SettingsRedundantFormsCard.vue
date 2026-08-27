@@ -100,7 +100,6 @@
       removeLoading.value = false;
     }
   }
-
 </script>
 
 <template>
@@ -110,7 +109,10 @@
     </template>
     <template #content>
       <p class="text-sm text-muted-color mb-4">
-        Some older imports can leave you with separate cards for two spellings of the same word that are <b>redundant</b> with each other. This will list those words so you can review and clean the redundant ones you no longer need manually. Nothing is deleted until you confirm and cards that are deleted will be in the archive below if they have reviews.
+        Some older imports can leave you with separate cards for two spellings of the same word that are
+        <b>redundant</b>
+        with each other. This will list those words so you can review and clean the redundant ones you no longer need manually. Nothing is deleted until you
+        confirm and cards that are deleted will be in the archive below if they have reviews.
       </p>
 
       <div class="flex flex-wrap items-center gap-3">
@@ -132,14 +134,13 @@
         :header="`Redundant forms — ${forms.length.toLocaleString()} form${forms.length === 1 ? '' : 's'}`"
         :style="{ width: '720px', maxWidth: '95vw' }"
       >
-        <div v-if="forms.length === 0" class="text-sm text-muted-color italic py-4 text-center">
-          No redundant forms found. Nothing to clean up.
-        </div>
+        <div v-if="forms.length === 0" class="text-sm text-muted-color italic py-4 text-center">No redundant forms found. Nothing to clean up.</div>
 
         <template v-else>
           <p class="text-sm text-muted-color mb-3">
             Ticked cards will be removed. The word stays known through the mastered form, and its review history moves to
-            <strong>Recently Removed</strong> so you can put it back.
+            <strong>Recently Removed</strong>
+            so you can put it back.
           </p>
 
           <div class="flex items-center justify-between gap-3 border-b border-surface-200 dark:border-surface-700 pb-2 mb-1">
@@ -198,7 +199,9 @@
                 <div class="mt-0.5 text-xs text-muted-color truncate">{{ form.mainDefinition || '—' }}</div>
               </div>
 
-              <span v-if="form.frequencyRank > 0" class="shrink-0 text-xs text-muted-color tabular-nums pt-0.5">#{{ form.frequencyRank.toLocaleString() }}</span>
+              <span v-if="form.frequencyRank > 0" class="shrink-0 text-xs text-muted-color tabular-nums pt-0.5">
+                #{{ form.frequencyRank.toLocaleString() }}
+              </span>
             </div>
           </div>
         </template>

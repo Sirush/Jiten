@@ -12,7 +12,6 @@
   import { type DeckSortOption, deckSortMeta, deckSortOption, deckSortOrdering, deckSortLabels } from '~/utils/deckSorting';
   import { getGenreText } from '~/utils/genreMapper';
 
-
   const props = defineProps<{
     word?: Word;
     defaultMediaType?: MediaType | null;
@@ -58,9 +57,7 @@
   const speechSortOptions = ref<DeckSortOption[]>([]);
 
   const sortByGrouped = computed(() => {
-    const groups: { label: string; items: DeckSortOption[] }[] = [
-      { label: 'General', items: sortByOptions.value },
-    ];
+    const groups: { label: string; items: DeckSortOption[] }[] = [{ label: 'General', items: sortByOptions.value }];
     if (novelSortOptions.value.length > 0) {
       groups.push({ label: 'Novel', items: novelSortOptions.value });
     }
@@ -177,7 +174,7 @@
     excludeGenres: excludeGenres.value,
     includeTags: includeTags.value,
     excludeTags: excludeTags.value,
-    excludeSequels: excludeSequels.value
+    excludeSequels: excludeSequels.value,
   });
 
   const updateFiltersDebounced = debounce(
@@ -207,7 +204,7 @@
         excludeGenres: excludeGenres.value,
         includeTags: includeTags.value,
         excludeTags: excludeTags.value,
-        excludeSequels: excludeSequels.value
+        excludeSequels: excludeSequels.value,
       };
 
       const toUndef = (v: number | null) => (v === null ? undefined : v);
@@ -241,7 +238,7 @@
           tags: arrayToString(includeTags.value) as any,
           excludeTags: arrayToString(excludeTags.value) as any,
           offset: 0 as any,
-          excludeSequels: excludeSequels.value === true ? true : undefined
+          excludeSequels: excludeSequels.value === true ? true : undefined,
         },
       });
     },
@@ -250,7 +247,29 @@
   );
 
   watch(
-    [charCountMin, charCountMax, difficultyMin, difficultyMax, releaseYearMin, releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin, subdeckCountMax, extRatingMin, extRatingMax, speechSpeedMin, speechSpeedMax, speechDurationMin, speechDurationMax, coverageMin, coverageMax, uniqueCoverageMin, uniqueCoverageMax, excludeSequels],
+    [
+      charCountMin,
+      charCountMax,
+      difficultyMin,
+      difficultyMax,
+      releaseYearMin,
+      releaseYearMax,
+      uniqueKanjiMin,
+      uniqueKanjiMax,
+      subdeckCountMin,
+      subdeckCountMax,
+      extRatingMin,
+      extRatingMax,
+      speechSpeedMin,
+      speechSpeedMax,
+      speechDurationMin,
+      speechDurationMax,
+      coverageMin,
+      coverageMax,
+      uniqueCoverageMin,
+      uniqueCoverageMax,
+      excludeSequels,
+    ],
     () => {
       updateFiltersDebounced();
     }
@@ -380,7 +399,7 @@
         excludeTags: undefined,
         status: undefined,
         offset: 0,
-        excludeSequels: undefined
+        excludeSequels: undefined,
       },
     });
   };
@@ -509,38 +528,35 @@
 
   const facetArr = (a: number[]) => (a.length > 0 ? a.join(',') : undefined);
   const facetNum = (v: number | null) => (v == null ? undefined : v);
-  const { data: facetData } = useApiFetch<{ genreCounts: Record<number, number>; tagCounts: Record<number, number> }>(
-    'media-deck/filter-facets',
-    {
-      server: false,
-      lazy: true,
-      query: {
-        mediaType: computed(() => (mediaType.value ? Number(mediaType.value) : undefined)),
-        charCountMin: computed(() => facetNum(debouncedFilters.value.charCountMin)),
-        charCountMax: computed(() => facetNum(debouncedFilters.value.charCountMax)),
-        difficultyMin: computed(() => facetNum(debouncedFilters.value.difficultyMin)),
-        difficultyMax: computed(() => facetNum(debouncedFilters.value.difficultyMax)),
-        releaseYearMin: computed(() => facetNum(debouncedFilters.value.releaseYearMin)),
-        releaseYearMax: computed(() => facetNum(debouncedFilters.value.releaseYearMax)),
-        uniqueKanjiMin: computed(() => facetNum(debouncedFilters.value.uniqueKanjiMin)),
-        uniqueKanjiMax: computed(() => facetNum(debouncedFilters.value.uniqueKanjiMax)),
-        subdeckCountMin: computed(() => facetNum(debouncedFilters.value.subdeckCountMin)),
-        subdeckCountMax: computed(() => facetNum(debouncedFilters.value.subdeckCountMax)),
-        extRatingMin: computed(() => facetNum(debouncedFilters.value.extRatingMin)),
-        extRatingMax: computed(() => facetNum(debouncedFilters.value.extRatingMax)),
-        speechSpeedMin: computed(() => facetNum(debouncedFilters.value.speechSpeedMin)),
-        speechSpeedMax: computed(() => facetNum(debouncedFilters.value.speechSpeedMax)),
-        speechDurationMin: computed(() => facetNum(debouncedFilters.value.speechDurationMin)),
-        speechDurationMax: computed(() => facetNum(debouncedFilters.value.speechDurationMax)),
-        genres: computed(() => facetArr(debouncedFilters.value.includeGenres)),
-        excludeGenres: computed(() => facetArr(debouncedFilters.value.excludeGenres)),
-        tags: computed(() => facetArr(debouncedFilters.value.includeTags)),
-        excludeTags: computed(() => facetArr(debouncedFilters.value.excludeTags)),
-        excludeSequels: computed(() => (debouncedFilters.value.excludeSequels === true ? true : undefined)),
-      },
-      watch: [mediaType, debouncedFilters],
+  const { data: facetData } = useApiFetch<{ genreCounts: Record<number, number>; tagCounts: Record<number, number> }>('media-deck/filter-facets', {
+    server: false,
+    lazy: true,
+    query: {
+      mediaType: computed(() => (mediaType.value ? Number(mediaType.value) : undefined)),
+      charCountMin: computed(() => facetNum(debouncedFilters.value.charCountMin)),
+      charCountMax: computed(() => facetNum(debouncedFilters.value.charCountMax)),
+      difficultyMin: computed(() => facetNum(debouncedFilters.value.difficultyMin)),
+      difficultyMax: computed(() => facetNum(debouncedFilters.value.difficultyMax)),
+      releaseYearMin: computed(() => facetNum(debouncedFilters.value.releaseYearMin)),
+      releaseYearMax: computed(() => facetNum(debouncedFilters.value.releaseYearMax)),
+      uniqueKanjiMin: computed(() => facetNum(debouncedFilters.value.uniqueKanjiMin)),
+      uniqueKanjiMax: computed(() => facetNum(debouncedFilters.value.uniqueKanjiMax)),
+      subdeckCountMin: computed(() => facetNum(debouncedFilters.value.subdeckCountMin)),
+      subdeckCountMax: computed(() => facetNum(debouncedFilters.value.subdeckCountMax)),
+      extRatingMin: computed(() => facetNum(debouncedFilters.value.extRatingMin)),
+      extRatingMax: computed(() => facetNum(debouncedFilters.value.extRatingMax)),
+      speechSpeedMin: computed(() => facetNum(debouncedFilters.value.speechSpeedMin)),
+      speechSpeedMax: computed(() => facetNum(debouncedFilters.value.speechSpeedMax)),
+      speechDurationMin: computed(() => facetNum(debouncedFilters.value.speechDurationMin)),
+      speechDurationMax: computed(() => facetNum(debouncedFilters.value.speechDurationMax)),
+      genres: computed(() => facetArr(debouncedFilters.value.includeGenres)),
+      excludeGenres: computed(() => facetArr(debouncedFilters.value.excludeGenres)),
+      tags: computed(() => facetArr(debouncedFilters.value.includeTags)),
+      excludeTags: computed(() => facetArr(debouncedFilters.value.excludeTags)),
+      excludeSequels: computed(() => (debouncedFilters.value.excludeSequels === true ? true : undefined)),
     },
-  );
+    watch: [mediaType, debouncedFilters],
+  });
 
   const genreCounts = computed(() => facetData.value?.genreCounts ?? {});
   const tagCounts = computed(() => facetData.value?.tagCounts ?? {});
@@ -550,13 +566,16 @@
   // Stream cards in over a few frames instead of mounting the whole page at once.
   const { visibleItems: visibleDecks } = useProgressiveList(
     computed(() => response.value?.data ?? []),
-    { initial: 6, batch: 4, keyOf: (d) => d.deckId },
+    { initial: 6, batch: 4, keyOf: (d) => d.deckId }
   );
 
   const jitenStore = useJitenStore();
-  watch(() => jitenStore.coverageVersion, () => {
-    refreshMediaList();
-  });
+  watch(
+    () => jitenStore.coverageVersion,
+    () => {
+      refreshMediaList();
+    }
+  );
 
   const updateDeckInList = (updatedDeck: Deck) => {
     if (response.value?.data) {
@@ -668,7 +687,7 @@
     label: string,
     minRef: Ref<number | null>,
     maxRef: Ref<number | null>,
-    format: (value: number) => string = (value) => value.toLocaleString(),
+    format: (value: number) => string = (value) => value.toLocaleString()
   ): FilterChip | null => {
     const min = minRef.value;
     const max = maxRef.value;
@@ -679,7 +698,14 @@
     else if (min != null) text = `${label} ≥ ${format(min)}`;
     else text = `${label} ≤ ${format(max as number)}`;
 
-    return { key, label: text, clear: () => { minRef.value = null; maxRef.value = null; } };
+    return {
+      key,
+      label: text,
+      clear: () => {
+        minRef.value = null;
+        maxRef.value = null;
+      },
+    };
   };
 
   const tagName = (tagId: number) => filterTags.value?.find((tag) => tag.tagId === tagId)?.name ?? `Tag ${tagId}`;
@@ -695,7 +721,9 @@
       chips.push({
         key: 'status',
         label: statusChipLabels[statusFilter.value as string] ?? 'Status',
-        clear: () => { statusFilter.value = 'none'; },
+        clear: () => {
+          statusFilter.value = 'none';
+        },
       });
     }
 
@@ -719,7 +747,13 @@
     }
 
     if (excludeSequels.value) {
-      chips.push({ key: 'excludeSequels', label: 'No sequels', clear: () => { excludeSequels.value = null; } });
+      chips.push({
+        key: 'excludeSequels',
+        label: 'No sequels',
+        clear: () => {
+          excludeSequels.value = null;
+        },
+      });
     }
 
     for (const id of includeGenres.value) {
@@ -818,138 +852,145 @@
     <div
       class="flex flex-col gap-2 max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:border-b max-md:border-surface-200 max-md:bg-[var(--jiten-page-bg)] max-md:px-4 max-md:py-2 max-md:dark:border-surface-800"
     >
-    <div class="flex gap-2 max-md:flex-row max-md:flex-wrap max-md:items-center md:flex-row">
-      <div class="hidden md:flex flex-row gap-2">
-        <FloatLabel variant="on" class="w-full">
-          <Select
-            v-model="sortBy"
-            :options="sortByGrouped"
-            option-label="label"
-            option-value="value"
-            option-group-label="label"
-            option-group-children="items"
-            placeholder="Sort by"
-            input-id="sortBy"
-            class="w-full md:w-56"
-            scroll-height="50vh"
-          >
-            <template #optiongroup="{ option }">
-              <div class="text-xs font-semibold text-surface-500 dark:text-surface-400 py-0.5 px-1">{{ option.label }}</div>
-            </template>
-          </Select>
-          <label for="sortBy">Sort by</label>
-        </FloatLabel>
-        <Button :icon="sortOrder === SortOrder.Ascending ? 'pi pi-arrow-up' : 'pi pi-arrow-down'" class="!px-4" @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending" />
-      </div>
+      <div class="flex gap-2 max-md:flex-row max-md:flex-wrap max-md:items-center md:flex-row">
+        <div class="hidden md:flex flex-row gap-2">
+          <FloatLabel variant="on" class="w-full">
+            <Select
+              v-model="sortBy"
+              :options="sortByGrouped"
+              option-label="label"
+              option-value="value"
+              option-group-label="label"
+              option-group-children="items"
+              placeholder="Sort by"
+              input-id="sortBy"
+              class="w-full md:w-56"
+              scroll-height="50vh"
+            >
+              <template #optiongroup="{ option }">
+                <div class="text-xs font-semibold text-surface-500 dark:text-surface-400 py-0.5 px-1">{{ option.label }}</div>
+              </template>
+            </Select>
+            <label for="sortBy">Sort by</label>
+          </FloatLabel>
+          <Button
+            :icon="sortOrder === SortOrder.Ascending ? 'pi pi-arrow-up' : 'pi pi-arrow-down'"
+            class="!px-4"
+            @click="sortOrder = sortOrder === SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending"
+          />
+        </div>
 
-      <!-- A min width rather than min-w-0: in a narrow container (the vocabulary detail page nests
+        <!-- A min width rather than min-w-0: in a narrow container (the vocabulary detail page nests
            this inside a card, leaving ~314px) the field would otherwise shrink to a stub instead
            of wrapping onto its own row. -->
-      <IconField class="max-md:min-w-32 max-md:flex-1 md:w-full">
-        <InputIcon>
-          <Icon name="material-symbols:search-rounded" />
-        </InputIcon>
-        <InputText v-model="titleFilter" type="text" placeholder="Search by title" aria-label="Search by title" class="w-full" />
-        <InputIcon v-if="titleFilter" class="cursor-pointer" @click="titleFilter = null">
-          <Icon name="material-symbols:close" />
-        </InputIcon>
-      </IconField>
+        <IconField class="max-md:min-w-32 max-md:flex-1 md:w-full">
+          <InputIcon>
+            <Icon name="material-symbols:search-rounded" />
+          </InputIcon>
+          <InputText v-model="titleFilter" type="text" placeholder="Search by title" aria-label="Search by title" class="w-full" />
+          <InputIcon v-if="titleFilter" class="cursor-pointer" @click="titleFilter = null">
+            <Icon name="material-symbols:close" />
+          </InputIcon>
+        </IconField>
 
-      <!-- The breakpoint sits on the wrapper: PrimeVue's runtime .p-button display rule
+        <!-- The breakpoint sits on the wrapper: PrimeVue's runtime .p-button display rule
            outranks a `hidden` utility placed on the Button itself. -->
-      <div class="md:hidden shrink-0">
-        <Button class="px-2!" :aria-label="`Sort by ${sortLabel}, ${sortOrderLabel}`" @click="sortPopover.toggle($event)">
-          <Icon name="material-symbols:sort-rounded" size="1.25em" />
-        </Button>
-      </div>
-
-      <Popover ref="sortPopover" class="md:hidden">
-        <div class="flex w-68 flex-col gap-3">
-          <SelectButton
-            v-model="sortOrder"
-            :options="sortDirectionOptions"
-            option-label="label"
-            option-value="value"
-            :allow-empty="false"
-            size="small"
-            class="w-full"
-          />
-          <Listbox
-            :model-value="sortBy"
-            :options="sortByGrouped"
-            option-label="label"
-            option-value="value"
-            option-group-label="label"
-            option-group-children="items"
-            scroll-height="50vh"
-            class="w-full border-0!"
-            @update:model-value="onSortByPicked"
-          >
-            <template #optiongroup="{ option }">
-              <div class="text-xs font-semibold text-surface-500 dark:text-surface-400 py-0.5 px-1">{{ option.label }}</div>
-            </template>
-          </Listbox>
+        <div class="md:hidden shrink-0">
+          <Button class="px-2!" :aria-label="`Sort by ${sortLabel}, ${sortOrderLabel}`" @click="sortPopover.toggle($event)">
+            <Icon name="material-symbols:sort-rounded" size="1.25em" />
+          </Button>
         </div>
-      </Popover>
 
-      <!-- Advanced Filters -->
-      <MediaListFilters
-        v-model:status-filter="statusFilter"
-        v-model:char-count-min="charCountMin"
-        v-model:char-count-max="charCountMax"
-        v-model:difficulty-min="difficultyMin"
-        v-model:difficulty-max="difficultyMax"
-        v-model:release-year-min="releaseYearMin"
-        v-model:release-year-max="releaseYearMax"
-        v-model:unique-kanji-min="uniqueKanjiMin"
-        v-model:unique-kanji-max="uniqueKanjiMax"
-        v-model:subdeck-count-min="subdeckCountMin"
-        v-model:subdeck-count-max="subdeckCountMax"
-        v-model:ext-rating-min="extRatingMin"
-        v-model:ext-rating-max="extRatingMax"
-        v-model:speech-speed-min="speechSpeedMin"
-        v-model:speech-speed-max="speechSpeedMax"
-        v-model:speech-duration-min="speechDurationMin"
-        v-model:speech-duration-max="speechDurationMax"
-        v-model:coverage-min="coverageMin"
-        v-model:coverage-max="coverageMax"
-        v-model:unique-coverage-min="uniqueCoverageMin"
-        v-model:unique-coverage-max="uniqueCoverageMax"
-        v-model:include-genres="includeGenres"
-        v-model:exclude-genres="excludeGenres"
-        v-model:include-tags="includeTags"
-        v-model:exclude-tags="excludeTags"
-        v-model:exclude-sequels="excludeSequels"
-        :is-connected="isConnected"
-        :genre-counts="genreCounts"
-        :tag-counts="tagCounts"
-        @reset="resetAllFilters"
-      />
+        <Popover ref="sortPopover" class="md:hidden">
+          <div class="flex w-68 flex-col gap-3">
+            <SelectButton
+              v-model="sortOrder"
+              :options="sortDirectionOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+              size="small"
+              class="w-full"
+            />
+            <Listbox
+              :model-value="sortBy"
+              :options="sortByGrouped"
+              option-label="label"
+              option-value="value"
+              option-group-label="label"
+              option-group-children="items"
+              scroll-height="50vh"
+              class="w-full border-0!"
+              @update:model-value="onSortByPicked"
+            >
+              <template #optiongroup="{ option }">
+                <div class="text-xs font-semibold text-surface-500 dark:text-surface-400 py-0.5 px-1">{{ option.label }}</div>
+              </template>
+            </Listbox>
+          </div>
+        </Popover>
 
-      <div class="flex flex-row gap-2 items-center">
-        <DisplayStyleSelector />
+        <!-- Advanced Filters -->
+        <MediaListFilters
+          v-model:status-filter="statusFilter"
+          v-model:char-count-min="charCountMin"
+          v-model:char-count-max="charCountMax"
+          v-model:difficulty-min="difficultyMin"
+          v-model:difficulty-max="difficultyMax"
+          v-model:release-year-min="releaseYearMin"
+          v-model:release-year-max="releaseYearMax"
+          v-model:unique-kanji-min="uniqueKanjiMin"
+          v-model:unique-kanji-max="uniqueKanjiMax"
+          v-model:subdeck-count-min="subdeckCountMin"
+          v-model:subdeck-count-max="subdeckCountMax"
+          v-model:ext-rating-min="extRatingMin"
+          v-model:ext-rating-max="extRatingMax"
+          v-model:speech-speed-min="speechSpeedMin"
+          v-model:speech-speed-max="speechSpeedMax"
+          v-model:speech-duration-min="speechDurationMin"
+          v-model:speech-duration-max="speechDurationMax"
+          v-model:coverage-min="coverageMin"
+          v-model:coverage-max="coverageMax"
+          v-model:unique-coverage-min="uniqueCoverageMin"
+          v-model:unique-coverage-max="uniqueCoverageMax"
+          v-model:include-genres="includeGenres"
+          v-model:exclude-genres="excludeGenres"
+          v-model:include-tags="includeTags"
+          v-model:exclude-tags="excludeTags"
+          v-model:exclude-sequels="excludeSequels"
+          :is-connected="isConnected"
+          :genre-counts="genreCounts"
+          :tag-counts="tagCounts"
+          @reset="resetAllFilters"
+        />
+
+        <div class="flex flex-row gap-2 items-center">
+          <DisplayStyleSelector />
+        </div>
       </div>
-    </div>
 
       <!-- The Filters badge is the only other trace of active filters, and it scrolls away
            with its button; below md these keep the hidden state readable and removable. -->
       <div v-if="activeFilterChips.length" class="flex flex-row flex-wrap items-center gap-1.5 md:hidden">
-        <Chip
-          v-for="chip in activeFilterChips"
-          :key="chip.key"
-          :label="chip.label"
-          removable
-          class="py-0.5! text-xs!"
-          @remove="chip.clear()"
-        />
-        <Button v-if="activeFilterChips.length > 1" severity="secondary" text size="small" class="py-0.5! text-xs!" @click="resetAllFilters">
-          Clear all
-        </Button>
+        <Chip v-for="chip in activeFilterChips" :key="chip.key" :label="chip.label" removable class="py-0.5! text-xs!" @remove="chip.clear()" />
+        <Button v-if="activeFilterChips.length > 1" severity="secondary" text size="small" class="py-0.5! text-xs!" @click="resetAllFilters">Clear all</Button>
       </div>
     </div>
     <div>
       <div class="flex flex-col gap-1">
-        <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" item-label="decks" mobile-compact />
+        <PaginationControls
+          v-if="response?.data?.length"
+          :previous-link="previousLink"
+          :next-link="nextLink"
+          :current-page="currentPage"
+          :total-pages="totalPages"
+          :page-link-for="pageLinkFor"
+          :start="start"
+          :end="end"
+          :total-items="totalItems"
+          item-label="decks"
+          mobile-compact
+        />
 
         <div v-if="status === 'pending'" class="flex flex-col gap-4">
           <Card v-for="i in 5" :key="i" class="p-2">
@@ -991,7 +1032,19 @@
           <LazyHydrateMediaDeckTableView v-for="(deck, index) in visibleDecks" :key="deck.deckId" :deck="deck" :lazy-render="index >= 12" />
         </div>
       </div>
-      <PaginationControls v-if="response?.data?.length" :previous-link="previousLink" :next-link="nextLink" :current-page="currentPage" :total-pages="totalPages" :page-link-for="pageLinkFor" :start="start" :end="end" :total-items="totalItems" :show-summary="false" :scroll-to-top-on-navigate="true" />
+      <PaginationControls
+        v-if="response?.data?.length"
+        :previous-link="previousLink"
+        :next-link="nextLink"
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :page-link-for="pageLinkFor"
+        :start="start"
+        :end="end"
+        :total-items="totalItems"
+        :show-summary="false"
+        :scroll-to-top-on-navigate="true"
+      />
     </div>
   </div>
 </template>

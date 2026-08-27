@@ -14,8 +14,15 @@
   const { $api } = useNuxtApp();
 
   const localVisible = ref(props.visible);
-  watch(() => props.visible, (v) => { localVisible.value = v; });
-  watch(localVisible, (v) => { emit('update:visible', v); });
+  watch(
+    () => props.visible,
+    (v) => {
+      localVisible.value = v;
+    }
+  );
+  watch(localVisible, (v) => {
+    emit('update:visible', v);
+  });
 
   const selectedMode = ref<StudyMoreMode | null>(null);
 
@@ -43,16 +50,19 @@
     { label: '7 days', value: 7 },
   ];
 
-  watch(() => props.visible, (v) => {
-    if (v) selectedMode.value = null;
-  });
+  watch(
+    () => props.visible,
+    (v) => {
+      if (v) selectedMode.value = null;
+    }
+  );
 
   const modes = computed(() => [
     {
       id: 'extraNew' as StudyMoreMode,
       icon: 'material-symbols:add-circle-outline',
       title: 'Learn More New Cards',
-      description: 'Temporarily increase today\'s new card limit',
+      description: "Temporarily increase today's new card limit",
       always: true,
     },
     {
@@ -79,7 +89,7 @@
     },
   ]);
 
-  const visibleModes = computed(() => modes.value.filter(m => !m.hidden));
+  const visibleModes = computed(() => modes.value.filter((m) => !m.hidden));
 
   function selectMode(mode: StudyMoreMode) {
     selectedMode.value = selectedMode.value === mode ? null : mode;
@@ -110,7 +120,10 @@
 
   async function doFetchCount() {
     const mode = selectedMode.value;
-    if (!mode) { previewCount.value = null; return; }
+    if (!mode) {
+      previewCount.value = null;
+      return;
+    }
 
     countAbortController?.abort();
     countAbortController = new AbortController();
@@ -144,7 +157,10 @@
     }
   }
 
-  watch(selectedMode, () => { previewCount.value = null; fetchCount(); });
+  watch(selectedMode, () => {
+    previewCount.value = null;
+    fetchCount();
+  });
   watch(extraNewAmount, fetchCount);
   watch(extraNewCustom, fetchCount);
   watch(extraReviewAmount, fetchCount);
@@ -182,9 +198,11 @@
         v-for="mode in visibleModes"
         :key="mode.id"
         class="rounded-xl border transition-all cursor-pointer"
-        :class="selectedMode === mode.id
-          ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/20 ring-1 ring-primary-500'
-          : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600'"
+        :class="
+          selectedMode === mode.id
+            ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/20 ring-1 ring-primary-500'
+            : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600'
+        "
         @click="selectMode(mode.id)"
       >
         <div class="flex items-center gap-3 px-4 py-3">
@@ -204,9 +222,11 @@
                 v-for="opt in extraNewOptions"
                 :key="opt"
                 class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-                :class="extraNewAmount === opt
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'"
+                :class="
+                  extraNewAmount === opt
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'
+                "
                 @click="extraNewAmount = opt"
               >
                 {{ opt === 0 ? 'Custom' : `+${opt}` }}
@@ -225,9 +245,11 @@
                 v-for="opt in extraReviewOptions"
                 :key="opt"
                 class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-                :class="extraReviewAmount === opt
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'"
+                :class="
+                  extraReviewAmount === opt
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'
+                "
                 @click="extraReviewAmount = opt"
               >
                 {{ opt === 0 ? 'Custom' : `+${opt}` }}
@@ -235,7 +257,15 @@
             </div>
             <div v-if="extraReviewAmount === 0" class="mt-3 flex items-center gap-3">
               <Slider v-model="extraReviewCustom" :min="1" :max="500" class="flex-1" />
-              <InputNumber v-model="extraReviewCustom" :min="1" :max="500" fluid class="max-w-22 flex-shrink-0" size="small" :input-style="{ textAlign: 'center' }" />
+              <InputNumber
+                v-model="extraReviewCustom"
+                :min="1"
+                :max="500"
+                fluid
+                class="max-w-22 flex-shrink-0"
+                size="small"
+                :input-style="{ textAlign: 'center' }"
+              />
             </div>
           </template>
 
@@ -246,9 +276,11 @@
                 v-for="opt in aheadOptions"
                 :key="opt.value"
                 class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-                :class="aheadOption === opt.value
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'"
+                :class="
+                  aheadOption === opt.value
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'
+                "
                 @click="aheadOption = opt.value"
               >
                 {{ opt.label }}
@@ -256,7 +288,16 @@
             </div>
             <div v-if="aheadOption === 0" class="mt-3 flex items-center gap-3">
               <Slider v-model="aheadCustomHours" :min="1" :max="168" class="flex-1" />
-              <InputNumber v-model="aheadCustomHours" :min="1" :max="168" suffix=" hrs" fluid class="max-w-22 flex-shrink-0" size="small" :input-style="{ textAlign: 'center' }" />
+              <InputNumber
+                v-model="aheadCustomHours"
+                :min="1"
+                :max="168"
+                suffix=" hrs"
+                fluid
+                class="max-w-22 flex-shrink-0"
+                size="small"
+                :input-style="{ textAlign: 'center' }"
+              />
             </div>
           </template>
 
@@ -267,9 +308,11 @@
                 v-for="opt in mistakeOptions"
                 :key="opt.value"
                 class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-                :class="mistakeOption === opt.value
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'"
+                :class="
+                  mistakeOption === opt.value
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'
+                "
                 @click="mistakeOption = opt.value"
               >
                 Last {{ opt.label }}
@@ -279,7 +322,10 @@
 
           <!-- Card count preview -->
           <div class="mt-2 text-xs tabular-nums h-4" :class="previewCount === 0 ? 'text-amber-500' : 'text-surface-400'">
-            <span v-if="isLoadingCount" class="inline-block w-3 h-3 border-2 border-surface-300 dark:border-surface-600 border-t-primary-500 rounded-full animate-spin align-middle mr-1" />
+            <span
+              v-if="isLoadingCount"
+              class="inline-block w-3 h-3 border-2 border-surface-300 dark:border-surface-600 border-t-primary-500 rounded-full animate-spin align-middle mr-1"
+            />
             <span v-else-if="previewCount !== null">{{ previewCount }} {{ previewCount === 1 ? 'card' : 'cards' }} available</span>
             <span v-else>&nbsp;</span>
           </div>
@@ -288,12 +334,7 @@
     </div>
 
     <div class="mt-4">
-      <Button
-        label="Start"
-        class="w-full"
-        :disabled="!selectedMode || previewCount === 0"
-        @click="handleStart"
-      />
+      <Button label="Start" class="w-full" :disabled="!selectedMode || previewCount === 0" @click="handleStart" />
     </div>
   </Dialog>
 </template>

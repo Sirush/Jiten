@@ -538,9 +538,7 @@
       toast.add({
         severity: 'success',
         summary: 'Queued',
-        detail: dryRun
-          ? 'Dry run queued. Check the API logs for the measured saving.'
-          : 'Renormalize queued. Originals are kept until you discard them.',
+        detail: dryRun ? 'Dry run queued. Check the API logs for the measured saving.' : 'Renormalize queued. Originals are kept until you discard them.',
         life: 6000,
       });
     } catch (error) {
@@ -619,9 +617,7 @@
 
   const confirmCardMediaDiscard = () => {
     confirm.require({
-      message:
-        `Permanently delete ${cardMediaPreview.value?.retained?.count ?? 0} superseded original files? ` +
-        'Rollback will no longer be possible.',
+      message: `Permanently delete ${cardMediaPreview.value?.retained?.count ?? 0} superseded original files? ` + 'Rollback will no longer be possible.',
       header: 'Discard originals',
       icon: 'pi pi-exclamation-triangle',
       acceptClass: 'p-button-danger',
@@ -1432,8 +1428,10 @@
         <template #title>Recompute Furigana-Affected Difficulties</template>
         <template #content>
           <p class="mb-4">
-            Finds leaf decks whose raw text still holds inline furigana notation (<code>{漢字'かんじ}</code>), which distorted the difficulty model before the
-            markup was stripped at call time, and recomputes them through the external API. Run the dry run first: every deck is a paid call.
+            Finds leaf decks whose raw text still holds inline furigana notation (
+            <code>{漢字'かんじ}</code>
+            ), which distorted the difficulty model before the markup was stripped at call time, and recomputes them through the external API. Run the dry run
+            first: every deck is a paid call.
           </p>
 
           <div class="flex flex-wrap justify-center gap-2 mb-4">
@@ -1461,7 +1459,8 @@
             </h4>
             <ul v-if="furiganaDifficulties.byMediaType.length" class="text-sm">
               <li v-for="group in furiganaDifficulties.byMediaType" :key="group.mediaType">
-                <strong>{{ getMediaTypeText(group.mediaType) }}:</strong> {{ group.count.toLocaleString() }}
+                <strong>{{ getMediaTypeText(group.mediaType) }}:</strong>
+                {{ group.count.toLocaleString() }}
               </li>
             </ul>
             <p class="mt-3 pt-3 border-t border-surface-300 dark:border-surface-600 text-sm">
@@ -1476,8 +1475,8 @@
         <template #content>
           <p class="mb-4">
             The old furigana pattern had an unbounded reading half, so a stray brace in engine script or a code block matched everything up to the next
-            <code>&#125;</code> and the parser never saw the prose in between. Raw text was never modified, so a reparse rebuilds word lists, counts and
-            example sentences from it.
+            <code>&#125;</code>
+            and the parser never saw the prose in between. Raw text was never modified, so a reparse rebuilds word lists, counts and example sentences from it.
           </p>
 
           <div class="flex flex-wrap justify-center gap-2 mb-4">
@@ -1506,8 +1505,8 @@
             </h4>
             <ul v-if="furiganaReparse.byMediaType.length" class="text-sm">
               <li v-for="group in furiganaReparse.byMediaType" :key="group.mediaType">
-                <strong>{{ getMediaTypeText(group.mediaType) }}:</strong> {{ group.count.toLocaleString() }} decks ·
-                {{ group.charsLost.toLocaleString() }} chars
+                <strong>{{ getMediaTypeText(group.mediaType) }}:</strong>
+                {{ group.count.toLocaleString() }} decks · {{ group.charsLost.toLocaleString() }} chars
               </li>
             </ul>
           </div>
@@ -1576,8 +1575,8 @@
         <template #content>
           <p class="mb-4">
             Re-runs upload-time normalization over card media images that were stored unprocessed (anything not
-            <code>image/webp</code>). Each file is re-encoded to a new path and the original is left on the CDN, so the
-            rewrite can be rolled back until you discard the originals.
+            <code>image/webp</code>
+            ). Each file is re-encoded to a new path and the original is left on the CDN, so the rewrite can be rolled back until you discard the originals.
           </p>
 
           <div class="flex flex-wrap justify-center gap-2 mb-4">
@@ -1614,22 +1613,26 @@
             </h4>
             <ul class="text-sm">
               <li v-for="group in cardMediaPreview.byContentType" :key="group.contentType">
-                <strong>{{ group.contentType }}:</strong> {{ group.count.toLocaleString() }} · {{ formatBytes(group.bytes) }}
+                <strong>{{ group.contentType }}:</strong>
+                {{ group.count.toLocaleString() }} · {{ formatBytes(group.bytes) }}
               </li>
             </ul>
 
             <div v-if="cardMediaPreview.retained" class="mt-3 pt-3 border-t border-surface-300 dark:border-surface-600 text-sm">
               <p>
                 {{ cardMediaPreview.retained.count.toLocaleString() }} rewritten files still hold their original:
-                {{ formatBytes(cardMediaPreview.retained.oldBytes) }} → {{ formatBytes(cardMediaPreview.retained.newBytes) }}.
-                Rollback is possible until they are discarded.
+                {{ formatBytes(cardMediaPreview.retained.oldBytes) }} → {{ formatBytes(cardMediaPreview.retained.newBytes) }}. Rollback is possible until they
+                are discarded.
               </p>
             </div>
           </div>
 
           <DataTable v-if="cardMediaPreview?.items.length" :value="cardMediaPreview.items" size="small" striped-rows class="mb-4">
             <Column header="Word">
-              <template #body="{ data }">{{ data.word ?? '?' }} <span class="text-xs text-surface-400">#{{ data.wordId }}</span></template>
+              <template #body="{ data }">
+                {{ data.word ?? '?' }}
+                <span class="text-xs text-surface-400">#{{ data.wordId }}</span>
+              </template>
             </Column>
             <Column field="readingIndex" header="Reading" />
             <Column field="contentType" header="Type" />
@@ -1739,13 +1742,34 @@
           <div v-if="wordReplacementResult" class="mb-4 p-4 bg-surface-100 dark:bg-surface-800 rounded-lg">
             <h4 class="font-semibold mb-2">Preview Results</h4>
             <ul class="text-sm space-y-1">
-              <li><strong>Affected Decks:</strong> {{ wordReplacementResult.affectedDeckCount }}</li>
-              <li><strong>DeckWords to Update:</strong> {{ wordReplacementResult.deckWordsUpdated }}</li>
-              <li><strong>DeckWords to Merge:</strong> {{ wordReplacementResult.deckWordsMerged }}</li>
-              <li><strong>Example Sentences:</strong> {{ wordReplacementResult.exampleSentenceWordsUpdated }}</li>
-              <li><strong>User Vocab to Update:</strong> {{ wordReplacementResult.fsrsCardsUpdated }}</li>
-              <li><strong>User Vocab Skipped:</strong> {{ wordReplacementResult.fsrsCardsSkipped }} (user has both)</li>
-              <li><strong>Parent Decks to Recalc:</strong> {{ wordReplacementResult.parentDecksQueued }}</li>
+              <li>
+                <strong>Affected Decks:</strong>
+                {{ wordReplacementResult.affectedDeckCount }}
+              </li>
+              <li>
+                <strong>DeckWords to Update:</strong>
+                {{ wordReplacementResult.deckWordsUpdated }}
+              </li>
+              <li>
+                <strong>DeckWords to Merge:</strong>
+                {{ wordReplacementResult.deckWordsMerged }}
+              </li>
+              <li>
+                <strong>Example Sentences:</strong>
+                {{ wordReplacementResult.exampleSentenceWordsUpdated }}
+              </li>
+              <li>
+                <strong>User Vocab to Update:</strong>
+                {{ wordReplacementResult.fsrsCardsUpdated }}
+              </li>
+              <li>
+                <strong>User Vocab Skipped:</strong>
+                {{ wordReplacementResult.fsrsCardsSkipped }} (user has both)
+              </li>
+              <li>
+                <strong>Parent Decks to Recalc:</strong>
+                {{ wordReplacementResult.parentDecksQueued }}
+              </li>
             </ul>
           </div>
 
@@ -1773,9 +1797,7 @@
       <Card class="shadow-md">
         <template #title>Split Word</template>
         <template #content>
-          <p class="mb-4">
-            Split a misparsed compound word into multiple correct words across all decks.
-          </p>
+          <p class="mb-4">Split a misparsed compound word into multiple correct words across all decks.</p>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
@@ -1848,13 +1870,34 @@
           <div v-if="splitWordResult" class="mb-4 p-4 bg-surface-100 dark:bg-surface-800 rounded-lg">
             <h4 class="font-semibold mb-2">Preview Results</h4>
             <ul class="text-sm space-y-1">
-              <li><strong>Affected Decks:</strong> {{ splitWordResult.affectedDeckCount }}</li>
-              <li><strong>DeckWords to Delete:</strong> {{ splitWordResult.deckWordsDeleted }}</li>
-              <li><strong>DeckWords to Insert:</strong> {{ splitWordResult.deckWordsInserted }}</li>
-              <li><strong>DeckWords to Merge:</strong> {{ splitWordResult.deckWordsMerged }}</li>
-              <li><strong>Example Sentences to Delete:</strong> {{ splitWordResult.exampleSentenceWordsDeleted }}</li>
-              <li><strong>Example Sentences to Insert:</strong> {{ splitWordResult.exampleSentenceWordsInserted }}</li>
-              <li><strong>Parent Decks to Recalc:</strong> {{ splitWordResult.parentDecksQueued }}</li>
+              <li>
+                <strong>Affected Decks:</strong>
+                {{ splitWordResult.affectedDeckCount }}
+              </li>
+              <li>
+                <strong>DeckWords to Delete:</strong>
+                {{ splitWordResult.deckWordsDeleted }}
+              </li>
+              <li>
+                <strong>DeckWords to Insert:</strong>
+                {{ splitWordResult.deckWordsInserted }}
+              </li>
+              <li>
+                <strong>DeckWords to Merge:</strong>
+                {{ splitWordResult.deckWordsMerged }}
+              </li>
+              <li>
+                <strong>Example Sentences to Delete:</strong>
+                {{ splitWordResult.exampleSentenceWordsDeleted }}
+              </li>
+              <li>
+                <strong>Example Sentences to Insert:</strong>
+                {{ splitWordResult.exampleSentenceWordsInserted }}
+              </li>
+              <li>
+                <strong>Parent Decks to Recalc:</strong>
+                {{ splitWordResult.parentDecksQueued }}
+              </li>
             </ul>
             <p class="text-xs mt-2 text-surface-500 dark:text-surface-400">Note: User vocabulary (FsrsCards) is not affected by split operations.</p>
           </div>
@@ -1884,8 +1927,8 @@
         <template #title>Remove Word</template>
         <template #content>
           <p class="mb-4 text-red-500">
-            <strong>Warning:</strong> Completely remove a word from all decks, example sentences, and user vocabularies. This is destructive and cannot be
-            undone.
+            <strong>Warning:</strong>
+            Completely remove a word from all decks, example sentences, and user vocabularies. This is destructive and cannot be undone.
           </p>
 
           <div class="max-w-md mx-auto mb-4">
@@ -1916,11 +1959,26 @@
           <div v-if="removeWordResult" class="mb-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
             <h4 class="font-semibold mb-2 text-red-700 dark:text-red-400">Preview Results</h4>
             <ul class="text-sm space-y-1">
-              <li><strong>Affected Decks:</strong> {{ removeWordResult.affectedDeckCount }}</li>
-              <li><strong>DeckWords to Delete:</strong> {{ removeWordResult.deckWordsDeleted }}</li>
-              <li><strong>Example Sentences to Delete:</strong> {{ removeWordResult.exampleSentenceWordsDeleted }}</li>
-              <li class="text-red-600 dark:text-red-400"><strong>User Vocab to Delete:</strong> {{ removeWordResult.fsrsCardsDeleted }}</li>
-              <li><strong>Parent Decks to Recalc:</strong> {{ removeWordResult.parentDecksQueued }}</li>
+              <li>
+                <strong>Affected Decks:</strong>
+                {{ removeWordResult.affectedDeckCount }}
+              </li>
+              <li>
+                <strong>DeckWords to Delete:</strong>
+                {{ removeWordResult.deckWordsDeleted }}
+              </li>
+              <li>
+                <strong>Example Sentences to Delete:</strong>
+                {{ removeWordResult.exampleSentenceWordsDeleted }}
+              </li>
+              <li class="text-red-600 dark:text-red-400">
+                <strong>User Vocab to Delete:</strong>
+                {{ removeWordResult.fsrsCardsDeleted }}
+              </li>
+              <li>
+                <strong>Parent Decks to Recalc:</strong>
+                {{ removeWordResult.parentDecksQueued }}
+              </li>
             </ul>
           </div>
 

@@ -34,8 +34,7 @@
 
   const hasPrior = computed(() => !!journey.value && hasPriorKnowledge(journey.value.points));
 
-  const methodTooltip =
-    'Show your historical coverage of this media over time.';
+  const methodTooltip = 'Show your historical coverage of this media over time.';
 
   // Dismissal only applies while locked; the section returns the moment the tier does.
   const dismissed = computed(() => !granted.value && jitenStore.hideCoverageJourney);
@@ -116,7 +115,7 @@
         <CoverageJourneyMilestones :milestones="journey!.milestones" :metric="metric" :granularity="journey!.granularity" />
         <p class="text-xs text-gray-500 dark:text-gray-400 pt-4">
           <span v-if="rangeLabel">{{ rangeLabel }}</span>
-          <span v-if="rangeLabel && asOfLabel"> · </span>
+          <span v-if="rangeLabel && asOfLabel">·</span>
           <span v-if="asOfLabel">As of your last coverage refresh: {{ asOfLabel }}</span>
         </p>
       </template>

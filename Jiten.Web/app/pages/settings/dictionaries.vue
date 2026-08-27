@@ -14,7 +14,8 @@
     <Card>
       <template #content>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
-          Manage your custom dictionaries. Definitions from your dictionaries appear on vocabulary pages and in downloaded Anki decks. <br />
+          Manage your custom dictionaries. Definitions from your dictionaries appear on vocabulary pages and in downloaded Anki decks.
+          <br />
           Dictionary data is stored locally in your browser and is never uploaded to the server.
         </p>
         <DictionaryManager />
@@ -36,9 +37,18 @@
           <li>
             Choose a mode per dictionary:
             <ul class="list-disc list-inside ml-4 mt-1 text-xs text-gray-500 dark:text-gray-400">
-              <li><strong>Always show</strong> — definitions from this dictionary are always displayed when a match is found</li>
-              <li><strong>Fallback</strong> — definitions are only shown when no "always show" dictionary has a match for that word</li>
-              <li><strong>Disabled</strong> — this dictionary data will never be shown anywhere</li>
+              <li>
+                <strong>Always show</strong>
+                — definitions from this dictionary are always displayed when a match is found
+              </li>
+              <li>
+                <strong>Fallback</strong>
+                — definitions are only shown when no "always show" dictionary has a match for that word
+              </li>
+              <li>
+                <strong>Disabled</strong>
+                — this dictionary data will never be shown anywhere
+              </li>
             </ul>
           </li>
           <li>Definitions appear on vocabulary pages and are applied to Anki deck downloads automatically when you check the corresponding option</li>

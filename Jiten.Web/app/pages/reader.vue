@@ -1,7 +1,7 @@
 <script setup lang="ts">
-  const description
-    = 'A free pop-up dictionary extension for reading Japanese online. Instant lookups, per-word knowledge tracking, '
-      + 'and a readability estimate for any page. Works with Ttsu, Asbplayer and Mokuro.';
+  const description =
+    'A free pop-up dictionary extension for reading Japanese online. Instant lookups, per-word knowledge tracking, ' +
+    'and a readability estimate for any page. Works with Ttsu, Asbplayer and Mokuro.';
 
   useSeoMeta({
     title: 'Jiten Reader - Browser Extension',
@@ -15,8 +15,7 @@
   defineOgImage('PageOgImage', {
     title: 'Jiten Reader',
     category: 'Browser extension',
-    description:
-      'A free pop-up Japanese dictionary for the web. Instant lookups, per-word knowledge tracking, and a readability estimate for any page.',
+    description: 'A free pop-up Japanese dictionary for the web. Instant lookups, per-word knowledge tracking, and a readability estimate for any page.',
   });
 
   const chromeStoreUrl = 'https://chromewebstore.google.com/detail/jiten-reader/fkegmlkjkenojfiplaclhlmncfeooaeo';
@@ -105,7 +104,7 @@
   ];
 
   const screenshots = [
-    { src: '/img/jitenreader_popup.webp', alt: 'Jiten Reader Japanese popup dictionary showing a word\'s reading, definition, part of speech and frequency' },
+    { src: '/img/jitenreader_popup.webp', alt: "Jiten Reader Japanese popup dictionary showing a word's reading, definition, part of speech and frequency" },
     { src: '/img/jitenreader_colouring.webp', alt: 'Japanese text with words coloured by knowledge state in Jiten Reader' },
     { src: '/img/jitenreader_customisation.webp', alt: 'Jiten Reader customisation panel for colours, popup behaviour and display options' },
   ];
@@ -135,7 +134,12 @@
 
             <!-- Download Buttons -->
             <div class="flex flex-col sm:flex-row gap-4 justify-center mb-4">
-              <a href="https://chromewebstore.google.com/detail/jiten-reader/fkegmlkjkenojfiplaclhlmncfeooaeo" target="_blank" rel="noopener noreferrer" class="no-underline">
+              <a
+                href="https://chromewebstore.google.com/detail/jiten-reader/fkegmlkjkenojfiplaclhlmncfeooaeo"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="no-underline"
+              >
                 <Button severity="primary" size="large" class="w-full sm:w-auto">
                   <Icon name="logos:chrome" class="mr-2" size="1.5em" />
                   Get for Chrome
@@ -150,7 +154,7 @@
             </div>
 
             <!-- Hero Screenshot -->
-            <div class="mx-auto" style="max-width: 800px; max-height: 450px; border-radius: var(--radius-md); overflow: hidden;">
+            <div class="mx-auto" style="max-width: 800px; max-height: 450px; border-radius: var(--radius-md); overflow: hidden">
               <Image src="/img/jitenreader_screenshot.webp" alt="Jiten Reader main interface" class="rounded-lg" preview />
             </div>
           </div>
@@ -190,7 +194,7 @@
             Works with your favourite apps
           </div>
         </template>
-        <template #subtitle> Automatic parsing on 15+ websites and apps </template>
+        <template #subtitle>Automatic parsing on 15+ websites and apps</template>
         <template #content>
           <div class="flex flex-wrap gap-3">
             <template v-for="app in supportedApps" :key="app.name">
@@ -203,7 +207,7 @@
                 {{ app.name }}
               </Button>
             </template>
-            <Button severity="info" size="small" outlined disabled> And more... </Button>
+            <Button severity="info" size="small" outlined disabled>And more...</Button>
           </div>
 
           <Message severity="info" class="mt-4">
@@ -238,7 +242,12 @@
 
             <!-- Download Buttons -->
             <div class="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-              <a href="https://chromewebstore.google.com/detail/jiten-reader/fkegmlkjkenojfiplaclhlmncfeooaeo" target="_blank" rel="noopener noreferrer" class="no-underline">
+              <a
+                href="https://chromewebstore.google.com/detail/jiten-reader/fkegmlkjkenojfiplaclhlmncfeooaeo"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="no-underline"
+              >
                 <Button severity="primary" size="large" class="w-full sm:w-auto">
                   <Icon name="logos:chrome" class="mr-2" size="1.5em" />
                   Get for Chrome

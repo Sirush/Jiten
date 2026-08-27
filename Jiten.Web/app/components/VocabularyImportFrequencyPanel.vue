@@ -29,7 +29,7 @@
     try {
       const data = await $api<{ words: number; forms: number; skipped: number }>(
         `user/vocabulary/import-from-frequency/${frequencyRange.value[0]}/${frequencyRange.value[1]}`,
-        { method: 'POST' },
+        { method: 'POST' }
       );
       toast.add({ severity: 'success', detail: `Added ${data.words} words, ${data.forms} forms by frequency range.`, life: 5000 });
       await nextTick();
@@ -77,13 +77,7 @@
             @update:model-value="updateMaxFrequency"
           />
         </div>
-        <Button
-          icon="pi pi-plus"
-          label="Add Words by Frequency"
-          class="w-full md:w-auto"
-          :loading="isLoading"
-          @click="getVocabularyByFrequency"
-        />
+        <Button icon="pi pi-plus" label="Add Words by Frequency" class="w-full md:w-auto" :loading="isLoading" @click="getVocabularyByFrequency" />
       </div>
     </template>
   </Card>

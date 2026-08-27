@@ -25,9 +25,7 @@ export default defineNuxtPlugin((nuxtApp) => {
       // Only assign when unset. ofetch re-enters this hook on each retry carrying the decremented
       // count, and overwriting it there would loop forever.
       if (options.retry === undefined) {
-        options.retry = import.meta.server || PAYLOAD_METHODS.has((options.method ?? 'GET').toUpperCase())
-          ? 0
-          : 2;
+        options.retry = import.meta.server || PAYLOAD_METHODS.has((options.method ?? 'GET').toUpperCase()) ? 0 : 2;
       }
 
       const url = request.toString();
@@ -81,10 +79,13 @@ export default defineNuxtPlugin((nuxtApp) => {
           const currentRoute = router.currentRoute.value.path;
 
           if (currentRoute !== '/login') {
-            return navigateTo({
-              path: '/login',
-              query: { redirect: currentRoute },
-            }, { external: true });
+            return navigateTo(
+              {
+                path: '/login',
+                query: { redirect: currentRoute },
+              },
+              { external: true }
+            );
           }
         });
       }

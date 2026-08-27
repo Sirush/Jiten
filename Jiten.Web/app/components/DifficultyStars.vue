@@ -4,14 +4,7 @@
   }>();
 
   const STARS = ['★☆☆☆☆', '★★☆☆☆', '★★★☆☆', '★★★★☆', '★★★★★', '★★★★★'];
-  const COLORS = [
-    'text-green-700 dark:text-green-300',
-    'text-green-500',
-    'text-cyan-500',
-    'text-amber-600',
-    'text-orange-600',
-    'text-red-600',
-  ];
+  const COLORS = ['text-green-700 dark:text-green-300', 'text-green-500', 'text-cyan-500', 'text-amber-600', 'text-orange-600', 'text-red-600'];
 </script>
 
 <template>

@@ -3,23 +3,24 @@
   import type { ResolvedDefinitionGroup } from '~/composables/useYomitanDictionary';
   import { definitionsToHtml } from '~/composables/useYomitanDictionary';
 
-  const props = withDefaults(defineProps<{
-    resolvedGroups: readonly ResolvedDefinitionGroup[];
-    isCompact: boolean;
-    currentReadingIndex?: number;
-    readings?: Reading[];
-    arrowKeyNav?: boolean;
-    maxDefinitions?: number | null;
-    wordId?: number;
-    hiddenBehaviour?: 'gray' | 'hide';
-    fontControls?: boolean;
-  }>(), { arrowKeyNav: true, maxDefinitions: null, fontControls: true });
+  const props = withDefaults(
+    defineProps<{
+      resolvedGroups: readonly ResolvedDefinitionGroup[];
+      isCompact: boolean;
+      currentReadingIndex?: number;
+      readings?: Reading[];
+      arrowKeyNav?: boolean;
+      maxDefinitions?: number | null;
+      wordId?: number;
+      hiddenBehaviour?: 'gray' | 'hide';
+      fontControls?: boolean;
+    }>(),
+    { arrowKeyNav: true, maxDefinitions: null, fontControls: true }
+  );
 
   const store = useJitenStore();
 
-  const singleJmDictOnly = computed(() =>
-    props.resolvedGroups.length === 1 && props.resolvedGroups[0].isJmDict,
-  );
+  const singleJmDictOnly = computed(() => props.resolvedGroups.length === 1 && props.resolvedGroups[0].isJmDict);
 
   const hasMultipleGroups = computed(() => props.resolvedGroups.length > 1);
   const customFontStyle = computed(() => ({ fontSize: `${store.customDictionaryFontSize}px` }));
@@ -31,13 +32,17 @@
     return !!active && !active.isJmDict;
   });
 
-  watch(() => props.resolvedGroups, (groups) => {
-    if (groups.length === 0) return;
-    if (!activeTab.value || !groups.some((g) => g.dictionaryId === activeTab.value)) {
-      const preferred = groups.find((g) => g.dictionaryId === store.preferredDictionaryId);
-      activeTab.value = (preferred ?? groups[0]!).dictionaryId;
-    }
-  }, { immediate: true });
+  watch(
+    () => props.resolvedGroups,
+    (groups) => {
+      if (groups.length === 0) return;
+      if (!activeTab.value || !groups.some((g) => g.dictionaryId === activeTab.value)) {
+        const preferred = groups.find((g) => g.dictionaryId === store.preferredDictionaryId);
+        activeTab.value = (preferred ?? groups[0]!).dictionaryId;
+      }
+    },
+    { immediate: true }
+  );
 
   function onTabSelected(value: string | number) {
     store.preferredDictionaryId = String(value);
@@ -107,12 +112,7 @@
               :word-id="wordId"
               :hidden-behaviour="hiddenBehaviour"
             />
-            <div
-              v-else-if="group.customDefinitions"
-              class="custom-dict-content"
-              :style="customFontStyle"
-              v-html="definitionsToHtml(group.customDefinitions)"
-            />
+            <div v-else-if="group.customDefinitions" class="custom-dict-content" :style="customFontStyle" v-html="definitionsToHtml(group.customDefinitions)" />
           </div>
         </TabPanel>
       </TabPanels>
@@ -123,11 +123,7 @@
   <template v-else-if="!isCompact">
     <div v-if="resolvedGroups.length > 0 && resolvedGroups[0].customDefinitions">
       <DictionaryFontSizeControl v-if="fontControls" class="mb-1" />
-      <div
-        class="custom-dict-content"
-        :style="customFontStyle"
-        v-html="definitionsToHtml(resolvedGroups[0].customDefinitions)"
-      />
+      <div class="custom-dict-content" :style="customFontStyle" v-html="definitionsToHtml(resolvedGroups[0].customDefinitions)" />
     </div>
   </template>
 
@@ -155,50 +151,50 @@
 </template>
 
 <style scoped>
-.dict-tabs :deep([data-pc-name="tab"]) {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.75rem;
-}
+  .dict-tabs :deep([data-pc-name='tab']) {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+  }
 
-.dict-tabs {
-  padding: 0;
-}
+  .dict-tabs {
+    padding: 0;
+  }
 
-:deep([data-pc-name="tabpanels"]) {
-  padding: 0;
-}
+  :deep([data-pc-name='tabpanels']) {
+    padding: 0;
+  }
 
-:deep([data-pc-name="tabpanel"]) {
-  padding: 0;
-}
+  :deep([data-pc-name='tabpanel']) {
+    padding: 0;
+  }
 
-:deep([data-pc-name="tabs"]) {
-  padding: 0;
-}
+  :deep([data-pc-name='tabs']) {
+    padding: 0;
+  }
 
-.custom-dict-compact {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
+  .custom-dict-compact {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 
-.custom-dict-compact :deep(*) {
-  display: inline;
-  margin: 0;
-  padding: 0;
-}
+  .custom-dict-compact :deep(*) {
+    display: inline;
+    margin: 0;
+    padding: 0;
+  }
 
-.custom-dict-compact :deep(br) {
-  content: ' ';
-}
+  .custom-dict-compact :deep(br) {
+    content: ' ';
+  }
 
-.custom-dict-compact :deep(li + li)::before {
-  content: '; ';
-}
+  .custom-dict-compact :deep(li + li)::before {
+    content: '; ';
+  }
 
-.custom-dict-compact :deep(ol),
-.custom-dict-compact :deep(ul) {
-  list-style: none;
-}
+  .custom-dict-compact :deep(ol),
+  .custom-dict-compact :deep(ul) {
+    list-style: none;
+  }
 </style>

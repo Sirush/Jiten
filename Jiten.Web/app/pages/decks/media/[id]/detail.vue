@@ -10,7 +10,7 @@
   // Without this the SPA answers 200 for any id (including the literal "*" from robots.txt patterns),
   // which Google indexes and then reports as soft 404s.
   definePageMeta({
-    validate: route => /^\d+$/.test(String(route.params.id)),
+    validate: (route) => /^\d+$/.test(String(route.params.id)),
   });
 
   const route = useRoute();
@@ -50,8 +50,7 @@
   // 200 rather than turning a transient API failure into a deindexed page.
   if (import.meta.server) {
     await detailReady;
-    if (isMissingResource(error.value, response.value?.data))
-      throw createError({ statusCode: 404, statusMessage: 'Deck not found', fatal: true });
+    if (isMissingResource(error.value, response.value?.data)) throw createError({ statusCode: 404, statusMessage: 'Deck not found', fatal: true });
   }
 
   const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor } = usePagination(response);
@@ -103,18 +102,18 @@
   const showSubdeckControls = computed(() => totalItems.value > 25 || !!appliedSubdeckFilter.value);
 
   const jitenStore = useJitenStore();
-  watch(() => jitenStore.coverageVersion, () => {
-    refreshDetail();
-  });
+  watch(
+    () => jitenStore.coverageVersion,
+    () => {
+      refreshDetail();
+    }
+  );
 
   // A single-media refresh bumps the media root's version; refetch so the subdeck bars repaint too.
   const mediaRootId = computed(() => response.value?.data?.mainDeck?.parentDeckId ?? Number(deckId.value));
-  watch(
-    [mediaRootId, () => jitenStore.deckCoverageVersions[mediaRootId.value] ?? 0],
-    ([rootId, version], [prevRootId, prevVersion]) => {
-      if (rootId === prevRootId && version > prevVersion) refreshDetail();
-    }
-  );
+  watch([mediaRootId, () => jitenStore.deckCoverageVersions[mediaRootId.value] ?? 0], ([rootId, version], [prevRootId, prevVersion]) => {
+    if (rootId === prevRootId && version > prevVersion) refreshDetail();
+  });
 
   const updateMainDeck = (updatedDeck: Deck) => {
     if (response.value?.data?.mainDeck) {
@@ -124,7 +123,7 @@
 
   const updateSubDeck = (updatedDeck: Deck) => {
     if (response.value?.data?.subDecks) {
-      const index = response.value.data.subDecks.findIndex(d => d.deckId === updatedDeck.deckId);
+      const index = response.value.data.subDecks.findIndex((d) => d.deckId === updatedDeck.deckId);
       if (index !== -1) {
         const newSubDecks = [...response.value.data.subDecks];
         newSubDecks[index] = updatedDeck;
@@ -189,7 +188,11 @@
     if (full.length <= 160) return full;
     const trimmed = build('');
     if (trimmed.length <= 160) return trimmed;
-    return build('').slice(0, 157).replace(/\s+\S*$/, '') + '…';
+    return (
+      build('')
+        .slice(0, 157)
+        .replace(/\s+\S*$/, '') + '…'
+    );
   });
 
   useSeoMeta({
@@ -203,9 +206,7 @@
   });
 
   useHead(() => ({
-    link: coverUrl.value
-      ? [{ rel: 'preload', as: 'image', href: coverUrl.value, fetchpriority: 'high' }]
-      : [],
+    link: coverUrl.value ? [{ rel: 'preload', as: 'image', href: coverUrl.value, fetchpriority: 'high' }] : [],
   }));
 
   // Subdecks (episodes, volumes) differ from their siblings only by number, so Google collapses them
@@ -216,7 +217,6 @@
   const pageUrl = computed(() => `https://jiten.moe/decks/media/${deckId.value}/detail`);
   useDeckSchema(mainDeck, pageUrl, parentDeck);
 
-
   // OG images are server-rendered only. Wait for the fetch to settle so the eager prop
   // snapshot below isn't empty (the wrapper's `await` above doesn't block on the request).
   if (import.meta.server) {
@@ -225,7 +225,7 @@
     defineOgImage(
       'MediaDeckCardOgImage',
       {
-        title: d ? (d.originalTitle?.trim() || localiseTitle(d)) : '',
+        title: d ? d.originalTitle?.trim() || localiseTitle(d) : '',
         mediaType: d?.mediaType,
         coverName: d?.coverName,
         characterCount: d?.characterCount,
@@ -241,7 +241,7 @@
       },
       // Never cache a placeholder: if the SSR data fetch failed (e.g. transient rate limit)
       // the card renders "Loading…" — don't bake that into the multi-day CDN cache.
-      d ? {} : { cacheMaxAgeSeconds: 0 },
+      d ? {} : { cacheMaxAgeSeconds: 0 }
     );
   }
 </script>
@@ -273,9 +273,7 @@
       <div v-if="showSubdeckSection" class="pt-4">
         <div class="flex items-baseline justify-between gap-4">
           <h2 class="font-bold">Subdecks</h2>
-          <a href="#similar-media" class="text-primary text-sm cursor-pointer" @click.prevent="jumpToSimilar">
-            Jump to similar media ↓
-          </a>
+          <a href="#similar-media" class="text-primary text-sm cursor-pointer" @click.prevent="jumpToSimilar">Jump to similar media ↓</a>
         </div>
         <div v-if="showSubdeckControls" class="flex flex-col sm:flex-row gap-2 sm:items-center pt-2">
           <IconField class="grow">
@@ -313,22 +311,24 @@
         <!-- Grid rather than flex-wrap: justify-content centres the track block while items still fill
              left-to-right, so a final short row starts at column 1 instead of centring its orphan. -->
         <div v-if="hasSubdecksToShow" class="grid grid-cols-[repeat(auto-fit,20rem)] items-stretch gap-2 justify-center pt-4">
-          <MediaDeckCard v-for="deck in response.data.subDecks" :key="deck.deckId" :deck="deck" title-tag="h3" :is-compact="true" @update:deck="updateSubDeck" @parent-status-changed="updateParentStatus" />
+          <MediaDeckCard
+            v-for="deck in response.data.subDecks"
+            :key="deck.deckId"
+            :deck="deck"
+            title-tag="h3"
+            :is-compact="true"
+            @update:deck="updateSubDeck"
+            @parent-status-changed="updateParentStatus"
+          />
         </div>
-        <div v-else class="pt-6 text-center text-surface-500 dark:text-surface-400">
-          No subdecks match “{{ appliedSubdeckFilter }}”.
-        </div>
+        <div v-else class="pt-6 text-center text-surface-500 dark:text-surface-400">No subdecks match “{{ appliedSubdeckFilter }}”.</div>
       </div>
 
       <div id="similar-media" class="scroll-mt-4">
         <SimilarMediaSection :deck="response.data.mainDeck" />
       </div>
 
-      <DeckVocabularyHighlights
-        v-if="showSeoBlocks && response.data.parentDeck == null"
-        :key="response.data.mainDeck.deckId"
-        :deck="response.data.mainDeck"
-      />
+      <DeckVocabularyHighlights v-if="showSeoBlocks && response.data.parentDeck == null" :key="response.data.mainDeck.deckId" :deck="response.data.mainDeck" />
     </div>
     <div v-else class="text-center py-12 flex flex-col items-center gap-4">
       <p class="text-surface-500 dark:text-surface-400">Failed to load this deck.</p>

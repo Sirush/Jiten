@@ -39,42 +39,54 @@
       <template v-else>
         <p class="text-gray-600 dark:text-gray-300">
           You're currently tracking
-          <span class="font-extrabold text-primary-600 dark:text-primary-300">{{ totalWordsAmount }}</span> words under
-          <b>{{ totalFormsAmount }}</b> forms. Of them,
+          <span class="font-extrabold text-primary-600 dark:text-primary-300">{{ totalWordsAmount }}</span>
+          words under
+          <b>{{ totalFormsAmount }}</b>
+          forms. Of them,
         </p>
         <ul class="text-gray-600 dark:text-gray-300 space-y-1 ml-3">
           <li>
-            <span class="font-extrabold text-yellow-600 dark:text-yellow-300">{{ youngWordsAmount }}</span> are young (<b>{{ youngFormsAmount }}</b> forms).
-          </li>
-          <li>
-            <span class="font-extrabold text-green-600 dark:text-green-300">{{ matureWordsAmount }}</span> are mature (<b>{{ matureFormsAmount }}</b> forms).
-          </li>
-          <li>
-            <span class="font-extrabold text-green-600 dark:text-green-300">{{ masteredWordsAmount }}</span> are mastered (<b>{{ masteredFormsAmount }}</b>
+            <span class="font-extrabold text-yellow-600 dark:text-yellow-300">{{ youngWordsAmount }}</span>
+            are young (
+            <b>{{ youngFormsAmount }}</b>
             forms).
           </li>
           <li>
-            <span class="font-extrabold text-gray-600 dark:text-gray-300">{{ blacklistedWordsAmount }}</span> are blacklisted (<b>{{
-              blacklistedFormsAmount
-            }}</b>
+            <span class="font-extrabold text-green-600 dark:text-green-300">{{ matureWordsAmount }}</span>
+            are mature (
+            <b>{{ matureFormsAmount }}</b>
+            forms).
+          </li>
+          <li>
+            <span class="font-extrabold text-green-600 dark:text-green-300">{{ masteredWordsAmount }}</span>
+            are mastered (
+            <b>{{ masteredFormsAmount }}</b>
+            forms).
+          </li>
+          <li>
+            <span class="font-extrabold text-gray-600 dark:text-gray-300">{{ blacklistedWordsAmount }}</span>
+            are blacklisted (
+            <b>{{ blacklistedFormsAmount }}</b>
             forms).
           </li>
         </ul>
         <template v-if="hasWordSetContributions">
           <p class="text-gray-600 dark:text-gray-300 mt-2">
             Additionally, word sets contribute
-            <span class="font-extrabold text-primary-600 dark:text-primary-300">{{ wordSetMasteredWords + wordSetBlacklistedWords }}</span> words to your
-            coverage:
+            <span class="font-extrabold text-primary-600 dark:text-primary-300">{{ wordSetMasteredWords + wordSetBlacklistedWords }}</span>
+            words to your coverage:
           </p>
           <ul class="text-gray-600 dark:text-gray-300 space-y-1 ml-3">
             <li v-if="wordSetMasteredWords > 0">
-              <span class="font-extrabold text-green-600 dark:text-green-300">{{ wordSetMasteredWords }}</span> mastered (<b>{{ wordSetMasteredForms }}</b>
+              <span class="font-extrabold text-green-600 dark:text-green-300">{{ wordSetMasteredWords }}</span>
+              mastered (
+              <b>{{ wordSetMasteredForms }}</b>
               forms)
             </li>
             <li v-if="wordSetBlacklistedWords > 0">
-              <span class="font-extrabold text-gray-600 dark:text-gray-300">{{ wordSetBlacklistedWords }}</span> blacklisted (<b>{{
-                wordSetBlacklistedForms
-              }}</b>
+              <span class="font-extrabold text-gray-600 dark:text-gray-300">{{ wordSetBlacklistedWords }}</span>
+              blacklisted (
+              <b>{{ wordSetBlacklistedForms }}</b>
               forms)
             </li>
           </ul>
@@ -82,7 +94,9 @@
         <p v-if="totalRedundantForms > 0" class="text-gray-600 dark:text-gray-300 mt-2">
           Redundancy covers another
           <span class="font-extrabold text-primary-600 dark:text-primary-300">{{ redundantWords }}</span>
-          words (<b>{{ totalRedundantForms }}</b> forms).
+          words (
+          <b>{{ totalRedundantForms }}</b>
+          forms).
         </p>
       </template>
     </template>

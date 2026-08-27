@@ -23,7 +23,7 @@ Browse everything from the **Media** page in the header. Filter by type, difficu
 
 ## Known words & coverage
 
-As you learn, you mark words as **known**. Jiten tracks these per account, so every deck can be measured against what *you* already know.
+As you learn, you mark words as **known**. Jiten tracks these per account, so every deck can be measured against what _you_ already know.
 
 **Coverage** is the headline number: the percentage of the words in a deck that you already know. A higher coverage means an easier, more comfortable read.
 
@@ -37,7 +37,7 @@ You do not have to mark words one by one. You can import a list of known words (
 
 ## Difficulty
 
-Every deck gets a **difficulty score** from a model trained on Japanese text. It lets you compare media on a single scale instead of guessing from the summary. Combined with coverage, character count, and word count, it gives you a realistic picture of how hard something will be *for you* before you commit.
+Every deck gets a **difficulty score** from a model trained on Japanese text. It lets you compare media on a single scale instead of guessing from the summary. Combined with coverage, character count, and word count, it gives you a realistic picture of how hard something will be _for you_ before you commit.
 
 ## Studying with the SRS
 

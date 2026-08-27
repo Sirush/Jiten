@@ -27,7 +27,7 @@
     () => props.visible,
     (v) => {
       localVisible.value = v;
-    },
+    }
   );
   watch(localVisible, (v) => {
     emit('update:visible', v);
@@ -87,15 +87,11 @@
 
   const selectable = computed(() => filtered.value.filter((e) => !pickedSet.value.has(e.deckId)));
 
-  const allSelected = computed(
-    () => selectable.value.length > 0 && selectable.value.every((e) => selectedIds.value.includes(e.deckId)),
-  );
+  const allSelected = computed(() => selectable.value.length > 0 && selectable.value.every((e) => selectedIds.value.includes(e.deckId)));
 
   function toggle(deckId: number) {
     if (pickedSet.value.has(deckId)) return;
-    selectedIds.value = selectedIds.value.includes(deckId)
-      ? selectedIds.value.filter((id) => id !== deckId)
-      : [...selectedIds.value, deckId];
+    selectedIds.value = selectedIds.value.includes(deckId) ? selectedIds.value.filter((id) => id !== deckId) : [...selectedIds.value, deckId];
   }
 
   function selectAllFiltered() {
@@ -194,24 +190,16 @@
             :disabled="selectedIds.length === 0"
             @click="clearSelection"
           />
-          <span class="ml-auto text-xs text-surface-500 dark:text-surface-400">
-            {{ filtered.length }} of {{ entries.length }} shown
-          </span>
+          <span class="ml-auto text-xs text-surface-500 dark:text-surface-400">{{ filtered.length }} of {{ entries.length }} shown</span>
         </div>
 
-        <p v-if="filtered.length === 0" class="py-8 text-center text-sm text-surface-500 dark:text-surface-400">
-          No tracked media matches these filters.
-        </p>
+        <p v-if="filtered.length === 0" class="py-8 text-center text-sm text-surface-500 dark:text-surface-400">No tracked media matches these filters.</p>
 
         <ul v-else class="flex flex-col gap-1.5 max-h-[55vh] overflow-y-auto pr-1">
           <li v-for="e in filtered" :key="e.deckId">
             <label
               class="flex items-center gap-3 rounded-lg border border-surface-200 dark:border-surface-700 p-2 min-w-0"
-              :class="
-                pickedSet.has(e.deckId)
-                  ? 'opacity-60'
-                  : 'cursor-pointer hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors'
-              "
+              :class="pickedSet.has(e.deckId) ? 'opacity-60' : 'cursor-pointer hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors'"
             >
               <Checkbox
                 :model-value="pickedSet.has(e.deckId) || selectedIds.includes(e.deckId)"
@@ -224,7 +212,7 @@
                 alt=""
                 class="h-14 w-10 object-cover rounded shrink-0"
                 @error="(ev) => ((ev.target as HTMLImageElement).src = '/img/nocover.jpg')"
-              >
+              />
               <div class="flex flex-col min-w-0 flex-1 gap-1">
                 <span class="text-sm font-medium truncate" :title="localiseTitle(e)">{{ localiseTitle(e) }}</span>
                 <div class="flex items-center gap-1.5 flex-wrap">

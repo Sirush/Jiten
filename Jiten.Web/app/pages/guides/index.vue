@@ -86,7 +86,6 @@
   useHead(() => ({
     script: faqItems.value.length ? [{ type: 'application/ld+json', innerHTML: faqSchema.value }] : [],
   }));
-
 </script>
 
 <template>

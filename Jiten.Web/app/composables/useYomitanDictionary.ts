@@ -109,9 +109,7 @@ function rewriteQueryHref(href: string): string {
 function sanitiseDefinition(content: any): any {
   if (content === null || content === undefined) return content;
   if (typeof content === 'string') {
-    return content
-      .replace(/<img[^>]*\/?>/gi, '')
-      .replace(/href="(\?query=[^"]+)"/gi, (_, href) => `href="${rewriteQueryHref(href)}"`);
+    return content.replace(/<img[^>]*\/?>/gi, '').replace(/href="(\?query=[^"]+)"/gi, (_, href) => `href="${rewriteQueryHref(href)}"`);
   }
   if (typeof content === 'number') return content;
   if (Array.isArray(content)) return content.map(sanitiseDefinition).filter((c) => c !== null);
@@ -134,11 +132,7 @@ function camelToKebab(str: string): string {
 }
 
 function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function normaliseHref(href: string): string {
@@ -334,10 +328,7 @@ export function useYomitanDictionary() {
     return _dictionariesLoadPromise ?? refreshDictionaries();
   }
 
-  async function importDictionary(
-    file: File,
-    onProgress?: (progress: ImportProgress) => void,
-  ): Promise<DictionaryMeta> {
+  async function importDictionary(file: File, onProgress?: (progress: ImportProgress) => void): Promise<DictionaryMeta> {
     onProgress?.({ phase: 'reading', current: 0, total: 1 });
 
     const zip = await JSZip.loadAsync(file);
@@ -355,9 +346,7 @@ export function useYomitanDictionary() {
     const dictId = crypto.randomUUID();
     const metaDb = await getMetaDb();
 
-    const existingDicts = await idbRequest(
-      metaDb.transaction('dictionaries', 'readonly').objectStore('dictionaries').getAll(),
-    );
+    const existingDicts = await idbRequest(metaDb.transaction('dictionaries', 'readonly').objectStore('dictionaries').getAll());
 
     const meta: DictionaryMeta = {
       id: dictId,
@@ -492,13 +481,8 @@ export function useYomitanDictionary() {
     await refreshDictionaries();
   }
 
-  async function lookupWord(
-    word: string,
-    reading?: string,
-  ): Promise<{ entry: DictionaryEntry; dictionary: DictionaryMeta }[]> {
-    const dicts = dictionaries.value.length > 0
-      ? dictionaries.value
-      : await loadDictionaries();
+  async function lookupWord(word: string, reading?: string): Promise<{ entry: DictionaryEntry; dictionary: DictionaryMeta }[]> {
+    const dicts = dictionaries.value.length > 0 ? dictionaries.value : await loadDictionaries();
 
     const customDicts = dicts.filter((d) => d.id !== JMDICT_DICTIONARY_ID);
     if (customDicts.length === 0) return [];
@@ -512,9 +496,7 @@ export function useYomitanDictionary() {
 
       let entries: DictionaryEntry[];
       if (reading) {
-        const wordReadingEntries = await idbRequest(
-          entryStore.index('word-reading').getAll(IDBKeyRange.only([word, reading])),
-        );
+        const wordReadingEntries = await idbRequest(entryStore.index('word-reading').getAll(IDBKeyRange.only([word, reading])));
         if (wordReadingEntries.length > 0) {
           entries = wordReadingEntries;
         } else {
@@ -536,11 +518,9 @@ export function useYomitanDictionary() {
   async function resolveDefinitions(
     word: string,
     reading: string | undefined,
-    jmDictDefinitions: Definition[] | undefined,
+    jmDictDefinitions: Definition[] | undefined
   ): Promise<ResolvedDefinitionGroup[]> {
-    const dicts = dictionaries.value.length > 0
-      ? dictionaries.value
-      : await loadDictionaries();
+    const dicts = dictionaries.value.length > 0 ? dictionaries.value : await loadDictionaries();
 
     const customResults = await lookupWord(word, reading);
     const customByDict = new Map<string, DictionaryEntry[]>();

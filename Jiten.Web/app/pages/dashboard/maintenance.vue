@@ -76,14 +76,7 @@
           </div>
 
           <div class="flex justify-end">
-            <Button
-              label="Save"
-              icon="pi pi-check"
-              class="p-button-primary"
-              :loading="saving"
-              :disabled="saving"
-              @click="saveBanner"
-            />
+            <Button label="Save" icon="pi pi-check" class="p-button-primary" :loading="saving" :disabled="saving" @click="saveBanner" />
           </div>
         </div>
       </template>

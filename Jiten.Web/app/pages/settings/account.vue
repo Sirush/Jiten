@@ -306,7 +306,7 @@
           <h3 class="text-lg font-semibold">Email</h3>
         </template>
         <template #content>
-          <Message v-if="!account.hasPassword" severity="info" :closable="false" class="mb-4"> Set a password first to change your email. </Message>
+          <Message v-if="!account.hasPassword" severity="info" :closable="false" class="mb-4">Set a password first to change your email.</Message>
           <Message v-if="emailSent" severity="info" :closable="false" class="mb-4">
             A confirmation link has been sent to your new email address. Your email changes once confirmed.
           </Message>
@@ -331,10 +331,10 @@
                   id="emailCurrentPassword"
                   v-model="emailForm.currentPassword"
                   :feedback="false"
-                  toggleMask
+                  toggle-mask
                   :disabled="emailLoading"
-                  :inputProps="{ autocomplete: 'current-password' }"
-                  :inputClass="'w-full'"
+                  :input-props="{ autocomplete: 'current-password' }"
+                  :input-class="'w-full'"
                 />
                 <label for="emailCurrentPassword">Current password</label>
               </FloatLabel>
@@ -367,10 +367,10 @@
                   id="currentPassword"
                   v-model="pwForm.currentPassword"
                   :feedback="false"
-                  toggleMask
+                  toggle-mask
                   :disabled="pwLoading"
-                  :inputProps="{ autocomplete: 'current-password' }"
-                  :inputClass="'w-full'"
+                  :input-props="{ autocomplete: 'current-password' }"
+                  :input-class="'w-full'"
                 />
                 <label for="currentPassword">Current password</label>
               </FloatLabel>
@@ -380,15 +380,15 @@
                 <Password
                   id="newPassword"
                   v-model="pwForm.newPassword"
-                  toggleMask
+                  toggle-mask
                   :feedback="true"
-                  :promptLabel="'At least 10 characters including upper, lower, digit'"
-                  :weakLabel="'Weak'"
-                  :mediumLabel="'Medium'"
-                  :strongLabel="'Strong'"
+                  :prompt-label="'At least 10 characters including upper, lower, digit'"
+                  :weak-label="'Weak'"
+                  :medium-label="'Medium'"
+                  :strong-label="'Strong'"
                   :disabled="pwLoading"
-                  :inputProps="{ autocomplete: 'new-password', minlength: 10 }"
-                  :inputClass="'w-full'"
+                  :input-props="{ autocomplete: 'new-password', minlength: 10 }"
+                  :input-class="'w-full'"
                 />
                 <label for="newPassword">New password</label>
               </FloatLabel>
@@ -399,10 +399,10 @@
                   id="confirmPassword"
                   v-model="pwForm.confirmPassword"
                   :feedback="false"
-                  toggleMask
+                  toggle-mask
                   :disabled="pwLoading"
-                  :inputProps="{ autocomplete: 'new-password' }"
-                  :inputClass="'w-full'"
+                  :input-props="{ autocomplete: 'new-password' }"
+                  :input-class="'w-full'"
                 />
                 <label for="confirmPassword">Confirm new password</label>
               </FloatLabel>
@@ -420,15 +420,15 @@
                 <Password
                   id="setNewPassword"
                   v-model="pwForm.newPassword"
-                  toggleMask
+                  toggle-mask
                   :feedback="true"
-                  :promptLabel="'At least 10 characters including upper, lower, digit'"
-                  :weakLabel="'Weak'"
-                  :mediumLabel="'Medium'"
-                  :strongLabel="'Strong'"
+                  :prompt-label="'At least 10 characters including upper, lower, digit'"
+                  :weak-label="'Weak'"
+                  :medium-label="'Medium'"
+                  :strong-label="'Strong'"
                   :disabled="pwLoading"
-                  :inputProps="{ autocomplete: 'new-password', minlength: 10 }"
-                  :inputClass="'w-full'"
+                  :input-props="{ autocomplete: 'new-password', minlength: 10 }"
+                  :input-class="'w-full'"
                 />
                 <label for="setNewPassword">New password</label>
               </FloatLabel>
@@ -439,10 +439,10 @@
                   id="setConfirmPassword"
                   v-model="pwForm.confirmPassword"
                   :feedback="false"
-                  toggleMask
+                  toggle-mask
                   :disabled="pwLoading"
-                  :inputProps="{ autocomplete: 'new-password' }"
-                  :inputClass="'w-full'"
+                  :input-props="{ autocomplete: 'new-password' }"
+                  :input-class="'w-full'"
                 />
                 <label for="setConfirmPassword">Confirm new password</label>
               </FloatLabel>
@@ -466,7 +466,7 @@
               <span class="font-semibold">Newsletter</span>
               <span class="block text-gray-600 dark:text-gray-300">Receive occasional updates and newsletters via email.</span>
             </label>
-            <ToggleSwitch input-id="newsletter" v-model="newsletter" :disabled="newsletterLoading" @update:model-value="onNewsletterChange" />
+            <ToggleSwitch v-model="newsletter" input-id="newsletter" :disabled="newsletterLoading" @update:model-value="onNewsletterChange" />
           </div>
         </template>
       </Card>

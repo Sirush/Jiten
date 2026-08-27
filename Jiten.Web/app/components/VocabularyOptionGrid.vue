@@ -21,20 +21,17 @@
     <div
       v-for="opt in options"
       :key="opt.key"
-      @click="emit('update:modelValue', opt.key)"
       class="border rounded-lg p-3 cursor-pointer transition-all duration-200 flex flex-col gap-1 items-start relative hover:border-gray-400 hover:dark:border-gray-500 hover:shadow-sm"
       :class="
         modelValue === opt.key
           ? 'bg-primary-50 dark:bg-gray-600 border-primary dark:border-gray-700 ring-1 ring-primary'
           : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
       "
+      @click="emit('update:modelValue', opt.key)"
     >
       <div class="flex items-center gap-2 w-full">
         <i :class="[opt.icon, modelValue === opt.key ? 'text-primary' : 'text-gray-400 dark:text-gray-400']" class="text-lg" />
-        <span
-          class="font-semibold text-sm"
-          :class="modelValue === opt.key ? 'text-primary-900 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300'"
-        >
+        <span class="font-semibold text-sm" :class="modelValue === opt.key ? 'text-primary-900 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300'">
           {{ opt.label }}
         </span>
       </div>

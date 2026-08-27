@@ -118,16 +118,17 @@ export function drawProfileShareCard(options: ProfileShareCardOptions): HTMLCanv
 
   const completed = acc ? getCompletedDisplay(acc.mediaType, acc.completedUnitCount, acc.completedDeckCount) : null;
 
-  const tiles = acc && completed
-    ? [
-        { label: completed.sub ? `${completed.label} (${completed.sub})` : completed.label, value: completed.value },
-        { label: 'Characters', value: acc.totalCharacterCount },
-        { label: 'Words', value: acc.totalWordCount },
-        { label: 'Unique words', value: acc.uniqueWordCount },
-        { label: '1-occurrence', value: acc.uniqueWordUsedOnceCount },
-        { label: 'Unique kanji', value: acc.uniqueKanjiCount },
-      ]
-    : [];
+  const tiles =
+    acc && completed
+      ? [
+          { label: completed.sub ? `${completed.label} (${completed.sub})` : completed.label, value: completed.value },
+          { label: 'Characters', value: acc.totalCharacterCount },
+          { label: 'Words', value: acc.totalWordCount },
+          { label: 'Unique words', value: acc.uniqueWordCount },
+          { label: '1-occurrence', value: acc.uniqueWordUsedOnceCount },
+          { label: 'Unique kanji', value: acc.uniqueKanjiCount },
+        ]
+      : [];
 
   const tileRows = Math.ceil(tiles.length / TILE_COLS);
   const weeks = heat ? heatmapWeeks(heat) : [];

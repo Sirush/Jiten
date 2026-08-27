@@ -46,10 +46,11 @@
   const localiseTitle = useLocaliseTitle();
 
   // Params go through the reactive `query` option (not the URL string) so useFetch watches them and refetches on toggle/page navigation.
-  const { data: response, status, ready } = useApiFetch<PaginatedResponse<DeckRankingRow[]>>(
-    `media-deck/get-media-decks-by-type-ranked/${mediaType}`,
-    { query: { page, descending: hardestFirst } }
-  );
+  const {
+    data: response,
+    status,
+    ready,
+  } = useApiFetch<PaginatedResponse<DeckRankingRow[]>>(`media-deck/get-media-decks-by-type-ranked/${mediaType}`, { query: { page, descending: hardestFirst } });
   await ready;
 
   if (import.meta.client) {
@@ -147,8 +148,7 @@
       <h1 class="text-3xl font-bold mb-2">Japanese {{ plural }} by Difficulty</h1>
       <p class="max-w-3xl text-surface-600 dark:text-surface-300">{{ introTexts[mediaType] }}</p>
       <p v-if="totalItems" class="mt-2 text-sm text-surface-500 dark:text-surface-400">
-        {{ totalItems.toLocaleString('en-US') }} {{ pluralLower }}, sorted from
-        {{ hardestFirst ? 'hardest to easiest' : 'easiest to hardest' }}.
+        {{ totalItems.toLocaleString('en-US') }} {{ pluralLower }}, sorted from {{ hardestFirst ? 'hardest to easiest' : 'easiest to hardest' }}.
       </p>
     </header>
 
@@ -156,14 +156,22 @@
       <NuxtLink
         :to="{ query: {} }"
         class="rounded-lg border px-3 py-1.5 text-sm !no-underline"
-        :class="!hardestFirst ? 'border-primary-500 bg-primary-50 !text-primary-700 dark:bg-primary-950 dark:!text-primary-300' : 'border-surface-300 !text-surface-600 dark:border-surface-600 dark:!text-surface-300'"
+        :class="
+          !hardestFirst
+            ? 'border-primary-500 bg-primary-50 !text-primary-700 dark:bg-primary-950 dark:!text-primary-300'
+            : 'border-surface-300 !text-surface-600 dark:border-surface-600 dark:!text-surface-300'
+        "
       >
         Easiest first
       </NuxtLink>
       <NuxtLink
         :to="{ query: { sort: 'hardest' } }"
         class="rounded-lg border px-3 py-1.5 text-sm !no-underline"
-        :class="hardestFirst ? 'border-primary-500 bg-primary-50 !text-primary-700 dark:bg-primary-950 dark:!text-primary-300' : 'border-surface-300 !text-surface-600 dark:border-surface-600 dark:!text-surface-300'"
+        :class="
+          hardestFirst
+            ? 'border-primary-500 bg-primary-50 !text-primary-700 dark:bg-primary-950 dark:!text-primary-300'
+            : 'border-surface-300 !text-surface-600 dark:border-surface-600 dark:!text-surface-300'
+        "
       >
         Hardest first
       </NuxtLink>
@@ -189,11 +197,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr
-            v-for="(deck, i) in rows"
-            :key="deck.deckId"
-            class="even:bg-surface-100 hover:bg-primary-50 dark:even:bg-surface-800 dark:hover:bg-surface-700"
-          >
+          <tr v-for="(deck, i) in rows" :key="deck.deckId" class="even:bg-surface-100 hover:bg-primary-50 dark:even:bg-surface-800 dark:hover:bg-surface-700">
             <td class="px-3 py-2 tabular-nums text-surface-400">{{ rankOffset + i + 1 }}</td>
             <td class="px-3 py-2">
               <NuxtLink :to="`/decks/media/${deck.deckId}/detail`" class="font-medium">{{ localiseTitle(deck) }}</NuxtLink>
@@ -221,7 +225,11 @@
           v-else
           :to="{ query: pageQuery(p) }"
           class="rounded-lg border px-3 py-1.5 text-sm tabular-nums !no-underline"
-          :class="p === page ? 'border-primary-500 bg-primary-50 !text-primary-700 dark:bg-primary-950 dark:!text-primary-300' : 'border-surface-300 !text-surface-600 dark:border-surface-600 dark:!text-surface-300'"
+          :class="
+            p === page
+              ? 'border-primary-500 bg-primary-50 !text-primary-700 dark:bg-primary-950 dark:!text-primary-300'
+              : 'border-surface-300 !text-surface-600 dark:border-surface-600 dark:!text-surface-300'
+          "
         >
           {{ p }}
         </NuxtLink>
@@ -239,7 +247,8 @@
       <p class="text-sm text-surface-500 dark:text-surface-400">
         Browse other media types:
         <template v-for="(t, i) in otherTypes" :key="t.slug">
-          <NuxtLink :to="`/decks/media/list/${t.slug}`">{{ t.label }}</NuxtLink><span v-if="i < otherTypes.length - 1">, </span>
+          <NuxtLink :to="`/decks/media/list/${t.slug}`">{{ t.label }}</NuxtLink>
+          <span v-if="i < otherTypes.length - 1">,</span>
         </template>
       </p>
     </footer>

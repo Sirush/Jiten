@@ -92,10 +92,7 @@
 </script>
 
 <template>
-  <div
-    v-if="isVisible && context"
-    class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-100 dark:bg-surface-800 px-3 py-2 text-sm"
-  >
+  <div v-if="isVisible && context" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-100 dark:bg-surface-800 px-3 py-2 text-sm">
     <NuxtLink :to="context.listPath" class="flex items-center gap-1 min-w-0" no-rel>
       <Icon name="material-symbols:arrow-back-rounded" class="shrink-0" />
       <span class="truncate">{{ context.label }}</span>

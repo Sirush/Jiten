@@ -109,7 +109,8 @@
 
     <Message v-if="isTrial" severity="info" :closable="false" class="mt-5">
       Your trial includes every Jiten+ feature with a smaller storage allowance. A paid plan
-      <template v-if="fullStorageLabel">raises storage to {{ fullStorageLabel }} and </template>unlocks saved frequency lists.
+      <template v-if="fullStorageLabel">raises storage to {{ fullStorageLabel }} and</template>
+      unlocks saved frequency lists.
     </Message>
 
     <!-- Feature tiles -->
@@ -140,7 +141,7 @@
         </div>
         <p class="jp-tile__body text-gray-600 dark:text-gray-300">
           Build frequency lists from any media on Jiten, use them in Yomitan, and share them with a link.
-          <template v-if="!isFull"> Generating and downloading is included in your trial; saving lists needs a paid plan.</template>
+          <template v-if="!isFull">Generating and downloading is included in your trial; saving lists needs a paid plan.</template>
         </p>
         <div class="jp-tile__actions">
           <NuxtLink to="/jiten-plus/frequency-lists">
@@ -189,8 +190,8 @@
           <h3 class="jp-tile__title text-gray-900 dark:text-white">Your coverage journey</h3>
         </div>
         <p class="jp-tile__body text-gray-600 dark:text-gray-300">
-          Watch how the coverage of the titles you're interested in grows over time. Get a look back at the journey that got you where you are today.
-          Access in any media deck detail, check the stats of it for the full chart with milestones.
+          Watch how the coverage of the titles you're interested in grows over time. Get a look back at the journey that got you where you are today. Access in
+          any media deck detail, check the stats of it for the full chart with milestones.
         </p>
       </div>
 

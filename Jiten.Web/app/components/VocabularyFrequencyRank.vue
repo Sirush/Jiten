@@ -40,17 +40,12 @@
   const typeRows = computed(() =>
     Object.entries(props.ranks?.byType ?? {})
       .map(([mediaType, entry]) => ({ value: Number(mediaType), label: getMediaTypeText(Number(mediaType)), rank: entry.rank }))
-      .sort((a, b) => a.rank - b.rank),
+      .sort((a, b) => a.rank - b.rank)
   );
 
-  const globalAndTypeRows = computed(() => [
-    { value: 0, label: 'Global', rank: props.ranks?.global.rank ?? props.fallbackRank },
-    ...typeRows.value,
-  ]);
+  const globalAndTypeRows = computed(() => [{ value: 0, label: 'Global', rank: props.ranks?.global.rank ?? props.fallbackRank }, ...typeRows.value]);
 
-  const listRows = computed(() =>
-    (props.ranks?.lists ?? []).map((list) => ({ value: -list.id, label: list.name, rank: list.rank })),
-  );
+  const listRows = computed(() => (props.ranks?.lists ?? []).map((list) => ({ value: -list.id, label: list.name, rank: list.rank })));
 
   const currentValue = computed(() => frequencySourceValue(resolved.value));
 
@@ -127,9 +122,7 @@
           class="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm"
           :class="[
             authStore.isAuthenticated ? 'cursor-pointer hover:bg-surface-100 dark:hover:bg-surface-700' : 'cursor-default',
-            row.value === currentValue
-              ? 'font-semibold text-primary-600 dark:text-primary-300'
-              : 'text-surface-700 dark:text-surface-300',
+            row.value === currentValue ? 'font-semibold text-primary-600 dark:text-primary-300' : 'text-surface-700 dark:text-surface-300',
           ]"
           @click="choose(row.value)"
         >
@@ -145,20 +138,14 @@
           <div v-if="listsLoading" class="flex justify-center py-2">
             <i class="pi pi-spin pi-spinner text-surface-400" />
           </div>
-          <span v-else-if="listRows.length === 0" class="px-3 py-1.5 text-sm text-surface-400 italic">
-            No saved frequency lists
-          </span>
+          <span v-else-if="listRows.length === 0" class="px-3 py-1.5 text-sm text-surface-400 italic">No saved frequency lists</span>
           <template v-else>
             <button
               v-for="row in listRows"
               :key="row.value"
               type="button"
               class="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer hover:bg-surface-100 dark:hover:bg-surface-700"
-              :class="
-                row.value === currentValue
-                  ? 'font-semibold text-primary-600 dark:text-primary-300'
-                  : 'text-surface-700 dark:text-surface-300'
-              "
+              :class="row.value === currentValue ? 'font-semibold text-primary-600 dark:text-primary-300' : 'text-surface-700 dark:text-surface-300'"
               @click="choose(row.value)"
             >
               <i class="w-3 text-center text-[0.65rem]" :class="row.value === currentValue ? 'pi pi-check' : ''" />

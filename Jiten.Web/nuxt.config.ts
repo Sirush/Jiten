@@ -138,9 +138,7 @@ export default defineNuxtConfig({
       ],
       link: [
         // Build assets carry `crossorigin`, so the warmed connection must be anonymous-CORS
-        ...(process.env.NUXT_APP_CDN_URL
-          ? [{ rel: 'preconnect', href: process.env.NUXT_APP_CDN_URL, crossorigin: 'anonymous' as const }]
-          : []),
+        ...(process.env.NUXT_APP_CDN_URL ? [{ rel: 'preconnect', href: process.env.NUXT_APP_CDN_URL, crossorigin: 'anonymous' as const }] : []),
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
         { rel: 'icon', type: 'image/png', sizes: '96x96', href: '/favicon-96x96.png' },
         { rel: 'icon', type: 'image/x-icon', sizes: '48x48', href: '/favicon.ico' },
@@ -161,12 +159,7 @@ export default defineNuxtConfig({
       name: 'Jiten',
       url: 'https://jiten.moe',
       logo: 'https://jiten.moe/web-app-manifest-512x512.png',
-      sameAs: [
-        'https://github.com/Sirush/Jiten',
-        'https://discord.gg/cZWM7b4wzk',
-        'https://patreon.com/JitenMoe',
-        'https://ko-fi.com/jiten',
-      ],
+      sameAs: ['https://github.com/Sirush/Jiten', 'https://discord.gg/cZWM7b4wzk', 'https://patreon.com/JitenMoe', 'https://ko-fi.com/jiten'],
     },
   },
   ogImage: {

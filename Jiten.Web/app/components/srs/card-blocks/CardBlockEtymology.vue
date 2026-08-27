@@ -59,8 +59,9 @@
         v-if="hasWasei"
         class="inline-block rounded-full px-2 py-0.5 text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
         title="Japanese-made — constructed in Japanese from foreign words, not a real foreign phrase"
-        >和製 wasei</span
       >
+        和製 wasei
+      </span>
       <span v-if="etymologyLine" class="text-sm text-gray-500 dark:text-gray-400">{{ etymologyLine }}</span>
     </div>
   </CardBlockSpoiler>

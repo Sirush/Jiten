@@ -3,13 +3,7 @@
   import { useToast } from 'primevue/usetoast';
   import type { CardLayout, CardLayoutPreset, StudySettingsDto } from '~/types';
   import { buildLayoutFromLegacySettings } from '~/utils/cardLayout';
-  import {
-    BUILT_IN_PRESETS,
-    decodeLayoutShareCode,
-    encodeLayoutShareCode,
-    instantiatePreset,
-    type DecodedShareLayout,
-  } from '~/utils/cardLayoutPresets';
+  import { BUILT_IN_PRESETS, decodeLayoutShareCode, encodeLayoutShareCode, instantiatePreset, type DecodedShareLayout } from '~/utils/cardLayoutPresets';
   import { cardBlockRegistry } from '~/components/srs/card-blocks/cardBlockRegistry';
 
   const props = defineProps<{ settings: StudySettingsDto }>();
@@ -245,7 +239,16 @@
     <Dialog v-model:visible="shareDialog" modal header="Share layout" :style="{ width: '28rem' }" :dismissable-mask="true" @show="selectShareCode">
       <div class="flex flex-col gap-3">
         <label class="text-sm text-surface-600 dark:text-surface-300" for="share-code">Copy this code and paste it anywhere to share your layout.</label>
-        <Textarea id="share-code" ref="shareTextarea" :model-value="shareCode" readonly rows="3" auto-resize class="w-full font-mono text-xs" @focus="selectShareCode" />
+        <Textarea
+          id="share-code"
+          ref="shareTextarea"
+          :model-value="shareCode"
+          readonly
+          rows="3"
+          auto-resize
+          class="w-full font-mono text-xs"
+          @focus="selectShareCode"
+        />
       </div>
       <template #footer>
         <Button type="button" size="small" severity="secondary" outlined label="Close" @click="shareDialog = false" />
@@ -260,7 +263,10 @@
         <p v-if="importInvalid" class="text-xs text-red-500">That share code could not be read. Check you copied all of it.</p>
 
         <div v-if="importResult" class="flex flex-col gap-2">
-          <div v-if="importResult.droppedTypes.length" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
+          <div
+            v-if="importResult.droppedTypes.length"
+            class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200"
+          >
             <i class="pi pi-info-circle mr-1" />
             Some blocks from a newer version were skipped: {{ importResult.droppedTypes.join(', ') }}.
           </div>
@@ -272,7 +278,8 @@
                 :key="`f${i}`"
                 class="inline-flex items-center gap-1 rounded-full border border-surface-200 bg-surface-0 px-2 py-0.5 text-xs text-surface-600 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-300"
               >
-                <i :class="chipIcon(b.type)" class="text-[0.65rem]" />{{ chipLabel(b.type) }}
+                <i :class="chipIcon(b.type)" class="text-[0.65rem]" />
+                {{ chipLabel(b.type) }}
               </span>
               <span v-if="!importResult.layout.front.length" class="text-xs text-surface-400">empty</span>
             </div>
@@ -285,7 +292,8 @@
                 :key="`b${i}`"
                 class="inline-flex items-center gap-1 rounded-full border border-surface-200 bg-surface-0 px-2 py-0.5 text-xs text-surface-600 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-300"
               >
-                <i :class="chipIcon(b.type)" class="text-[0.65rem]" />{{ chipLabel(b.type) }}
+                <i :class="chipIcon(b.type)" class="text-[0.65rem]" />
+                {{ chipLabel(b.type) }}
               </span>
               <span v-if="!importResult.layout.back.length" class="text-xs text-surface-400">empty</span>
             </div>

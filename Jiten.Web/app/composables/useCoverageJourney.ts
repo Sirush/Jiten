@@ -46,8 +46,7 @@ export function useCoverageJourney(deckId: MaybeRefOrGetter<number | string>) {
       // A coverage refresh strands the previous generation; dropping stranded keys keeps a long
       // browsing session from retaining a series per deck per refresh.
       const isCurrent = (k: string) => k === `${k.split(':')[0]}:${versionFor(k.split(':')[0]!)}`;
-      if (Object.keys(cache.value).some((k) => !isCurrent(k)))
-        cache.value = Object.fromEntries(Object.entries(cache.value).filter(([k]) => isCurrent(k)));
+      if (Object.keys(cache.value).some((k) => !isCurrent(k))) cache.value = Object.fromEntries(Object.entries(cache.value).filter(([k]) => isCurrent(k)));
       cache.value[key] = result;
     } catch (err) {
       journey.value = null;

@@ -34,11 +34,7 @@ export function useWordSets() {
     }
   };
 
-  const fetchWordSetVocabulary = async (
-    slug: string,
-    offset: number = 0,
-    limit: number = 50
-  ): Promise<PaginatedResponse<Word[]> | null> => {
+  const fetchWordSetVocabulary = async (slug: string, offset: number = 0, limit: number = 50): Promise<PaginatedResponse<Word[]> | null> => {
     error.value = null;
     try {
       const result = await $api<PaginatedResponse<Word[]>>(`word-sets/${slug}/vocabulary`, {
@@ -93,11 +89,11 @@ export function useWordSets() {
   };
 
   const isSubscribed = (setId: number): boolean => {
-    return subscriptions.value.some(s => s.setId === setId);
+    return subscriptions.value.some((s) => s.setId === setId);
   };
 
   const getSubscriptionState = (setId: number): WordSetStateType | null => {
-    const sub = subscriptions.value.find(s => s.setId === setId);
+    const sub = subscriptions.value.find((s) => s.setId === setId);
     return sub?.state ?? null;
   };
 

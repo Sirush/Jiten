@@ -23,11 +23,16 @@ export const DEFAULT_KEYBINDS: StudyKeybinds = {
 
 export function displayKeyName(key: string): string {
   switch (key) {
-    case ' ': return 'Space';
-    case 'ArrowUp': return '↑';
-    case 'ArrowDown': return '↓';
-    case 'ArrowLeft': return '←';
-    case 'ArrowRight': return '→';
+    case ' ':
+      return 'Space';
+    case 'ArrowUp':
+      return '↑';
+    case 'ArrowDown':
+      return '↓';
+    case 'ArrowLeft':
+      return '←';
+    case 'ArrowRight':
+      return '→';
     default:
       return key.length === 1 ? key.toUpperCase() : key;
   }
@@ -82,7 +87,7 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
   let batchCompletedAt = 0;
   const stopBatchWatch = watch(
     () => store.batchComplete,
-    complete => {
+    (complete) => {
       if (complete) batchCompletedAt = Date.now();
     },
     { flush: 'sync', immediate: true }
@@ -91,7 +96,9 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
   function flashKey(key: string) {
     pressedKey.value = key;
     if (pressedTimeout) clearTimeout(pressedTimeout);
-    pressedTimeout = setTimeout(() => { pressedKey.value = null; }, 150);
+    pressedTimeout = setTimeout(() => {
+      pressedKey.value = null;
+    }, 150);
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -104,9 +111,7 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
 
     const kb = store.studySettings.keybinds ?? DEFAULT_KEYBINDS;
     const is4Btn = store.studySettings.gradingButtons === 4;
-    const gradeKeys = is4Btn
-      ? [kb.grade1, kb.grade2, kb.grade3, kb.grade4]
-      : [kb.grade1, kb.grade2];
+    const gradeKeys = is4Btn ? [kb.grade1, kb.grade2, kb.grade3, kb.grade4] : [kb.grade1, kb.grade2];
     const ratings = is4Btn ? RATINGS_4 : RATINGS_2;
 
     // Swallows every other study key: replayAudio, pauseTimer, undo and wrapUp are not card-gated and would fire against a finished batch.
@@ -152,14 +157,40 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
     }
 
     if (store.currentCard && store.isFlipped) {
-      if (matchesKeybind(e, kb.blacklist)) { flashKey(kb.blacklist); callbacks.onBlacklist(); return; }
-      if (matchesKeybind(e, kb.forget)) { flashKey(kb.forget); callbacks.onForget(); return; }
-      if (matchesKeybind(e, kb.master)) { flashKey(kb.master); callbacks.onMaster(); return; }
-      if (matchesKeybind(e, kb.suspend)) { flashKey(kb.suspend); callbacks.onSuspend(); return; }
-      if (matchesKeybind(e, kb.bury)) { flashKey(kb.bury); callbacks.onBury(); return; }
+      if (matchesKeybind(e, kb.blacklist)) {
+        flashKey(kb.blacklist);
+        callbacks.onBlacklist();
+        return;
+      }
+      if (matchesKeybind(e, kb.forget)) {
+        flashKey(kb.forget);
+        callbacks.onForget();
+        return;
+      }
+      if (matchesKeybind(e, kb.master)) {
+        flashKey(kb.master);
+        callbacks.onMaster();
+        return;
+      }
+      if (matchesKeybind(e, kb.suspend)) {
+        flashKey(kb.suspend);
+        callbacks.onSuspend();
+        return;
+      }
+      if (matchesKeybind(e, kb.bury)) {
+        flashKey(kb.bury);
+        callbacks.onBury();
+        return;
+      }
       const onTabHeader = e.target instanceof HTMLElement && !!e.target.closest('[role="tab"]');
-      if (!onTabHeader && matchesKeybind(e, kb.dictPrev ?? DEFAULT_KEYBINDS.dictPrev)) { callbacks.onDictPrev(); return; }
-      if (!onTabHeader && matchesKeybind(e, kb.dictNext ?? DEFAULT_KEYBINDS.dictNext)) { callbacks.onDictNext(); return; }
+      if (!onTabHeader && matchesKeybind(e, kb.dictPrev ?? DEFAULT_KEYBINDS.dictPrev)) {
+        callbacks.onDictPrev();
+        return;
+      }
+      if (!onTabHeader && matchesKeybind(e, kb.dictNext ?? DEFAULT_KEYBINDS.dictNext)) {
+        callbacks.onDictNext();
+        return;
+      }
     }
 
     const replayKey = kb.replayAudio ?? DEFAULT_KEYBINDS.replayAudio;

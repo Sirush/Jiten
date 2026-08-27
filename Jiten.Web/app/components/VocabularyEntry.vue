@@ -26,7 +26,7 @@
 
   const { resolvedGroups } = useDictionaryDefinitions(
     computed(() => props.word?.mainReading?.text),
-    computed(() => props.word?.definitions),
+    computed(() => props.word?.definitions)
   );
 
   const toggleCompact = () => {
@@ -42,7 +42,13 @@
       <div class="flex justify-between cursor-pointer" @click="toggleCompact">
         <div class="flex flex-row md:gap-4 flex-wrap items-center">
           <Checkbox v-if="selectable" :model-value="selected" :binary="true" class="mr-2" @change="emit('select', word)" @click.stop />
-          <router-link class="text-2xl" :to="`/vocabulary/${word.wordId}/${word.mainReading.readingIndex}`" lang="ja" @click.stop v-html="convertToRuby(word.mainReading.text)" />
+          <router-link
+            class="text-2xl"
+            :to="`/vocabulary/${word.wordId}/${word.mainReading.readingIndex}`"
+            lang="ja"
+            @click.stop
+            v-html="convertToRuby(word.mainReading.text)"
+          />
           <Button
             text
             rounded
@@ -59,22 +65,20 @@
           <span @click.stop>
             <VocabularyStatus :word="word" />
           </span>
-          x{{ word.occurrences }} | Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}<span v-if="rankSourceLabel" class="text-xs whitespace-nowrap"> in {{ rankSourceLabel }}</span>
-          <Button
-            v-if="removable"
-            icon="pi pi-trash"
-            severity="danger"
-            text
-            size="small"
-            :loading="removing"
-            @click.stop="emit('remove', word)"
-          />
+          x{{ word.occurrences }} | Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}
+          <span v-if="rankSourceLabel" class="text-xs whitespace-nowrap">in {{ rankSourceLabel }}</span>
+          <Button v-if="removable" icon="pi pi-trash" severity="danger" text size="small" :loading="removing" @click.stop="emit('remove', word)" />
         </div>
       </div>
     </template>
     <template #subtitle />
     <template #content>
-      <VocabularyDictionaryDefinitions :resolved-groups="resolvedGroups" :is-compact="isCompact" :current-reading-index="word.mainReading.readingIndex" :readings="word.alternativeReadings" />
+      <VocabularyDictionaryDefinitions
+        :resolved-groups="resolvedGroups"
+        :is-compact="isCompact"
+        :current-reading-index="word.mainReading.readingIndex"
+        :readings="word.alternativeReadings"
+      />
     </template>
   </Card>
 </template>

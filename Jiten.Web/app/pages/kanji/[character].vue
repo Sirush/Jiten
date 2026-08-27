@@ -23,7 +23,7 @@
   // A route param that isn't a single character can never be a kanji; 404 before fetching so the
   // SPA catch-all can't answer 200 for arbitrary paths (which Google then treats as soft 404s).
   definePageMeta({
-    validate: route => [...String(route.params.character)].length === 1,
+    validate: (route) => [...String(route.params.character)].length === 1,
   });
 
   const route = useRoute();
@@ -40,13 +40,12 @@
   // error state at 200, or a slow API would deindex working pages.
   if (import.meta.server) {
     await ready;
-    if (isMissingResource(error.value, kanji.value))
-      throw createError({ statusCode: 404, statusMessage: 'Kanji not found', fatal: true });
+    if (isMissingResource(error.value, kanji.value)) throw createError({ statusCode: 404, statusMessage: 'Kanji not found', fatal: true });
   }
 
   const scaleBadges = computed(() =>
     allScales
-      .map(scale => ({
+      .map((scale) => ({
         severity: scaleSeverities[scale],
         cls: scaleClasses[scale],
         text: kanjiScaleMembership(character.value, scale, kanji.value?.grade),
@@ -57,9 +56,7 @@
   // undefined = untouched, so the most-used reading renders expanded (server-side, and instead of an
   // empty section). null = explicitly collapsed by the user.
   const expandedReading = ref<string | null | undefined>(undefined);
-  const activeReading = computed(() => (expandedReading.value === undefined
-    ? kanji.value?.wordsByReading?.[0]?.reading ?? null
-    : expandedReading.value));
+  const activeReading = computed(() => (expandedReading.value === undefined ? (kanji.value?.wordsByReading?.[0]?.reading ?? null) : expandedReading.value));
   const allReadingWords = ref<WordSummary[] | null>(null);
   const allTopWords = ref<WordSummary[] | null>(null);
   const loadingReadingWords = ref(false);
@@ -86,7 +83,7 @@
 
   const expandedGroup = computed(() => {
     if (!kanji.value?.wordsByReading || !activeReading.value) return null;
-    return kanji.value.wordsByReading.find(g => g.reading === activeReading.value) ?? null;
+    return kanji.value.wordsByReading.find((g) => g.reading === activeReading.value) ?? null;
   });
 
   const expandedWords = computed(() => {
@@ -105,10 +102,9 @@
     if (!activeReading.value) return;
     loadingReadingWords.value = true;
     try {
-      const data = await $api<{ items: WordSummary[] }>(
-        `kanji/${encodeURIComponent(character.value)}/words`,
-        { query: { reading: activeReading.value, pageSize: 5000 } }
-      );
+      const data = await $api<{ items: WordSummary[] }>(`kanji/${encodeURIComponent(character.value)}/words`, {
+        query: { reading: activeReading.value, pageSize: 5000 },
+      });
       allReadingWords.value = data.data;
     } finally {
       loadingReadingWords.value = false;
@@ -122,10 +118,7 @@
   const loadAllTopWords = async () => {
     loadingTopWords.value = true;
     try {
-      const data = await $api<{ items: WordSummary[] }>(
-        `kanji/${encodeURIComponent(character.value)}/words`,
-        { query: { pageSize: 5000 } }
-      );
+      const data = await $api<{ items: WordSummary[] }>(`kanji/${encodeURIComponent(character.value)}/words`, { query: { pageSize: 5000 } });
       allTopWords.value = data.data;
     } finally {
       loadingTopWords.value = false;
@@ -142,10 +135,7 @@
     const k = kanji.value;
     if (!k) return `Meaning, readings and common words for the kanji ${character.value}.`;
 
-    const level = [
-      k.grade != null ? `grade ${k.grade}` : null,
-      k.jlptLevel != null ? `JLPT N${k.jlptLevel}` : null,
-    ].filter(Boolean).join(', ');
+    const level = [k.grade != null ? `grade ${k.grade}` : null, k.jlptLevel != null ? `JLPT N${k.jlptLevel}` : null].filter(Boolean).join(', ');
 
     const readings = [...k.onReadings, ...k.kunReadings].slice(0, 4).join(', ');
     const sentence = `${k.character} is a ${level ? `${level} ` : ''}kanji meaning ${k.meanings.slice(0, 3).join(', ')}.`;
@@ -157,9 +147,7 @@
   const titleMeaning = computed(() => kanji.value?.meanings.slice(0, 2).join(', ') ?? '');
 
   useSeoMeta({
-    title: () => (titleMeaning.value
-      ? `${character.value} Kanji: ${titleMeaning.value} - Readings and Common Words`
-      : `${character.value} - Kanji`),
+    title: () => (titleMeaning.value ? `${character.value} Kanji: ${titleMeaning.value} - Readings and Common Words` : `${character.value} - Kanji`),
     description: metaDescription,
     ogDescription: metaDescription,
   });
@@ -187,9 +175,9 @@
 
         <!-- Metadata badges -->
         <div class="flex flex-wrap justify-center gap-2 mb-4">
-          <Tag v-if="kanji.frequencyRank" severity="primary"> Jiten frequency #{{ kanji.frequencyRank }} </Tag>
-          <Tag v-for="badge in scaleBadges" :key="badge.text" :severity="badge.severity" :class="badge.cls"> {{ badge.text }} </Tag>
-          <Tag severity="secondary"> {{ kanji.strokeCount }} strokes </Tag>
+          <Tag v-if="kanji.frequencyRank" severity="primary">Jiten frequency #{{ kanji.frequencyRank }}</Tag>
+          <Tag v-for="badge in scaleBadges" :key="badge.text" :severity="badge.severity" :class="badge.cls">{{ badge.text }}</Tag>
+          <Tag severity="secondary">{{ kanji.strokeCount }} strokes</Tag>
         </div>
       </div>
 
@@ -226,9 +214,11 @@
             v-for="group in kanji.wordsByReading"
             :key="group.reading"
             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors cursor-pointer"
-            :class="activeReading === group.reading
-              ? 'bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200'
-              : 'bg-surface-100 dark:bg-surface-800 text-surface-700 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'"
+            :class="
+              activeReading === group.reading
+                ? 'bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200'
+                : 'bg-surface-100 dark:bg-surface-800 text-surface-700 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'
+            "
             @click="toggleReading(group.reading)"
           >
             <span lang="ja" class="font-medium">{{ group.reading }}</span>
@@ -249,11 +239,7 @@
             >
               {{ loadingReadingWords ? 'Loading...' : `View all ${expandedGroup.totalWords}` }}
             </button>
-            <button
-              v-else
-              class="text-sm text-primary-600 dark:text-primary-400 hover:underline cursor-pointer"
-              @click="collapseReadingWords"
-            >
+            <button v-else class="text-sm text-primary-600 dark:text-primary-400 hover:underline cursor-pointer" @click="collapseReadingWords">
               View less
             </button>
           </div>
@@ -275,13 +261,7 @@
           >
             {{ loadingTopWords ? 'Loading...' : 'View all' }}
           </button>
-          <button
-            v-else
-            class="text-sm text-primary-600 dark:text-primary-400 hover:underline cursor-pointer"
-            @click="collapseTopWords"
-          >
-            View less
-          </button>
+          <button v-else class="text-sm text-primary-600 dark:text-primary-400 hover:underline cursor-pointer" @click="collapseTopWords">View less</button>
         </div>
       </div>
     </div>
