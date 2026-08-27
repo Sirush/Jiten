@@ -16,10 +16,13 @@ public partial class AdminController
 
         var normalised = query.Trim().ToLower();
 
-        var users = await userContext.Users.AsNoTracking()
-            .Where(u => u.UserName!.ToLower().Contains(normalised) ||
-                        u.Email!.ToLower().Contains(normalised) ||
-                        u.Id.ToLower() == normalised)
+        var source = userContext.Users.AsNoTracking();
+        var filtered = Guid.TryParse(normalised, out _)
+            ? source.Where(u => u.Id == normalised)
+            : source.Where(u => u.UserName!.ToLower().Contains(normalised) ||
+                                u.Email!.ToLower().Contains(normalised));
+
+        var users = await filtered
             .OrderBy(u => u.UserName)
             .Take(10)
             .Select(u => new { userId = u.Id, userName = u.UserName, email = u.Email })
