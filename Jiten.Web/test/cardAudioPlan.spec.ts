@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCardAudioPlan, type CardAudioContext } from '../app/utils/cardAudioPlan';
+import { buildCardAudioPlan, resolveSentenceAudioSource, type CardAudioContext, type SentenceAudioContext } from '../app/utils/cardAudioPlan';
 import type { StudySettingsDto } from '../app/types/types';
 
 // The planner only reads the autoplay fields below; the rest of StudySettingsDto is irrelevant here.
@@ -210,5 +210,47 @@ describe('buildCardAudioPlan', () => {
       );
       expect(plan.slots).toEqual(['headword', 'clip']);
     });
+  });
+});
+
+describe('resolveSentenceAudioSource', () => {
+  function reveal(settingsOverrides: Partial<StudySettingsDto> = {}, contextOverrides: Partial<SentenceAudioContext> = {}) {
+    return resolveSentenceAudioSource(settings({ autoPlaySentenceOnFront: true, ...settingsOverrides }), {
+      onFront: false,
+      hasClip: true,
+      hasSentence: true,
+      ttsMuted: false,
+      ...contextOverrides,
+    });
+  }
+
+  it('gives the sentence back on the side the clip does not play on', () => {
+    expect(reveal({ autoPlayCustomAudioPosition: 'Front' }, { onFront: false })).toBe('tts');
+    expect(reveal({ autoPlayCustomAudioPosition: 'Back' }, { onFront: true })).toBe('tts');
+  });
+
+  it('leaves the sentence slot to the clip on the side it plays on', () => {
+    expect(reveal({ autoPlayCustomAudioPosition: 'Front' }, { onFront: true })).toBe('clip');
+    expect(reveal({ autoPlayCustomAudioPosition: 'Back' }, { onFront: false })).toBe('clip');
+    expect(reveal({ autoPlayCustomAudioPosition: 'Both' }, { onFront: true })).toBe('clip');
+    expect(reveal({ autoPlayCustomAudioPosition: 'Both' }, { onFront: false })).toBe('clip');
+  });
+
+  it('gives the sentence back when the clip does not stand in for it', () => {
+    expect(reveal({ customAudioReplacesSentence: false })).toBe('tts');
+    expect(reveal({ autoPlayCustomAudio: false })).toBe('tts');
+    expect(reveal({}, { hasClip: false })).toBe('tts');
+  });
+
+  it('reads the sentence autoplay flag of the side being revealed', () => {
+    expect(reveal({ autoPlaySentence: false }, { hasClip: false, onFront: false })).toBe('none');
+    expect(reveal({ autoPlaySentence: false }, { hasClip: false, onFront: true })).toBe('tts');
+    expect(reveal({ autoPlaySentenceOnFront: false }, { hasClip: false, onFront: true })).toBe('none');
+    expect(reveal({ autoPlaySentenceOnFront: false }, { hasClip: false, onFront: false })).toBe('tts');
+  });
+
+  it('stays silent with no sentence or with text-to-speech muted', () => {
+    expect(reveal({}, { hasSentence: false })).toBe('none');
+    expect(reveal({ customAudioReplacesSentence: false }, { ttsMuted: true })).toBe('none');
   });
 });

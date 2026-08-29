@@ -84,7 +84,7 @@ export interface CardContext {
 
   cardExample: ComputedRef<StudyExampleSentenceDto | null | undefined>;
   exampleRevealed: Ref<boolean>;
-  revealExample: () => void;
+  revealExample: (side?: 'front' | 'back') => void;
 
   registerDictCycler: (fn: ((direction: 1 | -1) => void) | null) => void;
 }

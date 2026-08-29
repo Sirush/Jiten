@@ -139,7 +139,7 @@
     <blockquote
       class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
       :class="{ 'blur-md select-none cursor-pointer': blurred }"
-      @click.stop="revealExample()"
+      @click.stop="revealExample(side)"
     >
       <div class="flex items-start gap-2">
         <div class="leading-relaxed flex-1" :class="sizeClass" lang="ja" v-html="previewHtml" />
@@ -173,7 +173,7 @@
         <blockquote
           class="relative inline-block border-l-4 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
           :class="[cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500', { 'blur-md select-none cursor-pointer': blurred }]"
-          @click.stop="revealExample()"
+          @click.stop="revealExample(side)"
         >
           <div class="flex items-start gap-2">
             <div class="leading-relaxed flex-1" :class="sizeClass" lang="ja" v-html="exampleSentenceHtml" />

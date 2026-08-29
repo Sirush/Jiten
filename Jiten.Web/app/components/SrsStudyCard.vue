@@ -4,7 +4,7 @@
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
   import { displayKeyName } from '~/composables/useStudyKeyboard';
   import { resolveCardLayout } from '~/utils/cardLayout';
-  import { buildCardAudioPlan } from '~/utils/cardAudioPlan';
+  import { buildCardAudioPlan, resolveSentenceAudioSource } from '~/utils/cardAudioPlan';
   import { isTtsMuted } from '~/utils/ttsVolume';
   import { cardBlockRegistry } from '~/components/srs/card-blocks/cardBlockRegistry';
   import { exampleSentenceDefaults, resolveOptions } from '~/components/srs/card-blocks/cardBlockOptions';
@@ -417,18 +417,16 @@
     else tts.speakSentence(ex.sentenceId, ex.text);
   }
 
-  // The clip stands in for the sentence text-to-speech, so unblurring must not read the sentence aloud
-  // after the clip has already played on flip.
-  const customAudioCoversSentence = computed(
-    () => !!cardAudio.value?.url && srsStore.studySettings.autoPlayCustomAudio && srsStore.studySettings.customAudioReplacesSentence
-  );
-
-  function revealExample() {
+  function revealExample(side: 'front' | 'back' = props.isFlipped ? 'back' : 'front') {
     exampleRevealed.value = true;
     const example = cardExample.value;
-    if (srsStore.studySettings.autoPlaySentence && example?.sentenceId && !customAudioCoversSentence.value) {
-      playExample(example);
-    }
+    const source = resolveSentenceAudioSource(srsStore.studySettings, {
+      onFront: side === 'front',
+      hasClip: !!cardAudio.value?.url,
+      hasSentence: !!example?.sentenceId,
+      ttsMuted: isTtsMuted(jitenStore.ttsVolume),
+    });
+    if (source === 'tts') playExample(example!);
   }
 
   const backRef = ref<HTMLElement | null>(null);
