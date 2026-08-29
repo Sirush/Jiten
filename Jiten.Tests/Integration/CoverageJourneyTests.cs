@@ -732,6 +732,61 @@ public class CoverageJourneyTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task KnowledgeGrowth_CountsAWordWithOneBlacklistedForm()
+    {
+        await AddCard(1, 0, Now.AddDays(-100), mature: true);
+        await AddBlacklistedCard(1, 1, Now.AddDays(-90));
+
+        var growth = await ReadGrowth(await GetGrowth(TestUsers.UserA));
+
+        // Blacklisting one form must not disown the word its mature sibling keeps known.
+        growth.Points[^1].KnownWords.Should().Be(1);
+        growth.Points[^1].KnownWordsCombined.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task KnowledgeGrowth_ExcludesAWordWhoseFormsAreAllBlacklisted()
+    {
+        await AddCard(1, 0, Now.AddDays(-100), mature: true);
+        await AddBlacklistedCard(2, 0, Now.AddDays(-90));
+        await AddBlacklistedCard(2, 1, Now.AddDays(-90));
+
+        var growth = await ReadGrowth(await GetGrowth(TestUsers.UserA));
+
+        growth.Points[^1].KnownWords.Should().Be(1);
+        growth.Points[^1].KnownWordsCombined.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ProfileCountersAgree()
+    {
+        await AddCard(1, 0, Now.AddDays(-100), mature: true);
+        await AddCard(2, 0, Now.AddDays(-50), mature: false);
+        await AddCard(3, 0, Now.AddDays(-80), mature: true);
+        await AddBlacklistedCard(3, 1, Now.AddDays(-70));
+        await AddBlacklistedCard(4, 0, Now.AddDays(-60));
+        await AddCard(5, 0, Now.AddDays(-40), mature: false);
+        await ResetCardSchedule(5, 0, Now.AddDays(-10));
+        await AddBulkMasteredCards(6, 1, Now.AddDays(-30));
+        await AddWordSet(7, 0, Now.AddDays(-20));
+
+        var growth = await ReadGrowth(await GetGrowth(TestUsers.UserA));
+
+        var ownResponse = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "/api/user/vocabulary/known-ids/amount").WithUser(TestUsers.UserA));
+        ownResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var own = await ownResponse.Content.ReadFromJsonAsync<JsonElement>();
+
+        var headline = own.GetProperty("young").GetInt32() + own.GetProperty("mature").GetInt32() +
+                       own.GetProperty("mastered").GetInt32();
+        headline.Should().Be(4, "the mature, young and mixed-blacklist words plus the mastered one; " +
+                                "not the all-blacklisted word, the reset card or the word set");
+        own.GetProperty("blacklisted").GetInt32().Should().Be(1, "only the word with every form blacklisted");
+        // The invariant ProfileGrowthSummary.vue promises: both profile headlines are one number.
+        growth.Points[^1].KnownWordsCombined.Should().Be(headline);
+    }
+
+    [Fact]
     public async Task KnowledgeGrowth_TreatsALargeBulkMarkKnownAsAStartingPoint()
     {
         await AddCard(1, 0, Now.AddDays(-100), mature: true);
