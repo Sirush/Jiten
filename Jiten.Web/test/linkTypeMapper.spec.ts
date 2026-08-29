@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectLinkTypeFromUrl, getLinkLabel, getLinkTypeText } from '../app/utils/linkTypeMapper';
+import { detectLinkTypeFromUrl, getLinkLabel, getLinkTypeText, isVndbReleaseUrl } from '../app/utils/linkTypeMapper';
 import { LinkType } from '../app/types/enums';
 
 const vndb = (url: string) => getLinkLabel({ linkType: LinkType.Vndb, url });
@@ -37,6 +37,28 @@ describe('getLinkLabel', () => {
     ];
     const sorted = [...links].sort((a, b) => getLinkLabel(a).localeCompare(getLinkLabel(b)));
     expect(sorted.map(getLinkLabel)).toEqual(['VNDB', 'VNDB (release)']);
+  });
+});
+
+describe('isVndbReleaseUrl', () => {
+  it('matches release pages including sub-releases and odd casing', () => {
+    expect(isVndbReleaseUrl('https://vndb.org/r12345')).toBe(true);
+    expect(isVndbReleaseUrl('https://vndb.org/r12345/')).toBe(true);
+    expect(isVndbReleaseUrl('https://VNDB.ORG/r12345')).toBe(true);
+    expect(isVndbReleaseUrl('https://vndb.org/r12345.4')).toBe(true);
+  });
+
+  it('rejects visual novel pages', () => {
+    expect(isVndbReleaseUrl('https://vndb.org/v12345')).toBe(false);
+    expect(isVndbReleaseUrl('https://vndb.org/v12345/releases')).toBe(false);
+  });
+
+  it('rejects unusable input instead of throwing', () => {
+    expect(isVndbReleaseUrl('')).toBe(false);
+    expect(isVndbReleaseUrl('not a url')).toBe(false);
+    expect(isVndbReleaseUrl('/r12345')).toBe(false);
+    expect(isVndbReleaseUrl(null)).toBe(false);
+    expect(isVndbReleaseUrl(undefined)).toBe(false);
   });
 });
 

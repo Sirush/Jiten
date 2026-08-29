@@ -32,16 +32,22 @@ export function getLinkTypeText(linkType: LinkType): string {
 
 const vndbReleasePath = /^\/r\d+/;
 
+export function isVndbReleaseUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+
+  try {
+    return vndbReleasePath.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
 export function getLinkLabel(link: { linkType: LinkType | number; url?: string | null }): string {
   const text = getLinkTypeText(link.linkType as LinkType);
 
-  if (link.linkType !== LinkType.Vndb || !link.url) return text;
+  if (link.linkType !== LinkType.Vndb) return text;
 
-  try {
-    return vndbReleasePath.test(new URL(link.url).pathname) ? `${text} (release)` : text;
-  } catch {
-    return text;
-  }
+  return isVndbReleaseUrl(link.url) ? `${text} (release)` : text;
 }
 
 const hostedDomains: Array<{ domains: string[]; type: LinkType }> = [

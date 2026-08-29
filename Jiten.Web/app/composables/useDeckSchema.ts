@@ -3,6 +3,7 @@ import { type Deck, MediaType, LinkType } from '~/types';
 import { getMediaTypeSlug, getMediaTypeText } from '~/utils/mediaTypeMapper';
 import { getGenreText } from '~/utils/genreMapper';
 import { getDifficultyName } from '~/utils/difficultyColours';
+import { isVndbReleaseUrl } from '~/utils/linkTypeMapper';
 
 // Link types that are authoritative references about the work itself (good `sameAs` targets).
 // Excludes generic Web links and commercial Amazon listings.
@@ -17,6 +18,12 @@ const SAMEAS_LINK_TYPES = new Set<LinkType>([
   LinkType.Syosetsu,
   LinkType.Bookmeter,
 ]);
+
+export function buildSameAs(links: Deck['links'] | undefined): string[] {
+  return (links ?? [])
+    .filter((l) => SAMEAS_LINK_TYPES.has(l.linkType) && !(l.linkType === LinkType.Vndb && isVndbReleaseUrl(l.url)))
+    .map((l) => l.url);
+}
 
 function toDateOnly(value: Date | string | undefined): string | undefined {
   if (!value) return undefined;
@@ -48,7 +55,7 @@ export function useDeckSchema(deck: Ref<Deck | undefined>, pageUrl: Ref<string>,
       const name = d.originalTitle || '';
       const alternateName = [...new Set([d.englishTitle, d.romajiTitle, ...(d.aliases ?? [])].filter(Boolean) as string[])].filter((n) => n !== name);
 
-      const sameAs = (d.links ?? []).filter((l) => SAMEAS_LINK_TYPES.has(l.linkType)).map((l) => l.url);
+      const sameAs = buildSameAs(d.links);
 
       const image = d.coverName && d.coverName !== 'nocover.jpg' ? d.coverName : undefined;
 
