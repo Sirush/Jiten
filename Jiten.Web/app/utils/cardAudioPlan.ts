@@ -11,6 +11,7 @@ export interface CardAudioContext {
   isNewCard: boolean;
   frontHasSentence: boolean;
   sentenceBlurred: boolean;
+  ttsMuted: boolean;
 }
 
 export interface CardAudioPlan {
@@ -22,8 +23,9 @@ export interface CardAudioPlan {
 /** Orders the card's audio by slot, so a clip standing in for the sentence plays where the sentence would have. */
 export function buildCardAudioPlan(settings: StudySettingsDto, context: CardAudioContext): CardAudioPlan {
   const { onFront, forced } = context;
+  const ttsAudible = !context.ttsMuted;
 
-  let headword = forced || (onFront ? settings.autoPlayWordOnFront : settings.autoPlayWord);
+  let headword = ttsAudible && (forced || (onFront ? settings.autoPlayWordOnFront : settings.autoPlayWord));
   if (!forced && onFront && headword && settings.autoPlayWordOnFrontNewOnly && !context.isNewCard) headword = false;
 
   const position = settings.autoPlayCustomAudioPosition;
@@ -34,6 +36,7 @@ export function buildCardAudioPlan(settings: StudySettingsDto, context: CardAudi
   const replacesSentence = clip && settings.customAudioReplacesSentence;
 
   const sentence =
+    ttsAudible &&
     context.hasSentence &&
     (forced
       ? onFront

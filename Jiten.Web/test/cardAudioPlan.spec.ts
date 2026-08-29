@@ -27,6 +27,7 @@ function context(overrides: Partial<CardAudioContext> = {}): CardAudioContext {
     isNewCard: false,
     frontHasSentence: false,
     sentenceBlurred: false,
+    ttsMuted: false,
     ...overrides,
   };
 }
@@ -148,6 +149,41 @@ describe('buildCardAudioPlan', () => {
     it('skips the sentence on the back while it is blurred', () => {
       const plan = buildCardAudioPlan(settings({ customAudioReplacesHeadword: false, customAudioReplacesSentence: false }), context({ sentenceBlurred: true }));
       expect(plan.slots).toEqual(['headword', 'clip']);
+    });
+  });
+
+  describe('muted TTS', () => {
+    it('keeps only the clip when the clip replaces neither slot', () => {
+      const plan = buildCardAudioPlan(settings({ customAudioReplacesHeadword: false, customAudioReplacesSentence: false }), context({ ttsMuted: true }));
+      expect(plan.slots).toEqual(['clip']);
+      expect(plan.fallback).toEqual([]);
+    });
+
+    it('does not fall back to the headword the clip replaces', () => {
+      const plan = buildCardAudioPlan(settings({ customAudioReplacesSentence: false }), context({ ttsMuted: true }));
+      expect(plan.slots).toEqual(['clip']);
+      expect(plan.fallback).toEqual([]);
+    });
+
+    it('plans nothing when the card has no clip', () => {
+      const plan = buildCardAudioPlan(settings(), context({ ttsMuted: true, hasClip: false }));
+      expect(plan.slots).toEqual([]);
+      expect(plan.fallback).toEqual([]);
+    });
+
+    it('still drops the TTS slots on a manual replay', () => {
+      const plan = buildCardAudioPlan(
+        settings({ customAudioReplacesHeadword: false, customAudioReplacesSentence: false }),
+        context({ ttsMuted: true, forced: true })
+      );
+      expect(plan.slots).toEqual(['clip']);
+      expect(plan.fallback).toEqual([]);
+    });
+
+    it('leaves the plan untouched when the volume is up', () => {
+      const plan = buildCardAudioPlan(settings({ customAudioReplacesHeadword: false, customAudioReplacesSentence: false }), context({ ttsMuted: false }));
+      expect(plan.slots).toEqual(['headword', 'clip', 'sentence']);
+      expect(plan.fallback).toEqual([]);
     });
   });
 

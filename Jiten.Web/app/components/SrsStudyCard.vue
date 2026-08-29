@@ -5,6 +5,7 @@
   import { displayKeyName } from '~/composables/useStudyKeyboard';
   import { resolveCardLayout } from '~/utils/cardLayout';
   import { buildCardAudioPlan } from '~/utils/cardAudioPlan';
+  import { isTtsMuted } from '~/utils/ttsVolume';
   import { cardBlockRegistry } from '~/components/srs/card-blocks/cardBlockRegistry';
   import { exampleSentenceDefaults, resolveOptions } from '~/components/srs/card-blocks/cardBlockOptions';
   import { provideCardContext, type CardContext } from '~/components/srs/card-blocks/useCardContext';
@@ -30,6 +31,7 @@
   }>();
 
   const srsStore = useSrsStore();
+  const jitenStore = useJitenStore();
   const authStore = useAuthStore();
   const { $api } = useNuxtApp();
 
@@ -335,6 +337,7 @@
       isNewCard: props.card.isNewCard,
       frontHasSentence: frontHasSentence.value,
       sentenceBlurred: sentenceBlurred.value,
+      ttsMuted: isTtsMuted(jitenStore.ttsVolume),
     });
 
     const slots = [...plan.slots];
