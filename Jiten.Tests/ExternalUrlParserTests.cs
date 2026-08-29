@@ -22,6 +22,9 @@ public class ExternalUrlParserTests
     [Theory]
     [InlineData("https://vndb.org/r1234")]
     [InlineData("https://vndb.org/c1234")]
+    [InlineData("https://vndb.org/p123")]
+    [InlineData("https://vndb.org/s123")]
+    [InlineData("https://vndb.org/v")]
     [InlineData("https://vndb.org")]
     public void Vndb_NonVisualNovelPaths_ReturnFalse(string url)
     {

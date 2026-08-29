@@ -15,6 +15,26 @@ public readonly record struct ExternalUrlRef(LinkType LinkType, string Id, Exter
 
 public static class ExternalUrlParser
 {
+    /// <summary>
+    /// Picks the first link of a type that a by-id fetcher can actually use. A deck may hold several links of one
+    /// type pointing at different catalogue pages (a VNDB release alongside its visual novel), and the order they
+    /// materialise in is undefined, so the parse decides which one is usable rather than the position.
+    /// </summary>
+    public static bool TryParseFirst(IEnumerable<Link> links, LinkType linkType, out ExternalUrlRef result)
+    {
+        foreach (var link in links)
+        {
+            if (link.LinkType != linkType)
+                continue;
+
+            if (TryParse(link.Url, out result) && result.LinkType == linkType)
+                return true;
+        }
+
+        result = default;
+        return false;
+    }
+
     public static bool TryParse(string? input, out ExternalUrlRef result)
     {
         result = default;
