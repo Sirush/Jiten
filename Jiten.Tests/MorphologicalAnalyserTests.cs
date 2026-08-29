@@ -2104,6 +2104,18 @@ public class MorphologicalAnalyserTests
         yield return ["出ベソに", new[] { "出ベソ", "に" }];
         yield return ["お父上", new[] { "お", "父上" }];
         yield return ["父上様", new[] { "父上", "様" }];
+        // An honorific prefix must not eat the head of the compound under it (お母 and 母上 are both
+        // attested; 上 belongs to the longer one), and the kinship recut is not 父-only.
+        yield return ["お母上", new[] { "お", "母上" }];
+        yield return ["お姉上", new[] { "お", "姉上" }];
+        yield return ["母上様", new[] { "母上", "様" }];
+        yield return ["姉上様", new[] { "姉上", "様" }];
+        // …while a three-token span that IS a word keeps the prefix merge.
+        yield return ["お子様", new[] { "お子様" }];
+        // からって is one Sudachi token; it only splits when the span it ends is an expression entry.
+        yield return ["病は気からってね", new[] { "病は気から", "って", "ね" }];
+        yield return ["疲れているからって", new[] { "疲れている", "からって" }];
+        yield return ["ドキっとしたからって", new[] { "ドキっと", "した", "からって" }];
         // A te-stem whose surface+て deconjugates to its own dictionary form is a genuine
         // te-form, never quotative-って theft (わか = 和歌 must not steal the stem), and an OOV
         // compound verb whose deconjugated base is attested is not "unresolvable".
@@ -2117,6 +2129,11 @@ public class MorphologicalAnalyserTests
         yield return ["高ッ、この店", new[] { "高っ", "この", "店" }];
         yield return ["このお姉さんだあれ？", new[] { "この", "お姉さん", "だあれ" }];
         yield return ["お名前なんですか？", new[] { "お名前", "なん", "ですか" }];
+        // The question tail, not a list of hosts, decides: a bare noun keeps 何, a na-adjective or
+        // a genitive-の host gets the explanatory なんです.
+        yield return ["趣味なんですか？", new[] { "趣味", "なん", "ですか" }];
+        yield return ["理由なんですか？", new[] { "理由", "なん", "ですか" }];
+        yield return ["好きなんですか？", new[] { "好き", "なんです", "か" }];
         yield return ["意味がわかって言葉を失った", new[] { "意味", "が", "わかって", "言葉を失った" }];
         yield return ["助けてもらって感謝している", new[] { "助けてもらって", "感謝している" }];
         yield return ["「この男を知っているか？」", new[] { "この", "男", "を", "知っている", "か" }];

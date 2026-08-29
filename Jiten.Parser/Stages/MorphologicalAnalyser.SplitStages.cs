@@ -165,7 +165,7 @@ public partial class MorphologicalAnalyser
                 bool baseAttested = false;
                 foreach (var form in PipelineCachedDeconjugate(KanaConverter.ToHiragana(word.Text)))
                 {
-                    if (form.Text.Length >= 2 && form.Text != word.Text && HasCompoundLookup(form.Text))
+                    if (form.Text.Length >= 2 && form.Text != word.Text && HasNonNameCompoundLookup(form.Text))
                     {
                         baseAttested = true;
                         break;
@@ -207,7 +207,7 @@ public partial class MorphologicalAnalyser
                     if (HasNonNameCompoundLookup(godan))
                     {
                         split = (godan, p, true);
-                        continue;
+                        break;
                     }
                 }
 
@@ -1304,5 +1304,65 @@ public partial class MorphologicalAnalyser
         }
 
         return changed ? result : wordInfos;
+    }
+
+    /// <summary>
+    /// Sudachi's からって ("just because") is a single lexical token, which hides the boundary when
+    /// から is instead the tail of a lexicalised expression (病は気から|って). The span must be an
+    /// expression entry, not merely attested: a kana span reaches homograph nouns through its
+    /// reading key (た+から = 宝), and a clause-final から (疲れているからって) is no entry at all, so
+    /// the contraction survives wherever it is the real reading.
+    /// </summary>
+    private List<WordInfo> SplitLexicalisedKaratte(List<WordInfo> wordInfos)
+    {
+        if (HasExpressionLookup == null)
+            return wordInfos;
+
+        List<WordInfo>? result = null;
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var word = wordInfos[i];
+            if (word.Text != "からって" || word.PreMatchedWordId != null || i == 0)
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            // Widest first: the longest attested span is the one から belongs to. Three tokens is
+            // the reach of the expressions this applies to (病+は+気).
+            bool lexicalised = false;
+            for (int span = Math.Min(3, i); span >= 1 && !lexicalised; span--)
+            {
+                var left = span switch
+                {
+                    1 => wordInfos[i - 1].Text,
+                    2 => wordInfos[i - 2].Text + wordInfos[i - 1].Text,
+                    _ => string.Concat(wordInfos[i - 3].Text, wordInfos[i - 2].Text, wordInfos[i - 1].Text),
+                };
+                lexicalised = left.Length > 0 && HasExpressionLookup(left + "から");
+            }
+
+            if (!lexicalised)
+            {
+                result?.Add(word);
+                continue;
+            }
+
+            result ??= [..wordInfos[..i]];
+            int splitOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1;
+            result.Add(new WordInfo(word)
+            {
+                Text = "から", DictionaryForm = "から", NormalizedForm = "から",
+                PartOfSpeech = PartOfSpeech.Particle, Reading = "カラ", EndOffset = splitOffset
+            });
+            result.Add(new WordInfo(word)
+            {
+                Text = "って", DictionaryForm = "って", NormalizedForm = "って",
+                PartOfSpeech = PartOfSpeech.Particle, Reading = "ッテ", StartOffset = splitOffset
+            });
+        }
+
+        return result ?? wordInfos;
     }
 }

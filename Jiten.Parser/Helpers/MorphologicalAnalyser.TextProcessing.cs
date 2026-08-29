@@ -332,10 +332,7 @@ public partial class MorphologicalAnalyser
             .Replace("たいって", $"たい{_stopToken}って")
             // Dictionary-form verb + っていう (あるっていうなら): Sudachi fuses るっていう into a blob
             // that drops; る never ends a word before っていう otherwise.
-            .Replace("るっていう", $"る{_stopToken}っていう")
-            // 病は気から + quotative って: Sudachi's fused からって ("just because") consumes the
-            // proverb's tail; the boundary restores から + って after the topic-marked 気.
-            .Replace("は気からって", $"は気から{_stopToken}って");
+            .Replace("るっていう", $"る{_stopToken}っていう");
         text = TooriQuotativeRegex().Replace(text, _stopToken);
         text = VowelTailKatakanaBoundaryRegex().Replace(text, _stopToken);
         text = MoshiKatakanaBoundaryRegex().Replace(text, $"もし{_stopToken}");

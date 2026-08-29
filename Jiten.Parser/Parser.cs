@@ -761,7 +761,7 @@ namespace Jiten.Parser
 
             var (cleanText, furiganaHints) = FuriganaHintExtractor.Extract(text);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasCounterSenseLookup = HasCounterSenseAvailable };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasExpressionLookup = HasExpressionLookup, HasCounterSenseLookup = HasCounterSenseAvailable };
             var (sentences, cleanedOriginal) = await parser.ParseWithCleanedOriginal(cleanText, preserveStopToken: preserveStopToken, diagnostics: diagnostics);
 
             // ComputeTokenOffsets strips \r\n — relocate against the same coordinate space
@@ -894,7 +894,7 @@ namespace Jiten.Parser
             timer.Start();
 
             // Batch morphological analysis
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasCounterSenseLookup = HasCounterSenseAvailable };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasExpressionLookup = HasExpressionLookup, HasCounterSenseLookup = HasCounterSenseAvailable };
             var cleanedOriginals = new List<string>();
             var rawCharCounts = new List<int>();
             var batchedSentences = await parser.ParseBatch(cleanTexts, diagnostics: diagnostics, timings: timings, userDictCsv: userDictCsv, cleanedOriginals: cleanedOriginals, rawContentCharCounts: rawCharCounts);
@@ -1077,7 +1077,7 @@ namespace Jiten.Parser
         {
             await EnsureInitializedAsync(contextFactory);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasCounterSenseLookup = HasCounterSenseAvailable };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasExpressionLookup = HasExpressionLookup, HasCounterSenseLookup = HasCounterSenseAvailable };
             var sentences = await parser.Parse(text, morphemesOnly: true, diagnostics: diagnostics);
             var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
 
@@ -1410,7 +1410,7 @@ namespace Jiten.Parser
                             else if (wordData.wordInfo.PartOfSpeech is PartOfSpeech.Pronoun or PartOfSpeech.Conjunction
                                      or PartOfSpeech.Interjection or PartOfSpeech.Particle or PartOfSpeech.Adverb
                                      or PartOfSpeech.NaAdjective or PartOfSpeech.Suffix or PartOfSpeech.NounSuffix
-                                     or PartOfSpeech.PrenounAdjectival)
+                                     or PartOfSpeech.PrenounAdjectival or PartOfSpeech.Prefix)
                             {
                                 processedWord = nounResult.word;
                                 resolvedMargin = nounResult.margin;
@@ -3682,19 +3682,54 @@ namespace Jiten.Parser
             WordMeta.TryGetValue(id, out var meta) && meta.GetPriorityScore(true) > 0;
 
         // Fully-archaic entries with no frequency marker sit at ≈ −350 in WordMeta; nothing else
-        // scores below the name floor (−50). A compound whose entire entry set is that archaic is
-        // weaker evidence than the compositional parse it would replace (した+もの must not fuse
-        // into the archaic 下物).
+        // scores below the name floor (−50, ±10 for the uk delta). A compound whose entire entry
+        // set is that archaic is weaker evidence than the compositional parse it would replace
+        // (した+もの must not fuse into the archaic 下物).
         private const int ArchaicOnlyPriorityFloor = -100;
 
         // The same id must clear both bars: a span whose non-name entries are all archaic (or
         // whose non-archaic entries are all names) rests on two different unusable entries.
-        private static bool HasUsableCompoundEntry(List<int> ids, bool isKana)
+        // Script-blind on purpose: the kana and kanji scores differ only by the 10-point uk delta,
+        // so they land on the same side of the floor for every entry.
+        private static bool HasUsableCompoundEntry(List<int> ids)
         {
             foreach (var id in ids)
                 if (!_nameOnlyWordIds.Contains(id)
-                    && WordMeta.TryGetValue(id, out var meta) && meta.GetPriorityScore(isKana) > ArchaicOnlyPriorityFloor)
+                    && WordMeta.TryGetValue(id, out var meta) && meta.GetPriorityScore(false) > ArchaicOnlyPriorityFloor)
                     return true;
+            return false;
+        }
+
+        private static bool PrefixBreaksFollowingCompound(WordInfo prefix, WordInfo head, WordInfo following)
+        {
+            if (!PosMapper.IsNounForCompounding(following.PartOfSpeech) || following.Text.Length == 0)
+                return false;
+
+            return TryLookupUsableCompound(head.Text + following.Text, out _)
+                   && !_lookups.ContainsKey(prefix.Text + head.Text + following.Text);
+        }
+
+        // The surface's own lookup key, else its hiragana key, whichever holds a usable (non-name,
+        // non-archaic) compound entry. Reports the key that matched so callers can carry it as the
+        // dictionary form — a uk compound only resolves under its hiragana spelling.
+        private static bool TryLookupUsableCompound(string text, out string matchedKey)
+        {
+            if (_lookups.TryGetValue(text, out var ids) && ids.Count > 0
+                && HasUsableCompoundEntry(ids))
+            {
+                matchedKey = text;
+                return true;
+            }
+
+            var hiragana = KanaConverter.ToHiragana(text, convertLongVowelMark: false);
+            if (hiragana != text && _lookups.TryGetValue(hiragana, out ids) && ids.Count > 0
+                && HasUsableCompoundEntry(ids))
+            {
+                matchedKey = hiragana;
+                return true;
+            }
+
+            matchedKey = text;
             return false;
         }
 
@@ -3782,6 +3817,15 @@ namespace Jiten.Parser
             foreach (var id in ids)
                 if (WordMeta.TryGetValue(id, out var meta)
                     && meta.Pos.Any(p => p is PartOfSpeech.Verb or PartOfSpeech.IAdjective))
+                    return true;
+            return false;
+        }
+
+        private static bool HasExpressionLookup(string text)
+        {
+            if (!_lookups.TryGetValue(text, out var ids)) return false;
+            foreach (var id in ids)
+                if (WordMeta.TryGetValue(id, out var meta) && meta.Pos.Contains(PartOfSpeech.Expression))
                     return true;
             return false;
         }
@@ -4059,30 +4103,37 @@ namespace Jiten.Parser
                         // Verb: Sudachi splits compounds like 飛び道具 into 飛び (動詞) + 道具 (名詞).
                         // Adverb: a kanji lead that doubles as an adverb keeps its adverb tag inside a
                         // nominal compound (一向 → 一向一揆) — the JMDict lookup gates it, so only real
-                        // compounds reform. Kana adverbs are excluded: そう/どう + a kana noun can collide
-                        // with an unrelated kanji compound through its reading key (そう+なん = 遭難).
+                        // compounds reform. Hiragana adverbs are excluded: そう/どう + a kana noun can
+                        // collide with an unrelated kanji compound through its reading key (そう+なん =
+                        // 遭難). A katakana lead (ワン公, the bark tagged 副詞) is safe for the same
+                        // reason kanji is — the mixed-script surface is matched directly, never folded
+                        // onto a hiragana reading key that another word could own.
                         // Lone kanji: Sudachi splits a kanji compound whose lead it mis-tags as a non-noun
                         // (偶然 → 偶 タマ 副詞 | 然), often when a particle like って follows. A single mis-tagged
                         // kanji + a noun-like token recompounds the same way — the JMDict lookup gates it, so only
                         // real compounds reform.
                         bool misparsedKanjiLead = word.Text.Length == 1 && JapaneseTextHelper.IsKanji(word.Text[0]);
                         bool kanjiAdverbLead = word.PartOfSpeech == PartOfSpeech.Adverb &&
-                                               word.Text.Any(JapaneseTextHelper.IsKanji);
+                                               word.Text.Any(c => JapaneseTextHelper.IsKanji(c) || JapaneseTextHelper.IsKatakana(c));
                         if ((word.PartOfSpeech is PartOfSpeech.IAdjective or PartOfSpeech.Verb || kanjiAdverbLead || misparsedKanjiLead) &&
                             i + 1 < sentence.Words.Count &&
                             PosMapper.IsNounForCompounding(sentence.Words[i + 1].word.PartOfSpeech) &&
                             !word.HardPinned && !sentence.Words[i + 1].word.HardPinned)
                         {
                             var combinedText = word.Text + sentence.Words[i + 1].word.Text;
-                            if (_lookups.TryGetValue(combinedText, out var adjSuffixIds) && adjSuffixIds.Count > 0 &&
-                                HasUsableCompoundEntry(adjSuffixIds, WanaKana.IsKana(combinedText)))
+                            // Same kana fallback the multi-token window below uses: a uk compound is
+                            // keyed on its hiragana spelling (出べそ), so a katakana-spelled surface
+                            // (出ベソ) has no key of its own. The normalised form carries the key that
+                            // matched; the surface stays the dictionary form so form selection still
+                            // scores the spelling that actually occurred.
+                            if (TryLookupUsableCompound(combinedText, out var matchedKey))
                             {
                                 var combinedReading = word.Reading + sentence.Words[i + 1].word.Reading;
                                 int combinedLength = length + sentence.Words[i + 1].length;
                                 var combinedWord = new WordInfo(word)
                                                    {
                                                        Text = combinedText, DictionaryForm = combinedText, PartOfSpeech = PartOfSpeech.Noun,
-                                                       NormalizedForm = combinedText, Reading = KanaConverter.ToHiragana(combinedReading,
+                                                       NormalizedForm = matchedKey, Reading = KanaConverter.ToHiragana(combinedReading,
                                                            convertLongVowelMark: false),
                                                        PreMatchedWordId = null
                                                    };
@@ -4092,6 +4143,18 @@ namespace Jiten.Parser
                             }
                         }
 
+                        result.Add(sentence.Words[i]);
+                        i++;
+                        continue;
+                    }
+
+                    // An honorific prefix is the outermost layer, so it must not consume the head of
+                    // the compound underneath it: お|母|上 has お母 and 母上 both attested and the
+                    // window picks the leftmost, stranding 上. Gated on the three-token span not
+                    // being a word itself, so お+手+紙 → お手紙 still wins.
+                    if (word.PartOfSpeech == PartOfSpeech.Prefix && i + 2 < sentence.Words.Count
+                        && PrefixBreaksFollowingCompound(word, sentence.Words[i + 1].word, sentence.Words[i + 2].word))
+                    {
                         result.Add(sentence.Words[i]);
                         i++;
                         continue;
@@ -4107,8 +4170,12 @@ namespace Jiten.Parser
                         for (int j = 0; j < windowSize; j++)
                         {
                             var w = sentence.Words[i + j].word;
-                            // Counters (一本, 三年生, 数人) can continue a compound but not start one.
-                            bool isNoun = PosMapper.IsNounForCompounding(w.PartOfSpeech) ||
+                            // Counters (一本, 三年生, 数人) can continue a compound but not start one;
+                            // a prefix is the mirror case and can only start one. Without that, an
+                            // interrogative retagged Prefix (なん) gets absorbed by the token to its
+                            // left through the kana key — せい+なん → 西南, さん+なん → 三男.
+                            bool isNoun = (PosMapper.IsNounForCompounding(w.PartOfSpeech)
+                                           && (j == 0 || w.PartOfSpeech != PartOfSpeech.Prefix)) ||
                                           (j > 0 && w.PartOfSpeech == PartOfSpeech.Counter);
                             bool isInnerConnector = j > 0 && j < windowSize - 1 &&
                                                     (w is { PartOfSpeech: PartOfSpeech.Particle, Text: "の" } ||
@@ -4145,7 +4212,7 @@ namespace Jiten.Parser
                         // of the constituent tokens are name-like, and require a usable entry
                         // (non-name, non-archaic) so a fully-archaic compound cannot absorb the span.
                         if (_lookups.TryGetValue(combinedText, out var wordIds) && wordIds.Count > 0 &&
-                            (hasNameLikeToken || HasUsableCompoundEntry(wordIds, WanaKana.IsKana(combinedText))))
+                            (hasNameLikeToken || HasUsableCompoundEntry(wordIds)))
                         {
                             bestMatch = windowSize;
                             matchedNounText = combinedText;
@@ -4157,7 +4224,7 @@ namespace Jiten.Parser
                                                                     convertLongVowelMark: false);
                         if (hiraganaText != combinedText &&
                             _lookups.TryGetValue(hiraganaText, out wordIds) && wordIds.Count > 0 &&
-                            (hasNameLikeToken || HasUsableCompoundEntry(wordIds, isKana: true)))
+                            (hasNameLikeToken || HasUsableCompoundEntry(wordIds)))
                         {
                             bestMatch = windowSize;
                             matchedNounText = combinedText;

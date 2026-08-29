@@ -1792,6 +1792,11 @@ public class FormSelectionTests
         yield return ["出ベソに", "出ベソ", 1340770, (byte)0];
         yield return ["お父上", "父上", 1497670, (byte)0];
         yield return ["父上様", "様", 1545790, (byte)0];
+        yield return ["お母上", "母上", 1515110, (byte)0];
+        yield return ["母上様", "母上", 1515110, (byte)0];
+        yield return ["お姉上", "姉上", 1307670, (byte)0];
+        // 病は気から is an expression entry, so the からって token splits and the proverb forms
+        yield return ["病は気からってね", "病は気から", 2152850, (byte)0];
         yield return ["正体がわかって", "わかって", 1606560, (byte)4];
         yield return ["絵本手に取ってね", "手に取って", 1895840, (byte)0];
         // 打ち下ろし in prose is the deverbal 打ち下ろす, not the golf downhill-hole noun
@@ -1836,6 +1841,15 @@ public class FormSelectionTests
         yield return ["このお姉さんだあれ？", "だあれ", 1416830, (byte)2];
         // Noun + なんですか interrogative: 名前 hosts keep 何 (carved out of the なんです merge)
         yield return ["お名前なんですか？", "なん", 2846738, (byte)1];
+        // A question tail makes both readings available, so the merge needs positive evidence for
+        // the explanatory sense: a bare noun host has none and keeps 何 (no per-noun carve-out).
+        yield return ["趣味なんですか？", "なん", 2846738, (byte)1];
+        yield return ["理由なんですか？", "なん", 2846738, (byte)1];
+        // A na-adjective host supplies it (好き何ですか is not a reading), as does a genitive の.
+        yield return ["好きなんですか？", "なんです", 2683060, (byte)0];
+        yield return ["「俺のせいなんですかっ！？」", "なんです", 2683060, (byte)0];
+        // なん retagged Prefix must not be absorbed leftward through the kana key (せい+なん = 西南)
+        yield return ["「俺のせいなんですかっ！？」", "俺", 1576870, (byte)0];
         // quote-verb bypass is POS-gated: a noun starting with 言 doesn't reopen the theft
         yield return ["意味がわかって言葉を失った", "わかって", 1606560, (byte)4];
         yield return ["寒っ", "寒っ", 1210360, (byte)0];
@@ -1966,6 +1980,12 @@ public class FormSelectionTests
         yield return ["うちに初めて来た白乃は、当時の私の腰ほどの背丈だった。", "来た", 1547720, (byte)0];
         yield return ["「あ、カナ子来た」", "来た", 1547720, (byte)0];
         yield return ["と数メートル手前から手を振ってあいさつすると、「やーっときた」", "きた", 1547720, (byte)2];
+
+        // ご split off a ご+noun compound by resegmentation is the honorific prefix 御 (1270190),
+        // never the numeral 五 (1268060): a prefix-tagged token must not be re-resolved as a verb stem
+        yield return ["…ご都合のつく日ですか？", "ご", 1270190, (byte)1];
+        yield return ["『男性のみのご利用は、ご遠慮させていただいております』", "ご", 1270190, (byte)1];
+        yield return ["といってもあなた様ならすでにご承知なのでしょうけど。", "ご", 1270190, (byte)1];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

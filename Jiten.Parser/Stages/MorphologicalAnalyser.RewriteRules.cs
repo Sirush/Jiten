@@ -287,13 +287,13 @@ public partial class MorphologicalAnalyser
                 Reading: "ッコナイ", Pin: 2145640, PinReadingIndex: 0)],
             Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Verb])),
 
-        // Explanatory なんです (contracted な+の+です, 2683060) after nominal content. Left alone,
-        // the compound matcher absorbs なん leftward through a kana reading (居酒屋さん+なん → 三男,
-        // 俺のせい+なん → 西南). Matched on the pre-fusion shape な|ん|です, before the resegmenter
-        // fuses the tail into ですか/ですから — one rule then covers every tail instead of one per
-        // fused shape. The noun-ish Prev gate keeps interrogatives intact: これ/それ/何 are Pronoun
-        // POS and stay out, so これはなんですか still reads 何+ですか. 名前 hosts are carved out too —
-        // (お)名前なんですか is the "what is your name?" interrogative, where なん is 何.
+        // Explanatory なんです (contracted な+の+です, 2683060) after nominal content. Matched on the
+        // pre-fusion shape な|ん|です, before the resegmenter fuses the tail into ですか/ですから — one
+        // rule then covers every tail instead of one per fused shape. The noun-ish Prev gate keeps
+        // interrogatives intact: これ/それ/何 are Pronoun POS and stay out, so これはなんですか still
+        // reads 何+ですか.
+        // The tail decides the rest. 何ですね/何ですから/何ですけど are not readings, so with anything
+        // but a question tail the explanatory sense is the only one and the merge is unconditional.
         new RewriteRule("nandesu", RewritePhase.Early,
             [new TokenPattern(Text: "な"),
              new TokenPattern(Text: "ん"),
@@ -302,15 +302,33 @@ public partial class MorphologicalAnalyser
                 Reading: "ナンデス", Pin: 2683060, PinReadingIndex: 0)],
             Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun, PartOfSpeech.Suffix,
                 PartOfSpeech.Name, PartOfSpeech.NaAdjective]),
-            Window: new WindowCond(-1, -1, TextAnyOf: ["名前", "お名前"], Negate: true)),
+            Next: new ContextCond(TextAnyOf: ["か", "？"], Negate: true)),
 
-        // ワン公 ("doggy") is its own entry, but noun anchors only open expression windows, so the
-        // katakana bark + 公 never re-fuse at lookup (ワン "woof" + 公 "official").
-        new RewriteRule("wankou", RewritePhase.Late,
-            [new TokenPattern(Text: "ワン"),
-             new TokenPattern(Text: "公")],
-            [new TokenTemplate("ワン公", DictForm: "ワン公", NormalizedForm: "ワン公", Pos: PartOfSpeech.Noun,
-                Reading: "ワンコウ", Pin: 2582030, PinReadingIndex: 0)]),
+        // …and under a question tail both readings compete (趣味なんですか is "what is your hobby?",
+        // お名前なんですか likewise), so the merge needs positive evidence for the explanatory sense.
+        // A na-adjective host supplies it: 好き何ですか is not a reading, the な can only be the
+        // copula. A bare noun host does not, and stays 何.
+        new RewriteRule("nandesu-ka-naadj", RewritePhase.Early,
+            [new TokenPattern(Text: "な"),
+             new TokenPattern(Text: "ん"),
+             new TokenPattern(Text: "です")],
+            [new TokenTemplate("なんです", DictForm: "なんです", NormalizedForm: "なんです", Pos: PartOfSpeech.Expression,
+                Reading: "ナンデス", Pin: 2683060, PinReadingIndex: 0)],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.NaAdjective]),
+            Next: new ContextCond(TextAnyOf: ["か", "？"])),
+
+        // A genitive の before the host is the other positive signal: 俺の+せい is a possessed
+        // nominal predicate ("it's MY fault?!"), and 何 cannot question one without its own は.
+        new RewriteRule("nandesu-ka-no", RewritePhase.Early,
+            [new TokenPattern(Text: "な"),
+             new TokenPattern(Text: "ん"),
+             new TokenPattern(Text: "です")],
+            [new TokenTemplate("なんです", DictForm: "なんです", NormalizedForm: "なんです", Pos: PartOfSpeech.Expression,
+                Reading: "ナンデス", Pin: 2683060, PinReadingIndex: 0)],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun, PartOfSpeech.Suffix,
+                PartOfSpeech.Name]),
+            Next: new ContextCond(TextAnyOf: ["か", "？"]),
+            Window: new WindowCond(-2, -2, TextAnyOf: ["の"])),
 
         // 見るも無残 is its own expression. The na-adjective anchor added to the lookup window can
         // now reach it, but only after the analyser has run — these rows settle the span earlier,
@@ -356,26 +374,17 @@ public partial class MorphologicalAnalyser
              new TokenTemplate("だい", DictForm: "だい", NormalizedForm: "だい", Pos: PartOfSpeech.Particle,
                 Reading: "ダイ", Pin: 2097680, PinReadingIndex: 0)]),
 
-        // 出ベソ: the mixed-script uk compound is in the lookups, but noun anchors only open
-        // expression windows, so 出[Verb]+ベソ never re-fuses at lookup time.
-        new RewriteRule("debeso", RewritePhase.Late,
-            [new TokenPattern(Text: "出", Pos: [PartOfSpeech.Verb]),
-             new TokenPattern(Text: "ベソ")],
-            [new TokenTemplate("出ベソ", DictForm: "出べそ", NormalizedForm: "出べそ", Pos: PartOfSpeech.Noun,
-                Reading: "デベソ", Pin: 1340770, PinReadingIndex: 0)]),
-
-        // Kinship + 上 honorific compounds: 父上 is its own entry, but Sudachi cuts お|父|上 (the
-        // prefix combine then builds お父+上) or 父|上様. Re-cut around the 父上 unit.
-        new RewriteRule("chichiue", RewritePhase.Early,
-            [new TokenPattern(Text: "父", Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun]),
-             new TokenPattern(Text: "上", Pos: [PartOfSpeech.Suffix])],
-            [new TokenTemplate("父上", DictForm: "父上", NormalizedForm: "父上", Pos: PartOfSpeech.Noun,
-                Reading: "チチウエ", Pin: 1497670, PinReadingIndex: 0)]),
-        new RewriteRule("chichiue-sama", RewritePhase.Early,
-            [new TokenPattern(Text: "父", Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun]),
+        // Sudachi's lexicon prefers 上様 (ウエサマ) over the 上 that the preceding kinship noun
+        // actually compounds with, so 母|上様 can never yield 母上. Re-cut so the honorific compound
+        // forms and 様 stays its own suffix. The host list is closed on purpose: "noun whose token
+        // splits into two attested halves" fires on ordinary compounds too (滑走|路上, 事実|上達),
+        // and nothing in the lexicon separates a bound honorific from those.
+        new RewriteRule("kinship-uesama", RewritePhase.Early,
+            [new TokenPattern(TextAnyOf: ["父", "母", "兄", "姉", "祖父", "祖母", "義父", "義母"],
+                Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun]),
              new TokenPattern(Text: "上様")],
-            [new TokenTemplate("父上", DictForm: "父上", NormalizedForm: "父上", Pos: PartOfSpeech.Noun,
-                Reading: "チチウエ", Pin: 1497670, PinReadingIndex: 0),
+            [new TokenTemplate("", Pos: PartOfSpeech.Noun),
+             new TokenTemplate("上", DictForm: "上", NormalizedForm: "上", Pos: PartOfSpeech.Suffix, Reading: "ウエ"),
              new TokenTemplate("様", DictForm: "様", NormalizedForm: "様", Pos: PartOfSpeech.Suffix,
                 Reading: "サマ", Pin: 1545790, PinReadingIndex: 0)]),
 

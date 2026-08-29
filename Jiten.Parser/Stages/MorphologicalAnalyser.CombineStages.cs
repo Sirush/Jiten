@@ -411,6 +411,25 @@ public partial class MorphologicalAnalyser
     private static bool IsKanjiPrefix(string text) =>
         text.Length > 0 && JapaneseTextHelper.IsKanji(text[0]);
 
+    // The prefix combine runs long before noun compounding, so an honorific that is merely the
+    // outermost layer can consume the head of the compound underneath it (お|母|上 → お母, stranding
+    // 上). The head belongs to the longer attested compound; the prefix then stands alone, which is
+    // the correct reading (お + 母上). Only diverts when the three-token whole is NOT itself a word,
+    // so お+手+紙 → お手紙 is untouched.
+    private bool CompletesCompoundWithFollowing(List<WordInfo> wordInfos, int prefixIndex)
+    {
+        if (HasNonNameCompoundLookup == null || prefixIndex + 2 >= wordInfos.Count)
+            return false;
+
+        var head = wordInfos[prefixIndex + 1];
+        var following = wordInfos[prefixIndex + 2];
+        if (!PosMapper.IsNounForCompounding(following.PartOfSpeech) || following.Text.Length == 0)
+            return false;
+
+        return HasNonNameCompoundLookup(head.Text + following.Text)
+               && !HasCompoundLookup!(wordInfos[prefixIndex].Text + head.Text + following.Text);
+    }
+
     private List<WordInfo> CombinePrefixes(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2 || HasCompoundLookup == null)
@@ -445,7 +464,8 @@ public partial class MorphologicalAnalyser
                     var combinedText = currentWord.Text + nextWord.Text;
 
                     if (!PrefixCombineExclusions.Contains(combinedText) &&
-                        HasCompoundLookup(combinedText))
+                        HasCompoundLookup(combinedText) &&
+                        !CompletesCompoundWithFollowing(wordInfos, i))
                     {
                         var prefixStart = currentWord.StartOffset;
                         currentWord = new WordInfo(nextWord);

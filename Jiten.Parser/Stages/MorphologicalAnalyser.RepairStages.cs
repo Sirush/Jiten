@@ -5080,7 +5080,7 @@ public partial class MorphologicalAnalyser
     // lands on it. Kana stems stay out (や|ば never forms a stem to work from).
     private List<WordInfo> RepairClippedAdjective(List<WordInfo> wordInfos)
     {
-        if (wordInfos.Count < 2 || HasNonNameCompoundLookup == null)
+        if (wordInfos.Count < 2 || HasNonNameCompoundLookup == null || HasVerbOrAdjectiveLookup == null)
             return wordInfos;
 
         List<WordInfo>? result = null;
@@ -5109,7 +5109,7 @@ public partial class MorphologicalAnalyser
                 || !JapaneseTextHelper.IsKanji(current.Text[^1])
                 // POS-aware: the +い form must be a verb/adjective entry, not any word — keeps
                 // noun collisions (兄い vocative) from converting a clause-initial noun + っ.
-                || HasVerbOrAdjectiveLookup?.Invoke(current.Text + "い") != true
+                || !HasVerbOrAdjectiveLookup(current.Text + "い")
                 // A vocative っ after a noun whose halves form an attested compound is not a
                 // clipped adjective (隊長っ: 隊+長 must re-fuse to 隊長, not become 長い).
                 || (i > 0 && HasNonNameCompoundLookup(wordInfos[i - 1].Text + current.Text)))

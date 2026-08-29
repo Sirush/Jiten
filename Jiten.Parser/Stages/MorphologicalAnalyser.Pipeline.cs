@@ -32,6 +32,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Split, SplitUnattestedToAdverbs, TokenFeatures.AdverbEndsTo),
         Stage(TokenStageGroup.Split, SplitTanSuffix, TokenFeatures.TextTanSuffix),
         Stage(TokenStageGroup.Split, SplitTawakeNoun, TokenFeatures.TextTawake),
+        Stage(TokenStageGroup.Split, SplitLexicalisedKaratte, TokenFeatures.TextKaratte),
         Stage(TokenStageGroup.Split, SplitDoushiteContraction),
         Stage(TokenStageGroup.Split, SplitEmphaticMoSuru),
 
