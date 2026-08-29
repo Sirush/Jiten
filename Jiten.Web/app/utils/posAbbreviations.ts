@@ -129,3 +129,70 @@ export function posColorClass(abbr: string): string {
   if (abbr === 'prt' || abbr === 'conj' || abbr === 'cop') return posTypeColors.prt;
   return posTypeColors.misc;
 }
+
+// JMdict <misc> entity codes. The API ships these raw (unlike pos/field/dial, which it expands
+// server-side), so the badge shows the code and this table supplies the tooltip. Wording is
+// shortened from JMdict's own phrasing where the full text reads badly in a badge tooltip.
+const miscLabelMap: Record<string, string> = {
+  uk: 'usu. kana',
+  abbr: 'abbreviation',
+  'on-mim': 'onomatopoeia',
+  yoji: 'yojijukugo',
+  joc: 'jocular',
+  'net-sl': 'net slang',
+  'm-sl': 'manga slang',
+  sl: 'slang',
+  col: 'colloquial',
+  hon: 'honorific',
+  hum: 'humble',
+  pol: 'polite',
+  fam: 'familiar',
+  derog: 'derogatory',
+  vulg: 'vulgar',
+  sens: 'sensitive',
+  dated: 'dated',
+  hist: 'historical',
+  obs: 'obsolete',
+  rare: 'rare',
+  arch: 'archaic',
+  poet: 'poetical',
+  chn: "children's",
+  fem: 'female term',
+  male: 'male term',
+  proverb: 'proverb',
+  id: 'idiomatic',
+  euph: 'euphemistic',
+  X: 'X-rated',
+  form: 'formal or literary term',
+  quote: 'quotation',
+  char: 'character',
+  company: 'company name',
+  creat: 'creature',
+  dei: 'deity',
+  doc: 'document',
+  ev: 'event',
+  fict: 'fiction',
+  given: 'given name',
+  group: 'group',
+  leg: 'legend',
+  myth: 'mythology',
+  obj: 'object',
+  organization: 'organization name',
+  oth: 'other',
+  person: 'personal name',
+  place: 'place name',
+  product: 'product name',
+  relig: 'religion',
+  serv: 'service',
+  ship: 'ship name',
+  station: 'railway station',
+  surname: 'family name',
+  unclass: 'unclassified name',
+  work: 'work of art',
+};
+
+export const miscCodes = Object.keys(miscLabelMap);
+
+export function miscLabel(misc: string): string {
+  return miscLabelMap[misc] ?? misc;
+}

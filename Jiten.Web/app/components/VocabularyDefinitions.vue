@@ -54,38 +54,6 @@
 
   // misc tags that warn the learner before they study/Ankify a word.
   const WARNING_MISC = new Set(['vulg', 'X', 'sens', 'derog', 'obs', 'dated', 'hist', 'rare']);
-  const MISC_LABELS: Record<string, string> = {
-    uk: 'usu. kana',
-    abbr: 'abbreviation',
-    'on-mim': 'onomatopoeia',
-    yoji: 'yojijukugo',
-    joc: 'jocular',
-    'net-sl': 'net slang',
-    'm-sl': 'manga slang',
-    sl: 'slang',
-    col: 'colloquial',
-    hon: 'honorific',
-    hum: 'humble',
-    pol: 'polite',
-    fam: 'familiar',
-    derog: 'derogatory',
-    vulg: 'vulgar',
-    sens: 'sensitive',
-    dated: 'dated',
-    hist: 'historical',
-    obs: 'obsolete',
-    rare: 'rare',
-    arch: 'archaic',
-    poet: 'poetical',
-    chn: "children's",
-    fem: 'female term',
-    male: 'male term',
-    proverb: 'proverb',
-    id: 'idiomatic',
-    euph: 'euphemistic',
-    X: 'X-rated',
-  };
-  const miscLabel = (m: string) => MISC_LABELS[m] ?? m;
   const isWarningMisc = (m: string) => WARNING_MISC.has(m);
 
   const GLOSS_PREFIX: Record<string, string> = {
