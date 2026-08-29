@@ -189,6 +189,7 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         await _userConnection.DisposeAsync();
     }
 
+    /// <summary>Clears the jiten-side tables plus user deck preferences, profiles and study decks; every other user table (FSRS, promo, card media) and all jmdict word data is the test class's own job.</summary>
     public async Task ResetDatabaseAsync()
     {
         using var scope = Services.CreateScope();
@@ -212,6 +213,8 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         userDb.UserDeckPreferences.RemoveRange(userDb.UserDeckPreferences);
         userDb.UserProfiles.RemoveRange(userDb.UserProfiles);
+        userDb.UserStudyDeckWords.RemoveRange(userDb.UserStudyDeckWords);
+        userDb.UserStudyDecks.RemoveRange(userDb.UserStudyDecks);
         await userDb.SaveChangesAsync();
     }
 }
