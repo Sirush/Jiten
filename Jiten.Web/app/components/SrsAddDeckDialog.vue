@@ -781,16 +781,13 @@
           </div>
           <div class="min-w-0">
             <label class="block text-xs mb-1">Threshold</label>
-            <InputNumber v-model="occurrenceThreshold" :min="1" :use-grouping="false" class="w-full [&_input]:w-full" />
+            <InputNumber v-model="occurrenceThreshold" :min="1" :useGrouping="false" class="w-full [&_input]:w-full" />
           </div>
         </div>
       </template>
 
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">
-          Only include words tagged
-          <span class="text-gray-400">(optional)</span>
-        </label>
+        <label class="block text-sm font-medium mb-1">Only include words tagged <span class="text-gray-400">(optional)</span></label>
         <PosFilterSelect v-model="mediaPosFilter" />
       </div>
 
@@ -813,15 +810,11 @@
             <span>Counting...</span>
           </template>
           <template v-else-if="previewCount !== null">
-            <span>
-              ~
-              <span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.total.toLocaleString() }}</span>
-              words match
-              <span v-if="previewCount.unlearned !== previewCount.total" class="text-gray-500">
-                (
-                <span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.unlearned.toLocaleString() }}</span>
-                unknown)
-              </span>
+            <span
+              >~<span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.total.toLocaleString() }}</span> words match
+              <span v-if="previewCount.unlearned !== previewCount.total" class="text-gray-500"
+                >(<span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.unlearned.toLocaleString() }}</span> unknown)</span
+              >
             </span>
           </template>
         </span>
@@ -855,10 +848,7 @@
         <InputText v-model="globalName" placeholder="e.g. Top 5000 words" class="w-full" :maxlength="200" @input="globalNameTouched = true" />
       </div>
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">
-          Description
-          <span class="text-gray-400">(optional)</span>
-        </label>
+        <label class="block text-sm font-medium mb-1">Description <span class="text-gray-400">(optional)</span></label>
         <Textarea v-model="globalDescription" class="w-full" rows="2" :maxlength="2000" />
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
@@ -873,10 +863,7 @@
       </div>
 
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">
-          Only include words tagged
-          <span class="text-gray-400">(optional)</span>
-        </label>
+        <label class="block text-sm font-medium mb-1">Only include words tagged <span class="text-gray-400">(optional)</span></label>
         <PosFilterSelect v-model="globalPosFilter" />
       </div>
 
@@ -906,10 +893,7 @@
         <InputText v-model="staticName" placeholder="e.g. JLPT N2 Vocabulary" class="w-full" :maxlength="200" />
       </div>
       <div class="mb-3">
-        <label class="block text-sm font-medium mb-1">
-          Description
-          <span class="text-gray-400">(optional)</span>
-        </label>
+        <label class="block text-sm font-medium mb-1">Description <span class="text-gray-400">(optional)</span></label>
         <Textarea v-model="staticDescription" class="w-full" rows="2" :maxlength="2000" />
       </div>
       <div class="mb-4">
@@ -919,10 +903,7 @@
 
       <template v-if="!isEditMode">
         <div class="mb-4">
-          <label class="block text-sm font-medium mb-2">
-            Import from file
-            <span class="text-gray-400">(optional)</span>
-          </label>
+          <label class="block text-sm font-medium mb-2">Import from file <span class="text-gray-400">(optional)</span></label>
           <input
             type="file"
             :accept="IMPORT_ACCEPT_ATTR"

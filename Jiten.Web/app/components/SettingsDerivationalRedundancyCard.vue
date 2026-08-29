@@ -405,7 +405,7 @@
                   <span class="text-xs text-blue-500 dark:text-blue-300 cursor-default">Redundant</span>
                 </Tooltip>
                 <Tooltip v-else-if="isAdded(pair)" content="Ticking this category would make this form redundant for you">
-                  <span class="text-xs text-primary-600 dark:text-primary-300 cursor-default">Would be redundant</span>
+                  <span class="text-xs text-primary-600 dark:text-primary-300 cursor-default"> Would be redundant </span>
                 </Tooltip>
               </template>
             </Column>

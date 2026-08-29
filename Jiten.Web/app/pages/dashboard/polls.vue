@@ -228,10 +228,10 @@
                 </div>
                 <div class="text-xs text-surface-500 dark:text-surface-400 mt-1">
                   {{ poll.options.length }} options &middot; {{ poll.totalVoters }} {{ poll.totalVoters === 1 ? 'voter' : 'voters' }}
-                  <span v-if="poll.maxSelections > 1">&middot; up to {{ poll.maxSelections }} picks</span>
-                  <span v-if="poll.publishedAt">&middot; published {{ formatDate(poll.publishedAt) }}</span>
-                  <span v-if="poll.closesAt">&middot; closes {{ formatDate(poll.closesAt) }}</span>
-                  <span v-if="poll.closedAt">&middot; closed {{ formatDate(poll.closedAt) }}</span>
+                  <span v-if="poll.maxSelections > 1"> &middot; up to {{ poll.maxSelections }} picks</span>
+                  <span v-if="poll.publishedAt"> &middot; published {{ formatDate(poll.publishedAt) }}</span>
+                  <span v-if="poll.closesAt"> &middot; closes {{ formatDate(poll.closesAt) }}</span>
+                  <span v-if="poll.closedAt"> &middot; closed {{ formatDate(poll.closedAt) }}</span>
                 </div>
               </div>
 

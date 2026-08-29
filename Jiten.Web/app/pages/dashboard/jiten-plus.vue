@@ -495,8 +495,8 @@
       <template #content>
         <div class="flex flex-col gap-4 max-w-2xl">
           <p class="text-sm text-surface-500 dark:text-surface-400">
-            For when a purchase confirmation failed to send (see the billing-email alert for the user id). The email is rebuilt from the
-            user's current billing data.
+            For when a purchase confirmation failed to send (see the billing-email alert for the user id). The email is rebuilt from the user's current billing
+            data.
           </p>
           <div>
             <label class="block text-sm font-medium mb-1">User</label>
@@ -507,13 +507,7 @@
             </div>
             <div v-else class="flex gap-2">
               <InputText v-model="resendQuery" placeholder="Search by username, email or user id" class="flex-1" @keydown.enter="searchResendUsers" />
-              <Button
-                label="Search"
-                icon="pi pi-search"
-                :loading="resendSearching"
-                :disabled="resendQuery.trim().length < 2"
-                @click="searchResendUsers"
-              />
+              <Button label="Search" icon="pi pi-search" :loading="resendSearching" :disabled="resendQuery.trim().length < 2" @click="searchResendUsers" />
             </div>
             <div v-if="resendResults.length" class="mt-2 border border-surface-200 dark:border-surface-700 rounded overflow-hidden">
               <div
@@ -532,13 +526,7 @@
             <Select v-model="resendKind" :options="resendKindOptions" option-label="label" option-value="value" class="w-full" />
           </div>
           <div class="flex justify-end">
-            <Button
-              label="Resend email"
-              icon="pi pi-envelope"
-              :loading="resending"
-              :disabled="!resendUser || resending"
-              @click="confirmResend"
-            />
+            <Button label="Resend email" icon="pi pi-envelope" :loading="resending" :disabled="!resendUser || resending" @click="confirmResend" />
           </div>
         </div>
       </template>
@@ -736,8 +724,8 @@
           You are about to grant
           <span class="font-semibold">permanent</span>
           lifetime Jiten+ to
-          <span class="font-semibold">{{ selectedUser?.userName }}</span>
-          . It can only be undone by an admin revoke, and only for contributor grants. Make sure you didn't mean to grant a fixed number of days.
+          <span class="font-semibold">{{ selectedUser?.userName }}</span
+          >. It can only be undone by an admin revoke, and only for contributor grants. Make sure you didn't mean to grant a fixed number of days.
         </Message>
         <div>
           <label class="block text-sm font-medium mb-1">

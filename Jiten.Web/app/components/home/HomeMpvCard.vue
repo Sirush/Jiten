@@ -20,15 +20,12 @@
       <div class="flex flex-col md:flex-row items-start gap-6">
         <div class="flex-1">
           <p class="text-gray-700 dark:text-gray-300 mb-4">
-            A free plugin for
-            <strong>mpv</strong>
-            that brings most of Jiten Reader to your video player. Subtitles are coloured by what you already know, and you can blur the words you have learnt
-            to test yourself.
+            A free plugin for <strong>mpv</strong> that brings most of Jiten Reader to your video player. Subtitles are coloured by what you already know, and
+            you can blur the words you have learnt to test yourself.
           </p>
           <p class="text-gray-700 dark:text-gray-300 mb-4">
-            Mine a word and its sentence in one click, and review your cards without leaving the episode. With
-            <NuxtLink to="/jiten-plus">Jiten+</NuxtLink>
-            , mined cards can have a screenshot or an animated screenshot as well as the audio of the current line.
+            Mine a word and its sentence in one click, and review your cards without leaving the episode. With <NuxtLink to="/jiten-plus">Jiten+</NuxtLink>,
+            mined cards can have a screenshot or an animated screenshot as well as the audio of the current line.
           </p>
           <div class="flex flex-wrap gap-2 mb-4">
             <span

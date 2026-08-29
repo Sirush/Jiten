@@ -154,11 +154,8 @@
 
       <h1 class="text-2xl font-bold mb-2">Custom Example Sentences</h1>
       <p class="text-sm text-surface-400 mb-6">
-        Up to {{ sentenceLimit }} custom sentences for
-        <span class="font-bold">{{ title }}</span>
-        . Surround words you want highlighted with
-        <code class="bg-surface-100 dark:bg-surface-800 px-1 rounded">**</code>
-        , e.g.
+        Up to {{ sentenceLimit }} custom sentences for <span class="font-bold">{{ title }}</span
+        >. Surround words you want highlighted with <code class="bg-surface-100 dark:bg-surface-800 px-1 rounded">**</code>, e.g.
         <code class="bg-surface-100 dark:bg-surface-800 px-1 rounded">**{{ title }}**</code>
       </p>
 

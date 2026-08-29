@@ -8,8 +8,7 @@
         </div>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">
           A free browser extension that helps you read Japanese anywhere on the web. Compatible with apps such as
-          <strong>Ttsu Reader, Mokuro Reader, and Asbplayer</strong>
-          .
+          <strong>Ttsu Reader, Mokuro Reader, and Asbplayer</strong>.
         </p>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
           Look up words instantly, sync vocabulary to Jiten, see the coverage of what you're immersing in, add furigana, and more.

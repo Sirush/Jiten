@@ -92,8 +92,8 @@
   <div v-if="compact && boostable" class="flex flex-col items-center gap-1 shrink-0">
     <Button
       v-if="canBoost"
-      v-tooltip.top="tooltip"
       icon="pi pi-bolt"
+      v-tooltip.top="tooltip"
       :severity="hasBoosted ? 'secondary' : 'help'"
       :outlined="!hasBoosted"
       size="small"
@@ -122,9 +122,9 @@
       <template v-if="boostable">
         <Button
           v-if="canBoost"
-          v-tooltip.top="tooltip"
           :label="buttonLabel"
           icon="pi pi-bolt"
+          v-tooltip.top="tooltip"
           :severity="hasBoosted ? 'secondary' : 'help'"
           :outlined="!hasBoosted"
           :disabled="disabled"
@@ -139,17 +139,10 @@
 
   <Dialog v-model:visible="showConfirm" header="Boost this request?" :modal="true" :style="{ width: '440px' }" :breakpoints="{ '480px': '92vw' }">
     <div class="flex flex-col gap-2 text-sm">
+      <p>Boosting permanently adds <span class="font-semibold">+5 votes</span> to this request, making it more likely to be fulfilled earlier.</p>
       <p>
-        Boosting permanently adds
-        <span class="font-semibold">+5 votes</span>
-        to this request, making it more likely to be fulfilled earlier.
-      </p>
-      <p>
-        This uses
-        <span class="font-semibold">one of your {{ balance?.limit ?? 5 }} monthly boosts</span>
-        and
-        <span class="font-semibold">cannot be undone</span>
-        .
+        This uses <span class="font-semibold">one of your {{ balance?.limit ?? 5 }} monthly boosts</span> and
+        <span class="font-semibold">cannot be undone</span>.
       </p>
       <p v-if="balance" class="text-muted-color">You have {{ balance.remaining }} boost{{ balance.remaining === 1 ? '' : 's' }} left this month.</p>
     </div>

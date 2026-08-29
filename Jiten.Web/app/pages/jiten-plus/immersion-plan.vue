@@ -1355,7 +1355,7 @@
                     </div>
                     <p class="text-xs opacity-70">
                       The plan lines up as many titles as it takes to get you to {{ goalTarget }}% coverage of {{ goalTitleText }}.
-                      <template v-if="goalCurrentCoverage != null">You're at {{ pct(goalCurrentCoverage) }} of it right now.</template>
+                      <template v-if="goalCurrentCoverage != null"> You're at {{ pct(goalCurrentCoverage) }} of it right now. </template>
                     </p>
                   </div>
                 </div>
@@ -1413,7 +1413,7 @@
                         <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />
                       </Tooltip>
                     </label>
-                    <span class="shrink-0 text-sm font-semibold">{{ comprehension[0] }}–{{ comprehension[1] }}%</span>
+                    <span class="shrink-0 text-sm font-semibold"> {{ comprehension[0] }}–{{ comprehension[1] }}% </span>
                   </div>
                   <div class="px-2 py-2">
                     <Slider v-model="comprehension" range :min="60" :max="98" :step="1" class="w-full" />
@@ -1429,8 +1429,7 @@
                     <span class="text-xs">{{ previewWarning }}</span>
                   </Message>
                   <p v-else-if="previewSummary" class="mt-2 text-xs opacity-70">
-                    <i v-if="previewLoading" class="pi pi-spin pi-spinner mr-1 text-[10px]" />
-                    {{ previewSummary }}
+                    <i v-if="previewLoading" class="pi pi-spin pi-spinner mr-1 text-[10px]" />{{ previewSummary }}
                   </p>
                 </div>
 
@@ -1571,7 +1570,7 @@
                 </div>
 
                 <Message v-if="atCap && editingId === null" severity="warn" size="small" :closable="false">
-                  <span class="text-xs">You've reached {{ maxRoadmaps }} plans. Delete one to make room for a new one.</span>
+                  <span class="text-xs"> You've reached {{ maxRoadmaps }} plans. Delete one to make room for a new one. </span>
                 </Message>
 
                 <Button
@@ -1634,8 +1633,8 @@
                 <p class="text-sm opacity-70">
                   <span v-if="activeRoadmap.mode === 'goal'">Path towards your target media</span>
                   <span v-else>Your next picks</span>
-                  <span v-if="activeRoadmap.candidateCount > 0">· picked from {{ activeRoadmap.candidateCount.toLocaleString() }} titles</span>
-                  <span v-if="activeRoadmap.swappedCount > 0">· {{ activeRoadmap.swappedCount }} skipped</span>
+                  <span v-if="activeRoadmap.candidateCount > 0"> · picked from {{ activeRoadmap.candidateCount.toLocaleString() }} titles</span>
+                  <span v-if="activeRoadmap.swappedCount > 0"> · {{ activeRoadmap.swappedCount }} skipped</span>
                 </p>
               </div>
               <div class="flex flex-wrap gap-2">
@@ -1861,7 +1860,7 @@
                     </span>
                     <span class="tabular-nums font-semibold">
                       {{ formatHours(stepHours(step)) }}
-                      <span v-if="step.characterCount > 0" class="ml-1 text-xs font-normal opacity-60">{{ step.characterCount.toLocaleString() }} chars</span>
+                      <span v-if="step.characterCount > 0" class="ml-1 text-xs font-normal opacity-60"> {{ step.characterCount.toLocaleString() }} chars </span>
                     </span>
                   </div>
 
@@ -1908,7 +1907,9 @@
                   <!-- Frequency mix: how useful the new words are -->
                   <div v-if="bandTotal(step.frequencyBands) > 0" class="mt-2">
                     <div class="mb-1 flex items-center justify-between text-xs">
-                      <span class="text-gray-600 dark:text-gray-300">{{ Math.round(usefulShare(step.frequencyBands) * 100) }}% are common, everyday words</span>
+                      <span class="text-gray-600 dark:text-gray-300">
+                        {{ Math.round(usefulShare(step.frequencyBands) * 100) }}% are common, everyday words
+                      </span>
                       <button type="button" class="font-semibold text-primary-500 hover:text-primary-700 hover:underline" @click="toggleWords(step.index)">
                         {{ expandedStep === step.index ? 'Hide words' : 'See all words' }}
                       </button>
@@ -1928,8 +1929,7 @@
                   <!-- Expandable word list — resolved lazily on first expand -->
                   <div v-if="expandedStep === step.index" class="mt-3">
                     <div v-if="stepWordsStatus(step.index) === 'loading'" class="flex items-center gap-2 py-3 text-sm opacity-70">
-                      <i class="pi pi-spin pi-spinner" />
-                      Loading words…
+                      <i class="pi pi-spin pi-spinner" /> Loading words…
                     </div>
                     <div v-else-if="stepWordsStatus(step.index) === 'error'" class="py-3 text-sm text-red-500 dark:text-red-400">
                       Couldn't load the words.
@@ -1963,10 +1963,8 @@
                           target="_blank"
                           rel="noopener"
                           class="font-medium hover:underline"
-                        >
-                          See them all
-                        </a>
-                        .
+                          >See them all</a
+                        >.
                       </p>
                     </template>
                   </div>
@@ -1981,8 +1979,7 @@
                 </h3>
                 <p class="mt-1 text-sm opacity-80">
                   Nothing else is easy enough for you yet. Learn
-                  <strong>{{ activePayload.drill.wordsNeeded.toLocaleString() }}</strong>
-                  more words and
+                  <strong>{{ activePayload.drill.wordsNeeded.toLocaleString() }}</strong> more words and
                   <a :href="`/decks/media/${activePayload.drill.deckId}/detail`" target="_blank" rel="noopener" class="font-medium hover:underline">
                     {{ activePayload.drill.title }}
                   </a>
@@ -2039,7 +2036,7 @@
                     >
                       {{ goalCardTitle(activePayload.goal) }}
                     </a>
-                    <span class="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">Your goal</span>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400"> Your goal </span>
                   </div>
 
                   <div class="stat-row mt-1 flex items-center justify-between">
@@ -2079,8 +2076,7 @@
                   </p>
                   <p v-else class="mt-2 text-sm text-gray-600 dark:text-gray-300">
                     Still about
-                    <strong>{{ activePayload.goal.wordsRemaining.toLocaleString() }}</strong>
-                    words short of your target.
+                    <strong>{{ activePayload.goal.wordsRemaining.toLocaleString() }}</strong> words short of your target.
                   </p>
                 </div>
               </div>
@@ -2144,12 +2140,12 @@
         </ul>
 
         <div>
-          <label for="bulk-threshold" class="mb-1 block text-sm font-medium">Only include words used at least this many times</label>
+          <label for="bulk-threshold" class="mb-1 block text-sm font-medium"> Only include words used at least this many times </label>
           <InputNumber v-model="bulkThreshold" input-id="bulk-threshold" :min="1" :use-grouping="false" class="w-full" />
         </div>
 
         <Message v-if="bulkOverCap" severity="warn" size="small" :closable="false">
-          <span class="text-xs">You can only have {{ studyDeckCap }} study decks. Only the first {{ bulkFitCount }} of these will be added.</span>
+          <span class="text-xs"> You can only have {{ studyDeckCap }} study decks. Only the first {{ bulkFitCount }} of these will be added. </span>
         </Message>
 
         <div class="flex items-center gap-2">
@@ -2164,7 +2160,7 @@
 
         <Message v-if="bulkGatheringWarning" severity="warn" :closable="false">
           <div class="flex flex-col items-start gap-2">
-            <span class="text-xs">New cards are currently drawn from all your decks at once, so the plan's order won't decide what you see first.</span>
+            <span class="text-xs"> New cards are currently drawn from all your decks at once, so the plan's order won't decide what you see first. </span>
             <Button
               label="Take new cards from the top deck"
               size="small"

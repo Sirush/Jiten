@@ -534,44 +534,18 @@
       <summary class="cursor-pointer font-semibold text-surface-700 dark:text-surface-200">Search syntax & tips</summary>
       <ul class="mt-2 list-disc space-y-1 pl-5">
         <li>
-          Phrase search (PGroonga
-          <code>&amp;@</code>
-          ): the box is
-          <strong>one keyword</strong>
-          matched against the bigram index — it finds that exact run of characters anywhere in the text, e.g.
-          <code>について</code>
-          ,
-          <code>かもしれない</code>
-          .
+          Phrase search (PGroonga <code>&amp;@</code>): the box is <strong>one keyword</strong> matched against the bigram index — it finds that exact run of
+          characters anywhere in the text, e.g. <code>について</code>, <code>かもしれない</code>.
         </li>
         <li>
-          <strong>No operators:</strong>
-          <code>AND</code>
-          /
-          <code>OR</code>
-          ,
-          <code>*</code>
-          ,
-          <code>"…"</code>
-          , regex and SQL
-          <code>%</code>
-          are matched literally, not interpreted — so don't use them. (Spaces are special only for exclusions, below.)
+          <strong>No operators:</strong> <code>AND</code>/<code>OR</code>, <code>*</code>, <code>"…"</code>, regex and SQL <code>%</code> are matched literally,
+          not interpreted — so don't use them. (Spaces are special only for exclusions, below.)
         </li>
         <li>
-          <strong>
-            Exclusions (
-            <code>-</code>
-            ):
-          </strong>
-          append a space-separated
-          <code>-phrase</code>
-          to subtract occurrences where the term only appears as part of that longer phrase, e.g.
-          <code>ヘアアクセ -ヘアアクセサリー</code>
-          counts ヘアアクセ but not the ヘアアクセ inside ヘアアクセサリー. The excluded phrase
-          <strong>must contain the term</strong>
-          as a substring; you can add several (
-          <code>雨 -梅雨 -雨具</code>
-          ). Matching, counts and citations are all corrected.
+          <strong>Exclusions (<code>-</code>):</strong> append a space-separated <code>-phrase</code> to subtract occurrences where the term only appears as
+          part of that longer phrase, e.g. <code>ヘアアクセ -ヘアアクセサリー</code> counts ヘアアクセ but not the ヘアアクセ inside ヘアアクセサリー. The
+          excluded phrase <strong>must contain the term</strong> as a substring; you can add several (<code>雨 -梅雨 -雨具</code>). Matching, counts and
+          citations are all corrected.
         </li>
         <li>
           Latin letters, digits and symbols are tokenised
@@ -581,13 +555,7 @@
         <li>
           <strong>Not lemmatised</strong>
           — inflected forms are separate strings (食べた ≠ 食べる). Enter each form you care about as its own term (up to 15) to count and compare them side by
-          side, e.g.
-          <code>食べた</code>
-          ·
-          <code>食べて</code>
-          ·
-          <code>食べます</code>
-          .
+          side, e.g. <code>食べた</code> · <code>食べて</code> · <code>食べます</code>.
         </li>
         <li>
           Inline furigana
@@ -622,11 +590,7 @@
           <div class="flex flex-col gap-2">
             <label class="text-xs font-medium text-surface-500 dark:text-surface-400">Search terms (up to 15)</label>
             <span class="text-xs text-surface-400">
-              Quickly add a new term by typing or pasting with these separators
-              <code>,</code>
-              <code>;</code>
-              <code>；</code>
-              <code>/</code>
+              Quickly add a new term by typing or pasting with these separators <code>,</code> <code>;</code> <code>；</code> <code>/</code>
             </span>
             <span class="text-xs text-surface-400">
               Exclude a longer form with the minus operator

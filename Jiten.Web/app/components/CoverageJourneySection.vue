@@ -115,7 +115,7 @@
         <CoverageJourneyMilestones :milestones="journey!.milestones" :metric="metric" :granularity="journey!.granularity" />
         <p class="text-xs text-gray-500 dark:text-gray-400 pt-4">
           <span v-if="rangeLabel">{{ rangeLabel }}</span>
-          <span v-if="rangeLabel && asOfLabel">·</span>
+          <span v-if="rangeLabel && asOfLabel"> · </span>
           <span v-if="asOfLabel">As of your last coverage refresh: {{ asOfLabel }}</span>
         </p>
       </template>
