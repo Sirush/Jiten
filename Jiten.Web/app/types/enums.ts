@@ -61,8 +61,8 @@ export enum Genre {
 }
 
 export enum ReadingType {
-  Reading = 1,
-  KanaReading = 2,
+  Reading = 0,
+  KanaReading = 1,
 }
 
 export enum DeckDownloadType {

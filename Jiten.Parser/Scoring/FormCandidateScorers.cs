@@ -887,10 +887,34 @@ internal static class ReadingPosHelper
             return [];
 
         return word.Definitions
-            .Where(d => d.RestrictedToReadingIndices == null
-                     || d.RestrictedToReadingIndices.Contains((short)readingIndex))
+            .Where(d => AppliesToReading(word, d, readingIndex))
             .SelectMany(d => d.PartsOfSpeech)
             .ToHashSet();
+    }
+
+    // JMdict's stagk (kanji sp elling) and stagr (reading) restrictions share one flat index list,
+    // so the axis is recovered from the form type each index points at: a reading restriction never
+    // excludes a kanji form, and vice versa.
+    private static bool AppliesToReading(JmDictWord word, JmDictDefinition definition, byte readingIndex)
+    {
+        var restrictions = definition.RestrictedToReadingIndices;
+        if (restrictions == null || restrictions.Count == 0)
+            return true;
+
+        var currentForm = word.Forms.Find(f => f.ReadingIndex == readingIndex);
+        if (currentForm == null)
+            return restrictions.Contains((short)readingIndex);
+
+        bool sawSameAxis = false;
+        foreach (var index in restrictions)
+        {
+            var form = word.Forms.Find(f => f.ReadingIndex == index);
+            if (form == null || form.FormType != currentForm.FormType) continue;
+            if (index == readingIndex) return true;
+            sawSameAxis = true;
+        }
+
+        return !sawSameAxis;
     }
 }
 
