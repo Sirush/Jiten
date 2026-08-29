@@ -12,7 +12,7 @@
     removing?: boolean;
     selectable?: boolean;
     selected?: boolean;
-    /** Names the ranking the shown rank comes from ("Anime"); absent means the site-wide one. */
+    /** Names the requested ranking ("Anime"); each row swaps it for "global" when its own rank fell back. */
     rankSourceLabel?: string;
   }>();
 
@@ -32,6 +32,8 @@
   const toggleCompact = () => {
     isCompact.value = !isCompact.value;
   };
+
+  const rankLabel = computed(() => rowRankLabel(props.word.mainReading, props.rankSourceLabel));
 </script>
 
 <template>
@@ -65,8 +67,11 @@
           <span @click.stop>
             <VocabularyStatus :word="word" />
           </span>
-          x{{ word.occurrences }} | Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}
-          <span v-if="rankSourceLabel" class="text-xs whitespace-nowrap">in {{ rankSourceLabel }}</span>
+          x{{ word.occurrences }} | Rank #{{ rankLabel.rank }}
+          <Tooltip v-if="rankLabel.source && rankLabel.hint" :content="rankLabel.hint">
+            <span class="text-xs whitespace-nowrap cursor-help">in {{ rankLabel.source }}</span>
+          </Tooltip>
+          <span v-else-if="rankLabel.source" class="text-xs whitespace-nowrap">in {{ rankLabel.source }}</span>
           <Button v-if="removable" icon="pi pi-trash" severity="danger" text size="small" :loading="removing" @click.stop="emit('remove', word)" />
         </div>
       </div>
