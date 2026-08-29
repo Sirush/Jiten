@@ -157,10 +157,33 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            (string prefixBase, int splitAt)? split = null;
+            // An OOV compound verb carries its own surface as DictionaryForm (手に取って), so the
+            // direct lookups above miss even though the deconjugated base (手に取る) is attested.
+            // A conjugated token whose base resolves is not unresolvable — leave it whole.
+            if (dictForm == word.Text && !MorphologicalAnalyser.DictionaryVerbEndings.Contains(dictForm[^1]))
+            {
+                bool baseAttested = false;
+                foreach (var form in PipelineCachedDeconjugate(KanaConverter.ToHiragana(word.Text)))
+                {
+                    if (form.Text.Length >= 2 && form.Text != word.Text && HasCompoundLookup(form.Text))
+                    {
+                        baseAttested = true;
+                        break;
+                    }
+                }
 
-            // Prefer the longest stem (latest split point) so 縫い+止める beats 縫+い止める
-            for (int p = Math.Min(dictForm.Length - 2, word.Text.Length); p >= 1 && split == null; p--)
+                if (baseAttested)
+                {
+                    result?.Add(word);
+                    continue;
+                }
+            }
+
+            (string prefixBase, int splitAt, bool stemIsVerb)? split = null;
+
+            // Prefer the longest stem (latest split point) so 縫い+止める beats 縫+い止める.
+            // The stem stops one char short of the surface so the tail is never empty.
+            for (int p = Math.Min(dictForm.Length - 2, word.Text.Length - 1); p >= 1 && split == null; p--)
             {
                 var prefix = dictForm[..p];
                 if (!word.Text.StartsWith(prefix, StringComparison.Ordinal))
@@ -170,11 +193,11 @@ public partial class MorphologicalAnalyser
                 if (!HasNonNameCompoundLookup(suffixDict))
                     continue;
 
-                // The stem must itself be a verb: ichidan (寝→寝る) or godan renyokei (驚き→驚く)
+                // The stem is normally itself a verb: ichidan (寝→寝る) or godan renyokei (驚き→驚く)
                 var ichidan = prefix + 'る';
                 if (HasNonNameCompoundLookup(ichidan))
                 {
-                    split = (ichidan, p);
+                    split = (ichidan, p, true);
                     break;
                 }
 
@@ -182,8 +205,19 @@ public partial class MorphologicalAnalyser
                 {
                     var godan = prefix[..^1] + baseEnd;
                     if (HasNonNameCompoundLookup(godan))
-                        split = (godan, p);
+                    {
+                        split = (godan, p, true);
+                        continue;
+                    }
                 }
+
+                // …or a lexical lead that is a word in its own right — a prefix or adverb that
+                // productively fronts a verb (薄ら+笑う, もの+悲しむ). Only when the tail is itself
+                // a verb entry, so the conjugation still lands on a verb; without this the whole
+                // OOV compound drops and neither half surfaces.
+                if (prefix.Length >= 2 && HasNonNameCompoundLookup(prefix)
+                    && HasVerbOrAdjectiveLookup?.Invoke(suffixDict) == true)
+                    split = (prefix, p, false);
             }
 
             if (split == null)
@@ -194,14 +228,15 @@ public partial class MorphologicalAnalyser
 
             result ??= [..wordInfos[..idx]];
 
-            var (stemBase, at) = split.Value;
+            var (stemBase, at, stemIsVerb) = split.Value;
             var stemSurface = word.Text[..at];
             var tailSurface = word.Text[at..];
 
             result.Add(new WordInfo
             {
                 Text = stemSurface, DictionaryForm = stemBase, NormalizedForm = stemBase,
-                PartOfSpeech = PartOfSpeech.Verb, Reading = KanaConverter.ToHiragana(stemSurface),
+                PartOfSpeech = stemIsVerb ? PartOfSpeech.Verb : PartOfSpeech.Unknown,
+                Reading = KanaConverter.ToHiragana(stemSurface),
                 StartOffset = word.StartOffset,
                 EndOffset = word.StartOffset >= 0 ? word.StartOffset + at : -1
             });
