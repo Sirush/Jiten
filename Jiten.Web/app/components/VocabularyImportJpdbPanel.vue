@@ -146,9 +146,13 @@
         <div>
           <h4 class="font-medium mb-2">API Import</h4>
           <p class="mb-2 text-sm">
-            You can find your API key on the bottom of the settings page (
-            <a href="https://jpdb.io/settings" target="_blank" rel="nofollow" class="text-primary-500 hover:underline">https://jpdb.io/settings</a>
-            )
+            You can find your API key on the bottom of the settings page (<a
+              href="https://jpdb.io/settings"
+              target="_blank"
+              rel="nofollow"
+              class="text-primary-500 hover:underline"
+              >https://jpdb.io/settings</a
+            >)
           </p>
           <p class="mb-3 text-sm text-gray-600 dark:text-gray-400">
             Your API key will only be used for the import and won't be saved anywhere. Only the word list is sent to the server.
@@ -162,9 +166,9 @@
         <div class="flex flex-col gap-2">
           <div class="flex items-center">
             <Checkbox id="importAdditionalReadings" v-model="importAdditionalReadings" :binary="true" />
-            <label for="importAdditionalReadings" class="ml-2">
-              Import additional readings within frequency range of the imported reading (only the most frequent reading by default)
-            </label>
+            <label for="importAdditionalReadings" class="ml-2"
+              >Import additional readings within frequency range of the imported reading (only the most frequent reading by default)</label
+            >
           </div>
           <div v-if="importAdditionalReadings" class="ml-6 flex items-center gap-2">
             <label for="frequencyThreshold" class="text-sm">Frequency range:</label>

@@ -7,6 +7,10 @@ namespace Jiten.Parser;
 
 public partial class MorphologicalAnalyser
 {
+    // The verb heads a quotative って attaches to (言う/思う/聞く/考える/感じる); the datte-quote
+    // rewrite rule keys on the same class.
+    internal static readonly char[] QuoteVerbHeads = ['言', '思', '聞', '考', '感'];
+
     // The geminate suffixes 〜っぱなし/っぷり/っぽい attach to a verb 連用形 or noun, and Sudachi
     // routinely lets the っ (and sometimes more) bleed into the neighbours: 流|しっ|ぱなし
     // (しっ→知る), 上|が|りっぱ|な|し (りっぱ→立派), 脳天|気っぷ|り (気っぷ→気風), 皮肉っ|ぽい
@@ -4975,8 +4979,42 @@ public partial class MorphologicalAnalyser
                     }
                     else if (thief.PartOfSpeech != PartOfSpeech.Adverb)
                     {
-                        var forms = deconj.Deconjugate(stripped);
-                        shouldRepair = forms.Count > 0;
+                        // A thief that is itself a genuine te-stem — its surface + て deconjugates
+                        // back to its own dictionary form (わかっ+て → わかる) — is a verb Sudachi
+                        // got right, not a theft. The curated CommonTeFormVerbs skip only covers
+                        // the common spellings, so kana verbs outside it landed here and lost
+                        // their stem to a coincidental homograph (わか = 和歌).
+                        // …unless a quote VERB follows the て: there the quotative frame outranks
+                        // the te-form reading (かなっ|て|思ったら is かな + って + 思ったら, even
+                        // though かなって is also 叶う's te-form). The POS gate keeps nouns that
+                        // merely start with a quote-verb kanji from opening the frame (わかって
+                        // 言葉を失った must stay a te-form). The frame is deliberately broad: a
+                        // kana te-form directly governing a quote verb (わかって思った) loses its
+                        // boundary here, but narrowing it to reattachable thefts costs more real
+                        // 〜かなって思う spans than it recovers.
+                        bool quoteVerbFollows = i + 2 < wordInfos.Count
+                            && wordInfos[i + 2].PartOfSpeech == PartOfSpeech.Verb
+                            && wordInfos[i + 2].Text.Length > 0
+                            && QuoteVerbHeads.Contains(wordInfos[i + 2].Text[0]);
+
+                        bool selfTeForm = false;
+                        if (!quoteVerbFollows
+                            && thief.PartOfSpeech == PartOfSpeech.Verb && thief.DictionaryForm.Length >= 2
+                            && thief.DictionaryForm != thief.Text
+                            && HasNonNameCompoundLookup?.Invoke(thief.DictionaryForm) == true)
+                        {
+                            var dictHira = KanaConverter.ToHiragana(thief.DictionaryForm);
+                            foreach (var f in deconj.Deconjugate(KanaConverter.ToHiragana(thief.Text) + "て"))
+                            {
+                                if (f.Text == dictHira) { selfTeForm = true; break; }
+                            }
+                        }
+
+                        if (!selfTeForm)
+                        {
+                            var forms = deconj.Deconjugate(stripped);
+                            shouldRepair = forms.Count > 0;
+                        }
                     }
                     // A thief Sudachi mis-tags as an adverb but whose stripped form is itself a
                     // dictionary verb is the same stem theft one mora wider (するっ|て → する + って,
@@ -5034,6 +5072,68 @@ public partial class MorphologicalAnalyser
 
         return changed ? result : wordInfos;
     }
+
+    // Clipped exclamatory i-adjective: the colloquial stem + っ pattern (足短っ, 高っ, 寒っ)
+    // drops the い entirely, so the っ ends up a stranded symbol and the stem resolves as an
+    // unrelated noun homograph (短 → "fault; defect"). A kanji-final stem whose +い form is an
+    // attested verb or adjective is the adjective; merge and carry the dictionary form so lookup
+    // lands on it. Kana stems stay out (や|ば never forms a stem to work from).
+    private List<WordInfo> RepairClippedAdjective(List<WordInfo> wordInfos)
+    {
+        if (wordInfos.Count < 2 || HasNonNameCompoundLookup == null || HasVerbOrAdjectiveLookup == null)
+            return wordInfos;
+
+        List<WordInfo>? result = null;
+
+        for (int i = 0; i < wordInfos.Count; i++)
+        {
+            var current = wordInfos[i];
+
+            // The っ may be separated from the stem by a forced-boundary blank.
+            int tsuIdx = -1;
+            for (int j = i + 1; j < wordInfos.Count && j <= i + 2; j++)
+            {
+                // the forced sokuon boundary leaves a stop token between stem and っ
+                if (wordInfos[j].PartOfSpeech == PartOfSpeech.BlankSpace || wordInfos[j].Text == _stopToken) continue;
+                if (wordInfos[j].Text is "っ" or "ッ") tsuIdx = j;
+                break;
+            }
+
+            if (tsuIdx < 0
+                || current.Text.Length == 0 || current.Text.Length > 4
+                || current.PreMatchedWordId != null
+                || current.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Particle
+                    or PartOfSpeech.Auxiliary or PartOfSpeech.Symbol or PartOfSpeech.SupplementarySymbol
+                // Kanji-final stems only: a kana stem + い hits unrelated kana keys (がんっ →
+                // がん+い = 含意) and would resurrect SFX fragments the drop gates handle.
+                || !JapaneseTextHelper.IsKanji(current.Text[^1])
+                // POS-aware: the +い form must be a verb/adjective entry, not any word — keeps
+                // noun collisions (兄い vocative) from converting a clause-initial noun + っ.
+                || !HasVerbOrAdjectiveLookup(current.Text + "い")
+                // A vocative っ after a noun whose halves form an attested compound is not a
+                // clipped adjective (隊長っ: 隊+長 must re-fuse to 隊長, not become 長い).
+                || (i > 0 && HasNonNameCompoundLookup(wordInfos[i - 1].Text + current.Text)))
+            {
+                result?.Add(current);
+                continue;
+            }
+
+            result ??= [..wordInfos[..i]];
+            result.Add(new WordInfo(current)
+            {
+                Text = current.Text + "っ",
+                DictionaryForm = current.Text + "い",
+                NormalizedForm = current.Text + "い",
+                Reading = "",
+                PartOfSpeech = PartOfSpeech.IAdjective,
+                EndOffset = wordInfos[tsuIdx].EndOffset
+            });
+            i = tsuIdx;
+        }
+
+        return result ?? wordInfos;
+    }
+
 
     /// <summary>
     /// Classical attributive き fused into the following noun by the lattice: 白|き尾 → 白き|尾.

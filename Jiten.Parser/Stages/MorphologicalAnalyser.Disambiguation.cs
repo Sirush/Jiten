@@ -776,6 +776,27 @@ public partial class MorphologicalAnalyser
                     word.Reading = "イチニチ";
             }
 
+            // 張り (バリ) → ハリ when there is nothing to bind to. The ばり suffix is bound: it
+            // attaches directly to the noun or name whose style it borrows (漱石張り, ジョーダン張り).
+            // Governed by a particle or opening a clause, the word is the standalone noun はり
+            // (tension, resilience): 張りのある声, 声に張りがある.
+            if (word is { Text: "張り", Reading: "バリ" })
+            {
+                // A quoted host still binds (「漱石」張り): look through closing quotes/brackets and
+                // the blanks the bracket handling inserts, but not across sentence punctuation —
+                // ばり attaches to an adjacent nominal.
+                int h = i - 1;
+                while (h >= 0 && (wordInfos[h].PartOfSpeech == PartOfSpeech.BlankSpace
+                                  || (wordInfos[h].Text.Length == 1 && "」』）】》〉".Contains(wordInfos[h].Text[0]))))
+                    h--;
+                var prevHost = h >= 0 ? wordInfos[h] : null;
+                if (prevHost == null
+                    || prevHost.PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                        or PartOfSpeech.Name or PartOfSpeech.Pronoun or PartOfSpeech.Numeral
+                        or PartOfSpeech.Suffix))
+                    word.Reading = "ハリ";
+            }
+
             // 禍 (カ) → ワザワイ when standalone — カ reading only used in compounds (コロナ禍, 戦禍, 禍根)
             if (word is { Text: "禍", Reading: "カ" })
                 word.Reading = "ワザワイ";

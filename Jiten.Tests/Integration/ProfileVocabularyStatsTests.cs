@@ -209,4 +209,67 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
         foreach (var field in new[] { "young", "mature", "mastered", "wordSetMastered" })
             profile.GetProperty(field).GetInt32().Should().Be(own.GetProperty(field).GetInt32(), $"{field} must match the settings endpoint");
     }
+
+    private async Task AddCards(params FsrsCard[] cards)
+    {
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        userDb.FsrsCards.AddRange(cards);
+        await userDb.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task WordWithBlacklistedSiblingForm_CountsAsKnown()
+    {
+        await ConfigureProfile(TestUsers.UserA, isPublic: true);
+        await SeedCards(TestUsers.UserA);
+        var now = DateTime.UtcNow;
+        await AddCards(
+            new FsrsCard(TestUsers.UserA, 500, 0, state: FsrsState.Review, due: now.AddDays(30), lastReview: now.AddDays(-5)),
+            new FsrsCard(TestUsers.UserA, 500, 1, state: FsrsState.Blacklisted));
+
+        var response = await _client.GetAsync($"/api/user/profile/{TestUsers.UserA}/vocabulary-stats");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("mature").GetInt32().Should().Be(2, "a blacklisted sibling form must not disown a word the user knows");
+        body.GetProperty("young").GetInt32().Should().Be(1);
+        body.GetProperty("mastered").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task WordWithAllFormsBlacklisted_StaysBlacklisted()
+    {
+        await ConfigureProfile(TestUsers.UserA, isPublic: true);
+        await SeedCards(TestUsers.UserA);
+        await AddCards(new FsrsCard(TestUsers.UserA, 400, 1, state: FsrsState.Blacklisted));
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/user/vocabulary/known-ids/amount")
+            .WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("blacklisted").GetInt32().Should().Be(1);
+        body.GetProperty("young").GetInt32().Should().Be(1);
+        body.GetProperty("mature").GetInt32().Should().Be(1);
+        body.GetProperty("mastered").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ResetCard_DoesNotCountAsKnown()
+    {
+        await ConfigureProfile(TestUsers.UserA, isPublic: true);
+        await SeedCards(TestUsers.UserA);
+        var now = DateTime.UtcNow;
+        // Reviewed but holding no active schedule: back in the new queue, so it counts as neither young nor mature.
+        await AddCards(new FsrsCard(TestUsers.UserA, 600, 0, state: FsrsState.New, due: now, lastReview: now.AddDays(-1)));
+
+        var response = await _client.GetAsync($"/api/user/profile/{TestUsers.UserA}/vocabulary-stats");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("young").GetInt32().Should().Be(1);
+        body.GetProperty("mature").GetInt32().Should().Be(1);
+    }
 }

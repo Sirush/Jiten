@@ -411,6 +411,25 @@ public partial class MorphologicalAnalyser
     private static bool IsKanjiPrefix(string text) =>
         text.Length > 0 && JapaneseTextHelper.IsKanji(text[0]);
 
+    // The prefix combine runs long before noun compounding, so an honorific that is merely the
+    // outermost layer can consume the head of the compound underneath it (お|母|上 → お母, stranding
+    // 上). The head belongs to the longer attested compound; the prefix then stands alone, which is
+    // the correct reading (お + 母上). Only diverts when the three-token whole is NOT itself a word,
+    // so お+手+紙 → お手紙 is untouched.
+    private bool CompletesCompoundWithFollowing(List<WordInfo> wordInfos, int prefixIndex)
+    {
+        if (HasNonNameCompoundLookup == null || prefixIndex + 2 >= wordInfos.Count)
+            return false;
+
+        var head = wordInfos[prefixIndex + 1];
+        var following = wordInfos[prefixIndex + 2];
+        if (!PosMapper.IsNounForCompounding(following.PartOfSpeech) || following.Text.Length == 0)
+            return false;
+
+        return HasNonNameCompoundLookup(head.Text + following.Text)
+               && !HasCompoundLookup!(wordInfos[prefixIndex].Text + head.Text + following.Text);
+    }
+
     private List<WordInfo> CombinePrefixes(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2 || HasCompoundLookup == null)
@@ -445,7 +464,8 @@ public partial class MorphologicalAnalyser
                     var combinedText = currentWord.Text + nextWord.Text;
 
                     if (!PrefixCombineExclusions.Contains(combinedText) &&
-                        HasCompoundLookup(combinedText))
+                        HasCompoundLookup(combinedText) &&
+                        !CompletesCompoundWithFollowing(wordInfos, i))
                     {
                         var prefixStart = currentWord.StartOffset;
                         currentWord = new WordInfo(nextWord);
@@ -1063,6 +1083,17 @@ public partial class MorphologicalAnalyser
         return newList;
     }
 
+    // Every kanji of the surface survives into the candidate base — the base is a spelling of
+    // this surface, not merely a lemma the deconjugator can reach from it.
+    private static bool KanjiPreserved(string surface, string baseForm)
+    {
+        foreach (var c in surface)
+            if (JapaneseTextHelper.IsKanji(c) && baseForm.IndexOf(c) < 0)
+                return false;
+
+        return true;
+    }
+
     private List<WordInfo> ReclassifyOrphanedSuffixes(List<WordInfo> wordInfos)
     {
         for (int i = 1; i < wordInfos.Count; i++)
@@ -1075,8 +1106,50 @@ public partial class MorphologicalAnalyser
             if (wordInfos[i].DictionaryForm is "じまい" or "仕舞い" or "ちゃん" or "さん" or "くん" or "様" or "殿" or "氏")
                 continue;
 
-            var prev = wordInfos[i - 1].PartOfSpeech;
-            if (prev is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Numeral or PartOfSpeech.Prefix or PartOfSpeech.Pronoun or PartOfSpeech.Suffix)
+            // A suffix is a lexical item in its own right, so its surface is attested (たち, ども,
+            // 的, 長, っぱなし). A Suffix-tagged surface that is NOT attested but deconjugates to an
+            // attested verb is a conjugated verb Sudachi bound to the preceding noun
+            // (レッテル|貼り, フライヤー|貼り) — its own spelling has no suffix entry, and the fold to
+            // one (貼り → 張り's ばり) is a different word. Route it to the verb path.
+            // Scoped to kanji-bearing surfaces whose base keeps those kanji (貼り → 貼る): that is
+            // what makes the token a spelling of the verb rather than a lemma the deconjugator
+            // merely reaches. Kana suffixes are excluded by construction — a conjugating suffix
+            // (ぶっ+た → ぶった) deconjugates to unrelated verbs (打つ) and must stay a suffix.
+            if (HasNonNameCompoundLookup != null && !HasNonNameCompoundLookup(wordInfos[i].Text)
+                && wordInfos[i].Text.Any(JapaneseTextHelper.IsKanji))
+            {
+                foreach (var form in Deconjugator.Instance.Deconjugate(wordInfos[i].Text))
+                {
+                    if (form.Text == wordInfos[i].Text || form.Text.Length < 2) continue;
+                    if (!DictionaryVerbEndings.Contains(form.Text[^1])) continue;
+                    if (!KanjiPreserved(wordInfos[i].Text, form.Text)) continue;
+                    if (!HasNonNameCompoundLookup(form.Text)) continue;
+
+                    wordInfos[i].PartOfSpeech = PartOfSpeech.Verb;
+                    wordInfos[i].PartOfSpeechSection1 = PartOfSpeechSection.None;
+                    wordInfos[i].DictionaryForm = form.Text;
+                    wordInfos[i].NormalizedForm = form.Text;
+                    wordInfos[i].Reading = string.Empty;
+                    // Same contract as the noun exit: a Sudachi-bound suffix must not anchor
+                    // compound/expression windows after reclassification.
+                    wordInfos[i].WasReclassifiedFromSuffix = true;
+                    break;
+                }
+
+                if (wordInfos[i].PartOfSpeech == PartOfSpeech.Verb)
+                    continue;
+            }
+
+            // Sudachi shreds an OOV katakana adjective into 名詞 + 接尾辞 (チッチャ|い) and then tags
+            // the following content word 接尾辞 too — a "suffix chain" anchored on an adjective
+            // tail, not a nominal host. A bare predicate ending cannot host a suffix, so it does
+            // not count as one here (車 after チッチャい must reclassify to reach its noun entry).
+            var prevInfo = wordInfos[i - 1];
+            bool prevIsPredicateTailSuffix = prevInfo.PartOfSpeech == PartOfSpeech.Suffix
+                                             && prevInfo.Text is "い" or "く" or "かっ";
+            var prev = prevInfo.PartOfSpeech;
+            if (prev is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Numeral or PartOfSpeech.Prefix or PartOfSpeech.Pronoun
+                || (prev == PartOfSpeech.Suffix && !prevIsPredicateTailSuffix))
                 continue;
 
             // Adjectival suffixes (形容詞的) like くさい, らしい, っぽい should keep their POS

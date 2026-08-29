@@ -52,6 +52,7 @@ internal enum TokenFeatures : uint
     KatakanaRun     = 1 << 28,
     CompoundBoundaryShape = 1 << 29,
     SingleKanjiNoun = 1u << 30,
+    TextKaratte     = 1u << 31,
 
     // Composite
     InflectableBase = 1 << 18,
@@ -131,7 +132,8 @@ internal static class TokenFeatureScanner
 
             if (text.Contains('ー'))
                 f |= TokenFeatures.LongVowelMark;
-            if (text.Length > 0 && text[^1] == 'っ')
+            // ッ included: RepairClippedAdjective accepts a katakana sokuon token too.
+            if (text.Length > 0 && text[^1] is 'っ' or 'ッ')
                 f |= TokenFeatures.EndsWithTsu;
 
             // Candidate positions are needed only immediately before the structural block. Normal
@@ -200,6 +202,9 @@ internal static class TokenFeatureScanner
                     break;
                 case "らん":
                     f |= TokenFeatures.TextRan;
+                    break;
+                case "からって":
+                    f |= TokenFeatures.TextKaratte;
                     break;
                 case "さっ":
                     f |= TokenFeatures.TextSakki;

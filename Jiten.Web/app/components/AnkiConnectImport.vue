@@ -18,12 +18,12 @@
   const ankiImportStore = useAnkiImportStore();
   const { limits: planLimits, isPlus } = useJitenPlus();
 
-  const currentStep = ref(0);
+  let currentStep = ref(0);
 
   let client: YankiConnect;
   let decks: Record<string, number> = {};
   let deckEntries: Array<[string, number]> = [];
-  const cantConnect = ref(false);
+  let cantConnect = ref(false);
   let cardsIds: number[] = [];
 
   const apiKey = ref('');
@@ -1074,16 +1074,16 @@
         class="mb-4"
         @close="showSentenceSummary = false"
       >
-        {{ sentenceImport.stats.value.imported }} example sentence{{ sentenceImport.stats.value.imported === 1 ? '' : 's' }} imported
-        <template v-if="sentenceSkippedTotal > 0">, {{ sentenceSkippedTotal }} skipped</template>
-        .
+        {{ sentenceImport.stats.value.imported }} example sentence{{ sentenceImport.stats.value.imported === 1 ? '' : 's' }} imported<template
+          v-if="sentenceSkippedTotal > 0"
+          >, {{ sentenceSkippedTotal }} skipped</template
+        >.
       </Message>
       <div v-if="cantConnect" class="text-red-800 dark:text-red-400">
         <p>Couldn't connect to Anki.</p>
         <p>
-          Make sure you have the
-          <a href="https://ankiweb.net/shared/info/2055492159" rel="nofollow" target="_blank">Anki Connect plugin</a>
-          installed and enabled.
+          Make sure you have the <a href="https://ankiweb.net/shared/info/2055492159" rel="nofollow" target="_blank">Anki Connect plugin</a> installed and
+          enabled.
         </p>
         <p>Make sure Anki is running</p>
         <p>
@@ -1096,19 +1096,16 @@
       <div v-if="currentStep == 0">
         <p v-if="mediaOnly">
           Add example sentences, images and audio from Anki using the
-          <a href="https://ankiweb.net/shared/info/2055492159" rel="nofollow" target="_blank">Anki Connect plugin</a>
-          . Your vocabulary is left alone.
+          <a href="https://ankiweb.net/shared/info/2055492159" rel="nofollow" target="_blank">Anki Connect plugin</a>. Your vocabulary is left alone.
         </p>
         <p v-else>
-          Add words directly from Anki using the
-          <a href="https://ankiweb.net/shared/info/2055492159" rel="nofollow" target="_blank">Anki Connect plugin</a>
-          .
+          Add words directly from Anki using the <a href="https://ankiweb.net/shared/info/2055492159" rel="nofollow" target="_blank">Anki Connect plugin</a>.
         </p>
         <div class="flex flex-col gap-1 p-4 pb-0 max-w-md">
           <label for="ankiApiKey" class="text-sm text-surface-500 dark:text-surface-400">API key (optional)</label>
           <InputText
             v-model="apiKey"
-            input-id="ankiApiKey"
+            inputId="ankiApiKey"
             name="ankiApiKey"
             autocomplete="off"
             data-1p-ignore
@@ -1117,11 +1114,7 @@
             class="w-full"
             @keyup.enter="Connect()"
           />
-          <small class="text-surface-500 dark:text-surface-400">
-            Leave blank unless you configured an
-            <code>apiKey</code>
-            in AnkiConnect's config.
-          </small>
+          <small class="text-surface-500 dark:text-surface-400">Leave blank unless you configured an <code>apiKey</code> in AnkiConnect's config.</small>
         </div>
         <div class="p-4">
           <Button label="Connect to Anki" @click="Connect()" />
@@ -1130,15 +1123,14 @@
 
       <div v-if="currentStep == 1 && deckEntries.length > 0">
         <p>Select a deck to add words from.</p>
-        <Select v-model="selectedDeck" :options="deckEntries" option-label="0" option-value="1" placeholder="Select a deck" class="w-full" />
+        <Select v-model="selectedDeck" :options="deckEntries" optionLabel="0" optionValue="1" placeholder="Select a deck" class="w-full" />
         <div class="flex flex-row gap-2 p-4">
           <Button label="Next" :disabled="!selectedDeck" @click="NextStep()" />
         </div>
       </div>
       <div v-if="currentStep == 2">
         <p>
-          Selected deck:
-          <b>{{ selectedDeckName || '—' }}</b>
+          Selected deck: <b>{{ selectedDeckName || '—' }}</b>
         </p>
         <div v-if="isLoading">
           <ProgressSpinner style="width: 50px; height: 50px" stroke-width="8px" animation-duration=".5s" />
@@ -1173,10 +1165,7 @@
                 </ul>
               </div>
               <div class="flex flex-col gap-1">
-                <label class="text-sm font-medium">
-                  Reading field
-                  <span class="font-normal text-surface-400">· optional</span>
-                </label>
+                <label class="text-sm font-medium">Reading field <span class="font-normal text-surface-400">· optional</span></label>
                 <Select
                   v-model="selectedReadingField"
                   :options="readingFieldsOptions"
@@ -1186,13 +1175,10 @@
                   class="w-full"
                   @change="onSelectionChanged"
                 />
-                <small class="text-surface-500 dark:text-surface-400">
-                  Used to tell apart words with the same spelling. Can be with full kana or furigana
-                  <br />
-                  (
-                  <span class="font-noto-sans">下[くだ]さる</span>
-                  ).
-                </small>
+                <small class="text-surface-500 dark:text-surface-400"
+                  >Used to tell apart words with the same spelling. Can be with full kana or furigana <br />
+                  (<span class="font-noto-sans">下[くだ]さる</span>).</small
+                >
                 <button
                   v-if="readingExtraSamples.length > 0"
                   type="button"
@@ -1210,8 +1196,7 @@
 
           <section class="flex flex-col gap-1">
             <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-2">
-              Example sentences
-              <span class="font-normal normal-case tracking-normal text-surface-400">· optional</span>
+              Example sentences <span class="font-normal normal-case tracking-normal text-surface-400">· optional</span>
             </h3>
             <Select
               v-model="selectedSentenceField"
@@ -1242,8 +1227,7 @@
           <JitenPlusGate feature="card-media" feature-label="Card media import">
             <section class="flex flex-col gap-3">
               <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">
-                Images &amp; audio
-                <span class="font-normal normal-case tracking-normal text-surface-400">· optional</span>
+                Images &amp; audio <span class="font-normal normal-case tracking-normal text-surface-400">· optional</span>
               </h3>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="flex flex-col gap-1">
@@ -1300,9 +1284,9 @@
                   </div>
                 </div>
               </div>
-              <small class="text-surface-500 dark:text-surface-400">
-                Files are read straight from your Anki media folder. Images are recompressed and count towards your card media storage.
-              </small>
+              <small class="text-surface-500 dark:text-surface-400"
+                >Files are read straight from your Anki media folder. Images are recompressed and count towards your card media storage.</small
+              >
             </section>
           </JitenPlusGate>
 
@@ -1319,9 +1303,7 @@
       </div>
       <div v-if="currentStep == 3">
         <p>
-          This will import up to
-          <b>{{ cardsIds.length }} cards</b>
-          .
+          This will import up to <b>{{ cardsIds.length }} cards</b>.
         </p>
         <p v-if="mediaOnly" class="text-sm text-surface-500 dark:text-surface-400 mb-4">
           Only sentences and media are imported; your vocabulary and review history are untouched.
@@ -1345,18 +1327,18 @@
         </div>
         <div class="flex flex-col gap-3 p-4">
           <div v-if="!mediaOnly" class="flex items-center gap-2">
-            <Checkbox v-model="importReviewHistory" input-id="importReviewHistory" :binary="true" @change="onSelectionChanged" />
-            <label for="importReviewHistory" class="cursor-pointer">Import review history</label>
+            <Checkbox v-model="importReviewHistory" inputId="importReviewHistory" :binary="true" @change="onSelectionChanged" />
+            <label for="importReviewHistory" class="cursor-pointer"> Import review history </label>
           </div>
           <div v-if="!mediaOnly" class="flex items-center gap-2">
-            <Checkbox v-model="overwriteExisting" input-id="overwrite" :binary="true" @change="onSelectionChanged" />
+            <Checkbox v-model="overwriteExisting" inputId="overwrite" :binary="true" @change="onSelectionChanged" />
             <label for="overwrite" class="cursor-pointer">
               Update words you already track (adds Anki's review history to Jiten's without removing anything; whichever side you reviewed more recently sets
               your next review date)
             </label>
           </div>
           <div class="flex items-center gap-2">
-            <Checkbox v-model="parseWords" input-id="parseWords" :binary="true" @change="onSelectionChanged" />
+            <Checkbox v-model="parseWords" inputId="parseWords" :binary="true" @change="onSelectionChanged" />
             <label for="parseWords" class="cursor-pointer">
               Parse words instead of importing them directly (only use if you have conjugated verbs instead of the dictionary form, less accurate)
             </label>
@@ -1387,8 +1369,7 @@
           <p class="font-semibold">Importing card media... {{ mediaImport.done.value }}/{{ mediaImport.total.value }} files</p>
           <ProgressBar :value="mediaImport.total.value > 0 ? Math.round((mediaImport.done.value / mediaImport.total.value) * 100) : 0" class="my-2 max-w-md" />
           <p class="text-sm text-surface-500 dark:text-surface-400">
-            <span v-if="mediaEtaText">About {{ mediaEtaText }} remaining ·</span>
-            Please keep this tab open until the import finishes.
+            <span v-if="mediaEtaText">About {{ mediaEtaText }} remaining · </span>Please keep this tab open until the import finishes.
           </p>
           <p v-if="mediaImport.maxBytes.value > 0" class="text-sm text-surface-500 dark:text-surface-400">
             Storage used: {{ formatBytes(mediaImport.usedBytes.value) }} / {{ formatBytes(mediaImport.maxBytes.value) }}
@@ -1451,9 +1432,10 @@
   <Dialog v-model:visible="showMediaSummary" modal header="Card media imported" class="w-[95vw] sm:w-[90vw] md:w-[36rem]">
     <div class="flex flex-col gap-3">
       <Message :severity="mediaImport.stats.value.uploaded + mediaImport.stats.value.replaced > 0 ? 'success' : 'warn'" :closable="false">
-        {{ mediaImport.stats.value.uploaded }} file{{ mediaImport.stats.value.uploaded === 1 ? '' : 's' }} imported
-        <span v-if="mediaImport.stats.value.replaced > 0">, {{ mediaImport.stats.value.replaced }} replaced</span>
-        .
+        {{ mediaImport.stats.value.uploaded }} file{{ mediaImport.stats.value.uploaded === 1 ? '' : 's' }} imported<span
+          v-if="mediaImport.stats.value.replaced > 0"
+          >, {{ mediaImport.stats.value.replaced }} replaced</span
+        >.
       </Message>
       <Message v-if="mediaImport.stats.value.quotaExceeded > 0" severity="error" :closable="false">
         Your card media storage is full, so the rest was not imported.

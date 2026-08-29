@@ -503,16 +503,14 @@
                       <div v-if="isAudioVisual && deck.speechDuration > 0" class="flex justify-between gap-2 stat-row">
                         <Tooltip :content="'Total duration of speech, excluding silence.\nCharacter count: ' + deck.characterCount.toLocaleString()">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                            <span class="@xl:hidden">Speech time</span>
-                            <span class="hidden @xl:inline">Speech duration</span>
+                            <span class="@xl:hidden">Speech time</span><span class="hidden @xl:inline">Speech duration</span>
                           </span>
                         </Tooltip>
                         <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ formattedSpeechDuration }}</span>
                       </div>
                       <div v-else class="flex justify-between gap-2 stat-row">
                         <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                          <span class="@xl:hidden">Characters</span>
-                          <span class="hidden @xl:inline">Character count</span>
+                          <span class="@xl:hidden">Characters</span><span class="hidden @xl:inline">Character count</span>
                         </span>
                         <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.characterCount.toLocaleString() }}</span>
                       </div>
@@ -524,14 +522,14 @@
                         <Tooltip :content="'Words appearing exactly once: ' + deck.uniqueWordUsedOnceCount.toLocaleString()">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                             Unique words
-                            <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums">
-                              · {{ formatOnce(deck.uniqueWordUsedOnceCount) }}
-                            </span>
+                            <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums"
+                              >· {{ formatOnce(deck.uniqueWordUsedOnceCount) }}</span
+                            >
                           </span>
                         </Tooltip>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">
-                          {{ deck.uniqueWordCount.toLocaleString() }}
-                        </span>
+                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
+                          deck.uniqueWordCount.toLocaleString()
+                        }}</span>
                       </div>
                     </div>
 
@@ -540,23 +538,22 @@
                         <Tooltip :content="'Kanji appearing exactly once: ' + deck.uniqueKanjiUsedOnceCount.toLocaleString()">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                             Unique kanji
-                            <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums">
-                              · {{ formatOnce(deck.uniqueKanjiUsedOnceCount) }}
-                            </span>
+                            <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums"
+                              >· {{ formatOnce(deck.uniqueKanjiUsedOnceCount) }}</span
+                            >
                           </span>
                         </Tooltip>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">
-                          {{ deck.uniqueKanjiCount.toLocaleString() }}
-                        </span>
+                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
+                          deck.uniqueKanjiCount.toLocaleString()
+                        }}</span>
                       </div>
                       <div v-if="deck.averageSentenceLength !== 0 && !deck.hideAverageSentenceLength" class="flex justify-between gap-2 stat-row">
-                        <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                          <span class="@xl:hidden">Avg. sentence</span>
-                          <span class="hidden @xl:inline">Average sentence length</span>
-                        </span>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">
-                          {{ deck.averageSentenceLength.toFixed(1) }}
-                        </span>
+                        <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap"
+                          ><span class="@xl:hidden">Avg. sentence</span><span class="hidden @xl:inline">Average sentence length</span></span
+                        >
+                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
+                          deck.averageSentenceLength.toFixed(1)
+                        }}</span>
                       </div>
                       <div v-if="speechSpeed > 0" class="flex justify-between gap-2 stat-row">
                         <Tooltip content="Average speed of speech in mora per minute.">
@@ -600,9 +597,9 @@
                         :to="`/decks/media/${deck.deckId}/detail`"
                         class="flex justify-between gap-2 stat-row group cursor-pointer no-underline"
                       >
-                        <span class="text-primary-600 dark:text-primary-400 font-normal whitespace-nowrap underline-offset-2 group-hover:underline">
-                          {{ childrenLabel }}
-                        </span>
+                        <span class="text-primary-600 dark:text-primary-400 font-normal whitespace-nowrap underline-offset-2 group-hover:underline">{{
+                          childrenLabel
+                        }}</span>
                         <span class="tabular-nums font-semibold whitespace-nowrap text-primary-600 dark:text-primary-400">
                           {{ deck.childrenDeckCount.toLocaleString() }}
                           <i class="pi pi-arrow-right text-xs ml-0.5 transition-transform group-hover:translate-x-0.5" />
@@ -610,9 +607,9 @@
                       </router-link>
                       <div v-else-if="deck.childrenDeckCount != 0" class="flex justify-between gap-2 stat-row">
                         <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">{{ childrenLabel }}</span>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">
-                          {{ deck.childrenDeckCount.toLocaleString() }}
-                        </span>
+                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
+                          deck.childrenDeckCount.toLocaleString()
+                        }}</span>
                       </div>
 
                       <div
@@ -640,16 +637,15 @@
                           </span>
                         </Tooltip>
 
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">
-                          {{ readingDuration > 0 ? readingDuration : '<1' }} h
-                        </span>
+                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap"
+                          >{{ readingDuration > 0 ? readingDuration : '<1' }} h</span
+                        >
                       </div>
 
                       <div v-if="deck.externalRating != 0 && !store.hideExternalRating && !demoCoverage" class="flex justify-between gap-2 stat-row">
                         <Tooltip content="Score based on user ratings from 3rd party websites, such as AniList, TMDB, VNDB or IGDB.">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                            <span class="@xl:hidden">Rating</span>
-                            <span class="hidden @xl:inline">External Rating</span>
+                            <span class="@xl:hidden">Rating</span><span class="hidden @xl:inline">External Rating</span>
                           </span>
                         </Tooltip>
                         <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.externalRating }} %</span>
@@ -657,8 +653,7 @@
 
                       <div v-if="deck.selectedWordOccurrences != 0" class="flex justify-between gap-2 stat-row">
                         <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                          <span class="@xl:hidden">Appears</span>
-                          <span class="hidden @xl:inline">Appears (times)</span>
+                          <span class="@xl:hidden">Appears</span><span class="hidden @xl:inline">Appears (times)</span>
                         </span>
                         <span class="tabular-nums font-bold whitespace-nowrap">{{ deck.selectedWordOccurrences.toLocaleString() }}</span>
                       </div>
@@ -739,8 +734,7 @@
                           <template v-if="!isCompact">
                             <i class="pi pi-download" />
                             <span class="whitespace-nowrap">
-                              <span class="@xl:hidden">Download</span>
-                              <span class="hidden @xl:inline">Download / Learn</span>
+                              <span class="@xl:hidden">Download</span><span class="hidden @xl:inline">Download / Learn</span>
                             </span>
                           </template>
                         </Button>
@@ -787,9 +781,8 @@
       <div class="flex flex-col gap-6">
         <div>
           <p class="text-sm text-muted-color mb-2">
-            How difficult did you find
-            <strong>{{ ratingDeckId === deck.deckId ? localiseTitle(deck) : 'this series' }}</strong>
-            ?
+            How difficult did you find <strong>{{ ratingDeckId === deck.deckId ? localiseTitle(deck) : 'this series' }}</strong
+            >?
           </p>
           <LazyDifficultyRating :deck-id="ratingDeckId" :current-rating="existingRating" @rated="() => {}" />
         </div>
@@ -809,9 +802,8 @@
           <div v-else class="flex flex-col items-center gap-3 py-6">
             <i class="pi pi-check-circle text-green-500 text-4xl" />
             <p class="text-sm text-muted-color text-center">
-              Thanks for helping refine the difficulties!
-              <br />
-              <NuxtLink to="/ratings" target="_blank" class="text-primary-500 hover:underline font-semibold">Compare more media →</NuxtLink>
+              Thanks for helping refine the difficulties! <br />
+              <NuxtLink to="/ratings" target="_blank" class="text-primary-500 hover:underline font-semibold"> Compare more media → </NuxtLink>
             </p>
           </div>
         </template>

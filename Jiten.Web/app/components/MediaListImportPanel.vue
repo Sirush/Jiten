@@ -557,11 +557,10 @@
           </template>
 
           <Message v-if="applied" severity="success" class="mt-4">
-            Imported: {{ applied.added }} added, {{ applied.updated }} updated
-            <template v-if="applied.favourited > 0">, {{ applied.favourited }} favourited</template>
-            <template v-if="applied.subdecksCompleted > 0">, {{ applied.subdecksCompleted }} subdecks completed</template>
-            <template v-if="applied.skippedIgnored > 0">, {{ applied.skippedIgnored }} skipped (ignored)</template>
-            .
+            Imported: {{ applied.added }} added, {{ applied.updated }} updated<template v-if="applied.favourited > 0"
+              >, {{ applied.favourited }} favourited</template
+            ><template v-if="applied.subdecksCompleted > 0">, {{ applied.subdecksCompleted }} subdecks completed</template
+            ><template v-if="applied.skippedIgnored > 0">, {{ applied.skippedIgnored }} skipped (ignored)</template>.
             <NuxtLink to="/profile" class="ml-1">View your media list</NuxtLink>
           </Message>
         </div>
@@ -630,9 +629,9 @@
                 Mark watched episodes / read volumes as completed subdecks
               </label>
               <span class="text-xs text-gray-500 dark:text-gray-400">
-                {{ progressRows.length }} titles have progress
-                <template v-if="importProgress && progressUnitTotal > 0">; {{ progressUnitTotal }} volumes/episodes will be marked as completed</template>
-                .
+                {{ progressRows.length }} titles have progress<template v-if="importProgress && progressUnitTotal > 0"
+                  >; {{ progressUnitTotal }} volumes/episodes will be marked as completed</template
+                >.
               </span>
             </div>
 
@@ -790,9 +789,8 @@
                           v-if="showUnits(item)"
                           :title="`${progressUnits(item)} of ${item.subdeckCount} subdecks will be marked as completed`"
                           class="flex-none rounded-sm bg-surface-100 px-1 font-semibold tabular-nums text-surface-600 dark:bg-surface-700/60 dark:text-surface-300"
+                          >{{ progressUnits(item) }} / {{ item.subdeckCount }}</span
                         >
-                          {{ progressUnits(item) }} / {{ item.subdeckCount }}
-                        </span>
                         <span v-if="showAlternateTitles(item)" class="min-w-0 truncate">
                           <template v-for="(t, i) in rowAlternateTitles(item)" :key="i">
                             <span v-if="i > 0" class="mx-1">·</span>
@@ -804,60 +802,56 @@
                         <span
                           v-if="showUnits(item)"
                           class="flex-none rounded-sm bg-surface-100 px-1 font-semibold tabular-nums text-surface-600 dark:bg-surface-700/60 dark:text-surface-300"
+                          >{{ progressUnits(item) }} / {{ item.subdeckCount }}</span
                         >
-                          {{ progressUnits(item) }} / {{ item.subdeckCount }}
-                        </span>
                         <template v-if="externalDiffers(item)">
                           <span class="truncate rounded-full px-1.5 py-px font-semibold" :class="externalChipClass">{{ externalStatusDisplay(item) }}</span>
                           <span class="flex-none text-gray-400">→</span>
                         </template>
-                        <span class="flex-none rounded-full px-1.5 py-px font-semibold" :class="statusChipClass[item.mappedStatus]">
-                          {{ getDeckStatusText(item.mappedStatus) }}
-                        </span>
+                        <span class="flex-none rounded-full px-1.5 py-px font-semibold" :class="statusChipClass[item.mappedStatus]">{{
+                          getDeckStatusText(item.mappedStatus)
+                        }}</span>
                         <span
                           v-if="isConflict(item)"
                           class="min-w-0 truncate text-gray-500 dark:text-gray-400"
                           :title="`Currently ${getDeckStatusText(item.currentStatus!)} on Jiten`"
+                          >· now {{ getDeckStatusText(item.currentStatus!) }}</span
                         >
-                          · now {{ getDeckStatusText(item.currentStatus!) }}
-                        </span>
                       </div>
                     </div>
                   </div>
                   <span class="hidden truncate text-sm sm:block">{{ getMediaTypeText(item.mediaType) }}</span>
                   <span class="hidden sm:block">
-                    <span class="inline-block max-w-full truncate rounded-full px-2 py-0.5 text-xs font-semibold" :class="externalChipClass">
-                      {{ externalStatusDisplay(item) }}
-                    </span>
+                    <span class="inline-block max-w-full truncate rounded-full px-2 py-0.5 text-xs font-semibold" :class="externalChipClass">{{
+                      externalStatusDisplay(item)
+                    }}</span>
                   </span>
                   <span class="hidden text-center text-gray-400 sm:block">→</span>
                   <span class="hidden sm:block">
-                    <span class="inline-block max-w-full truncate rounded-full px-2 py-0.5 text-xs font-semibold" :class="statusChipClass[item.mappedStatus]">
-                      {{ getDeckStatusText(item.mappedStatus) }}
-                    </span>
+                    <span class="inline-block max-w-full truncate rounded-full px-2 py-0.5 text-xs font-semibold" :class="statusChipClass[item.mappedStatus]">{{
+                      getDeckStatusText(item.mappedStatus)
+                    }}</span>
                   </span>
                   <span class="hidden lg:block">
                     <span
                       v-if="item.currentStatus != null"
                       class="inline-block max-w-full truncate rounded-full px-2 py-0.5 text-xs font-semibold"
                       :class="statusChipClass[item.currentStatus]"
+                      >{{ getDeckStatusText(item.currentStatus) }}</span
                     >
-                      {{ getDeckStatusText(item.currentStatus) }}
-                    </span>
                     <span v-else class="text-gray-400 dark:text-gray-500">—</span>
                   </span>
-                  <span v-if="showDateColumn" class="hidden truncate text-xs text-gray-500 lg:block dark:text-gray-400">
-                    {{ formatFinished(item.finishedAt) || '—' }}
-                  </span>
+                  <span v-if="showDateColumn" class="hidden truncate text-xs text-gray-500 lg:block dark:text-gray-400">{{
+                    formatFinished(item.finishedAt) || '—'
+                  }}</span>
                   <div class="min-w-0 justify-self-end text-right">
                     <span v-if="actionKind(item) === 'ignored'" class="text-xs text-gray-400 dark:text-gray-500">Ignored</span>
                     <span
                       v-else-if="actionKind(item) === 'excluded'"
                       class="inline-block max-w-full truncate rounded-full bg-surface-100 px-2 py-0.5 text-xs text-surface-500 dark:bg-surface-700/60 dark:text-surface-300"
                       :title="exclusionReason(item)"
+                      >{{ exclusionReason(item) }}</span
                     >
-                      {{ exclusionReason(item) }}
-                    </span>
                     <template v-else-if="actionKind(item) === 'conflict'">
                       <SelectButton
                         class="!hidden lg:!inline-flex"
@@ -883,9 +877,8 @@
                     <span
                       v-else-if="actionKind(item) === 'favourite'"
                       class="inline-block max-w-full truncate rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                      >Favourite</span
                     >
-                      Favourite
-                    </span>
                     <span v-else-if="actionKind(item) === 'unchanged'" class="text-xs text-gray-400 dark:text-gray-500">Unchanged</span>
                     <span v-else class="text-xs font-semibold text-green-600 sm:hidden dark:text-green-400">New</span>
                   </div>
@@ -916,11 +909,8 @@
           <!-- Apply bar -->
           <div class="flex flex-wrap items-center gap-3">
             <div class="text-sm">
-              <b class="tabular-nums">{{ newCount }}</b>
-              new ·
-              <b class="tabular-nums">{{ updateCount }}</b>
-              updates
-              <span v-if="ignoredRows.length > 0" class="text-gray-500 dark:text-gray-400">· {{ ignoredRows.length }} skipped (ignored)</span>
+              <b class="tabular-nums">{{ newCount }}</b> new · <b class="tabular-nums">{{ updateCount }}</b> updates
+              <span v-if="ignoredRows.length > 0" class="text-gray-500 dark:text-gray-400"> · {{ ignoredRows.length }} skipped (ignored)</span>
             </div>
             <Button
               :label="`Import ${applyRows.length} titles`"

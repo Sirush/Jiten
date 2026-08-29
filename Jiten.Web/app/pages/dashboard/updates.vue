@@ -232,9 +232,9 @@
               </div>
               <div class="text-xs text-surface-500 dark:text-surface-400 mt-1">
                 Created {{ formatDate(update.createdAt) }}
-                <span v-if="update.publishedAt">&middot; published {{ formatDate(update.publishedAt) }}</span>
-                <span v-if="update.updatedAt">&middot; edited {{ formatDate(update.updatedAt) }}</span>
-                <span v-if="update.notifiedAt">&middot; notified</span>
+                <span v-if="update.publishedAt"> &middot; published {{ formatDate(update.publishedAt) }}</span>
+                <span v-if="update.updatedAt"> &middot; edited {{ formatDate(update.updatedAt) }}</span>
+                <span v-if="update.notifiedAt"> &middot; notified</span>
               </div>
             </div>
 

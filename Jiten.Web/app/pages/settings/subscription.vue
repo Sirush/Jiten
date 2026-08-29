@@ -198,23 +198,18 @@
                 :class="sources?.isLifetime ? 'text-surface-400' : 'text-primary-500'"
               />
               <span v-if="sources?.isLifetime">
-                You also have an active
-                <span class="font-medium capitalize">{{ planName }}</span>
-                subscription. Lifetime access already covers everything. You can cancel it below to avoid further charges.
+                You also have an active <span class="font-medium capitalize">{{ planName }}</span> subscription. Lifetime access already covers everything. You
+                can cancel it below to avoid further charges.
               </span>
               <span v-else-if="sources?.cancelAtPeriodEnd">
-                Your
-                <span class="font-medium capitalize">{{ planName }}</span>
-                subscription is cancelled and will not renew
-                <span v-if="sources?.periodEnd">. Jiten+ stays fully available until {{ formatDate(sources.periodEnd) }}</span>
-                .
+                Your <span class="font-medium capitalize">{{ planName }}</span> subscription is cancelled and will not renew<span v-if="sources?.periodEnd"
+                  >. Jiten+ stays fully available until {{ formatDate(sources.periodEnd) }}</span
+                >.
               </span>
               <span v-else>
-                Active
-                <span class="font-medium capitalize">{{ planName }}</span>
-                subscription
-                <span v-if="sources?.periodEnd">, renews on {{ formatDate(sources.periodEnd) }}</span>
-                .
+                Active <span class="font-medium capitalize">{{ planName }}</span> subscription<span v-if="sources?.periodEnd"
+                  >, renews on {{ formatDate(sources.periodEnd) }}</span
+                >.
               </span>
             </li>
             <li v-if="trialLine" class="flex items-start gap-2">

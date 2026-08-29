@@ -1066,7 +1066,8 @@ public class FormSelectionTests
         yield return ["強いは弱いの実", "強い", 1236070, (byte)0];
 
         // === 訳 should be わけ (1538330), not やく (2057030) in these contexts ===
-        yield return ["残念ながらそういう訳にはいかんな", "訳", 1538330, (byte)0];
+        // ん-negative folding reaches the full idiom entry (訳にはいかん = わけにはいかない).
+        yield return ["残念ながらそういう訳にはいかんな", "訳にはいかん", 2057580, (byte)0];
         yield return ["自分でも訳が分からずに", "訳", 1538330, (byte)0];
         yield return ["見間違う訳がねぇ", "訳", 1538330, (byte)0];
 
@@ -1610,7 +1611,7 @@ public class FormSelectionTests
         // Verb/adjective surfaces matched to standalone-noun/連体詞 homographs
         yield return ["意識が飛んだ。", "飛んだ", 1429700, (byte)0]; // 飛ぶ past, not とんだ 連体詞
         yield return ["「うわっ、痛ぇぇぇーーー！！」", "痛", 1432680, (byte)0]; // clipped 痛い, not -algia
-        yield return ["「暗っ！」", "暗", 1154330, (byte)0]; // clipped 暗い
+        yield return ["「暗っ！」", "暗っ", 1154330, (byte)0]; // clipped 暗い keeps its っ now
         yield return ["皿をその横に置き、てきぱきと野菜を並べた。", "置き", 1421850, (byte)0]; // 置く 連用形, not おき interval
         yield return ["強がってみせる。", "強がって", 1928800, (byte)0]; // 強がる
         yield return ["「先に行け！」", "行け", 1578850, (byte)0]; // 行く imperative, not 行ける
@@ -1759,6 +1760,106 @@ public class FormSelectionTests
         yield return ["ざまあみやがれ山犬野郎", "ざまあみやがれ", 2868161, (byte)1];
         yield return ["「そりゃいいこった」", "こった", 2106260, (byte)0];
         yield return ["ミッチーのあまりの脳天気っぷりに面食らった。", "脳天気", 2027320, (byte)2];
+        // Kana-row-noun swallow repairs: the reassembled verb chain and the っこない expression
+        // must land on their own entries, not the row nouns ガ行/ハ行 or the っこ suffix.
+        yield return ["母が行かせまいとして玄関で引き止めた。", "行かせまい", 1578850, (byte)0];
+        yield return ["どう考えても聖域には行けっこない", "っこない", 2145640, (byte)0];
+        yield return ["そんなの出来っこないよ", "出来っこない", 2063900, (byte)0];
+        // 金のこと boundary: お金 keeps its own entry (not the 金ノコ hacksaw abbreviation)
+        yield return ["ううん、お金のことじゃない。", "お金", 1001820, (byte)0];
+        // なんだ+あれ: the pronoun survives (誰's だあれ kana form must not claim the span)
+        yield return ["なんだあれ", "あれ", 1000580, (byte)2];
+        yield return ["どうにか立とうと苦心する", "立とう", 1597040, (byte)0];
+        // Explanatory なんです after nominal content resolves to its own entry; left unmerged, the
+        // compound matcher absorbs なん leftward through a kana reading (三男, 西南). The pronoun
+        // POS keeps interrogatives out: これは何ですか keeps 何.
+        yield return ["「これが居酒屋さんなんですね」", "なんです", 2683060, (byte)0];
+        yield return ["「これが居酒屋さんなんですね」", "さん", 1005340, (byte)0];
+        yield return ["「俺のせいなんですかっ！？」", "せい", 1610040, (byte)1];
+        yield return ["仕事にも学校にも行かず、家で引きこもっている人のことなんですけどね", "なんです", 2683060, (byte)0];
+        yield return ["好きなんです", "なんです", 2683060, (byte)0];
+        yield return ["これは何ですか", "何", 1577100, (byte)0];
+        // Dialect/slur family lands on the dialect entries, not the homograph shards
+        // (ちょっ interjection, 唸る, じゃう, 所為).
+        yield return ["着る物や履く物まで決められちょった。", "ちょった", 2869627, (byte)0];
+        yield return ["居場所がのうなったらしい。", "のうなった", 2793080, (byte)1];
+        yield return ["期限ちょうどの日じゃった", "じゃった", 2850797, (byte)0];
+        yield return ["もう勘弁してくだせえ", "くだせえ", 1184270, (byte)1];
+        yield return ["「読んでみればわかるっすよ。」", "っす", 2269410, (byte)0];
+        yield return ["人に預けっぱなしですましている", "すましている", 1295030, (byte)2];
+        yield return ["「まったく、恥ずかしいったらありゃしない」", "ったらありゃしない", 2229510, (byte)0];
+        yield return ["「どうしたんだい」", "だい", 2097680, (byte)0];
+        yield return ["出ベソに", "出ベソ", 1340770, (byte)0];
+        yield return ["お父上", "父上", 1497670, (byte)0];
+        yield return ["父上様", "様", 1545790, (byte)0];
+        yield return ["お母上", "母上", 1515110, (byte)0];
+        yield return ["母上様", "母上", 1515110, (byte)0];
+        yield return ["お姉上", "姉上", 1307670, (byte)0];
+        // 病は気から is an expression entry, so the からって token splits and the proverb forms
+        yield return ["病は気からってね", "病は気から", 2152850, (byte)0];
+        yield return ["正体がわかって", "わかって", 1606560, (byte)4];
+        yield return ["絵本手に取ってね", "手に取って", 1895840, (byte)0];
+        // 打ち下ろし in prose is the deverbal 打ち下ろす, not the golf downhill-hole noun
+        yield return ["逆に言えば、動体に打ち下ろしを決める術理は存在しない。", "打ち下ろし", 1408600, (byte)0];
+        // Verb-lead noun merges require a non-archaic entry: した+もの stays compositional (the
+        // only entry for the fused surface is the fully-archaic 下物)
+        yield return ["紫織の攻撃力も充分すぎるほど常人離れしたものだ。", "した", 1157170, (byte)1];
+        yield return ["紫織の攻撃力も充分すぎるほど常人離れしたものだ。", "もの", 1502390, (byte)1];
+        // A Suffix tag anchored on a shredded adjective tail (チッチャ|い) is not a nominal host:
+        // 車 reclassifies and reaches its standalone noun, not the bound -しゃ suffix
+        yield return ["こんなとこチッチャい車が走るからいけねえんだ", "車", 1323080, (byte)0];
+        // ばり is a bound suffix: with no nominal host to bind to, 張り is the noun はり (tension),
+        // and Sudachi's バリ reading must not carry the suffix entry in on reading match.
+        yield return ["そして張りのある声", "張り", 1427760, (byte)0];
+        yield return ["声に張りがある", "張り", 1427760, (byte)0];
+        yield return ["漱石張りの文体だ", "張り", 1983280, (byte)0];
+        // ばり binds through a closing quote to its host
+        yield return ["「漱石」張りの文体", "張り", 1983280, (byte)0];
+        // Lexical-lead OOV compound verbs decompose instead of dropping (the lead is a prefix,
+        // not a renyoukei stem), which covers every inflection of the compound.
+        yield return ["だが薄ら笑う冷泉の神経が異様に太い", "笑う", 1351360, (byte)0];
+        yield return ["黄泉木「ブッ壊れてる」", "壊れてる", 1199900, (byte)0];
+        // なんです matched before the tail fuses, so every tail is covered by the one rule:
+        // 〜なんですから is なんです + から, not 何 + ですから.
+        yield return ["「ガルデモはあの４人だからこその調和なんですから」", "なんです", 2683060, (byte)0];
+        // 〜たいって was resolving the stolen い as 言う (1587040)
+        yield return ["あなたのこともっと知りたいって思って。", "知りたい", 1420470, (byte)0];
+        yield return ["あなたのこともっと知りたいって思って。", "って", 2086960, (byte)0];
+        // A Suffix-tagged surface that is not itself an attested word but deconjugates to an
+        // attested verb is a conjugated verb (貼り → 貼る), not the ばり suffix its normalised
+        // form folds to.
+        yield return ["「お前はレッテル貼りの達人だろ」", "貼り", 1427900, (byte)1];
+        yield return ["フライヤー貼りを再開させる", "貼り", 1427900, (byte)1];
+        // === Misparses batch 2026-08-13: lexicalized adverb, expression re-fusions, clipped
+        // adjectives, rare-idiom exclusion, place-name recut ===
+        yield return ["影が徐々に近づいてくる。", "徐々に", 1595480, (byte)0];
+        yield return ["頼んだぜワン公", "ワン公", 2582030, (byte)0];
+        yield return ["足短っ", "短っ", 1418620, (byte)0];
+        // katakana sokuon variant of the clipped adjective
+        yield return ["高ッ、この店", "高っ", 1283190, (byte)0];
+        // だあれ (誰) survives after an ん-final nominal; only なんだ/何だ hosts split
+        yield return ["このお姉さんだあれ？", "だあれ", 1416830, (byte)2];
+        // Noun + なんですか interrogative: 名前 hosts keep 何 (carved out of the なんです merge)
+        yield return ["お名前なんですか？", "なん", 2846738, (byte)1];
+        // A question tail makes both readings available, so the merge needs positive evidence for
+        // the explanatory sense: a bare noun host has none and keeps 何 (no per-noun carve-out).
+        yield return ["趣味なんですか？", "なん", 2846738, (byte)1];
+        yield return ["理由なんですか？", "なん", 2846738, (byte)1];
+        // A na-adjective host supplies it (好き何ですか is not a reading), as does a genitive の.
+        yield return ["好きなんですか？", "なんです", 2683060, (byte)0];
+        yield return ["「俺のせいなんですかっ！？」", "なんです", 2683060, (byte)0];
+        // なん retagged Prefix must not be absorbed leftward through the kana key (せい+なん = 西南)
+        yield return ["「俺のせいなんですかっ！？」", "俺", 1576870, (byte)0];
+        // quote-verb bypass is POS-gated: a noun starting with 言 doesn't reopen the theft
+        yield return ["意味がわかって言葉を失った", "わかって", 1606560, (byte)4];
+        yield return ["寒っ", "寒っ", 1210360, (byte)0];
+        yield return ["見るも無残な子グリフォン", "見るも無残", 2871068, (byte)0];
+        yield return ["「この男を知っているか？」", "男", 1419990, (byte)0];
+        yield return ["各養護院に引き取られることになっている。", "養護", 1605847, (byte)0];
+        yield return ["話にならん", "話にならん", 2223720, (byte)0];
+        yield return ["田中さんじゃった", "じゃった", 2850797, (byte)0];
+        yield return ["もうのうなった", "のうなった", 2793080, (byte)1];
+        yield return ["見るも無残だった", "見るも無残", 2871068, (byte)0];
         yield return ["俺の皮肉っぽい言い方に、むっとしたのがわかった。", "っぽい", 2083720, (byte)0];
         yield return ["立派な人になりたい。", "立派な", 1551790, (byte)0];
         yield return ["ちっぽけな家に住んでいる。", "ちっぽけな", 1007570, (byte)1];
@@ -1814,8 +1915,8 @@ public class FormSelectionTests
         yield return ["否定はしませぬ", "しませぬ", 1157170, (byte)1];
         // Polite かもしれません is its own expression (1002975); the plain かもしれない (1002970) still combines
         yield return ["同じなのかもしれませんしね", "かもしれません", 1002975, (byte)1];
-        // 合 after 死 is the 合い suffix あい (死合=しあい), not the volume unit ごう
-        yield return ["竜胆はこの死合の果てに", "合", 1284320, (byte)1];
+        // 死合 has its own entry since the 2026-08 JMdict update; the whole compound wins
+        yield return ["竜胆はこの死合の果てに", "死合", 2872098, (byte)0];
         // 直+copula に is 直に じかに (1430690), not 直(ちょく)+に
         yield return ["その熱量を直に感じ取ってみる", "直に", 1430690, (byte)0];
         // bare 有り得 at a clause end is its own entry (2560320), not 有り得る
@@ -1879,6 +1980,12 @@ public class FormSelectionTests
         yield return ["うちに初めて来た白乃は、当時の私の腰ほどの背丈だった。", "来た", 1547720, (byte)0];
         yield return ["「あ、カナ子来た」", "来た", 1547720, (byte)0];
         yield return ["と数メートル手前から手を振ってあいさつすると、「やーっときた」", "きた", 1547720, (byte)2];
+
+        // ご split off a ご+noun compound by resegmentation is the honorific prefix 御 (1270190),
+        // never the numeral 五 (1268060): a prefix-tagged token must not be re-resolved as a verb stem
+        yield return ["…ご都合のつく日ですか？", "ご", 1270190, (byte)1];
+        yield return ["『男性のみのご利用は、ご遠慮させていただいております』", "ご", 1270190, (byte)1];
+        yield return ["といってもあなた様ならすでにご承知なのでしょうけど。", "ご", 1270190, (byte)1];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

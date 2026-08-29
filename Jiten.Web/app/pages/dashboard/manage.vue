@@ -1425,10 +1425,8 @@
         <template #title>Recompute Furigana-Affected Difficulties</template>
         <template #content>
           <p class="mb-4">
-            Finds leaf decks whose raw text still holds inline furigana notation (
-            <code>{漢字'かんじ}</code>
-            ), which distorted the difficulty model before the markup was stripped at call time, and recomputes them through the external API. Run the dry run
-            first: every deck is a paid call.
+            Finds leaf decks whose raw text still holds inline furigana notation (<code>{漢字'かんじ}</code>), which distorted the difficulty model before the
+            markup was stripped at call time, and recomputes them through the external API. Run the dry run first: every deck is a paid call.
           </p>
 
           <div class="flex flex-wrap justify-center gap-2 mb-4">
@@ -1571,9 +1569,8 @@
         <template #title>Renormalize Card Media</template>
         <template #content>
           <p class="mb-4">
-            Re-runs upload-time normalization over card media images that were stored unprocessed (anything not
-            <code>image/webp</code>
-            ). Each file is re-encoded to a new path and the original is left on the CDN, so the rewrite can be rolled back until you discard the originals.
+            Re-runs upload-time normalization over card media images that were stored unprocessed (anything not <code>image/webp</code>). Each file is
+            re-encoded to a new path and the original is left on the CDN, so the rewrite can be rolled back until you discard the originals.
           </p>
 
           <div class="flex flex-wrap justify-center gap-2 mb-4">

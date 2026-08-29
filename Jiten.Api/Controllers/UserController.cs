@@ -135,7 +135,9 @@ public partial class UserController(
         int youngWords = 0, matureWords = 0, masteredWords = 0, blacklistedWords = 0;
         foreach (var wordGroup in effectiveForms.GroupBy(kvp => kvp.Key.WordId))
         {
-            var best = wordGroup.Max(kvp => kvp.Value);
+            var best = wordGroup.Max(kvp => kvp.Value == KnownState.Blacklisted ? KnownState.New : kvp.Value);
+            if (best == KnownState.New && wordGroup.Any(kvp => kvp.Value == KnownState.Blacklisted))
+                best = KnownState.Blacklisted;
             switch (best)
             {
                 case KnownState.Young: youngWords++; break;
@@ -4187,7 +4189,11 @@ public partial class UserController(
             return null;
 
         var interval = (due - lastReview.Value).TotalDays;
-        return interval < 21 ? KnownState.Young : KnownState.Mature;
+        if (interval >= 21)
+            return KnownState.Mature;
+        return state is FsrsState.Learning or FsrsState.Review or FsrsState.Relearning or FsrsState.Suspended
+            ? KnownState.Young
+            : null;
     }
 
     #endregion

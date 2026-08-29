@@ -54,38 +54,6 @@
 
   // misc tags that warn the learner before they study/Ankify a word.
   const WARNING_MISC = new Set(['vulg', 'X', 'sens', 'derog', 'obs', 'dated', 'hist', 'rare']);
-  const MISC_LABELS: Record<string, string> = {
-    uk: 'usu. kana',
-    abbr: 'abbreviation',
-    'on-mim': 'onomatopoeia',
-    yoji: 'yojijukugo',
-    joc: 'jocular',
-    'net-sl': 'net slang',
-    'm-sl': 'manga slang',
-    sl: 'slang',
-    col: 'colloquial',
-    hon: 'honorific',
-    hum: 'humble',
-    pol: 'polite',
-    fam: 'familiar',
-    derog: 'derogatory',
-    vulg: 'vulgar',
-    sens: 'sensitive',
-    dated: 'dated',
-    hist: 'historical',
-    obs: 'obsolete',
-    rare: 'rare',
-    arch: 'archaic',
-    poet: 'poetical',
-    chn: "children's",
-    fem: 'female term',
-    male: 'male term',
-    proverb: 'proverb',
-    id: 'idiomatic',
-    euph: 'euphemistic',
-    X: 'X-rated',
-  };
-  const miscLabel = (m: string) => MISC_LABELS[m] ?? m;
   const isWarningMisc = (m: string) => WARNING_MISC.has(m);
 
   const GLOSS_PREFIX: Record<string, string> = {
@@ -214,13 +182,9 @@
         />
         <span class="text-gray-400 mr-1">{{ definition.index }}.</span>
         <!-- plain meanings inline (trademarks get a ™) -->
-        <template v-for="(seg, i) in meaningSegments(definition).inline" :key="'inl' + i">
-          <span v-if="i > 0" class="text-gray-400">;</span>
-          <span>
-            {{ seg.text }}
-            <span v-if="seg.tm" class="text-gray-400">™</span>
-          </span>
-        </template>
+        <template v-for="(seg, i) in meaningSegments(definition).inline" :key="'inl' + i"
+          ><span v-if="i > 0" class="text-gray-400">; </span><span>{{ seg.text }}<span v-if="seg.tm" class="text-gray-400">™</span></span></template
+        >
         <!-- trailing tag badges (misc / field / dial / restriction), grouped at the end like genre tags -->
         <Tooltip v-for="m in definition.misc" :key="'m' + m" :content="miscLabel(m)" placement="top">
           <span
@@ -256,8 +220,8 @@
         </span>
         <!-- typed glosses (literally / figuratively / explanation) on their own indented line -->
         <div v-for="(blk, i) in meaningSegments(definition).blocks" :key="'blk' + i" class="ml-4 text-sm italic text-gray-500 dark:text-gray-400">
-          <span v-if="blk.prefix" class="not-italic text-gray-400">{{ blk.prefix }}</span>
-          {{ blk.text }}
+          <span v-if="blk.prefix" class="not-italic text-gray-400">{{ blk.prefix }}</span
+          >{{ blk.text }}
         </div>
         <!-- s_inf usage notes -->
         <div v-for="(note, i) in definition.senseInfo" :key="'si' + i" class="ml-4 text-sm italic text-gray-500 dark:text-gray-400">
@@ -272,18 +236,14 @@
               :to="`/vocabulary/${x.targetWordId}/0`"
               :title="x.targetSenseIndex ? `sense ${x.targetSenseIndex}` : undefined"
               class="inline-block rounded-full px-2 py-0.5 text-xs bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50"
+              >{{ xrefBaseText(x) }}<sup v-if="x.targetSenseIndex" class="text-[0.65em] opacity-60">{{ x.targetSenseIndex }}</sup></NuxtLink
             >
-              {{ xrefBaseText(x) }}
-              <sup v-if="x.targetSenseIndex" class="text-[0.65em] opacity-60">{{ x.targetSenseIndex }}</sup>
-            </NuxtLink>
             <span
               v-else
               :title="x.targetSenseIndex ? `sense ${x.targetSenseIndex}` : undefined"
               class="inline-block rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+              >{{ xrefBaseText(x) }}<sup v-if="x.targetSenseIndex" class="text-[0.65em] opacity-60">{{ x.targetSenseIndex }}</sup></span
             >
-              {{ xrefBaseText(x) }}
-              <sup v-if="x.targetSenseIndex" class="text-[0.65em] opacity-60">{{ x.targetSenseIndex }}</sup>
-            </span>
           </template>
         </div>
       </li>
@@ -300,7 +260,7 @@
 
   <div v-if="isCompact && !hideDefinition">
     <template v-for="(definition, di) in definitionsWithPartsOfSpeech.slice(0, 10)" :key="definition.index">
-      <span v-if="di > 0" class="text-gray-400">;</span>
+      <span v-if="di > 0" class="text-gray-400">; </span>
       <span :class="{ 'opacity-40': isRestricted(definition) || isHidden(definition) }">{{ definition.meanings.join('; ') }}</span>
       <!-- glanceable tag badges (misc / field / dial); verbose s_inf/g_type/xref stay on the detail + SRS views -->
       <Tooltip v-for="m in definition.misc" :key="'cm' + m" :content="miscLabel(m)" placement="top">

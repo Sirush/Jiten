@@ -680,12 +680,9 @@
           </div>
 
           <div class="flex items-center gap-2 mt-3">
-            <ToggleSwitch v-model="includeNewCards" input-id="includeNewCards" :disabled="workloadLoading" />
+            <ToggleSwitch v-model="includeNewCards" inputId="includeNewCards" :disabled="workloadLoading" />
             <label for="includeNewCards" class="text-sm cursor-pointer text-gray-600 dark:text-gray-300">Include future new cards in the estimate</label>
-            <span v-if="workloadLoading" class="flex items-center gap-1 text-xs text-gray-400">
-              <i class="pi pi-spin pi-spinner text-xs" />
-              Updating…
-            </span>
+            <span v-if="workloadLoading" class="flex items-center gap-1 text-xs text-gray-400"> <i class="pi pi-spin pi-spinner text-xs" /> Updating… </span>
           </div>
 
           <Button label="Simulate" icon="pi pi-chart-line" :loading="workloadLoading" class="mt-3" @click="loadWorkloadCurve" />
@@ -694,16 +691,12 @@
             <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-3">
               <div class="text-sm">
                 <span class="font-semibold text-lg tabular-nums" :class="multiplierColor">{{ multiplierLabel }}×</span>
-                <span class="text-gray-500 dark:text-gray-400">your current reviews</span>
+                <span class="text-gray-500 dark:text-gray-400"> your current reviews</span>
               </div>
               <div class="text-sm text-gray-600 dark:text-gray-300">
-                ≈
-                <span class="font-semibold tabular-nums">{{ reviewsPerDayLabel }}</span>
-                reviews/day,
-                <span class="font-semibold tabular-nums">{{ minutesPerDayLabel }}</span>
-                min/day,
-                <span class="font-semibold tabular-nums">{{ recallPctLabel }}%</span>
-                recall
+                ≈ <span class="font-semibold tabular-nums">{{ reviewsPerDayLabel }}</span> reviews/day,
+                <span class="font-semibold tabular-nums">{{ minutesPerDayLabel }}</span> min/day,
+                <span class="font-semibold tabular-nums">{{ recallPctLabel }}%</span> recall
               </div>
             </div>
             <p class="text-[11px] text-gray-400 mt-1">
@@ -742,11 +735,9 @@
       <div class="mb-5">
         <h4 class="text-md font-semibold mb-1">Optimise parameters</h4>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">
-          Analyse your review history to find the optimal FSRS parameters for your memory patterns.
-          <br />
+          Analyse your review history to find the optimal FSRS parameters for your memory patterns. <br />
           The more reviews you have, the more accurate the optimisation will be. It is recommended to optimise every time your number of reviews doubles.
-          <br />
-          You currently have {{ reviewCount }} reviews.
+          <br />You currently have {{ reviewCount }} reviews.
         </p>
 
         <!-- Review-history health check: a quick read on whether the history is fit to train on -->
@@ -791,25 +782,18 @@
             >
               <i class="pi pi-exclamation-triangle text-amber-600 dark:text-amber-400 text-sm" />
               <span class="text-sm text-amber-800 dark:text-amber-200">
-                You press
-                <b>Hard</b>
-                often but almost never
-                <b>Again</b>
-                . If Hard is your "I failed" button, it skews optimisation. Hard should mean "recalled, but with difficulty".
+                You press <b>Hard</b> often but almost never <b>Again</b>. If Hard is your "I failed" button, it skews optimisation. Hard should mean "recalled,
+                but with difficulty".
               </span>
               <Button label="Remap Hard → Again" size="small" severity="warn" outlined class="ml-auto" :loading="isRemapping" @click="confirmRemapHard" />
             </div>
             <div v-if="health.neverUsesHard" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <i class="pi pi-info-circle text-sky-500 text-sm" />
-              You have never pressed
-              <b>Hard</b>
-              . Using it for cards you barely recalled gives the optimiser more to work with.
+              You have never pressed <b>Hard</b>. Using it for cards you barely recalled gives the optimiser more to work with.
             </div>
             <div v-if="health.neverUsesEasy" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <i class="pi pi-info-circle text-sky-500 text-sm" />
-              You have never pressed
-              <b>Easy</b>
-              . Reserve it for cards that felt effortless.
+              You have never pressed <b>Easy</b>. Reserve it for cards that felt effortless.
             </div>
             <div v-if="sameDayPct >= 40 && !health.likelyHardAsFail" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <i class="pi pi-info-circle text-sky-500 text-sm" />
@@ -820,7 +804,7 @@
         </div>
 
         <div class="flex items-center gap-2 mb-2">
-          <Checkbox v-model="rescheduleAfterOptimise" input-id="rescheduleAfterOptimise" :binary="true" :disabled="!canOptimise" />
+          <Checkbox v-model="rescheduleAfterOptimise" inputId="rescheduleAfterOptimise" :binary="true" :disabled="!canOptimise" />
           <label for="rescheduleAfterOptimise" class="text-sm cursor-pointer">Also reschedule all my cards after optimisation</label>
         </div>
         <Button
@@ -850,16 +834,14 @@
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">
           21 comma-separated numbers that control FSRS scheduling. These are set automatically when you optimise, but you can also edit them manually.
         </p>
-        <Textarea v-model="parametersCsv" class="w-full" rows="3" placeholder="0.2172, 1.1771, 3.2602, ..." @update:model-value="hasUserEdited = true" />
+        <Textarea v-model="parametersCsv" class="w-full" rows="3" placeholder="0.2172, 1.1771, 3.2602, ..." @update:modelValue="hasUserEdited = true" />
         <div class="mt-2 text-sm text-surface-600 dark:text-surface-400">
-          Values:
-          <b>{{ valueCount }}</b>
-          / {{ expectedCount }}
+          Values: <b>{{ valueCount }}</b> / {{ expectedCount }}
         </div>
         <Message v-if="formError" key="fsrs-params-error" severity="error" :closable="false" class="mt-2">
           {{ formError }}
         </Message>
-        <Message v-else-if="isDefault" key="fsrs-params-default" severity="info" :closable="false" class="mt-2">Using default FSRS settings.</Message>
+        <Message v-else-if="isDefault" key="fsrs-params-default" severity="info" :closable="false" class="mt-2"> Using default FSRS settings. </Message>
 
         <div v-if="parsedValues" class="mt-3">
           <button class="text-sm text-primary cursor-pointer underline" @click="showBreakdown = !showBreakdown">

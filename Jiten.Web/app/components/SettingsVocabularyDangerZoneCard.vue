@@ -164,9 +164,8 @@
       </Message>
 
       <p class="mb-3">
-        Clicking this button will
-        <b>delete ALL your known words</b>
-        . This action cannot be undone, and unlike removing individual cards, nothing is kept under Recently Removed.
+        Clicking this button will <b>delete ALL your known words</b>. This action cannot be undone, and unlike removing individual cards, nothing is kept under
+        Recently Removed.
       </p>
       <div class="flex">
         <Button severity="danger" icon="pi pi-trash" label="Clear All Known Words" @click="clearKnownWords" />
@@ -176,9 +175,8 @@
 
       <p class="mb-3">
         Recalculates your heatmap, streaks and activity totals from your existing reviews. Use it if a day or a streak looks wrong. Your reviews and cards are
-        untouched, but the recalculated days will be under your
-        <b>current</b>
-        study timezone, so they can look different from your historical stats if you've changed timezone in-between.
+        untouched, but the recalculated days will be under your <b>current</b> study timezone, so they can look different from your historical stats if you've
+        changed timezone in-between.
       </p>
       <div class="flex">
         <Button severity="danger" outlined icon="pi pi-refresh" label="Rebuild Activity History" :loading="rebuildBusy" @click="confirmRebuildActivity" />
@@ -187,11 +185,10 @@
       <Divider />
 
       <p class="mb-3">
-        Deletes
-        <b>all of your reviews</b>
-        in a selected period of time, including the ones in your history (Recently Removed). They disappear from your heatmap, streaks and retention. Cards that
-        keep part of their history are rescheduled from what is left; cards left with no review at all are removed, since a card without history is a word you
-        have never studied. Words you marked as known, blacklisted or suspended are not affected. This cannot be undone.
+        Deletes <b>all of your reviews</b> in a selected period of time, including the ones in your history (Recently Removed). They disappear from your
+        heatmap, streaks and retention. Cards that keep part of their history are rescheduled from what is left; cards left with no review at all are removed,
+        since a card without history is a word you have never studied. Words you marked as known, blacklisted or suspended are not affected. This cannot be
+        undone.
       </p>
       <div class="flex">
         <Button severity="danger" outlined icon="pi pi-calendar-times" label="Erase Review History" @click="showPurgeDialog = true" />

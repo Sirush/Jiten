@@ -461,9 +461,8 @@
               <span
                 class="text-[clamp(0.95rem,5vw,1.5rem)] font-bold tabular-nums"
                 :class="srsStore.dueSummary.reviewsDue > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-400'"
+                >{{ srsStore.dueSummary.reviewsDue }}</span
               >
-                {{ srsStore.dueSummary.reviewsDue }}
-              </span>
               <span class="text-xs text-gray-500 dark:text-gray-400">Reviews</span>
             </button>
 
@@ -475,9 +474,8 @@
               <span
                 class="text-[clamp(0.95rem,5vw,1.5rem)] font-bold tabular-nums"
                 :class="srsStore.dueSummary.newCardsAvailable > 0 ? 'text-green-400 dark:text-green-600' : 'text-gray-400 dark:text-gray-400'"
+                >{{ srsStore.dueSummary.newCardsAvailable }}</span
               >
-                {{ srsStore.dueSummary.newCardsAvailable }}
-              </span>
               <span class="text-xs text-gray-500 dark:text-gray-400">New</span>
             </button>
 
@@ -510,12 +508,10 @@
             </div>
             <div v-if="srsStore.deckStreak.isNewRecord && srsStore.deckStreak.currentStreak > 1" class="text-xs font-semibold text-orange-500">New record!</div>
             <div class="text-sm text-gray-500 dark:text-gray-400">
-              Longest:
-              <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ srsStore.deckStreak.longestStreak }}</span>
+              Longest: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ srsStore.deckStreak.longestStreak }}</span>
             </div>
             <div class="text-sm text-gray-500 dark:text-gray-400">
-              Days studied:
-              <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ srsStore.deckStreak.totalReviewDays }}</span>
+              Days studied: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ srsStore.deckStreak.totalReviewDays }}</span>
             </div>
           </div>
           <!-- Mini Heatmap -->
@@ -556,12 +552,10 @@
         >
           <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
             <div class="text-sm text-gray-500 dark:text-gray-400">
-              Next 7d:
-              <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ forecastNext7d }}</span>
+              Next 7d: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ forecastNext7d }}</span>
             </div>
             <div class="text-sm text-gray-500 dark:text-gray-400">
-              Next 30d:
-              <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ forecastNext30d }}</span>
+              Next 30d: <span class="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ forecastNext30d }}</span>
             </div>
           </div>
           <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">Upcoming reviews</div>
@@ -586,8 +580,7 @@
           </div>
         </div>
         <span class="flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 flex-shrink-0">
-          View
-          <Icon name="material-symbols:arrow-forward-rounded" size="1.1rem" />
+          View <Icon name="material-symbols:arrow-forward-rounded" size="1.1rem" />
         </span>
       </NuxtLink>
     </div>
@@ -599,11 +592,11 @@
         :key="i"
         class="flex items-center gap-4 p-4 bg-surface-0 dark:bg-surface-900 rounded-xl shadow-sm border border-surface-200 dark:border-surface-700"
       >
-        <Skeleton width="64px" height="80px" border-radius="2px" />
+        <Skeleton width="64px" height="80px" borderRadius="2px" />
         <div class="flex-1">
           <Skeleton width="60%" height="1.2rem" class="mb-2" />
           <Skeleton width="40%" height="0.9rem" class="mb-3" />
-          <Skeleton width="100%" height="1.5rem" border-radius="4px" />
+          <Skeleton width="100%" height="1.5rem" borderRadius="4px" />
         </div>
       </div>
     </div>
@@ -627,16 +620,16 @@
         <Tooltip :content="usageTooltip" placement="bottom">
           <div class="flex items-center gap-3">
             <span :class="usageColor(deckUsage, planLimits.studyDecks)">
-              <span class="font-semibold tabular-nums">{{ deckUsage }}</span>
-              <span class="opacity-60">/{{ planLimits.studyDecks }} decks</span>
+              <span class="font-semibold tabular-nums">{{ deckUsage }}</span
+              ><span class="opacity-60">/{{ planLimits.studyDecks }} decks</span>
             </span>
             <span v-if="hasStaticDecks" :class="usageColor(staticWordUsage, planLimits.studyDeckWords)">
-              <span class="font-semibold tabular-nums">{{ staticWordUsage.toLocaleString() }}</span>
-              <span class="opacity-60">/{{ compactWords(planLimits.studyDeckWords) }} custom words</span>
+              <span class="font-semibold tabular-nums">{{ staticWordUsage.toLocaleString() }}</span
+              ><span class="opacity-60">/{{ compactWords(planLimits.studyDeckWords) }} custom words</span>
             </span>
           </div>
         </Tooltip>
-        <NuxtLink v-if="!isPlus" to="/jiten-plus" class="text-primary-600 dark:text-primary-400 hover:underline whitespace-nowrap">Need more?</NuxtLink>
+        <NuxtLink v-if="!isPlus" to="/jiten-plus" class="text-primary-600 dark:text-primary-400 hover:underline whitespace-nowrap"> Need more? </NuxtLink>
         <Button icon="pi pi-plus" label="Add Deck" size="small" class="sm:!hidden ml-auto flex-shrink-0" @click="showAddDialog = true" />
       </div>
 
@@ -728,10 +721,10 @@
                   <template v-if="deck.deckType === StudyDeckType.MediaDeck">{{ getMediaTypeText(deck.mediaType) }}</template>
                   <template v-else-if="deck.deckType === StudyDeckType.GlobalDynamic">{{ frequencyDeckLabel(deck) }}</template>
                   <template v-else>Word List</template>
-                  <span v-if="deck.totalWords">· {{ deck.totalWords }} words</span>
-                  <span v-if="deckOrderLabel(deck)">· {{ deckOrderLabel(deck) }}</span>
-                  <span v-if="deck.description">· {{ deck.description }}</span>
-                  <span v-if="newCardDeckIds.has(deck.userStudyDeckId)" class="text-green-400 dark:text-green-600 font-medium">· New cards from here</span>
+                  <span v-if="deck.totalWords"> · {{ deck.totalWords }} words</span>
+                  <span v-if="deckOrderLabel(deck)"> · {{ deckOrderLabel(deck) }}</span>
+                  <span v-if="deck.description"> · {{ deck.description }}</span>
+                  <span v-if="newCardDeckIds.has(deck.userStudyDeckId)" class="text-green-400 dark:text-green-600 font-medium"> · New cards from here</span>
                 </div>
                 <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">
                   <Tooltip :content="`${maturePct(deck)}% mature<br>${knownPct(deck)}% known (young + mature)`" placement="top">
@@ -894,9 +887,9 @@
                   <template v-if="deck.deckType === StudyDeckType.MediaDeck">{{ getMediaTypeText(deck.mediaType) }}</template>
                   <template v-else-if="deck.deckType === StudyDeckType.GlobalDynamic">{{ frequencyDeckLabel(deck) }}</template>
                   <template v-else>Word List</template>
-                  <span v-if="deck.totalWords">· {{ deck.totalWords }} words</span>
-                  <span v-if="deckOrderLabel(deck)">· {{ deckOrderLabel(deck) }}</span>
-                  <span v-if="deck.description">· {{ deck.description }}</span>
+                  <span v-if="deck.totalWords"> · {{ deck.totalWords }} words</span>
+                  <span v-if="deckOrderLabel(deck)"> · {{ deckOrderLabel(deck) }}</span>
+                  <span v-if="deck.description"> · {{ deck.description }}</span>
                 </div>
                 <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">
                   <Tooltip :content="`${maturePct(deck)}% mature<br>${knownPct(deck)}% known (young + mature)`" placement="top">

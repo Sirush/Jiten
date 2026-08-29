@@ -42,8 +42,8 @@ public class CoverageJourneyService(
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(12);
     /// <summary>Without a coverage stamp nothing rotates the key, so unstamped entries expire on their own instead.</summary>
     private static readonly TimeSpan UnstampedCacheTtl = TimeSpan.FromMinutes(15);
-    /// <summary>The growth series tracks reviews, not coverage, so it has no stamp to rotate on and just ages out.</summary>
-    private static readonly TimeSpan GrowthCacheTtl = TimeSpan.FromHours(1);
+    /// <summary>Matches the profile vocab cache TTL so the two profile headline counters stay in step mid-session.</summary>
+    private static readonly TimeSpan GrowthCacheTtl = TimeSpan.FromMinutes(5);
     /// <summary>Transition dates never change once set, so they survive a week; a miss only costs one log walk.</summary>
     private static readonly TimeSpan TransitionDatesTtl = TimeSpan.FromDays(7);
     /// <summary>Absorbs a burst of deck views without rebuilding the segment map from the card rows each time.</summary>

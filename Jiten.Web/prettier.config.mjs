@@ -11,7 +11,7 @@ const config = {
   vueIndentScriptAndStyle: true,
   printWidth: 160,
   endOfLine: 'auto',
-  htmlWhitespaceSensitivity: 'ignore',
+  htmlWhitespaceSensitivity: 'css',
 };
 
 export default config;

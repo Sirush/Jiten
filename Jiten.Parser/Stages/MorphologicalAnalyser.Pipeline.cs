@@ -32,6 +32,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Split, SplitUnattestedToAdverbs, TokenFeatures.AdverbEndsTo),
         Stage(TokenStageGroup.Split, SplitTanSuffix, TokenFeatures.TextTanSuffix),
         Stage(TokenStageGroup.Split, SplitTawakeNoun, TokenFeatures.TextTawake),
+        Stage(TokenStageGroup.Split, SplitLexicalisedKaratte, TokenFeatures.TextKaratte),
         Stage(TokenStageGroup.Split, SplitDoushiteContraction),
         Stage(TokenStageGroup.Split, SplitEmphaticMoSuru),
 
@@ -54,6 +55,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Repair, ApplyTokenRewriteRulesLate),
         Stage(TokenStageGroup.Repair, RepairSakkiMoraTheft, TokenFeatures.TextSakki),
         Stage(TokenStageGroup.Repair, CollapseReduplicatedMimetic, TokenFeatures.KanaRepetition),
+        Stage(TokenStageGroup.Repair, RepairClippedAdjective, TokenFeatures.EndsWithTsu),
         Stage(TokenStageGroup.Repair, RepairClassicalKiAdjective),
 
         Stage(TokenStageGroup.Combine, CombinePrefixes, TokenFeatures.Prefix),

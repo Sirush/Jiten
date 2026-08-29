@@ -533,8 +533,7 @@
                 completed {{ formatCompletedAt(request.completedAt) }}
               </span>
               <span v-if="request.requesterName && authStore.isAdmin" class="text-sm text-muted-color">
-                by
-                <span class="font-medium">{{ request.requesterName }}</span>
+                by <span class="font-medium">{{ request.requesterName }}</span>
               </span>
             </div>
           </div>
@@ -711,7 +710,7 @@
                 <i class="pi pi-plus-circle" />
                 Create deck from this request
               </NuxtLink>
-              <small class="text-surface-500 dark:text-surface-400">Opens prefilled form and put the request to In Progress.</small>
+              <small class="text-surface-500 dark:text-surface-400"> Opens prefilled form and put the request to In Progress. </small>
             </div>
 
             <div v-if="!isTerminal" class="flex gap-2 flex-wrap">
@@ -855,7 +854,7 @@
                   <template v-if="authStore.isAdmin">
                     <span>{{ (comment.upload as MediaRequestUploadAdminDto).fileName }}</span>
                     <span>({{ formatFileSize(comment.upload.fileSize) }})</span>
-                    <span v-if="comment.upload.originalFileCount > 1" class="text-xs">({{ comment.upload.originalFileCount }} files)</span>
+                    <span v-if="comment.upload.originalFileCount > 1" class="text-xs"> ({{ comment.upload.originalFileCount }} files) </span>
                   </template>
                   <template v-else>
                     <span>{{ uploadFileCountLabel(comment.upload) }}</span>
@@ -947,7 +946,7 @@
             <small class="text-muted-color">{{ commentText.length }}/500</small>
 
             <div class="flex flex-col gap-2">
-              <Message severity="warn" :closable="false" class="text-sm">Do not zip EPUBs - they are automatically optimised when uploaded directly.</Message>
+              <Message severity="warn" :closable="false" class="text-sm"> Do not zip EPUBs - they are automatically optimised when uploaded directly. </Message>
 
               <input ref="fileInputRef" type="file" :accept="allowedExtensions.join(',')" multiple class="hidden" @change="handleFileSelect" />
 
@@ -988,8 +987,7 @@
                   <Button icon="pi pi-times" severity="secondary" text size="small" rounded @click="removeFile(index)" />
                 </div>
                 <small :class="isOverUploadLimit ? 'text-red-500' : 'text-muted-color'">
-                  Total: {{ formatFileSize(totalFileSize) }}
-                  <template v-if="isOverUploadLimit">. Over the 100MB limit, remove a file to post.</template>
+                  Total: {{ formatFileSize(totalFileSize) }}<template v-if="isOverUploadLimit">. Over the 100MB limit, remove a file to post.</template>
                 </small>
               </div>
             </div>
