@@ -613,39 +613,9 @@ public partial class MorphologicalAnalyser
         return newList;
     }
 
-    private List<WordInfo> CombineTte(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo>? newList = null;
-        WordInfo currentWord = wordInfos[0];
-        bool isCopy = false;
-
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            WordInfo nextWord = wordInfos[i];
-
-            if (currentWord.Text.EndsWith("っ") && nextWord.Text.StartsWith("て"))
-            {
-                if (newList == null) { newList = CopyAccumulatorUpTo(wordInfos, i - 1); }
-                if (!isCopy) { currentWord = new WordInfo(currentWord); isCopy = true; }
-                currentWord.Text += nextWord.Text;
-                currentWord.EndOffset = nextWord.EndOffset;
-                currentWord.Reading += nextWord.Reading;
-            }
-            else
-            {
-                newList?.Add(currentWord);
-                currentWord = nextWord;
-                isCopy = false;
-            }
-        }
-
-        if (newList == null) return wordInfos;
-        newList.Add(currentWord);
-        return newList;
-    }
+    private List<WordInfo> CombineTte(List<WordInfo> wordInfos) =>
+        MergeAdjacentWhere(wordInfos, static (currentWord, nextWord) =>
+            currentWord.Text.EndsWith("っ") && nextWord.Text.StartsWith("て"));
 
     // Quotative って + the kana verb いう fuse into the single relativiser っていう (= という,
     // JMDict 2757880), matching how ってのは/たって already surface as one cluster. Restricted to the
@@ -666,7 +636,7 @@ public partial class MorphologicalAnalyser
                 && word is { Text: "って", DictionaryForm: "って", PartOfSpeech: PartOfSpeech.Particle }
                 && wordInfos[i + 1] is { Text: "いう", DictionaryForm: "いう" })
             {
-                newList ??= [..wordInfos[..i]];
+                newList ??= CopyAccumulatorUpTo(wordInfos, i);
                 var iu = wordInfos[i + 1];
                 newList.Add(new WordInfo(word)
                 {
@@ -694,7 +664,7 @@ public partial class MorphologicalAnalyser
                 && wordInfos[i + 1] is { Text: "いう", DictionaryForm: "いう" }
                 && IsQuotativeTteStem(word.Text[..^2]))
             {
-                newList ??= [..wordInfos[..i]];
+                newList ??= CopyAccumulatorUpTo(wordInfos, i);
                 var iu = wordInfos[i + 1];
                 var stem = word.Text[..^2];
                 int mid = word.EndOffset >= 0 ? word.EndOffset - 2 : -1;
@@ -740,41 +710,11 @@ public partial class MorphologicalAnalyser
         return wordInfos;
     }
 
-    private List<WordInfo> CombineAdverbialParticle(List<WordInfo> wordInfos)
-    {
-        if (wordInfos.Count < 2)
-            return wordInfos;
-
-        List<WordInfo>? newList = null;
-        WordInfo currentWord = wordInfos[0];
-        bool isCopy = false;
-
-        for (int i = 1; i < wordInfos.Count; i++)
-        {
-            WordInfo nextWord = wordInfos[i];
-
-            if (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.AdverbialParticle) &&
-                (nextWord.DictionaryForm == "だり" || nextWord.DictionaryForm == "たり") &&
-                currentWord.PartOfSpeech == PartOfSpeech.Verb)
-            {
-                if (newList == null) { newList = CopyAccumulatorUpTo(wordInfos, i - 1); }
-                if (!isCopy) { currentWord = new WordInfo(currentWord); isCopy = true; }
-                currentWord.Text += nextWord.Text;
-                currentWord.EndOffset = nextWord.EndOffset;
-                currentWord.Reading += nextWord.Reading;
-            }
-            else
-            {
-                newList?.Add(currentWord);
-                currentWord = nextWord;
-                isCopy = false;
-            }
-        }
-
-        if (newList == null) return wordInfos;
-        newList.Add(currentWord);
-        return newList;
-    }
+    private List<WordInfo> CombineAdverbialParticle(List<WordInfo> wordInfos) =>
+        MergeAdjacentWhere(wordInfos, static (currentWord, nextWord) =>
+            nextWord.HasPartOfSpeechSection(PartOfSpeechSection.AdverbialParticle) &&
+            (nextWord.DictionaryForm == "だり" || nextWord.DictionaryForm == "たり") &&
+            currentWord.PartOfSpeech == PartOfSpeech.Verb);
 
     private List<WordInfo> CombineConjunctiveParticle(List<WordInfo> wordInfos)
     {
@@ -957,7 +897,7 @@ public partial class MorphologicalAnalyser
                 && CompletionAuxVerbs.Contains(aux.DictionaryForm)
                 && HasCompoundLookup(word.Text + aux.DictionaryForm))
             {
-                result ??= [..wordInfos[..i]];
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
                 result.Add(new WordInfo(word)
                 {
                     Text = word.Text + aux.Text,
@@ -1353,7 +1293,7 @@ public partial class MorphologicalAnalyser
 
             if (nextWord.Text == "ば" && currentWord.PartOfSpeech == PartOfSpeech.Verb)
             {
-                newList ??= CopyUpTo(wordInfos, i);
+                newList ??= CopyAccumulatorUpTo(wordInfos, i);
                 var merged = new WordInfo(currentWord);
                 merged.Text += nextWord.Text;
                 merged.EndOffset = nextWord.EndOffset;
@@ -1377,7 +1317,7 @@ public partial class MorphologicalAnalyser
                     if (sc.Second == "で" && tokoroDeBlocked) continue;
                     if (nextWord.Text == sc.Second)
                     {
-                        newList ??= CopyUpTo(wordInfos, i);
+                        newList ??= CopyAccumulatorUpTo(wordInfos, i);
                         var merged = new WordInfo(currentWord)
                         {
                             Text = currentWord.Text + nextWord.Text,
@@ -1405,7 +1345,7 @@ public partial class MorphologicalAnalyser
                         (sc.Third.Length > 1 && sc.Third[^1] == 'ー' && thirdWord.Text == sc.Third[..^1]);
                     if (nextWord.Text == sc.Item2 && thirdMatch)
                     {
-                        newList ??= CopyUpTo(wordInfos, i);
+                        newList ??= CopyAccumulatorUpTo(wordInfos, i);
                         var merged = new WordInfo(currentWord)
                         {
                             Text = currentWord.Text + nextWord.Text + sc.Third,
@@ -1427,14 +1367,6 @@ public partial class MorphologicalAnalyser
         }
 
         return newList ?? wordInfos;
-    }
-
-    private static List<WordInfo> CopyUpTo(List<WordInfo> source, int count)
-    {
-        var list = new List<WordInfo>(source.Count);
-        for (int i = 0; i < count; i++)
-            list.Add(source[i]);
-        return list;
     }
 
     /// <summary>

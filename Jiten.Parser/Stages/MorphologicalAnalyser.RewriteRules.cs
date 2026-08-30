@@ -44,6 +44,7 @@ internal sealed record TokenPattern(
     string? TextEndsWith = null,
     PartOfSpeech[]? Pos = null,
     string[]? DictFormAnyOf = null,
+    string[]? NormalizedFormAnyOf = null,
     string? ReadingPrefix = null,
     string? NotReadingPrefix = null,
     bool RequireUnpinned = true);
@@ -56,6 +57,7 @@ internal sealed record TokenTemplate(
     string? DictForm = null,
     string? NormalizedForm = null,
     PartOfSpeech? Pos = null,
+    PartOfSpeechSection? PosSection = null,
     string? Reading = null,
     int? Pin = null,
     byte? PinReadingIndex = null,
@@ -874,6 +876,277 @@ public partial class MorphologicalAnalyser
                 new TokenTemplate("あいつ", DictForm: "あいつ", NormalizedForm: "あいつ", Pos: PartOfSpeech.Pronoun, Reading: "アイツ"),
                 new TokenTemplate("も", DictForm: "も", NormalizedForm: "も", Pos: PartOfSpeech.Particle, Reading: "モ"),
             ]),
+
+        // --- Literal single-surface fixes migrated out of ProcessSpecialCases. Early phase runs at
+        // that method's pipeline position, so ordering relative to the rest of the pipeline is
+        // unchanged. RequireUnpinned: false throughout — the hand blocks never gated on pins. ---
+
+        // そうかいそうかい: Sudachi mashes the middle into an OOV noun かいそうか that then matches the
+        // rare 階層化 via its kana reading. Re-cut so the reduplicated そう+かい survives.
+        new RewriteRule("kaisouka", RewritePhase.Early,
+            [new TokenPattern(Text: "かいそうか", Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun], RequireUnpinned: false)],
+            [new TokenTemplate("かい", DictForm: "かい", NormalizedForm: "かい", Pos: PartOfSpeech.Particle, Reading: "カイ"),
+             new TokenTemplate("そう", DictForm: "そう", NormalizedForm: "そう", Pos: PartOfSpeech.Adverb, Reading: "ソウ"),
+             new TokenTemplate("か", DictForm: "か", NormalizedForm: "か", Pos: PartOfSpeech.Particle, Reading: "カ")]),
+
+        // [noun]がないって: before a quotative って, Sudachi mis-lattices が+ない into がな(仮名)+いっ(言う)
+        // (the whole then resolves to the rare 我鳴る). Regroup to が + ない + って after a noun.
+        new RewriteRule("ganai-tte", RewritePhase.Early,
+            [new TokenPattern(Text: "がな", NormalizedFormAnyOf: ["仮名"], RequireUnpinned: false),
+             new TokenPattern(Text: "いっ", NormalizedFormAnyOf: ["言う"], RequireUnpinned: false),
+             new TokenPattern(Text: "て", RequireUnpinned: false)],
+            [new TokenTemplate("が", DictForm: "が", NormalizedForm: "が", Pos: PartOfSpeech.Particle, Reading: "ガ", Pin: 2028930),
+             new TokenTemplate("ない", DictForm: "ない", NormalizedForm: "無い", Pos: PartOfSpeech.IAdjective, Reading: "ナイ", Pin: 1529520),
+             new TokenTemplate("って", DictForm: "って", NormalizedForm: "って", Pos: PartOfSpeech.Particle, Reading: "ッテ", Pin: 2086960)],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun,
+                PartOfSpeech.Pronoun, PartOfSpeech.Counter])),
+
+        // [predicate]ときっての: きっての ("foremost of") steals とき's き after a relative clause; it
+        // genuinely follows a noun (学校きっての秀才) — after a predicate the reading is とき+って+の.
+        new RewriteRule("toki-tteno", RewritePhase.Early,
+            [new TokenPattern(Text: "と", RequireUnpinned: false),
+             new TokenPattern(Text: "きっての", RequireUnpinned: false)],
+            [new TokenTemplate("とき", DictForm: "とき", NormalizedForm: "時", Pos: PartOfSpeech.Noun, Reading: "トキ"),
+             new TokenTemplate("って", DictForm: "って", NormalizedForm: "って", Pos: PartOfSpeech.Particle, Reading: "ッテ", Pin: 2086960),
+             new TokenTemplate("の", DictForm: "の", NormalizedForm: "の", Pos: PartOfSpeech.Particle, Reading: "ノ")],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Verb, PartOfSpeech.IAdjective,
+                PartOfSpeech.Auxiliary, PartOfSpeech.Expression])),
+
+        // ありがてぇ (ありがたい 1541560, ai→ee): most ai→ee adjectives Sudachi normalises whole,
+        // but this fixed compound shreds あり|が|てぇ — recombine and pin.
+        new RewriteRule("arigatee", RewritePhase.Early,
+            [new TokenPattern(Text: "あり", RequireUnpinned: false),
+             new TokenPattern(Text: "が", RequireUnpinned: false),
+             new TokenPattern(Text: "てぇ", RequireUnpinned: false)],
+            [new TokenTemplate("ありがてぇ", DictForm: "ありがたい", NormalizedForm: "ありがたい",
+                Pos: PartOfSpeech.IAdjective, Reading: "アリガテェ", Pin: 1541560, RecoverConjugations: true)]),
+
+        // 貸り (non-standard 借り, entry 貸りる): Sudachi tags 貸 Noun + り Aux; merge to the verb
+        // renyokei so the inflection (貸りたい) combines and resolves.
+        new RewriteRule("kariru", RewritePhase.Early,
+            [new TokenPattern(Text: "貸", Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun], RequireUnpinned: false),
+             new TokenPattern(Text: "り", RequireUnpinned: false)],
+            [new TokenTemplate("貸り", DictForm: "貸りる", NormalizedForm: "貸りる", Pos: PartOfSpeech.Verb, Reading: "カリ")],
+            Guard: new LookupGuard(LookupGuardKind.NonNameCompoundExists, "貸りる")),
+
+        // こんな/そんな/あんな/どんな + の: Sudachi cuts the 連体詞 as こん|なの (and the scorer then
+        // mismatches こん to 紺). Gated on the 連体詞 POS so the genuine noun reading (色は紺なの) stays.
+        new RewriteRule("konna-no", RewritePhase.Early,
+            [new TokenPattern(Text: "こん", Pos: [PartOfSpeech.PrenounAdjectival], RequireUnpinned: false),
+             new TokenPattern(Text: "なの", RequireUnpinned: false)],
+            [new TokenTemplate("こんな", DictForm: "こんな", NormalizedForm: "こんな", Reading: "コンナ"),
+             new TokenTemplate("の", DictForm: "の", NormalizedForm: "の", Pos: PartOfSpeech.Particle, Reading: "ノ")],
+            Guard: new LookupGuard(LookupGuardKind.CompoundExists, "こんな")),
+        new RewriteRule("sonna-no", RewritePhase.Early,
+            [new TokenPattern(Text: "そん", Pos: [PartOfSpeech.PrenounAdjectival], RequireUnpinned: false),
+             new TokenPattern(Text: "なの", RequireUnpinned: false)],
+            [new TokenTemplate("そんな", DictForm: "そんな", NormalizedForm: "そんな", Reading: "ソンナ"),
+             new TokenTemplate("の", DictForm: "の", NormalizedForm: "の", Pos: PartOfSpeech.Particle, Reading: "ノ")],
+            Guard: new LookupGuard(LookupGuardKind.CompoundExists, "そんな")),
+        new RewriteRule("anna-no", RewritePhase.Early,
+            [new TokenPattern(Text: "あん", Pos: [PartOfSpeech.PrenounAdjectival], RequireUnpinned: false),
+             new TokenPattern(Text: "なの", RequireUnpinned: false)],
+            [new TokenTemplate("あんな", DictForm: "あんな", NormalizedForm: "あんな", Reading: "アンナ"),
+             new TokenTemplate("の", DictForm: "の", NormalizedForm: "の", Pos: PartOfSpeech.Particle, Reading: "ノ")],
+            Guard: new LookupGuard(LookupGuardKind.CompoundExists, "あんな")),
+        new RewriteRule("donna-no", RewritePhase.Early,
+            [new TokenPattern(Text: "どん", Pos: [PartOfSpeech.PrenounAdjectival], RequireUnpinned: false),
+             new TokenPattern(Text: "なの", RequireUnpinned: false)],
+            [new TokenTemplate("どんな", DictForm: "どんな", NormalizedForm: "どんな", Reading: "ドンナ"),
+             new TokenTemplate("の", DictForm: "の", NormalizedForm: "の", Pos: PartOfSpeech.Particle, Reading: "ノ")],
+            Guard: new LookupGuard(LookupGuardKind.CompoundExists, "どんな")),
+
+        // 化け物どもめ etc.: Sudachi cuts the plural+derogatory run ども+め as prefix ど + noun もめ
+        // (揉め). After a content noun, recut to ども + め (both suffixes).
+        new RewriteRule("domo-me", RewritePhase.Early,
+            [new TokenPattern(Text: "ど", Pos: [PartOfSpeech.Prefix], RequireUnpinned: false),
+             new TokenPattern(Text: "もめ", RequireUnpinned: false)],
+            [new TokenTemplate("ども", DictForm: "ども", NormalizedForm: "ども", Pos: PartOfSpeech.Suffix, Reading: "ドモ"),
+             new TokenTemplate("め", DictForm: "め", NormalizedForm: "め", Pos: PartOfSpeech.Suffix, Reading: "メ")],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun,
+                PartOfSpeech.Name, PartOfSpeech.Pronoun])),
+
+        // Katakana particle sequence ノヨ misread as the name 乃代 — split into the particles.
+        new RewriteRule("no-yo", RewritePhase.Early,
+            [new TokenPattern(Text: "ノヨ", Pos: [PartOfSpeech.Noun, PartOfSpeech.NaAdjective], RequireUnpinned: false)],
+            [new TokenTemplate("ノ", DictForm: "の", NormalizedForm: "の", Pos: PartOfSpeech.Particle, Reading: "ノ"),
+             new TokenTemplate("ヨ", DictForm: "よ", NormalizedForm: "よ", Pos: PartOfSpeech.Particle, Reading: "ヨ")]),
+
+        // Clause-initial いいか、/いいか! is the "Listen!" interjection (2555520), not adjective いい +
+        // question か. Gated on clause position AND the following 、/! so the genuine question keeps
+        // its split everywhere else (行っていいか分からない, standalone いいか?).
+        new RewriteRule("iika-listen", RewritePhase.Early,
+            [new TokenPattern(Text: "いい", Pos: [PartOfSpeech.IAdjective], RequireUnpinned: false),
+             new TokenPattern(Text: "か", Pos: [PartOfSpeech.Particle], RequireUnpinned: false)],
+            [new TokenTemplate("いいか", DictForm: "いいか", NormalizedForm: "いいか", Pos: PartOfSpeech.Expression,
+                Reading: "イイカ", Pin: 2555520)],
+            Prev: new ContextCond(ClauseBoundary: true),
+            Next: new ContextCond(TextAnyOf: ["、", "!", "！"])),
+
+        // Standalone ひと tagged with Sudachi's 一-lexeme is almost always 人 — the 一 lemma otherwise
+        // feeds the scorer a lemma bonus toward the bound-prefix entry. Genuine prefix usages (ひと月)
+        // are tagged 接頭辞 or kept fused by Sudachi.
+        new RewriteRule("hito-dict", RewritePhase.Early,
+            [new TokenPattern(Text: "ひと", Pos: [PartOfSpeech.Noun], DictFormAnyOf: ["一"], RequireUnpinned: false)],
+            [new TokenTemplate("", DictForm: "人", NormalizedForm: "人")]),
+        new RewriteRule("hito-norm", RewritePhase.Early,
+            [new TokenPattern(Text: "ひと", Pos: [PartOfSpeech.Noun], NormalizedFormAnyOf: ["一"], RequireUnpinned: false)],
+            [new TokenTemplate("", DictForm: "人", NormalizedForm: "人")]),
+
+        // Suffix かねる + negative = the lexicalized かねない "quite capable of" (破りかねない);
+        // Sudachi's df=かねる makes the gate exact (金 is impossible here).
+        new RewriteRule("kanenai", RewritePhase.Early,
+            [new TokenPattern(Text: "かね", Pos: [PartOfSpeech.Suffix], DictFormAnyOf: ["かねる"], RequireUnpinned: false),
+             new TokenPattern(Text: "ない", RequireUnpinned: false)],
+            [new TokenTemplate("かねない", DictForm: "かねない", NormalizedForm: "かねない",
+                Pos: PartOfSpeech.Expression, Reading: "カネナイ")]),
+        new RewriteRule("kanenakatta", RewritePhase.Early,
+            [new TokenPattern(Text: "かね", Pos: [PartOfSpeech.Suffix], DictFormAnyOf: ["かねる"], RequireUnpinned: false),
+             new TokenPattern(Text: "なかっ", RequireUnpinned: false),
+             new TokenPattern(Text: "た", RequireUnpinned: false)],
+            [new TokenTemplate("かねなかった", DictForm: "かねない", NormalizedForm: "かねない",
+                Pos: PartOfSpeech.Expression, Reading: "カネナカッタ")]),
+
+        // Imperative たまえ after a renyokei verb: 気をつけ|た|まえ → 気をつけ + たまえ
+        // (×た前 is ungrammatical — "before X-ing" is る前/の前).
+        new RewriteRule("tamae", RewritePhase.Early,
+            [new TokenPattern(Text: "た", Pos: [PartOfSpeech.Auxiliary], RequireUnpinned: false),
+             new TokenPattern(Text: "まえ", Pos: [PartOfSpeech.Noun], RequireUnpinned: false)],
+            [new TokenTemplate("たまえ", DictForm: "たまえ", NormalizedForm: "たまえ", Pos: PartOfSpeech.Suffix, Reading: "タマエ")],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Verb])),
+
+        // Suffix-tagged っけ is the recollection sentence-ending particle.
+        new RewriteRule("kke-sfp", RewritePhase.Early,
+            [new TokenPattern(Text: "っけ", Pos: [PartOfSpeech.Suffix], RequireUnpinned: false)],
+            [new TokenTemplate("", Pos: PartOfSpeech.Particle, PosSection: PartOfSpeechSection.SentenceEndingParticle)]),
+
+        // Sudachi fuses 私+戦 → 私戦 (しせん "private war"). Followed by いたく (Sudachi: adverb 痛く)
+        // it's 私(わたし) + 戦いたく (want to fight).
+        new RewriteRule("shisen-itaku", RewritePhase.Early,
+            [new TokenPattern(Text: "私戦", Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun], RequireUnpinned: false),
+             new TokenPattern(Text: "いたく", NormalizedFormAnyOf: ["痛く"], RequireUnpinned: false)],
+            [new TokenTemplate("私", DictForm: "私", NormalizedForm: "私", Pos: PartOfSpeech.Pronoun, Reading: "ワタシ"),
+             new TokenTemplate("戦いたく", DictForm: "戦う", NormalizedForm: "戦う", Pos: PartOfSpeech.Verb, Reading: "タタカイタク")]),
+
+        // Sudachi glues a trailing particle into a 表現 token — split so the underlying noun/verb and
+        // particle match separately.
+        new RewriteRule("hitomae-de", RewritePhase.Early,
+            [new TokenPattern(Text: "人前で", Pos: [PartOfSpeech.Expression], RequireUnpinned: false)],
+            [new TokenTemplate("人前", DictForm: "人前", NormalizedForm: "人前", Pos: PartOfSpeech.Noun, Reading: ""),
+             new TokenTemplate("で", DictForm: "で", NormalizedForm: "で", Pos: PartOfSpeech.Particle, Reading: "デ")]),
+        new RewriteRule("sama-ni", RewritePhase.Early,
+            [new TokenPattern(Text: "様に", Pos: [PartOfSpeech.Expression], RequireUnpinned: false)],
+            [new TokenTemplate("様", DictForm: "様", NormalizedForm: "様", Pos: PartOfSpeech.Noun, Reading: ""),
+             new TokenTemplate("に", DictForm: "に", NormalizedForm: "に", Pos: PartOfSpeech.Particle, Reading: "ニ")]),
+        new RewriteRule("dare-datte", RewritePhase.Early,
+            [new TokenPattern(Text: "誰だって", Pos: [PartOfSpeech.Expression], RequireUnpinned: false)],
+            [new TokenTemplate("誰", DictForm: "誰", NormalizedForm: "誰", Pos: PartOfSpeech.Pronoun, Reading: ""),
+             new TokenTemplate("だって", DictForm: "だって", NormalizedForm: "だって", Pos: PartOfSpeech.Particle, Reading: "ダッテ")]),
+
+        // Split おけばいい so the preceding 放って can form the compound 放っておく.
+        new RewriteRule("okeba-ii", RewritePhase.Early,
+            [new TokenPattern(Text: "おけばいい", Pos: [PartOfSpeech.Expression], RequireUnpinned: false)],
+            [new TokenTemplate("おけ", DictForm: "おく", NormalizedForm: "おく", Pos: PartOfSpeech.Verb, Reading: "オケ"),
+             new TokenTemplate("ば", DictForm: "ば", NormalizedForm: "ば", Pos: PartOfSpeech.Particle, Reading: "バ"),
+             new TokenTemplate("いい", DictForm: "いい", NormalizedForm: "いい", Pos: PartOfSpeech.IAdjective, Reading: "イイ")]),
+
+        // で (conjunction/auxiliary) + しょう (noun) is a split でしょう.
+        new RewriteRule("de-shou", RewritePhase.Early,
+            [new TokenPattern(Text: "で", Pos: [PartOfSpeech.Conjunction, PartOfSpeech.Auxiliary], RequireUnpinned: false),
+             new TokenPattern(Text: "しょう", Pos: [PartOfSpeech.Noun], RequireUnpinned: false)],
+            [new TokenTemplate("でしょう", DictForm: "でしょう", NormalizedForm: "です", Pos: PartOfSpeech.Expression,
+                PosSection: PartOfSpeechSection.None, Reading: "デショウ")]),
+
+        // Sudachi parses 何でしょう as 何で(noun) + しょう(noun); split to 何 + でしょう.
+        new RewriteRule("nande-shou", RewritePhase.Early,
+            [new TokenPattern(Text: "何で", Pos: [PartOfSpeech.Noun], RequireUnpinned: false),
+             new TokenPattern(Text: "しょう", Pos: [PartOfSpeech.Noun], RequireUnpinned: false)],
+            [new TokenTemplate("何", DictForm: "何", NormalizedForm: "何", Pos: PartOfSpeech.Pronoun, Reading: "ナニ"),
+             new TokenTemplate("でしょう", DictForm: "でしょう", NormalizedForm: "です", Pos: PartOfSpeech.Expression,
+                PosSection: PartOfSpeechSection.None, Reading: "デショウ")]),
+
+        // でしょう is (sometimes?) parsed as auxiliary — normalise to Expression.
+        new RewriteRule("deshou-expression", RewritePhase.Early,
+            [new TokenPattern(Text: "でしょう", RequireUnpinned: false)],
+            [new TokenTemplate("", Pos: PartOfSpeech.Expression, PosSection: PartOfSpeechSection.None)]),
+
+        // Standalone ぬ misread as the archaic verb 寝(ぬ) is the classical negative auxiliary (norm ず).
+        new RewriteRule("nu-negative", RewritePhase.Early,
+            [new TokenPattern(Text: "ぬ", Pos: [PartOfSpeech.Verb], NormalizedFormAnyOf: ["寝る"], RequireUnpinned: false)],
+            [new TokenTemplate("", NormalizedForm: "ず", Pos: PartOfSpeech.Auxiliary)]),
+
+        // なれ always tagged 代名詞 汝 (archaic "thou") — in modern text it is the 命令形/可能形 stem of 成る.
+        new RewriteRule("nare-naru", RewritePhase.Early,
+            [new TokenPattern(Text: "なれ", Pos: [PartOfSpeech.Pronoun], NormalizedFormAnyOf: ["汝"], RequireUnpinned: false)],
+            [new TokenTemplate("", DictForm: "なる", NormalizedForm: "なる", Pos: PartOfSpeech.Verb, Reading: "ナレ")]),
+
+        // Prefix-tagged 今 is the adverb.
+        new RewriteRule("ima-adverb", RewritePhase.Early,
+            [new TokenPattern(Text: "今", Pos: [PartOfSpeech.Prefix], RequireUnpinned: false)],
+            [new TokenTemplate("", Pos: PartOfSpeech.Adverb)]),
+
+        // 空 as 形状詞/ウツロ → noun/カラ: kanji 空 in modern Japanese almost always reads から (empty);
+        // うつろ is typically written 虚ろ.
+        new RewriteRule("kara-empty", RewritePhase.Early,
+            [new TokenPattern(Text: "空", Pos: [PartOfSpeech.NaAdjective], ReadingPrefix: "ウツロ", RequireUnpinned: false)],
+            [new TokenTemplate("", NormalizedForm: "空", Pos: PartOfSpeech.Noun, Reading: "カラ")]),
+
+        // に + しろ → にしろ ("even if") except after a noun-ish host (大概にしろ = imperative of 大概にする).
+        new RewriteRule("ni-shiro", RewritePhase.Early,
+            [new TokenPattern(Text: "に", RequireUnpinned: false),
+             new TokenPattern(Text: "しろ", RequireUnpinned: false)],
+            [new TokenTemplate("にしろ", DictForm: "にしろ", NormalizedForm: "にしろ", Pos: PartOfSpeech.Expression, Reading: "ニシロ")],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Noun, PartOfSpeech.NaAdjective, PartOfSpeech.Pronoun], Negate: true)),
+
+        // Verb stem + とくと misread as the adverb 篤と: it is とく (ておく contraction) + と (particle).
+        new RewriteRule("toku-to", RewritePhase.Early,
+            [new TokenPattern(Text: "とくと", Pos: [PartOfSpeech.Adverb], NormalizedFormAnyOf: ["篤と"], RequireUnpinned: false)],
+            [new TokenTemplate("とく", DictForm: "とく", NormalizedForm: "とく", Pos: PartOfSpeech.Auxiliary, Reading: "トク"),
+             new TokenTemplate("と", DictForm: "と", NormalizedForm: "と", Pos: PartOfSpeech.Particle, Reading: "ト")],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Verb])),
+
+        // Verb/noun stem + とくよう misread as 徳用: it is とく (ておく) + よう (formal noun).
+        // Noun hosts too — Sudachi often tags verb continuative forms as nouns.
+        new RewriteRule("toku-you", RewritePhase.Early,
+            [new TokenPattern(Text: "とくよう", NormalizedFormAnyOf: ["徳用"], RequireUnpinned: false)],
+            [new TokenTemplate("とく", DictForm: "とく", NormalizedForm: "とく", Pos: PartOfSpeech.Auxiliary, Reading: "トク"),
+             new TokenTemplate("よう", DictForm: "よう", NormalizedForm: "よう", Pos: PartOfSpeech.Noun, Reading: "ヨウ")],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Verb, PartOfSpeech.Noun])),
+
+        // しよう (noun) + として → しようとして (te-form of しようとする).
+        new RewriteRule("shiyou-toshite", RewritePhase.Early,
+            [new TokenPattern(Text: "しよう", Pos: [PartOfSpeech.Noun], RequireUnpinned: false),
+             new TokenPattern(Text: "として", RequireUnpinned: false)],
+            [new TokenTemplate("しようとして", DictForm: "しようとする", Pos: PartOfSpeech.Verb, Reading: "シヨウトシテ")]),
+        // …and the shape where Sudachi misreads し as a conjunction before ようとして.
+        new RewriteRule("shi-youtoshite", RewritePhase.Early,
+            [new TokenPattern(Text: "し", Pos: [PartOfSpeech.Conjunction], RequireUnpinned: false),
+             new TokenPattern(Text: "ようとして", RequireUnpinned: false)],
+            [new TokenTemplate("しようとして", DictForm: "しようとして", Pos: PartOfSpeech.Verb, Reading: "シヨウトシテ")]),
+
+        // 恋って parsed as te-form of the archaic 恋う — in modern Japanese it is 恋 + quotative って.
+        new RewriteRule("koi-tte", RewritePhase.Early,
+            [new TokenPattern(Text: "恋っ", Pos: [PartOfSpeech.Verb], DictFormAnyOf: ["恋う"], RequireUnpinned: false),
+             new TokenPattern(Text: "て", Pos: [PartOfSpeech.Particle], RequireUnpinned: false)],
+            [new TokenTemplate("恋", DictForm: "恋", NormalizedForm: "恋", Pos: PartOfSpeech.Noun, Reading: "コイ"),
+             new TokenTemplate("って", DictForm: "って", NormalizedForm: "って", Pos: PartOfSpeech.Particle, Reading: "ッテ")]),
+
+        // 逆(名詞) + に(助動詞 だ) is almost always the single adverb 逆に ("conversely").
+        new RewriteRule("gyaku-ni", RewritePhase.Early,
+            [new TokenPattern(Text: "逆", Pos: [PartOfSpeech.Noun], RequireUnpinned: false),
+             new TokenPattern(Text: "に", DictFormAnyOf: ["だ"], RequireUnpinned: false)],
+            [new TokenTemplate("逆に", DictForm: "逆に", Pos: PartOfSpeech.Adverb, Reading: "ギャクニ")]),
+
+        // Trailing 1:1 POS normalisations: よう is always the formal noun, 十五 a numeral, オレ a pronoun.
+        new RewriteRule("you-noun", RewritePhase.Early,
+            [new TokenPattern(Text: "よう", RequireUnpinned: false)],
+            [new TokenTemplate("", Pos: PartOfSpeech.Noun)]),
+        new RewriteRule("juugo-numeral", RewritePhase.Early,
+            [new TokenPattern(Text: "十五", RequireUnpinned: false)],
+            [new TokenTemplate("", Pos: PartOfSpeech.Numeral)]),
+        new RewriteRule("ore-pronoun", RewritePhase.Early,
+            [new TokenPattern(Text: "オレ", RequireUnpinned: false)],
+            [new TokenTemplate("", Pos: PartOfSpeech.Pronoun)]),
     ];
 
     private sealed class RewriteIndex
@@ -1040,6 +1313,7 @@ public partial class MorphologicalAnalyser
         if (p.TextEndsWith != null && !token.Text.EndsWith(p.TextEndsWith, StringComparison.Ordinal)) return false;
         if (p.Pos != null && Array.IndexOf(p.Pos, token.PartOfSpeech) < 0) return false;
         if (p.DictFormAnyOf != null && Array.IndexOf(p.DictFormAnyOf, token.DictionaryForm) < 0) return false;
+        if (p.NormalizedFormAnyOf != null && Array.IndexOf(p.NormalizedFormAnyOf, token.NormalizedForm) < 0) return false;
         if (p.ReadingPrefix != null && !token.Reading.StartsWith(p.ReadingPrefix, StringComparison.Ordinal)) return false;
         if (p.NotReadingPrefix != null && token.Reading.StartsWith(p.NotReadingPrefix, StringComparison.Ordinal)) return false;
         return true;
@@ -1153,6 +1427,8 @@ public partial class MorphologicalAnalyser
                 PinnedByRewriteRule = t.Pin != null,
                 HardPinned = t.Pin != null && t.HardPin,
             };
+            if (t.PosSection != null)
+                w.PartOfSpeechSection1 = t.PosSection.Value;
             if (t.RecoverConjugations && t.Pin != null)
                 w.PreMatchedConjugations = PinnedConjugationProcess(surface, w.DictionaryForm);
 

@@ -742,7 +742,7 @@ public partial class MorphologicalAnalyser
                 if (!wholeAttested &&
                     (HasNonNameCompoundLookup(lead) || HasNonNameCompoundLookup(NormalizeToHiragana(lead))))
                 {
-                    result ??= [..wordInfos[..i]];
+                    result ??= CopyAccumulatorUpTo(wordInfos, i);
                     int mid = word.EndOffset >= 0 ? word.EndOffset - 1 : -1;
                     result.Add(new WordInfo(word)
                     {
@@ -1349,7 +1349,7 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            result ??= [..wordInfos[..i]];
+            result ??= CopyAccumulatorUpTo(wordInfos, i);
             int splitOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1;
             result.Add(new WordInfo(word)
             {

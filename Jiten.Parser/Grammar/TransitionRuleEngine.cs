@@ -83,9 +83,6 @@ internal static class TransitionRuleEngine
                     (TransitionRuleSets.VerbOnlyAuxDictForms.Contains(w.Current.DictionaryForm) ||
                      TransitionRuleSets.VerbOrAdjAuxDictForms.Contains(w.Current.DictionaryForm)),
 
-                MatchCondition.IsAuxiliary =>
-                    w.Current.PartOfSpeech == PartOfSpeech.Auxiliary,
-
                 MatchCondition.IsCounter =>
                     w.Current.PartOfSpeech == PartOfSpeech.Counter ||
                     (w.Current.PartOfSpeech == PartOfSpeech.Suffix &&
@@ -97,10 +94,6 @@ internal static class TransitionRuleEngine
                 MatchCondition.PrevIsVerbOrAux =>
                     w.Prev?.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary,
 
-                MatchCondition.PrevIsVerbAuxOrIAdj =>
-                    w.Prev?.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary
-                                         or PartOfSpeech.IAdjective,
-
                 MatchCondition.PrevIsVerbAuxIAdjOrSfp =>
                     w.Prev?.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary
                                          or PartOfSpeech.IAdjective
@@ -111,12 +104,6 @@ internal static class TransitionRuleEngine
                     w.Prev?.PartOfSpeech is PartOfSpeech.Numeral or PartOfSpeech.Noun
                                          or PartOfSpeech.CommonNoun or PartOfSpeech.Pronoun
                                          or PartOfSpeech.Name,
-
-                MatchCondition.PrevIsAuxiliary =>
-                    w.Prev?.PartOfSpeech == PartOfSpeech.Auxiliary,
-
-                MatchCondition.PrevIsAuxiliaryOrParticle =>
-                    w.Prev?.PartOfSpeech is PartOfSpeech.Auxiliary or PartOfSpeech.Particle,
 
                 MatchCondition.IsNotEmphaticSfp =>
                     w.Current.Text is not ("ぞ" or "ぜ"),
@@ -305,20 +292,6 @@ internal static class TransitionRuleEngine
         }
 
         return bonus;
-    }
-
-    internal static bool HasApplicableSoftRules(ScoringWindow window)
-    {
-        var ctx = ConditionContext.FromScoringWindow(window);
-        foreach (var rule in TransitionRuleSets.SoftRules)
-        {
-            if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
-                continue;
-            if (!MatchesAll(ctx, rule.CandidateMatch)) continue;
-            if (MatchesAll(ctx, rule.ContextMatch)) return true;
-        }
-
-        return false;
     }
 
     internal static bool CouldAnySoftRuleApply(

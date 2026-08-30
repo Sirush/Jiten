@@ -327,7 +327,6 @@ internal static class TransitionRuleSets
         // Phase 1: leading auxiliaries can never begin a clause
         new(
             Id: "leading-aux-strip",
-            Severity: RuleSeverity.Hard,
             WhenToken: [MatchCondition.IsSentenceInitial, MatchCondition.IsVerbAttachingAux],
             ValidIf: [],
             OnViolation: ViolationAction.RemoveCurrent),
@@ -335,7 +334,6 @@ internal static class TransitionRuleSets
         // Phase 2a: passive/causative/desire/polite/polite-past aux must follow verb or aux
         new(
             Id: "aux-must-follow-verb",
-            Severity: RuleSeverity.Hard,
             WhenToken: [MatchCondition.IsVerbOnlyAux],
             ValidIf: [MatchCondition.PrevIsVerbOrAux],
             OnViolation: ViolationAction.MergeWithPrevious),
@@ -343,7 +341,6 @@ internal static class TransitionRuleSets
         // Phase 2b: past/negative aux must follow verb, aux, i-adjective, or sentence-ending particle
         new(
             Id: "verb-or-adj-aux-must-follow-content",
-            Severity: RuleSeverity.Hard,
             WhenToken: [MatchCondition.IsVerbOrAdjAux],
             ValidIf: [MatchCondition.PrevIsVerbAuxIAdjOrSfp],
             OnViolation: ViolationAction.MergeWithPrevious),
@@ -351,7 +348,6 @@ internal static class TransitionRuleSets
         // Phase 3: counter suffix must follow a number or noun-like token
         new(
             Id: "counter-must-follow-numberlike",
-            Severity: RuleSeverity.Hard,
             WhenToken: [MatchCondition.IsCounter],
             ValidIf: [MatchCondition.PrevExists, MatchCondition.PrevIsNumericOrNoun],
             OnViolation: ViolationAction.ReclassifyCurrentAsNoun),
@@ -363,7 +359,6 @@ internal static class TransitionRuleSets
         // follow them directly (出るぞ無名！) — merging would just delete the particle.
         new(
             Id: "sfp-must-be-near-clause-end",
-            Severity: RuleSeverity.Hard,
             WhenToken: [MatchCondition.IsSentenceEndingParticle, MatchCondition.IsNotEmphaticSfp, MatchCondition.NextIsContentWord, MatchCondition.NextIsNotQuotative],
             ValidIf: [MatchCondition.PrevIsSfpValidHost],
             OnViolation: ViolationAction.MergeWithPrevious),
@@ -371,7 +366,6 @@ internal static class TransitionRuleSets
         // Phase 5a: prefix at sentence-end is almost always a misparse → reclassify as noun
         new(
             Id: "prefix-at-sentence-end",
-            Severity: RuleSeverity.Hard,
             WhenToken: [MatchCondition.IsPrefix, MatchCondition.IsSentenceFinal],
             ValidIf: [],
             OnViolation: ViolationAction.ReclassifyCurrentAsNoun),
@@ -379,7 +373,6 @@ internal static class TransitionRuleSets
         // Phase 5b: prefix before a particle is almost always a misparse → reclassify as noun
         new(
             Id: "prefix-before-particle",
-            Severity: RuleSeverity.Hard,
             WhenToken: [MatchCondition.IsPrefix, MatchCondition.NextIsParticle],
             ValidIf: [],
             OnViolation: ViolationAction.ReclassifyCurrentAsNoun),
@@ -387,7 +380,6 @@ internal static class TransitionRuleSets
         // Phase 6: suffix at sentence start has no content to attach to → reclassify as noun
         new(
             Id: "suffix-must-follow-content",
-            Severity: RuleSeverity.Hard,
             WhenToken: [MatchCondition.IsSuffix, MatchCondition.IsSentenceInitial],
             ValidIf: [],
             OnViolation: ViolationAction.ReclassifyCurrentAsNoun),
@@ -397,7 +389,6 @@ internal static class TransitionRuleSets
         // Exception: if followed by a content word, the fragment is a valid sentence-start (e.g. がいないと)
         new(
             Id: "particle-at-sentence-start",
-            Severity: RuleSeverity.Hard,
             WhenToken: [MatchCondition.IsSentenceInitial, MatchCondition.IsStrictCaseMarkingParticle],
             ValidIf: [MatchCondition.NextIsContentWord],
             OnViolation: ViolationAction.RemoveCurrent),

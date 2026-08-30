@@ -970,31 +970,6 @@ public class TransitionRuleEngineTests
     }
 
     // -----------------------------------------------------------------------
-    // HasApplicableSoftRules
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public void HasApplicableSoftRules_ReturnsTrueWhenRuleMatches()
-    {
-        var candidate = MakeCandidate("本", "n");
-        var window = MakeWindow(candidate,
-            nextPOS: [PartOfSpeech.Particle], nextText: "が");
-
-        TransitionRuleEngine.HasApplicableSoftRules(window).Should().BeTrue();
-    }
-
-    [Fact]
-    public void HasApplicableSoftRules_ReturnsFalseWhenNoRuleMatches()
-    {
-        var candidate = MakeCandidate("食べる", "v1");
-        var window = MakeWindow(candidate,
-            prevPOS: [PartOfSpeech.Noun], prevText: "本",
-            nextPOS: [PartOfSpeech.Noun], nextText: "物");
-
-        TransitionRuleEngine.HasApplicableSoftRules(window).Should().BeFalse();
-    }
-
-    // -----------------------------------------------------------------------
     // Confidence margin (CandidateSelectionResult)
     // -----------------------------------------------------------------------
 
