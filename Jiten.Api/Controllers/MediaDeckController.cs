@@ -715,7 +715,8 @@ public class MediaDeckController(
                        "uniqueKanjiMin",
                        "uniqueKanjiMax", "subdeckCountMin", "subdeckCountMax", "extRatingMin", "extRatingMax", "genres",
                        "excludeGenres", "tags", "excludeTags", "coverageMin", "coverageMax", "uniqueCoverageMin",
-                       "uniqueCoverageMax", "speechSpeedMin", "speechSpeedMax"
+                       "uniqueCoverageMax", "totalCoverageMin", "totalCoverageMax", "uTotalCoverageMin", "uTotalCoverageMax",
+                       "speechSpeedMin", "speechSpeedMax"
                    ])]
     [SwaggerOperation(Summary = "List media decks",
                       Description =
@@ -736,6 +737,8 @@ public class MediaDeckController(
                                                                       string? tags = null, string? excludeTags = null,
                                                                       float? coverageMin = null, float? coverageMax = null,
                                                                       float? uniqueCoverageMin = null, float? uniqueCoverageMax = null,
+                                                                      float? totalCoverageMin = null, float? totalCoverageMax = null,
+                                                                      float? uTotalCoverageMin = null, float? uTotalCoverageMax = null,
                                                                       float? speechSpeedMin = null, float? speechSpeedMax = null,
                                                                       int? speechDurationMin = null, int? speechDurationMax = null,
                                                                       bool? excludeSequels = null)
@@ -958,6 +961,9 @@ public class MediaDeckController(
             youngCoverageDict = coverages.YoungCoverage;
             youngUniqueCoverageDict = coverages.YoungUniqueCoverage;
 
+            var totalCoverageDict = CombineCoverage(coverageDict, youngCoverageDict);
+            var uniqueTotalCoverageDict = CombineCoverage(uniqueCoverageDict, youngUniqueCoverageDict);
+
             if (coverageMin != null || coverageMax != null)
             {
                 var matchingIds = coverageDict
@@ -978,14 +984,34 @@ public class MediaDeckController(
                 query = query.Where(d => matchingIds.Contains(d.DeckId));
             }
 
+            if (totalCoverageMin != null || totalCoverageMax != null)
+            {
+                var matchingIds = totalCoverageDict
+                                  .Where(kvp => (totalCoverageMin == null || kvp.Value >= totalCoverageMin) &&
+                                                (totalCoverageMax == null || kvp.Value <= totalCoverageMax))
+                                  .Select(kvp => kvp.Key)
+                                  .ToHashSet();
+                query = query.Where(d => matchingIds.Contains(d.DeckId));
+            }
+
+            if (uTotalCoverageMin != null || uTotalCoverageMax != null)
+            {
+                var matchingIds = uniqueTotalCoverageDict
+                                  .Where(kvp => (uTotalCoverageMin == null || kvp.Value >= uTotalCoverageMin) &&
+                                                (uTotalCoverageMax == null || kvp.Value <= uTotalCoverageMax))
+                                  .Select(kvp => kvp.Key)
+                                  .ToHashSet();
+                query = query.Where(d => matchingIds.Contains(d.DeckId));
+            }
+
 
             if (sortBy is "coverage" or "uCoverage" or "totalCoverage" or "uTotalCoverage")
             {
                 var sortDict = sortBy switch
                 {
                     "uCoverage" => uniqueCoverageDict,
-                    "totalCoverage" => CombineCoverage(coverageDict, youngCoverageDict),
-                    "uTotalCoverage" => CombineCoverage(uniqueCoverageDict, youngUniqueCoverageDict),
+                    "totalCoverage" => totalCoverageDict,
+                    "uTotalCoverage" => uniqueTotalCoverageDict,
                     _ => coverageDict
                 };
 

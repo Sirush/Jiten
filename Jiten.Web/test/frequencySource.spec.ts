@@ -48,7 +48,7 @@ describe('rowRankLabel', () => {
     const row = rowRankLabel({ frequencyRank: 330850, frequencyRankSource: 'global', isFrequencyFallback: true }, 'Anime');
     expect(row.rank).toBe('330,850');
     expect(row.source).toBe('global');
-    expect(row.hint).toBe('Not seen in Anime yet, so this is the global rank.');
+    expect(row.hint).toBe('Not present in Anime yet, so this is the global rank instead.');
   });
 
   it('prints a dash for a word outside a custom list, keeping the list label', () => {

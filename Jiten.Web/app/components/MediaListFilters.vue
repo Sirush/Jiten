@@ -44,6 +44,10 @@
   const coverageMax = defineModel<number | null>('coverageMax', { required: true });
   const uniqueCoverageMin = defineModel<number | null>('uniqueCoverageMin', { required: true });
   const uniqueCoverageMax = defineModel<number | null>('uniqueCoverageMax', { required: true });
+  const totalCoverageMin = defineModel<number | null>('totalCoverageMin', { required: true });
+  const totalCoverageMax = defineModel<number | null>('totalCoverageMax', { required: true });
+  const uTotalCoverageMin = defineModel<number | null>('uTotalCoverageMin', { required: true });
+  const uTotalCoverageMax = defineModel<number | null>('uTotalCoverageMax', { required: true });
   const excludeSequels = defineModel<boolean | null>('excludeSequels', { required: false });
 
   const excludeNotOriginallyJp = computed({
@@ -219,6 +223,22 @@
     },
   });
 
+  const totalCoverageRange = computed<[number, number]>({
+    get: () => [totalCoverageMin.value ?? 0, totalCoverageMax.value ?? 100],
+    set: (val) => {
+      totalCoverageMin.value = val[0];
+      totalCoverageMax.value = val[1];
+    },
+  });
+
+  const uTotalCoverageRange = computed<[number, number]>({
+    get: () => [uTotalCoverageMin.value ?? 0, uTotalCoverageMax.value ?? 100],
+    set: (val) => {
+      uTotalCoverageMin.value = val[0];
+      uTotalCoverageMax.value = val[1];
+    },
+  });
+
   const updateGenreState = (genreId: number, state: TagState) => {
     if (state === 'include') {
       if (!includeGenres.value.includes(genreId)) {
@@ -281,6 +301,10 @@
     if (coverageMax.value != null) count++;
     if (uniqueCoverageMin.value != null) count++;
     if (uniqueCoverageMax.value != null) count++;
+    if (totalCoverageMin.value != null) count++;
+    if (totalCoverageMax.value != null) count++;
+    if (uTotalCoverageMin.value != null) count++;
+    if (uTotalCoverageMax.value != null) count++;
     if (statusFilter.value !== 'none') count++;
     if (excludeSequels.value) count++;
     count += includeGenres.value.length;
@@ -474,7 +498,7 @@
                         </div>
 
                         <div v-if="isConnected" class="flex flex-col gap-2">
-                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Coverage (%)</div>
+                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Coverage (Mature) (%)</div>
                           <div class="flex items-center gap-3">
                             <InputNumber
                               v-model="coverageMin"
@@ -509,7 +533,42 @@
                         </div>
 
                         <div v-if="isConnected" class="flex flex-col gap-2">
-                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Unique Coverage (%)</div>
+                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Coverage (Total) (%)</div>
+                          <div class="flex items-center gap-3">
+                            <InputNumber
+                              v-model="totalCoverageMin"
+                              :min="0"
+                              :max="100"
+                              :use-grouping="false"
+                              mode="decimal"
+                              :min-fraction-digits="0"
+                              :max-fraction-digits="2"
+                              fluid
+                              class="max-w-28 flex-shrink-0"
+                              show-buttons
+                              size="small"
+                              placeholder="Min"
+                            />
+                            <Slider v-model="totalCoverageRange" range :min="0" :max="100" class="flex-1" />
+                            <InputNumber
+                              v-model="totalCoverageMax"
+                              :min="0"
+                              :max="100"
+                              :use-grouping="false"
+                              mode="decimal"
+                              :min-fraction-digits="0"
+                              :max-fraction-digits="2"
+                              fluid
+                              class="max-w-28 flex-shrink-0"
+                              show-buttons
+                              size="small"
+                              placeholder="Max"
+                            />
+                          </div>
+                        </div>
+
+                        <div v-if="isConnected" class="flex flex-col gap-2">
+                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Unique Coverage (Mature) (%)</div>
                           <div class="flex items-center gap-3">
                             <InputNumber
                               v-model="uniqueCoverageMin"
@@ -528,6 +587,41 @@
                             <Slider v-model="uniqueCoverageRange" range :min="0" :max="100" class="flex-1" />
                             <InputNumber
                               v-model="uniqueCoverageMax"
+                              :min="0"
+                              :max="100"
+                              :use-grouping="false"
+                              mode="decimal"
+                              :min-fraction-digits="0"
+                              :max-fraction-digits="2"
+                              fluid
+                              class="max-w-28 flex-shrink-0"
+                              show-buttons
+                              size="small"
+                              placeholder="Max"
+                            />
+                          </div>
+                        </div>
+
+                        <div v-if="isConnected" class="flex flex-col gap-2">
+                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Unique Coverage (Total) (%)</div>
+                          <div class="flex items-center gap-3">
+                            <InputNumber
+                              v-model="uTotalCoverageMin"
+                              :min="0"
+                              :max="100"
+                              :use-grouping="false"
+                              mode="decimal"
+                              :min-fraction-digits="0"
+                              :max-fraction-digits="2"
+                              fluid
+                              class="max-w-28 flex-shrink-0"
+                              show-buttons
+                              size="small"
+                              placeholder="Min"
+                            />
+                            <Slider v-model="uTotalCoverageRange" range :min="0" :max="100" class="flex-1" />
+                            <InputNumber
+                              v-model="uTotalCoverageMax"
                               :min="0"
                               :max="100"
                               :use-grouping="false"

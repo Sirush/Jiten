@@ -113,6 +113,10 @@
   const coverageMax = ref<number | null>(toNumOrNull(route.query.coverageMax));
   const uniqueCoverageMin = ref<number | null>(toNumOrNull(route.query.uniqueCoverageMin));
   const uniqueCoverageMax = ref<number | null>(toNumOrNull(route.query.uniqueCoverageMax));
+  const totalCoverageMin = ref<number | null>(toNumOrNull(route.query.totalCoverageMin));
+  const totalCoverageMax = ref<number | null>(toNumOrNull(route.query.totalCoverageMax));
+  const uTotalCoverageMin = ref<number | null>(toNumOrNull(route.query.uTotalCoverageMin));
+  const uTotalCoverageMax = ref<number | null>(toNumOrNull(route.query.uTotalCoverageMax));
   const excludeSequels = ref<boolean | null>(toBooleanOrNull(route.query.excludeSequels));
 
   // Genre and Tag filter state
@@ -126,15 +130,10 @@
   includeTags.value = parseNumberArray(route.query.tags);
   excludeTags.value = parseNumberArray(route.query.excludeTags);
 
-  // Ensure min is not higher than max and values stay within bounds
-  const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
   const normalizePair = (minRef: any, maxRef: any, floor: number, ceil: number) => {
-    if (minRef.value != null) minRef.value = clamp(minRef.value, floor, ceil);
-    if (maxRef.value != null) maxRef.value = clamp(maxRef.value, floor, ceil);
-    if (minRef.value != null && maxRef.value != null && minRef.value > maxRef.value) {
-      // keep ranges valid: when min surpasses max, move max up to min
-      maxRef.value = minRef.value;
-    }
+    const { min, max } = clampRange(minRef.value, maxRef.value, floor, ceil);
+    minRef.value = min;
+    maxRef.value = max;
   };
 
   // Normalize ranges when user edits inputs
@@ -148,6 +147,8 @@
   watch([speechDurationMin, speechDurationMax], () => normalizePair(speechDurationMin, speechDurationMax, 0, 300));
   watch([coverageMin, coverageMax], () => normalizePair(coverageMin, coverageMax, 0, 100));
   watch([uniqueCoverageMin, uniqueCoverageMax], () => normalizePair(uniqueCoverageMin, uniqueCoverageMax, 0, 100));
+  watch([totalCoverageMin, totalCoverageMax], () => normalizePair(totalCoverageMin, totalCoverageMax, 0, 100));
+  watch([uTotalCoverageMin, uTotalCoverageMax], () => normalizePair(uTotalCoverageMin, uTotalCoverageMax, 0, 100));
 
   const debouncedFilters = ref({
     charCountMin: charCountMin.value,
@@ -170,6 +171,10 @@
     coverageMax: coverageMax.value,
     uniqueCoverageMin: uniqueCoverageMin.value,
     uniqueCoverageMax: uniqueCoverageMax.value,
+    totalCoverageMin: totalCoverageMin.value,
+    totalCoverageMax: totalCoverageMax.value,
+    uTotalCoverageMin: uTotalCoverageMin.value,
+    uTotalCoverageMax: uTotalCoverageMax.value,
     includeGenres: includeGenres.value,
     excludeGenres: excludeGenres.value,
     includeTags: includeTags.value,
@@ -200,6 +205,10 @@
         coverageMax: coverageMax.value,
         uniqueCoverageMin: uniqueCoverageMin.value,
         uniqueCoverageMax: uniqueCoverageMax.value,
+        totalCoverageMin: totalCoverageMin.value,
+        totalCoverageMax: totalCoverageMax.value,
+        uTotalCoverageMin: uTotalCoverageMin.value,
+        uTotalCoverageMax: uTotalCoverageMax.value,
         includeGenres: includeGenres.value,
         excludeGenres: excludeGenres.value,
         includeTags: includeTags.value,
@@ -233,6 +242,10 @@
           coverageMax: toUndef(coverageMax.value) as any,
           uniqueCoverageMin: toUndef(uniqueCoverageMin.value) as any,
           uniqueCoverageMax: toUndef(uniqueCoverageMax.value) as any,
+          totalCoverageMin: toUndef(totalCoverageMin.value) as any,
+          totalCoverageMax: toUndef(totalCoverageMax.value) as any,
+          uTotalCoverageMin: toUndef(uTotalCoverageMin.value) as any,
+          uTotalCoverageMax: toUndef(uTotalCoverageMax.value) as any,
           genres: arrayToString(includeGenres.value) as any,
           excludeGenres: arrayToString(excludeGenres.value) as any,
           tags: arrayToString(includeTags.value) as any,
@@ -268,6 +281,10 @@
       coverageMax,
       uniqueCoverageMin,
       uniqueCoverageMax,
+      totalCoverageMin,
+      totalCoverageMax,
+      uTotalCoverageMin,
+      uTotalCoverageMax,
       excludeSequels,
     ],
     () => {
@@ -357,6 +374,10 @@
     coverageMax.value = null;
     uniqueCoverageMin.value = null;
     uniqueCoverageMax.value = null;
+    totalCoverageMin.value = null;
+    totalCoverageMax.value = null;
+    uTotalCoverageMin.value = null;
+    uTotalCoverageMax.value = null;
     excludeSequels.value = false;
 
     // Genre and tag filters
@@ -393,6 +414,10 @@
         coverageMax: undefined,
         uniqueCoverageMin: undefined,
         uniqueCoverageMax: undefined,
+        totalCoverageMin: undefined,
+        totalCoverageMax: undefined,
+        uTotalCoverageMin: undefined,
+        uTotalCoverageMax: undefined,
         genres: undefined,
         excludeGenres: undefined,
         tags: undefined,
@@ -517,6 +542,10 @@
       coverageMax: computed(() => debouncedFilters.value.coverageMax),
       uniqueCoverageMin: computed(() => debouncedFilters.value.uniqueCoverageMin),
       uniqueCoverageMax: computed(() => debouncedFilters.value.uniqueCoverageMax),
+      totalCoverageMin: computed(() => debouncedFilters.value.totalCoverageMin),
+      totalCoverageMax: computed(() => debouncedFilters.value.totalCoverageMax),
+      uTotalCoverageMin: computed(() => debouncedFilters.value.uTotalCoverageMin),
+      uTotalCoverageMax: computed(() => debouncedFilters.value.uTotalCoverageMax),
       genres: computed(() => (debouncedFilters.value.includeGenres.length > 0 ? debouncedFilters.value.includeGenres.join(',') : undefined)),
       excludeGenres: computed(() => (debouncedFilters.value.excludeGenres.length > 0 ? debouncedFilters.value.excludeGenres.join(',') : undefined)),
       tags: computed(() => (debouncedFilters.value.includeTags.length > 0 ? debouncedFilters.value.includeTags.join(',') : undefined)),
@@ -689,14 +718,8 @@
     maxRef: Ref<number | null>,
     format: (value: number) => string = (value) => value.toLocaleString()
   ): FilterChip | null => {
-    const min = minRef.value;
-    const max = maxRef.value;
-    if (min == null && max == null) return null;
-
-    let text: string;
-    if (min != null && max != null) text = min === max ? `${label} ${format(min)}` : `${label} ${format(min)}-${format(max)}`;
-    else if (min != null) text = `${label} ≥ ${format(min)}`;
-    else text = `${label} ≤ ${format(max as number)}`;
+    const text = rangeChipLabel(label, minRef.value, maxRef.value, format);
+    if (text === null) return null;
 
     return {
       key,
@@ -741,6 +764,8 @@
       rangeChip('speechDuration', 'Duration', speechDurationMin, speechDurationMax, (value) => `${value}h`),
       rangeChip('coverage', 'Coverage', coverageMin, coverageMax, percent),
       rangeChip('uniqueCoverage', 'Unique coverage', uniqueCoverageMin, uniqueCoverageMax, percent),
+      rangeChip('totalCoverage', 'Total coverage', totalCoverageMin, totalCoverageMax, percent),
+      rangeChip('uTotalCoverage', 'Unique total coverage', uTotalCoverageMin, uTotalCoverageMax, percent),
     ];
     for (const chip of ranges) {
       if (chip) chips.push(chip);
@@ -953,6 +978,10 @@
           v-model:coverage-max="coverageMax"
           v-model:unique-coverage-min="uniqueCoverageMin"
           v-model:unique-coverage-max="uniqueCoverageMax"
+          v-model:total-coverage-min="totalCoverageMin"
+          v-model:total-coverage-max="totalCoverageMax"
+          v-model:u-total-coverage-min="uTotalCoverageMin"
+          v-model:u-total-coverage-max="uTotalCoverageMax"
           v-model:include-genres="includeGenres"
           v-model:exclude-genres="excludeGenres"
           v-model:include-tags="includeTags"
