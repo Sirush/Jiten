@@ -11,8 +11,9 @@
       isConnected: boolean;
       genreCounts?: Record<number, number>;
       tagCounts?: Record<number, number>;
+      activePresetName?: string | null;
     }>(),
-    { genreCounts: () => ({}), tagCounts: () => ({}) }
+    { genreCounts: () => ({}), tagCounts: () => ({}), activePresetName: null }
   );
 
   const emit = defineEmits<{
@@ -314,6 +315,12 @@
     return count;
   });
 
+  const badgeLabel = computed(() => {
+    const preset = props.activePresetName;
+    if (preset) return preset.length > 12 ? `${preset.slice(0, 11)}…` : preset;
+    return activeFilterCount.value > 0 ? String(activeFilterCount.value) : null;
+  });
+
   const toggle = (event: Event) => {
     popover.value.toggle(event);
   };
@@ -327,11 +334,20 @@
       <Icon name="material-symbols:filter-list" size="1.25em" />
       <span class="hidden md:inline">Filters</span>
     </Button>
-    <Badge v-if="activeFilterCount > 0" :value="activeFilterCount" severity="warn" class="absolute -top-2 -right-2 pointer-events-none" />
+    <Badge
+      v-if="badgeLabel"
+      :value="badgeLabel"
+      severity="warn"
+      :class="['absolute -top-2 -right-2 pointer-events-none', activePresetName ? 'max-w-20 truncate md:max-w-32' : '']"
+    />
   </div>
 
   <Popover ref="popover" class="w-[min(48rem,calc(100vw_-_2rem))]">
     <div class="flex flex-col gap-4 p-3 min-w-[280px]">
+      <div v-if="$slots.presets" class="border-b border-gray-200 pb-3 dark:border-gray-700">
+        <slot name="presets" />
+      </div>
+
       <Tabs value="filters" :show-navigators="false" lazy>
         <TabList>
           <Tab value="filters">Filters</Tab>

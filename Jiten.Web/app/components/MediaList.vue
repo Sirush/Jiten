@@ -11,6 +11,20 @@
   import { LazyHydrateMediaDeckCard, LazyHydrateMediaDeckCompactView, LazyHydrateMediaDeckTableView } from '~/utils/lazyHydratedComponents';
   import { type DeckSortOption, deckSortMeta, deckSortOption, deckSortOrdering, deckSortLabels } from '~/utils/deckSorting';
   import { getGenreText } from '~/utils/genreMapper';
+  import {
+    MEDIA_FILTER_PRESETS_ENDPOINT,
+    type MediaFilterPreset,
+    type MediaFilterPresetsPayload,
+    PRESET_QUERY_KEYS,
+    type PresetQuery,
+    buildPresetQuery,
+    capturePresetQuery,
+    parsePresetsResponse,
+    presetQueryEquals,
+    resolveDefaultPreset,
+    toPresetsPayload,
+  } from '~/utils/mediaFilterPresets';
+  import { useToast } from 'primevue/usetoast';
 
   const props = defineProps<{
     word?: Word;
@@ -150,7 +164,7 @@
   watch([totalCoverageMin, totalCoverageMax], () => normalizePair(totalCoverageMin, totalCoverageMax, 0, 100));
   watch([uTotalCoverageMin, uTotalCoverageMax], () => normalizePair(uTotalCoverageMin, uTotalCoverageMax, 0, 100));
 
-  const debouncedFilters = ref({
+  const snapshotFilters = () => ({
     charCountMin: charCountMin.value,
     charCountMax: charCountMax.value,
     difficultyMin: difficultyMin.value,
@@ -182,39 +196,15 @@
     excludeSequels: excludeSequels.value,
   });
 
+  const debouncedFilters = ref(snapshotFilters());
+
+  // Set while a preset writes every filter ref at once: the URL is then rewritten by a single
+  // replace, and the sort watchers must not overwrite the preset's own sort order on the way.
+  const applyingPreset = ref(false);
+
   const updateFiltersDebounced = debounce(
     () => {
-      debouncedFilters.value = {
-        charCountMin: charCountMin.value,
-        charCountMax: charCountMax.value,
-        difficultyMin: difficultyMin.value,
-        difficultyMax: difficultyMax.value,
-        releaseYearMin: releaseYearMin.value,
-        releaseYearMax: releaseYearMax.value,
-        uniqueKanjiMin: uniqueKanjiMin.value,
-        uniqueKanjiMax: uniqueKanjiMax.value,
-        subdeckCountMin: subdeckCountMin.value,
-        subdeckCountMax: subdeckCountMax.value,
-        extRatingMin: extRatingMin.value,
-        extRatingMax: extRatingMax.value,
-        speechSpeedMin: speechSpeedMin.value,
-        speechSpeedMax: speechSpeedMax.value,
-        speechDurationMin: speechDurationMin.value,
-        speechDurationMax: speechDurationMax.value,
-        coverageMin: coverageMin.value,
-        coverageMax: coverageMax.value,
-        uniqueCoverageMin: uniqueCoverageMin.value,
-        uniqueCoverageMax: uniqueCoverageMax.value,
-        totalCoverageMin: totalCoverageMin.value,
-        totalCoverageMax: totalCoverageMax.value,
-        uTotalCoverageMin: uTotalCoverageMin.value,
-        uTotalCoverageMax: uTotalCoverageMax.value,
-        includeGenres: includeGenres.value,
-        excludeGenres: excludeGenres.value,
-        includeTags: includeTags.value,
-        excludeTags: excludeTags.value,
-        excludeSequels: excludeSequels.value,
-      };
+      debouncedFilters.value = snapshotFilters();
 
       const toUndef = (v: number | null) => (v === null ? undefined : v);
       const arrayToString = (arr: number[]) => (arr.length > 0 ? arr.join(',') : undefined);
@@ -288,6 +278,7 @@
       excludeSequels,
     ],
     () => {
+      if (applyingPreset.value) return;
       updateFiltersDebounced();
     }
   );
@@ -295,6 +286,7 @@
   watch(
     [includeGenres, excludeGenres, includeTags, excludeTags],
     () => {
+      if (applyingPreset.value) return;
       updateFiltersDebounced();
     },
     { deep: true }
@@ -429,6 +421,182 @@
     });
   };
 
+  const presets = ref<MediaFilterPreset[]>([]);
+  const defaultPresetName = ref<string | null>(null);
+  const presetsLoaded = ref(false);
+
+  const currentPresetQuery = computed<PresetQuery>(() =>
+    capturePresetQuery({
+      mediaType: mediaType.value,
+      title: titleFilter.value,
+      sortBy: sortBy.value,
+      sortOrder: sortOrder.value,
+      status: statusFilter.value === 'none' ? null : statusFilter.value,
+      charCountMin: charCountMin.value,
+      charCountMax: charCountMax.value,
+      difficultyMin: difficultyMin.value,
+      difficultyMax: difficultyMax.value,
+      releaseYearMin: releaseYearMin.value,
+      releaseYearMax: releaseYearMax.value,
+      uniqueKanjiMin: uniqueKanjiMin.value,
+      uniqueKanjiMax: uniqueKanjiMax.value,
+      subdeckCountMin: subdeckCountMin.value,
+      subdeckCountMax: subdeckCountMax.value,
+      extRatingMin: extRatingMin.value,
+      extRatingMax: extRatingMax.value,
+      speechSpeedMin: speechSpeedMin.value,
+      speechSpeedMax: speechSpeedMax.value,
+      speechDurationMin: speechDurationMin.value,
+      speechDurationMax: speechDurationMax.value,
+      coverageMin: coverageMin.value,
+      coverageMax: coverageMax.value,
+      uniqueCoverageMin: uniqueCoverageMin.value,
+      uniqueCoverageMax: uniqueCoverageMax.value,
+      totalCoverageMin: totalCoverageMin.value,
+      totalCoverageMax: totalCoverageMax.value,
+      uTotalCoverageMin: uTotalCoverageMin.value,
+      uTotalCoverageMax: uTotalCoverageMax.value,
+      genres: includeGenres.value.join(','),
+      excludeGenres: excludeGenres.value.join(','),
+      tags: includeTags.value.join(','),
+      excludeTags: excludeTags.value.join(','),
+      excludeSequels: excludeSequels.value === true ? 'true' : null,
+    })
+  );
+
+  const captureCurrentFilters = (): PresetQuery => ({ ...currentPresetQuery.value });
+
+  // In an embed the host page owns the media tab, so a preset counts as applied whatever the tab.
+  const presetMatchIgnores = computed<readonly string[]>(() => (props.word != null ? ['mediaType'] : []));
+  const activePresetName = computed(
+    () => presets.value.find((preset) => presetQueryEquals(preset.query, currentPresetQuery.value, presetMatchIgnores.value))?.name ?? null
+  );
+
+  const applyPreset = (preset: MediaFilterPreset) => {
+    const query = preset.query;
+    applyingPreset.value = true;
+
+    titleFilter.value = query.title ?? null;
+    debouncedTitleFilter.value = titleFilter.value;
+    statusFilter.value = query.status ?? 'none';
+    sortBy.value = query.sortBy ?? sortByOptions.value[0].value;
+    sortOrder.value = query.sortOrder != null ? Number(query.sortOrder) : (deckSortMeta[sortBy.value as string]?.default ?? SortOrder.Ascending);
+
+    charCountMin.value = toNumOrNull(query.charCountMin);
+    charCountMax.value = toNumOrNull(query.charCountMax);
+    difficultyMin.value = toNumOrNull(query.difficultyMin);
+    difficultyMax.value = toNumOrNull(query.difficultyMax);
+    releaseYearMin.value = toNumOrNull(query.releaseYearMin);
+    releaseYearMax.value = toNumOrNull(query.releaseYearMax);
+    uniqueKanjiMin.value = toNumOrNull(query.uniqueKanjiMin);
+    uniqueKanjiMax.value = toNumOrNull(query.uniqueKanjiMax);
+    subdeckCountMin.value = toNumOrNull(query.subdeckCountMin);
+    subdeckCountMax.value = toNumOrNull(query.subdeckCountMax);
+    extRatingMin.value = toNumOrNull(query.extRatingMin);
+    extRatingMax.value = toNumOrNull(query.extRatingMax);
+    speechSpeedMin.value = toNumOrNull(query.speechSpeedMin);
+    speechSpeedMax.value = toNumOrNull(query.speechSpeedMax);
+    speechDurationMin.value = toNumOrNull(query.speechDurationMin);
+    speechDurationMax.value = toNumOrNull(query.speechDurationMax);
+    coverageMin.value = toNumOrNull(query.coverageMin);
+    coverageMax.value = toNumOrNull(query.coverageMax);
+    uniqueCoverageMin.value = toNumOrNull(query.uniqueCoverageMin);
+    uniqueCoverageMax.value = toNumOrNull(query.uniqueCoverageMax);
+    totalCoverageMin.value = toNumOrNull(query.totalCoverageMin);
+    totalCoverageMax.value = toNumOrNull(query.totalCoverageMax);
+    uTotalCoverageMin.value = toNumOrNull(query.uTotalCoverageMin);
+    uTotalCoverageMax.value = toNumOrNull(query.uTotalCoverageMax);
+    excludeSequels.value = toBooleanOrNull(query.excludeSequels);
+    includeGenres.value = parseNumberArray(query.genres);
+    excludeGenres.value = parseNumberArray(query.excludeGenres);
+    includeTags.value = parseNumberArray(query.tags);
+    excludeTags.value = parseNumberArray(query.excludeTags);
+
+    debouncedFilters.value = snapshotFilters();
+
+    nextTick(() => {
+      applyingPreset.value = false;
+    });
+    router.replace({ query: buildPresetQuery(route.query, preset) });
+  };
+
+  const { $api } = useNuxtApp();
+  const toast = useToast();
+
+  const presetsPayload = (): MediaFilterPresetsPayload => toPresetsPayload({ presets: presets.value, defaultName: defaultPresetName.value });
+
+  let persistedSnapshot = '';
+
+  // In an embed the URL is the host page's; the embed itself writes mediaType/offset on mount, so
+  // only the presence of actual filter keys means the viewer already chose a view.
+  const urlHasFilterState = () =>
+    props.word == null ? Object.keys(route.query).length > 0 : PRESET_QUERY_KEYS.some((key) => key !== 'mediaType' && route.query[key] != null);
+
+  const loadPresets = async () => {
+    const canApplyDefault = (props.word != null || props.defaultMediaType == null) && !urlHasFilterState();
+
+    try {
+      const state = parsePresetsResponse(await $api(MEDIA_FILTER_PRESETS_ENDPOINT));
+      presets.value = state.presets;
+      defaultPresetName.value = state.defaultName;
+      persistedSnapshot = JSON.stringify(presetsPayload());
+      presetsLoaded.value = true;
+    } catch {
+      return;
+    }
+
+    if (!canApplyDefault || urlHasFilterState()) return;
+    const preset = resolveDefaultPreset(presets.value, defaultPresetName.value);
+    if (!preset) return;
+    if (props.word != null && props.defaultMediaType != null) {
+      // An explicitly chosen media type on the host page wins over the preset's tab.
+      applyPreset({ ...preset, query: { ...preset.query, mediaType: String(props.defaultMediaType) } });
+      return;
+    }
+    applyPreset(preset);
+  };
+
+  const persistPresets = async (payload: MediaFilterPresetsPayload) => {
+    try {
+      await $api(MEDIA_FILTER_PRESETS_ENDPOINT, { method: 'PUT', body: payload });
+    } catch {
+      toast.add({
+        severity: 'warn',
+        summary: 'Presets not saved',
+        detail: 'Your presets could not be saved. Check your connection and try again.',
+        life: 4000,
+      });
+    }
+  };
+
+  onMounted(() => {
+    if (isConnected.value) void loadPresets();
+  });
+
+  watch(isConnected, (connected) => {
+    if (connected) {
+      if (!presetsLoaded.value) void loadPresets();
+      return;
+    }
+    presetsLoaded.value = false;
+    presets.value = [];
+    defaultPresetName.value = null;
+    persistedSnapshot = '';
+  });
+
+  watch(
+    [presets, defaultPresetName],
+    () => {
+      if (!presetsLoaded.value) return;
+      const payload = presetsPayload();
+      const snapshot = JSON.stringify(payload);
+      if (snapshot === persistedSnapshot) return;
+      persistedSnapshot = snapshot;
+      void persistPresets(payload);
+    },
+    { deep: true }
+  );
+
   watch(
     () => props.word,
     (newWord) => {
@@ -454,6 +622,7 @@
   }
 
   const updateDebounced = debounce(async (newValue: string | null) => {
+    if (newValue !== titleFilter.value) return;
     debouncedTitleFilter.value = newValue;
     await router.replace({
       query: {
@@ -467,10 +636,12 @@
   }, 500);
 
   watch(titleFilter, (newValue) => {
+    if (applyingPreset.value) return;
     updateDebounced(newValue);
   });
 
   watch(sortOrder, (newValue) => {
+    if (applyingPreset.value) return;
     router.replace({
       query: {
         ...route.query,
@@ -481,6 +652,7 @@
   });
 
   watch(sortBy, (newValue) => {
+    if (applyingPreset.value) return;
     const meta = deckSortMeta[newValue as string];
     if (meta) {
       sortOrder.value = meta.default;
@@ -495,6 +667,7 @@
   });
 
   watch(statusFilter, (newValue) => {
+    if (applyingPreset.value) return;
     router.replace({
       query: {
         ...route.query,
@@ -990,8 +1163,19 @@
           :is-connected="isConnected"
           :genre-counts="genreCounts"
           :tag-counts="tagCounts"
+          :active-preset-name="activePresetName"
           @reset="resetAllFilters"
-        />
+        >
+          <template v-if="isConnected" #presets>
+            <MediaListFilterPresets
+              v-model:presets="presets"
+              v-model:default-name="defaultPresetName"
+              :capture="captureCurrentFilters"
+              :active-preset-name="activePresetName"
+              @apply="applyPreset"
+            />
+          </template>
+        </MediaListFilters>
 
         <div class="flex flex-row gap-2 items-center">
           <DisplayStyleSelector />
