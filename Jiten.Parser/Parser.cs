@@ -1014,7 +1014,25 @@ namespace Jiten.Parser
             }
 
             var totalWordCount = processedWords.Select(w => w.Occurrences).Sum();
-            var characterCount = rawContentCharCount ?? wordInfos.Sum(x => x.Text.Length);
+
+            var charCounts = new Dictionary<char, int>();
+            int wordInfoCharCount = 0;
+            foreach (var w in wordInfos)
+            {
+                wordInfoCharCount += w.Text.Length;
+                foreach (var c in w.Text)
+                    charCounts[c] = charCounts.GetValueOrDefault(c) + 1;
+            }
+
+            int uniqueKanjiCount = 0, uniqueKanjiUsedOnceCount = 0;
+            foreach (var (c, count) in charCounts)
+            {
+                if (!JapaneseTextHelper.IsKanji(c)) continue;
+                uniqueKanjiCount++;
+                if (count == 1) uniqueKanjiUsedOnceCount++;
+            }
+
+            var characterCount = rawContentCharCount ?? wordInfoCharCount;
 
             var textWithoutDialogues = DialogueRegex.Replace(text, "");
             textWithoutDialogues = TokenCleanRegex.Replace(textWithoutDialogues, "");
@@ -1029,9 +1047,7 @@ namespace Jiten.Parser
                        {
                            CharacterCount = characterCount, WordCount = totalWordCount, UniqueWordCount = processedWords.Length,
                            UniqueWordUsedOnceCount = processedWords.Count(x => x.Occurrences == 1),
-                           UniqueKanjiCount = wordInfos.SelectMany(w => w.Text).Distinct().Count(JapaneseTextHelper.IsKanji),
-                           UniqueKanjiUsedOnceCount = wordInfos.SelectMany(w => w.Text).GroupBy(c => c)
-                                                               .Count(g => g.Count() == 1 && JapaneseTextHelper.IsKanji(g.Key)),
+                           UniqueKanjiCount = uniqueKanjiCount, UniqueKanjiUsedOnceCount = uniqueKanjiUsedOnceCount,
                            SentenceCount = sentences.Count, DialoguePercentage = dialoguePercentage, DeckWords = processedWords,
                            RawText = storeRawText ? new DeckRawText(text) : null, ExampleSentences = exampleSentences
                        };
@@ -1110,6 +1126,18 @@ namespace Jiten.Parser
             }
 
             return result;
+        }
+
+        /// <summary>First-seen order; `first` must already be duplicate-free (CollectIds output is).</summary>
+        private static List<int> AppendDistinct(List<int> first, List<int> second)
+        {
+            var seen = new HashSet<int>(first);
+            var merged = new List<int>(first.Count + second.Count);
+            merged.AddRange(first);
+            foreach (var id in second)
+                if (seen.Add(id))
+                    merged.Add(id);
+            return merged;
         }
 
         // Limit how many concurrent operations we perform to prevent overwhelming the system
@@ -1520,7 +1548,7 @@ namespace Jiten.Parser
                 var ruText = surfaceHira + "る";
                 if (_lookups.TryGetValue(ruText, out List<int>? ruIds))
                 {
-                    var ruWordCache = await GetWordsWithCache(ruIds.Distinct().ToList(), batchWordCache);
+                    var ruWordCache = await GetWordsWithCache(ruIds, batchWordCache);
                     bool isKanaForStem = WanaKana.IsKana(wordInfo.Text);
                     JmDictWord? bestV1 = null;
                     foreach (var (_, ruWord) in ruWordCache)
@@ -1916,7 +1944,7 @@ namespace Jiten.Parser
                                                                                   includeLongVowelStripped: true,
                                                                                   normalizedTierGate: normalizedTierGate);
                     if (normalizedCollected.Count > 0)
-                        collected = collected.Concat(normalizedCollected).Distinct().ToList();
+                        collected = AppendDistinct(collected, normalizedCollected);
                 }
 
                 // Colloquial gemination collapse:
@@ -1937,9 +1965,9 @@ namespace Jiten.Parser
                         if (desokuonCollected.Count > 0)
                         {
                             desokuonText = desokuon;
-                            collected = collected
-                                        .Where(id => IsKanaAppropriateId(id) || HasPrioritizedMeta(id))
-                                        .Concat(desokuonCollected).Distinct().ToList();
+                            collected = AppendDistinct(
+                                collected.Where(id => IsKanaAppropriateId(id) || HasPrioritizedMeta(id)).ToList(),
+                                desokuonCollected);
                         }
                     }
                 }
@@ -1955,7 +1983,7 @@ namespace Jiten.Parser
 
             if (candidates is { Count: not 0 })
             {
-                candidates = candidates.OrderBy(c => c).ToList();
+                candidates.Sort();
 
                 Dictionary<int, JmDictWord> wordCache;
                 try
@@ -2242,7 +2270,7 @@ namespace Jiten.Parser
             var (allCandidateIds, directSurfaceIds) =
                 PrioritiseAndCollectCandidateIds(wordInfo, candidates, baseDictionaryWord);
 
-            if (!allCandidateIds.Any())
+            if (allCandidateIds.Count == 0)
                 return (false, null, null, null);
 
             Dictionary<int, JmDictWord> wordCache;
@@ -2308,8 +2336,7 @@ namespace Jiten.Parser
             bool fromReadingChannel) CollectVerbAdjectiveCandidates(WordInfo wordInfo, Deconjugator deconjugator,
                                                                     string normalizedText)
         {
-            var deconjugated = deconjugator.Deconjugate(normalizedText)
-                                           .OrderByDescending(d => d.Text.Length).ToList();
+            var deconjugated = deconjugator.Deconjugate(normalizedText).ToList();
 
             // A katakana noun is a name/loanword shape: unwinding a conjugation from its hiragana
             // conversion and landing on a kanji-primary word fabricates vocabulary out of a name
@@ -2357,7 +2384,7 @@ namespace Jiten.Parser
                 var readingHiragana = KanaNormalizer.Normalize(KanaConverter.ToHiragana(wordInfo.Reading));
                 if (readingHiragana != normalizedText && WanaKana.IsHiragana(readingHiragana))
                 {
-                    foreach (var form in deconjugator.Deconjugate(readingHiragana).OrderByDescending(d => d.Text.Length))
+                    foreach (var form in deconjugator.Deconjugate(readingHiragana))
                     {
                         if (_lookups.TryGetValue(form.Text, out List<int>? lookup))
                         {
@@ -2396,7 +2423,12 @@ namespace Jiten.Parser
                 candidates.Insert(0, baseWordCandidate);
             }
 
-            var allCandidateIds = candidates.SelectMany(c => c.ids).Distinct().ToList();
+            var seenIds = new HashSet<int>();
+            var allCandidateIds = new List<int>();
+            foreach (var c in candidates)
+                foreach (var id in c.ids)
+                    if (seenIds.Add(id))
+                        allCandidateIds.Add(id);
 
             // If we have DictionaryForm fallback to try, add those IDs to the list
             if (tryDictionaryFormFallback)
@@ -2406,7 +2438,9 @@ namespace Jiten.Parser
                 {
                     if (dictFormLookupIds is { Count: > 0 })
                     {
-                        allCandidateIds = allCandidateIds.Concat(dictFormLookupIds).Distinct().ToList();
+                        foreach (var id in dictFormLookupIds)
+                            if (seenIds.Add(id))
+                                allCandidateIds.Add(id);
                     }
                 }
 
@@ -2421,7 +2455,9 @@ namespace Jiten.Parser
                     {
                         if (dictFormLookupIds is { Count: > 0 })
                         {
-                            allCandidateIds = allCandidateIds.Concat(dictFormLookupIds).Distinct().ToList();
+                            foreach (var id in dictFormLookupIds)
+                                if (seenIds.Add(id))
+                                    allCandidateIds.Add(id);
                         }
                     }
                 }
@@ -2432,9 +2468,9 @@ namespace Jiten.Parser
             // Note: keep the FULL lookup set for form enumeration — some ids may already be in
             // allCandidateIds via deconjugation but were POS-filtered out in the matches loop.
             var directSurfaceIds = LookupCandidateCollector.CollectIds(_lookups, wordInfo.Text, includeKanaNormalized: false);
-            var newDirectSurfaceIds = directSurfaceIds.Except(allCandidateIds).ToList();
-            if (newDirectSurfaceIds.Count > 0)
-                allCandidateIds = allCandidateIds.Concat(newDirectSurfaceIds).Distinct().ToList();
+            foreach (var id in directSurfaceIds)
+                if (seenIds.Add(id))
+                    allCandidateIds.Add(id);
 
             return (allCandidateIds, directSurfaceIds);
         }
@@ -4456,6 +4492,16 @@ namespace Jiten.Parser
             return set;
         }
 
+        private static readonly HashSet<long> TwoTokenExpressionWhitelistHashes = BuildTwoTokenWhitelistHashes();
+
+        private static HashSet<long> BuildTwoTokenWhitelistHashes()
+        {
+            var set = new HashSet<long>();
+            foreach (var text in TwoTokenExpressionWhitelist)
+                set.Add(HiraRollingHash(text));
+            return set;
+        }
+
         private static void CombineExpressionsInSentence(SentenceInfo sentence)
         {
             {
@@ -4520,8 +4566,15 @@ namespace Jiten.Parser
                         // and no POS gate separates those from semantic units (どちらも, ものか).
                         if (windowSize == 2)
                         {
-                            var pairText = ConcatTokenTexts(sentence.Words, i, 2);
-                            if (TwoTokenExpressionWhitelist.Contains(pairText))
+                            // Hash pre-filter: equal strings hash equal (fold included), so a miss
+                            // proves the exact whitelist probe would miss — skip the concat allocation.
+                            string? pairText = null;
+                            if (tokenLens[i + 1] >= _hashBasePowers!.Length ||
+                                TwoTokenExpressionWhitelistHashes.Contains(
+                                    unchecked(tokenHashes[i] * _hashBasePowers[tokenLens[i + 1]] + tokenHashes[i + 1])))
+                                pairText = ConcatTokenTexts(sentence.Words, i, 2);
+
+                            if (pairText != null && TwoTokenExpressionWhitelist.Contains(pairText))
                             {
                                 // とは言えない must stay と+は+言え+ない: the conjunction とはいえ
                                 // never continues into ない/ません.
@@ -5759,7 +5812,8 @@ namespace Jiten.Parser
                         continue;
                     }
 
-                    bool tokenHasHint = FindMatchingHint(relocatedHints, currentInfo) != null;
+                    FuriganaHint? matchingHint = FindMatchingHint(relocatedHints, currentInfo);
+                    bool tokenHasHint = matchingHint != null;
 
                     List<FormCandidate>? candidates = null;
                     bool fromFirstPassCache = false;
@@ -5872,7 +5926,6 @@ namespace Jiten.Parser
                     var left2DictForm = i >= 2 ? sentenceWords[i - 2].word.DictionaryForm : null;
                     var right2DictForm = i < sentenceWords.Count - 2 ? sentenceWords[i + 2].word.DictionaryForm : null;
 
-                    FuriganaHint? matchingHint = FindMatchingHint(relocatedHints, currentInfo);
                     string? hintHiragana = matchingHint.HasValue
                         ? KanaScoringHelpers.ToNormalizedHiragana(matchingHint.Value.Reading, convertLongVowelMark: false)
                         : null;

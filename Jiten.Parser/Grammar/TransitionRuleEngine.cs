@@ -8,6 +8,13 @@ namespace Jiten.Parser.Grammar;
 
 internal static class TransitionRuleEngine
 {
+    private static readonly TransitionRule[] LeadingStripRules = Array.FindAll(
+        TransitionRuleSets.HardRules, r => r.Id is "leading-aux-strip" or "particle-at-sentence-start");
+
+    // Pass-2 rules keep their declaration order: break-on-first-match makes order load-bearing.
+    private static readonly TransitionRule[] ContextHardRules = Array.FindAll(
+        TransitionRuleSets.HardRules, r => r.Id is not ("leading-aux-strip" or "particle-at-sentence-start"));
+
     // Two-pass approach
     //   Pass 1 — while-loop strips all leading verb-attaching auxiliaries
     //   Pass 2 — backwards loop validates aux context and counter placement
@@ -16,19 +23,15 @@ internal static class TransitionRuleEngine
         Func<string, bool> hasLookup,
         ParserDiagnostics? diagnostics = null)
     {
-        var rules = TransitionRuleSets.HardRules;
-
         // Pass 1: strip all sentence-initial tokens that can never begin a clause (needs while loop:
         // removing index 0 exposes a new index 0 that also needs to be checked)
-        var leadingStripRules = Array.FindAll(rules,
-            r => r.Id is "leading-aux-strip" or "particle-at-sentence-start");
         bool leadingRemoved;
         do
         {
             leadingRemoved = false;
             if (words.Count == 0) break;
             var window = BuildWindow(words, 0);
-            foreach (var rule in leadingStripRules)
+            foreach (var rule in LeadingStripRules)
             {
                 if (!MatchesAll(window, rule.WhenToken)) continue;
                 if (IsValidState(window, rule.ValidIf)) continue;
@@ -43,9 +46,8 @@ internal static class TransitionRuleEngine
         for (int i = words.Count - 1; i >= 0; i--)
         {
             var window = BuildWindow(words, i);
-            foreach (var rule in rules)
+            foreach (var rule in ContextHardRules)
             {
-                if (rule.Id is "leading-aux-strip" or "particle-at-sentence-start") continue;
                 if (!MatchesAll(window, rule.WhenToken)) continue;
                 if (IsValidState(window, rule.ValidIf)) continue;
 
