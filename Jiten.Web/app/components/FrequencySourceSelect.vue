@@ -1,5 +1,4 @@
 <script setup lang="ts">
-  import { MediaType } from '~/types';
 
   const props = defineProps<{
     inputId?: string;
@@ -17,7 +16,7 @@
   const fieldId = computed(() => props.inputId ?? 'frequencySource');
 
   const mediaTypeOptions = computed(() =>
-    (Object.values(MediaType).filter((v) => typeof v === 'number') as MediaType[]).map((type) => ({
+    getListedMediaTypes().map((type) => ({
       label: getMediaTypeText(type),
       value: type as number,
     }))

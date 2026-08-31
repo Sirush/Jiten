@@ -57,7 +57,7 @@
     return [{ label: 'All types', value: null as MediaType | null }, ...present.map((t) => ({ label: getMediaTypeText(t), value: t as MediaType | null }))];
   });
 
-  const audioVisualTypes = [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio];
+  const audioVisualTypes = [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio, MediaType.YouTube];
   const sentenceLengthTypes = [MediaType.Novel, MediaType.NonFiction, MediaType.VideoGame, MediaType.VisualNovel, MediaType.WebNovel];
 
   const sortGroups = computed(() => {

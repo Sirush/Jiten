@@ -24,6 +24,8 @@ export function getLinkTypeText(linkType: LinkType): string {
       return 'Bookmeter';
     case LinkType.Amazon:
       return 'Amazon';
+    case LinkType.YouTube:
+      return 'YouTube';
 
     default:
       return 'Unknown';
@@ -60,6 +62,7 @@ const hostedDomains: Array<{ domains: string[]; type: LinkType }> = [
   { domains: ['syosetu.com'], type: LinkType.Syosetsu },
   { domains: ['bookmeter.com'], type: LinkType.Bookmeter },
   { domains: ['amzn.to', 'amzn.asia'], type: LinkType.Amazon },
+  { domains: ['youtube.com', 'youtu.be', 'youtube-nocookie.com'], type: LinkType.YouTube },
 ];
 
 const amazonHost = /(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$/;

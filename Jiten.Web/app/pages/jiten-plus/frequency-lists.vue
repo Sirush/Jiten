@@ -20,7 +20,7 @@
   import { useConfirm } from 'primevue/useconfirm';
   import { useApiFetch } from '~/composables/useApiFetch';
   import { coverUrl } from '~/utils/coverImage';
-  import { MediaType, type Tag as MediaTag, type MediaSuggestion } from '~/types';
+  import type { Tag as MediaTag, MediaSuggestion } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getAllGenres } from '~/utils/genreMapper';
   import { extractApiError } from '~/utils/toast';
@@ -67,9 +67,8 @@
   const selectedDeck = ref<MediaSuggestion | string | null>(null);
   const deckSuggestions = ref<MediaSuggestion[]>([]);
 
-  const mediaTypeOptions = Object.values(MediaType)
-    .filter((v) => typeof v === 'number')
-    .map((v) => ({ name: getMediaTypeText(v as MediaType), id: v as MediaType }))
+  const mediaTypeOptions = getListedMediaTypes()
+    .map((v) => ({ name: getMediaTypeText(v), id: v }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const genres = getAllGenres();

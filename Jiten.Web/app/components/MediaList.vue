@@ -299,7 +299,7 @@
   );
 
   const updateOptions = () => {
-    const showspeechSpeedOptionMediaTypes = [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio];
+    const showspeechSpeedOptionMediaTypes = [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio, MediaType.YouTube];
 
     if (mediaType.value == null || !showspeechSpeedOptionMediaTypes.includes(Number(mediaType.value))) {
       novelSortOptions.value = ['charCount', 'dialoguePercentage'].map(deckSortOption);

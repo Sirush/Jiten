@@ -1025,7 +1025,7 @@ public class ComputationJob(
         await File.WriteAllBytesAsync(filePath, bytes);
         await File.WriteAllTextAsync(indexFilePath, index);
 
-        foreach (var mediaType in Enum.GetValues<MediaType>())
+        foreach (var mediaType in MediaTypes.Listed)
         {
             Console.WriteLine($"Computing {mediaType} frequencies...");
             (wordFrequencies, formFrequencies) = await JitenHelper.ComputeFrequencies(contextFactory, mediaType);

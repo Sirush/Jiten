@@ -134,7 +134,7 @@ public class Deck
     {
         get
         {
-            if (MediaType is MediaType.Anime or MediaType.Drama or MediaType.Movie or MediaType.Manga or MediaType.VideoGame or MediaType.Audio)
+            if (MediaType is MediaType.Anime or MediaType.Drama or MediaType.Movie or MediaType.Manga or MediaType.VideoGame or MediaType.Audio or MediaType.YouTube)
                 return 100;
 
             return _dialoguePercentage;

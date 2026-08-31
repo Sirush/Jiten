@@ -23,7 +23,7 @@ public static class MediaTypeGroups
 
     public static readonly HashSet<MediaType> AudioVisual =
     [
-        MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio
+        MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio, MediaType.YouTube
     ];
 
     public static readonly HashSet<MediaType> NonFictionGroup =

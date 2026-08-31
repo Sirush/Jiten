@@ -51,7 +51,7 @@
   const readingDuration = computed(() => Math.round(props.deck.characterCount / readingSpeed.value));
   const speechSpeed = computed(() => props.deck.speechSpeed ?? 0);
 
-  const isAudioVisual = computed(() => [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio].includes(props.deck.mediaType));
+  const isAudioVisual = computed(() => [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio, MediaType.YouTube].includes(props.deck.mediaType));
 
   const hasChildren = computed(() => props.deck.childrenDeckCount > 0);
   const childrenLabel = computed(() => getChildrenCountText(props.deck.mediaType));

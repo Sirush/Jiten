@@ -2,14 +2,14 @@
   import { useRoute } from '#vue-router';
   import type { DeckRankingRow, PaginatedResponse } from '~/types';
   import { MediaType } from '~/types';
-  import { getMediaTypeFromSlug, getMediaTypePluralText, getMediaTypeSlug } from '~/utils/mediaTypeMapper';
+  import { getListedMediaTypes, getMediaTypeFromSlug, getMediaTypePluralText, getMediaTypeSlug, isListedMediaType } from '~/utils/mediaTypeMapper';
 
   const route = useRoute();
   const param = String(route.params.mediaType);
 
   // Legacy numeric URLs 301 to the slug via routeRules in nuxt.config; anything else unknown is a 404.
   const mediaType = getMediaTypeFromSlug(param);
-  if (mediaType === null) {
+  if (mediaType === null || !isListedMediaType(mediaType)) {
     throw createError({ statusCode: 404, statusMessage: 'Unknown media type', fatal: true });
   }
 
@@ -136,7 +136,7 @@
   );
 
   const otherTypes = computed(() =>
-    (Object.values(MediaType).filter((v): v is MediaType => typeof v === 'number') as MediaType[])
+    getListedMediaTypes()
       .filter((t) => t !== mediaType)
       .map((t) => ({ slug: getMediaTypeSlug(t), label: getMediaTypePluralText(t) }))
   );

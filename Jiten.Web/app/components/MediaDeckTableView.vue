@@ -19,7 +19,7 @@
   const showDownloadDialog = ref(false);
   const difficultyRef = ref<{ tooltip: string }>();
 
-  const isAudioVisual = computed(() => [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio].includes(props.deck.mediaType));
+  const isAudioVisual = computed(() => [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio, MediaType.YouTube].includes(props.deck.mediaType));
 
   const formattedSpeechDuration = computed(() => {
     if (props.deck.speechDuration <= 0) return '';
