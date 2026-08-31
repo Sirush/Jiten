@@ -491,6 +491,21 @@
           />
         </template>
       </Card>
+
+      <!-- Account deletion -->
+      <Card>
+        <template #title>
+          <h3 class="text-lg font-semibold">Delete account</h3>
+        </template>
+        <template #content>
+          <p class="text-gray-600 dark:text-gray-300">
+            To delete your account, send an email to
+            <a href="mailto:contact@jiten.moe" class="text-primary-600 dark:text-primary-400 hover:underline">contact@jiten.moe</a>
+            from your account email address. Deletion is handled as described in the
+            <NuxtLink to="/privacy" class="text-primary-600 dark:text-primary-400 hover:underline">Privacy Policy</NuxtLink>.
+          </p>
+        </template>
+      </Card>
     </div>
   </div>
 </template>
