@@ -43,6 +43,7 @@ public partial class RequestController(
     private const long MaxRequestBodySize = MaxUploadSize + 1_048_576;
     private const long MaxUploadBytesPerDay = 500 * 1024 * 1024; // 500MB per 24h
     private const int MonthlyBoostLimit = 5;
+    private const string TurnaroundCacheKey = "requests:turnaround";
     private const int BoostWeight = 5;
     private const int MaxCommentLength = 500;
     private const int CommentRateLimitPerFiveMin = 5;
@@ -315,6 +316,121 @@ public partial class RequestController(
             attachmentsNo = attachmentTotal - attachmentsYes,
             attachmentTotal,
         });
+    }
+
+    [HttpGet("turnaround")]
+    public async Task<IResult> GetRequestTurnaround()
+    {
+        if (string.IsNullOrEmpty(currentUserService.UserId))
+            return Results.Unauthorized();
+
+        var stats = await memoryCache.GetOrCreateAsync(TurnaroundCacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(6);
+            return await ComputeTurnaroundAsync();
+        });
+
+        return Results.Ok(stats);
+    }
+
+    /// <summary>Fulfilment speed measured from the first upload, with still-open requests counted as censored rather than dropped.</summary>
+    private async Task<RequestTurnaroundDto> ComputeTurnaroundAsync()
+    {
+        var now = DateTime.UtcNow;
+
+        // A deleted file still started the clock, so the sample keeps it; only a surviving file makes an open request actionable.
+        var firstUploads = await context.MediaRequestUploads.AsNoTracking()
+            .GroupBy(u => u.MediaRequestId)
+            .Select(g => new { RequestId = g.Key, First = g.Min(u => u.CreatedAt) })
+            .ToDictionaryAsync(x => x.RequestId, x => x.First);
+
+        var liveUploads = (await context.MediaRequestUploads.AsNoTracking()
+            .Where(u => !u.FileDeleted)
+            .Select(u => u.MediaRequestId)
+            .Distinct()
+            .ToListAsync()).ToHashSet();
+
+        var rows = await context.MediaRequests.AsNoTracking()
+            .Where(r => r.Status == MediaRequestStatus.Open
+                        || r.Status == MediaRequestStatus.InProgress
+                        || r.Status == MediaRequestStatus.Completed)
+            .Select(r => new { r.Id, r.Status, r.CreatedAt, r.CompletedAt })
+            .ToListAsync();
+
+        var observations = new List<(double Days, bool Completed)>();
+        var awaitingAges = new List<double>();
+        var readyToProcess = 0;
+
+        foreach (var r in rows)
+        {
+            var isOpen = r.Status != MediaRequestStatus.Completed;
+            if (isOpen)
+            {
+                if (liveUploads.Contains(r.Id)) readyToProcess++;
+                else awaitingAges.Add((now - r.CreatedAt).TotalDays);
+            }
+
+            if (!firstUploads.TryGetValue(r.Id, out var uploadedAt)) continue;
+
+            var end = isOpen ? now : r.CompletedAt;
+            if (end == null) continue;
+
+            var days = (end.Value - uploadedAt).TotalDays;
+            if (days >= 0) observations.Add((days, !isOpen));
+        }
+
+        return new RequestTurnaroundDto
+        {
+            MedianDays = KaplanMeierQuantile(observations, 0.5),
+            P75Days = KaplanMeierQuantile(observations, 0.75),
+            SampleSize = observations.Count,
+            ReadyToProcess = readyToProcess,
+            AwaitingFile = awaitingAges.Count,
+            MedianAwaitingFileDays = Percentile(awaitingAges, 0.5),
+        };
+    }
+
+    /// <summary>Time by which the given share of requests is fulfilled, or null when follow-up never reaches that share.</summary>
+    private static double? KaplanMeierQuantile(List<(double Days, bool Completed)> observations, double quantile)
+    {
+        if (observations.Count == 0) return null;
+
+        var ordered = observations.OrderBy(o => o.Days).ToList();
+        var survival = 1.0;
+        var i = 0;
+
+        while (i < ordered.Count)
+        {
+            var t = ordered[i].Days;
+            var atRisk = ordered.Count - i;
+            var events = 0;
+            var j = i;
+
+            while (j < ordered.Count && ordered[j].Days.Equals(t))
+            {
+                if (ordered[j].Completed) events++;
+                j++;
+            }
+
+            if (events > 0)
+            {
+                survival *= 1.0 - (double)events / atRisk;
+                if (survival <= 1.0 - quantile) return t;
+            }
+
+            i = j;
+        }
+
+        return null;
+    }
+
+    private static double? Percentile(List<double> values, double quantile)
+    {
+        if (values.Count == 0) return null;
+
+        var ordered = values.OrderBy(v => v).ToList();
+        var index = (int)Math.Floor(quantile * (ordered.Count - 1));
+        return ordered[index];
     }
 
     [HttpGet("{id:int}")]

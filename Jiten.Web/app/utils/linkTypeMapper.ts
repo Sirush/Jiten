@@ -44,6 +44,12 @@ export function isVndbReleaseUrl(url: string | null | undefined): boolean {
   }
 }
 
+export function resolveLinkType(url: string | null | undefined, stored: LinkType | null | undefined): LinkType | null {
+  const detected = url ? detectLinkTypeFromUrl(url) : null;
+  if (detected !== null && detected !== LinkType.Web) return detected;
+  return stored ?? detected;
+}
+
 export function getLinkLabel(link: { linkType: LinkType | number; url?: string | null }): string {
   const text = getLinkTypeText(link.linkType as LinkType);
 

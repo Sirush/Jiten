@@ -4,7 +4,7 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
   import { getRequestKindText, getRequestKindIcon } from '~/utils/requestKindMapper';
-  import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { getLinkTypeText, resolveLinkType } from '~/utils/linkTypeMapper';
   import type { RequestFacets, BoostBalance } from '~/composables/useMediaRequests';
 
   definePageMeta({
@@ -118,6 +118,10 @@
     { label: withCount('Has Attachments', facets.value?.attachmentsYes), value: 'yes' },
     { label: withCount('No Attachments', facets.value?.attachmentsNo), value: 'no' },
   ]);
+
+  const showAttachmentSplit = computed(
+    () => facets.value !== null && (selectedStatus.value === RequestStatus.Open || selectedStatus.value === RequestStatus.InProgress)
+  );
 
   function parseAttachmentsFromQuery() {
     const v = route.query.attachments;
@@ -372,6 +376,9 @@
         :value="`${boostBalance!.remaining} / ${boostBalance!.limit} boosts left this month`"
         severity="secondary"
       />
+      <Tooltip v-if="showAttachmentSplit" content="Requests with a file uploaded can be worked on. The rest are waiting for someone to provide the text.">
+        <Tag :value="`${facets!.attachmentsYes} ready to process, ${facets!.attachmentsNo} waiting for a file`" severity="secondary" />
+      </Tooltip>
     </div>
 
     <div v-if="isLoading" class="flex justify-center py-12">
@@ -431,9 +438,9 @@
                       </p>
 
                       <div class="flex items-center gap-3 text-sm text-muted-color mt-1">
-                        <span v-if="request.externalLinkType" class="hidden md:flex items-center gap-1">
+                        <span v-if="resolveLinkType(request.externalUrl, request.externalLinkType)" class="hidden md:flex items-center gap-1">
                           <i class="pi pi-external-link text-xs" />
-                          {{ getLinkTypeText(request.externalLinkType) }}
+                          {{ getLinkTypeText(resolveLinkType(request.externalUrl, request.externalLinkType)!) }}
                         </span>
                         <span
                           v-if="request.boostCount > 0"

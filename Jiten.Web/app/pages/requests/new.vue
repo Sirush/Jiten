@@ -1,9 +1,9 @@
 <script setup lang="ts">
-  import { MediaType, RequestKind } from '~/types';
+  import { LinkType, MediaType, RequestKind } from '~/types';
   import type { DuplicateCheckResultDto, MediaSuggestion } from '~/types/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getRequestStatusText } from '~/utils/requestStatusMapper';
-  import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { detectLinkTypeFromUrl, getLinkTypeText } from '~/utils/linkTypeMapper';
 
   definePageMeta({
     middleware: ['auth'],
@@ -27,10 +27,21 @@
   const duplicates = ref<DuplicateCheckResultDto | null>(null);
   const quota = ref<MediaRequestQuota | null>(null);
 
+  // Null until the field holds a parseable absolute URL, so the AniList hint cannot flash while the user is still typing.
+  const externalLinkType = computed(() => (externalUrl.value.trim() ? detectLinkTypeFromUrl(externalUrl.value) : null));
+  const showAnilistHint = computed(
+    () => mediaType.value === MediaType.Novel && externalLinkType.value !== null && externalLinkType.value !== LinkType.Anilist
+  );
+
+  const isYouTube = computed(() => mediaType.value === MediaType.YouTube);
+
   const isAtQuotaLimit = computed(() => quota.value !== null && quota.value.activeCount >= quota.value.limit);
   const showPlusUpsell = computed(() => quota.value !== null && !quota.value.isPlus && quota.value.plusLimit > quota.value.limit);
 
+  const { load: loadTurnaround, fulfilmentRange, awaitingWait } = useRequestTurnaround();
+
   onMounted(async () => {
+    loadTurnaround();
     quota.value = await fetchMyQuota();
   });
 
@@ -159,7 +170,7 @@
               <Checkbox v-model="isUpdate" input-id="isUpdate" binary />
               <label for="isUpdate" class="font-semibold cursor-pointer">This is an update to an existing media</label>
             </div>
-            <small class="text-muted-color">Use this if you wish to submit new or missing volumes to an existing piece of media.</small>
+            <small class="text-muted-color pl-7">Use this to add new or missing volumes to an existing media.</small>
 
             <div v-if="isUpdate" class="flex flex-col gap-2 mt-1">
               <label class="font-semibold">Media to update *</label>
@@ -186,12 +197,22 @@
               :disabled="isUpdate"
             />
             <small v-if="isUpdate" class="text-muted-color">Taken from the selected media.</small>
+            <div v-else-if="isYouTube" class="flex flex-col gap-1">
+              <small class="text-muted-color flex items-start gap-1.5">
+                <i class="pi pi-info-circle mt-0.5 w-[14px] shrink-0 text-center text-[13px] text-blue-500 dark:text-blue-300" />
+                <span>You can request either a full YouTube channels or some specific playlists.</span>
+              </small>
+              <small class="text-muted-color flex items-start gap-1.5">
+                <i class="pi pi-exclamation-triangle mt-0.5 w-[14px] shrink-0 text-center text-[13px] text-amber-600 dark:text-amber-500" />
+                <span>Videos must have Japanese subtitles made by a person (softsubs). Auto-generated subtitles are not accurate enough.</span>
+              </small>
+            </div>
           </div>
 
           <!-- Title -->
           <div class="flex flex-col gap-2">
             <label class="font-semibold">Title *</label>
-            <InputText v-model="title" placeholder="Enter the title of the media" maxlength="300" class="w-full" />
+            <InputText v-model="title" :placeholder="isYouTube ? 'Channel or playlist name' : 'Enter the title of the media'" maxlength="300" class="w-full" />
 
             <!-- Duplicate detection results -->
             <div v-if="hasDuplicateHints" class="mt-2">
@@ -233,49 +254,60 @@
           <!-- External URL -->
           <div class="flex flex-col gap-2">
             <label class="font-semibold">External URL</label>
-            <InputText v-model="externalUrl" placeholder="Link to a database" maxlength="500" class="w-full" />
-            <small class="text-muted-color">
-              Providing a link helps us find and add the correct media faster. Requests without a link may take longer or result in the wrong version being
-              added.
-            </small>
-            <Message severity="warn" :closable="false" class="text-sm">
-              <i class="pi pi-exclamation-triangle mr-1" />
-              Do not link to piracy websites. Only link to official sources such as Anilist, VNDB, TMDB, MyAnimeList, IGDB, Bookmeter or similar databases.
-            </Message>
+            <InputText v-model="externalUrl" :placeholder="isYouTube ? 'Link to the channel or playlist' : 'Link to a database'" maxlength="500" class="w-full" />
+            <small v-if="isYouTube" class="text-muted-color">Paste a link to the channel or playlist.</small>
+            <div v-else class="flex flex-col gap-1">
+              <small class="text-muted-color flex items-start gap-1.5">
+                <span class="w-[14px] shrink-0" />
+                <span>A link helps us find and add the correct media faster.</span>
+              </small>
+              <small class="text-muted-color flex items-start gap-1.5">
+                <i class="pi pi-exclamation-triangle mt-0.5 w-[14px] shrink-0 text-center text-[13px] text-amber-600 dark:text-amber-500" />
+                <span>Do not link to piracy websites. Only link to official sources such as AniList, VNDB, TMDB, MyAnimeList, IGDB or Bookmeter.</span>
+              </small>
+              <small v-if="showAnilistHint" class="text-muted-color flex items-start gap-1.5">
+                <i class="pi pi-info-circle mt-0.5 w-[14px] shrink-0 text-center text-[13px] text-blue-500 dark:text-blue-300" />
+                <span>AniList is the preferred source for novels. Requests linked to it are fulfilled faster.</span>
+              </small>
+            </div>
           </div>
 
           <!-- Description -->
           <div class="flex flex-col gap-2">
             <label class="font-semibold">Description</label>
-            <Textarea v-model="description" placeholder="Any additional details (edition, volume, version...)" :maxlength="1000" rows="3" class="w-full" />
+            <Textarea v-model="description" placeholder="Any additional details (romaji name, edition, volume, version...)" :maxlength="1000" rows="3" class="w-full" />
             <small class="text-muted-color text-right">{{ description.length }}/1000</small>
           </div>
 
-          <small class="text-muted-color">
-            <i class="pi pi-info-circle mr-1" />
-            You'll be able to attach files (scripts, subtitles, etc.) in the comments after submitting your request.
-          </small>
+          <div class="border-t border-surface-200 dark:border-surface-700" />
 
-          <Message severity="secondary" :closable="false" class="text-sm">
-            Your username is not visible to other users, but is visible to administrators to avoid abuse.
-          </Message>
+          <div class="flex flex-col gap-2">
+            <small class="text-muted-color flex items-start gap-1.5">
+              <i class="pi pi-paperclip mt-0.5 w-[14px] shrink-0 text-center text-[13px]" />
+              <span>
+                You can attach files (scripts, subtitles, ebooks...) in the comments once your request is submitted.
+                <template v-if="fulfilmentRange">Requests with a file are usually fulfilled within {{ fulfilmentRange }}.</template>
+                <template v-else>Requests with a file are fulfilled far faster.</template>
+                <template v-if="awaitingWait">Requests without a file have been waiting for about {{ awaitingWait }}.</template>
+              </span>
+            </small>
+            <small class="text-muted-color flex items-start gap-1.5">
+              <i class="pi pi-eye mt-0.5 w-[14px] shrink-0 text-center text-[13px]" />
+              <span>Your username is only visible to administrators, not to other users.</span>
+            </small>
+          </div>
 
-          <template v-if="quota">
-            <Message v-if="isAtQuotaLimit" severity="error" :closable="false" class="text-sm">
-              You have reached the limit of {{ quota.limit }} active requests. Wait for existing requests to be fulfilled or rejected before submitting a new
-              one.
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <small v-if="quota && isAtQuotaLimit" class="text-red-600 dark:text-red-400">
+              You have reached the limit of {{ quota.limit }} active requests. Wait for existing requests to be fulfilled or rejected.
               <template v-if="showPlusUpsell">
                 <NuxtLink to="/jiten-plus" class="underline">Jiten+</NuxtLink>
                 raises this to {{ quota.plusLimit }} slots.
               </template>
-            </Message>
-            <small v-else class="text-muted-color">
-              <i class="pi pi-list mr-1" />
-              {{ quota.limit - quota.activeCount }} of {{ quota.limit }} active request slots remaining.
             </small>
-          </template>
-
-          <Button label="Submit Request" icon="pi pi-send" :loading="isSubmitting" :disabled="!canSubmit" class="w-full" @click="handleSubmit" />
+            <small v-else-if="quota" class="text-muted-color">{{ quota.limit - quota.activeCount }} of {{ quota.limit }} active request slots remaining.</small>
+            <Button label="Submit Request" icon="pi pi-send" :loading="isSubmitting" :disabled="!canSubmit" class="ml-auto shrink-0" @click="handleSubmit" />
+          </div>
         </div>
       </template>
     </Card>
