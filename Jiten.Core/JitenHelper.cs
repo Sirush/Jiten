@@ -328,7 +328,7 @@ public static class JitenHelper
                 }
 
                 // Step 1: preallocate unique IDs from the backing sequence (safe under concurrency)
-                var ids = new List<int>(exampleSentences.Count);
+                var ids = new List<long>(exampleSentences.Count);
                 await using (var idCmd = new NpgsqlCommand(
                     @"SELECT nextval(pg_get_serial_sequence('jiten.""ExampleSentences""', 'SentenceId')::regclass)
                          FROM generate_series(1, @cnt)", conn))
@@ -338,9 +338,7 @@ public static class JitenHelper
                     await using var reader = await idCmd.ExecuteReaderAsync();
                     while (await reader.ReadAsync())
                     {
-                        // nextval returns bigint
-                        var id64 = reader.GetInt64(0);
-                        ids.Add(Convert.ToInt32(id64));
+                        ids.Add(reader.GetInt64(0));
                     }
                 }
 

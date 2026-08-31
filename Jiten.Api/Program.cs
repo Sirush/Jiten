@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -979,6 +979,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         "freq-list-transient-cleanup",
         job => job.CleanupTransientLists(),
         Cron.Daily(3));
+
+    recurringJobs.AddOrUpdate<SequenceMonitorJob>(
+        "sequence-monitor",
+        job => job.CheckSequences(),
+        Cron.Daily(5));
 }
 
 app.UseResponseCompression();

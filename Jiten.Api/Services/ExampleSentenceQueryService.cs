@@ -21,7 +21,7 @@ public class ExampleSentenceQueryService(JitenDbContext context) : IExampleSente
 {
     private const float BandSize = 0.5f;
 
-    private record PickedSentence(int SentenceId, string Text, float Difficulty, int DeckId, int? ParentDeckId, bool FromStudyDeck);
+    private record PickedSentence(long SentenceId, string Text, float Difficulty, int DeckId, int? ParentDeckId, bool FromStudyDeck);
 
     public async Task<List<ExampleSentenceDto>> GetRandomAsync(int wordId, int readingIndex, List<int> excludedDeckIds,
                                                                MediaType? mediaType, int take, int[]? priorityDeckIds = null)
@@ -216,7 +216,7 @@ public class ExampleSentenceQueryService(JitenDbContext context) : IExampleSente
                             .ToArrayAsync();
     }
 
-    private IQueryable<int> SentenceIdsFor(int wordId, int readingIndex)
+    private IQueryable<long> SentenceIdsFor(int wordId, int readingIndex)
         => context.ExampleSentenceWords
                   .Where(w => w.WordId == wordId && w.ReadingIndex == readingIndex)
                   .Select(w => w.ExampleSentenceId)

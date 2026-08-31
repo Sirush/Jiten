@@ -4,7 +4,7 @@ namespace Jiten.Core.Data;
 
 public class ExampleSentence
 {
-    public int SentenceId { get; set; }
+    public long SentenceId { get; set; }
     public int DeckId { get; set; }
     public required string Text { get; set; }
     
@@ -20,7 +20,7 @@ public class ExampleSentence
 
 public class ExampleSentenceWord
 {
-    public int ExampleSentenceId { get; set; }
+    public long ExampleSentenceId { get; set; }
     public int WordId { get; set; }
     public byte ReadingIndex { get; set; }
     public byte Position { get; set; }

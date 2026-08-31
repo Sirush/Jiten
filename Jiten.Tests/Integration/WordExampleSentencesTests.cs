@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Jiten.Core;
@@ -19,7 +19,7 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
     private const int WordId = 4242;
     private int[] _studyDeckIds = [];
     private int[] _otherDeckIds = [];
-    private int[] _studySentenceIds = [];
+    private long[] _studySentenceIds = [];
 
     public async Task InitializeAsync()
     {
@@ -88,7 +88,7 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
         ReleaseDate = new DateOnly(2020, 1, 1),
     };
 
-    private static async Task<int> AddSentence(JitenDbContext db, int deckId, string text, float difficulty)
+    private static async Task<long> AddSentence(JitenDbContext db, int deckId, string text, float difficulty)
     {
         var sentence = new ExampleSentence { DeckId = deckId, Text = text, Difficulty = difficulty };
         db.ExampleSentences.Add(sentence);
@@ -184,7 +184,7 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
         await userDb.SaveChangesAsync();
     }
 
-    private async Task<int?> CardExampleSentenceId()
+    private async Task<long?> CardExampleSentenceId()
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/srs/card-examples")
             .WithUser(TestUsers.UserA)
@@ -200,7 +200,7 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
     {
         await SetExampleSentenceSource("Random");
 
-        var seen = new HashSet<int>();
+        var seen = new HashSet<long>();
         for (var i = 0; i < 20; i++)
         {
             var id = await CardExampleSentenceId();
@@ -216,7 +216,7 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
     {
         await SetExampleSentenceSource("StudyDecks");
 
-        var seen = new HashSet<int>();
+        var seen = new HashSet<long>();
         for (var i = 0; i < 20; i++)
         {
             var id = await CardExampleSentenceId();
@@ -250,6 +250,38 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task CardExamples_SentenceIdAboveIntMax_RoundTrips()
+    {
+        const int bigWordId = 5555;
+        const long bigSentenceId = 3_000_000_000;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            await jitenDb.JMDictWords.Where(w => w.WordId == bigWordId).ExecuteDeleteAsync();
+            jitenDb.JMDictWords.Add(new JmDictWord { WordId = bigWordId, PartsOfSpeech = ["noun"] });
+            jitenDb.ExampleSentences.Add(new ExampleSentence
+            {
+                SentenceId = bigSentenceId, DeckId = _otherDeckIds[0], Text = "big id sentence", Difficulty = 0.2f,
+            });
+            await jitenDb.SaveChangesAsync();
+            jitenDb.ExampleSentenceWords.Add(new ExampleSentenceWord
+            {
+                ExampleSentenceId = bigSentenceId, WordId = bigWordId, ReadingIndex = 0, Position = 0, Length = 2,
+            });
+            await jitenDb.SaveChangesAsync();
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/srs/card-examples")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { pairs = new[] { new { wordId = bigWordId, readingIndex = 0 } } });
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<CardExamplesPayload>();
+        payload!.Examples.GetValueOrDefault($"{bigWordId}-0")!.SentenceId.Should().Be(bigSentenceId);
+    }
+
+    [Fact]
     public async Task Anonymous_IsRejected()
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/srs/word-example-sentences")
@@ -266,7 +298,7 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
 
     private class SentenceDto
     {
-        public int SentenceId { get; set; }
+        public long SentenceId { get; set; }
         public string Text { get; set; } = "";
         public bool FromStudyDeck { get; set; }
         public DeckRef? SourceDeck { get; set; }

@@ -1,4 +1,4 @@
-using Jiten.Core;
+﻿using Jiten.Core;
 using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -131,6 +131,8 @@ public class ImportCommands(CliContext context)
     {
         Console.WriteLine("Applying migrations to the Jiten database.");
         await using var jitenContext = new JitenDbContext(context.DbOptions);
+        // Table-rewriting migrations (e.g. int -> bigint) far exceed the 30s Npgsql default
+        jitenContext.Database.SetCommandTimeout(0);
         await jitenContext.Database.MigrateAsync();
         Console.WriteLine("Migrations applied to the Jiten database.");
 
@@ -139,6 +141,7 @@ public class ImportCommands(CliContext context)
         var userOptionsBuilder = new DbContextOptionsBuilder<UserDbContext>();
         userOptionsBuilder.UseNpgsql(connectionString, o => { o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery); });
         await using var userContext = new UserDbContext(userOptionsBuilder.Options);
+        userContext.Database.SetCommandTimeout(0);
         await userContext.Database.MigrateAsync();
         Console.WriteLine("Migrations applied to the User database.");
     }
