@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { useApiFetch, useApiFetchPaginated } from '~/composables/useApiFetch';
-  import { type Deck, MediaType, SortOrder, type Word, DisplayStyle, type Tag } from '~/types';
+  import { type Deck, MediaType, SortOrder, type Word, DisplayStyle } from '~/types';
   import Skeleton from 'primevue/skeleton';
   import Card from 'primevue/card';
   import InputText from 'primevue/inputtext';
@@ -10,7 +10,6 @@
   import { useAuthStore } from '~/stores/authStore';
   import { LazyHydrateMediaDeckCard, LazyHydrateMediaDeckCompactView, LazyHydrateMediaDeckTableView } from '~/utils/lazyHydratedComponents';
   import { type DeckSortOption, deckSortMeta, deckSortOption, deckSortOrdering, deckSortLabels } from '~/utils/deckSorting';
-  import { getGenreText } from '~/utils/genreMapper';
   import {
     MEDIA_FILTER_PRESETS_ENDPOINT,
     type MediaFilterPreset,
@@ -870,105 +869,6 @@
     ];
   });
 
-  const { data: filterTags } = useApiFetch<Tag[]>('media-deck/tags', { server: true, lazy: false });
-
-  const statusChipLabels: Record<string, string> = {
-    nostatus: 'Without status',
-    fav: 'Favourited',
-    ignore: 'Ignored',
-    planning: 'Planning',
-    ongoing: 'Ongoing',
-    completed: 'Completed',
-    dropped: 'Dropped',
-  };
-
-  type FilterChip = { key: string; label: string; clear: () => void };
-
-  const rangeChip = (
-    key: string,
-    label: string,
-    minRef: Ref<number | null>,
-    maxRef: Ref<number | null>,
-    format: (value: number) => string = (value) => value.toLocaleString()
-  ): FilterChip | null => {
-    const text = rangeChipLabel(label, minRef.value, maxRef.value, format);
-    if (text === null) return null;
-
-    return {
-      key,
-      label: text,
-      clear: () => {
-        minRef.value = null;
-        maxRef.value = null;
-      },
-    };
-  };
-
-  const tagName = (tagId: number) => filterTags.value?.find((tag) => tag.tagId === tagId)?.name ?? `Tag ${tagId}`;
-
-  const removeFrom = (listRef: Ref<number[]>, id: number) => {
-    listRef.value = listRef.value.filter((entry) => entry !== id);
-  };
-
-  const activeFilterChips = computed<FilterChip[]>(() => {
-    const chips: FilterChip[] = [];
-
-    if (statusFilter.value !== 'none') {
-      chips.push({
-        key: 'status',
-        label: statusChipLabels[statusFilter.value as string] ?? 'Status',
-        clear: () => {
-          statusFilter.value = 'none';
-        },
-      });
-    }
-
-    const plain = (value: number) => String(value);
-    const percent = (value: number) => `${value}%`;
-
-    const ranges = [
-      rangeChip('charCount', 'Characters', charCountMin, charCountMax),
-      rangeChip('difficulty', 'Difficulty', difficultyMin, difficultyMax, plain),
-      rangeChip('releaseYear', 'Year', releaseYearMin, releaseYearMax, plain),
-      rangeChip('uniqueKanji', 'Unique kanji', uniqueKanjiMin, uniqueKanjiMax),
-      rangeChip('subdeckCount', 'Subdecks', subdeckCountMin, subdeckCountMax),
-      rangeChip('extRating', 'Rating', extRatingMin, extRatingMax, plain),
-      rangeChip('speechSpeed', 'Speech speed', speechSpeedMin, speechSpeedMax),
-      rangeChip('speechDuration', 'Duration', speechDurationMin, speechDurationMax, (value) => `${value}h`),
-      rangeChip('coverage', 'Coverage', coverageMin, coverageMax, percent),
-      rangeChip('uniqueCoverage', 'Unique coverage', uniqueCoverageMin, uniqueCoverageMax, percent),
-      rangeChip('totalCoverage', 'Total coverage', totalCoverageMin, totalCoverageMax, percent),
-      rangeChip('uTotalCoverage', 'Unique total coverage', uTotalCoverageMin, uTotalCoverageMax, percent),
-    ];
-    for (const chip of ranges) {
-      if (chip) chips.push(chip);
-    }
-
-    if (excludeSequels.value) {
-      chips.push({
-        key: 'excludeSequels',
-        label: 'No sequels',
-        clear: () => {
-          excludeSequels.value = null;
-        },
-      });
-    }
-
-    for (const id of includeGenres.value) {
-      chips.push({ key: `genre-${id}`, label: getGenreText(id), clear: () => removeFrom(includeGenres, id) });
-    }
-    for (const id of excludeGenres.value) {
-      chips.push({ key: `genre-x-${id}`, label: `Not ${getGenreText(id)}`, clear: () => removeFrom(excludeGenres, id) });
-    }
-    for (const id of includeTags.value) {
-      chips.push({ key: `tag-${id}`, label: tagName(id), clear: () => removeFrom(includeTags, id) });
-    }
-    for (const id of excludeTags.value) {
-      chips.push({ key: `tag-x-${id}`, label: `Not ${tagName(id)}`, clear: () => removeFrom(excludeTags, id) });
-    }
-
-    return chips;
-  });
 </script>
 
 <template>
@@ -1164,6 +1064,7 @@
           :genre-counts="genreCounts"
           :tag-counts="tagCounts"
           :active-preset-name="activePresetName"
+          :deck-count="totalItems"
           @reset="resetAllFilters"
         >
           <template v-if="isConnected" #presets>
@@ -1182,13 +1083,44 @@
         </div>
       </div>
 
-      <!-- The Filters badge is the only other trace of active filters, and it scrolls away
-           with its button; below md these keep the hidden state readable and removable. -->
-      <div v-if="activeFilterChips.length" class="flex flex-row flex-wrap items-center gap-1.5 md:hidden">
-        <Chip v-for="chip in activeFilterChips" :key="chip.key" :label="chip.label" removable class="py-0.5! text-xs!" @remove="chip.clear()" />
-        <Button v-if="activeFilterChips.length > 1" severity="secondary" text size="small" class="py-0.5! text-xs!" @click="resetAllFilters">Clear all</Button>
-      </div>
     </div>
+
+    <!-- The Filters badge is the only other trace of active filters, and it scrolls away with
+         its button; these keep the applied state readable and removable next to the results. -->
+    <MediaListFilterChips
+      v-model:status-filter="statusFilter"
+      v-model:char-count-min="charCountMin"
+      v-model:char-count-max="charCountMax"
+      v-model:difficulty-min="difficultyMin"
+      v-model:difficulty-max="difficultyMax"
+      v-model:release-year-min="releaseYearMin"
+      v-model:release-year-max="releaseYearMax"
+      v-model:unique-kanji-min="uniqueKanjiMin"
+      v-model:unique-kanji-max="uniqueKanjiMax"
+      v-model:subdeck-count-min="subdeckCountMin"
+      v-model:subdeck-count-max="subdeckCountMax"
+      v-model:ext-rating-min="extRatingMin"
+      v-model:ext-rating-max="extRatingMax"
+      v-model:speech-speed-min="speechSpeedMin"
+      v-model:speech-speed-max="speechSpeedMax"
+      v-model:speech-duration-min="speechDurationMin"
+      v-model:speech-duration-max="speechDurationMax"
+      v-model:coverage-min="coverageMin"
+      v-model:coverage-max="coverageMax"
+      v-model:unique-coverage-min="uniqueCoverageMin"
+      v-model:unique-coverage-max="uniqueCoverageMax"
+      v-model:total-coverage-min="totalCoverageMin"
+      v-model:total-coverage-max="totalCoverageMax"
+      v-model:u-total-coverage-min="uTotalCoverageMin"
+      v-model:u-total-coverage-max="uTotalCoverageMax"
+      v-model:include-genres="includeGenres"
+      v-model:exclude-genres="excludeGenres"
+      v-model:include-tags="includeTags"
+      v-model:exclude-tags="excludeTags"
+      v-model:exclude-sequels="excludeSequels"
+      @reset="resetAllFilters"
+    />
+
     <div>
       <div class="flex flex-col gap-1">
         <PaginationControls

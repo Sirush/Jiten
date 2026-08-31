@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { clampRange, rangeChipLabel } from '../app/utils/rangeFilters';
+import { MEDIA_RANGE_SPECS } from '../app/utils/mediaFilterRanges';
 
 const MEDIA_LIST = readFileSync(fileURLToPath(new URL('../app/components/MediaList.vue', import.meta.url)), 'utf8');
 const MEDIA_LIST_FILTERS = readFileSync(fileURLToPath(new URL('../app/components/MediaListFilters.vue', import.meta.url)), 'utf8');
@@ -31,9 +32,9 @@ describe('coverage filter chips', () => {
   });
 
   it('labels each bound shape', () => {
-    expect(rangeChipLabel('Total coverage', 70, null, percent)).toBe('Total coverage ≥ 70%');
-    expect(rangeChipLabel('Unique total coverage', null, 30, percent)).toBe('Unique total coverage ≤ 30%');
-    expect(rangeChipLabel('Total coverage', 70, 90, percent)).toBe('Total coverage 70%-90%');
+    expect(rangeChipLabel('Total coverage', 70, null, percent)).toBe('Total coverage 70% and up');
+    expect(rangeChipLabel('Unique total coverage', null, 30, percent)).toBe('Unique total coverage up to 30%');
+    expect(rangeChipLabel('Total coverage', 70, 90, percent)).toBe('Total coverage 70% - 90%');
     expect(rangeChipLabel('Total coverage', 70, 70, percent)).toBe('Total coverage 70%');
   });
 });
@@ -58,9 +59,10 @@ describe('total coverage filter wiring', () => {
     }
   });
 
-  it('names mature and total explicitly on every coverage slider', () => {
-    for (const label of ['Coverage (Mature) (%)', 'Coverage (Total) (%)', 'Unique Coverage (Mature) (%)', 'Unique Coverage (Total) (%)']) {
-      expect(MEDIA_LIST_FILTERS).toContain(label);
+  it('names mature and total explicitly on every coverage row', () => {
+    const labels = MEDIA_RANGE_SPECS.map((spec) => spec.label);
+    for (const label of ['Coverage (Mature)', 'Coverage (Total)', 'Unique Coverage (Mature)', 'Unique Coverage (Total)']) {
+      expect(labels).toContain(label);
     }
   });
 });
