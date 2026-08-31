@@ -293,6 +293,14 @@
               >Settings</nuxt-link
             >
             <nuxt-link
+              v-if="auth.isAuthenticated"
+              to="/requests"
+              class="py-2 px-3"
+              :class="route.path.startsWith('/requests') ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >Media Requests</nuxt-link
+            >
+            <nuxt-link
               to="/frequency-dictionaries"
               class="py-2 px-3"
               :class="route.path === '/frequency-dictionaries' ? 'font-semibold !text-purple-200' : '!text-white'"
