@@ -314,7 +314,7 @@
   </div>
 
   <Popover v-if="!isMobile" ref="popover" class="w-[min(48rem,calc(100vw_-_2rem))]">
-    <div class="flex max-h-[calc(100dvh-16rem)] min-w-[280px] flex-col">
+    <div class="flex max-h-[calc(100dvh-13rem)] min-w-[280px] flex-col">
       <div v-if="$slots.presets" class="shrink-0 border-b border-surface-200 pb-2 dark:border-surface-700">
         <slot name="presets" />
       </div>
