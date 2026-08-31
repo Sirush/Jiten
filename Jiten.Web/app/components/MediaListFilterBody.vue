@@ -18,6 +18,7 @@
   const expandedKey = defineModel<MediaRangeKey | null>('expandedKey', { required: true });
   const statusFilter = defineModel<string>('statusFilter', { required: true });
   const excludeSequels = defineModel<boolean | null>('excludeSequels', { required: false });
+  const favourite = defineModel<boolean | null>('favourite', { required: false });
   const excludeNotOriginallyJp = defineModel<boolean>('excludeNotOriginallyJp', { required: true });
 
   const query = computed(() => search.value.trim().toLowerCase());
@@ -86,6 +87,11 @@
           />
         </div>
 
+        <div v-if="mobile && isConnected" class="flex h-11 shrink-0 items-center gap-2 px-2">
+          <Checkbox v-model="favourite" class="shrink-0" input-id="favouriteOnly" binary />
+          <label for="favouriteOnly" class="text-sm text-surface-700 dark:text-surface-200">Favourited</label>
+        </div>
+
         <div v-for="(section, index) in sections" :key="section.key" class="shrink-0">
           <div
             :class="[
@@ -122,6 +128,10 @@
     <slot v-if="!split" name="after" />
 
     <div :class="['mt-2 flex shrink-0 px-1', mobile ? 'flex-col gap-1.5' : 'flex-wrap items-center gap-x-6 gap-y-1.5']">
+      <div v-if="!mobile && isConnected" class="flex items-center gap-2">
+        <Checkbox v-model="favourite" class="shrink-0" input-id="favouriteOnly" binary />
+        <label for="favouriteOnly" class="text-sm text-surface-700 dark:text-surface-200">Favourited</label>
+      </div>
       <div class="flex items-center gap-2">
         <Checkbox v-model="excludeSequels" class="shrink-0" input-id="excludeSequels" binary />
         <label for="excludeSequels" class="text-sm text-surface-700 dark:text-surface-200">Exclude sequels and fandiscs</label>

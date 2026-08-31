@@ -39,7 +39,7 @@ public class UserSettingsController(
         "totalCoverageMin", "totalCoverageMax",
         "uTotalCoverageMin", "uTotalCoverageMax",
         "genres", "excludeGenres", "tags", "excludeTags",
-        "excludeSequels",
+        "excludeSequels", "favourite",
     };
 
     [HttpGet("media-filter-presets")]

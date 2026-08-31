@@ -99,6 +99,7 @@ export type MediaFilterSnapshot = {
   includeTags: number[];
   excludeTags: number[];
   excludeSequels: boolean | null;
+  favourite: boolean | null;
 };
 
 export const countActiveFilters = (snapshot: MediaFilterSnapshot): number => {
@@ -109,6 +110,7 @@ export const countActiveFilters = (snapshot: MediaFilterSnapshot): number => {
   }
   if (snapshot.statusFilter !== 'none') count++;
   if (snapshot.excludeSequels) count++;
+  if (snapshot.favourite) count++;
   count += snapshot.includeGenres.length + snapshot.excludeGenres.length;
   count += snapshot.includeTags.length + snapshot.excludeTags.length;
   return count;

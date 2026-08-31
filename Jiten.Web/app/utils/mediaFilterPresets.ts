@@ -38,6 +38,7 @@ export const PRESET_QUERY_KEYS = [
   'tags',
   'excludeTags',
   'excludeSequels',
+  'favourite',
 ] as const;
 
 export type PresetQuery = Record<string, string>;

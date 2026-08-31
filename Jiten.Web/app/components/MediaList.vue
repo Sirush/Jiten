@@ -86,7 +86,9 @@
     return sortOrder.value === SortOrder.Ascending ? meta.asc : meta.desc;
   });
 
-  const statusFilter = ref(route.query.status ? (Array.isArray(route.query.status) ? route.query.status[0] : route.query.status) : 'none');
+  // Legacy URLs carried status=fav before favourite became its own flag.
+  const rawStatus = Array.isArray(route.query.status) ? route.query.status[0] : route.query.status;
+  const statusFilter = ref(rawStatus && rawStatus !== 'fav' ? rawStatus : 'none');
 
   const authStore = useAuthStore();
   const isConnected = computed(() => authStore.isAuthenticated);
@@ -131,6 +133,7 @@
   const uTotalCoverageMin = ref<number | null>(toNumOrNull(route.query.uTotalCoverageMin));
   const uTotalCoverageMax = ref<number | null>(toNumOrNull(route.query.uTotalCoverageMax));
   const excludeSequels = ref<boolean | null>(toBooleanOrNull(route.query.excludeSequels));
+  const favourite = ref<boolean | null>(rawStatus === 'fav' ? true : toBooleanOrNull(route.query.favourite));
 
   // Genre and Tag filter state
   const includeGenres = ref<number[]>([]);
@@ -193,6 +196,7 @@
     includeTags: includeTags.value,
     excludeTags: excludeTags.value,
     excludeSequels: excludeSequels.value,
+    favourite: favourite.value,
   });
 
   const debouncedFilters = ref(snapshotFilters());
@@ -241,6 +245,7 @@
           excludeTags: arrayToString(excludeTags.value) as any,
           offset: 0 as any,
           excludeSequels: excludeSequels.value === true ? true : undefined,
+          favourite: favourite.value === true ? true : undefined,
         },
       });
     },
@@ -275,6 +280,7 @@
       uTotalCoverageMin,
       uTotalCoverageMax,
       excludeSequels,
+      favourite,
     ],
     () => {
       if (applyingPreset.value) return;
@@ -370,6 +376,7 @@
     uTotalCoverageMin.value = null;
     uTotalCoverageMax.value = null;
     excludeSequels.value = false;
+    favourite.value = false;
 
     // Genre and tag filters
     includeGenres.value = [];
@@ -416,6 +423,7 @@
         status: undefined,
         offset: 0,
         excludeSequels: undefined,
+        favourite: undefined,
       },
     });
   };
@@ -460,6 +468,7 @@
       tags: includeTags.value.join(','),
       excludeTags: excludeTags.value.join(','),
       excludeSequels: excludeSequels.value === true ? 'true' : null,
+      favourite: favourite.value === true ? 'true' : null,
     })
   );
 
@@ -477,7 +486,9 @@
 
     titleFilter.value = query.title ?? null;
     debouncedTitleFilter.value = titleFilter.value;
-    statusFilter.value = query.status ?? 'none';
+    // Presets saved before the split may still carry status=fav.
+    statusFilter.value = query.status && query.status !== 'fav' ? query.status : 'none';
+    favourite.value = query.status === 'fav' ? true : toBooleanOrNull(query.favourite);
     sortBy.value = query.sortBy ?? sortByOptions.value[0].value;
     sortOrder.value = query.sortOrder != null ? Number(query.sortOrder) : (deckSortMeta[sortBy.value as string]?.default ?? SortOrder.Ascending);
 
@@ -723,6 +734,7 @@
       tags: computed(() => (debouncedFilters.value.includeTags.length > 0 ? debouncedFilters.value.includeTags.join(',') : undefined)),
       excludeTags: computed(() => (debouncedFilters.value.excludeTags.length > 0 ? debouncedFilters.value.excludeTags.join(',') : undefined)),
       excludeSequels: computed(() => debouncedFilters.value.excludeSequels),
+      favourite: computed(() => (debouncedFilters.value.favourite === true ? true : undefined)),
     },
     watch: [offset, mediaType],
   });
@@ -1060,6 +1072,7 @@
           v-model:include-tags="includeTags"
           v-model:exclude-tags="excludeTags"
           v-model:exclude-sequels="excludeSequels"
+          v-model:favourite="favourite"
           :is-connected="isConnected"
           :genre-counts="genreCounts"
           :tag-counts="tagCounts"
@@ -1118,6 +1131,7 @@
       v-model:include-tags="includeTags"
       v-model:exclude-tags="excludeTags"
       v-model:exclude-sequels="excludeSequels"
+      v-model:favourite="favourite"
       @reset="resetAllFilters"
     />
 

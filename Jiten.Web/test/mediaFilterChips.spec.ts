@@ -24,6 +24,7 @@ const snapshot = (overrides: Partial<MediaFilterSnapshot> = {}): MediaFilterSnap
   includeTags: [],
   excludeTags: [],
   excludeSequels: null,
+  favourite: null,
   ...overrides,
 });
 
@@ -44,18 +45,19 @@ describe('active filter count', () => {
     expect(countActiveFilters(snapshot({ ranges: withRange('difficulty', { min: 2, max: 4 }) }))).toBe(1);
   });
 
-  it('counts status, each genre, each tag and the sequel exclusion separately', () => {
+  it('counts status, favourite, each genre, each tag and the sequel exclusion separately', () => {
     const count = countActiveFilters(
       snapshot({
         ranges: withRange('charCount', { min: null, max: 500_000 }),
-        statusFilter: 'fav',
+        statusFilter: 'completed',
         includeGenres: [7],
         excludeGenres: [5],
         includeTags: [1, 2],
         excludeSequels: true,
+        favourite: true,
       })
     );
-    expect(count).toBe(7);
+    expect(count).toBe(8);
   });
 });
 

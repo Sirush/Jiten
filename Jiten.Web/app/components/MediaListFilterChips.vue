@@ -40,6 +40,7 @@
   const uTotalCoverageMin = defineModel<number | null>('uTotalCoverageMin', { required: true });
   const uTotalCoverageMax = defineModel<number | null>('uTotalCoverageMax', { required: true });
   const excludeSequels = defineModel<boolean | null>('excludeSequels', { required: false });
+  const favourite = defineModel<boolean | null>('favourite', { required: false });
 
   const rangeBounds: MediaRangeRefs = {
     charCount: { min: charCountMin, max: charCountMax },
@@ -60,7 +61,6 @@
 
   const statusChipLabels: Record<string, string> = {
     nostatus: 'Without status',
-    fav: 'Favourited',
     ignore: 'Ignored',
     planning: 'Planning',
     ongoing: 'Ongoing',
@@ -99,6 +99,17 @@
         clear: () => {
           bounds.min.value = null;
           bounds.max.value = null;
+        },
+      });
+    }
+
+    if (favourite.value) {
+      result.push({
+        key: 'favourite',
+        label: 'Favourited',
+        excluded: false,
+        clear: () => {
+          favourite.value = null;
         },
       });
     }

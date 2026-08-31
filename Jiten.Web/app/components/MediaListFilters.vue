@@ -53,6 +53,7 @@
   const uTotalCoverageMin = defineModel<number | null>('uTotalCoverageMin', { required: true });
   const uTotalCoverageMax = defineModel<number | null>('uTotalCoverageMax', { required: true });
   const excludeSequels = defineModel<boolean | null>('excludeSequels', { required: false });
+  const favourite = defineModel<boolean | null>('favourite', { required: false });
 
   const excludeNotOriginallyJp = computed({
     get: () => excludeTags.value.includes(NOT_ORIGINALLY_JP_TAG_ID),
@@ -114,7 +115,6 @@
   const statusFilterOptions = [
     { label: 'Show All', value: 'none' },
     { label: 'Without Status', value: 'nostatus' },
-    { label: 'Only Favourited', value: 'fav' },
     { label: 'Only Ignored', value: 'ignore' },
     { label: 'Only Planning', value: 'planning' },
     { label: 'Only Ongoing', value: 'ongoing' },
@@ -275,6 +275,7 @@
       includeTags: includeTags.value,
       excludeTags: excludeTags.value,
       excludeSequels: excludeSequels.value,
+      favourite: favourite.value,
     })
   );
 
@@ -325,6 +326,7 @@
           v-model:expanded-key="expandedKey"
           v-model:status-filter="statusFilter"
           v-model:exclude-sequels="excludeSequels"
+          v-model:favourite="favourite"
           v-model:exclude-not-originally-jp="excludeNotOriginallyJp"
           class="min-h-0 flex-1"
           split
@@ -406,6 +408,7 @@
               v-model:expanded-key="expandedKey"
               v-model:status-filter="statusFilter"
               v-model:exclude-sequels="excludeSequels"
+              v-model:favourite="favourite"
               v-model:exclude-not-originally-jp="excludeNotOriginallyJp"
               mobile
               :is-connected="isConnected"
