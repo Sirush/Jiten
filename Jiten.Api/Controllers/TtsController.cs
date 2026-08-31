@@ -41,8 +41,8 @@ public class TtsController(ITtsService ttsService, IConfiguration configuration)
         }
     }
 
-    [HttpGet("sentence/{sentenceId:int}")]
-    public async Task<IResult> GetSentenceAudio(int sentenceId, [FromQuery] string voice = "female", CancellationToken ct = default)
+    [HttpGet("sentence/{sentenceId:long}")]
+    public async Task<IResult> GetSentenceAudio(long sentenceId, [FromQuery] string voice = "female", CancellationToken ct = default)
     {
         var rateLimitKey = GetRateLimitKey();
         try

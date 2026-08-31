@@ -35,8 +35,6 @@ public class Deconjugator
 
     private readonly DeconjugationRule[] _rules;
 
-    private static readonly bool UseCache = true;
-
     public sealed record DeconjugationCacheStats(
         long Hits,
         long Misses,
@@ -59,6 +57,7 @@ public class Deconjugator
     private readonly Dictionary<string, RuleIndexEntry[]> _conEndIndex;
     private readonly Dictionary<string, RuleIndexEntry[]>.AlternateLookup<ReadOnlySpan<char>> _conEndIndexAlt;
     private readonly int _maxConEndLength;
+    private readonly int _maxDecEndLength;
 
     public Deconjugator(int maxCacheEntries = DefaultMaxCacheEntries)
     {
@@ -78,16 +77,17 @@ public class Deconjugator
 
         _rules = rules.ToArray();
 
-        (_conEndIndex, _maxConEndLength) = BuildRuleIndex(_rules);
+        (_conEndIndex, _maxConEndLength, _maxDecEndLength) = BuildRuleIndex(_rules);
         _conEndIndexAlt = _conEndIndex.GetAlternateLookup<ReadOnlySpan<char>>();
 
     }
 
-    private static (Dictionary<string, RuleIndexEntry[]> index, int maxLen)
+    private static (Dictionary<string, RuleIndexEntry[]> index, int maxConEndLen, int maxDecEndLen)
         BuildRuleIndex(DeconjugationRule[] rules)
     {
         var tempIndex = new Dictionary<string, List<RuleIndexEntry>>(StringComparer.Ordinal);
         int maxConEndLen = 0;
+        int maxDecEndLen = 0;
 
         foreach (var rule in rules)
         {
@@ -103,7 +103,7 @@ public class Deconjugator
             for (int i = 0; i < rule.DecEnd.Length; i++)
             {
                 var vr = new DeconjugationVirtualRule(
-                    rule.DecEnd.ElementAtOrDefault(i) ?? rule.DecEnd[0],
+                    rule.DecEnd[i],
                     rule.ConEnd.ElementAtOrDefault(i) ?? rule.ConEnd[0],
                     rule.DecTag?.ElementAtOrDefault(i) ?? rule.DecTag?[0],
                     rule.ConTag?.ElementAtOrDefault(i) ?? rule.ConTag?[0],
@@ -111,6 +111,7 @@ public class Deconjugator
 
                 var conEnd = vr.ConEnd;
                 if (conEnd.Length > maxConEndLen) maxConEndLen = conEnd.Length;
+                if (vr.DecEnd.Length > maxDecEndLen) maxDecEndLen = vr.DecEnd.Length;
 
                 if (!tempIndex.TryGetValue(conEnd, out var list))
                     tempIndex[conEnd] = list = new List<RuleIndexEntry>();
@@ -122,7 +123,7 @@ public class Deconjugator
         foreach (var (key, list) in tempIndex)
             index[key] = list.ToArray();
 
-        return (index, maxConEndLen);
+        return (index, maxConEndLen, maxDecEndLen);
     }
 
     private bool TryGetCached(string text, out IReadOnlyList<DeconjugationForm> forms)
@@ -148,15 +149,14 @@ public class Deconjugator
         return false;
     }
 
-    private void StoreCached(string text, List<DeconjugationForm> forms)
+    private void StoreCached(string text, DeconjugationForm[] forms)
     {
-        if (text.Length > MaxCacheableInputLength || forms.Count >= MaxCachedFormsBase + MaxCachedFormsPerChar * text.Length)
+        if (text.Length > MaxCacheableInputLength || forms.Length >= MaxCachedFormsBase + MaxCachedFormsPerChar * text.Length)
             return;
 
-        var snapshot = forms.ToArray();
         Interlocked.Increment(ref _cacheStoreCount);
 
-        if (_gen0.TryAdd(text, snapshot))
+        if (_gen0.TryAdd(text, forms))
         {
             var count = Interlocked.Increment(ref _gen0Count);
             if (count > _maxCacheEntries)
@@ -212,9 +212,10 @@ public class Deconjugator
         Interlocked.Exchange(ref _cacheEvictionCount, 0);
     }
 
+    /// <summary>Results are ordered by Text.Length descending, then ordinal — call sites must not re-sort.</summary>
     public IReadOnlyList<DeconjugationForm> Deconjugate(string text)
     {
-        if (UseCache && TryGetCached(text, out var cached))
+        if (TryGetCached(text, out var cached))
             return cached;
 
         if (string.IsNullOrEmpty(text))
@@ -225,13 +226,12 @@ public class Deconjugator
         Interlocked.Add(ref _bfsTotalTicks, Stopwatch.GetTimestamp() - start);
         Interlocked.Increment(ref _bfsCallCount);
 
-        if (UseCache)
-            StoreCached(text, result);
+        StoreCached(text, result);
 
         return result;
     }
 
-    private List<DeconjugationForm> RunBfs(string text)
+    private DeconjugationForm[] RunBfs(string text)
     {
         var processed = new HashSet<DeconjugationForm>(Math.Min(text.Length * 2, 100));
         var novel = new HashSet<DeconjugationForm>(20);
@@ -256,7 +256,7 @@ public class Deconjugator
         return processed
             .OrderByDescending(f => f.Text.Length)
             .ThenBy(f => f.Text, StringComparer.Ordinal)
-            .ToList();
+            .ToArray();
     }
 
     private void ApplyIndexedRules(DeconjugationForm form, HashSet<DeconjugationForm> newNovel,
@@ -264,6 +264,11 @@ public class Deconjugator
     {
         var text = form.Text;
         int maxSuffix = Math.Min(_maxConEndLength, text.Length);
+
+        // One buffer for every candidate: a stackalloc inside the loops would accumulate
+        // stack space until the method returns.
+        int maxNewTextLength = text.Length + _maxDecEndLength;
+        Span<char> buffer = maxNewTextLength <= 256 ? stackalloc char[256] : new char[maxNewTextLength];
 
         for (int suffixLen = 0; suffixLen <= maxSuffix; suffixLen++)
         {
@@ -294,10 +299,10 @@ public class Deconjugator
                     continue;
 
                 var prefixLength = text.Length - entry.VirtualRule.ConEnd.Length;
-                Span<char> buffer = stackalloc char[prefixLength + entry.VirtualRule.DecEnd.Length];
+                int newTextLength = prefixLength + entry.VirtualRule.DecEnd.Length;
                 text.AsSpan(0, prefixLength).CopyTo(buffer);
                 entry.VirtualRule.DecEnd.AsSpan().CopyTo(buffer[prefixLength..]);
-                var newText = new string(buffer);
+                var newText = new string(buffer[..newTextLength]);
 
                 if (newText.Equals(form.OriginalText, StringComparison.Ordinal))
                     continue;

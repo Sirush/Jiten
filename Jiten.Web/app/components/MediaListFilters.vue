@@ -4,15 +4,19 @@
   import { getAllGenres } from '~/utils/genreMapper';
   import { NOT_ORIGINALLY_JP_TAG_ID } from '~/utils/tags';
   import type { TagState } from '~/components/TriStateTag.vue';
-  import ScrollPanel from 'primevue/scrollpanel';
+  import type { TagCloudEntry } from '~/components/MediaListTagCloud.vue';
+  import { countActiveFilters, MEDIA_RANGE_SPECS, readRangeBounds, type MediaRangeKey, type MediaRangeRefs } from '~/utils/mediaFilterRanges';
+  import type { RangeBounds } from '~/utils/rangeFilters';
 
   const props = withDefaults(
     defineProps<{
       isConnected: boolean;
       genreCounts?: Record<number, number>;
       tagCounts?: Record<number, number>;
+      activePresetName?: string | null;
+      deckCount?: number | null;
     }>(),
-    { genreCounts: () => ({}), tagCounts: () => ({}) }
+    { genreCounts: () => ({}), tagCounts: () => ({}), activePresetName: null, deckCount: null }
   );
 
   const emit = defineEmits<{
@@ -44,7 +48,12 @@
   const coverageMax = defineModel<number | null>('coverageMax', { required: true });
   const uniqueCoverageMin = defineModel<number | null>('uniqueCoverageMin', { required: true });
   const uniqueCoverageMax = defineModel<number | null>('uniqueCoverageMax', { required: true });
+  const totalCoverageMin = defineModel<number | null>('totalCoverageMin', { required: true });
+  const totalCoverageMax = defineModel<number | null>('totalCoverageMax', { required: true });
+  const uTotalCoverageMin = defineModel<number | null>('uTotalCoverageMin', { required: true });
+  const uTotalCoverageMax = defineModel<number | null>('uTotalCoverageMax', { required: true });
   const excludeSequels = defineModel<boolean | null>('excludeSequels', { required: false });
+  const favourite = defineModel<boolean | null>('favourite', { required: false });
 
   const excludeNotOriginallyJp = computed({
     get: () => excludeTags.value.includes(NOT_ORIGINALLY_JP_TAG_ID),
@@ -59,14 +68,53 @@
     },
   });
 
-  const popover = ref();
+  const rangeBounds: MediaRangeRefs = {
+    charCount: { min: charCountMin, max: charCountMax },
+    uniqueKanji: { min: uniqueKanjiMin, max: uniqueKanjiMax },
+    subdeckCount: { min: subdeckCountMin, max: subdeckCountMax },
+    difficulty: { min: difficultyMin, max: difficultyMax },
+    coverage: { min: coverageMin, max: coverageMax },
+    totalCoverage: { min: totalCoverageMin, max: totalCoverageMax },
+    uniqueCoverage: { min: uniqueCoverageMin, max: uniqueCoverageMax },
+    uTotalCoverage: { min: uTotalCoverageMin, max: uTotalCoverageMax },
+    releaseYear: { min: releaseYearMin, max: releaseYearMax },
+    extRating: { min: extRatingMin, max: extRatingMax },
+    speechSpeed: { min: speechSpeedMin, max: speechSpeedMax },
+    speechDuration: { min: speechDurationMin, max: speechDurationMax },
+  };
 
-  const currentYear = new Date().getFullYear();
+  const rangeValues = computed<Record<MediaRangeKey, RangeBounds>>({
+    get: () => readRangeBounds(rangeBounds),
+    set: (next) => {
+      for (const spec of MEDIA_RANGE_SPECS) {
+        rangeBounds[spec.key].min.value = next[spec.key].min;
+        rangeBounds[spec.key].max.value = next[spec.key].max;
+      }
+    },
+  });
+
+  const popover = ref();
+  const drawerOpen = ref(false);
+  const mobilePane = ref<'genres' | 'tags' | null>(null);
+  const expandedKey = ref<MediaRangeKey | null>(null);
+
+  // Popover and Drawer are teleported overlays, so the split cannot be a CSS-only one.
+  const isMobile = ref(false);
+  let breakpoint: MediaQueryList | null = null;
+  const syncBreakpoint = (event: MediaQueryListEvent | MediaQueryList) => {
+    isMobile.value = !event.matches;
+  };
+
+  onMounted(() => {
+    breakpoint = window.matchMedia('(min-width: 768px)');
+    syncBreakpoint(breakpoint);
+    breakpoint.addEventListener('change', syncBreakpoint);
+  });
+  onBeforeUnmount(() => breakpoint?.removeEventListener('change', syncBreakpoint));
 
   const statusFilterOptions = [
     { label: 'Show All', value: 'none' },
     { label: 'Without Status', value: 'nostatus' },
-    { label: 'Only Favourited', value: 'fav' },
     { label: 'Only Ignored', value: 'ignore' },
     { label: 'Only Planning', value: 'planning' },
     { label: 'Only Ongoing', value: 'ongoing' },
@@ -79,9 +127,10 @@
     lazy: false,
   });
 
-  const tags = computed(() => availableTags.value || []);
+  const tags = computed(() => [...(availableTags.value || [])].sort((a, b) => a.name.localeCompare(b.name)));
   const genres = computed(() => getAllGenres());
 
+  const filterSearchQuery = ref('');
   const genreSearchQuery = ref('');
   const tagSearchQuery = ref('');
 
@@ -89,40 +138,82 @@
   const hasGenreFacets = computed(() => Object.keys(props.genreCounts).length > 0);
   const hasTagFacets = computed(() => Object.keys(props.tagCounts).length > 0);
 
-  const filteredGenres = computed(() => {
-    const query = genreSearchQuery.value.toLowerCase();
-    return genres.value.filter((genre) => {
-      if (query && !genre.label.toLowerCase().includes(query)) return false;
-      // keep selected chips reachable so they can be toggled back off
-      if (includeGenres.value.includes(genre.value) || excludeGenres.value.includes(genre.value)) return true;
-      if (!hasGenreFacets.value) return true;
-      return (props.genreCounts[genre.value] ?? 0) > 0;
-    });
-  });
+  const lower = (value: string) => value.trim().toLowerCase();
 
-  const filteredTags = computed(() => {
-    const query = tagSearchQuery.value.toLowerCase();
-    return tags.value.filter((tag) => {
-      if (query && !tag.name.toLowerCase().includes(query)) return false;
-      if (includeTags.value.includes(tag.tagId) || excludeTags.value.includes(tag.tagId)) return true;
-      if (!hasTagFacets.value) return true;
-      return (props.tagCounts[tag.tagId] ?? 0) > 0;
-    });
-  });
+  const genreQueries = computed(() => (mobilePane.value === 'genres' ? [genreSearchQuery.value] : [filterSearchQuery.value]));
+  const tagQueries = computed(() => (mobilePane.value === 'tags' ? [tagSearchQuery.value] : [tagSearchQuery.value, filterSearchQuery.value]));
+
+  const matchesAll = (text: string, queries: string[]) => queries.every((query) => !lower(query) || text.toLowerCase().includes(lower(query)));
+
+  const genreState = (value: number): TagState =>
+    includeGenres.value.includes(value) ? 'include' : excludeGenres.value.includes(value) ? 'exclude' : 'neutral';
+  const tagState = (tagId: number): TagState => (includeTags.value.includes(tagId) ? 'include' : excludeTags.value.includes(tagId) ? 'exclude' : 'neutral');
 
   const genreLabel = (value: number, label: string): string => {
-    const c = props.genreCounts[value];
-    return hasGenreFacets.value && c != null ? `${label} (${c.toLocaleString()})` : label;
+    if (!hasGenreFacets.value) return label;
+    return `${label} (${(props.genreCounts[value] ?? 0).toLocaleString()})`;
   };
   const tagLabel = (tagId: number, name: string): string => {
-    const c = props.tagCounts[tagId];
-    return hasTagFacets.value && c != null ? `${name} (${c.toLocaleString()})` : name;
+    const count = props.tagCounts[tagId];
+    return hasTagFacets.value && count != null ? `${name} (${count.toLocaleString()})` : name;
   };
 
-  const genreFilteredCount = computed(() => filteredGenres.value.length);
-  const genreTotalCount = computed(() => genres.value.length);
-  const tagFilteredCount = computed(() => filteredTags.value.length);
-  const tagTotalCount = computed(() => tags.value.length);
+  const genreEntries = computed<TagCloudEntry[]>(() =>
+    genres.value
+      .filter((genre) => {
+        if (!matchesAll(genre.label, genreQueries.value)) return false;
+        if (!isMobile.value) return true;
+        if (genreState(genre.value) !== 'neutral') return true;
+        if (!hasGenreFacets.value) return true;
+        return (props.genreCounts[genre.value] ?? 0) > 0;
+      })
+      .map((genre) => ({
+        id: genre.value,
+        label: genreLabel(genre.value, genre.label),
+        state: genreState(genre.value),
+        dimmed: hasGenreFacets.value && genreState(genre.value) === 'neutral' && (props.genreCounts[genre.value] ?? 0) === 0,
+      }))
+  );
+
+  const tagEntries = computed<TagCloudEntry[]>(() =>
+    tags.value
+      .filter((tag) => {
+        if (!matchesAll(tag.name, tagQueries.value)) return false;
+        if (tagState(tag.tagId) !== 'neutral') return true;
+        if (!hasTagFacets.value) return true;
+        return (props.tagCounts[tag.tagId] ?? 0) > 0;
+      })
+      .map((tag) => ({ id: tag.tagId, label: tagLabel(tag.tagId, tag.name), state: tagState(tag.tagId) }))
+  );
+
+  const selectedGenreEntries = computed<TagCloudEntry[]>(() =>
+    genres.value
+      .filter((genre) => genreState(genre.value) !== 'neutral')
+      .map((genre) => ({ id: genre.value, label: genreLabel(genre.value, genre.label), state: genreState(genre.value) }))
+  );
+
+  const selectedTagEntries = computed<TagCloudEntry[]>(() =>
+    tags.value
+      .filter((tag) => tagState(tag.tagId) !== 'neutral')
+      .map((tag) => ({ id: tag.tagId, label: tagLabel(tag.tagId, tag.name), state: tagState(tag.tagId) }))
+  );
+
+  const selectionSummary = (included: string[], excluded: string[]): string | null => {
+    const parts = [...included, ...excluded.map((name) => `not ${name}`)];
+    if (parts.length === 0) return null;
+    return parts.length <= 2 ? parts.join(', ') : `${parts.length} selected`;
+  };
+
+  const genreName = (id: number) => genres.value.find((genre) => genre.value === id)?.label ?? String(id);
+  const tagName = (id: number) => tags.value.find((tag) => tag.tagId === id)?.name ?? String(id);
+
+  const genreSummary = computed(() => selectionSummary(includeGenres.value.map(genreName), excludeGenres.value.map(genreName)));
+  const tagSummary = computed(() => selectionSummary(includeTags.value.map(tagName), excludeTags.value.map(tagName)));
+
+  // A section only disappears for the panel-wide search; its own empty search result keeps the box reachable.
+  const hasPanelSearch = computed(() => lower(filterSearchQuery.value).length > 0);
+  const showGenreSection = computed(() => genreEntries.value.length > 0 || !hasPanelSearch.value);
+  const showTagSection = computed(() => tagEntries.value.length > 0 || !hasPanelSearch.value);
 
   const CHAR_COUNT_STEPS: number[] = [];
   for (let v = 0; v <= 10_000; v += 1_000) CHAR_COUNT_STEPS.push(v);
@@ -131,167 +222,78 @@
   for (let v = 3_500_000; v <= 6_000_000; v += 500_000) CHAR_COUNT_STEPS.push(v);
   for (let v = 7_000_000; v <= 20_000_000; v += 1_000_000) CHAR_COUNT_STEPS.push(v);
 
-  const charCountToPos = (val: number) => {
-    let best = 0;
-    for (let i = 1; i < CHAR_COUNT_STEPS.length; i++) {
-      if (Math.abs(CHAR_COUNT_STEPS[i] - val) < Math.abs(CHAR_COUNT_STEPS[best] - val)) best = i;
-    }
-    return best;
-  };
-
-  const charCountSliderRange = computed<[number, number]>({
-    get: () => [charCountToPos(charCountMin.value ?? 0), charCountToPos(charCountMax.value ?? 20_000_000)],
-    set: (val) => {
-      charCountMin.value = CHAR_COUNT_STEPS[val[0]];
-      charCountMax.value = CHAR_COUNT_STEPS[val[1]];
-    },
-  });
-
-  const difficultyRange = computed<[number, number]>({
-    get: () => [difficultyMin.value ?? 0, difficultyMax.value ?? 5],
-    set: (val) => {
-      difficultyMin.value = val[0];
-      difficultyMax.value = val[1];
-    },
-  });
-
-  const releaseYearRange = computed<[number, number]>({
-    get: () => [releaseYearMin.value ?? 1900, releaseYearMax.value ?? currentYear],
-    set: (val) => {
-      releaseYearMin.value = val[0];
-      releaseYearMax.value = val[1];
-    },
-  });
-
-  const uniqueKanjiRange = computed<[number, number]>({
-    get: () => [uniqueKanjiMin.value ?? 0, uniqueKanjiMax.value ?? 5000],
-    set: (val) => {
-      uniqueKanjiMin.value = val[0];
-      uniqueKanjiMax.value = val[1];
-    },
-  });
-
-  const subdeckCountRange = computed<[number, number]>({
-    get: () => [subdeckCountMin.value ?? 0, subdeckCountMax.value ?? 2000],
-    set: (val) => {
-      subdeckCountMin.value = val[0];
-      subdeckCountMax.value = val[1];
-    },
-  });
-
-  const extRatingRange = computed<[number, number]>({
-    get: () => [extRatingMin.value ?? 0, extRatingMax.value ?? 100],
-    set: (val) => {
-      extRatingMin.value = val[0];
-      extRatingMax.value = val[1];
-    },
-  });
-
-  const subtitleRateRange = computed<[number, number]>({
-    get: () => [speechSpeedMin.value ?? 0, speechSpeedMax.value ?? 800],
-    set: (val) => {
-      speechSpeedMin.value = val[0];
-      speechSpeedMax.value = val[1];
-    },
-  });
-
-  const speechDurationRange = computed<[number, number]>({
-    get: () => [speechDurationMin.value ?? 0, speechDurationMax.value ?? 300],
-    set: (val) => {
-      speechDurationMin.value = val[0];
-      speechDurationMax.value = val[1];
-    },
-  });
-
-  const coverageRange = computed<[number, number]>({
-    get: () => [coverageMin.value ?? 0, coverageMax.value ?? 100],
-    set: (val) => {
-      coverageMin.value = val[0];
-      coverageMax.value = val[1];
-    },
-  });
-
-  const uniqueCoverageRange = computed<[number, number]>({
-    get: () => [uniqueCoverageMin.value ?? 0, uniqueCoverageMax.value ?? 100],
-    set: (val) => {
-      uniqueCoverageMin.value = val[0];
-      uniqueCoverageMax.value = val[1];
-    },
-  });
-
-  const updateGenreState = (genreId: number, state: TagState) => {
+  const setGenreState = (genreId: number, state: TagState) => {
     if (state === 'include') {
-      if (!includeGenres.value.includes(genreId)) {
-        includeGenres.value.push(genreId);
-      }
+      if (!includeGenres.value.includes(genreId)) includeGenres.value.push(genreId);
       excludeGenres.value = excludeGenres.value.filter((id) => id !== genreId);
     } else if (state === 'exclude') {
       includeGenres.value = includeGenres.value.filter((id) => id !== genreId);
-      if (!excludeGenres.value.includes(genreId)) {
-        excludeGenres.value.push(genreId);
-      }
+      if (!excludeGenres.value.includes(genreId)) excludeGenres.value.push(genreId);
     } else {
       includeGenres.value = includeGenres.value.filter((id) => id !== genreId);
       excludeGenres.value = excludeGenres.value.filter((id) => id !== genreId);
     }
   };
 
-  const updateTagState = (tagId: number, state: TagState) => {
+  const setTagState = (tagId: number, state: TagState) => {
     if (state === 'include') {
-      if (!includeTags.value.includes(tagId)) {
-        includeTags.value.push(tagId);
-      }
+      if (!includeTags.value.includes(tagId)) includeTags.value.push(tagId);
       excludeTags.value = excludeTags.value.filter((id) => id !== tagId);
     } else if (state === 'exclude') {
       includeTags.value = includeTags.value.filter((id) => id !== tagId);
-      if (!excludeTags.value.includes(tagId)) {
-        excludeTags.value.push(tagId);
-      }
+      if (!excludeTags.value.includes(tagId)) excludeTags.value.push(tagId);
     } else {
       includeTags.value = includeTags.value.filter((id) => id !== tagId);
       excludeTags.value = excludeTags.value.filter((id) => id !== tagId);
     }
+  };
+
+  const clearGenres = () => {
+    includeGenres.value = [];
+    excludeGenres.value = [];
+  };
+
+  const clearTags = () => {
+    includeTags.value = [];
+    excludeTags.value = [];
   };
 
   const handleReset = () => {
+    filterSearchQuery.value = '';
     genreSearchQuery.value = '';
     tagSearchQuery.value = '';
+    expandedKey.value = null;
     emit('reset');
   };
 
-  const activeFilterCount = computed(() => {
-    let count = 0;
-    if (charCountMin.value != null) count++;
-    if (charCountMax.value != null) count++;
-    if (difficultyMin.value != null) count++;
-    if (difficultyMax.value != null) count++;
-    if (releaseYearMin.value != null) count++;
-    if (releaseYearMax.value != null) count++;
-    if (uniqueKanjiMin.value != null) count++;
-    if (uniqueKanjiMax.value != null) count++;
-    if (subdeckCountMin.value != null) count++;
-    if (subdeckCountMax.value != null) count++;
-    if (extRatingMin.value != null) count++;
-    if (extRatingMax.value != null) count++;
-    if (speechSpeedMin.value != null) count++;
-    if (speechSpeedMax.value != null) count++;
-    if (speechDurationMin.value != null) count++;
-    if (speechDurationMax.value != null) count++;
-    if (coverageMin.value != null) count++;
-    if (coverageMax.value != null) count++;
-    if (uniqueCoverageMin.value != null) count++;
-    if (uniqueCoverageMax.value != null) count++;
-    if (statusFilter.value !== 'none') count++;
-    if (excludeSequels.value) count++;
-    count += includeGenres.value.length;
-    count += excludeGenres.value.length;
-    count += includeTags.value.length;
-    count += excludeTags.value.length;
-    return count;
+  const activeFilterCount = computed(() =>
+    countActiveFilters({
+      ranges: rangeValues.value,
+      statusFilter: statusFilter.value,
+      includeGenres: includeGenres.value,
+      excludeGenres: excludeGenres.value,
+      includeTags: includeTags.value,
+      excludeTags: excludeTags.value,
+      excludeSequels: excludeSequels.value,
+      favourite: favourite.value,
+    })
+  );
+
+  const badgeLabel = computed(() => {
+    const preset = props.activePresetName;
+    if (preset) return preset.length > 12 ? `${preset.slice(0, 11)}…` : preset;
+    return activeFilterCount.value > 0 ? String(activeFilterCount.value) : null;
   });
 
+  const deckCountLabel = computed(() => (props.deckCount == null ? 'Show results' : `Show ${props.deckCount.toLocaleString()} decks`));
+
   const toggle = (event: Event) => {
-    popover.value.toggle(event);
+    if (isMobile.value) {
+      mobilePane.value = null;
+      drawerOpen.value = true;
+      return;
+    }
+    popover.value?.toggle(event);
   };
 
   defineExpose({ toggle });
@@ -303,479 +305,200 @@
       <Icon name="material-symbols:filter-list" size="1.25em" />
       <span class="hidden md:inline">Filters</span>
     </Button>
-    <Badge v-if="activeFilterCount > 0" :value="activeFilterCount" severity="warn" class="absolute -top-2 -right-2 pointer-events-none" />
+    <Badge
+      v-if="badgeLabel"
+      :value="badgeLabel"
+      severity="warn"
+      :class="['absolute -top-2 -right-2 pointer-events-none', activePresetName ? 'max-w-20 truncate md:max-w-32' : '']"
+    />
   </div>
 
-  <Popover ref="popover" class="w-[min(48rem,calc(100vw_-_2rem))]">
-    <div class="flex flex-col gap-4 p-3 min-w-[280px]">
-      <Tabs value="filters" :show-navigators="false" lazy>
-        <TabList>
-          <Tab value="filters">Filters</Tab>
-          <Tab value="genres">Genres</Tab>
-          <Tab value="tags">Tags</Tab>
-        </TabList>
+  <Popover v-if="!isMobile" ref="popover" class="w-[min(48rem,calc(100vw_-_2rem))]">
+    <div class="flex max-h-[calc(100dvh-16rem)] min-w-[280px] flex-col">
+      <div v-if="$slots.presets" class="shrink-0 border-b border-surface-200 pb-2 dark:border-surface-700">
+        <slot name="presets" />
+      </div>
 
-        <TabPanels>
-          <TabPanel value="filters">
-            <div class="overflow-y-auto max-md:max-h-[50vh] md:max-h-[60vh]">
-              <div class="flex flex-col gap-4 pt-4">
-                <FloatLabel v-if="isConnected" variant="on" class="w-full">
-                  <Select
-                    v-model="statusFilter"
-                    :options="statusFilterOptions"
-                    option-label="label"
-                    option-value="value"
-                    placeholder="Status"
-                    input-id="preferenceFilter"
-                    class="w-full md:w-56"
-                    scroll-height="30vh"
-                  />
-                  <label for="preferenceFilter">Status</label>
-                </FloatLabel>
+      <div class="flex min-h-0 flex-1 flex-col overflow-y-auto py-1.5 pr-1 [scrollbar-width:thin]">
+        <MediaListFilterBody
+          v-model:ranges="rangeValues"
+          v-model:search="filterSearchQuery"
+          v-model:expanded-key="expandedKey"
+          v-model:status-filter="statusFilter"
+          v-model:exclude-sequels="excludeSequels"
+          v-model:favourite="favourite"
+          v-model:exclude-not-originally-jp="excludeNotOriginallyJp"
+          class="min-h-0 flex-1"
+          split
+          :is-connected="isConnected"
+          :char-count-steps="CHAR_COUNT_STEPS"
+          :status-options="statusFilterOptions"
+        >
+          <template #panes>
+            <template v-if="showGenreSection">
+              <div class="mt-1 mb-1 shrink-0 px-1 text-[11px] leading-none font-semibold tracking-wider text-surface-500 uppercase">Genres</div>
+              <MediaListTagCloud
+                v-model:search="genreSearchQuery"
+                class="shrink-0 [&_.p-tag]:px-1.5 [&_.p-tag]:py-0.5 [&_.p-tag]:text-xs"
+                :entries="genreEntries"
+                :show-search="false"
+                empty-label="No genre matches that search."
+                @set="setGenreState"
+              />
+            </template>
 
-                <Accordion multiple lazy>
-                  <AccordionPanel value="content">
-                    <AccordionHeader>Content</AccordionHeader>
-                    <AccordionContent>
-                      <div class="flex flex-col gap-4 pt-2">
-                        <div class="flex flex-col gap-2">
-                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Character count</div>
-                          <div class="flex items-center gap-3">
-                            <InputNumber
-                              v-model="charCountMin"
-                              :min="0"
-                              :max="20000000"
-                              :use-grouping="true"
-                              fluid
-                              class="max-w-34 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Min"
-                              :step="10000"
-                            />
-                            <Slider v-model="charCountSliderRange" range :min="0" :max="CHAR_COUNT_STEPS.length - 1" class="flex-1" />
-                            <InputNumber
-                              v-model="charCountMax"
-                              :min="0"
-                              :max="20000000"
-                              :use-grouping="true"
-                              fluid
-                              class="max-w-34 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Max"
-                              :step="10000"
-                            />
-                          </div>
-                        </div>
-
-                        <div class="flex flex-col gap-2">
-                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Unique kanji</div>
-                          <div class="flex items-center gap-3">
-                            <InputNumber
-                              v-model="uniqueKanjiMin"
-                              :min="0"
-                              :max="5000"
-                              :use-grouping="false"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Min"
-                              :step="10"
-                            />
-                            <Slider v-model="uniqueKanjiRange" range :min="0" :max="5000" class="flex-1" />
-                            <InputNumber
-                              v-model="uniqueKanjiMax"
-                              :min="0"
-                              :max="5000"
-                              :use-grouping="false"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Max"
-                              :step="10"
-                            />
-                          </div>
-                        </div>
-
-                        <div class="flex flex-col gap-2">
-                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Subdecks</div>
-                          <div class="flex items-center gap-3">
-                            <InputNumber
-                              v-model="subdeckCountMin"
-                              :min="0"
-                              :max="2000"
-                              :use-grouping="false"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Min"
-                            />
-                            <Slider v-model="subdeckCountRange" range :min="0" :max="2000" class="flex-1" />
-                            <InputNumber
-                              v-model="subdeckCountMax"
-                              :min="0"
-                              :max="2000"
-                              :use-grouping="false"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Max"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionPanel>
-
-                  <AccordionPanel value="difficulty">
-                    <AccordionHeader>Difficulty</AccordionHeader>
-                    <AccordionContent>
-                      <div class="flex flex-col gap-4 pt-2">
-                        <div class="flex flex-col gap-2">
-                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Difficulty</div>
-                          <div class="flex items-center gap-3">
-                            <InputNumber
-                              v-model="difficultyMin"
-                              :min="0"
-                              :max="5"
-                              :use-grouping="false"
-                              mode="decimal"
-                              :min-fraction-digits="0"
-                              :max-fraction-digits="1"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Min"
-                              :step="0.5"
-                            />
-                            <Slider v-model="difficultyRange" range :min="0" :max="5" :step="0.5" class="flex-1" />
-                            <InputNumber
-                              v-model="difficultyMax"
-                              :min="0"
-                              :max="5"
-                              :use-grouping="false"
-                              mode="decimal"
-                              :min-fraction-digits="0"
-                              :max-fraction-digits="1"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Max"
-                              :step="0.5"
-                            />
-                          </div>
-                        </div>
-
-                        <div v-if="isConnected" class="flex flex-col gap-2">
-                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Coverage (%)</div>
-                          <div class="flex items-center gap-3">
-                            <InputNumber
-                              v-model="coverageMin"
-                              :min="0"
-                              :max="100"
-                              :use-grouping="false"
-                              mode="decimal"
-                              :min-fraction-digits="0"
-                              :max-fraction-digits="2"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Min"
-                            />
-                            <Slider v-model="coverageRange" range :min="0" :max="100" class="flex-1" />
-                            <InputNumber
-                              v-model="coverageMax"
-                              :min="0"
-                              :max="100"
-                              :use-grouping="false"
-                              mode="decimal"
-                              :min-fraction-digits="0"
-                              :max-fraction-digits="2"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Max"
-                            />
-                          </div>
-                        </div>
-
-                        <div v-if="isConnected" class="flex flex-col gap-2">
-                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Unique Coverage (%)</div>
-                          <div class="flex items-center gap-3">
-                            <InputNumber
-                              v-model="uniqueCoverageMin"
-                              :min="0"
-                              :max="100"
-                              :use-grouping="false"
-                              mode="decimal"
-                              :min-fraction-digits="0"
-                              :max-fraction-digits="2"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Min"
-                            />
-                            <Slider v-model="uniqueCoverageRange" range :min="0" :max="100" class="flex-1" />
-                            <InputNumber
-                              v-model="uniqueCoverageMax"
-                              :min="0"
-                              :max="100"
-                              :use-grouping="false"
-                              mode="decimal"
-                              :min-fraction-digits="0"
-                              :max-fraction-digits="2"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Max"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionPanel>
-
-                  <AccordionPanel value="media-properties">
-                    <AccordionHeader>Media Properties</AccordionHeader>
-                    <AccordionContent>
-                      <div class="flex flex-col gap-4 pt-2">
-                        <div class="flex flex-col gap-2">
-                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Release year</div>
-                          <div class="flex items-center gap-3">
-                            <InputNumber
-                              v-model="releaseYearMin"
-                              :min="1900"
-                              :max="currentYear"
-                              :use-grouping="false"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Min"
-                            />
-                            <Slider v-model="releaseYearRange" range :min="1900" :max="currentYear" class="flex-1" />
-                            <InputNumber
-                              v-model="releaseYearMax"
-                              :min="1900"
-                              :max="currentYear"
-                              :use-grouping="false"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Max"
-                            />
-                          </div>
-                        </div>
-
-                        <div class="flex flex-col gap-2">
-                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">External Rating (0 = unknown rating)</div>
-                          <div class="flex items-center gap-3">
-                            <InputNumber
-                              v-model="extRatingMin"
-                              :min="0"
-                              :max="100"
-                              :use-grouping="false"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Min"
-                            />
-                            <Slider v-model="extRatingRange" range :min="0" :max="100" class="flex-1" />
-                            <InputNumber
-                              v-model="extRatingMax"
-                              :min="0"
-                              :max="100"
-                              :use-grouping="false"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Max"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionPanel>
-
-                  <AccordionPanel value="audio">
-                    <AccordionHeader>Audio</AccordionHeader>
-                    <AccordionContent>
-                      <div class="flex flex-col gap-4 pt-2">
-                        <div class="flex flex-col gap-2">
-                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Speech speed</div>
-                          <div class="flex items-center gap-3">
-                            <InputNumber
-                              v-model="speechSpeedMin"
-                              :min="0"
-                              :max="800"
-                              :use-grouping="false"
-                              mode="decimal"
-                              :min-fraction-digits="0"
-                              :max-fraction-digits="1"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Min"
-                              :step="10"
-                            />
-                            <Slider v-model="subtitleRateRange" range :min="0" :max="800" :step="10" class="flex-1" />
-                            <InputNumber
-                              v-model="speechSpeedMax"
-                              :min="0"
-                              :max="800"
-                              :use-grouping="false"
-                              mode="decimal"
-                              :min-fraction-digits="0"
-                              :max-fraction-digits="1"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Max"
-                              :step="10"
-                            />
-                          </div>
-                        </div>
-
-                        <div class="flex flex-col gap-2">
-                          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">Speech duration (hours)</div>
-                          <div class="flex items-center gap-3">
-                            <InputNumber
-                              v-model="speechDurationMin"
-                              :min="0"
-                              :max="300"
-                              :use-grouping="false"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Min"
-                              :step="1"
-                            />
-                            <Slider v-model="speechDurationRange" range :min="0" :max="300" :step="1" class="flex-1" />
-                            <InputNumber
-                              v-model="speechDurationMax"
-                              :min="0"
-                              :max="300"
-                              :use-grouping="false"
-                              fluid
-                              class="max-w-28 flex-shrink-0"
-                              show-buttons
-                              size="small"
-                              placeholder="Max"
-                              :step="1"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionPanel>
-                </Accordion>
-
-                <div class="flex flex-col gap-2">
-                  <div class="flex items-center gap-2">
-                    <Checkbox v-model="excludeSequels" class="flex-shrink-0" input-id="excludeSequels" binary />
-                    <label for="excludeSequels" class="text-sm font-medium text-gray-600 dark:text-gray-300">Exclude sequels and fandiscs</label>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <Checkbox v-model="excludeNotOriginallyJp" class="flex-shrink-0" input-id="excludeNotOriginallyJp" binary />
-                    <label for="excludeNotOriginallyJp" class="text-sm font-medium text-gray-600 dark:text-gray-300">
-                      Exclude not originally Japanese media
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </TabPanel>
-
-          <TabPanel value="genres">
-            <div class="flex flex-col gap-3 pt-4">
-              <div class="flex items-center justify-between gap-2">
-                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">{{ genreFilteredCount }}/{{ genreTotalCount }}</div>
-                <IconField class="flex-1">
-                  <InputIcon>
-                    <Icon name="material-symbols:search-rounded" />
-                  </InputIcon>
-                  <InputText v-model="genreSearchQuery" type="text" placeholder="Search genres..." class="w-full" />
-                  <InputIcon v-if="genreSearchQuery" class="cursor-pointer" @click="genreSearchQuery = ''">
-                    <Icon name="material-symbols:close" />
-                  </InputIcon>
-                </IconField>
-              </div>
-              <ScrollPanel class="w-full" style="height: 350px">
-                <div class="flex flex-wrap gap-2 p-2">
-                  <TriStateTag
-                    v-for="genre in filteredGenres"
-                    :key="genre.value"
-                    :label="genreLabel(genre.value, genre.label)"
-                    :state="includeGenres.includes(genre.value) ? 'include' : excludeGenres.includes(genre.value) ? 'exclude' : 'neutral'"
-                    @update:state="(state) => updateGenreState(genre.value, state)"
+            <template v-if="showTagSection">
+              <div class="flex min-h-0 flex-1 flex-col">
+                <div class="mt-3 mb-1 shrink-0 px-1 text-[11px] leading-none font-semibold tracking-wider text-surface-500 uppercase">Tags</div>
+                <div class="relative min-h-52 flex-1">
+                  <MediaListTagCloud
+                    v-model:search="tagSearchQuery"
+                    class="absolute inset-0 [&_.p-tag]:px-1.5 [&_.p-tag]:py-0.5 [&_.p-tag]:text-xs"
+                    :entries="tagEntries"
+                    :placeholder="`Search ${tags.length} tags...`"
+                    empty-label="No tag matches that search."
+                    list-class="min-h-0 flex-1 overflow-y-auto rounded border border-surface-200 dark:border-surface-700"
+                    @set="setTagState"
                   />
                 </div>
-              </ScrollPanel>
-            </div>
-          </TabPanel>
-
-          <TabPanel value="tags">
-            <div class="flex flex-col gap-3 pt-4">
-              <div class="flex items-center justify-between gap-2">
-                <div class="text-sm font-medium text-gray-600 dark:text-gray-300">{{ tagFilteredCount }}/{{ tagTotalCount }}</div>
-                <IconField class="flex-1">
-                  <InputIcon>
-                    <Icon name="material-symbols:search-rounded" />
-                  </InputIcon>
-                  <InputText v-model="tagSearchQuery" type="text" placeholder="Search tags..." class="w-full" />
-                  <InputIcon v-if="tagSearchQuery" class="cursor-pointer" @click="tagSearchQuery = ''">
-                    <Icon name="material-symbols:close" />
-                  </InputIcon>
-                </IconField>
               </div>
-              <ScrollPanel class="w-full" style="height: 40vh">
-                <div class="flex flex-wrap gap-2 p-2">
-                  <TriStateTag
-                    v-for="tag in filteredTags"
-                    :key="tag.tagId"
-                    :label="tagLabel(tag.tagId, tag.name)"
-                    :state="includeTags.includes(tag.tagId) ? 'include' : excludeTags.includes(tag.tagId) ? 'exclude' : 'neutral'"
-                    @update:state="(state) => updateTagState(tag.tagId, state)"
-                  />
-                </div>
-              </ScrollPanel>
-            </div>
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
+            </template>
+          </template>
+        </MediaListFilterBody>
+      </div>
 
-      <!-- Reset Button -->
-      <div class="flex justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
-        <Button severity="danger" @click="handleReset">
-          <Icon name="material-symbols:refresh" class="mr-2" />
-          Reset All Filters
+      <div class="flex shrink-0 items-center border-t border-surface-200 pt-1.5 dark:border-surface-700">
+        <span class="text-sm text-surface-500">{{ activeFilterCount }} {{ activeFilterCount === 1 ? 'filter' : 'filters' }} active</span>
+        <Button severity="danger" size="small" class="ml-auto" @click="handleReset">
+          <Icon name="material-symbols:refresh" />
+          Reset all filters
         </Button>
       </div>
     </div>
   </Popover>
-</template>
 
-<style scoped>
-  @media (max-width: 767px) {
-    :deep(.p-slider) {
-      display: none;
-    }
-  }
-</style>
+  <Drawer
+    v-else
+    v-model:visible="drawerOpen"
+    position="bottom"
+    :pt="{ root: { class: 'h-[90dvh]! rounded-t-xl overflow-hidden' } }"
+    aria-label="Filters"
+  >
+    <template #container="{ closeCallback }">
+      <div class="flex h-full min-h-0 flex-col">
+        <div class="flex shrink-0 justify-center pt-2 pb-1">
+          <div class="h-1 w-9 rounded-full bg-surface-300 dark:bg-surface-600" />
+        </div>
+
+        <template v-if="mobilePane === null">
+          <div class="flex shrink-0 items-baseline gap-2 px-4 pb-2">
+            <span class="text-lg font-bold text-surface-900 dark:text-surface-0">Filters</span>
+            <span class="text-sm text-surface-500">{{ activeFilterCount }} active</span>
+            <Button severity="danger" text size="small" class="ml-auto" @click="handleReset">Reset</Button>
+          </div>
+
+          <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-3 [scrollbar-width:thin]">
+            <div v-if="$slots.presets" class="mb-3 border-b border-surface-200 pb-3 dark:border-surface-700">
+              <slot name="presets" />
+            </div>
+
+            <MediaListFilterBody
+              v-model:ranges="rangeValues"
+              v-model:search="filterSearchQuery"
+              v-model:expanded-key="expandedKey"
+              v-model:status-filter="statusFilter"
+              v-model:exclude-sequels="excludeSequels"
+              v-model:favourite="favourite"
+              v-model:exclude-not-originally-jp="excludeNotOriginallyJp"
+              mobile
+              :is-connected="isConnected"
+              :char-count-steps="CHAR_COUNT_STEPS"
+              :status-options="statusFilterOptions"
+            >
+              <template #before>
+                <button
+                  type="button"
+                  class="flex h-11 cursor-pointer items-center gap-2 rounded px-2 text-left hover:bg-surface-50 dark:hover:bg-surface-800"
+                  @click="mobilePane = 'genres'"
+                >
+                  <span class="text-sm font-semibold text-surface-700 dark:text-surface-200">Genres</span>
+                  <span
+                    :class="[
+                      'ml-auto truncate text-[13px]',
+                      genreSummary ? 'font-semibold text-purple-700 dark:text-purple-300' : 'text-surface-400 dark:text-surface-500',
+                    ]"
+                  >
+                    {{ genreSummary ?? 'Any' }}
+                  </span>
+                  <Icon name="material-symbols:chevron-right-rounded" class="shrink-0 text-surface-400" size="1.1em" />
+                </button>
+                <button
+                  type="button"
+                  class="flex h-11 cursor-pointer items-center gap-2 rounded px-2 text-left hover:bg-surface-50 dark:hover:bg-surface-800"
+                  @click="mobilePane = 'tags'"
+                >
+                  <span class="text-sm font-semibold text-surface-700 dark:text-surface-200">Tags</span>
+                  <span
+                    :class="[
+                      'ml-auto truncate text-[13px]',
+                      tagSummary ? 'font-semibold text-purple-700 dark:text-purple-300' : 'text-surface-400 dark:text-surface-500',
+                    ]"
+                  >
+                    {{ tagSummary ?? 'Any' }}
+                  </span>
+                  <Icon name="material-symbols:chevron-right-rounded" class="shrink-0 text-surface-400" size="1.1em" />
+                </button>
+              </template>
+            </MediaListFilterBody>
+          </div>
+        </template>
+
+        <template v-else-if="mobilePane === 'genres'">
+          <div class="flex shrink-0 items-center gap-2 px-4 pb-2">
+            <Button text severity="secondary" size="small" class="px-1!" aria-label="Back to filters" @click="mobilePane = null">
+              <Icon name="material-symbols:arrow-back-rounded" size="1.3em" />
+            </Button>
+            <span class="text-lg font-bold text-surface-900 dark:text-surface-0">Genres</span>
+            <span class="text-sm text-surface-500">{{ selectedGenreEntries.length }} selected</span>
+            <Button severity="danger" text size="small" class="ml-auto" @click="clearGenres">Clear</Button>
+          </div>
+          <MediaListTagCloud
+            v-model:search="genreSearchQuery"
+            class="min-h-0 flex-1 px-4 pb-3"
+            :entries="genreEntries"
+            :selected-entries="selectedGenreEntries"
+            placeholder="Search genres..."
+            empty-label="No genre matches that search."
+            list-class="min-h-0 flex-1 overflow-y-auto"
+            @set="setGenreState"
+          />
+        </template>
+
+        <template v-else>
+          <div class="flex shrink-0 items-center gap-2 px-4 pb-2">
+            <Button text severity="secondary" size="small" class="px-1!" aria-label="Back to filters" @click="mobilePane = null">
+              <Icon name="material-symbols:arrow-back-rounded" size="1.3em" />
+            </Button>
+            <span class="text-lg font-bold text-surface-900 dark:text-surface-0">Tags</span>
+            <span class="text-sm text-surface-500">{{ selectedTagEntries.length }} selected</span>
+            <Button severity="danger" text size="small" class="ml-auto" @click="clearTags">Clear</Button>
+          </div>
+          <MediaListTagCloud
+            v-model:search="tagSearchQuery"
+            class="min-h-0 flex-1 px-4 pb-3"
+            :entries="tagEntries"
+            :selected-entries="selectedTagEntries"
+            :placeholder="`Search ${tags.length} tags...`"
+            empty-label="No tag matches that search."
+            list-class="min-h-0 flex-1 overflow-y-auto"
+            @set="setTagState"
+          />
+        </template>
+
+        <div class="shrink-0 border-t border-surface-200 px-4 pt-3 pb-7 dark:border-surface-700">
+          <Button class="w-full justify-center" @click="closeCallback">{{ deckCountLabel }}</Button>
+        </div>
+      </div>
+    </template>
+  </Drawer>
+</template>

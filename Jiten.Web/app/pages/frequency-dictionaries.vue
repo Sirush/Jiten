@@ -36,11 +36,10 @@
 
   const deckTypes = [
     { id: null, name: 'Global' },
-    ...Object.values(MediaType)
-      .filter((value) => typeof value === 'number')
+    ...getListedMediaTypes()
       .map((value) => ({
-        id: value as MediaType,
-        name: getMediaTypeText(value as MediaType),
+        id: value,
+        name: getMediaTypeText(value),
       }))
       .sort((a, b) => a.name.localeCompare(b.name)),
     { id: 'kanji' as const, name: 'Kanji' },
@@ -170,13 +169,12 @@
   const globalStatsUrl = 'stats/get-global-stats';
   const { data: response, status, error } = await useApiFetch<GlobalStats>(globalStatsUrl);
 
-  const mediaTypesForDisplay = Object.values(MediaType)
-    .filter((value) => typeof value === 'number')
+  const mediaTypesForDisplay = getListedMediaTypes()
     .map((value) => ({
-      name: getMediaTypeText(value as MediaType),
-      plural: getMediaTypePluralText(value as MediaType),
-      slug: getMediaTypeSlug(value as MediaType),
-      id: value as MediaType,
+      name: getMediaTypeText(value),
+      plural: getMediaTypePluralText(value),
+      slug: getMediaTypeSlug(value),
+      id: value,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 </script>

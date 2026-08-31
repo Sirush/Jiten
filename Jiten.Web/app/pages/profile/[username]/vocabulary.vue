@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { type AccomplishmentVocabularyDto, type UserProfile, MediaType } from '~/types';
+  import type { AccomplishmentVocabularyDto, UserProfile } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { debounce } from 'perfect-debounce';
@@ -24,10 +24,10 @@
 
   const mediaTypeOptions = computed(() => {
     const options = [{ label: 'All Media Types', value: ALL_MEDIA_TYPES }];
-    for (const type of Object.values(MediaType).filter((v) => typeof v === 'number')) {
+    for (const type of getListedMediaTypes()) {
       options.push({
-        label: getMediaTypeText(type as MediaType),
-        value: (type as MediaType).toString(),
+        label: getMediaTypeText(type),
+        value: type.toString(),
       });
     }
     return options;

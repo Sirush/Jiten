@@ -17,6 +17,7 @@ const SAMEAS_LINK_TYPES = new Set<LinkType>([
   LinkType.Igdb,
   LinkType.Syosetsu,
   LinkType.Bookmeter,
+  LinkType.YouTube,
 ]);
 
 export function buildSameAs(links: Deck['links'] | undefined): string[] {

@@ -8,7 +8,7 @@
       resolvedGroups: readonly ResolvedDefinitionGroup[];
       isCompact: boolean;
       currentReadingIndex?: number;
-      readings?: Reading[];
+      readings: Reading[];
       arrowKeyNav?: boolean;
       maxDefinitions?: number | null;
       wordId?: number;

@@ -36,19 +36,21 @@ public class DeckCommands(CliContext context)
         int processed = 0, matched = 0;
         foreach (var vn in vnDecks)
         {
-            var url = vn.Url.TrimEnd('/');
-            var vndbId = url.Substring(url.LastIndexOf('/') + 1);
+            processed++;
 
-            var relations = MetadataProviderHelper.GetVndbAnimeRelations(vndbId);
-            if (relations.Count > 0)
+            // A VNDB link may point at a release or a character page rather than the visual novel
+            if (ExternalUrlParser.TryParse(vn.Url, out var parsed) && parsed.LinkType == LinkType.Vndb)
             {
-                await MetadataProviderHelper.ProcessRelations(db, vn.DeckId, relations);
-                matched++;
-                if (options.Verbose)
-                    Console.WriteLine($"  {vndbId}: {relations.Count} anime MAL id(s) processed.");
+                var relations = MetadataProviderHelper.GetVndbAnimeRelations(parsed.Id);
+                if (relations.Count > 0)
+                {
+                    await MetadataProviderHelper.ProcessRelations(db, vn.DeckId, relations);
+                    matched++;
+                    if (options.Verbose)
+                        Console.WriteLine($"  {parsed.Id}: {relations.Count} anime MAL id(s) processed.");
+                }
             }
 
-            processed++;
             if (processed % 500 == 0)
                 Console.WriteLine($"Processed {processed}/{vnDecks.Count}...");
         }

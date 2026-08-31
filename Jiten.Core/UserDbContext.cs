@@ -25,6 +25,7 @@ public class UserDbContext : IdentityDbContext<User>
     public DbSet<UserCoverageChunk> UserCoverageChunks { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<UserMetadata> UserMetadatas { get; set; }
+    public DbSet<UserSettings> UserSettings { get; set; }
     public DbSet<ApiKey> ApiKeys { get; set; }
     public DbSet<UserDeckPreference> UserDeckPreferences { get; set; }
     public DbSet<UserFsrsSettings> UserFsrsSettings { get; set; }
@@ -165,6 +166,25 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasOne<User>()
                   .WithOne()
                   .HasForeignKey<UserMetadata>(um => um.UserId);
+        });
+
+        modelBuilder.Entity<UserSettings>(entity =>
+        {
+            entity.HasKey(us => us.UserId);
+            if (isNpgsql)
+            {
+                entity.Property(us => us.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+                entity.Property(us => us.MediaFilterPresetsJson).HasColumnType("jsonb").HasDefaultValue("{}");
+            }
+            else
+            {
+                entity.Property(us => us.MediaFilterPresetsJson).HasDefaultValue("{}");
+            }
+
+            entity.HasOne<User>()
+                  .WithOne()
+                  .HasForeignKey<UserSettings>(us => us.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ApiKey>(entity =>

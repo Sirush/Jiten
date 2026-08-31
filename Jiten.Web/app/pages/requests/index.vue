@@ -4,7 +4,7 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
   import { getRequestKindText, getRequestKindIcon } from '~/utils/requestKindMapper';
-  import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { getLinkTypeText, resolveLinkType } from '~/utils/linkTypeMapper';
   import type { RequestFacets, BoostBalance } from '~/composables/useMediaRequests';
 
   definePageMeta({
@@ -119,6 +119,10 @@
     { label: withCount('No Attachments', facets.value?.attachmentsNo), value: 'no' },
   ]);
 
+  const showAttachmentSplit = computed(
+    () => facets.value !== null && (selectedStatus.value === RequestStatus.Open || selectedStatus.value === RequestStatus.InProgress)
+  );
+
   function parseAttachmentsFromQuery() {
     const v = route.query.attachments;
     return v === 'yes' || v === 'no' ? v : undefined;
@@ -140,7 +144,6 @@
   const isMine = computed(() => activeTab.value === 1);
   const isContributed = computed(() => activeTab.value === 2);
   const isVoted = computed(() => activeTab.value === 3);
-  const isPersonalTab = computed(() => activeTab.value === 1 || activeTab.value === 2);
   const canExcludeOwn = computed(() => isContributed.value || isVoted.value);
 
   const displaySections = computed(() => {
@@ -148,58 +151,20 @@
   });
 
   async function loadRequests() {
-    const search = debouncedSearch.value.trim() || undefined;
-    if (isContributed.value) {
-      await fetchRequests({
-        mediaType: selectedMediaType.value,
-        status: selectedStatus.value,
-        kind: selectedKind.value,
-        sort: sortBy.value,
-        offset: 0,
-        limit: 200,
-        contributed: true,
-        excludeOwn: excludeOwnRequests.value,
-        search,
-        attachments: selectedAttachments.value,
-      });
-    } else if (isVoted.value) {
-      await fetchRequests({
-        mediaType: selectedMediaType.value,
-        status: selectedStatus.value,
-        kind: selectedKind.value,
-        sort: sortBy.value,
-        offset: offset.value,
-        limit,
-        voted: true,
-        excludeOwn: excludeOwnRequests.value,
-        search,
-        attachments: selectedAttachments.value,
-      });
-    } else if (isMine.value) {
-      await fetchRequests({
-        mediaType: selectedMediaType.value,
-        status: selectedStatus.value,
-        kind: selectedKind.value,
-        sort: sortBy.value,
-        offset: 0,
-        limit: 200,
-        mine: true,
-        search,
-        attachments: selectedAttachments.value,
-      });
-    } else {
-      await fetchRequests({
-        mediaType: selectedMediaType.value,
-        status: selectedStatus.value,
-        kind: selectedKind.value,
-        sort: sortBy.value,
-        offset: offset.value,
-        limit,
-        mine: false,
-        search,
-        attachments: selectedAttachments.value,
-      });
-    }
+    await fetchRequests({
+      mediaType: selectedMediaType.value,
+      status: selectedStatus.value,
+      kind: selectedKind.value,
+      sort: sortBy.value,
+      offset: offset.value,
+      limit,
+      mine: isMine.value || undefined,
+      contributed: isContributed.value || undefined,
+      voted: isVoted.value || undefined,
+      excludeOwn: (canExcludeOwn.value && excludeOwnRequests.value) || undefined,
+      search: debouncedSearch.value.trim() || undefined,
+      attachments: selectedAttachments.value,
+    });
   }
 
   async function loadFacets() {
@@ -252,7 +217,7 @@
     if (selectedStatus.value === undefined) query.status = 'all';
     else if (selectedStatus.value !== RequestStatus.Open) query.status = String(selectedStatus.value);
     if (sortBy.value !== 'votes') query.sort = sortBy.value;
-    if (!isPersonalTab.value && offset.value > 0) query.page = String(offset.value / limit + 1);
+    if (offset.value > 0) query.page = String(offset.value / limit + 1);
     router.replace({ query });
   });
 
@@ -411,6 +376,9 @@
         :value="`${boostBalance!.remaining} / ${boostBalance!.limit} boosts left this month`"
         severity="secondary"
       />
+      <Tooltip v-if="showAttachmentSplit" content="Requests with a file uploaded can be worked on. The rest are waiting for someone to provide the text.">
+        <Tag :value="`${facets!.attachmentsYes} ready to process, ${facets!.attachmentsNo} waiting for a file`" severity="secondary" />
+      </Tooltip>
     </div>
 
     <div v-if="isLoading" class="flex justify-center py-12">
@@ -470,9 +438,9 @@
                       </p>
 
                       <div class="flex items-center gap-3 text-sm text-muted-color mt-1">
-                        <span v-if="request.externalLinkType" class="hidden md:flex items-center gap-1">
+                        <span v-if="resolveLinkType(request.externalUrl, request.externalLinkType)" class="hidden md:flex items-center gap-1">
                           <i class="pi pi-external-link text-xs" />
-                          {{ getLinkTypeText(request.externalLinkType) }}
+                          {{ getLinkTypeText(resolveLinkType(request.externalUrl, request.externalLinkType)!) }}
                         </span>
                         <span
                           v-if="request.boostCount > 0"
@@ -523,7 +491,7 @@
         </div>
       </template>
 
-      <Paginator v-if="!isPersonalTab && totalCount > limit" :rows="limit" :total-records="totalCount" :first="offset" class="mt-4" @page="onPageChange" />
+      <Paginator v-if="totalCount > limit" :rows="limit" :total-records="totalCount" :first="offset" class="mt-4" @page="onPageChange" />
     </template>
   </div>
 </template>

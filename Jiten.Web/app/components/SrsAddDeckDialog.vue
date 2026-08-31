@@ -297,7 +297,7 @@
       { label: 'Everything', items: [{ label: 'Global', value: 'global' }] },
       {
         label: 'Media type',
-        items: (Object.values(MediaType).filter((v) => typeof v === 'number') as number[]).map((type) => ({
+        items: getListedMediaTypes().map((type) => ({
           label: mediaTypeDeckCounts.value[type]
             ? getMediaTypeText(type) + ' - ' + mediaTypeDeckCounts.value[type]!.toLocaleString() + ' decks'
             : getMediaTypeText(type),

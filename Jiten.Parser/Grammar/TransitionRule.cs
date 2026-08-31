@@ -4,8 +4,6 @@ using Jiten.Parser.Scoring;
 
 namespace Jiten.Parser.Grammar;
 
-internal enum RuleSeverity { Hard, Soft }
-
 internal enum ViolationAction
 {
     None,
@@ -20,14 +18,10 @@ internal enum MatchCondition
     IsVerbOnlyAux,       // Auxiliary with DictionaryForm in VerbOnlyAuxDictForms
     IsVerbOrAdjAux,      // Auxiliary with DictionaryForm in VerbOrAdjAuxDictForms
     IsVerbAttachingAux,  // IsVerbOnlyAux || IsVerbOrAdjAux (for leading-strip rule)
-    IsAuxiliary,         // PartOfSpeech == Auxiliary
     IsCounter,           // PartOfSpeech == Counter || (Suffix with Counter section)
     IsSentenceInitial,   // Index == 0
     PrevIsVerbOrAux,             // Prev.PartOfSpeech is Verb or Auxiliary
-    PrevIsVerbAuxOrIAdj,         // Prev.PartOfSpeech is Verb, Auxiliary, or IAdjective
     PrevIsVerbAuxIAdjOrSfp,      // Prev.PartOfSpeech is Verb, Auxiliary, IAdjective, or sentence-ending particle
-    PrevIsAuxiliary,             // Prev.PartOfSpeech is Auxiliary
-    PrevIsAuxiliaryOrParticle,   // Prev.PartOfSpeech is Auxiliary or Particle
     IsNotEmphaticSfp,            // Current.Text is not the emphatic ぞ/ぜ (they never merge)
     PrevIsNumericOrNoun, // Prev.PartOfSpeech is Numeral, Noun, CommonNoun, Pronoun, or Name
     PrevExists,          // Prev != null
@@ -44,11 +38,9 @@ internal enum MatchCondition
 
 internal sealed record TransitionRule(
     string Id,
-    RuleSeverity Severity,
     MatchCondition[] WhenToken,
     MatchCondition[] ValidIf,
-    ViolationAction OnViolation,
-    int SoftDelta = 0);
+    ViolationAction OnViolation);
 
 internal readonly record struct TokenWindow(
     WordInfo? Prev,

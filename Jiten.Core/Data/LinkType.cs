@@ -12,5 +12,6 @@ public enum LinkType
     Igdb = 8,
     Syosetsu = 9,
     Bookmeter = 10,
-    Amazon = 11
+    Amazon = 11,
+    YouTube = 12
 }

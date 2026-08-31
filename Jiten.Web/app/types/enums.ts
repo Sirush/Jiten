@@ -9,6 +9,7 @@ export enum MediaType {
   WebNovel = 8,
   Manga = 9,
   Audio = 10,
+  YouTube = 11,
 }
 
 export enum MediaTypeGroup {
@@ -37,6 +38,7 @@ export enum LinkType {
   Syosetsu = 9,
   Bookmeter = 10,
   Amazon = 11,
+  YouTube = 12,
 }
 
 export enum Genre {
@@ -61,8 +63,8 @@ export enum Genre {
 }
 
 export enum ReadingType {
-  Reading = 1,
-  KanaReading = 2,
+  Reading = 0,
+  KanaReading = 1,
 }
 
 export enum DeckDownloadType {
@@ -245,7 +247,7 @@ export enum RequestAction {
 
 const proseTypes = new Set([MediaType.Novel, MediaType.WebNovel, MediaType.VisualNovel]);
 const visualTextTypes = new Set([MediaType.Manga, MediaType.VideoGame]);
-const audioVisualTypes = new Set([MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio]);
+const audioVisualTypes = new Set([MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio, MediaType.YouTube]);
 const nonFictionTypes = new Set([MediaType.NonFiction]);
 const allTextTypes = new Set([...proseTypes, ...visualTextTypes, ...nonFictionTypes]);
 

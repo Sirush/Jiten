@@ -1,11 +1,10 @@
-using System.Collections.ObjectModel;
-
 namespace Jiten.Parser;
 
 public sealed class DeconjugationForm : IEquatable<DeconjugationForm>
 {
-    private readonly ReadOnlyCollection<string> _tags;
-    private readonly ReadOnlyCollection<string> _process;
+    // Arrays are never mutated after construction; exposed directly as IReadOnlyList.
+    private readonly string[] _tags;
+    private readonly string[] _process;
     private readonly HashSet<string> _seenText;
     private readonly int _hashCode;
 
@@ -24,16 +23,13 @@ public sealed class DeconjugationForm : IEquatable<DeconjugationForm>
     {
         Text = text;
         OriginalText = originalText;
-        var tagArray = tags?.Where(t => !string.IsNullOrEmpty(t)).ToArray() ?? [];
-        var processArray = process?.Where(p => !string.IsNullOrEmpty(p)).ToArray() ?? [];
+        _tags = tags?.Where(t => !string.IsNullOrEmpty(t)).ToArray() ?? [];
+        _process = process?.Where(p => !string.IsNullOrEmpty(p)).ToArray() ?? [];
         _seenText = seenText != null
             ? new HashSet<string>(seenText.Where(s => !string.IsNullOrEmpty(s)), StringComparer.Ordinal)
             : new HashSet<string>(StringComparer.Ordinal);
 
-        _tags = Array.AsReadOnly(tagArray);
-        _process = Array.AsReadOnly(processArray);
-
-        _hashCode = ComputeHash(Text, OriginalText, tagArray, processArray, _seenText);
+        _hashCode = ComputeHash(Text, OriginalText, _tags, _process, _seenText);
     }
 
     internal DeconjugationForm(
@@ -45,8 +41,8 @@ public sealed class DeconjugationForm : IEquatable<DeconjugationForm>
     {
         Text = text;
         OriginalText = originalText;
-        _tags = Array.AsReadOnly(tags);
-        _process = Array.AsReadOnly(process);
+        _tags = tags;
+        _process = process;
         _seenText = seenText;
 
         _hashCode = ComputeHash(text, originalText, tags, process, seenText);
@@ -81,8 +77,8 @@ public sealed class DeconjugationForm : IEquatable<DeconjugationForm>
 
         return Text == other.Text &&
                OriginalText == other.OriginalText &&
-               _tags.SequenceEqual(other._tags) &&
-               _process.SequenceEqual(other._process) &&
+               _tags.AsSpan().SequenceEqual(other._tags) &&
+               _process.AsSpan().SequenceEqual(other._process) &&
                SetsEqual(_seenText, other._seenText);
     }
 

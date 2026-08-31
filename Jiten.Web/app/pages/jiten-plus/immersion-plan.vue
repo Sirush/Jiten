@@ -205,15 +205,14 @@
     { label: 'Everything', value: 'catalogwide' },
   ];
 
-  const mediaTypeOptions = Object.values(MediaType)
-    .filter((v) => typeof v === 'number')
-    .map((v) => ({ name: getMediaTypeText(v as MediaType), id: v as MediaType }))
+  const mediaTypeOptions = getListedMediaTypes()
+    .map((v) => ({ name: getMediaTypeText(v), id: v }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const genres = getAllGenres();
   const { data: availableTags } = useApiFetch<MediaTag[]>('media-deck/tags', { server: true, lazy: false });
 
-  const AUDIO_VISUAL_TYPES = [MediaType.Anime, MediaType.Movie, MediaType.Drama, MediaType.Audio];
+  const AUDIO_VISUAL_TYPES = [MediaType.Anime, MediaType.Movie, MediaType.Drama, MediaType.Audio, MediaType.YouTube];
 
   // The two difficulty models are adapted to different training data, so a band is only meaningful
   // within its own family. Each slider is shown only when its family is actually in scope.

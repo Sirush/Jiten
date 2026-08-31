@@ -45,7 +45,7 @@ public class StatsController(JitenDbContext context) : ControllerBase
     {
         Dictionary<MediaType, int> mediaByType = new();
         var decks = context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null);
-        foreach (var mediaType in Enum.GetValues<MediaType>())
+        foreach (var mediaType in MediaTypes.Listed)
         {
             mediaByType.Add(mediaType, await decks.CountAsync(d => d.MediaType == mediaType));
         }

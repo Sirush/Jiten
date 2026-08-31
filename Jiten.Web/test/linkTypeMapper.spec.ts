@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectLinkTypeFromUrl, getLinkLabel, getLinkTypeText, isVndbReleaseUrl } from '../app/utils/linkTypeMapper';
+import { detectLinkTypeFromUrl, getLinkLabel, getLinkTypeText, isVndbReleaseUrl, resolveLinkType } from '../app/utils/linkTypeMapper';
 import { LinkType } from '../app/types/enums';
 
 const vndb = (url: string) => getLinkLabel({ linkType: LinkType.Vndb, url });
@@ -110,5 +110,20 @@ describe('detectLinkTypeFromUrl', () => {
     expect(detectLinkTypeFromUrl('vndb.org/v123')).toBeNull();
     expect(detectLinkTypeFromUrl('not a url')).toBeNull();
     expect(detectLinkTypeFromUrl('ftp://vndb.org/v123')).toBeNull();
+  });
+
+  it('detects bookmeter and youtube whatever the id', () => {
+    expect(detectLinkTypeFromUrl('https://bookmeter.com/books/653277')).toBe(LinkType.Bookmeter);
+    expect(detectLinkTypeFromUrl('https://bookmeter.com/books/12757853')).toBe(LinkType.Bookmeter);
+    expect(detectLinkTypeFromUrl('https://www.youtube.com/@channel')).toBe(LinkType.YouTube);
+    expect(detectLinkTypeFromUrl('https://youtu.be/dQw4w9WgXcQ')).toBe(LinkType.YouTube);
+  });
+
+  it('re-reads the host for requests whose stored type predates the host being recognised', () => {
+    expect(resolveLinkType('https://bookmeter.com/books/12757853', LinkType.Web)).toBe(LinkType.Bookmeter);
+    expect(resolveLinkType('https://example.com/x', LinkType.Web)).toBe(LinkType.Web);
+    expect(resolveLinkType(null, LinkType.Bookmeter)).toBe(LinkType.Bookmeter);
+    expect(resolveLinkType('not a url', LinkType.Bookmeter)).toBe(LinkType.Bookmeter);
+    expect(resolveLinkType(null, null)).toBeNull();
   });
 });

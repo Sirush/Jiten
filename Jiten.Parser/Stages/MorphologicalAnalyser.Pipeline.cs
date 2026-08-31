@@ -93,6 +93,7 @@ public partial class MorphologicalAnalyser
         _pipelineDeconjCacheAlt = _pipelineDeconjCache.GetAlternateLookup<ReadOnlySpan<char>>();
         TokenFeatureScan? candidateScan = null;
         var features = TokenFeatureScanner.Scan(wordInfos);
+        bool featuresStale = false;
         bool candidateScanDirty = true;
         Stopwatch? sw = timings != null ? Stopwatch.StartNew() : null;
 
@@ -103,13 +104,25 @@ public partial class MorphologicalAnalyser
                 candidateScan = TokenFeatureScanner.ScanWithCandidates(wordInfos);
                 features = candidateScan.Features;
                 candidateScanDirty = false;
+                featuresStale = false;
             }
 
             if (stage.RequiredFeatures != TokenFeatures.None &&
                 (features & stage.RequiredFeatures) == TokenFeatures.None)
             {
-                diagnostics?.RecordSkippedStage(stage);
-                continue;
+                // Features go stale after a modifying stage. A stale-set bit only costs one no-op
+                // stage run, but a skip must never trust a stale-clear bit — rescan before skipping.
+                if (featuresStale)
+                {
+                    features = TokenFeatureScanner.Scan(wordInfos);
+                    featuresStale = false;
+                }
+
+                if ((features & stage.RequiredFeatures) == TokenFeatures.None)
+                {
+                    diagnostics?.RecordSkippedStage(stage);
+                    continue;
+                }
             }
 
             sw?.Restart();
@@ -121,7 +134,7 @@ public partial class MorphologicalAnalyser
 
             if (!ReferenceEquals(prev, wordInfos))
             {
-                features = TokenFeatureScanner.Scan(wordInfos);
+                featuresStale = true;
                 candidateScanDirty = true;
             }
             else if (!stage.UsesCandidatePositions)

@@ -672,11 +672,11 @@ namespace Jiten.Core.Migrations
 
             modelBuilder.Entity("Jiten.Core.Data.ExampleSentence", b =>
                 {
-                    b.Property<int>("SentenceId")
+                    b.Property<long>("SentenceId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("bigint");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("SentenceId"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("SentenceId"));
 
                     b.Property<int>("DeckId")
                         .HasColumnType("integer");
@@ -709,8 +709,8 @@ namespace Jiten.Core.Migrations
 
             modelBuilder.Entity("Jiten.Core.Data.ExampleSentenceWord", b =>
                 {
-                    b.Property<int>("ExampleSentenceId")
-                        .HasColumnType("integer");
+                    b.Property<long>("ExampleSentenceId")
+                        .HasColumnType("bigint");
 
                     b.Property<int>("WordId")
                         .HasColumnType("integer");

@@ -72,7 +72,7 @@ public class StudyDefinitionDto
 
 public class StudyExampleSentenceDto
 {
-    public int SentenceId { get; set; }
+    public long SentenceId { get; set; }
     public string Text { get; set; } = "";
     public int WordPosition { get; set; }
     public int WordLength { get; set; }

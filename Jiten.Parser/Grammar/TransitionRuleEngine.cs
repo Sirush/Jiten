@@ -8,6 +8,13 @@ namespace Jiten.Parser.Grammar;
 
 internal static class TransitionRuleEngine
 {
+    private static readonly TransitionRule[] LeadingStripRules = Array.FindAll(
+        TransitionRuleSets.HardRules, r => r.Id is "leading-aux-strip" or "particle-at-sentence-start");
+
+    // Pass-2 rules keep their declaration order: break-on-first-match makes order load-bearing.
+    private static readonly TransitionRule[] ContextHardRules = Array.FindAll(
+        TransitionRuleSets.HardRules, r => r.Id is not ("leading-aux-strip" or "particle-at-sentence-start"));
+
     // Two-pass approach
     //   Pass 1 — while-loop strips all leading verb-attaching auxiliaries
     //   Pass 2 — backwards loop validates aux context and counter placement
@@ -16,19 +23,15 @@ internal static class TransitionRuleEngine
         Func<string, bool> hasLookup,
         ParserDiagnostics? diagnostics = null)
     {
-        var rules = TransitionRuleSets.HardRules;
-
         // Pass 1: strip all sentence-initial tokens that can never begin a clause (needs while loop:
         // removing index 0 exposes a new index 0 that also needs to be checked)
-        var leadingStripRules = Array.FindAll(rules,
-            r => r.Id is "leading-aux-strip" or "particle-at-sentence-start");
         bool leadingRemoved;
         do
         {
             leadingRemoved = false;
             if (words.Count == 0) break;
             var window = BuildWindow(words, 0);
-            foreach (var rule in leadingStripRules)
+            foreach (var rule in LeadingStripRules)
             {
                 if (!MatchesAll(window, rule.WhenToken)) continue;
                 if (IsValidState(window, rule.ValidIf)) continue;
@@ -43,9 +46,8 @@ internal static class TransitionRuleEngine
         for (int i = words.Count - 1; i >= 0; i--)
         {
             var window = BuildWindow(words, i);
-            foreach (var rule in rules)
+            foreach (var rule in ContextHardRules)
             {
-                if (rule.Id is "leading-aux-strip" or "particle-at-sentence-start") continue;
                 if (!MatchesAll(window, rule.WhenToken)) continue;
                 if (IsValidState(window, rule.ValidIf)) continue;
 
@@ -83,9 +85,6 @@ internal static class TransitionRuleEngine
                     (TransitionRuleSets.VerbOnlyAuxDictForms.Contains(w.Current.DictionaryForm) ||
                      TransitionRuleSets.VerbOrAdjAuxDictForms.Contains(w.Current.DictionaryForm)),
 
-                MatchCondition.IsAuxiliary =>
-                    w.Current.PartOfSpeech == PartOfSpeech.Auxiliary,
-
                 MatchCondition.IsCounter =>
                     w.Current.PartOfSpeech == PartOfSpeech.Counter ||
                     (w.Current.PartOfSpeech == PartOfSpeech.Suffix &&
@@ -97,10 +96,6 @@ internal static class TransitionRuleEngine
                 MatchCondition.PrevIsVerbOrAux =>
                     w.Prev?.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary,
 
-                MatchCondition.PrevIsVerbAuxOrIAdj =>
-                    w.Prev?.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary
-                                         or PartOfSpeech.IAdjective,
-
                 MatchCondition.PrevIsVerbAuxIAdjOrSfp =>
                     w.Prev?.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Auxiliary
                                          or PartOfSpeech.IAdjective
@@ -111,12 +106,6 @@ internal static class TransitionRuleEngine
                     w.Prev?.PartOfSpeech is PartOfSpeech.Numeral or PartOfSpeech.Noun
                                          or PartOfSpeech.CommonNoun or PartOfSpeech.Pronoun
                                          or PartOfSpeech.Name,
-
-                MatchCondition.PrevIsAuxiliary =>
-                    w.Prev?.PartOfSpeech == PartOfSpeech.Auxiliary,
-
-                MatchCondition.PrevIsAuxiliaryOrParticle =>
-                    w.Prev?.PartOfSpeech is PartOfSpeech.Auxiliary or PartOfSpeech.Particle,
 
                 MatchCondition.IsNotEmphaticSfp =>
                     w.Current.Text is not ("ぞ" or "ぜ"),
@@ -305,20 +294,6 @@ internal static class TransitionRuleEngine
         }
 
         return bonus;
-    }
-
-    internal static bool HasApplicableSoftRules(ScoringWindow window)
-    {
-        var ctx = ConditionContext.FromScoringWindow(window);
-        foreach (var rule in TransitionRuleSets.SoftRules)
-        {
-            if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
-                continue;
-            if (!MatchesAll(ctx, rule.CandidateMatch)) continue;
-            if (MatchesAll(ctx, rule.ContextMatch)) return true;
-        }
-
-        return false;
     }
 
     internal static bool CouldAnySoftRuleApply(

@@ -1,12 +1,9 @@
 import { defineEventHandler } from 'h3';
 import type { SitemapUrl } from '@nuxtjs/sitemap/dist/runtime/types';
-import { MediaType } from '~/types/enums';
-import { getMediaTypeSlug } from '~/utils/mediaTypeMapper';
+import { getListedMediaTypes, getMediaTypeSlug } from '~/utils/mediaTypeMapper';
 
 // /decks/media/list/{slug} hub pages, derived from the MediaType enum so new types appear automatically.
-const MEDIA_TYPE_SLUGS = Object.values(MediaType)
-  .filter((v): v is number => typeof v === 'number')
-  .map((t) => getMediaTypeSlug(t));
+const MEDIA_TYPE_SLUGS = getListedMediaTypes().map((t) => getMediaTypeSlug(t));
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();

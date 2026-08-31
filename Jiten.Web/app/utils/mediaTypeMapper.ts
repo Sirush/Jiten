@@ -22,6 +22,8 @@ export function getMediaTypeText(mediaType: MediaType): string {
       return 'Manga';
     case MediaType.Audio:
       return 'Audio';
+    case MediaType.YouTube:
+      return 'YouTube';
     default:
       return 'Unknown';
   }
@@ -39,7 +41,19 @@ const mediaTypeSlugMap: Record<number, string> = {
   [MediaType.WebNovel]: 'web-novels',
   [MediaType.Manga]: 'manga',
   [MediaType.Audio]: 'audio',
+  [MediaType.YouTube]: 'youtube',
 };
+
+// Requestable but not yet browsable
+const unlistedMediaTypes = new Set<MediaType>([MediaType.YouTube]);
+
+export function isListedMediaType(mediaType: MediaType): boolean {
+  return !unlistedMediaTypes.has(mediaType);
+}
+
+export function getListedMediaTypes(): MediaType[] {
+  return (Object.values(MediaType).filter((v): v is MediaType => typeof v === 'number') as MediaType[]).filter(isListedMediaType);
+}
 
 export function getMediaTypeSlug(mediaType: MediaType): string {
   return mediaTypeSlugMap[mediaType] ?? String(mediaType);
@@ -74,6 +88,8 @@ export function getMediaTypePluralText(mediaType: MediaType): string {
       return 'Manga';
     case MediaType.Audio:
       return 'Audio Works';
+    case MediaType.YouTube:
+      return 'YouTube';
     default:
       return 'Media';
   }
@@ -134,6 +150,8 @@ export function getChildrenCountText(mediaType: MediaType): string {
       return 'Parts';
     case MediaType.Audio:
       return 'Entries';
+    case MediaType.YouTube:
+      return 'Videos';
     default:
       return 'Unknown';
   }

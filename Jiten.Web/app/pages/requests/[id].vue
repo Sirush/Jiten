@@ -4,7 +4,7 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
   import { getRequestKindText, getRequestKindIcon } from '~/utils/requestKindMapper';
-  import { getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { getLinkTypeText, resolveLinkType } from '~/utils/linkTypeMapper';
   import { stripEpubImages } from '~/utils/epubStripper';
   import { useAuthStore } from '~/stores/authStore';
   import { useJitenStore } from '~/stores/jitenStore';
@@ -219,11 +219,25 @@
 
   const maxUploadBytes = 104_857_600;
   const totalFileSize = computed(() => selectedFiles.value.reduce((sum, f) => sum + f.size, 0));
+
+  // Manga and game script archives are fine; a zip on a book request usually wraps an EPUB that should be uploaded directly.
+  const archiveExtensions = ['.zip', '.rar', '.7z'];
+  const hasArchiveOnBookRequest = computed(() => {
+    const type = request.value?.mediaType;
+    if (type !== MediaType.Novel && type !== MediaType.WebNovel) return false;
+    return selectedFiles.value.some((f) => archiveExtensions.includes(f.name.substring(f.name.lastIndexOf('.')).toLowerCase()));
+  });
   const isOverUploadLimit = computed(() => totalFileSize.value > maxUploadBytes);
   const hasContent = computed(() => commentText.value.trim().length > 0 || selectedFiles.value.length > 0);
 
+  const uploadArchiveAnyway = ref(false);
+  watch(hasArchiveOnBookRequest, (val) => {
+    if (!val) uploadArchiveAnyway.value = false;
+  });
+  const needsArchiveConfirmation = computed(() => hasArchiveOnBookRequest.value && !uploadArchiveAnyway.value);
+
   async function handleAddComment() {
-    if (!hasContent.value || isOverUploadLimit.value || !request.value) return;
+    if (!hasContent.value || isOverUploadLimit.value || needsArchiveConfirmation.value || !request.value) return;
     isSubmittingComment.value = true;
     const text = commentText.value.trim() || undefined;
     const files = selectedFiles.value.length > 0 ? selectedFiles.value : undefined;
@@ -470,7 +484,8 @@
   const createDeckHref = computed(() => {
     const req = request.value;
     if (!req) return '';
-    if (req.externalLinkType === LinkType.Syosetsu && req.externalUrl) return `/dashboard/add-webnovel?url=${encodeURIComponent(req.externalUrl)}`;
+    if (resolveLinkType(req.externalUrl, req.externalLinkType) === LinkType.Syosetsu && req.externalUrl)
+      return `/dashboard/add-webnovel?url=${encodeURIComponent(req.externalUrl)}`;
     return `/dashboard/add-media?requestId=${req.id}`;
   });
 
@@ -496,7 +511,12 @@
     return `on ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined })}`;
   }
 
-  onMounted(() => loadData());
+  const { load: loadTurnaround, fulfilmentRange } = useRequestTurnaround();
+
+  onMounted(() => {
+    loadTurnaround();
+    loadData();
+  });
 </script>
 
 <template>
@@ -557,7 +577,9 @@
             <div v-if="request.externalUrl" class="mb-4">
               <a :href="request.externalUrl" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline flex items-center gap-1">
                 <i class="pi pi-external-link" />
-                <span v-if="request.externalLinkType">{{ getLinkTypeText(request.externalLinkType) }}</span>
+                <span v-if="resolveLinkType(request.externalUrl, request.externalLinkType)">
+                  {{ getLinkTypeText(resolveLinkType(request.externalUrl, request.externalLinkType)!) }}
+                </span>
                 <span v-else>External link</span>
               </a>
             </div>
@@ -611,6 +633,15 @@
               View deck: {{ request.fulfilledDeckTitle || `#${request.fulfilledDeckId}` }}
             </NuxtLink>
           </div>
+
+          <small v-if="canComment && request.uploadCount === 0" class="text-muted-color flex items-start gap-1.5 mb-4">
+            <i class="pi pi-paperclip mt-0.5 w-[14px] shrink-0 text-center text-[13px] text-amber-600 dark:text-amber-500" />
+            <span>
+              No file attached yet.
+              <template v-if="fulfilmentRange">Requests with one are usually filled in {{ fulfilmentRange }}.</template>
+              If you have the script, subtitles or ebook, attach it in a comment below.
+            </span>
+          </small>
 
           <div class="flex items-center gap-3 flex-wrap">
             <UpvoteButton :has-upvoted="request.hasUserUpvoted" :upvote-count="request.upvoteCount" :boost-count="request.boostCount" @toggle="handleUpvote" />
@@ -939,14 +970,18 @@
           </div>
 
           <div v-if="canComment" class="flex flex-col gap-2">
-            <Message severity="secondary" :closable="false" class="text-sm">
-              Your username is not visible to other users, but is visible to administrators to avoid abuse.
-            </Message>
+            <small class="text-muted-color flex items-start gap-1.5">
+              <i class="pi pi-eye mt-0.5 w-[14px] shrink-0 text-center text-[13px]" />
+              <span>Your username is only visible to administrators, not to other users.</span>
+            </small>
             <Textarea v-model="commentText" placeholder="Add a comment..." rows="3" :maxlength="500" class="w-full" />
             <small class="text-muted-color">{{ commentText.length }}/500</small>
 
             <div class="flex flex-col gap-2">
-              <Message severity="warn" :closable="false" class="text-sm"> Do not zip EPUBs - they are automatically optimised when uploaded directly. </Message>
+              <small class="text-muted-color flex items-start gap-1.5">
+                <i class="pi pi-exclamation-triangle mt-0.5 w-[14px] shrink-0 text-center text-[13px] text-amber-600 dark:text-amber-500" />
+                <span>Do not zip EPUBs - they are automatically optimised when uploaded directly.</span>
+              </small>
 
               <input ref="fileInputRef" type="file" :accept="allowedExtensions.join(',')" multiple class="hidden" @change="handleFileSelect" />
 
@@ -989,6 +1024,16 @@
                 <small :class="isOverUploadLimit ? 'text-red-500' : 'text-muted-color'">
                   Total: {{ formatFileSize(totalFileSize) }}<template v-if="isOverUploadLimit">. Over the 100MB limit, remove a file to post.</template>
                 </small>
+                <template v-if="hasArchiveOnBookRequest">
+                  <small class="text-amber-600 dark:text-amber-500 flex items-start gap-1.5">
+                    <i class="pi pi-exclamation-triangle mt-0.5 w-[14px] shrink-0 text-center text-[13px]" />
+                    <span>This is a book request. If the archive contains some EPUBs or text files, please attach those files directly instead.</span>
+                  </small>
+                  <div class="flex items-center gap-2 pl-[19px]">
+                    <Checkbox v-model="uploadArchiveAnyway" input-id="uploadArchiveAnyway" binary />
+                    <label for="uploadArchiveAnyway" class="text-sm cursor-pointer">I acknowledged the message above, upload it anyway</label>
+                  </div>
+                </template>
               </div>
             </div>
 
@@ -997,7 +1042,7 @@
                 :label="selectedFiles.length > 0 ? 'Post Comment & Upload' : 'Post Comment'"
                 icon="pi pi-send"
                 :loading="isSubmittingComment"
-                :disabled="!hasContent || isOverUploadLimit"
+                :disabled="!hasContent || isOverUploadLimit || needsArchiveConfirmation"
                 @click="handleAddComment"
               />
             </div>

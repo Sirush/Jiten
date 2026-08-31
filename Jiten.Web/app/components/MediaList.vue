@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { useApiFetch, useApiFetchPaginated } from '~/composables/useApiFetch';
-  import { type Deck, MediaType, SortOrder, type Word, DisplayStyle, type Tag } from '~/types';
+  import { type Deck, MediaType, SortOrder, type Word, DisplayStyle } from '~/types';
   import Skeleton from 'primevue/skeleton';
   import Card from 'primevue/card';
   import InputText from 'primevue/inputtext';
@@ -10,7 +10,20 @@
   import { useAuthStore } from '~/stores/authStore';
   import { LazyHydrateMediaDeckCard, LazyHydrateMediaDeckCompactView, LazyHydrateMediaDeckTableView } from '~/utils/lazyHydratedComponents';
   import { type DeckSortOption, deckSortMeta, deckSortOption, deckSortOrdering, deckSortLabels } from '~/utils/deckSorting';
-  import { getGenreText } from '~/utils/genreMapper';
+  import {
+    MEDIA_FILTER_PRESETS_ENDPOINT,
+    type MediaFilterPreset,
+    type MediaFilterPresetsPayload,
+    PRESET_QUERY_KEYS,
+    type PresetQuery,
+    buildPresetQuery,
+    capturePresetQuery,
+    parsePresetsResponse,
+    presetQueryEquals,
+    resolveDefaultPreset,
+    toPresetsPayload,
+  } from '~/utils/mediaFilterPresets';
+  import { useToast } from 'primevue/usetoast';
 
   const props = defineProps<{
     word?: Word;
@@ -73,7 +86,9 @@
     return sortOrder.value === SortOrder.Ascending ? meta.asc : meta.desc;
   });
 
-  const statusFilter = ref(route.query.status ? (Array.isArray(route.query.status) ? route.query.status[0] : route.query.status) : 'none');
+  // Legacy URLs carried status=fav before favourite became its own flag.
+  const rawStatus = Array.isArray(route.query.status) ? route.query.status[0] : route.query.status;
+  const statusFilter = ref(rawStatus && rawStatus !== 'fav' ? rawStatus : 'none');
 
   const authStore = useAuthStore();
   const isConnected = computed(() => authStore.isAuthenticated);
@@ -113,7 +128,12 @@
   const coverageMax = ref<number | null>(toNumOrNull(route.query.coverageMax));
   const uniqueCoverageMin = ref<number | null>(toNumOrNull(route.query.uniqueCoverageMin));
   const uniqueCoverageMax = ref<number | null>(toNumOrNull(route.query.uniqueCoverageMax));
+  const totalCoverageMin = ref<number | null>(toNumOrNull(route.query.totalCoverageMin));
+  const totalCoverageMax = ref<number | null>(toNumOrNull(route.query.totalCoverageMax));
+  const uTotalCoverageMin = ref<number | null>(toNumOrNull(route.query.uTotalCoverageMin));
+  const uTotalCoverageMax = ref<number | null>(toNumOrNull(route.query.uTotalCoverageMax));
   const excludeSequels = ref<boolean | null>(toBooleanOrNull(route.query.excludeSequels));
+  const favourite = ref<boolean | null>(rawStatus === 'fav' ? true : toBooleanOrNull(route.query.favourite));
 
   // Genre and Tag filter state
   const includeGenres = ref<number[]>([]);
@@ -126,15 +146,10 @@
   includeTags.value = parseNumberArray(route.query.tags);
   excludeTags.value = parseNumberArray(route.query.excludeTags);
 
-  // Ensure min is not higher than max and values stay within bounds
-  const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
   const normalizePair = (minRef: any, maxRef: any, floor: number, ceil: number) => {
-    if (minRef.value != null) minRef.value = clamp(minRef.value, floor, ceil);
-    if (maxRef.value != null) maxRef.value = clamp(maxRef.value, floor, ceil);
-    if (minRef.value != null && maxRef.value != null && minRef.value > maxRef.value) {
-      // keep ranges valid: when min surpasses max, move max up to min
-      maxRef.value = minRef.value;
-    }
+    const { min, max } = clampRange(minRef.value, maxRef.value, floor, ceil);
+    minRef.value = min;
+    maxRef.value = max;
   };
 
   // Normalize ranges when user edits inputs
@@ -148,8 +163,10 @@
   watch([speechDurationMin, speechDurationMax], () => normalizePair(speechDurationMin, speechDurationMax, 0, 300));
   watch([coverageMin, coverageMax], () => normalizePair(coverageMin, coverageMax, 0, 100));
   watch([uniqueCoverageMin, uniqueCoverageMax], () => normalizePair(uniqueCoverageMin, uniqueCoverageMax, 0, 100));
+  watch([totalCoverageMin, totalCoverageMax], () => normalizePair(totalCoverageMin, totalCoverageMax, 0, 100));
+  watch([uTotalCoverageMin, uTotalCoverageMax], () => normalizePair(uTotalCoverageMin, uTotalCoverageMax, 0, 100));
 
-  const debouncedFilters = ref({
+  const snapshotFilters = () => ({
     charCountMin: charCountMin.value,
     charCountMax: charCountMax.value,
     difficultyMin: difficultyMin.value,
@@ -170,42 +187,27 @@
     coverageMax: coverageMax.value,
     uniqueCoverageMin: uniqueCoverageMin.value,
     uniqueCoverageMax: uniqueCoverageMax.value,
+    totalCoverageMin: totalCoverageMin.value,
+    totalCoverageMax: totalCoverageMax.value,
+    uTotalCoverageMin: uTotalCoverageMin.value,
+    uTotalCoverageMax: uTotalCoverageMax.value,
     includeGenres: includeGenres.value,
     excludeGenres: excludeGenres.value,
     includeTags: includeTags.value,
     excludeTags: excludeTags.value,
     excludeSequels: excludeSequels.value,
+    favourite: favourite.value,
   });
+
+  const debouncedFilters = ref(snapshotFilters());
+
+  // Set while a preset writes every filter ref at once: the URL is then rewritten by a single
+  // replace, and the sort watchers must not overwrite the preset's own sort order on the way.
+  const applyingPreset = ref(false);
 
   const updateFiltersDebounced = debounce(
     () => {
-      debouncedFilters.value = {
-        charCountMin: charCountMin.value,
-        charCountMax: charCountMax.value,
-        difficultyMin: difficultyMin.value,
-        difficultyMax: difficultyMax.value,
-        releaseYearMin: releaseYearMin.value,
-        releaseYearMax: releaseYearMax.value,
-        uniqueKanjiMin: uniqueKanjiMin.value,
-        uniqueKanjiMax: uniqueKanjiMax.value,
-        subdeckCountMin: subdeckCountMin.value,
-        subdeckCountMax: subdeckCountMax.value,
-        extRatingMin: extRatingMin.value,
-        extRatingMax: extRatingMax.value,
-        speechSpeedMin: speechSpeedMin.value,
-        speechSpeedMax: speechSpeedMax.value,
-        speechDurationMin: speechDurationMin.value,
-        speechDurationMax: speechDurationMax.value,
-        coverageMin: coverageMin.value,
-        coverageMax: coverageMax.value,
-        uniqueCoverageMin: uniqueCoverageMin.value,
-        uniqueCoverageMax: uniqueCoverageMax.value,
-        includeGenres: includeGenres.value,
-        excludeGenres: excludeGenres.value,
-        includeTags: includeTags.value,
-        excludeTags: excludeTags.value,
-        excludeSequels: excludeSequels.value,
-      };
+      debouncedFilters.value = snapshotFilters();
 
       const toUndef = (v: number | null) => (v === null ? undefined : v);
       const arrayToString = (arr: number[]) => (arr.length > 0 ? arr.join(',') : undefined);
@@ -233,12 +235,17 @@
           coverageMax: toUndef(coverageMax.value) as any,
           uniqueCoverageMin: toUndef(uniqueCoverageMin.value) as any,
           uniqueCoverageMax: toUndef(uniqueCoverageMax.value) as any,
+          totalCoverageMin: toUndef(totalCoverageMin.value) as any,
+          totalCoverageMax: toUndef(totalCoverageMax.value) as any,
+          uTotalCoverageMin: toUndef(uTotalCoverageMin.value) as any,
+          uTotalCoverageMax: toUndef(uTotalCoverageMax.value) as any,
           genres: arrayToString(includeGenres.value) as any,
           excludeGenres: arrayToString(excludeGenres.value) as any,
           tags: arrayToString(includeTags.value) as any,
           excludeTags: arrayToString(excludeTags.value) as any,
           offset: 0 as any,
           excludeSequels: excludeSequels.value === true ? true : undefined,
+          favourite: favourite.value === true ? true : undefined,
         },
       });
     },
@@ -268,9 +275,15 @@
       coverageMax,
       uniqueCoverageMin,
       uniqueCoverageMax,
+      totalCoverageMin,
+      totalCoverageMax,
+      uTotalCoverageMin,
+      uTotalCoverageMax,
       excludeSequels,
+      favourite,
     ],
     () => {
+      if (applyingPreset.value) return;
       updateFiltersDebounced();
     }
   );
@@ -278,6 +291,7 @@
   watch(
     [includeGenres, excludeGenres, includeTags, excludeTags],
     () => {
+      if (applyingPreset.value) return;
       updateFiltersDebounced();
     },
     { deep: true }
@@ -291,7 +305,7 @@
   );
 
   const updateOptions = () => {
-    const showspeechSpeedOptionMediaTypes = [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio];
+    const showspeechSpeedOptionMediaTypes = [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio, MediaType.YouTube];
 
     if (mediaType.value == null || !showspeechSpeedOptionMediaTypes.includes(Number(mediaType.value))) {
       novelSortOptions.value = ['charCount', 'dialoguePercentage'].map(deckSortOption);
@@ -357,7 +371,12 @@
     coverageMax.value = null;
     uniqueCoverageMin.value = null;
     uniqueCoverageMax.value = null;
+    totalCoverageMin.value = null;
+    totalCoverageMax.value = null;
+    uTotalCoverageMin.value = null;
+    uTotalCoverageMax.value = null;
     excludeSequels.value = false;
+    favourite.value = false;
 
     // Genre and tag filters
     includeGenres.value = [];
@@ -393,6 +412,10 @@
         coverageMax: undefined,
         uniqueCoverageMin: undefined,
         uniqueCoverageMax: undefined,
+        totalCoverageMin: undefined,
+        totalCoverageMax: undefined,
+        uTotalCoverageMin: undefined,
+        uTotalCoverageMax: undefined,
         genres: undefined,
         excludeGenres: undefined,
         tags: undefined,
@@ -400,9 +423,189 @@
         status: undefined,
         offset: 0,
         excludeSequels: undefined,
+        favourite: undefined,
       },
     });
   };
+
+  const presets = ref<MediaFilterPreset[]>([]);
+  const defaultPresetName = ref<string | null>(null);
+  const presetsLoaded = ref(false);
+
+  const currentPresetQuery = computed<PresetQuery>(() =>
+    capturePresetQuery({
+      mediaType: mediaType.value,
+      title: titleFilter.value,
+      sortBy: sortBy.value,
+      sortOrder: sortOrder.value,
+      status: statusFilter.value === 'none' ? null : statusFilter.value,
+      charCountMin: charCountMin.value,
+      charCountMax: charCountMax.value,
+      difficultyMin: difficultyMin.value,
+      difficultyMax: difficultyMax.value,
+      releaseYearMin: releaseYearMin.value,
+      releaseYearMax: releaseYearMax.value,
+      uniqueKanjiMin: uniqueKanjiMin.value,
+      uniqueKanjiMax: uniqueKanjiMax.value,
+      subdeckCountMin: subdeckCountMin.value,
+      subdeckCountMax: subdeckCountMax.value,
+      extRatingMin: extRatingMin.value,
+      extRatingMax: extRatingMax.value,
+      speechSpeedMin: speechSpeedMin.value,
+      speechSpeedMax: speechSpeedMax.value,
+      speechDurationMin: speechDurationMin.value,
+      speechDurationMax: speechDurationMax.value,
+      coverageMin: coverageMin.value,
+      coverageMax: coverageMax.value,
+      uniqueCoverageMin: uniqueCoverageMin.value,
+      uniqueCoverageMax: uniqueCoverageMax.value,
+      totalCoverageMin: totalCoverageMin.value,
+      totalCoverageMax: totalCoverageMax.value,
+      uTotalCoverageMin: uTotalCoverageMin.value,
+      uTotalCoverageMax: uTotalCoverageMax.value,
+      genres: includeGenres.value.join(','),
+      excludeGenres: excludeGenres.value.join(','),
+      tags: includeTags.value.join(','),
+      excludeTags: excludeTags.value.join(','),
+      excludeSequels: excludeSequels.value === true ? 'true' : null,
+      favourite: favourite.value === true ? 'true' : null,
+    })
+  );
+
+  const captureCurrentFilters = (): PresetQuery => ({ ...currentPresetQuery.value });
+
+  // In an embed the host page owns the media tab, so a preset counts as applied whatever the tab.
+  const presetMatchIgnores = computed<readonly string[]>(() => (props.word != null ? ['mediaType'] : []));
+  const activePresetName = computed(
+    () => presets.value.find((preset) => presetQueryEquals(preset.query, currentPresetQuery.value, presetMatchIgnores.value))?.name ?? null
+  );
+
+  const applyPreset = (preset: MediaFilterPreset) => {
+    const query = preset.query;
+    applyingPreset.value = true;
+
+    titleFilter.value = query.title ?? null;
+    debouncedTitleFilter.value = titleFilter.value;
+    // Presets saved before the split may still carry status=fav.
+    statusFilter.value = query.status && query.status !== 'fav' ? query.status : 'none';
+    favourite.value = query.status === 'fav' ? true : toBooleanOrNull(query.favourite);
+    sortBy.value = query.sortBy ?? sortByOptions.value[0].value;
+    sortOrder.value = query.sortOrder != null ? Number(query.sortOrder) : (deckSortMeta[sortBy.value as string]?.default ?? SortOrder.Ascending);
+
+    charCountMin.value = toNumOrNull(query.charCountMin);
+    charCountMax.value = toNumOrNull(query.charCountMax);
+    difficultyMin.value = toNumOrNull(query.difficultyMin);
+    difficultyMax.value = toNumOrNull(query.difficultyMax);
+    releaseYearMin.value = toNumOrNull(query.releaseYearMin);
+    releaseYearMax.value = toNumOrNull(query.releaseYearMax);
+    uniqueKanjiMin.value = toNumOrNull(query.uniqueKanjiMin);
+    uniqueKanjiMax.value = toNumOrNull(query.uniqueKanjiMax);
+    subdeckCountMin.value = toNumOrNull(query.subdeckCountMin);
+    subdeckCountMax.value = toNumOrNull(query.subdeckCountMax);
+    extRatingMin.value = toNumOrNull(query.extRatingMin);
+    extRatingMax.value = toNumOrNull(query.extRatingMax);
+    speechSpeedMin.value = toNumOrNull(query.speechSpeedMin);
+    speechSpeedMax.value = toNumOrNull(query.speechSpeedMax);
+    speechDurationMin.value = toNumOrNull(query.speechDurationMin);
+    speechDurationMax.value = toNumOrNull(query.speechDurationMax);
+    coverageMin.value = toNumOrNull(query.coverageMin);
+    coverageMax.value = toNumOrNull(query.coverageMax);
+    uniqueCoverageMin.value = toNumOrNull(query.uniqueCoverageMin);
+    uniqueCoverageMax.value = toNumOrNull(query.uniqueCoverageMax);
+    totalCoverageMin.value = toNumOrNull(query.totalCoverageMin);
+    totalCoverageMax.value = toNumOrNull(query.totalCoverageMax);
+    uTotalCoverageMin.value = toNumOrNull(query.uTotalCoverageMin);
+    uTotalCoverageMax.value = toNumOrNull(query.uTotalCoverageMax);
+    excludeSequels.value = toBooleanOrNull(query.excludeSequels);
+    includeGenres.value = parseNumberArray(query.genres);
+    excludeGenres.value = parseNumberArray(query.excludeGenres);
+    includeTags.value = parseNumberArray(query.tags);
+    excludeTags.value = parseNumberArray(query.excludeTags);
+
+    debouncedFilters.value = snapshotFilters();
+
+    nextTick(() => {
+      applyingPreset.value = false;
+    });
+    router.replace({ query: buildPresetQuery(route.query, preset) });
+  };
+
+  const { $api } = useNuxtApp();
+  const toast = useToast();
+
+  const presetsPayload = (): MediaFilterPresetsPayload => toPresetsPayload({ presets: presets.value, defaultName: defaultPresetName.value });
+
+  let persistedSnapshot = '';
+
+  // In an embed the URL is the host page's; the embed itself writes mediaType/offset on mount, so
+  // only the presence of actual filter keys means the viewer already chose a view.
+  const urlHasFilterState = () =>
+    props.word == null ? Object.keys(route.query).length > 0 : PRESET_QUERY_KEYS.some((key) => key !== 'mediaType' && route.query[key] != null);
+
+  const loadPresets = async () => {
+    const canApplyDefault = (props.word != null || props.defaultMediaType == null) && !urlHasFilterState();
+
+    try {
+      const state = parsePresetsResponse(await $api(MEDIA_FILTER_PRESETS_ENDPOINT));
+      presets.value = state.presets;
+      defaultPresetName.value = state.defaultName;
+      persistedSnapshot = JSON.stringify(presetsPayload());
+      presetsLoaded.value = true;
+    } catch {
+      return;
+    }
+
+    if (!canApplyDefault || urlHasFilterState()) return;
+    const preset = resolveDefaultPreset(presets.value, defaultPresetName.value);
+    if (!preset) return;
+    if (props.word != null && props.defaultMediaType != null) {
+      // An explicitly chosen media type on the host page wins over the preset's tab.
+      applyPreset({ ...preset, query: { ...preset.query, mediaType: String(props.defaultMediaType) } });
+      return;
+    }
+    applyPreset(preset);
+  };
+
+  const persistPresets = async (payload: MediaFilterPresetsPayload) => {
+    try {
+      await $api(MEDIA_FILTER_PRESETS_ENDPOINT, { method: 'PUT', body: payload });
+    } catch {
+      toast.add({
+        severity: 'warn',
+        summary: 'Presets not saved',
+        detail: 'Your presets could not be saved. Check your connection and try again.',
+        life: 4000,
+      });
+    }
+  };
+
+  onMounted(() => {
+    if (isConnected.value) void loadPresets();
+  });
+
+  watch(isConnected, (connected) => {
+    if (connected) {
+      if (!presetsLoaded.value) void loadPresets();
+      return;
+    }
+    presetsLoaded.value = false;
+    presets.value = [];
+    defaultPresetName.value = null;
+    persistedSnapshot = '';
+  });
+
+  watch(
+    [presets, defaultPresetName],
+    () => {
+      if (!presetsLoaded.value) return;
+      const payload = presetsPayload();
+      const snapshot = JSON.stringify(payload);
+      if (snapshot === persistedSnapshot) return;
+      persistedSnapshot = snapshot;
+      void persistPresets(payload);
+    },
+    { deep: true }
+  );
 
   watch(
     () => props.word,
@@ -429,6 +632,7 @@
   }
 
   const updateDebounced = debounce(async (newValue: string | null) => {
+    if (newValue !== titleFilter.value) return;
     debouncedTitleFilter.value = newValue;
     await router.replace({
       query: {
@@ -442,10 +646,12 @@
   }, 500);
 
   watch(titleFilter, (newValue) => {
+    if (applyingPreset.value) return;
     updateDebounced(newValue);
   });
 
   watch(sortOrder, (newValue) => {
+    if (applyingPreset.value) return;
     router.replace({
       query: {
         ...route.query,
@@ -456,6 +662,7 @@
   });
 
   watch(sortBy, (newValue) => {
+    if (applyingPreset.value) return;
     const meta = deckSortMeta[newValue as string];
     if (meta) {
       sortOrder.value = meta.default;
@@ -470,6 +677,7 @@
   });
 
   watch(statusFilter, (newValue) => {
+    if (applyingPreset.value) return;
     router.replace({
       query: {
         ...route.query,
@@ -517,11 +725,16 @@
       coverageMax: computed(() => debouncedFilters.value.coverageMax),
       uniqueCoverageMin: computed(() => debouncedFilters.value.uniqueCoverageMin),
       uniqueCoverageMax: computed(() => debouncedFilters.value.uniqueCoverageMax),
+      totalCoverageMin: computed(() => debouncedFilters.value.totalCoverageMin),
+      totalCoverageMax: computed(() => debouncedFilters.value.totalCoverageMax),
+      uTotalCoverageMin: computed(() => debouncedFilters.value.uTotalCoverageMin),
+      uTotalCoverageMax: computed(() => debouncedFilters.value.uTotalCoverageMax),
       genres: computed(() => (debouncedFilters.value.includeGenres.length > 0 ? debouncedFilters.value.includeGenres.join(',') : undefined)),
       excludeGenres: computed(() => (debouncedFilters.value.excludeGenres.length > 0 ? debouncedFilters.value.excludeGenres.join(',') : undefined)),
       tags: computed(() => (debouncedFilters.value.includeTags.length > 0 ? debouncedFilters.value.includeTags.join(',') : undefined)),
       excludeTags: computed(() => (debouncedFilters.value.excludeTags.length > 0 ? debouncedFilters.value.excludeTags.join(',') : undefined)),
       excludeSequels: computed(() => debouncedFilters.value.excludeSequels),
+      favourite: computed(() => (debouncedFilters.value.favourite === true ? true : undefined)),
     },
     watch: [offset, mediaType],
   });
@@ -668,109 +881,6 @@
     ];
   });
 
-  const { data: filterTags } = useApiFetch<Tag[]>('media-deck/tags', { server: true, lazy: false });
-
-  const statusChipLabels: Record<string, string> = {
-    nostatus: 'Without status',
-    fav: 'Favourited',
-    ignore: 'Ignored',
-    planning: 'Planning',
-    ongoing: 'Ongoing',
-    completed: 'Completed',
-    dropped: 'Dropped',
-  };
-
-  type FilterChip = { key: string; label: string; clear: () => void };
-
-  const rangeChip = (
-    key: string,
-    label: string,
-    minRef: Ref<number | null>,
-    maxRef: Ref<number | null>,
-    format: (value: number) => string = (value) => value.toLocaleString()
-  ): FilterChip | null => {
-    const min = minRef.value;
-    const max = maxRef.value;
-    if (min == null && max == null) return null;
-
-    let text: string;
-    if (min != null && max != null) text = min === max ? `${label} ${format(min)}` : `${label} ${format(min)}-${format(max)}`;
-    else if (min != null) text = `${label} ≥ ${format(min)}`;
-    else text = `${label} ≤ ${format(max as number)}`;
-
-    return {
-      key,
-      label: text,
-      clear: () => {
-        minRef.value = null;
-        maxRef.value = null;
-      },
-    };
-  };
-
-  const tagName = (tagId: number) => filterTags.value?.find((tag) => tag.tagId === tagId)?.name ?? `Tag ${tagId}`;
-
-  const removeFrom = (listRef: Ref<number[]>, id: number) => {
-    listRef.value = listRef.value.filter((entry) => entry !== id);
-  };
-
-  const activeFilterChips = computed<FilterChip[]>(() => {
-    const chips: FilterChip[] = [];
-
-    if (statusFilter.value !== 'none') {
-      chips.push({
-        key: 'status',
-        label: statusChipLabels[statusFilter.value as string] ?? 'Status',
-        clear: () => {
-          statusFilter.value = 'none';
-        },
-      });
-    }
-
-    const plain = (value: number) => String(value);
-    const percent = (value: number) => `${value}%`;
-
-    const ranges = [
-      rangeChip('charCount', 'Characters', charCountMin, charCountMax),
-      rangeChip('difficulty', 'Difficulty', difficultyMin, difficultyMax, plain),
-      rangeChip('releaseYear', 'Year', releaseYearMin, releaseYearMax, plain),
-      rangeChip('uniqueKanji', 'Unique kanji', uniqueKanjiMin, uniqueKanjiMax),
-      rangeChip('subdeckCount', 'Subdecks', subdeckCountMin, subdeckCountMax),
-      rangeChip('extRating', 'Rating', extRatingMin, extRatingMax, plain),
-      rangeChip('speechSpeed', 'Speech speed', speechSpeedMin, speechSpeedMax),
-      rangeChip('speechDuration', 'Duration', speechDurationMin, speechDurationMax, (value) => `${value}h`),
-      rangeChip('coverage', 'Coverage', coverageMin, coverageMax, percent),
-      rangeChip('uniqueCoverage', 'Unique coverage', uniqueCoverageMin, uniqueCoverageMax, percent),
-    ];
-    for (const chip of ranges) {
-      if (chip) chips.push(chip);
-    }
-
-    if (excludeSequels.value) {
-      chips.push({
-        key: 'excludeSequels',
-        label: 'No sequels',
-        clear: () => {
-          excludeSequels.value = null;
-        },
-      });
-    }
-
-    for (const id of includeGenres.value) {
-      chips.push({ key: `genre-${id}`, label: getGenreText(id), clear: () => removeFrom(includeGenres, id) });
-    }
-    for (const id of excludeGenres.value) {
-      chips.push({ key: `genre-x-${id}`, label: `Not ${getGenreText(id)}`, clear: () => removeFrom(excludeGenres, id) });
-    }
-    for (const id of includeTags.value) {
-      chips.push({ key: `tag-${id}`, label: tagName(id), clear: () => removeFrom(includeTags, id) });
-    }
-    for (const id of excludeTags.value) {
-      chips.push({ key: `tag-x-${id}`, label: `Not ${tagName(id)}`, clear: () => removeFrom(excludeTags, id) });
-    }
-
-    return chips;
-  });
 </script>
 
 <template>
@@ -953,29 +1063,78 @@
           v-model:coverage-max="coverageMax"
           v-model:unique-coverage-min="uniqueCoverageMin"
           v-model:unique-coverage-max="uniqueCoverageMax"
+          v-model:total-coverage-min="totalCoverageMin"
+          v-model:total-coverage-max="totalCoverageMax"
+          v-model:u-total-coverage-min="uTotalCoverageMin"
+          v-model:u-total-coverage-max="uTotalCoverageMax"
           v-model:include-genres="includeGenres"
           v-model:exclude-genres="excludeGenres"
           v-model:include-tags="includeTags"
           v-model:exclude-tags="excludeTags"
           v-model:exclude-sequels="excludeSequels"
+          v-model:favourite="favourite"
           :is-connected="isConnected"
           :genre-counts="genreCounts"
           :tag-counts="tagCounts"
+          :active-preset-name="activePresetName"
+          :deck-count="totalItems"
           @reset="resetAllFilters"
-        />
+        >
+          <template v-if="isConnected" #presets>
+            <MediaListFilterPresets
+              v-model:presets="presets"
+              v-model:default-name="defaultPresetName"
+              :capture="captureCurrentFilters"
+              :active-preset-name="activePresetName"
+              @apply="applyPreset"
+            />
+          </template>
+        </MediaListFilters>
 
         <div class="flex flex-row gap-2 items-center">
           <DisplayStyleSelector />
         </div>
       </div>
 
-      <!-- The Filters badge is the only other trace of active filters, and it scrolls away
-           with its button; below md these keep the hidden state readable and removable. -->
-      <div v-if="activeFilterChips.length" class="flex flex-row flex-wrap items-center gap-1.5 md:hidden">
-        <Chip v-for="chip in activeFilterChips" :key="chip.key" :label="chip.label" removable class="py-0.5! text-xs!" @remove="chip.clear()" />
-        <Button v-if="activeFilterChips.length > 1" severity="secondary" text size="small" class="py-0.5! text-xs!" @click="resetAllFilters">Clear all</Button>
-      </div>
     </div>
+
+    <!-- The Filters badge is the only other trace of active filters, and it scrolls away with
+         its button; these keep the applied state readable and removable next to the results. -->
+    <MediaListFilterChips
+      v-model:status-filter="statusFilter"
+      v-model:char-count-min="charCountMin"
+      v-model:char-count-max="charCountMax"
+      v-model:difficulty-min="difficultyMin"
+      v-model:difficulty-max="difficultyMax"
+      v-model:release-year-min="releaseYearMin"
+      v-model:release-year-max="releaseYearMax"
+      v-model:unique-kanji-min="uniqueKanjiMin"
+      v-model:unique-kanji-max="uniqueKanjiMax"
+      v-model:subdeck-count-min="subdeckCountMin"
+      v-model:subdeck-count-max="subdeckCountMax"
+      v-model:ext-rating-min="extRatingMin"
+      v-model:ext-rating-max="extRatingMax"
+      v-model:speech-speed-min="speechSpeedMin"
+      v-model:speech-speed-max="speechSpeedMax"
+      v-model:speech-duration-min="speechDurationMin"
+      v-model:speech-duration-max="speechDurationMax"
+      v-model:coverage-min="coverageMin"
+      v-model:coverage-max="coverageMax"
+      v-model:unique-coverage-min="uniqueCoverageMin"
+      v-model:unique-coverage-max="uniqueCoverageMax"
+      v-model:total-coverage-min="totalCoverageMin"
+      v-model:total-coverage-max="totalCoverageMax"
+      v-model:u-total-coverage-min="uTotalCoverageMin"
+      v-model:u-total-coverage-max="uTotalCoverageMax"
+      v-model:include-genres="includeGenres"
+      v-model:exclude-genres="excludeGenres"
+      v-model:include-tags="includeTags"
+      v-model:exclude-tags="excludeTags"
+      v-model:exclude-sequels="excludeSequels"
+      v-model:favourite="favourite"
+      @reset="resetAllFilters"
+    />
+
     <div>
       <div class="flex flex-col gap-1">
         <PaginationControls

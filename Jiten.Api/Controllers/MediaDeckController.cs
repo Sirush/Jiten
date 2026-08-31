@@ -704,18 +704,20 @@ public class MediaDeckController(
     /// <param name="titleFilter">Full‑text filter on title (supports romaji/english/japanese).</param>
     /// <param name="sortBy">Sort field (title, difficulty, charCount, wordCount, sentenceLength, dialoguePercentage, subtitleRate, uKanji, uWordCount, uKanjiOnce, filter, releaseDate, coverage, uCoverage, totalCoverage, uTotalCoverage, communityVotes, etc.).</param>
     /// <param name="sortOrder">Ascending or Descending.</param>
-    /// <param name="status">Status (none, nostatus, fav, ignore, planning, ongoing, completed, dropped)</param>
+    /// <param name="status">Status (none, nostatus, ignore, planning, ongoing, completed, dropped; "fav" is a legacy alias for favourite=true)</param>
+    /// <param name="favourite">If true, only decks the user has favourited are returned.</param>
     /// <returns>Paginated list of decks.</returns>
     [HttpGet("get-media-decks")]
     [ResponseCache(Duration = 300, VaryByHeader = "Authorization",
                    VaryByQueryKeys =
                    [
-                       "offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder", "status",
+                       "offset", "mediaType", "wordId", "readingIndex", "titleFilter", "sortBy", "sortOrder", "status", "favourite",
                        "charCountMin", "charCountMax", "difficultyMin", "difficultyMax", "releaseYearMin", "releaseYearMax",
                        "uniqueKanjiMin",
                        "uniqueKanjiMax", "subdeckCountMin", "subdeckCountMax", "extRatingMin", "extRatingMax", "genres",
                        "excludeGenres", "tags", "excludeTags", "coverageMin", "coverageMax", "uniqueCoverageMin",
-                       "uniqueCoverageMax", "speechSpeedMin", "speechSpeedMax"
+                       "uniqueCoverageMax", "totalCoverageMin", "totalCoverageMax", "uTotalCoverageMin", "uTotalCoverageMax",
+                       "speechSpeedMin", "speechSpeedMax"
                    ])]
     [SwaggerOperation(Summary = "List media decks",
                       Description =
@@ -736,9 +738,11 @@ public class MediaDeckController(
                                                                       string? tags = null, string? excludeTags = null,
                                                                       float? coverageMin = null, float? coverageMax = null,
                                                                       float? uniqueCoverageMin = null, float? uniqueCoverageMax = null,
+                                                                      float? totalCoverageMin = null, float? totalCoverageMax = null,
+                                                                      float? uTotalCoverageMin = null, float? uTotalCoverageMax = null,
                                                                       float? speechSpeedMin = null, float? speechSpeedMax = null,
                                                                       int? speechDurationMin = null, int? speechDurationMax = null,
-                                                                      bool? excludeSequels = null)
+                                                                      bool? excludeSequels = null, bool? favourite = null)
     {
         // Responses carry the viewer's coverage and preferences; they must not be shared from a cache.
         if (currentUserService.IsAuthenticated)
@@ -866,15 +870,22 @@ public class MediaDeckController(
             ignoredDeckIds = prefsList.Where(p => p.IsIgnored).Select(p => p.DeckId).ToHashSet();
         }
 
-        if (currentUserService.IsAuthenticated && !string.IsNullOrEmpty(status))
+        // Legacy alias: "fav" predates the standalone favourite flag and must keep working for old URLs and presets.
+        var normalizedStatus = status?.ToLowerInvariant() ?? "";
+        if (normalizedStatus == "fav")
         {
-            var normalizedStatus = status.ToLowerInvariant();
+            favourite = true;
+            normalizedStatus = "none";
+        }
 
-            if (normalizedStatus == "fav")
-            {
-                query = query.Where(d => favDeckIds.Contains(d.DeckId));
-            }
-            else if (normalizedStatus == "ignore")
+        if (currentUserService.IsAuthenticated && favourite == true)
+        {
+            query = query.Where(d => favDeckIds.Contains(d.DeckId));
+        }
+
+        if (currentUserService.IsAuthenticated && normalizedStatus.Length > 0)
+        {
+            if (normalizedStatus == "ignore")
             {
                 query = query.Where(d => ignoredDeckIds.Contains(d.DeckId));
             }
@@ -908,7 +919,7 @@ public class MediaDeckController(
             }
         }
 
-        if (currentUserService.IsAuthenticated && status?.ToLowerInvariant() != "ignore")
+        if (currentUserService.IsAuthenticated && normalizedStatus != "ignore")
         {
             query = query.Where(d => !ignoredDeckIds.Contains(d.DeckId));
         }
@@ -958,6 +969,9 @@ public class MediaDeckController(
             youngCoverageDict = coverages.YoungCoverage;
             youngUniqueCoverageDict = coverages.YoungUniqueCoverage;
 
+            var totalCoverageDict = CombineCoverage(coverageDict, youngCoverageDict);
+            var uniqueTotalCoverageDict = CombineCoverage(uniqueCoverageDict, youngUniqueCoverageDict);
+
             if (coverageMin != null || coverageMax != null)
             {
                 var matchingIds = coverageDict
@@ -978,14 +992,34 @@ public class MediaDeckController(
                 query = query.Where(d => matchingIds.Contains(d.DeckId));
             }
 
+            if (totalCoverageMin != null || totalCoverageMax != null)
+            {
+                var matchingIds = totalCoverageDict
+                                  .Where(kvp => (totalCoverageMin == null || kvp.Value >= totalCoverageMin) &&
+                                                (totalCoverageMax == null || kvp.Value <= totalCoverageMax))
+                                  .Select(kvp => kvp.Key)
+                                  .ToHashSet();
+                query = query.Where(d => matchingIds.Contains(d.DeckId));
+            }
+
+            if (uTotalCoverageMin != null || uTotalCoverageMax != null)
+            {
+                var matchingIds = uniqueTotalCoverageDict
+                                  .Where(kvp => (uTotalCoverageMin == null || kvp.Value >= uTotalCoverageMin) &&
+                                                (uTotalCoverageMax == null || kvp.Value <= uTotalCoverageMax))
+                                  .Select(kvp => kvp.Key)
+                                  .ToHashSet();
+                query = query.Where(d => matchingIds.Contains(d.DeckId));
+            }
+
 
             if (sortBy is "coverage" or "uCoverage" or "totalCoverage" or "uTotalCoverage")
             {
                 var sortDict = sortBy switch
                 {
                     "uCoverage" => uniqueCoverageDict,
-                    "totalCoverage" => CombineCoverage(coverageDict, youngCoverageDict),
-                    "uTotalCoverage" => CombineCoverage(uniqueCoverageDict, youngUniqueCoverageDict),
+                    "totalCoverage" => totalCoverageDict,
+                    "uTotalCoverage" => uniqueTotalCoverageDict,
                     _ => coverageDict
                 };
 

@@ -207,10 +207,6 @@
     return formatOptions.value.find((f) => f.value === format.value) || formatOptions.value[0];
   });
 
-  const targetPercentageCardCount = computed(() => {
-    return Math.floor(wordCount.value * (targetPercentage.value / 100));
-  });
-
   const requiresAccurateCardAmount = computed(() => {
     if (downloadMode.value === 'target') return true;
     if (effectiveExcludeKana.value) return true;
@@ -219,7 +215,6 @@
   });
 
   const fallbackCardAmount = computed(() => {
-    if (downloadMode.value === 'target') return targetPercentageCardCount.value;
     if (downloadMode.value === 'occurrence') return occurrenceCount.value;
 
     if (downloadType.value == DeckDownloadType.Full) {
@@ -232,11 +227,16 @@
     return 0;
   });
 
-  const currentCardAmount = computed(() => {
-    if (isOccurrences.value) return wordCount.value;
-    if (requiresAccurateCardAmount.value) return accurateCardAmount.value ?? fallbackCardAmount.value;
-    return fallbackCardAmount.value;
-  });
+  const currentCardAmount = computed(() =>
+    resolveDisplayedCardCount({
+      mode: downloadMode.value,
+      isOccurrences: isOccurrences.value,
+      requiresAccurateCount: requiresAccurateCardAmount.value,
+      accurateCount: accurateCardAmount.value,
+      fallbackCount: fallbackCardAmount.value,
+      wordCount: wordCount.value,
+    })
+  );
 
   const isCountLoading = computed(() => isFrequencyCountLoading.value || isOccurrenceCountLoading.value || isAccurateCountLoading.value);
 
@@ -455,6 +455,10 @@
         return;
       }
 
+      if (downloadMode.value === 'target') accurateCardAmount.value = null;
+
+      isAccurateCountLoading.value = true;
+      accurateCountLoadingStartedAt = Date.now();
       fetchAccurateCardAmountDebounced();
     }
   );
@@ -539,6 +543,8 @@
       }
     } catch (err) {
       console.error('Failed to fetch accurate card count:', err);
+      // A stale count belonging to a previous configuration is worse than none.
+      if (reqId === accurateCountRequestId) accurateCardAmount.value = null;
     } finally {
       if (reqId === accurateCountRequestId) {
         const elapsed = Date.now() - accurateCountLoadingStartedAt;
@@ -655,8 +661,9 @@
     }
 
     const count = currentCardAmount.value;
+    const subject = count === null ? 'the selected words' : `approximately ${count} words`;
     confirm.require({
-      message: `This will mark approximately ${count} words as ${stateLabel}. Continue?`,
+      message: `This will mark ${subject} as ${stateLabel}. Continue?`,
       header: 'Confirm Vocabulary Update',
       icon: learnState.value === 'blacklisted' ? 'pi pi-exclamation-triangle' : 'pi pi-check-circle',
       acceptClass: learnState.value === 'blacklisted' ? 'p-button-danger' : 'p-button-primary',
@@ -1107,7 +1114,7 @@
         <div class="text-sm text-gray-600 dark:text-gray-300">
           <span class="inline-flex items-center gap-2">
             <span>Result:{{ isOccurrences ? '' : ' approx' }}</span>
-            <span class="font-bold text-gray-900 dark:text-gray-100">{{ currentCardAmount }}</span>
+            <span class="font-bold text-gray-900 dark:text-gray-100">{{ currentCardAmount ?? '—' }}</span>
             <i v-if="isCountLoading" class="pi pi-spin pi-spinner text-gray-400 dark:text-gray-400 text-xs" />
             <span>{{ format === DeckFormat.Anki ? 'cards' : 'words' }}</span>
           </span>

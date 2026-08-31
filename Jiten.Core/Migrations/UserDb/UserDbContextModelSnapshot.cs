@@ -1225,6 +1225,22 @@ namespace Jiten.Core.Migrations.UserDb
                     b.ToTable("UserProfiles", "user");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.UserSettings", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MediaFilterPresetsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("{}");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("UserSettings", "user");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.UserWordSetState", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -1593,6 +1609,15 @@ namespace Jiten.Core.Migrations.UserDb
                     b.HasOne("Jiten.Core.Data.Authentication.User", null)
                         .WithOne()
                         .HasForeignKey("Jiten.Core.Data.UserProfile", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.UserSettings", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithOne()
+                        .HasForeignKey("Jiten.Core.Data.UserSettings", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

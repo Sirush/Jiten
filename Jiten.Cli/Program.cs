@@ -150,7 +150,7 @@ public class Program
         {
             await JitenHelper.ComputeFrequencies(context.ContextFactory);
 
-            foreach (var mediaType in Enum.GetValues<MediaType>())
+            foreach (var mediaType in MediaTypes.Listed)
             {
                 try
                 {

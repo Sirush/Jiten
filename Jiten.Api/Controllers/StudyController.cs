@@ -3919,8 +3919,8 @@ public class StudyController(
 
         var isNpgsql = context.Database.ProviderName?.Contains("Npgsql") == true;
 
-        List<int> studyExampleIds;
-        List<int> fallbackExampleIds;
+        List<long> studyExampleIds;
+        List<long> fallbackExampleIds;
         if (isNpgsql)
         {
             // A set-based pass rather than a lateral with LIMIT per word: the lateral makes Postgres probe
@@ -3931,7 +3931,7 @@ public class StudyController(
             // picked among in memory; taking one id here would pin every card to its lowest-id sentence.
             studyExampleIds = studyDeckIdArray.Length > 0
                 ? await context.Database
-                    .SqlQueryRaw<int>(@"
+                    .SqlQueryRaw<long>(@"
                         SELECT t.""ExampleSentenceId""
                         FROM (
                             SELECT esw.""ExampleSentenceId"",
@@ -3951,7 +3951,7 @@ public class StudyController(
             // Always run: the windowed query returns many ids per form, so its row count no longer tells us
             // which forms it covered, and a form with no study-deck sentence still needs its fallback.
             fallbackExampleIds = await context.Database
-                .SqlQueryRaw<int>(@"
+                .SqlQueryRaw<long>(@"
                     SELECT esw.""ExampleSentenceId""
                     FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
                     CROSS JOIN LATERAL (

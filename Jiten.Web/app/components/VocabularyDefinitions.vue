@@ -5,7 +5,7 @@
     definitions: Definition[];
     isCompact: boolean;
     currentReadingIndex?: number;
-    readings?: Reading[];
+    readings: Reading[];
     // When set (>0), the non-compact list shows only the first N senses behind a "Show N more" expander.
     maxDefinitions?: number | null;
     wordId?: number;
@@ -41,10 +41,7 @@
     return map;
   });
 
-  function isRestricted(definition: Definition): boolean {
-    if (props.currentReadingIndex == null || !definition.restrictedToReadingIndices) return false;
-    return !definition.restrictedToReadingIndices.includes(props.currentReadingIndex);
-  }
+  const isRestricted = (definition: Definition) => isSenseRestricted(definition, props.currentReadingIndex, props.readings);
 
   function restrictedLabel(definition: Definition): string | null {
     if (!definition.restrictedToReadingIndices || definition.restrictedToReadingIndices.length === 0) return null;

@@ -23,7 +23,7 @@ public class TtsTextNotFoundException : Exception;
 public interface ITtsService
 {
     Task<byte[]> GetWordAudioAsync(int wordId, int readingIndex, string voice, string rateLimitKey, CancellationToken ct, bool bypassGenerationLimit = false);
-    Task<byte[]> GetSentenceAudioAsync(int sentenceId, string voice, string rateLimitKey, CancellationToken ct);
+    Task<byte[]> GetSentenceAudioAsync(long sentenceId, string voice, string rateLimitKey, CancellationToken ct);
     Task<byte[]> GetCustomSentenceAudioAsync(int userExampleSentenceId, string userId, string voice, string rateLimitKey, CancellationToken ct);
 }
 
@@ -129,7 +129,7 @@ public class TtsService(
         return await _inflight.GetOrAdd(key, _ => GenerateAsync(key, text, storageText, pitchPosition, TtsType.Word, voice, rateLimitKey, ct, bypassGenerationLimit, fixInteriorHa));
     }
 
-    public async Task<byte[]> GetSentenceAudioAsync(int sentenceId, string voice, string rateLimitKey, CancellationToken ct)
+    public async Task<byte[]> GetSentenceAudioAsync(long sentenceId, string voice, string rateLimitKey, CancellationToken ct)
     {
         if (!Voices.ContainsKey(voice)) voice = "female";
 
