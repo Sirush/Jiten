@@ -1,6 +1,14 @@
 <script setup lang="ts">
   import { RequestStatus, RequestKind, MediaType, LinkType } from '~/types';
-  import type { MediaRequestDto, MediaRequestCommentDto, MediaRequestUploadDto, MediaRequestUploadAdminDto, MediaSuggestion } from '~/types/types';
+  import type {
+    Deck,
+    DeckDetail,
+    MediaRequestDto,
+    MediaRequestCommentDto,
+    MediaRequestUploadDto,
+    MediaRequestUploadAdminDto,
+    MediaSuggestion,
+  } from '~/types/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
   import { getRequestKindText, getRequestKindIcon } from '~/utils/requestKindMapper';
@@ -18,6 +26,7 @@
   const toast = useToast();
   const authStore = useAuthStore();
   const jitenStore = useJitenStore();
+  const { $api } = useNuxtApp();
 
   const requestId = computed(() => Number(route.params.id));
   const {
@@ -62,6 +71,62 @@
   const fulfilledDeckLabel = ref('');
   const isUpdatingStatus = ref(false);
   const reviewingUploadId = ref<number | null>(null);
+
+  // Set by the add-media form after it enqueued the parse; only an admin who just created the deck waits on it
+  const isWaitingForDeck = ref(false);
+  const fulfilledDeck = ref<Deck | null>(null);
+  const isLoadingFulfilledDeck = ref(false);
+  let parsePollTimer: ReturnType<typeof setTimeout> | null = null;
+  let parsePollStartedAt = 0;
+  const PARSE_POLL_INTERVAL_MS = 5000;
+  const PARSE_POLL_TIMEOUT_MS = 15 * 60 * 1000;
+
+  async function loadFulfilledDeck(deckId: number) {
+    isLoadingFulfilledDeck.value = true;
+    try {
+      const detail = await $api<{ data: DeckDetail | null }>(`media-deck/${deckId}/detail`);
+      fulfilledDeck.value = detail?.data?.mainDeck ?? null;
+    } catch {
+      fulfilledDeck.value = null;
+    } finally {
+      isLoadingFulfilledDeck.value = false;
+    }
+  }
+
+  function stopParsePolling() {
+    if (parsePollTimer) clearTimeout(parsePollTimer);
+    parsePollTimer = null;
+    isWaitingForDeck.value = false;
+  }
+
+  async function pollForDeck() {
+    parsePollTimer = null;
+    if (!authStore.isAdmin || !request.value) return stopParsePolling();
+    if (Date.now() - parsePollStartedAt > PARSE_POLL_TIMEOUT_MS) {
+      stopParsePolling();
+      toast.add({ severity: 'warn', summary: 'Still parsing', detail: 'Refresh the page later to check the deck.', life: 8000 });
+      return;
+    }
+
+    const fresh = await fetchRequest(request.value.id);
+    if (fresh?.fulfilledDeckId) {
+      stopParsePolling();
+      await loadData();
+      toast.add({ severity: 'success', summary: 'Deck ready', detail: 'Check the deck below, then complete the request.', life: 5000 });
+      return;
+    }
+    parsePollTimer = setTimeout(pollForDeck, PARSE_POLL_INTERVAL_MS);
+  }
+
+  function startParsePolling() {
+    if (parsePollTimer || !authStore.isAdmin) return;
+    isWaitingForDeck.value = true;
+    showAdminPanel.value = true;
+    parsePollStartedAt = Date.now();
+    parsePollTimer = setTimeout(pollForDeck, PARSE_POLL_INTERVAL_MS);
+  }
+
+  onBeforeUnmount(stopParsePolling);
 
   // Admin edit fields
   const editTitle = ref('');
@@ -129,6 +194,7 @@
       if (req.fulfilledDeckId) {
         fulfilledDeckId.value = req.fulfilledDeckId;
         fulfilledDeckLabel.value = req.fulfilledDeckTitle ?? String(req.fulfilledDeckId);
+        if (authStore.isAdmin && fulfilledDeck.value?.deckId !== req.fulfilledDeckId) loadFulfilledDeck(req.fulfilledDeckId);
       } else if (req.kind === RequestKind.Update && req.targetDeckId && fulfilledDeckId.value === null) {
         // Completing an update request almost always fulfils it with the deck it targets.
         fulfilledDeckId.value = req.targetDeckId;
@@ -513,9 +579,13 @@
 
   const { load: loadTurnaround, fulfilmentRange } = useRequestTurnaround();
 
-  onMounted(() => {
+  onMounted(async () => {
     loadTurnaround();
-    loadData();
+    await loadData();
+    if (route.query.parsing !== undefined && authStore.isAdmin && request.value && !request.value.fulfilledDeckId) {
+      startParsePolling();
+      router.replace({ query: { ...route.query, parsing: undefined } });
+    }
   });
 </script>
 
@@ -737,11 +807,25 @@
               <small v-if="fulfilledDeckId" class="text-surface-500 dark:text-surface-400">Deck ID: {{ fulfilledDeckId }}</small>
             </div>
             <div v-if="canCreateDeck" class="flex flex-col gap-1">
-              <NuxtLink :to="createDeckHref" target="_blank" class="inline-flex items-center gap-2 w-fit text-primary hover:underline font-medium text-sm">
+              <NuxtLink :to="createDeckHref" class="inline-flex items-center gap-2 w-fit text-primary hover:underline font-medium text-sm">
                 <i class="pi pi-plus-circle" />
                 Create deck from this request
               </NuxtLink>
-              <small class="text-surface-500 dark:text-surface-400"> Opens prefilled form and put the request to In Progress. </small>
+              <small class="text-surface-500 dark:text-surface-400">Prefilled form with the attached files. You come back here once it is submitted.</small>
+            </div>
+
+            <div v-if="isWaitingForDeck" class="flex items-center gap-2 text-sm text-muted-color">
+              <ProgressSpinner style="width: 18px; height: 18px" stroke-width="6" />
+              <span>Parsing the deck. This page updates itself when it is ready.</span>
+            </div>
+
+            <div v-if="request.fulfilledDeckId && !isTerminal" class="flex flex-col gap-2">
+              <h3 class="font-semibold text-sm">Created deck</h3>
+              <MediaDeckCard v-if="fulfilledDeck" :deck="fulfilledDeck" @update:deck="fulfilledDeck = $event" />
+              <div v-else-if="isLoadingFulfilledDeck" class="flex justify-center py-4">
+                <ProgressSpinner style="width: 30px; height: 30px" />
+              </div>
+              <small v-else class="text-muted-color">Could not load the deck. Open it from the link above.</small>
             </div>
 
             <div v-if="!isTerminal" class="flex gap-2 flex-wrap">

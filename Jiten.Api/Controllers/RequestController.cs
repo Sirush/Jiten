@@ -1915,6 +1915,27 @@ public partial class RequestController(
         return Results.Ok(new { url = cdnUrl });
     }
 
+    /// <summary>Proxies the zip bytes; the public pull zone sends no CORS headers for archives, so the browser cannot read them directly.</summary>
+    [HttpGet("{id:int}/uploads/{uploadId:int}/file")]
+    [Authorize("RequiresAdmin")]
+    public async Task<IResult> DownloadUploadFile(int id, int uploadId)
+    {
+        var upload = await context.MediaRequestUploads.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == uploadId && u.MediaRequestId == id);
+
+        if (upload == null)
+            return Results.NotFound("Upload not found");
+
+        if (upload.FileDeleted)
+            return Results.Problem("File has been deleted", statusCode: 410);
+
+        var bytes = await cdnService.DownloadFile(upload.StoragePath);
+        if (bytes == null)
+            return Results.NotFound("File is missing from storage");
+
+        return Results.File(bytes, "application/zip", $"request-{id}-upload-{uploadId}.zip");
+    }
+
     [HttpPut("{id:int}/edit")]
     [Authorize("RequiresAdmin")]
     public async Task<IResult> EditRequest(int id, [FromBody] AdminEditMediaRequestRequest model)
