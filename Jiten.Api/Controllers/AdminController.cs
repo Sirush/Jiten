@@ -730,11 +730,20 @@ public partial class AdminController(
             .SetProperty(m => m.CoverageDirty, true)
             .SetProperty(m => m.CoverageDirtyAt, now));
 
+        backgroundJobs.Enqueue<ComputationJob>(job => job.RebuildWordParentDeckIndex());
         foreach (var userId in userIds)
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
 
         logger.LogInformation("Admin queued recompute coverages for all users: UserCount={UserCount}", userIds.Count);
         return Ok(new { Message = "Recomputing user coverages for all users has been queued" });
+    }
+
+    [HttpPost("rebuild-word-parent-deck-index")]
+    public IActionResult RebuildWordParentDeckIndex()
+    {
+        backgroundJobs.Enqueue<ComputationJob>(job => job.RebuildWordParentDeckIndex());
+        logger.LogInformation("Admin queued WordParentDeckIndex rebuild");
+        return Ok(new { Message = "WordParentDeckIndex rebuild has been queued" });
     }
 
     [HttpPost("recompute-accomplishments")]

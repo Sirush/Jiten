@@ -20,6 +20,8 @@ public class JitenDbContext : DbContext
     public DbSet<DeckStats> DeckStats { get; set; }
     public DbSet<DeckDifficulty> DeckDifficulties { get; set; }
     public DbSet<DeckDictionaryEntry> DeckDictionaryEntries { get; set; }
+    public DbSet<WordParentDeckIndex> WordParentDeckIndex { get; set; }
+    public DbSet<WordParentDeckIndexBuild> WordParentDeckIndexBuilds { get; set; }
 
     public DbSet<JmDictWord> JMDictWords { get; set; }
     public DbSet<JmDictWordFrequency> JmDictWordFrequencies { get; set; }
@@ -190,6 +192,26 @@ public class JitenDbContext : DbContext
             entity.HasOne(dw => dw.Deck)
                   .WithMany(d => d.DeckWords)
                   .HasForeignKey(dw => dw.DeckId);
+        });
+
+        modelBuilder.Entity<WordParentDeckIndex>(entity =>
+        {
+            entity.ToTable("WordParentDeckIndex", "jiten");
+            entity.HasKey(w => new { w.WordId, w.ReadingIndex });
+            if (isNpgsql)
+            {
+                entity.Property(w => w.DeckIds).HasColumnType("integer[]").IsRequired();
+                entity.Property(w => w.Occurrences).HasColumnType("integer[]").IsRequired();
+            }
+        });
+
+        modelBuilder.Entity<WordParentDeckIndexBuild>(entity =>
+        {
+            entity.ToTable("WordParentDeckIndexBuild", "jiten");
+            entity.HasKey(b => b.Id);
+            entity.Property(b => b.Id).ValueGeneratedNever();
+            if (isNpgsql)
+                entity.Property(b => b.DeckIds).HasColumnType("integer[]").IsRequired();
         });
 
         modelBuilder.Entity<DeckEmbedding>(entity =>

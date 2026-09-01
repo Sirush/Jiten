@@ -5,6 +5,7 @@ using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
+using Jiten.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 
@@ -22,6 +23,7 @@ public class ComputationJob(
     private static readonly HashSet<string> CoverageComputingUserIds = new();
     private const int COVERAGE_CHUNK_SIZE = 1024;
     private const string COVERAGE_WORK_MEM = "256MB";
+    private const int COVERAGE_PARALLEL_WORKERS = 4;
 
     [Queue(CoverageQueues.Incremental)]
     public async Task DailyUserCoverage()
@@ -39,10 +41,21 @@ public class ComputationJob(
                                        || !userContext.UserCoverageChunks.Any(c => c.UserId == u.Id))
                              select u.Id).ToListAsync();
 
+        // Same single-worker queue as the user jobs, so the index is fresh before the first of them runs.
+        backgroundJobs.Enqueue<ComputationJob>(job => job.RebuildWordParentDeckIndex());
         foreach (var userId in userIds)
         {
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
         }
+    }
+
+    [AutomaticRetry(Attempts = 0)]
+    [Queue(CoverageQueues.Full)]
+    public async Task RebuildWordParentDeckIndex()
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        context.Database.SetCommandTimeout(TimeSpan.FromMinutes(15));
+        await WordParentDeckIndexService.RebuildAsync(context, logger);
     }
 
     [AutomaticRetry(Attempts = 0)]
@@ -85,11 +98,16 @@ public class ComputationJob(
             }
 
             var totalSw = System.Diagnostics.Stopwatch.StartNew();
+            // A first-time or catch-up rebuild scans all of DeckWords and needs more than the per-statement budget below.
+            userContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(15));
+            var build = await WordParentDeckIndexService.EnsureFreshAsync(userContext, logger);
+            userContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(3));
+
             await using var transaction = await userContext.Database.BeginTransactionAsync();
             await userContext.Database.ExecuteSqlRawAsync($"SET LOCAL work_mem = '{COVERAGE_WORK_MEM}';");
             await userContext.UserCoverageChunks.Where(uc => uc.UserId == userId).ExecuteDeleteAsync();
             logger.LogInformation("Coverage: old chunks deleted in {Elapsed}ms", totalSw.ElapsedMilliseconds);
-            await RecomputeUserCoverageChunks(userContext, userId, computedAt);
+            await RecomputeUserCoverageChunks(userContext, userId, computedAt, build);
             await transaction.CommitAsync();
 
             await UpsertCoverageMetadata(userContext, userId, computedAt, isDirty: false);
@@ -291,172 +309,100 @@ public class ComputationJob(
         metadata.CoverageDirtyAt = isDirty ? computedAt : null;
     }
 
-    private async Task RecomputeUserCoverageChunks(UserDbContext userContext, string userId, DateTime computedAt)
+    private async Task RecomputeUserCoverageChunks(UserDbContext userContext, string userId, DateTime computedAt,
+                                                   WordParentDeckIndexService.BuildState build)
     {
         var userGuid = Guid.Parse(userId);
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var derivationCategoryIds = await CoverageComputeService.LoadDerivationCategoryIds(userContext, userId);
 
-        // Step 1: Materialize user's mature known words
-        // Kana-expand FsrsCards (small set), word sets already store specific forms
-        await userContext.Database.ExecuteSqlRawAsync("""
-            CREATE TEMP TABLE _mature_known ON COMMIT DROP AS
-            WITH
-            fsrs_mature_direct AS (
-                SELECT fc."WordId", fc."ReadingIndex"
-                FROM "user"."FsrsCards" fc
-                WHERE fc."UserId" = {0}::uuid
-                  AND (
-                      -- Blacklisted/Mastered only; Suspended keeps its interval-derived tier
-                      fc."State" IN (4, 5)
-                      OR (fc."LastReview" IS NOT NULL AND (fc."Due" - fc."LastReview") >= INTERVAL '21 days')
-                  )
-            ),
-            fsrs_mature AS (
-                SELECT "WordId", "ReadingIndex" FROM fsrs_mature_direct
-                UNION
-                SELECT kana_wf."WordId", kana_wf."ReadingIndex"
-                FROM fsrs_mature_direct fmd
-                JOIN "jmdict"."WordForms" kanji_wf ON kanji_wf."WordId" = fmd."WordId" AND kanji_wf."ReadingIndex" = fmd."ReadingIndex" AND kanji_wf."FormType" = 0
-                JOIN "jmdict"."WordForms" kana_wf ON kana_wf."WordId" = fmd."WordId" AND kana_wf."FormType" = 1
-            )
-            SELECT "WordId", "ReadingIndex" FROM fsrs_mature
-            UNION
-            SELECT wsm."WordId", wsm."ReadingIndex"
-            FROM "user"."UserWordSetStates" uwss
-            JOIN "jiten"."WordSetMembers" wsm ON wsm."SetId" = uwss."SetId"
-            WHERE uwss."UserId" = {0}::uuid
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM "user"."FsrsCards" fc
-                  WHERE fc."UserId" = {0}::uuid
-                    AND fc."WordId" = wsm."WordId"
-                    AND fc."ReadingIndex" = wsm."ReadingIndex"
-              );
-            """, userGuid);
-        await userContext.Database.ExecuteSqlRawAsync("""CREATE INDEX ON _mature_known ("WordId", "ReadingIndex");""");
-        await CoverageComputeService.ExpandMatureThroughDerivations(userContext, userGuid, derivationCategoryIds);
-        await userContext.Database.ExecuteSqlRawAsync("ANALYZE _mature_known;");
+        await CoverageComputeService.CreateKnownWordsTempTablesAsync(userContext, userGuid, derivationCategoryIds);
         var matureCount = await userContext.Database.SqlQueryRaw<int>("SELECT COUNT(*)::int AS \"Value\" FROM _mature_known").SingleAsync();
-        logger.LogInformation("Coverage: mature_known materialized ({Count} rows) in {Elapsed}ms", matureCount, sw.ElapsedMilliseconds);
+        var youngCount = await userContext.Database.SqlQueryRaw<int>("SELECT COUNT(*)::int AS \"Value\" FROM _fsrs_young").SingleAsync();
+        logger.LogInformation("Coverage: known forms materialized ({Mature} mature, {Young} young) in {Elapsed}ms",
+                              matureCount, youngCount, sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Step 2: Materialize user's young words (kana-expanded, excluding mature)
-        await userContext.Database.ExecuteSqlRawAsync("""
-            CREATE TEMP TABLE _fsrs_young ON COMMIT DROP AS
-            WITH
-            fsrs_young_direct AS (
-                SELECT fc."WordId", fc."ReadingIndex"
-                FROM "user"."FsrsCards" fc
-                WHERE fc."UserId" = {0}::uuid
-                  AND fc."State" IN (1, 2, 3, 6)
-                  AND fc."LastReview" IS NOT NULL
-                  AND (fc."Due" - fc."LastReview") < INTERVAL '21 days'
-            ),
-            young_expanded AS (
-                SELECT "WordId", "ReadingIndex" FROM fsrs_young_direct
-                UNION
-                SELECT kana_wf."WordId", kana_wf."ReadingIndex"
-                FROM fsrs_young_direct fyd
-                JOIN "jmdict"."WordForms" kanji_wf ON kanji_wf."WordId" = fyd."WordId" AND kanji_wf."ReadingIndex" = fyd."ReadingIndex" AND kanji_wf."FormType" = 0
-                JOIN "jmdict"."WordForms" kana_wf ON kana_wf."WordId" = fyd."WordId" AND kana_wf."FormType" = 1
-            )
-            SELECT ye."WordId", ye."ReadingIndex"
-            FROM young_expanded ye
-            WHERE NOT EXISTS (
-                SELECT 1 FROM _mature_known mk
-                WHERE mk."WordId" = ye."WordId" AND mk."ReadingIndex" = ye."ReadingIndex"
-            );
-            """, userGuid);
-        await userContext.Database.ExecuteSqlRawAsync("""CREATE INDEX ON _fsrs_young ("WordId", "ReadingIndex");""");
-        await CoverageComputeService.ExpandYoungThroughDerivations(userContext, userGuid, derivationCategoryIds);
-        await userContext.Database.ExecuteSqlRawAsync("ANALYZE _fsrs_young;");
-        logger.LogInformation("Coverage: fsrs_young materialized in {Elapsed}ms", sw.ElapsedMilliseconds);
-        sw.Restart();
-
-        // Step 3a: Materialise parent deck IDs (~10K rows)
-        await userContext.Database.ExecuteSqlRawAsync("""
-            CREATE TEMP TABLE _parent_ids ON COMMIT DROP AS
-            SELECT "DeckId" FROM "jiten"."Decks" WHERE "ParentDeckId" IS NULL;
+        // Parallel workers cannot read temp tables, and the reloption is what lets a table this small drive a
+        // parallel plan; created inside the transaction so a failure rolls it back with everything else.
+        var knownTable = $"\"jiten\".\"_coverage_known_{Guid.NewGuid():N}\"";
+        await userContext.Database.ExecuteSqlRawAsync($"""
+            CREATE UNLOGGED TABLE {knownTable} AS
+            SELECT "WordId", "ReadingIndex", TRUE AS "Mature" FROM _mature_known
+            UNION ALL
+            SELECT "WordId", "ReadingIndex", FALSE FROM _fsrs_young;
             """);
-        await userContext.Database.ExecuteSqlRawAsync("""CREATE INDEX ON _parent_ids ("DeckId");""");
-        await userContext.Database.ExecuteSqlRawAsync("ANALYZE _parent_ids;");
-        logger.LogInformation("Coverage: parent_ids materialized in {Elapsed}ms", sw.ElapsedMilliseconds);
+        await userContext.Database.ExecuteSqlRawAsync($"ALTER TABLE {knownTable} SET (parallel_workers = {COVERAGE_PARALLEL_WORKERS});");
+        await userContext.Database.ExecuteSqlRawAsync($"ANALYZE {knownTable};");
+        // The known set has unique keys, so a Memoize node over the probes only churns its cache.
+        await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_memoize = off;");
+        await userContext.Database.ExecuteSqlRawAsync($"SET LOCAL max_parallel_workers_per_gather = {COVERAGE_PARALLEL_WORKERS};");
+
+        await userContext.Database.ExecuteSqlRawAsync($$"""
+            CREATE TEMP TABLE _hits ON COMMIT DROP AS
+            SELECT u.deck_id AS "DeckId",
+                   SUM(u.occ) FILTER (WHERE k."Mature") AS m_occ,
+                   COUNT(*) FILTER (WHERE k."Mature") AS m_uniq,
+                   SUM(u.occ) FILTER (WHERE NOT k."Mature") AS y_occ,
+                   COUNT(*) FILTER (WHERE NOT k."Mature") AS y_uniq
+            FROM {{knownTable}} k
+            JOIN "jiten"."WordParentDeckIndex" w ON w."WordId" = k."WordId" AND w."ReadingIndex" = k."ReadingIndex"
+            CROSS JOIN LATERAL unnest(w."DeckIds", w."Occurrences") AS u(deck_id, occ)
+            GROUP BY u.deck_id;
+            """);
+        logger.LogInformation("Coverage: hits computed from WordParentDeckIndex in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Step 3b: Mature hits. With a freshly-vacuumed DeckWords visibility map, the planner's
-        // word-driven plan — drive from the known set through IX_DeckWords_WordId_ReadingIndex_IncDeckIdOcc
-        // as an INDEX-ONLY scan, then hash-join _parent_ids — is optimal for normal known-sets. The old
-        // hints (enable_seqscan=off + join_collapse_limit=1) were a workaround from when DeckWords' VM was
-        // stale (see step 3c); for a SMALL known-set they instead force a _mature_known×_parent_ids
-        // nested-loop cross product (e.g. 2.6K × 15K = 40M point probes, ~196s). Only for a very large
-        // known-set does the per-word probe volume make the parent-deck-driven scan + hash win — keep the
-        // hints there (this also preserves today's exact behaviour for those users). CRITICAL: the
-        // word-driven path needs DeckWords' visibility map kept fresh (autovacuum_vacuum_insert_* storage
-        // params on the table) or the index-only scan degrades to per-row heap fetches and is ~250x slower.
-        const int LargeKnownSetThreshold = 50_000;
-        var matureLargeSet = matureCount >= LargeKnownSetThreshold;
-        if (matureLargeSet)
+        // EnsureFreshAsync bounds this set, so the deck-driven query below never grows into a DeckWords walk.
+        await userContext.Database.ExecuteSqlRawAsync($"""
+            CREATE TEMP TABLE _stale_parents ON COMMIT DROP AS
+            SELECT d."DeckId" FROM "jiten"."Decks" d WHERE {WordParentDeckIndexService.StaleParentPredicate};
+            """, build.CoveredUntil, build.DeckIds);
+        var staleCount = await userContext.Database.SqlQueryRaw<int>("SELECT COUNT(*)::int AS \"Value\" FROM _stale_parents").SingleAsync();
+        if (staleCount > 0)
         {
-            await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = off;");
-            await userContext.Database.ExecuteSqlRawAsync("SET LOCAL join_collapse_limit = 1;");
+            await userContext.Database.ExecuteSqlRawAsync("""DELETE FROM _hits h USING _stale_parents s WHERE s."DeckId" = h."DeckId";""");
+            await userContext.Database.ExecuteSqlRawAsync($$"""
+                INSERT INTO _hits ("DeckId", m_occ, m_uniq, y_occ, y_uniq)
+                SELECT dw."DeckId",
+                       SUM(dw."Occurrences") FILTER (WHERE k."Mature"),
+                       COUNT(*) FILTER (WHERE k."Mature"),
+                       SUM(dw."Occurrences") FILTER (WHERE NOT k."Mature"),
+                       COUNT(*) FILTER (WHERE NOT k."Mature")
+                FROM _stale_parents s
+                JOIN "jiten"."DeckWords" dw ON dw."DeckId" = s."DeckId"
+                JOIN {{knownTable}} k ON k."WordId" = dw."WordId" AND k."ReadingIndex" = dw."ReadingIndex"
+                GROUP BY dw."DeckId";
+                """);
         }
-        await userContext.Database.ExecuteSqlRawAsync("""
-            CREATE TEMP TABLE _mature_hits ON COMMIT DROP AS
-            SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
-            FROM _parent_ids pd
-            JOIN "jiten"."DeckWords" dw ON dw."DeckId" = pd."DeckId"
-            JOIN _mature_known mk ON mk."WordId" = dw."WordId" AND mk."ReadingIndex" = dw."ReadingIndex"
-            GROUP BY dw."DeckId";
-            """);
-        if (matureLargeSet)
-        {
-            await userContext.Database.ExecuteSqlRawAsync("SET LOCAL join_collapse_limit = 8;");
-            await userContext.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = on;");
-        }
-        logger.LogInformation("Coverage: mature_hits computed ({Path}, {Count} known) in {Elapsed}ms",
-                              matureLargeSet ? "parent-driven" : "word-driven", matureCount, sw.ElapsedMilliseconds);
+        await userContext.Database.ExecuteSqlRawAsync($"DROP TABLE {knownTable};");
+        logger.LogInformation("Coverage: {Count} stale parents recomputed from DeckWords in {Elapsed}ms", staleCount, sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Step 3c: Young hits. The young set is small (cards due within 21 days), so the word-driven
-        // index-only plan is always the right choice — no planner hints. Same VM-freshness caveat as 3b.
-        await userContext.Database.ExecuteSqlRawAsync("""
-            CREATE TEMP TABLE _young_hits ON COMMIT DROP AS
-            SELECT dw."DeckId", SUM(dw."Occurrences") AS occ_hits, COUNT(*) AS uniq_hits
-            FROM _parent_ids pd
-            JOIN "jiten"."DeckWords" dw ON dw."DeckId" = pd."DeckId"
-            JOIN _fsrs_young yk ON yk."WordId" = dw."WordId" AND yk."ReadingIndex" = dw."ReadingIndex"
-            GROUP BY dw."DeckId";
-            """);
-        logger.LogInformation("Coverage: young_hits computed in {Elapsed}ms", sw.ElapsedMilliseconds);
-        sw.Restart();
-
-        // Step 4: Build per-deck coverage (parent decks only - child slots remain 0 to signal uncomputed)
+        // Child slots stay 0 to signal uncomputed; only live parents get values.
         await userContext.Database.ExecuteSqlRawAsync("""
             CREATE TEMP TABLE _deck_cov ON COMMIT DROP AS
             SELECT d."DeckId",
                    CASE WHEN d."WordCount" = 0 THEN 0::smallint
-                        ELSE LEAST(ROUND(COALESCE(mh.occ_hits, 0)::numeric * 10000 / d."WordCount")::int, 10000)::smallint
+                        ELSE LEAST(ROUND(COALESCE(h.m_occ, 0)::numeric * 10000 / d."WordCount")::int, 10000)::smallint
                    END AS m_cov,
                    CASE WHEN d."UniqueWordCount" = 0 THEN 0::smallint
-                        ELSE LEAST(ROUND(COALESCE(mh.uniq_hits, 0)::numeric * 10000 / d."UniqueWordCount")::int, 10000)::smallint
+                        ELSE LEAST(ROUND(COALESCE(h.m_uniq, 0)::numeric * 10000 / d."UniqueWordCount")::int, 10000)::smallint
                    END AS m_ucov,
                    CASE WHEN d."WordCount" = 0 THEN 0::smallint
-                        ELSE LEAST(ROUND(COALESCE(yh.occ_hits, 0)::numeric * 10000 / d."WordCount")::int, 10000)::smallint
+                        ELSE LEAST(ROUND(COALESCE(h.y_occ, 0)::numeric * 10000 / d."WordCount")::int, 10000)::smallint
                    END AS y_cov,
                    CASE WHEN d."UniqueWordCount" = 0 THEN 0::smallint
-                        ELSE LEAST(ROUND(COALESCE(yh.uniq_hits, 0)::numeric * 10000 / d."UniqueWordCount")::int, 10000)::smallint
+                        ELSE LEAST(ROUND(COALESCE(h.y_uniq, 0)::numeric * 10000 / d."UniqueWordCount")::int, 10000)::smallint
                    END AS y_ucov
             FROM "jiten"."Decks" d
-            LEFT JOIN _mature_hits mh ON mh."DeckId" = d."DeckId"
-            LEFT JOIN _young_hits yh ON yh."DeckId" = d."DeckId"
+            LEFT JOIN _hits h ON h."DeckId" = d."DeckId"
             WHERE d."ParentDeckId" IS NULL;
             """);
         await userContext.Database.ExecuteSqlRawAsync("""CREATE INDEX ON _deck_cov ("DeckId");""");
         logger.LogInformation("Coverage: deck_cov built in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // Step 5: Insert coverage chunks per metric
         var metrics = new (short id, string col)[]
         {
             ((short)UserCoverageMetric.MatureCoverage, "m_cov"),
