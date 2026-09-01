@@ -3,13 +3,16 @@
   import Card from 'primevue/card';
   import Button from 'primevue/button';
   import FileUpload from 'primevue/fileupload';
+  import InputNumber from 'primevue/inputnumber';
   import InputText from 'primevue/inputtext';
   import Message from 'primevue/message';
   import SplitButton from 'primevue/splitbutton';
+  import Tag from 'primevue/tag';
   import Toast from 'primevue/toast';
   import { useToast } from 'primevue/usetoast';
+  import JSZip from 'jszip';
   import type { Metadata, DuplicateCheckDeckDto } from '~/types';
-  import type { MediaRequestDto } from '~/types/types';
+  import type { MediaRequestDto, MediaRequestUploadAdminDto } from '~/types/types';
   import { MediaType } from '~/types';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getLinkLabel } from '~/utils/linkTypeMapper';
@@ -32,10 +35,18 @@
   const toast = useToast();
   const route = useRoute();
   const { $api } = useNuxtApp();
-  const { fetchRequest } = useMediaRequests();
+  const { fetchRequest, fetchComments, downloadUploadFile, reviewUpload } = useMediaRequests();
 
   const fulfillingRequest = ref<MediaRequestDto | null>(null);
   const isPrefilling = ref(false);
+  const requestUploads = ref<MediaRequestUploadAdminDto[]>([]);
+  const importingUploadId = ref<number | null>(null);
+
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
   function showToast(severity: 'success' | 'info' | 'warn' | 'error', summary: string, detail: string = '') {
     toast.add({ severity, summary, detail, life: 3000 });
@@ -129,6 +140,14 @@
     { label: 'From file name', icon: 'pi pi-file', command: () => applyAutoNames('filename', true) },
   ];
 
+  const sortItems = [
+    { label: 'By detected number', icon: 'pi pi-sort-amount-down', command: sortSubdecksByDetected },
+    { label: 'By file name', icon: 'pi pi-sort-alpha-down', command: sortSubdecksByFileName },
+    { label: 'By title', icon: 'pi pi-sort-alpha-down-alt', command: sortSubdecksByTitle },
+    { separator: true },
+    { label: 'Reverse order', icon: 'pi pi-arrows-v', command: reverseSubdecks },
+  ];
+
   function markTitleEdited(subdeck: { titleEdited?: boolean; autoDetected?: boolean }) {
     subdeck.titleEdited = true;
     subdeck.autoDetected = false;
@@ -164,62 +183,150 @@
     }
   }
 
-  function handleNewSubdeckFileUpload(event: { files: File[] }) {
-    if (event.files && event.files.length > 0) {
-      let mainFileConvertedInThisBatch = false;
+  function addFilesAsSubdecks(files: File[]) {
+    if (!files.length) return;
 
-      for (const file of event.files) {
-        // If this is the first subdeck, convert the main file to the first subdeck
-        if (subdecks.value.length === 0 && selectedFile.value && !mainFileConvertedInThisBatch) {
-          // Add the main file as the first subdeck
-          subdecks.value.push({
-            id: nextSubdeckId++,
-            originalTitle: `${subdeckDefaultName.value} 1`,
-            file: selectedFile.value,
-          });
-          mainFileConvertedInThisBatch = true;
-
-          // Add the new file as the second subdeck
-          subdecks.value.push({
-            id: nextSubdeckId++,
-            originalTitle: `${subdeckDefaultName.value} 2`,
-            file: file,
-          });
-        } else {
-          // If not the first subdeck, just add the new subdeck as before
-          const newSubdeckNumber = subdecks.value.length + 1;
-          subdecks.value.push({
-            id: nextSubdeckId++,
-            originalTitle: `${subdeckDefaultName.value} ${newSubdeckNumber}`,
-            file: file,
-          });
-        }
-      }
-
-      applyAutoNames('detected');
-
-      // Explicitly clear the FileUpload component's selection
-      if (newSubdeckUploaderRef.value) {
-        newSubdeckUploaderRef.value.clear();
-      }
+    // The main file becomes subdeck 1 the moment a second file arrives
+    if (subdecks.value.length === 0 && selectedFile.value) {
+      subdecks.value.push({ id: nextSubdeckId++, originalTitle: `${subdeckDefaultName.value} 1`, file: selectedFile.value });
     }
+
+    for (const file of files) {
+      subdecks.value.push({ id: nextSubdeckId++, originalTitle: `${subdeckDefaultName.value} ${subdecks.value.length + 1}`, file });
+    }
+
+    applyAutoNames('detected');
+  }
+
+  function handleNewSubdeckFileUpload(event: { files: File[] }) {
+    if (!event.files?.length) return;
+    addFilesAsSubdecks(event.files);
+    newSubdeckUploaderRef.value?.clear();
   }
 
   function removeSubdeck(id: number) {
-    // Only allow removing the last subdeck and not the first one
-    if (subdecks.value.length <= 1) {
-      showToast('warn', 'Cannot Delete', 'You cannot delete the first subdeck');
+    const index = subdecks.value.findIndex((sd) => sd.id === id);
+    if (index === -1) return;
+    subdecks.value.splice(index, 1);
+
+    // A lone subdeck is just a main file
+    if (subdecks.value.length === 1) {
+      selectedFile.value = subdecks.value[0].file;
+      subdecks.value = [];
       return;
     }
+    applyAutoNames('detected');
+  }
 
-    const lastSubdeck = subdecks.value[subdecks.value.length - 1];
-    if (lastSubdeck.id !== id) {
-      showToast('warn', 'Cannot Delete', 'You can only delete the last subdeck');
-      return;
+  function moveSubdeckToIndex(from: number, to: number) {
+    if (from === to || from < 0 || to < 0 || from >= subdecks.value.length || to >= subdecks.value.length) return;
+    const list = [...subdecks.value];
+    const [moved] = list.splice(from, 1);
+    list.splice(to, 0, moved);
+    subdecks.value = list;
+    applyAutoNames('detected');
+  }
+
+  function moveSubdeck(id: number, delta: -1 | 1) {
+    const index = subdecks.value.findIndex((sd) => sd.id === id);
+    if (index === -1) return;
+    moveSubdeckToIndex(index, index + delta);
+  }
+
+  function moveSubdeckToPosition(id: number, position: number | null) {
+    if (position === null) return;
+    const index = subdecks.value.findIndex((sd) => sd.id === id);
+    if (index === -1) return;
+    moveSubdeckToIndex(index, Math.min(Math.max(Math.round(position) - 1, 0), subdecks.value.length - 1));
+  }
+
+  // TransitionGroup exposes a component instance; the reorder helper walks the rendered element's children
+  const subdeckListRef = ref<{ $el: HTMLElement } | null>(null);
+  const subdeckListEl = computed(() => subdeckListRef.value?.$el ?? null);
+  const { dragIndex, dropIndex, handlePointerDown } = useTouchReorder({
+    containerRef: subdeckListEl,
+    onReorder: moveSubdeckToIndex,
+  });
+
+  const naturalCompare = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare;
+  const subdeckDetectionNames = () => subdecks.value.map((sd) => sd.file?.name ?? sd.originalTitle);
+
+  function sortSubdecksByDetected() {
+    const detections = detectNumbering(subdeckDetectionNames());
+    subdecks.value = subdecks.value
+      .map((sd, i) => ({ sd, i, value: detections[i]?.value ?? Infinity }))
+      .sort((a, b) => a.value - b.value || a.i - b.i)
+      .map((x) => x.sd);
+    applyAutoNames('detected');
+  }
+
+  function sortSubdecksByFileName() {
+    subdecks.value = subdecks.value
+      .map((sd, i) => ({ sd, i }))
+      .sort((a, b) => naturalCompare(a.sd.file?.name ?? a.sd.originalTitle, b.sd.file?.name ?? b.sd.originalTitle) || a.i - b.i)
+      .map((x) => x.sd);
+    applyAutoNames('detected');
+  }
+
+  function sortSubdecksByTitle() {
+    subdecks.value = subdecks.value
+      .map((sd, i) => ({ sd, i }))
+      .sort((a, b) => naturalCompare(a.sd.originalTitle, b.sd.originalTitle) || a.i - b.i)
+      .map((x) => x.sd);
+  }
+
+  function reverseSubdecks() {
+    subdecks.value = [...subdecks.value].reverse();
+    applyAutoNames('detected');
+  }
+
+  const ignoredZipEntryRe = /(^|\/)(__MACOSX\/|\.DS_Store$|Thumbs\.db$|desktop\.ini$)/i;
+
+  async function extractUploadFiles(blob: Blob): Promise<File[]> {
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const entries = Object.values(zip.files)
+      .filter((entry) => !entry.dir && !ignoredZipEntryRe.test(entry.name))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+    const files: File[] = [];
+    for (const entry of entries) {
+      const name = entry.name.split('/').pop() || entry.name;
+      files.push(new File([await entry.async('blob')], name, { lastModified: entry.date?.getTime() ?? Date.now() }));
     }
+    return files;
+  }
 
-    // Remove the last subdeck
-    subdecks.value.pop();
+  async function importUpload(upload: MediaRequestUploadAdminDto) {
+    if (!fulfillingRequest.value || importingUploadId.value !== null) return;
+    importingUploadId.value = upload.id;
+    try {
+      const blob = await downloadUploadFile(fulfillingRequest.value.id, upload.id);
+      if (!blob) {
+        showToast('error', 'Download failed', 'Could not fetch the uploaded file.');
+        return;
+      }
+      const files = await extractUploadFiles(blob);
+      if (!files.length) {
+        showToast('warn', 'Empty upload', 'The archive holds no usable files.');
+        return;
+      }
+
+      if (files.length === 1 && !selectedFile.value && subdecks.value.length === 0) {
+        selectedFile.value = files[0];
+      } else {
+        addFilesAsSubdecks(files);
+      }
+
+      if (!upload.adminReviewed && (await reviewUpload(fulfillingRequest.value.id, upload.id, true))) {
+        upload.adminReviewed = true;
+      }
+      showToast('success', 'Files added', files.length === 1 ? files[0].name : `${files.length} files added as subdecks.`);
+    } catch (error) {
+      console.error('Error importing upload:', error);
+      showToast('error', 'Import failed', 'The archive could not be read.');
+    } finally {
+      importingUploadId.value = null;
+    }
   }
 
   function searchAPI(apiName: string) {
@@ -311,6 +418,12 @@
       currentScreen.value = SCREEN_FILE_UPLOAD;
       searchQuery.value = request.title;
       originalTitle.value = request.title;
+
+      fetchComments(requestId).then((comments) => {
+        requestUploads.value = comments
+          .map((c) => c.upload as MediaRequestUploadAdminDto | undefined)
+          .filter((u): u is MediaRequestUploadAdminDto => !!u && !u.fileDeleted);
+      });
 
       if (!request.externalUrl) return;
 
@@ -478,7 +591,7 @@
       });
 
       showToast('success', 'Success', 'Media added successfully!');
-      navigateTo(fulfillingRequest.value ? `/requests/${fulfillingRequest.value.id}` : '/dashboard');
+      navigateTo(fulfillingRequest.value ? `/requests/${fulfillingRequest.value.id}?parsing=1` : '/dashboard');
     } catch (error) {
       console.error('Error submitting media:', error);
       showToast('error', 'Submission Error', extractApiError(error, 'An error occurred while submitting. Please try again.'));
@@ -523,8 +636,40 @@
           <h2 class="text-xl font-semibold">Upload {{ getMediaTypeText(selectedMediaType!) }}</h2>
         </div>
 
+        <Card v-if="fulfillingRequest && requestUploads.length" class="mb-6">
+          <template #title>Files attached to the request</template>
+          <template #content>
+            <div class="flex flex-col gap-2">
+              <div
+                v-for="upload in requestUploads"
+                :key="upload.id"
+                class="flex items-center gap-3 flex-wrap p-2 rounded border border-surface-200 dark:border-surface-700 text-sm"
+              >
+                <i class="pi pi-paperclip text-xs" />
+                <span class="font-medium break-all">{{ upload.fileName }}</span>
+                <span class="text-muted-color">
+                  {{ formatFileSize(upload.fileSize) }}<template v-if="upload.originalFileCount > 1">, {{ upload.originalFileCount }} files</template>
+                </span>
+                <Tag v-if="upload.adminReviewed" value="Reviewed" severity="success" class="text-xs" />
+                <span v-if="upload.uploaderName" class="text-xs text-muted-color">by {{ upload.uploaderName }}</span>
+                <Button
+                  label="Use these files"
+                  icon="pi pi-download"
+                  size="small"
+                  severity="secondary"
+                  class="ml-auto"
+                  :loading="importingUploadId === upload.id"
+                  :disabled="importingUploadId !== null"
+                  @click="importUpload(upload)"
+                />
+              </div>
+            </div>
+            <p class="mt-3 text-sm text-muted-color">One file becomes the main file. Several files become subdecks you can reorder below.</p>
+          </template>
+        </Card>
+
         <!-- Main file upload -->
-        <Card class="mb-6">
+        <Card v-if="!subdecks.length" class="mb-6">
           <template #title>Main File</template>
           <template #content>
             <div v-if="selectedFile" class="flex items-center gap-2">
@@ -667,56 +812,112 @@
         </Card>
 
         <!-- Subdecks section -->
-        <div v-if="selectedFile" class="mt-6">
+        <div v-if="selectedFile || subdecks.length" class="mt-6">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-medium">Subdecks</h3>
-            <SplitButton
-              v-if="subdecks.length"
-              v-tooltip.top="'Rename all subdecks from the numbering detected in their file names'"
-              label="Auto-name"
-              icon="pi pi-sparkles"
-              severity="secondary"
-              size="small"
-              :model="autoNameItems"
-              @click="applyAutoNames('detected', true)"
-            />
+            <h3 class="text-lg font-medium">Subdecks <span v-if="subdecks.length" class="text-muted-color font-normal">({{ subdecks.length }})</span></h3>
+            <div v-if="subdecks.length" class="flex items-center gap-2">
+              <SplitButton
+                v-tooltip.top="'Sort subdecks by the number detected in their file names'"
+                label="Sort"
+                icon="pi pi-sort-amount-down"
+                severity="secondary"
+                size="small"
+                :model="sortItems"
+                @click="sortSubdecksByDetected"
+              />
+              <SplitButton
+                v-tooltip.top="'Rename all subdecks from the numbering detected in their file names'"
+                label="Auto-name"
+                icon="pi pi-sparkles"
+                severity="secondary"
+                size="small"
+                :model="autoNameItems"
+                @click="applyAutoNames('detected', true)"
+              />
+            </div>
           </div>
-          <Card v-for="subdeck in subdecks" :key="subdeck.id" class="mb-4">
-            <template #title>
-              <div class="flex justify-between items-center">
-                <div class="flex items-center gap-2">
-                  <InputText v-model="subdeck.originalTitle" class="w-64" @input="markTitleEdited(subdeck)" />
-                  <i v-if="subdeck.autoDetected" v-tooltip.top="'Detected from the file name'" class="pi pi-sparkles text-primary-500 dark:text-primary-400" />
+          <p v-if="subdecks.length > 1" class="text-sm text-muted-color mb-3">Drag the handle, use the arrows, or type a position to reorder.</p>
+          <TransitionGroup ref="subdeckListRef" name="subdeck-list" tag="div" class="relative">
+            <Card
+              v-for="(subdeck, index) in subdecks"
+              :key="subdeck.id"
+              class="mb-4 subdeck-card"
+              :class="{
+                'opacity-50': dragIndex === index,
+                'ring-2 ring-primary-400 dark:ring-primary-500': dropIndex === index && dragIndex !== null && dragIndex !== index,
+              }"
+            >
+              <template #title>
+                <div class="flex justify-between items-center gap-3 flex-wrap">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span
+                      class="cursor-grab active:cursor-grabbing text-muted-color px-1 select-none"
+                      style="touch-action: none"
+                      title="Drag to reorder"
+                      @pointerdown="handlePointerDown($event, index)"
+                    >
+                      <i class="pi pi-bars" />
+                    </span>
+                    <InputNumber
+                      :model-value="index + 1"
+                      :min="1"
+                      :max="subdecks.length"
+                      :step="1"
+                      :allow-empty="false"
+                      :use-grouping="false"
+                      input-class="w-14 text-center"
+                      title="Jump to position"
+                      @update:model-value="(val) => moveSubdeckToPosition(subdeck.id, val)"
+                    />
+                    <InputText v-model="subdeck.originalTitle" class="w-64" @input="markTitleEdited(subdeck)" />
+                    <i v-if="subdeck.autoDetected" v-tooltip.top="'Detected from the file name'" class="pi pi-sparkles text-primary-500 dark:text-primary-400" />
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <Button
+                      icon="pi pi-arrow-up"
+                      severity="secondary"
+                      text
+                      size="small"
+                      aria-label="Move up"
+                      :disabled="index === 0"
+                      @click="moveSubdeck(subdeck.id, -1)"
+                    />
+                    <Button
+                      icon="pi pi-arrow-down"
+                      severity="secondary"
+                      text
+                      size="small"
+                      aria-label="Move down"
+                      :disabled="index === subdecks.length - 1"
+                      @click="moveSubdeck(subdeck.id, 1)"
+                    />
+                    <Button class="p-button-danger p-button-text" aria-label="Remove subdeck" @click="removeSubdeck(subdeck.id)">
+                      <Icon name="material-symbols-light:delete-forever" class="w-full" size="2em" />
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  v-if="subdecks.length > 1 && subdeck.id === subdecks[subdecks.length - 1].id"
-                  class="p-button-danger p-button-text"
-                  @click="removeSubdeck(subdeck.id)"
-                >
-                  <Icon name="material-symbols-light:delete-forever" class="w-full" size="2em" />
-                </Button>
-              </div>
-            </template>
-            <template #content>
-              <div v-if="!subdeck.file">
-                <FileUpload
-                  mode="advanced"
-                  :auto="true"
-                  choose-label="Select File"
-                  :multiple="false"
-                  class="w-full subdeck-file-upload"
-                  :custom-upload="true"
-                  :show-upload-button="false"
-                  :show-cancel-button="false"
-                  drag-drop-text="Select File or Drag and Drop Here"
-                  @select="(e) => handleSubdeckFileUpload(e, subdeck.id)"
-                />
-              </div>
-              <div v-else class="flex items-center">
-                <span class="text-sm text-gray-600 dark:text-gray-400">{{ subdeck.file.name }}</span>
-              </div>
-            </template>
-          </Card>
+              </template>
+              <template #content>
+                <div v-if="!subdeck.file">
+                  <FileUpload
+                    mode="advanced"
+                    :auto="true"
+                    choose-label="Select File"
+                    :multiple="false"
+                    class="w-full subdeck-file-upload"
+                    :custom-upload="true"
+                    :show-upload-button="false"
+                    :show-cancel-button="false"
+                    drag-drop-text="Select File or Drag and Drop Here"
+                    @select="(e) => handleSubdeckFileUpload(e, subdeck.id)"
+                  />
+                </div>
+                <div v-else class="flex items-center">
+                  <span class="text-sm text-gray-600 dark:text-gray-400">{{ subdeck.file.name }}</span>
+                </div>
+              </template>
+            </Card>
+          </TransitionGroup>
           <Card class="mb-4">
             <template #title>
               <div class="flex justify-between items-center">
@@ -769,6 +970,20 @@
 </template>
 
 <style scoped>
+  .subdeck-list-move {
+    transition: transform 0.3s ease;
+  }
+
+  .subdeck-list-leave-active {
+    position: absolute;
+    width: 100%;
+    transition: opacity 0.2s ease;
+  }
+
+  .subdeck-list-leave-to {
+    opacity: 0;
+  }
+
   .p-fileupload.p-fileupload-advanced .p-fileupload-buttonbar {
     display: none;
   }

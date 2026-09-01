@@ -303,6 +303,16 @@ export function useMediaRequests() {
     }
   };
 
+  const downloadUploadFile = async (requestId: number, uploadId: number): Promise<Blob | null> => {
+    error.value = null;
+    try {
+      return await $api<Blob>(`requests/${requestId}/uploads/${uploadId}/file`, { responseType: 'blob' });
+    } catch (e) {
+      error.value = e as Error;
+      return null;
+    }
+  };
+
   const checkDuplicates = async (title: string, targetDeckId?: number): Promise<DuplicateCheckResultDto | null> => {
     error.value = null;
     try {
@@ -462,6 +472,7 @@ export function useMediaRequests() {
     deleteUpload,
     reviewUpload,
     getUploadDownloadUrl,
+    downloadUploadFile,
     checkDuplicates,
     editRequest,
     updateStatus,

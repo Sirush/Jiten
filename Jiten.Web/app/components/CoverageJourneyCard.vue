@@ -20,6 +20,10 @@
     return j?.points.length ? formatBucketDated(j.points[0]!.date, j.granularity) : '';
   });
 
+  const mounted = ref(false);
+  onMounted(() => (mounted.value = true));
+  const showSkeleton = computed(() => !mounted.value || loading.value || !statusReady.value);
+
   const dismissed = computed(() => !granted.value && jitenStore.hideCoverageJourney);
   const showSection = computed(() => auth.isAuthenticated && !dismissed.value && (!failed.value || rateLimited.value));
   const showJourney = computed(() => granted.value && journey.value?.hasEnoughHistory);
@@ -39,7 +43,7 @@
         </NuxtLink>
       </div>
 
-      <div v-if="loading || !statusReady" class="h-[86px] rounded bg-surface-100 dark:bg-surface-800 animate-pulse" />
+      <div v-if="showSkeleton" class="h-[86px] rounded bg-surface-100 dark:bg-surface-800 animate-pulse" />
 
       <div v-else-if="rateLimited" class="py-2 flex flex-wrap items-center justify-between gap-2">
         <span class="text-sm text-gray-500 dark:text-gray-400">Couldn't load your journey just now.</span>
