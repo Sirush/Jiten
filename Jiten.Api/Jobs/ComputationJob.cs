@@ -353,26 +353,35 @@ public class ComputationJob(
         logger.LogInformation("Coverage: hits computed from WordParentDeckIndex in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // EnsureFreshAsync bounds this set, so the deck-driven query below never grows into a DeckWords walk.
+        // EnsureFreshAsync bounds this set, so the whole-deck fetch below stays small.
         await userContext.Database.ExecuteSqlRawAsync($"""
             CREATE TEMP TABLE _stale_parents ON COMMIT DROP AS
-            SELECT d."DeckId" FROM "jiten"."Decks" d WHERE {WordParentDeckIndexService.StaleParentPredicate};
+            {WordParentDeckIndexService.StaleParentsQuery};
             """, build.CoveredUntil, build.DeckIds);
+        await userContext.Database.ExecuteSqlRawAsync("ANALYZE _stale_parents;");
         var staleCount = await userContext.Database.SqlQueryRaw<int>("SELECT COUNT(*)::int AS \"Value\" FROM _stale_parents").SingleAsync();
         if (staleCount > 0)
         {
+            // Fetched by DeckId alone, before the known set enters the picture: joined in one query the
+            // planner can start from the known forms and walk DeckWords through the word index instead.
+            await userContext.Database.ExecuteSqlRawAsync("""
+                CREATE TEMP TABLE _stale_words ON COMMIT DROP AS
+                SELECT dw."DeckId", dw."WordId", dw."ReadingIndex", dw."Occurrences"
+                FROM _stale_parents s
+                JOIN "jiten"."DeckWords" dw ON dw."DeckId" = s."DeckId";
+                """);
+            await userContext.Database.ExecuteSqlRawAsync("ANALYZE _stale_words;");
             await userContext.Database.ExecuteSqlRawAsync("""DELETE FROM _hits h USING _stale_parents s WHERE s."DeckId" = h."DeckId";""");
             await userContext.Database.ExecuteSqlRawAsync($$"""
                 INSERT INTO _hits ("DeckId", m_occ, m_uniq, y_occ, y_uniq)
-                SELECT dw."DeckId",
-                       SUM(dw."Occurrences") FILTER (WHERE k."Mature"),
+                SELECT sw."DeckId",
+                       SUM(sw."Occurrences") FILTER (WHERE k."Mature"),
                        COUNT(*) FILTER (WHERE k."Mature"),
-                       SUM(dw."Occurrences") FILTER (WHERE NOT k."Mature"),
+                       SUM(sw."Occurrences") FILTER (WHERE NOT k."Mature"),
                        COUNT(*) FILTER (WHERE NOT k."Mature")
-                FROM _stale_parents s
-                JOIN "jiten"."DeckWords" dw ON dw."DeckId" = s."DeckId"
-                JOIN {{knownTable}} k ON k."WordId" = dw."WordId" AND k."ReadingIndex" = dw."ReadingIndex"
-                GROUP BY dw."DeckId";
+                FROM _stale_words sw
+                JOIN {{knownTable}} k ON k."WordId" = sw."WordId" AND k."ReadingIndex" = sw."ReadingIndex"
+                GROUP BY sw."DeckId";
                 """);
         }
         await userContext.Database.ExecuteSqlRawAsync($"DROP TABLE {knownTable};");

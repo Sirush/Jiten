@@ -15,11 +15,13 @@ public static class WordParentDeckIndexService
 
     private const long RebuildLockKey = 7_212_026_001;
 
-    /// <summary>Parents the index does not describe: updated after its snapshot ({0}) or absent from the built set ({1}).</summary>
-    public const string StaleParentPredicate = """
-        d."ParentDeckId" IS NULL
-        AND (d."LastUpdate" > {0}::timestamptz
-             OR NOT EXISTS (SELECT 1 FROM unnest({1}::int[]) b(id) WHERE b.id = d."DeckId"))
+    /// <summary>Parents the index does not describe: updated after its snapshot ({0}) or absent from the built set ({1}). Yields "DeckId".</summary>
+    public const string StaleParentsQuery = """
+        SELECT d."DeckId"
+        FROM "jiten"."Decks" d
+        LEFT JOIN unnest({1}::int[]) AS built(id) ON built.id = d."DeckId"
+        WHERE d."ParentDeckId" IS NULL
+          AND (built.id IS NULL OR d."LastUpdate" > {0}::timestamptz)
         """;
 
     public sealed record BuildState(DateTime BuiltAt, int[] DeckIds)
@@ -43,7 +45,7 @@ public static class WordParentDeckIndexService
 
     public static Task<int> CountStaleParentsAsync(DbContext db, BuildState build)
         => db.Database
-             .SqlQueryRaw<int>($"""SELECT COUNT(*)::int AS "Value" FROM "jiten"."Decks" d WHERE {StaleParentPredicate}""",
+             .SqlQueryRaw<int>($"""SELECT COUNT(*)::int AS "Value" FROM ({StaleParentsQuery}) s""",
                                build.CoveredUntil, build.DeckIds)
              .SingleAsync();
 
