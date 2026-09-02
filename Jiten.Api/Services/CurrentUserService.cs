@@ -65,6 +65,7 @@ public class CurrentUserService(
         }
 
         var candidates = await userContext.FsrsCards
+                                          .AsNoTracking()
                                           .Where(u => u.UserId == UserId && lookupWordIds.Contains(u.WordId))
                                           .ToListAsync();
 

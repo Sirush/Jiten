@@ -266,11 +266,13 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             var source = frequencySource.Value;
             return await context.WordFormFrequenciesByType.AsNoTracking()
                                 .Where(wff => wff.MediaType == source && wordIds.Contains(wff.WordId))
+                                .Select(wff => new { wff.WordId, wff.ReadingIndex, wff.FrequencyRank })
                                 .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex), wff => wff.FrequencyRank);
         }
 
         return await context.WordFormFrequencies.AsNoTracking()
                             .Where(wff => wordIds.Contains(wff.WordId))
+                            .Select(wff => new { wff.WordId, wff.ReadingIndex, wff.FrequencyRank })
                             .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex), wff => wff.FrequencyRank);
     }
 
