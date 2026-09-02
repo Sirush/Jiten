@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hangfire;
 using Jiten.Api.Dtos;
@@ -1255,6 +1255,13 @@ public class StudyController(
                         var rangeIds = await context.DeckWords.AsNoTracking()
                             .Where(dw => dw.DeckId == studyDeck.DeckId)
                             .OrderByDescending(dw => dw.Occurrences)
+                            .ThenBy(dw => context.WordFormFrequencies
+                                                 .Where(wff => wff.WordId == dw.WordId
+                                                               && wff.ReadingIndex == (short)dw.ReadingIndex
+                                                               && wff.FrequencyRank > 0)
+                                                 .Select(wff => (int?)wff.FrequencyRank)
+                                                 .FirstOrDefault() ?? int.MaxValue)
+                            .ThenBy(dw => dw.DeckWordId)
                             .Skip(studyDeck.MinFrequency)
                             .Take(studyDeck.MaxFrequency - studyDeck.MinFrequency)
                             .Select(dw => dw.DeckWordId)
