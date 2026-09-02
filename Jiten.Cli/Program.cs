@@ -148,13 +148,13 @@ public class Program
 
         if (options.ComputeFrequencies)
         {
-            await JitenHelper.ComputeFrequencies(context.ContextFactory);
+            var batch = await JitenHelper.LoadFrequencyBatch(context.ContextFactory);
 
             foreach (var mediaType in MediaTypes.Listed)
             {
                 try
                 {
-                    var (typeWordFreqs, typeFormFreqs) = await JitenHelper.ComputeFrequencies(context.ContextFactory, mediaType);
+                    var (typeWordFreqs, typeFormFreqs) = batch.Compute(mediaType);
                     await JitenHelper.SaveFrequenciesByTypeToDatabase(context.ContextFactory, mediaType, typeWordFreqs, typeFormFreqs);
                 }
                 catch (Exception ex)
