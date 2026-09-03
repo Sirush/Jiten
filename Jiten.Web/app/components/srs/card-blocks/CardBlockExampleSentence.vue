@@ -177,7 +177,7 @@
         >
           <div class="flex items-start gap-2">
             <div class="leading-relaxed flex-1" :class="sizeClass" lang="ja" v-html="exampleSentenceHtml" />
-            <div v-if="opts.showActions" class="flex items-center gap-1 mt-0.5 shrink-0">
+            <div v-if="opts.showActions" class="flex items-center gap-1 mt-0.5 shrink-0" :class="{ 'pointer-events-none': blurred }">
               <TtsButton
                 v-if="cardExample"
                 :text="cardExample.text"
