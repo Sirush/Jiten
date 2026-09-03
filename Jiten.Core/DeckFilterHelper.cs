@@ -1,4 +1,4 @@
-using Jiten.Core.Data;
+﻿using Jiten.Core.Data;
 using Jiten.Core.Data.Billing;
 using Microsoft.EntityFrameworkCore;
 
@@ -99,6 +99,7 @@ public static class DeckFilterHelper
         var query = BuildQuery(context, def, mode);
         var count = await query.CountAsync();
         var sample = await query.OrderByDescending(d => d.CharacterCount)
+                                .ThenBy(d => d.DeckId)
                                 .Take(sampleSize)
                                 .Select(d => new SampleTitle(d.OriginalTitle, d.RomajiTitle, d.EnglishTitle))
                                 .ToListAsync();

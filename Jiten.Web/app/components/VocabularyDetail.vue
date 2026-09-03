@@ -9,6 +9,7 @@
     type Word,
     type WordFrequencyRanks,
   } from '~/types';
+  import type { ComputedRef } from 'vue';
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
@@ -53,14 +54,24 @@
   // The /info payload is publicly cached, so the caller's own ranking is fetched separately and overlaid on it.
   const freqRanksUrl = computed(() => `vocabulary/${props.wordId}/${currentReadingIndex.value}/frequency-ranks`);
 
-  const { data: response, refresh: refreshInfo } = useApiFetch<Word>(infoUrl, { watch: false });
+  // Nuxt reuses the first handler registered under a key, and the search page mounts this same
+  // component first, so the key must follow the URL or a refresh keeps fetching the old reading.
+  const keyedFetch = (url: ComputedRef<string>) => ({ key: computed(() => `api-${url.value}`), watch: false, dedupe: 'defer' });
+
+  const { data: response, refresh: refreshInfo } = useApiFetch<Word>(infoUrl, keyedFetch(infoUrl));
   const {
     data: mediaFrequency,
     status: mediaFreqStatus,
     refresh: refreshMediaFrequency,
-  } = useApiFetch<Record<string, number>>(mediaFreqUrl, { lazy: true, watch: false });
-  const { data: fetchedKnownStates, refresh: refreshKnownStates } = useApiFetch<KnownState[]>(knownStateUrl, { lazy: true, watch: false });
-  const { data: frequencyRanks, refresh: refreshFrequencyRanks } = useApiFetch<WordFrequencyRanks>(freqRanksUrl, { lazy: true, watch: false });
+  } = useApiFetch<Record<string, number>>(mediaFreqUrl, { lazy: true, ...keyedFetch(mediaFreqUrl) });
+  const { data: fetchedKnownStates, refresh: refreshKnownStates } = useApiFetch<KnownState[]>(knownStateUrl, {
+    lazy: true,
+    ...keyedFetch(knownStateUrl),
+  });
+  const { data: frequencyRanks, refresh: refreshFrequencyRanks } = useApiFetch<WordFrequencyRanks>(freqRanksUrl, {
+    lazy: true,
+    ...keyedFetch(freqRanksUrl),
+  });
 
   const listsLoading = ref(false);
 

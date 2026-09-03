@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Jiten.Core.Data.JMDict;
+using Jiten.Parser.Diagnostics;
 using Jiten.Parser.Scoring;
 
 namespace Jiten.Parser.Data.Redis;
@@ -22,15 +23,21 @@ public sealed class InProcessJmDictCache : IJmDictCache
 {
     private readonly IJmDictCache _inner;
 
-    // 50K per generation → 50–100K resident across gen0+gen1.
-    private const int MaxGen0Entries = 50_000;
+    public const int DefaultMaxGen0Entries = 400_000;
+
+    // Per generation; resident count is up to twice this across gen0+gen1.
+    private readonly int _maxGen0Entries;
 
     private volatile ConcurrentDictionary<int, JmDictWord> _gen0 = new();
     private volatile ConcurrentDictionary<int, JmDictWord>? _gen1;
     private int _gen0Count;
     private int _rotating;
 
-    public InProcessJmDictCache(IJmDictCache inner) => _inner = inner;
+    public InProcessJmDictCache(IJmDictCache inner, int maxGen0Entries = DefaultMaxGen0Entries)
+    {
+        _inner = inner;
+        _maxGen0Entries = Math.Max(1, maxGen0Entries);
+    }
 
     private bool TryGetLocal(int id, out JmDictWord word)
     {
@@ -61,7 +68,7 @@ public sealed class InProcessJmDictCache : IJmDictCache
     private void Add(int id, JmDictWord word)
     {
         if (_gen0.TryAdd(id, word))
-            if (Interlocked.Increment(ref _gen0Count) > MaxGen0Entries)
+            if (Interlocked.Increment(ref _gen0Count) > _maxGen0Entries)
                 Rotate();
     }
 
@@ -102,9 +109,15 @@ public sealed class InProcessJmDictCache : IJmDictCache
             if (result.ContainsKey(id))
                 continue;
             if (TryGetLocal(id, out var local))
+            {
                 result[id] = local;
+                Interlocked.Increment(ref ParserCounters.JmDictInProcessHits);
+            }
             else
+            {
                 (missed ??= new List<int>()).Add(id);
+                Interlocked.Increment(ref ParserCounters.JmDictInProcessMisses);
+            }
         }
 
         if (missed != null)

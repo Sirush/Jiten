@@ -11,11 +11,11 @@ public partial class MorphologicalAnalyser
         KanaConverter.ToNormalizedHiragana(text);
 
     private static bool IsNdaVerbForm(IReadOnlyList<DeconjugationForm> forms) =>
-        forms.Any(f => f.Tags.Count > 0 &&
-                       ((f.Tags.Any(t => t == "v5m") && f.Text.EndsWith("む")) ||
-                        (f.Tags.Any(t => t == "v5n") && f.Text.EndsWith("ぬ")) ||
-                        (f.Tags.Any(t => t == "v5b") && f.Text.EndsWith("ぶ")) ||
-                        (f.Tags.Any(t => t == "v5g") && f.Text.EndsWith("ぐ"))));
+        forms.Any(f => f.Tags.Length > 0 &&
+                       ((f.Tags.Any(t => t == "v5m") && f.Text.EndsWith('む')) ||
+                        (f.Tags.Any(t => t == "v5n") && f.Text.EndsWith('ぬ')) ||
+                        (f.Tags.Any(t => t == "v5b") && f.Text.EndsWith('ぶ')) ||
+                        (f.Tags.Any(t => t == "v5g") && f.Text.EndsWith('ぐ'))));
 
     /// <summary>
     /// Checks if a verb ending in ん + だ is a valid past tense form (from む/ぬ/ぶ/ぐ verbs).
@@ -24,7 +24,7 @@ public partial class MorphologicalAnalyser
     /// </summary>
     private bool IsValidNdaPastTense(string verbText)
     {
-        if (!verbText.EndsWith("ん")) return false;
+        if (!verbText.EndsWith('ん')) return false;
         var verbHiragana = NormalizeToHiragana(verbText);
         var verbForms = PipelineCachedDeconjugate(verbHiragana);
         if (verbForms.Any(f => f.Process.Any(p => p.Contains("slurred negative") || p.Contains("colloquial negative"))))
@@ -35,10 +35,10 @@ public partial class MorphologicalAnalyser
     }
 
     private static bool IsAnyVerbForm(IReadOnlyList<DeconjugationForm> forms) =>
-        forms.Any(f => f.Tags.Count > 0 && f.Tags.Any(t => t.StartsWith("v")));
+        forms.Any(f => f.Tags.Length > 0 && f.Tags.Any(t => t.StartsWith('v')));
 
     private static bool IsMasenVerbForm(IReadOnlyList<DeconjugationForm> forms) =>
-        forms.Any(f => f.Tags.Count > 0 && f.Tags.Any(t => t.StartsWith("v")) && !f.Text.EndsWith("ます"));
+        forms.Any(f => f.Tags.Length > 0 && f.Tags.Any(t => t.StartsWith('v')) && !f.Text.EndsWith("ます", StringComparison.Ordinal));
 
     private static WordInfo CreateNToken() => new()
                                               {
@@ -100,7 +100,7 @@ public partial class MorphologicalAnalyser
 
         // Skip i-adjective + んだ pattern - the んだ is explanatory, not verb conjugation
         // e.g., いいんだ should be いい + んだ, not combined as verb form
-        if (result.Count >= 1 && suffix.StartsWith("ん"))
+        if (result.Count >= 1 && suffix.StartsWith('ん'))
         {
             var lastToken = result[^1];
             if (lastToken.PartOfSpeech == PartOfSpeech.IAdjective)

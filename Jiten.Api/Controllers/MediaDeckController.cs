@@ -960,7 +960,7 @@ public class MediaDeckController(
 
         if (currentUserService.IsAuthenticated)
         {
-            var allDeckIds = await query.Select(d => d.DeckId).ToListAsync();
+            var allDeckIds = await query.OrderBy(d => d.DeckId).Select(d => d.DeckId).ToListAsync();
             var userId = currentUserService.UserId!;
 
             var coverages = await UserCoverageChunkHelper.GetCoverage(userContext, userId, allDeckIds);

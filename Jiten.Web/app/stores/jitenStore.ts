@@ -122,6 +122,9 @@ export const useJitenStore = defineStore('jiten', () => {
   // Off means bulk-declared words are folded into the curve, spike and all.
   const separatePriorKnowledge = createLocalStorageState<boolean>('separate-prior-knowledge', true);
 
+  // Positions the journey by the shrinking remainder (100 - coverage) so late gains stay visible.
+  const coverageJourneyLogTail = createLocalStorageState<boolean>('coverage-journey-log-tail', false);
+
   // Drives the unread dot on the home page's "what's new" strip.
   const lastSeenUpdateId = createLocalStorageState<number>('last-seen-update-id', 0);
   const customDictionaryFontSize = createLocalStorageState<number>('custom-dictionary-font-size', 16);
@@ -169,6 +172,7 @@ export const useJitenStore = defineStore('jiten', () => {
     preferredDictionaryId,
     hideCoverageJourney,
     separatePriorKnowledge,
+    coverageJourneyLogTail,
     lastSeenUpdateId,
     customDictionaryFontSize,
     coverageVersion,

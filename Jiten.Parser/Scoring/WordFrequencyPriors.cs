@@ -34,7 +34,7 @@ internal static class WordFrequencyPriors
 
         // Only override picks that are themselves plain surface-exact matches — conjugated or
         // fold-matched picks carry morphological evidence the word-level prior can't outweigh.
-        if (context.Surface != best.Form.Text || best.DeconjForm?.Process is { Count: > 0 })
+        if (context.Surface != best.Form.Text || best.DeconjForm?.Process is { Length: > 0 })
             return null;
 
         // Both sides need observed data: an unobserved best is not evidence of a misparse
@@ -54,7 +54,7 @@ internal static class WordFrequencyPriors
         {
             if (candidate.Word.WordId == best.Word.WordId) continue;
             if (context.Surface != candidate.Form.Text) continue;
-            if (candidate.DeconjForm?.Process is { Count: > 0 }) continue;
+            if (candidate.DeconjForm?.Process is { Length: > 0 }) continue;
             if (candidate.IsPosIncompatibleDirectSurface && !best.IsPosIncompatibleDirectSurface) continue;
 
             if (!frequencies.TryGetValue(candidate.Word.WordId, out double frequency)) continue;

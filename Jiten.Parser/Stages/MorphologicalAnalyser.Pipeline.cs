@@ -5,6 +5,8 @@ namespace Jiten.Parser;
 
 public partial class MorphologicalAnalyser
 {
+    private static readonly bool StageDebug = Environment.GetEnvironmentVariable("JITEN_STAGE_DEBUG") is { Length: > 0 };
+
     private IReadOnlyList<TokenStage>? _tokenStages;
 
     private IReadOnlyList<TokenStage> GetTokenStages() => _tokenStages ??= BuildTokenStages();
@@ -129,7 +131,7 @@ public partial class MorphologicalAnalyser
             var prev = wordInfos;
             wordInfos = TrackStage(stage, wordInfos, diagnostics, candidateScan);
 
-            if (Environment.GetEnvironmentVariable("JITEN_STAGE_DEBUG") is { Length: > 0 })
+            if (StageDebug)
                 Console.WriteLine($"[stage] {stage.Name}: {string.Join("|", wordInfos.Select(w => w.Text))}");
 
             if (!ReferenceEquals(prev, wordInfos))

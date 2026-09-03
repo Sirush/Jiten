@@ -13,6 +13,7 @@
     type ChartData,
   } from 'chart.js';
   import type { JourneyPoint, GrowthPoint, JourneyMilestone, JourneyGranularity } from '~/types';
+  import { coverageToTail, coverageWindow, coverageTickDecimals, formatCoverageTick, tailWindow, tailTicks } from '~/utils/coverageAxis';
 
   ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
@@ -29,6 +30,8 @@
       tooltip?: boolean;
       // Draws bulk-declared words as their own baseline band instead of folding them into the curve.
       separatePrior?: boolean;
+      // Positions coverage by its shrinking remainder so gains past 90% stay legible; ignored in count mode.
+      logTail?: boolean;
     }>(),
     {
       granularity: 'monthly',
@@ -39,6 +42,7 @@
       height: '260px',
       tooltip: true,
       separatePrior: true,
+      logTail: false,
     }
   );
 
@@ -50,6 +54,7 @@
   const GRID = 'rgba(107, 114, 128, 0.15)';
 
   const isCount = computed(() => props.mode === 'count');
+  const isTail = computed(() => props.logTail && !isCount.value);
   const isUnique = computed(() => props.metric === 'unique');
 
   const labels = computed(() => props.points.map((p) => formatBucketAxis(p.date, props.granularity)));
@@ -83,9 +88,20 @@
     return indices;
   });
 
+  const plot = (values: number[]) => (isTail.value ? values.map(coverageToTail) : values);
+
+  const yWindow = computed(() => {
+    if (isCount.value) return null;
+    const values = [...matureValues.value, ...combinedValues.value];
+    return isTail.value ? tailWindow(values) : coverageWindow(values);
+  });
+
+  const yTicks = computed(() => (isTail.value && yWindow.value ? tailTicks(yWindow.value) : []));
+  const linearDecimals = computed(() => (yWindow.value && !isTail.value ? coverageTickDecimals(yWindow.value) : 0));
+
   const priorDataset = computed(() => ({
     label: PRIOR_LABEL,
-    data: priorValues.value,
+    data: plot(priorValues.value),
     borderColor: AXIS,
     backgroundColor: AXIS,
     borderDash: [4, 4],
@@ -103,19 +119,19 @@
       ...(showPrior.value ? [priorDataset.value] : []),
       {
         label: 'Mature + young',
-        data: combinedValues.value,
+        data: plot(combinedValues.value),
         borderColor: 'transparent',
         backgroundColor: COMBINED_FILL,
         pointRadius: 0,
         pointHitRadius: 0,
         borderWidth: 0,
         cubicInterpolationMode: 'monotone' as const,
-        fill: 'origin',
+        fill: 'start',
         order: 2,
       },
       {
         label: 'Mature',
-        data: matureValues.value,
+        data: plot(matureValues.value),
         borderColor: MATURE,
         backgroundColor: MATURE_FILL,
         pointBackgroundColor: MATURE,
@@ -125,7 +141,7 @@
         pointHoverRadius: props.compact ? 4 : 5,
         borderWidth: 2,
         cubicInterpolationMode: 'monotone' as const,
-        fill: 'origin',
+        fill: 'start',
         order: 1,
       },
     ],
@@ -133,6 +149,16 @@
 
   function formatValue(value: number): string {
     return isCount.value ? value.toLocaleString() : `${value.toFixed(1)}%`;
+  }
+
+  function rawValue(label: string | undefined, index: number): number {
+    const series = label === PRIOR_LABEL ? priorValues.value : label === 'Mature' ? matureValues.value : combinedValues.value;
+    return series[index] ?? 0;
+  }
+
+  function formatTick(value: number | string): string {
+    if (isCount.value) return Number(value).toLocaleString();
+    return formatCoverageTick(Number(value), linearDecimals.value);
   }
 
   const chartOptions = computed<ChartOptions<'line'>>(() => ({
@@ -161,7 +187,7 @@
             const point = props.points[items[0]?.dataIndex ?? 0];
             return point ? formatBucketLong(point.date, props.granularity) : '';
           },
-          label: (ctx) => `${ctx.dataset.label}: ${formatValue(ctx.raw as number)}`,
+          label: (ctx) => `${ctx.dataset.label}: ${formatValue(rawValue(ctx.dataset.label, ctx.dataIndex))}`,
         },
       },
     },
@@ -173,15 +199,17 @@
       },
       y: {
         display: !props.compact,
-        beginAtZero: isCount.value ? !showPrior.value : true,
-        max: isCount.value ? undefined : 100,
+        beginAtZero: isCount.value ? !showPrior.value : undefined,
+        min: yWindow.value?.min,
+        max: yWindow.value?.max,
         grace: isCount.value ? '10%' : undefined,
         grid: { color: GRID },
+        afterBuildTicks: isTail.value ? (scale) => (scale.ticks = yTicks.value.map((t) => ({ value: t.value }))) : undefined,
         ticks: {
           color: AXIS,
           font: { size: 10 },
-          precision: 0,
-          callback: (v) => (isCount.value ? Number(v).toLocaleString() : `${v}%`),
+          precision: isCount.value ? 0 : undefined,
+          callback: (v, i) => (isTail.value ? (yTicks.value[i]?.label ?? '') : formatTick(v)),
         },
       },
     },

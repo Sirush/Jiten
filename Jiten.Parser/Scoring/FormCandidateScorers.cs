@@ -125,7 +125,7 @@ internal static class WordPriorityScorer
             wordScore -= 10;
 
         // Shorter deconjugation chains are preferred for morphological plausibility.
-        int chainCount = candidate.DeconjForm?.Process.Count ?? 0;
+        int chainCount = candidate.DeconjForm?.Process.Length ?? 0;
         if (chainCount <= 2)
             wordScore += 8;
         else
@@ -149,7 +149,7 @@ internal static class EntryPriorityScorer
         if (wordPri.Contains("gai1")) entryPriorityScore += 15;
         if (wordPri.Contains("gai2")) entryPriorityScore += 10;
 
-        var wnf = wordPri.FirstOrDefault(p => p.StartsWith("nf"));
+        var wnf = wordPri.FirstOrDefault(p => p.StartsWith("nf", StringComparison.Ordinal));
         if (wnf is { Length: > 2 } && int.TryParse(wnf[2..], out var wnfRank))
         {
             entryPriorityScore += Math.Max(0, 5 - (int)Math.Round(wnfRank / 10f));
@@ -193,7 +193,7 @@ internal static class FormPriorityScorer
         if (priorities.Contains("gai1")) formPriorityScore += 8;
         if (priorities.Contains("gai2")) formPriorityScore += 5;
 
-        var nf = priorities.FirstOrDefault(p => p.StartsWith("nf"));
+        var nf = priorities.FirstOrDefault(p => p.StartsWith("nf", StringComparison.Ordinal));
         if (nf is { Length: > 2 } && int.TryParse(nf[2..], out var nfRank))
             formPriorityScore += Math.Max(0, 3 - (int)Math.Round(nfRank / 10f));
 
@@ -349,8 +349,8 @@ internal static class LemmaScorer
         var normalizedForm = context.NormalizedForm;
 
         double lemmaScale = 1.0;
-        if (candidate.DeconjForm?.Process is { Count: > 0 } deconjProcess)
-            lemmaScale = Math.Max(0.0, 1.0 - (deconjProcess.Count - 1) * 0.35);
+        if (candidate.DeconjForm?.Process is { Length: > 0 } deconjProcess)
+            lemmaScale = Math.Max(0.0, 1.0 - (deconjProcess.Length - 1) * 0.35);
 
         // Lemma match — only when dictionaryForm differs from surface.
         if (!string.IsNullOrEmpty(dictionaryForm) && dictionaryForm != surface)
@@ -360,7 +360,7 @@ internal static class LemmaScorer
                 // When deconjugation traces back to the DictionaryForm, Sudachi and the
                 // deconjugator independently agree on the base form — use a higher floor
                 // so deep chains (e.g. 来てない→来る via teru contraction) aren't crushed.
-                bool deconjConfirmsDictForm = candidate.DeconjForm is { Process.Count: > 0 }
+                bool deconjConfirmsDictForm = candidate.DeconjForm is { Process.Length: > 0 }
                     && candidate.DeconjForm.Text == context.DictionaryFormHiragana;
                 double floor = deconjConfirmsDictForm ? 0.8 : 0.3;
                 double effectiveScale = Math.Max(floor, lemmaScale);
@@ -441,7 +441,7 @@ internal static class PenaltyScorer
         if (!string.IsNullOrEmpty(context.DictionaryForm)
             && context.DictionaryForm != context.Surface
             && surfaceMatchesFormDirectly
-            && (candidate.DeconjForm == null || candidate.DeconjForm.Process.Count == 0))
+            && (candidate.DeconjForm == null || candidate.DeconjForm.Process.Length == 0))
         {
             // Non-inflectable words (adj-pn, etc.) cannot be conjugated forms,
             // so the penalty should not apply (e.g. 亡き is adj-pn, not a conjugation of 亡い)
@@ -796,7 +796,7 @@ internal static class ReadingScorer
                         foreach (var f in word.Forms)
                             if (f.Text == context.DictionaryForm) { formMatchesDictForm = true; break; }
                     }
-                    if (formMatchesDictForm && candidate.DeconjForm?.Process is not { Count: > 0 })
+                    if (formMatchesDictForm && candidate.DeconjForm?.Process is not { Length: > 0 })
                         readingMatchScore -= 70;
                 }
             }
@@ -1048,7 +1048,7 @@ internal static class KanaScoringHelpers
         {
             if (p is "ichi1" or "ichi2" or "news1" or "news2") return true;
             if (includeJiten && p == "jiten") return true;
-            if (p.StartsWith("nf")) return true;
+            if (p.StartsWith("nf", StringComparison.Ordinal)) return true;
         }
         return false;
     }

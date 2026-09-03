@@ -18,6 +18,11 @@
     { key: 'unique', label: 'Unique' },
   ];
 
+  const scaleOptions: { key: boolean; label: string }[] = [
+    { key: false, label: 'Linear' },
+    { key: true, label: 'Log' },
+  ];
+
   const example = computed(() => buildExampleJourney());
 
   const currentValue = computed(() => (metric.value === 'unique' ? journey.value?.currentUniqueCoverage : journey.value?.currentCoverage));
@@ -70,6 +75,21 @@
               {{ opt.label }}
             </button>
           </div>
+          <div class="flex rounded-lg bg-surface-100 dark:bg-surface-800 p-0.5 text-xs">
+            <button
+              v-for="opt in scaleOptions"
+              :key="opt.label"
+              class="px-2.5 py-1 rounded-md transition-colors"
+              :class="
+                jitenStore.coverageJourneyLogTail === opt.key
+                  ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              "
+              @click="jitenStore.coverageJourneyLogTail = opt.key"
+            >
+              {{ opt.label }}
+            </button>
+          </div>
           <CoverageJourneyShareButton :deck="deck" :title="title" :journey="journey!" :metric="metric" />
         </div>
       </div>
@@ -102,6 +122,7 @@
           :metric="metric"
           height="300px"
           :separate-prior="jitenStore.separatePriorKnowledge"
+          :log-tail="jitenStore.coverageJourneyLogTail"
         />
         <button
           v-if="hasPrior"

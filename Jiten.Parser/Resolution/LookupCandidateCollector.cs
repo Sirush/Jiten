@@ -73,7 +73,7 @@ internal static class LookupCandidateCollector
         if (includeLongVowelStripped && text.Contains('ー'))
         {
             var textStripped = text.Replace("ー", "");
-            bool endsInBar = text.EndsWith("ー");
+            bool endsInBar = text.EndsWith('ー');
             bool isShort = textStripped.Length <= 2;
 
             if (!endsInBar || !isShort)

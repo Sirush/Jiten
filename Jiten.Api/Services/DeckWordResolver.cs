@@ -53,8 +53,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 break;
 
             case DeckDownloadType.TopDeckFrequency:
-                deckWordsQuery = deckWordsQuery
-                                 .OrderByDescending(dw => dw.Occurrences)
+                deckWordsQuery = ThenByGlobalRank(deckWordsQuery.OrderByDescending(dw => dw.Occurrences))
                                  .Skip(minFrequency)
                                  .Take(maxFrequency - minFrequency);
                 break;
@@ -73,9 +72,15 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 if (targetPercentage is null or < 1 or > 100)
                     return (null, Results.BadRequest("Target percentage must be between 1 and 100"));
 
-                var allDeckWordsForCoverage = await deckWordsQuery
-                                                    .OrderByDescending(dw => dw.Occurrences)
-                                                    .ToListAsync();
+                var coverageRows = await deckWordsQuery.ToListAsync();
+                var coverageRanks = await LoadTieBreakRanks(coverageRows.Select(dw => dw.WordId));
+
+                var allDeckWordsForCoverage = coverageRows
+                                              .OrderByDescending(dw => dw.Occurrences)
+                                              .ThenBy(dw => TieBreakRank(coverageRanks, dw.WordId, dw.ReadingIndex))
+                                              .ThenBy(dw => dw.WordId)
+                                              .ThenBy(dw => dw.ReadingIndex)
+                                              .ToList();
 
                 var coverageWordKeys = allDeckWordsForCoverage
                                        .Select(dw => (dw.WordId, dw.ReadingIndex))
@@ -144,19 +149,20 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                     deckWordsQuery = deckWordsQuery.OrderByDescending(dw => dw.Occurrences);
                     break;
                 case DeckOrder.Random:
-                    deckWordsRaw = await deckWordsQuery.ToListAsync();
+                    var shuffled = await deckWordsQuery.ToListAsync();
                     var rng = Random.Shared;
-                    for (var i = deckWordsRaw.Count - 1; i > 0; i--)
+                    for (var i = shuffled.Count - 1; i > 0; i--)
                     {
                         var j = rng.Next(i + 1);
-                        (deckWordsRaw[i], deckWordsRaw[j]) = (deckWordsRaw[j], deckWordsRaw[i]);
+                        (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
                     }
+                    deckWordsRaw = shuffled;
                     break;
                 default:
                     return (null, Results.BadRequest());
             }
 
-            deckWordsRaw = await deckWordsQuery.ToListAsync();
+            deckWordsRaw ??= await deckWordsQuery.ToListAsync();
         }
 
         if ((excludeMatureMasteredBlacklisted || excludeAllTrackedWords) && currentUserService.IsAuthenticated)
@@ -195,6 +201,18 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             .ToListAsync();
 
         return keys.ToHashSet();
+    }
+
+    /// Rank 0 and missing rows both mean unranked, which sorts last.
+    private IOrderedQueryable<DeckWord> ThenByGlobalRank(IOrderedQueryable<DeckWord> query)
+    {
+        return query.ThenBy(dw => context.WordFormFrequencies
+                                         .Where(wff => wff.WordId == dw.WordId
+                                                       && wff.ReadingIndex == (short)dw.ReadingIndex
+                                                       && wff.FrequencyRank > 0)
+                                         .Select(wff => (int?)wff.FrequencyRank)
+                                         .FirstOrDefault() ?? int.MaxValue)
+                    .ThenBy(dw => dw.DeckWordId);
     }
 
     private IQueryable<DeckWord> ApplyFrequencyRankFilter(IQueryable<DeckWord> query, int minFrequency, int maxFrequency,
@@ -248,11 +266,13 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             var source = frequencySource.Value;
             return await context.WordFormFrequenciesByType.AsNoTracking()
                                 .Where(wff => wff.MediaType == source && wordIds.Contains(wff.WordId))
+                                .Select(wff => new { wff.WordId, wff.ReadingIndex, wff.FrequencyRank })
                                 .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex), wff => wff.FrequencyRank);
         }
 
         return await context.WordFormFrequencies.AsNoTracking()
                             .Where(wff => wordIds.Contains(wff.WordId))
+                            .Select(wff => new { wff.WordId, wff.ReadingIndex, wff.FrequencyRank })
                             .ToDictionaryAsync(wff => (wff.WordId, wff.ReadingIndex), wff => wff.FrequencyRank);
     }
 
@@ -414,6 +434,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
 
             words = await query
                 .OrderBy(wff => wff.FrequencyRank)
+                .ThenBy(wff => wff.WordId)
+                .ThenBy(wff => wff.ReadingIndex)
                 .Take(maxResults + 1)
                 .Select(wff => new ResolvedWord
                 {
@@ -505,11 +527,17 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 break;
 
             case DeckDownloadType.TopDeckFrequency:
+            {
+                var windowRanks = await LoadTieBreakRanks(words.Select(w => w.WordId));
                 words = words.OrderByDescending(w => w.Occurrences)
+                             .ThenBy(w => TieBreakRank(windowRanks, w.WordId, w.ReadingIndex))
+                             .ThenBy(w => w.WordId)
+                             .ThenBy(w => w.ReadingIndex)
                              .Skip(minFrequency)
                              .Take(Math.Max(0, maxFrequency - minFrequency))
                              .ToList();
                 break;
+            }
 
             case DeckDownloadType.TopChronological:
                 words = words.OrderBy(w => w.SortOrder)
@@ -529,7 +557,13 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             {
                 if (targetPercentage is null or < 1 or > 100) return [];
 
-                var byOccurrences = words.OrderByDescending(w => w.Occurrences).ToList();
+                var coverageRanks = await LoadTieBreakRanks(words.Select(w => w.WordId));
+
+                var byOccurrences = words.OrderByDescending(w => w.Occurrences)
+                                         .ThenBy(w => TieBreakRank(coverageRanks, w.WordId, w.ReadingIndex))
+                                         .ThenBy(w => w.WordId)
+                                         .ThenBy(w => w.ReadingIndex)
+                                         .ToList();
                 var keysWithOccurrences = byOccurrences
                     .Select(w => (Key: WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex), w.Occurrences))
                     .ToList();
@@ -657,6 +691,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             const int maxResults = 500_000;
             var words = await query
                 .OrderBy(wff => wff.FrequencyRank)
+                .ThenBy(wff => wff.WordId)
+                .ThenBy(wff => wff.ReadingIndex)
                 .Take(maxResults + 1)
                 .Select(wff => new { wff.WordId, ReadingIndex = (byte)wff.ReadingIndex })
                 .ToListAsync();
@@ -690,9 +726,9 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                     query = ApplyFrequencyRankFilter(query, minFrequency, maxFrequency, frequencySource);
                 break;
             case DeckDownloadType.TopDeckFrequency:
-                query = query.OrderByDescending(dw => dw.Occurrences)
-                             .Skip(minFrequency)
-                             .Take(maxFrequency - minFrequency);
+                query = ThenByGlobalRank(query.OrderByDescending(dw => dw.Occurrences))
+                        .Skip(minFrequency)
+                        .Take(maxFrequency - minFrequency);
                 break;
             case DeckDownloadType.TopChronological:
                 query = query.OrderBy(dw => dw.DeckWordId)
@@ -782,10 +818,18 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             }
         }
 
-        var allDeckWords = await deckWordsQuery
-            .OrderByDescending(dw => dw.Occurrences)
+        var allDeckWordsUnordered = await deckWordsQuery
             .Select(dw => new { dw.WordId, dw.ReadingIndex, dw.Occurrences })
             .ToListAsync();
+
+        var coverageRanks = await LoadTieBreakRanks(allDeckWordsUnordered.Select(dw => dw.WordId));
+
+        var allDeckWords = allDeckWordsUnordered
+            .OrderByDescending(dw => dw.Occurrences)
+            .ThenBy(dw => TieBreakRank(coverageRanks, dw.WordId, dw.ReadingIndex))
+            .ThenBy(dw => dw.WordId)
+            .ThenBy(dw => dw.ReadingIndex)
+            .ToList();
 
         int totalOccurrences = deck.WordCount;
 
@@ -903,6 +947,18 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             excluded);
 
         return excluded;
+    }
+
+    /// Selection ties always rank on the site-wide list so a deck's membership matches across resolve, count and study-deck paths.
+    private async Task<Dictionary<(int, short), int>> LoadTieBreakRanks(IEnumerable<int> wordIds)
+    {
+        return await LoadFormRanks(wordIds.Distinct().ToList(), null);
+    }
+
+    private static int TieBreakRank(Dictionary<(int, short), int> ranks, int wordId, byte readingIndex)
+    {
+        // Rank 0 means unranked, which sorts last rather than first.
+        return ranks.TryGetValue((wordId, (short)readingIndex), out var rank) && rank > 0 ? rank : int.MaxValue;
     }
 
     private static List<DeckWord> CollectCoverageWords(

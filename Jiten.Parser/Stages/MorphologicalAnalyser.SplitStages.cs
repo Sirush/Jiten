@@ -31,7 +31,7 @@ public partial class MorphologicalAnalyser
             string? matchedAux = null;
             foreach (var aux in CompoundVerbSplitSuffixes)
             {
-                if (word.DictionaryForm.EndsWith(aux) && word.DictionaryForm.Length > aux.Length)
+                if (word.DictionaryForm.EndsWith(aux, StringComparison.Ordinal) && word.DictionaryForm.Length > aux.Length)
                 {
                     matchedAux = aux;
                     break;
@@ -70,7 +70,7 @@ public partial class MorphologicalAnalyser
 
             // Verify the auxiliary surface starts with the auxiliary stem
             if (!AuxiliaryVerbStems.TryGetValue(matchedAux, out var auxStem) ||
-                !auxVerbSurface.StartsWith(auxStem))
+                !auxVerbSurface.StartsWith(auxStem, StringComparison.Ordinal))
             {
                 result.Add(word);
                 continue;
@@ -544,7 +544,7 @@ public partial class MorphologicalAnalyser
             {
                 var candidateText = NormalizeToHiragana(prev.Text + "た");
                 var forms = deconj.Deconjugate(candidateText);
-                if (forms.Any(f => f.Tags.Any(t => t.StartsWith("v")) && f.Process.Any(p => p == "past")))
+                if (forms.Any(f => f.Tags.Any(t => t.StartsWith('v')) && f.Process.Any(p => p == "past")))
                     shouldSplit = true;
             }
 
@@ -581,7 +581,7 @@ public partial class MorphologicalAnalyser
     {
         if (wordInfos.Count < 2) return wordInfos;
 
-        var result = new List<WordInfo>(wordInfos.Count + 2);
+        List<WordInfo>? result = null;
 
         for (int i = 0; i < wordInfos.Count; i++)
         {
@@ -590,8 +590,10 @@ public partial class MorphologicalAnalyser
             // Split だな misparsed as 棚 (shelf) → だ (copula) + な (particle)
             if (word is { Text: "だな", PartOfSpeech: PartOfSpeech.Noun, NormalizedForm: "棚" })
             {
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
                 result.Add(new WordInfo { Text = "だ", DictionaryForm = "だ", NormalizedForm = "だ", PartOfSpeech = PartOfSpeech.Auxiliary, Reading = "だ",
                     StartOffset = word.StartOffset, EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1 });
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
                 result.Add(new WordInfo { Text = "な", DictionaryForm = "な", NormalizedForm = "な", PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.SentenceEndingParticle, Reading = "な",
                     StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1, EndOffset = word.EndOffset });
                 continue;
@@ -607,6 +609,7 @@ public partial class MorphologicalAnalyser
                 wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective
                     or PartOfSpeech.Auxiliary or PartOfSpeech.Expression)
             {
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
                 result.Add(new WordInfo
                 {
                     Text = "か", DictionaryForm = "か", NormalizedForm = "か",
@@ -616,6 +619,7 @@ public partial class MorphologicalAnalyser
                     StartOffset = word.StartOffset,
                     EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1
                 });
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
                 result.Add(new WordInfo
                 {
                     Text = "って", DictionaryForm = "って", NormalizedForm = "って",
@@ -637,6 +641,7 @@ public partial class MorphologicalAnalyser
                 wordInfos[i - 1] is { PartOfSpeech: PartOfSpeech.Particle, Text: "て" or "で" } prevTe &&
                 prevTe.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle))
             {
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
                 result.Add(new WordInfo
                 {
                     Text = "い", DictionaryForm = "いる", NormalizedForm = "居る",
@@ -644,6 +649,7 @@ public partial class MorphologicalAnalyser
                     StartOffset = word.StartOffset,
                     EndOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1
                 });
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
                 result.Add(new WordInfo
                 {
                     Text = "た", DictionaryForm = "た", NormalizedForm = "た",
@@ -651,6 +657,7 @@ public partial class MorphologicalAnalyser
                     StartOffset = word.StartOffset >= 0 ? word.StartOffset + 1 : -1,
                     EndOffset = word.StartOffset >= 0 ? word.StartOffset + 2 : -1
                 });
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
                 result.Add(new WordInfo
                 {
                     Text = "って", DictionaryForm = "って", NormalizedForm = "って",
@@ -678,6 +685,7 @@ public partial class MorphologicalAnalyser
                     string pastMarker = word.Text == "たって" ? "た" : "だ";
 
                     // Add the past auxiliary verb (た/だ)
+                    result ??= CopyAccumulatorUpTo(wordInfos, i);
                     result.Add(new WordInfo
                     {
                         Text = pastMarker,
@@ -690,6 +698,7 @@ public partial class MorphologicalAnalyser
                     });
 
                     // Add the quotative particle (って)
+                    result ??= CopyAccumulatorUpTo(wordInfos, i);
                     result.Add(new WordInfo
                     {
                         Text = "って",
@@ -706,10 +715,10 @@ public partial class MorphologicalAnalyser
                 }
             }
 
-            result.Add(word);
+            result?.Add(word);
         }
 
-        return result;
+        return result ?? wordInfos;
     }
 
     /// <summary>

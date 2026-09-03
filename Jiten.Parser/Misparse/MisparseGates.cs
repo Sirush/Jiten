@@ -40,6 +40,8 @@ internal static class MisparseGates
     /// no gate would touch. The ≤4 cap excludes 6-character reduplications such as ギュウギュウ;
     /// those overlap attested on-mim adverbs such as ごちゃごちゃとして and require separate
     /// mimetic preference handling.
+    private static readonly char[] TrailingStretchChars = ['ー', '〜', 'っ', 'ッ', 'ぁ', 'ぃ', 'ぅ', 'ぇ', 'ぉ'];
+
     public static bool MayBeKanaFragment(string s)
     {
         if (s.Length == 0) return false;
@@ -104,7 +106,7 @@ internal static class MisparseGates
         bool reduplicated = surface.Length is 4 or 6
                             && surface[..(surface.Length / 2)] == surface[(surface.Length / 2)..];
         if (surface.Length == 0 || (surface.Length > 4 && !reduplicated) || surface.Length > 6
-            || !WanaKana.IsKana(surface)) return false;
+            || !JapaneseTextHelper.IsAllKana(surface)) return false;
 
         // A neighbour already discarded as a misparse shred is part of the same burst; so is an
         // unresolved kana scrap. Both make the current token frame-transparent on that side.
@@ -119,7 +121,7 @@ internal static class MisparseGates
         bool burstContext = exclamatoryClip
                             && (prevShard
                                 || (ctx.Prev != null && ctx.Prev.Text.Length <= 2
-                                    && WanaKana.IsKana(ctx.Prev.Text)));
+                                    && JapaneseTextHelper.IsAllKana(ctx.Prev.Text)));
 
         // The token must be cut off from the sentence on both sides — by punctuation, an utterance
         // boundary, an interjection, a trailing sentence-final particle, or another shard of the same
@@ -135,7 +137,7 @@ internal static class MisparseGates
                            || ctx.Prev.PartOfSpeech == PartOfSpeech.Interjection
                            || (ctx.Prev.PartOfSpeech == PartOfSpeech.Particle
                                && ctx.Prev.Text is "な" or "よ" or "ね" or "ぞ" or "ぜ" or "わ" or "さ")
-                           || (exclamatoryClip && ctx.Prev.Text.Length <= 2 && WanaKana.IsKana(ctx.Prev.Text))
+                           || (exclamatoryClip && ctx.Prev.Text.Length <= 2 && JapaneseTextHelper.IsAllKana(ctx.Prev.Text))
                            || prevShard
                            || reduplicatedToFrame;
         if (!frameBefore) return false;
@@ -239,14 +241,14 @@ internal static class MisparseGates
     // A neighbouring token that is itself an unresolved kana scrap marks the current token as part
     // of a shredded blob rather than a standalone word.
     internal static bool IsKanaShardNeighbour(WordInfo? w)
-        => w is { ResolvedWordId: null } && w.Text.Length <= 3 && WanaKana.IsKana(w.Text)
+        => w is { ResolvedWordId: null } && w.Text.Length <= 3 && JapaneseTextHelper.IsAllKana(w.Text)
            && w.PartOfSpeech is not (PartOfSpeech.Particle or PartOfSpeech.Auxiliary
                or PartOfSpeech.BlankSpace);
 
     private static bool IsRepeatedKanaStuttering(in MisparseGateContext ctx)
     {
         string surface = ctx.Token.Text;
-        if (surface.Length < 2 || !WanaKana.IsKana(surface)) return false;
+        if (surface.Length < 2 || !JapaneseTextHelper.IsAllKana(surface)) return false;
 
         char first = surface[0];
         for (int i = 1; i < surface.Length; i++)
@@ -273,8 +275,8 @@ internal static class MisparseGates
             return true;
 
         // Both neighbours are single kana (onomatopoeia context like ちゅぼぼっ)
-        if (ctx.Prev is { Text.Length: <= 2 } && WanaKana.IsKana(ctx.Prev.Text)
-            && ctx.Next is { Text.Length: <= 2 } && WanaKana.IsKana(ctx.Next.Text))
+        if (ctx.Prev is { Text.Length: <= 2 } && JapaneseTextHelper.IsAllKana(ctx.Prev.Text)
+            && ctx.Next is { Text.Length: <= 2 } && JapaneseTextHelper.IsAllKana(ctx.Next.Text))
             return true;
 
         return false;
@@ -283,7 +285,7 @@ internal static class MisparseGates
     private static bool IsKanaStutterBeforeWord(in MisparseGateContext ctx)
     {
         string surface = ctx.Token.Text;
-        if (surface.Length > 3 || !WanaKana.IsKana(surface)) return false;
+        if (surface.Length > 3 || !JapaneseTextHelper.IsAllKana(surface)) return false;
 
         // An emphatic interjection token ending in っ/ー (くそっ, あー) that is repeated for effect
         // (くそっくそっ…) is deliberate, not a sub-word stutter shred, so it is kept. Plain response
@@ -307,16 +309,14 @@ internal static class MisparseGates
             or PartOfSpeech.Particle })
             return false;
 
-        string katakana = surface.Length == 1
-            ? new string(surface[0] >= 'ぁ' && surface[0] <= 'ん' ? (char)(surface[0] + 0x60) : surface[0], 1)
-            : WanaKana.ToKatakana(surface);
+        string katakana = JapaneseTextHelper.HiraganaToKatakana(surface);
 
         return next.Reading.StartsWith(katakana, StringComparison.Ordinal);
     }
 
     private static bool IsShortKanaNameWithoutContext(in MisparseGateContext ctx)
     {
-        if (!WanaKana.IsKana(ctx.Token.Text)) return false;
+        if (!JapaneseTextHelper.IsAllKana(ctx.Token.Text)) return false;
         if (ctx.Token.Text.Length > 2) return false;
         if (!ctx.SelectedWord.PartsOfSpeech.Contains(PartOfSpeech.Name)) return false;
         if (ctx.Token.IsPersonNameContext) return false;
@@ -329,7 +329,7 @@ internal static class MisparseGates
     {
         string surface = ctx.Token.Text;
 
-        if (!WanaKana.IsKana(surface)) return false;
+        if (!JapaneseTextHelper.IsAllKana(surface)) return false;
         if (surface.Length > 2) return false;
 
         if (ExemptFromKanaGate.Contains(ctx.Token.PartOfSpeech)) return false;
@@ -379,18 +379,20 @@ internal static class MisparseGates
         if (word == null) return (false, true, false, false, false);
 
         bool isUk = word.PartsOfSpeech.Contains("uk");
-        bool hasKanji = word.Forms.Any(f => f.FormType == JmDictFormType.KanjiForm);
-
-        bool readingIsIchi = word.Priorities?.Contains("jiten") == true
-                             || word.Forms.Any(f => f.FormType == JmDictFormType.KanaForm
-                                                    && f.ReadingIndex == readingIndex
-                                                    && f.Priorities != null
-                                                    && (f.Priorities.Contains("ichi1") || f.Priorities.Contains("ichi2")
-                                                        || f.Priorities.Contains("jiten")));
-
+        bool hasKanji = false;
+        bool readingIsIchi = word.Priorities?.Contains("jiten") == true;
         // Literal, same-script comparison: hiragana ぱん does not attest katakana-only パン. A surface
         // the entry does not actually spell was reached through normalisation or text mutation.
-        bool surfaceAttestsForm = surface != null && word.Forms.Any(f => f.Text == surface);
+        bool surfaceAttestsForm = false;
+        foreach (var f in word.Forms)
+        {
+            if (f.FormType == JmDictFormType.KanjiForm) hasKanji = true;
+            if (!readingIsIchi && f.FormType == JmDictFormType.KanaForm && f.ReadingIndex == readingIndex
+                && f.Priorities != null
+                && (f.Priorities.Contains("ichi1") || f.Priorities.Contains("ichi2") || f.Priorities.Contains("jiten")))
+                readingIsIchi = true;
+            if (surface != null && f.Text == surface) surfaceAttestsForm = true;
+        }
 
         bool surfaceAttestsLiterally = surfaceAttestsForm;
 
@@ -421,7 +423,7 @@ internal static class MisparseGates
         if (!surfaceAttestsForm && surface is { Length: > 0 }
             && (!hasKanji || word.Priorities is { Count: > 0 }))
         {
-            string detrailed = surface.TrimEnd('ー', '〜', 'っ', 'ッ', 'ぁ', 'ぃ', 'ぅ', 'ぇ', 'ぉ');
+            string detrailed = surface.TrimEnd(TrailingStretchChars);
             string degeminated = string.Concat(surface.Where(c => c is not ('っ' or 'ッ')));
             // An internal stretch mark belongs to a shouted content word (おーっと); function
             // words are unstressed, so a particle reached by de-stretching (わーい → the

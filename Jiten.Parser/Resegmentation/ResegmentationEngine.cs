@@ -348,7 +348,7 @@ internal static class ResegmentationEngine
         string hira = KanaConverter.ToHiragana(text);
         foreach (var f in Deconjugator.Instance.Deconjugate(hira))
         {
-            if (f.Process.Count == 0 || f.Text.Length < 2 || f.Text == hira) continue;
+            if (f.Process.Length == 0 || f.Text.Length < 2 || f.Text == hira) continue;
             if (!lookups.TryGetValue(f.Text, out var ids)) continue;
             foreach (var id in ids)
                 if (wordMeta.TryGetValue(id, out var meta)

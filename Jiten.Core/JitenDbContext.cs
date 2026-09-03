@@ -417,6 +417,12 @@ public class JitenDbContext : DbContext
                 entity.Property(e => e.SenseInfo).HasColumnType("text[]").HasDefaultValueSql("'{}'");
                 entity.Property(e => e.GlossTypes).HasColumnType("text[]").HasDefaultValueSql("'{}'");
                 entity.Property(e => e.RestrictedToReadingIndices).HasColumnType("smallint[]").IsRequired(false);
+                entity.Property<NpgsqlTypes.NpgsqlTsVector>("SearchVector")
+                      .HasColumnType("tsvector")
+                      .HasComputedColumnSql("to_tsvector('english', jmdict.gloss_search_text(\"EnglishMeanings\"))", stored: true);
+                entity.HasIndex("SearchVector")
+                      .HasMethod("gin")
+                      .HasDatabaseName("IX_Definitions_SearchVector");
             }
             else
             {

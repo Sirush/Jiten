@@ -46,7 +46,7 @@ internal static class RederivationHelper
             var normalizedText = KanaNormalizer.Normalize(KanaConverter.ToHiragana(text));
             var deconjugated = deconjugator.Deconjugate(normalizedText);
 
-            var deconjMatches = new List<(DeconjugationForm form, List<int> ids)>();
+            var deconjMatches = new List<(DeconjugationForm form, List<int> ids)>(deconjugated.Count);
             var seen = new HashSet<int>(candidateIds);
 
             for (int d = 0; d < deconjugated.Count; d++)

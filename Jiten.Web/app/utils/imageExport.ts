@@ -120,6 +120,8 @@ export interface SeriesCardOptions {
   /** The emphasised series; `band` is the lighter one drawn behind it. */
   line: number[];
   band: number[];
+  /** Value mapped to the bottom of the plot area; the areas fill down to it. Defaults to 0. */
+  min?: number;
   /** Value mapped to the top of the plot area. */
   max: number;
   footLeft: string;
@@ -132,6 +134,7 @@ export interface SeriesCardOptions {
  */
 export function drawSeriesCard(options: SeriesCardOptions): HTMLCanvasElement {
   const { palette: pal, line, band, max } = options;
+  const min = options.min ?? 0;
 
   const canvas = document.createElement('canvas');
   canvas.width = EXPORT_W * EXPORT_SCALE;
@@ -200,7 +203,7 @@ export function drawSeriesCard(options: SeriesCardOptions): HTMLCanvasElement {
   const chartH = chartBottom - chartTop;
 
   const xAt = (i: number) => chartX + (line.length === 1 ? chartW / 2 : (i / (line.length - 1)) * chartW);
-  const yAt = (value: number) => chartBottom - (Math.min(value, max) / max) * chartH;
+  const yAt = (value: number) => chartBottom - ((Math.min(Math.max(value, min), max) - min) / (max - min)) * chartH;
 
   const area = (values: number[], fill: string) => {
     ctx.beginPath();

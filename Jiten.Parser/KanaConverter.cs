@@ -19,6 +19,12 @@ internal static class KanaConverter
 
     public static string ToHiragana(string text, bool convertLongVowelMark)
     {
+        if (IsAlreadyHiragana(text))
+            return text;
+
+        if (TryFoldKatakana(text, convertLongVowelMark, out var folded))
+            return folded;
+
         var key = (text, convertLongVowelMark);
 
         if (_gen0.TryGetValue(key, out var result))
@@ -40,6 +46,52 @@ internal static class KanaConverter
         }
 
         return result;
+    }
+
+    // Katakana letters shift to hiragana one-to-one; ヵヶヮゎ take JapaneseTextHelper's spellings and
+    // ー stays only when long-vowel conversion is off. Any other character defers to WanaKana.
+    internal static bool TryFoldKatakana(string text, bool convertLongVowelMark, out string folded)
+    {
+        foreach (char c in text)
+        {
+            if (c is >= 'ぁ' and <= 'ゔ' || JapaneseTextHelper.IsKanji(c) || c is >= 'ァ' and <= 'ヶ')
+                continue;
+            if (c == 'ー' && !convertLongVowelMark)
+                continue;
+            folded = null!;
+            return false;
+        }
+
+        folded = string.Create(text.Length, text, static (span, src) =>
+        {
+            for (int i = 0; i < src.Length; i++)
+            {
+                char c = src[i];
+                span[i] = c switch
+                {
+                    'ヵ' => 'か',
+                    'ヶ' => 'け',
+                    'ヮ' or 'ゎ' => 'わ',
+                    >= 'ァ' and <= 'ヴ' => (char)(c - 0x60),
+                    _ => c,
+                };
+            }
+        });
+        return true;
+    }
+
+    // Plain hiragana + kanji passes through WanaKana unchanged, so the cache probe is pure overhead.
+    // ゎ (U+308E) is excluded: JapaneseTextHelper rewrites it to わ before converting.
+    private static bool IsAlreadyHiragana(string text)
+    {
+        foreach (char c in text)
+        {
+            if (c is >= 'ぁ' and <= 'ゔ' and not 'ゎ') continue;
+            if (JapaneseTextHelper.IsKanji(c)) continue;
+            return false;
+        }
+
+        return true;
     }
 
     private static void RotateGenerations()

@@ -625,12 +625,6 @@
     { immediate: true, deep: true }
   );
 
-  if (props.word != null) {
-    sortByOptions.value.unshift(deckSortOption('occurrences'));
-    sortBy.value = 'occurrences';
-    sortOrder.value = SortOrder.Descending;
-  }
-
   const updateDebounced = debounce(async (newValue: string | null) => {
     if (newValue !== titleFilter.value) return;
     debouncedTitleFilter.value = newValue;

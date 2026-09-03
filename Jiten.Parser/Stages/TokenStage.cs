@@ -94,6 +94,14 @@ internal static class TokenFeatureScanner
         return new TokenFeatureScan(ScanCore(tokens, candidates), candidates);
     }
 
+    private static bool IsKatakanaRun(string text)
+    {
+        foreach (var c in text)
+            if (!JapaneseTextHelper.IsKatakanaWordChar(c))
+                return false;
+        return true;
+    }
+
     private static TokenFeatures ScanCore(List<WordInfo> tokens,
                                           Dictionary<TokenFeatures, List<int>>? candidates)
     {
@@ -144,7 +152,7 @@ internal static class TokenFeatureScanner
                 if (text.EndsWith('っ') || text.EndsWith("っぱ", StringComparison.Ordinal)
                                         || text.EndsWith("っぷ", StringComparison.Ordinal))
                     AddCandidate(TokenFeatures.GeminateSuffixShape, index);
-                if (text.Length > 0 && text.All(JapaneseTextHelper.IsKatakanaWordChar))
+                if (text.Length > 0 && IsKatakanaRun(text))
                     AddCandidate(TokenFeatures.KatakanaRun, index);
                 if (text.Length is 2 or 3 && "上中内外前後間下先際的".Contains(text[^1]))
                 {

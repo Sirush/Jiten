@@ -724,6 +724,153 @@ public static class JitenHelper
         return (words, forms, observedForms);
     }
 
+    /// <summary>Frequency inputs read once for the global and every per-type computation; a parent deck has one media type, so global aggregates are the per-type sums.</summary>
+    public sealed class FrequencyBatch
+    {
+        private readonly List<(int WordId, short ReadingIndex)> _formKeys;
+        private readonly Dictionary<int, int> _parentDeckCountByType;
+        private readonly Dictionary<int, List<DeckWordAggregate>> _wordAggregatesByType;
+        private readonly Dictionary<int, List<DeckReadingAggregate>> _readingAggregatesByType;
+
+        /// <summary>Loaded once with the same query the exports run per scope, so their form ordering is unchanged.</summary>
+        public List<JmDictWordForm> WordForms { get; }
+
+        internal FrequencyBatch(List<(int WordId, short ReadingIndex)> formKeys,
+                                List<JmDictWordForm> wordForms,
+                                Dictionary<int, int> parentDeckCountByType,
+                                Dictionary<int, List<DeckWordAggregate>> wordAggregatesByType,
+                                Dictionary<int, List<DeckReadingAggregate>> readingAggregatesByType)
+        {
+            _formKeys = formKeys;
+            WordForms = wordForms;
+            _parentDeckCountByType = parentDeckCountByType;
+            _wordAggregatesByType = wordAggregatesByType;
+            _readingAggregatesByType = readingAggregatesByType;
+        }
+
+        /// <summary>Same result as <see cref="ComputeFrequencies"/> for the same scope, without touching the database.</summary>
+        public (List<JmDictWordFrequency> WordFrequencies, List<JmDictWordFormFrequency> FormFrequencies) Compute(MediaType? mediaType)
+        {
+            var (wordFrequencies, readingFreqs) = BuildInitialFrequencyDicts(_formKeys);
+
+            bool hasPrimaryDecks = mediaType.HasValue
+                ? _parentDeckCountByType.ContainsKey((int)mediaType.Value)
+                : _parentDeckCountByType.Count > 0;
+            if (!hasPrimaryDecks)
+                return (wordFrequencies.Values.ToList(), readingFreqs.Values.ToList());
+
+            List<DeckWordAggregate> wordAggregates;
+            List<DeckReadingAggregate> readingAggregates;
+            if (mediaType.HasValue)
+            {
+                wordAggregates = _wordAggregatesByType.GetValueOrDefault((int)mediaType.Value, []);
+                readingAggregates = _readingAggregatesByType.GetValueOrDefault((int)mediaType.Value, []);
+            }
+            else
+            {
+                (wordAggregates, readingAggregates) = SumAcrossTypes();
+            }
+
+            return ApplyAggregatesAndRank(wordFrequencies, readingFreqs, wordAggregates, readingAggregates);
+        }
+
+        private (List<DeckWordAggregate>, List<DeckReadingAggregate>) SumAcrossTypes()
+        {
+            var words = new Dictionary<int, (int Occurrences, int Decks)>();
+            foreach (var agg in _wordAggregatesByType.Values.SelectMany(list => list))
+            {
+                words.TryGetValue(agg.WordId, out var acc);
+                words[agg.WordId] = (checked(acc.Occurrences + agg.TotalOccurrences), acc.Decks + agg.DistinctDeckCount);
+            }
+
+            var readings = new Dictionary<(int, byte), (int Occurrences, int Entries)>();
+            foreach (var agg in _readingAggregatesByType.Values.SelectMany(list => list))
+            {
+                var key = (agg.WordId, agg.ReadingIndex);
+                readings.TryGetValue(key, out var acc);
+                readings[key] = (checked(acc.Occurrences + agg.TotalOccurrences), acc.Entries + agg.EntryCount);
+            }
+
+            return (words.Select(kvp => new DeckWordAggregate(kvp.Key, kvp.Value.Occurrences, kvp.Value.Decks)).ToList(),
+                    readings.Select(kvp => new DeckReadingAggregate(kvp.Key.Item1, kvp.Key.Item2, kvp.Value.Occurrences, kvp.Value.Entries)).ToList());
+        }
+    }
+
+    private sealed class TypedWordAggregateRow
+    {
+        public int WordId { get; set; }
+        public int MediaType { get; set; }
+        public int TotalOccurrences { get; set; }
+        public int DistinctDeckCount { get; set; }
+    }
+
+    private sealed class TypedReadingAggregateRow
+    {
+        public int WordId { get; set; }
+        public int ReadingIndex { get; set; }
+        public int MediaType { get; set; }
+        public int TotalOccurrences { get; set; }
+        public int EntryCount { get; set; }
+    }
+
+    public static async Task<FrequencyBatch> LoadFrequencyBatch(IDbContextFactory<JitenDbContext> contextFactory)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        var wordFormKeys = await context.WordForms.AsNoTracking()
+            .Select(wf => new { wf.WordId, wf.ReadingIndex })
+            .ToListAsync();
+        var formKeys = wordFormKeys.Select(fk => (fk.WordId, fk.ReadingIndex)).ToList();
+
+        var parentDeckCountByType = (await context.Decks.AsNoTracking()
+                                                   .Where(d => d.ParentDeck == null)
+                                                   .GroupBy(d => d.MediaType)
+                                                   .Select(g => new { g.Key, Count = g.Count() })
+                                                   .ToListAsync())
+            .ToDictionary(g => (int)g.Key, g => g.Count);
+
+        var wordIds = formKeys.Select(k => k.WordId).Distinct().ToList();
+        var wordForms = await YomitanHelper.LoadFormsForWordIds(contextFactory, wordIds);
+
+        List<TypedReadingAggregateRow> readingRows;
+        List<TypedWordAggregateRow> wordRows;
+        await using (var tx = await context.Database.BeginTransactionAsync())
+        {
+            // Both aggregates sort or hash tens of millions of rows; the defaults spill them to disk.
+            await context.Database.ExecuteSqlRawAsync("SET LOCAL work_mem = '1GB';");
+            await context.Database.ExecuteSqlRawAsync("SET LOCAL max_parallel_workers_per_gather = 4;");
+
+            readingRows = await context.Database.SqlQueryRaw<TypedReadingAggregateRow>("""
+                SELECT dw."WordId", dw."ReadingIndex"::int AS "ReadingIndex", d."MediaType"::int AS "MediaType",
+                       SUM(dw."Occurrences")::int AS "TotalOccurrences", COUNT(*)::int AS "EntryCount"
+                FROM "jiten"."DeckWords" dw
+                JOIN "jiten"."Decks" d ON d."DeckId" = dw."DeckId"
+                WHERE d."ParentDeckId" IS NULL
+                GROUP BY dw."WordId", dw."ReadingIndex", d."MediaType"
+                """).ToListAsync();
+
+            wordRows = await context.Database.SqlQueryRaw<TypedWordAggregateRow>("""
+                SELECT dw."WordId", d."MediaType"::int AS "MediaType",
+                       SUM(dw."Occurrences")::int AS "TotalOccurrences", COUNT(DISTINCT dw."DeckId")::int AS "DistinctDeckCount"
+                FROM "jiten"."DeckWords" dw
+                JOIN "jiten"."Decks" d ON d."DeckId" = dw."DeckId"
+                WHERE d."ParentDeckId" IS NULL
+                GROUP BY dw."WordId", d."MediaType"
+                """).ToListAsync();
+
+            await tx.CommitAsync();
+        }
+
+        var wordAggregatesByType = wordRows
+            .GroupBy(r => r.MediaType)
+            .ToDictionary(g => g.Key, g => g.Select(r => new DeckWordAggregate(r.WordId, r.TotalOccurrences, r.DistinctDeckCount)).ToList());
+        var readingAggregatesByType = readingRows
+            .GroupBy(r => r.MediaType)
+            .ToDictionary(g => g.Key, g => g.Select(r => new DeckReadingAggregate(r.WordId, (byte)r.ReadingIndex, r.TotalOccurrences, r.EntryCount)).ToList());
+
+        return new FrequencyBatch(formKeys, wordForms, parentDeckCountByType, wordAggregatesByType, readingAggregatesByType);
+    }
+
     /// <summary>
     /// Seeds a zeroed <see cref="JmDictWordFrequency"/> per distinct word and a zeroed
     /// <see cref="JmDictWordFormFrequency"/> per (word, reading) key, ready for the deck aggregates to
@@ -754,9 +901,9 @@ public static class JitenHelper
         return (wordFrequencies, readingFreqs);
     }
 
-    private sealed record DeckWordAggregate(int WordId, int TotalOccurrences, int DistinctDeckCount);
+    internal sealed record DeckWordAggregate(int WordId, int TotalOccurrences, int DistinctDeckCount);
 
-    private sealed record DeckReadingAggregate(int WordId, byte ReadingIndex, int TotalOccurrences, int EntryCount);
+    internal sealed record DeckReadingAggregate(int WordId, byte ReadingIndex, int TotalOccurrences, int EntryCount);
 
     private static async Task<(List<DeckWordAggregate> WordAggregates, List<DeckReadingAggregate> ReadingAggregates)>
         LoadDeckWordAggregates(JitenDbContext context, List<int> primaryDecks)

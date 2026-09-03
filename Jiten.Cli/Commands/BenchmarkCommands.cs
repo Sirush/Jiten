@@ -50,7 +50,22 @@ public class BenchmarkCommands(CliContext context)
             Console.WriteLine();
         }
 
+        for (int pass = 1; pass < options.BenchmarkPasses; pass++)
+        {
+            var passSw = Stopwatch.StartNew();
+            foreach (var filePath in txtFiles)
+                await Jiten.Parser.Parser.ParseTextToDeck(context.ContextFactory, await File.ReadAllTextAsync(filePath), false, false, deckType);
+            Console.WriteLine($"Pass {pass}/{options.BenchmarkPasses} (not reported): {passSw.ElapsedMilliseconds:N0} ms");
+        }
+        if (options.BenchmarkPasses > 1) Console.WriteLine();
+
+        var gcPauseBefore = GC.GetTotalPauseDuration();
+        var gcAllocBefore = GC.GetTotalAllocatedBytes(precise: true);
+        int gc0Before = GC.CollectionCount(0), gc1Before = GC.CollectionCount(1), gc2Before = GC.CollectionCount(2);
+        ParserCounters.Reset();
+        ParserCounters.SectionTiming = options.BenchmarkSections;
         var results = new List<BenchmarkFileResult>();
+        var dump = options.BenchmarkDump != null ? new System.Text.StringBuilder() : null;
         var aggregateTimings = new BenchmarkTimings();
         var stopwatch = new Stopwatch();
 
@@ -75,6 +90,7 @@ public class BenchmarkCommands(CliContext context)
             var charsPerSecond = elapsedMs > 0 ? (double)characterCount / elapsedMs * 1000 : 0;
 
             aggregateTimings.Accumulate(fileTimings);
+            if (dump != null) AppendDeckSignature(dump, fileName, deck);
 
             results.Add(new BenchmarkFileResult
             {
@@ -145,6 +161,16 @@ public class BenchmarkCommands(CliContext context)
         Console.WriteLine($"    Avg BFS:    {(deconjStats.BfsCalls > 0 ? deconjStats.BfsTimeMs / deconjStats.BfsCalls : 0):F3} ms/call");
         Console.WriteLine($"    Entries:    {deconjStats.Count:N0} / {deconjStats.MaxEntries:N0}");
 
+        Console.WriteLine();
+        Console.WriteLine("GC:");
+        Console.WriteLine($"    Mode:       {(System.Runtime.GCSettings.IsServerGC ? "server" : "workstation")}, latency {System.Runtime.GCSettings.LatencyMode}");
+        Console.WriteLine($"    Pause:      {(GC.GetTotalPauseDuration() - gcPauseBefore).TotalMilliseconds:N0} ms");
+        Console.WriteLine($"    Allocated:  {(GC.GetTotalAllocatedBytes(precise: true) - gcAllocBefore) / (1024.0 * 1024.0):N0} MB");
+        Console.WriteLine($"    Gen0/1/2:   {GC.CollectionCount(0) - gc0Before} / {GC.CollectionCount(1) - gc1Before} / {GC.CollectionCount(2) - gc2Before}");
+        Console.WriteLine();
+        Console.WriteLine("Parser Counters:");
+        Console.Write(ParserCounters.Dump());
+
         if (t.PipelineStageMs.Count > 0)
         {
             Console.WriteLine();
@@ -153,6 +179,12 @@ public class BenchmarkCommands(CliContext context)
             {
                 Console.WriteLine($"    {stage,-35} {ms,10:N1} ms ({Pct(ms, t.PipelineMs)})");
             }
+        }
+
+        if (dump != null)
+        {
+            await File.WriteAllTextAsync(options.BenchmarkDump!, dump.ToString());
+            Console.WriteLine($"Deck signatures written to: {options.BenchmarkDump}");
         }
 
         if (!string.IsNullOrEmpty(options.Output))
@@ -184,6 +216,30 @@ public class BenchmarkCommands(CliContext context)
             await File.WriteAllTextAsync(options.Output, JsonSerializer.Serialize(benchmarkOutput, jsonOptions));
             Console.WriteLine();
             Console.WriteLine($"Results written to: {options.Output}");
+        }
+    }
+
+    private static void AppendDeckSignature(System.Text.StringBuilder sb, string fileName, Deck deck)
+    {
+        sb.Append("## ").Append(fileName).Append('\n');
+        sb.Append($"chars={deck.CharacterCount} words={deck.WordCount} unique={deck.UniqueWordCount} once={deck.UniqueWordUsedOnceCount} kanji={deck.UniqueKanjiCount} kanjiOnce={deck.UniqueKanjiUsedOnceCount} sentences={deck.SentenceCount} dialogue={deck.DialoguePercentage:R}\n");
+        foreach (var w in deck.DeckWords)
+        {
+            sb.Append(w.WordId).Append(':').Append(w.ReadingIndex).Append(':').Append(w.Occurrences)
+              .Append(':').Append(w.OriginalText).Append(':').Append((int)w.Origin)
+              .Append(':').Append(string.Join(",", w.PartsOfSpeech.Select(p => (int)p)))
+              .Append(':').Append(w.SudachiReading).Append(':').Append((int)w.SudachiPartOfSpeech)
+              .Append(':').Append(w.CachedMargin?.ToString() ?? "-").Append(':').Append(string.Join(",", w.Conjugations)).Append('\n');
+        }
+        if (deck.ExampleSentences != null)
+        {
+            foreach (var s in deck.ExampleSentences)
+            {
+                sb.Append("S ").Append(s.Position).Append(':').Append(s.Difficulty.ToString("R")).Append(':').Append(s.Text).Append(" | ");
+                foreach (var sw in s.Words)
+                    sb.Append(sw.WordId).Append('/').Append(sw.ReadingIndex).Append('/').Append(sw.Position).Append('/').Append(sw.Length).Append(' ');
+                sb.Append('\n');
+            }
         }
     }
 

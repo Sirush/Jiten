@@ -965,16 +965,19 @@ public class ComputationJob(
         string path = Path.Join(configuration["StaticFilesPath"], "yomitan");
         Directory.CreateDirectory(path);
 
+        Console.WriteLine("Loading deck word aggregates...");
+        var batch = await JitenHelper.LoadFrequencyBatch(contextFactory);
+
         Console.WriteLine("Computing global frequencies...");
-        var (wordFrequencies, formFrequencies) = await JitenHelper.ComputeFrequencies(contextFactory, null);
+        var (wordFrequencies, formFrequencies) = batch.Compute(null);
         await JitenHelper.SaveFrequenciesToDatabase(contextFactory, wordFrequencies, formFrequencies);
 
         // Save frequencies to CSV
-        await SaveFrequenciesToCsv(wordFrequencies, formFrequencies, Path.Join(path, "jiten_freq_global.csv"));
+        await SaveFrequenciesToCsv(wordFrequencies, formFrequencies, Path.Join(path, "jiten_freq_global.csv"), batch.WordForms);
 
         // Generate Yomitan deck
         string index = YomitanHelper.GetIndexJson(null);
-        var bytes = await YomitanHelper.GenerateYomitanFrequencyDeck(contextFactory, wordFrequencies, formFrequencies, null, index);
+        var bytes = await YomitanHelper.GenerateYomitanFrequencyDeck(contextFactory, wordFrequencies, formFrequencies, null, index, batch.WordForms);
         var filePath = Path.Join(path, "jiten_freq_global.zip");
         string indexFilePath = Path.Join(path, "jiten_freq_global.json");
         await File.WriteAllBytesAsync(filePath, bytes);
@@ -983,7 +986,7 @@ public class ComputationJob(
         foreach (var mediaType in MediaTypes.Listed)
         {
             Console.WriteLine($"Computing {mediaType} frequencies...");
-            (wordFrequencies, formFrequencies) = await JitenHelper.ComputeFrequencies(contextFactory, mediaType);
+            (wordFrequencies, formFrequencies) = batch.Compute(mediaType);
 
             try
             {
@@ -995,11 +998,11 @@ public class ComputationJob(
             }
 
             // Save frequencies to CSV
-            await SaveFrequenciesToCsv(wordFrequencies, formFrequencies, Path.Join(path, $"jiten_freq_{mediaType.ToString()}.csv"));
+            await SaveFrequenciesToCsv(wordFrequencies, formFrequencies, Path.Join(path, $"jiten_freq_{mediaType.ToString()}.csv"), batch.WordForms);
 
             // Generate Yomitan deck
             index = YomitanHelper.GetIndexJson(mediaType);
-            bytes = await YomitanHelper.GenerateYomitanFrequencyDeck(contextFactory, wordFrequencies, formFrequencies, mediaType, index);
+            bytes = await YomitanHelper.GenerateYomitanFrequencyDeck(contextFactory, wordFrequencies, formFrequencies, mediaType, index, batch.WordForms);
             filePath = Path.Join(path, $"jiten_freq_{mediaType.ToString()}.zip");
             indexFilePath = Path.Join(path, $"jiten_freq_{mediaType.ToString()}.json");
             await File.WriteAllBytesAsync(filePath, bytes);
@@ -1068,14 +1071,10 @@ public class ComputationJob(
     }
 
     private async Task SaveFrequenciesToCsv(List<JmDictWordFrequency> frequencies,
-        List<JmDictWordFormFrequency> formFrequencies, string filePath)
+        List<JmDictWordFormFrequency> formFrequencies, string filePath, List<JmDictWordForm>? preloadedForms = null)
     {
-        await using var context = await contextFactory.CreateDbContextAsync();
-
-        var wordIds = frequencies.Select(f => f.WordId).ToList();
-        var allForms = await context.WordForms.AsNoTracking()
-            .Where(wf => wordIds.Contains(wf.WordId))
-            .ToListAsync();
+        var allForms = preloadedForms
+                       ?? await YomitanHelper.LoadFormsForWordIds(contextFactory, frequencies.Select(f => f.WordId).ToList());
         var formsByWord = allForms.GroupBy(wf => wf.WordId)
             .ToDictionary(g => g.Key, g => g.ToList());
 

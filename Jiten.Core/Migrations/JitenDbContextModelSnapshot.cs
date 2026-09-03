@@ -899,6 +899,11 @@ namespace Jiten.Core.Migrations
                     b.PrimitiveCollection<List<short>>("RestrictedToReadingIndices")
                         .HasColumnType("smallint[]");
 
+                    b.Property<NpgsqlTypes.NpgsqlTsVector>("SearchVector")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("tsvector")
+                        .HasComputedColumnSql("to_tsvector('english', jmdict.gloss_search_text(\"EnglishMeanings\"))", true);
+
                     b.Property<int>("SenseIndex")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -914,6 +919,11 @@ namespace Jiten.Core.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("DefinitionId");
+
+                    b.HasIndex("SearchVector")
+                        .HasDatabaseName("IX_Definitions_SearchVector");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "gin");
 
                     b.HasIndex("WordId", "SenseIndex")
                         .HasDatabaseName("IX_Definitions_WordId_SenseIndex");

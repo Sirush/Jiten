@@ -1252,7 +1252,7 @@ public partial class MorphologicalAnalyser
             var rule = FindFiringRule(wordInfos, i, index);
             if (rule != null)
             {
-                result ??= new List<WordInfo>(wordInfos.Take(i));
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
                 result.AddRange(BuildOutputs(rule, wordInfos, i));
                 i += rule.Match.Length;
             }

@@ -132,11 +132,14 @@ public static class YomitanHelper
         return frequencyList;
     }
 
-    private static async Task<List<JmDictWordForm>> LoadFormsForFrequencies(IDbContextFactory<JitenDbContext> contextFactory,
-                                                                            List<JmDictWordFrequency> frequencies)
+    private static Task<List<JmDictWordForm>> LoadFormsForFrequencies(IDbContextFactory<JitenDbContext> contextFactory,
+                                                                      List<JmDictWordFrequency> frequencies)
+        => LoadFormsForWordIds(contextFactory, frequencies.Select(f => f.WordId).ToList());
+
+    public static async Task<List<JmDictWordForm>> LoadFormsForWordIds(IDbContextFactory<JitenDbContext> contextFactory,
+                                                                       List<int> wordIds)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
-        var wordIds = frequencies.Select(f => f.WordId).ToList();
         return await context.WordForms.AsNoTracking()
                             .Where(wf => wordIds.Contains(wf.WordId))
                             .ToListAsync();

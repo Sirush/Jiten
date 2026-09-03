@@ -532,7 +532,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         if (trimmed.Length > 200)
             return Results.BadRequest("Query too long");
 
-        var cacheKey = $"jiten:dict-search:{trimmed}:{limit}:{offset}";
+        var cacheKey = $"jiten:dict-search:v2:{trimmed}:{limit}:{offset}";
         var redisDb = redis.GetDatabase();
         try
         {
@@ -702,37 +702,92 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
 
     private async Task<List<DictionaryEntryDto>> SearchByEnglishGloss(string query, int limit, int offset)
     {
-        var regexPattern = $@"\m{SanitizeRegexInput(query)}\M";
-        var oversampleLimit = Math.Max(limit * 4, 100);
+        var candidateLimit = Math.Max((limit + offset) * 6, 300);
 
-        var wordIds = await context.Database
-            .SqlQueryRaw<int>(
-                """
-                SELECT w."WordId" AS "Value"
-                FROM (
-                    SELECT DISTINCT d."WordId", f."FrequencyRank"
-                    FROM jmdict."Definitions" d
-                    LEFT JOIN jmdict."WordFrequencies" f ON d."WordId" = f."WordId"
-                    WHERE EXISTS (
-                        SELECT 1 FROM unnest(d."EnglishMeanings") AS m
-                        WHERE m ~* {0}
-                    )
-                ) w
-                ORDER BY w."FrequencyRank" ASC NULLS LAST
-                LIMIT {1}
-                """, regexPattern, oversampleLimit)
-            .ToListAsync();
+        var candidates = await FetchGlossCandidates(query, candidateLimit, GlossMatchMode.AllTerms);
+        if (candidates.Count == 0)
+            candidates = await FetchGlossCandidates(query, candidateLimit, GlossMatchMode.AnyTerm);
+        if (candidates.Count == 0)
+            candidates = await FetchGlossCandidates(query, candidateLimit, GlossMatchMode.Phrase);
+        if (candidates.Count == 0) return [];
 
-        var entries = await BuildDictionaryEntries(wordIds, englishQuery: query);
-        return entries
-            .OrderByDescending(e => e.Meanings.Any(m => m.Contains(query, StringComparison.OrdinalIgnoreCase)))
-            .ThenBy(e => e.FrequencyRank)
-            .Skip(offset)
-            .Take(limit)
-            .ToList();
+        var frequencyRanks = candidates
+            .Where(c => c.FrequencyRank.HasValue)
+            .GroupBy(c => c.WordId)
+            .ToDictionary(g => g.Key, g => g.Min(c => c.FrequencyRank!.Value));
+
+        var ranked = GlossSearchScorer.Rank(
+            query,
+            candidates.Select(c => new GlossSenseCandidate(c.WordId, c.SenseIndex, c.EnglishMeanings, c.Misc, c.GlossTypes, c.IsCommon)),
+            frequencyRanks);
+
+        var page = ranked.Skip(offset).Take(limit).ToList();
+        var entries = await BuildDictionaryEntries(page.Select(h => h.WordId).ToList());
+        var byWord = entries.ToDictionary(e => e.WordId);
+
+        var result = new List<DictionaryEntryDto>(page.Count);
+        foreach (var hit in page)
+        {
+            if (!byWord.TryGetValue(hit.WordId, out var entry)) continue;
+            entry.Meanings = hit.Meanings;
+            result.Add(entry);
+        }
+        return result;
     }
 
-    private async Task<List<DictionaryEntryDto>> BuildDictionaryEntries(List<int> wordIds, string? matchText = null, string? englishQuery = null, bool preferMostCommonForm = false)
+    private sealed class GlossCandidateRow
+    {
+        public int WordId { get; set; }
+        public int SenseIndex { get; set; }
+        public List<string> EnglishMeanings { get; set; } = [];
+        public List<string> Misc { get; set; } = [];
+        public List<string> GlossTypes { get; set; } = [];
+        public int? FrequencyRank { get; set; }
+        public bool IsCommon { get; set; }
+    }
+
+    private enum GlossMatchMode { AllTerms, AnyTerm, Phrase }
+
+    /// <summary>AllTerms and AnyTerm hit the gloss tsvector index; Phrase is the unindexed whole-phrase scan kept for stopword-only queries like "with".</summary>
+    private async Task<List<GlossCandidateRow>> FetchGlossCandidates(string query, int candidateLimit, GlossMatchMode mode)
+    {
+        const string columns = """
+            SELECT d."WordId", d."SenseIndex", d."EnglishMeanings", d."Misc", d."GlossTypes",
+                   (SELECT MIN(f."FrequencyRank") FROM jmdict."WordFrequencies" f WHERE f."WordId" = d."WordId") AS "FrequencyRank",
+                   EXISTS (SELECT 1 FROM jmdict."WordForms" wf WHERE wf."WordId" = d."WordId"
+                           AND wf."Priorities" && ARRAY['ichi1','news1','spec1','gai1']) AS "IsCommon"
+            FROM jmdict."Definitions" d
+            """;
+
+        if (mode == GlossMatchMode.Phrase)
+        {
+            return await context.Database
+                .SqlQueryRaw<GlossCandidateRow>(
+                    columns + """
+
+                    WHERE EXISTS (SELECT 1 FROM unnest(d."EnglishMeanings") AS m WHERE m ~* {0})
+                    ORDER BY "FrequencyRank" ASC NULLS LAST
+                    LIMIT {1}
+                    """, $@"\m{SanitizeRegexInput(query)}\M", candidateLimit)
+                .ToListAsync();
+        }
+
+        var tsquery = mode == GlossMatchMode.AnyTerm
+            ? "replace(plainto_tsquery('english', {0})::text, '&', '|')::tsquery"
+            : "plainto_tsquery('english', {0})";
+
+        return await context.Database
+            .SqlQueryRaw<GlossCandidateRow>(
+                columns + $$"""
+
+                WHERE numnode({{tsquery}}) > 0 AND d."SearchVector" @@ {{tsquery}}
+                ORDER BY ts_rank_cd(d."SearchVector", {{tsquery}}, 1) DESC, "FrequencyRank" ASC NULLS LAST
+                LIMIT {1}
+                """, query, candidateLimit)
+            .ToListAsync();
+    }
+
+    private async Task<List<DictionaryEntryDto>> BuildDictionaryEntries(List<int> wordIds, string? matchText = null, bool preferMostCommonForm = false)
     {
         if (wordIds.Count == 0) return [];
 
@@ -786,15 +841,6 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                     .Where(d => d.EnglishMeanings.Count > 0)
                     .OrderBy(d => d.SenseIndex)
                     .FirstOrDefault();
-
-                if (englishQuery != null)
-                {
-                    var matchingDef = w.Definitions
-                        .Where(d => d.EnglishMeanings.Any(m => m.Contains(englishQuery, StringComparison.OrdinalIgnoreCase)))
-                        .OrderBy(d => d.SenseIndex)
-                        .FirstOrDefault();
-                    if (matchingDef != null) firstDef = matchingDef;
-                }
 
                 string? primaryKanjiText = null;
                 if (bestForm.FormType == JmDictFormType.KanaForm)

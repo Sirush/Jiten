@@ -12,6 +12,7 @@ internal static class FormCandidateFactory
         DeconjugationForm? deconjForm = null,
         string? surface = null)
     {
+        Interlocked.Increment(ref Diagnostics.ParserCounters.EnumerateFormsCalls);
         var candidates = new List<FormCandidate>();
         var targetNormalized = KanaNormalizer.Normalize(targetHiragana);
         var targetLoose = allowLooseLvmMatch
@@ -86,7 +87,7 @@ internal static class FormCandidateFactory
             {
                 var formHiragana = KanaConverter.ToHiragana(f.Text, convertLongVowelMark: false);
                 return formHiragana == readingHiragana ||
-                       (allowStemMatch && formHiragana.StartsWith(readingHiragana));
+                       (allowStemMatch && formHiragana.StartsWith(readingHiragana, StringComparison.Ordinal));
             });
     }
 

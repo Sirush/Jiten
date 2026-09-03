@@ -210,7 +210,7 @@ internal static class FormCandidateSelector
         {
             if (c.Word.WordId == best.Word.WordId) continue;
             if (context.Surface != c.Form.Text) continue;                         // exact surface
-            if (c.DeconjForm?.Process is { Count: > 0 }) continue;                // direct match
+            if (c.DeconjForm?.Process is { Length: > 0 }) continue;                // direct match
             if (c.Word.PartsOfSpeech.Any(p => p is "cop"))
                 return c;
         }
@@ -227,7 +227,7 @@ internal static class FormCandidateSelector
         FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
     {
         if (!context.IsKanaSurface) return null;
-        if (best.DeconjForm?.Process is { Count: > 0 } || context.Surface != best.Form.Text) return null;
+        if (best.DeconjForm?.Process is { Length: > 0 } || context.Surface != best.Form.Text) return null;
         if (best.Word.Priorities?.Contains("jiten") != true) return null;
         if (best.Form.FormType != JmDictFormType.KanaForm) return null;
         if (best.Word.PartsOfSpeech.Any(p => p is "uk")) return null;
@@ -236,7 +236,7 @@ internal static class FormCandidateSelector
         foreach (var c in allCandidates)
         {
             if (c.Word.WordId == best.Word.WordId) continue;
-            if (c.DeconjForm?.Process is { Count: > 0 } || context.Surface != c.Form.Text) continue;
+            if (c.DeconjForm?.Process is { Length: > 0 } || context.Surface != c.Form.Text) continue;
             if (c.Word.Forms.Any(f => f.FormType == JmDictFormType.KanjiForm)) continue;  // pure-kana entry only
             if (c.Word.CachedPOS.Contains(PartOfSpeech.Name)) continue;
             if (!KanaScoringHelpers.HasFrequencyMarker(c.Word.Priorities, includeJiten: false)) continue;
@@ -258,14 +258,14 @@ internal static class FormCandidateSelector
     {
         if (!context.IsSentenceFinal)
             return null;
-        if (best.DeconjForm?.Process is not { Count: > 0 }
+        if (best.DeconjForm?.Process is not { Length: > 0 }
             || !KanaScoringHelpers.IsInflectableVerbOrAdj(best.Word.PartsOfSpeech))
             return null;
 
         foreach (var candidate in allCandidates)
         {
             if (candidate.Word.WordId == best.Word.WordId) continue;
-            if (candidate.DeconjForm?.Process is { Count: > 0 }) continue;   // direct surface match only
+            if (candidate.DeconjForm?.Process is { Length: > 0 }) continue;   // direct surface match only
             if (context.Surface != candidate.Form.Text) continue;            // exact surface
             if (candidate.Word.CachedPOS.Any(p => p is not (PartOfSpeech.Interjection or PartOfSpeech.Unknown)))
                 continue;
@@ -366,7 +366,7 @@ internal static class FormCandidateSelector
         if (best.ReadingMatchScore <= 0) return null;
         if (best.EntryPriorityScore > 0) return null;
         if (context.Surface != best.Form.Text) return null;
-        if (best.DeconjForm?.Process is { Count: > 0 }) return null;
+        if (best.DeconjForm?.Process is { Length: > 0 }) return null;
 
         int bestEffective = ScoringPolicy.EffectiveScore(best);
 
@@ -378,7 +378,7 @@ internal static class FormCandidateSelector
             if (c.Form.Text != context.Surface) continue;
             if (c.EntryPriorityScore <= 0) continue;
             if (c.ReadingMatchScore > 0) continue;
-            if (c.DeconjForm?.Process is { Count: > 0 }) continue;
+            if (c.DeconjForm?.Process is { Length: > 0 }) continue;
             if (c.IsPosIncompatibleDirectSurface && !best.IsPosIncompatibleDirectSurface) continue;
             // JMDict entry priorities are form-level and often land on the wrong homograph
             // (里(り) carries ichi1, 汝(うぬ) carries news2). Only flip when the furigana corpus
@@ -401,7 +401,7 @@ internal static class FormCandidateSelector
         var candidateProcess = candidate.DeconjForm?.Process;
         var currentProcess = current.DeconjForm?.Process;
 
-        if (candidateProcess is not { Count: > 0 } || currentProcess is not { Count: > 0 })
+        if (candidateProcess is not { Length: > 0 } || currentProcess is not { Length: > 0 })
             return false;
 
         bool candidateIsInfinitive = candidateProcess[^1] is "(infinitive)" or "(unstressed infinitive)";
