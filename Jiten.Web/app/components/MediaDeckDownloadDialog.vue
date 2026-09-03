@@ -987,8 +987,8 @@
                 <div class="flex-1">
                   <div class="text-sm font-medium text-gray-800 dark:text-gray-200">Use Custom Dictionaries</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">
-                    <template v-if="hasCustomDictionaries">Add the definitions from your custom dictionaries.</template>
-                    <template v-else>No custom dictionaries imported.</template>
+                    <template v-if="hasCustomDictionaries">Add the definitions from your custom dictionaries. </template>
+                    <template v-else>No custom dictionaries imported. </template>
                     <NuxtLink to="/settings/dictionaries" class="text-primary hover:underline" @click.stop>Manage dictionaries</NuxtLink>
                   </div>
                 </div>
@@ -1081,8 +1081,8 @@
                 <div class="flex-1">
                   <div class="text-sm font-medium text-gray-800 dark:text-gray-200">Use Custom Dictionaries</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">
-                    <template v-if="hasCustomDictionaries">Add the definitions from your custom dictionaries.</template>
-                    <template v-else>No custom dictionaries imported.</template>
+                    <template v-if="hasCustomDictionaries">Add the definitions from your custom dictionaries. </template>
+                    <template v-else>No custom dictionaries imported. </template>
                     <NuxtLink to="/settings/dictionaries" class="text-primary hover:underline" @click.stop>Manage dictionaries</NuxtLink>
                   </div>
                 </div>
