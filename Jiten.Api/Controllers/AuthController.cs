@@ -109,13 +109,9 @@ public class AuthController : ControllerBase
         var result = await _userManager.CreateAsync(user, model.Password);
         if (!result.Succeeded)
         {
-            _logger.LogWarning("User registration failed: Username={Username}", userName);
-            return BadRequest(new
-                              {
-                                  message =
-                                      "User creation failed. Make sure your password is long enough and contains lower case, upper case and digits.",
-                                  errors = result.Errors.Select(e => e.Description)
-                              });
+            var errors = result.Errors.Select(e => e.Description).ToArray();
+            _logger.LogWarning("User registration failed: Username={Username}, Errors={Errors}", userName, string.Join(" ", errors));
+            return BadRequest(new { message = "User creation failed. " + string.Join(" ", errors), errors });
         }
 
         await _userManager.AddToRoleAsync(user, nameof(UserRole.User));
