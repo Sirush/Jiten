@@ -36,18 +36,23 @@
       const mature = windowed.map((p) => (unique ? p.uniqueCoverage : p.coverage));
       const combined = windowed.map((p) => (unique ? p.combinedUniqueCoverage : p.combinedCoverage));
       const startLabel = formatBucketDated(windowed[0]!.date, journey.granularity);
+      // Same auto-fit as the on-page chart, or a 98 -> 99 journey exports as a solid block.
+      const axis = coverageWindow([...mature, ...combined]);
+      // Whole percentages hide the journey once it spans less than a few points.
+      const decimals = mature[mature.length - 1]! - mature[0]! < 5 ? 1 : 0;
 
       const canvas = drawSeriesCard({
         palette,
         logo: logoBitmap,
         kicker: 'COVERAGE JOURNEY',
         cover: { bitmap: coverBitmap, title: props.title },
-        stat: `${mature[0]!.toFixed(0)}% → ${mature[mature.length - 1]!.toFixed(0)}%`,
+        stat: `${mature[0]!.toFixed(decimals)}% → ${mature[mature.length - 1]!.toFixed(decimals)}%`,
         statSuffix: unique ? 'unique words known' : 'readable',
         subtitle: trend ? trend.overLabel : `${startLabel} to today`,
         line: mature,
         band: combined,
-        max: 100,
+        min: axis.min,
+        max: axis.max,
         footLeft: startLabel,
         footRight: 'Today',
       });

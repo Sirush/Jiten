@@ -71,6 +71,7 @@
             compact
             height="64px"
             :separate-prior="jitenStore.separatePriorKnowledge"
+            :log-tail="jitenStore.coverageJourneyLogTail"
           />
           <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-400 mt-0.5">
             <span>{{ rangeStart }}</span>
