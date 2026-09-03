@@ -13,7 +13,7 @@
     type ChartData,
   } from 'chart.js';
   import type { JourneyPoint, GrowthPoint, JourneyMilestone, JourneyGranularity } from '~/types';
-  import { coverageToTail, coverageWindow, coverageTickDecimals, formatCoverageTick, tailWindow, tailTicks } from '~/utils/coverageAxis';
+  import { coverageToTail, coverageWindow, coverageTickDecimals, formatCoverageTick, tailWindow, tailTicks, type CoverageScale } from '~/utils/coverageAxis';
 
   ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
@@ -30,8 +30,8 @@
       tooltip?: boolean;
       // Draws bulk-declared words as their own baseline band instead of folding them into the curve.
       separatePrior?: boolean;
-      // Positions coverage by its shrinking remainder so gains past 90% stay legible; ignored in count mode.
-      logTail?: boolean;
+      // 'fit' zooms the axis to the plotted range, 'log' positions coverage by its shrinking remainder, 'full' is a fixed 0-100%; ignored in count mode.
+      scale?: CoverageScale;
     }>(),
     {
       granularity: 'monthly',
@@ -42,19 +42,23 @@
       height: '260px',
       tooltip: true,
       separatePrior: true,
-      logTail: false,
+      scale: 'fit',
     }
   );
 
   const MATURE = '#d20ca3';
   const MATURE_FILL = 'rgba(210, 12, 163, 0.35)';
   const COMBINED_FILL = 'rgba(210, 12, 163, 0.12)';
+  // A solid block on an axis that does not start at 0 reads as a quantity; a tint keeps it reading as a trend.
+  const MATURE_FILL_ZOOMED = 'rgba(210, 12, 163, 0.18)';
+  const COMBINED_FILL_ZOOMED = 'rgba(210, 12, 163, 0.12)';
   const AXIS = '#6b7280';
   const PRIOR_LABEL = 'Already knew';
   const GRID = 'rgba(107, 114, 128, 0.15)';
 
   const isCount = computed(() => props.mode === 'count');
-  const isTail = computed(() => props.logTail && !isCount.value);
+  const isTail = computed(() => props.scale === 'log' && !isCount.value);
+  const isFull = computed(() => props.scale === 'full' && !isCount.value);
   const isUnique = computed(() => props.metric === 'unique');
 
   const labels = computed(() => props.points.map((p) => formatBucketAxis(p.date, props.granularity)));
@@ -92,9 +96,12 @@
 
   const yWindow = computed(() => {
     if (isCount.value) return null;
+    if (isFull.value) return { min: 0, max: 100 };
     const values = [...matureValues.value, ...combinedValues.value];
     return isTail.value ? tailWindow(values) : coverageWindow(values);
   });
+
+  const zoomed = computed(() => !isCount.value && !isFull.value && (yWindow.value?.min ?? 0) > (isTail.value ? coverageToTail(0) : 0));
 
   const yTicks = computed(() => (isTail.value && yWindow.value ? tailTicks(yWindow.value) : []));
   const linearDecimals = computed(() => (yWindow.value && !isTail.value ? coverageTickDecimals(yWindow.value) : 0));
@@ -121,7 +128,7 @@
         label: 'Mature + young',
         data: plot(combinedValues.value),
         borderColor: 'transparent',
-        backgroundColor: COMBINED_FILL,
+        backgroundColor: zoomed.value ? COMBINED_FILL_ZOOMED : COMBINED_FILL,
         pointRadius: 0,
         pointHitRadius: 0,
         borderWidth: 0,
@@ -133,7 +140,7 @@
         label: 'Mature',
         data: plot(matureValues.value),
         borderColor: MATURE,
-        backgroundColor: MATURE_FILL,
+        backgroundColor: zoomed.value ? MATURE_FILL_ZOOMED : MATURE_FILL,
         pointBackgroundColor: MATURE,
         pointBorderColor: MATURE,
         pointRadius: props.compact ? 0 : props.points.map((_, i) => (milestoneIndexByPoint.value.has(i) ? 5 : 0)),
@@ -208,7 +215,8 @@
         ticks: {
           color: AXIS,
           font: { size: 10 },
-          precision: isCount.value ? 0 : undefined,
+          precision: isCount.value || isFull.value ? 0 : undefined,
+          includeBounds: isCount.value || isFull.value,
           callback: (v, i) => (isTail.value ? (yTicks.value[i]?.label ?? '') : formatTick(v)),
         },
       },

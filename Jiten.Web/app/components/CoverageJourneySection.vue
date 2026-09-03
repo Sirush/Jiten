@@ -2,6 +2,7 @@
   import type { Deck, JourneyPoint } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
   import { useJitenStore } from '~/stores/jitenStore';
+  import type { CoverageScale } from '~/utils/coverageAxis';
 
   const props = defineProps<{
     deck: Deck;
@@ -18,9 +19,10 @@
     { key: 'unique', label: 'Unique' },
   ];
 
-  const scaleOptions: { key: boolean; label: string }[] = [
-    { key: false, label: 'Linear' },
-    { key: true, label: 'Log' },
+  const scaleOptions: { key: CoverageScale; label: string }[] = [
+    { key: 'fit', label: 'Fit' },
+    { key: 'log', label: 'Log' },
+    { key: 'full', label: 'Full' },
   ];
 
   const example = computed(() => buildExampleJourney());
@@ -78,19 +80,19 @@
           <div class="flex rounded-lg bg-surface-100 dark:bg-surface-800 p-0.5 text-xs">
             <button
               v-for="opt in scaleOptions"
-              :key="opt.label"
+              :key="opt.key"
               class="px-2.5 py-1 rounded-md transition-colors"
               :class="
-                jitenStore.coverageJourneyLogTail === opt.key
+                jitenStore.coverageJourneyScale === opt.key
                   ? 'bg-surface-0 dark:bg-surface-700 shadow-sm font-medium text-gray-800 dark:text-gray-100'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               "
-              @click="jitenStore.coverageJourneyLogTail = opt.key"
+              @click="jitenStore.coverageJourneyScale = opt.key"
             >
               {{ opt.label }}
             </button>
           </div>
-          <CoverageJourneyShareButton :deck="deck" :title="title" :journey="journey!" :metric="metric" />
+          <CoverageJourneyShareButton :deck="deck" :title="title" :journey="journey!" :metric="metric" :scale="jitenStore.coverageJourneyScale" />
         </div>
       </div>
     </template>
@@ -122,7 +124,7 @@
           :metric="metric"
           height="300px"
           :separate-prior="jitenStore.separatePriorKnowledge"
-          :log-tail="jitenStore.coverageJourneyLogTail"
+          :scale="jitenStore.coverageJourneyScale"
         />
         <button
           v-if="hasPrior"

@@ -8,7 +8,6 @@ import {
   tailWindow,
   tailTicks,
   formatTailCoverage,
-  TAIL_ANCHORS,
 } from '../app/utils/coverageAxis';
 
 const HIGH = [97.9, 98.1, 98.4, 98.6, 98.9, 99.0, 99.2];
@@ -71,50 +70,63 @@ describe('coverageToTail', () => {
   });
 });
 
+const MID = [95.44, 95.45, 95.5, 95.6, 95.62, 95.93, 95.95, 96.0];
+
 describe('tailWindow and tailTicks', () => {
-  it('shows only the ladder anchors inside a high-coverage window', () => {
+  it('shows decade-style ticks inside a high-coverage window', () => {
     const w = tailWindow(HIGH);
     const labels = tailTicks(w).map((t) => t.label);
-    expect(labels).toEqual(['98%', '99%']);
+    expect(labels).toContain('98%');
+    expect(labels).toContain('99%');
     expect(w.min).toBeLessThan(coverageToTail(97.9));
     expect(w.max).toBeGreaterThan(coverageToTail(99.2));
   });
 
-  it('uses round anchors for a low-coverage window', () => {
+  it('uses round ticks for a low-coverage window', () => {
     const labels = tailTicks(tailWindow(LOW)).map((t) => t.label);
     expect(labels).toEqual(['10%', '20%', '30%', '40%']);
   });
 
-  it('widens a narrow window until two anchors fall inside', () => {
-    for (const series of [[99.55, 99.7, 99.85], [99.2], [100, 100], [0, 0]]) {
-      const w = tailWindow(series);
-      expect(w.min).toBeLessThan(w.max);
-      expect(tailTicks(w).length).toBeGreaterThanOrEqual(2);
+  it('stays fitted to a mid-90s series instead of widening to the nearest decade anchors', () => {
+    const w = tailWindow(MID);
+    expect(tailToCoverage(w.min)).toBeGreaterThan(94);
+    expect(tailToCoverage(w.max)).toBeLessThan(97.5);
+    const labels = tailTicks(w).map((t) => t.label);
+    expect(labels.length).toBeGreaterThanOrEqual(3);
+    expect(labels).not.toContain('90%');
+    for (const label of labels) {
+      const value = parseFloat(label);
+      expect(value).toBeGreaterThan(94);
+      expect(value).toBeLessThan(97.5);
     }
   });
 
-  it('thins bunched low anchors on a full-range series but keeps the fine ones near 100', () => {
+  it('always yields a usable ladder for narrow, single-point and edge series', () => {
+    for (const series of [[99.55, 99.7, 99.85], [99.2], [100, 100], [0, 0], [99.991, 99.993]]) {
+      const w = tailWindow(series);
+      expect(w.min).toBeLessThan(w.max);
+      const ticks = tailTicks(w);
+      expect(ticks.length).toBeGreaterThanOrEqual(2);
+      expect(ticks.length).toBeLessThanOrEqual(8);
+      for (const t of ticks) {
+        expect(t.value).toBeGreaterThanOrEqual(w.min - 1e-9);
+        expect(t.value).toBeLessThanOrEqual(w.max + 1e-9);
+      }
+    }
+  });
+
+  it('keeps the fine ticks near 100 on a full-range series', () => {
     const labels = tailTicks(tailWindow([0.4, 3, 12, 40, 80, 95, 98.7])).map((t) => t.label);
     expect(labels).toContain('98%');
-    expect(labels).toContain('99%');
     expect(labels).toContain('95%');
-    expect(labels.length).toBeLessThanOrEqual(12);
-    expect(labels).not.toContain('10%');
+    expect(labels.length).toBeLessThanOrEqual(8);
   });
 
   it('positions ticks ascending and labels them as coverage, never as remainders', () => {
-    const ticks = tailTicks(tailWindow(HIGH));
-    for (let i = 1; i < ticks.length; i++) expect(ticks[i]!.value).toBeGreaterThan(ticks[i - 1]!.value);
-    for (const t of ticks) {
-      expect(t.label).not.toBe('2%');
-      expect(t.label).not.toBe('0.8%');
-      expect(formatTailCoverage(tailToCoverage(t.value))).toBe(t.label);
-    }
-  });
-
-  it('round-trips every ladder anchor through its label', () => {
-    for (const anchor of TAIL_ANCHORS) {
-      expect(formatTailCoverage(tailToCoverage(coverageToTail(anchor)))).toBe(formatTailCoverage(anchor));
+    for (const series of [HIGH, MID, LOW]) {
+      const ticks = tailTicks(tailWindow(series));
+      for (let i = 1; i < ticks.length; i++) expect(ticks[i]!.value).toBeGreaterThan(ticks[i - 1]!.value);
+      for (const t of ticks) expect(formatTailCoverage(tailToCoverage(t.value))).toBe(t.label);
     }
   });
 });

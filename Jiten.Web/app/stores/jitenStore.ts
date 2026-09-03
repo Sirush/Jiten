@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { type DifficultyDisplayStyle, DifficultyValueDisplayStyle, ThemeMode, TitleLanguage } from '~/types';
 import type { KanjiScalePref } from '~/data/kanjiGroupings';
 import { DEFAULT_TTS_VOLUME } from '~/utils/ttsVolume';
+import type { CoverageScale } from '~/utils/coverageAxis';
 
 const YEAR = 60 * 60 * 24 * 365;
 
@@ -122,8 +123,7 @@ export const useJitenStore = defineStore('jiten', () => {
   // Off means bulk-declared words are folded into the curve, spike and all.
   const separatePriorKnowledge = createLocalStorageState<boolean>('separate-prior-knowledge', true);
 
-  // Positions the journey by the shrinking remainder (100 - coverage) so late gains stay visible.
-  const coverageJourneyLogTail = createLocalStorageState<boolean>('coverage-journey-log-tail', false);
+  const coverageJourneyScale = createLocalStorageState<CoverageScale>('coverage-journey-scale', 'fit');
 
   // Drives the unread dot on the home page's "what's new" strip.
   const lastSeenUpdateId = createLocalStorageState<number>('last-seen-update-id', 0);
@@ -172,7 +172,7 @@ export const useJitenStore = defineStore('jiten', () => {
     preferredDictionaryId,
     hideCoverageJourney,
     separatePriorKnowledge,
-    coverageJourneyLogTail,
+    coverageJourneyScale,
     lastSeenUpdateId,
     customDictionaryFontSize,
     coverageVersion,
