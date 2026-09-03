@@ -381,6 +381,7 @@
     v-else
     v-model:visible="drawerOpen"
     position="bottom"
+    block-scroll
     :pt="{ root: { class: 'h-[90dvh]! rounded-t-xl overflow-hidden' } }"
     aria-label="Filters"
   >
