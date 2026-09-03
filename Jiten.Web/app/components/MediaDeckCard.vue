@@ -2,6 +2,7 @@
   import { type Deck, MediaType, DeckStatus } from '~/types';
   import Card from 'primevue/card';
   import TieredMenu from 'primevue/tieredmenu';
+  import Popover from 'primevue/popover';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getLinkLabel } from '~/utils/linkTypeMapper';
   import { getDeckStatusText } from '~/utils/deckStatusMapper';
@@ -38,6 +39,7 @@
   const completionSuggestions = ref<import('~/types/types').ComparisonSuggestionDto[]>([]);
   const completionComparisonIndex = ref(0);
   const menu = ref();
+  const statusPopover = ref();
   const difficultyRef = ref<{ tooltip: string }>();
 
   const store = useJitenStore();
@@ -243,11 +245,6 @@
 
   const menuItems = computed(() => [
     {
-      label: props.deck.isFavourite ? 'Unfavourite' : 'Favourite',
-      icon: props.deck.isFavourite ? 'pi pi-star-fill' : 'pi pi-star',
-      command: toggleFavourite,
-    },
-    {
       label: props.deck.isIgnored ? 'Unignore' : 'Ignore',
       icon: props.deck.isIgnored ? 'pi pi-eye' : 'pi pi-eye-slash',
       command: toggleIgnore,
@@ -259,32 +256,6 @@
       command: () => {
         openRatingDialog();
       },
-    },
-    {
-      label: 'Set status',
-      icon: 'pi pi-flag',
-      items: [
-        {
-          label: 'None',
-          command: () => setStatus(DeckStatus.None),
-        },
-        {
-          label: 'Planning',
-          command: () => setStatus(DeckStatus.Planning),
-        },
-        {
-          label: 'Ongoing',
-          command: () => setStatus(DeckStatus.Ongoing),
-        },
-        {
-          label: 'Completed',
-          command: () => handleMarkCompleted(),
-        },
-        {
-          label: 'Dropped',
-          command: () => setStatus(DeckStatus.Dropped),
-        },
-      ],
     },
     {
       label: 'Refresh coverage',
@@ -307,6 +278,19 @@
       },
     },
   ]);
+
+  const statusOptions = [DeckStatus.None, DeckStatus.Planning, DeckStatus.Ongoing, DeckStatus.Completed, DeckStatus.Dropped];
+
+  const currentStatus = computed(() => props.deck.status ?? DeckStatus.None);
+
+  const toggleStatusPopover = (event: Event) => statusPopover.value?.toggle(event);
+
+  const chooseStatus = async (status: DeckStatus) => {
+    statusPopover.value?.hide();
+    if (status === currentStatus.value) return;
+    if (status === DeckStatus.Completed) await handleMarkCompleted();
+    else await setStatus(status);
+  };
 
   const statusColor = computed(() => {
     if (!props.deck.status || props.deck.status === DeckStatus.None) return '';
@@ -401,22 +385,42 @@
       </div>
     </div>
 
-    <!-- Own positioning context: the calibration banner below would otherwise pull the strip off the card's edge. -->
     <div class="relative" :class="isCompact ? 'h-full' : ''">
       <Card :class="isCompact ? 'h-full' : ''" :pt="{ body: { style: 'padding: 0.75rem 1rem; gap: 0.25rem' } }">
         <template #title>
-          <!-- Compact titles are clipped to a fixed two-line box so sibling cards in a row keep
-             their stats aligned; the tooltip carries the untruncated title. -->
           <div ref="titleBoxRef" class="overflow-hidden" :class="isCompact ? 'relative leading-snug h-[2.75em]' : ''">
-            <div class="float-right flex flex-row items-center gap-1 h-6 shrink-0 ml-2">
-              <!-- Matches the icon buttons' p-1.5, so the gap to the first icon equals the gaps between icons. -->
-              <div v-if="authStore.isAuthenticated" class="flex items-center gap-2 pr-1.5">
-                <i v-if="deck.isFavourite" class="pi pi-star-fill text-yellow-500 text-lg" />
-                <i v-if="deck.isIgnored" class="pi pi-eye-slash text-gray-800 dark:text-gray-300 text-lg" />
-                <span v-if="deck.status && deck.status !== DeckStatus.None" :class="['text-sm font-bold', statusColor]">
-                  {{ getDeckStatusText(deck.status) }}
-                </span>
+            <div
+              class="flex flex-row items-center gap-1 h-6 shrink-0"
+              :class="isCompact ? 'float-right ml-2' : 'justify-end mb-1 md:float-right md:ml-2 md:mb-0'"
+            >
+              <div v-if="authStore.isAuthenticated && deck.isIgnored" class="flex items-center pr-1.5">
+                <i class="pi pi-eye-slash text-gray-800 dark:text-gray-300 text-lg" />
               </div>
+              <Tooltip v-if="authStore.isAuthenticated" :content="deck.isFavourite ? 'Remove from favourites' : 'Add to favourites'">
+                <button
+                  type="button"
+                  class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  :aria-pressed="!!deck.isFavourite"
+                  :aria-label="deck.isFavourite ? 'Remove from favourites' : 'Add to favourites'"
+                  @click="toggleFavourite"
+                >
+                  <i :class="deck.isFavourite ? 'pi pi-star-fill text-yellow-500' : 'pi pi-star utility-icon'" />
+                </button>
+              </Tooltip>
+              <Tooltip v-if="authStore.isAuthenticated" content="Set status">
+                <button
+                  type="button"
+                  class="flex items-center gap-1 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  aria-haspopup="true"
+                  :aria-label="currentStatus === DeckStatus.None ? 'Set status' : `Status: ${getDeckStatusText(currentStatus)}`"
+                  @click="toggleStatusPopover"
+                >
+                  <i :class="['pi', currentStatus === DeckStatus.None ? 'pi-flag utility-icon' : `pi-flag-fill ${statusColor}`]" />
+                  <span v-if="currentStatus !== DeckStatus.None" :class="['text-sm font-bold leading-none', statusColor]">
+                    {{ getDeckStatusText(currentStatus) }}
+                  </span>
+                </button>
+              </Tooltip>
               <Tooltip v-if="canEditInline" :content="isEditing ? 'Stop editing' : 'Edit metadata inline'">
                 <button
                   type="button"
@@ -767,6 +771,23 @@
     <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" :deck="deck" @update:visible="showIssueDialog = $event" />
 
     <TieredMenu v-if="authStore.isAuthenticated && menuActivated" ref="menu" :model="menuItems" popup />
+    <Popover v-if="authStore.isAuthenticated" ref="statusPopover" :pt="{ content: { class: 'p-1' } }">
+      <div class="flex flex-col min-w-36" role="menu" aria-label="Set status">
+        <button
+          v-for="option in statusOptions"
+          :key="option"
+          type="button"
+          role="menuitemradio"
+          :aria-checked="option === currentStatus"
+          class="flex items-center justify-between gap-3 px-3 py-1.5 rounded text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+          :class="option === currentStatus ? 'font-bold' : ''"
+          @click="chooseStatus(option)"
+        >
+          <span>{{ getDeckStatusText(option) }}</span>
+          <i v-if="option === currentStatus" class="pi pi-check text-xs" />
+        </button>
+      </div>
+    </Popover>
     <LoadingOverlay :visible="isRefreshingCoverage" message="Refreshing coverage…" />
 
     <Dialog
