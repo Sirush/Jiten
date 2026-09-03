@@ -995,6 +995,14 @@ public class DiagnosticCommands(CliContext context)
         Console.WriteLine($"Wrote {tokenCount} tokens to {outPath}");
     }
 
+    public async Task WarmJmDictCache()
+    {
+        var sw = Stopwatch.StartNew();
+        Console.WriteLine("Warming JMDict Redis cache...");
+        await Parser.Parser.WaitForJmDictPrefillAsync(context.ContextFactory);
+        Console.WriteLine($"JMDict Redis cache ready in {sw.ElapsedMilliseconds:N0} ms");
+    }
+
     public async Task FlushRedisCache()
     {
         var redisConnectionString = context.Configuration.GetConnectionString("Redis");

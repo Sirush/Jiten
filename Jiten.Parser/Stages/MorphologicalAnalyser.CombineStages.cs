@@ -58,13 +58,13 @@ public partial class MorphologicalAnalyser
 
                 // Sudachi tags やれ as interjection, but after て-form it's the imperative of auxiliary やる
                 if (!isValidPart && nextWord is { Text: "やれ", PartOfSpeech: PartOfSpeech.Interjection } &&
-                    currentWord.Text.EndsWith("て"))
+                    currentWord.Text.EndsWith('て'))
                     isValidPart = true;
 
                 // Sudachi sometimes tags colloquial ねえ (= ない negative) as noun (姉)
                 // After te/de-form, ねえ is the negative auxiliary, not the word for sister
                 if (!isValidPart && nextWord is { Text: "ねえ", PartOfSpeech: PartOfSpeech.Noun } &&
-                    (currentWord.Text.EndsWith("て") || currentWord.Text.EndsWith("で")))
+                    (currentWord.Text.EndsWith('て') || currentWord.Text.EndsWith('で')))
                     isValidPart = true;
 
                 // Greedy steal: handle そうだ/そうか by taking just そう if it forms valid inflection
@@ -177,15 +177,15 @@ public partial class MorphologicalAnalyser
                         var matchForm = FindByText(forms, targetHiragana)!;
                         bool hasVerbStemTag = false;
                         foreach (var t in matchForm.Tags)
-                            if (t.StartsWith("stem-") && t != "stem-adj-base") { hasVerbStemTag = true; break; }
+                            if (t.StartsWith("stem-", StringComparison.Ordinal) && t != "stem-adj-base") { hasVerbStemTag = true; break; }
 
                         if (hasVerbStemTag)
                         {
                             DeconjugationForm? verbForm = null;
                             foreach (var f in forms)
                             {
-                                if (f.Text != targetHiragana && f.Tags.Count > 0 &&
-                                    f.Tags[^1].StartsWith("v") &&
+                                if (f.Text != targetHiragana && f.Tags.Length > 0 &&
+                                    f.Tags[^1].StartsWith('v') &&
                                     HasCompoundLookup != null && HasCompoundLookup(f.Text))
                                 { verbForm = f; break; }
                             }
@@ -229,12 +229,12 @@ public partial class MorphologicalAnalyser
                     }
                 }
                 else if (currentPOS == PartOfSpeech.Verb &&
-                         !currentWord.Text.EndsWith("て") &&
-                         !currentWord.Text.EndsWith("で") &&
-                         !currentWord.Text.EndsWith("たく") &&
-                         !currentWord.Text.EndsWith("なく") &&
-                         !currentWord.Text.EndsWith("たり") &&
-                         !currentWord.Text.EndsWith("だり") &&
+                         !currentWord.Text.EndsWith('て') &&
+                         !currentWord.Text.EndsWith('で') &&
+                         !currentWord.Text.EndsWith("たく", StringComparison.Ordinal) &&
+                         !currentWord.Text.EndsWith("なく", StringComparison.Ordinal) &&
+                         !currentWord.Text.EndsWith("たり", StringComparison.Ordinal) &&
+                         !currentWord.Text.EndsWith("だり", StringComparison.Ordinal) &&
                          !AuxiliaryVerbs.Contains(nextWord.DictionaryForm) &&
                          (nextWord.HasPartOfSpeechSection(PartOfSpeechSection.VerbLike) ||
                           (nextWord.PartOfSpeech == PartOfSpeech.Verb &&
@@ -255,7 +255,7 @@ public partial class MorphologicalAnalyser
                     {
                         merged = true;
                         newDictForm = match.Text;
-                        currentPOS = match.Tags.Count > 0 && match.Tags[^1] == "adj-i"
+                        currentPOS = match.Tags.Length > 0 && match.Tags[^1] == "adj-i"
                             ? PartOfSpeech.IAdjective
                             : PartOfSpeech.Verb;
                     }
@@ -312,7 +312,7 @@ public partial class MorphologicalAnalyser
     private static DeconjugationForm? FindEndingWith(IReadOnlyList<DeconjugationForm> forms, string suffix)
     {
         for (int i = 0; i < forms.Count; i++)
-            if (forms[i].Text.EndsWith(suffix) && forms[i].Text.Length > suffix.Length) return forms[i];
+            if (forms[i].Text.EndsWith(suffix, StringComparison.Ordinal) && forms[i].Text.Length > suffix.Length) return forms[i];
         return null;
     }
 
@@ -342,8 +342,8 @@ public partial class MorphologicalAnalyser
 
         // いけ after ちゃ/じゃ/きゃ/にゃ is obligation/prohibition, not compound
         if (nextWord.DictionaryForm == "いける" &&
-            (currentWord.Text.EndsWith("ちゃ") || currentWord.Text.EndsWith("じゃ") ||
-             currentWord.Text.EndsWith("きゃ") || currentWord.Text.EndsWith("にゃ")))
+            (currentWord.Text.EndsWith("ちゃ", StringComparison.Ordinal) || currentWord.Text.EndsWith("じゃ", StringComparison.Ordinal) ||
+             currentWord.Text.EndsWith("きゃ", StringComparison.Ordinal) || currentWord.Text.EndsWith("にゃ", StringComparison.Ordinal)))
             return true;
 
         if (nextWord is { Text: "ん", DictionaryForm: "の" or "ん" })
@@ -385,17 +385,17 @@ public partial class MorphologicalAnalyser
         // Benefactive auxiliaries after a te-form stay separate tokens (堪能させて|いただきます,
         // 繕って|貰いて). The て+貰う/いただく deconjugator rules exist for chain display on tokens
         // merged by the Dependant path (して貰いたい) — they must not widen this stage's merges.
-        if ((currentWord.Text.EndsWith("て") || currentWord.Text.EndsWith("で"))
+        if ((currentWord.Text.EndsWith('て') || currentWord.Text.EndsWith('で'))
             && nextWord.DictionaryForm is "いただく" or "頂く" or "貰う")
             return true;
 
         // Te-form auxiliaries attach to VERB te-forms only; after an adjective くて the next
         // verb starts its own clause (頭が良くて + やりたい, never 良い + [do-for-someone]).
-        if (currentPOS == PartOfSpeech.IAdjective && currentWord.Text.EndsWith("て")
+        if (currentPOS == PartOfSpeech.IAdjective && currentWord.Text.EndsWith('て')
             && nextWord.PartOfSpeech == PartOfSpeech.Verb)
             return true;
 
-        if (currentWord.Text.EndsWith("ん") && nextWord.Text is "だ" or "です")
+        if (currentWord.Text.EndsWith('ん') && nextWord.Text is "だ" or "です")
             return true;
         if (nextWord is { Text: "じゃ", DictionaryForm: "だ" })
             return true;
@@ -435,12 +435,12 @@ public partial class MorphologicalAnalyser
         if (wordInfos.Count < 2 || HasCompoundLookup == null)
             return wordInfos;
 
-        List<WordInfo> newList = new List<WordInfo>(wordInfos.Count);
+        List<WordInfo>? newList = null;
         int i = 0;
 
         while (i < wordInfos.Count)
         {
-            var currentWord = new WordInfo(wordInfos[i]);
+            var currentWord = wordInfos[i];
 
             // The emphatic prefix ど is tagged Adverb (truncated どう) by Sudachi; before an
             // i-adjective it is the intensifier (ど偉い, どでかい) — the attested-compound guards
@@ -475,6 +475,7 @@ public partial class MorphologicalAnalyser
                         currentWord.StartOffset = prefixStart;
                         if (nextWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective)
                             currentWord.PartOfSpeech = PartOfSpeech.Noun;
+                        newList ??= CopyAccumulatorUpTo(wordInfos, i);
                         newList.Add(currentWord);
                         i += 2;
                         continue;
@@ -497,6 +498,7 @@ public partial class MorphologicalAnalyser
                             currentWord.DictionaryForm = normalizedCombined;
                             currentWord.NormalizedForm = normalizedCombined;
                             currentWord.StartOffset = prefixStart;
+                            newList ??= CopyAccumulatorUpTo(wordInfos, i);
                             newList.Add(currentWord);
                             i += 2;
                             continue;
@@ -520,6 +522,7 @@ public partial class MorphologicalAnalyser
                                 currentWord.DictionaryForm = readingCombined;
                                 currentWord.NormalizedForm = readingCombined;
                                 currentWord.StartOffset = prefixStart;
+                                newList ??= CopyAccumulatorUpTo(wordInfos, i);
                                 newList.Add(currentWord);
                                 i += 2;
                                 continue;
@@ -550,6 +553,7 @@ public partial class MorphologicalAnalyser
                                 combinedWord.Text = partialText;
                                 combinedWord.StartOffset = currentWord.StartOffset;
                                 combinedWord.EndOffset = nextWord.StartOffset >= 0 ? nextWord.StartOffset + len : -1;
+                                newList ??= CopyAccumulatorUpTo(wordInfos, i);
                                 newList.Add(combinedWord);
 
                                 var remainder = new WordInfo(nextWord);
@@ -569,11 +573,11 @@ public partial class MorphologicalAnalyser
                 }
             }
 
-            newList.Add(currentWord);
+            newList?.Add(currentWord);
             i++;
         }
 
-        return newList;
+        return newList ?? wordInfos;
     }
 
     private List<WordInfo> CombineAmounts(List<WordInfo> wordInfos)
@@ -615,7 +619,7 @@ public partial class MorphologicalAnalyser
 
     private List<WordInfo> CombineTte(List<WordInfo> wordInfos) =>
         MergeAdjacentWhere(wordInfos, static (currentWord, nextWord) =>
-            currentWord.Text.EndsWith("っ") && nextWord.Text.StartsWith("て"));
+            currentWord.Text.EndsWith('っ') && nextWord.Text.StartsWith('て'));
 
     // Quotative って + the kana verb いう fuse into the single relativiser っていう (= という,
     // JMDict 2757880), matching how ってのは/たって already surface as one cluster. Restricted to the
@@ -721,18 +725,19 @@ public partial class MorphologicalAnalyser
         if (wordInfos.Count < 2)
             return wordInfos;
 
-        List<WordInfo> newList = [wordInfos[0]];
+        List<WordInfo>? newList = null;
 
         for (int i = 1; i < wordInfos.Count; i++)
         {
             WordInfo currentWord = wordInfos[i];
-            WordInfo previousWord = newList[^1];
+            WordInfo previousWord = newList != null ? newList[^1] : wordInfos[i - 1];
             bool combined = false;
 
             if (currentWord.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle) &&
                 currentWord.Text is "て" or "で" or "ちゃ" or "ば" &&
                 previousWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.Auxiliary)
             {
+                newList ??= CopyAccumulatorUpTo(wordInfos, i);
                 previousWord.Text += currentWord.Text;
                 previousWord.EndOffset = currentWord.EndOffset;
                 previousWord.Reading += currentWord.Reading;
@@ -741,11 +746,11 @@ public partial class MorphologicalAnalyser
 
             if (!combined)
             {
-                newList.Add(currentWord);
+                newList?.Add(currentWord);
             }
         }
 
-        return newList;
+        return newList ?? wordInfos;
     }
 
     // The quote-taking verbs that mark a preceding って as quotative — the same set the
@@ -761,16 +766,12 @@ public partial class MorphologicalAnalyser
         var deconjugator = Deconjugator.Instance;
         IReadOnlyList<DeconjugationForm> Deconj(string h) => deconjugator.Deconjugate(h);
 
-        List<WordInfo> newList =
-        [
-            wordInfos[0]
-        ];
-        bool changed = false;
+        List<WordInfo>? newList = null;
 
         for (int i = 1; i < wordInfos.Count; i++)
         {
             WordInfo currentWord = wordInfos[i];
-            WordInfo previousWord = newList[^1];
+            WordInfo previousWord = newList != null ? newList[^1] : wordInfos[i - 1];
             bool combined = false;
 
             if (currentWord.PartOfSpeech != PartOfSpeech.Auxiliary)
@@ -784,11 +785,11 @@ public partial class MorphologicalAnalyser
                     previousWord.Reading += currentWord.Reading;
                     previousWord.PartOfSpeech = currentWord.PartOfSpeech;
                     previousWord.DictionaryForm = "である";
-                    changed = true;
+                    newList ??= CopyAccumulatorUpTo(wordInfos, i);
                 }
                 else
                 {
-                    newList.Add(currentWord);
+                    newList?.Add(currentWord);
                 }
 
                 continue;
@@ -833,7 +834,7 @@ public partial class MorphologicalAnalyser
                      && currentWord.Text.EndsWith("って", StringComparison.Ordinal)
                      && i + 1 < wordInfos.Count && IsQuoteTakingVerb(wordInfos[i + 1]))
                 && currentWord.Text != "なのだ"
-                && !currentWord.Text.StartsWith("なん")
+                && !currentWord.Text.StartsWith("なん", StringComparison.Ordinal)
                 && currentWord.Text != "だろ"
                 && currentWord.Text != "ハズ"
                 && (currentWord.Text != "だ" || currentWord.Text == "だ" && previousWord.Text[^1] == 'ん' && IsValidNdaPastTense(previousWord.Text))
@@ -864,15 +865,15 @@ public partial class MorphologicalAnalyser
                 combined = true;
             }
 
-            if (combined) changed = true;
+            if (combined) newList ??= CopyAccumulatorUpTo(wordInfos, i);
 
             if (!combined)
             {
-                newList.Add(currentWord);
+                newList?.Add(currentWord);
             }
         }
 
-        return changed ? newList : wordInfos;
+        return newList ?? wordInfos;
     }
 
     // Completion auxiliaries that Sudachi tokenises as a bare verb after a 連用形 stem when the
@@ -923,8 +924,9 @@ public partial class MorphologicalAnalyser
         if (wordInfos.Count < 2)
             return wordInfos;
 
-        List<WordInfo> newList = new List<WordInfo>();
-        WordInfo currentWord = new WordInfo(wordInfos[0]);
+        List<WordInfo>? newList = null;
+        WordInfo currentWord = wordInfos[0];
+        bool isCopy = false;
 
         for (int i = 1; i < wordInfos.Count; i++)
         {
@@ -933,7 +935,7 @@ public partial class MorphologicalAnalyser
             // Combine AuxiliaryVerbStem (そう, etc.) with preceding verb/adjective
             // Also handle adjectival suffixes like やすい, にくい, づらい (their stem forms: やす, にく, づら)
             var isAdjectivalSuffix = wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Suffix &&
-                                     wordInfos[i - 1].DictionaryForm.EndsWith("い");
+                                     wordInfos[i - 1].DictionaryForm.EndsWith('い');
             if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem) &&
                 wordInfos[i].Text != "ように" &&
                 wordInfos[i].Text != "よう" &&
@@ -946,19 +948,22 @@ public partial class MorphologicalAnalyser
                    wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun))) ||
                  isAdjectivalSuffix))
             {
+                newList ??= CopyAccumulatorUpTo(wordInfos, i - 1);
+                if (!isCopy) { currentWord = new WordInfo(currentWord); isCopy = true; }
                 currentWord.Text += nextWord.Text;
                 currentWord.EndOffset = nextWord.EndOffset;
                 currentWord.Reading += nextWord.Reading;
             }
             else
             {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
+                newList?.Add(currentWord);
+                currentWord = nextWord;
+                isCopy = false;
             }
         }
 
+        if (newList == null) return wordInfos;
         newList.Add(currentWord);
-
         return newList;
     }
 
@@ -967,8 +972,9 @@ public partial class MorphologicalAnalyser
         if (wordInfos.Count < 2)
             return wordInfos;
 
-        List<WordInfo> newList = new List<WordInfo>();
-        WordInfo currentWord = new WordInfo(wordInfos[0]);
+        List<WordInfo>? newList = null;
+        WordInfo currentWord = wordInfos[0];
+        bool isCopy = false;
 
         for (int i = 1; i < wordInfos.Count; i++)
         {
@@ -982,10 +988,12 @@ public partial class MorphologicalAnalyser
                     || (wordInfos[i].DictionaryForm == "がる" && currentWord.PartOfSpeech != PartOfSpeech.Pronoun)
                     || (wordInfos[i].DictionaryForm is "ぶり" or "振り" &&
                         currentWord.PartOfSpeech == PartOfSpeech.IAdjective &&
-                        !currentWord.Text.EndsWith("い") && currentWord.DictionaryForm.EndsWith("い"))
+                        !currentWord.Text.EndsWith('い') && currentWord.DictionaryForm.EndsWith('い'))
                     || (wordInfos[i].DictionaryForm == "ら" &&
                         wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Pronoun && wordInfos[i - 1].Text != "貴様")))
             {
+                newList ??= CopyAccumulatorUpTo(wordInfos, i - 1);
+                if (!isCopy) { currentWord = new WordInfo(currentWord); isCopy = true; }
                 currentWord.Text += nextWord.Text;
                 currentWord.EndOffset = nextWord.EndOffset;
                 currentWord.Reading += nextWord.Reading;
@@ -995,6 +1003,8 @@ public partial class MorphologicalAnalyser
                      && HasCompoundLookup != null
                      && HasCompoundLookup(currentWord.DictionaryForm + "ぶる"))
             {
+                newList ??= CopyAccumulatorUpTo(wordInfos, i - 1);
+                if (!isCopy) { currentWord = new WordInfo(currentWord); isCopy = true; }
                 currentWord.DictionaryForm += "ぶる";
                 currentWord.PartOfSpeech = PartOfSpeech.Verb;
                 currentWord.Text += nextWord.Text;
@@ -1005,20 +1015,24 @@ public partial class MorphologicalAnalyser
             // Sudachi sometimes parses these as: adj-stem + がったり (adverb) instead of correctly splitting
             else if (nextWord is { PartOfSpeech: PartOfSpeech.Adverb, Text: "がったり" }
                      && currentWord.PartOfSpeech == PartOfSpeech.IAdjective
-                     && !currentWord.Text.EndsWith("い")
-                     && currentWord.DictionaryForm.EndsWith("い"))
+                     && !currentWord.Text.EndsWith('い')
+                     && currentWord.DictionaryForm.EndsWith('い'))
             {
+                newList ??= CopyAccumulatorUpTo(wordInfos, i - 1);
+                if (!isCopy) { currentWord = new WordInfo(currentWord); isCopy = true; }
                 currentWord.Text += nextWord.Text;
                 currentWord.EndOffset = nextWord.EndOffset;
                 currentWord.Reading += nextWord.Reading;
             }
             else
             {
-                newList.Add(currentWord);
-                currentWord = new WordInfo(nextWord);
+                newList?.Add(currentWord);
+                currentWord = nextWord;
+                isCopy = false;
             }
         }
 
+        if (newList == null) return wordInfos;
         newList.Add(currentWord);
         return newList;
     }
@@ -1113,8 +1127,7 @@ public partial class MorphologicalAnalyser
         if (wordInfos.Count < 2)
             return wordInfos;
 
-        List<WordInfo> newList = new List<WordInfo>();
-        bool changed = false;
+        List<WordInfo>? newList = null;
         int i = 0;
         while (i < wordInfos.Count)
         {
@@ -1126,17 +1139,17 @@ public partial class MorphologicalAnalyser
             if (i + 2 < wordInfos.Count &&
                 currentWord.Text == "か" &&
                 wordInfos[i + 1].Text == "も" &&
-                (wordInfos[i + 2].Text.StartsWith("しれ") ||
-                 wordInfos[i + 2].Text.StartsWith("しんな") || wordInfos[i + 2].Text.StartsWith("しんね")))
+                (wordInfos[i + 2].Text.StartsWith("しれ", StringComparison.Ordinal) ||
+                 wordInfos[i + 2].Text.StartsWith("しんな", StringComparison.Ordinal) || wordInfos[i + 2].Text.StartsWith("しんね", StringComparison.Ordinal)))
             {
                 WordInfo combinedWord = new WordInfo(currentWord);
                 combinedWord.Text = currentWord.Text + wordInfos[i + 1].Text + wordInfos[i + 2].Text;
                 combinedWord.EndOffset = wordInfos[i + 2].EndOffset;
                 combinedWord.Reading = currentWord.Reading + wordInfos[i + 1].Reading + wordInfos[i + 2].Reading;
                 combinedWord.PartOfSpeech = PartOfSpeech.Expression;
+                newList ??= CopyAccumulatorUpTo(wordInfos, i);
                 newList.Add(combinedWord);
                 i += 3;
-                changed = true;
                 continue;
             }
 
@@ -1154,9 +1167,9 @@ public partial class MorphologicalAnalyser
                 combinedWord.EndOffset = wordInfos[i + 1].EndOffset;
                 combinedWord.Reading = currentWord.Reading + wordInfos[i + 1].Reading;
                 combinedWord.PartOfSpeech = PartOfSpeech.Expression;
+                newList ??= CopyAccumulatorUpTo(wordInfos, i);
                 newList.Add(combinedWord);
                 i += 2;
-                changed = true;
                 continue;
             }
 
@@ -1174,9 +1187,9 @@ public partial class MorphologicalAnalyser
                 combinedWord.EndOffset = wordInfos[i + 1].EndOffset;
                 combinedWord.Reading += wordInfos[i + 1].Reading;
                 combinedWord.DictionaryForm += "か";
+                newList ??= CopyAccumulatorUpTo(wordInfos, i);
                 newList.Add(combinedWord);
                 i += 2;
-                changed = true;
                 continue;
             }
 
@@ -1219,25 +1232,27 @@ public partial class MorphologicalAnalyser
                                 consumed = 4;
                             }
 
+                            newList ??= CopyAccumulatorUpTo(wordInfos, i);
+
                             newList.Add(combinedWord);
                             i += consumed;
-                            changed = true;
                             continue;
                         }
                     }
 
+                    newList ??= CopyAccumulatorUpTo(wordInfos, i);
+
                     newList.Add(combinedWord);
                     i += 2;
-                    changed = true;
                     continue;
                 }
             }
 
-            newList.Add(new WordInfo(currentWord));
+            newList?.Add(currentWord);
             i++;
         }
 
-        return changed ? newList : wordInfos;
+        return newList ?? wordInfos;
     }
 
     private static readonly Dictionary<string, List<(string Second, PartOfSpeech? Pos)>> SpecialCases2Dict = BuildSpecialCases2Dict();

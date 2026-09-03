@@ -403,7 +403,7 @@ public partial class MorphologicalAnalyser
                 f.Text.Length > 1 && f.Text != cand
                 && f.Text.StartsWith(k.Text, StringComparison.Ordinal)
                 && f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal))
-                && f.Process.Count > 0
+                && f.Process.Length > 0
                 && HasNonNameCompoundLookup?.Invoke(f.Text) == true);
             if (form == null) continue;
 
@@ -513,7 +513,7 @@ public partial class MorphologicalAnalyser
 
         foreach (var f in Deconjugator.Instance.Deconjugate(stem))
         {
-            if (f.Process.Count != 1 || f.Text.Length <= 1 || f.Text == stem) continue;
+            if (f.Process.Length != 1 || f.Text.Length <= 1 || f.Text == stem) continue;
             if (!f.Text.StartsWith(kanji, StringComparison.Ordinal)) continue;
             if (!f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal))) continue;
             if (HasNonNameCompoundLookup?.Invoke(f.Text) == true) return f.Text;
@@ -838,14 +838,14 @@ public partial class MorphologicalAnalyser
                 {
                     var candidateText = prev.Text + "た";
                     var forms = deconj.Deconjugate(NormalizeToHiragana(candidateText));
-                    if (forms.Any(f => f.Tags.Any(t => t.StartsWith("v"))))
+                    if (forms.Any(f => f.Tags.Any(t => t.StartsWith('v'))))
                         shouldSplit = true;
                 }
 
                 // Pattern 1b: Te-form ending + たんか → combine with た
                 // Handles cases like 怖がって + たんか where 怖がって is classified as IAdjective
                 // If prev ends with て/で, adding た creates てた/でた (past progressive/resultative)
-                if (!shouldSplit && (prev.Text.EndsWith("て") || prev.Text.EndsWith("で")))
+                if (!shouldSplit && (prev.Text.EndsWith('て') || prev.Text.EndsWith('で')))
                 {
                     // This is likely a te-form that should combine with た from たんか
                     // e.g., 怖がって + た → 怖がってた (was scared)
@@ -858,7 +858,7 @@ public partial class MorphologicalAnalyser
                 if (prev.Text == "もう")
                 {
                     var verbBefore = GetPrevToken(2);
-                    if (verbBefore != null && (verbBefore.Text.EndsWith("て") || verbBefore.Text.EndsWith("で")))
+                    if (verbBefore != null && (verbBefore.Text.EndsWith('て') || verbBefore.Text.EndsWith('で')))
                     {
                         // Combine: verbて + もう + た → verbてもうた
                         var combinedText = verbBefore.Text + "もうた";
@@ -899,7 +899,7 @@ public partial class MorphologicalAnalyser
                     if (shiToken is { Text: "し" })
                     {
                         var verbBefore = GetPrevToken(3);
-                        if (verbBefore != null && (verbBefore.Text.EndsWith("て") || verbBefore.Text.EndsWith("で") ||
+                        if (verbBefore != null && (verbBefore.Text.EndsWith('て') || verbBefore.Text.EndsWith('で') ||
                                                    verbBefore.PartOfSpeech == PartOfSpeech.Expression))
                         {
                             // Combine: verb + し + も + た → verbしもた
@@ -971,7 +971,7 @@ public partial class MorphologicalAnalyser
                 result[^1] is { Text: "ね", PartOfSpeech: PartOfSpeech.Particle } &&
                 (result[^2] is { PartOfSpeech: PartOfSpeech.Particle, Text: "て" or "で" } ||
                  (result[^2].PartOfSpeech == PartOfSpeech.Verb &&
-                  (result[^2].Text.EndsWith("て") || result[^2].Text.EndsWith("で")))))
+                  (result[^2].Text.EndsWith('て') || result[^2].Text.EndsWith('で')))))
             {
                 result[^1] = new WordInfo(result[^1])
                 {
@@ -1010,7 +1010,7 @@ public partial class MorphologicalAnalyser
                 wordInfos[i + 1].Text is "ない" or "ねえ" or "ねぇ" or "ねー" &&
                 result.Count >= 1 &&
                 (result[^1] is { PartOfSpeech: PartOfSpeech.Particle, Text: "て" or "で" } ||
-                 (result[^1].Text.EndsWith("て") || result[^1].Text.EndsWith("で"))))
+                 (result[^1].Text.EndsWith('て') || result[^1].Text.EndsWith('で'))))
             {
                 var next = wordInfos[i + 1];
                 result.Add(new WordInfo
@@ -1204,7 +1204,7 @@ public partial class MorphologicalAnalyser
                 current.Text[1..].All(c => c == 'ー') &&
                 prev.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun &&
                 prev.Text.Length <= 2 &&
-                !prev.Text.EndsWith("ん"))
+                !prev.Text.EndsWith('ん'))
             {
                 result[^1] = new WordInfo(prev) { Text = prev.Text + "ん", EndOffset = current.EndOffset, PartOfSpeech = PartOfSpeech.Suffix };
                 changed = true;
@@ -1518,7 +1518,7 @@ public partial class MorphologicalAnalyser
             {
                 var prevEmitted = split != null ? (split.Count > 0 ? split[^1] : null)
                                                 : (idx > 0 ? wordInfos[idx - 1] : null);
-                if (prevEmitted != null && (prevEmitted.Text == "ん" || prevEmitted.Text.EndsWith("ん")))
+                if (prevEmitted != null && (prevEmitted.Text == "ん" || prevEmitted.Text.EndsWith('ん')))
                 {
                     var remainder = word.Text[1..];
                     if (DaCompoundSuffixes.Contains(remainder))
@@ -1572,10 +1572,10 @@ public partial class MorphologicalAnalyser
             // Case: Token already ends with ん (e.g., 飲ん) and next is だ/で - combine as past/te-form
             // Skip na-adjectives (e.g., たくさん + で should NOT combine - で is the copula, not verb conjugation)
             // Skip suffixes (e.g., さん + だ should NOT combine - さん is honorific, だ is copula)
-            if (current.Text.EndsWith("ん") && current.Text.Length > 1 && current.Text != "ん" &&
+            if (current.Text.EndsWith('ん') && current.Text.Length > 1 && current.Text != "ん" &&
                 !IsNaAdjectiveToken(current) &&
                 current.PartOfSpeech != PartOfSpeech.Suffix &&
-                !NormalizeToHiragana(current.DictionaryForm).EndsWith("ん") &&
+                !NormalizeToHiragana(current.DictionaryForm).EndsWith('ん') &&
                 i + 1 < source.Count && source[i + 1].Text is "だ" or "で")
             {
                 var candidateText = current.Text + source[i + 1].Text;
@@ -1703,7 +1703,7 @@ public partial class MorphologicalAnalyser
 
                     // After combining ませ+ん→ません, try to combine preceding verb stem with ません
                     // e.g., [し, ませ] + ん → [しません]
-                    if (negativeWord.Text.EndsWith("ません") && result.Count > 0)
+                    if (negativeWord.Text.EndsWith("ません", StringComparison.Ordinal) && result.Count > 0)
                     {
                         var verbStem = result[^1];
                         var candidateText = verbStem.Text + negativeWord.Text;
@@ -1894,7 +1894,7 @@ public partial class MorphologicalAnalyser
     private static bool IsKanaUnitRepetition(string s, out string unit)
     {
         unit = "";
-        if (s.Length < 2 || s.Length % 2 != 0 || !WanaKanaShaapu.WanaKana.IsKana(s)) return false;
+        if (s.Length < 2 || s.Length % 2 != 0 || !JapaneseTextHelper.IsAllKana(s)) return false;
         unit = s[..2];
         return IsRepetitionOf(s, unit);
     }
@@ -1902,7 +1902,7 @@ public partial class MorphologicalAnalyser
     // True if s is the 2-char unit repeated a whole number of times (kana only).
     private static bool IsRepetitionOf(string s, string unit)
     {
-        if (s.Length == 0 || s.Length % 2 != 0 || !WanaKanaShaapu.WanaKana.IsKana(s)) return false;
+        if (s.Length == 0 || s.Length % 2 != 0 || !JapaneseTextHelper.IsAllKana(s)) return false;
         for (int k = 0; k < s.Length; k += 2)
             if (s[k] != unit[0] || s[k + 1] != unit[1]) return false;
         return true;
@@ -2360,7 +2360,7 @@ public partial class MorphologicalAnalyser
                 && i + 1 < wordInfos.Count
                 && wordInfos[i + 1].DictionaryForm is "成る" or "なる"
                 && wordInfos[i + 1].PartOfSpeech == PartOfSpeech.Verb
-                && newList.Count > 0 && newList[^1].Text.EndsWith("から"))
+                && newList.Count > 0 && newList[^1].Text.EndsWith("から", StringComparison.Ordinal))
             {
                 var naru = wordInfos[i + 1];
                 newList.Add(new WordInfo(naru)
@@ -2431,7 +2431,7 @@ public partial class MorphologicalAnalyser
 
             // X史|上 → X|史上: 史上 (ichi1) binds tighter than the 史 suffix (人類史上初).
             // 史上+初 then merges into 史上初 via the expression whitelist.
-            if (w1.PartOfSpeech == PartOfSpeech.Noun && w1.Text.Length >= 3 && w1.Text.EndsWith("史")
+            if (w1.PartOfSpeech == PartOfSpeech.Noun && w1.Text.Length >= 3 && w1.Text.EndsWith('史')
                 && i + 1 < wordInfos.Count
                 && wordInfos[i + 1] is { Text: "上", PartOfSpeech: PartOfSpeech.Suffix }
                 && HasNonNameCompoundLookup?.Invoke(w1.Text[..^1]) == true)
@@ -2454,7 +2454,7 @@ public partial class MorphologicalAnalyser
 
             // Sudachi's 使いで (usability) steals the で: 魔法|使いで|も|ない → 魔法使い|でもない.
             // Only fires when the previous noun + stem is a real word (魔法使い).
-            if (w1.PartOfSpeech == PartOfSpeech.Noun && w1.Text.Length >= 3 && w1.Text.EndsWith("で")
+            if (w1.PartOfSpeech == PartOfSpeech.Noun && w1.Text.Length >= 3 && w1.Text.EndsWith('で')
                 && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "も"
                 && newList.Count > 0 && newList[^1].PartOfSpeech == PartOfSpeech.Noun
                 && HasNonNameCompoundLookup?.Invoke(newList[^1].Text + w1.Text[..^1]) == true)
@@ -2581,13 +2581,13 @@ public partial class MorphologicalAnalyser
             // when a JMDict expression entry exists (e.g., 飛んで → 2248530 "zero; flying").
             // Reclassify as Verb with the correct DictionaryForm so the parser matches the verb.
             if (w1 is { PartOfSpeech: PartOfSpeech.Expression, Text.Length: >= 3 }
-                && (w1.Text.EndsWith("んで") || w1.Text.EndsWith("んだ")))
+                && (w1.Text.EndsWith("んで", StringComparison.Ordinal) || w1.Text.EndsWith("んだ", StringComparison.Ordinal)))
             {
                 var hiragana = NormalizeToHiragana(w1.Text);
                 var deconjForms = PipelineCachedDeconjugate(hiragana);
                 var verbForm = deconjForms.FirstOrDefault(f =>
                     f.Tags.Any(t => t is "v5b" or "v5m" or "v5n" or "v5g") &&
-                    (f.Text.EndsWith("ぶ") || f.Text.EndsWith("む") || f.Text.EndsWith("ぬ") || f.Text.EndsWith("ぐ")));
+                    (f.Text.EndsWith('ぶ') || f.Text.EndsWith('む') || f.Text.EndsWith('ぬ') || f.Text.EndsWith('ぐ')));
                 if (verbForm != null)
                 {
                     var prefix = w1.Text[..^2];
@@ -2639,10 +2639,10 @@ public partial class MorphologicalAnalyser
                 newList.Add(new WordInfo
                 {
                     Text = next.Text[1..],
-                    DictionaryForm = next.DictionaryForm?.StartsWith("し") == true
+                    DictionaryForm = next.DictionaryForm?.StartsWith('し') == true
                         ? next.DictionaryForm[1..]
                         : next.Text[1..],
-                    NormalizedForm = next.NormalizedForm?.StartsWith("し") == true
+                    NormalizedForm = next.NormalizedForm?.StartsWith('し') == true
                         ? next.NormalizedForm[1..]
                         : next.Text[1..],
                     PartOfSpeech = PartOfSpeech.Verb,
@@ -2661,7 +2661,7 @@ public partial class MorphologicalAnalyser
                 && w1.HasPartOfSpeechSection(PartOfSpeechSection.NaAdjectiveLike)
                 && newList.Count > 0
                 && newList[^1].PartOfSpeech == PartOfSpeech.IAdjective
-                && !newList[^1].Text.EndsWith("い"))
+                && !newList[^1].Text.EndsWith('い'))
             {
                 newList[^1].Text += w1.Text;
                 newList[^1].EndOffset = w1.EndOffset;
@@ -2695,8 +2695,8 @@ public partial class MorphologicalAnalyser
                     var combined = w1.Text + "とこう";
                     var forms = PipelineCachedDeconjugate(combined);
                     var verbForm = forms.FirstOrDefault(f =>
-                        f.Tags.Count > 0 && f.Tags.Count <= 6 &&
-                        f.Tags.Any(t => t.StartsWith("v")) &&
+                        f.Tags.Length > 0 && f.Tags.Length <= 6 &&
+                        f.Tags.Any(t => t.StartsWith('v')) &&
                         HasCompoundLookup(f.Text));
                     if (verbForm != null)
                     {
@@ -3235,9 +3235,9 @@ public partial class MorphologicalAnalyser
         int origNounEnd = noun.EndOffset;
         noun.Text = nounRemainder;
         noun.EndOffset = noun.StartOffset >= 0 ? noun.StartOffset + nounRemainder.Length : -1;
-        if (noun.DictionaryForm.EndsWith(verbStem))
+        if (noun.DictionaryForm.EndsWith(verbStem, StringComparison.Ordinal))
             noun.DictionaryForm = noun.DictionaryForm[..^w];
-        if (noun.NormalizedForm.EndsWith(verbStem))
+        if (noun.NormalizedForm.EndsWith(verbStem, StringComparison.Ordinal))
             noun.NormalizedForm = noun.NormalizedForm[..^w];
 
         result.Add(new WordInfo
@@ -3406,7 +3406,7 @@ public partial class MorphologicalAnalyser
         if (HasCompoundLookup == null) return false;
         foreach (var f in Deconjugator.Instance.Deconjugate(text))
         {
-            if (f.Process.Count != 1 || string.IsNullOrEmpty(f.Text)) continue;
+            if (f.Process.Length != 1 || string.IsNullOrEmpty(f.Text)) continue;
             var p = f.Process[0];
             if ((p.Contains("imperative", StringComparison.Ordinal) || p.Contains("volitional", StringComparison.Ordinal))
                 && HasCompoundLookup(f.Text))
@@ -3419,7 +3419,7 @@ public partial class MorphologicalAnalyser
     private static bool HasOneStepVolitional(string text)
     {
         foreach (var f in Deconjugator.Instance.Deconjugate(text))
-            if (f.Process.Count == 1 && f.Process[0].Contains("volitional", StringComparison.Ordinal))
+            if (f.Process.Length == 1 && f.Process[0].Contains("volitional", StringComparison.Ordinal))
                 return true;
 
         return false;
@@ -4296,7 +4296,7 @@ public partial class MorphologicalAnalyser
                     bool hasRealDeconjStep = false;
                     foreach (var f in forms)
                     {
-                        if (f.Process.Count == 1) { hasRealDeconjStep = true; break; }
+                        if (f.Process.Length == 1) { hasRealDeconjStep = true; break; }
                     }
                     // いっ+て is usually 言って/行って mid-verb: only steal the い when the
                     // reattachment makes a real word (悪い), not a deconj-shaped fragment
@@ -4643,9 +4643,9 @@ public partial class MorphologicalAnalyser
 
                 foreach (var form in forms)
                 {
-                    if (form.Tags.Count == 0 || form.Tags.Count > 5) continue;
+                    if (form.Tags.Length == 0 || form.Tags.Length > 5) continue;
                     var lastTag = form.Tags[^1];
-                    if (!lastTag.StartsWith("v") && lastTag is not "adj-i" and not "adj-na")
+                    if (!lastTag.StartsWith('v') && lastTag is not "adj-i" and not "adj-na")
                         continue;
                     if (!hasNonNameLookup(form.Text)) continue;
 

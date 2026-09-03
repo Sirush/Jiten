@@ -220,6 +220,11 @@ public class Program
             await diagnosticCommands.FlushRedisCache();
         }
 
+        if (options.WarmJmDictCache)
+        {
+            await diagnosticCommands.WarmJmDictCache();
+        }
+
         if (options.WarmupTts > 0)
         {
             var ttsCommands = new TtsCommands(context);

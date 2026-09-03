@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using WanaKanaShaapu;
@@ -103,7 +104,7 @@ internal readonly record struct FormScoringContext(
             normalizedForm,
             isNameContext,
             sudachiReading,
-            WanaKana.IsKana(surface),
+            JapaneseTextHelper.IsAllKana(surface),
             surfaceHiragana,
             surfaceHiraganaLoose,
             dictionaryFormHiragana,

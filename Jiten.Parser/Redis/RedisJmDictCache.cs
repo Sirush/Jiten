@@ -1,5 +1,6 @@
 using Jiten.Core;
 using Jiten.Core.Data.JMDict;
+using Jiten.Parser.Diagnostics;
 using MessagePack;
 using MessagePack.Resolvers;
 using Microsoft.EntityFrameworkCore;
@@ -214,6 +215,7 @@ public class RedisJmDictCache : IJmDictCache
 
         if (missedIds.Any())
         {
+            ParserCounters.Add(ref ParserCounters.JmDictRedisMisses, missedIds.Count);
             const int batchSize = 1000;
 
             for (int i = 0; i < missedIds.Count; i += batchSize)
@@ -243,6 +245,7 @@ public class RedisJmDictCache : IJmDictCache
                                 .Where(w => batchIds.Contains(w.WordId))
                                 .ToListAsync();
 
+                            ParserCounters.Add(ref ParserCounters.JmDictDbRows, dbWords.Count);
                             if (dbWords.Any())
                             {
                                 var cacheBatch = _redisDb.CreateBatch();

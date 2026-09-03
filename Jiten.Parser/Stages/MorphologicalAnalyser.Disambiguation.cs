@@ -312,7 +312,7 @@ public partial class MorphologicalAnalyser
             // on neighbour scoring.
             if (word is { Text: "ばっか", PreMatchedWordId: null } && i > 0
                 && ((wordInfos[i - 1] is { PartOfSpeech: PartOfSpeech.Verb } vprev
-                     && (vprev.Text.EndsWith("て") || vprev.Text.EndsWith("で")))
+                     && (vprev.Text.EndsWith('て') || vprev.Text.EndsWith('で')))
                     || wordInfos[i - 1] is { PartOfSpeech: PartOfSpeech.Particle, Text: "て" or "で" }
                     || wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
                         or PartOfSpeech.Pronoun or PartOfSpeech.Name))
@@ -1019,9 +1019,10 @@ public partial class MorphologicalAnalyser
                 && word.DictionaryForm is { Length: > 0 } tsuDf && !tsuDf.Contains('っ'))
             {
                 var tsuForms = Deconjugator.Instance.Deconjugate(word.Text);
+                var currentLemma = word.DictionaryForm;
                 // Only when the current lemma is NOT itself a valid deconjugation of the surface —
                 // 背負っていた→背負う and よって→よる are real onbin chains and stay.
-                var tsuBetter = tsuForms.Any(f => f.Text == word.DictionaryForm)
+                var tsuBetter = tsuForms.Any(f => f.Text == currentLemma)
                     ? null
                     : tsuForms.FirstOrDefault(f => f.Text.Contains('っ')
                         && f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal))
@@ -1119,7 +1120,7 @@ public partial class MorphologicalAnalyser
 
                 // かく: geometry word + の + 角 (三角形の角, 多角形の角)
                 bool afterGeometry = prev is { Text: "の" } && prev2 != null &&
-                                     (prev2.Text.EndsWith("角形") || prev2.Text.EndsWith("多角"));
+                                     (prev2.Text.EndsWith("角形", StringComparison.Ordinal) || prev2.Text.EndsWith("多角", StringComparison.Ordinal));
 
                 // かく: 角 + が/は/も + degree/equality (角が90度, 角は等しい)
                 var next3 = i + 3 < wordInfos.Count ? wordInfos[i + 3] : null;
@@ -1157,7 +1158,7 @@ public partial class MorphologicalAnalyser
             //     word.Reading = "ミンナ";
 
             // 抱く (イダク) → ダク — いだく is literary; modern standalone 抱く is overwhelmingly だく.
-            if (word is { DictionaryForm: "抱く", Reading: { } r } && r.StartsWith("イダ"))
+            if (word is { DictionaryForm: "抱く", Reading: { } r } && r.StartsWith("イダ", StringComparison.Ordinal))
                 word.Reading = r.Replace("イダ", "ダ");
 
             // 様 disambiguation: さま (honorific suffix, 1545790) vs よう (appearance/manner, 1605840)
@@ -1275,7 +1276,7 @@ public partial class MorphologicalAnalyser
             // (私は貴女と共にあり――), not the noun 蟻. Real ant sentences continue with が/は/を,
             // so the clause-final gate keeps them on the noun.
             if (word is { Text: "あり", PartOfSpeech: PartOfSpeech.Noun }
-                && i > 0 && (wordInfos[i - 1].Text.EndsWith("に") || wordInfos[i - 1].Text.EndsWith("と"))
+                && i > 0 && (wordInfos[i - 1].Text.EndsWith('に') || wordInfos[i - 1].Text.EndsWith('と'))
                 && (i + 1 >= wordInfos.Count
                     || wordInfos[i + 1].PartOfSpeech is PartOfSpeech.SupplementarySymbol
                         or PartOfSpeech.Symbol or PartOfSpeech.BlankSpace))
@@ -1286,7 +1287,7 @@ public partial class MorphologicalAnalyser
 
             // 捩* (モジ*) → ネジ* — standalone 捩る is almost always ねじる (to twist);
             // もじる (to parody) is rare and typically written in kana.
-            if (word.DictionaryForm == "捩る" && word.Reading.StartsWith("モジ"))
+            if (word.DictionaryForm == "捩る" && word.Reading.StartsWith("モジ", StringComparison.Ordinal))
                 word.Reading = word.Reading.Replace("モジ", "ネジ");
 
             // 大勢 (タイセイ, general trend) → オオゼイ (many people) — the common reading.
@@ -1311,7 +1312,7 @@ public partial class MorphologicalAnalyser
             // イキ (katakana) → 行く, not 生きる. Sudachi maps katakana イキ to dict=イキる/norm=生きる,
             // but standalone katakana イキ is slang for 行く (イク). 生きる is never written as イキ.
             // After CombineAuxiliary, the token may be イキました/イキます etc.
-            if (word.DictionaryForm == "イキる" && word.Text.StartsWith("イキ"))
+            if (word.DictionaryForm == "イキる" && word.Text.StartsWith("イキ", StringComparison.Ordinal))
             {
                 word.DictionaryForm = "行く";
                 word.NormalizedForm = "行く";
@@ -1355,7 +1356,7 @@ public partial class MorphologicalAnalyser
 
             // 弾ける: Sudachi gives dict=弾ける for both はじける (to burst) and the potential of
             // 弾く/ひく (to play). The reading disambiguates: ヒケ* = 弾く potential, ハジケ* = 弾ける.
-            if (word.DictionaryForm == "弾ける" && word.Reading.StartsWith("ヒケ"))
+            if (word.DictionaryForm == "弾ける" && word.Reading.StartsWith("ヒケ", StringComparison.Ordinal))
             {
                 word.DictionaryForm = "弾く";
                 word.NormalizedForm = "弾く";
@@ -1376,7 +1377,7 @@ public partial class MorphologicalAnalyser
                 word.DictionaryForm = "来る";
             }
             else if (word.Text.Length >= 2 && word.Text[0] == '来' && word.Text[1] != 'り'
-                     && word.DictionaryForm == "来る" && word.Reading.StartsWith("キタ"))
+                     && word.DictionaryForm == "来る" && word.Reading.StartsWith("キタ", StringComparison.Ordinal))
             {
                 word.Reading = "ク" + word.Reading[2..];
             }

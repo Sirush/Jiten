@@ -199,6 +199,9 @@ public class CliOptions
     [Option(longName: "flush-redis", Required = false, HelpText = "Flush the Redis cache (clears all cached parser results).")]
     public bool FlushRedis { get; set; }
 
+    [Option(longName: "warm-jmdict-cache", Required = false, HelpText = "Run the JMDict Redis prefill to completion (the API does this in the background; the CLI exits too early for it to finish on its own).")]
+    public bool WarmJmDictCache { get; set; }
+
     [Option(longName: "warmup-tts", Required = false, HelpText = "Pre-generate and CDN-cache word TTS audio for the top N most frequent words across all voices (round-robin).")]
     public int WarmupTts { get; set; }
 
@@ -246,6 +249,15 @@ public class CliOptions
 
     [Option(longName: "benchmark-warmup", Required = false, Default = true, HelpText = "Run a warmup parse before benchmarking (default: true).")]
     public bool BenchmarkWarmup { get; set; }
+
+    [Option(longName: "benchmark-dump", Required = false, HelpText = "Write a full per-file deck signature (stats, every DeckWord, example sentences) to this path for byte-identity diffing between benchmark runs.")]
+    public string? BenchmarkDump { get; set; }
+
+    [Option(longName: "benchmark-passes", Required = false, Default = 1, HelpText = "Parse the corpus this many times in one process and report the last pass; passes after the first show the warm in-process state a long-lived parse job runs in.")]
+    public int BenchmarkPasses { get; set; }
+
+    [Option(longName: "benchmark-sections", Required = false, HelpText = "Enable the fine-grained section timers (adjacent scoring phases, deconjugator BFS time). They cost a few percent themselves.")]
+    public bool BenchmarkSections { get; set; }
 
     [Option(longName: "scan-confidence", Required = false, HelpText = "Scan a corpus file for low-confidence token resolutions. Requires --input.")]
     public bool ScanConfidence { get; set; }

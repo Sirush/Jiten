@@ -69,10 +69,10 @@ public partial class MorphologicalAnalyser
     private List<WordInfo> CombineVerbPossibleDependants(List<WordInfo> wordInfos) =>
         MergeAdjacentWhere(wordInfos, (currentWord, nextWord) =>
         {
-            bool isClassicalWaRowTeForm = nextWord.DictionaryForm.EndsWith("う") &&
-                                          nextWord.Text.EndsWith("いて");
+            bool isClassicalWaRowTeForm = nextWord.DictionaryForm.EndsWith('う') &&
+                                          nextWord.Text.EndsWith("いて", StringComparison.Ordinal);
             return nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant) &&
-                   currentWord.PartOfSpeech == PartOfSpeech.Verb && !currentWord.Text.EndsWith("たり") &&
+                   currentWord.PartOfSpeech == PartOfSpeech.Verb && !currentWord.Text.EndsWith("たり", StringComparison.Ordinal) &&
                    nextWord.Text != currentWord.Text &&
                    !currentWord.Text.EndsWith("くて", StringComparison.Ordinal) &&
                    !isClassicalWaRowTeForm &&
@@ -84,7 +84,7 @@ public partial class MorphologicalAnalyser
                      (HasCompoundLookup(currentWord.Text + "だす") || HasCompoundLookup(currentWord.Text + "出す"))) ||
                     (nextWord.DictionaryForm == "得る" && HasCompoundLookup != null &&
                      HasCompoundLookup(currentWord.Text + "得る")) ||
-                    (nextWord.DictionaryForm == "する" && (currentWord.Text.EndsWith("た") || currentWord.Text.EndsWith("だ"))) ||
+                    (nextWord.DictionaryForm == "する" && (currentWord.Text.EndsWith('た') || currentWord.Text.EndsWith('だ'))) ||
                     (nextWord.DictionaryForm == "付く" && HasCompoundLookup != null &&
                      currentWord.DictionaryForm.Length >= 2 &&
                      HasCompoundLookup(currentWord.DictionaryForm[..^1] + "り付く")));
@@ -105,7 +105,7 @@ public partial class MorphologicalAnalyser
             {
                 WordInfo nextWord = wordInfos[i + 1];
                 bool isModernSuru = nextWord.DictionaryForm == "する" && nextWord.Text != "する" && nextWord.Text != "しない"
-                                   && !nextWord.Text.EndsWith("すぎ") && !nextWord.Text.EndsWith("過ぎ");
+                                   && !nextWord.Text.EndsWith("すぎ", StringComparison.Ordinal) && !nextWord.Text.EndsWith("過ぎ", StringComparison.Ordinal);
                 bool isLiterarySuru = nextWord.DictionaryForm == "す" && nextWord.NormalizedForm == "為る";
                 bool isSuruNoun = currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
                                   currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun);
@@ -166,8 +166,8 @@ public partial class MorphologicalAnalyser
             {
                 WordInfo nextWord = wordInfos[i + 1];
 
-                bool isClassicalWaRowTeForm = nextWord.DictionaryForm.EndsWith("う") &&
-                                              nextWord.Text.EndsWith("いて");
+                bool isClassicalWaRowTeForm = nextWord.DictionaryForm.EndsWith('う') &&
+                                              nextWord.Text.EndsWith("いて", StringComparison.Ordinal);
                 // A demonstrative is never a te-form subsidiary verb: 夢見て + これ must not fuse
                 // into 夢見てこれ (これ spuriously deconjugates to a subsidiary-verb form). Gate on the
                 // demonstrative dict-form, not POS Pronoun — こん (来ん) is also POS Pronoun but is a
@@ -177,7 +177,7 @@ public partial class MorphologicalAnalyser
                 bool isDemonstrative = nextWord.DictionaryForm is "これ" or "それ" or "あれ" or "どれ";
                 bool koreIsPotentialStem = nextWord.DictionaryForm == "これ" && i + 2 < wordInfos.Count
                     && wordInfos[i + 2].DictionaryForm is "ない" or "無い" or "た" or "ます" or "ん" or "ぬ" or "ず" or "る";
-                if ((currentWord.Text.EndsWith("て") || currentWord.Text.EndsWith("で")) &&
+                if ((currentWord.Text.EndsWith('て') || currentWord.Text.EndsWith('で')) &&
                     currentWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective &&
                     // くて is a genuine i-adjective te-form — subsidiary verbs attach to verb
                     // te-forms only (頭が良くて + やりたい stays split)
@@ -209,7 +209,7 @@ public partial class MorphologicalAnalyser
                             if (TeFormAuxChainVerbs.Contains(f.Text))
                             {
                                 foreach (var t in f.Tags)
-                                    if (t.StartsWith("v")) { isKnownSubsidiary = true; break; }
+                                    if (t.StartsWith('v')) { isKnownSubsidiary = true; break; }
                                 if (isKnownSubsidiary) break;
                             }
                         }
@@ -235,7 +235,7 @@ public partial class MorphologicalAnalyser
                 WordInfo nextWord = wordInfos[i + 1];
 
                 if (currentWord.PartOfSpeech == PartOfSpeech.Verb &&
-                    currentWord.Text.EndsWith("っ") &&
+                    currentWord.Text.EndsWith('っ') &&
                     nextWord.DictionaryForm == "とる")
                 {
                     string nextHiragana = KanaNormalizer.Normalize(KanaConverter.ToHiragana(nextWord.Text));
@@ -248,7 +248,7 @@ public partial class MorphologicalAnalyser
                             if (p.Contains("toru (teoru)")) { hasToru = true; break; }
                         if (!hasToru) continue;
                         foreach (var t in f.Tags)
-                            if (t.StartsWith("v") || t.StartsWith("stem-te")) { isTeOruForm = true; break; }
+                            if (t.StartsWith('v') || t.StartsWith("stem-te", StringComparison.Ordinal)) { isTeOruForm = true; break; }
                         if (isTeOruForm) break;
                     }
 

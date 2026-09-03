@@ -221,9 +221,10 @@ public class Deconjugator
         if (string.IsNullOrEmpty(text))
             return [];
 
-        long start = Stopwatch.GetTimestamp();
+        bool timed = Diagnostics.ParserCounters.SectionTiming;
+        long start = timed ? Stopwatch.GetTimestamp() : 0;
         var result = RunBfs(text);
-        Interlocked.Add(ref _bfsTotalTicks, Stopwatch.GetTimestamp() - start);
+        if (timed) Interlocked.Add(ref _bfsTotalTicks, Stopwatch.GetTimestamp() - start);
         Interlocked.Increment(ref _bfsCallCount);
 
         StoreCached(text, result);
@@ -233,34 +234,59 @@ public class Deconjugator
 
     private DeconjugationForm[] RunBfs(string text)
     {
-        var processed = new HashSet<DeconjugationForm>(Math.Min(text.Length * 2, 100));
-        var novel = new HashSet<DeconjugationForm>(20);
-        novel.Add(CreateInitialForm(text));
+        // `seen` doubles as the result set: every form reached is emitted, in discovery order.
+        var seen = new HashSet<DeconjugationForm>(Math.Max(text.Length * 4, 32));
+        var ordered = new List<DeconjugationForm>(Math.Max(text.Length * 4, 32));
+        var novel = new List<DeconjugationForm>(20);
+        var initial = CreateInitialForm(text);
+        seen.Add(initial);
+        ordered.Add(initial);
+        novel.Add(initial);
 
+        var newNovel = new List<DeconjugationForm>(32);
         while (novel.Count > 0)
         {
-            var newNovel = new HashSet<DeconjugationForm>(novel.Count * 2);
+            newNovel.Clear();
 
             foreach (var form in novel)
             {
                 if (ShouldSkipForm(form))
                     continue;
 
-                ApplyIndexedRules(form, newNovel, processed, novel);
+                ApplyIndexedRules(form, newNovel, seen, ordered);
             }
 
-            processed.UnionWith(novel);
-            novel = newNovel;
+            (novel, newNovel) = (newNovel, novel);
         }
 
-        return processed
-            .OrderByDescending(f => f.Text.Length)
-            .ThenBy(f => f.Text, StringComparer.Ordinal)
-            .ToArray();
+        return SortForms(ordered);
     }
 
-    private void ApplyIndexedRules(DeconjugationForm form, HashSet<DeconjugationForm> newNovel,
-                                    HashSet<DeconjugationForm> processed, HashSet<DeconjugationForm> novel)
+    // Length descending, then ordinal text, then discovery order: a stable sort, so equal-key
+    // forms (same text, different chains) keep the order the BFS found them in.
+    private static DeconjugationForm[] SortForms(List<DeconjugationForm> ordered)
+    {
+        int n = ordered.Count;
+        var index = new int[n];
+        for (int i = 0; i < n; i++) index[i] = i;
+
+        Array.Sort(index, (a, b) =>
+        {
+            var fa = ordered[a];
+            var fb = ordered[b];
+            int cmp = fb.Text.Length.CompareTo(fa.Text.Length);
+            if (cmp != 0) return cmp;
+            cmp = string.CompareOrdinal(fa.Text, fb.Text);
+            return cmp != 0 ? cmp : a.CompareTo(b);
+        });
+
+        var result = new DeconjugationForm[n];
+        for (int i = 0; i < n; i++) result[i] = ordered[index[i]];
+        return result;
+    }
+
+    private void ApplyIndexedRules(DeconjugationForm form, List<DeconjugationForm> newNovel,
+                                    HashSet<DeconjugationForm> seen, List<DeconjugationForm> ordered)
     {
         var text = form.Text;
         int maxSuffix = Math.Min(_maxConEndLength, text.Length);
@@ -280,8 +306,8 @@ public class Deconjugator
             {
                 switch (entry.Mode)
                 {
-                    case RuleMode.OnlyFinal when form.Tags.Count > 0:
-                    case RuleMode.NeverFinal when form.Tags.Count == 0:
+                    case RuleMode.OnlyFinal when form.Tags.Length > 0:
+                    case RuleMode.NeverFinal when form.Tags.Length == 0:
                         continue;
                     case RuleMode.Rewrite when !text.Equals(entry.VirtualRule.ConEnd, StringComparison.Ordinal):
                         continue;
@@ -292,10 +318,10 @@ public class Deconjugator
                         break;
                 }
 
-                if (string.IsNullOrEmpty(entry.Rule.Detail) && form.Tags.Count == 0)
+                if (string.IsNullOrEmpty(entry.Rule.Detail) && form.Tags.Length == 0)
                     continue;
 
-                if (form.Tags.Count > 0 && form.Tags[^1] != entry.VirtualRule.ConTag)
+                if (form.Tags.Length > 0 && form.Tags[^1] != entry.VirtualRule.ConTag)
                     continue;
 
                 var prefixLength = text.Length - entry.VirtualRule.ConEnd.Length;
@@ -310,15 +336,18 @@ public class Deconjugator
                 var newForm = CreateNewForm(form, newText, entry.VirtualRule.ConTag,
                     entry.VirtualRule.DecTag, entry.VirtualRule.Detail);
 
-                if (!processed.Contains(newForm) && !novel.Contains(newForm) && !newNovel.Contains(newForm))
+                if (seen.Add(newForm))
+                {
+                    ordered.Add(newForm);
                     newNovel.Add(newForm);
+                }
             }
         }
     }
 
     private DeconjugationForm CreateInitialForm(string text)
     {
-        return new DeconjugationForm(text, text, [], new HashSet<string>(StringComparer.Ordinal), []);
+        return new DeconjugationForm(text, text, [], null, []);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -326,12 +355,12 @@ public class Deconjugator
     {
         return string.IsNullOrEmpty(form.Text) ||
                form.Text.Length > form.OriginalText.Length + MaxTextGrowthFromOriginal ||
-               form.Tags.Count > form.OriginalText.Length + MaxChainDepthAboveInputLength;
+               form.Tags.Length > form.OriginalText.Length + MaxChainDepthAboveInputLength;
     }
 
     private DeconjugationForm CreateNewForm(DeconjugationForm form, string newText, string? conTag, string? decTag, string detail)
     {
-        int existingTagCount = form.Tags.Count;
+        int existingTagCount = form.Tags.Length;
         bool addConTag = existingTagCount == 0 && conTag != null;
         bool addDecTag = decTag != null;
         int newTagCount = existingTagCount + (addConTag ? 1 : 0) + (addDecTag ? 1 : 0);
@@ -343,14 +372,9 @@ public class Deconjugator
         if (addConTag) tags[idx++] = conTag!;
         if (addDecTag) tags[idx++] = decTag!;
 
-        var seenText = new HashSet<string>(form.SeenText.Count + 2, StringComparer.Ordinal);
-        foreach (var s in form.SeenText)
-            seenText.Add(s);
-        if (seenText.Count == 0)
-            seenText.Add(form.Text);
-        seenText.Add(newText);
+        var seenText = BuildSeenText(form, newText);
 
-        int procCount = form.Process.Count;
+        int procCount = form.Process.Length;
         var process = new string[procCount + 1];
         for (int i = 0; i < procCount; i++)
             process[i] = form.Process[i];
@@ -359,13 +383,21 @@ public class Deconjugator
         return new DeconjugationForm(newText, form.OriginalText, tags, seenText, process);
     }
 
+    // Parent chain, then the parent text when the chain is empty, then the new text; a text
+    // already on the chain keeps its first position.
+    private static SeenTextNode BuildSeenText(DeconjugationForm form, string newText)
+    {
+        var chain = form.SeenChain ?? SeenTextNode.Append(null, form.Text);
+        return SeenTextNode.Append(chain, newText);
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool TemiruCheck(DeconjugationForm form, DeconjugationRule rule)
     {
         var conEnd = rule.ConEnd[0];
         if (!form.Text.EndsWith(conEnd, StringComparison.Ordinal)) return false;
         var prefix = form.Text.AsSpan(0, form.Text.Length - conEnd.Length);
-        return prefix.EndsWith("て") || prefix.EndsWith("で");
+        return prefix.EndsWith('て') || prefix.EndsWith('で');
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

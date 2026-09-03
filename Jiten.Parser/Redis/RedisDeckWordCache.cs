@@ -1,4 +1,5 @@
 using Jiten.Core.Data;
+using Jiten.Parser.Diagnostics;
 using MessagePack;
 using MessagePack.Resolvers;
 using Microsoft.Extensions.Configuration;
@@ -57,12 +58,14 @@ public class RedisDeckWordCache : IDeckWordCache
             if (values[i].IsNullOrEmpty)
             {
                 results[keys[i]] = null;
+                Interlocked.Increment(ref ParserCounters.DeckWordCacheMisses);
             }
             else
             {
                 try
                 {
                     results[keys[i]] = MessagePackSerializer.Deserialize<DeckWord>((byte[])values[i]!, MsgPackOptions);
+                    Interlocked.Increment(ref ParserCounters.DeckWordCacheHits);
                 }
                 catch
                 {

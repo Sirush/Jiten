@@ -143,7 +143,7 @@ internal static class TransitionRuleEngine
                     TransitionRuleSets.StrictCaseMarkingParticles.Contains(w.Current.DictionaryForm),
 
                 MatchCondition.NextIsNotQuotative =>
-                    w.Next == null || !w.Next.Text.StartsWith("という"),
+                    w.Next == null || !w.Next.Text.StartsWith("という", StringComparison.Ordinal),
 
                 // Valid hosts for a sentence-final particle: auxiliaries/particles (だな, はね), plain
                 // predicates before な (prohibitive えぐるな, exclamatory 欲しいな), and plain
@@ -296,10 +296,17 @@ internal static class TransitionRuleEngine
         return bonus;
     }
 
+    internal readonly record struct SoftRulePrefilterKey(
+        uint CurrentMask, string CurrentText,
+        uint PrevMask, bool HasPrev, string? PrevText,
+        uint NextMask, bool HasNext, string? NextText);
+
+    /// <param name="memo">Per-document cache: the answer depends only on the three masks and texts.</param>
     internal static bool CouldAnySoftRuleApply(
         List<PartOfSpeech> currentPOS, string currentText,
         List<PartOfSpeech>? prevPOS, string? prevText,
-        List<PartOfSpeech>? nextPOS, string? nextText)
+        List<PartOfSpeech>? nextPOS, string? nextText,
+        Dictionary<SoftRulePrefilterKey, bool>? memo = null)
     {
         if (currentPOS.Count == 0) return false;
 
@@ -307,6 +314,21 @@ internal static class TransitionRuleEngine
             PosMask.FromList(currentPOS), currentText,
             prevPOS != null ? PosMask.FromList(prevPOS) : 0, prevPOS != null, prevText,
             nextPOS != null ? PosMask.FromList(nextPOS) : 0, nextPOS != null, nextText);
+
+        if (memo == null)
+            return AnySoftRuleMatches(ctx);
+
+        var key = new SoftRulePrefilterKey(ctx.CandidateMask, currentText, ctx.PrevMask, ctx.HasPrev, prevText,
+                                           ctx.NextMask, ctx.HasNext, nextText);
+        if (memo.TryGetValue(key, out var cached))
+            return cached;
+        bool result = AnySoftRuleMatches(ctx);
+        memo[key] = result;
+        return result;
+    }
+
+    private static bool AnySoftRuleMatches(ConditionContext ctx)
+    {
         foreach (var rule in TransitionRuleSets.SoftRules)
         {
             if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
@@ -344,7 +366,7 @@ internal static class TransitionRuleEngine
             PosMask.Has(w.Candidate.Word.CachedPOSMask, PosMask.SuffixGroup) &&
             w.Candidate.Word.PartsOfSpeech.Exists(TransitionRuleSets.HonorificRegisterTags.Contains),
             w.Candidate.DeconjForm?.Process.Contains("volitional") == true,
-            w.Candidate.DeconjForm?.Process is { Count: > 0 } process
+            w.Candidate.DeconjForm?.Process is { Length: > 0 } process
                 && process[^1] is "(infinitive)" or "(unstressed infinitive)" or "imperative");
     }
 

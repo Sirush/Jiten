@@ -18,6 +18,31 @@ public static class JapaneseTextHelper
     public static bool IsKatakana(char c) =>
         c is >= '\u30A0' and <= '\u30FF';
 
+    /// <summary>Drop-in for WanaKana.IsKana (same character ranges, false on empty) without its allocations.</summary>
+    public static bool IsAllKana(ReadOnlySpan<char> s)
+    {
+        if (s.IsEmpty) return false;
+        foreach (var c in s)
+            if (!IsKana(c))
+                return false;
+        return true;
+    }
+
+    /// <summary>Drop-in for WanaKana.ToKatakana on kana-only input: the whole hiragana block shifts by 0x60, everything else stays.</summary>
+    public static string HiraganaToKatakana(string s)
+    {
+        int first = -1;
+        for (int i = 0; i < s.Length; i++)
+            if (IsHiragana(s[i])) { first = i; break; }
+        if (first < 0) return s;
+
+        return string.Create(s.Length, s, static (span, src) =>
+        {
+            for (int i = 0; i < src.Length; i++)
+                span[i] = IsHiragana(src[i]) ? (char)(src[i] + 0x60) : src[i];
+        });
+    }
+
     /// <summary>Non-empty string whose every char is hiragana. Allocation-free.</summary>
     public static bool IsAllHiragana(ReadOnlySpan<char> s)
     {

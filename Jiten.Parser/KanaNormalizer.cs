@@ -1,11 +1,8 @@
-using System.Collections.Concurrent;
-
 namespace Jiten.Parser;
 
 public class KanaNormalizer
 {
     private static readonly Dictionary<char, char> KanaToVowel = BuildKanaToVowelMap();
-    private static readonly ConcurrentDictionary<string, string> Cache = new();
 
     private static Dictionary<char, char> BuildKanaToVowelMap()
     {
@@ -18,32 +15,19 @@ public class KanaNormalizer
         return map;
     }
 
+    /// Rewrites every ー after a kana as that kana's vowel; a leading ー or one after a non-kana char stays.
     public static string Normalize(string input)
     {
         if (string.IsNullOrEmpty(input) || input.IndexOf('ー') == -1)
             return input;
 
-        if (Cache.TryGetValue(input, out var cached))
-            return cached;
-
-        var sb = new System.Text.StringBuilder(input.Length);
-
-        for (int i = 0; i < input.Length; i++)
+        return string.Create(input.Length, input, static (span, src) =>
         {
-            char c = input[i];
-
-            if (c == 'ー' && i > 0)
+            for (int i = 0; i < src.Length; i++)
             {
-                sb.Append(KanaToVowel.GetValueOrDefault(input[i - 1], 'ー'));
+                char c = src[i];
+                span[i] = c == 'ー' && i > 0 ? KanaToVowel.GetValueOrDefault(src[i - 1], 'ー') : c;
             }
-            else
-            {
-                sb.Append(c);
-            }
-        }
-
-        var result = sb.ToString();
-        Cache.TryAdd(input, result);
-        return result;
+        });
     }
 }
