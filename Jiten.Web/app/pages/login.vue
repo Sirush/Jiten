@@ -55,6 +55,7 @@
     } catch {
       resendMessage.value = 'If your email address is registered and not yet confirmed, a new confirmation link has been sent.';
     } finally {
+      recaptchaResponse.value = null;
       resendLoading.value = false;
     }
   }

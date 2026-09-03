@@ -23,6 +23,7 @@
         'If your email address is registered and confirmed, you will receive a password reset link. If you created your account with google auth, you will need to connect through google.';
     } catch (err: unknown) {
     } finally {
+      recaptchaResponse.value = null;
       isLoading.value = false;
     }
   }

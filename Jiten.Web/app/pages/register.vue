@@ -159,6 +159,7 @@
       error.value = `Registration failed: ${data?.message || fallback}`;
       errorDetails.value = Array.isArray(data?.errors) ? data.errors.filter((e) => !error.value?.includes(e)) : [];
     } finally {
+      recaptchaResponse.value = null;
       isLoading.value = false;
     }
   }
