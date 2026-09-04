@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
   import {
     KnownState,
     type DerivationCoverDto,
@@ -320,7 +320,7 @@
       url += '/' + selectedMediaType.value;
     }
 
-    const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeck.deckId);
+    const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeckParent?.deckId ?? sentence.sourceDeck.deckId);
 
     try {
       const results = await $api<ExampleSentence[]>(url, {
@@ -352,7 +352,7 @@
       url += '/' + selectedMediaType.value;
     }
 
-    const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeck.deckId);
+    const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeckParent?.deckId ?? sentence.sourceDeck.deckId);
 
     try {
       const results = await $api<ExampleSentencesByDifficultyResponse>(

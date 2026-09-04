@@ -1,6 +1,4 @@
-using Jiten.Core.Data;
-
-namespace Jiten.Api.Dtos;
+﻿namespace Jiten.Api.Dtos;
 
 public class ExampleSentenceDto
 {
@@ -9,8 +7,8 @@ public class ExampleSentenceDto
     public int WordPosition { get; set; }
     public int WordLength { get; set; }
     public float Difficulty { get; set; }
-    public Deck? SourceDeckParent { get; set; }
-    public Deck? SourceDeck { get; set; }
+    public StudyExampleSourceDto? SourceDeckParent { get; set; }
+    public StudyExampleSourceDto? SourceDeck { get; set; }
 
     /// <summary>Set only by the authenticated study endpoint: the sentence comes from one of the caller's study decks.</summary>
     public bool FromStudyDeck { get; set; }

@@ -1,4 +1,4 @@
-using Jiten.Api.Dtos;
+﻿using Jiten.Api.Dtos;
 using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
@@ -479,16 +479,19 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     /// <param name="alreadyLoaded">A list of deck IDs already loaded on the client to avoid duplicates.</param>
     /// <param name="mediaType">Optional media type filter.</param>
     /// <returns>A list of example sentences with metadata.</returns>
+    private const int MaxExcludedDeckIds = 500;
+
     [HttpPost("{wordId}/{readingIndex}/random-example-sentences/{mediaType?}")]
     [EnableRateLimiting("heavy")]
     [SwaggerOperation(Summary = "Get random example sentences",
                       Description =
                           "Returns up to three random example sentences for the given word and reading index, excluding already loaded ones.")]
     [ProducesResponseType(typeof(List<ExampleSentenceDto>), StatusCodes.Status200OK)]
-    public Task<List<ExampleSentenceDto>> GetRandomExampleSentences([FromRoute] int wordId, [FromRoute] int readingIndex,
-                                                                    [FromBody] List<int> alreadyLoaded, [FromRoute] MediaType? mediaType = null)
+    public async Task<IResult> GetRandomExampleSentences([FromRoute] int wordId, [FromRoute] int readingIndex,
+                                                         [FromBody] List<int> alreadyLoaded, [FromRoute] MediaType? mediaType = null)
     {
-        return exampleSentences.GetRandomAsync(wordId, readingIndex, alreadyLoaded, mediaType, 3);
+        if (alreadyLoaded.Count > MaxExcludedDeckIds) return Results.BadRequest();
+        return Results.Ok(await exampleSentences.GetRandomAsync(wordId, readingIndex, alreadyLoaded, mediaType, 3));
     }
 
     [HttpPost("{wordId}/{readingIndex}/example-sentences-by-difficulty/{mediaType?}")]
@@ -498,14 +501,15 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                           "Returns example sentences for the given word and reading index, ordered by difficulty score. " +
                           "Automatically expands the band (ascending or descending) until `take` sentences are found or the range is exhausted.")]
     [ProducesResponseType(typeof(ExampleSentencesByDifficultyResponse), StatusCodes.Status200OK)]
-    public Task<ExampleSentencesByDifficultyResponse> GetExampleSentencesByDifficulty(
+    public async Task<IResult> GetExampleSentencesByDifficulty(
         [FromRoute] int wordId, [FromRoute] int readingIndex,
         [FromBody] List<int> alreadyLoaded, [FromRoute] MediaType? mediaType = null,
         [FromQuery] float minDifficulty = 0f, [FromQuery] float maxDifficulty = 0.5f,
         [FromQuery] bool descending = false, [FromQuery] int take = 3)
     {
-        return exampleSentences.GetByDifficultyAsync(wordId, readingIndex, alreadyLoaded, mediaType,
-                                                     minDifficulty, maxDifficulty, descending, take);
+        if (alreadyLoaded.Count > MaxExcludedDeckIds) return Results.BadRequest();
+        return Results.Ok(await exampleSentences.GetByDifficultyAsync(wordId, readingIndex, alreadyLoaded, mediaType,
+                                                                      minDifficulty, maxDifficulty, descending, take));
     }
 
 

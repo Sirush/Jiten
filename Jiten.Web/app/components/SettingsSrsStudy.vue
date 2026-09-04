@@ -1000,42 +1000,6 @@
                     </Tooltip>
                   </label>
                 </div>
-                <div v-if="exampleSentencePosition !== 'Hidden'">
-                  <label class="text-sm mb-1 block">
-                    Sentence origin
-                    <Tooltip
-                      content="Where the card's sentence comes from.<br>**Study decks** — a sentence from one of your study decks, picked at random when several of them have one.<br>**Random** — ignores your decks and display random example sentences instead.<br>Your own custom sentences always win over both."
-                      placement="right"
-                    >
-                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                    </Tooltip>
-                  </label>
-                  <SelectButton
-                    v-model="form.exampleSentenceSource"
-                    :options="exampleSentenceSourceOptions"
-                    option-label="label"
-                    option-value="value"
-                    :allow-empty="false"
-                  />
-                </div>
-                <div v-if="exampleSentencePosition !== 'Hidden'">
-                  <label class="text-sm mb-1 block">
-                    Sorting
-                    <Tooltip
-                      content='Order of the sentences under "See more sentences". Sentences from your study decks come first in every mode.<br>**Random** — random sentences.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences.'
-                      placement="right"
-                    >
-                      <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-                    </Tooltip>
-                  </label>
-                  <SelectButton
-                    v-model="form.exampleSentenceSorting"
-                    :options="exampleSentenceSortingOptions"
-                    option-label="label"
-                    option-value="value"
-                    :allow-empty="false"
-                  />
-                </div>
               </div>
             </div>
 
@@ -1169,6 +1133,48 @@
             >
               <SrsCardPreview :settings="form" />
             </div>
+          </div>
+        </div>
+      </template>
+
+      <template v-if="exampleSentencePosition !== 'Hidden'">
+        <label class="block text-sm font-semibold mb-2 pb-1 border-b border-surface-200 dark:border-surface-700">Example sentence sources</label>
+        <div :class="props.inline ? 'flex flex-col gap-3' : 'flex flex-col gap-3 md:flex-row md:gap-8'">
+          <div class="shrink-0">
+            <label class="text-sm mb-1 block">
+              Sentence origin
+              <Tooltip
+                content='Where the card&apos;s sentence comes from, and the first sentences that will be under "See more sentences".<br>**Study decks** — a sentence from one of your active study decks, picked at random when several of them have one. Extra sentences show your study decks first.<br>**Random** — ignores your decks entirely, for the card and the extra sentences.<br>Your own custom sentences always win over both.'
+                placement="right"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+            <SelectButton
+              v-model="form.exampleSentenceSource"
+              :options="exampleSentenceSourceOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+            />
+          </div>
+          <div class="shrink-0">
+            <label class="text-sm mb-1 block">
+              Sorting
+              <Tooltip
+                content='Order of the sentences under "See more sentences".<br>**Random** — random sentences.<br>**Easiest** — prefer simpler sentences.<br>**Hardest** — prefer more complex sentences.'
+                placement="right"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+            <SelectButton
+              v-model="form.exampleSentenceSorting"
+              :options="exampleSentenceSortingOptions"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+            />
           </div>
         </div>
       </template>
