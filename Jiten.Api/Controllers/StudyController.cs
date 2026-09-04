@@ -2064,6 +2064,8 @@ public class StudyController(
                         studyDeck.MinGlobalFrequency, studyDeck.MaxGlobalFrequency, studyDeck.PosFilter,
                         studyDeck.ExcludeKana, false, false, FrequencyScope.From(studyDeck));
                     wordPairs = gdResult.Words.Select(w => (w.WordId, w.ReadingIndex)).ToList();
+                    if (studyDeck.Order == (int)DeckOrder.Random)
+                        DeckWordResolver.ShuffleInPlace(wordPairs);
                 }
                 else if (studyDeck.DeckType == StudyDeckType.StaticWordList)
                 {
