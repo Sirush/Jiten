@@ -35,6 +35,7 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
         await jitenDb.JMDictWords.Where(w => w.WordId == WordId).ExecuteDeleteAsync();
         await userDb.UserStudyDecks.Where(d => d.UserId == TestUsers.UserA).ExecuteDeleteAsync();
         await userDb.UserExampleSentences.Where(e => e.UserId == TestUsers.UserA).ExecuteDeleteAsync();
+        await userDb.UserFsrsSettings.Where(s => s.UserId == TestUsers.UserA).ExecuteDeleteAsync();
 
         jitenDb.JMDictWords.Add(new JmDictWord { WordId = WordId, PartsOfSpeech = ["noun"] });
 
@@ -157,6 +158,40 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Random_WithRandomSource_IgnoresStudyDecks()
+    {
+        await SetExampleSentenceSource("Random");
+
+        var seenStudyDeckFirst = false;
+        for (var i = 0; i < 20 && !seenStudyDeckFirst; i++)
+        {
+            var result = await Query(new { wordId = WordId, readingIndex = 0, sorting = "Random", take = 3 });
+            result.Sentences.Should().HaveCount(3);
+            result.Sentences.Should().NotContain(s => s.FromStudyDeck);
+            seenStudyDeckFirst = !_studyDeckIds.Contains(result.Sentences[0].SourceDeck!.DeckId);
+        }
+
+        seenStudyDeckFirst.Should().BeTrue("with five candidate decks a general one leads within 20 draws");
+    }
+
+    [Fact]
+    public async Task Random_InactiveStudyDeck_IsNotPrioritised()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            await userDb.UserStudyDecks
+                .Where(d => d.UserId == TestUsers.UserA && d.DeckId == _studyDeckIds[1])
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.IsActive, false));
+        }
+
+        var result = await Query(new { wordId = WordId, readingIndex = 0, sorting = "Random", take = 3 });
+
+        result.Sentences.Count(s => s.FromStudyDeck).Should().Be(1);
+        result.Sentences[0].SourceDeck!.DeckId.Should().Be(_studyDeckIds[0]);
+    }
+
+    [Fact]
     public async Task Difficulty_PrefersStudyDeckWithinTheBand()
     {
         var result = await Query(new
@@ -168,6 +203,69 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
         result.Sentences.Should().NotBeEmpty();
         result.Sentences[0].FromStudyDeck.Should().BeTrue();
         _studySentenceIds.Should().Contain(result.Sentences[0].SentenceId);
+    }
+
+    [Fact]
+    public async Task Difficulty_Descending_ReturnsTheBandCursorItReached()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            await AddSentence(jitenDb, _otherDeckIds[0], "hard sentence", 2.2f);
+        }
+
+        // Only one sentence sits in [2.0, 2.5): the server must walk down into [0, 0.5) to fill the page
+        var result = await Query(new
+        {
+            wordId = WordId, readingIndex = 0, sorting = "HardestFirst",
+            minDifficulty = 2.0f, maxDifficulty = 2.5f, descending = true, take = 3,
+        });
+
+        result.Sentences.Should().HaveCount(3);
+        result.SearchedBandMin.Should().BeLessThan(2.0f, "the cursor must move past the bands already consumed");
+        result.SearchedBandMin.Should().BeLessOrEqualTo(0.5f);
+    }
+
+    [Fact]
+    public async Task Random_CollapsesSubdecksOfOneTitleToASingleSentence()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            var parent = NewDeck("Parent");
+            jitenDb.Decks.Add(parent);
+            await jitenDb.SaveChangesAsync();
+            var routes = Enumerable.Range(0, 6).Select(i => new Deck
+            {
+                OriginalTitle = $"Route {i}", MediaType = MediaType.Novel, ReleaseDate = new DateOnly(2020, 1, 1),
+                ParentDeckId = parent.DeckId,
+            }).ToList();
+            jitenDb.Decks.AddRange(routes);
+            await jitenDb.SaveChangesAsync();
+            foreach (var route in routes)
+                await AddSentence(jitenDb, route.DeckId, $"route sentence {route.DeckId}", 0.2f);
+        }
+
+        var result = await Query(new
+        {
+            wordId = WordId, readingIndex = 0, sorting = "Random", take = 3,
+            excludedDeckIds = _studyDeckIds.Concat(_otherDeckIds).ToArray(),
+        }, TestUsers.UserB);
+
+        result.Sentences.Should().HaveCount(1, "six route subdecks share one parent title");
+    }
+
+    [Fact]
+    public async Task Anonymous_RejectsOversizedExclusionList()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/vocabulary/{WordId}/0/random-example-sentences")
+            .WithJsonContent(Enumerable.Range(1, 501).ToArray());
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var ok = new HttpRequestMessage(HttpMethod.Post, $"/api/vocabulary/{WordId}/0/random-example-sentences")
+            .WithJsonContent(Array.Empty<int>());
+        (await _client.SendAsync(ok)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     private async Task SetExampleSentenceSource(string source)
@@ -293,6 +391,8 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
 
     private class SentencesResponse
     {
+        public float SearchedBandMin { get; set; }
+        public float SearchedBandMax { get; set; }
         public List<SentenceDto> Sentences { get; set; } = [];
     }
 

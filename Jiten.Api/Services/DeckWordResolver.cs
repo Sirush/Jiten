@@ -115,6 +115,11 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                                                                : int.MaxValue
                                                       ).ToList();
                 }
+                else if (order == DeckOrder.Random)
+                {
+                    ShuffleInPlace(resultWords);
+                    deckWordsRaw = resultWords;
+                }
                 else
                 {
                     deckWordsRaw = resultWords;
@@ -150,12 +155,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                     break;
                 case DeckOrder.Random:
                     var shuffled = await deckWordsQuery.ToListAsync();
-                    var rng = Random.Shared;
-                    for (var i = shuffled.Count - 1; i > 0; i--)
-                    {
-                        var j = rng.Next(i + 1);
-                        (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
-                    }
+                    ShuffleInPlace(shuffled);
                     deckWordsRaw = shuffled;
                     break;
                 default:
@@ -177,6 +177,16 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         }
 
         return (deckWordsRaw, null);
+    }
+
+    public static void ShuffleInPlace<T>(List<T> items)
+    {
+        var rng = Random.Shared;
+        for (var i = items.Count - 1; i > 0; i--)
+        {
+            var j = rng.Next(i + 1);
+            (items[i], items[j]) = (items[j], items[i]);
+        }
     }
 
     public async Task<HashSet<long>> GetStudyDeckWordKeys(List<int> deckIds)
@@ -607,12 +617,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         }
         else if (order == (int)DeckOrder.Random)
         {
-            var rng = Random.Shared;
-            for (var i = words.Count - 1; i > 0; i--)
-            {
-                var j = rng.Next(i + 1);
-                (words[i], words[j]) = (words[j], words[i]);
-            }
+            ShuffleInPlace(words);
         }
         else
         {

@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   ComparisonOutcome,
   DeckRelationshipType,
   DeckStatus,
@@ -491,8 +491,8 @@ export interface ExampleSentence {
   wordPosition: number;
   wordLength: number;
   difficulty: number;
-  sourceDeck: Deck;
-  sourceDeckParent: Deck;
+  sourceDeck: StudyExampleSourceDto;
+  sourceDeckParent?: StudyExampleSourceDto;
   fromStudyDeck?: boolean;
 }
 

@@ -1,9 +1,10 @@
-import type { MaybeRefOrGetter } from 'vue';
+﻿import type { MaybeRefOrGetter } from 'vue';
 import type { ExampleSentence, ExampleSentencesByDifficultyResponse } from '~/types';
 
 export interface ExtraSentenceTarget {
   wordId: number;
   readingIndex: number;
+  exampleSentence?: { sourceDeck?: { deckId: number }; sourceParent?: { deckId: number }; isCustom?: boolean };
 }
 
 const BAND_SIZE = 0.5;
@@ -77,7 +78,11 @@ export function useExtraExampleSentences(target: MaybeRefOrGetter<ExtraSentenceT
     const sorting = srsStore.studySettings.exampleSentenceSorting;
 
     try {
-      const alreadyLoaded = sentences.value.map((s) => s.sourceDeck.deckId);
+      const alreadyLoaded = sentences.value.map((s) => s.sourceDeckParent?.deckId ?? s.sourceDeck.deckId);
+      // The card's own sentence must not come back as the first extra
+      const shown = card.exampleSentence?.isCustom ? undefined : card.exampleSentence;
+      const shownDeckId = shown?.sourceParent?.deckId ?? shown?.sourceDeck?.deckId;
+      if (shownDeckId !== undefined && !alreadyLoaded.includes(shownDeckId)) alreadyLoaded.push(shownDeckId);
       const results = await fetchPage(card, sorting, alreadyLoaded);
 
       if (sorting === 'Random') {
