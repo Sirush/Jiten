@@ -46,11 +46,11 @@
             id="password"
             v-model="newPassword"
             toggle-mask
-            :feedback="true"
-            :prompt-label="'At least 10 chars incl. upper, lower, digit'"
+            :feedback="false"
             :input-props="{ autocomplete: 'new-password', minlength: 10 }"
             required
           />
+          <PasswordStrengthMeter :value="newPassword" />
         </div>
         <Button type="submit" :disabled="isLoading">{{ isLoading ? 'Resetting...' : 'Reset Password' }}</Button>
       </form>

@@ -2,12 +2,14 @@
   import { useToast } from 'primevue/usetoast';
   import type { Deck, CoverageJourney, JourneyPoint } from '~/types';
   import { createBitmapLoader, currentExportPalette, drawSeriesCard, saveCanvasPng } from '~/utils/imageExport';
+  import type { CoverageScale } from '~/utils/coverageAxis';
 
   const props = defineProps<{
     deck: Deck;
     title: string;
     journey: CoverageJourney;
     metric: 'total' | 'unique';
+    scale?: CoverageScale;
   }>();
 
   const toast = useToast();
@@ -36,8 +38,7 @@
       const mature = windowed.map((p) => (unique ? p.uniqueCoverage : p.coverage));
       const combined = windowed.map((p) => (unique ? p.combinedUniqueCoverage : p.combinedCoverage));
       const startLabel = formatBucketDated(windowed[0]!.date, journey.granularity);
-      // Same auto-fit as the on-page chart, or a 98 -> 99 journey exports as a solid block.
-      const axis = coverageWindow([...mature, ...combined]);
+      const axis = props.scale === 'full' ? { min: 0, max: 100 } : coverageWindow([...mature, ...combined]);
       // Whole percentages hide the journey once it spans less than a few points.
       const decimals = mature[mature.length - 1]! - mature[0]! < 5 ? 1 : 0;
 

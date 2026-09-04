@@ -134,7 +134,7 @@
             <b>{{ globalStats.totalMedia.toLocaleString() }}</b>
             titles, including
             <template v-for="(featured, index) in featuredTypes" :key="featured.type">
-              <template v-if="index > 0">and</template>
+              <template v-if="index > 0"> and </template>
               <NuxtLink :to="{ path: '/decks/media', query: { mediaType: featured.type } }">
                 {{ typeCount(featured.type)?.toLocaleString() }} {{ featured.label }}
               </NuxtLink>

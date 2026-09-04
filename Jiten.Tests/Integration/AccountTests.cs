@@ -3,10 +3,12 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Jiten.Core;
+using Jiten.Api.Dtos;
 using Jiten.Core.Data.Authentication;
 using Jiten.Parser.Tests.Integration.Infrastructure;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jiten.Parser.Tests.Integration;
@@ -451,6 +453,7 @@ public class AccountTests(JitenWebApplicationFactory factory)
     [Theory]
     [InlineData("a")]                  // too short (min 2)
     [InlineData("たなか")]              // non-latin (Japanese)
+    [InlineData("タナカ")]              // katakana
     [InlineData("user name")]          // space (disallowed char)
     [InlineData("user#name")]          // '#' disallowed
     [InlineData("___")]                // no letter or digit
@@ -459,7 +462,21 @@ public class AccountTests(JitenWebApplicationFactory factory)
     public async Task Register_InvalidUsername_Returns400_AndCreatesNoUser(string username)
     {
         var response = await RegisterAsync(username, "reg_invalid@test.dev");
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, await response.Content.ReadAsStringAsync());
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, body);
+
+        // The DTO's MinLength(2) rejects "a" with a ModelState body; everything else reaches UsernameValidator.
+        var root = JsonDocument.Parse(body).RootElement;
+        if (root.TryGetProperty("message", out var messageElement))
+        {
+            var message = messageElement.GetString();
+            message.Should().StartWith("Username");
+            message.Should().NotContainEquivalentOf("password");
+        }
+        else
+        {
+            root.GetProperty("errors").TryGetProperty("Username", out _).Should().BeTrue(body);
+        }
 
         using var scope = factory.Services.CreateScope();
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
@@ -471,6 +488,72 @@ public class AccountTests(JitenWebApplicationFactory factory)
     {
         var response = await RegisterAsync(new string('a', 31), "reg_long@test.dev");
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest, await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Register_PasswordShorterThanIdentityMinimum_Returns400_WithPasswordMessage()
+    {
+        // RegisterRequest allows 8 characters but Identity requires 10, so this reaches CreateAsync and fails there.
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/auth/register")
+            .WithJsonContent(new
+            {
+                username = "short_pw_user",
+                email = "reg_short_pw@test.dev",
+                password = "Aa1aaaaa",
+                recaptchaResponse = "test",
+                tosAccepted = true,
+                receiveNewsletter = false
+            }));
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, body);
+
+        var root = JsonDocument.Parse(body).RootElement;
+        root.GetProperty("message").GetString().Should().ContainEquivalentOf("password");
+        root.GetProperty("errors").EnumerateArray().Select(e => e.GetString()).Should().Contain(e => e!.Contains("10"));
+    }
+
+    // ---- complete-google-registration username validation ----
+
+    private Task<HttpResponseMessage> CompleteGoogleRegistrationAsync(string tempToken, string username)
+    {
+        var cache = factory.Services.GetRequiredService<IMemoryCache>();
+        cache.Set($"google_registration_{tempToken}",
+                  new GoogleRegistrationData { Email = "google_reg@test.dev", Name = "Google User", TempToken = tempToken },
+                  TimeSpan.FromMinutes(5));
+        return _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/auth/complete-google-registration")
+            .WithJsonContent(new { tempToken, username, tosAccepted = true, receiveNewsletter = false }));
+    }
+
+    [Theory]
+    [InlineData("タナカ")]
+    [InlineData("たなか")]
+    [InlineData("user name")]
+    [InlineData("ааа")]
+    public async Task CompleteGoogleRegistration_InvalidUsername_Returns400_AndCreatesNoUser(string username)
+    {
+        var response = await CompleteGoogleRegistrationAsync("tok_invalid_" + Guid.NewGuid().ToString("N"), username);
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, body);
+        var message = JsonDocument.Parse(body).RootElement.GetProperty("message").GetString();
+        message.Should().StartWith("Username");
+        message.Should().NotContainEquivalentOf("password");
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        (await userDb.Users.AnyAsync(u => u.Email == "google_reg@test.dev")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CompleteGoogleRegistration_ValidUsername_CreatesUser()
+    {
+        await EnsureUserRoleAsync();
+
+        var response = await CompleteGoogleRegistrationAsync("tok_valid_" + Guid.NewGuid().ToString("N"), "google.user+1");
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        using var scope = factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+        (await userManager.FindByNameAsync("google.user+1")).Should().NotBeNull();
     }
 
     // ---- revoke-token keepCurrent ----

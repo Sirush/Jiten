@@ -203,7 +203,7 @@
         <label for="cgv-consent" class="cursor-pointer select-none">
           I have read and accept the
           <NuxtLink to="/cgv" target="_blank" class="underline hover:text-primary-600 dark:hover:text-primary-400">Terms of Sale</NuxtLink>
-          <template v-if="legal.cgvVersion">(version {{ legal.cgvVersion }})</template>
+          <template v-if="legal.cgvVersion"> (version {{ legal.cgvVersion }})</template>
           —
           <NuxtLink to="/cgv-fr" target="_blank" class="underline hover:text-primary-600 dark:hover:text-primary-400">version française</NuxtLink>
         </label>

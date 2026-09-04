@@ -2,6 +2,7 @@
   import { ref, computed, watch, onMounted } from 'vue';
   import { useAuthStore } from '~/stores/authStore';
   import type { CompleteGoogleRegistrationRequest } from '~/types/types';
+  import { USERNAME_MAX, sanitizeUsername, validateUsername } from '~/utils/usernameRules';
 
   const authStore = useAuthStore();
   const router = useRouter();
@@ -13,16 +14,9 @@
   const name = ref((authStore.googleRegistrationData?.name as string) || (route.query.name as string) || '');
   const picture = ref((authStore.googleRegistrationData?.picture as string) || (route.query.picture as string) || '');
 
-  const USERNAME_MIN = 3;
-  const USERNAME_MAX = 30;
   const username = ref('');
   const acceptedTerms = ref(false);
   const acceptedEmailConsent = ref(false);
-
-  // Keep only characters Identity allows, then cap to the server limit
-  function sanitizeUsername(value: string): string {
-    return value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, USERNAME_MAX);
-  }
 
   const usernameError = ref('');
   const step = ref(1); // 1: username, 2: terms and consent
@@ -35,30 +29,13 @@
 
     const raw = email.value.split('@')[0] || name.value.toLowerCase().replace(/\s+/g, '');
     username.value = sanitizeUsername(raw);
-    checkUsername();
   });
 
-  let usernameCheckTimeout: NodeJS.Timeout;
   watch(username, (newUsername) => {
-    clearTimeout(usernameCheckTimeout);
-    if (newUsername.length > USERNAME_MAX) {
-      usernameError.value = `Username must be at most ${USERNAME_MAX} characters`;
-    } else if (newUsername.length >= USERNAME_MIN) {
-      usernameCheckTimeout = setTimeout(checkUsername, 500);
-    } else {
-      usernameError.value = newUsername.length > 0 ? `Username must be at least ${USERNAME_MIN} characters` : '';
-    }
+    usernameError.value = newUsername ? (validateUsername(newUsername.trim()) ?? '') : '';
   });
 
-  // No availability endpoint exists; Identity rejects duplicate usernames at completion.
-  function checkUsername() {
-    if (username.value.length < USERNAME_MIN) return;
-    usernameError.value = '';
-  }
-
-  const canProceedToStep2 = computed(() => {
-    return username.value.length >= USERNAME_MIN && username.value.length <= USERNAME_MAX && !usernameError.value;
-  });
+  const canProceedToStep2 = computed(() => validateUsername(username.value.trim()) === null);
 
   const canComplete = computed(() => {
     return canProceedToStep2.value && acceptedTerms.value;
@@ -79,7 +56,7 @@
 
     const registrationData: CompleteGoogleRegistrationRequest = {
       tempToken: tempToken.value,
-      username: username.value,
+      username: username.value.trim(),
       tosAccepted: acceptedTerms.value,
       receiveNewsletter: acceptedEmailConsent.value,
     };

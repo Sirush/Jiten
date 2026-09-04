@@ -381,17 +381,14 @@
                   id="newPassword"
                   v-model="pwForm.newPassword"
                   toggle-mask
-                  :feedback="true"
-                  :prompt-label="'At least 10 characters including upper, lower, digit'"
-                  :weak-label="'Weak'"
-                  :medium-label="'Medium'"
-                  :strong-label="'Strong'"
+                  :feedback="false"
                   :disabled="pwLoading"
                   :input-props="{ autocomplete: 'new-password', minlength: 10 }"
                   :input-class="'w-full'"
                 />
                 <label for="newPassword">New password</label>
               </FloatLabel>
+              <PasswordStrengthMeter :value="pwForm.newPassword" />
             </div>
             <div class="w-full">
               <FloatLabel>
@@ -421,17 +418,14 @@
                   id="setNewPassword"
                   v-model="pwForm.newPassword"
                   toggle-mask
-                  :feedback="true"
-                  :prompt-label="'At least 10 characters including upper, lower, digit'"
-                  :weak-label="'Weak'"
-                  :medium-label="'Medium'"
-                  :strong-label="'Strong'"
+                  :feedback="false"
                   :disabled="pwLoading"
                   :input-props="{ autocomplete: 'new-password', minlength: 10 }"
                   :input-class="'w-full'"
                 />
                 <label for="setNewPassword">New password</label>
               </FloatLabel>
+              <PasswordStrengthMeter :value="pwForm.newPassword" />
             </div>
             <div class="w-full">
               <FloatLabel>

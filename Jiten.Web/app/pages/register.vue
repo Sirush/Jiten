@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { useAuthStore } from '~/stores/authStore';
+  import { USERNAME_MAX, validateUsername as validateUsernameValue } from '~/utils/usernameRules';
 
   const { $api } = useNuxtApp();
   const runtimeConfig = useRuntimeConfig();
@@ -54,41 +55,25 @@
   const registered = ref(false);
   const registeredEmail = ref('');
   const error = ref<string | null>(null);
+  const errorDetails = ref<string[]>([]);
 
   const usernameError = ref<string | null>(null);
   const passwordError = ref<string | null>(null);
   const emailError = ref<string | null>(null);
+  const tosError = ref<string | null>(null);
+
+  function validateTos() {
+    if (!form.tosAccepted) {
+      tosError.value = 'You need to accept the Terms of Service and Privacy Policy to create an account';
+      return false;
+    }
+    tosError.value = null;
+    return true;
+  }
 
   function validateUsername() {
-    const username = form.username.trim();
-
-    if (!username) {
-      usernameError.value = 'Username is required';
-      return false;
-    }
-
-    if (username.length < 2) {
-      usernameError.value = 'Username must be at least 2 characters';
-      return false;
-    }
-
-    if (username.length > 30) {
-      usernameError.value = 'Username must be at most 30 characters';
-      return false;
-    }
-
-    if (!/^[A-Za-z0-9._@+-]+$/.test(username)) {
-      usernameError.value = 'Username can only contain Latin letters, digits and the characters . _ - @ +';
-      return false;
-    }
-
-    if (!/[A-Za-z0-9]/.test(username)) {
-      usernameError.value = 'Username must contain at least one letter or digit';
-      return false;
-    }
-
-    usernameError.value = null;
-    return true;
+    usernameError.value = validateUsernameValue(form.username.trim());
+    return usernameError.value === null;
   }
 
   function validatePassword() {
@@ -147,12 +132,14 @@
 
   async function handleRegister() {
     error.value = null;
+    errorDetails.value = [];
 
     const isUsernameValid = validateUsername();
     const isPasswordValid = validatePassword();
     const isEmailValid = validateEmail();
+    const isTosValid = validateTos();
 
-    if (!isUsernameValid || !isPasswordValid || !isEmailValid) {
+    if (!isUsernameValid || !isPasswordValid || !isEmailValid || !isTosValid) {
       error.value = 'Please fix the validation errors before submitting';
       return;
     }
@@ -167,10 +154,12 @@
       registered.value = true;
       trackEvent('signup_completed', { method: 'email' });
     } catch (err) {
-      const apiMessage = (err as { response?: { _data?: { message?: string } } }).response?._data?.message;
+      const data = (err as { response?: { _data?: { message?: string; errors?: string[] } } }).response?._data;
       const fallback = err instanceof Error && err.message ? err.message : 'An unexpected error occurred.';
-      error.value = `Registration failed: ${apiMessage || fallback}`;
+      error.value = `Registration failed: ${data?.message || fallback}`;
+      errorDetails.value = Array.isArray(data?.errors) ? data.errors.filter((e) => !error.value?.includes(e)) : [];
     } finally {
+      recaptchaResponse.value = null;
       isLoading.value = false;
     }
   }
@@ -199,7 +188,7 @@
                 id="username"
                 v-model.trim="form.username"
                 required
-                maxlength="30"
+                :maxlength="USERNAME_MAX"
                 autocomplete="username"
                 class="w-full"
                 @blur="validateUsername"
@@ -231,11 +220,7 @@
                 id="password"
                 v-model="form.password"
                 toggleMask
-                :feedback="true"
-                :promptLabel="'At least 10 characters including upper, lower, digit'"
-                :weakLabel="'Weak'"
-                :mediumLabel="'Medium'"
-                :strongLabel="'Strong'"
+                :feedback="false"
                 :inputProps="{ autocomplete: 'new-password', minlength: 10 }"
                 :inputClass="'w-full'"
                 required
@@ -244,18 +229,30 @@
               />
               <label for="password">Password</label>
             </FloatLabel>
-            <small v-if="passwordError" class="text-red-500">{{ passwordError }}</small>
+            <PasswordStrengthMeter :value="form.password" :error="passwordError" />
           </div>
 
           <div class="flex flex-col gap-4 pt-2">
-            <div class="flex items-start gap-3">
-              <Checkbox inputId="terms" v-model="form.tosAccepted" name="terms" binary required class="mt-1" />
-              <label for="terms" class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed cursor-pointer">
-                I agree to the
-                <NuxtLink to="/terms" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium"> Terms of Service </NuxtLink>
-                and
-                <NuxtLink to="/privacy" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium"> Privacy Policy </NuxtLink>
-              </label>
+            <div class="flex flex-col gap-1">
+              <div class="flex items-start gap-3">
+                <Checkbox
+                  inputId="terms"
+                  v-model="form.tosAccepted"
+                  name="terms"
+                  binary
+                  class="mt-1"
+                  :invalid="!!tosError"
+                  :aria-describedby="tosError ? 'terms-error' : undefined"
+                  @update:model-value="tosError = null"
+                />
+                <label for="terms" class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed cursor-pointer">
+                  I agree to the
+                  <NuxtLink to="/terms" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium"> Terms of Service </NuxtLink>
+                  and
+                  <NuxtLink to="/privacy" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline font-medium"> Privacy Policy </NuxtLink>
+                </label>
+              </div>
+              <small v-if="tosError" id="terms-error" class="text-red-500">{{ tosError }}</small>
             </div>
 
             <div class="flex items-start gap-3">
@@ -276,6 +273,9 @@
           <component :is="GoogleSignInButtonComponent" @success="handleGoogleOnSuccess" @error="handleGoogleOnError" />
         </div>
         <p v-if="error" class="text-red-500">{{ error }}</p>
+        <ul v-if="errorDetails.length" class="text-red-500 text-sm list-disc pl-5">
+          <li v-for="detail in errorDetails" :key="detail">{{ detail }}</li>
+        </ul>
         <div class="links">
           <NuxtLink :to="{ path: '/login', query: redirectQuery }">Back to Login</NuxtLink>
         </div>

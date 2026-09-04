@@ -288,7 +288,7 @@
                 You can attach files (scripts, subtitles, ebooks...) in the comments once your request is submitted.
                 <template v-if="fulfilmentRange">Requests with a file are usually fulfilled within {{ fulfilmentRange }}.</template>
                 <template v-else>Requests with a file are fulfilled far faster.</template>
-                <template v-if="awaitingWait">Requests without a file have been waiting for about {{ awaitingWait }}.</template>
+                <template v-if="awaitingWait"> Requests without a file have been waiting for about {{ awaitingWait }}.</template>
               </span>
             </small>
             <small class="text-muted-color flex items-start gap-1.5">

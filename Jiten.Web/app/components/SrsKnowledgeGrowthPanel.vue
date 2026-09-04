@@ -44,7 +44,7 @@
         You started with {{ baseline.toLocaleString() }} words you marked known, and have learned {{ learnedHere.toLocaleString() }} since.
       </template>
       <template v-else>How many words you had learned over time.</template>
-      <span v-if="hasData && growth!.recentGain !== 0" :class="growth!.recentGain > 0 ? 'text-green-600 dark:text-green-400 font-semibold' : 'font-semibold'">
+      <span v-if="hasData && growth!.recentGain !== 0" class="ml-1" :class="growth!.recentGain > 0 ? 'text-green-600 dark:text-green-400 font-semibold' : 'font-semibold'">
         {{ growth!.recentGain > 0 ? '+' : '' }}{{ growth!.recentGain.toLocaleString() }} in the last 30 days.
       </span>
     </div>
