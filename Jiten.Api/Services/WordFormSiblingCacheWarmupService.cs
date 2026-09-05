@@ -1,9 +1,11 @@
 namespace Jiten.Api.Services;
 
-public class WordFormSiblingCacheWarmupService(IServiceProvider services, ILogger<WordFormSiblingCacheWarmupService> logger)
+public class WordFormSiblingCacheWarmupService(IServiceProvider services, StartupReadiness readiness,
+                                               ILogger<WordFormSiblingCacheWarmupService> logger)
     : BackgroundService
 {
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    // The singleton loads in its constructor; resolving it off the host thread keeps Kestrel's bind from waiting on it.
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.Run(() =>
     {
         try
         {
@@ -15,7 +17,9 @@ public class WordFormSiblingCacheWarmupService(IServiceProvider services, ILogge
         {
             logger.LogError(ex, "WordFormSiblingCache warmup failed");
         }
-
-        return Task.CompletedTask;
-    }
+        finally
+        {
+            readiness.MarkReady(StartupReadiness.WordFormSiblings);
+        }
+    }, stoppingToken);
 }

@@ -2,7 +2,8 @@ using Jiten.Core.Services;
 
 namespace Jiten.Api.Services;
 
-public class DeckVectorCacheWarmupService(IServiceProvider services, ILogger<DeckVectorCacheWarmupService> logger)
+public class DeckVectorCacheWarmupService(IServiceProvider services, StartupReadiness readiness,
+                                          ILogger<DeckVectorCacheWarmupService> logger)
     : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -19,6 +20,9 @@ public class DeckVectorCacheWarmupService(IServiceProvider services, ILogger<Dec
         {
             logger.LogError(ex, "DeckVectorService warmup failed");
         }
+
+        // Loading the 2 GB ONNX model would otherwise steal CPU from the caches /health waits on.
+        await readiness.WhenReady.WaitAsync(stoppingToken);
 
         try
         {

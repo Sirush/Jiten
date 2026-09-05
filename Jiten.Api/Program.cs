@@ -442,6 +442,7 @@ builder.Services.AddScoped<WordReplacementService>();
 builder.Services.AddScoped<ICdnService, BunnyCdnService>();
 builder.Services.AddScoped<Jiten.Core.Services.RequestActivityService>();
 builder.Services.AddScoped<Jiten.Core.Services.NotificationService>();
+builder.Services.AddSingleton<StartupReadiness>();
 builder.Services.AddHostedService<ParserWarmupService>();
 builder.Services.AddHostedService<WordFormSiblingCacheWarmupService>();
 builder.Services.AddHostedService<DerivationLinkCacheWarmupService>();
@@ -1085,7 +1086,11 @@ if (enableOtlpExporter)
 
 app.UseAuthorization();
 app.MapControllers();
-app.MapGet("/health", () => Results.Ok("healthy"));
+var gateHealthOnWarmup = !app.Environment.IsEnvironment("Testing");
+app.MapGet("/health", (StartupReadiness readiness) =>
+    !gateHealthOnWarmup || readiness.IsReady
+        ? Results.Ok("healthy")
+        : Results.Json(new { status = "warming", pending = readiness.Pending }, statusCode: StatusCodes.Status503ServiceUnavailable));
 
 app.Run();
 

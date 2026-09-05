@@ -1,9 +1,11 @@
 namespace Jiten.Api.Services;
 
-public class DerivationLinkCacheWarmupService(IServiceProvider services, ILogger<DerivationLinkCacheWarmupService> logger)
+public class DerivationLinkCacheWarmupService(IServiceProvider services, StartupReadiness readiness,
+                                              ILogger<DerivationLinkCacheWarmupService> logger)
     : BackgroundService
 {
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    // The singleton loads in its constructor; resolving it off the host thread keeps Kestrel's bind from waiting on it.
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.Run(() =>
     {
         try
         {
@@ -15,7 +17,9 @@ public class DerivationLinkCacheWarmupService(IServiceProvider services, ILogger
         {
             logger.LogError(ex, "DerivationLinkCache warmup failed");
         }
-
-        return Task.CompletedTask;
-    }
+        finally
+        {
+            readiness.MarkReady(StartupReadiness.DerivationLinks);
+        }
+    }, stoppingToken);
 }
