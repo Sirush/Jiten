@@ -413,7 +413,7 @@ builder.Services.AddSingleton<Jiten.Core.Services.DescriptionSearchService>(sp =
     {
         var dir = config[Jiten.Core.Services.SentenceEmbedder.ModelDirConfigKey];
         if (Jiten.Core.Services.SentenceEmbedder.IsAvailable(dir))
-            return new Jiten.Core.Services.SentenceEmbedder(dir!);
+            return new Jiten.Core.Services.SentenceEmbedder(dir!, config.GetValue(Jiten.Core.Services.SentenceEmbedder.ThreadsConfigKey, 2));
         logger.LogWarning("Description search disabled: no model at DescriptionEmbeddingModelDir='{Dir}'", dir);
         return null;
     }
@@ -974,7 +974,7 @@ if (!app.Environment.IsEnvironment("Testing"))
 
     recurringJobs.AddOrUpdate<DescriptionEmbeddingJob>(
         "sync-description-embeddings",
-        job => job.Sync(),
+        job => job.Sync(CancellationToken.None),
         Cron.Hourly(20));
 
     recurringJobs.AddOrUpdate<WebNovelSyncSweepJob>(

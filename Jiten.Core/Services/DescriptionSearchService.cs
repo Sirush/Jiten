@@ -71,7 +71,7 @@ public class DescriptionSearchService(
     /// Embeds every parent deck whose description changed since its stored hash (or has no vector),
     /// and drops vectors for decks whose description was removed. Returns (embedded, removed).
     /// </summary>
-    public async Task<(int Embedded, int Removed)> SyncAsync(bool force = false, CancellationToken ct = default)
+    public async Task<(int Embedded, int Removed)> SyncAsync(bool force = false, int? maxEmbeds = null, CancellationToken ct = default)
     {
         var embedder = _embedder.Value;
         if (embedder == null)
@@ -107,7 +107,15 @@ public class DescriptionSearchService(
             work.Add((deckId, text, hash));
         }
 
-        logger.LogInformation("DescriptionSearchService: {Work} descriptions to embed, {Stale} stale vectors to drop", work.Count, stale.Count);
+        var deferred = 0;
+        if (maxEmbeds is > 0 && work.Count > maxEmbeds)
+        {
+            deferred = work.Count - maxEmbeds.Value;
+            work.RemoveRange(maxEmbeds.Value, deferred);
+        }
+
+        logger.LogInformation("DescriptionSearchService: {Work} descriptions to embed ({Deferred} deferred to a later run), {Stale} stale vectors to drop",
+            work.Count, deferred, stale.Count);
 
         var merged = new Dictionary<int, float[]>(_vectors);
         var mergedTexts = new Dictionary<int, string>(_foldedTexts);
