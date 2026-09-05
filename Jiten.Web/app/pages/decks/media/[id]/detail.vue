@@ -145,6 +145,8 @@
     }
   });
 
+  useDeckViewBeacon(deckId);
+
   const updateParentStatus = (parentDeckId: number, status: import('~/types').DeckStatus) => {
     if (response.value?.data?.mainDeck && response.value.data.mainDeck.deckId === parentDeckId) {
       response.value = { ...response.value, data: { ...response.value.data, mainDeck: { ...response.value.data.mainDeck, status } } };

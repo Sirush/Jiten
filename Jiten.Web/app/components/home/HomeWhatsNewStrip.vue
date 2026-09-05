@@ -2,6 +2,8 @@
   import type { SiteUpdate } from '~/types';
   import { useJitenStore } from '~/stores/jitenStore';
 
+  defineProps<{ compact?: boolean }>();
+
   const { $api } = useNuxtApp();
   const store = useJitenStore();
 
@@ -32,8 +34,8 @@
 </script>
 
 <template>
-  <div v-if="loading" class="flex items-start gap-3 p-4 rounded-xl border border-surface-200 dark:border-surface-700">
-    <Skeleton shape="circle" width="2.25rem" height="2.25rem" />
+  <div v-if="loading" class="flex items-start gap-3" :class="compact ? 'p-3' : 'p-4 rounded-xl border border-surface-200 dark:border-surface-700'">
+    <Skeleton shape="circle" width="2rem" height="2rem" />
     <div class="flex-1 flex flex-col gap-2">
       <Skeleton width="5rem" height="0.7rem" />
       <Skeleton width="10rem" height="0.9rem" />
@@ -42,6 +44,7 @@
 
   <HomeStrip
     v-else-if="update"
+    :compact="compact"
     label="What's new"
     icon="material-symbols-light:campaign"
     :to="`/updates#update-${update.id}`"

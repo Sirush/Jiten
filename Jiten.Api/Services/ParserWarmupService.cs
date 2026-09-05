@@ -3,11 +3,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Services;
 
-public class ParserWarmupService(IDbContextFactory<JitenDbContext> contextFactory, ILogger<ParserWarmupService> logger)
+public class ParserWarmupService(IDbContextFactory<JitenDbContext> contextFactory, StartupReadiness readiness,
+                                 ILogger<ParserWarmupService> logger)
     : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        await Task.Yield();
         try
         {
             logger.LogInformation("Parser warmup starting");
@@ -19,6 +21,10 @@ public class ParserWarmupService(IDbContextFactory<JitenDbContext> contextFactor
         catch (Exception ex)
         {
             logger.LogError(ex, "Parser warmup failed");
+        }
+        finally
+        {
+            readiness.MarkReady(StartupReadiness.Parser);
         }
     }
 }

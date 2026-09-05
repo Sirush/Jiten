@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using NpgsqlTypes;
 
 #nullable disable
 
@@ -104,6 +105,9 @@ namespace Jiten.Core.Migrations
                     b.Property<bool>("HideDialoguePercentage")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsTrending")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTimeOffset>("LastUpdate")
                         .HasColumnType("timestamp with time zone");
 
@@ -120,6 +124,24 @@ namespace Jiten.Core.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.Property<int?>("ParentDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PopularityFavouriteCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PopularityGlobalRank")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PopularityListCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PopularityRank")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("PopularityScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("PopularityStudyDeckCount")
                         .HasColumnType("integer");
 
                     b.Property<DateOnly>("ReleaseDate")
@@ -185,7 +207,54 @@ namespace Jiten.Core.Migrations
                     b.HasIndex("ParentDeckId", "MediaType")
                         .HasDatabaseName("IX_ParentDeckId_MediaType");
 
+                    b.HasIndex("PopularityScore", "ExternalRating", "ReleaseDate")
+                        .IsDescending()
+                        .HasDatabaseName("IX_Decks_PopularityScore");
+
                     b.ToTable("Decks", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DeckActivityDaily", b =>
+                {
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<int>("GuestDownloads")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Views")
+                        .HasColumnType("integer");
+
+                    b.HasKey("DeckId", "Date");
+
+                    b.ToTable("DeckActivityDaily", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DeckDescriptionEmbedding", b =>
+                {
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("TextHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<byte[]>("Vector")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("DeckId");
+
+                    b.ToTable("DeckDescriptionEmbeddings", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.DeckDictionaryEntry", b =>
@@ -899,7 +968,7 @@ namespace Jiten.Core.Migrations
                     b.PrimitiveCollection<List<short>>("RestrictedToReadingIndices")
                         .HasColumnType("smallint[]");
 
-                    b.Property<NpgsqlTypes.NpgsqlTsVector>("SearchVector")
+                    b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
                         .HasComputedColumnSql("to_tsvector('english', jmdict.gloss_search_text(\"EnglishMeanings\"))", true);
@@ -2127,6 +2196,24 @@ namespace Jiten.Core.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("ParentDeck");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DeckActivityDaily", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", null)
+                        .WithMany()
+                        .HasForeignKey("DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DeckDescriptionEmbedding", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", null)
+                        .WithOne()
+                        .HasForeignKey("Jiten.Core.Data.DeckDescriptionEmbedding", "DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.DeckDictionaryEntry", b =>

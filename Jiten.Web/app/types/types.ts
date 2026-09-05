@@ -55,6 +55,10 @@ export interface Deck {
   hideDialoguePercentage: boolean;
   hideAverageSentenceLength: boolean;
   externalRating: number;
+  popularityRank?: number | null;
+  popularityGlobalRank?: number | null;
+  isTrending?: boolean;
+  popularityCounts?: { inLists: number; favourites: number; studyDecks: number } | null;
   exampleSentence?: ExampleSentence;
   genres?: Genre[];
   tags?: TagWithPercentage[];
@@ -78,6 +82,14 @@ export interface SimilarDeck {
   deck: Deck;
   similarity: number;
   similarityPercent: number;
+}
+
+export interface DescriptionSearchResponse {
+  query: string;
+  searchedText: string;
+  detectedMediaType: MediaType | null;
+  mediaType: MediaType | null;
+  results: SimilarDeck[];
 }
 
 export interface DeckVocabularyList {

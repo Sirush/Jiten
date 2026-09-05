@@ -393,22 +393,24 @@ public static class JmDictHelper
 
     public static async Task<Dictionary<string, List<int>>> LoadLookupTable(JitenDbContext context)
     {
-        // GROUP BY in Postgres is faster than transferring every (wordId, lookupKey) row and grouping in C#.
-        // array_agg returns a native int[] which Npgsql reads via binary protocol.
+        // A GROUP BY here makes Postgres walk the LookupKey index (~4s of random heap reads); a flat
+        // sequential scan grouped in C# finishes in about a fifth of the time.
         var conn = (NpgsqlConnection)context.Database.GetDbConnection();
         var shouldClose = conn.State == ConnectionState.Closed;
         if (shouldClose) await conn.OpenAsync();
         try
         {
-            await using var cmd = new NpgsqlCommand(
-                """SELECT "LookupKey", array_agg("WordId") FROM jmdict."Lookups" GROUP BY "LookupKey" """, conn);
+            await using var cmd = new NpgsqlCommand("""SELECT "LookupKey", "WordId" FROM jmdict."Lookups" """, conn);
             await using var reader = await cmd.ExecuteReaderAsync();
 
-            var result = new Dictionary<string, List<int>>();
+            var result = new Dictionary<string, List<int>>(1_600_000);
             while (await reader.ReadAsync())
             {
-                var ids = (int[])reader.GetValue(1);
-                result[reader.GetString(0)] = new List<int>(ids);
+                var key = reader.GetString(0);
+                var wordId = reader.GetInt32(1);
+                if (!result.TryGetValue(key, out var ids))
+                    result[key] = ids = new List<int>(1);
+                ids.Add(wordId);
             }
             return result;
         }

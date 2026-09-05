@@ -1,11 +1,13 @@
-﻿using Jiten.Core.Data;
+using Jiten.Core.Data;
 using Jiten.Core.Data.Authentication;
 using Jiten.Core.Data.Billing;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.User;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Jiten.Core.Services.Popularity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Jiten.Core;
@@ -28,6 +30,7 @@ public class UserDbContext : IdentityDbContext<User>
     public DbSet<UserSettings> UserSettings { get; set; }
     public DbSet<ApiKey> ApiKeys { get; set; }
     public DbSet<UserDeckPreference> UserDeckPreferences { get; set; }
+    public DbSet<DeckDownload> DeckDownloads { get; set; }
     public DbSet<UserFsrsSettings> UserFsrsSettings { get; set; }
 
     public DbSet<FsrsCard> FsrsCards { get; set; }
@@ -220,6 +223,7 @@ public class UserDbContext : IdentityDbContext<User>
             entity.Property(udp => udp.Status).IsRequired();
             entity.Property(udp => udp.IsFavourite).IsRequired();
             entity.Property(udp => udp.IsIgnored).IsRequired();
+            entity.Property(udp => udp.UpdatedAt).IsRequired();
 
             entity.HasOne<User>()
                   .WithMany()
@@ -230,6 +234,20 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasIndex(udp => new { udp.UserId, udp.IsFavourite }).HasDatabaseName("IX_UserDeckPreference_UserId_IsFavourite");
             entity.HasIndex(udp => new { udp.UserId, udp.Status }).HasDatabaseName("IX_UserDeckPreference_UserId_Status");
             entity.HasIndex(udp => new { udp.UserId, udp.IsIgnored }).HasDatabaseName("IX_UserDeckPreference_UserId_IsIgnored");
+        });
+
+        modelBuilder.Entity<DeckDownload>(entity =>
+        {
+            entity.ToTable("DeckDownloads", "user");
+            entity.HasKey(dd => new { dd.UserId, dd.DeckId });
+            if (isNpgsql)
+                entity.Property(dd => dd.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(dd => dd.FirstDownloadAt).IsRequired();
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(dd => dd.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // FSRS
@@ -672,8 +690,26 @@ public class UserDbContext : IdentityDbContext<User>
         return base.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>Only a stronger status or a new favourite refreshes the date, so toggling a row down and up cannot keep it forever young.</summary>
+    private static bool SignalStrengthened(EntityEntry<UserDeckPreference> entry)
+    {
+        var before = entry.OriginalValues;
+        var after = entry.Entity;
+        var statusUp = PopularityWeights.ForStatus(after.Status) > PopularityWeights.ForStatus(before.GetValue<DeckStatus>(nameof(UserDeckPreference.Status)));
+        var favouriteAdded = after.IsFavourite && !before.GetValue<bool>(nameof(UserDeckPreference.IsFavourite));
+        return statusUp || favouriteAdded;
+    }
+
     private void AddTimestamps()
     {
+        foreach (var entry in ChangeTracker.Entries<UserDeckPreference>())
+        {
+            if (entry.State == EntityState.Added)
+                entry.Entity.UpdatedAt = DateTime.UtcNow;
+            else if (entry.State == EntityState.Modified && SignalStrengthened(entry))
+                entry.Entity.UpdatedAt = DateTime.UtcNow;
+        }
+
         var userEntities = ChangeTracker.Entries()
                                         .Where(x => x is { Entity: User, State: EntityState.Added or EntityState.Modified });
 

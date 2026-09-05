@@ -408,6 +408,17 @@ public class Program
             if (options.SimilarTo != null)
                 await vectorCommands.SimilarTo(options);
         }
+
+        if (options.EmbedDescriptions || options.DescribeSearch != null)
+        {
+            var descriptionCommands = new DescriptionSearchCommands(context);
+
+            if (options.EmbedDescriptions)
+                await descriptionCommands.Embed(options);
+
+            if (options.DescribeSearch != null)
+                await descriptionCommands.Search(options);
+        }
     }
 
     private static async Task CleanupGhostCards(CliContext context, bool dryRun)

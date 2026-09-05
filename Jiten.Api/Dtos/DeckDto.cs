@@ -42,6 +42,13 @@ public class DeckDto
     public float YoungCoverage { get; set; }
     public float YoungUniqueCoverage { get; set; }
     public byte ExternalRating { get; set; }
+
+    /// <summary>Rank within the media type, null when the deck is outside the display window.</summary>
+    public int? PopularityRank { get; set; }
+    public int? PopularityGlobalRank { get; set; }
+    public bool IsTrending { get; set; }
+    /// <summary>Null below five users in lists, so a niche deck never points at one person.</summary>
+    public PopularityCountsDto? PopularityCounts { get; set; }
     public ExampleSentenceDto? ExampleSentence { get; set; }
     public List<Genre> Genres { get; set; } = new();
     public List<TagWithPercentageDto> Tags { get; set; } = new();
@@ -99,6 +106,7 @@ public class DeckDto
         Aliases = deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias).Select(t => t.Title).ToList();
         DictionaryEntries = deck.DictionaryEntries.Select(e => new DeckDictionaryEntryDto { Surface = e.Surface, EntryType = e.EntryType }).ToList();
         ExternalRating = deck.ExternalRating;
+        MapPopularity(deck);
         ExampleSentence = exampleSentence;
         Genres = deck.DeckGenres.Select(dg => dg.Genre).OrderBy(g => g.ToString()).ToList();
         Tags = deck.DeckTags.Select(dt => new TagWithPercentageDto
@@ -146,6 +154,7 @@ public class DeckDto
         Aliases = deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias).Select(t => t.Title).ToList();
         DictionaryEntries = deck.DictionaryEntries.Select(e => new DeckDictionaryEntryDto { Surface = e.Surface, EntryType = e.EntryType }).ToList();
         ExternalRating = deck.ExternalRating;
+        MapPopularity(deck);
         ExampleSentence = exampleSentence;
         Genres = deck.DeckGenres.Select(dg => dg.Genre).OrderBy(g => g.ToString()).ToList();
         Tags = deck.DeckTags.Select(dt => new TagWithPercentageDto
@@ -155,6 +164,24 @@ public class DeckDto
             Percentage = dt.Percentage
         }).OrderByDescending(t => t.Percentage).ToList();
         MapVoteFields(deck);
+    }
+
+    private const int PopularityCountsMinUsers = 5;
+
+    private void MapPopularity(Deck deck)
+    {
+        PopularityRank = deck.PopularityRank > 0 ? deck.PopularityRank : null;
+        PopularityGlobalRank = deck.PopularityGlobalRank > 0 ? deck.PopularityGlobalRank : null;
+        IsTrending = deck.IsTrending;
+        if (deck.PopularityListCount >= PopularityCountsMinUsers)
+        {
+            PopularityCounts = new PopularityCountsDto
+            {
+                InLists = deck.PopularityListCount,
+                Favourites = deck.PopularityFavouriteCount,
+                StudyDecks = deck.PopularityStudyDeckCount
+            };
+        }
     }
 
     private void MapVoteFields(Deck deck)
@@ -197,4 +224,11 @@ public class DeckRelationshipDto
 
         return direct.Concat(inverse).ToList();
     }
+}
+
+public class PopularityCountsDto
+{
+    public int InLists { get; set; }
+    public int Favourites { get; set; }
+    public int StudyDecks { get; set; }
 }

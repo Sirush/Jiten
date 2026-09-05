@@ -1,4 +1,6 @@
 <script setup lang="ts">
+  defineProps<{ compact?: boolean }>();
+
   const { tier, sources, fetched } = useJitenPlus();
 
   const PITCHES = [
@@ -42,15 +44,15 @@
   <!-- Nothing until the tier is known, so a subscriber never sees the upsell flash first. -->
   <template v-if="fetched">
     <!-- Links out rather than listing the perks, so /jiten-plus stays the single source for them. -->
-    <HomeStrip v-if="tier === 'full'" :label="fullLabel" icon="material-symbols-light:star" to="/jiten-plus">
+    <HomeStrip v-if="tier === 'full'" :compact="compact" :label="fullLabel" icon="material-symbols-light:star" to="/jiten-plus">
       View your list of perks
       <span v-if="renewalLabel" class="text-surface-400 dark:text-surface-400">{{ renewalLabel }}</span>
     </HomeStrip>
 
-    <HomeStrip v-else-if="tier === 'trial'" label="Jiten+ trial" icon="material-symbols-light:star" to="/jiten-plus">
+    <HomeStrip v-else-if="tier === 'trial'" :compact="compact" label="Jiten+ trial" icon="material-symbols-light:star" to="/jiten-plus">
       {{ trialDaysLabel }}
     </HomeStrip>
 
-    <HomeStrip v-else label="Jiten+" icon="material-symbols-light:star" to="/jiten-plus"> Adds {{ PITCHES[pitchIndex] }}, and more. </HomeStrip>
+    <HomeStrip v-else :compact="compact" label="Jiten+" icon="material-symbols-light:star" to="/jiten-plus"> Adds {{ PITCHES[pitchIndex] }}, and more. </HomeStrip>
   </template>
 </template>

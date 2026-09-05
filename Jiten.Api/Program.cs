@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -405,6 +405,20 @@ builder.Services.AddScoped<Jiten.Api.Services.Stripe.StripeService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
 builder.Services.AddSingleton<IDerivationLinkCache, DerivationLinkCache>();
 builder.Services.AddSingleton<Jiten.Core.Services.DeckVectorService>();
+builder.Services.AddSingleton<Jiten.Core.Services.DescriptionSearchService>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<Jiten.Core.Services.DescriptionSearchService>>();
+    Jiten.Core.Services.SentenceEmbedder? CreateEmbedder()
+    {
+        var dir = config[Jiten.Core.Services.SentenceEmbedder.ModelDirConfigKey];
+        if (Jiten.Core.Services.SentenceEmbedder.IsAvailable(dir))
+            return new Jiten.Core.Services.SentenceEmbedder(dir!);
+        logger.LogWarning("Description search disabled: no model at DescriptionEmbeddingModelDir='{Dir}'", dir);
+        return null;
+    }
+    return new Jiten.Core.Services.DescriptionSearchService(sp.GetRequiredService<IDbContextFactory<JitenDbContext>>(), CreateEmbedder, logger);
+});
 builder.Services.AddScoped<IRoadmapDataLoader, RoadmapDataLoader>();
 builder.Services.AddScoped<ICoverageJourneyService, CoverageJourneyService>();
 builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
@@ -419,6 +433,7 @@ builder.Services.AddScoped<IIndexNowService, IndexNowService>();
 builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
 builder.Services.AddSingleton<IStudySessionService, StudySessionService>();
 builder.Services.AddSingleton<IPendingCoverageQueue, PendingCoverageQueue>();
+builder.Services.AddSingleton<IDeckActivityBuffer, DeckActivityBuffer>();
 builder.Services.AddSingleton<IPendingEmbeddingQueue, PendingEmbeddingQueue>();
 builder.Services.AddSingleton<IUserActivityTracker, UserActivityTracker>();
 builder.Services.AddSingleton<IParseThrottleService, ParseThrottleService>();
@@ -428,10 +443,13 @@ builder.Services.AddScoped<WordReplacementService>();
 builder.Services.AddScoped<ICdnService, BunnyCdnService>();
 builder.Services.AddScoped<Jiten.Core.Services.RequestActivityService>();
 builder.Services.AddScoped<Jiten.Core.Services.NotificationService>();
+builder.Services.AddSingleton<StartupReadiness>();
 builder.Services.AddHostedService<ParserWarmupService>();
 builder.Services.AddHostedService<WordFormSiblingCacheWarmupService>();
 builder.Services.AddHostedService<DerivationLinkCacheWarmupService>();
 builder.Services.AddHostedService<DeckVectorCacheWarmupService>();
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddHostedService<DeckActivityFlushService>();
 
 // Shared secret sent by the Nuxt SSR server (X-Internal-Ssr-Key) so first-party server
 // rendering is exempt from the per-IP anonymous rate limit. Without this, every anonymous
@@ -781,7 +799,9 @@ builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
 builder.Services.AddScoped<ReviewRollupJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
+builder.Services.AddScoped<PopularityScoreJob>();
 builder.Services.AddScoped<RecomputeVectorsJob>();
+builder.Services.AddScoped<DescriptionEmbeddingJob>();
 builder.Services.AddScoped<StripeReconcileJob>();
 builder.Services.AddScoped<RenewalReminderJob>();
 builder.Services.AddScoped<DecrementPromoCreditsJob>();
@@ -952,6 +972,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         job => job.EmbedPending(),
         "*/30 * * * *");
 
+    recurringJobs.AddOrUpdate<DescriptionEmbeddingJob>(
+        "sync-description-embeddings",
+        job => job.Sync(),
+        Cron.Hourly(20));
+
     recurringJobs.AddOrUpdate<WebNovelSyncSweepJob>(
         "webnovel-sync-sweep",
         job => job.Sweep(),
@@ -984,6 +1009,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         "sequence-monitor",
         job => job.CheckSequences(),
         Cron.Daily(5));
+
+    recurringJobs.AddOrUpdate<PopularityScoreJob>(
+        "popularity-score",
+        job => job.RecomputeAll(),
+        "30 3 * * *");
 }
 
 app.UseResponseCompression();
@@ -1065,7 +1095,11 @@ if (enableOtlpExporter)
 
 app.UseAuthorization();
 app.MapControllers();
-app.MapGet("/health", () => Results.Ok("healthy"));
+var gateHealthOnWarmup = !app.Environment.IsEnvironment("Testing");
+app.MapGet("/health", (StartupReadiness readiness) =>
+    !gateHealthOnWarmup || readiness.IsReady
+        ? Results.Ok("healthy")
+        : Results.Json(new { status = "warming", pending = readiness.Pending }, statusCode: StatusCodes.Status503ServiceUnavailable));
 
 app.Run();
 

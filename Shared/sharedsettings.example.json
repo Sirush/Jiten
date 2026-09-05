@@ -42,6 +42,7 @@
   "BunnyCdnUserSecret": "",
   "DictionaryPath": "path/to/system_full.dic",
   "FastTextModelPath": "path/to/cc.ja.300.bin",
+  "DescriptionEmbeddingModelDir": "path/to/multilingual-e5-small",
   "JimakuApiKey" : "YourApiKey",
   "TmdbApiKey" : "YourApiKey",
   "IgdbClientId": "YourClientId",

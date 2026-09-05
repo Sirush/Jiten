@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
@@ -702,6 +702,14 @@ public partial class AdminController(
         return Ok(new { Message = $"Reparsing {count} decks (smallest to largest)", Count = count });
     }
 
+    [HttpPost("recompute-popularity")]
+    public IResult RecomputePopularity()
+    {
+        backgroundJobs.Enqueue<PopularityScoreJob>(job => job.RecomputeAll());
+        logger.LogInformation("Admin queued popularity recompute job");
+        return Results.Ok(new { message = "Popularity recompute queued" });
+    }
+
     [HttpPost("recompute-frequencies")]
     public IActionResult RecomputeFrequencies()
     {
@@ -915,121 +923,6 @@ public partial class AdminController(
         logger.LogInformation("Admin queued {Count} missing-difficulty recomputations across {ParentCount} parents",
             missing.Count, parentIds.Count);
         return Ok(new { Message = $"Queued {missing.Count} missing-difficulty recomputations", Count = missing.Count, AffectedParents = parentIds.Count });
-    }
-
-    private class FuriganaAffectedDeck
-    {
-        public int DeckId { get; set; }
-        public int? ParentDeckId { get; set; }
-        public int MediaType { get; set; }
-    }
-
-    [HttpPost("recompute-furigana-difficulties")]
-    public async Task<IActionResult> RecomputeFuriganaDifficulties([FromQuery] bool dryRun = true)
-    {
-        const string furiganaPattern = FuriganaHintExtractor.AnnotationPattern;
-
-        var affected = await dbContext.Database
-            .SqlQuery<FuriganaAffectedDeck>($"""
-                SELECT d."DeckId" AS "DeckId", d."ParentDeckId" AS "ParentDeckId", d."MediaType" AS "MediaType"
-                FROM jiten."Decks" d
-                JOIN jiten."DeckRawTexts" rt ON rt."DeckId" = d."DeckId"
-                WHERE rt."RawText" ~ {furiganaPattern}
-                  AND NOT EXISTS (SELECT 1 FROM jiten."Decks" c WHERE c."ParentDeckId" = d."DeckId")
-                """)
-            .ToListAsync();
-
-        var byMediaType = affected
-            .GroupBy(a => a.MediaType)
-            .Select(g => new { MediaType = g.Key, Count = g.Count() })
-            .OrderByDescending(g => g.Count)
-            .ToList();
-
-        var parentIds = affected
-            .Where(a => a.ParentDeckId != null)
-            .Select(a => a.ParentDeckId!.Value)
-            .Distinct()
-            .ToList();
-
-        if (!dryRun)
-        {
-            foreach (var deck in affected)
-                backgroundJobs.Enqueue<DifficultyComputationJob>(
-                    job => job.ComputeDeckDifficulty(deck.DeckId, true));
-        }
-
-        logger.LogInformation("Admin {Action} {Count} furigana-affected difficulty recomputations across {ParentCount} parents",
-            dryRun ? "previewed" : "queued", affected.Count, parentIds.Count);
-
-        return Ok(new
-        {
-            DryRun = dryRun,
-            DeckCount = affected.Count,
-            ParentCount = parentIds.Count,
-            ByMediaType = byMediaType
-        });
-    }
-
-    private class FuriganaOvermatchDeck
-    {
-        public int DeckId { get; set; }
-        public int? ParentDeckId { get; set; }
-        public int MediaType { get; set; }
-        public int CharsLost { get; set; }
-    }
-
-    [HttpPost("reparse-furigana-overmatch")]
-    public async Task<IActionResult> ReparseFuriganaOvermatch([FromQuery] bool dryRun = true)
-    {
-        const string legacyPattern = @"\{([^'{}]+)'[^}]+\}";
-        const string currentPattern = FuriganaHintExtractor.AnnotationPattern;
-
-        var affected = await dbContext.Database
-            .SqlQuery<FuriganaOvermatchDeck>($"""
-                WITH scanned AS (
-                    SELECT d."DeckId", d."ParentDeckId", d."MediaType",
-                           length(regexp_replace(rt."RawText", {legacyPattern}, '\1', 'g')) AS legacy_len,
-                           length(regexp_replace(rt."RawText", {currentPattern}, '\1', 'g')) AS current_len
-                    FROM jiten."Decks" d
-                    JOIN jiten."DeckRawTexts" rt ON rt."DeckId" = d."DeckId"
-                    WHERE rt."RawText" ~ {legacyPattern}
-                )
-                SELECT "DeckId" AS "DeckId", "ParentDeckId" AS "ParentDeckId", "MediaType" AS "MediaType",
-                       (current_len - legacy_len) AS "CharsLost"
-                FROM scanned
-                WHERE current_len > legacy_len
-                """)
-            .ToListAsync();
-
-        var byMediaType = affected
-            .GroupBy(a => a.MediaType)
-            .Select(g => new { MediaType = g.Key, Count = g.Count(), CharsLost = g.Sum(a => a.CharsLost) })
-            .OrderByDescending(g => g.CharsLost)
-            .ToList();
-
-        // Reparsing a parent walks its children, so collapse each affected deck to the root of its tree.
-        var roots = affected
-            .Select(a => a.ParentDeckId ?? a.DeckId)
-            .Distinct()
-            .ToList();
-
-        if (!dryRun)
-        {
-            foreach (var rootId in roots)
-                backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(rootId, false));
-        }
-
-        logger.LogInformation("Admin {Action} furigana-overmatch reparse for {Count} decks ({RootCount} trees, {Chars} chars)",
-            dryRun ? "previewed" : "queued", affected.Count, roots.Count, affected.Sum(a => a.CharsLost));
-
-        return Ok(new
-        {
-            DryRun = dryRun,
-            DeckCount = affected.Count,
-            TreeCount = roots.Count,
-            TotalCharsLost = affected.Sum(a => a.CharsLost),
-            ByMediaType = byMediaType
-        });
     }
 
     [HttpGet("issues")]

@@ -489,6 +489,22 @@ namespace Jiten.Core.Migrations.UserDb
                     b.ToTable("UserRoadmaps", "user");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.DeckDownload", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FirstDownloadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "DeckId");
+
+                    b.ToTable("DeckDownloads", "user");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsCard", b =>
                 {
                     b.Property<long>("CardId")
@@ -1097,6 +1113,9 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("UserId", "DeckId");
 
                     b.HasIndex("UserId")
@@ -1439,6 +1458,15 @@ namespace Jiten.Core.Migrations.UserDb
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.Billing.UserRoadmap", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DeckDownload", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Authentication.User", null)
                         .WithMany()

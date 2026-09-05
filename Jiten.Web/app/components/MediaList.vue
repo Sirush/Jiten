@@ -1,5 +1,7 @@
 <script setup lang="ts">
   import { useApiFetch, useApiFetchPaginated } from '~/composables/useApiFetch';
+  import { readDescribeQuery } from '~/utils/describeQuery';
+  import type { DescriptionSearchResponse } from '~/types/types';
   import { type Deck, MediaType, SortOrder, type Word, DisplayStyle } from '~/types';
   import Skeleton from 'primevue/skeleton';
   import Card from 'primevue/card';
@@ -57,11 +59,15 @@
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const mediaType = computed(() => (route.query.mediaType ? route.query.mediaType : null));
 
-  const titleFilter = ref(route.query.title ? (Array.isArray(route.query.title) ? route.query.title[0] : route.query.title) : null);
+  const describeQuery = computed(() => readDescribeQuery(route.query.describe));
+  const isDescribeMode = computed(() => describeQuery.value !== null);
+  const titleFilter = ref(
+    describeQuery.value ?? (route.query.title ? (Array.isArray(route.query.title) ? route.query.title[0] : route.query.title) : null)
+  );
   const debouncedTitleFilter = ref(titleFilter.value);
 
   const sortByOptions = ref(
-    ['title', 'difficulty', 'subdeckCount', 'extRating', 'uKanji', 'uWordCount', 'wordCount', 'uKanjiOnce', 'communityVotes', 'releaseDate', 'addedDate'].map(
+    ['popularity', 'title', 'difficulty', 'subdeckCount', 'extRating', 'uKanji', 'uWordCount', 'wordCount', 'uKanjiOnce', 'communityVotes', 'releaseDate', 'addedDate'].map(
       deckSortOption
     )
   );
@@ -312,7 +318,7 @@
     } else {
       novelSortOptions.value = [];
       if (sortBy.value === 'charCount' || sortBy.value === 'dialoguePercentage') {
-        sortBy.value = 'title';
+        sortBy.value = 'popularity';
       }
     }
 
@@ -321,7 +327,7 @@
     } else {
       speechSortOptions.value = [];
       if (sortBy.value === 'speechSpeed' || sortBy.value === 'speechDuration') {
-        sortBy.value = 'title';
+        sortBy.value = 'popularity';
       }
     }
 
@@ -336,7 +342,7 @@
         sortByOptions.value = sortByOptions.value.filter((o) => o.value !== 'sentenceLength');
       }
       if (sortBy.value === 'sentenceLength') {
-        sortBy.value = 'title';
+        sortBy.value = 'popularity';
       }
     }
 
@@ -632,12 +638,25 @@
       query: {
         ...route.query,
         title: newValue || undefined,
+        describe: undefined,
         sortBy: 'filter',
         offset: 0,
       },
     });
     sortBy.value = 'filter';
   }, 500);
+
+  const searchTitlesInstead = async () => {
+    const text = describeQuery.value;
+    if (!text) return;
+    await router.replace({ query: { ...route.query, describe: undefined, title: text, offset: 0 } });
+  };
+
+  const searchDescriptionsInstead = async () => {
+    const text = debouncedTitleFilter.value;
+    if (!text) return;
+    await router.replace({ query: { ...route.query, describe: text, title: undefined, offset: 0 } });
+  };
 
   watch(titleFilter, (newValue) => {
     if (applyingPreset.value) return;
@@ -770,6 +789,45 @@
 
   const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor } = usePagination(response);
 
+  const HANDOFF_BELOW = 3;
+  const handoffText = computed(() => {
+    if (isDescribeMode.value || !debouncedTitleFilter.value) return null;
+    if (status.value !== 'success' || (response.value?.totalItems ?? 0) >= HANDOFF_BELOW) return null;
+    return debouncedTitleFilter.value;
+  });
+ 
+  const describeRequest = computed(() => describeQuery.value ?? handoffText.value);
+  const {
+    data: describeResponse,
+    status: describeStatus,
+    error: describeError,
+  } = useApiFetch<DescriptionSearchResponse>('media-deck/search-by-description', {
+    revalidateOnClient: true,
+    immediate: describeRequest.value !== null,
+    query: {
+      query: describeRequest,
+      limit: 40,
+      mediaType: computed(() => (mediaType.value ? Number(mediaType.value) : undefined)),
+    },
+    watch: [describeRequest, mediaType],
+  });
+
+  const describeResults = computed(() =>
+    describeRequest.value && describeResponse.value?.query === describeRequest.value ? describeResponse.value.results : []
+  );
+ 
+  const describeDecks = computed(() => describeResults.value.map((r) => r.deck));
+  const describeMediaTypeLabel = computed(() => {
+    const type = describeResponse.value?.mediaType;
+    return type ? getMediaTypePluralText(type) : null;
+  });
+
+  const effectiveMediaType = computed<number | null>(() => {
+    if (mediaType.value) return Number(mediaType.value);
+    return isDescribeMode.value ? (describeResponse.value?.detectedMediaType ?? null) : null;
+  });
+  const showHandoff = computed(() => handoffText.value !== null && describeResults.value.length > 0);
+
   // Stream cards in over a few frames instead of mounting the whole page at once.
   const { visibleItems: visibleDecks } = useProgressiveList(
     computed(() => response.value?.data ?? []),
@@ -813,10 +871,8 @@
   ];
 
   const isActive = (type: MediaType | null) => {
-    if (type === null) {
-      return !mediaType.value || mediaType.value === '0';
-    }
-    return Number(mediaType.value) === type;
+    if (type === null) return !effectiveMediaType.value;
+    return effectiveMediaType.value === type;
   };
 
   const mediaTypeChipClass = (type: MediaType | null) => [
@@ -991,7 +1047,13 @@
           <InputIcon>
             <Icon name="material-symbols:search-rounded" />
           </InputIcon>
-          <InputText v-model="titleFilter" type="text" placeholder="Search by title" aria-label="Search by title" class="w-full" />
+          <InputText
+            v-model="titleFilter"
+            type="text"
+            placeholder="Search by title, or describe what you want"
+            aria-label="Search by title, or describe what you want"
+            class="w-full"
+          />
           <InputIcon v-if="titleFilter" class="cursor-pointer" @click="titleFilter = null">
             <Icon name="material-symbols:close" />
           </InputIcon>
@@ -1129,7 +1191,60 @@
       @reset="resetAllFilters"
     />
 
-    <div>
+    <div v-if="isDescribeMode" class="flex flex-col gap-2">
+      <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm text-surface-600 dark:text-surface-300">
+        <p>
+          Closest by description to "<span lang="ja">{{ describeResponse?.searchedText || describeQuery }}</span
+          >"<template v-if="describeMediaTypeLabel">, {{ describeMediaTypeLabel }} only</template>.
+          <template v-if="totalItems > 0">
+            <button type="button" class="text-primary-500 hover:underline cursor-pointer" @click="searchTitlesInstead">
+              {{ totalItems.toLocaleString() }} {{ totalItems === 1 ? 'title matches' : 'titles match' }} this text
+            </button>
+          </template>
+          <button v-else type="button" class="text-primary-500 hover:underline cursor-pointer" @click="searchTitlesInstead">Search titles instead</button>
+        </p>
+        <span v-if="describeResults.length" class="text-surface-400 whitespace-nowrap">Best {{ describeResults.length }} matches</span>
+      </div>
+
+      <div v-if="describeStatus === 'pending'" class="flex flex-col gap-4">
+        <Card v-for="i in 5" :key="i" class="p-2">
+          <template #content>
+            <Skeleton width="100%" height="250px" />
+          </template>
+        </Card>
+      </div>
+
+      <div v-else-if="describeError" class="flex flex-col items-center justify-center py-16 text-center">
+        <p class="text-lg font-medium text-primary-700 dark:text-primary-300">Description search is not available right now</p>
+        <button type="button" class="text-sm text-primary-500 hover:underline cursor-pointer" @click="searchTitlesInstead">Search titles instead</button>
+      </div>
+
+      <div v-else-if="!describeResults.length" class="flex flex-col items-center justify-center py-16">
+        <i class="pi pi-search text-4xl text-primary-500 mb-4" />
+        <p class="text-lg font-medium text-primary-700 dark:text-primary-300">Nothing close enough</p>
+        <p class="text-sm text-surface-400">Try describing the story, setting or mood in a few words</p>
+      </div>
+
+      <div v-else-if="displayStyle === DisplayStyle.Card" class="flex flex-col gap-2">
+        <LazyHydrateMediaDeckCard
+          v-for="(deck, index) in describeDecks"
+          :key="deck.deckId"
+          :deck="deck"
+          :lazy-cover="index >= 3"
+          :class="index >= 3 ? '[content-visibility:auto] [contain-intrinsic-size:auto_30rem] p-1 -m-1' : ''"
+        />
+      </div>
+
+      <div v-else-if="displayStyle === DisplayStyle.Compact" class="flex flex-wrap gap-4 justify-center">
+        <LazyHydrateMediaDeckCompactView v-for="(deck, index) in describeDecks" :key="deck.deckId" :deck="deck" :lazy-cover="index >= 12" />
+      </div>
+
+      <div v-else-if="displayStyle === DisplayStyle.Table" class="flex flex-col gap-0.5">
+        <LazyHydrateMediaDeckTableView v-for="(deck, index) in describeDecks" :key="deck.deckId" :deck="deck" :lazy-render="index >= 12" />
+      </div>
+    </div>
+
+    <div v-else>
       <div class="flex flex-col gap-1">
         <PaginationControls
           v-if="response?.data?.length"
@@ -1155,11 +1270,13 @@
 
         <div v-else-if="error">Error: {{ error }}</div>
 
-        <div v-else-if="!response?.data?.length" class="flex flex-col items-center justify-center py-16">
+        <div v-else-if="!response?.data?.length && !showHandoff" class="flex flex-col items-center justify-center py-16">
           <i class="pi pi-search text-4xl text-primary-500 mb-4" />
           <p class="text-lg font-medium text-primary-700 dark:text-primary-300">No decks found</p>
           <p class="text-sm text-surface-400">Try adjusting your search or filters</p>
         </div>
+
+        <div v-else-if="!response?.data?.length" />
 
         <!-- Card View -->
         <!-- LazyHydrate* keeps the SSR HTML but defers each item's hydration until it
@@ -1184,6 +1301,27 @@
         <div v-else-if="displayStyle === DisplayStyle.Table" class="flex flex-col gap-0.5">
           <LazyHydrateMediaDeckTableView v-for="(deck, index) in visibleDecks" :key="deck.deckId" :deck="deck" :lazy-render="index >= 12" />
         </div>
+
+        <Card v-if="showHandoff" class="mt-2">
+          <template #content>
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-0.5">
+                <p class="font-medium">
+                  <template v-if="response?.data?.length">Only {{ totalItems }} {{ totalItems === 1 ? 'title matches' : 'titles match' }}</template>
+                  <template v-else>There is no title matching</template>
+                  "<span lang="ja">{{ handoffText }}</span>", but the following media have a description that comes close
+                </p>
+                <p class="text-sm text-surface-500 dark:text-surface-400">You can type what you feel like watching or reading, in English or Japanese.</p>
+              </div>
+              <div class="flex flex-wrap gap-3 max-h-48 overflow-hidden">
+                <MediaDeckCompactView v-for="deck in describeDecks" :key="deck.deckId" :deck="deck" />
+              </div>
+              <div>
+                <Button :label="`Show all ${describeResults.length} matches`" size="small" @click="searchDescriptionsInstead" />
+              </div>
+            </div>
+          </template>
+        </Card>
       </div>
       <PaginationControls
         v-if="response?.data?.length"
