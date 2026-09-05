@@ -17,7 +17,7 @@ import type {
   SessionStreakDto,
   ReviewForecastDto,
 } from '~/types';
-import { FsrsRating } from '~/types';
+import { FsrsRating, FsrsState } from '~/types';
 import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
 import { DEFAULT_CARD_DISPLAY_SETTINGS } from '~/utils/defaultStudySettings';
 import { useAuthStore } from '~/stores/authStore';
@@ -43,6 +43,7 @@ interface PersistedSession {
   currentBatch: StudyCardDto[];
   currentCardIndex: number;
   againCardKeys: string[];
+  learningCardKeys: string[];
   clearedGrades: ('hard' | 'good' | 'easy' | 'action')[];
   sessionReviews: SessionReview[];
   sessionLeeches: LeechCard[];
@@ -92,6 +93,7 @@ interface PendingReview {
   rating: FsrsRating;
   reviewEntry: SessionReview;
   reinsertedAgainCard: StudyCardDto | null;
+  reinsertedLearningCard: StudyCardDto | null;
   epoch: number;
   deltas: {
     counted: boolean;
@@ -109,6 +111,7 @@ interface UndoSnapshot {
   batch: StudyCardDto[];
   cardIndex: number;
   againKeys: Set<string>;
+  learningKeys: Set<string>;
   grades: ('hard' | 'good' | 'easy' | 'action')[];
   reviews: SessionReview[];
   leeches: LeechCard[];
@@ -181,6 +184,9 @@ export const useSrsStore = defineStore('srs', () => {
     derivationalRedundancyCategories: [],
     defaultFrequencyMediaType: null,
     defaultFrequencyListId: null,
+    learningSteps: [10],
+    relearningSteps: [10],
+    learnAheadMinutes: 20,
     leechThreshold: 8,
     leechAction: 'Suspend',
     timedReview: {
@@ -225,6 +231,8 @@ export const useSrsStore = defineStore('srs', () => {
   const newCardsToday = ref(0);
   const reviewsToday = ref(0);
   const againCardKeys = ref(new Set<string>());
+  // Cards re-queued because their learning step ends inside the learn-ahead window; drives the "Learning" chip.
+  const learningCardKeys = ref(new Set<string>());
   const clearedGrades = ref<('hard' | 'good' | 'easy' | 'action')[]>([]);
 
   const MAX_UNDO_DEPTH = 100;
@@ -313,6 +321,16 @@ export const useSrsStore = defineStore('srs', () => {
     return count;
   });
 
+  const learningCardsAhead = computed(() => {
+    let count = 0;
+    for (let i = currentCardIndex.value; i < currentBatch.value.length; i++) {
+      const c = currentBatch.value[i];
+      const key = `${c.wordId}-${c.readingIndex}`;
+      if (learningCardKeys.value.has(key) && !againCardKeys.value.has(key)) count++;
+    }
+    return count;
+  });
+
   const hardestCards = computed<HardestCard[]>(() => {
     const grouped = new Map<string, HardestCard>();
     for (const r of sessionReviews.value) {
@@ -351,6 +369,7 @@ export const useSrsStore = defineStore('srs', () => {
       batch: [...currentBatch.value],
       cardIndex: currentCardIndex.value,
       againKeys: new Set(againCardKeys.value),
+      learningKeys: new Set(learningCardKeys.value),
       grades: [...clearedGrades.value],
       reviews: [...sessionReviews.value],
       leeches: [...sessionLeeches.value],
@@ -686,6 +705,7 @@ export const useSrsStore = defineStore('srs', () => {
       batchComplete.value = false;
       moreCardsLikely.value = false;
       againCardKeys.value = new Set();
+      learningCardKeys.value = new Set();
       clearedGrades.value = [];
       undoStack.value = [];
       inFlightReviews.clear();
@@ -952,6 +972,25 @@ export const useSrsStore = defineStore('srs', () => {
     thinkingDuration.value = cardShownAt.value ? Date.now() - cardShownAt.value : undefined;
   }
 
+  // The interval the server will schedule for this grade when it is a learning step inside the
+  // learn-ahead window, else null. Review intervals are at least a day, so the window alone separates them.
+  function learningStepSeconds(card: StudyCardDto, rating: FsrsRating): number | null {
+    const preview = card.intervalPreview;
+    if (!preview || rating === FsrsRating.Again) return null;
+    const seconds = rating === FsrsRating.Hard ? preview.hardSeconds : rating === FsrsRating.Easy ? preview.easySeconds : preview.goodSeconds;
+    const windowSeconds = (studySettings.value.learnAheadMinutes ?? 0) * 60;
+    if (seconds <= 0 || windowSeconds <= 0 || seconds > windowSeconds) return null;
+    return seconds;
+  }
+
+  // Queue distance that lands the card roughly when its step ends, at this session's pace.
+  function learningStepOffset(stepSeconds: number): number {
+    const started = sessionStats.value.startTime?.getTime();
+    const reviewed = sessionStats.value.cardsReviewed;
+    const secondsPerCard = started && reviewed >= 5 ? Math.max(3, (Date.now() - started) / 1000 / reviewed) : 10;
+    return Math.max(5, Math.round(stepSeconds / secondsPerCard));
+  }
+
   // Optimistic grading: the UI advances synchronously and the /srs/review request is sent in the
   // background. isFlipped flips to false immediately, which also acts as the per-card guard against a
   // double grade (every grade trigger requires isFlipped). isBusy is only consulted (not set) so that
@@ -997,7 +1036,13 @@ export const useSrsStore = defineStore('srs', () => {
     // Optimistic queue mutation — assume the review succeeds and the card is not a fresh leech.
     // Leech suspension and the freshly-computed interval preview are reconciled when the request lands.
     let reinsertedAgainCard: StudyCardDto | null = null;
+    let reinsertedLearningCard: StudyCardDto | null = null;
     let clearedGrade: 'hard' | 'good' | 'easy' | null = null;
+    if (learningCardKeys.value.has(cardKey)) {
+      const newSet = new Set(learningCardKeys.value);
+      newSet.delete(cardKey);
+      learningCardKeys.value = newSet;
+    }
     if (rating === FsrsRating.Again) {
       const newSet = new Set(againCardKeys.value);
       newSet.add(cardKey);
@@ -1021,6 +1066,24 @@ export const useSrsStore = defineStore('srs', () => {
       clearedGrade = rating === FsrsRating.Hard ? 'hard' : rating === FsrsRating.Easy ? 'easy' : 'good';
       clearedGrades.value = [...clearedGrades.value, clearedGrade];
       currentCardIndex.value++;
+
+      const stepSeconds = learningStepSeconds(card, rating);
+      if (stepSeconds !== null) {
+        const batch = [...currentBatch.value];
+        const remaining = batch.length - currentCardIndex.value;
+        const offset = Math.min(learningStepOffset(stepSeconds), remaining);
+        reinsertedLearningCard = {
+          ...card,
+          isNewCard: false,
+          state: card.state === FsrsState.Relearning ? FsrsState.Relearning : FsrsState.Learning,
+          intervalPreview: undefined,
+        };
+        batch.splice(currentCardIndex.value + offset, 0, reinsertedLearningCard);
+        currentBatch.value = batch;
+        const newSet = new Set(learningCardKeys.value);
+        newSet.add(cardKey);
+        learningCardKeys.value = newSet;
+      }
     }
 
     ensurePrefetched();
@@ -1041,6 +1104,7 @@ export const useSrsStore = defineStore('srs', () => {
       rating,
       reviewEntry,
       reinsertedAgainCard,
+      reinsertedLearningCard,
       epoch: sessionEpoch,
       deltas: { counted, wasNew, correct, gradeKey, clearedGrade },
     };
@@ -1125,6 +1189,8 @@ export const useSrsStore = defineStore('srs', () => {
         // Patch the freshly-scheduled interval onto the re-queued card (deep-reactive via the ref).
         ctx.reinsertedAgainCard.intervalPreview = reviewResult.intervalPreview;
       }
+    } else if (ctx.reinsertedLearningCard && reviewResult?.intervalPreview) {
+      ctx.reinsertedLearningCard.intervalPreview = reviewResult.intervalPreview;
     }
   }
 
@@ -1151,6 +1217,13 @@ export const useSrsStore = defineStore('srs', () => {
     // "Again" cards are already back in the queue; only non-Again cards need re-queuing.
     if (ctx.rating !== FsrsRating.Again) {
       const batch = [...currentBatch.value];
+      if (ctx.reinsertedLearningCard) {
+        const idx = batch.indexOf(ctx.reinsertedLearningCard);
+        if (idx >= 0) batch.splice(idx, 1);
+        const newSet = new Set(learningCardKeys.value);
+        newSet.delete(ctx.cardKey);
+        learningCardKeys.value = newSet;
+      }
       const remaining = batch.length - currentCardIndex.value;
       const offset = remaining <= 0 ? 0 : Math.min(Math.floor(Math.random() * 6) + 5, remaining);
       batch.splice(currentCardIndex.value + offset, 0, { ...ctx.card });
@@ -1269,6 +1342,7 @@ export const useSrsStore = defineStore('srs', () => {
       currentBatch.value = snap.batch;
       currentCardIndex.value = snap.cardIndex;
       againCardKeys.value = new Set(snap.againKeys);
+      learningCardKeys.value = new Set(snap.learningKeys);
       clearedGrades.value = [...snap.grades];
       sessionReviews.value = [...snap.reviews];
       sessionLeeches.value = [...snap.leeches];
@@ -1294,11 +1368,11 @@ export const useSrsStore = defineStore('srs', () => {
     isWrappingUp.value = true;
     preWrapUpBatch.value = [...currentBatch.value];
 
-    // Keep the current card + any "again" cards still in the queue
+    // Keep the current card + any "again" cards and learning-step repeats still in the queue
     const upcoming = currentBatch.value.slice(currentCardIndex.value + 1);
     const keptAgain = upcoming.filter((c) => {
       const key = `${c.wordId}-${c.readingIndex}`;
-      return againCardKeys.value.has(key);
+      return againCardKeys.value.has(key) || learningCardKeys.value.has(key);
     });
 
     const current = currentBatch.value[currentCardIndex.value];
@@ -1356,6 +1430,7 @@ export const useSrsStore = defineStore('srs', () => {
         currentBatch: currentBatch.value,
         currentCardIndex: currentCardIndex.value,
         againCardKeys: Array.from(againCardKeys.value),
+        learningCardKeys: Array.from(learningCardKeys.value),
         clearedGrades: clearedGrades.value,
         sessionReviews: sessionReviews.value,
         sessionLeeches: sessionLeeches.value,
@@ -1420,6 +1495,7 @@ export const useSrsStore = defineStore('srs', () => {
     currentBatch.value = blob.currentBatch;
     currentCardIndex.value = blob.currentCardIndex;
     againCardKeys.value = new Set(blob.againCardKeys ?? []);
+    learningCardKeys.value = new Set(blob.learningCardKeys ?? []);
     clearedGrades.value = blob.clearedGrades ?? [];
     sessionReviews.value = blob.sessionReviews ?? [];
     sessionLeeches.value = blob.sessionLeeches ?? [];
@@ -1473,6 +1549,7 @@ export const useSrsStore = defineStore('srs', () => {
     batchComplete.value = false;
     moreCardsLikely.value = false;
     againCardKeys.value = new Set();
+    learningCardKeys.value = new Set();
     clearedGrades.value = [];
     sessionReviews.value = [];
     sessionLeeches.value = [];
@@ -1570,6 +1647,8 @@ export const useSrsStore = defineStore('srs', () => {
     startStudyMore,
     wrapUp,
     againCardKeys,
+    learningCardKeys,
+    learningCardsAhead,
     lastLeechEvent,
     sessionLeeches,
     suspendLeech,

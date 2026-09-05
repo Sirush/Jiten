@@ -1281,9 +1281,76 @@ public class FsrsTests
         Assert.True(easyStability > goodStability); // Easy should produce higher stability than Good
     }
 
+    // The step-progression tests below are written against Anki's classic 1m/10m + 10m lists.
     public static FsrsScheduler CreateSchedulerWithoutFuzzing()
     {
-        return new FsrsScheduler(enableFuzzing: false);
+        return new FsrsScheduler(learningSteps: [TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10)],
+                                 relearningSteps: [TimeSpan.FromMinutes(10)],
+                                 enableFuzzing: false);
+    }
+
+    [Fact]
+    public void DefaultSteps_AreSingleTenMinuteSteps()
+    {
+        var scheduler = new FsrsScheduler(enableFuzzing: false);
+
+        Assert.Equal([TimeSpan.FromMinutes(10)], scheduler.LearningSteps);
+        Assert.Equal([TimeSpan.FromMinutes(10)], scheduler.RelearningSteps);
+
+        var card = CreateNewCard();
+        (card, _) = scheduler.ReviewCard(card, FsrsRating.Good, card.Due);
+        Assert.Equal(FsrsState.Review, card.State);
+        Assert.Null(card.Step);
+    }
+
+    [Fact]
+    public void CustomRelearningSteps_AreFollowedInOrder()
+    {
+        var scheduler = new FsrsScheduler(learningSteps: [TimeSpan.FromMinutes(10)],
+                                          relearningSteps: [TimeSpan.FromMinutes(30), TimeSpan.FromHours(1)],
+                                          enableFuzzing: false);
+        var card = CreateRelearningCard(scheduler);
+        Assert.Equal(FsrsState.Relearning, card.State);
+        Assert.Equal(30, Math.Round((card.Due - card.LastReview!.Value).TotalMinutes));
+
+        (card, _) = scheduler.ReviewCard(card, FsrsRating.Good, card.Due);
+        Assert.Equal(FsrsState.Relearning, card.State);
+        Assert.Equal(1, card.Step);
+        Assert.Equal(60, Math.Round((card.Due - card.LastReview!.Value).TotalMinutes));
+
+        (card, _) = scheduler.ReviewCard(card, FsrsRating.Good, card.Due);
+        Assert.Equal(FsrsState.Review, card.State);
+        Assert.True((card.Due - card.LastReview!.Value).TotalDays >= 1);
+    }
+
+    [Fact]
+    public void StepPastShortenedList_GraduatesAndHardDoesNotThrow()
+    {
+        var scheduler = new FsrsScheduler(learningSteps: [TimeSpan.FromMinutes(10)], enableFuzzing: false);
+        var hard = new FsrsCard("u", 1, 0, state: FsrsState.Learning, step: 3) { Due = DateTime.UtcNow };
+        var good = new FsrsCard("u", 2, 0, state: FsrsState.Learning, step: 3) { Due = DateTime.UtcNow };
+
+        (hard, _) = scheduler.ReviewCard(hard, FsrsRating.Hard, hard.Due);
+        (good, _) = scheduler.ReviewCard(good, FsrsRating.Good, good.Due);
+
+        Assert.Equal(FsrsState.Review, hard.State);
+        Assert.Equal(FsrsState.Review, good.State);
+    }
+
+    [Theory]
+    [InlineData(new int[0], null)]
+    [InlineData(new[] { 10 }, null)]
+    [InlineData(new[] { 1, 10, 60, 240 }, null)]
+    [InlineData(new[] { 10, 5 }, "increase")]
+    [InlineData(new[] { 10, 10 }, "increase")]
+    [InlineData(new[] { 0 }, "at least 1 minute")]
+    [InlineData(new[] { 1440 }, "under 12 hours")]
+    [InlineData(new[] { 1, 2, 3, 4, 5 }, "at most 4")]
+    public void StepSettings_Validate(int[] minutes, string? expectedError)
+    {
+        var error = FsrsStepSettings.Validate(minutes, "Learning steps");
+        if (expectedError == null) Assert.Null(error);
+        else Assert.Contains(expectedError, error);
     }
 
     public static FsrsCard CreateNewCard()

@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   ComparisonOutcome,
   DeckRelationshipType,
   DeckStatus,
@@ -1313,6 +1313,12 @@ export interface StudySettingsDto {
   defaultFrequencyMediaType?: number | null;
   /** Custom frequency list whose ranking replaces the global one. Same omitted/0 rules as the media type. */
   defaultFrequencyListId?: number | null;
+  /** Learning step lengths in minutes; empty = FSRS picks the first interval. Omitted on a save = unchanged. */
+  learningSteps?: number[] | null;
+  /** Relearning step lengths in minutes; same rules as learningSteps. */
+  relearningSteps?: number[] | null;
+  /** Learning cards due within this many minutes are served as due. */
+  learnAheadMinutes: number;
   leechThreshold: number;
   leechAction: LeechAction;
   timedReview: TimedReviewSettings;

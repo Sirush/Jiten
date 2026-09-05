@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.Json;
 using Hangfire;
 using Jiten.Api.Dtos;
@@ -85,9 +85,7 @@ public class SrsController(
         }
         else
         {
-            var parameters = GetParameters(undoSettings);
-            var desiredRetention = GetDesiredRetention(undoSettings);
-            var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
+            var scheduler = FsrsSettingsHelper.CreateScheduler(undoSettings, enableFuzzing: false);
 
             // Undo restores the state the card had before the undone review, so a terminal state set by that
             // review must not be preserved.
@@ -164,8 +162,8 @@ public class SrsController(
         var studySettings = GetStudySettings(userSettings);
         var loadBalancer = await BuildLoadBalancer(userId, studySettings.LoadBalancing);
         var easyDays = BuildEasyDaysPolicy(studySettings);
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters,
-                                          loadBalancer: loadBalancer, easyDays: easyDays);
+        var scheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: true,
+                                                           loadBalancer, easyDays);
         if (card == null)
         {
             card = new FsrsCard(userId, request.WordId, request.ReadingIndex);
@@ -229,7 +227,7 @@ public class SrsController(
         await transaction.CommitAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
 
-        var previewScheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
+        var previewScheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: false);
         var intervals = previewScheduler.PreviewIntervals(cardAndLog.UpdatedCard, DateTime.UtcNow);
 
         var resultObj = new
@@ -303,8 +301,8 @@ public class SrsController(
         var studySettings = GetStudySettings(userSettings);
         var loadBalancer = await BuildLoadBalancer(userId, studySettings.LoadBalancing);
         var easyDays = BuildEasyDaysPolicy(studySettings);
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters,
-                                          loadBalancer: loadBalancer, easyDays: easyDays);
+        var scheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: true,
+                                                           loadBalancer, easyDays);
 
         await using var transaction = await userContext.Database.BeginTransactionAsync();
 

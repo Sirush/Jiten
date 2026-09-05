@@ -51,8 +51,8 @@ public class FsrsScheduler
     /// </summary>
     /// <param name="parameters">Custom FSRS parameters (uses defaults if null)</param>
     /// <param name="desiredRetention">Target retention rate (default: 0.9)</param>
-    /// <param name="learningSteps">Learning intervals (default: 1min, 10min)</param>
-    /// <param name="relearningSteps">Relearning intervals (default: 10min)</param>
+    /// <param name="learningSteps">Learning intervals (default: <see cref="FsrsStepSettings.DefaultLearningSteps"/>)</param>
+    /// <param name="relearningSteps">Relearning intervals (default: <see cref="FsrsStepSettings.DefaultRelearningSteps"/>)</param>
     /// <param name="maximumInterval">Max interval in days (default: 36500)</param>
     /// <param name="enableFuzzing">Enable interval randomization (default: true)</param>
     /// <param name="loadBalancer">Optional load balancer for spreading fuzzed due dates across days</param>
@@ -69,8 +69,8 @@ public class FsrsScheduler
     {
         Parameters = parameters is { Length: > 0 } ? parameters : FsrsConstants.DefaultParameters;
         DesiredRetention = desiredRetention;
-        LearningSteps = learningSteps ?? [TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10)];
-        RelearningSteps = relearningSteps ?? [TimeSpan.FromMinutes(10)];
+        LearningSteps = learningSteps ?? FsrsStepSettings.DefaultLearningSteps;
+        RelearningSteps = relearningSteps ?? FsrsStepSettings.DefaultRelearningSteps;
         MaximumInterval = maximumInterval;
         EnableFuzzing = enableFuzzing;
         _loadBalancer = loadBalancer;

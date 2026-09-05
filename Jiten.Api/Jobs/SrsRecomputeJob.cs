@@ -1,5 +1,6 @@
 using Hangfire;
 using Jiten.Api.Dtos;
+using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.FSRS;
@@ -55,14 +56,14 @@ public class SrsRecomputeJob(
             balancer = sharedBalancer ?? await FsrsLoadBalancerSeeder.SeedAsync(userContext, userId);
         }
 
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters,
-                                          loadBalancer: balancer, easyDays: easyDays);
+        var studySettings = FsrsSettingsHelper.GetStudySettings(await FsrsSettingsHelper.LoadAsync(userContext, userId));
+        var scheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: true,
+                                                           balancer, easyDays);
         // Replay scheduler for historical reviews: their due dates are superseded by the next review,
         // so fuzzing/balancing them would only register phantom load in the balancer's histogram.
         // Stability/difficulty depend solely on log timestamps, so skipping fuzz changes nothing else
         // and makes the replay deterministic.
-        var replayScheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters,
-                                                enableFuzzing: false);
+        var replayScheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: false);
 
         var total = await userContext.FsrsCards.CountAsync(card => card.UserId == userId);
         var cards = await userContext.FsrsCards

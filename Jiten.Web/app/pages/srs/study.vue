@@ -161,8 +161,15 @@
   onUnmounted(() => barObserver?.disconnect());
 
   const barColors = {
-    rainbow: { easy: 'bg-blue-400', good: 'bg-emerald-400', hard: 'bg-orange-300', action: 'bg-gray-400', again: 'bg-red-400' },
-    mono: { easy: 'bg-surface-500', good: 'bg-surface-400', hard: 'bg-surface-300', action: 'bg-surface-300', again: 'bg-surface-600 dark:bg-surface-500' },
+    rainbow: { easy: 'bg-blue-400', good: 'bg-emerald-400', hard: 'bg-orange-300', action: 'bg-gray-400', again: 'bg-red-400', learning: 'bg-violet-300' },
+    mono: {
+      easy: 'bg-surface-500',
+      good: 'bg-surface-400',
+      hard: 'bg-surface-300',
+      action: 'bg-surface-300',
+      again: 'bg-surface-600 dark:bg-surface-500',
+      learning: 'bg-surface-300 dark:bg-surface-600',
+    },
   } as const;
   const dotColors = {
     rainbow: { again: 'bg-red-400', hard: 'bg-orange-300', good: 'bg-emerald-400', easy: 'bg-blue-400' },
@@ -181,6 +188,8 @@
     if (counts.hard > 0) segments.push({ key: 'hard', width: (counts.hard / total) * 100, color: c.hard });
     if (counts.action > 0) segments.push({ key: 'action', width: (counts.action / total) * 100, color: c.action });
     if (srsStore.againCardsAhead > 0) segments.push({ key: 'again', width: (srsStore.againCardsAhead / total) * 100, color: c.again });
+    if (srsStore.learningCardsAhead > 0)
+      segments.push({ key: 'learning', width: (srsStore.learningCardsAhead / total) * 100, color: c.learning });
     return segments;
   });
 
@@ -649,6 +658,7 @@
               <div class="mt-1 text-gray-300 dark:text-gray-400 text-center">
                 {{ srsStore.progress.current }}/{{ srsStore.progress.total }} completed
                 <template v-if="srsStore.againCardsAhead > 0">· {{ srsStore.againCardsAhead }} again pending</template>
+                <template v-if="srsStore.learningCardsAhead > 0">· {{ srsStore.learningCardsAhead }} learning pending</template>
               </div>
               <div class="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-800 dark:border-b-gray-100" />
             </div>

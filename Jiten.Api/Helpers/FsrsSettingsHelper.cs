@@ -44,12 +44,50 @@ public static class FsrsSettingsHelper
     {
         if (settings?.SettingsJson is { Length: > 2 } json)
         {
-            try { return StudySettingsMigrator.Apply(JsonSerializer.Deserialize<StudySettingsDto>(json) ?? new StudySettingsDto()); }
+            try { return FillStepDefaults(StudySettingsMigrator.Apply(JsonSerializer.Deserialize<StudySettingsDto>(json) ?? new StudySettingsDto())); }
             catch (JsonException) { }
         }
 
-        return StudySettingsMigrator.Apply(new StudySettingsDto());
+        return FillStepDefaults(StudySettingsMigrator.Apply(new StudySettingsDto()));
     }
+
+    /// <summary>Null steps are stored as "never set"; readers see the defaults so clients never have to know that.</summary>
+    public static StudySettingsDto FillStepDefaults(StudySettingsDto settings)
+    {
+        settings.LearningSteps ??= FsrsStepSettings.DefaultLearningMinutes;
+        settings.RelearningSteps ??= FsrsStepSettings.DefaultRelearningMinutes;
+        return settings;
+    }
+
+    public static TimeSpan[] GetLearningSteps(StudySettingsDto settings)
+        => FsrsStepSettings.ToTimeSpans(settings.LearningSteps ?? FsrsStepSettings.DefaultLearningMinutes);
+
+    public static TimeSpan[] GetRelearningSteps(StudySettingsDto settings)
+        => FsrsStepSettings.ToTimeSpans(settings.RelearningSteps ?? FsrsStepSettings.DefaultRelearningMinutes);
+
+    /// <summary>
+    /// The only way the API should build a scheduler: a site constructing <see cref="FsrsScheduler"/> directly
+    /// silently drops the user's steps, and replay or restore would then rewrite their due dates.
+    /// </summary>
+    public static FsrsScheduler CreateScheduler(UserFsrsSettings? settings, bool enableFuzzing,
+                                                IFsrsLoadBalancer? loadBalancer = null, EasyDaysPolicy? easyDays = null,
+                                                double[]? parameters = null, double? desiredRetention = null)
+        => CreateScheduler(GetStudySettings(settings), parameters ?? GetParameters(settings),
+                           desiredRetention ?? GetDesiredRetention(settings), enableFuzzing, loadBalancer, easyDays);
+
+    public static FsrsScheduler CreateScheduler(StudySettingsDto studySettings, double[] parameters, double desiredRetention,
+                                                bool enableFuzzing, IFsrsLoadBalancer? loadBalancer = null,
+                                                EasyDaysPolicy? easyDays = null)
+        => new(desiredRetention: desiredRetention,
+               parameters: parameters,
+               learningSteps: GetLearningSteps(studySettings),
+               relearningSteps: GetRelearningSteps(studySettings),
+               enableFuzzing: enableFuzzing,
+               loadBalancer: loadBalancer,
+               easyDays: easyDays);
+
+    public static async Task<FsrsScheduler> CreateSchedulerAsync(UserDbContext userContext, string userId, bool enableFuzzing)
+        => CreateScheduler(await LoadAsync(userContext, userId), enableFuzzing);
 
     public static double ResolveOffsetHours(DateTime utcNow, string? timezone)
         => ResolveTimeZone(timezone)?.GetUtcOffset(utcNow).TotalHours ?? 0;
