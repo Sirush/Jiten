@@ -168,6 +168,12 @@ public class SrsController(
         {
             card = new FsrsCard(userId, request.WordId, request.ReadingIndex);
         }
+        else if (IsTerminalState(card.State))
+        {
+            return Results.BadRequest($"Card is {card.State} and cannot be reviewed. Release it first.");
+        }
+
+        PromoteNewToLearning(card);
 
         var reviewedAt = DateTime.UtcNow;
         var isFirstReview = card.CardId == 0 || !await userContext.FsrsReviewLogs.AnyAsync(l => l.CardId == card.CardId);
@@ -323,16 +329,24 @@ public class SrsController(
 
         var results = new List<object>(deduped.Count);
         var leechSuspended = new List<int>();
+        var skipped = new List<object>();
         // New cards must be inserted before their review logs can reference a CardId.
         var pendingNewLogs = new List<(FsrsCard Card, FsrsReviewLog Log)>();
 
         foreach (var (key, rating) in deduped)
         {
             existingMap.TryGetValue(key, out var card);
+            if (card != null && IsTerminalState(card.State))
+            {
+                skipped.Add(new { wordId = key.WordId, readingIndex = key.ReadingIndex, state = (int)card.State });
+                continue;
+            }
+
             var isNew = card == null;
             if (isNew || !reviewedBefore.Contains(card!.CardId))
                 firstReviews++;
             card ??= new FsrsCard(userId, key.WordId, key.ReadingIndex);
+            PromoteNewToLearning(card);
 
             var previousState = card.State;
             var cardAndLog = scheduler.ReviewCard(card, rating, now);
@@ -388,11 +402,13 @@ public class SrsController(
             }
         }
 
+        var processed = results.Count;
         await ReviewRollupHelper.ApplyDeltaAsync(
             userContext, userId,
             ReviewRollupHelper.LocalDateOf(now, ResolveTimeZone(studySettings.Timezone)),
-            reviewDelta: deduped.Count,
-            correctDelta: deduped.Count(r => r.Value != FsrsRating.Again),
+            reviewDelta: processed,
+            correctDelta: deduped.Count(r => r.Value != FsrsRating.Again
+                                             && !(existingMap.TryGetValue(r.Key, out var c) && IsTerminalState(c.State))),
             newCardDelta: firstReviews,
             durationDeltaMs: 0);
 
@@ -401,16 +417,28 @@ public class SrsController(
         await transaction.CommitAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
 
-        logger.LogInformation("User batch-reviewed {Count} SRS cards ({Suspended} suspended as leeches).",
-                              deduped.Count, leechSuspended.Count);
+        logger.LogInformation("User batch-reviewed {Count} SRS cards ({Suspended} suspended as leeches, {Skipped} skipped).",
+                              processed, leechSuspended.Count, skipped.Count);
 
         return Results.Json(new
         {
             success = true,
-            processed = deduped.Count,
+            processed,
             leechSuspended,
+            skipped,
             results
         });
+    }
+
+    private static bool IsTerminalState(FsrsState state)
+        => state is FsrsState.Suspended or FsrsState.Mastered or FsrsState.Blacklisted;
+
+    /// <summary>The scheduler has no transition out of New; a first grade is a learning step 0 review.</summary>
+    private static void PromoteNewToLearning(FsrsCard card)
+    {
+        if (card.State != FsrsState.New) return;
+        card.State = FsrsState.Learning;
+        card.Step = 0;
     }
 
     [HttpGet("review-history/{wordId}/{readingIndex}")]
