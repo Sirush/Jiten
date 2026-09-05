@@ -578,7 +578,10 @@
         <div class="min-w-0">
           <label class="block text-sm font-medium mb-1">
             Max reviews per day
-            <Tooltip content="Maximum number of review cards shown each day. Reviews that exceed this limit carry over to the next day." placement="top">
+            <Tooltip
+              content="Maximum number of review cards shown each day. New cards and their learning steps come out of the new-card limit instead. Reviews that exceed this limit carry over to the next day."
+              placement="top"
+            >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>
@@ -616,7 +619,7 @@
         <label for="countFailedReviews" class="text-sm cursor-pointer">
           Count failed reviews toward daily limit
           <Tooltip
-            content="When enabled, every review counts toward your daily limit, including repeated reviews of cards you got wrong. When disabled, only unique cards count, so failing a card multiple times won't eat into your daily budget."
+            content="When enabled, every review of a card you already knew counts toward the daily review limit, including repeats after you got it wrong. When disabled, only unique cards count, so failing a card multiple times won't eat into your daily budget."
             placement="top"
           >
             <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />

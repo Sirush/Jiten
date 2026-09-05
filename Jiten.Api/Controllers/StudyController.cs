@@ -1783,8 +1783,8 @@ public class StudyController(
             .GroupBy(_ => 1)
             .Select(g => new
             {
-                ReviewsToday = g.Count(),
-                UniqueCardsToday = g.Select(l => l.CardId).Distinct().Count(),
+                ReviewsToday = g.Count(l => l.Card.CreatedAt < todayStart),
+                UniqueCardsToday = g.Where(l => l.Card.CreatedAt < todayStart).Select(l => l.CardId).Distinct().Count(),
                 NewCardsToday = g.Select(l => l.Card)
                     .Where(c => c.CreatedAt >= todayStart)
                     .Select(l => l.CardId)
@@ -2687,8 +2687,8 @@ public class StudyController(
             .GroupBy(_ => 1)
             .Select(g => new
             {
-                ReviewsToday = g.Count(),
-                UniqueCardsToday = g.Select(l => l.CardId).Distinct().Count(),
+                ReviewsToday = g.Count(l => l.Card.CreatedAt < todayStart),
+                UniqueCardsToday = g.Where(l => l.Card.CreatedAt < todayStart).Select(l => l.CardId).Distinct().Count(),
                 NewCardsToday = g.Where(l => l.Card.CreatedAt >= todayStart).Select(l => l.CardId).Distinct().Count(),
             })
             .FirstOrDefaultAsync();
