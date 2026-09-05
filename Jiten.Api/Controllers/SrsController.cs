@@ -1094,6 +1094,13 @@ public class SrsController(
                 }
                 break;
 
+            case "clear-lapses":
+                if (card != null)
+                {
+                    card.Lapses = 0;
+                }
+                break;
+
             default:
                 return Results.BadRequest($"Invalid state: {request.State}");
         }
@@ -1159,6 +1166,7 @@ public class SrsController(
         card.Difficulty = null;
         card.Due = DateTime.UtcNow;
         card.LastReview = null;
+        card.Lapses = 0;
     }
 
     [HttpPost("set-vocabulary-state-bulk")]
@@ -1270,6 +1278,14 @@ public class SrsController(
                 foreach (var card in cards)
                 {
                     ResetCardSchedule(card);
+                    affected++;
+                }
+                break;
+
+            case "clear-lapses":
+                foreach (var card in cards.Where(c => c.Lapses > 0))
+                {
+                    card.Lapses = 0;
                     affected++;
                 }
                 break;
@@ -1436,7 +1452,12 @@ public class SrsController(
                     .SetProperty(c => c.Stability, (double?)null)
                     .SetProperty(c => c.Difficulty, (double?)null)
                     .SetProperty(c => c.Due, DateTime.UtcNow)
-                    .SetProperty(c => c.LastReview, (DateTime?)null));
+                    .SetProperty(c => c.LastReview, (DateTime?)null)
+                    .SetProperty(c => c.Lapses, 0));
+                break;
+
+            case "clear-lapses":
+                affected = await query.ExecuteUpdateAsync(s => s.SetProperty(c => c.Lapses, 0));
                 break;
 
             case "restore-state":
@@ -1779,6 +1800,9 @@ public class SrsController(
     {
         var query = userContext.FsrsCards.Where(c => c.UserId == userId);
 
+        if (request.Action == "clear-lapses")
+            query = query.Where(c => c.Lapses > 0);
+
         if (request.StateFilter is { Length: > 0 })
         {
             var states = request.StateFilter.Select(s => (FsrsState)s).ToList();
@@ -1810,7 +1834,7 @@ public class SrsController(
 
     private static string? ValidateMassActionRequest(MassActionRequest request, bool previewOnly)
     {
-        if (request.Action is not ("change-state" or "push-due" or "delete-cards" or "reset-schedule" or "restore-state"))
+        if (request.Action is not ("change-state" or "push-due" or "delete-cards" or "reset-schedule" or "restore-state" or "clear-lapses"))
             return $"Invalid action: {request.Action}";
 
         if (!previewOnly)

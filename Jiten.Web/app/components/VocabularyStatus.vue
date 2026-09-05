@@ -248,7 +248,7 @@
 
   const confirmReset = () => {
     confirm.require({
-      message: `Reset "${plainText.value}"? This clears its scheduling (stability, difficulty) and puts it back into Learning. Review history is kept.`,
+      message: `Reset "${plainText.value}"? This clears its scheduling (stability, difficulty, lapses) and puts it back into Learning. Review history is kept.`,
       header: 'Reset Schedule',
       icon: 'pi pi-history',
       accept: () => srsAction('reset-schedule', [KnownState.Young]),

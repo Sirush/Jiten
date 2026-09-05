@@ -318,6 +318,10 @@
         card.difficulty = undefined;
         card.due = new Date();
         card.lastReview = undefined;
+        card.lapses = 0;
+        break;
+      case 'clear-lapses':
+        card.lapses = 0;
         break;
     }
   }
@@ -330,6 +334,7 @@
     'blacklist-add': (c) => c.state !== FsrsState.Blacklisted,
     'blacklist-remove': (c) => c.state === FsrsState.Blacklisted,
     'reset-schedule': () => true,
+    'clear-lapses': (c) => (c.lapses ?? 0) > 0,
   };
 
   async function setVocabularyState(card: FsrsCardWithWordDto, state: string) {
@@ -365,6 +370,7 @@
     }
 
     actions.push({ label: 'Add to list', icon: 'pi pi-list', action: () => openAddToList([card]) });
+    if ((card.lapses ?? 0) > 0) actions.push({ label: 'Clear lapses', icon: 'pi pi-eraser', action: () => setVocabularyState(card, 'clear-lapses') });
     actions.push({ label: 'Reset schedule', icon: 'pi pi-history', action: () => confirmResetSchedule(card) });
 
     actions.push({
@@ -380,7 +386,7 @@
   function confirmResetSchedule(card: FsrsCardWithWordDto) {
     const plain = stripRuby(card.wordText);
     confirm.require({
-      message: `Reset "${plain}"? This clears its scheduling (stability, difficulty) and puts it back into Learning. Review history is kept.`,
+      message: `Reset "${plain}"? This clears its scheduling (stability, difficulty, lapses) and puts it back into Learning. Review history is kept.`,
       header: 'Reset Schedule',
       icon: 'pi pi-history',
       accept: () => setVocabularyState(card, 'reset-schedule'),
@@ -449,6 +455,8 @@
     if (anyEligible('blacklist-remove'))
       defs.push({ label: 'Unblacklist', icon: 'pi pi-undo', severity: 'secondary', run: () => confirmBulkAction('Unblacklist', 'blacklist-remove') });
 
+    if (anyEligible('clear-lapses'))
+      defs.push({ label: 'Clear lapses', icon: 'pi pi-eraser', severity: 'info', run: () => confirmBulkAction('Clear lapses', 'clear-lapses') });
     defs.push({ label: 'Reset', icon: 'pi pi-history', severity: 'info', run: () => confirmBulkAction('Reset', 'reset-schedule') });
     defs.push({ label: 'Forget', icon: 'pi pi-trash', severity: 'danger', run: confirmBulkForget });
     return defs;
@@ -459,10 +467,14 @@
     if (eligible.length === 0) return;
     const skipped = selectedCards.value.length - eligible.length;
 
+    const n = eligible.length;
+    const cardsWord = `card${n !== 1 ? 's' : ''}`;
     let message =
       state === 'reset-schedule'
-        ? `Reset ${eligible.length} card${eligible.length !== 1 ? 's' : ''}? This clears their scheduling (stability, difficulty) and puts them back into Learning. Review history is kept.`
-        : `Are you sure you want to ${label.toLowerCase()} ${eligible.length} card${eligible.length !== 1 ? 's' : ''}?`;
+        ? `Reset ${n} ${cardsWord}? This clears their scheduling (stability, difficulty, lapses) and puts them back into Learning. Review history is kept.`
+        : state === 'clear-lapses'
+          ? `Clear the lapse count on ${n} ${cardsWord}? They stop being leeches; scheduling and review history are kept.`
+          : `Are you sure you want to ${label.toLowerCase()} ${n} ${cardsWord}?`;
     if (skipped > 0) {
       message += ` ${skipped} selected card${skipped !== 1 ? 's are' : ' is'} not applicable and will be skipped.`;
     }
