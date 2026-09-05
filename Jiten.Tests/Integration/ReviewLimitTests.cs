@@ -29,7 +29,7 @@ public class ReviewLimitTests(JitenWebApplicationFactory factory)
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    /// <summary>A card introduced today with three learning-step logs, and an older card lapsed and recovered today.</summary>
+    /// <summary>A card introduced today with three learning-step logs, and a card reviewed ten days ago, lapsed and recovered today.</summary>
     private async Task SeedTodaysActivity()
     {
         var now = DateTime.UtcNow;
@@ -44,6 +44,7 @@ public class ReviewLimitTests(JitenWebApplicationFactory factory)
         var lapsedToday = new FsrsCard(TestUsers.UserA, 2, 0, state: FsrsState.Review, stability: 5, difficulty: 6,
                                        due: now.AddDays(3), lastReview: now.AddMinutes(-5))
                           { CreatedAt = now.AddDays(-40) };
+        lapsedToday.ReviewLogs.Add(new FsrsReviewLog { Rating = FsrsRating.Good, ReviewDateTime = now.AddDays(-10) });
         lapsedToday.ReviewLogs.Add(new FsrsReviewLog { Rating = FsrsRating.Again, ReviewDateTime = now.AddMinutes(-20) });
         lapsedToday.ReviewLogs.Add(new FsrsReviewLog { Rating = FsrsRating.Good, ReviewDateTime = now.AddMinutes(-5) });
 
@@ -95,6 +96,51 @@ public class ReviewLimitTests(JitenWebApplicationFactory factory)
 
         (await Get("/api/srs/study-batch?limit=10")).GetProperty("reviewsToday").GetInt32().Should().Be(1);
         (await Get("/api/srs/due-summary")).GetProperty("reviewsToday").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ACardWithOldReviews_ButCreatedToday_CountsAsAReview()
+    {
+        // Archive restore recreates the card today with its old logs; it must not count as new.
+        var now = DateTime.UtcNow;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var restored = new FsrsCard(TestUsers.UserA, 7, 0, state: FsrsState.Review, stability: 8, difficulty: 5,
+                                        due: now.AddDays(2), lastReview: now.AddMinutes(-3));
+            restored.ReviewLogs.Add(new FsrsReviewLog { Rating = FsrsRating.Good, ReviewDateTime = now.AddDays(-15) });
+            restored.ReviewLogs.Add(new FsrsReviewLog { Rating = FsrsRating.Good, ReviewDateTime = now.AddMinutes(-3) });
+            userDb.FsrsCards.Add(restored);
+            await userDb.SaveChangesAsync();
+        }
+
+        var summary = await Get("/api/srs/due-summary");
+        summary.GetProperty("reviewsToday").GetInt32().Should().Be(1);
+        summary.GetProperty("newCardsToday").GetInt32().Should().Be(0);
+
+        var batch = await Get("/api/srs/study-batch?limit=10");
+        batch.GetProperty("reviewsToday").GetInt32().Should().Be(1);
+        batch.GetProperty("newCardsToday").GetInt32().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ACardCreatedLongAgo_FirstReviewedToday_CountsAsNew()
+    {
+        // Reset-schedule leaves CreatedAt old; only the review history decides.
+        var now = DateTime.UtcNow;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var card = new FsrsCard(TestUsers.UserA, 8, 0, state: FsrsState.Learning, step: 0, stability: 1, difficulty: 5,
+                                    due: now.AddMinutes(10), lastReview: now.AddMinutes(-1)) { CreatedAt = now.AddDays(-30) };
+            card.ReviewLogs.Add(new FsrsReviewLog { Rating = FsrsRating.Good, ReviewDateTime = now.AddMinutes(-1) });
+            userDb.FsrsCards.Add(card);
+            await userDb.SaveChangesAsync();
+        }
+
+        var summary = await Get("/api/srs/due-summary");
+        summary.GetProperty("reviewsToday").GetInt32().Should().Be(0);
+        summary.GetProperty("newCardsToday").GetInt32().Should().Be(1);
     }
 
     [Fact]

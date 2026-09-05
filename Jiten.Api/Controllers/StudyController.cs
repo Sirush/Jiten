@@ -1783,13 +1783,11 @@ public class StudyController(
             .GroupBy(_ => 1)
             .Select(g => new
             {
-                ReviewsToday = g.Count(l => l.Card.CreatedAt < todayStart),
-                UniqueCardsToday = g.Where(l => l.Card.CreatedAt < todayStart).Select(l => l.CardId).Distinct().Count(),
-                NewCardsToday = g.Select(l => l.Card)
-                    .Where(c => c.CreatedAt >= todayStart)
-                    .Select(l => l.CardId)
-                    .Distinct()
-                    .Count()
+                ReviewsToday = g.Count(l => l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart)),
+                UniqueCardsToday = g.Where(l => l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
+                    .Select(l => l.CardId).Distinct().Count(),
+                NewCardsToday = g.Where(l => !l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
+                    .Select(l => l.CardId).Distinct().Count()
             })
             .FirstOrDefaultAsync();
 
@@ -2687,9 +2685,11 @@ public class StudyController(
             .GroupBy(_ => 1)
             .Select(g => new
             {
-                ReviewsToday = g.Count(l => l.Card.CreatedAt < todayStart),
-                UniqueCardsToday = g.Where(l => l.Card.CreatedAt < todayStart).Select(l => l.CardId).Distinct().Count(),
-                NewCardsToday = g.Where(l => l.Card.CreatedAt >= todayStart).Select(l => l.CardId).Distinct().Count(),
+                ReviewsToday = g.Count(l => l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart)),
+                UniqueCardsToday = g.Where(l => l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
+                    .Select(l => l.CardId).Distinct().Count(),
+                NewCardsToday = g.Where(l => !l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
+                    .Select(l => l.CardId).Distinct().Count(),
             })
             .FirstOrDefaultAsync();
 
@@ -2832,12 +2832,13 @@ public class StudyController(
         {
             case "extraNew":
             {
-                var newCardIds = userContext.FsrsCards
-                    .Where(c => c.UserId == userId && c.CreatedAt >= todayStart)
+                var userCardIds = userContext.FsrsCards
+                    .Where(c => c.UserId == userId)
                     .Select(c => c.CardId);
                 var newCardsToday = await userContext.FsrsReviewLogs
                     .AsNoTracking()
-                    .Where(rl => newCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= todayStart)
+                    .Where(rl => userCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= todayStart
+                                 && !rl.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
                     .Select(rl => rl.CardId)
                     .Distinct()
                     .CountAsync();
