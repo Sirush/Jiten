@@ -253,9 +253,17 @@ public class MediaDeckController(
 
         var decks = await context.Decks.AsNoTracking()
                                  .Where(d => finalIds.Contains(d.DeckId))
+                                 .Include(d => d.Children)
                                  .Include(d => d.Links)
                                  .Include(d => d.Titles)
+                                 .Include(d => d.DeckGenres)
+                                 .Include(d => d.DeckTags)
+                                 .ThenInclude(dt => dt.Tag)
                                  .Include(d => d.DeckDifficulty)
+                                 .Include(d => d.RelationshipsAsSource)
+                                 .ThenInclude(r => r.TargetDeck)
+                                 .Include(d => d.RelationshipsAsTarget)
+                                 .ThenInclude(r => r.SourceDeck)
                                  .AsSplitQuery()
                                  .ToDictionaryAsync(d => d.DeckId);
 
@@ -266,7 +274,9 @@ public class MediaDeckController(
             if (!decks.TryGetValue(id, out var deck))
                 continue;
 
-            result.Add(new SimilarDeckDto { Deck = new DeckDto(deck), Similarity = similarityById[id] });
+            var dto = new DeckDto(deck);
+            dto.Relationships = DeckRelationshipDto.FromDeck(deck.RelationshipsAsSource, deck.RelationshipsAsTarget);
+            result.Add(new SimilarDeckDto { Deck = dto, Similarity = similarityById[id] });
         }
 
         // Decorate with the viewer's coverage so the frontend can render coverage borders.
