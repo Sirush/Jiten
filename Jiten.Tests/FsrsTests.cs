@@ -462,6 +462,34 @@ public class FsrsTests
     }
 
     [Fact]
+    public void LoadBalancing_OffsetKeysLoadOnTheLocalDay()
+    {
+        // 20:00 UTC on Jan 1 is 05:00 on Jan 2 for a UTC+9 user, so it must share a bucket with a card
+        // due at 03:00 UTC on Jan 2 and not with one due at noon UTC on Jan 1.
+        var balancer = new DictionaryFsrsLoadBalancer(offsetHours: 9);
+        balancer.Register(new DateTime(2026, 1, 1, 20, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(1, balancer.GetLoad(new DateTime(2026, 1, 2, 3, 0, 0, DateTimeKind.Utc)));
+        Assert.Equal(0, balancer.GetLoad(new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc)));
+    }
+
+    [Fact]
+    public void LoadBalancing_OffsetSteersAwayFromTheLoadedLocalDay()
+    {
+        // Interval 30 -> window [27, 33]. Every card is due at 20:00 UTC, which is the next local day at
+        // UTC+9. Load local day 30 heavily: the balancer must not pick the UTC day 30 (local 31 is empty
+        // only if the offset is applied consistently to both sides).
+        var balancer = new DictionaryFsrsLoadBalancer(offsetHours: 9);
+        var anchor = new DateTime(2026, 1, 1, 20, 0, 0, DateTimeKind.Utc);
+        for (var n = 0; n < 50; n++)
+            balancer.Register(anchor.AddDays(30));
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, anchor, balancer);
+
+        Assert.NotEqual(30, result.Days);
+    }
+
+    [Fact]
     public void EasyDays_OffsetShiftsWeekdayClassification()
     {
         // A large positive offset can roll a UTC weekday into the next local day; the policy must classify
@@ -1281,9 +1309,76 @@ public class FsrsTests
         Assert.True(easyStability > goodStability); // Easy should produce higher stability than Good
     }
 
+    // The step-progression tests below are written against Anki's classic 1m/10m + 10m lists.
     public static FsrsScheduler CreateSchedulerWithoutFuzzing()
     {
-        return new FsrsScheduler(enableFuzzing: false);
+        return new FsrsScheduler(learningSteps: [TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10)],
+                                 relearningSteps: [TimeSpan.FromMinutes(10)],
+                                 enableFuzzing: false);
+    }
+
+    [Fact]
+    public void DefaultSteps_AreSingleTenMinuteSteps()
+    {
+        var scheduler = new FsrsScheduler(enableFuzzing: false);
+
+        Assert.Equal([TimeSpan.FromMinutes(10)], scheduler.LearningSteps);
+        Assert.Equal([TimeSpan.FromMinutes(10)], scheduler.RelearningSteps);
+
+        var card = CreateNewCard();
+        (card, _) = scheduler.ReviewCard(card, FsrsRating.Good, card.Due);
+        Assert.Equal(FsrsState.Review, card.State);
+        Assert.Null(card.Step);
+    }
+
+    [Fact]
+    public void CustomRelearningSteps_AreFollowedInOrder()
+    {
+        var scheduler = new FsrsScheduler(learningSteps: [TimeSpan.FromMinutes(10)],
+                                          relearningSteps: [TimeSpan.FromMinutes(30), TimeSpan.FromHours(1)],
+                                          enableFuzzing: false);
+        var card = CreateRelearningCard(scheduler);
+        Assert.Equal(FsrsState.Relearning, card.State);
+        Assert.Equal(30, Math.Round((card.Due - card.LastReview!.Value).TotalMinutes));
+
+        (card, _) = scheduler.ReviewCard(card, FsrsRating.Good, card.Due);
+        Assert.Equal(FsrsState.Relearning, card.State);
+        Assert.Equal(1, card.Step);
+        Assert.Equal(60, Math.Round((card.Due - card.LastReview!.Value).TotalMinutes));
+
+        (card, _) = scheduler.ReviewCard(card, FsrsRating.Good, card.Due);
+        Assert.Equal(FsrsState.Review, card.State);
+        Assert.True((card.Due - card.LastReview!.Value).TotalDays >= 1);
+    }
+
+    [Fact]
+    public void StepPastShortenedList_GraduatesAndHardDoesNotThrow()
+    {
+        var scheduler = new FsrsScheduler(learningSteps: [TimeSpan.FromMinutes(10)], enableFuzzing: false);
+        var hard = new FsrsCard("u", 1, 0, state: FsrsState.Learning, step: 3) { Due = DateTime.UtcNow };
+        var good = new FsrsCard("u", 2, 0, state: FsrsState.Learning, step: 3) { Due = DateTime.UtcNow };
+
+        (hard, _) = scheduler.ReviewCard(hard, FsrsRating.Hard, hard.Due);
+        (good, _) = scheduler.ReviewCard(good, FsrsRating.Good, good.Due);
+
+        Assert.Equal(FsrsState.Review, hard.State);
+        Assert.Equal(FsrsState.Review, good.State);
+    }
+
+    [Theory]
+    [InlineData(new int[0], null)]
+    [InlineData(new[] { 10 }, null)]
+    [InlineData(new[] { 1, 10, 60, 240 }, null)]
+    [InlineData(new[] { 10, 5 }, "increase")]
+    [InlineData(new[] { 10, 10 }, "increase")]
+    [InlineData(new[] { 0 }, "at least 1 minute")]
+    [InlineData(new[] { 1440 }, "under 12 hours")]
+    [InlineData(new[] { 1, 2, 3, 4, 5 }, "at most 4")]
+    public void StepSettings_Validate(int[] minutes, string? expectedError)
+    {
+        var error = FsrsStepSettings.Validate(minutes, "Learning steps");
+        if (expectedError == null) Assert.Null(error);
+        else Assert.Contains(expectedError, error);
     }
 
     public static FsrsCard CreateNewCard()

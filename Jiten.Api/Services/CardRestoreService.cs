@@ -1,4 +1,5 @@
-﻿using Jiten.Core;
+using Jiten.Api.Helpers;
+using Jiten.Core;
 using Jiten.Core.Data.FSRS;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,8 +23,7 @@ public static class CardRestoreService
     /// </summary>
     public static async Task<List<CardRestoreOutcome>> RestoreAsync(
         UserDbContext userCtx, JitenDbContext jitenCtx, string userId,
-        IReadOnlyList<(int WordId, byte ReadingIndex)> keys,
-        double[] parameters, double desiredRetention)
+        IReadOnlyList<(int WordId, byte ReadingIndex)> keys)
     {
         var outcomes = new List<CardRestoreOutcome>(keys.Count);
         if (keys.Count == 0)
@@ -52,8 +52,9 @@ public static class CardRestoreService
                         .Where(c => keySet.Contains((c.WordId, c.ReadingIndex)))
                         .ToDictionary(c => (c.WordId, c.ReadingIndex));
 
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters);
-        var replayScheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
+        var settings = await FsrsSettingsHelper.LoadAsync(userCtx, userId);
+        var scheduler = FsrsSettingsHelper.CreateScheduler(settings, enableFuzzing: true);
+        var replayScheduler = FsrsSettingsHelper.CreateScheduler(settings, enableFuzzing: false);
 
         foreach (var key in keys.Distinct())
         {

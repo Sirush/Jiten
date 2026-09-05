@@ -20,6 +20,9 @@ public class DescriptionSearchService(
     /// <summary>Forward-pass batch size for the sync job; bounded by padding waste, not memory.</summary>
     private const int EmbedBatchSize = 32;
 
+    /// <summary>Tags below this AniList-style confidence are guesses and would hand out boosts for tropes the work barely touches.</summary>
+    private const byte MinTagPercentage = 50;
+
     /// <summary>Full keyword coverage adds this much to a cosine that sits in the 0.45 to 0.70 band.</summary>
     private const float KeywordBoost = 0.12f;
 
@@ -56,11 +59,21 @@ public class DescriptionSearchService(
         var ids = vectors.Keys.ToList();
         var descriptions = await context.Decks.AsNoTracking()
                                         .Where(d => ids.Contains(d.DeckId) && d.Description != null)
-                                        .Select(d => new { d.DeckId, d.Description })
+                                        .Select(d => new
+                                        {
+                                            d.DeckId,
+                                            d.Description,
+                                            Genres = d.DeckGenres.Select(g => g.Genre).ToList(),
+                                            Tags = d.DeckTags.Where(t => t.Percentage >= MinTagPercentage).Select(t => t.Tag.Name).ToList()
+                                        })
                                         .ToListAsync();
         var folded = new Dictionary<int, string>(descriptions.Count);
         foreach (var d in descriptions)
-            folded[d.DeckId] = DescriptionKeywords.Fold(d.Description!);
+        {
+            // Tags and genres join the lexical text only; the vector stays synopsis-only so this needs no re-embed.
+            var labels = d.Tags.Concat(d.Genres.Select(GenreLabel));
+            folded[d.DeckId] = DescriptionKeywords.Fold(d.Description! + " | " + string.Join(" | ", labels));
+        }
 
         _vectors = vectors;
         _foldedTexts = folded;
@@ -165,9 +178,9 @@ public class DescriptionSearchService(
     public void EnsureModelLoaded() => _ = _embedder.Value;
 
     /// <summary>
-    /// Ranks embedded decks against the query. <paramref name="allowedDeckIds"/> restricts the pool before
-    /// ranking: filtering afterwards starves narrow pools, since same-language descriptions dominate the top ranks.
-    /// The list is cut where scores stop meaning anything, so a query the model cannot read returns few or no rows.
+    /// Ranks embedded decks against the query. <paramref name="allowedDeckIds"/> restricts the results,
+    /// but the noise floor is set by the best score over every deck: a filter that removes the real
+    /// matches must yield few or no rows, not the same number of rows drawn from padding.
     /// </summary>
     public List<Match> Search(string query, int limit, IReadOnlySet<int>? allowedDeckIds = null, bool cutNoise = true)
     {
@@ -182,28 +195,44 @@ public class DescriptionSearchService(
         // Rarity-weighted: a hit on "onmyoji" (two descriptions) outweighs a hit on "girl" (thousands).
         var weights = DescriptionKeywords.RarityWeights(keywords, texts.Values);
         var scored = new List<Match>(allowedDeckIds?.Count ?? vectors.Count);
+        var best = float.MinValue;
         foreach (var (deckId, v) in vectors)
         {
-            if (allowedDeckIds != null && !allowedDeckIds.Contains(deckId))
-                continue;
             var cosine = Dot(q, v);
             var hits = keywords.Count > 0 && texts.TryGetValue(deckId, out var text) ? DescriptionKeywords.Hits(keywords, text) : [];
             var coverage = DescriptionKeywords.WeightedCoverage(hits, weights);
-            scored.Add(new Match(deckId, cosine + KeywordBoost * coverage, cosine, coverage, hits));
+            var score = cosine + KeywordBoost * coverage;
+            best = Math.Max(best, score);
+            if (allowedDeckIds == null || allowedDeckIds.Contains(deckId))
+                scored.Add(new Match(deckId, score, cosine, coverage, hits));
         }
 
         scored.Sort((a, b) => b.Score.CompareTo(a.Score));
         if (cutNoise && scored.Count > 0)
         {
-            var floor = Math.Max(AbsoluteFloor, scored[0].Score - RelativeMargin);
-            var keep = scored.FindIndex(m => m.Score < floor);
-            if (keep >= 0)
-                scored.RemoveRange(keep, scored.Count - keep);
+            var floor = Math.Max(AbsoluteFloor, best - RelativeMargin);
+            // A verbatim hit on the query's rarest term ("loop", "onmyoji") is evidence of its own; only the absolute floor applies to it.
+            var anchor = weights.Count > 0 ? weights.MaxBy(kv => kv.Value).Key : null;
+            scored.RemoveAll(m => m.Score < AbsoluteFloor || (m.Score < floor && (anchor == null || !m.KeywordsHit.Contains(anchor))));
         }
 
         if (scored.Count > limit)
             scored.RemoveRange(limit, scored.Count - limit);
         return scored;
+    }
+
+    private static string GenreLabel(Genre genre)
+    {
+        var name = genre.ToString();
+        var sb = new System.Text.StringBuilder(name.Length + 4);
+        for (var i = 0; i < name.Length; i++)
+        {
+            if (i > 0 && char.IsUpper(name[i]))
+                sb.Append(' ');
+            sb.Append(name[i]);
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>Collapses provider line breaks so formatting alone never changes the hash.</summary>

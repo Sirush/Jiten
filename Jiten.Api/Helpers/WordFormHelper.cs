@@ -116,13 +116,13 @@ public static class WordFormHelper
             return new RedundantImportResult(redundant, 0);
 
         var entries = new List<(FsrsCard Card, IReadOnlyList<PackedReview> Reviews)>();
+        var replay = scheduler ?? await FsrsSettingsHelper.CreateSchedulerAsync(userContext, userId, enableFuzzing: false);
         foreach (var card in redundant.Keys)
         {
             var reviews = historyOf(card);
             if (reviews.Count == 0)
                 continue;
 
-            var replay = scheduler ?? new FsrsScheduler(enableFuzzing: false);
             var logs = ToLogs(reviews);
 
             if (card.LastReview == null)

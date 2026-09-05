@@ -11,14 +11,16 @@ namespace Jiten.Core.Services;
 /// </summary>
 public static partial class DescriptionKeywords
 {
-    private static readonly HashSet<string> StopWords = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> StopWords = new(new[]
     {
         "a", "an", "the", "and", "or", "of", "to", "in", "on", "at", "by", "for", "from", "with", "without", "about", "into", "over",
         "is", "are", "was", "were", "be", "been", "being", "has", "have", "had", "do", "does", "did", "will", "would", "can", "could",
         "that", "this", "these", "those", "who", "whom", "whose", "which", "where", "when", "what", "how", "why",
         "it", "its", "he", "she", "they", "them", "his", "her", "their", "him", "as", "but", "so", "than", "then", "very", "some", "any",
         "story", "stories", "about", "like", "set", "one", "two", "gets", "get", "goes", "go", "way", "thing", "things",
-    };
+        "keep", "keeps", "kept", "every", "each", "same", "after", "before", "again", "just", "only", "also", "not", "all",
+        "won't", "don't", "doesn't", "isn't", "can't", "there", "here", "still", "ever", "never", "always", "while", "during",
+    }.Select(Fold), StringComparer.Ordinal);
 
     public static string Fold(string text)
     {
@@ -67,7 +69,7 @@ public static partial class DescriptionKeywords
         {
             total++;
             for (var i = 0; i < keywords.Count; i++)
-                if (text.Contains(keywords[i], StringComparison.Ordinal))
+                if (ContainsKeyword(text, keywords[i]))
                     counts[i]++;
         }
 
@@ -98,10 +100,30 @@ public static partial class DescriptionKeywords
             return [];
         var hits = new List<string>();
         foreach (var k in keywords)
-            if (foldedDescription.Contains(k, StringComparison.Ordinal))
+            if (ContainsKeyword(foldedDescription, k))
                 hits.Add(k);
         return hits.ToArray();
     }
+
+    private static bool ContainsKeyword(string foldedText, string keyword)
+    {
+        if (keyword[0] >= 128)
+            return foldedText.Contains(keyword, StringComparison.Ordinal);
+
+        var from = 0;
+        while (true)
+        {
+            var idx = foldedText.IndexOf(keyword, from, StringComparison.Ordinal);
+            if (idx < 0)
+                return false;
+            var end = idx + keyword.Length;
+            if ((idx == 0 || !IsWordChar(foldedText[idx - 1])) && (end == foldedText.Length || !IsWordChar(foldedText[end])))
+                return true;
+            from = idx + 1;
+        }
+    }
+
+    private static bool IsWordChar(char c) => c is >= 'a' and <= 'z' or >= '0' and <= '9';
 
     [GeneratedRegex(@"([aeiou])\1")]
     private static partial Regex DoubledVowel();

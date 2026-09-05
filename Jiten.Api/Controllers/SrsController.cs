@@ -85,9 +85,7 @@ public class SrsController(
         }
         else
         {
-            var parameters = GetParameters(undoSettings);
-            var desiredRetention = GetDesiredRetention(undoSettings);
-            var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
+            var scheduler = FsrsSettingsHelper.CreateScheduler(undoSettings, enableFuzzing: false);
 
             // Undo restores the state the card had before the undone review, so a terminal state set by that
             // review must not be preserved.
@@ -126,7 +124,7 @@ public class SrsController(
                       Description = "Rate (review) a word using the FSRS scheduler.")]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IResult> Review(SrsReviewRequest request)
     {
         var userId = currentUserService.UserId;
@@ -135,21 +133,22 @@ public class SrsController(
         if (!Enum.IsDefined(request.Rating))
             return Results.BadRequest($"Invalid rating: {(int)request.Rating}. Must be 1 (Again), 2 (Hard), 3 (Good), or 4 (Easy).");
 
-        var hasIdempotency = !string.IsNullOrEmpty(request.SessionId) && !string.IsNullOrEmpty(request.ClientRequestId);
+        if (!string.IsNullOrEmpty(request.SessionId) && !await sessionService.ValidateSession(request.SessionId, userId))
+            return Results.Unauthorized();
+
+        var hasIdempotency = !string.IsNullOrEmpty(request.ClientRequestId);
+        var idempotencyScope = !string.IsNullOrEmpty(request.SessionId) ? request.SessionId : $"user:{userId}";
 
         if (hasIdempotency)
         {
-            if (!await sessionService.ValidateSession(request.SessionId!, userId))
-                return Results.Unauthorized();
-
-            var cached = await sessionService.GetCachedReviewResult(request.SessionId!, request.ClientRequestId!);
+            var cached = await sessionService.GetCachedReviewResult(idempotencyScope, request.ClientRequestId!);
             if (cached != null)
                 return Results.Content(cached, "application/json");
         }
-
-        if (!debounceService.TryAcquire("review", userId, request.WordId, request.ReadingIndex))
+        else if (!debounceService.TryAcquire("review", userId, request.WordId, request.ReadingIndex))
         {
-            return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+            // 409, not 429: a duplicate must not be retried as if it were a rate limit.
+            return Results.Conflict(new { error_message = "A review for this word was just recorded. Duplicate ignored." });
         }
 
         await using var transaction = await userContext.Database.BeginTransactionAsync();
@@ -162,14 +161,20 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var studySettings = GetStudySettings(userSettings);
-        var loadBalancer = await BuildLoadBalancer(userId, studySettings.LoadBalancing);
+        var loadBalancer = await BuildLoadBalancer(userId, studySettings);
         var easyDays = BuildEasyDaysPolicy(studySettings);
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters,
-                                          loadBalancer: loadBalancer, easyDays: easyDays);
+        var scheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: true,
+                                                           loadBalancer, easyDays);
         if (card == null)
         {
             card = new FsrsCard(userId, request.WordId, request.ReadingIndex);
         }
+        else if (IsTerminalState(card.State))
+        {
+            return Results.BadRequest($"Card is {card.State} and cannot be reviewed. Release it first.");
+        }
+
+        PromoteNewToLearning(card);
 
         var reviewedAt = DateTime.UtcNow;
         var isFirstReview = card.CardId == 0 || !await userContext.FsrsReviewLogs.AnyAsync(l => l.CardId == card.CardId);
@@ -180,31 +185,25 @@ public class SrsController(
         var leechDetected = false;
         var leechSuspended = false;
         var isLapse = previousState == FsrsState.Review && request.Rating == FsrsRating.Again;
+        var threshold = studySettings.LeechThreshold;
+        var wasLeech = LeechHelper.IsLeech(card.Lapses, card.Stability, threshold);
 
-        if (isLapse)
+        cardAndLog.UpdatedCard.Lapses = isLapse ? card.Lapses + 1 : card.Lapses;
+
+        if (isLapse && threshold > 0)
         {
-            cardAndLog.UpdatedCard.Lapses = card.Lapses + 1;
-
-            var threshold = studySettings.LeechThreshold;
-
-            if (threshold > 0)
-            {
-                var lapseCount = cardAndLog.UpdatedCard.Lapses;
-                var halfThreshold = Math.Max(threshold / 2, 1);
-                if (lapseCount == threshold || (lapseCount > threshold && (lapseCount - threshold) % halfThreshold == 0))
-                {
-                    leechDetected = true;
-                    if (studySettings.LeechAction == LeechAction.Suspend)
-                    {
-                        cardAndLog.UpdatedCard.State = FsrsState.Suspended;
-                        leechSuspended = true;
-                    }
-                }
-            }
+            var lapseCount = cardAndLog.UpdatedCard.Lapses;
+            var halfThreshold = Math.Max(threshold / 2, 1);
+            leechDetected = lapseCount == threshold || (lapseCount > threshold && (lapseCount - threshold) % halfThreshold == 0);
         }
-        else
+
+        var isLeech = LeechHelper.IsLeech(cardAndLog.UpdatedCard.Lapses, cardAndLog.UpdatedCard.Stability, threshold);
+        if (!wasLeech && isLeech) leechDetected = true;
+
+        if (leechDetected && studySettings.LeechAction == LeechAction.Suspend)
         {
-            cardAndLog.UpdatedCard.Lapses = card.Lapses;
+            cardAndLog.UpdatedCard.State = FsrsState.Suspended;
+            leechSuspended = true;
         }
 
         if (card.CardId == 0)
@@ -235,7 +234,7 @@ public class SrsController(
         await transaction.CommitAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
 
-        var previewScheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
+        var previewScheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: false);
         var intervals = previewScheduler.PreviewIntervals(cardAndLog.UpdatedCard, DateTime.UtcNow);
 
         var resultObj = new
@@ -247,6 +246,8 @@ public class SrsController(
             difficulty = cardAndLog.UpdatedCard.Difficulty,
             leechDetected,
             leechSuspended,
+            isLeech,
+            lapses = cardAndLog.UpdatedCard.Lapses,
             intervalPreview = new
             {
                 againSeconds = (int)intervals[FsrsRating.Again].TotalSeconds,
@@ -259,7 +260,7 @@ public class SrsController(
         if (hasIdempotency)
         {
             var resultJson = System.Text.Json.JsonSerializer.Serialize(resultObj);
-            _ = sessionService.StoreCachedReviewResult(request.SessionId!, request.ClientRequestId!, resultJson);
+            _ = sessionService.StoreCachedReviewResult(idempotencyScope, request.ClientRequestId!, resultJson);
         }
 
         logger.LogInformation("User reviewed SRS card: WordId={WordId}, ReadingIndex={ReadingIndex}, Rating={Rating}, NewState={NewState}",
@@ -305,10 +306,10 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var studySettings = GetStudySettings(userSettings);
-        var loadBalancer = await BuildLoadBalancer(userId, studySettings.LoadBalancing);
+        var loadBalancer = await BuildLoadBalancer(userId, studySettings);
         var easyDays = BuildEasyDaysPolicy(studySettings);
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters,
-                                          loadBalancer: loadBalancer, easyDays: easyDays);
+        var scheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: true,
+                                                           loadBalancer, easyDays);
 
         await using var transaction = await userContext.Database.BeginTransactionAsync();
 
@@ -329,16 +330,24 @@ public class SrsController(
 
         var results = new List<object>(deduped.Count);
         var leechSuspended = new List<int>();
+        var skipped = new List<object>();
         // New cards must be inserted before their review logs can reference a CardId.
         var pendingNewLogs = new List<(FsrsCard Card, FsrsReviewLog Log)>();
 
         foreach (var (key, rating) in deduped)
         {
             existingMap.TryGetValue(key, out var card);
+            if (card != null && IsTerminalState(card.State))
+            {
+                skipped.Add(new { wordId = key.WordId, readingIndex = key.ReadingIndex, state = (int)card.State });
+                continue;
+            }
+
             var isNew = card == null;
             if (isNew || !reviewedBefore.Contains(card!.CardId))
                 firstReviews++;
             card ??= new FsrsCard(userId, key.WordId, key.ReadingIndex);
+            PromoteNewToLearning(card);
 
             var previousState = card.State;
             var cardAndLog = scheduler.ReviewCard(card, rating, now);
@@ -394,11 +403,13 @@ public class SrsController(
             }
         }
 
+        var processed = results.Count;
         await ReviewRollupHelper.ApplyDeltaAsync(
             userContext, userId,
             ReviewRollupHelper.LocalDateOf(now, ResolveTimeZone(studySettings.Timezone)),
-            reviewDelta: deduped.Count,
-            correctDelta: deduped.Count(r => r.Value != FsrsRating.Again),
+            reviewDelta: processed,
+            correctDelta: deduped.Count(r => r.Value != FsrsRating.Again
+                                             && !(existingMap.TryGetValue(r.Key, out var c) && IsTerminalState(c.State))),
             newCardDelta: firstReviews,
             durationDeltaMs: 0);
 
@@ -407,16 +418,28 @@ public class SrsController(
         await transaction.CommitAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
 
-        logger.LogInformation("User batch-reviewed {Count} SRS cards ({Suspended} suspended as leeches).",
-                              deduped.Count, leechSuspended.Count);
+        logger.LogInformation("User batch-reviewed {Count} SRS cards ({Suspended} suspended as leeches, {Skipped} skipped).",
+                              processed, leechSuspended.Count, skipped.Count);
 
         return Results.Json(new
         {
             success = true,
-            processed = deduped.Count,
+            processed,
             leechSuspended,
+            skipped,
             results
         });
+    }
+
+    private static bool IsTerminalState(FsrsState state)
+        => state is FsrsState.Suspended or FsrsState.Mastered or FsrsState.Blacklisted;
+
+    /// <summary>The scheduler has no transition out of New; a first grade is a learning step 0 review.</summary>
+    private static void PromoteNewToLearning(FsrsCard card)
+    {
+        if (card.State != FsrsState.New) return;
+        card.State = FsrsState.Learning;
+        card.Step = 0;
     }
 
     [HttpGet("review-history/{wordId}/{readingIndex}")]
@@ -968,7 +991,7 @@ public class SrsController(
 
             case "neverForget-remove":
                 if (card != null && card.State == FsrsState.Mastered)
-                    RestoreCardState(card);
+                    await ReleaseCard(card);
                 break;
 
             case "blacklist-add":
@@ -988,7 +1011,7 @@ public class SrsController(
             case "blacklist-remove":
                 if (card != null && card.State == FsrsState.Blacklisted)
                 {
-                    RestoreCardState(card);
+                    await ReleaseCard(card);
                 }
                 else if (card == null)
                 {
@@ -1040,7 +1063,7 @@ public class SrsController(
             case "suspend-remove":
                 if (card != null && card.State == FsrsState.Suspended)
                 {
-                    RestoreCardState(card);
+                    await ReleaseCard(card);
                 }
 
                 break;
@@ -1071,6 +1094,13 @@ public class SrsController(
                 }
                 break;
 
+            case "clear-lapses":
+                if (card != null)
+                {
+                    card.Lapses = 0;
+                }
+                break;
+
             default:
                 return Results.BadRequest($"Invalid state: {request.State}");
         }
@@ -1093,6 +1123,25 @@ public class SrsController(
 
     private Task MarkReviewRollupDirty(string userId)
         => ReviewRollupHelper.MarkDirtyAndQueue(userContext, backgroundJobs, userId);
+
+    /// <summary>Lifts a terminal state; a card the quick action itself created (no reviews) goes back to unseen.</summary>
+    private async Task<bool> ReleaseCard(FsrsCard card)
+    {
+        var hasReviews = await userContext.FsrsReviewLogs.AnyAsync(l => l.CardId == card.CardId);
+        return ReleaseCard(card, hasReviews);
+    }
+
+    private bool ReleaseCard(FsrsCard card, bool hasReviews)
+    {
+        if (hasReviews)
+        {
+            RestoreCardState(card);
+            return false;
+        }
+
+        userContext.FsrsCards.Remove(card);
+        return true;
+    }
 
     private static void RestoreCardState(FsrsCard card)
     {
@@ -1117,6 +1166,7 @@ public class SrsController(
         card.Difficulty = null;
         card.Due = DateTime.UtcNow;
         card.LastReview = null;
+        card.Lapses = 0;
     }
 
     [HttpPost("set-vocabulary-state-bulk")]
@@ -1199,33 +1249,43 @@ public class SrsController(
             }
 
             case "neverForget-remove":
-                foreach (var card in cards.Where(c => c.State == FsrsState.Mastered))
-                {
-                    RestoreCardState(card);
-                    affected++;
-                }
-                break;
-
             case "blacklist-remove":
-                foreach (var card in cards.Where(c => c.State == FsrsState.Blacklisted))
-                {
-                    RestoreCardState(card);
-                    affected++;
-                }
-                break;
-
             case "suspend-remove":
-                foreach (var card in cards.Where(c => c.State == FsrsState.Suspended))
+            {
+                var held = request.State switch
                 {
-                    RestoreCardState(card);
+                    "neverForget-remove" => FsrsState.Mastered,
+                    "blacklist-remove" => FsrsState.Blacklisted,
+                    _ => FsrsState.Suspended,
+                };
+                var releasing = cards.Where(c => c.State == held).ToList();
+                var releasingIds = releasing.Select(c => c.CardId).ToList();
+                var reviewed = (await userContext.FsrsReviewLogs
+                                                 .Where(l => releasingIds.Contains(l.CardId))
+                                                 .Select(l => l.CardId)
+                                                 .Distinct()
+                                                 .ToListAsync()).ToHashSet();
+
+                foreach (var card in releasing)
+                {
+                    ReleaseCard(card, reviewed.Contains(card.CardId));
                     affected++;
                 }
                 break;
+            }
 
             case "reset-schedule":
                 foreach (var card in cards)
                 {
                     ResetCardSchedule(card);
+                    affected++;
+                }
+                break;
+
+            case "clear-lapses":
+                foreach (var card in cards.Where(c => c.Lapses > 0))
+                {
+                    card.Lapses = 0;
                     affected++;
                 }
                 break;
@@ -1392,7 +1452,12 @@ public class SrsController(
                     .SetProperty(c => c.Stability, (double?)null)
                     .SetProperty(c => c.Difficulty, (double?)null)
                     .SetProperty(c => c.Due, DateTime.UtcNow)
-                    .SetProperty(c => c.LastReview, (DateTime?)null));
+                    .SetProperty(c => c.LastReview, (DateTime?)null)
+                    .SetProperty(c => c.Lapses, 0));
+                break;
+
+            case "clear-lapses":
+                affected = await query.ExecuteUpdateAsync(s => s.SetProperty(c => c.Lapses, 0));
                 break;
 
             case "restore-state":
@@ -1735,6 +1800,9 @@ public class SrsController(
     {
         var query = userContext.FsrsCards.Where(c => c.UserId == userId);
 
+        if (request.Action == "clear-lapses")
+            query = query.Where(c => c.Lapses > 0);
+
         if (request.StateFilter is { Length: > 0 })
         {
             var states = request.StateFilter.Select(s => (FsrsState)s).ToList();
@@ -1766,7 +1834,7 @@ public class SrsController(
 
     private static string? ValidateMassActionRequest(MassActionRequest request, bool previewOnly)
     {
-        if (request.Action is not ("change-state" or "push-due" or "delete-cards" or "reset-schedule" or "restore-state"))
+        if (request.Action is not ("change-state" or "push-due" or "delete-cards" or "reset-schedule" or "restore-state" or "clear-lapses"))
             return $"Invalid action: {request.Action}";
 
         if (!previewOnly)
@@ -1902,10 +1970,11 @@ public class SrsController(
     /// due dates settle on the least-busy day within their fuzz window. Returns null when load balancing
     /// is disabled, leaving the scheduler on plain random fuzz.
     /// </summary>
-    private async Task<IFsrsLoadBalancer?> BuildLoadBalancer(string userId, bool enabled)
+    private async Task<IFsrsLoadBalancer?> BuildLoadBalancer(string userId, StudySettingsDto studySettings)
     {
-        if (!enabled) return null;
-        return await FsrsLoadBalancerSeeder.SeedAsync(userContext, userId);
+        if (!studySettings.LoadBalancing) return null;
+        return await FsrsLoadBalancerSeeder.SeedAsync(userContext, userId,
+                                                      ResolveOffsetHours(DateTime.UtcNow, studySettings.Timezone));
     }
 
     /// <summary>

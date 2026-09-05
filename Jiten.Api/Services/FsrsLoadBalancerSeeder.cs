@@ -6,11 +6,11 @@ namespace Jiten.Api.Services;
 
 /// <summary>
 /// Builds a load balancer seeded from a user's currently-scheduled review load. Counts are aggregated
-/// per UTC day in SQL, so only (day, count) rows cross the wire instead of one row per scheduled card.
+/// per local day in SQL, so only (day, count) rows cross the wire instead of one row per scheduled card.
 /// </summary>
 public static class FsrsLoadBalancerSeeder
 {
-    public static async Task<DictionaryFsrsLoadBalancer> SeedAsync(UserDbContext userContext, string userId)
+    public static async Task<DictionaryFsrsLoadBalancer> SeedAsync(UserDbContext userContext, string userId, double offsetHours)
     {
         var now = DateTime.UtcNow;
         var loadByDay = await userContext.FsrsCards
@@ -21,11 +21,11 @@ public static class FsrsLoadBalancerSeeder
                                                      && (c.State == FsrsState.Review
                                                          || c.State == FsrsState.Relearning
                                                          || c.State == FsrsState.Learning))
-                                         .GroupBy(c => c.Due.Date)
+                                         .GroupBy(c => c.Due.AddHours(offsetHours).Date)
                                          .Select(g => new { Day = g.Key, Count = g.Count() })
                                          .ToListAsync();
 
         return new DictionaryFsrsLoadBalancer(
-            loadByDay.Select(x => KeyValuePair.Create(DateOnly.FromDateTime(x.Day), x.Count)));
+            loadByDay.Select(x => KeyValuePair.Create(DateOnly.FromDateTime(x.Day), x.Count)), offsetHours);
     }
 }

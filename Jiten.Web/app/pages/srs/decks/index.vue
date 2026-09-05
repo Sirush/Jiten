@@ -92,7 +92,7 @@
   }
 
   function effectiveTotal(deck: StudyDeckDto) {
-    return Math.max(0, deck.totalWords - deck.blacklistedCount);
+    return Math.max(0, deck.totalWords - deck.blacklistedCount - deck.suspendedCount);
   }
 
   function knownPct(deck: StudyDeckDto) {
@@ -729,8 +729,8 @@
                 <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">
                   <Tooltip :content="`${maturePct(deck)}% mature<br>${knownPct(deck)}% known (young + mature)`" placement="top">
                     <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
-                      <div class="absolute bg-purple-500/30 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
-                      <div class="absolute bg-purple-500/60 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                      <div class="absolute bg-purple-500/30 dark:bg-purple-400/25 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
+                      <div class="absolute bg-purple-500/60 dark:bg-purple-300/50 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
                       <div class="absolute bg-purple-600 h-6 rounded-lg transition-all duration-700" :style="{ width: maturePct(deck) + '%' }" />
                       <span class="absolute inset-0 flex items-center justify-between px-2 z-10 pointer-events-none">
                         <span class="text-xs font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]">{{ maturePct(deck) }}% mature</span>
@@ -894,8 +894,8 @@
                 <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">
                   <Tooltip :content="`${maturePct(deck)}% mature<br>${knownPct(deck)}% known (young + mature)`" placement="top">
                     <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
-                      <div class="absolute bg-purple-500/30 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
-                      <div class="absolute bg-purple-500/60 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                      <div class="absolute bg-purple-500/30 dark:bg-purple-400/25 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
+                      <div class="absolute bg-purple-500/60 dark:bg-purple-300/50 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
                       <div class="absolute bg-purple-600 h-6 rounded-lg transition-all duration-700" :style="{ width: maturePct(deck) + '%' }" />
                       <span class="absolute inset-0 flex items-center justify-between px-2 z-10 pointer-events-none">
                         <span class="text-xs font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]">{{ maturePct(deck) }}% mature</span>

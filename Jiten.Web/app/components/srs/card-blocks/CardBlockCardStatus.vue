@@ -10,10 +10,11 @@
 
   const cardKey = computed(() => (card.value ? `${card.value.wordId}-${card.value.readingIndex}` : ''));
   const isAgain = computed(() => !isPreview && srsStore.againCardKeys.has(cardKey.value));
+  const isLearning = computed(() => !isPreview && srsStore.learningCardKeys.has(cardKey.value));
   const isNew = computed(() => (isPreview ? sample!.isNew : !!card.value?.isNewCard));
   const isLeech = computed(() => !isPreview && !!card.value?.isLeech);
 
-  const statusLabel = computed(() => (isAgain.value ? 'Again' : isNew.value ? 'New' : 'Review'));
+  const statusLabel = computed(() => (isAgain.value ? 'Again' : isLearning.value ? 'Learning' : isNew.value ? 'New' : 'Review'));
 </script>
 
 <template>

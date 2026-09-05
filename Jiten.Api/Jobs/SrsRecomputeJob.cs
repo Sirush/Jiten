@@ -1,5 +1,6 @@
 using Hangfire;
 using Jiten.Api.Dtos;
+using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.FSRS;
@@ -13,13 +14,24 @@ public class SrsRecomputeJob(
 {
     private const int BatchSize = 500;
 
+    private static async Task<double> ResolveOffsetHours(UserDbContext userContext, string userId)
+    {
+        var studySettings = FsrsSettingsHelper.GetStudySettings(await FsrsSettingsHelper.LoadAsync(userContext, userId));
+        return FsrsSettingsHelper.ResolveOffsetHours(DateTime.UtcNow, studySettings.Timezone);
+    }
+
     [Queue("default")]
     public async Task RecomputeUserSrs(string userId, double[] parameters, double desiredRetention, bool loadBalance = true,
                                        EasyDaysPolicy? easyDays = null)
     {
         // Single-shot recompute: one in-memory balancer accumulates across all batches, so every card is
         // placed against the freshly-rebalanced schedule built so far (online greedy balancing).
-        var balancer = loadBalance ? new DictionaryFsrsLoadBalancer() : null;
+        DictionaryFsrsLoadBalancer? balancer = null;
+        if (loadBalance)
+        {
+            await using var settingsContext = await userContextFactory.CreateDbContextAsync();
+            balancer = new DictionaryFsrsLoadBalancer(offsetHours: await ResolveOffsetHours(settingsContext, userId));
+        }
         var lastCardId = 0L;
 
         while (true)
@@ -52,17 +64,18 @@ public class SrsRecomputeJob(
         IFsrsLoadBalancer? balancer = null;
         if (loadBalance)
         {
-            balancer = sharedBalancer ?? await FsrsLoadBalancerSeeder.SeedAsync(userContext, userId);
+            balancer = sharedBalancer
+                       ?? await FsrsLoadBalancerSeeder.SeedAsync(userContext, userId, await ResolveOffsetHours(userContext, userId));
         }
 
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters,
-                                          loadBalancer: balancer, easyDays: easyDays);
+        var studySettings = FsrsSettingsHelper.GetStudySettings(await FsrsSettingsHelper.LoadAsync(userContext, userId));
+        var scheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: true,
+                                                           balancer, easyDays);
         // Replay scheduler for historical reviews: their due dates are superseded by the next review,
         // so fuzzing/balancing them would only register phantom load in the balancer's histogram.
         // Stability/difficulty depend solely on log timestamps, so skipping fuzz changes nothing else
         // and makes the replay deterministic.
-        var replayScheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters,
-                                                enableFuzzing: false);
+        var replayScheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: false);
 
         var total = await userContext.FsrsCards.CountAsync(card => card.UserId == userId);
         var cards = await userContext.FsrsCards

@@ -19,6 +19,8 @@
     setSentencePosition,
   } from '~/utils/cardLayout';
 
+  import { formatLearningSteps, parseLearningSteps } from '~/utils/learningSteps';
+
   const props = defineProps<{ inline?: boolean }>();
 
   const srsStore = useSrsStore();
@@ -61,6 +63,7 @@
     form.timedReview = { ...srsStore.studySettings.timedReview };
     form.writeInReview = { ...srsStore.studySettings.writeInReview };
     syncEasyFromForm();
+    syncStepsFromForm();
     if (!form.timezone) applyDetectedTimezone();
     // Let the hydration mutations flush through the deep watcher (still guarded by loaded=false)
     // before arming auto-save, otherwise the initial Object.assign triggers a spurious save.
@@ -344,6 +347,43 @@
     { deep: true }
   );
 
+  // Step lists are edited as Anki-style text ("10m 1h"); the form only receives a list that parses,
+  // so a half-typed value never reaches the server.
+  const learningStepsText = ref('');
+  const relearningStepsText = ref('');
+  const learningStepsError = ref<string | null>(null);
+  const relearningStepsError = ref<string | null>(null);
+
+  function syncStepsFromForm() {
+    learningStepsText.value = formatLearningSteps(form.learningSteps);
+    relearningStepsText.value = formatLearningSteps(form.relearningSteps);
+    learningStepsError.value = null;
+    relearningStepsError.value = null;
+  }
+
+  function applyStepsText(kind: 'learningSteps' | 'relearningSteps') {
+    const text = kind === 'learningSteps' ? learningStepsText : relearningStepsText;
+    const error = kind === 'learningSteps' ? learningStepsError : relearningStepsError;
+    const parsed = parseLearningSteps(text.value);
+    if (!parsed.ok) {
+      error.value = parsed.error;
+      return;
+    }
+    error.value = null;
+    const current = form[kind] ?? [];
+    if (current.length !== parsed.minutes.length || current.some((m, i) => m !== parsed.minutes[i])) form[kind] = parsed.minutes;
+    text.value = formatLearningSteps(parsed.minutes);
+  }
+
+  const stepsHint = computed(() => {
+    const learning = form.learningSteps ?? [];
+    const relearning = form.relearningSteps ?? [];
+    if (learning.length === 0 && relearning.length === 0) return 'FSRS schedules every card straight into review.';
+    if (learning.length === 0) return 'New cards go straight to review; lapses repeat before they return.';
+    if (relearning.length === 0) return 'New cards repeat before graduating; lapses go straight back to review.';
+    return null;
+  });
+
   function getUtcOffsetMinutes(zone: string, date?: Date): number {
     const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', hour12: false, timeZoneName: 'shortOffset' }).formatToParts(
       date ?? new Date()
@@ -538,7 +578,10 @@
         <div class="min-w-0">
           <label class="block text-sm font-medium mb-1">
             Max reviews per day
-            <Tooltip content="Maximum number of review cards shown each day. Reviews that exceed this limit carry over to the next day." placement="top">
+            <Tooltip
+              content="Maximum number of review cards shown each day. New cards and their learning steps come out of the new-card limit instead. Reviews that exceed this limit carry over to the next day."
+              placement="top"
+            >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
             </Tooltip>
           </label>
@@ -576,7 +619,7 @@
         <label for="countFailedReviews" class="text-sm cursor-pointer">
           Count failed reviews toward daily limit
           <Tooltip
-            content="When enabled, every review counts toward your daily limit, including repeated reviews of cards you got wrong. When disabled, only unique cards count, so failing a card multiple times won't eat into your daily budget."
+            content="When enabled, every review of a card you already knew counts toward the daily review limit, including repeats after you got it wrong. When disabled, only unique cards count, so failing a card multiple times won't eat into your daily budget."
             placement="top"
           >
             <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
@@ -839,6 +882,77 @@
             <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
           </Tooltip>
         </label>
+      </div>
+
+      <Divider />
+
+      <!-- Learning steps -->
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Learning steps</h3>
+      <p class="text-sm text-surface-500 dark:text-surface-400 -mt-1 mb-1">
+        Optional fixed steps that cards will go through when they're new or when they lapsed before having the normal FSRS scheduling. Leave a field blank to deactivate it.
+      </p>
+      <div :class="props.inline ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'">
+        <div class="min-w-0">
+          <label for="learningSteps" class="block text-sm font-medium mb-1">
+            New cards
+            <Tooltip content="Steps for a card you see for the first time. Good skips to the next step, Again restarts from the first one. With a single step, Good sends the card straight to the normal schedule and the step only applies after Again or Hard." placement="top">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+          <InputText
+            id="learningSteps"
+            v-model="learningStepsText"
+            placeholder="10m"
+            class="w-full"
+            :invalid="!!learningStepsError"
+            :aria-describedby="learningStepsError ? 'learningSteps-error' : undefined"
+            @blur="applyStepsText('learningSteps')"
+            @keydown.enter.prevent="applyStepsText('learningSteps')"
+          />
+          <p v-if="learningStepsError" id="learningSteps-error" class="text-xs text-red-600 dark:text-red-400 mt-1">{{ learningStepsError }}</p>
+        </div>
+        <div class="min-w-0">
+          <label for="relearningSteps" class="block text-sm font-medium mb-1">
+            Lapsed cards
+            <Tooltip content="Steps for a review card you failed. Good skips to the next step, Again restarts from the first one. With a single step, Good sends the card straight back to the normal schedule and the step only applies after Again or Hard." placement="top">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+          <InputText
+            id="relearningSteps"
+            v-model="relearningStepsText"
+            placeholder="10m"
+            class="w-full"
+            :invalid="!!relearningStepsError"
+            :aria-describedby="relearningStepsError ? 'relearningSteps-error' : undefined"
+            @blur="applyStepsText('relearningSteps')"
+            @keydown.enter.prevent="applyStepsText('relearningSteps')"
+          />
+          <p v-if="relearningStepsError" id="relearningSteps-error" class="text-xs text-red-600 dark:text-red-400 mt-1">{{ relearningStepsError }}</p>
+        </div>
+      </div>
+      <p class="text-xs text-surface-500 dark:text-surface-400 -mt-2">
+        Write steps in minutes or hours, separated by spaces: <span class="font-mono">10m</span>, <span class="font-mono">5m 30m</span>,
+        <span class="font-mono">10m 1h</span>. Up to 4 steps, each under 12 hours.
+        <template v-if="stepsHint"> {{ stepsHint }}</template>
+      </p>
+      <p v-if="form.dayBoundaryScheduling" class="text-xs text-amber-700 dark:text-amber-400 -mt-2">
+        Group reviews by day is on, so cards do not wait for these delays. They come back in your next batch, for the amount of steps you set.
+      </p>
+
+      <div :class="props.inline ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'">
+        <div class="min-w-0">
+          <label class="block text-sm font-medium mb-1">
+            Learn ahead limit (minutes)
+            <Tooltip
+              content="If a step falls inside this minute limit, it's shown in the current session instead of waiting for the next one. Set to 0 to show exactly when the step is due instead."
+              placement="top"
+            >
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+          <InputNumber v-model="form.learnAheadMinutes" :min="0" :max="120" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
+        </div>
       </div>
 
       <Divider />

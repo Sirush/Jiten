@@ -66,14 +66,13 @@ public class DescriptionSearchCommands(CliContext context)
 
         Console.WriteLine($"\n\"{options.DescribeSearch}\" over {loaded} decks in {elapsed:F0}ms:\n");
         var rank = 1;
-        var kept = service.Search(parsed.Text, options.SimilarLimit, allowed).Count;
+        var kept = service.Search(parsed.Text, options.SimilarLimit, allowed).Select(m => m.DeckId).ToHashSet();
         foreach (var m in results)
         {
-            var line = $"{rank,3}. {m.Score:F3}  [{m.DeckId}] {titles.GetValueOrDefault(m.DeckId, "?")}";
+            var mark = options.Explain && !kept.Contains(m.DeckId) ? "x" : " ";
+            var line = $"{mark}{rank,3}. {m.Score:F3}  [{m.DeckId}] {titles.GetValueOrDefault(m.DeckId, "?")}";
             if (options.Explain)
                 line += $"   cosine {m.Cosine:F3} + boost {m.Score - m.Cosine:F3}" + (m.KeywordsHit.Length > 0 ? $" ({string.Join(", ", m.KeywordsHit)})" : "");
-            if (options.Explain && rank == kept + 1)
-                Console.WriteLine("     ---- cut: below the noise floor from here ----");
             Console.WriteLine(line);
             rank++;
         }

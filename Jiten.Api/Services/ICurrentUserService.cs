@@ -13,6 +13,10 @@ public interface ICurrentUserService
     ClaimsPrincipal? Principal { get; }
     Task<Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>> GetKnownWordsState(IEnumerable<(int WordId, byte ReadingIndex)> keys);
     Task<List<KnownState>> GetKnownWordState(int wordId, byte readingIndex);
+    /// <summary>Card-less, set-less forms the given cards and set states make redundant, with the states GetKnownWordsState would give them.</summary>
+    Task<Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>> ResolveRedundantStates(
+        IReadOnlyDictionary<(int WordId, byte ReadingIndex), KnownCardSnapshot> cardsByKey,
+        Dictionary<(int, byte), WordSetStateType> setDerivedStates);
     /// <summary>Null when the form has its own card, when no enabled derivation reaches it, or when nothing in its family is known.</summary>
     Task<DerivationCover?> GetCoveringDerivation(int wordId, byte readingIndex);
     Task<Dictionary<(int, byte), WordSetStateType>> GetWordSetDerivedStates();

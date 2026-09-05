@@ -255,6 +255,21 @@ public class StudySettingsDto
     [JsonPropertyName("derivationalRedundancyCategories")]
     public List<string>? DerivationalRedundancyCategories { get; set; }
 
+    /// <summary>
+    /// Learning step lengths in minutes for new cards; empty hands the first interval to FSRS. Null on a PUT
+    /// means unchanged, so a client that predates the field cannot reset a user's steps.
+    /// </summary>
+    [JsonPropertyName("learningSteps")]
+    public int[]? LearningSteps { get; set; }
+
+    /// <summary>Relearning step lengths in minutes for lapsed cards; same null and empty rules as <see cref="LearningSteps"/>.</summary>
+    [JsonPropertyName("relearningSteps")]
+    public int[]? RelearningSteps { get; set; }
+
+    /// <summary>Learning cards due within this many minutes are served as due, so a step can finish inside the session.</summary>
+    [JsonPropertyName("learnAheadMinutes")]
+    public int LearnAheadMinutes { get; set; } = 20;
+
     [JsonPropertyName("leechThreshold")]
     public int LeechThreshold { get; set; } = 8;
 

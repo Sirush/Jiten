@@ -486,11 +486,7 @@ public partial class UserController(
         foreach (var log in existingLogs)
             existingLogMap[(log.CardId, log.ReviewDateTime)] = log;
 
-        var settings = await userContext.UserFsrsSettings.AsNoTracking()
-                                        .FirstOrDefaultAsync(s => s.UserId == userId);
-        var parameters = settings?.GetParametersOnce() is { Length: > 0 } p ? p : FsrsConstants.DefaultParameters;
-        var desiredRetention = settings?.DesiredRetention is double dr and > 0 and < 1 ? dr : FsrsConstants.DefaultDesiredRetention;
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: parameters, enableFuzzing: false);
+        var scheduler = await FsrsSettingsHelper.CreateSchedulerAsync(userContext, userId, enableFuzzing: false);
 
         var cardsToAdd = new List<FsrsCard>();
         var logsToAdd = new List<FsrsReviewLog>();
@@ -686,17 +682,18 @@ public partial class UserController(
     /// <summary>Second precision is the resolution shared by Anki exports and Jiten's own logs.</summary>
     private static DateTime TruncateToSecond(DateTime value) => new(value.Ticks - value.Ticks % TimeSpan.TicksPerSecond, value.Kind);
 
-    private static int CountLapsesFromLogs(List<FsrsReviewLogExportDto> logs)
-        => CountLapsesFromLogs(logs.Select(l => (l.Rating, DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime, l.ReviewDuration)));
+    private static int CountLapsesFromLogs(List<FsrsReviewLogExportDto> logs, FsrsScheduler scheduler)
+        => CountLapsesFromLogs(logs.Select(l => (l.Rating, DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime, l.ReviewDuration)), scheduler);
 
-    private static int CountLapsesFromLogs(IEnumerable<(FsrsRating Rating, DateTime ReviewDateTime, int? ReviewDuration)> logs)
+    private static int CountLapsesFromLogs(IEnumerable<(FsrsRating Rating, DateTime ReviewDateTime, int? ReviewDuration)> logs,
+                                           FsrsScheduler scheduler)
         => FsrsReplay.CountLapses(logs.Select(l => new FsrsReviewLog
                                                    {
                                                        Rating = l.Rating, ReviewDateTime = l.ReviewDateTime,
                                                        ReviewDuration = l.ReviewDuration
                                                    })
                                       .ToList(),
-                                  new FsrsScheduler(enableFuzzing: false));
+                                  scheduler);
 
     private static byte ResolveReadingIndex(List<JmDictWordForm> forms, string spelling)
     {
@@ -1192,11 +1189,7 @@ public partial class UserController(
         if (keys.Count == 0)
             return Results.Ok(new { restored = 0, skipped = 0, remaining = 0, results = Array.Empty<CardRestoreOutcome>() });
 
-        var settings = await FsrsSettingsHelper.LoadAsync(userContext, userId);
-
-        var outcomes = await CardRestoreService.RestoreAsync(
-            userContext, jitenContext, userId, keys,
-            FsrsSettingsHelper.GetParameters(settings), FsrsSettingsHelper.GetDesiredRetention(settings));
+        var outcomes = await CardRestoreService.RestoreAsync(userContext, jitenContext, userId, keys);
 
         var restored = outcomes.Count(o => o.Restored);
         if (restored > 0)
@@ -1581,6 +1574,7 @@ public partial class UserController(
     {
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+        var lapseScheduler = await FsrsSettingsHelper.CreateSchedulerAsync(userContext, userId, enableFuzzing: false);
 
         if (request?.Cards == null || request.Cards.Count == 0)
             return Results.BadRequest("No cards provided.");
@@ -1835,7 +1829,7 @@ public partial class UserController(
                 if (updatedCards.Contains(card) && mergedLogs.Count > 0)
                 {
                     card.Lapses = CountLapsesFromLogs(card.ReviewLogs.Concat(mergedLogs)
-                                                          .Select(l => (l.Rating, l.ReviewDateTime, l.ReviewDuration)));
+                                                          .Select(l => (l.Rating, l.ReviewDateTime, l.ReviewDuration)), lapseScheduler);
                 }
             }
 
@@ -2607,6 +2601,7 @@ public partial class UserController(
     {
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+        var lapseScheduler = await FsrsSettingsHelper.CreateSchedulerAsync(userContext, userId, enableFuzzing: false);
 
         // Sentences and notes are restorable on their own: a backup carrying only them is still worth importing.
         if (exportDto == null
@@ -2752,7 +2747,7 @@ public partial class UserController(
                                                 .DistinctBy(l => l.ReviewDateTime)
                                                 .ToList();
 
-                var importLapses = CountLapsesFromLogs(uniqueIncomingLogs);
+                var importLapses = CountLapsesFromLogs(uniqueIncomingLogs, lapseScheduler);
 
                 if (existingCardsMap.TryGetValue(key, out var existingCard))
                 {

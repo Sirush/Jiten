@@ -26,6 +26,7 @@
     { label: 'Restore Cards', value: 'restore-state' },
     { label: 'Push Due Date', value: 'push-due' },
     { label: 'Reset Schedule', value: 'reset-schedule' },
+    { label: 'Clear Lapses', value: 'clear-lapses' },
     { label: 'Delete Cards', value: 'delete-cards' },
   ];
 
@@ -137,7 +138,9 @@
       case 'restore-state':
         return 'Return all matching cards to Review (or Learning if never studied), keeping their scheduling. Use this to bulk-unsuspend, unmaster or unblacklist.';
       case 'reset-schedule':
-        return 'Reset all matching cards to Learning state, clearing scheduling data but keeping review history.';
+        return 'Reset all matching cards to Learning state, clearing scheduling data and lapses but keeping review history.';
+      case 'clear-lapses':
+        return 'Set the lapse count of all matching cards with lapses back to zero. Nothing else changes.';
       case 'delete-cards':
         return 'Delete all matching cards. Their review history is kept under Recently Removed.';
       default:
@@ -235,7 +238,11 @@
           completely from the same place.
         </Message>
         <Message v-if="action === 'reset-schedule'" severity="info" :closable="false">
-          This will reset scheduling data (stability, difficulty) and set cards back to Learning. Review history is preserved.
+          This will reset scheduling data (stability, difficulty, lapses) and set cards back to Learning. Review history is preserved.
+        </Message>
+        <Message v-if="action === 'clear-lapses'" severity="info" :closable="false">
+          Clears the lapse count, so matching cards stop being flagged as leeches. Scheduling and review history are untouched. Only cards with at
+          least one lapse are affected.
         </Message>
         <Message v-if="action === 'restore-state'" severity="info" :closable="false">
           This puts cards back into normal review rotation: cards with existing scheduling return to Review, cards never studied return to Learning. Stability,

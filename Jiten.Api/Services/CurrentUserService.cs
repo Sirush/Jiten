@@ -64,29 +64,14 @@ public class CurrentUserService(
             lookupWordIds = widened.ToList();
         }
 
-        var candidates = await userContext.FsrsCards
-                                          .AsNoTracking()
-                                          .Where(u => u.UserId == UserId && lookupWordIds.Contains(u.WordId))
-                                          .ToListAsync();
-
-        var cardsByKey = candidates
-                          .DistinctBy(w => (w.WordId, w.ReadingIndex))
-                          .ToDictionary(w => (w.WordId, w.ReadingIndex));
-
-        var fsrsCardDict = cardsByKey
-                            .Where(kv => keysSet.Contains(kv.Key))
-                            .ToDictionary(kv => kv.Key, kv => kv.Value);
-
+        var cardsByKey = await LoadCardSnapshots(lookupWordIds);
         var setDerivedStates = await GetWordSetDerivedStates(lookupWordIds);
-
-        var candidatesByWordId = candidates.GroupBy(c => c.WordId)
-                                           .ToDictionary(g => g.Key, g => g.ToList());
 
         return keysSet.ToDictionary(k => k, k =>
         {
             // An existing card always wins over word-set membership, matching coverage,
             // the known-word counters and the scheduler, which all ignore set state once a card exists.
-            if (fsrsCardDict.TryGetValue(k, out var card))
+            if (cardsByKey.TryGetValue(k, out var card))
                 return GetKnownStatesFromCard(card);
 
             if (setDerivedStates.TryGetValue((k.WordId, k.ReadingIndex), out var setState))
@@ -99,36 +84,120 @@ public class CurrentUserService(
                 };
             }
 
-            var kanjiIndexes = wordFormCache.GetKanjiIndexesForKana(k.WordId, k.ReadingIndex);
-            if (kanjiIndexes != null && candidatesByWordId.TryGetValue(k.WordId, out var wordCandidates))
-            {
-                var bestKanjiCard = wordCandidates
-                    .Where(c => kanjiIndexes.Contains(c.ReadingIndex))
-                    .OrderByDescending(c => GetKnownStateRank(c))
-                    .FirstOrDefault();
-
-                if (bestKanjiCard != null)
-                {
-                    // Due belongs to the covering sibling's card; the redundant form itself has nothing to review.
-                    // Redundant is always paired with a tier state (New if the sibling was never reviewed).
-                    var states = GetKnownStatesFromCard(bestKanjiCard);
-                    states.Remove(KnownState.Due);
-                    if (states.Count == 0)
-                        states.Add(KnownState.New);
-                    states.Add(KnownState.Redundant);
-                    return states;
-                }
-            }
-
-            if (coversByKey.TryGetValue(k, out var covers))
-            {
-                var derived = ResolveFromDerivationFamily(covers, cardsByKey, setDerivedStates);
-                if (derived != null)
-                    return derived.Value.States;
-            }
-
-            return [KnownState.New];
+            coversByKey.TryGetValue(k, out var covers);
+            return ResolveRedundantStates(k, cardsByKey, setDerivedStates, covers) ?? [KnownState.New];
         });
+    }
+
+    /// <summary>
+    /// States of every card-less, set-less form the given cards and word-set states make redundant, resolved
+    /// exactly as <see cref="GetKnownWordsState"/> would. Callers that already hold the user's whole card set
+    /// (study-deck stats) use this instead of re-querying per deck.
+    /// </summary>
+    public async Task<Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>> ResolveRedundantStates(
+        IReadOnlyDictionary<(int WordId, byte ReadingIndex), KnownCardSnapshot> cardsByKey,
+        Dictionary<(int, byte), WordSetStateType> setDerivedStates)
+    {
+        var result = new Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>();
+        if (!IsAuthenticated)
+            return result;
+
+        var categories = derivationCache.IsEmpty
+            ? new HashSet<DerivationCategory>()
+            : await DerivationSettingsHelper.GetEnabledCategories(memoryCache, userContext, UserId!);
+
+        var candidates = new HashSet<(int WordId, byte ReadingIndex)>();
+        foreach (var (wordId, ri) in cardsByKey.Keys)
+        {
+            var kanaIndexes = wordFormCache.GetKanaIndexesForKanji(wordId, ri);
+            if (kanaIndexes != null)
+                foreach (var kanaRi in kanaIndexes)
+                    candidates.Add((wordId, kanaRi));
+
+            if (categories.Count > 0)
+                foreach (var covered in derivationCache.GetCoveredKeys(wordId, ri, categories))
+                    candidates.Add((covered.WordId, covered.ReadingIndex));
+        }
+
+        if (categories.Count > 0)
+        {
+            foreach (var ((wordId, ri), setState) in setDerivedStates)
+            {
+                if (setState is not (WordSetStateType.Mastered or WordSetStateType.Blacklisted)) continue;
+                if (cardsByKey.ContainsKey((wordId, ri))) continue;
+                foreach (var covered in derivationCache.GetCoveredKeys(wordId, ri, categories))
+                    candidates.Add((covered.WordId, covered.ReadingIndex));
+            }
+        }
+
+        foreach (var key in candidates)
+        {
+            if (cardsByKey.ContainsKey(key) || setDerivedStates.ContainsKey(key)) continue;
+
+            var covers = categories.Count > 0
+                ? derivationCache.GetCoveringKeys(key.WordId, key.ReadingIndex, categories)
+                : null;
+            var states = ResolveRedundantStates(key, cardsByKey, setDerivedStates, covers);
+            if (states != null)
+                result[key] = states;
+        }
+
+        return result;
+    }
+
+    /// <summary>Kana-sibling cover is tried before the derivation family, so both entry points agree.</summary>
+    private List<KnownState>? ResolveRedundantStates(
+        (int WordId, byte ReadingIndex) key,
+        IReadOnlyDictionary<(int WordId, byte ReadingIndex), KnownCardSnapshot> cardsByKey,
+        Dictionary<(int, byte), WordSetStateType> setDerivedStates,
+        IReadOnlyList<DerivationCover>? covers)
+    {
+        var kanjiIndexes = wordFormCache.GetKanjiIndexesForKana(key.WordId, key.ReadingIndex);
+        if (kanjiIndexes != null)
+        {
+            KnownCardSnapshot? bestKanjiCard = null;
+            var bestRank = -1;
+            foreach (var kanjiRi in kanjiIndexes)
+            {
+                if (!cardsByKey.TryGetValue((key.WordId, kanjiRi), out var card)) continue;
+                var rank = GetKnownStateRank(card);
+                if (rank <= bestRank) continue;
+                bestRank = rank;
+                bestKanjiCard = card;
+            }
+
+            if (bestKanjiCard != null)
+                return AsRedundant(GetKnownStatesFromCard(bestKanjiCard.Value));
+        }
+
+        if (covers != null && covers.Count > 0)
+            return ResolveFromDerivationFamily(covers, cardsByKey, setDerivedStates)?.States;
+
+        return null;
+    }
+
+    /// <summary>Due belongs to the covering card; a redundant form has nothing to review and always keeps a tier.</summary>
+    private static List<KnownState> AsRedundant(List<KnownState> states)
+    {
+        states.Remove(KnownState.Due);
+        if (states.Count == 0)
+            states.Add(KnownState.New);
+        states.Add(KnownState.Redundant);
+        return states;
+    }
+
+    private async Task<Dictionary<(int WordId, byte ReadingIndex), KnownCardSnapshot>> LoadCardSnapshots(List<int> wordIds)
+    {
+        var cards = await userContext.FsrsCards
+                                     .AsNoTracking()
+                                     .Where(u => u.UserId == UserId && wordIds.Contains(u.WordId))
+                                     .Select(u => new { u.WordId, u.ReadingIndex, u.State, u.Due, u.LastReview })
+                                     .ToListAsync();
+
+        var result = new Dictionary<(int WordId, byte ReadingIndex), KnownCardSnapshot>();
+        foreach (var c in cards)
+            result.TryAdd((c.WordId, c.ReadingIndex), new KnownCardSnapshot(c.State, c.Due, c.LastReview));
+        return result;
     }
 
     /// <summary>The known family member a card-less derived form is covered by, for the word-page chip.</summary>
@@ -143,12 +212,7 @@ public class CurrentUserService(
 
         // The requested word is in the query so its own card can shadow the cover, as it does everywhere else.
         var familyWordIds = covers.Select(c => c.WordId).Append(wordId).Distinct().ToList();
-        var cards = await userContext.FsrsCards
-                                     .Where(u => u.UserId == UserId && familyWordIds.Contains(u.WordId))
-                                     .ToListAsync();
-
-        var cardsByKey = cards.DistinctBy(c => (c.WordId, c.ReadingIndex))
-                              .ToDictionary(c => (c.WordId, c.ReadingIndex));
+        var cardsByKey = await LoadCardSnapshots(familyWordIds);
 
         if (cardsByKey.ContainsKey(key))
             return null;
@@ -163,7 +227,7 @@ public class CurrentUserService(
     /// </summary>
     private static (List<KnownState> States, DerivationCover Cover)? ResolveFromDerivationFamily(
         IReadOnlyList<DerivationCover> covers,
-        Dictionary<(int WordId, byte ReadingIndex), FsrsCard> cardsByKey,
+        IReadOnlyDictionary<(int WordId, byte ReadingIndex), KnownCardSnapshot> cardsByKey,
         Dictionary<(int, byte), WordSetStateType> setDerivedStates)
     {
         List<KnownState>? best = null;
@@ -202,12 +266,7 @@ public class CurrentUserService(
         if (best == null)
             return null;
 
-        // Due belongs to the covering family member's card; the redundant form has nothing to review.
-        best.Remove(KnownState.Due);
-        if (best.Count == 0)
-            best.Add(KnownState.New);
-        best.Add(KnownState.Redundant);
-        return (best, bestCover);
+        return (AsRedundant(best), bestCover);
     }
 
     private async Task<Dictionary<(int WordId, byte ReadingIndex), IReadOnlyList<DerivationCover>>>
@@ -234,7 +293,7 @@ public class CurrentUserService(
     private const int MasteredRank = 4;
     private const int BlacklistedRank = 3;
 
-    private static int GetKnownStateRank(FsrsCard card) => card.State switch
+    private static int GetKnownStateRank(KnownCardSnapshot card) => card.State switch
     {
         FsrsState.Mastered => MasteredRank,
         FsrsState.Blacklisted => BlacklistedRank,
@@ -244,7 +303,7 @@ public class CurrentUserService(
         _ => 0
     };
 
-    private static List<KnownState> GetKnownStatesFromCard(FsrsCard card)
+    private static List<KnownState> GetKnownStatesFromCard(KnownCardSnapshot card)
     {
         switch (card.State)
         {
@@ -479,3 +538,6 @@ public class CurrentUserService(
 
     public bool IsAuthenticated => Principal?.Identity?.IsAuthenticated == true;
 }
+
+/// <summary>The three card fields known-state derivation reads, so callers can pass projections instead of tracked entities.</summary>
+public readonly record struct KnownCardSnapshot(FsrsState State, DateTime Due, DateTime? LastReview);

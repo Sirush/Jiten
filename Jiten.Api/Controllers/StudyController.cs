@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hangfire;
 using Jiten.Api.Dtos;
@@ -136,24 +136,20 @@ public class StudyController(
             wordSetEncodedKeys[WordFormHelper.EncodeWordKey(key.Item1, key.Item2)] = setState;
         }
 
-        var redundantKanaKeys = new HashSet<long>();
-        var redundantKanaPairs = new HashSet<(int, byte)>();
-        foreach (var ((wordId, ri), (state, _, _)) in cardStateMap)
+        var cardSnapshots = cardStateMap.ToDictionary(kv => kv.Key,
+                                                      kv => new KnownCardSnapshot(kv.Value.State, kv.Value.Due, kv.Value.LastReview));
+        var redundantTiersByPair = new Dictionary<(int, byte), VocabularyTier>();
+        var redundantTiersByKey = new Dictionary<long, VocabularyTier>();
+        foreach (var (key, states) in await currentUserService.ResolveRedundantStates(cardSnapshots, wordSetStates))
         {
-            if (state is FsrsState.New) continue;
-            var kanaIndexes = wordFormCache.GetKanaIndexesForKanji(wordId, ri);
-            if (kanaIndexes == null) continue;
-            foreach (var kanaRi in kanaIndexes)
-            {
-                if (cardStateMap.ContainsKey((wordId, kanaRi))) continue;
-                redundantKanaKeys.Add(WordFormHelper.EncodeWordKey(wordId, kanaRi));
-                redundantKanaPairs.Add((wordId, kanaRi));
-            }
+            var tier = VocabularyDisplayFilter.ResolveTier(states);
+            redundantTiersByPair[key] = tier;
+            redundantTiersByKey[WordFormHelper.EncodeWordKey(key.WordId, key.ReadingIndex)] = tier;
         }
 
         var settings = await LoadStudySettings(userId);
         var now = DateTime.UtcNow;
-        var dueCutoff = GetDueCutoff(now, settings);
+        var dueCutoff = GetDueWindow(now, settings);
         var resolvedDecks = new List<(UserStudyDeck Sd, Deck? Deck)>();
         var countOnlyStats = new Dictionary<int, (int Total, int Unseen, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due, int Young, int Mature, bool WasTruncated)>();
 
@@ -288,7 +284,7 @@ public class StudyController(
                 resolvedDecks.Add((sd, null));
                 if (staticWordKeysByDeck != null && staticWordKeysByDeck.TryGetValue(sd.UserStudyDeckId, out var wordKeys))
                 {
-                    var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateByKey, dueCutoff, wordSetEncodedKeys, redundantKanaKeys);
+                    var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateByKey, dueCutoff, wordSetEncodedKeys, redundantTiersByKey);
                     countOnlyStats[sd.UserStudyDeckId] = (wordKeys.Count, Math.Max(0, wordKeys.Count - stats.Tracked),
                         stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, stats.Young, stats.Mature, false);
                 }
@@ -309,7 +305,7 @@ public class StudyController(
         foreach (var (studyDeckId, task) in mediaDeckCountTasks)
         {
             var (total, wordKeys) = task.Result;
-            var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateByKey, dueCutoff, wordSetEncodedKeys, redundantKanaKeys);
+            var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateByKey, dueCutoff, wordSetEncodedKeys, redundantTiersByKey);
             countOnlyStats[studyDeckId] = (total, Math.Max(0, total - stats.Tracked),
                 stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, stats.Young, stats.Mature, false);
         }
@@ -321,7 +317,7 @@ public class StudyController(
                 ? cached : null;
             var stats = ComputeGlobalDynamicCardStats(
                 sd, cardStateMap, cardFreqRanksByScope![FrequencyScope.From(sd)], kanaOnlyCardWords, posMatchedWordIds, dueCutoff,
-                wordSetStates, redundantKanaPairs);
+                wordSetStates, redundantTiersByPair);
             countOnlyStats[studyDeckId] = (total, Math.Max(0, total - stats.Tracked),
                 stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, stats.Young, stats.Mature, wasTruncated);
         }
@@ -1787,13 +1783,11 @@ public class StudyController(
             .GroupBy(_ => 1)
             .Select(g => new
             {
-                ReviewsToday = g.Count(),
-                UniqueCardsToday = g.Select(l => l.CardId).Distinct().Count(),
-                NewCardsToday = g.Select(l => l.Card)
-                    .Where(c => c.CreatedAt >= todayStart)
-                    .Select(l => l.CardId)
-                    .Distinct()
-                    .Count()
+                ReviewsToday = g.Count(l => l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart)),
+                UniqueCardsToday = g.Where(l => l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
+                    .Select(l => l.CardId).Distinct().Count(),
+                NewCardsToday = g.Where(l => !l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
+                    .Select(l => l.CardId).Distinct().Count()
             })
             .FirstOrDefaultAsync();
 
@@ -1882,6 +1876,8 @@ public class StudyController(
         // ── Phase 3: Collect due reviews ──
         var baseCutoff = GetDueCutoff(now, settings);
         var dueCutoff = aheadMinutes.HasValue ? baseCutoff.AddMinutes(aheadMinutes.Value) : baseCutoff;
+        var learnAheadCutoff = GetLearnAheadCutoff(now, settings);
+        if (learnAheadCutoff < dueCutoff) learnAheadCutoff = dueCutoff;
         var batch = new List<(int WordId, byte ReadingIndex, long CardId, bool IsNew, int State)>();
         var dueCardLookup = new Dictionary<(int, byte), FsrsCard>();
 
@@ -1930,7 +1926,8 @@ public class StudyController(
                             && c.State != FsrsState.Blacklisted
                             && c.State != FsrsState.Mastered
                             && c.State != FsrsState.Suspended
-                            && c.Due <= dueCutoff);
+                            && (c.Due <= dueCutoff
+                                || ((c.State == FsrsState.Learning || c.State == FsrsState.Relearning) && c.Due <= learnAheadCutoff)));
 
             HashSet<long>? studyDeckWordKeys = null;
             var activeStudyDecks = studyDecks.Where(sd => sd.IsActive).ToList();
@@ -1981,22 +1978,31 @@ public class StudyController(
                     .ToList();
 
                 totalDueCount = allDueCards.Count;
-                dueCards = allDueCards.OrderBy(c => c.Due).Take(reviewBudget).ToList();
+                dueCards = allDueCards
+                    .OrderBy(c => c.Due <= dueCutoff ? 0 : 1)
+                    .ThenBy(c => c.State == FsrsState.Learning || c.State == FsrsState.Relearning ? 0 : 1)
+                    .ThenBy(c => c.Due)
+                    .Take(reviewBudget)
+                    .ToList();
             }
             else
             {
                 totalDueCount = await dueQuery.CountAsync();
                 dueCards = await dueQuery
-                    .OrderBy(c => c.Due)
+                    .OrderBy(c => c.Due <= dueCutoff ? 0 : 1)
+                    .ThenBy(c => c.State == FsrsState.Learning || c.State == FsrsState.Relearning ? 0 : 1)
+                    .ThenBy(c => c.Due)
                     .Take(reviewBudget)
                     .ToListAsync();
             }
 
-            // Sort: learning/relearning steps first (by due), then reviews by relative overdueness
+            // Sort: learning/relearning steps first (by due), then reviews by relative overdueness; cards
+            // served ahead of their step come last so they never push a due card out of the batch.
             // Add slight randomness so batches don't always come in the exact same order
             var rng = Random.Shared;
             dueCards = dueCards
-                .OrderBy(c => c.State is FsrsState.Learning or FsrsState.Relearning ? 0 : 1)
+                .OrderBy(c => c.Due <= dueCutoff ? 0 : 1)
+                .ThenBy(c => c.State is FsrsState.Learning or FsrsState.Relearning ? 0 : 1)
                 .ThenByDescending(c =>
                 {
                     double overdueness;
@@ -2324,14 +2330,10 @@ public class StudyController(
             });
         }
 
-        if (settings.ShowNextInterval)
         {
-            var userSettings = await userContext.UserFsrsSettings
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.UserId == userId);
-            var fsrsParams = userSettings?.Parameters is { Length: > 0 } p ? p : FsrsConstants.DefaultParameters;
-            var desiredRetention = userSettings?.DesiredRetention is double dr and > 0 and < 1 ? dr : FsrsConstants.DefaultDesiredRetention;
-            var previewScheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: fsrsParams, enableFuzzing: false);
+            var userSettings = await FsrsSettingsHelper.LoadAsync(userContext, userId);
+            var previewScheduler = FsrsSettingsHelper.CreateScheduler(settings, FsrsSettingsHelper.GetParameters(userSettings),
+                                                                       FsrsSettingsHelper.GetDesiredRetention(userSettings), enableFuzzing: false);
 
             var now2 = DateTime.UtcNow;
             foreach (var dto in cards)
@@ -2432,6 +2434,12 @@ public class StudyController(
                     request.EasyDays[i] = Math.Clamp(request.EasyDays[i], 0.0, 1.0);
         }
 
+        if (request.LearningSteps != null && FsrsStepSettings.Validate(request.LearningSteps, "Learning steps") is { } learningError)
+            return Results.BadRequest(learningError);
+        if (request.RelearningSteps != null && FsrsStepSettings.Validate(request.RelearningSteps, "Relearning steps") is { } relearningError)
+            return Results.BadRequest(relearningError);
+        request.LearnAheadMinutes = Math.Clamp(request.LearnAheadMinutes, 0, 120);
+
         if (request.CardLayout != null)
             SanitizeCardLayout(request.CardLayout);
         request.CardLayoutPresets = SanitizeCardLayoutPresets(request.CardLayoutPresets);
@@ -2455,6 +2463,8 @@ public class StudyController(
             request.CardLayout = stored.CardLayout;
         if (request.CardLayoutPresets == null && stored?.CardLayoutPresets != null)
             request.CardLayoutPresets = stored.CardLayoutPresets;
+        request.LearningSteps ??= stored?.LearningSteps;
+        request.RelearningSteps ??= stored?.RelearningSteps;
 
         var previousTimezone = stored?.Timezone;
         var previousDerivationCategories =
@@ -2497,27 +2507,11 @@ public class StudyController(
             stored?.DefaultFrequencyListId != request.DefaultFrequencyListId)
             FrequencySourceResolver.Invalidate(memoryCache, userId);
 
-        return Results.Ok(request);
+        return Results.Ok(FsrsSettingsHelper.FillStepDefaults(request));
     }
 
     private async Task<StudySettingsDto> LoadStudySettings(string userId)
-    {
-        var fsrsSettings = await userContext.UserFsrsSettings
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.UserId == userId);
-
-        if (fsrsSettings == null || string.IsNullOrEmpty(fsrsSettings.SettingsJson) || fsrsSettings.SettingsJson == "{}")
-            return StudySettingsMigrator.Apply(new StudySettingsDto());
-
-        try
-        {
-            return StudySettingsMigrator.Apply(JsonSerializer.Deserialize<StudySettingsDto>(fsrsSettings.SettingsJson) ?? new StudySettingsDto());
-        }
-        catch (JsonException)
-        {
-            return StudySettingsMigrator.Apply(new StudySettingsDto());
-        }
-    }
+        => FsrsSettingsHelper.GetStudySettings(await FsrsSettingsHelper.LoadAsync(userContext, userId));
 
     private static string SanitizeKeybind(string value, string fallback)
     {
@@ -2643,6 +2637,7 @@ public class StudyController(
         var (todayStart, _) = ResolveTimezone(now, settings.Timezone);
 
         var dueCutoff = GetDueCutoff(now, settings);
+        var learnAheadCutoff = GetLearnAheadCutoff(now, settings);
 
         var dueBaseQuery = userContext.FsrsCards
             .AsNoTracking()
@@ -2651,6 +2646,9 @@ public class StudyController(
                         && c.State != FsrsState.Blacklisted
                         && c.State != FsrsState.Mastered
                         && c.State != FsrsState.Suspended);
+        var dueNowQuery = dueBaseQuery
+            .Where(c => c.Due <= dueCutoff
+                        || ((c.State == FsrsState.Learning || c.State == FsrsState.Relearning) && c.Due <= learnAheadCutoff));
 
         HashSet<long>? deckFilter = null;
         List<UserStudyDeck>? activeStudyDecks = null;
@@ -2659,8 +2657,7 @@ public class StudyController(
 
         if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
         {
-            var dueCardKeys = await dueBaseQuery
-                .Where(c => c.Due <= dueCutoff)
+            var dueCardKeys = await dueNowQuery
                 .Select(c => new { c.WordId, c.ReadingIndex })
                 .ToListAsync();
             activeStudyDecks = await LoadActiveStudyDecks(userId);
@@ -2672,7 +2669,7 @@ public class StudyController(
         }
         else
         {
-            reviewsDue = await dueBaseQuery.Where(c => c.Due <= dueCutoff).CountAsync();
+            reviewsDue = await dueNowQuery.CountAsync();
         }
 
         var userCardIds = userContext.FsrsCards
@@ -2688,9 +2685,11 @@ public class StudyController(
             .GroupBy(_ => 1)
             .Select(g => new
             {
-                ReviewsToday = g.Count(),
-                UniqueCardsToday = g.Select(l => l.CardId).Distinct().Count(),
-                NewCardsToday = g.Where(l => l.Card.CreatedAt >= todayStart).Select(l => l.CardId).Distinct().Count(),
+                ReviewsToday = g.Count(l => l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart)),
+                UniqueCardsToday = g.Where(l => l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
+                    .Select(l => l.CardId).Distinct().Count(),
+                NewCardsToday = g.Where(l => !l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
+                    .Select(l => l.CardId).Distinct().Count(),
             })
             .FirstOrDefaultAsync();
 
@@ -2833,12 +2832,13 @@ public class StudyController(
         {
             case "extraNew":
             {
-                var newCardIds = userContext.FsrsCards
-                    .Where(c => c.UserId == userId && c.CreatedAt >= todayStart)
+                var userCardIds = userContext.FsrsCards
+                    .Where(c => c.UserId == userId)
                     .Select(c => c.CardId);
                 var newCardsToday = await userContext.FsrsReviewLogs
                     .AsNoTracking()
-                    .Where(rl => newCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= todayStart)
+                    .Where(rl => userCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= todayStart
+                                 && !rl.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
                     .Select(rl => rl.CardId)
                     .Distinct()
                     .CountAsync();
@@ -3301,7 +3301,7 @@ public class StudyController(
         var projByRetention = new Dictionary<double, FsrsWorkloadSimulator.WorkloadProjection>();
         foreach (var r in retentions)
         {
-            var scheduler = new FsrsScheduler(desiredRetention: r, parameters: fsrsParams, enableFuzzing: false);
+            var scheduler = FsrsSettingsHelper.CreateScheduler(userSettings, enableFuzzing: false, desiredRetention: r);
             projByRetention[r] = FsrsWorkloadSimulator.Project(seeds, scheduler, horizonDays, now);
         }
 
@@ -3626,15 +3626,11 @@ public class StudyController(
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
 
-        var userSettings = await userContext.UserFsrsSettings
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.UserId == userId);
-        var fsrsParams = userSettings?.Parameters is { Length: > 0 } p ? p : FsrsConstants.DefaultParameters;
-        var desiredRetention = userSettings?.DesiredRetention is double dr and > 0 and < 1 ? dr : FsrsConstants.DefaultDesiredRetention;
-        var scheduler = new FsrsScheduler(desiredRetention: desiredRetention, parameters: fsrsParams, enableFuzzing: false);
+        var userSettings = await FsrsSettingsHelper.LoadAsync(userContext, userId);
+        var scheduler = FsrsSettingsHelper.CreateScheduler(userSettings, enableFuzzing: false);
 
         var now = DateTime.UtcNow;
-        var studySettings = await LoadStudySettings(userId);
+        var studySettings = FsrsSettingsHelper.GetStudySettings(userSettings);
         var leechThreshold = studySettings.LeechThreshold;
 
         var cards = await userContext.FsrsCards
@@ -3882,6 +3878,24 @@ public class StudyController(
 
     private static DateTime GetDueCutoff(DateTime utcNow, StudySettingsDto settings)
         => settings.DayBoundaryScheduling ? LocalDayStartUtc(utcNow, settings.Timezone, 1) : utcNow;
+
+    /// <summary>Learning and relearning cards are due from this point, so a step can end inside the current session.</summary>
+    private static DateTime GetLearnAheadCutoff(DateTime utcNow, StudySettingsDto settings)
+    {
+        var dueCutoff = GetDueCutoff(utcNow, settings);
+        var learnAhead = utcNow.AddMinutes(settings.LearnAheadMinutes);
+        return learnAhead > dueCutoff ? learnAhead : dueCutoff;
+    }
+
+    private static DueWindow GetDueWindow(DateTime utcNow, StudySettingsDto settings)
+        => new(GetDueCutoff(utcNow, settings), GetLearnAheadCutoff(utcNow, settings));
+
+    /// <summary>Review cards count as due up to <see cref="Review"/>; learning-state cards up to <see cref="Learning"/>.</summary>
+    private readonly record struct DueWindow(DateTime Review, DateTime Learning)
+    {
+        public bool IsDue(FsrsState state, DateTime due)
+            => due <= (state is FsrsState.Learning or FsrsState.Relearning ? Learning : Review);
+    }
 
     private static DateTime? SnapToLocalDayStart(DateTime? utc, StudySettingsDto settings)
     {
@@ -4285,7 +4299,7 @@ public class StudyController(
     private static (int Tracked, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due, int Young, int Mature)
         CountCardStats(
             IEnumerable<(FsrsState State, DateTime Due, DateTime? LastReview)> cards,
-            DateTime dueCutoff)
+            DueWindow dueCutoff)
     {
         int learning = 0, review = 0, mastered = 0, blacklisted = 0, suspended = 0, dueCount = 0, tracked = 0, young = 0, mature = 0;
         foreach (var (state, due, lastReview) in cards)
@@ -4294,13 +4308,13 @@ public class StudyController(
             if (state is FsrsState.New or FsrsState.Learning or FsrsState.Relearning)
             {
                 learning++;
-                if (state is FsrsState.Learning or FsrsState.Relearning && due <= dueCutoff)
+                if (state is FsrsState.Learning or FsrsState.Relearning && dueCutoff.IsDue(state, due))
                     dueCount++;
             }
             else if (state == FsrsState.Review)
             {
                 review++;
-                if (due <= dueCutoff) dueCount++;
+                if (dueCutoff.IsDue(state, due)) dueCount++;
                 // Maturity mirrors UserController.ComputeEffectiveCategory: interval = due - lastReview, mature at >= 21 days.
                 if (lastReview.HasValue && (due - lastReview.Value).TotalDays >= 21) mature++;
                 else young++;
@@ -4319,9 +4333,9 @@ public class StudyController(
             Dictionary<(int, byte), int> freqRanks,
             HashSet<long>? kanaFormKeys,
             HashSet<int>? posMatchedWordIds,
-            DateTime dueCutoff,
+            DueWindow dueCutoff,
             Dictionary<(int, byte), WordSetStateType>? wordSetStates = null,
-            HashSet<(int, byte)>? redundantKanaPairs = null)
+            Dictionary<(int, byte), VocabularyTier>? redundantTiers = null)
     {
         bool MatchesFreqRange((int wordId, byte ri) key)
         {
@@ -4351,14 +4365,13 @@ public class StudyController(
             }
         }
 
-        if (redundantKanaPairs != null)
+        if (redundantTiers != null)
         {
-            foreach (var key in redundantKanaPairs)
+            foreach (var (key, tier) in redundantTiers)
             {
                 if (wordSetStates != null && wordSetStates.ContainsKey(key)) continue;
                 if (!MatchesFreqRange(key)) continue;
-                stats.Tracked++;
-                stats.Mastered++;
+                CountRedundant(ref stats, tier);
             }
         }
 
@@ -4369,25 +4382,25 @@ public class StudyController(
         ComputeCardStatsFromWordKeys(
             HashSet<long> wordKeys,
             Dictionary<long, (FsrsState State, DateTime Due, DateTime? LastReview)> cardStateByKey,
-            DateTime dueCutoff,
+            DueWindow dueCutoff,
             Dictionary<long, WordSetStateType>? wordSetKeys = null,
-            HashSet<long>? redundantKanaKeys = null)
+            Dictionary<long, VocabularyTier>? redundantTiers = null)
     {
         var filtered = wordKeys.Count < cardStateByKey.Count
             ? wordKeys.Where(cardStateByKey.ContainsKey).Select(k => cardStateByKey[k])
             : cardStateByKey.Where(e => wordKeys.Contains(e.Key)).Select(e => e.Value);
 
         var stats = CountCardStats(filtered, dueCutoff);
-        if (wordSetKeys != null || redundantKanaKeys != null)
-            EnrichStatsWithWordSetAndKana(ref stats, wordKeys, wordSetKeys, redundantKanaKeys);
+        if (wordSetKeys != null || redundantTiers != null)
+            EnrichStatsWithWordSetAndRedundant(ref stats, wordKeys, wordSetKeys, redundantTiers);
         return stats;
     }
 
-    private static void EnrichStatsWithWordSetAndKana(
+    private static void EnrichStatsWithWordSetAndRedundant(
         ref (int Tracked, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due, int Young, int Mature) stats,
         HashSet<long> deckKeys,
         Dictionary<long, WordSetStateType>? wordSetKeys,
-        HashSet<long>? redundantKanaKeys)
+        Dictionary<long, VocabularyTier>? redundantTiers)
     {
         if (wordSetKeys != null)
         {
@@ -4400,15 +4413,30 @@ public class StudyController(
             }
         }
 
-        if (redundantKanaKeys != null)
+        if (redundantTiers != null)
         {
-            foreach (var key in redundantKanaKeys)
+            foreach (var (key, tier) in redundantTiers)
             {
                 if (!deckKeys.Contains(key)) continue;
                 if (wordSetKeys != null && wordSetKeys.ContainsKey(key)) continue;
-                stats.Tracked++;
-                stats.Mastered++;
+                CountRedundant(ref stats, tier);
             }
+        }
+    }
+
+    /// <summary>A redundant form takes its covering card's tier, the same collapse the vocabulary Display filter applies.</summary>
+    private static void CountRedundant(
+        ref (int Tracked, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due, int Young, int Mature) stats,
+        VocabularyTier tier)
+    {
+        stats.Tracked++;
+        switch (tier)
+        {
+            case VocabularyTier.Blacklisted: stats.Blacklisted++; break;
+            case VocabularyTier.Mastered: stats.Mastered++; break;
+            case VocabularyTier.Mature: stats.Review++; stats.Mature++; break;
+            case VocabularyTier.Young: stats.Review++; stats.Young++; break;
+            default: stats.Learning++; break;
         }
     }
 
@@ -4416,19 +4444,19 @@ public class StudyController(
         StudyDeckDto dto,
         List<(int WordId, byte ReadingIndex)> wordPairs,
         Dictionary<(int, byte), (FsrsState State, DateTime Due, DateTime? LastReview)> cardStateMap,
-        DateTime dueCutoff,
+        DueWindow dueCutoff,
         Dictionary<long, WordSetStateType>? wordSetKeys = null,
-        HashSet<long>? redundantKanaKeys = null)
+        Dictionary<long, VocabularyTier>? redundantTiers = null)
     {
         var matched = wordPairs
             .Where(w => cardStateMap.ContainsKey((w.WordId, w.ReadingIndex)))
             .Select(w => cardStateMap[(w.WordId, w.ReadingIndex)]);
 
         var stats = CountCardStats(matched, dueCutoff);
-        if (wordSetKeys != null || redundantKanaKeys != null)
+        if (wordSetKeys != null || redundantTiers != null)
         {
             var encodedKeys = wordPairs.Select(w => WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex)).ToHashSet();
-            EnrichStatsWithWordSetAndKana(ref stats, encodedKeys, wordSetKeys, redundantKanaKeys);
+            EnrichStatsWithWordSetAndRedundant(ref stats, encodedKeys, wordSetKeys, redundantTiers);
         }
         dto.LearningCount = stats.Learning;
         dto.ReviewCount = stats.Review;
