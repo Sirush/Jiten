@@ -462,6 +462,34 @@ public class FsrsTests
     }
 
     [Fact]
+    public void LoadBalancing_OffsetKeysLoadOnTheLocalDay()
+    {
+        // 20:00 UTC on Jan 1 is 05:00 on Jan 2 for a UTC+9 user, so it must share a bucket with a card
+        // due at 03:00 UTC on Jan 2 and not with one due at noon UTC on Jan 1.
+        var balancer = new DictionaryFsrsLoadBalancer(offsetHours: 9);
+        balancer.Register(new DateTime(2026, 1, 1, 20, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(1, balancer.GetLoad(new DateTime(2026, 1, 2, 3, 0, 0, DateTimeKind.Utc)));
+        Assert.Equal(0, balancer.GetLoad(new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc)));
+    }
+
+    [Fact]
+    public void LoadBalancing_OffsetSteersAwayFromTheLoadedLocalDay()
+    {
+        // Interval 30 -> window [27, 33]. Every card is due at 20:00 UTC, which is the next local day at
+        // UTC+9. Load local day 30 heavily: the balancer must not pick the UTC day 30 (local 31 is empty
+        // only if the offset is applied consistently to both sides).
+        var balancer = new DictionaryFsrsLoadBalancer(offsetHours: 9);
+        var anchor = new DateTime(2026, 1, 1, 20, 0, 0, DateTimeKind.Utc);
+        for (var n = 0; n < 50; n++)
+            balancer.Register(anchor.AddDays(30));
+
+        var result = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, anchor, balancer);
+
+        Assert.NotEqual(30, result.Days);
+    }
+
+    [Fact]
     public void EasyDays_OffsetShiftsWeekdayClassification()
     {
         // A large positive offset can roll a UTC weekday into the next local day; the policy must classify

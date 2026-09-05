@@ -14,13 +14,24 @@ public class SrsRecomputeJob(
 {
     private const int BatchSize = 500;
 
+    private static async Task<double> ResolveOffsetHours(UserDbContext userContext, string userId)
+    {
+        var studySettings = FsrsSettingsHelper.GetStudySettings(await FsrsSettingsHelper.LoadAsync(userContext, userId));
+        return FsrsSettingsHelper.ResolveOffsetHours(DateTime.UtcNow, studySettings.Timezone);
+    }
+
     [Queue("default")]
     public async Task RecomputeUserSrs(string userId, double[] parameters, double desiredRetention, bool loadBalance = true,
                                        EasyDaysPolicy? easyDays = null)
     {
         // Single-shot recompute: one in-memory balancer accumulates across all batches, so every card is
         // placed against the freshly-rebalanced schedule built so far (online greedy balancing).
-        var balancer = loadBalance ? new DictionaryFsrsLoadBalancer() : null;
+        DictionaryFsrsLoadBalancer? balancer = null;
+        if (loadBalance)
+        {
+            await using var settingsContext = await userContextFactory.CreateDbContextAsync();
+            balancer = new DictionaryFsrsLoadBalancer(offsetHours: await ResolveOffsetHours(settingsContext, userId));
+        }
         var lastCardId = 0L;
 
         while (true)
@@ -53,7 +64,8 @@ public class SrsRecomputeJob(
         IFsrsLoadBalancer? balancer = null;
         if (loadBalance)
         {
-            balancer = sharedBalancer ?? await FsrsLoadBalancerSeeder.SeedAsync(userContext, userId);
+            balancer = sharedBalancer
+                       ?? await FsrsLoadBalancerSeeder.SeedAsync(userContext, userId, await ResolveOffsetHours(userContext, userId));
         }
 
         var studySettings = FsrsSettingsHelper.GetStudySettings(await FsrsSettingsHelper.LoadAsync(userContext, userId));

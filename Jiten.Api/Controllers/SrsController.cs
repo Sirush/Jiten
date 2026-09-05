@@ -160,7 +160,7 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var studySettings = GetStudySettings(userSettings);
-        var loadBalancer = await BuildLoadBalancer(userId, studySettings.LoadBalancing);
+        var loadBalancer = await BuildLoadBalancer(userId, studySettings);
         var easyDays = BuildEasyDaysPolicy(studySettings);
         var scheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: true,
                                                            loadBalancer, easyDays);
@@ -299,7 +299,7 @@ public class SrsController(
         var parameters = GetParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var studySettings = GetStudySettings(userSettings);
-        var loadBalancer = await BuildLoadBalancer(userId, studySettings.LoadBalancing);
+        var loadBalancer = await BuildLoadBalancer(userId, studySettings);
         var easyDays = BuildEasyDaysPolicy(studySettings);
         var scheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: true,
                                                            loadBalancer, easyDays);
@@ -1917,10 +1917,11 @@ public class SrsController(
     /// due dates settle on the least-busy day within their fuzz window. Returns null when load balancing
     /// is disabled, leaving the scheduler on plain random fuzz.
     /// </summary>
-    private async Task<IFsrsLoadBalancer?> BuildLoadBalancer(string userId, bool enabled)
+    private async Task<IFsrsLoadBalancer?> BuildLoadBalancer(string userId, StudySettingsDto studySettings)
     {
-        if (!enabled) return null;
-        return await FsrsLoadBalancerSeeder.SeedAsync(userContext, userId);
+        if (!studySettings.LoadBalancing) return null;
+        return await FsrsLoadBalancerSeeder.SeedAsync(userContext, userId,
+                                                      ResolveOffsetHours(DateTime.UtcNow, studySettings.Timezone));
     }
 
     /// <summary>
