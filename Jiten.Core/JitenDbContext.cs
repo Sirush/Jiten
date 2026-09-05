@@ -15,6 +15,7 @@ public class JitenDbContext : DbContext
     public DbSet<DeckWord> DeckWords { get; set; }
     public DbSet<DeckEmbedding> DeckEmbeddings { get; set; }
     public DbSet<DeckEmbeddingSpace> DeckEmbeddingSpaces { get; set; }
+    public DbSet<DeckDescriptionEmbedding> DeckDescriptionEmbeddings { get; set; }
     public DbSet<DeckRawText> DeckRawTexts { get; set; }
     public DbSet<DeckTitle> DeckTitles { get; set; }
     public DbSet<DeckStats> DeckStats { get; set; }
@@ -231,6 +232,20 @@ public class JitenDbContext : DbContext
             entity.ToTable("DeckEmbeddingSpaces", "jiten");
             entity.HasKey(de => de.Id);
             entity.Property(de => de.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<DeckDescriptionEmbedding>(entity =>
+        {
+            entity.ToTable("DeckDescriptionEmbeddings", "jiten");
+            entity.HasKey(de => de.DeckId);
+            entity.Property(de => de.DeckId).ValueGeneratedNever();
+            entity.Property(de => de.TextHash).HasMaxLength(64);
+            entity.Property(de => de.Model).HasMaxLength(128);
+
+            entity.HasOne<Deck>()
+                  .WithOne()
+                  .HasForeignKey<DeckDescriptionEmbedding>(de => de.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<DeckRawText>(entity =>

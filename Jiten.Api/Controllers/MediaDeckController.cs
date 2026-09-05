@@ -47,7 +47,8 @@ public class MediaDeckController(
     IDeckDownloadService downloadService,
     IBackgroundJobClient backgroundJobClient,
     ICoverageJourneyService coverageJourneyService,
-    Jiten.Core.Services.DeckVectorService deckVectorService) : ControllerBase
+    Jiten.Core.Services.DeckVectorService deckVectorService,
+    DescriptionSearchService descriptionSearchService) : ControllerBase
 {
     private record DeckIdWithCount(int DeckId, int TotalCount);
 
@@ -175,6 +176,55 @@ public class MediaDeckController(
         // The service picks the right similarity strategy (short-regime gating vs pure cosine) itself.
         var fetch = mediaType == null ? limit : Math.Min(limit * 8, 400);
         var sims = await deckVectorService.FindSimilarForAsync(deckId, fetch);
+        return await HydrateRankedDecks(sims, limit, mediaType);
+    }
+
+    /// <summary>
+    /// Natural-language media search: ranks decks by how well their description matches the
+    /// query ("slow-burn romance in a rural town", "探偵もの"). A media type named in the query
+    /// ("a visual novel about ninja") becomes the filter unless an explicit one is passed.
+    /// </summary>
+    /// <param name="query">Free-text description of what to find, English or Japanese.</param>
+    /// <param name="limit">Maximum number of results (default 20, max 100).</param>
+    /// <param name="mediaType">Optional media type filter; overrides a type named in the query.</param>
+    [HttpGet("search-by-description")]
+    [EnableRateLimiting("heavy")]
+    [ResponseCache(Duration = 60 * 10, VaryByQueryKeys = ["query", "limit", "mediaType"], VaryByHeader = "Authorization")]
+    [SwaggerOperation(Summary = "Search media by describing it")]
+    [ProducesResponseType(typeof(DescriptionSearchResponseDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<DescriptionSearchResponseDto>> SearchByDescription([FromQuery] string query, [FromQuery] int limit = 20,
+                                                                                      [FromQuery] MediaType? mediaType = null)
+    {
+        query = (query ?? "").Trim();
+        if (query.Length is < 2 or > 500)
+            return BadRequest("Query must be between 2 and 500 characters.");
+        if (!descriptionSearchService.IsAvailable)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Description search is not available.");
+
+        limit = Math.Clamp(limit, 1, 100);
+        var parsed = DescriptionQueryParser.Parse(query);
+        var effectiveType = mediaType ?? parsed.MediaType;
+        HashSet<int>? allowed = null;
+        if (effectiveType != null)
+            allowed = await context.Decks.AsNoTracking()
+                                   .Where(d => d.ParentDeckId == null && d.MediaType == effectiveType)
+                                   .Select(d => d.DeckId)
+                                   .ToHashSetAsync();
+        var matches = descriptionSearchService.Search(parsed.Text, limit, allowed);
+        var results = await HydrateRankedDecks(matches.Select(m => (m.DeckId, m.Score)).ToList(), limit, mediaType: null);
+        return new DescriptionSearchResponseDto
+        {
+            Query = query,
+            SearchedText = parsed.Text,
+            DetectedMediaType = parsed.MediaType,
+            MediaType = effectiveType,
+            Results = results
+        };
+    }
+
+    /// <summary>Applies the media-type filter to a ranked candidate list, then loads only the surviving decks.</summary>
+    private async Task<List<SimilarDeckDto>> HydrateRankedDecks(List<(int DeckId, float Similarity)> sims, int limit, MediaType? mediaType)
+    {
         if (sims.Count == 0)
             return new List<SimilarDeckDto>();
 

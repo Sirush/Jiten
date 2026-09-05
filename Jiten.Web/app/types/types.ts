@@ -80,6 +80,14 @@ export interface SimilarDeck {
   similarityPercent: number;
 }
 
+export interface DescriptionSearchResponse {
+  query: string;
+  searchedText: string;
+  detectedMediaType: MediaType | null;
+  mediaType: MediaType | null;
+  results: SimilarDeck[];
+}
+
 export interface DeckVocabularyList {
   parentDeck: Deck | null;
   deck: Deck;

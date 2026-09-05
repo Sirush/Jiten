@@ -7,16 +7,26 @@
     marked?: boolean;
     /** Short call-to-action text shown before the chevron. */
     cta?: string;
+    /** A row inside a grouped card: no border or shadow of its own, tighter padding. */
+    compact?: boolean;
   }>();
 </script>
 
 <template>
   <NuxtLink
     :to="to"
-    class="group flex items-start gap-3 p-4 h-full rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm transition-colors hover:border-primary-400 dark:hover:border-primary-500 !text-inherit !no-underline"
+    class="group flex items-start gap-3 h-full transition-colors !text-inherit !no-underline"
+    :class="
+      compact
+        ? 'p-3 hover:bg-surface-50 dark:hover:bg-surface-800'
+        : 'p-4 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm hover:border-primary-400 dark:hover:border-primary-500'
+    "
   >
-    <span class="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300">
-      <Icon :name="icon" size="1.35em" />
+    <span
+      class="shrink-0 flex items-center justify-center rounded-lg bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-300"
+      :class="compact ? 'w-8 h-8' : 'w-9 h-9'"
+    >
+      <Icon :name="icon" :size="compact ? '1.2em' : '1.35em'" />
     </span>
 
     <span class="flex-1 min-w-0">

@@ -19,5 +19,18 @@ public class DeckVectorCacheWarmupService(IServiceProvider services, ILogger<Dec
         {
             logger.LogError(ex, "DeckVectorService warmup failed");
         }
+
+        try
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var search = services.GetRequiredService<DescriptionSearchService>();
+            var count = await search.LoadFromDbAsync();
+            search.EnsureModelLoaded();
+            logger.LogInformation("DescriptionSearchService warmup completed in {ElapsedMs}ms ({Count} vectors)", sw.ElapsedMilliseconds, count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "DescriptionSearchService warmup failed");
+        }
     }
 }

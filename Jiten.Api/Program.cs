@@ -405,6 +405,20 @@ builder.Services.AddScoped<Jiten.Api.Services.Stripe.StripeService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
 builder.Services.AddSingleton<IDerivationLinkCache, DerivationLinkCache>();
 builder.Services.AddSingleton<Jiten.Core.Services.DeckVectorService>();
+builder.Services.AddSingleton<Jiten.Core.Services.DescriptionSearchService>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<Jiten.Core.Services.DescriptionSearchService>>();
+    Jiten.Core.Services.SentenceEmbedder? CreateEmbedder()
+    {
+        var dir = config[Jiten.Core.Services.SentenceEmbedder.ModelDirConfigKey];
+        if (Jiten.Core.Services.SentenceEmbedder.IsAvailable(dir))
+            return new Jiten.Core.Services.SentenceEmbedder(dir!);
+        logger.LogWarning("Description search disabled: no model at DescriptionEmbeddingModelDir='{Dir}'", dir);
+        return null;
+    }
+    return new Jiten.Core.Services.DescriptionSearchService(sp.GetRequiredService<IDbContextFactory<JitenDbContext>>(), CreateEmbedder, logger);
+});
 builder.Services.AddScoped<IRoadmapDataLoader, RoadmapDataLoader>();
 builder.Services.AddScoped<ICoverageJourneyService, CoverageJourneyService>();
 builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
@@ -782,6 +796,7 @@ builder.Services.AddScoped<SrsRecomputeJob>();
 builder.Services.AddScoped<ReviewRollupJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
 builder.Services.AddScoped<RecomputeVectorsJob>();
+builder.Services.AddScoped<DescriptionEmbeddingJob>();
 builder.Services.AddScoped<StripeReconcileJob>();
 builder.Services.AddScoped<RenewalReminderJob>();
 builder.Services.AddScoped<DecrementPromoCreditsJob>();
@@ -951,6 +966,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         "embed-pending-decks",
         job => job.EmbedPending(),
         "*/30 * * * *");
+
+    recurringJobs.AddOrUpdate<DescriptionEmbeddingJob>(
+        "sync-description-embeddings",
+        job => job.Sync(),
+        Cron.Hourly(20));
 
     recurringJobs.AddOrUpdate<WebNovelSyncSweepJob>(
         "webnovel-sync-sweep",

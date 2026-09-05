@@ -329,6 +329,15 @@ public class CliOptions
     [Option(longName: "similar-limit", Required = false, Default = 20, HelpText = "Number of results for --similar-to (default: 20).")]
     public int SimilarLimit { get; set; }
 
+    [Option(longName: "embed-descriptions", Required = false, HelpText = "Embed parent deck descriptions for natural-language search (incremental; add --force to redo all). Needs DescriptionEmbeddingModelDir in config.")]
+    public bool EmbedDescriptions { get; set; }
+
+    [Option(longName: "describe-search", Required = false, HelpText = "Debug: rank decks against a free-text description query.")]
+    public string? DescribeSearch { get; set; }
+
+    [Option(longName: "force", Required = false, HelpText = "With --embed-descriptions: re-embed every description regardless of stored hashes.")]
+    public bool Force { get; set; }
+
     [Option(longName: "ft-model", Required = false, HelpText = "Path to the fastText .bin model (e.g. cc.ja.300.bin) for building deck vectors. Falls back to FastTextModelPath in config.")]
     public string? FtModel { get; set; }
 
