@@ -43,7 +43,8 @@ export function useWriteInReview(opts: { commitGrade: (rating: FsrsRating) => vo
     let mode: WriteInMode;
     if (!writeInActive.value) mode = 'srs';
     else if (card.isNewCard && settings.value.skipNewCards)
-      mode = 'srs'; // never consumes the bag
+      // Not cached: once the card is graded it comes back as a review and must draw a real mode.
+      return 'srs';
     else mode = drawMode();
     // Reading mode is pointless for words with no kanji (the shown surface already is the reading).
     // Re-route to meaning if enabled, else fall back to a standard card.

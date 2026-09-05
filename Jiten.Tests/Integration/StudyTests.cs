@@ -580,6 +580,39 @@ public class StudyTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task StudyBatch_LearningStepsSurfaceAheadOfReviewBacklog()
+    {
+        await EnsureSeedData();
+
+        var now = DateTime.UtcNow;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            for (var i = 1; i <= 4; i++)
+                userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, i, 0, state: FsrsState.Review,
+                    stability: 10, difficulty: 5, due: now.AddDays(-60), lastReview: now.AddDays(-70)));
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 5, 0, state: FsrsState.Learning, step: 0,
+                stability: 1, difficulty: 5, due: now.AddMinutes(-1), lastReview: now.AddMinutes(-6)));
+            await userDb.SaveChangesAsync();
+        }
+
+        var settings = new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { newCardsPerDay = 0, maxReviewsPerDay = 2, gradingButtons = 4, interleaving = "mixed", reviewFrom = "allTracked" });
+        (await _client.SendAsync(settings)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var batch = new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-batch?limit=20")
+            .WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(batch);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var wordIds = body.GetProperty("cards").EnumerateArray().Select(c => c.GetProperty("wordId").GetInt32()).ToList();
+        wordIds.Should().HaveCount(2);
+        wordIds.Should().Contain(5, "a due learning step must not starve behind an overdue review backlog");
+    }
+
+    [Fact]
     public async Task ReorderStudyDecks_UpdatesSortOrder()
     {
         // Add two decks (need a second test deck)

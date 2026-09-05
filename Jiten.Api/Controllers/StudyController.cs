@@ -1981,13 +1981,18 @@ public class StudyController(
                     .ToList();
 
                 totalDueCount = allDueCards.Count;
-                dueCards = allDueCards.OrderBy(c => c.Due).Take(reviewBudget).ToList();
+                dueCards = allDueCards
+                    .OrderBy(c => c.State == FsrsState.Learning || c.State == FsrsState.Relearning ? 0 : 1)
+                    .ThenBy(c => c.Due)
+                    .Take(reviewBudget)
+                    .ToList();
             }
             else
             {
                 totalDueCount = await dueQuery.CountAsync();
                 dueCards = await dueQuery
-                    .OrderBy(c => c.Due)
+                    .OrderBy(c => c.State == FsrsState.Learning || c.State == FsrsState.Relearning ? 0 : 1)
+                    .ThenBy(c => c.Due)
                     .Take(reviewBudget)
                     .ToListAsync();
             }
