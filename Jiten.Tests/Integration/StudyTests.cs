@@ -1020,7 +1020,7 @@ public class StudyTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task SetVocabularyState_BlacklistRemove_RestoresState()
+    public async Task SetVocabularyState_BlacklistRemove_OnUnseenWord_DeletesCard()
     {
         var blacklist = new HttpRequestMessage(HttpMethod.Post, "/api/srs/set-vocabulary-state")
             .WithUser(TestUsers.UserA)
@@ -1036,8 +1036,7 @@ public class StudyTests(JitenWebApplicationFactory factory)
         using var scope = factory.Services.CreateScope();
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         var card = await userDb.FsrsCards.FirstOrDefaultAsync(c => c.WordId == 3 && c.ReadingIndex == 0 && c.UserId == TestUsers.UserA);
-        card.Should().NotBeNull();
-        card!.State.Should().NotBe(FsrsState.Blacklisted);
+        card.Should().BeNull();
     }
 
     [Fact]

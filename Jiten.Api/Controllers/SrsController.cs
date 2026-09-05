@@ -962,7 +962,7 @@ public class SrsController(
 
             case "neverForget-remove":
                 if (card != null && card.State == FsrsState.Mastered)
-                    RestoreCardState(card);
+                    await ReleaseCard(card);
                 break;
 
             case "blacklist-add":
@@ -982,7 +982,7 @@ public class SrsController(
             case "blacklist-remove":
                 if (card != null && card.State == FsrsState.Blacklisted)
                 {
-                    RestoreCardState(card);
+                    await ReleaseCard(card);
                 }
                 else if (card == null)
                 {
@@ -1034,7 +1034,7 @@ public class SrsController(
             case "suspend-remove":
                 if (card != null && card.State == FsrsState.Suspended)
                 {
-                    RestoreCardState(card);
+                    await ReleaseCard(card);
                 }
 
                 break;
@@ -1087,6 +1087,25 @@ public class SrsController(
 
     private Task MarkReviewRollupDirty(string userId)
         => ReviewRollupHelper.MarkDirtyAndQueue(userContext, backgroundJobs, userId);
+
+    /// <summary>Lifts a terminal state; a card the quick action itself created (no reviews) goes back to unseen.</summary>
+    private async Task<bool> ReleaseCard(FsrsCard card)
+    {
+        var hasReviews = await userContext.FsrsReviewLogs.AnyAsync(l => l.CardId == card.CardId);
+        return ReleaseCard(card, hasReviews);
+    }
+
+    private bool ReleaseCard(FsrsCard card, bool hasReviews)
+    {
+        if (hasReviews)
+        {
+            RestoreCardState(card);
+            return false;
+        }
+
+        userContext.FsrsCards.Remove(card);
+        return true;
+    }
 
     private static void RestoreCardState(FsrsCard card)
     {
@@ -1193,28 +1212,30 @@ public class SrsController(
             }
 
             case "neverForget-remove":
-                foreach (var card in cards.Where(c => c.State == FsrsState.Mastered))
-                {
-                    RestoreCardState(card);
-                    affected++;
-                }
-                break;
-
             case "blacklist-remove":
-                foreach (var card in cards.Where(c => c.State == FsrsState.Blacklisted))
-                {
-                    RestoreCardState(card);
-                    affected++;
-                }
-                break;
-
             case "suspend-remove":
-                foreach (var card in cards.Where(c => c.State == FsrsState.Suspended))
+            {
+                var held = request.State switch
                 {
-                    RestoreCardState(card);
+                    "neverForget-remove" => FsrsState.Mastered,
+                    "blacklist-remove" => FsrsState.Blacklisted,
+                    _ => FsrsState.Suspended,
+                };
+                var releasing = cards.Where(c => c.State == held).ToList();
+                var releasingIds = releasing.Select(c => c.CardId).ToList();
+                var reviewed = (await userContext.FsrsReviewLogs
+                                                 .Where(l => releasingIds.Contains(l.CardId))
+                                                 .Select(l => l.CardId)
+                                                 .Distinct()
+                                                 .ToListAsync()).ToHashSet();
+
+                foreach (var card in releasing)
+                {
+                    ReleaseCard(card, reviewed.Contains(card.CardId));
                     affected++;
                 }
                 break;
+            }
 
             case "reset-schedule":
                 foreach (var card in cards)
