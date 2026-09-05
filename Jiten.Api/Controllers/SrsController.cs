@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using Hangfire;
 using Jiten.Api.Dtos;
@@ -180,31 +180,25 @@ public class SrsController(
         var leechDetected = false;
         var leechSuspended = false;
         var isLapse = previousState == FsrsState.Review && request.Rating == FsrsRating.Again;
+        var threshold = studySettings.LeechThreshold;
+        var wasLeech = LeechHelper.IsLeech(card.Lapses, card.Stability, threshold);
 
-        if (isLapse)
+        cardAndLog.UpdatedCard.Lapses = isLapse ? card.Lapses + 1 : card.Lapses;
+
+        if (isLapse && threshold > 0)
         {
-            cardAndLog.UpdatedCard.Lapses = card.Lapses + 1;
-
-            var threshold = studySettings.LeechThreshold;
-
-            if (threshold > 0)
-            {
-                var lapseCount = cardAndLog.UpdatedCard.Lapses;
-                var halfThreshold = Math.Max(threshold / 2, 1);
-                if (lapseCount == threshold || (lapseCount > threshold && (lapseCount - threshold) % halfThreshold == 0))
-                {
-                    leechDetected = true;
-                    if (studySettings.LeechAction == LeechAction.Suspend)
-                    {
-                        cardAndLog.UpdatedCard.State = FsrsState.Suspended;
-                        leechSuspended = true;
-                    }
-                }
-            }
+            var lapseCount = cardAndLog.UpdatedCard.Lapses;
+            var halfThreshold = Math.Max(threshold / 2, 1);
+            leechDetected = lapseCount == threshold || (lapseCount > threshold && (lapseCount - threshold) % halfThreshold == 0);
         }
-        else
+
+        var isLeech = LeechHelper.IsLeech(cardAndLog.UpdatedCard.Lapses, cardAndLog.UpdatedCard.Stability, threshold);
+        if (!wasLeech && isLeech) leechDetected = true;
+
+        if (leechDetected && studySettings.LeechAction == LeechAction.Suspend)
         {
-            cardAndLog.UpdatedCard.Lapses = card.Lapses;
+            cardAndLog.UpdatedCard.State = FsrsState.Suspended;
+            leechSuspended = true;
         }
 
         if (card.CardId == 0)
@@ -247,6 +241,8 @@ public class SrsController(
             difficulty = cardAndLog.UpdatedCard.Difficulty,
             leechDetected,
             leechSuspended,
+            isLeech,
+            lapses = cardAndLog.UpdatedCard.Lapses,
             intervalPreview = new
             {
                 againSeconds = (int)intervals[FsrsRating.Again].TotalSeconds,

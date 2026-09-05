@@ -1082,6 +1082,14 @@ export const useSrsStore = defineStore('srs', () => {
 
   // Reconcile the server response with the optimistic state once the review lands.
   function applyReviewResult(reviewResult: any, ctx: PendingReview): void {
+    if (typeof reviewResult?.isLeech === 'boolean') {
+      for (const queued of currentBatch.value) {
+        if (`${queued.wordId}-${queued.readingIndex}` !== ctx.cardKey) continue;
+        queued.isLeech = reviewResult.isLeech;
+        if (typeof reviewResult.lapses === 'number') queued.lapses = reviewResult.lapses;
+      }
+    }
+
     if (reviewResult?.leechDetected || reviewResult?.leechSuspended) {
       lastLeechEvent.value = { detected: true, suspended: !!reviewResult.leechSuspended };
       if (!sessionLeeches.value.some((l) => `${l.wordId}-${l.readingIndex}` === ctx.cardKey)) {
