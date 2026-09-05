@@ -92,7 +92,7 @@
   }
 
   function effectiveTotal(deck: StudyDeckDto) {
-    return Math.max(0, deck.totalWords - deck.blacklistedCount);
+    return Math.max(0, deck.totalWords - deck.blacklistedCount - deck.suspendedCount);
   }
 
   function knownPct(deck: StudyDeckDto) {
