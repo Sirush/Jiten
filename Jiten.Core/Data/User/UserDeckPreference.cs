@@ -7,4 +7,6 @@ public class UserDeckPreference
     public DeckStatus Status { get; set; }
     public bool IsFavourite { get; set; }
     public bool IsIgnored { get; set; }
+
+    public DateTime UpdatedAt { get; set; }
 }

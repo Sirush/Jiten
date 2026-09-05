@@ -16,6 +16,7 @@ public class JitenDbContext : DbContext
     public DbSet<DeckEmbedding> DeckEmbeddings { get; set; }
     public DbSet<DeckEmbeddingSpace> DeckEmbeddingSpaces { get; set; }
     public DbSet<DeckDescriptionEmbedding> DeckDescriptionEmbeddings { get; set; }
+    public DbSet<DeckActivityDaily> DeckActivityDailies { get; set; }
     public DbSet<DeckRawText> DeckRawTexts { get; set; }
     public DbSet<DeckTitle> DeckTitles { get; set; }
     public DbSet<DeckStats> DeckStats { get; set; }
@@ -128,6 +129,17 @@ public class JitenDbContext : DbContext
             entity.HasIndex(d => d.Difficulty).HasDatabaseName("IX_Difficulty");
             entity.HasIndex(d => d.ExternalRating).HasDatabaseName("IX_ExternalRating");
             entity.HasIndex(d => new { d.ParentDeckId, d.MediaType }).HasDatabaseName("IX_ParentDeckId_MediaType");
+            if (isNpgsql)
+            {
+                entity.HasIndex(d => new { d.PopularityScore, d.ExternalRating, d.ReleaseDate })
+                      .IsDescending(true, true, true)
+                      .HasDatabaseName("IX_Decks_PopularityScore");
+            }
+            else
+            {
+                entity.HasIndex(d => new { d.PopularityScore, d.ExternalRating, d.ReleaseDate })
+                      .HasDatabaseName("IX_Decks_PopularityScore");
+            }
 
             entity.HasOne(d => d.ParentDeck)
                   .WithMany(p => p.Children)
@@ -232,6 +244,16 @@ public class JitenDbContext : DbContext
             entity.ToTable("DeckEmbeddingSpaces", "jiten");
             entity.HasKey(de => de.Id);
             entity.Property(de => de.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<DeckActivityDaily>(entity =>
+        {
+            entity.ToTable("DeckActivityDaily", "jiten");
+            entity.HasKey(a => new { a.DeckId, a.Date });
+            entity.HasOne<Deck>()
+                  .WithMany()
+                  .HasForeignKey(a => a.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<DeckDescriptionEmbedding>(entity =>

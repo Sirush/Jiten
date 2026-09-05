@@ -4,6 +4,7 @@
   import TieredMenu from 'primevue/tieredmenu';
   import Popover from 'primevue/popover';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { ordinal } from '~/utils/ordinal';
   import { getLinkLabel } from '~/utils/linkTypeMapper';
   import { getDeckStatusText } from '~/utils/deckStatusMapper';
   import { useJitenStore } from '~/stores/jitenStore';
@@ -41,6 +42,19 @@
   const menu = ref();
   const statusPopover = ref();
   const difficultyRef = ref<{ tooltip: string }>();
+
+  const popularityTooltip = computed(() => {
+    const deck = props.deck;
+    if (!deck.popularityRank) return '';
+    const lines = [`${ordinal(deck.popularityRank)} most popular ${getMediaTypeText(deck.mediaType).toLowerCase()} on Jiten`];
+    if (deck.popularityGlobalRank) lines[0] += `, #${deck.popularityGlobalRank} across all media`;
+    if (deck.popularityCounts) {
+      const c = deck.popularityCounts;
+      lines.push(`${c.inLists.toLocaleString()} in lists · ${c.favourites.toLocaleString()} favourites · ${c.studyDecks.toLocaleString()} study decks`);
+    }
+    if (deck.isTrending) lines.push('Trending: has a spike of activity recently');
+    return lines.join('\n');
+  });
 
   const store = useJitenStore();
   const authStore = useAuthStore();
@@ -456,6 +470,21 @@
         <template v-if="!isCompact" #subtitle>
           <span class="flex items-baseline gap-1 min-w-0 text-xs pl-0.5">
             <span class="font-semibold whitespace-nowrap text-gray-800 dark:text-gray-100">{{ getMediaTypeText(deck.mediaType) }}</span>
+            <template v-if="deck.popularityRank">
+              <span class="text-gray-400 dark:text-gray-400">·</span>
+              <Tooltip :content="popularityTooltip">
+                <span class="whitespace-nowrap cursor-help">
+                  <span class="font-bold tabular-nums text-gray-800 dark:text-gray-100">#{{ deck.popularityRank }}</span>
+                  <span class="text-gray-600 dark:text-gray-400"> most popular</span>
+                </span>
+              </Tooltip>
+            </template>
+            <span
+              v-if="deck.isTrending"
+              class="inline-flex items-center gap-1 rounded px-1.5 leading-4 text-[11px] font-semibold bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-200"
+            >
+              <i class="pi pi-arrow-up-right text-[9px]" />Trending
+            </span>
             <template v-if="alternateTitles.length && !store.hideAlternativeTitles">
               <span class="text-gray-400 dark:text-gray-400">·</span>
               <!-- Full text stays in the DOM (truncate only clips visually) so it remains crawlable. -->

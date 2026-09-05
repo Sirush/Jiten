@@ -101,6 +101,23 @@ public class Deck
     /// </summary>
     public byte ExternalRating { get; set; }
 
+    /// <summary>Nightly blend of decayed engagement and all-time rank, 0..1; parents only, children stay 0.</summary>
+    public double PopularityScore { get; set; }
+
+    /// <summary>Rank within the media type; 0 outside the display window, so any stored rank is one worth showing.</summary>
+    public int PopularityRank { get; set; }
+
+    public int PopularityGlobalRank { get; set; }
+
+    public bool IsTrending { get; set; }
+
+    /// <summary>Distinct users with any status on the deck or a child.</summary>
+    public int PopularityListCount { get; set; }
+
+    public int PopularityFavouriteCount { get; set; }
+
+    public int PopularityStudyDeckCount { get; set; }
+
     /// <summary>
     /// Amount of sentences
     /// </summary>

@@ -67,7 +67,7 @@
   const debouncedTitleFilter = ref(titleFilter.value);
 
   const sortByOptions = ref(
-    ['title', 'difficulty', 'subdeckCount', 'extRating', 'uKanji', 'uWordCount', 'wordCount', 'uKanjiOnce', 'communityVotes', 'releaseDate', 'addedDate'].map(
+    ['popularity', 'title', 'difficulty', 'subdeckCount', 'extRating', 'uKanji', 'uWordCount', 'wordCount', 'uKanjiOnce', 'communityVotes', 'releaseDate', 'addedDate'].map(
       deckSortOption
     )
   );
@@ -318,7 +318,7 @@
     } else {
       novelSortOptions.value = [];
       if (sortBy.value === 'charCount' || sortBy.value === 'dialoguePercentage') {
-        sortBy.value = 'title';
+        sortBy.value = 'popularity';
       }
     }
 
@@ -327,7 +327,7 @@
     } else {
       speechSortOptions.value = [];
       if (sortBy.value === 'speechSpeed' || sortBy.value === 'speechDuration') {
-        sortBy.value = 'title';
+        sortBy.value = 'popularity';
       }
     }
 
@@ -342,7 +342,7 @@
         sortByOptions.value = sortByOptions.value.filter((o) => o.value !== 'sentenceLength');
       }
       if (sortBy.value === 'sentenceLength') {
-        sortBy.value = 'title';
+        sortBy.value = 'popularity';
       }
     }
 

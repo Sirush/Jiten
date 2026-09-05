@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Text.Json;
@@ -48,7 +48,8 @@ public class MediaDeckController(
     IBackgroundJobClient backgroundJobClient,
     ICoverageJourneyService coverageJourneyService,
     Jiten.Core.Services.DeckVectorService deckVectorService,
-    DescriptionSearchService descriptionSearchService) : ControllerBase
+    DescriptionSearchService descriptionSearchService,
+    IDeckActivityBuffer activityBuffer) : ControllerBase
 {
     private record DeckIdWithCount(int DeckId, int TotalCount);
 
@@ -752,7 +753,7 @@ public class MediaDeckController(
     /// <param name="wordId">If set, only decks containing this word are returned.</param>
     /// <param name="readingIndex">Reading index associated with wordId.</param>
     /// <param name="titleFilter">Full‑text filter on title (supports romaji/english/japanese).</param>
-    /// <param name="sortBy">Sort field (title, difficulty, charCount, wordCount, sentenceLength, dialoguePercentage, subtitleRate, uKanji, uWordCount, uKanjiOnce, filter, releaseDate, coverage, uCoverage, totalCoverage, uTotalCoverage, communityVotes, etc.).</param>
+    /// <param name="sortBy">Sort field (title, difficulty, charCount, wordCount, sentenceLength, dialoguePercentage, subtitleRate, uKanji, uWordCount, uKanjiOnce, filter, releaseDate, coverage, uCoverage, totalCoverage, uTotalCoverage, communityVotes, popularity, etc.).</param>
     /// <param name="sortOrder">Ascending or Descending.</param>
     /// <param name="status">Status (none, nostatus, ignore, planning, ongoing, completed, dropped; "fav" is a legacy alias for favourite=true)</param>
     /// <param name="favourite">If true, only decks the user has favourited are returned.</param>
@@ -776,7 +777,7 @@ public class MediaDeckController(
     public async Task<PaginatedResponse<List<DeckDto>>> GetMediaDecks(int? offset = 0, MediaType? mediaType = null,
                                                                       int wordId = 0, int readingIndex = 0, string? titleFilter = "",
                                                                       string? sortBy = "",
-                                                                      SortOrder sortOrder = SortOrder.Ascending,
+                                                                      SortOrder? sortOrder = null,
                                                                       string status = "",
                                                                       int? charCountMin = null, int? charCountMax = null,
                                                                       float? difficultyMin = null, float? difficultyMax = null,
@@ -1001,7 +1002,8 @@ public class MediaDeckController(
         }
 
         if (string.IsNullOrEmpty(sortBy))
-            sortBy = string.IsNullOrEmpty(titleFilter) ? "title" : "filter";
+            sortBy = string.IsNullOrEmpty(titleFilter) ? "popularity" : "filter";
+        var order = sortOrder ?? (sortBy is "popularity" or "filter" ? SortOrder.Descending : SortOrder.Ascending);
 
         Dictionary<int, float> coverageDict = new();
         Dictionary<int, float> uniqueCoverageDict = new();
@@ -1073,7 +1075,7 @@ public class MediaDeckController(
                     _ => coverageDict
                 };
 
-                return await HandleCoverageSorting(query, projectedQuery, sortOrder, offset ?? 0, pageSize, coverageDict,
+                return await HandleCoverageSorting(query, projectedQuery, order, offset ?? 0, pageSize, coverageDict,
                                                    uniqueCoverageDict, youngCoverageDict, youngUniqueCoverageDict, sortDict,
                                                    allUserPrefs);
             }
@@ -1081,11 +1083,11 @@ public class MediaDeckController(
 
         if (wordId != 0)
         {
-            return await HandleWordBasedQuery(projectedQuery!, wordId, readingIndex, sortBy, sortOrder, offset ?? 0, pageSize, coverageDict,
+            return await HandleWordBasedQuery(projectedQuery!, wordId, readingIndex, sortBy, order, offset ?? 0, pageSize, coverageDict,
                                               uniqueCoverageDict, youngCoverageDict, youngUniqueCoverageDict, allUserPrefs, orderedDeckIds);
         }
 
-        query = ApplySorting(query, sortBy, sortOrder);
+        query = ApplySorting(query, sortBy, order);
         var totalCount = await query.CountAsync();
 
         List<Deck> paginatedDecks;
@@ -1353,6 +1355,9 @@ public class MediaDeckController(
                 : query.Where(d => d.DeckDifficulty != null && d.DeckDifficulty.DistinctVoterCount > 0)
                        .OrderByDescending(d => d.DeckDifficulty!.DistinctVoterCount)
                        .ThenBy(d => d.DeckId),
+            "popularity" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(d => d.PopularityScore == 0).ThenBy(d => d.PopularityScore).ThenBy(d => d.ExternalRating).ThenBy(d => d.ReleaseDate).ThenBy(d => d.DeckId)
+                : query.OrderByDescending(d => d.PopularityScore).ThenByDescending(d => d.ExternalRating).ThenByDescending(d => d.ReleaseDate).ThenBy(d => d.DeckId),
             _ => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.RomajiTitle).ThenBy(d => d.DeckId)
                 : query.OrderByDescending(d => d.RomajiTitle).ThenBy(d => d.DeckId),
@@ -1429,6 +1434,9 @@ public class MediaDeckController(
                 : query.Where(p => p.Deck.DeckDifficulty != null && p.Deck.DeckDifficulty.DistinctVoterCount > 0)
                        .OrderByDescending(p => p.Deck.DeckDifficulty!.DistinctVoterCount)
                        .ThenBy(p => p.Deck.DeckId),
+            "popularity" => sortOrder == SortOrder.Ascending
+                ? query.OrderBy(p => p.Deck.PopularityScore == 0).ThenBy(p => p.Deck.PopularityScore).ThenBy(p => p.Deck.ExternalRating).ThenBy(p => p.Deck.ReleaseDate).ThenBy(p => p.Deck.DeckId)
+                : query.OrderByDescending(p => p.Deck.PopularityScore).ThenByDescending(p => p.Deck.ExternalRating).ThenByDescending(p => p.Deck.ReleaseDate).ThenBy(p => p.Deck.DeckId),
             _ => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(p => p.Deck.RomajiTitle).ThenBy(p => p.Deck.DeckId)
                 : query.OrderByDescending(p => p.Deck.RomajiTitle).ThenBy(p => p.Deck.DeckId),
@@ -2134,6 +2142,8 @@ public class MediaDeckController(
         if (bytes == null)
             return Results.BadRequest();
 
+        await RecordDownloadAsync(id);
+
         logger.LogInformation(
                               "User downloaded deck: DeckId={DeckId}, DeckTitle={DeckTitle}, Format={Format}, DownloadType={DownloadType}, WordCount={WordCount}, ExcludeMature={ExcludeMature}, ExcludeAllTracked={ExcludeAllTracked}",
                               id, deck.OriginalTitle, request.Format, request.DownloadType, deckWordsRaw!.Count,
@@ -2146,6 +2156,68 @@ public class MediaDeckController(
             DeckFormat.Txt or DeckFormat.TxtRepeated => Results.File(bytes, "text/plain", $"{deck.OriginalTitle}.txt"),
             _ => throw new ArgumentOutOfRangeException()
         };
+    }
+
+    [HttpPost("{id:int}/view")]
+    [AllowAnonymous]
+    [EnableRateLimiting("fixed")]
+    [SwaggerOperation(Summary = "Record an engaged view of a deck",
+                      Description = "Fired by the deck page after a delay.")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public IResult RecordView(int id)
+    {
+        if (id > 0)
+            activityBuffer.RecordView(id, VisitorKey(HttpContext));
+        return Results.NoContent();
+    }
+
+    /// <summary>The proxy-resolved connection address is the only value a client cannot forge; headers are a fallback for calls arriving from inside the network.</summary>
+    private static string VisitorKey(HttpContext context)
+    {
+        var remote = context.Connection.RemoteIpAddress;
+        if (remote != null && !IsInternal(remote)) return remote.ToString();
+
+        foreach (var header in new[] { "CF-Connecting-IP", "X-Real-IP", "X-Forwarded-For" })
+        {
+            var value = context.Request.Headers[header].FirstOrDefault();
+            if (string.IsNullOrEmpty(value)) continue;
+            var ip = value.Split(',')[0].Trim();
+            if (!string.IsNullOrEmpty(ip) && ip != "unknown") return ip;
+        }
+
+        return remote?.ToString() ?? "unknown";
+    }
+
+    private static bool IsInternal(System.Net.IPAddress ip)
+    {
+        if (System.Net.IPAddress.IsLoopback(ip)) return true;
+        if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
+        if (ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) return false;
+        var b = ip.GetAddressBytes();
+        return b[0] == 10 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168);
+    }
+
+    private async Task RecordDownloadAsync(int deckId)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null)
+        {
+            activityBuffer.RecordGuestDownload(deckId);
+            return;
+        }
+
+        var exists = await userContext.DeckDownloads.AnyAsync(d => d.UserId == userId && d.DeckId == deckId);
+        if (exists) return;
+
+        userContext.DeckDownloads.Add(new DeckDownload { UserId = userId, DeckId = deckId, FirstDownloadAt = DateTime.UtcNow });
+        try
+        {
+            await userContext.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            userContext.ChangeTracker.Clear();
+        }
     }
 
     /// <summary>

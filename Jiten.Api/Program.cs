@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -433,6 +433,7 @@ builder.Services.AddScoped<IIndexNowService, IndexNowService>();
 builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
 builder.Services.AddSingleton<IStudySessionService, StudySessionService>();
 builder.Services.AddSingleton<IPendingCoverageQueue, PendingCoverageQueue>();
+builder.Services.AddSingleton<IDeckActivityBuffer, DeckActivityBuffer>();
 builder.Services.AddSingleton<IPendingEmbeddingQueue, PendingEmbeddingQueue>();
 builder.Services.AddSingleton<IUserActivityTracker, UserActivityTracker>();
 builder.Services.AddSingleton<IParseThrottleService, ParseThrottleService>();
@@ -447,6 +448,8 @@ builder.Services.AddHostedService<ParserWarmupService>();
 builder.Services.AddHostedService<WordFormSiblingCacheWarmupService>();
 builder.Services.AddHostedService<DerivationLinkCacheWarmupService>();
 builder.Services.AddHostedService<DeckVectorCacheWarmupService>();
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddHostedService<DeckActivityFlushService>();
 
 // Shared secret sent by the Nuxt SSR server (X-Internal-Ssr-Key) so first-party server
 // rendering is exempt from the per-IP anonymous rate limit. Without this, every anonymous
@@ -796,6 +799,7 @@ builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
 builder.Services.AddScoped<ReviewRollupJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
+builder.Services.AddScoped<PopularityScoreJob>();
 builder.Services.AddScoped<RecomputeVectorsJob>();
 builder.Services.AddScoped<DescriptionEmbeddingJob>();
 builder.Services.AddScoped<StripeReconcileJob>();
@@ -1005,6 +1009,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         "sequence-monitor",
         job => job.CheckSequences(),
         Cron.Daily(5));
+
+    recurringJobs.AddOrUpdate<PopularityScoreJob>(
+        "popularity-score",
+        job => job.RecomputeAll(),
+        "30 3 * * *");
 }
 
 app.UseResponseCompression();

@@ -7,6 +7,7 @@ export interface DeckSortMeta {
 }
 
 export const deckSortMeta: Record<string, DeckSortMeta> = {
+  popularity: { default: SortOrder.Descending, asc: 'Least popular', desc: 'Most popular' },
   title: { default: SortOrder.Ascending, asc: 'A → Z', desc: 'Z → A' },
   difficulty: { default: SortOrder.Ascending, asc: 'Easiest first', desc: 'Hardest first' },
   coverage: { default: SortOrder.Descending, asc: 'Lowest first', desc: 'Highest first' },
@@ -32,6 +33,7 @@ export const deckSortMeta: Record<string, DeckSortMeta> = {
 };
 
 export const deckSortLabels: Record<string, string> = {
+  popularity: 'Popularity',
   title: 'Title',
   difficulty: 'Difficulty',
   totalCoverage: 'Coverage (Total)',
@@ -57,6 +59,7 @@ export const deckSortLabels: Record<string, string> = {
 
 // Display order of the General group, so options staying consistent as entries are added or removed.
 export const deckSortOrdering = [
+  'popularity',
   'title',
   'difficulty',
   'totalCoverage',

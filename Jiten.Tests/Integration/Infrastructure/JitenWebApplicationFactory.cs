@@ -1,4 +1,4 @@
-using Hangfire;
+﻿using Hangfire;
 using Jiten.Core;
 using Jiten.Core.Data.Authentication;
 using Microsoft.AspNetCore.Authentication;
@@ -207,11 +207,13 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         db.MediaRequestUpvotes.RemoveRange(db.MediaRequestUpvotes);
         db.MediaRequestBoosts.RemoveRange(db.MediaRequestBoosts);
         db.MediaRequests.RemoveRange(db.MediaRequests);
+        db.DeckActivityDailies.RemoveRange(db.DeckActivityDailies);
         db.Decks.RemoveRange(db.Decks);
         await db.SaveChangesAsync();
 
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         userDb.UserDeckPreferences.RemoveRange(userDb.UserDeckPreferences);
+        userDb.DeckDownloads.RemoveRange(userDb.DeckDownloads);
         userDb.UserProfiles.RemoveRange(userDb.UserProfiles);
         userDb.UserStudyDeckWords.RemoveRange(userDb.UserStudyDeckWords);
         userDb.UserStudyDecks.RemoveRange(userDb.UserStudyDecks);

@@ -55,6 +55,10 @@ export interface Deck {
   hideDialoguePercentage: boolean;
   hideAverageSentenceLength: boolean;
   externalRating: number;
+  popularityRank?: number | null;
+  popularityGlobalRank?: number | null;
+  isTrending?: boolean;
+  popularityCounts?: { inLists: number; favourites: number; studyDecks: number } | null;
   exampleSentence?: ExampleSentence;
   genres?: Genre[];
   tags?: TagWithPercentage[];
