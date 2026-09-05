@@ -124,7 +124,7 @@ public class SrsController(
                       Description = "Rate (review) a word using the FSRS scheduler.")]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IResult> Review(SrsReviewRequest request)
     {
         var userId = currentUserService.UserId;
@@ -133,21 +133,22 @@ public class SrsController(
         if (!Enum.IsDefined(request.Rating))
             return Results.BadRequest($"Invalid rating: {(int)request.Rating}. Must be 1 (Again), 2 (Hard), 3 (Good), or 4 (Easy).");
 
-        var hasIdempotency = !string.IsNullOrEmpty(request.SessionId) && !string.IsNullOrEmpty(request.ClientRequestId);
+        if (!string.IsNullOrEmpty(request.SessionId) && !await sessionService.ValidateSession(request.SessionId, userId))
+            return Results.Unauthorized();
+
+        var hasIdempotency = !string.IsNullOrEmpty(request.ClientRequestId);
+        var idempotencyScope = !string.IsNullOrEmpty(request.SessionId) ? request.SessionId : $"user:{userId}";
 
         if (hasIdempotency)
         {
-            if (!await sessionService.ValidateSession(request.SessionId!, userId))
-                return Results.Unauthorized();
-
-            var cached = await sessionService.GetCachedReviewResult(request.SessionId!, request.ClientRequestId!);
+            var cached = await sessionService.GetCachedReviewResult(idempotencyScope, request.ClientRequestId!);
             if (cached != null)
                 return Results.Content(cached, "application/json");
         }
-
-        if (!debounceService.TryAcquire("review", userId, request.WordId, request.ReadingIndex))
+        else if (!debounceService.TryAcquire("review", userId, request.WordId, request.ReadingIndex))
         {
-            return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+            // 409, not 429: a duplicate must not be retried as if it were a rate limit.
+            return Results.Conflict(new { error_message = "A review for this word was just recorded. Duplicate ignored." });
         }
 
         await using var transaction = await userContext.Database.BeginTransactionAsync();
@@ -259,7 +260,7 @@ public class SrsController(
         if (hasIdempotency)
         {
             var resultJson = System.Text.Json.JsonSerializer.Serialize(resultObj);
-            _ = sessionService.StoreCachedReviewResult(request.SessionId!, request.ClientRequestId!, resultJson);
+            _ = sessionService.StoreCachedReviewResult(idempotencyScope, request.ClientRequestId!, resultJson);
         }
 
         logger.LogInformation("User reviewed SRS card: WordId={WordId}, ReadingIndex={ReadingIndex}, Rating={Rating}, NewState={NewState}",

@@ -1124,13 +1124,12 @@ export const useSrsStore = defineStore('srs', () => {
     try {
       reviewResult = await $api('srs/review', { method: 'POST', body });
     } catch (firstError: any) {
-      // 429 is the server-side debounce treating the request as a duplicate — i.e. already accepted.
-      if (firstError?.status !== 429) {
-        try {
-          reviewResult = await $api('srs/review', { method: 'POST', body });
-        } catch (retryError: any) {
-          if (retryError?.status !== 429) failed = true;
-        }
+      const status = firstError?.status;
+      if (status === 409 || status === 429) await new Promise((r) => setTimeout(r, 1100));
+      try {
+        reviewResult = await $api('srs/review', { method: 'POST', body });
+      } catch {
+        failed = true;
       }
     }
 
