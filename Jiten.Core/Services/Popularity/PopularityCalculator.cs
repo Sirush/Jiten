@@ -178,6 +178,35 @@ public static class PopularityCalculator
         return result;
     }
 
+    public static List<IntentEvent> CollapsePerRoot(IEnumerable<IntentEvent> intents, IReadOnlyDictionary<int, int> rootOf)
+    {
+        var byUser = new Dictionary<(int Root, string UserId), IntentEvent>();
+        var anonymous = new List<IntentEvent>();
+        foreach (var e in intents)
+        {
+            var root = rootOf.GetValueOrDefault(e.DeckId, e.DeckId);
+            if (e.UserId == null)
+            {
+                anonymous.Add(e with { DeckId = root });
+                continue;
+            }
+
+            var key = (root, e.UserId);
+            if (!byUser.TryGetValue(key, out var kept))
+            {
+                byUser[key] = e with { DeckId = root };
+                continue;
+            }
+
+            var weight = Math.Abs(e.Weight) > Math.Abs(kept.Weight) ? e.Weight : kept.Weight;
+            var at = e.At > kept.At ? e.At : kept.At;
+            byUser[key] = kept with { Weight = weight, At = at };
+        }
+
+        anonymous.AddRange(byUser.Values);
+        return anonymous;
+    }
+
     private static double Attention(double views, double guestDownloads) =>
         Math.Min(PopularityWeights.AttentionCap,
                  PopularityWeights.ViewWeight * Math.Log2(1 + views) + PopularityWeights.GuestDownloadWeight * Math.Log2(1 + guestDownloads));

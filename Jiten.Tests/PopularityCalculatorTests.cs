@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using Jiten.Core.Data;
 using Jiten.Core.Services.Popularity;
 
@@ -41,6 +41,40 @@ public class PopularityCalculatorTests
         fresh[2].Should().BeGreaterThan(0);
         later[2].Should().BeLessThan(fresh[2]);
         later[1].Should().BeGreaterThan(later[2]);
+    }
+
+    [Fact]
+    public void Marking_every_episode_counts_like_marking_the_series_once()
+    {
+        var rootOf = new Dictionary<int, int> { [1] = 1, [2] = 2 };
+        for (var i = 11; i <= 40; i++) rootOf[i] = 1;
+        var episodes = Enumerable.Range(0, 5).SelectMany(u => Enumerable.Range(11, 30)
+            .Select(ep => new IntentEvent(ep, PopularityWeights.Completed, Now.AddDays(-ep), $"u{u}")));
+        var series = Enumerable.Range(0, 20).Select(u => new IntentEvent(2, PopularityWeights.Completed, Now.AddDays(-20), $"s{u}"));
+
+        var collapsed = PopularityCalculator.CollapsePerRoot(episodes.Concat(series), rootOf);
+
+        collapsed.Count(e => e.DeckId == 1).Should().Be(5);
+        collapsed.Where(e => e.DeckId == 1).Should().OnlyContain(e => e.Weight == PopularityWeights.Completed && e.At == Now.AddDays(-11));
+        collapsed.Count(e => e.DeckId == 2).Should().Be(20);
+    }
+
+    [Fact]
+    public void Collapse_keeps_the_strongest_weight_and_the_latest_date()
+    {
+        var rootOf = new Dictionary<int, int> { [1] = 1, [11] = 1 };
+        var events = new[]
+        {
+            new IntentEvent(11, PopularityWeights.Planning, Now.AddDays(-1), "u"),
+            new IntentEvent(1, PopularityWeights.Completed, Now.AddDays(-30), "u"),
+            new IntentEvent(11, PopularityWeights.Ongoing, Now.AddDays(-400)),
+        };
+
+        var collapsed = PopularityCalculator.CollapsePerRoot(events, rootOf);
+
+        collapsed.Should().HaveCount(2);
+        collapsed.Single(e => e.UserId == "u").Should().Be(new IntentEvent(1, PopularityWeights.Completed, Now.AddDays(-1), "u"));
+        collapsed.Single(e => e.UserId == null).DeckId.Should().Be(1);
     }
 
     [Fact]
