@@ -45,7 +45,11 @@ public sealed class SentenceEmbedder : IDisposable
 
     public int Dimension { get; }
 
-    public SentenceEmbedder(string modelDir)
+    /// <summary>Configuration key for the ONNX intra-op thread cap; unset lets OnnxRuntime take every core.</summary>
+    public const string ThreadsConfigKey = "DescriptionEmbeddingThreads";
+
+    /// <param name="intraOpThreads">Cores a single forward pass may use; the API caps this so a backfill cannot starve request handling.</param>
+    public SentenceEmbedder(string modelDir, int? intraOpThreads = null)
     {
         var modelPath = Path.Combine(modelDir, "onnx", "model.onnx");
         var spmPath = Path.Combine(modelDir, "sentencepiece.bpe.model");
@@ -61,6 +65,8 @@ public sealed class SentenceEmbedder : IDisposable
         _tokenizer = SentencePieceTokenizer.Create(spm, false, false);
 
         var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+        if (intraOpThreads is > 0)
+            options.IntraOpNumThreads = intraOpThreads.Value;
         _session = new InferenceSession(modelPath, options);
         _wantsTokenTypeIds = _session.InputMetadata.ContainsKey("token_type_ids");
         Dimension = _session.OutputMetadata.First().Value.Dimensions[^1];

@@ -67,6 +67,7 @@ services:
       - DictionaryPath=${DICTIONARY_PATH:-/path/to/system_full.dic}
       - FastTextModelPath=${FASTTEXT_MODEL_PATH:-/app/uploads/models/cc.ja.300.bin}
       - DescriptionEmbeddingModelDir=${DESCRIPTION_EMBEDDING_MODEL_DIR:-/app/uploads/models/bge-m3}
+      - DescriptionEmbeddingThreads=${DESCRIPTION_EMBEDDING_THREADS:-2}
       - JimakuApiKey=${JIMAKU_API_KEY:-}
       - TmdbApiKey=${TMDB_API_KEY:-}
       - DOTNET_ENVIRONMENT=${DOTNET_ENVIRONMENT:-}

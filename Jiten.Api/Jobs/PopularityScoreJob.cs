@@ -43,23 +43,29 @@ public class PopularityScoreJob(
         var preferences = await userContext.UserDeckPreferences.AsNoTracking()
                                            .Select(p => new { p.UserId, p.DeckId, p.Status, p.IsFavourite, p.IsIgnored, p.UpdatedAt })
                                            .ToListAsync();
+        var statusIntents = new List<IntentEvent>();
+        var favouriteIntents = new List<IntentEvent>();
+        var ignoredIntents = new List<IntentEvent>();
         foreach (var p in preferences)
         {
             var statusWeight = PopularityWeights.ForStatus(p.Status);
-            if (statusWeight != 0) intents.Add(new IntentEvent(p.DeckId, statusWeight, p.UpdatedAt, p.UserId));
-            if (p.IsFavourite) intents.Add(new IntentEvent(p.DeckId, PopularityWeights.Favourite, p.UpdatedAt, p.UserId));
-            if (p.IsIgnored) intents.Add(new IntentEvent(p.DeckId, PopularityWeights.Ignored, p.UpdatedAt, p.UserId));
+            if (statusWeight != 0) statusIntents.Add(new IntentEvent(p.DeckId, statusWeight, p.UpdatedAt, p.UserId));
+            if (p.IsFavourite) favouriteIntents.Add(new IntentEvent(p.DeckId, PopularityWeights.Favourite, p.UpdatedAt, p.UserId));
+            if (p.IsIgnored) ignoredIntents.Add(new IntentEvent(p.DeckId, PopularityWeights.Ignored, p.UpdatedAt, p.UserId));
             if (!rootOf.TryGetValue(p.DeckId, out var root)) continue;
             if (p.Status != DeckStatus.None) Track(listUsers, root, p.UserId);
             if (p.IsFavourite) Track(favouriteUsers, root, p.UserId);
         }
+        intents.AddRange(PopularityCalculator.CollapsePerRoot(statusIntents, rootOf));
+        intents.AddRange(PopularityCalculator.CollapsePerRoot(favouriteIntents, rootOf));
+        intents.AddRange(PopularityCalculator.CollapsePerRoot(ignoredIntents, rootOf));
 
         var studyDecks = await userContext.UserStudyDecks.AsNoTracking()
                                           .Where(s => s.DeckId != null)
                                           .Select(s => new { s.UserId, s.DeckId, s.CreatedAt })
                                           .ToListAsync();
-        intents.AddRange(studyDecks.GroupBy(s => new { s.UserId, s.DeckId })
-                                   .Select(g => new IntentEvent(g.Key.DeckId!.Value, PopularityWeights.StudyDeck, g.Min(s => s.CreatedAt), g.Key.UserId)));
+        intents.AddRange(PopularityCalculator.CollapsePerRoot(
+            studyDecks.Select(s => new IntentEvent(s.DeckId!.Value, PopularityWeights.StudyDeck, s.CreatedAt, s.UserId)), rootOf));
         foreach (var s in studyDecks)
         {
             if (rootOf.TryGetValue(s.DeckId!.Value, out var root)) Track(studyUsers, root, s.UserId);
@@ -68,7 +74,8 @@ public class PopularityScoreJob(
         var downloads = await userContext.DeckDownloads.AsNoTracking()
                                          .Select(d => new { d.UserId, d.DeckId, d.FirstDownloadAt })
                                          .ToListAsync();
-        intents.AddRange(downloads.Select(d => new IntentEvent(d.DeckId, PopularityWeights.Download, d.FirstDownloadAt, d.UserId)));
+        intents.AddRange(PopularityCalculator.CollapsePerRoot(
+            downloads.Select(d => new IntentEvent(d.DeckId, PopularityWeights.Download, d.FirstDownloadAt, d.UserId)), rootOf));
 
         var requestDecks = await context.MediaRequests.AsNoTracking()
                                         .Where(r => r.FulfilledDeckId != null || r.TargetDeckId != null)
@@ -81,15 +88,15 @@ public class PopularityScoreJob(
                                    .Where(u => requestIds.Contains(u.MediaRequestId))
                                    .Select(u => new { u.MediaRequestId, u.UserId, u.CreatedAt })
                                    .ToListAsync();
-        intents.AddRange(upvotes.GroupBy(u => new { u.UserId, DeckId = deckByRequest[u.MediaRequestId] })
-                                .Select(g => new IntentEvent(g.Key.DeckId, PopularityWeights.Upvote, g.Min(u => u.CreatedAt), g.Key.UserId)));
+        intents.AddRange(PopularityCalculator.CollapsePerRoot(
+            upvotes.Select(u => new IntentEvent(deckByRequest[u.MediaRequestId], PopularityWeights.Upvote, u.CreatedAt, u.UserId)), rootOf));
 
         var boosts = await context.MediaRequestBoosts.AsNoTracking()
                                   .Where(b => requestIds.Contains(b.MediaRequestId))
                                   .Select(b => new { b.MediaRequestId, b.UserId, b.CreatedAt })
                                   .ToListAsync();
-        intents.AddRange(boosts.GroupBy(b => new { b.UserId, DeckId = deckByRequest[b.MediaRequestId] })
-                               .Select(g => new IntentEvent(g.Key.DeckId, PopularityWeights.Boost, g.Min(b => b.CreatedAt), g.Key.UserId)));
+        intents.AddRange(PopularityCalculator.CollapsePerRoot(
+            boosts.Select(b => new IntentEvent(deckByRequest[b.MediaRequestId], PopularityWeights.Boost, b.CreatedAt, b.UserId)), rootOf));
 
         var since = DateOnly.FromDateTime(now - ActivityWindow);
         var activityRows = await context.DeckActivityDailies.AsNoTracking()
