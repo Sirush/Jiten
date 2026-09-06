@@ -21,6 +21,11 @@
   const tagUsage = ref<TagUsage | null>(null);
   const loadingUsage = ref(false);
   const searchQuery = ref('');
+  const searchInput = ref();
+  const clearSearch = () => {
+    searchQuery.value = '';
+    nextTick(() => searchInput.value?.$el?.focus());
+  };
 
   // Tag mappings dialog state
   const showMappingsDialog = ref(false);
@@ -300,8 +305,8 @@
         <InputIcon>
           <Icon name="material-symbols:search-rounded" />
         </InputIcon>
-        <InputText v-model="searchQuery" type="text" placeholder="Search tags by name..." class="w-full" />
-        <InputIcon v-if="searchQuery" class="cursor-pointer" @click="searchQuery = ''">
+        <InputText ref="searchInput" v-model="searchQuery" type="text" placeholder="Search tags by name..." class="w-full" />
+        <InputIcon v-if="searchQuery" class="cursor-pointer" @click="clearSearch">
           <Icon name="material-symbols:close" />
         </InputIcon>
       </IconField>

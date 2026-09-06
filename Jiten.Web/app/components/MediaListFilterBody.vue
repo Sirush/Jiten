@@ -46,6 +46,12 @@
   const setRange = (key: MediaRangeKey, bounds: RangeBounds) => {
     ranges.value = { ...ranges.value, [key]: bounds };
   };
+
+  const searchInput = ref();
+  const clearSearch = () => {
+    search.value = '';
+    nextTick(() => searchInput.value?.$el?.focus());
+  };
 </script>
 
 <template>
@@ -55,6 +61,7 @@
         <Icon name="material-symbols:search-rounded" />
       </InputIcon>
       <InputText
+        ref="searchInput"
         v-model="search"
         type="text"
         placeholder="Find a filter, genre or tag..."
@@ -62,7 +69,7 @@
         class="w-full"
         :size="mobile ? undefined : 'small'"
       />
-      <InputIcon v-if="search" class="cursor-pointer" @click="search = ''">
+      <InputIcon v-if="search" class="cursor-pointer" @click="clearSearch">
         <Icon name="material-symbols:close" />
       </InputIcon>
     </IconField>

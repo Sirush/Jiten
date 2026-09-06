@@ -63,6 +63,11 @@
   const isDescribeMode = computed(() => describeQuery.value !== null);
   const titleFilter = ref(describeQuery.value ?? (route.query.title ? (Array.isArray(route.query.title) ? route.query.title[0] : route.query.title) : null));
   const debouncedTitleFilter = ref(titleFilter.value);
+  const titleFilterInput = ref();
+  const clearTitleFilter = () => {
+    titleFilter.value = null;
+    nextTick(() => titleFilterInput.value?.$el?.focus());
+  };
 
   const sortByOptions = ref(
     [
@@ -1082,13 +1087,14 @@
             <Icon name="material-symbols:search-rounded" />
           </InputIcon>
           <InputText
+            ref="titleFilterInput"
             v-model="titleFilter"
             type="text"
             placeholder="Search by title, or describe what you want"
             aria-label="Search by title, or describe what you want"
             class="w-full"
           />
-          <InputIcon v-if="titleFilter" class="cursor-pointer" @click="titleFilter = null">
+          <InputIcon v-if="titleFilter" class="cursor-pointer" @click="clearTitleFilter">
             <Icon name="material-symbols:close" />
           </InputIcon>
         </IconField>

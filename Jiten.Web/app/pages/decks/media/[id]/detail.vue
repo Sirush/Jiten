@@ -88,6 +88,11 @@
   const subdecksRefreshing = computed(() => status.value === 'pending');
 
   const subdeckFilterInput = ref(appliedSubdeckFilter.value ?? '');
+  const subdeckFilterInputEl = ref();
+  const clearSubdeckFilter = () => {
+    subdeckFilterInput.value = '';
+    nextTick(() => subdeckFilterInputEl.value?.$el?.focus());
+  };
 
   const pushSubdeckFilter = debounce(async (value: string) => {
     await router.replace({ query: { ...route.query, subdeckFilter: value.trim() || undefined, offset: undefined } });
@@ -417,6 +422,7 @@
                 <Icon name="material-symbols:search-rounded" />
               </InputIcon>
               <InputText
+                ref="subdeckFilterInputEl"
                 v-model="subdeckFilterInput"
                 type="text"
                 :placeholder="subdecksAreVideos ? 'Search videos by title or number' : 'Search subdecks by title or number'"
@@ -425,7 +431,7 @@
                 @compositionstart="subdeckFilterComposing = true"
                 @compositionend="onSubdeckFilterCompositionEnd"
               />
-              <InputIcon v-if="subdeckFilterInput" class="cursor-pointer" @click="subdeckFilterInput = ''">
+              <InputIcon v-if="subdeckFilterInput" class="cursor-pointer" @click="clearSubdeckFilter">
                 <Icon name="material-symbols:close" />
               </InputIcon>
             </IconField>

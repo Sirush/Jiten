@@ -84,6 +84,11 @@
   const unmatchedOpen = ref(false);
 
   const search = ref('');
+  const searchInput = ref();
+  const clearSearch = () => {
+    search.value = '';
+    nextTick(() => searchInput.value?.$el?.focus());
+  };
   const activeView = ref<ViewKey>('import');
   const sortKey = ref<SortKey>('title');
   const sortDir = ref<SortDir>('asc');
@@ -688,8 +693,8 @@
               <InputIcon>
                 <Icon name="material-symbols:search-rounded" />
               </InputIcon>
-              <InputText v-model="search" type="text" placeholder="Search titles..." class="w-full" size="small" />
-              <InputIcon v-if="search" class="cursor-pointer" @click="search = ''">
+              <InputText ref="searchInput" v-model="search" type="text" placeholder="Search titles..." class="w-full" size="small" />
+              <InputIcon v-if="search" class="cursor-pointer" @click="clearSearch">
                 <Icon name="material-symbols:close" />
               </InputIcon>
             </IconField>

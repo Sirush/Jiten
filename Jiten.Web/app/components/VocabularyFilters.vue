@@ -38,6 +38,11 @@
   };
 
   const sortPopover = ref();
+  const searchInput = ref();
+  const clearSearch = () => {
+    emit('update:search', '');
+    nextTick(() => searchInput.value?.$el?.focus());
+  };
 
   const sortLabel = computed(() => props.sortByOptions.find((o) => o.value === props.sortBy)?.label ?? 'Sort');
 
@@ -76,8 +81,14 @@
       <InputIcon>
         <Icon name="material-symbols:search-rounded" />
       </InputIcon>
-      <InputText :model-value="search" placeholder="Search words or definitions..." class="w-full" @update:model-value="$emit('update:search', $event)" />
-      <InputIcon v-if="search" class="cursor-pointer" @click="$emit('update:search', '')">
+      <InputText
+        ref="searchInput"
+        :model-value="search"
+        placeholder="Search words or definitions..."
+        class="w-full"
+        @update:model-value="$emit('update:search', $event)"
+      />
+      <InputIcon v-if="search" class="cursor-pointer" @click="clearSearch">
         <Icon name="material-symbols:close" />
       </InputIcon>
     </IconField>

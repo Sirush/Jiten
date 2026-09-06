@@ -132,6 +132,11 @@
   const excludeOwnRequests = ref(route.query.excludeOwn === '1');
 
   const searchQuery = ref(typeof route.query.search === 'string' ? route.query.search : '');
+  const searchInput = ref();
+  const clearSearch = () => {
+    searchQuery.value = '';
+    nextTick(() => searchInput.value?.$el?.focus());
+  };
   const debouncedSearch = ref(searchQuery.value);
   let searchTimeout: ReturnType<typeof setTimeout>;
   watch(searchQuery, (val) => {
@@ -321,8 +326,8 @@
         <label class="text-sm text-muted-color">Search</label>
         <IconField>
           <InputIcon class="pi pi-search" />
-          <InputText v-model="searchQuery" placeholder="Search titles..." class="w-full" />
-          <InputIcon v-if="searchQuery" class="pi pi-times cursor-pointer" @click="searchQuery = ''" />
+          <InputText ref="searchInput" v-model="searchQuery" placeholder="Search titles..." class="w-full" />
+          <InputIcon v-if="searchQuery" class="pi pi-times cursor-pointer" @click="clearSearch" />
         </IconField>
       </div>
       <div class="flex flex-col gap-1 min-w-0">

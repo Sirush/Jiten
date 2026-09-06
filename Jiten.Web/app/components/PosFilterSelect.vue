@@ -4,6 +4,11 @@
   const model = defineModel<string[]>({ required: true });
 
   const searchQuery = ref('');
+  const searchInput = ref();
+  const clearSearch = () => {
+    searchQuery.value = '';
+    nextTick(() => searchInput.value?.$el?.focus());
+  };
   const expanded = ref<Record<string, boolean>>({});
   const toggleExpand = (key: string) => {
     expanded.value[key] = !expanded.value[key];
@@ -62,8 +67,8 @@
         <InputIcon>
           <Icon name="material-symbols:search-rounded" />
         </InputIcon>
-        <InputText v-model="searchQuery" type="text" placeholder="Search tags..." size="small" class="w-full" />
-        <InputIcon v-if="searchQuery" class="cursor-pointer" @click="searchQuery = ''">
+        <InputText ref="searchInput" v-model="searchQuery" type="text" placeholder="Search tags..." size="small" class="w-full" />
+        <InputIcon v-if="searchQuery" class="cursor-pointer" @click="clearSearch">
           <Icon name="material-symbols:close" />
         </InputIcon>
       </IconField>

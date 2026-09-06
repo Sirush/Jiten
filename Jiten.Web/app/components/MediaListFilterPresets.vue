@@ -27,6 +27,11 @@
   const saving = ref(false);
   const draftName = ref('');
   const search = ref('');
+  const searchInput = ref();
+  const clearSearch = () => {
+    search.value = '';
+    nextTick(() => searchInput.value?.$el?.focus());
+  };
   const renaming = ref<string | null>(null);
   const renameDraft = ref('');
   const deleting = ref<string | null>(null);
@@ -153,8 +158,8 @@
         <InputIcon>
           <Icon name="material-symbols:search-rounded" />
         </InputIcon>
-        <InputText v-model="search" size="small" placeholder="Filter presets" aria-label="Filter presets" class="w-full" />
-        <InputIcon v-if="search" class="cursor-pointer" @click="search = ''">
+        <InputText ref="searchInput" v-model="search" size="small" placeholder="Filter presets" aria-label="Filter presets" class="w-full" />
+        <InputIcon v-if="search" class="cursor-pointer" @click="clearSearch">
           <Icon name="material-symbols:close" />
         </InputIcon>
       </IconField>
