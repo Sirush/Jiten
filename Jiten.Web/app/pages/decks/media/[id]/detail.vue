@@ -85,13 +85,22 @@
 
   const { start, end, totalItems, previousLink, nextLink, currentPage, totalPages, pageLinkFor } = usePagination(response);
 
+  const subdecksRefreshing = computed(() => status.value === 'pending');
+
   const subdeckFilterInput = ref(appliedSubdeckFilter.value ?? '');
 
   const pushSubdeckFilter = debounce(async (value: string) => {
     await router.replace({ query: { ...route.query, subdeckFilter: value.trim() || undefined, offset: undefined } });
-  }, 400);
+  }, 500);
+
+  const subdeckFilterComposing = ref(false);
+  const onSubdeckFilterCompositionEnd = () => {
+    subdeckFilterComposing.value = false;
+    pushSubdeckFilter(subdeckFilterInput.value);
+  };
 
   watch(subdeckFilterInput, (value) => {
+    if (subdeckFilterComposing.value) return;
     if ((value.trim() || undefined) === appliedSubdeckFilter.value) return;
     pushSubdeckFilter(value);
   });
@@ -214,8 +223,12 @@
 
   const hasSubdecksToShow = computed(() => (response.value?.data?.subDecks?.length ?? 0) > 0);
   // The filter is server-side, so a zero-match page must still render the controls that produced it.
-  const showSubdeckSection = computed(() => hasSubdecksToShow.value || hasActiveSubdeckFilters.value);
-  const showSubdeckControls = computed(() => totalItems.value > 5 || hasActiveSubdeckFilters.value);
+  const showSubdeckSection = ref(false);
+  const showSubdeckControls = ref(false);
+  watchEffect(() => {
+    if (hasSubdecksToShow.value || hasActiveSubdeckFilters.value || subdeckFilterInput.value) showSubdeckSection.value = true;
+    if (totalItems.value > 5 || hasActiveSubdeckFilters.value || subdeckFilterInput.value) showSubdeckControls.value = true;
+  });
   const noMatchMessage = computed(() =>
     appliedSubdeckFilter.value ? `No subdecks match “${appliedSubdeckFilter.value}”.` : 'No subdecks match these filters.'
   );
@@ -371,7 +384,7 @@
 <template>
   <div>
     <DeckBreadcrumb :deck="response?.data?.mainDeck" :parent-deck="response?.data?.parentDeck" class="mb-2" />
-    <div v-if="status === 'pending'" class="flex flex-col gap-4">
+    <div v-if="status === 'pending' && !response?.data?.mainDeck" class="flex flex-col gap-4">
       <Card v-for="i in 5" :key="i" class="p-2">
         <template #content>
           <Skeleton width="100%" height="250px" />
@@ -409,6 +422,8 @@
                 :placeholder="subdecksAreVideos ? 'Search videos by title or number' : 'Search subdecks by title or number'"
                 aria-label="Search subdecks"
                 class="w-full"
+                @compositionstart="subdeckFilterComposing = true"
+                @compositionend="onSubdeckFilterCompositionEnd"
               />
               <InputIcon v-if="subdeckFilterInput" class="cursor-pointer" @click="subdeckFilterInput = ''">
                 <Icon name="material-symbols:close" />
@@ -460,46 +475,46 @@
             </div>
           </div>
         </div>
-        <div v-if="totalPages > 1 || showPageSize" class="pt-4 pb-1">
-          <PaginationControls
-            :previous-link="previousLink"
-            :next-link="nextLink"
-            :current-page="currentPage"
-            :total-pages="totalPages"
-            :page-link-for="pageLinkFor"
-            :start="start"
-            :end="end"
-            :total-items="totalItems"
-            item-label="decks"
-            :page-size="25"
-            :page-size-options="showPageSize ? [25, 50, 100] : undefined"
-            page-size-param="pageSize"
-            mobile-compact
-          />
+        <div :class="{ 'opacity-50 transition-opacity': subdecksRefreshing }" :aria-busy="subdecksRefreshing">
+          <div v-if="totalPages > 1 || showPageSize" class="pt-4 pb-1">
+            <PaginationControls
+              :previous-link="previousLink"
+              :next-link="nextLink"
+              :current-page="currentPage"
+              :total-pages="totalPages"
+              :page-link-for="pageLinkFor"
+              :start="start"
+              :end="end"
+              :total-items="totalItems"
+              item-label="decks"
+              :page-size="25"
+              :page-size-options="showPageSize ? [25, 50, 100] : undefined"
+              page-size-param="pageSize"
+              mobile-compact
+            />
+          </div>
+          <div
+            v-if="hasSubdecksToShow && effectiveSubdeckStyle === DisplayStyle.Card"
+            class="grid grid-cols-[repeat(auto-fit,20rem)] items-stretch gap-2 justify-center pt-4"
+          >
+            <MediaDeckCard
+              v-for="deck in response.data.subDecks"
+              :key="deck.deckId"
+              :deck="deck"
+              title-tag="h3"
+              :is-compact="true"
+              @update:deck="updateSubDeck"
+              @parent-status-changed="updateParentStatus"
+            />
+          </div>
+          <div v-else-if="hasSubdecksToShow && effectiveSubdeckStyle === DisplayStyle.Compact" class="flex flex-wrap gap-4 justify-center pt-4">
+            <MediaDeckCompactView v-for="(deck, index) in response.data.subDecks" :key="deck.deckId" :deck="deck" :lazy-cover="index >= 12" />
+          </div>
+          <div v-else-if="hasSubdecksToShow" class="flex flex-col gap-0.5 pt-4">
+            <MediaDeckTableView v-for="(deck, index) in response.data.subDecks" :key="deck.deckId" :deck="deck" :lazy-render="index >= 12" />
+          </div>
+          <div v-else class="pt-6 text-center text-surface-500 dark:text-surface-400">{{ noMatchMessage }}</div>
         </div>
-        <!-- Grid rather than flex-wrap: justify-content centres the track block while items still fill
-             left-to-right, so a final short row starts at column 1 instead of centring its orphan. -->
-        <div
-          v-if="hasSubdecksToShow && effectiveSubdeckStyle === DisplayStyle.Card"
-          class="grid grid-cols-[repeat(auto-fit,20rem)] items-stretch gap-2 justify-center pt-4"
-        >
-          <MediaDeckCard
-            v-for="deck in response.data.subDecks"
-            :key="deck.deckId"
-            :deck="deck"
-            title-tag="h3"
-            :is-compact="true"
-            @update:deck="updateSubDeck"
-            @parent-status-changed="updateParentStatus"
-          />
-        </div>
-        <div v-else-if="hasSubdecksToShow && effectiveSubdeckStyle === DisplayStyle.Compact" class="flex flex-wrap gap-4 justify-center pt-4">
-          <MediaDeckCompactView v-for="(deck, index) in response.data.subDecks" :key="deck.deckId" :deck="deck" :lazy-cover="index >= 12" />
-        </div>
-        <div v-else-if="hasSubdecksToShow" class="flex flex-col gap-0.5 pt-4">
-          <MediaDeckTableView v-for="(deck, index) in response.data.subDecks" :key="deck.deckId" :deck="deck" :lazy-render="index >= 12" />
-        </div>
-        <div v-else class="pt-6 text-center text-surface-500 dark:text-surface-400">{{ noMatchMessage }}</div>
       </div>
 
       <div id="similar-media" class="scroll-mt-4">
