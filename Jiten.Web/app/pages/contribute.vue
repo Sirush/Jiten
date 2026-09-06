@@ -5,6 +5,7 @@
 
   const globalStatsUrl = 'stats/get-global-stats';
   const { data: response, status, error } = await useApiFetch<GlobalStats>(globalStatsUrl);
+  const mediaByTypeSorted = computed(() => Object.entries(response.value?.mediaByType ?? {}).sort(([, a], [, b]) => b - a));
 </script>
 
 <template>
@@ -91,7 +92,7 @@
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div v-for="[mediaType, amount] in Object.entries(response.mediaByType)" :key="mediaType" class="p-2 border rounded-md">
+          <div v-for="[mediaType, amount] in mediaByTypeSorted" :key="mediaType" class="p-2 border rounded-md">
             <div class="font-medium">
               {{ getMediaTypeText(MediaType[mediaType]) }}
             </div>

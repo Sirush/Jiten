@@ -70,6 +70,10 @@ services:
       - DescriptionEmbeddingThreads=${DESCRIPTION_EMBEDDING_THREADS:-2}
       - JimakuApiKey=${JIMAKU_API_KEY:-}
       - TmdbApiKey=${TMDB_API_KEY:-}
+      - YouTube__IngestKey=${YOUTUBE_INGEST_KEY:-}
+      - YouTube__ServerFetch=${YOUTUBE_SERVER_FETCH:-false}
+      - YtDlp__Path=${YTDLP_PATH:-yt-dlp}
+      - YtDlp__Proxy=${YTDLP_PROXY:-}
       - DOTNET_ENVIRONMENT=${DOTNET_ENVIRONMENT:-}
       - StoreRawText=${STORE_RAW_TEXT:-false}
       - IgdbClientId=${IGDB_CLIENT_ID:-}

@@ -11,8 +11,11 @@ using Jiten.Api.Jobs;
 using Jiten.Api.Services;
 using Jiten.Api.Authentication;
 using Jiten.Core;
+using Jiten.Parser;
 using Jiten.Core.Data.Authentication;
 using Jiten.Core.WebNovel;
+using Jiten.Core.YouTube;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -139,6 +142,33 @@ builder.Services.AddHttpClient(SyosetuSource.HttpClientName, client =>
 
 builder.Services.AddSingleton<IWebNovelSource, SyosetuSource>();
 builder.Services.AddSingleton<IWebNovelSourceResolver, WebNovelSourceResolver>();
+
+builder.Services.Configure<YtDlpOptions>(builder.Configuration.GetSection("YtDlp"));
+builder.Services.Configure<YouTubeOptions>(builder.Configuration.GetSection("YouTube"));
+builder.Services.AddHttpClient("YouTube", client =>
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Jiten/1.0");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddSingleton<YtDlpClient>(sp =>
+    new YtDlpClient(sp.GetRequiredService<IOptions<YtDlpOptions>>().Value,
+                    sp.GetRequiredService<IHttpClientFactory>().CreateClient("YouTube")));
+builder.Services.AddSingleton<YouTubeFeedReader>(sp =>
+    new YouTubeFeedReader(sp.GetRequiredService<IHttpClientFactory>().CreateClient("YouTube")));
+builder.Services.AddSingleton<YouTubeSourceRegistrar>();
+builder.Services.AddSingleton<SpeechStatsComputer>(async items =>
+{
+    var stats = await SubtitleMoraRateCalculator.ComputeAsync(items);
+    return (stats.DurationMs, stats.MoraCount);
+});
+builder.Services.AddTransient<YouTubeDrainService>(sp =>
+    new YouTubeDrainService(sp.GetRequiredService<IDbContextFactory<JitenDbContext>>(),
+                            sp.GetRequiredService<YtDlpClient>(),
+                            sp.GetRequiredService<SpeechStatsComputer>(),
+                            Path.Join(builder.Configuration["StaticFilesPath"], "tmp", "youtube"),
+                            TimeSpan.FromMilliseconds(sp.GetRequiredService<IOptions<YouTubeOptions>>().Value.DelayMs),
+                            sp.GetRequiredService<ILogger<YouTubeDrainService>>()));
+builder.Services.AddScoped<Jiten.Api.Controllers.IngestKeyFilter>();
 
 // OpenTelemetry Configuration
 var otelConfig = builder.Configuration.GetSection("OpenTelemetry");
@@ -372,9 +402,9 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("RequiresAdmin", policy => policy.RequireRole(nameof(UserRole.Administrator)));
 
-    // Corpus analysis tools: restricted to users with the Researcher rate-limit tier (or higher),
-    // plus administrators. Tier is carried in the "rate_limit_tier" claim by both the JWT and the
-    // API-key auth handlers.
+    options.AddPolicy("RequiresAccountSession", policy => policy.RequireAssertion(ctx =>
+        ctx.User.Identity?.IsAuthenticated == true && !ctx.User.HasClaim("auth_scheme", "ApiKey")));
+
     options.AddPolicy("RequiresResearcher", policy => policy.RequireAssertion(ctx =>
         ctx.User.IsInRole(nameof(UserRole.Administrator)) ||
         ctx.User.HasClaim("rate_limit_tier", nameof(RateLimitTier.Researcher)) ||
@@ -492,6 +522,16 @@ builder.Services.AddRateLimiter(options =>
                                                                  AutoReplenishment = true
                                                              });
     });
+
+    // Home-CLI ingest: a drain posts one request per video at 1.5s intervals, so this only bounds key guessing
+    options.AddPolicy("ingest", context =>
+        RateLimitPartition.GetFixedWindowLimiter($"ingest:{GetClientIp(context)}",
+                                                 _ => new FixedWindowRateLimiterOptions
+                                                      {
+                                                          PermitLimit = 120, Window = TimeSpan.FromSeconds(60),
+                                                          QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                                                          AutoReplenishment = true
+                                                      }));
 
     options.AddPolicy("heavy", context =>
     {
@@ -794,6 +834,9 @@ builder.Services.AddScoped<ParseJob>();
 builder.Services.AddScoped<WebNovelImportJob>();
 builder.Services.AddScoped<WebNovelFetchJob>();
 builder.Services.AddScoped<WebNovelSyncSweepJob>();
+builder.Services.AddScoped<YouTubeImportJob>();
+builder.Services.AddScoped<YouTubeFetchJob>();
+builder.Services.AddScoped<YouTubeSyncSweepJob>();
 builder.Services.AddScoped<ReparseJob>();
 builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
@@ -880,6 +923,16 @@ builder.Services.AddHangfireServer((options) =>
     options.ServerName = "WebNovelSyosetuMetadataServer";
     options.Queues = [WebNovelQueues.SyosetuMetadata];
     options.WorkerCount = 1;
+});
+
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "YouTubeFetchServer";
+    options.Queues = [YouTubeQueues.Fetch];
+    options.WorkerCount = 1;
+    // Enumerating and draining a large channel runs for hours
+    options.ShutdownTimeout = TimeSpan.FromHours(3);
+    options.StopTimeout = TimeSpan.FromHours(3);
 });
 
 builder.Services.AddHangfireServer((options) =>
@@ -981,6 +1034,16 @@ if (!app.Environment.IsEnvironment("Testing"))
         "webnovel-sync-sweep",
         job => job.Sweep(),
         Cron.Daily(5));
+
+    recurringJobs.AddOrUpdate<YouTubeSyncSweepJob>(
+        "youtube-sync-sweep",
+        job => job.Sweep(),
+        Cron.Daily(4));
+
+    recurringJobs.AddOrUpdate<YouTubeImportJob>(
+        "youtube-import-fetched",
+        job => job.ImportAllFetched(),
+        Cron.Hourly(40));
 
     recurringJobs.AddOrUpdate<StripeReconcileJob>(
         "stripe-reconcile",

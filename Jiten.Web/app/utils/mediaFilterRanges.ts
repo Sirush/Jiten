@@ -13,7 +13,8 @@ export type MediaRangeKey =
   | 'releaseYear'
   | 'extRating'
   | 'speechSpeed'
-  | 'speechDuration';
+  | 'speechDuration'
+  | 'runtime';
 
 export type MediaRangeSection = 'content' | 'difficulty' | 'media' | 'audio';
 

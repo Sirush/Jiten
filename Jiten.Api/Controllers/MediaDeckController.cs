@@ -575,10 +575,29 @@ public class MediaDeckController(
                                                        int? speechDurationMin, int? speechDurationMax,
                                                        string? genres, string? excludeGenres,
                                                        string? tags, string? excludeTags,
-                                                       bool? excludeSequels)
+                                                       bool? excludeSequels,
+                                                       int? runtimeMin = null, int? runtimeMax = null,
+                                                       string? excludeMediaTypes = null)
     {
         if (mediaType != null)
             query = query.Where(d => d.MediaType == mediaType);
+
+        if (mediaType == null && !string.IsNullOrEmpty(excludeMediaTypes))
+        {
+            var excluded = excludeMediaTypes.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                            .Select(t => int.TryParse(t, out var id) ? (MediaType?)id : null)
+                                            .Where(t => t.HasValue)
+                                            .Select(t => t!.Value)
+                                            .ToList();
+            if (excluded.Count > 0)
+                query = query.Where(d => !excluded.Contains(d.MediaType));
+        }
+
+        if (runtimeMin != null)
+            query = query.Where(d => (d.MedianChildRuntimeSeconds ?? d.RuntimeSeconds) >= runtimeMin);
+
+        if (runtimeMax != null)
+            query = query.Where(d => (d.MedianChildRuntimeSeconds ?? d.RuntimeSeconds) <= runtimeMax);
 
         if (charCountMin != null)
             query = query.Where(d => d.CharacterCount >= charCountMin);
@@ -719,7 +738,8 @@ public class MediaDeckController(
                        "mediaType", "charCountMin", "charCountMax", "difficultyMin", "difficultyMax", "releaseYearMin",
                        "releaseYearMax", "uniqueKanjiMin", "uniqueKanjiMax", "subdeckCountMin", "subdeckCountMax",
                        "extRatingMin", "extRatingMax", "genres", "excludeGenres", "tags", "excludeTags", "speechSpeedMin",
-                       "speechSpeedMax", "speechDurationMin", "speechDurationMax", "excludeSequels"
+                       "speechSpeedMax", "speechDurationMin", "speechDurationMax", "excludeSequels", "runtimeMin",
+                       "runtimeMax", "excludeMediaTypes"
                    ])]
     [SwaggerOperation(Summary = "Browse filter facet counts",
                       Description = "Returns per-genre and per-tag deck counts for the current filter selection.")]
@@ -734,13 +754,16 @@ public class MediaDeckController(
                                                string? tags = null, string? excludeTags = null,
                                                float? speechSpeedMin = null, float? speechSpeedMax = null,
                                                int? speechDurationMin = null, int? speechDurationMax = null,
-                                               bool? excludeSequels = null)
+                                               bool? excludeSequels = null,
+                                               int? runtimeMin = null, int? runtimeMax = null,
+                                               string? excludeMediaTypes = null)
     {
         var query = ApplyBrowseFilters(context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null), mediaType,
                                        charCountMin, charCountMax, difficultyMin, difficultyMax, releaseYearMin,
                                        releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin, subdeckCountMax,
                                        extRatingMin, extRatingMax, speechSpeedMin, speechSpeedMax, speechDurationMin,
-                                       speechDurationMax, genres, excludeGenres, tags, excludeTags, excludeSequels);
+                                       speechDurationMax, genres, excludeGenres, tags, excludeTags, excludeSequels,
+                                       runtimeMin, runtimeMax, excludeMediaTypes);
 
         var genreCounts = await query.SelectMany(d => d.DeckGenres)
                                      .GroupBy(dg => dg.Genre)
@@ -778,7 +801,8 @@ public class MediaDeckController(
                        "uniqueKanjiMax", "subdeckCountMin", "subdeckCountMax", "extRatingMin", "extRatingMax", "genres",
                        "excludeGenres", "tags", "excludeTags", "coverageMin", "coverageMax", "uniqueCoverageMin",
                        "uniqueCoverageMax", "totalCoverageMin", "totalCoverageMax", "uTotalCoverageMin", "uTotalCoverageMax",
-                       "speechSpeedMin", "speechSpeedMax"
+                       "speechSpeedMin", "speechSpeedMax", "speechDurationMin", "speechDurationMax", "excludeSequels",
+                       "runtimeMin", "runtimeMax", "excludeMediaTypes"
                    ])]
     [SwaggerOperation(Summary = "List media decks",
                       Description =
@@ -803,7 +827,9 @@ public class MediaDeckController(
                                                                       float? uTotalCoverageMin = null, float? uTotalCoverageMax = null,
                                                                       float? speechSpeedMin = null, float? speechSpeedMax = null,
                                                                       int? speechDurationMin = null, int? speechDurationMax = null,
-                                                                      bool? excludeSequels = null, bool? favourite = null)
+                                                                      bool? excludeSequels = null, bool? favourite = null,
+                                                                      int? runtimeMin = null, int? runtimeMax = null,
+                                                                      string? excludeMediaTypes = null)
     {
         // Responses carry the viewer's coverage and preferences; they must not be shared from a cache.
         if (currentUserService.IsAuthenticated)
@@ -906,7 +932,7 @@ public class MediaDeckController(
                                    releaseYearMin, releaseYearMax, uniqueKanjiMin, uniqueKanjiMax, subdeckCountMin,
                                    subdeckCountMax, extRatingMin, extRatingMax, speechSpeedMin, speechSpeedMax,
                                    speechDurationMin, speechDurationMax, genres, excludeGenres, tags, excludeTags,
-                                   excludeSequels);
+                                   excludeSequels, runtimeMin, runtimeMax, excludeMediaTypes);
 
         if (wordId != 0)
         {
@@ -1299,10 +1325,10 @@ public class MediaDeckController(
                            + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0))
                        .ThenBy(d => d.DeckId),
             "charCount" => sortOrder == SortOrder.Ascending
-                ? query.Where(d => d.MediaType != MediaType.Anime && d.MediaType != MediaType.Drama && d.MediaType != MediaType.Movie && d.MediaType != MediaType.Audio)
+                ? query.Where(d => d.MediaType != MediaType.Anime && d.MediaType != MediaType.Drama && d.MediaType != MediaType.Movie && d.MediaType != MediaType.Audio && d.MediaType != MediaType.YouTube)
                        .OrderBy(d => d.CharacterCount)
                        .ThenBy(d => d.DeckId)
-                : query.Where(d => d.MediaType != MediaType.Anime && d.MediaType != MediaType.Drama && d.MediaType != MediaType.Movie && d.MediaType != MediaType.Audio)
+                : query.Where(d => d.MediaType != MediaType.Anime && d.MediaType != MediaType.Drama && d.MediaType != MediaType.Movie && d.MediaType != MediaType.Audio && d.MediaType != MediaType.YouTube)
                        .OrderByDescending(d => d.CharacterCount)
                        .ThenBy(d => d.DeckId),
             "sentenceLength" => sortOrder == SortOrder.Ascending
@@ -1391,10 +1417,10 @@ public class MediaDeckController(
                            + (float)(p.Deck.DeckDifficulty != null ? p.Deck.DeckDifficulty.UserAdjustment : 0))
                        .ThenBy(p => p.Deck.DeckId),
             "charCount" => sortOrder == SortOrder.Ascending
-                ? query.Where(p => p.Deck.MediaType != MediaType.Anime && p.Deck.MediaType != MediaType.Drama && p.Deck.MediaType != MediaType.Movie && p.Deck.MediaType != MediaType.Audio)
+                ? query.Where(p => p.Deck.MediaType != MediaType.Anime && p.Deck.MediaType != MediaType.Drama && p.Deck.MediaType != MediaType.Movie && p.Deck.MediaType != MediaType.Audio && p.Deck.MediaType != MediaType.YouTube)
                        .OrderBy(p => p.Deck.CharacterCount)
                        .ThenBy(p => p.Deck.DeckId)
-                : query.Where(p => p.Deck.MediaType != MediaType.Anime && p.Deck.MediaType != MediaType.Drama && p.Deck.MediaType != MediaType.Movie && p.Deck.MediaType != MediaType.Audio)
+                : query.Where(p => p.Deck.MediaType != MediaType.Anime && p.Deck.MediaType != MediaType.Drama && p.Deck.MediaType != MediaType.Movie && p.Deck.MediaType != MediaType.Audio && p.Deck.MediaType != MediaType.YouTube)
                        .OrderByDescending(p => p.Deck.CharacterCount)
                        .ThenBy(p => p.Deck.DeckId),
             "sentenceLength" => sortOrder == SortOrder.Ascending
@@ -1892,19 +1918,26 @@ public class MediaDeckController(
     /// </summary>
     /// <param name="id">Deck identifier.</param>
     /// <param name="offset">Pagination offset for subdecks.</param>
-    /// <param name="subdeckFilter">Case-insensitive substring matched against the subdeck titles.</param>
-    /// <param name="subdeckSort">Subdeck ordering.</param>
+    /// <param name="subdeckFilter">Title search over the subdecks (full-text with romaji and kana variants; a bare number also matches the subdeck position).</param>
+    /// <param name="subdeckSort">Subdeck ordering; unset means best match while filtering, deck order otherwise.</param>
     /// <param name="subdeckSortOrder">Direction for <paramref name="subdeckSort"/>.</param>
+    /// <param name="pageSize">Subdecks per page: 25, 50 or 100.</param>
+    /// <param name="runtimeMin">Minimum subdeck runtime in seconds.</param>
+    /// <param name="runtimeMax">Maximum subdeck runtime in seconds.</param>
+    /// <param name="hideCompleted">Drops subdecks the current user marked completed.</param>
     /// <returns>Deck detail with subdecks.</returns>
     [HttpGet("{id}/detail")]
     [SwaggerOperation(Summary = "Get deck details")]
     [ProducesResponseType(typeof(PaginatedResponse<DeckDetailDto?>), StatusCodes.Status200OK)]
     public async Task<PaginatedResponse<DeckDetailDto?>> GetMediaDeckDetail(int id, int? offset = 0,
                                                                            string? subdeckFilter = null,
-                                                                           SubdeckSort subdeckSort = SubdeckSort.Order,
-                                                                           SortOrder subdeckSortOrder = SortOrder.Ascending)
+                                                                           SubdeckSort? subdeckSort = null,
+                                                                           SortOrder subdeckSortOrder = SortOrder.Ascending,
+                                                                           int pageSize = 25,
+                                                                           int? runtimeMin = null, int? runtimeMax = null,
+                                                                           bool hideCompleted = false)
     {
-        int pageSize = 25;
+        pageSize = pageSize switch { 50 => 50, 100 => 100, _ => 25 };
 
         var deck = await context.Decks.AsNoTracking()
                                 .Include(d => d.Children)
@@ -1925,36 +1958,85 @@ public class MediaDeckController(
         var parentDeck = await context.Decks.AsNoTracking().Include(d => d.DeckGenres).Include(d => d.DeckTags).ThenInclude(dt => dt.Tag).Include(d => d.DeckDifficulty)
                                       .FirstOrDefaultAsync(d => d.DeckId == deck.ParentDeckId);
         var subDecks = context.Decks.AsNoTracking().Include(d => d.DeckGenres).Include(d => d.DeckTags).ThenInclude(dt => dt.Tag).Include(d => d.DeckDifficulty)
+                              .Include(d => d.Links)
                               .Where(d => d.ParentDeckId == id);
 
-        if (!string.IsNullOrWhiteSpace(subdeckFilter))
+        if (runtimeMin != null)
+            subDecks = subDecks.Where(d => d.RuntimeSeconds >= runtimeMin);
+        if (runtimeMax != null)
+            subDecks = subDecks.Where(d => d.RuntimeSeconds <= runtimeMax);
+
+        if (hideCompleted && currentUserService.IsAuthenticated)
         {
-            // lower() + LIKE rather than ILIKE: the integration suite runs on SQLite, which has no ILIKE.
-            var pattern = $"%{EscapeLikeWildcards(subdeckFilter.Trim().ToLower())}%";
-            subDecks = subDecks.Where(d => EF.Functions.Like(d.OriginalTitle.ToLower(), pattern, LikeEscapeCharacter)
-                                           || (d.RomajiTitle != null && EF.Functions.Like(d.RomajiTitle.ToLower(), pattern, LikeEscapeCharacter))
-                                           || (d.EnglishTitle != null && EF.Functions.Like(d.EnglishTitle.ToLower(), pattern, LikeEscapeCharacter)));
+            var completedIds = await userContext.UserDeckPreferences.AsNoTracking()
+                                                .Where(p => p.UserId == currentUserService.UserId && p.Status == DeckStatus.Completed)
+                                                .Select(p => p.DeckId)
+                                                .ToListAsync();
+            if (completedIds.Count > 0)
+                subDecks = subDecks.Where(d => !completedIds.Contains(d.DeckId));
         }
 
-        int totalCount = await subDecks.CountAsync();
-
-        subDecks = (subdeckSort, subdeckSortOrder) switch
+        List<int>? rankedIds = null;
+        if (!string.IsNullOrWhiteSpace(subdeckFilter))
         {
-            (SubdeckSort.Difficulty, SortOrder.Descending) => subDecks.OrderByDescending(SubdeckDifficultyKey).ThenBy(d => d.DeckOrder),
-            (SubdeckSort.Difficulty, _) => subDecks.OrderBy(SubdeckDifficultyKey).ThenBy(d => d.DeckOrder),
-            (_, SortOrder.Descending) => subDecks.OrderByDescending(d => d.DeckOrder),
-            _ => subDecks.OrderBy(d => d.DeckOrder),
-        };
+            rankedIds = await SearchSubdeckIds(id, subdeckFilter.Trim());
+            subDecks = subDecks.Where(d => rankedIds.Contains(d.DeckId));
+        }
 
-        subDecks = subDecks
-                   .Skip(offset ?? 0)
-                   .Take(pageSize);
+        var sort = subdeckSort ?? (rankedIds != null ? SubdeckSort.Relevance : SubdeckSort.Order);
+        if (sort == SubdeckSort.Relevance && rankedIds == null) sort = SubdeckSort.Order;
+        if (sort == SubdeckSort.Coverage && !currentUserService.IsAuthenticated) sort = SubdeckSort.Order;
+
+        int totalCount = await subDecks.CountAsync();
+        List<Deck> subDeckList;
+
+        if (sort is SubdeckSort.Relevance or SubdeckSort.Coverage)
+        {
+            var candidateIds = await subDecks.OrderBy(d => d.DeckOrder).Select(d => d.DeckId).ToListAsync();
+            List<int> orderedIds;
+            if (sort == SubdeckSort.Relevance)
+            {
+                var candidates = candidateIds.ToHashSet();
+                orderedIds = rankedIds!.Where(candidates.Contains).ToList();
+                if (subdeckSortOrder == SortOrder.Descending) orderedIds.Reverse();
+            }
+            else
+            {
+                var coverage = (await UserCoverageChunkHelper.GetCoverage(userContext, currentUserService.UserId!, candidateIds)).MatureCoverage;
+                // Zero means "not computed yet" as often as "nothing known", so those trail in both directions.
+                var known = candidateIds.Where(cid => coverage.GetValueOrDefault(cid) > 0f);
+                var ordered = subdeckSortOrder == SortOrder.Descending ? known.OrderByDescending(cid => coverage[cid]) : known.OrderBy(cid => coverage[cid]);
+                orderedIds = ordered.Concat(candidateIds.Where(cid => coverage.GetValueOrDefault(cid) <= 0f)).ToList();
+            }
+
+            var pageIds = orderedIds.Skip(offset ?? 0).Take(pageSize).ToList();
+            var pageIndex = pageIds.Select((did, idx) => (did, idx)).ToDictionary(x => x.did, x => x.idx);
+            subDeckList = (await subDecks.Where(d => pageIds.Contains(d.DeckId)).ToListAsync())
+                          .OrderBy(d => pageIndex[d.DeckId])
+                          .ToList();
+        }
+        else
+        {
+            var descending = subdeckSortOrder == SortOrder.Descending;
+            IOrderedQueryable<Deck> ordered = sort switch
+            {
+                SubdeckSort.Difficulty => descending ? subDecks.OrderByDescending(SubdeckDifficultyKey) : subDecks.OrderBy(SubdeckDifficultyKey),
+                SubdeckSort.Length => descending ? subDecks.OrderByDescending(SubdeckLengthKey) : subDecks.OrderBy(SubdeckLengthKey),
+                SubdeckSort.Date => descending ? subDecks.OrderByDescending(d => d.ReleaseDate) : subDecks.OrderBy(d => d.ReleaseDate),
+                SubdeckSort.SpeechSpeed => descending ? subDecks.OrderByDescending(SubdeckSpeechSpeedKey) : subDecks.OrderBy(SubdeckSpeechSpeedKey),
+                SubdeckSort.UniqueWords => descending ? subDecks.OrderByDescending(d => d.UniqueWordCount) : subDecks.OrderBy(d => d.UniqueWordCount),
+                _ => descending ? subDecks.OrderByDescending(d => d.DeckOrder) : subDecks.OrderBy(d => d.DeckOrder),
+            };
+            subDeckList = await ordered.ThenBy(d => d.DeckOrder).ThenBy(d => d.DeckId)
+                                       .Skip(offset ?? 0)
+                                       .Take(pageSize)
+                                       .ToListAsync();
+        }
 
         var mainDeckDto = new DeckDto(deck);
         mainDeckDto.Relationships = DeckRelationshipDto.FromDeck(deck.RelationshipsAsSource, deck.RelationshipsAsTarget);
         List<DeckDto> subdeckDtos = [];
 
-        var subDeckList = await subDecks.ToListAsync();
         foreach (var subDeck in subDeckList)
             subdeckDtos.Add(new DeckDto(subDeck));
 
@@ -2797,6 +2879,118 @@ public class MediaDeckController(
     private static readonly Expression<Func<Deck, float>> SubdeckDifficultyKey =
         d => (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
              + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0);
+
+    /// <summary>Video runtime when known, else speech time, else text length; siblings share a media type so the units agree within one list.</summary>
+    private static readonly Expression<Func<Deck, long>> SubdeckLengthKey =
+        d => d.RuntimeSeconds != null ? d.RuntimeSeconds.Value : (d.SpeechDuration > 0 ? d.SpeechDuration / 1000 : d.CharacterCount);
+
+    private static readonly Expression<Func<Deck, double>> SubdeckSpeechSpeedKey =
+        d => d.SpeechDuration > 0 ? d.SpeechMoraCount / (d.SpeechDuration / 60000.0) : 0;
+
+    /// <summary>A query that is just a number, optionally wrapped in an episode/volume marker ("5", "ep5", "第5話").</summary>
+    private static readonly Regex SubdeckNumberQuery =
+        new(@"^\s*(?:ep\.?|episode|#|第|vol\.?|volume|no\.?|ch\.?|chapter|part)?\s*(\d{1,5})\s*(?:話|巻|章|話目|回)?\s*$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Subdeck ids matching a title query, best match first
+    /// </summary>
+    private async Task<List<int>> SearchSubdeckIds(int parentId, string filter)
+    {
+        var ordered = new List<int>();
+
+        var numberMatch = SubdeckNumberQuery.Match(filter);
+        if (numberMatch.Success && int.TryParse(numberMatch.Groups[1].Value, out var number))
+        {
+            var children = await context.Decks.AsNoTracking()
+                                         .Where(d => d.ParentDeckId == parentId)
+                                         .OrderBy(d => d.DeckOrder).ThenBy(d => d.DeckId)
+                                         .Select(d => new { d.DeckId, d.DeckOrder, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle })
+                                         .ToListAsync();
+            var exactNumber = new Regex($@"(?<![0-9０-９]){number}(?![0-9０-９])|(?<![0-9０-９]){number.ToString().ToFullWidthDigits()}(?![0-9０-９])");
+            ordered.AddRange(children.Where(c => exactNumber.IsMatch(c.OriginalTitle)
+                                                 || (c.RomajiTitle != null && exactNumber.IsMatch(c.RomajiTitle))
+                                                 || (c.EnglishTitle != null && exactNumber.IsMatch(c.EnglishTitle)))
+                                     .Select(c => c.DeckId));
+            ordered.AddRange(children.Where(c => c.DeckOrder == number).Select(c => c.DeckId));
+        }
+
+        var kanaVariants = new List<string>();
+        if (WanaKana.IsRomaji(filter))
+        {
+            var hiragana = WanaKana.ToHiragana(filter);
+            if (hiragana != filter) kanaVariants.Add(hiragana);
+            var katakana = WanaKana.ToKatakana(filter);
+            if (katakana != filter && katakana != hiragana) kanaVariants.Add(katakana);
+        }
+
+        if (context.Database.IsNpgsql())
+        {
+            var romajiFilter = TextNormalizationHelper.ContainsRomaji(filter) ? TextNormalizationHelper.NormaliseRomaji(filter) : filter;
+            var hasRomajiVariant = romajiFilter != filter.ToLowerInvariant();
+            var filterNoSpaces = filter.Replace(" ", "");
+            var romajiFilterNoSpaces = romajiFilter.Replace(" ", "");
+            var queryLength = filter.Length;
+            var kana1 = kanaVariants.ElementAtOrDefault(0) ?? "";
+            var kana2 = kanaVariants.ElementAtOrDefault(1) ?? "";
+            var hasKana = kanaVariants.Count > 0;
+
+            FormattableString sql = $$"""
+                                      WITH exact_matches AS (
+                                          SELECT DISTINCT dt."DeckId", 0 AS match_priority, 100.0 AS score, LENGTH(dt."Title") AS title_length
+                                          FROM jiten."DeckTitles" dt
+                                          JOIN jiten."Decks" d ON d."DeckId" = dt."DeckId"
+                                          WHERE d."ParentDeckId" = {{parentId}}
+                                            AND (LOWER(dt."Title") = LOWER({{filter}})
+                                                 OR LOWER(dt."TitleNoSpaces") = LOWER({{filterNoSpaces}})
+                                                 OR ({{hasRomajiVariant}} AND (LOWER(dt."Title") = {{romajiFilter}} OR LOWER(dt."TitleNoSpaces") = {{romajiFilterNoSpaces}}))
+                                                 OR ({{hasKana}} AND dt."Title" IN ({{kana1}}, {{kana2}})))
+                                      ),
+                                      fuzzy_matches AS (
+                                          SELECT dt."DeckId", 1 AS match_priority, pgroonga_score(dt.tableoid, dt.ctid) AS score, LENGTH(dt."Title") AS title_length
+                                          FROM jiten."DeckTitles" dt
+                                          JOIN jiten."Decks" d ON d."DeckId" = dt."DeckId"
+                                          WHERE d."ParentDeckId" = {{parentId}}
+                                            AND (dt."Title" &@~ {{filter}}
+                                                 OR dt."TitleNoSpaces" &@~ {{filterNoSpaces}}
+                                                 OR ({{hasRomajiVariant}} AND (dt."Title" &@~ {{romajiFilter}} OR dt."TitleNoSpaces" &@~ {{romajiFilterNoSpaces}}))
+                                                 OR ({{hasKana}} AND (dt."Title" &@~ {{kana1}} OR dt."Title" &@~ {{kana2}})))
+                                            AND dt."DeckId" NOT IN (SELECT "DeckId" FROM exact_matches)
+                                      ),
+                                      ranked AS (
+                                          SELECT "DeckId",
+                                                 MIN(match_priority) AS best_match,
+                                                 MAX(score) AS best_score,
+                                                 {{queryLength}}::float / NULLIF(MIN(title_length), 0)::float AS length_ratio
+                                          FROM (SELECT * FROM exact_matches UNION ALL SELECT * FROM fuzzy_matches) m
+                                          GROUP BY "DeckId"
+                                      )
+                                      SELECT r."DeckId"
+                                      FROM ranked r
+                                      JOIN jiten."Decks" d ON d."DeckId" = r."DeckId"
+                                      ORDER BY r.best_match ASC, r.best_score DESC, r.length_ratio DESC, d."DeckOrder" ASC
+                                      """;
+            ordered.AddRange(await context.Database.SqlQuery<int>(sql).ToListAsync());
+        }
+
+        // lower() + LIKE rather than ILIKE: the integration suite runs on SQLite, which has no ILIKE.
+        var patterns = kanaVariants.Prepend(filter).Select(v => $"%{EscapeLikeWildcards(v.ToLower())}%").ToList();
+        var p0 = patterns[0];
+        var p1 = patterns.ElementAtOrDefault(1) ?? p0;
+        var p2 = patterns.ElementAtOrDefault(2) ?? p0;
+        ordered.AddRange(await context.Decks.AsNoTracking()
+                                      .Where(d => d.ParentDeckId == parentId)
+                                      .Where(d => EF.Functions.Like(d.OriginalTitle.ToLower(), p0, LikeEscapeCharacter)
+                                                  || EF.Functions.Like(d.OriginalTitle.ToLower(), p1, LikeEscapeCharacter)
+                                                  || EF.Functions.Like(d.OriginalTitle.ToLower(), p2, LikeEscapeCharacter)
+                                                  || (d.RomajiTitle != null && EF.Functions.Like(d.RomajiTitle.ToLower(), p0, LikeEscapeCharacter))
+                                                  || (d.EnglishTitle != null && EF.Functions.Like(d.EnglishTitle.ToLower(), p0, LikeEscapeCharacter)))
+                                      .OrderBy(d => d.DeckOrder)
+                                      .Select(d => d.DeckId)
+                                      .ToListAsync());
+
+        return ordered.Distinct().ToList();
+    }
 
     /// <summary>Neutralises user-supplied LIKE wildcards so a term of "%" matches literally instead of everything.</summary>
     private static string EscapeLikeWildcards(string term)

@@ -17,6 +17,7 @@ RUN dotnet publish "Jiten.Api/Jiten.Api.csproj" -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 RUN apt-get update && apt-get install -y --no-install-recommends curl libgomp1 && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp     && chmod +x /usr/local/bin/yt-dlp
 WORKDIR /app
 COPY --from=build /app/publish .
 # Ensure the Shared directory exists in the final image

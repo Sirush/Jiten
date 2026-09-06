@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { DisplayStyle, MediaType } from '~/types';
   import { useApiFetchPaginated } from '~/composables/useApiFetch';
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
@@ -27,6 +28,21 @@
   const appliedSubdeckFilter = computed(() => (route.query.subdeckFilter as string) || undefined);
   const subdeckSortQuery = computed(() => (route.query.subdeckSort as string) || undefined);
   const subdeckSortOrderQuery = computed(() => (route.query.subdeckSortOrder as string) || undefined);
+  const subdeckPageSizeQuery = computed(() => {
+    const size = Number(route.query.pageSize);
+    return size === 50 || size === 100 ? size : undefined;
+  });
+  
+  const minutesParam = (key: string) => {
+    const value = Number(route.query[key]);
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  };
+  const runtimeMinMinutes = computed(() => minutesParam('runtimeMin'));
+  const runtimeMaxMinutes = computed(() => minutesParam('runtimeMax'));
+  const runtimeMinSeconds = computed(() => (runtimeMinMinutes.value ? runtimeMinMinutes.value * 60 : undefined));
+  const runtimeMaxSeconds = computed(() => (runtimeMaxMinutes.value ? runtimeMaxMinutes.value * 60 : undefined));
+  const hideCompleted = computed(() => route.query.hideCompleted === '1');
+  const hideCompletedParam = computed(() => (hideCompleted.value && authStore.isAuthenticated ? true : undefined));
 
   const {
     data: response,
@@ -41,8 +57,22 @@
       subdeckFilter: appliedSubdeckFilter,
       subdeckSort: subdeckSortQuery,
       subdeckSortOrder: subdeckSortOrderQuery,
+      pageSize: subdeckPageSizeQuery,
+      runtimeMin: runtimeMinSeconds,
+      runtimeMax: runtimeMaxSeconds,
+      hideCompleted: hideCompletedParam,
     },
-    watch: [offset, deckId, appliedSubdeckFilter, subdeckSortQuery, subdeckSortOrderQuery],
+    watch: [
+      offset,
+      deckId,
+      appliedSubdeckFilter,
+      subdeckSortQuery,
+      subdeckSortOrderQuery,
+      subdeckPageSizeQuery,
+      runtimeMinSeconds,
+      runtimeMaxSeconds,
+      hideCompletedParam,
+    ],
   });
 
   // A missing deck currently comes back as 200 with a null payload; 404 is accepted too so this keeps
@@ -71,35 +101,125 @@
     if ((subdeckFilterInput.value.trim() || undefined) !== value) subdeckFilterInput.value = value ?? '';
   });
 
-  const subdeckSortOptions = [
-    { label: 'Default order', value: 'order' },
-    { label: 'Reverse order', value: 'order-desc' },
-    { label: 'Easiest first', value: 'difficulty' },
-    { label: 'Hardest first', value: 'difficulty-desc' },
-  ];
+  const mainDeckForControls = computed(() => response.value?.data?.mainDeck);
+  const subdecksAreVideos = computed(() => mainDeckForControls.value?.mediaType === MediaType.YouTube);
+  const subdecksHaveSpeech = computed(() => (mainDeckForControls.value?.speechDuration ?? 0) > 0);
+
+  type SubdeckSortKey = 'relevance' | 'order' | 'difficulty' | 'length' | 'date' | 'speechspeed' | 'uniquewords' | 'coverage';
+  const SORT_PARAM: Record<SubdeckSortKey, string | undefined> = {
+    relevance: 'Relevance',
+    order: undefined,
+    difficulty: 'Difficulty',
+    length: 'Length',
+    date: 'Date',
+    speechspeed: 'SpeechSpeed',
+    uniquewords: 'UniqueWords',
+    coverage: 'Coverage',
+  };
+
+  const subdeckSortOptions = computed(() => {
+    const options: { label: string; value: string }[] = [];
+    if (appliedSubdeckFilter.value) options.push({ label: 'Best match', value: 'relevance' });
+    options.push({ label: 'Default order', value: 'order' }, { label: 'Reverse order', value: 'order-desc' });
+    if (subdecksAreVideos.value) options.push({ label: 'Newest first', value: 'date-desc' }, { label: 'Oldest first', value: 'date' });
+    options.push(
+      { label: 'Easiest first', value: 'difficulty' },
+      { label: 'Hardest first', value: 'difficulty-desc' },
+      { label: 'Shortest first', value: 'length' },
+      { label: 'Longest first', value: 'length-desc' }
+    );
+    if (subdecksHaveSpeech.value)
+      options.push({ label: 'Slowest speech first', value: 'speechspeed' }, { label: 'Fastest speech first', value: 'speechspeed-desc' });
+    options.push({ label: 'Fewest unique words', value: 'uniquewords' }, { label: 'Most unique words', value: 'uniquewords-desc' });
+    if (authStore.isAuthenticated)
+      options.push({ label: 'Highest coverage first', value: 'coverage-desc' }, { label: 'Lowest coverage first', value: 'coverage' });
+    return options;
+  });
 
   const subdeckSortValue = computed(() => {
-    const sort = subdeckSortQuery.value?.toLowerCase() === 'difficulty' ? 'difficulty' : 'order';
+    const raw = subdeckSortQuery.value?.toLowerCase();
+    const known = raw && raw in SORT_PARAM ? (raw as SubdeckSortKey) : undefined;
+    const sort = known ?? (appliedSubdeckFilter.value ? 'relevance' : 'order');
     return subdeckSortOrderQuery.value?.toLowerCase() === 'descending' ? `${sort}-desc` : sort;
   });
 
   const onSubdeckSortChange = (value: string) => {
     const descending = value.endsWith('-desc');
-    const sort = descending ? value.slice(0, -'-desc'.length) : value;
+    const sort = (descending ? value.slice(0, -'-desc'.length) : value) as SubdeckSortKey;
     router.replace({
       query: {
         ...route.query,
-        subdeckSort: sort === 'difficulty' ? 'Difficulty' : undefined,
+        subdeckSort: SORT_PARAM[sort],
         subdeckSortOrder: descending ? 'Descending' : undefined,
         offset: undefined,
       },
     });
   };
 
+  const showPageSize = computed(() => totalItems.value > 25 || subdeckPageSizeQuery.value !== undefined);
+
+  const runtimeMinInput = ref<number | null>(runtimeMinMinutes.value ?? null);
+  const runtimeMaxInput = ref<number | null>(runtimeMaxMinutes.value ?? null);
+  const pushRuntime = debounce(async () => {
+    const min = runtimeMinInput.value && runtimeMinInput.value > 0 ? runtimeMinInput.value : undefined;
+    const max = runtimeMaxInput.value && runtimeMaxInput.value > 0 ? runtimeMaxInput.value : undefined;
+    if (min === runtimeMinMinutes.value && max === runtimeMaxMinutes.value) return;
+    await router.replace({ query: { ...route.query, runtimeMin: min, runtimeMax: max, offset: undefined } });
+  }, 400);
+  watch([runtimeMinInput, runtimeMaxInput], () => pushRuntime());
+  watch([runtimeMinMinutes, runtimeMaxMinutes], ([min, max]) => {
+    if ((runtimeMinInput.value ?? undefined) !== min) runtimeMinInput.value = min ?? null;
+    if ((runtimeMaxInput.value ?? undefined) !== max) runtimeMaxInput.value = max ?? null;
+  });
+
+  const hideCompletedModel = computed({
+    get: () => hideCompleted.value,
+    set: (value: boolean) => {
+      router.replace({ query: { ...route.query, hideCompleted: value ? '1' : undefined, offset: undefined } });
+    },
+  });
+
+  const hasActiveSubdeckFilters = computed(() => !!appliedSubdeckFilter.value || !!runtimeMinMinutes.value || !!runtimeMaxMinutes.value || hideCompleted.value);
+
+  const subdeckStyleKey = computed(() => `jiten-subdeck-style-${response.value?.data?.mainDeck?.parentDeckId ?? deckId.value}`);
+  const storedSubdeckStyle = ref<DisplayStyle | null>(null);
+  const readStoredSubdeckStyle = () => {
+    try {
+      const raw = localStorage.getItem(subdeckStyleKey.value);
+      storedSubdeckStyle.value = raw === null ? null : (Number(raw) as DisplayStyle);
+    } catch {
+      storedSubdeckStyle.value = null;
+    }
+  };
+  onMounted(readStoredSubdeckStyle);
+  watch(subdeckStyleKey, readStoredSubdeckStyle);
+  const AUTO_TABLE_THRESHOLD = 50;
+  const subdeckStyle = computed<DisplayStyle>({
+    get: () => storedSubdeckStyle.value ?? (totalItems.value >= AUTO_TABLE_THRESHOLD ? DisplayStyle.Table : DisplayStyle.Card),
+    set: (value) => {
+      storedSubdeckStyle.value = value;
+      try {
+        localStorage.setItem(subdeckStyleKey.value, String(value));
+      } catch {
+      }
+    },
+  });
+
+  const isDesktop = ref(true);
+  onMounted(() => {
+    const query = window.matchMedia('(min-width: 768px)');
+    isDesktop.value = query.matches;
+    query.addEventListener('change', (e) => (isDesktop.value = e.matches));
+  });
+  const effectiveSubdeckStyle = computed(() => (isDesktop.value ? subdeckStyle.value : DisplayStyle.Card));
+
   const hasSubdecksToShow = computed(() => (response.value?.data?.subDecks?.length ?? 0) > 0);
   // The filter is server-side, so a zero-match page must still render the controls that produced it.
-  const showSubdeckSection = computed(() => hasSubdecksToShow.value || !!appliedSubdeckFilter.value);
-  const showSubdeckControls = computed(() => totalItems.value > 25 || !!appliedSubdeckFilter.value);
+  const showSubdeckSection = computed(() => hasSubdecksToShow.value || hasActiveSubdeckFilters.value);
+  const showSubdeckControls = computed(() => totalItems.value > 5 || hasActiveSubdeckFilters.value);
+  const noMatchMessage = computed(() =>
+    appliedSubdeckFilter.value ? `No subdecks match “${appliedSubdeckFilter.value}”.` : 'No subdecks match these filters.'
+  );
 
   const jitenStore = useJitenStore();
   watch(
@@ -230,6 +350,7 @@
         title: d ? d.originalTitle?.trim() || localiseTitle(d) : '',
         mediaType: d?.mediaType,
         coverName: d?.coverName,
+        isLandscapeCover: d?.mediaType === MediaType.YouTube && !!d?.parentDeckId,
         characterCount: d?.characterCount,
         wordCount: d?.wordCount,
         uniqueWordCount: d?.uniqueWordCount,
@@ -277,42 +398,92 @@
           <h2 class="font-bold">Subdecks</h2>
           <a href="#similar-media" class="text-primary text-sm cursor-pointer" @click.prevent="jumpToSimilar">Jump to similar media ↓</a>
         </div>
-        <div v-if="showSubdeckControls" class="flex flex-col sm:flex-row gap-2 sm:items-center pt-2">
-          <IconField class="grow">
-            <InputIcon>
-              <Icon name="material-symbols:search-rounded" />
-            </InputIcon>
-            <InputText v-model="subdeckFilterInput" type="text" placeholder="Filter subdecks by title" aria-label="Filter subdecks by title" class="w-full" />
-            <InputIcon v-if="subdeckFilterInput" class="cursor-pointer" @click="subdeckFilterInput = ''">
-              <Icon name="material-symbols:close" />
-            </InputIcon>
-          </IconField>
-          <Select
-            :model-value="subdeckSortValue"
-            :options="subdeckSortOptions"
-            option-label="label"
-            option-value="value"
-            aria-label="Sort subdecks"
-            class="sm:w-52"
-            @update:model-value="onSubdeckSortChange"
+        <div v-if="showSubdeckControls" class="flex flex-col gap-2 pt-2">
+          <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <IconField class="grow">
+              <InputIcon>
+                <Icon name="material-symbols:search-rounded" />
+              </InputIcon>
+              <InputText
+                v-model="subdeckFilterInput"
+                type="text"
+                :placeholder="subdecksAreVideos ? 'Search videos by title or number' : 'Search subdecks by title or number'"
+                aria-label="Search subdecks"
+                class="w-full"
+              />
+              <InputIcon v-if="subdeckFilterInput" class="cursor-pointer" @click="subdeckFilterInput = ''">
+                <Icon name="material-symbols:close" />
+              </InputIcon>
+            </IconField>
+            <div class="flex items-center gap-2 sm:contents">
+              <Select
+                :model-value="subdeckSortValue"
+                :options="subdeckSortOptions"
+                option-label="label"
+                option-value="value"
+                aria-label="Sort subdecks"
+                class="grow sm:grow-0 sm:w-56"
+                @update:model-value="onSubdeckSortChange"
+              />
+              <div class="hidden md:contents">
+                <DisplayStyleSelector v-model="subdeckStyle" />
+              </div>
+              <label v-if="authStore.isAuthenticated" class="flex items-center gap-2 cursor-pointer text-sm whitespace-nowrap shrink-0">
+                <Checkbox v-model="hideCompletedModel" binary input-id="hideCompletedSubdecks" />
+                <span>Hide completed</span>
+              </label>
+            </div>
+          </div>
+          <div v-if="subdecksAreVideos" class="flex flex-wrap gap-x-4 gap-y-2 items-center text-sm">
+            <div class="flex items-center gap-2">
+              <span class="text-surface-600 dark:text-surface-300">Duration</span>
+              <InputNumber
+                v-model="runtimeMinInput"
+                :min="0"
+                :max="1440"
+                placeholder="min"
+                suffix=" min"
+                aria-label="Minimum video length in minutes"
+                input-class="w-24"
+                size="small"
+              />
+              <span class="text-surface-400">to</span>
+              <InputNumber
+                v-model="runtimeMaxInput"
+                :min="0"
+                :max="1440"
+                placeholder="max"
+                suffix=" min"
+                aria-label="Maximum video length in minutes"
+                input-class="w-24"
+                size="small"
+              />
+            </div>
+          </div>
+        </div>
+        <div v-if="totalPages > 1 || showPageSize" class="pt-4 pb-1">
+          <PaginationControls
+            :previous-link="previousLink"
+            :next-link="nextLink"
+            :current-page="currentPage"
+            :total-pages="totalPages"
+            :page-link-for="pageLinkFor"
+            :start="start"
+            :end="end"
+            :total-items="totalItems"
+            item-label="decks"
+            :page-size="25"
+            :page-size-options="showPageSize ? [25, 50, 100] : undefined"
+            page-size-param="pageSize"
+            mobile-compact
           />
         </div>
-        <PaginationControls
-          v-if="totalPages > 1"
-          class="pt-2"
-          :previous-link="previousLink"
-          :next-link="nextLink"
-          :current-page="currentPage"
-          :total-pages="totalPages"
-          :page-link-for="pageLinkFor"
-          :start="start"
-          :end="end"
-          :total-items="totalItems"
-          item-label="decks"
-        />
         <!-- Grid rather than flex-wrap: justify-content centres the track block while items still fill
              left-to-right, so a final short row starts at column 1 instead of centring its orphan. -->
-        <div v-if="hasSubdecksToShow" class="grid grid-cols-[repeat(auto-fit,20rem)] items-stretch gap-2 justify-center pt-4">
+        <div
+          v-if="hasSubdecksToShow && effectiveSubdeckStyle === DisplayStyle.Card"
+          class="grid grid-cols-[repeat(auto-fit,20rem)] items-stretch gap-2 justify-center pt-4"
+        >
           <MediaDeckCard
             v-for="deck in response.data.subDecks"
             :key="deck.deckId"
@@ -323,7 +494,13 @@
             @parent-status-changed="updateParentStatus"
           />
         </div>
-        <div v-else class="pt-6 text-center text-surface-500 dark:text-surface-400">No subdecks match “{{ appliedSubdeckFilter }}”.</div>
+        <div v-else-if="hasSubdecksToShow && effectiveSubdeckStyle === DisplayStyle.Compact" class="flex flex-wrap gap-4 justify-center pt-4">
+          <MediaDeckCompactView v-for="(deck, index) in response.data.subDecks" :key="deck.deckId" :deck="deck" :lazy-cover="index >= 12" />
+        </div>
+        <div v-else-if="hasSubdecksToShow" class="flex flex-col gap-0.5 pt-4">
+          <MediaDeckTableView v-for="(deck, index) in response.data.subDecks" :key="deck.deckId" :deck="deck" :lazy-render="index >= 12" />
+        </div>
+        <div v-else class="pt-6 text-center text-surface-500 dark:text-surface-400">{{ noMatchMessage }}</div>
       </div>
 
       <div id="similar-media" class="scroll-mt-4">

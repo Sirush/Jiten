@@ -38,6 +38,8 @@
       'Manga difficulty is measured from the text of each volumes. An easy manga can be a good way to start your Japanese journey, as the pictures can help you understand the context.',
     [MediaType.Audio]:
       'Audio works are ranked by the difficulty of their transcripts. There is no text on screen to lean on, so the vocabulary lists are a way to prepare before you press play.',
+    [MediaType.YouTube]:
+      'YouTube channels are ranked from the Japanese subtitles of their videos. Spoken, everyday language and short videos make them a low-commitment way to get listening practice in.',
   };
 
   const page = computed(() => Math.max(1, Number(route.query.page) || 1));

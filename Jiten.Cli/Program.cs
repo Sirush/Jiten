@@ -45,6 +45,31 @@ public class Program
         var benchmarkCommands = new BenchmarkCommands(context);
         var rubyExtractCommands = new RubyExtractCommands(context);
         var webNovelCommands = new WebNovelCommands();
+        var youTubeCommands = new YouTubeCommands(context);
+
+        if (!string.IsNullOrEmpty(options.YtTest))
+        {
+            await youTubeCommands.Test(options);
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(options.YtImport))
+        {
+            await youTubeCommands.Import(options);
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(options.YtDrain))
+        {
+            await youTubeCommands.Drain(options);
+            return;
+        }
+
+        if (options.YtRegister != null)
+        {
+            await youTubeCommands.Register(options);
+            return;
+        }
 
         if (!string.IsNullOrEmpty(options.WebNovelTest))
         {

@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.User;
 using Jiten.Parser.Tests.Integration.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -152,6 +153,96 @@ public class SubdeckFilterTests(JitenWebApplicationFactory factory)
         var body = await GetDetail(parentId, "?subdeckSortOrder=Descending");
 
         SubdeckTitles(body).Should().Equal("総集編", "第2話", "第1話");
+    }
+
+    [Fact]
+    public async Task Detail_SubdeckFilter_BareNumberMatchesPosition()
+    {
+        var parentId = await SeedSeries();
+
+        var body = await GetDetail(parentId, "?subdeckFilter=3");
+
+        SubdeckTitles(body).Should().Equal("総集編");
+    }
+
+    [Fact]
+    public async Task Detail_SubdeckFilter_EpisodeMarkerMatchesPositionAndTitle()
+    {
+        var parentId = await SeedSeries();
+
+        var body = await GetDetail(parentId, "?subdeckFilter=ep%202");
+
+        SubdeckTitles(body).Should().Equal("第2話");
+    }
+
+    [Fact]
+    public async Task Detail_PageSize_ClampsToAllowedValues()
+    {
+        var parentId = await SeedSeries();
+
+        (await GetDetail(parentId, "?pageSize=100")).GetProperty("pageSize").GetInt32().Should().Be(100);
+        (await GetDetail(parentId, "?pageSize=37")).GetProperty("pageSize").GetInt32().Should().Be(25);
+    }
+
+    [Fact]
+    public async Task Detail_SubdeckSortLength_UsesCharacterCountWithoutRuntime()
+    {
+        var parentId = await SeedSeries();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            var children = db.Decks.Where(d => d.ParentDeckId == parentId).OrderBy(d => d.DeckOrder).ToList();
+            children[0].CharacterCount = 300;
+            children[1].CharacterCount = 100;
+            children[2].CharacterCount = 200;
+            await db.SaveChangesAsync();
+        }
+
+        var body = await GetDetail(parentId, "?subdeckSort=Length");
+
+        SubdeckTitles(body).Should().Equal("第2話", "総集編", "第1話");
+    }
+
+    [Fact]
+    public async Task Detail_RuntimeRange_FiltersOnChildRuntime()
+    {
+        var parentId = await SeedSeries();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            var children = db.Decks.Where(d => d.ParentDeckId == parentId).OrderBy(d => d.DeckOrder).ToList();
+            children[0].RuntimeSeconds = 600;
+            children[1].RuntimeSeconds = 1200;
+            children[2].RuntimeSeconds = 3600;
+            await db.SaveChangesAsync();
+        }
+
+        var body = await GetDetail(parentId, "?runtimeMin=900&runtimeMax=1800");
+
+        SubdeckTitles(body).Should().Equal("第2話");
+    }
+
+    [Fact]
+    public async Task Detail_HideCompleted_DropsCompletedChildrenForUser()
+    {
+        var parentId = await SeedSeries();
+        int secondId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            secondId = db.Decks.Single(d => d.ParentDeckId == parentId && d.DeckOrder == 2).DeckId;
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            userDb.UserDeckPreferences.Add(new UserDeckPreference { UserId = TestUsers.UserA, DeckId = secondId, Status = DeckStatus.Completed });
+            await userDb.SaveChangesAsync();
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/media-deck/{parentId}/detail?hideCompleted=true").WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        SubdeckTitles(body).Should().Equal("第1話", "総集編");
+        body.GetProperty("totalItems").GetInt32().Should().Be(2);
     }
 
     [Fact]

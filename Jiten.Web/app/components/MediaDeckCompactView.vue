@@ -31,6 +31,7 @@
   const difficultyRef = ref<{ tooltip: string }>();
 
   const isAudioVisual = computed(() => [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio, MediaType.YouTube].includes(props.deck.mediaType));
+  const isVideo = computed(() => props.deck.mediaType === MediaType.YouTube && !!props.deck.parentDeckId);
 
   const formattedSpeechDuration = computed(() => {
     if (props.deck.speechDuration <= 0) return '';
@@ -137,15 +138,18 @@
           </div>
 
           <div class="mt-2 flex gap-1">
-            <Button v-tooltip="'View details'" as="router-link" :to="`/decks/media/${deck.deckId}/detail`" size="small" class="p-button-sm">
-              <Icon name="material-symbols:info-outline" size="1.5em" />
-            </Button>
-            <Button v-tooltip="'View vocabulary'" as="router-link" :to="`/decks/media/${deck.deckId}/vocabulary`" size="small" class="p-button-sm">
-              <Icon name="material-symbols:menu-book-outline" size="1.5em" />
-            </Button>
-            <Button v-tooltip="'Download / Learn'" size="small" class="p-button-sm" @click="showDownloadDialog = true">
-              <Icon name="material-symbols:download" size="1.5em" />
-            </Button>
+            <Tooltip content="Details">
+              <Button as="router-link" :to="`/decks/media/${deck.deckId}/detail`" icon="pi pi-eye" size="small" class="p-button-sm" />
+            </Tooltip>
+            <Tooltip v-if="isVideo" content="Watch with the transcript">
+              <Button as="router-link" :to="`/decks/media/${deck.deckId}/watch`" icon="pi pi-youtube" size="small" class="p-button-sm" />
+            </Tooltip>
+            <Tooltip content="Vocabulary">
+              <Button as="router-link" :to="`/decks/media/${deck.deckId}/vocabulary`" icon="pi pi-book" size="small" class="p-button-sm" />
+            </Tooltip>
+            <Tooltip content="Download / Learn">
+              <Button icon="pi pi-download" size="small" class="p-button-sm" @click="showDownloadDialog = true" />
+            </Tooltip>
           </div>
         </div>
 

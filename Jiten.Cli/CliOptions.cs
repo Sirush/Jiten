@@ -357,4 +357,38 @@ public class CliOptions
     [Option(longName: "chunk-chars", Required = false,
             HelpText = "Subdeck character budget for --webnovel-test (default: 150000).")]
     public int? ChunkChars { get; set; }
+
+    [Option(longName: "yt-test", Required = false,
+            HelpText = "Dry run a YouTube channel or playlist URL: list videos, fetch metadata and manual ja subs, report each verdict. Writes only to the staging directory.")]
+    public string? YtTest { get; set; }
+
+    [Option(longName: "yt-import", Required = false,
+            HelpText = "Import a YouTube channel or playlist as a parent deck with one subdeck per accepted video, and write the source ledger.")]
+    public string? YtImport { get; set; }
+
+    [Option(longName: "yt-register", Required = false,
+            HelpText = "Complete a dashboard YouTube registration (id shown on the add page): lists the channel with this machine's yt-dlp, sends it to the API, then drains it.")]
+    public int? YtRegister { get; set; }
+
+    [Option(longName: "yt-drain", Required = false,
+            HelpText = "Fetch pending videos for a tracked YouTube source (parent deck id) or 'all' from this machine's connection. Parsing happens server-side.")]
+    public string? YtDrain { get; set; }
+
+    [Option(longName: "yt-max", Required = false, HelpText = "With --yt-test/--yt-import: only consider the first N listed videos (newest first for channels).")]
+    public int? YtMax { get; set; }
+
+    [Option(longName: "yt-include", Required = false, HelpText = "With --yt-test/--yt-import: regex a video title must match to be ingested.")]
+    public string? YtInclude { get; set; }
+
+    [Option(longName: "yt-exclude", Required = false, HelpText = "With --yt-test/--yt-import: regex; matching video titles are skipped.")]
+    public string? YtExclude { get; set; }
+
+    [Option(longName: "yt-min-minutes", Required = false, HelpText = "With --yt-test/--yt-import: skip videos shorter than this many minutes.")]
+    public double? YtMinMinutes { get; set; }
+
+    [Option(longName: "yt-max-minutes", Required = false, HelpText = "With --yt-test/--yt-import: skip videos longer than this many minutes.")]
+    public double? YtMaxMinutes { get; set; }
+
+    [Option(longName: "yt-staging", Required = false, HelpText = "Directory for fetched subtitles and metadata (default: <StaticFilesPath>/tmp/youtube).")]
+    public string? YtStaging { get; set; }
 }

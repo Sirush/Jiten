@@ -5,9 +5,9 @@ category: FAQ
 level: beginner
 order: 70
 icon: material-symbols-light:upcoming-outline
-updated: 2026-07-28
+updated: 2026-09-06
 ---
 
-Yes, YouTube will be supported in the future.
+YouTube channels are the latest addition. The catalogue is small for now and grows as channels with proper manual Japanese subtitles get added, so feel free to request the ones you watch.
 
-Each new media type comes with its own set of challenges, which is why they will take more time. If you have any other suggestions, please let me know on [Discord](https://discord.gg/cZWM7b4wzk).
+If there's other media types you'd like to see, please let me know on [Discord](https://discord.gg/cZWM7b4wzk).

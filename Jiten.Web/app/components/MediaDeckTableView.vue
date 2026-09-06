@@ -20,6 +20,7 @@
   const difficultyRef = ref<{ tooltip: string }>();
 
   const isAudioVisual = computed(() => [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio, MediaType.YouTube].includes(props.deck.mediaType));
+  const isVideo = computed(() => props.deck.mediaType === MediaType.YouTube && !!props.deck.parentDeckId);
 
   const formattedSpeechDuration = computed(() => {
     if (props.deck.speechDuration <= 0) return '';
@@ -33,6 +34,8 @@
     return `${hours}h ${minutes}min`;
   });
 
+  const runtimeLabel = computed(() => formatRuntime(props.deck.parentDeckId ? props.deck.runtimeSeconds : props.deck.medianChildRuntimeSeconds));
+
   const showCoverageStrip = computed(
     () => authStore.isAuthenticated && !store.hideCoverageBorders && (props.deck.coverage != 0 || props.deck.uniqueCoverage != 0)
   );
@@ -44,7 +47,7 @@
       <template #content>
         <div class="flex flex-row flex-wrap items-center gap-y-2">
           <!-- Title and Media Type -->
-          <div class="flex-grow min-w-0 basis-full sm:basis-auto">
+          <div class="flex-grow min-w-0 basis-full sm:basis-0">
             <div class="font-bold truncate max-w-100" :title="localiseTitle(deck)">{{ localiseTitle(deck) }}</div>
             <div class="text-xs text-gray-500 dark:text-gray-400">{{ getMediaTypeText(deck.mediaType) }}</div>
           </div>
@@ -58,6 +61,11 @@
             <div v-else class="flex flex-col items-center w-20">
               <div class="text-xs text-gray-600 dark:text-gray-300">Characters</div>
               <div class="font-medium tabular-nums">{{ deck.characterCount.toLocaleString() }}</div>
+            </div>
+
+            <div v-if="runtimeLabel" class="flex flex-col items-center w-16">
+              <div class="text-xs text-gray-600 dark:text-gray-300">Length</div>
+              <div class="font-medium tabular-nums">{{ runtimeLabel }}</div>
             </div>
 
             <div class="flex flex-col items-center w-18">
@@ -109,15 +117,18 @@
 
           <!-- Action Buttons -->
           <div class="flex gap-0.5">
-            <Button v-tooltip="'View details'" as="router-link" :to="`/decks/media/${deck.deckId}/detail`" size="small" class="p-button-sm">
-              <Icon name="material-symbols:info-outline" size="1.5em" />
-            </Button>
-            <Button v-tooltip="'View vocabulary'" as="router-link" :to="`/decks/media/${deck.deckId}/vocabulary`" size="small" class="p-button-sm">
-              <Icon name="material-symbols:menu-book-outline" size="1.5em" />
-            </Button>
-            <Button v-tooltip="'Download / Learn'" size="small" class="p-button-sm" @click="showDownloadDialog = true">
-              <Icon name="material-symbols:download" size="1.5em" />
-            </Button>
+            <Tooltip content="Details">
+              <Button as="router-link" :to="`/decks/media/${deck.deckId}/detail`" icon="pi pi-eye" size="small" class="p-button-sm" />
+            </Tooltip>
+            <Tooltip v-if="isVideo" content="Watch with the transcript">
+              <Button as="router-link" :to="`/decks/media/${deck.deckId}/watch`" icon="pi pi-youtube" size="small" class="p-button-sm" />
+            </Tooltip>
+            <Tooltip content="Vocabulary">
+              <Button as="router-link" :to="`/decks/media/${deck.deckId}/vocabulary`" icon="pi pi-book" size="small" class="p-button-sm" />
+            </Tooltip>
+            <Tooltip content="Download / Learn">
+              <Button icon="pi pi-download" size="small" class="p-button-sm" @click="showDownloadDialog = true" />
+            </Tooltip>
           </div>
         </div>
       </template>

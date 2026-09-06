@@ -6,6 +6,7 @@
     title?: string;
     mediaType?: MediaType;
     coverName?: string;
+    isLandscapeCover?: boolean;
     characterCount?: number;
     wordCount?: number;
     uniqueWordCount?: number;
@@ -45,7 +46,7 @@
     class="bg-white text-black border border-gray-300 flex flex-row overflow-hidden"
     style="width: 1200px; height: 630px; padding: 32px; font-family: 'Noto Sans JP', sans-serif; align-items: flex-start"
   >
-    <div class="flex-shrink-0 h-full" style="width: 340px; margin-right: 32px">
+    <div class="flex-shrink-0" :style="isLandscapeCover ? 'width: 480px; height: 270px; margin-right: 32px' : 'width: 340px; height: 100%; margin-right: 32px'">
       <img
         :src="!coverName || coverName == 'nocover.jpg' ? '/img/nocover.jpg' : coverName"
         :alt="title"

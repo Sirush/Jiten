@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { type Deck, MediaType, DeckStatus } from '~/types';
+  import { type Deck, LinkType, MediaType, DeckStatus } from '~/types';
   import Card from 'primevue/card';
   import TieredMenu from 'primevue/tieredmenu';
   import Popover from 'primevue/popover';
@@ -68,6 +68,14 @@
   const speechSpeed = computed(() => props.deck.speechSpeed ?? 0);
 
   const isAudioVisual = computed(() => [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio, MediaType.YouTube].includes(props.deck.mediaType));
+  const hasLandscapeCover = computed(() => props.deck.mediaType === MediaType.YouTube && !!props.deck.parentDeckId);
+  const isVideo = computed(() => props.deck.mediaType === MediaType.YouTube && !!props.deck.parentDeckId);
+  const youtubeUrl = computed(() => props.deck.links?.find((l) => l.linkType === LinkType.YouTube)?.url ?? null);
+  const runtimeLabel = computed(() => {
+    const seconds = props.deck.parentDeckId ? props.deck.runtimeSeconds : props.deck.medianChildRuntimeSeconds;
+    return seconds ? formatRuntime(seconds) : '';
+  });
+  const coverSrc = computed(() => (props.deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : props.deck.coverName));
 
   const hasChildren = computed(() => props.deck.childrenDeckCount > 0);
   const childrenLabel = computed(() => getChildrenCountText(props.deck.mediaType));
@@ -501,18 +509,19 @@
           <div class="flex-gap-6" :class="isCompact ? 'h-full flex flex-col' : ''">
             <div class="flex-1 max-w-full overflow-hidden" :class="isCompact ? 'flex flex-col' : ''">
               <div class="flex flex-col md:flex-row md:items-stretch gap-x-4 gap-y-2 w-full" :class="isCompact ? 'flex-1' : ''">
-                <div v-if="!isCompact" class="@container text-left text-sm md:w-34 md:shrink-0">
+                <div v-if="!isCompact" class="@container text-left text-sm md:shrink-0" :class="hasLandscapeCover ? 'md:w-60' : 'md:w-34'">
                   <div class="flex items-start gap-4 @max-[17rem]:flex-col @max-[17rem]:items-stretch md:block">
                     <div class="shrink-0">
                       <img
-                        :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
+                        :src="coverSrc"
                         :alt="localiseTitle(deck)"
-                        class="h-48 w-34 min-w-34 object-cover"
+                        class="object-cover"
+                        :class="hasLandscapeCover ? 'w-60 min-w-60 aspect-video rounded-md' : 'h-48 w-34 min-w-34'"
                         :fetchpriority="lazyCover ? undefined : 'high'"
                         :loading="lazyCover ? 'lazy' : 'eager'"
                         decoding="async"
-                        width="136"
-                        height="192"
+                        :width="hasLandscapeCover ? 240 : 136"
+                        :height="hasLandscapeCover ? 135 : 192"
                       />
                       <Tooltip content="Release date">
                         <div class="mt-2 flex items-center md:justify-center tabular-nums text-gray-600 dark:text-gray-400">
@@ -528,6 +537,14 @@
                   </div>
                 </div>
                 <div class="@container min-w-0 flex-1 flex flex-col">
+                  <NuxtLink
+                    v-if="isCompact && hasLandscapeCover && deck.coverName != 'nocover.jpg'"
+                    :to="`/decks/media/${deck.deckId}/${isVideo ? 'watch' : 'detail'}`"
+                    class="block mb-2 -mx-1 rounded-md overflow-hidden bg-gray-200 dark:bg-gray-800"
+                    :aria-label="isVideo ? `Watch ${localiseTitle(deck)}` : localiseTitle(deck)"
+                  >
+                    <img :src="coverSrc" alt="" class="w-full aspect-video object-cover" loading="lazy" decoding="async" width="320" height="180" />
+                  </NuxtLink>
                   <div
                     class="grid grid-cols-1 gap-x-3 @xl:gap-x-8 @3xl:gap-x-12 gap-y-1 max-w-[51rem] text-sm"
                     :class="isCompact ? '' : '@xs:grid-cols-2 @3xl:grid-cols-3'"
@@ -645,6 +662,16 @@
                         }}</span>
                       </div>
 
+                      <div v-if="runtimeLabel" class="flex justify-between gap-2 stat-row">
+                        <Tooltip :content="deck.parentDeckId ? 'Length of the video.' : 'Median length of a video on this channel.'">
+                          <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
+                            <span v-if="deck.parentDeckId">Length</span
+                            ><span v-else><span class="@xl:hidden">Avg. length</span><span class="hidden @xl:inline">Average video length</span></span>
+                          </span>
+                        </Tooltip>
+                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ runtimeLabel }}</span>
+                      </div>
+
                       <div
                         v-if="
                           (deck.mediaType == MediaType.Novel ||
@@ -738,6 +765,16 @@
                           :to="`/decks/media/${deck.deckId}/detail`"
                           :label="isCompact ? undefined : 'Details'"
                           icon="pi pi-eye"
+                          size="small"
+                          class="text-center"
+                        />
+                      </Tooltip>
+                      <Tooltip v-if="isVideo" content="Watch with the transcript">
+                        <Button
+                          as="router-link"
+                          :to="`/decks/media/${deck.deckId}/watch`"
+                          :label="isCompact ? undefined : 'Watch'"
+                          icon="pi pi-youtube"
                           size="small"
                           class="text-center"
                         />

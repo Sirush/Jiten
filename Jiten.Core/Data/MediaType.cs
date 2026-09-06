@@ -18,7 +18,7 @@ namespace Jiten.Core.Data
     public static class MediaTypes
     {
         /// Types accepted for media requests but kept out of browsing, stats and frequency downloads until their decks ship.
-        private static readonly HashSet<MediaType> Unlisted = [MediaType.YouTube];
+        private static readonly HashSet<MediaType> Unlisted = [];
 
         public static bool IsListed(MediaType type) => !Unlisted.Contains(type);
 

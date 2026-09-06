@@ -134,6 +134,19 @@ public class Deck
     public long SpeechMoraCount { get; set; }
 
     /// <summary>
+    /// Media length in seconds where known (video runtime); a parent holds the sum of its children
+    /// </summary>
+    public int? RuntimeSeconds { get; set; }
+
+    /// <summary>
+    /// Median child runtime in seconds; what the browse runtime filter uses for a parent, since the sum says
+    /// nothing about how long one video is
+    /// </summary>
+    public int? MedianChildRuntimeSeconds { get; set; }
+
+    public DeckSubtitleTrack? SubtitleTrack { get; set; }
+
+    /// <summary>
     /// Mora per minute, computed from SpeechMoraCount and SpeechDuration
     /// </summary>
     [NotMapped]

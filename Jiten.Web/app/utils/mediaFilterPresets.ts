@@ -38,6 +38,8 @@ export const PRESET_QUERY_KEYS = [
   'tags',
   'excludeTags',
   'excludeSequels',
+  'runtimeMin',
+  'runtimeMax',
   'favourite',
 ] as const;
 

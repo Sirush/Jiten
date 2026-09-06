@@ -2,8 +2,10 @@
   import { DisplayStyle } from '~/types';
   import { useDisplayStyleStore } from '~/stores/displayStyleStore';
 
+  // Bound to a local choice when a v-model is given (subdeck lists); otherwise to the site-wide store.
+  const model = defineModel<DisplayStyle>();
   const displayStyleStore = useDisplayStyleStore();
-  const displayStyle = computed(() => displayStyleStore.displayStyle);
+  const displayStyle = computed(() => model.value ?? displayStyleStore.displayStyle);
 
   const styles = [
     { value: DisplayStyle.Card, label: 'Card View', icon: 'material-symbols:view-agenda-outline' },
@@ -16,7 +18,8 @@
   const popover = ref();
 
   const setDisplayStyle = (style: DisplayStyle) => {
-    displayStyleStore.displayStyle = style;
+    if (model.value !== undefined) model.value = style;
+    else displayStyleStore.displayStyle = style;
   };
 
   const pickDisplayStyle = (style: DisplayStyle) => {
@@ -27,15 +30,11 @@
 
 <template>
   <div class="hidden md:flex gap-2">
-    <Button
-      v-for="style in styles"
-      :key="style.value"
-      v-tooltip="style.label"
-      :class="{ 'p-button-outlined': displayStyle !== style.value }"
-      @click="setDisplayStyle(style.value)"
-    >
-      <Icon :name="style.icon" size="1.25em" />
-    </Button>
+    <Tooltip v-for="style in styles" :key="style.value" :content="style.label">
+      <Button :class="{ 'p-button-outlined': displayStyle !== style.value }" :aria-label="style.label" @click="setDisplayStyle(style.value)">
+        <Icon :name="style.icon" size="1.25em" />
+      </Button>
+    </Tooltip>
   </div>
 
   <!-- Three 44px buttons leave no room for the search field in the single mobile toolbar row.

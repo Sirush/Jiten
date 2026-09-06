@@ -27,6 +27,8 @@
   const speechSpeedMax = defineModel<number | null>('speechSpeedMax', { required: true });
   const speechDurationMin = defineModel<number | null>('speechDurationMin', { required: true });
   const speechDurationMax = defineModel<number | null>('speechDurationMax', { required: true });
+  const runtimeMin = defineModel<number | null>('runtimeMin', { required: true });
+  const runtimeMax = defineModel<number | null>('runtimeMax', { required: true });
   const includeGenres = defineModel<number[]>('includeGenres', { required: true });
   const excludeGenres = defineModel<number[]>('excludeGenres', { required: true });
   const includeTags = defineModel<number[]>('includeTags', { required: true });
@@ -55,6 +57,7 @@
     extRating: { min: extRatingMin, max: extRatingMax },
     speechSpeed: { min: speechSpeedMin, max: speechSpeedMax },
     speechDuration: { min: speechDurationMin, max: speechDurationMax },
+    runtime: { min: runtimeMin, max: runtimeMax },
   };
 
   const { data: availableTags } = useApiFetch<Tag[]>('media-deck/tags', { server: true, lazy: false });

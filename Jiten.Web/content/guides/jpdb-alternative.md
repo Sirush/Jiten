@@ -7,7 +7,7 @@ level: beginner
 order: 10
 icon: material-symbols-light:compare-arrows
 draft: false
-updated: 2026-08-23
+updated: 2026-09-06
 published: 2026-07-28
 verified: 2026-08-23
 ---
@@ -46,9 +46,9 @@ This list is not exhaustive as the two websites contain many more features. If y
 
 Historically, JPDB offered a strong media database, but it only received around **50 new titles in 2025** (per its [changelog](https://jpdb.io/changelog)). Jiten grows at a fast pace with up to **100 new media** being added **weekly** on average.
 
-|       | Anime     | Aozora Bunko           | Audio  | Live Action | Manga     | Non-Fiction | Novels    | Video Games | Visual Novels | Web Novels | Youtube |
+|       | Anime     | Aozora Bunko           | Audio  | Live Action | Manga     | Non-Fiction | Novels    | Video Games | Visual Novels | Web Novels | YouTube |
 | ----- | --------- | ---------------------- | ------ | ----------- | --------- | ----------- | --------- | ----------- | ------------- | ---------- | ------- |
-| Jiten | **3600+** | Some are within novels | 15     | **6500+**   | **1100+** | 97          | **2000+** | **200+**    | **1700+**     | 6          | Planned |
+| Jiten | **3700+** | Some are within novels | 15     | **6500+**   | **1200+** | 100+          | **2300+** | **200+**    | **1900+**     | 29          | New     |
 | JPDB  | 1399      | **577**                | **45** | 1273        | None      | **144**     | 1518      | 30          | 529           | **1053**   | **137** |
 
 JPDB counts as listed on [jpdb.io](https://jpdb.io/), as of August 2026.
