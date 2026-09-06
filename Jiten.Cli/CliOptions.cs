@@ -370,6 +370,10 @@ public class CliOptions
             HelpText = "Complete a dashboard YouTube registration (id shown on the add page): lists the channel with this machine's yt-dlp, sends it to the API, then drains it.")]
     public int? YtRegister { get; set; }
 
+    [Option(longName: "yt-bootstrap", Required = false,
+            HelpText = "Re-list a tracked YouTube source (parent deck id) with this machine's yt-dlp, add unseen videos as pending on the API, then drain it.")]
+    public int? YtBootstrap { get; set; }
+
     [Option(longName: "yt-drain", Required = false,
             HelpText = "Fetch pending videos for a tracked YouTube source (parent deck id) or 'all' from this machine's connection. Parsing happens server-side.")]
     public string? YtDrain { get; set; }

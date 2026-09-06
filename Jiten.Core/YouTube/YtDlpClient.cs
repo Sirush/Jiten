@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jiten.Core.Data.YouTube;
 
 namespace Jiten.Core.YouTube;
@@ -13,7 +14,20 @@ public class YtDlpOptions
     /// <summary>Forwarded as --proxy; unset means the machine's own egress</summary>
     public string? Proxy { get; set; }
 
+    /// <summary>Per video; a batch process gets this times its video count</summary>
     public int TimeoutSeconds { get; set; } = 180;
+
+    /// <summary>Videos handed to one yt-dlp process; saves the interpreter start-up per video</summary>
+    public int BatchSize { get; set; } = 20;
+
+    /// <summary>Forwarded as --sleep-requests; 0.75 is the yt-dlp maintainers' "-t sleep" preset</summary>
+    public double SleepRequestsSeconds { get; set; } = 0.75;
+
+    /// <summary>Forwarded as --sleep-subtitles; the timedtext endpoint 429s after ~10 back-to-back fetches</summary>
+    public double SleepSubtitlesSeconds { get; set; } = 5;
+
+    /// <summary>Forwarded as --impersonate; needs the curl_cffi handler, which yt-dlp reports at start-up</summary>
+    public string? Impersonate { get; set; } = "chrome";
 }
 
 /// <summary>
@@ -37,7 +51,8 @@ public class YtDlpClient(YtDlpOptions options, HttpClient httpClient)
         if (!YouTubeUrlParser.TryParse(input, out var kind, out var listingUrl, out _))
             throw new ArgumentException($"'{input}' is not a YouTube channel or playlist URL.");
 
-        var args = new List<string> { "--flat-playlist", "-J", "--no-warnings" };
+        // The webpage path stops at the first 100 entries of a playlist (continuation never followed); the API-only path lists all
+        var args = new List<string> { "--flat-playlist", "-J", "--no-warnings", "--extractor-args", "youtubetab:skip=webpage" };
         if (maxVideos is > 0)
             args.AddRange(["--playlist-items", $"1:{maxVideos}"]);
         args.Add(listingUrl);
@@ -87,6 +102,8 @@ public class YtDlpClient(YtDlpOptions options, HttpClient httpClient)
         return info;
     }
 
+    public int BatchSize => Math.Max(1, options.BatchSize);
+
     /// <summary>
     /// Fetches one video's metadata and, when a manual Japanese track exists, writes it into
     /// <paramref name="outputDirectory"/> as {id}.{lang}.srt (or .vtt when YouTube offers no srt).
@@ -94,43 +111,93 @@ public class YtDlpClient(YtDlpOptions options, HttpClient httpClient)
     public async Task<YouTubeFetchResult> FetchVideoAsync(string videoId, string outputDirectory,
                                                           CancellationToken cancellationToken = default)
     {
+        var batch = await FetchVideosAsync([videoId], outputDirectory, cancellationToken);
+        if (batch.BlockedMessage != null)
+            throw new YtDlpBlockedException(batch.BlockedMessage);
+
+        var result = batch.Results[videoId];
+        if (result.Error != null)
+            throw new YtDlpFailedException(result.Error);
+        return result;
+    }
+
+    /// <summary>
+    /// One yt-dlp process for all <paramref name="videoIds"/>. A video that errored carries
+    /// <see cref="YouTubeFetchResult.Error"/>; a bot check sets <see cref="YouTubeBatchFetchResult.BlockedMessage"/>
+    /// and the videos yt-dlp never reached are absent from the results.
+    /// </summary>
+    public async Task<YouTubeBatchFetchResult> FetchVideosAsync(IReadOnlyList<string> videoIds, string outputDirectory,
+                                                                CancellationToken cancellationToken = default)
+    {
+        var batch = new YouTubeBatchFetchResult();
+        if (videoIds.Count == 0)
+            return batch;
+
         Directory.CreateDirectory(outputDirectory);
 
         var args = new List<string>
         {
             "--skip-download", "--no-playlist", "--no-warnings", "--no-progress", "--ignore-no-formats-error",
+            "--no-abort-on-error",
             "--write-subs", "--no-write-auto-subs",
             "--sub-langs", JapaneseTrackPattern,
             "--sub-format", "srt/vtt/best",
             "--print-json",
-            "-o", System.IO.Path.Combine(outputDirectory, "%(id)s.%(ext)s"),
-            YouTubeUrlParser.VideoUrl(videoId)
+            "-o", System.IO.Path.Combine(outputDirectory, "%(id)s.%(ext)s")
         };
+        if (options.SleepRequestsSeconds > 0)
+            args.AddRange(["--sleep-requests", options.SleepRequestsSeconds.ToString(CultureInfo.InvariantCulture)]);
+        if (options.SleepSubtitlesSeconds > 0)
+            args.AddRange(["--sleep-subtitles", options.SleepSubtitlesSeconds.ToString(CultureInfo.InvariantCulture)]);
+        if (!string.IsNullOrEmpty(options.Impersonate))
+            args.AddRange(["--impersonate", options.Impersonate]);
+        args.AddRange(videoIds.Select(YouTubeUrlParser.VideoUrl));
 
-        string stdout;
-        try
+        var timeout = TimeSpan.FromSeconds((double)options.TimeoutSeconds * videoIds.Count);
+        var (stdout, stderr, _) = await RunProcessAsync(args, timeout, cancellationToken);
+
+        if (IsBotCheck(stderr))
+            batch.BlockedMessage = "YouTube bot check on this IP: " + FirstErrorLine(stderr);
+
+        foreach (var line in stdout.Split('\n'))
         {
-            (stdout, _) = await RunAsync(args, cancellationToken);
+            var jsonStart = line.IndexOf('{');
+            if (jsonStart < 0)
+                continue;
+
+            using var document = JsonDocument.Parse(line[jsonStart..]);
+            var info = ReadVideoInfo(document.RootElement, outputDirectory);
+            batch.Results[info.VideoId] = Classify(info);
         }
-        catch (YtDlpFailedException ex)
+
+        var errors = PerVideoErrors(stderr);
+        foreach (var videoId in videoIds)
         {
-            var classified = ClassifyVideoError(ex.Message);
-            if (classified != null)
-                return YouTubeFetchResult.Skip(classified.Value.Status, classified.Value.Reason);
-            throw;
+            if (batch.Results.ContainsKey(videoId))
+                continue;
+
+            if (errors.TryGetValue(videoId, out var error))
+            {
+                var classified = ClassifyVideoError(error);
+                batch.Results[videoId] = classified != null
+                    ? YouTubeFetchResult.Skip(classified.Value.Status, classified.Value.Reason)
+                    : YouTubeFetchResult.Failed(error);
+            }
+            else if (batch.BlockedMessage == null)
+            {
+                batch.Results[videoId] = YouTubeFetchResult.Failed($"yt-dlp printed no JSON for {videoId}: {FirstErrorLine(stderr)}");
+            }
         }
 
-        var jsonStart = stdout.IndexOf('{');
-        if (jsonStart < 0)
-            throw new YtDlpFailedException($"yt-dlp printed no JSON for {videoId}");
+        return batch;
+    }
 
-        using var document = JsonDocument.Parse(stdout[jsonStart..]);
-        var root = document.RootElement;
-
+    private static YouTubeVideoInfo ReadVideoInfo(JsonElement root, string outputDirectory)
+    {
         var info = new YouTubeVideoInfo
         {
-            VideoId = GetString(root, "id") ?? videoId,
-            Title = GetString(root, "title") ?? videoId,
+            VideoId = GetString(root, "id") ?? throw new YtDlpFailedException("yt-dlp printed a video without an id"),
+            Title = GetString(root, "title") ?? GetString(root, "id")!,
             Description = GetString(root, "description"),
             DurationSeconds = GetInt(root, "duration"),
             UploadedAt = ParseUploadedAt(root),
@@ -150,18 +217,29 @@ public class YtDlpClient(YtDlpOptions options, HttpClient httpClient)
                                                  f.EndsWith(".vtt", StringComparison.OrdinalIgnoreCase))
                                      .OrderByDescending(f => new FileInfo(f).Length)
                                      .FirstOrDefault();
+        return info;
+    }
 
-        var hasJapaneseManual = info.ManualSubtitleLanguages.Any(IsJapaneseTrack);
-        if (info.SubtitlePath == null)
-        {
-            if (hasJapaneseManual)
-                return YouTubeFetchResult.Skip(YouTubeVideoStatus.NoManualSubs, "fetch-error: ja track listed but not written", info);
+    private static YouTubeFetchResult Classify(YouTubeVideoInfo info)
+    {
+        if (info.SubtitlePath != null)
+            return new YouTubeFetchResult { Info = info, Status = YouTubeVideoStatus.Fetched };
 
-            var hasJapaneseAsr = info.AutomaticCaptionLanguages.Any(IsJapaneseTrack);
-            return YouTubeFetchResult.Skip(YouTubeVideoStatus.NoManualSubs, hasJapaneseAsr ? "asr-only" : "no-ja-track", info);
-        }
+        if (info.ManualSubtitleLanguages.Any(IsJapaneseTrack))
+            return YouTubeFetchResult.Skip(YouTubeVideoStatus.NoManualSubs, "fetch-error: ja track listed but not written", info);
 
-        return new YouTubeFetchResult { Info = info, Status = YouTubeVideoStatus.Fetched };
+        var hasJapaneseAsr = info.AutomaticCaptionLanguages.Any(IsJapaneseTrack);
+        return YouTubeFetchResult.Skip(YouTubeVideoStatus.NoManualSubs, hasJapaneseAsr ? "asr-only" : "no-ja-track", info);
+    }
+
+    private static readonly Regex PerVideoError = new(@"^ERROR: \[youtube\] (?<id>[\w-]{11}): (?<message>.*)$", RegexOptions.Multiline | RegexOptions.Compiled);
+
+    private static Dictionary<string, string> PerVideoErrors(string stderr)
+    {
+        var errors = new Dictionary<string, string>();
+        foreach (Match match in PerVideoError.Matches(stderr))
+            errors.TryAdd(match.Groups["id"].Value, match.Groups["message"].Value.Trim());
+        return errors;
     }
 
     /// <summary>
@@ -235,6 +313,24 @@ public class YtDlpClient(YtDlpOptions options, HttpClient httpClient)
 
     private async Task<(string Stdout, string Stderr)> RunAsync(List<string> args, CancellationToken cancellationToken)
     {
+        var (stdout, stderr, exitCode) = await RunProcessAsync(args, TimeSpan.FromSeconds(options.TimeoutSeconds), cancellationToken);
+
+        if (IsBotCheck(stderr))
+            throw new YtDlpBlockedException("YouTube bot check on this IP: " + FirstErrorLine(stderr));
+
+        if (exitCode != 0)
+            throw new YtDlpFailedException(FirstErrorLine(stderr));
+
+        return (stdout, stderr);
+    }
+
+    private static bool IsBotCheck(string stderr) =>
+        stderr.Contains("confirm you're not a bot", StringComparison.OrdinalIgnoreCase) ||
+        stderr.Contains("confirm you’re not a bot", StringComparison.OrdinalIgnoreCase);
+
+    private async Task<(string Stdout, string Stderr, int ExitCode)> RunProcessAsync(List<string> args, TimeSpan timeout,
+                                                                                    CancellationToken cancellationToken)
+    {
         var startInfo = new ProcessStartInfo
         {
             FileName = options.Path,
@@ -276,32 +372,20 @@ public class YtDlpClient(YtDlpOptions options, HttpClient httpClient)
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(options.TimeoutSeconds));
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(timeout);
 
         try
         {
-            await process.WaitForExitAsync(timeout.Token);
+            await process.WaitForExitAsync(timeoutSource.Token);
         }
         catch (OperationCanceledException)
         {
             try { process.Kill(entireProcessTree: true); } catch { /* already gone */ }
-            throw new YtDlpFailedException($"yt-dlp timed out after {options.TimeoutSeconds}s: {string.Join(' ', args)}");
+            throw new YtDlpFailedException($"yt-dlp timed out after {timeout.TotalSeconds:0}s: {string.Join(' ', args)}");
         }
 
-        var stdout = await stdoutTask;
-        var stderr = await stderrTask;
-
-        if (stderr.Contains("confirm you're not a bot", StringComparison.OrdinalIgnoreCase) ||
-            stderr.Contains("confirm you’re not a bot", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new YtDlpBlockedException("YouTube bot check on this IP: " + FirstErrorLine(stderr));
-        }
-
-        if (process.ExitCode != 0)
-            throw new YtDlpFailedException(FirstErrorLine(stderr));
-
-        return (stdout, stderr);
+        return (await stdoutTask, await stderrTask, process.ExitCode);
     }
 
     private static string FirstErrorLine(string stderr)
@@ -358,7 +442,7 @@ public class YtDlpClient(YtDlpOptions options, HttpClient httpClient)
 
         var uploadDate = GetString(root, "upload_date");
         if (uploadDate != null &&
-            DateTime.TryParseExact(uploadDate, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date))
+            DateTime.TryParseExact(uploadDate, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var date))
             return new DateTimeOffset(date, TimeSpan.Zero);
 
         return null;

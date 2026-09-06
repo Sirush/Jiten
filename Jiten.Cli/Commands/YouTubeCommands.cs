@@ -28,38 +28,38 @@ public class YouTubeCommands(CliContext context)
         var delay = DelayBetweenVideos();
         var outcomes = new List<(YouTubeVideoListing Listing, YouTubeFetchOutcome Outcome)>();
 
+        var listings = source.Videos.ToDictionary(v => v.VideoId);
+
         Console.WriteLine();
-        foreach (var listing in source.Videos)
+        foreach (var chunk in source.Videos.Chunk(fetcher.BatchSize))
         {
-            YouTubeFetchOutcome outcome;
-            try
+            var requests = chunk.Select(v => new YouTubeFetchRequest(v.VideoId, v.Title, v.DurationSeconds)).ToList();
+            var batch = await fetcher.FetchManyAsync(requests, stagingDirectory, Filters(options));
+
+            foreach (var (videoId, outcome) in batch.Outcomes)
             {
-                outcome = await fetcher.FetchAsync(listing.VideoId, listing.Title, listing.DurationSeconds, stagingDirectory, Filters(options));
+                var listing = listings[videoId];
+                outcomes.Add((listing, outcome));
+
+                if (outcome.Accepted)
+                {
+                    var info = outcome.Info!;
+                    var cleaned = outcome.Cleaned!;
+                    Console.WriteLine($"  accept {listing.VideoId}  {cleaned.CharacterCount,6} chars  {info.DurationSeconds / 60.0,5:0.0} min" +
+                                      $"  readings-{cleaned.DroppedReadingLines} latin-{cleaned.DroppedLatinLines}" +
+                                      $"  {info.UploadedAt:yyyy-MM-dd}  {Preview(info.Title, 50)}");
+                }
+                else
+                {
+                    Console.WriteLine($"  skip   {listing.VideoId}  {outcome.SkipReason}  {Preview(outcome.Info?.Title ?? listing.Title, 50)}");
+                }
             }
-            catch (YtDlpBlockedException ex)
+
+            if (batch.BlockedMessage != null)
             {
-                Console.WriteLine($"  STOP   {ex.Message}");
+                Console.WriteLine($"  STOP   {batch.BlockedMessage}");
                 Console.WriteLine("  This IP is bot-checked. Switch egress (YtDlp:Proxy) or run from a home connection.");
                 break;
-            }
-            catch (YtDlpFailedException ex)
-            {
-                outcome = new YouTubeFetchOutcome { Status = YouTubeVideoStatus.Pending, SkipReason = $"fetch-error: {Preview(ex.Message, 200)}" };
-            }
-
-            outcomes.Add((listing, outcome));
-
-            if (outcome.Accepted)
-            {
-                var info = outcome.Info!;
-                var cleaned = outcome.Cleaned!;
-                Console.WriteLine($"  accept {listing.VideoId}  {cleaned.CharacterCount,6} chars  {info.DurationSeconds / 60.0,5:0.0} min" +
-                                  $"  readings-{cleaned.DroppedReadingLines} latin-{cleaned.DroppedLatinLines}" +
-                                  $"  {info.UploadedAt:yyyy-MM-dd}  {Preview(info.Title, 50)}");
-            }
-            else
-            {
-                Console.WriteLine($"  skip   {listing.VideoId}  {outcome.SkipReason}  {Preview(outcome.Info?.Title ?? listing.Title, 50)}");
             }
 
             await Task.Delay(delay);
@@ -192,6 +192,49 @@ public class YouTubeCommands(CliContext context)
     }
 
     /// <summary>
+    /// Full re-enumeration of a tracked source from this machine: seeds the videos the feed or a truncated
+    /// first listing never showed, then drains them.
+    /// </summary>
+    public async Task Bootstrap(CliOptions options)
+    {
+        var ingest = CreateIngestClient();
+        if (ingest == null)
+        {
+            Console.WriteLine("--yt-bootstrap needs YouTube:ApiBaseUrl and YouTube:IngestKey in the configuration.");
+            return;
+        }
+
+        var deckId = options.YtBootstrap!.Value;
+        YouTubeIngestClient.TrackedSource tracked;
+        try
+        {
+            tracked = await ingest.GetSourceAsync(deckId);
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"Deck {deckId} is not a tracked YouTube source: {ex.Message}");
+            return;
+        }
+
+        var source = await ResolveAndReport(CreateClient(), tracked.Url, null);
+        if (source == null)
+            return;
+
+        try
+        {
+            var (listed, added) = await ingest.BootstrapAsync(deckId, source);
+            Console.WriteLine($"Deck {deckId}: {listed} videos listed, {added} new pending.");
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"Bootstrap refused: {ex.Message}");
+            return;
+        }
+
+        await DrainRemote(ingest, deckId, options);
+    }
+
+    /// <summary>
     /// Drains Pending ledger rows for one source (deck id) or every source ("all") from this machine's egress.
     /// </summary>
     public async Task Drain(CliOptions options)
@@ -294,45 +337,51 @@ public class YouTubeCommands(CliContext context)
             Console.WriteLine($"Draining deck {source.DeckId} '{source.ChannelName}' ({source.Videos.Count} pending)...");
             int fetched = 0, skipped = 0;
 
-            foreach (var video in source.Videos)
+            var videos = source.Videos.ToDictionary(v => v.VideoId);
+            var workDirectory = Path.Combine(stagingDirectory, source.DeckId.ToString());
+            var blocked = false;
+
+            foreach (var chunk in source.Videos.Chunk(fetcher.BatchSize))
             {
-                YouTubeFetchOutcome outcome;
-                try
+                var requests = chunk.Select(v => new YouTubeFetchRequest(v.VideoId, v.Title, v.RuntimeSeconds)).ToList();
+                var batch = await fetcher.FetchManyAsync(requests, workDirectory, source.Filters);
+
+                foreach (var (videoId, outcome) in batch.Outcomes)
                 {
-                    outcome = await fetcher.FetchAsync(video.VideoId, video.Title, video.RuntimeSeconds,
-                                                       Path.Combine(stagingDirectory, source.DeckId.ToString()), source.Filters);
-                }
-                catch (YtDlpBlockedException ex)
-                {
-                    Console.WriteLine($"  STOP   {ex.Message}");
-                    return;
-                }
-                catch (YtDlpFailedException ex)
-                {
-                    Console.WriteLine($"  error  {video.VideoId}  {Preview(ex.Message, 120)}");
-                    skipped++;
-                    await Task.Delay(delay);
-                    continue;
+                    var video = videos[videoId];
+                    if (outcome.FetchFailed)
+                    {
+                        Console.WriteLine($"  error  {videoId}  {Preview(outcome.SkipReason ?? "", 120)}");
+                        skipped++;
+                        continue;
+                    }
+
+                    try
+                    {
+                        if (outcome.Accepted)
+                        {
+                            var childDeckId = await ingest.UploadFetchedAsync(source.DeckId, videoId, outcome);
+                            fetched++;
+                            Console.WriteLine($"  fetched {videoId}  deck {childDeckId}  {outcome.Cleaned!.CharacterCount,6} chars  {Preview(outcome.Info!.Title, 50)}");
+                        }
+                        else
+                        {
+                            await ingest.SkipAsync(source.DeckId, videoId, outcome);
+                            skipped++;
+                            Console.WriteLine($"  skip    {videoId}  {outcome.SkipReason}  {Preview(outcome.Info?.Title ?? video.Title, 50)}");
+                        }
+                    }
+                    catch (HttpRequestException ex)
+                    {
+                        Console.WriteLine($"  upload failed for {videoId}: {Preview(ex.Message, 200)}");
+                    }
                 }
 
-                try
+                if (batch.BlockedMessage != null)
                 {
-                    if (outcome.Accepted)
-                    {
-                        var childDeckId = await ingest.UploadFetchedAsync(source.DeckId, video.VideoId, outcome);
-                        fetched++;
-                        Console.WriteLine($"  fetched {video.VideoId}  deck {childDeckId}  {outcome.Cleaned!.CharacterCount,6} chars  {Preview(outcome.Info!.Title, 50)}");
-                    }
-                    else
-                    {
-                        await ingest.SkipAsync(source.DeckId, video.VideoId, outcome);
-                        skipped++;
-                        Console.WriteLine($"  skip    {video.VideoId}  {outcome.SkipReason}  {Preview(outcome.Info?.Title ?? video.Title, 50)}");
-                    }
-                }
-                catch (HttpRequestException ex)
-                {
-                    Console.WriteLine($"  upload failed for {video.VideoId}: {Preview(ex.Message, 200)}");
+                    Console.WriteLine($"  STOP   {batch.BlockedMessage}");
+                    blocked = true;
+                    break;
                 }
 
                 await Task.Delay(delay);
@@ -351,6 +400,8 @@ public class YouTubeCommands(CliContext context)
             }
 
             Console.WriteLine($"  fetched {fetched}, skipped {skipped}.{(fetched > 0 ? " Parsing queued on the server." : "")}");
+            if (blocked)
+                return;
         }
     }
 

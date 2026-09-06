@@ -57,52 +57,57 @@ public class YouTubeDrainService(
         var workDirectory = Path.Combine(workRoot, sourceDeckId.ToString());
         Directory.CreateDirectory(workDirectory);
 
-        foreach (var video in pending)
+        var byId = pending.ToDictionary(v => v.VideoId);
+        var filters = YouTubeSourceFilters.From(source);
+
+        foreach (var chunk in pending.Chunk(_fetcher.BatchSize))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            result.Checked++;
 
-            YouTubeFetchOutcome outcome;
-            try
+            var requests = chunk.Select(v => new YouTubeFetchRequest(v.VideoId, v.Title, v.RuntimeSeconds)).ToList();
+            var batch = await _fetcher.FetchManyAsync(requests, workDirectory, filters, cancellationToken);
+
+            foreach (var (videoId, outcome) in batch.Outcomes)
             {
-                outcome = await _fetcher.FetchAsync(video.VideoId, video.Title, video.RuntimeSeconds, workDirectory,
-                                                    YouTubeSourceFilters.From(source), cancellationToken);
+                var video = byId[videoId];
+                result.Checked++;
+
+                if (outcome.FetchFailed)
+                {
+                    video.LastCheckedAt = DateTimeOffset.UtcNow;
+                    video.SkipReason = Truncate(outcome.SkipReason ?? "fetch-error", 500);
+                    await context.SaveChangesAsync(cancellationToken);
+                    result.Skipped++;
+                    logger?.LogWarning("YouTubeDrain: {VideoId} fetch failed: {Error}", video.VideoId, outcome.SkipReason);
+                    continue;
+                }
+
+                var childDeckId = await ApplyOutcomeAsync(context, source, video, outcome, cancellationToken);
+                if (childDeckId == null)
+                {
+                    result.Skipped++;
+                    logger?.LogInformation("YouTubeDrain: {VideoId} {Reason}", video.VideoId, video.SkipReason);
+                }
+                else
+                {
+                    result.Fetched++;
+                    result.FetchedChildDeckIds.Add(childDeckId.Value);
+                    logger?.LogInformation("YouTubeDrain: {VideoId} fetched as deck {ChildDeckId} ({Chars} chars)",
+                                           video.VideoId, childDeckId, outcome.Cleaned?.CharacterCount);
+                }
             }
-            catch (YtDlpBlockedException ex)
+
+            if (batch.BlockedMessage != null)
             {
-                // The IP is refused, not the video: leave the row Pending and stop the whole drain
+                // The IP is refused, not the video: leave the unreached rows Pending and stop the whole drain
                 result.Blocked = true;
-                result.Error = ex.Message;
+                result.Error = batch.BlockedMessage;
                 source.ConsecutiveFailures++;
-                source.LastError = Truncate(ex.Message, 1000);
+                source.LastError = Truncate(batch.BlockedMessage, 1000);
                 source.NextCheckAt = YouTubeSchedule.NextCheckAfterFailure(source.ConsecutiveFailures);
                 await context.SaveChangesAsync(cancellationToken);
-                logger?.LogWarning("YouTubeDrain: source {DeckId} stopped, egress is bot-checked: {Error}", sourceDeckId, ex.Message);
+                logger?.LogWarning("YouTubeDrain: source {DeckId} stopped, egress is bot-checked: {Error}", sourceDeckId, batch.BlockedMessage);
                 return result;
-            }
-            catch (YtDlpFailedException ex)
-            {
-                video.LastCheckedAt = DateTimeOffset.UtcNow;
-                video.SkipReason = Truncate($"fetch-error: {ex.Message}", 500);
-                await context.SaveChangesAsync(cancellationToken);
-                result.Skipped++;
-                logger?.LogWarning("YouTubeDrain: {VideoId} fetch failed: {Error}", video.VideoId, ex.Message);
-                await Task.Delay(delayBetweenVideos, cancellationToken);
-                continue;
-            }
-
-            var childDeckId = await ApplyOutcomeAsync(context, source, video, outcome, cancellationToken);
-            if (childDeckId == null)
-            {
-                result.Skipped++;
-                logger?.LogInformation("YouTubeDrain: {VideoId} {Reason}", video.VideoId, video.SkipReason);
-            }
-            else
-            {
-                result.Fetched++;
-                result.FetchedChildDeckIds.Add(childDeckId.Value);
-                logger?.LogInformation("YouTubeDrain: {VideoId} fetched as deck {ChildDeckId} ({Chars} chars)",
-                                       video.VideoId, childDeckId, outcome.Cleaned?.CharacterCount);
             }
 
             await Task.Delay(delayBetweenVideos, cancellationToken);

@@ -70,8 +70,22 @@ public class YouTubeFetchResult
     public string? SkipReason { get; set; }
     public YouTubeVideoStatus Status { get; set; }
 
-    public bool Succeeded => Info != null && SkipReason == null;
+    /// <summary>yt-dlp failed on this video without a classifiable cause; the video stays Pending</summary>
+    public string? Error { get; set; }
+
+    public bool Succeeded => Info != null && SkipReason == null && Error == null;
 
     public static YouTubeFetchResult Skip(YouTubeVideoStatus status, string reason, YouTubeVideoInfo? info = null) =>
         new() { Status = status, SkipReason = reason, Info = info };
+
+    public static YouTubeFetchResult Failed(string error) =>
+        new() { Status = YouTubeVideoStatus.Pending, Error = error };
+}
+
+public class YouTubeBatchFetchResult
+{
+    public Dictionary<string, YouTubeFetchResult> Results { get; } = new();
+
+    /// <summary>Set when the egress IP was bot-checked partway; results before it are still valid</summary>
+    public string? BlockedMessage { get; set; }
 }

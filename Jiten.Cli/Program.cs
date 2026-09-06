@@ -71,6 +71,12 @@ public class Program
             return;
         }
 
+        if (options.YtBootstrap != null)
+        {
+            await youTubeCommands.Bootstrap(options);
+            return;
+        }
+
         if (!string.IsNullOrEmpty(options.WebNovelTest))
         {
             await webNovelCommands.Test(options.WebNovelTest, options.ChunkChars);

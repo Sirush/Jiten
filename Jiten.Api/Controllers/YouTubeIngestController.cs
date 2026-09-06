@@ -259,6 +259,39 @@ public class YouTubeIngestController(
         }
     }
 
+    /// <summary>What the CLI needs to re-list a tracked source with its own yt-dlp.</summary>
+    [HttpGet("sources/{deckId:int}")]
+    public async Task<IActionResult> GetSource(int deckId)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var source = await context.YouTubeSources.AsNoTracking().FirstOrDefaultAsync(s => s.DeckId == deckId);
+        if (source == null)
+            return NotFound();
+
+        return Ok(new { source.DeckId, Kind = source.SourceKind.ToString(), source.SourceId, Url = YouTubeUrlParser.SourceUrl(source.SourceKind, source.SourceId) });
+    }
+
+    /// <summary>Adds unseen videos from a full listing the CLI resolved as Pending; known rows keep their status.</summary>
+    [HttpPost("sources/{deckId:int}/bootstrap")]
+    public async Task<IActionResult> Bootstrap(int deckId, [FromBody] RegisterYouTubeSourceRequest model)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var source = await context.YouTubeSources.AsNoTracking().FirstOrDefaultAsync(s => s.DeckId == deckId);
+        if (source == null)
+            return NotFound();
+
+        var validation = ValidateSource(model.Source);
+        if (validation != null)
+            return BadRequest(new { Message = validation });
+        if (model.Source.Kind != source.SourceKind || model.Source.SourceId != source.SourceId)
+            return BadRequest(new { Message = "The listing is for a different source." });
+
+        var added = await registrar.SeedLedgerAsync(deckId, model.Source.Videos.Select(v => (v.VideoId, v.Title, v.DurationSeconds, (DateTimeOffset?)null)));
+        logger.LogInformation("YouTubeIngest: bootstrap of deck {DeckId} listed {Count} videos, {Added} new", deckId, model.Source.Videos.Count, added);
+
+        return Ok(new { DeckId = deckId, Listed = model.Source.Videos.Count, Added = added });
+    }
+
     /// <summary>Parses the source's Fetched rows now; the CLI calls it once at the end of a drain instead of per video.</summary>
     [HttpPost("sources/{deckId:int}/import")]
     public async Task<IActionResult> ImportFetched(int deckId)
