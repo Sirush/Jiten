@@ -9,6 +9,7 @@ using Hangfire.PostgreSql;
 using Jiten.Api.Helpers;
 using Jiten.Api.Jobs;
 using Jiten.Api.Services;
+using Jiten.Api.Telemetry;
 using Jiten.Api.Authentication;
 using Jiten.Core;
 using Jiten.Parser;
@@ -170,6 +171,20 @@ builder.Services.AddTransient<YouTubeDrainService>(sp =>
                             sp.GetRequiredService<ILogger<YouTubeDrainService>>()));
 builder.Services.AddScoped<Jiten.Api.Controllers.IngestKeyFilter>();
 
+// Shared secret sent by the Nuxt SSR server (X-Internal-Ssr-Key) so first-party server
+// rendering is exempt from the per-IP anonymous rate limit. Without this, every anonymous
+// SSR request lands in one partition (the SSR host's IP as seen past the reverse proxy) and
+// saturates the limit, leaving logged-out pages and OG images data-less. Empty disables it.
+var ssrBypassKey = builder.Configuration["SsrBypassKey"];
+var ssrBypassKeyBytes = string.IsNullOrEmpty(ssrBypassKey) ? null : Encoding.UTF8.GetBytes(ssrBypassKey);
+
+bool IsTrustedSsr(HttpContext ctx)
+{
+    if (ssrBypassKeyBytes == null) return false;
+    if (!ctx.Request.Headers.TryGetValue("X-Internal-Ssr-Key", out var provided)) return false;
+    return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(provided.ToString()), ssrBypassKeyBytes);
+}
+
 // OpenTelemetry Configuration
 var otelConfig = builder.Configuration.GetSection("OpenTelemetry");
 var enableOtlpExporter = otelConfig.GetValue<bool>("EnableOtlpExporter");
@@ -203,7 +218,27 @@ if (enableOtlpExporter)
                            var path = httpContext.Request.Path.Value ?? "";
                            return !path.Contains("/health") && !path.Contains("/static") && !path.StartsWith("/swagger");
                        };
+                       options.EnrichWithHttpRequest = (activity, request) =>
+                       {
+                           activity.SetTag("client.address", ClientIp.Resolve(request.HttpContext));
+                           var userAgent = request.Headers.UserAgent.ToString();
+                           if (userAgent.Length > 0) activity.SetTag("user_agent.original", userAgent);
+                           if (IsTrustedSsr(request.HttpContext)) activity.SetTag("ssr.internal", true);
+                       };
+                       // Authentication runs after the request hook, so identity tags only exist on the response side.
+                       options.EnrichWithHttpResponse = (activity, response) =>
+                       {
+                           var user = response.HttpContext.User;
+                           var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                           if (userId is null) return;
+                           activity.SetTag("enduser.id", userId);
+                           activity.SetTag("auth.scheme", user.FindFirst("auth_scheme")?.Value ?? "Jwt");
+                           activity.SetTag("rate_limit.tier", user.FindFirst("rate_limit_tier")?.Value ?? "Default");
+                           var apiKeyId = user.FindFirst("api_key_id")?.Value;
+                           if (apiKeyId is not null) activity.SetTag("api_key.id", apiKeyId);
+                       };
                    })
+                   .AddSource(HangfireActivityFilter.SourceName)
                    .AddHttpClientInstrumentation(options => { options.RecordException = true; })
                    .AddEntityFrameworkCoreInstrumentation(options => { options.SetDbStatementForText = true; });
 
@@ -241,7 +276,8 @@ if (enableOtlpExporter)
                    .AddHttpClientInstrumentation()
                    .AddRuntimeInstrumentation()
                    .AddMeter(CoverageJourneyService.MeterName)
-                   .AddMeter(Jiten.Api.Services.Stripe.BillingTelemetry.MeterName);
+                   .AddMeter(Jiten.Api.Services.Stripe.BillingTelemetry.MeterName)
+                   .AddMeter(RateLimitTelemetry.MeterName);
 
                if (enableConsoleExporter)
                {
@@ -480,20 +516,6 @@ builder.Services.AddHostedService<DerivationLinkCacheWarmupService>();
 builder.Services.AddHostedService<DeckVectorCacheWarmupService>();
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddHostedService<DeckActivityFlushService>();
-
-// Shared secret sent by the Nuxt SSR server (X-Internal-Ssr-Key) so first-party server
-// rendering is exempt from the per-IP anonymous rate limit. Without this, every anonymous
-// SSR request lands in one partition (the SSR host's IP as seen past the reverse proxy) and
-// saturates the limit, leaving logged-out pages and OG images data-less. Empty disables it.
-var ssrBypassKey = builder.Configuration["SsrBypassKey"];
-var ssrBypassKeyBytes = string.IsNullOrEmpty(ssrBypassKey) ? null : Encoding.UTF8.GetBytes(ssrBypassKey);
-
-bool IsTrustedSsr(HttpContext ctx)
-{
-    if (ssrBypassKeyBytes == null) return false;
-    if (!ctx.Request.Headers.TryGetValue("X-Internal-Ssr-Key", out var provided)) return false;
-    return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(provided.ToString()), ssrBypassKeyBytes);
-}
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -748,6 +770,11 @@ builder.Services.AddRateLimiter(options =>
 
     options.OnRejected = async (context, token) =>
     {
+        var policy = context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName ?? "global";
+        var partition = context.HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier) != null ? "user" : "ip";
+        RateLimitTelemetry.Rejected.Add(1, new KeyValuePair<string, object?>("policy", policy),
+                                        new KeyValuePair<string, object?>("partition", partition));
+
         var origin = context.HttpContext.Request.Headers.Origin.FirstOrDefault();
         if (!string.IsNullOrEmpty(origin))
         {
@@ -862,6 +889,7 @@ builder.Services.AddHangfire(configuration =>
 
 // Configure Hangfire global settings for long-running jobs
 GlobalJobFilters.Filters.Add(new AutomaticRetryAttribute { Attempts = 3 });
+GlobalJobFilters.Filters.Add(new HangfireActivityFilter());
 
 // Hangfire servers
 // Fetchers only have 1 worker to respect rate limits

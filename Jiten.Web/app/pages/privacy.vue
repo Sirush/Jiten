@@ -7,7 +7,7 @@
 <template>
   <div class="legal-doc mx-auto max-w-3xl px-6 py-10 leading-relaxed text-gray-800 dark:text-gray-200">
     <h1 class="mb-2 text-center text-3xl font-bold text-gray-900 dark:text-gray-100">Privacy Policy for Jiten.moe</h1>
-    <p class="mb-10 text-center italic text-gray-500 dark:text-gray-400">Last Updated: 8 August 2026</p>
+    <p class="mb-10 text-center italic text-gray-500 dark:text-gray-400">Last Updated: 7 September 2026</p>
 
     <p>
       Jiten.moe ("we", "our", "us") respects your privacy and is committed to protecting your personal data. This Privacy Policy explains how we collect, use,
@@ -35,8 +35,8 @@
         <li><b>Technical Data:</b> IP address, browser type, operating system (collected automatically for security and site functionality).</li>
         <li><b>Study Data:</b> Your vocabulary state, study history and preferences, processed to provide the learning features you use.</li>
         <li>
-          <b>Audience Measurement:</b> Aggregate usage statistics collected by our self-hosted analytics (see section 10). IP addresses are anonymised and no
-          advertising or cross-site tracking takes place.
+          <b>Usage Data:</b> Pages visited, features used and errors encountered, collected by our own analytics (see section 10). IP addresses are not
+          stored and no advertising or cross-site tracking takes place.
         </li>
         <li><b>Payment and Subscription Data:</b> If you purchase Jiten+; see section 6.</li>
         <li>
@@ -78,6 +78,10 @@
         <li>Account data (username, email) is kept as long as your account is active.</li>
         <li>If you delete your account, we delete or anonymise your data within 30 days, unless retention is required by law.</li>
         <li>Newsletter data is kept until you unsubscribe.</li>
+        <li>
+          Technical request logs and usage data tied to your account (IP address, browser identification, pages visited, features used, API calls and errors)
+          are kept for 30 days for security, abuse prevention and debugging, then deleted or reduced to anonymous aggregates.
+        </li>
         <li>
           Accounting records relating to a purchase are retained for ten (10) years from the end of the financial year concerned, as required by article L123-22
           of the French Commercial Code. This retention survives deletion of your account: after account deletion the retained records are reduced to what the
@@ -171,11 +175,10 @@
           require consent.
         </li>
         <li>
-          <b>Audience measurement.</b> We use a self-hosted instance of <a href="https://umami.is" target="_blank" rel="noopener">Umami</a>, a privacy-focused
-          analytics tool, to understand aggregate site usage. It sets no cookies, stores no identifier on your device, anonymises IP addresses, and performs no
-          advertising or cross-site tracking. The data stays on our own infrastructure and is not shared with anyone. Because no tracker is stored on your
-          device and the data is used solely to produce anonymous aggregate statistics, this measurement operates under the audience-measurement exemption and
-          no consent banner is required.
+          <b>Audience measurement.</b> We measure site usage ourselves, on our own infrastructure. It sets no cookies, stores no identifier on your device,
+          never stores IP addresses, and performs no advertising or cross-site tracking. The data is not shared with anyone. While you are signed in, usage
+          and error reports are linked to your account for 30 days so we can fix problems and improve the features you use (legitimate interest, see section
+          3); after that only anonymous aggregate statistics remain. No consent banner is required for this.
         </li>
         <li>
           <b>Abuse prevention.</b> The registration page uses Google reCAPTCHA to block automated sign-ups. reCAPTCHA is provided by Google LLC and processes

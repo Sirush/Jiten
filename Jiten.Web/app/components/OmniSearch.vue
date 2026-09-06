@@ -94,23 +94,27 @@
   };
 
   const navigateToParse = async () => {
+    trackEvent('search_performed', { kind: 'parse' });
     if (!trimmedText.value) return;
     closeDropdown();
     await navigateTo(parseRoute.value);
   };
 
   const navigateToMediaSearch = async () => {
+    trackEvent('search_performed', { kind: 'media' });
     if (!trimmedText.value) return;
     closeDropdown();
     await navigateTo(mediaSearchRoute.value);
   };
 
   const navigateToDeck = async (deckId: number) => {
+    trackEvent('search_performed', { kind: 'deck' });
     closeDropdown();
     await navigateTo(deckRoute(deckId));
   };
 
   const navigateToKanji = async (character: string) => {
+    trackEvent('search_performed', { kind: 'kanji' });
     closeDropdown();
     await navigateTo(kanjiRoute(character));
   };

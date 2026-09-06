@@ -135,6 +135,15 @@ export const useSrsStore = defineStore('srs', () => {
   const isFlipped = ref(false);
   const isLoading = ref(false);
   const isSessionComplete = ref(false);
+  watch(isSessionComplete, (complete) => {
+    if (!complete || sessionStats.value.cardsReviewed === 0) return;
+    const started = sessionStats.value.startTime?.getTime();
+    trackEvent('srs_session_finished', {
+      cards: sessionStats.value.cardsReviewed,
+      new: sessionStats.value.newCardsLearned,
+      minutes: started ? Math.round((Date.now() - started) / 60000) : 0,
+    });
+  });
   const isWrappingUp = ref(false);
   const preWrapUpBatch = ref<StudyCardDto[]>([]);
   // Drives the "batch complete" checkpoint popup: set when a full batch is exhausted and the

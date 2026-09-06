@@ -32,6 +32,7 @@
       });
 
       if (!response.ok) throw new Error('Failed to export vocabulary');
+      trackEvent('vocabulary_export', { kind: 'word_list' });
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);

@@ -1,15 +1,9 @@
-import cluster from 'node:cluster';
 import { constants, monitorEventLoopDelay, PerformanceObserver } from 'node:perf_hooks';
 import v8 from 'node:v8';
 
-const SAMPLE_MS = Number(process.env.PERF_SAMPLE_MS) || 10_000;
-
-// Every worker samples its own loop and heap; without the id the interleaved lines can't be
-// attributed, and one sick worker is indistinguishable from a fleet-wide problem.
-const WORKER = `w${cluster.worker?.id ?? 0}`;
+const REPORT_MS = Number(process.env.PERF_REPORT_MS) || 60_000;
 
 const toMs = (nanoseconds: number) => Math.round(nanoseconds / 1e6);
-const toMb = (bytes: number) => Math.round(bytes / 1024 / 1024);
 
 export default defineNitroPlugin((nitroApp) => {
   // The prerenderer instantiates the nitro app inside `nuxt build`; sampling there measures
@@ -40,19 +34,28 @@ export default defineNitroPlugin((nitroApp) => {
   const timer = setInterval(() => {
     const heap = v8.getHeapStatistics();
     const mem = process.memoryUsage();
+    const { requests, routes, slow } = drainRequests();
 
-    console.log(
-      `[perf ${WORKER}] lag p50=${toMs(loopDelay.percentile(50))}ms p99=${toMs(loopDelay.percentile(99))}ms max=${toMs(loopDelay.max)}ms` +
-        ` | gc n=${gcCount} total=${Math.round(gcTotalMs)}ms max=${Math.round(gcMaxMs)}ms major=${Math.round(gcMaxMajorMs)}ms` +
-        ` | heap ${toMb(heap.used_heap_size)}/${toMb(heap.heap_size_limit)}MB rss=${toMb(mem.rss)}MB ext=${toMb(mem.external)}MB`
-    );
+    sendToKami('/ingest/nitro', {
+      worker: WORKER,
+      at: Date.now(),
+      periodMs: REPORT_MS,
+      pid: process.pid,
+      uptimeS: Math.round(process.uptime()),
+      requests,
+      routes,
+      slow,
+      loop: { p50: toMs(loopDelay.percentile(50)), p99: toMs(loopDelay.percentile(99)), max: toMs(loopDelay.max) },
+      gc: { n: gcCount, ms: Math.round(gcTotalMs), max: Math.round(gcMaxMs), major: Math.round(gcMaxMajorMs) },
+      mem: { heap: heap.used_heap_size, limit: heap.heap_size_limit, rss: mem.rss, external: mem.external },
+    });
 
     loopDelay.reset();
     gcCount = 0;
     gcTotalMs = 0;
     gcMaxMs = 0;
     gcMaxMajorMs = 0;
-  }, SAMPLE_MS);
+  }, REPORT_MS);
 
   timer.unref();
 

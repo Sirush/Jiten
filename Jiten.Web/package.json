@@ -39,7 +39,6 @@
     "hatsuon": "2.0.0",
     "jszip": "3.10.1",
     "nuxt": "4.5.2",
-    "nuxt-umami": "3.2.1",
     "nuxt-vue3-google-signin": "0.0.13",
     "patch-package": "8.0.1",
     "perfect-debounce": "1.0.0",

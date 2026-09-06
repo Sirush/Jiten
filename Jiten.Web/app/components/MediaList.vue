@@ -228,6 +228,7 @@
   const updateFiltersDebounced = debounce(
     () => {
       debouncedFilters.value = snapshotFilters();
+      trackEvent('filter_used', { media: mediaType.value == null ? 'all' : (MediaType[Number(mediaType.value)] ?? String(mediaType.value)) });
 
       const toUndef = (v: number | null) => (v === null ? undefined : v);
       const arrayToString = (arr: number[]) => (arr.length > 0 ? arr.join(',') : undefined);

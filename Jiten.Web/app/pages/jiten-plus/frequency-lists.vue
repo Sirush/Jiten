@@ -366,6 +366,7 @@
   async function download(list: FrequencyListDto, format: 'zip' | 'csv') {
     try {
       const blob = await $api<Blob>(`frequency-lists/${list.id}/download`, { query: { format }, responseType: 'blob' });
+      trackEvent('frequency_list_download', { format });
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = objectUrl;
