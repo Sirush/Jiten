@@ -22,14 +22,25 @@
     redundantVia?: DerivationCoverDto | null;
   }>();
 
+  const emit = defineEmits<{
+    changed: [states: KnownState[]];
+  }>();
+
   const knownStates = ref([...(props.knownStatesOverride ?? props.word.knownStates ?? [])]);
+  let syncingFromProps = false;
+  watch(knownStates, (states) => {
+    if (!syncingFromProps) emit('changed', [...states]);
+  });
   const op = ref();
   const opActivated = ref(false);
   const deckOpActivated = ref(false);
   const addingToDeck = ref<number | null>(null);
 
-  watch([() => props.knownStatesOverride, () => props.word.knownStates], ([override, wordStates]) => {
+  watch([() => props.knownStatesOverride, () => props.word.knownStates], async ([override, wordStates]) => {
+    syncingFromProps = true;
     knownStates.value = [...(override ?? wordStates ?? [])];
+    await nextTick();
+    syncingFromProps = false;
   });
 
   const wordPath = computed(() => `${props.word.wordId}/${props.word.mainReading.readingIndex}`);

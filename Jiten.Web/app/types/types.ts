@@ -41,6 +41,8 @@ export interface Deck {
   speechDuration: number;
   speechMoraCount: number;
   speechSpeed: number;
+  runtimeSeconds?: number | null;
+  medianChildRuntimeSeconds?: number | null;
   parentDeckId: number;
   deckWords: DeckWord[];
   links: Link[];
@@ -2164,4 +2166,46 @@ export interface CardMediaImportResponse {
   results: CardMediaImportResult[];
   usedBytes: number;
   maxBytes: number;
+}
+
+export interface WatchInfo {
+  deckId: number;
+  parentDeckId: number | null;
+  videoId: string;
+  runtimeSeconds: number | null;
+  cueCount: number;
+}
+
+export interface WatchCue {
+  index: number;
+  start: number;
+  end: number;
+  text: string;
+  /** [wordId, readingIndex, start, length, conjugationIndex] per token; the last is -1 when unconjugated */
+  tokens: number[][];
+}
+
+export interface WatchWord {
+  wordId: number;
+  readingIndex: number;
+  spelling: string;
+  reading: string;
+  frequencyRank: number | null;
+  knownStates: KnownState[];
+}
+
+export interface WatchWindow {
+  cueCount: number;
+  lines: WatchCue[];
+  words: Record<string, WatchWord>;
+  /** Conjugation chains the tokens index into, innermost first */
+  conjugations: string[][];
+}
+
+export interface WatchTimeline {
+  totalMs: number;
+  counts: number[];
+  /** Start (ms) of the first line with unknown words in each bucket; -1 when the bucket has none */
+  starts: number[];
+  unknownWords: number;
 }

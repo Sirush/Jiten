@@ -29,9 +29,7 @@
   const sections = computed(() =>
     MEDIA_RANGE_SECTIONS.map((section) => ({
       ...section,
-      specs: MEDIA_RANGE_SPECS.filter(
-        (spec) => spec.section === section.key && (!spec.requiresAuth || props.isConnected) && matches(spec.label)
-      ),
+      specs: MEDIA_RANGE_SPECS.filter((spec) => spec.section === section.key && (!spec.requiresAuth || props.isConnected) && matches(spec.label)),
     })).filter((section) => section.specs.length > 0)
   );
 
@@ -93,13 +91,7 @@
         </div>
 
         <div v-for="(section, index) in sections" :key="section.key" class="shrink-0">
-          <div
-            :class="[
-              'px-1 text-[11px] font-semibold tracking-wider text-surface-500 uppercase',
-              sectionHeaderSpacing(index),
-              mobile ? '' : 'leading-none',
-            ]"
-          >
+          <div :class="['px-1 text-[11px] font-semibold tracking-wider text-surface-500 uppercase', sectionHeaderSpacing(index), mobile ? '' : 'leading-none']">
             {{ section.label }}
           </div>
           <div :class="['grid gap-x-5 gap-y-0.5', mobile || split ? 'grid-cols-1' : 'grid-cols-2']">

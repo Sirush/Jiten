@@ -113,7 +113,7 @@ public class ParseJob(
         if (metadata.ReleaseDate != null)
             deck.ReleaseDate = DateOnly.FromDateTime(metadata.ReleaseDate.Value);
 
-        if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
+        if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio or MediaType.YouTube)
             deck.SentenceCount = 0;
 
         deck.RomajiTitle = metadata.RomajiTitle;
@@ -242,7 +242,7 @@ public class ParseJob(
             deck.SpeechDuration = meta.SpeechDuration ?? 0;
             deck.SpeechMoraCount = meta.SpeechMoraCount ?? 0;
 
-            if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
+            if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio or MediaType.YouTube)
                 deck.SentenceCount = 0;
 
             metaToDeck[meta] = deck;

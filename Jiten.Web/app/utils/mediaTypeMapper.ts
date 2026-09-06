@@ -45,7 +45,7 @@ const mediaTypeSlugMap: Record<number, string> = {
 };
 
 // Requestable but not yet browsable
-const unlistedMediaTypes = new Set<MediaType>([MediaType.YouTube]);
+const unlistedMediaTypes = new Set<MediaType>([]);
 
 export function isListedMediaType(mediaType: MediaType): boolean {
   return !unlistedMediaTypes.has(mediaType);

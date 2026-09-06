@@ -120,6 +120,7 @@ export default defineNuxtConfig({
     '/decks/media/list/8': { redirect: { to: '/decks/media/list/web-novels', statusCode: 301 } },
     '/decks/media/list/9': { redirect: { to: '/decks/media/list/manga', statusCode: 301 } },
     '/decks/media/list/10': { redirect: { to: '/decks/media/list/audio', statusCode: 301 } },
+    '/decks/media/list/11': { redirect: { to: '/decks/media/list/youtube', statusCode: 301 } },
     '/mentions-legales': { robots: 'noindex, follow' },
     '/cgv': { robots: 'noindex, follow' },
     '/cgv-fr': { robots: 'noindex, follow' },

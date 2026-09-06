@@ -69,7 +69,7 @@ public class ParseNewSubdecksJob(
             original.SentenceCount = parsed.SentenceCount;
             original.DialoguePercentage = parsed.DialoguePercentage;
 
-            if (original.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
+            if (original.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio or MediaType.YouTube)
                 original.SentenceCount = 0;
 
             await context.SaveChangesAsync();
@@ -83,22 +83,24 @@ public class ParseNewSubdecksJob(
                 original.DeckId, original.OriginalTitle);
         }
 
-        // Reload parent with ALL children for reaggregation
         var parentWithChildren = await context.Decks
                                               .Include(d => d.Children).ThenInclude(c => c.DeckWords)
-                                              .Include(d => d.ExampleSentences).Include(deck => deck.DeckWords)
                                               .FirstAsync(d => d.DeckId == parentDeckId);
 
+        var parentSentences = await context.ExampleSentences
+                                           .AsNoTracking()
+                                           .Where(s => s.DeckId == parentDeckId)
+                                           .ToListAsync();
+
         await parentWithChildren.AddChildDeckWords(context);
+
+        var parentWords = parentWithChildren.DeckWords?.ToList() ?? [];
+        parentWithChildren.DeckWords = new List<DeckWord>();
 
         // Update parent stats and persist
         await context.SaveChangesAsync();
 
         await JitenHelper.DeleteDeckData(context, parentDeckId);
-
-        // Collect parent's aggregated data for bulk insert
-        var parentWords = parentWithChildren.DeckWords?.ToList() ?? [];
-        var parentSentences = parentWithChildren.ExampleSentences?.ToList() ?? [];
         await JitenHelper.BulkInsertDeckData(contextFactory, parentDeckId, parentWords, parentSentences);
 
         // Enqueue decks for the periodic coverage sweeper (coalesces per-user work)

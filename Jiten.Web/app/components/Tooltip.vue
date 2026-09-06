@@ -45,6 +45,7 @@
   const activated = ref(false);
 
   const show = () => {
+    if (!props.content) return;
     activated.value = true;
     isVisible.value = true;
   };

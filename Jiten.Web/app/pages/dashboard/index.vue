@@ -67,6 +67,16 @@
       </Card>
 
       <Card class="shadow-md">
+        <template #title>Add YouTube Source</template>
+        <template #content>
+          <p class="mb-4">Track a channel or playlist with manual Japanese subtitles</p>
+          <div class="flex justify-center">
+            <Button label="Add YouTube" class="p-button-primary" @click="navigateTo('/dashboard/add-youtube')" />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
         <template #title>Maintenance Banner</template>
         <template #content>
           <p class="mb-4">Display a site-wide maintenance notice</p>

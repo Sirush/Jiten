@@ -10,6 +10,8 @@
     parentDeck?: Deck | null;
     // When set, the deck title becomes a link and this label is appended as the (unlinked) current page.
     current?: string;
+    // A shorter deck label for pages that already display the full title below.
+    deckLabel?: string;
   }>();
 
   const localiseTitle = useLocaliseTitle();
@@ -30,7 +32,7 @@
       list.push({ label: localiseTitle(props.parentDeck), route: `/decks/media/${props.parentDeck.deckId}/detail` });
     }
     list.push({
-      label: localiseTitle(deck),
+      label: props.deckLabel ?? localiseTitle(deck),
       route: props.current ? `/decks/media/${deck.deckId}/detail` : undefined,
     });
     if (props.current) {

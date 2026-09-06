@@ -37,7 +37,7 @@
 
   const markerHint = computed(() => (!text.value || hasValidMarkers(text.value) ? null : 'Mark words to highlight with **, e.g. **食べる**'));
 
-  const previewHtml = computed(() => (hasValidMarkers(text.value) ? parseCustomSentenceHtml(text.value) : sanitiseHtml(text.value)));
+  const previewHtml = computed(() => (hasValidMarkers(text.value) ? parseCustomSentenceHtml(text.value) : escapeHtml(text.value)));
 
   const canSave = computed(() => hasValidMarkers(text.value) && text.value.length <= 150 && !saving.value);
 

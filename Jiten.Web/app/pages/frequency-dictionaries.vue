@@ -66,6 +66,7 @@
     { name: 'Video Game', text: `Built from the scripts of ${typePhrase('VideoGame', 'video game', 'video games')}.` },
     { name: 'Visual Novel', text: `Built from the scripts of ${typePhrase('VisualNovel', 'visual novel', 'visual novels')}.` },
     { name: 'Web Novel', text: `Built from ${typePhrase('WebNovel', 'serialized web novel', 'serialized web novels')}.` },
+    { name: 'YouTube', text: `Built from the Japanese subtitles of ${typePhrase('YouTube', 'YouTube channel', 'YouTube channels')}.` },
     {
       name: 'Kanji',
       text: 'Ranks individual kanji rather than words, by how often each character appears across the corpus.',

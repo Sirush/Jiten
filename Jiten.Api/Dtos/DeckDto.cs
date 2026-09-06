@@ -27,6 +27,8 @@ public class DeckDto
     public long SpeechDuration { get; set; }
     public long SpeechMoraCount { get; set; }
     public float SpeechSpeed { get; set; }
+    public int? RuntimeSeconds { get; set; }
+    public int? MedianChildRuntimeSeconds { get; set; }
     public float AverageSentenceLength { get; set; }
     public int? ParentDeckId { get; set; }
     public List<Link> Links { get; set; } = new();
@@ -95,6 +97,8 @@ public class DeckDto
         SpeechDuration = deck.SpeechDuration;
         SpeechMoraCount = deck.SpeechMoraCount;
         SpeechSpeed = (float)deck.SpeechSpeed;
+        RuntimeSeconds = deck.RuntimeSeconds;
+        MedianChildRuntimeSeconds = deck.MedianChildRuntimeSeconds;
         AverageSentenceLength = deck.AverageSentenceLength;
         ParentDeckId = deck.ParentDeckId;
         Links = deck.Links;
@@ -144,6 +148,8 @@ public class DeckDto
         SpeechDuration = deck.SpeechDuration;
         SpeechMoraCount = deck.SpeechMoraCount;
         SpeechSpeed = (float)deck.SpeechSpeed;
+        RuntimeSeconds = deck.RuntimeSeconds;
+        MedianChildRuntimeSeconds = deck.MedianChildRuntimeSeconds;
         AverageSentenceLength = deck.AverageSentenceLength;
         ParentDeckId = deck.ParentDeckId;
         Links = deck.Links;

@@ -114,6 +114,9 @@ namespace Jiten.Core.Migrations
                     b.Property<int>("MediaType")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("MedianChildRuntimeSeconds")
+                        .HasColumnType("integer");
+
                     b.Property<string>("OriginalFileName")
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
@@ -150,6 +153,9 @@ namespace Jiten.Core.Migrations
                     b.Property<string>("RomajiTitle")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("RuntimeSeconds")
+                        .HasColumnType("integer");
 
                     b.Property<int>("SentenceCount")
                         .HasColumnType("integer");
@@ -469,6 +475,20 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_DeckStats_ComputedAt");
 
                     b.ToTable("DeckStats", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DeckSubtitleTrack", b =>
+                {
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CuesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("DeckId");
+
+                    b.ToTable("DeckSubtitleTracks", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.DeckTag", b =>
@@ -2177,6 +2197,190 @@ namespace Jiten.Core.Migrations
                     b.ToTable("WordSetMembers", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.YouTube.YouTubeRegistration", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CoverPath")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EnglishTitle")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int?>("MaxRuntimeSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MinRuntimeSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OriginalTitle")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateOnly?>("ReleaseDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("RomajiTitle")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TitleFilterExclude")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TitleFilterInclude")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompletedAt")
+                        .HasDatabaseName("IX_YouTubeRegistrations_CompletedAt");
+
+                    b.ToTable("YouTubeRegistrations", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.YouTube.YouTubeSource", b =>
+                {
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ChannelId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ChannelName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("CheckIntervalDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("LastSourceUpdate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("MaxRuntimeSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MinRuntimeSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("NextCheckAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("SourceKind")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("SyncEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TitleFilterExclude")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TitleFilterInclude")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("DeckId");
+
+                    b.HasIndex("SourceKind", "SourceId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_YouTubeSources_SourceKind_SourceId");
+
+                    b.HasIndex("SyncEnabled", "NextCheckAt")
+                        .HasDatabaseName("IX_YouTubeSources_SyncEnabled_NextCheckAt");
+
+                    b.ToTable("YouTubeSources", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.YouTube.YouTubeVideo", b =>
+                {
+                    b.Property<int>("SourceDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("VideoId")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("ChildDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("PlayableInEmbed")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("RuntimeSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SkipReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("SourceDeckId", "VideoId");
+
+                    b.HasIndex("ChildDeckId")
+                        .HasDatabaseName("IX_YouTubeVideos_ChildDeckId");
+
+                    b.HasIndex("Status", "LastCheckedAt")
+                        .HasDatabaseName("IX_YouTubeVideos_Status_LastCheckedAt");
+
+                    b.ToTable("YouTubeVideos", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.BlacklistedComparisonDeck", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Deck", "Deck")
@@ -2295,6 +2499,17 @@ namespace Jiten.Core.Migrations
                     b.HasOne("Jiten.Core.Data.Deck", "Deck")
                         .WithOne("DeckStats")
                         .HasForeignKey("Jiten.Core.Data.DeckStats", "DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Deck");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DeckSubtitleTrack", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
+                        .WithOne("SubtitleTrack")
+                        .HasForeignKey("Jiten.Core.Data.DeckSubtitleTrack", "DeckId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -2663,6 +2878,28 @@ namespace Jiten.Core.Migrations
                     b.Navigation("Set");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.YouTube.YouTubeSource", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
+                        .WithOne()
+                        .HasForeignKey("Jiten.Core.Data.YouTube.YouTubeSource", "DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Deck");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.YouTube.YouTubeVideo", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.YouTube.YouTubeSource", "Source")
+                        .WithMany("Videos")
+                        .HasForeignKey("SourceDeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Source");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Deck", b =>
                 {
                     b.Navigation("Children");
@@ -2688,6 +2925,8 @@ namespace Jiten.Core.Migrations
                     b.Navigation("RelationshipsAsSource");
 
                     b.Navigation("RelationshipsAsTarget");
+
+                    b.Navigation("SubtitleTrack");
 
                     b.Navigation("Titles");
                 });
@@ -2754,6 +2993,11 @@ namespace Jiten.Core.Migrations
             modelBuilder.Entity("Jiten.Core.Data.WordSet", b =>
                 {
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.YouTube.YouTubeSource", b =>
+                {
+                    b.Navigation("Videos");
                 });
 #pragma warning restore 612, 618
         }

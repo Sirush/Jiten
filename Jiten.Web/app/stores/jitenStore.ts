@@ -4,6 +4,37 @@ import type { KanjiScalePref } from '~/data/kanjiGroupings';
 import { DEFAULT_TTS_VOLUME } from '~/utils/ttsVolume';
 import type { CoverageScale } from '~/utils/coverageAxis';
 
+/** Word colour keys on the watch page; a null colour means the ordinary text colour. */
+export type WatchColourKey = 'new' | 'young' | 'due' | 'mature' | 'redundant' | 'ignored';
+
+export interface WatchPrefs {
+  autoPause: boolean;
+  pauseOffsetMs: number;
+  blurKnown: boolean;
+  pauseOnLookup: boolean;
+  /** Neighbouring lines added on each side when mining a sentence */
+  sentenceContext: number;
+  colours: Record<WatchColourKey, string | null>;
+}
+
+export const DEFAULT_WATCH_COLOURS: Record<WatchColourKey, string | null> = {
+  new: '#f43f5e',
+  young: '#f59e0b',
+  due: '#f97316',
+  mature: null,
+  redundant: '#0ea5e9',
+  ignored: '#9ca3af',
+};
+
+export const DEFAULT_WATCH_PREFS: WatchPrefs = {
+  autoPause: false,
+  pauseOffsetMs: -100,
+  blurKnown: false,
+  pauseOnLookup: true,
+  sentenceContext: 0,
+  colours: { ...DEFAULT_WATCH_COLOURS },
+};
+
 const YEAR = 60 * 60 * 24 * 365;
 
 function createCookieState<T>(key: string, defaultValue: T): Ref<T> {
@@ -28,6 +59,8 @@ function createLocalStorageState<T>(key: string, defaultValue: T): Ref<T> {
   const state = ref<T>(defaultValue) as Ref<T>;
 
   if (import.meta.client) {
+    // Hydration reassigns object values before mount, which must not clobber the stored one
+    let loaded = false;
     onMounted(() => {
       try {
         const stored = localStorage.getItem(storageKey);
@@ -35,9 +68,11 @@ function createLocalStorageState<T>(key: string, defaultValue: T): Ref<T> {
       } catch {
         // A corrupt entry just means the default stands.
       }
+      loaded = true;
     });
 
     watch(state, (newValue) => {
+      if (!loaded) return;
       try {
         localStorage.setItem(storageKey, JSON.stringify(newValue));
       } catch {
@@ -72,6 +107,7 @@ export const useJitenStore = defineStore('jiten', () => {
   const kanjiScale = createCookieState<KanjiScalePref>('kanji-scale', 'jlpt');
   const similarMediaPinnedType = createCookieState<number>('similar-media-pinned-type', 0);
   const preferredDictionaryId = createCookieState<string>('preferred-dictionary-id', '');
+  // Media types left out of the All tab; the browse URL carries the same list once set.
 
   const difficultyValueDisplayStyleCookie = useCookie<DifficultyValueDisplayStyle>('jiten-difficulty-value-display-style', {
     watch: true,
@@ -130,6 +166,7 @@ export const useJitenStore = defineStore('jiten', () => {
   const customDictionaryFontSize = createLocalStorageState<number>('custom-dictionary-font-size', 16);
 
   const ttsVolume = createLocalStorageState<number>('tts-volume', DEFAULT_TTS_VOLUME);
+  const watchPrefs = createLocalStorageState<WatchPrefs>('watch-prefs', { ...DEFAULT_WATCH_PREFS });
 
   const coverageVersion = ref(0);
 
@@ -165,6 +202,7 @@ export const useJitenStore = defineStore('jiten', () => {
     quickMasterVocabulary,
     ttsVoice,
     ttsVolume,
+    watchPrefs,
     difficultyDisplayStyle,
     difficultyValueDisplayStyle,
     kanjiScale,

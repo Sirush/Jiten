@@ -61,15 +61,24 @@
 
   const describeQuery = computed(() => readDescribeQuery(route.query.describe));
   const isDescribeMode = computed(() => describeQuery.value !== null);
-  const titleFilter = ref(
-    describeQuery.value ?? (route.query.title ? (Array.isArray(route.query.title) ? route.query.title[0] : route.query.title) : null)
-  );
+  const titleFilter = ref(describeQuery.value ?? (route.query.title ? (Array.isArray(route.query.title) ? route.query.title[0] : route.query.title) : null));
   const debouncedTitleFilter = ref(titleFilter.value);
 
   const sortByOptions = ref(
-    ['popularity', 'title', 'difficulty', 'subdeckCount', 'extRating', 'uKanji', 'uWordCount', 'wordCount', 'uKanjiOnce', 'communityVotes', 'releaseDate', 'addedDate'].map(
-      deckSortOption
-    )
+    [
+      'popularity',
+      'title',
+      'difficulty',
+      'subdeckCount',
+      'extRating',
+      'uKanji',
+      'uWordCount',
+      'wordCount',
+      'uKanjiOnce',
+      'communityVotes',
+      'releaseDate',
+      'addedDate',
+    ].map(deckSortOption)
   );
 
   const novelSortOptions = ref<DeckSortOption[]>([]);
@@ -130,6 +139,8 @@
   const speechSpeedMax = ref<number | null>(toNumOrNull(route.query.speechSpeedMax));
   const speechDurationMin = ref<number | null>(toNumOrNull(route.query.speechDurationMin));
   const speechDurationMax = ref<number | null>(toNumOrNull(route.query.speechDurationMax));
+  const runtimeMin = ref<number | null>(toNumOrNull(route.query.runtimeMin));
+  const runtimeMax = ref<number | null>(toNumOrNull(route.query.runtimeMax));
   const coverageMin = ref<number | null>(toNumOrNull(route.query.coverageMin));
   const coverageMax = ref<number | null>(toNumOrNull(route.query.coverageMax));
   const uniqueCoverageMin = ref<number | null>(toNumOrNull(route.query.uniqueCoverageMin));
@@ -167,6 +178,7 @@
   watch([extRatingMin, extRatingMax], () => normalizePair(extRatingMin, extRatingMax, 0, 2000));
   watch([speechSpeedMin, speechSpeedMax], () => normalizePair(speechSpeedMin, speechSpeedMax, 0, 800));
   watch([speechDurationMin, speechDurationMax], () => normalizePair(speechDurationMin, speechDurationMax, 0, 300));
+  watch([runtimeMin, runtimeMax], () => normalizePair(runtimeMin, runtimeMax, 0, 240));
   watch([coverageMin, coverageMax], () => normalizePair(coverageMin, coverageMax, 0, 100));
   watch([uniqueCoverageMin, uniqueCoverageMax], () => normalizePair(uniqueCoverageMin, uniqueCoverageMax, 0, 100));
   watch([totalCoverageMin, totalCoverageMax], () => normalizePair(totalCoverageMin, totalCoverageMax, 0, 100));
@@ -189,6 +201,8 @@
     speechSpeedMax: speechSpeedMax.value,
     speechDurationMin: speechDurationMin.value,
     speechDurationMax: speechDurationMax.value,
+    runtimeMin: runtimeMin.value,
+    runtimeMax: runtimeMax.value,
     coverageMin: coverageMin.value,
     coverageMax: coverageMax.value,
     uniqueCoverageMin: uniqueCoverageMin.value,
@@ -237,6 +251,8 @@
           speechSpeedMax: toUndef(speechSpeedMax.value) as any,
           speechDurationMin: toUndef(speechDurationMin.value) as any,
           speechDurationMax: toUndef(speechDurationMax.value) as any,
+          runtimeMin: toUndef(runtimeMin.value) as any,
+          runtimeMax: toUndef(runtimeMax.value) as any,
           coverageMin: toUndef(coverageMin.value) as any,
           coverageMax: toUndef(coverageMax.value) as any,
           uniqueCoverageMin: toUndef(uniqueCoverageMin.value) as any,
@@ -277,6 +293,8 @@
       speechSpeedMax,
       speechDurationMin,
       speechDurationMax,
+      runtimeMin,
+      runtimeMax,
       coverageMin,
       coverageMax,
       uniqueCoverageMin,
@@ -373,6 +391,8 @@
     speechSpeedMax.value = null;
     speechDurationMin.value = null;
     speechDurationMax.value = null;
+    runtimeMin.value = null;
+    runtimeMax.value = null;
     coverageMin.value = null;
     coverageMax.value = null;
     uniqueCoverageMin.value = null;
@@ -414,6 +434,8 @@
         speechSpeedMax: undefined,
         speechDurationMin: undefined,
         speechDurationMax: undefined,
+        runtimeMin: undefined,
+        runtimeMax: undefined,
         coverageMin: undefined,
         coverageMax: undefined,
         uniqueCoverageMin: undefined,
@@ -461,6 +483,8 @@
       speechSpeedMax: speechSpeedMax.value,
       speechDurationMin: speechDurationMin.value,
       speechDurationMax: speechDurationMax.value,
+      runtimeMin: runtimeMin.value,
+      runtimeMax: runtimeMax.value,
       coverageMin: coverageMin.value,
       coverageMax: coverageMax.value,
       uniqueCoverageMin: uniqueCoverageMin.value,
@@ -514,6 +538,8 @@
     speechSpeedMax.value = toNumOrNull(query.speechSpeedMax);
     speechDurationMin.value = toNumOrNull(query.speechDurationMin);
     speechDurationMax.value = toNumOrNull(query.speechDurationMax);
+    runtimeMin.value = toNumOrNull(query.runtimeMin);
+    runtimeMax.value = toNumOrNull(query.runtimeMax);
     coverageMin.value = toNumOrNull(query.coverageMin);
     coverageMax.value = toNumOrNull(query.coverageMax);
     uniqueCoverageMin.value = toNumOrNull(query.uniqueCoverageMin);
@@ -700,6 +726,9 @@
     });
   });
 
+  // Minutes in the URL and panel, seconds on the wire
+  const toSeconds = (minutes: number | null) => (minutes == null ? undefined : minutes * 60);
+
   const url = computed(() => `media-deck/get-media-decks`);
 
   const {
@@ -734,6 +763,8 @@
       speechSpeedMax: computed(() => debouncedFilters.value.speechSpeedMax),
       speechDurationMin: computed(() => debouncedFilters.value.speechDurationMin),
       speechDurationMax: computed(() => debouncedFilters.value.speechDurationMax),
+      runtimeMin: computed(() => toSeconds(debouncedFilters.value.runtimeMin)),
+      runtimeMax: computed(() => toSeconds(debouncedFilters.value.runtimeMax)),
       coverageMin: computed(() => debouncedFilters.value.coverageMin),
       coverageMax: computed(() => debouncedFilters.value.coverageMax),
       uniqueCoverageMin: computed(() => debouncedFilters.value.uniqueCoverageMin),
@@ -775,6 +806,8 @@
       speechSpeedMax: computed(() => facetNum(debouncedFilters.value.speechSpeedMax)),
       speechDurationMin: computed(() => facetNum(debouncedFilters.value.speechDurationMin)),
       speechDurationMax: computed(() => facetNum(debouncedFilters.value.speechDurationMax)),
+      runtimeMin: computed(() => toSeconds(debouncedFilters.value.runtimeMin)),
+      runtimeMax: computed(() => toSeconds(debouncedFilters.value.runtimeMax)),
       genres: computed(() => facetArr(debouncedFilters.value.includeGenres)),
       excludeGenres: computed(() => facetArr(debouncedFilters.value.excludeGenres)),
       tags: computed(() => facetArr(debouncedFilters.value.includeTags)),
@@ -795,7 +828,7 @@
     if (status.value !== 'success' || (response.value?.totalItems ?? 0) >= HANDOFF_BELOW) return null;
     return debouncedTitleFilter.value;
   });
- 
+
   const describeRequest = computed(() => describeQuery.value ?? handoffText.value);
   const {
     data: describeResponse,
@@ -815,7 +848,7 @@
   const describeResults = computed(() =>
     describeRequest.value && describeResponse.value?.query === describeRequest.value ? describeResponse.value.results : []
   );
- 
+
   const describeDecks = computed(() => describeResults.value.map((r) => r.deck));
   const describeMediaTypeLabel = computed(() => {
     const type = describeResponse.value?.mediaType;
@@ -868,6 +901,7 @@
     { type: MediaType.VideoGame, label: 'Video Games' },
     { type: MediaType.VisualNovel, label: 'Visual Novels' },
     { type: MediaType.WebNovel, label: 'Web Novels' },
+    { type: MediaType.YouTube, label: 'YouTube' },
   ];
 
   const isActive = (type: MediaType | null) => {
@@ -930,7 +964,6 @@
       { label: meta?.desc ?? 'Descending', value: SortOrder.Descending },
     ];
   });
-
 </script>
 
 <template>
@@ -1115,6 +1148,8 @@
           v-model:speech-speed-max="speechSpeedMax"
           v-model:speech-duration-min="speechDurationMin"
           v-model:speech-duration-max="speechDurationMax"
+          v-model:runtime-min="runtimeMin"
+          v-model:runtime-max="runtimeMax"
           v-model:coverage-min="coverageMin"
           v-model:coverage-max="coverageMax"
           v-model:unique-coverage-min="uniqueCoverageMin"
@@ -1151,7 +1186,6 @@
           <DisplayStyleSelector />
         </div>
       </div>
-
     </div>
 
     <!-- The Filters badge is the only other trace of active filters, and it scrolls away with
@@ -1174,6 +1208,8 @@
       v-model:speech-speed-max="speechSpeedMax"
       v-model:speech-duration-min="speechDurationMin"
       v-model:speech-duration-max="speechDurationMax"
+      v-model:runtime-min="runtimeMin"
+      v-model:runtime-max="runtimeMax"
       v-model:coverage-min="coverageMin"
       v-model:coverage-max="coverageMax"
       v-model:unique-coverage-min="uniqueCoverageMin"
@@ -1309,7 +1345,8 @@
                 <p class="font-medium">
                   <template v-if="response?.data?.length">Only {{ totalItems }} {{ totalItems === 1 ? 'title matches' : 'titles match' }}</template>
                   <template v-else>There is no title matching</template>
-                  "<span lang="ja">{{ handoffText }}</span>", but the following media have a description that comes close
+                  "<span lang="ja">{{ handoffText }}</span
+                  >", but the following media have a description that comes close
                 </p>
                 <p class="text-sm text-surface-500 dark:text-surface-400">You can type what you feel like watching or reading, in English or Japanese.</p>
               </div>

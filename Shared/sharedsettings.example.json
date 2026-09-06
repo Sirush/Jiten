@@ -50,6 +50,18 @@
   "IgdbClientSecret": "YourClientSecret",
   "DiscordWebhook": "https://ptb.discord.com/api/webhooks/your/webhookurl",
   "StoreRawText": false,
+  "YtDlp": {
+    "Path": "yt-dlp",
+    "Proxy": null,
+    "DelayMs": 1500
+  },
+  "YouTube": {
+    "ServerFetch": false,
+    "FetchBatchSize": 50,
+    "DelayMs": 1500,
+    "IngestKey": "",
+    "ApiBaseUrl": ""
+  },
   "SsrBypassKey": "",
   "RunPod": {
     "ApiKey": "your-api-key",

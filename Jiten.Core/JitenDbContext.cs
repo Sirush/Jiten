@@ -1,6 +1,7 @@
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.WebNovel;
+using Jiten.Core.Data.YouTube;
 using Microsoft.Extensions.Configuration;
 
 namespace Jiten.Core;
@@ -54,6 +55,10 @@ public class JitenDbContext : DbContext
 
     public DbSet<WebNovelSource> WebNovelSources { get; set; }
     public DbSet<WebNovelChapter> WebNovelChapters { get; set; }
+    public DbSet<YouTubeSource> YouTubeSources { get; set; }
+    public DbSet<YouTubeVideo> YouTubeVideos { get; set; }
+    public DbSet<YouTubeRegistration> YouTubeRegistrations { get; set; }
+    public DbSet<DeckSubtitleTrack> DeckSubtitleTracks { get; set; }
 
     public DbSet<WordSet> WordSets { get; set; }
     public DbSet<WordSetMember> WordSetMembers { get; set; }
@@ -314,6 +319,60 @@ public class JitenDbContext : DbContext
 
             entity.HasIndex(c => c.ChildDeckId)
                   .HasDatabaseName("IX_WebNovelChapters_ChildDeckId");
+        });
+
+        modelBuilder.Entity<YouTubeSource>(entity =>
+        {
+            entity.ToTable("YouTubeSources", "jiten");
+            entity.HasKey(s => s.DeckId);
+            entity.Property(s => s.DeckId).ValueGeneratedNever();
+
+            entity.HasOne(s => s.Deck)
+                  .WithOne()
+                  .HasForeignKey<YouTubeSource>(s => s.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(s => new { s.SourceKind, s.SourceId })
+                  .IsUnique()
+                  .HasDatabaseName("IX_YouTubeSources_SourceKind_SourceId");
+
+            entity.HasIndex(s => new { s.SyncEnabled, s.NextCheckAt })
+                  .HasDatabaseName("IX_YouTubeSources_SyncEnabled_NextCheckAt");
+        });
+
+        modelBuilder.Entity<YouTubeRegistration>(entity =>
+        {
+            entity.ToTable("YouTubeRegistrations", "jiten");
+            entity.HasKey(r => r.Id);
+            entity.HasIndex(r => r.CompletedAt).HasDatabaseName("IX_YouTubeRegistrations_CompletedAt");
+        });
+
+        modelBuilder.Entity<YouTubeVideo>(entity =>
+        {
+            entity.ToTable("YouTubeVideos", "jiten");
+            entity.HasKey(v => new { v.SourceDeckId, v.VideoId });
+
+            entity.HasOne(v => v.Source)
+                  .WithMany(s => s.Videos)
+                  .HasForeignKey(v => v.SourceDeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(v => v.ChildDeckId)
+                  .HasDatabaseName("IX_YouTubeVideos_ChildDeckId");
+
+            entity.HasIndex(v => new { v.Status, v.LastCheckedAt })
+                  .HasDatabaseName("IX_YouTubeVideos_Status_LastCheckedAt");
+        });
+
+        modelBuilder.Entity<DeckSubtitleTrack>(entity =>
+        {
+            entity.ToTable("DeckSubtitleTracks", "jiten");
+            entity.HasKey(t => t.DeckId);
+            entity.Property(t => t.DeckId).ValueGeneratedNever();
+            entity.HasOne(t => t.Deck)
+                  .WithOne(d => d.SubtitleTrack)
+                  .HasForeignKey<DeckSubtitleTrack>(t => t.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<DeckStats>(entity =>
