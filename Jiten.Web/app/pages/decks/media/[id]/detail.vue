@@ -193,9 +193,8 @@
   };
   onMounted(readStoredSubdeckStyle);
   watch(subdeckStyleKey, readStoredSubdeckStyle);
-  const AUTO_TABLE_THRESHOLD = 50;
   const subdeckStyle = computed<DisplayStyle>({
-    get: () => storedSubdeckStyle.value ?? (totalItems.value >= AUTO_TABLE_THRESHOLD ? DisplayStyle.Table : DisplayStyle.Card),
+    get: () => storedSubdeckStyle.value ?? DisplayStyle.Card,
     set: (value) => {
       storedSubdeckStyle.value = value;
       try {

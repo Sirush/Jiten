@@ -56,6 +56,23 @@ public class YouTubeIngestClient
         return body.GetProperty("deckId").GetInt32();
     }
 
+    public record TrackedSource(int DeckId, string Kind, string SourceId, string Url);
+
+    public async Task<TrackedSource> GetSourceAsync(int deckId)
+    {
+        using var response = await _http.GetAsync($"api/ingest/youtube/sources/{deckId}");
+        await EnsureOkAsync(response);
+        return (await response.Content.ReadFromJsonAsync<TrackedSource>(Json))!;
+    }
+
+    public async Task<(int Listed, int Added)> BootstrapAsync(int deckId, YouTubeSourceInfo source)
+    {
+        using var response = await _http.PostAsJsonAsync($"api/ingest/youtube/sources/{deckId}/bootstrap", new { source }, Json);
+        await EnsureOkAsync(response);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        return (body.GetProperty("listed").GetInt32(), body.GetProperty("added").GetInt32());
+    }
+
     public async Task SkipAsync(int deckId, string videoId, YouTubeFetchOutcome outcome)
     {
         using var response = await _http.PostAsJsonAsync($"api/ingest/youtube/videos/{deckId}/{videoId}/skip",
