@@ -11,6 +11,7 @@ using Jiten.Api.Enums;
 using Jiten.Api.Helpers;
 using Jiten.Api.Jobs;
 using Jiten.Api.Services;
+using Jiten.Api.Telemetry;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
@@ -41,6 +42,7 @@ public class MediaDeckController(
     ICurrentUserService currentUserService,
     IConfiguration configuration,
     ILogger<MediaDeckController> logger,
+    ILoggerFactory loggerFactory,
     IHttpClientFactory httpClientFactory,
     IDeckWordResolver deckWordResolver,
     IFrequencySourceResolver frequencySourceResolver,
@@ -2236,10 +2238,11 @@ public class MediaDeckController(
 
         await RecordDownloadAsync(id);
 
-        logger.LogInformation(
-                              "User downloaded deck: DeckId={DeckId}, DeckTitle={DeckTitle}, Format={Format}, DownloadType={DownloadType}, WordCount={WordCount}, ExcludeMature={ExcludeMature}, ExcludeAllTracked={ExcludeAllTracked}",
-                              id, deck.OriginalTitle, request.Format, request.DownloadType, deckWordsRaw!.Count,
-                              request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords);
+        loggerFactory.CreateLogger("Jiten.Events.DeckDownload").LogInformation(
+            "User downloaded deck: DeckId={DeckId}, DeckTitle={DeckTitle}, Format={Format}, DownloadType={DownloadType}, WordCount={WordCount}, ExcludeMature={ExcludeMature}, ExcludeAllTracked={ExcludeAllTracked}, UserId={UserId}, ClientIp={ClientIp}",
+            id, deck.OriginalTitle, request.Format, request.DownloadType, deckWordsRaw!.Count,
+            request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
+            currentUserService.UserId ?? "anonymous", ClientIp.Resolve(HttpContext));
 
         return request.Format switch
         {

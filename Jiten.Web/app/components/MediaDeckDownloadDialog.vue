@@ -582,6 +582,12 @@
 
       if (response) {
         trackActivation('deck_download');
+        trackEvent('deck_download', {
+          format: DeckFormat[format.value] ?? String(format.value),
+          selection: DeckDownloadType[downloadType.value] ?? String(downloadType.value),
+          source: isMediaListMode.value ? 'media_list' : isStudyDeckMode.value ? 'study_deck' : 'deck',
+          media: props.deck ? (MediaType[props.deck.mediaType] ?? String(props.deck.mediaType)) : '',
+        });
         let finalBlob: Blob = response as unknown as Blob;
 
         if (useCustomDefinitions.value && format.value === DeckFormat.Anki) {

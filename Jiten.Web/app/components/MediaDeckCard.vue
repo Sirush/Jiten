@@ -289,7 +289,7 @@
       label: 'Edit',
       icon: 'pi pi-pencil',
       visible: !props.isCompact && authStore.isAdmin && displayAdminFunctions.value,
-      command: () => navigateTo(`/dashboard/media/${props.deck.deckId}`),
+      route: `/dashboard/media/${props.deck.deckId}`,
     },
     {
       label: 'Report an issue',
@@ -836,7 +836,20 @@
     <LazySrsAddDeckDialog v-if="showStudyDeckDialog" :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
     <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" :deck="deck" @update:visible="showIssueDialog = $event" />
 
-    <TieredMenu v-if="authStore.isAuthenticated && menuActivated" ref="menu" :model="menuItems" popup />
+    <TieredMenu v-if="authStore.isAuthenticated && menuActivated" ref="menu" :model="menuItems" popup>
+      <template #item="{ item, props: itemProps }">
+        <NuxtLink v-if="item.route" v-slot="{ href, navigate }" :to="item.route" custom>
+          <a :href="href" v-bind="itemProps.action" @click="navigate">
+            <span :class="item.icon" />
+            <span class="ml-2">{{ item.label }}</span>
+          </a>
+        </NuxtLink>
+        <a v-else v-bind="itemProps.action">
+          <span :class="item.icon" />
+          <span class="ml-2">{{ item.label }}</span>
+        </a>
+      </template>
+    </TieredMenu>
     <Popover v-if="authStore.isAuthenticated" ref="statusPopover" :pt="{ content: { class: 'p-1' } }">
       <div class="flex flex-col min-w-36" role="menu" aria-label="Set status">
         <button

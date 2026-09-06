@@ -14,7 +14,10 @@ export default defineNuxtConfig({
     // Server-only: shared secret sent on SSR-originated API calls so the API can exempt
     // first-party server rendering from the per-IP anonymous rate limit. Empty in dev.
     ssrBypassKey: process.env.NUXT_SSR_BYPASS_KEY || '',
+    kamiUrl: process.env.NUXT_KAMI_URL || '',
+    kamiKey: process.env.NUXT_KAMI_KEY || '',
     public: {
+      beatOnLocalhost: process.env.NUXT_PUBLIC_BEAT_ON_LOCALHOST === '1',
       baseURL: process.env.NUXT_PUBLIC_BASE_URL || 'https://localhost:7299/api/',
       googleSignInClientId: process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID || '',
       legal: {
@@ -42,8 +45,6 @@ export default defineNuxtConfig({
     '@nuxt/fonts',
     '@nuxt/content',
     '@nuxt/scripts',
-    // Always registered so umTrackEvent exists at build time; without an id the module runs in faux mode and sends nothing.
-    'nuxt-umami',
     ...(process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID ? ['nuxt-vue3-google-signin'] : []),
     ...(process.env.NUXT_PUBLIC_RECAPTCHA_V2_SITE_KEY ? ['vue-recaptcha/nuxt'] : []),
     // @nuxtjs/mdc marks its `#mdc-imports`/`#mdc-configs` imports @vite-ignore, so the browser receives
@@ -193,13 +194,6 @@ export default defineNuxtConfig({
         global: true,
       },
     ],
-  },
-  umami: {
-    id: process.env.NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_WEBSITE_ID || '',
-    host: process.env.NUXT_PUBLIC_SCRIPTS_UMAMI_ANALYTICS_HOST_URL || '',
-    autoTrack: true,
-    proxy: 'cloak',
-    ignoreLocalhost: true,
   },
   ...(process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID
     ? {

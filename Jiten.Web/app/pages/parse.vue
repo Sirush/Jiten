@@ -19,6 +19,10 @@
     watch: [searchContent],
   });
 
+  watch(response, (r) => {
+    if (r) trackEvent('text_parsed', { kind: 'lookup', length: lengthBucket(String(searchContent.value).length) });
+  });
+
   const words = computed<DeckWord[]>(() => response.value?.words || []);
   const hasMeaningfulParseResults = computed(() => words.value.some((w) => w.wordId !== 0));
 

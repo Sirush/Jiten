@@ -32,6 +32,7 @@
   import MultiSelect from 'primevue/multiselect';
   import InputNumber from 'primevue/inputnumber';
   import SplitButton from 'primevue/splitbutton';
+  import Paginator from 'primevue/paginator';
   import CoverImageField from '~/components/dashboard/CoverImageField.vue';
 
   const route = useRoute();
@@ -157,6 +158,15 @@
     const singularText = baseText.endsWith('s') ? baseText.slice(0, -1) : baseText;
     return singularText;
   });
+
+  const SUBDECK_PAGE_SIZE = 50;
+  const subdeckPageFirst = ref(0);
+  const pagedSubdecks = computed(() => subdecks.value.slice(subdeckPageFirst.value, subdeckPageFirst.value + SUBDECK_PAGE_SIZE));
+  const subdeckIndex = (id: number) => subdecks.value.findIndex((sd) => sd.id === id);
+
+  function showSubdeckPage(index: number) {
+    subdeckPageFirst.value = Math.floor(Math.max(0, index) / SUBDECK_PAGE_SIZE) * SUBDECK_PAGE_SIZE;
+  }
 
   const { data: response, status, error } = await useApiFetch<DeckDetail>(`admin/deck/${mediaId}`, { server: false });
 
@@ -311,6 +321,7 @@
         });
       }
       applyAutoNames('detected');
+      showSubdeckPage(subdecks.value.length - 1);
       // Explicitly clear the FileUpload component's selection
       if (newSubdeckUploaderRef.value) {
         newSubdeckUploaderRef.value.clear();
@@ -374,6 +385,7 @@
       file: null,
       difficultyOverride: -1,
     });
+    showSubdeckPage(subdecks.value.length - 1);
   }
 
   function removeSubdeck(id: number) {
@@ -388,6 +400,7 @@
     }
 
     subdecks.value.splice(index, 1);
+    showSubdeckPage(Math.min(index, subdecks.value.length - 1));
   }
 
   function moveSubdeckUp(id: number) {
@@ -399,6 +412,7 @@
     newSubdecks[index] = newSubdecks[index - 1];
     newSubdecks[index - 1] = temp;
     subdecks.value = newSubdecks;
+    showSubdeckPage(index - 1);
   }
 
   function moveSubdeckDown(id: number) {
@@ -410,6 +424,7 @@
     newSubdecks[index] = newSubdecks[index + 1];
     newSubdecks[index + 1] = temp;
     subdecks.value = newSubdecks;
+    showSubdeckPage(index + 1);
   }
 
   async function loadAvailableTags() {
@@ -558,6 +573,7 @@
     const [subdeck] = newSubdecks.splice(currentIndex, 1);
     newSubdecks.splice(targetIndex, 0, subdeck);
     subdecks.value = newSubdecks;
+    showSubdeckPage(targetIndex);
   }
 
   function openAddLinkDialog() {
@@ -1419,7 +1435,7 @@
           </div>
 
           <div v-if="response && response.subDecks && response.subDecks.length > 0" class="mb-4">
-            <DataTable :value="response.subDecks" class="p-datatable-sm">
+            <DataTable :value="response.subDecks" class="p-datatable-sm" :paginator="response.subDecks.length > SUBDECK_PAGE_SIZE" :rows="SUBDECK_PAGE_SIZE">
               <Column field="deckId" header="ID" :sortable="true" />
               <Column field="originalTitle" header="Title" :sortable="true" />
               <Column field="characterCount" header="Chars" :sortable="true" />
@@ -1436,19 +1452,28 @@
             </DataTable>
           </div>
 
-          <TransitionGroup name="subdeck-list" tag="div">
-            <Card v-for="(subdeck, index) in subdecks" :key="subdeck.id" class="mb-4 subdeck-card">
+          <Paginator
+            v-if="subdecks.length > SUBDECK_PAGE_SIZE"
+            v-model:first="subdeckPageFirst"
+            :rows="SUBDECK_PAGE_SIZE"
+            :total-records="subdecks.length"
+            template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
+            current-page-report-template="{first} - {last} of {totalRecords}"
+            class="mb-4"
+          />
+          <div>
+            <Card v-for="subdeck in pagedSubdecks" :key="subdeck.id" class="mb-4 subdeck-card">
               <template #title>
                 <div class="flex flex-col gap-3 w-full">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-3">
                       <div class="flex flex-col gap-1">
-                        <Button class="p-button-text p-button-sm h-6" :disabled="index === 0" title="Move up" @click="moveSubdeckUp(subdeck.id)">
+                        <Button class="p-button-text p-button-sm h-6" :disabled="subdeckIndex(subdeck.id) === 0" title="Move up" @click="moveSubdeckUp(subdeck.id)">
                           <Icon name="material-symbols-light:arrow-upward" size="1.2em" />
                         </Button>
                         <Button
                           class="p-button-text p-button-sm h-6"
-                          :disabled="index === subdecks.length - 1"
+                          :disabled="subdeckIndex(subdeck.id) === subdecks.length - 1"
                           title="Move down"
                           @click="moveSubdeckDown(subdeck.id)"
                         >
@@ -1456,11 +1481,11 @@
                         </Button>
                       </div>
                       <div class="flex items-center gap-2">
-                        <span class="text-lg font-semibold text-muted-color min-w-8">#{{ index + 1 }}</span>
+                        <span class="text-lg font-semibold text-muted-color min-w-8">#{{ subdeckIndex(subdeck.id) + 1 }}</span>
                         <div class="flex flex-col">
                           <label class="block text-xs font-medium mb-1">Position</label>
                           <InputNumber
-                            :model-value="index + 1"
+                            :model-value="subdeckIndex(subdeck.id) + 1"
                             :min="1"
                             :max="subdecks.length"
                             :step="1"
@@ -1532,7 +1557,16 @@
                 </div>
               </template>
             </Card>
-          </TransitionGroup>
+          </div>
+          <Paginator
+            v-if="subdecks.length > SUBDECK_PAGE_SIZE"
+            v-model:first="subdeckPageFirst"
+            :rows="SUBDECK_PAGE_SIZE"
+            :total-records="subdecks.length"
+            template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
+            current-page-report-template="{first} - {last} of {totalRecords}"
+            class="mb-4"
+          />
 
           <Card class="mb-4">
             <template #title>
@@ -1690,24 +1724,5 @@
 
   .subdeck-card:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  }
-
-  .subdeck-list-move {
-    transition: transform 0.5s ease;
-  }
-
-  .subdeck-list-enter-active,
-  .subdeck-list-leave-active {
-    transition: all 0.5s ease;
-  }
-
-  .subdeck-list-enter-from,
-  .subdeck-list-leave-to {
-    opacity: 0;
-    transform: translateX(30px);
-  }
-
-  .subdeck-list-leave-active {
-    position: absolute;
   }
 </style>

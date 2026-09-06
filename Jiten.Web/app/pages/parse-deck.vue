@@ -37,6 +37,7 @@
       const url = `media-deck/parse-custom-deck`;
 
       // Expect a standard JSON response now, so remove responseType: 'blob'
+      trackEvent('text_parsed', { kind: 'custom_deck', length: lengthBucket(userText.value.length) });
       const response = await $api<ParseCustomDeckResponse>(url, {
         method: 'POST',
         body: {
