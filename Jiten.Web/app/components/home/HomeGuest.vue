@@ -6,6 +6,7 @@
 
   useHead({
     title: 'Jiten - Vocabulary Lists and Anki Decks for Japanese Media',
+    titleTemplate: null,
     meta: [
       {
         name: 'description',
