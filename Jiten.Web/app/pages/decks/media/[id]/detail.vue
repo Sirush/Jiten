@@ -88,11 +88,6 @@
   const subdecksRefreshing = computed(() => status.value === 'pending');
 
   const subdeckFilterInput = ref(appliedSubdeckFilter.value ?? '');
-  const subdeckFilterInputEl = ref();
-  const clearSubdeckFilter = () => {
-    subdeckFilterInput.value = '';
-    nextTick(() => subdeckFilterInputEl.value?.$el?.focus());
-  };
 
   const pushSubdeckFilter = debounce(async (value: string) => {
     await router.replace({ query: { ...route.query, subdeckFilter: value.trim() || undefined, offset: undefined } });
@@ -417,24 +412,14 @@
         </div>
         <div v-if="showSubdeckControls" class="flex flex-col gap-2 pt-2">
           <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <IconField class="grow">
-              <InputIcon>
-                <Icon name="material-symbols:search-rounded" />
-              </InputIcon>
-              <InputText
-                ref="subdeckFilterInputEl"
-                v-model="subdeckFilterInput"
-                type="text"
-                :placeholder="subdecksAreVideos ? 'Search videos by title or number' : 'Search subdecks by title or number'"
-                aria-label="Search subdecks"
-                class="w-full"
-                @compositionstart="subdeckFilterComposing = true"
-                @compositionend="onSubdeckFilterCompositionEnd"
-              />
-              <InputIcon v-if="subdeckFilterInput" class="cursor-pointer" @click="clearSubdeckFilter">
-                <Icon name="material-symbols:close" />
-              </InputIcon>
-            </IconField>
+            <SearchInput
+              v-model="subdeckFilterInput"
+              :placeholder="subdecksAreVideos ? 'Search videos by title or number' : 'Search subdecks by title or number'"
+              aria-label="Search subdecks"
+              class="grow"
+              @compositionstart="subdeckFilterComposing = true"
+              @compositionend="onSubdeckFilterCompositionEnd"
+            />
             <div class="flex items-center gap-2 sm:contents">
               <Select
                 :model-value="subdeckSortValue"

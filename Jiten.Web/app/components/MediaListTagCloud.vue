@@ -18,25 +18,11 @@
   const emit = defineEmits<{ set: [id: number, state: TagState] }>();
 
   const search = defineModel<string>('search', { required: true });
-
-  const searchInput = ref();
-  const clearSearch = () => {
-    search.value = '';
-    nextTick(() => searchInput.value?.$el?.focus());
-  };
 </script>
 
 <template>
   <div class="flex min-h-0 flex-col gap-2">
-    <IconField v-if="showSearch" class="shrink-0">
-      <InputIcon>
-        <Icon name="material-symbols:search-rounded" />
-      </InputIcon>
-      <InputText ref="searchInput" v-model="search" type="text" :placeholder="placeholder" :aria-label="placeholder" class="w-full" size="small" />
-      <InputIcon v-if="search" class="cursor-pointer" @click="clearSearch">
-        <Icon name="material-symbols:close" />
-      </InputIcon>
-    </IconField>
+    <SearchInput v-if="showSearch" v-model="search" :placeholder="placeholder" :aria-label="placeholder" size="small" class="shrink-0" />
 
     <div v-if="selectedEntries.length" class="shrink-0 border-b border-surface-200 pb-2 dark:border-surface-700">
       <div class="mb-1.5 text-[11px] font-semibold tracking-wider text-surface-500 uppercase">Selected</div>

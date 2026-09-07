@@ -84,11 +84,6 @@
   const unmatchedOpen = ref(false);
 
   const search = ref('');
-  const searchInput = ref();
-  const clearSearch = () => {
-    search.value = '';
-    nextTick(() => searchInput.value?.$el?.focus());
-  };
   const activeView = ref<ViewKey>('import');
   const sortKey = ref<SortKey>('title');
   const sortDir = ref<SortDir>('asc');
@@ -689,15 +684,7 @@
               class="w-36 lg:!hidden"
               @update:model-value="chooseSort($event)"
             />
-            <IconField class="w-full sm:ml-auto sm:w-64">
-              <InputIcon>
-                <Icon name="material-symbols:search-rounded" />
-              </InputIcon>
-              <InputText ref="searchInput" v-model="search" type="text" placeholder="Search titles..." class="w-full" size="small" />
-              <InputIcon v-if="search" class="cursor-pointer" @click="clearSearch">
-                <Icon name="material-symbols:close" />
-              </InputIcon>
-            </IconField>
+            <SearchInput v-model="search" placeholder="Search titles..." size="small" class="w-full sm:ml-auto sm:w-64" />
           </div>
 
           <!-- Matched rows -->

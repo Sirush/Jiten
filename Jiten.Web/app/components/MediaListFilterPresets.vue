@@ -27,11 +27,6 @@
   const saving = ref(false);
   const draftName = ref('');
   const search = ref('');
-  const searchInput = ref();
-  const clearSearch = () => {
-    search.value = '';
-    nextTick(() => searchInput.value?.$el?.focus());
-  };
   const renaming = ref<string | null>(null);
   const renameDraft = ref('');
   const deleting = ref<string | null>(null);
@@ -154,15 +149,7 @@
     </div>
 
     <div v-if="listOpen" class="flex flex-col gap-2">
-      <IconField v-if="presets.length > 8">
-        <InputIcon>
-          <Icon name="material-symbols:search-rounded" />
-        </InputIcon>
-        <InputText ref="searchInput" v-model="search" size="small" placeholder="Filter presets" aria-label="Filter presets" class="w-full" />
-        <InputIcon v-if="search" class="cursor-pointer" @click="clearSearch">
-          <Icon name="material-symbols:close" />
-        </InputIcon>
-      </IconField>
+      <SearchInput v-if="presets.length > 8" v-model="search" size="small" placeholder="Filter presets" aria-label="Filter presets" />
 
       <p v-if="!presets.length" class="text-xs text-surface-500 dark:text-surface-400">
         Nothing saved yet. Set up the filters you want, then choose Save current.
