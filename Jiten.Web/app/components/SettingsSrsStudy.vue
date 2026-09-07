@@ -945,7 +945,7 @@
           <label class="block text-sm font-medium mb-1">
             Learn ahead limit (minutes)
             <Tooltip
-              content="If a step falls inside this minute limit, it's shown in the current session instead of waiting for the next one. Set to 0 to show exactly when the step is due instead."
+              content="If a step falls inside this minute limit, the card comes back in the current session instead of waiting. Set to 0 to show cards only once a step is due."
               placement="top"
             >
               <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />

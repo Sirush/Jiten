@@ -250,6 +250,8 @@ export const useSrsStore = defineStore('srs', () => {
   const sessionLeeches = ref<LeechCard[]>([]);
   const cardShownAt = ref<number | null>(null);
   const thinkingDuration = ref<number | undefined>(undefined);
+  // Wall-clock seconds the last few cards were on screen; breaks over a minute are left out as AFK.
+  const recentCardSeconds = ref<number[]>([]);
   const isBusy = ref(false);
   // Reviews recovered from the archive by the last quickAction
   const lastAutoRestoredCount = ref(0);
@@ -718,6 +720,7 @@ export const useSrsStore = defineStore('srs', () => {
       clearedGrades.value = [];
       undoStack.value = [];
       inFlightReviews.clear();
+      recentCardSeconds.value = [];
       sessionEpoch++;
       exampleCache.value = new Map();
       inFlightExampleKeys.clear();
@@ -992,12 +995,49 @@ export const useSrsStore = defineStore('srs', () => {
     return seconds;
   }
 
+  // A failed card only comes back this session when its first (re)learning step ends inside the
+  // learn-ahead window, matching Anki. Without a preview the step is unknown, so it comes back.
+  function againRepeatsInSession(card: StudyCardDto): boolean {
+    const seconds = card.intervalPreview?.againSeconds;
+    if (!seconds || seconds <= 0) return true;
+    return seconds <= (studySettings.value.learnAheadMinutes ?? 0) * 60;
+  }
+
+  const PACE_SAMPLE_COUNT = 10;
+  const AFK_SECONDS = 60;
+
+  function recordCardPace(): void {
+    if (!cardShownAt.value) return;
+    const seconds = (Date.now() - cardShownAt.value) / 1000;
+    if (seconds > AFK_SECONDS) return;
+    recentCardSeconds.value = [...recentCardSeconds.value, seconds].slice(-PACE_SAMPLE_COUNT);
+  }
+
+  function secondsPerCard(): number {
+    const samples = [...recentCardSeconds.value].sort((a, b) => a - b);
+    if (samples.length < 3) return 10;
+    return Math.max(2, samples[Math.floor(samples.length / 2)]!);
+  }
+
   // Queue distance that lands the card roughly when its step ends, at this session's pace.
   function learningStepOffset(stepSeconds: number): number {
-    const started = sessionStats.value.startTime?.getTime();
-    const reviewed = sessionStats.value.cardsReviewed;
-    const secondsPerCard = started && reviewed >= 5 ? Math.max(3, (Date.now() - started) / 1000 / reviewed) : 10;
-    return Math.max(5, Math.round(stepSeconds / secondsPerCard));
+    return Math.max(1, Math.round(stepSeconds / secondsPerCard()));
+  }
+
+  function settleCurrentCard(): void {
+    const deferred = new Set<StudyCardDto>();
+    for (;;) {
+      const card = currentBatch.value[currentCardIndex.value];
+      if (!card?.dueAt || card.dueAt <= Date.now() || deferred.has(card)) return;
+      const batch = [...currentBatch.value];
+      const remaining = batch.length - currentCardIndex.value - 1;
+      if (remaining <= 0) return;
+      deferred.add(card);
+      batch.splice(currentCardIndex.value, 1);
+      const offset = Math.min(learningStepOffset((card.dueAt - Date.now()) / 1000), remaining);
+      batch.splice(currentCardIndex.value + offset, 0, card);
+      currentBatch.value = batch;
+    }
   }
 
   // Optimistic grading: the UI advances synchronously and the /srs/review request is sent in the
@@ -1010,6 +1050,7 @@ export const useSrsStore = defineStore('srs', () => {
     if (!card || isBusy.value || !isFlipped.value || gradeLock.value) return true;
 
     takeSnapshot(card, 'grade', rating);
+    recordCardPace();
 
     const AFK_THRESHOLD = 60_000;
     const reviewDuration = thinkingDuration.value !== undefined ? Math.min(thinkingDuration.value, AFK_THRESHOLD) : undefined;
@@ -1052,7 +1093,14 @@ export const useSrsStore = defineStore('srs', () => {
       newSet.delete(cardKey);
       learningCardKeys.value = newSet;
     }
-    if (rating === FsrsRating.Again) {
+    if (rating === FsrsRating.Again && !againRepeatsInSession(card)) {
+      if (isRepeat) {
+        const newSet = new Set(againCardKeys.value);
+        newSet.delete(cardKey);
+        againCardKeys.value = newSet;
+      }
+      currentCardIndex.value++;
+    } else if (rating === FsrsRating.Again) {
       const newSet = new Set(againCardKeys.value);
       newSet.add(cardKey);
       againCardKeys.value = newSet;
@@ -1060,8 +1108,10 @@ export const useSrsStore = defineStore('srs', () => {
       const batch = [...currentBatch.value];
       batch.splice(currentCardIndex.value, 1);
       const remaining = batch.length - currentCardIndex.value;
-      const offset = remaining <= 0 ? 0 : Math.min(Math.floor(Math.random() * 6) + 5, remaining);
-      const reinsertedCard = { ...card };
+      const againSeconds = card.intervalPreview?.againSeconds ?? 0;
+      const wanted = againSeconds > 0 ? learningStepOffset(againSeconds) : Math.floor(Math.random() * 6) + 5;
+      const offset = remaining <= 0 ? 0 : Math.min(wanted, remaining);
+      const reinsertedCard = { ...card, dueAt: againSeconds > 0 ? Date.now() + againSeconds * 1000 : undefined };
       batch.splice(currentCardIndex.value + offset, 0, reinsertedCard);
       reinsertedAgainCard = reinsertedCard;
       currentBatch.value = batch;
@@ -1086,6 +1136,7 @@ export const useSrsStore = defineStore('srs', () => {
           isNewCard: false,
           state: card.state === FsrsState.Relearning ? FsrsState.Relearning : FsrsState.Learning,
           intervalPreview: undefined,
+          dueAt: Date.now() + stepSeconds * 1000,
         };
         batch.splice(currentCardIndex.value + offset, 0, reinsertedLearningCard);
         currentBatch.value = batch;
@@ -1095,6 +1146,7 @@ export const useSrsStore = defineStore('srs', () => {
       }
     }
 
+    settleCurrentCard();
     ensurePrefetched();
     isFlipped.value = false;
     cardShownAt.value = Date.now();
@@ -1222,8 +1274,8 @@ export const useSrsStore = defineStore('srs', () => {
       }
     }
 
-    // "Again" cards are already back in the queue; only non-Again cards need re-queuing.
-    if (ctx.rating !== FsrsRating.Again) {
+    // An "Again" card that was re-queued is already back in the queue.
+    if (!ctx.reinsertedAgainCard) {
       const batch = [...currentBatch.value];
       if (ctx.reinsertedLearningCard) {
         const idx = batch.indexOf(ctx.reinsertedLearningCard);
@@ -1234,7 +1286,7 @@ export const useSrsStore = defineStore('srs', () => {
       }
       const remaining = batch.length - currentCardIndex.value;
       const offset = remaining <= 0 ? 0 : Math.min(Math.floor(Math.random() * 6) + 5, remaining);
-      batch.splice(currentCardIndex.value + offset, 0, { ...ctx.card });
+      batch.splice(currentCardIndex.value + offset, 0, { ...ctx.card, dueAt: undefined });
       currentBatch.value = batch;
       evictCardExampleForReroll(ctx.cardKey);
       isSessionComplete.value = false;
@@ -1281,6 +1333,7 @@ export const useSrsStore = defineStore('srs', () => {
       sessionStats.value.cardsReviewed++;
       clearedGrades.value = [...clearedGrades.value, 'action'];
       currentCardIndex.value++;
+      settleCurrentCard();
       isFlipped.value = false;
       cardShownAt.value = Date.now();
 

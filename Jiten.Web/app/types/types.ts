@@ -1137,6 +1137,7 @@ export interface StudyCardDto {
   deckOccurrences?: StudyDeckOccurrenceDto[];
   sourceDeckName?: string;
   confusableReadings?: string[];
+  dueAt?: number;
 }
 
 export interface StudyDeckOccurrenceDto {
