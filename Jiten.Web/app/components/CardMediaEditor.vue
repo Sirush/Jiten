@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import type { CardMediaDto, CardMediaKind } from '~/types';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
+  import { clipFailureToast, logClipFailure, playCustomAudio, type PlaybackHandle } from '~/utils/customAudioPlayback';
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
 
@@ -92,17 +93,13 @@
     }
   }
 
-  // Compact mode has no persistent <audio> element, so the clip plays through a throwaway element.
+  // Compact mode has no persistent <audio> element, so the clip plays through a throwaway player.
   const previewPlaying = ref(false);
-  let previewAudio: HTMLAudioElement | null = null;
+  let preview: PlaybackHandle | null = null;
 
   function stopPreview() {
-    if (previewAudio) {
-      previewAudio.onended = null;
-      previewAudio.onerror = null;
-      previewAudio.pause();
-      previewAudio = null;
-    }
+    preview?.stop();
+    preview = null;
     previewPlaying.value = false;
   }
 
@@ -113,15 +110,18 @@
     }
     const url = audio.value?.url;
     if (!url) return;
-    const a = new Audio(url);
-    previewAudio = a;
-    const done = () => {
-      if (previewAudio === a) stopPreview();
-    };
-    a.onended = done;
-    a.onerror = done;
+    const handle = playCustomAudio(url);
+    preview = handle;
     previewPlaying.value = true;
-    a.play().catch(done);
+    handle.started.then((result) => {
+      if (preview !== handle || result.ok) return;
+      logClipFailure(url, result);
+      toast.add(clipFailureToast(result));
+      stopPreview();
+    });
+    handle.finished.then(() => {
+      if (preview === handle) stopPreview();
+    });
   }
 
   watch(

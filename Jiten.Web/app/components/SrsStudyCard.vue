@@ -348,10 +348,8 @@
       }
       const slot = slots[i];
       if (slot === 'clip') {
-        const played = await playCustomToEnd(media!);
+        await playCustomToEnd(media!);
         if (!current()) return;
-        // A clip that never sounded stands in for nothing, so what it replaced plays after all.
-        if (!played) slots.push(...plan.fallback.filter((s) => !slots.includes(s)));
       } else if (slot === 'headword') {
         playHeadwordAudio();
         await afterWordAudio();
