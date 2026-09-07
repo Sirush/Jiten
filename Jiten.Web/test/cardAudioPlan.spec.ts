@@ -36,43 +36,36 @@ describe('buildCardAudioPlan', () => {
   it('plays the clip alone when it replaces both the headword and the sentence', () => {
     const plan = buildCardAudioPlan(settings(), context());
     expect(plan.slots).toEqual(['clip']);
-    expect(plan.fallback).toEqual(['headword', 'sentence']);
   });
 
   it('plays the clip then the sentence when it replaces the headword only', () => {
     const plan = buildCardAudioPlan(settings({ customAudioReplacesSentence: false }), context());
     expect(plan.slots).toEqual(['clip', 'sentence']);
-    expect(plan.fallback).toEqual(['headword']);
   });
 
   it('plays the headword then the clip when it replaces the sentence only', () => {
     const plan = buildCardAudioPlan(settings({ customAudioReplacesHeadword: false }), context());
     expect(plan.slots).toEqual(['headword', 'clip']);
-    expect(plan.fallback).toEqual(['sentence']);
   });
 
   it('plays headword, clip and sentence when the clip replaces neither', () => {
     const plan = buildCardAudioPlan(settings({ customAudioReplacesHeadword: false, customAudioReplacesSentence: false }), context());
     expect(plan.slots).toEqual(['headword', 'clip', 'sentence']);
-    expect(plan.fallback).toEqual([]);
   });
 
   it('plays the clip alone when it replaces the sentence and headword autoplay is off', () => {
     const plan = buildCardAudioPlan(settings({ customAudioReplacesHeadword: false, autoPlayWord: false }), context());
     expect(plan.slots).toEqual(['clip']);
-    expect(plan.fallback).toEqual(['sentence']);
   });
 
   it('falls back to nothing when the replaced slots were not going to play anyway', () => {
     const plan = buildCardAudioPlan(settings({ autoPlayWord: false, autoPlaySentence: false }), context());
     expect(plan.slots).toEqual(['clip']);
-    expect(plan.fallback).toEqual([]);
   });
 
   it('drops the clip slot when the card has no clip', () => {
     const plan = buildCardAudioPlan(settings(), context({ hasClip: false }));
     expect(plan.slots).toEqual(['headword', 'sentence']);
-    expect(plan.fallback).toEqual([]);
   });
 
   it('drops the sentence slot when the card has no example sentence', () => {
@@ -120,7 +113,6 @@ describe('buildCardAudioPlan', () => {
         context({ onFront: true, isNewCard: false })
       );
       expect(plan.slots).toEqual(['clip']);
-      expect(plan.fallback).toEqual([]);
     });
 
     it('keeps the headword on the front for a new card when new-only is set', () => {
@@ -156,19 +148,16 @@ describe('buildCardAudioPlan', () => {
     it('keeps only the clip when the clip replaces neither slot', () => {
       const plan = buildCardAudioPlan(settings({ customAudioReplacesHeadword: false, customAudioReplacesSentence: false }), context({ ttsMuted: true }));
       expect(plan.slots).toEqual(['clip']);
-      expect(plan.fallback).toEqual([]);
     });
 
     it('does not fall back to the headword the clip replaces', () => {
       const plan = buildCardAudioPlan(settings({ customAudioReplacesSentence: false }), context({ ttsMuted: true }));
       expect(plan.slots).toEqual(['clip']);
-      expect(plan.fallback).toEqual([]);
     });
 
     it('plans nothing when the card has no clip', () => {
       const plan = buildCardAudioPlan(settings(), context({ ttsMuted: true, hasClip: false }));
       expect(plan.slots).toEqual([]);
-      expect(plan.fallback).toEqual([]);
     });
 
     it('still drops the TTS slots on a manual replay', () => {
@@ -177,13 +166,11 @@ describe('buildCardAudioPlan', () => {
         context({ ttsMuted: true, forced: true })
       );
       expect(plan.slots).toEqual(['clip']);
-      expect(plan.fallback).toEqual([]);
     });
 
     it('leaves the plan untouched when the volume is up', () => {
       const plan = buildCardAudioPlan(settings({ customAudioReplacesHeadword: false, customAudioReplacesSentence: false }), context({ ttsMuted: false }));
       expect(plan.slots).toEqual(['headword', 'clip', 'sentence']);
-      expect(plan.fallback).toEqual([]);
     });
   });
 
@@ -200,7 +187,6 @@ describe('buildCardAudioPlan', () => {
         context({ forced: true })
       );
       expect(plan.slots).toEqual(['headword', 'clip']);
-      expect(plan.fallback).toEqual(['sentence']);
     });
 
     it('still respects a blurred sentence on the back', () => {

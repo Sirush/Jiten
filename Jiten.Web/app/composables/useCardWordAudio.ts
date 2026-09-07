@@ -1,27 +1,30 @@
+import { useToast } from 'primevue/usetoast';
 import type { CardMediaDto } from '~/types';
+import { clipFailureToast, logClipFailure, playCustomAudio, type PlaybackFailure, type PlaybackHandle } from '~/utils/customAudioPlayback';
 
 interface PlayWordOptions {
   wordId: number;
   readingIndex: number;
   fallbackText?: string;
   media: CardMediaDto | null | undefined;
-  // Called once when the custom audio fails to load (typically an expired signed URL) to obtain a
-  // fresh CardMediaDto. Returning null gives up on custom audio and falls back to TTS.
+  // Called once when the custom audio fails to load (typically an expired signed URL) to obtain a fresh CardMediaDto.
+  onExpired?: () => Promise<CardMediaDto | null>;
+}
+
+interface PlayClipOptions {
+  media: CardMediaDto | null | undefined;
   onExpired?: () => Promise<CardMediaDto | null>;
 }
 
 export function useCardWordAudio() {
   const tts = useTts();
-  let audio: HTMLAudioElement | null = null;
+  const toast = useToast();
+  let active: PlaybackHandle | null = null;
   const customPlaying = ref(false);
 
   function stopCustom() {
-    if (audio) {
-      audio.onended = null;
-      audio.onerror = null;
-      audio.pause();
-      audio = null;
-    }
+    active?.stop();
+    active = null;
     customPlaying.value = false;
   }
 
@@ -30,111 +33,62 @@ export function useCardWordAudio() {
     tts.stop();
   }
 
-  // Resolves true once playback starts, false if it could not start (bad/expired URL).
-  function playUrl(url: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      let settled = false;
-      const settle = (ok: boolean) => {
-        if (!settled) {
-          settled = true;
-          resolve(ok);
-        }
-      };
-      const a = new Audio(url);
-      audio = a;
-      customPlaying.value = true;
-      a.onended = () => {
-        if (audio === a) {
-          customPlaying.value = false;
-          audio = null;
-        }
-      };
-      a.onerror = () => {
-        if (audio === a) {
-          customPlaying.value = false;
-          audio = null;
-        }
-        settle(false);
-      };
-      a.play()
-        .then(() => settle(true))
-        .catch(() => {
-          if (audio === a) {
-            customPlaying.value = false;
-            audio = null;
-          }
-          settle(false);
-        });
+  function reportFailure(url: string, result: PlaybackFailure) {
+    logClipFailure(url, result);
+    toast.add(clipFailureToast(result));
+  }
+
+  async function startClip(opts: PlayClipOptions): Promise<PlaybackHandle | null> {
+    const media = opts.media;
+    if (!media?.url) return null;
+
+    let url = media.url;
+    let handle = playCustomAudio(url);
+    active = handle;
+    customPlaying.value = true;
+    let result = await handle.started;
+
+    if (!result.ok && result.reason !== 'blocked' && active === handle) {
+      const fresh = await opts.onExpired?.();
+      if (active === handle && fresh?.url && fresh.url !== url) {
+        url = fresh.url;
+        handle = playCustomAudio(url);
+        active = handle;
+        result = await handle.started;
+      }
+    }
+
+    if (active !== handle) return null;
+    if (!result.ok) {
+      reportFailure(url, result);
+      stopCustom();
+      return null;
+    }
+
+    handle.finished.then(() => {
+      if (active === handle) {
+        active = null;
+        customPlaying.value = false;
+      }
     });
+    return handle;
   }
 
   async function playWord(opts: PlayWordOptions) {
     stop();
-    const media = opts.media;
-    if (media?.url) {
-      const ok = await playUrl(media.url);
-      if (ok) return;
-      // One retry with a fresh signed URL, then give up on custom audio for this play.
-      const fresh = await opts.onExpired?.();
-      if (fresh?.url && fresh.url !== media.url) {
-        const retryOk = await playUrl(fresh.url);
-        if (retryOk) return;
-      }
-      tts.speakWord(opts.wordId, opts.readingIndex, opts.fallbackText);
+    if (opts.media?.url) {
+      await startClip(opts);
       return;
     }
     tts.speakWord(opts.wordId, opts.readingIndex, opts.fallbackText);
   }
 
-  // Resolves true once the clip has played to its end, false if it never started.
-  function playUrlToEnd(url: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      let settled = false;
-      const settle = (ok: boolean) => {
-        if (!settled) {
-          settled = true;
-          resolve(ok);
-        }
-      };
-      const a = new Audio(url);
-      audio = a;
-      customPlaying.value = true;
-      a.onended = () => {
-        if (audio === a) {
-          customPlaying.value = false;
-          audio = null;
-        }
-        settle(true);
-      };
-      a.onerror = () => {
-        if (audio === a) {
-          customPlaying.value = false;
-          audio = null;
-        }
-        settle(false);
-      };
-      a.play().catch(() => {
-        if (audio === a) {
-          customPlaying.value = false;
-          audio = null;
-        }
-        settle(false);
-      });
-    });
-  }
-
-  // Plays the custom clip and resolves true once it finishes, false if it could not play (even after
-  // one signed-URL refresh). Unlike playWord it never falls back to TTS — the caller decides.
-  async function playCustomToEnd(opts: { media: CardMediaDto | null | undefined; onExpired?: () => Promise<CardMediaDto | null> }): Promise<boolean> {
+  async function playCustomToEnd(opts: PlayClipOptions): Promise<boolean> {
     stop();
-    const media = opts.media;
-    if (!media?.url) return false;
-    if (await playUrlToEnd(media.url)) return true;
-    const fresh = await opts.onExpired?.();
-    if (fresh?.url && fresh.url !== media.url) {
-      return await playUrlToEnd(fresh.url);
-    }
-    return false;
+    const handle = await startClip(opts);
+    if (!handle) return false;
+    await handle.finished;
+    return true;
   }
 
   // True while either the custom clip or the TTS word audio is sounding. Drives the play button's

@@ -16,8 +16,6 @@ export interface CardAudioContext {
 
 export interface CardAudioPlan {
   slots: CardAudioSlot[];
-  /** Slots the clip stands in for; play them after all when the clip fails to sound. */
-  fallback: CardAudioSlot[];
 }
 
 export type SentenceAudioSource = 'clip' | 'tts' | 'none';
@@ -77,9 +75,5 @@ export function buildCardAudioPlan(settings: StudySettingsDto, context: CardAudi
   if (clip && !replacesHeadword) slots.push('clip');
   if (sentence && !replacesSentence) slots.push('sentence');
 
-  const fallback: CardAudioSlot[] = [];
-  if (replacesHeadword && headword) fallback.push('headword');
-  if (replacesSentence && sentence) fallback.push('sentence');
-
-  return { slots, fallback };
+  return { slots };
 }

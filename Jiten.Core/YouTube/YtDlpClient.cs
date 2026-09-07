@@ -99,6 +99,14 @@ public class YtDlpClient(YtDlpOptions options, HttpClient httpClient)
             }
         }
 
+        var announced = GetInt(root, "playlist_count");
+        if (announced is > 0)
+        {
+            var wanted = maxVideos is > 0 ? Math.Min(announced.Value, maxVideos.Value) : announced.Value;
+            if (info.Videos.Count < wanted)
+                throw new YtDlpFailedException($"yt-dlp listed {info.Videos.Count} of {announced} videos for {listingUrl}; the listing was cut short. Update yt-dlp (yt-dlp -U) and retry.");
+        }
+
         return info;
     }
 

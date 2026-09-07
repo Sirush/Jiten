@@ -8,6 +8,7 @@
     CardMediaManageSummary,
     CardMediaSort,
   } from '~/types';
+  import { clipFailureToast, logClipFailure, playCustomAudio, type PlaybackHandle } from '~/utils/customAudioPlayback';
   import { formatBytes } from '~/utils/formatBytes';
   import { formatDateShort } from '~/utils/formatDateShort';
   import { debounce } from 'perfect-debounce';
@@ -144,17 +145,13 @@
     load();
   }
 
-  // Audio plays through a throwaway element (no persistent <audio> per row).
+  // Audio plays through a throwaway player (no persistent <audio> per row).
   const playingUrl = ref<string | null>(null);
-  let audioEl: HTMLAudioElement | null = null;
+  let playback: PlaybackHandle | null = null;
 
   function stopAudio() {
-    if (audioEl) {
-      audioEl.onended = null;
-      audioEl.onerror = null;
-      audioEl.pause();
-      audioEl = null;
-    }
+    playback?.stop();
+    playback = null;
     playingUrl.value = null;
   }
 
@@ -164,15 +161,18 @@
       return;
     }
     stopAudio();
-    const a = new Audio(url);
-    audioEl = a;
-    const done = () => {
-      if (audioEl === a) stopAudio();
-    };
-    a.onended = done;
-    a.onerror = done;
+    const handle = playCustomAudio(url);
+    playback = handle;
     playingUrl.value = url;
-    a.play().catch(done);
+    handle.started.then((result) => {
+      if (playback !== handle || result.ok) return;
+      logClipFailure(url, result);
+      toast.add(clipFailureToast(result));
+      stopAudio();
+    });
+    handle.finished.then(() => {
+      if (playback === handle) stopAudio();
+    });
   }
 
   function confirmDeleteFile(item: CardMediaManageItem, kind: CardMediaKind) {
