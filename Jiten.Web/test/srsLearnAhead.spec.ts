@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StudyCardDto } from '../app/types';
 
 vi.stubGlobal('ref', ref);
@@ -8,7 +8,7 @@ vi.stubGlobal('computed', computed);
 vi.stubGlobal('watch', watch);
 vi.stubGlobal('trackActivation', () => {});
 
-function card(wordId: number, goodSeconds: number): StudyCardDto {
+function card(wordId: number, goodSeconds: number, againSeconds = 60): StudyCardDto {
   return {
     cardId: 0,
     wordId,
@@ -23,7 +23,7 @@ function card(wordId: number, goodSeconds: number): StudyCardDto {
     definitions: [],
     partsOfSpeech: [],
     frequencyRank: 0,
-    intervalPreview: { againSeconds: 60, hardSeconds: goodSeconds, goodSeconds, easySeconds: 86400 * 4 },
+    intervalPreview: { againSeconds, hardSeconds: goodSeconds, goodSeconds, easySeconds: 86400 * 4 },
   } as unknown as StudyCardDto;
 }
 
@@ -55,12 +55,15 @@ describe('learn-ahead re-queue', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
   });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-  async function start(goodSeconds: number, learnAheadMinutes: number) {
+  async function start(goodSeconds: number, learnAheadMinutes: number, againSeconds = 60) {
     const store = useSrsStore();
     store.studySettings.pauseBetweenBatches = false;
     store.studySettings.learnAheadMinutes = learnAheadMinutes;
-    batchCards = [card(1, goodSeconds), ...Array.from({ length: 20 }, (_, i) => card(10 + i, 86400))];
+    batchCards = [card(1, goodSeconds, againSeconds), ...Array.from({ length: 20 }, (_, i) => card(10 + i, 86400))];
     await store.fetchBatch();
     store.isFlipped = true;
     return store;
@@ -116,5 +119,85 @@ describe('learn-ahead re-queue', () => {
 
     expect(store.currentBatch.slice(store.currentCardIndex).some((c) => c.wordId === 1)).toBe(true);
     expect(store.currentBatch.slice(store.currentCardIndex).filter((c) => c.wordId !== 1)).toHaveLength(1);
+  });
+
+  it('re-queues an Again card whose first step ends inside the window', async () => {
+    const store = await start(600, 20, 600);
+    store.gradeCard(1);
+    await flush();
+
+    expect(store.currentBatch.filter((c) => c.wordId === 1)).toHaveLength(1);
+    expect(store.currentBatch.slice(store.currentCardIndex).some((c) => c.wordId === 1)).toBe(true);
+    expect(store.againCardKeys.has('1-0')).toBe(true);
+  });
+
+  it('does not re-queue an Again card whose first step ends outside the window', async () => {
+    const store = await start(600, 0, 1800);
+    store.gradeCard(1);
+    await flush();
+
+    expect(store.currentBatch.slice(store.currentCardIndex).some((c) => c.wordId === 1)).toBe(false);
+    expect(store.againCardKeys.size).toBe(0);
+    expect(store.currentCardIndex).toBe(1);
+    expect(store.sessionStats.gradeCounts.again).toBe(1);
+  });
+
+  it('re-queues an Again card with no interval preview', async () => {
+    const store = await start(600, 0, 0);
+    store.gradeCard(1);
+    await flush();
+
+    expect(store.currentBatch.slice(store.currentCardIndex).some((c) => c.wordId === 1)).toBe(true);
+  });
+
+  it('defers a copy that reaches the front before its step has elapsed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const store = await start(30, 20);
+    store.gradeCard(3);
+    await flush();
+    expect(store.currentBatch.indexOf(store.currentBatch.find((c) => c.wordId === 1 && c.dueAt)!)).toBe(store.currentCardIndex + 3);
+
+    for (let i = 0; i < 3; i++) {
+      vi.setSystemTime(Date.now() + 5_000);
+      store.isFlipped = true;
+      store.gradeCard(3);
+      await flush();
+    }
+
+    expect(store.currentCard!.wordId).not.toBe(1);
+    const copyIndex = store.currentBatch.findIndex((c, i) => i > store.currentCardIndex && c.wordId === 1);
+    expect(copyIndex).toBe(store.currentCardIndex + 3);
+  });
+
+  it('shows a not-yet-due copy once it is the only card left', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const store = await start(600, 20);
+    store.gradeCard(3);
+    await flush();
+
+    while (store.currentCard && store.currentCard.wordId !== 1) {
+      store.isFlipped = true;
+      store.gradeCard(3);
+      await flush();
+    }
+
+    expect(store.currentCard?.wordId).toBe(1);
+    expect(store.currentCardIndex).toBe(store.currentBatch.length - 1);
+  });
+
+  it('shows a copy on time once its step has elapsed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const store = await start(30, 20);
+    store.gradeCard(3);
+    await flush();
+    vi.setSystemTime(Date.now() + 31_000);
+
+    for (let i = 0; i < 3; i++) {
+      store.isFlipped = true;
+      store.gradeCard(3);
+      await flush();
+    }
+
+    expect(store.currentCard!.wordId).toBe(1);
   });
 });

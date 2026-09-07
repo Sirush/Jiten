@@ -8,6 +8,7 @@ vi.stubGlobal('ref', ref);
 vi.stubGlobal('computed', computed);
 vi.stubGlobal('watch', watch);
 vi.stubGlobal('trackActivation', () => {});
+vi.stubGlobal('trackEvent', () => {});
 
 const apiCalls: string[] = [];
 let pendingReview: (() => void) | null = null;
