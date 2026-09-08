@@ -5,7 +5,7 @@ namespace Jiten.Api.Services;
 public class ParseThrottleService(TimeProvider? timeProvider = null) : IParseThrottleService
 {
     public const int BudgetPerWindow = 200_000;
-    public const int MinimumCharge = 2000;
+    public const int MinimumCharge = 1000;
     public static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan CleanupInterval = TimeSpan.FromMinutes(5);
 
