@@ -33,5 +33,10 @@ public class WebNovelChapter
 
     public int CharCount { get; set; }
 
+    /// <summary>
+    /// Source text is newer than what this subdeck holds; cleared when the subdeck is rebuilt
+    /// </summary>
+    public bool RevisedAtSource { get; set; }
+
     public WebNovelSource Source { get; set; } = null!;
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, onMounted } from 'vue';
+  import { ref, computed, onMounted } from 'vue';
   import Card from 'primevue/card';
   import Button from 'primevue/button';
   import Message from 'primevue/message';
@@ -17,6 +17,7 @@
     endEpisode: number;
     episodeCount: number;
     charCount: number;
+    revisedCount: number;
   }
 
   interface WebNovelSource {
@@ -44,6 +45,9 @@
   const source = ref<WebNovelSource | null>(null);
   const syncing = ref(false);
   const rebuilding = ref<number | null>(null);
+  const rebuildingRevised = ref(false);
+
+  const revisedSubdeckCount = computed(() => source.value?.subdecks.filter((s) => s.revisedCount > 0).length ?? 0);
 
   const load = async () => {
     try {
@@ -75,6 +79,23 @@
       toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Could not queue the rebuild.'), life: 4000 });
     } finally {
       rebuilding.value = null;
+    }
+  };
+
+  const rebuildRevised = async () => {
+    rebuildingRevised.value = true;
+    try {
+      const result = await $api<{ subdeckCount: number }>(`admin/webnovel/${props.deckId}/rebuild-revised`, { method: 'POST' });
+      toast.add({
+        severity: 'success',
+        summary: 'Rebuilds queued',
+        detail: `${result.subdeckCount} subdeck${result.subdeckCount === 1 ? '' : 's'} will be re-fetched and reparsed.`,
+        life: 4000,
+      });
+    } catch (error) {
+      toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Could not queue the rebuilds.'), life: 4000 });
+    } finally {
+      rebuildingRevised.value = false;
     }
   };
 
@@ -111,8 +132,25 @@
       </Message>
 
       <Message v-if="source.pendingRevisionCount > 0" severity="warn" :closable="false" class="mb-4">
-        {{ source.pendingRevisionCount }} episode{{ source.pendingRevisionCount === 1 ? '' : 's' }} revised at the source. Rebuild the subdeck holding them to
-        pick the changes up.
+        <div class="flex flex-wrap items-center gap-3">
+          <span v-if="revisedSubdeckCount === 0">
+            {{ source.pendingRevisionCount }} episode{{ source.pendingRevisionCount === 1 ? '' : 's' }} revised at the source. Run a sync to see
+            which subdecks hold them.
+          </span>
+          <span v-else>
+            {{ source.pendingRevisionCount }} episode{{ source.pendingRevisionCount === 1 ? '' : 's' }} revised at the source across
+            {{ revisedSubdeckCount }} subdeck{{ revisedSubdeckCount === 1 ? '' : 's' }}. Rebuilding re-fetches every episode in those ranges.
+          </span>
+          <Button
+            v-if="revisedSubdeckCount > 0"
+            :label="`Rebuild ${revisedSubdeckCount} subdeck${revisedSubdeckCount === 1 ? '' : 's'}`"
+            icon="pi pi-replay"
+            size="small"
+            severity="warn"
+            :loading="rebuildingRevised"
+            @click="rebuildRevised"
+          />
+        </div>
       </Message>
 
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
@@ -155,6 +193,7 @@
           <span class="text-xs text-surface-500 dark:text-surface-400 tabular-nums">
             {{ subdeck.episodeCount }} episodes · {{ formatNumber(subdeck.charCount) }} chars
           </span>
+          <Tag v-if="subdeck.revisedCount > 0" :value="`${subdeck.revisedCount} revised`" severity="warn" class="text-xs" />
           <div class="ml-auto flex items-center gap-1">
             <Button
               v-tooltip.top="'Re-fetch every episode in this range, picking up revisions (改稿)'"
