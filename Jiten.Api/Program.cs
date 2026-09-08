@@ -223,6 +223,8 @@ if (enableOtlpExporter)
                            activity.SetTag("client.address", ClientIp.Resolve(request.HttpContext));
                            var userAgent = request.Headers.UserAgent.ToString();
                            if (userAgent.Length > 0) activity.SetTag("user_agent.original", userAgent);
+                           var clientName = request.Headers["X-Client-Name"].ToString();
+                           if (clientName.Length > 0) activity.SetTag("client.name", clientName);
                            if (IsTrustedSsr(request.HttpContext)) activity.SetTag("ssr.internal", true);
                        };
                        // Authentication runs after the request hook, so identity tags only exist on the response side.

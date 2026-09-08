@@ -1,3 +1,4 @@
+using System.Globalization;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
@@ -40,6 +41,7 @@ public class ReaderController(
                       Description = "Parses the provided text and returns parsed words and any gaps as separate items, preserving order.")]
     // [ProducesResponseType(typeof(List<DeckWordDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IResult> Parse(ReaderParseRequest request)
     {
         var totalLength = string.Join("", request.Text).Length;
@@ -47,8 +49,11 @@ public class ReaderController(
             return Results.BadRequest("Text is too long");
 
         var userId = currentUserService.UserId;
-        if (userId != null && !parseThrottle.TryConsume(userId, totalLength))
+        if (userId != null && !parseThrottle.TryConsume(userId, totalLength, out var retryAfter))
+        {
+            Response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds).ToString(CultureInfo.InvariantCulture);
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+        }
 
         List<List<ReaderToken>> allTokens = new();
         List<ReaderWord> allWords = new();

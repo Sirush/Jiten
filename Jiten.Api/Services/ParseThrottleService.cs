@@ -2,21 +2,24 @@ using System.Collections.Concurrent;
 
 namespace Jiten.Api.Services;
 
-public class ParseThrottleService : IParseThrottleService
+public class ParseThrottleService(TimeProvider? timeProvider = null) : IParseThrottleService
 {
-    private const int BudgetPerWindow = 200_000;
-    private static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
+    public const int BudgetPerWindow = 200_000;
+    public const int MinimumCharge = 2000;
+    public static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan CleanupInterval = TimeSpan.FromMinutes(5);
 
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly ConcurrentDictionary<string, UserBucket> _buckets = new();
-    private DateTime _lastCleanup = DateTime.UtcNow;
+    private DateTime _lastCleanup = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
     private readonly Lock _cleanupLock = new();
 
-    public bool TryConsume(string userId, int characterCount)
+    public bool TryConsume(string userId, int characterCount, out TimeSpan retryAfter)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         CleanupIfNeeded(now);
 
+        var charge = Math.Max(characterCount, MinimumCharge);
         var bucket = _buckets.GetOrAdd(userId, _ => new UserBucket(BudgetPerWindow, now));
 
         lock (bucket)
@@ -27,10 +30,14 @@ public class ParseThrottleService : IParseThrottleService
                 bucket.WindowStart = now;
             }
 
-            if (bucket.Remaining < characterCount)
+            if (bucket.Remaining < charge)
+            {
+                retryAfter = bucket.WindowStart + Window - now;
                 return false;
+            }
 
-            bucket.Remaining -= characterCount;
+            bucket.Remaining -= charge;
+            retryAfter = TimeSpan.Zero;
             return true;
         }
     }
