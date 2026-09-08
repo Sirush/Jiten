@@ -86,8 +86,8 @@ function sendVitals(): void {
   const v = firstViewId;
   const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   if (nav && nav.responseStart > 0) push({ t: 'vital', n: 'TTFB', val: Math.round(nav.responseStart), v, p: firstViewPath });
-  if (vitals.fcp !== null) push({ t: 'vital', n: 'FCP', val: Math.round(vitals.fcp), v, p: firstViewPath });
-  if (vitals.lcp !== null) push({ t: 'vital', n: 'LCP', val: Math.round(vitals.lcp), v, p: firstViewPath });
+  if (vitals.fcp !== null && vitals.fcp < firstHiddenTime) push({ t: 'vital', n: 'FCP', val: Math.round(vitals.fcp), v, p: firstViewPath });
+  if (vitals.lcp !== null && vitals.lcp < firstHiddenTime) push({ t: 'vital', n: 'LCP', val: Math.round(vitals.lcp), v, p: firstViewPath });
   push({ t: 'vital', n: 'CLS', val: Math.round(vitals.cls * 1000) / 1000, v, p: firstViewPath });
   if (vitals.inp !== null) push({ t: 'vital', n: 'INP', val: Math.round(vitals.inp), v, p: firstViewPath });
 }
@@ -95,9 +95,14 @@ function sendVitals(): void {
 const vitals = { lcp: null as number | null, cls: 0, inp: null as number | null, fcp: null as number | null };
 let firstViewId = '';
 let firstViewPath = '';
+let firstHiddenTime = Infinity;
 
 function observeVitals(): void {
   if (typeof PerformanceObserver === 'undefined') return;
+  if (document.visibilityState === 'hidden') firstHiddenTime = 0;
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) vitalsSent = true;
+  });
   const observe = (type: string, cb: (entries: PerformanceEntry[]) => void, extra?: PerformanceObserverInit) => {
     try {
       const po = new PerformanceObserver((list) => cb(list.getEntries()));
@@ -197,6 +202,7 @@ export function beatStart(options: { userId: () => string | undefined }): void {
   window.setInterval(idleCheck, 5000);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
+      firstHiddenTime = Math.min(firstHiddenTime, performance.now());
       sendVitals();
       sendLeave();
       flush();
