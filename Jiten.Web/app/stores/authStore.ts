@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
 import type { CompleteGoogleRegistrationRequest, GoogleSignInResponse, GoogleRegistrationData, LoginRequest, TokenResponse } from '~/types/types';
 import { TabSyncManager } from '~/utils/tabSync';
 import { CookieMonitor, readCookie } from '~/utils/cookieMonitor';
@@ -84,8 +83,7 @@ export const useAuthStore = defineStore('auth', () => {
     tabSyncManager.on('LOGOUT', () => {
       dbg('User logged out in another tab');
       clearAuthData();
-      const router = useRouter();
-      router.push('/login');
+      nuxtApp.$router.push('/login');
     });
 
     // Monitor cookie changes (fallback mechanism)
@@ -451,10 +449,7 @@ export const useAuthStore = defineStore('auth', () => {
       isLoading.value = false;
 
       // Only redirect on client-side (router unavailable during SSR)
-      if (import.meta.client) {
-        const router = useRouter();
-        router.push('/login');
-      }
+      if (import.meta.client) nuxtApp.$router.push('/login');
     }
   }
 

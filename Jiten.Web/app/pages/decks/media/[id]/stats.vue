@@ -200,7 +200,7 @@
       </template>
     </Card>
 
-    <Card v-else-if="difficultyData">
+    <Card v-else-if="difficultyData && deckResponse?.data?.mainDeck">
       <template #header>
         <h2 class="text-xl font-bold px-4 pt-4">Difficulty Progression</h2>
         <h3 class="italic text-sm px-4">{{ progressionDescription }}</h3>

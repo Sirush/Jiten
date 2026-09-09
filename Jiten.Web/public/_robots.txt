@@ -1,3 +1,48 @@
+User-agent: Amazonbot
+Disallow: /
+
+User-agent: DataForSeoBot
+Disallow: /
+
+User-agent: SERankingBacklinksBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: ExaSearchBot
+Disallow: /
+
+User-agent: Reflectionbot
+Disallow: /
+
+User-agent: YouBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: DotBot
+Disallow: /
+
+User-agent: PetalBot
+Disallow: /
+
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: AionBot
+Disallow: /
+
+User-agent: ShapBot
+Disallow: /
+
 User-agent: *
 Disallow: /decks/media/*/vocabulary
 Disallow: /decks/media

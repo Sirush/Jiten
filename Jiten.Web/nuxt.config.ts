@@ -106,6 +106,8 @@ export default defineNuxtConfig({
   routeRules: {
     '/_nuxt/**': { ssr: false },
     '/.well-known/**': { ssr: false },
+    // Noindexed, per-user page hammered by scrapers that ignore robots.txt
+    '/decks/media/*/vocabulary': { ssr: false },
     // FAQ migrated into the Guides system; preserve existing ranking/backlinks.
     '/faq': { redirect: { to: '/guides', statusCode: 301 } },
     // Frequency lists moved, old URL kept for Yomitan and other backlinks
