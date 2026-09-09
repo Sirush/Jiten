@@ -254,7 +254,7 @@ public class DifficultyComputationJob(
             return;
         }
 
-        var avgDifficulty = childrenWithDifficulty.Average(c => c.DeckDifficulty!.Difficulty);
+        var avgDifficulty = (decimal)Deck.WeightedByCharacters(childrenWithDifficulty, c => (double)c.DeckDifficulty!.Difficulty);
         var maxPeak = childrenWithDifficulty.Max(c => c.DeckDifficulty!.Peak);
 
         var progression = ComputeParentProgression(childrenWithDifficulty);
@@ -316,7 +316,7 @@ public class DifficultyComputationJob(
             if (childrenInSegment.Count == 0)
                 continue;
 
-            var segmentDifficulty = childrenInSegment.Average(c => c.DeckDifficulty!.Difficulty);
+            var segmentDifficulty = (decimal)Deck.WeightedByCharacters(childrenInSegment, c => (double)c.DeckDifficulty!.Difficulty);
             var segmentPeak = childrenInSegment.Max(c => c.DeckDifficulty!.Peak);
 
             segments.Add(new ProgressionSegment
@@ -345,14 +345,14 @@ public class DifficultyComputationJob(
 
         foreach (var key in allKeys)
         {
-            var values = childrenWithDifficulty
+            var decksWithKey = childrenWithDifficulty
                 .Where(c => c.DeckDifficulty?.Deciles.ContainsKey(key) == true)
-                .Select(c => c.DeckDifficulty!.Deciles[key])
                 .ToList();
 
-            if (values.Count > 0)
+            if (decksWithKey.Count > 0)
             {
-                aggregatedDeciles[key] = Math.Round(values.Average(), 2);
+                var weighted = Deck.WeightedByCharacters(decksWithKey, c => (double)c.DeckDifficulty!.Deciles[key]);
+                aggregatedDeciles[key] = Math.Round((decimal)weighted, 2);
             }
         }
 

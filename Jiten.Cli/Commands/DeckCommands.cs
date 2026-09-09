@@ -209,13 +209,8 @@ public class DeckCommands(CliContext context)
 
             if (parentDeck.Children.Count > 0 && matched.Count > 0)
             {
-                var childrenWithSpeech = parentDeck.Children.Where(c => c.SpeechDuration > 0).ToList();
-                if (childrenWithSpeech.Count > 0)
-                {
-                    var avgSpeed = childrenWithSpeech.Average(c => c.SpeechSpeed);
-                    parentDeck.SpeechDuration = childrenWithSpeech.Sum(c => c.SpeechDuration);
-                    parentDeck.SpeechMoraCount = (long)(avgSpeed * (parentDeck.SpeechDuration / 60000.0));
-                }
+                parentDeck.SpeechDuration = parentDeck.Children.Sum(c => c.SpeechDuration);
+                parentDeck.SpeechMoraCount = parentDeck.Children.Sum(c => c.SpeechMoraCount);
             }
 
             if (matchedCount > 0)
@@ -685,13 +680,8 @@ public class DeckCommands(CliContext context)
 
                 if (parentDeck.Children.Count > 0 && matched.Count > 0)
                 {
-                    var childrenWithSpeech = parentDeck.Children.Where(c => c.SpeechDuration > 0).ToList();
-                    if (childrenWithSpeech.Count > 0)
-                    {
-                        var avgSpeed = childrenWithSpeech.Average(c => c.SpeechSpeed);
-                        parentDeck.SpeechDuration = childrenWithSpeech.Sum(c => c.SpeechDuration);
-                        parentDeck.SpeechMoraCount = (long)(avgSpeed * (parentDeck.SpeechDuration / 60000.0));
-                    }
+                    parentDeck.SpeechDuration = parentDeck.Children.Sum(c => c.SpeechDuration);
+                    parentDeck.SpeechMoraCount = parentDeck.Children.Sum(c => c.SpeechMoraCount);
                 }
 
                 if (matchedCount > 0)
