@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using Jiten.Core;
 using System.Text;
@@ -737,6 +737,32 @@ public class DiagnosticCommands(CliContext context)
         {
             PrintWord(word);
             Console.WriteLine("---");
+        }
+    }
+
+    public async Task ResolveReading(string query)
+    {
+        var pairs = new List<(string Word, string Reading)>();
+        foreach (var entry in query.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var open = entry.IndexOf('[');
+            if (open > 0 && entry.EndsWith("]"))
+                pairs.Add((entry[..open], entry[(open + 1)..^1].Trim()));
+            else
+                pairs.Add((entry, ""));
+        }
+
+        var resolved = await Parser.Parser.GetWordsDirectLookupByReading(context.ContextFactory, pairs);
+
+        foreach (var (word, reading) in pairs)
+        {
+            if (!resolved.TryGetValue((word, reading), out var hit))
+            {
+                Console.WriteLine($"{word}[{reading}] -> unresolved");
+                continue;
+            }
+
+            Console.WriteLine($"{word}[{reading}] -> WordId {hit.WordId}, ReadingIndex {hit.ReadingIndex}, reading {hit.SudachiReading}");
         }
     }
 

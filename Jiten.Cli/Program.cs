@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using CommandLine;
 using Jiten.Cli;
 using Jiten.Cli.Commands;
@@ -239,6 +239,11 @@ public class Program
         if (!string.IsNullOrEmpty(options.SearchWord))
         {
             await diagnosticCommands.SearchWord(options.SearchWord);
+        }
+
+        if (!string.IsNullOrEmpty(options.ResolveReading))
+        {
+            await diagnosticCommands.ResolveReading(options.ResolveReading);
         }
 
         if (!string.IsNullOrEmpty(options.SearchLookup))

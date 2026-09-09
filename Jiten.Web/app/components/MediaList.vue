@@ -850,7 +850,10 @@
     describeRequest.value && describeResponse.value?.query === describeRequest.value ? describeResponse.value.results : []
   );
 
-  const describeDecks = computed(() => describeResults.value.map((r) => r.deck));
+  const describeDecks = computed(() => {
+    const shown = new Set(isDescribeMode.value ? [] : (response.value?.data ?? []).map((d) => d.deckId));
+    return describeResults.value.map((r) => r.deck).filter((d) => !shown.has(d.deckId));
+  });
   const describeMediaTypeLabel = computed(() => {
     const type = describeResponse.value?.mediaType;
     return type ? getMediaTypePluralText(type) : null;
@@ -860,7 +863,7 @@
     if (mediaType.value) return Number(mediaType.value);
     return isDescribeMode.value ? (describeResponse.value?.detectedMediaType ?? null) : null;
   });
-  const showHandoff = computed(() => handoffText.value !== null && describeResults.value.length > 0);
+  const showHandoff = computed(() => handoffText.value !== null && describeDecks.value.length > 0);
 
   // Stream cards in over a few frames instead of mounting the whole page at once.
   const { visibleItems: visibleDecks } = useProgressiveList(
@@ -1355,7 +1358,7 @@
                 <MediaDeckCompactView v-for="deck in describeDecks" :key="deck.deckId" :deck="deck" />
               </div>
               <div>
-                <Button :label="`Show all ${describeResults.length} matches`" size="small" @click="searchDescriptionsInstead" />
+                <Button :label="`Show all ${describeDecks.length} matches`" size="small" @click="searchDescriptionsInstead" />
               </div>
             </div>
           </template>

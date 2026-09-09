@@ -257,6 +257,18 @@ public class Deck
 
     public float GetDifficulty() => DifficultyOverride > -1 ? DifficultyOverride : Difficulty;
 
+    /// <summary>Mean of a per-deck value weighted by CharacterCount; plain mean when no deck has characters.</summary>
+    public static double WeightedByCharacters(IReadOnlyCollection<Deck> decks, Func<Deck, double> value)
+    {
+        if (decks.Count == 0)
+            return 0;
+
+        double totalChars = decks.Sum(d => (double)d.CharacterCount);
+        return totalChars > 0
+            ? decks.Sum(d => value(d) * d.CharacterCount) / totalChars
+            : decks.Average(value);
+    }
+
     public Task AddChildDeckWords(JitenDbContext context)
     {
         if (Children.Count == 0)
@@ -292,20 +304,11 @@ public class Deck
         UniqueWordCount = DeckWords.Select(dw => new { dw.WordId, dw.ReadingIndex }).Distinct().Count();
         UniqueWordUsedOnceCount = DeckWords.Where(dw => dw.Occurrences == 1).Select(dw => new { dw.WordId, dw.ReadingIndex }).Distinct().Count();
         SentenceCount = Children.Sum(c => c.SentenceCount);
-        var childrenWithSpeech = Children.Where(c => c.SpeechDuration > 0).ToList();
-        if (childrenWithSpeech.Count > 0)
-        {
-            var avgSpeed = childrenWithSpeech.Average(c => c.SpeechSpeed);
-            SpeechDuration = childrenWithSpeech.Sum(c => c.SpeechDuration);
-            SpeechMoraCount = (long)(avgSpeed * (SpeechDuration / 60000.0));
-        }
-        else
-        {
-            SpeechDuration = 0;
-            SpeechMoraCount = 0;
-        }
-        Difficulty = Children.Average(c => c.Difficulty);
-        DialoguePercentage = Children.Sum(c => c.DialoguePercentage) / Children.Count;
+        SpeechDuration = Children.Sum(c => c.SpeechDuration);
+        SpeechMoraCount = Children.Sum(c => c.SpeechMoraCount);
+        var children = Children.ToList();
+        Difficulty = (float)WeightedByCharacters(children, c => c.Difficulty);
+        DialoguePercentage = (float)WeightedByCharacters(children, c => c.DialoguePercentage);
 
         // Not the most efficient or elegant way to do it, rebuilding the text, but it works and I don't have a better idea for now
 

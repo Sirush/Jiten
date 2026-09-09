@@ -2726,10 +2726,7 @@ namespace Jiten.Parser
         }
 
         /// <summary>
-        /// Direct lookup variant keyed by (surface, reading). When a reading is supplied it is used
-        /// to pick, among the words sharing that surface, the most common one whose kana reading
-        /// matches; if none match (or no reading is given) it falls back to the most common word for
-        /// the surface. This lets imports disambiguate homographs with different readings.
+        /// Direct lookup variant keyed by (surface, reading)
         /// </summary>
         public static async Task<Dictionary<(string Word, string Reading), DeckWord>> GetWordsDirectLookupByReading(
             IDbContextFactory<JitenDbContext> contextFactory, List<(string Word, string Reading)> pairs)
@@ -2745,7 +2742,7 @@ namespace Jiten.Parser
                 if (result.ContainsKey(key)) continue;
                 if (!candidates.TryGetValue(word, out var matches)) continue;
 
-                var best = PickBestDirectLookupMatch(matches, formFrequencies, reading);
+                var best = PickBestDirectLookupMatch(matches, formFrequencies, reading, requireReadingMatch: true);
                 if (best == null) continue;
                 if (ExcludedMisparses.Contains((best.Value.match.WordId, (byte)best.Value.readingIndex))) continue;
 
@@ -2808,16 +2805,12 @@ namespace Jiten.Parser
             return (candidates, formFrequencies);
         }
 
-        // Picks the best (word, readingIndex) match by frequency rank. When a reading hint is given,
-        // candidates are restricted to words that have a kana reading equal to it, so homographs read
-        // differently (e.g. 花 = はな vs あや, distinct words) resolve to distinct cards. The reading
-        // only selects the word — the surface form's ReadingIndex is kept so the stored value stays
-        // consistent with how the rest of the system indexes that surface. If no candidate has the
-        // reading, all candidates are considered (i.e. just the most common word for the surface).
+        // Picks the best (word, readingIndex) match by frequency rank.
         private static (JmDictWord match, int readingIndex)? PickBestDirectLookupMatch(
             List<(JmDictWord match, int readingIndex)> matches,
             Dictionary<(int, short), JmDictWordFormFrequency> formFrequencies,
-            string? readingHint)
+            string? readingHint,
+            bool requireReadingMatch = false)
         {
             if (matches.Count == 0)
                 return null;
@@ -2831,6 +2824,9 @@ namespace Jiten.Parser
                 var byReading = matches.Where(m => WordHasKanaReading(m.match, hintHira)).ToList();
                 if (byReading.Count > 0)
                     return byReading.OrderBy(FreqRank).First();
+
+                if (requireReadingMatch)
+                    return null;
             }
 
             return matches.OrderBy(FreqRank).First();

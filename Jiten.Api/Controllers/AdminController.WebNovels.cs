@@ -151,7 +151,8 @@ public partial class AdminController
                                           StartEpisode = g.Min(c => c.EpisodeNumber),
                                           EndEpisode = g.Max(c => c.EpisodeNumber),
                                           EpisodeCount = g.Count(),
-                                          CharCount = g.Sum(c => c.CharCount)
+                                          CharCount = g.Sum(c => c.CharCount),
+                                          RevisedCount = g.Count(c => c.RevisedAtSource)
                                       })
                                       .OrderBy(g => g.StartEpisode)
                                       .ToListAsync();
@@ -200,6 +201,28 @@ public partial class AdminController
         var jobId = backgroundJobs.Enqueue<WebNovelFetchJob>(job => job.RebuildSubdeck(deckId, childDeckId));
 
         return Accepted(new { Message = "Rebuild queued.", JobId = jobId });
+    }
+
+    /// <summary>
+    /// Queues a rebuild for every subdeck holding at least one episode revised at the source.
+    /// </summary>
+    [HttpPost("webnovel/{deckId:int}/rebuild-revised")]
+    public async Task<IActionResult> RebuildRevisedWebNovelSubdecks(int deckId)
+    {
+        if (!await dbContext.WebNovelSources.AnyAsync(s => s.DeckId == deckId))
+            return NotFound();
+
+        var childDeckIds = await dbContext.WebNovelChapters
+                                          .Where(c => c.DeckId == deckId && c.RevisedAtSource)
+                                          .Select(c => c.ChildDeckId)
+                                          .Distinct()
+                                          .OrderBy(id => id)
+                                          .ToListAsync();
+
+        foreach (var childDeckId in childDeckIds)
+            backgroundJobs.Enqueue<WebNovelFetchJob>(job => job.RebuildSubdeck(deckId, childDeckId));
+
+        return Accepted(new { Message = $"{childDeckIds.Count} rebuild(s) queued.", SubdeckCount = childDeckIds.Count });
     }
 
     [HttpPost("webnovel/{deckId:int}/sync-enabled")]

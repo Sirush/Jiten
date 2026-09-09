@@ -1,4 +1,4 @@
-using Hangfire;
+﻿using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
@@ -1657,11 +1657,9 @@ public partial class UserController(
                 continue;
             }
 
-            // Lookup by (surface, reading); fall back to the surface-only resolution (e.g. the
-            // ParseWords path, or when the reading didn't resolve) before giving up.
             var reading = wrapper.Card.Reading?.Trim() ?? "";
             if (!wordLookup.TryGetValue((word, reading), out var wordInfo)
-                && (reading.Length == 0 || !wordLookup.TryGetValue((word, ""), out wordInfo)))
+                && (!request.ParseWords || reading.Length == 0 || !wordLookup.TryGetValue((word, ""), out wordInfo)))
             {
                 skippedWords.Add(word);
                 skippedCount++;

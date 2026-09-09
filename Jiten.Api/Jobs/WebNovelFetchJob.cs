@@ -59,10 +59,8 @@ public class WebNovelFetchJob(
             var newEpisodes = toc.Where(e => !ledger.ContainsKey(e.Number)).OrderBy(e => e.Number).ToList();
 
             // Episodes we already hold whose text changed at the source (改稿). Applying these means
-            // rebuilding the subdeck that holds them, so they are surfaced for a manual refresh instead.
-            var revisedCount = toc.Count(e => ledger.TryGetValue(e.Number, out var known) &&
-                                              e.UpdatedAt != null && known.SourceUpdatedAt != null &&
-                                              e.UpdatedAt > known.SourceUpdatedAt);
+            // rebuilding the subdeck that holds them, so they are flagged for a manual refresh instead.
+            var revisedCount = MarkRevisions(tracked, toc.ToDictionary(e => e.Number));
 
             if (newEpisodes.Count == 0)
             {
@@ -221,15 +219,28 @@ public class WebNovelFetchJob(
 
         // Recompute over the whole ledger: this rebuild refreshed its own chapters' SourceUpdatedAt, but
         // other subdecks may still hold revised episodes awaiting their own rebuild.
-        tracked.PendingRevisionCount = tracked.Chapters.Count(c => toc.TryGetValue(c.EpisodeNumber, out var e) &&
-                                                                   e.UpdatedAt != null && c.SourceUpdatedAt != null &&
-                                                                   e.UpdatedAt > c.SourceUpdatedAt);
+        tracked.PendingRevisionCount = MarkRevisions(tracked, toc);
         await context.SaveChangesAsync();
 
         backgroundJobs.Enqueue<ParseNewSubdecksJob>(job => job.ParseNewSubdecks(parentDeckId, new List<int> { childDeckId }));
 
         logger.LogInformation("WebNovelRebuild: rebuilt subdeck {ChildDeckId} from {Count} episodes",
                               childDeckId, texts.Count);
+    }
+
+    private static int MarkRevisions(WebNovelSource tracked, Dictionary<int, WebNovelEpisodeRef> toc)
+    {
+        var revised = 0;
+        foreach (var chapter in tracked.Chapters)
+        {
+            chapter.RevisedAtSource = toc.TryGetValue(chapter.EpisodeNumber, out var e) &&
+                                      e.UpdatedAt != null && chapter.SourceUpdatedAt != null &&
+                                      e.UpdatedAt > chapter.SourceUpdatedAt;
+            if (chapter.RevisedAtSource)
+                revised++;
+        }
+
+        return revised;
     }
 
     private static async Task<List<ExistingChunk>> BuildExistingChunksAsync(JitenDbContext context, WebNovelSource tracked)
