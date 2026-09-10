@@ -46,26 +46,19 @@
   const setRange = (key: MediaRangeKey, bounds: RangeBounds) => {
     ranges.value = { ...ranges.value, [key]: bounds };
   };
+
 </script>
 
 <template>
   <div :class="['flex min-h-0 flex-col', mobile ? 'gap-2' : 'gap-1.5']">
-    <IconField v-if="!split" class="shrink-0">
-      <InputIcon>
-        <Icon name="material-symbols:search-rounded" />
-      </InputIcon>
-      <InputText
-        v-model="search"
-        type="text"
-        placeholder="Find a filter, genre or tag..."
-        aria-label="Find a filter, genre or tag"
-        class="w-full"
-        :size="mobile ? undefined : 'small'"
-      />
-      <InputIcon v-if="search" class="cursor-pointer" @click="search = ''">
-        <Icon name="material-symbols:close" />
-      </InputIcon>
-    </IconField>
+    <SearchInput
+      v-if="!split"
+      v-model="search"
+      placeholder="Find a filter, genre or tag..."
+      aria-label="Find a filter, genre or tag"
+      class="shrink-0"
+      :size="mobile ? undefined : 'small'"
+    />
 
     <slot name="before" />
 

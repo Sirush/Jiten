@@ -58,15 +58,7 @@
 <template>
   <div class="border border-gray-200 dark:border-gray-700 rounded-md overflow-hidden">
     <div class="flex items-center gap-2 px-2 py-2 border-b border-gray-200 dark:border-gray-700">
-      <IconField class="flex-1">
-        <InputIcon>
-          <Icon name="material-symbols:search-rounded" />
-        </InputIcon>
-        <InputText v-model="searchQuery" type="text" placeholder="Search tags..." size="small" class="w-full" />
-        <InputIcon v-if="searchQuery" class="cursor-pointer" @click="searchQuery = ''">
-          <Icon name="material-symbols:close" />
-        </InputIcon>
-      </IconField>
+      <SearchInput v-model="searchQuery" placeholder="Search tags..." size="small" class="flex-1" />
       <button
         v-if="model.length > 0"
         type="button"

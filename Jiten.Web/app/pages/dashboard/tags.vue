@@ -296,15 +296,7 @@
 
     <!-- Search Bar -->
     <div class="mb-4">
-      <IconField class="w-full md:w-96">
-        <InputIcon>
-          <Icon name="material-symbols:search-rounded" />
-        </InputIcon>
-        <InputText v-model="searchQuery" type="text" placeholder="Search tags by name..." class="w-full" />
-        <InputIcon v-if="searchQuery" class="cursor-pointer" @click="searchQuery = ''">
-          <Icon name="material-symbols:close" />
-        </InputIcon>
-      </IconField>
+      <SearchInput v-model="searchQuery" placeholder="Search tags by name..." class="w-full md:w-96" />
     </div>
 
     <DataTable

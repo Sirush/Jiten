@@ -38,6 +38,10 @@
   };
 
   const sortPopover = ref();
+  const searchModel = computed({
+    get: () => props.search ?? '',
+    set: (v) => emit('update:search', v),
+  });
 
   const sortLabel = computed(() => props.sortByOptions.find((o) => o.value === props.sortBy)?.label ?? 'Sort');
 
@@ -72,15 +76,12 @@
       </Button>
     </div>
 
-    <IconField v-if="search !== undefined" class="flex-1 max-md:min-w-32 md:min-w-48">
-      <InputIcon>
-        <Icon name="material-symbols:search-rounded" />
-      </InputIcon>
-      <InputText :model-value="search" placeholder="Search words or definitions..." class="w-full" @update:model-value="$emit('update:search', $event)" />
-      <InputIcon v-if="search" class="cursor-pointer" @click="$emit('update:search', '')">
-        <Icon name="material-symbols:close" />
-      </InputIcon>
-    </IconField>
+    <SearchInput
+      v-if="search !== undefined"
+      v-model="searchModel"
+      placeholder="Search words or definitions..."
+      class="flex-1 max-md:min-w-32 md:min-w-48"
+    />
 
     <div class="md:hidden shrink-0">
       <Button class="px-2!" :aria-label="`Sort by ${sortLabel}, ${sortDescending ? 'descending' : 'ascending'}`" @click="sortPopover.toggle($event)">

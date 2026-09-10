@@ -5,7 +5,6 @@
   import { type Deck, MediaType, SortOrder, type Word, DisplayStyle } from '~/types';
   import Skeleton from 'primevue/skeleton';
   import Card from 'primevue/card';
-  import InputText from 'primevue/inputtext';
   import { debounce } from 'perfect-debounce';
   import { useDisplayStyleStore } from '~/stores/displayStyleStore';
   import { useJitenStore } from '~/stores/jitenStore';
@@ -1080,21 +1079,12 @@
         <!-- A min width rather than min-w-0: in a narrow container (the vocabulary detail page nests
            this inside a card, leaving ~314px) the field would otherwise shrink to a stub instead
            of wrapping onto its own row. -->
-        <IconField class="max-md:min-w-32 max-md:flex-1 md:w-full">
-          <InputIcon>
-            <Icon name="material-symbols:search-rounded" />
-          </InputIcon>
-          <InputText
-            v-model="titleFilter"
-            type="text"
-            placeholder="Search by title, or describe what you want"
-            aria-label="Search by title, or describe what you want"
-            class="w-full"
-          />
-          <InputIcon v-if="titleFilter" class="cursor-pointer" @click="titleFilter = null">
-            <Icon name="material-symbols:close" />
-          </InputIcon>
-        </IconField>
+        <SearchInput
+          v-model="titleFilter"
+          placeholder="Search by title, or describe what you want"
+          aria-label="Search by title, or describe what you want"
+          class="max-md:min-w-32 max-md:flex-1 md:w-full"
+        />
 
         <!-- The breakpoint sits on the wrapper: PrimeVue's runtime .p-button display rule
            outranks a `hidden` utility placed on the Button itself. -->

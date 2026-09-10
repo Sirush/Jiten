@@ -319,11 +319,7 @@
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 my-4 items-end">
       <div class="flex flex-col gap-1 col-span-2 sm:col-span-1">
         <label class="text-sm text-muted-color">Search</label>
-        <IconField>
-          <InputIcon class="pi pi-search" />
-          <InputText v-model="searchQuery" placeholder="Search titles..." class="w-full" />
-          <InputIcon v-if="searchQuery" class="pi pi-times cursor-pointer" @click="searchQuery = ''" />
-        </IconField>
+        <SearchInput v-model="searchQuery" placeholder="Search titles..." search-icon-class="pi pi-search" clear-icon-class="pi pi-times" />
       </div>
       <div class="flex flex-col gap-1 min-w-0">
         <label class="text-sm text-muted-color">Media Type</label>
