@@ -242,6 +242,7 @@ if (enableOtlpExporter)
                    })
                    .AddSource(HangfireActivityFilter.SourceName)
                    .AddHttpClientInstrumentation(options => { options.RecordException = true; })
+                   .AddProcessor(new ProbeStatusProcessor())
                    .AddEntityFrameworkCoreInstrumentation(options => { options.SetDbStatementForText = true; });
 
                if (enableConsoleExporter)
