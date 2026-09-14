@@ -11,7 +11,7 @@ public class PopularityScoreJob(
     IDbContextFactory<UserDbContext> userContextFactory,
     ILogger<PopularityScoreJob> logger)
 {
-    private static readonly TimeSpan ActivityWindow = TimeSpan.FromDays(PopularityWeights.TrendingBaselineDays);
+    private static readonly TimeSpan ActivityWindow = TimeSpan.FromDays(PopularityWeights.TrendingBaselineDays + PopularityWeights.TrendingWindowDays);
 
     private sealed record Counts(int InLists, int Favourites, int StudyDecks);
 

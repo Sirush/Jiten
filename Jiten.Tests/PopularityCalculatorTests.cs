@@ -184,31 +184,70 @@ public class PopularityCalculatorTests
         results[101].GlobalRank.Should().Be(0);
     }
 
+    private static List<ActivityDay> DailyViews(int deckId, int fromDaysAgo, int toDaysAgo, int views) =>
+        Enumerable.Range(fromDaysAgo, toDaysAgo - fromDaysAgo + 1)
+                  .Select(i => new ActivityDay(deckId, DateOnly.FromDateTime(Now.AddDays(-i)), views, 0))
+                  .ToList();
+
     [Fact]
-    public void Trending_needs_activity_history_and_a_burst_over_baseline()
+    public void A_burst_of_visitors_trends_a_deck_nobody_usually_visits()
     {
         var decks = new[] { Parent(1), Parent(2) };
-        var burst = Enumerable.Range(0, 3).Select(i => new IntentEvent(1, PopularityWeights.Completed, Now.AddDays(-i), $"u{i}")).ToList();
-        var steady = Enumerable.Range(0, 60).Select(i => new IntentEvent(2, PopularityWeights.Planning, Now.AddDays(-i), $"s{i}")).ToList();
-        var thinActivity = Enumerable.Range(0, 5).Select(i => new ActivityDay(2, DateOnly.FromDateTime(Now.AddDays(-i)), 1, 0)).ToList();
-        var richActivity = Enumerable.Range(0, 20).Select(i => new ActivityDay(2, DateOnly.FromDateTime(Now.AddDays(-i)), 1, 0)).ToList();
+        var quietThenBurst = DailyViews(1, 2, 27, 1).Concat(DailyViews(1, 0, 1, 8)).ToList();
+        var flat = DailyViews(2, 0, 27, 8);
 
-        var early = PopularityCalculator.Compute(decks, burst.Concat(steady), thinActivity, Now);
-        var later = PopularityCalculator.Compute(decks, burst.Concat(steady), richActivity, Now);
+        var results = PopularityCalculator.Compute(decks, [], quietThenBurst.Concat(flat), Now);
 
-        early[1].IsTrending.Should().BeFalse();
-        later[1].IsTrending.Should().BeTrue();
-        later[2].IsTrending.Should().BeFalse();
+        results[1].IsTrending.Should().BeTrue();
+        results[2].IsTrending.Should().BeFalse();
     }
 
     [Fact]
-    public void New_decks_never_trend()
+    public void Trending_ends_once_the_burst_leaves_the_window()
     {
-        var decks = new[] { Parent(1, Now.AddDays(-3)) };
-        var burst = Enumerable.Range(0, 3).Select(i => new IntentEvent(1, PopularityWeights.Completed, Now.AddDays(-i), $"u{i}")).ToList();
-        var activity = Enumerable.Range(0, 20).Select(i => new ActivityDay(1, DateOnly.FromDateTime(Now.AddDays(-i)), 1, 0)).ToList();
+        var decks = new[] { Parent(1) };
+        var burst = DailyViews(1, 0, 1, 10);
 
-        PopularityCalculator.Compute(decks, burst, activity, Now)[1].IsTrending.Should().BeFalse();
+        PopularityCalculator.Compute(decks, [], burst, Now)[1].IsTrending.Should().BeTrue();
+        PopularityCalculator.Compute(decks, [], burst, Now.AddDays(3))[1].IsTrending.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Steady_popular_decks_need_a_spike_over_their_own_usual()
+    {
+        var decks = new[] { Parent(1) };
+        var usual = DailyViews(1, 2, 27, 30);
+        var mild = usual.Concat(DailyViews(1, 0, 1, 60)).ToList();
+        var spike = usual.Concat(DailyViews(1, 0, 1, 100)).ToList();
+
+        PopularityCalculator.Compute(decks, [], mild, Now)[1].IsTrending.Should().BeFalse();
+        PopularityCalculator.Compute(decks, [], spike, Now)[1].IsTrending.Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_few_people_acting_trend_a_deck_immediately()
+    {
+        var decks = new[] { Parent(1) };
+        var adds = Enumerable.Range(0, 3).Select(i => new IntentEvent(1, PopularityWeights.StudyDeck, Now, $"u{i}")).ToList();
+
+        PopularityCalculator.Compute(decks, adds, [], Now)[1].IsTrending.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Brand_new_decks_can_trend()
+    {
+        var decks = new[] { Parent(1, Now.AddDays(-1)) };
+        var burst = DailyViews(1, 0, 1, 12);
+
+        PopularityCalculator.Compute(decks, [], burst, Now)[1].IsTrending.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Two_visitors_against_an_empty_baseline_do_not_trend()
+    {
+        var decks = new[] { Parent(1) };
+
+        PopularityCalculator.Compute(decks, [], DailyViews(1, 0, 1, 2), Now)[1].IsTrending.Should().BeFalse();
     }
 
     [Fact]
@@ -235,8 +274,8 @@ public class PopularityCalculatorTests
             new IntentEvent(1, PopularityWeights.Favourite, Now, "u1"),
             new IntentEvent(1, PopularityWeights.Download, Now, "u1"),
         };
-        var activity = Enumerable.Range(0, 20).Select(i => new ActivityDay(1, DateOnly.FromDateTime(Now.AddDays(-i)), 1, 0)).ToList();
+        var ownView = DailyViews(1, 0, 1, 1);
 
-        PopularityCalculator.Compute(decks, solo, activity, Now)[1].IsTrending.Should().BeFalse();
+        PopularityCalculator.Compute(decks, solo, ownView, Now)[1].IsTrending.Should().BeFalse();
     }
 }
