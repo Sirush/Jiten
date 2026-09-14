@@ -7,8 +7,6 @@
 
   const isLoading = ref(false);
   const jpdbApiKey = ref('');
-  const importAdditionalReadings = ref(true);
-  const frequencyThreshold = ref(15000);
   const jpdbProgress = ref('');
   const overwriteCardStates = ref(true);
   const reviewsFile = ref<File | null>(null);
@@ -60,21 +58,15 @@
     jpdbProgress.value = 'Fetching user decks...';
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    const response = await client.getFilteredVocabularyIds();
-    const totalWords = response.knownIds.length + response.blacklistedIds.length + response.suspendedIds.length;
+    const cards = await client.getStudiedCards();
 
-    if (totalWords > 0) {
+    if (cards.length > 0) {
       jpdbProgress.value = 'Sending vocabulary to your account...';
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const result = await $api<{ added: number; skipped: number }>('user/vocabulary/import-from-ids', {
         method: 'POST',
-        body: JSON.stringify({
-          wordIds: response.knownIds,
-          blacklistedWordIds: response.blacklistedIds,
-          suspendedWordIds: response.suspendedIds,
-          frequencyThreshold: importAdditionalReadings.value ? frequencyThreshold.value : null,
-        }),
+        body: JSON.stringify({ cards }),
         headers: { 'Content-Type': 'application/json' },
       });
 
@@ -161,19 +153,6 @@
             <InputText id="jpdbApiKey" v-model="jpdbApiKey" class="w-full" type="password" />
             <label for="jpdbApiKey">JPDB API Key</label>
           </span>
-        </div>
-
-        <div class="flex flex-col gap-2">
-          <div class="flex items-center">
-            <Checkbox id="importAdditionalReadings" v-model="importAdditionalReadings" :binary="true" />
-            <label for="importAdditionalReadings" class="ml-2"
-              >Import additional readings within frequency range of the imported reading (only the most frequent reading by default)</label
-            >
-          </div>
-          <div v-if="importAdditionalReadings" class="ml-6 flex items-center gap-2">
-            <label for="frequencyThreshold" class="text-sm">Frequency range:</label>
-            <InputNumber id="frequencyThreshold" v-model="frequencyThreshold" :min="1000" :max="100000" :step="1000" class="w-32" />
-          </div>
         </div>
 
         <div>

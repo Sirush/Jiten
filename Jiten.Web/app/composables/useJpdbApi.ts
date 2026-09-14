@@ -21,10 +21,12 @@ export const useJpdbApi = () => {
     id2: number;
   }
 
-  interface JpdbImportResult {
-    knownIds: number[];
-    blacklistedIds: number[];
-    suspendedIds: number[];
+  type JpdbCardState = 'known' | 'blacklisted' | 'suspended';
+
+  interface JpdbStudiedCard {
+    wordId: number;
+    spelling: string;
+    state: JpdbCardState;
   }
 
   class JpdbApiClient {
@@ -37,28 +39,26 @@ export const useJpdbApi = () => {
       this.apiKey = apiKey;
     }
 
-    async getFilteredVocabularyIds(): Promise<JpdbImportResult> {
+    async getStudiedCards(): Promise<JpdbStudiedCard[]> {
       try {
         const deckIds = await this.getUserDecks();
         deckIds.push('never-forget');
         deckIds.push('blacklist');
 
-        const allVocabulary: VocabularyIdPair[] = [];
+        const seen = new Set<string>();
+        const uniqueVocab: VocabularyIdPair[] = [];
         for (const deckId of deckIds) {
-          const deckVocabulary = await this.getDeckVocabulary(deckId);
-          allVocabulary.push(...deckVocabulary);
+          for (const vocab of await this.getDeckVocabulary(deckId)) {
+            const key = `${vocab.id1}:${vocab.id2}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            uniqueVocab.push(vocab);
+          }
         }
 
-        const uniqueVocab = allVocabulary.reduce((acc, vocab) => {
-          if (!acc.find((v) => v.id1 === vocab.id1)) {
-            acc.push(vocab);
-          }
-          return acc;
-        }, [] as VocabularyIdPair[]);
-
-        return await this.lookupAndFilterVocabulary(uniqueVocab);
+        return await this.lookupStudiedCards(uniqueVocab);
       } catch (error) {
-        throw new Error(`Error getting filtered vocabulary IDs: ${error}`);
+        throw new Error(`Error getting studied cards: ${error}`);
       }
     }
 
@@ -99,17 +99,16 @@ export const useJpdbApi = () => {
       return vocabularyPairs;
     }
 
-    private async lookupAndFilterVocabulary(vocabularyPairs: VocabularyIdPair[]): Promise<JpdbImportResult> {
+    private async lookupStudiedCards(vocabularyPairs: VocabularyIdPair[]): Promise<JpdbStudiedCard[]> {
       const chunkSize = 2500;
       const knownStates = new Set(['never-forget', 'known']);
-      const result: JpdbImportResult = { knownIds: [], blacklistedIds: [], suspendedIds: [] };
+      const result: JpdbStudiedCard[] = [];
 
       for (let i = 0; i < vocabularyPairs.length; i += chunkSize) {
         const chunk = vocabularyPairs.slice(i, i + chunkSize);
-        const lookupList = chunk.map((vp) => [vp.id1, vp.id2]);
         const requestBody = {
-          list: lookupList,
-          fields: ['vid', 'card_level', 'card_state'],
+          list: chunk.map((vp) => [vp.id1, vp.id2]),
+          fields: ['vid', 'spelling', 'card_state'],
         };
 
         const response = await this.makeApiRequest('https://jpdb.io/api/v1/lookup-vocabulary', requestBody);
@@ -118,18 +117,20 @@ export const useJpdbApi = () => {
           for (const vocabInfo of response.vocabulary_info) {
             if (!Array.isArray(vocabInfo) || vocabInfo.length < 3) continue;
 
-            const id = vocabInfo[0];
+            const wordId = vocabInfo[0];
+            const spelling = vocabInfo[1];
             const states = vocabInfo[2];
 
-            if (!Array.isArray(states)) continue;
+            if (typeof spelling !== 'string' || !Array.isArray(states)) continue;
+            // JPDB flags a spelling as redundant when another spelling of the same word is the studied one
+            if (states.includes('redundant')) continue;
 
-            if (states.some((s: string) => s === 'blacklisted')) {
-              result.blacklistedIds.push(id);
-            } else if (states.some((s: string) => s === 'suspended')) {
-              result.suspendedIds.push(id);
-            } else if (states.some((s: string) => knownStates.has(s))) {
-              result.knownIds.push(id);
-            }
+            let state: JpdbCardState | null = null;
+            if (states.includes('blacklisted')) state = 'blacklisted';
+            else if (states.includes('suspended')) state = 'suspended';
+            else if (states.some((s: string) => knownStates.has(s))) state = 'known';
+
+            if (state) result.push({ wordId, spelling, state });
           }
         }
       }

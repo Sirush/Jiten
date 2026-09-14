@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
@@ -797,7 +797,7 @@ public class CardArchiveTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task JpdbImport_ArchivesTheHistoryOfAFormItSkipsAsRedundant()
     {
-        var response = await ImportJpdb(("飲む", 2), ("のむ", 3));
+        var response = await ImportJpdb(("飲む", 5), ("のむ", 3));
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -822,10 +822,10 @@ public class CardArchiveTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task JpdbImport_ReimportingTheSameFileLeavesTheArchivedHistoryUnchanged()
     {
-        await ImportJpdb(("飲む", 2), ("のむ", 3));
+        await ImportJpdb(("飲む", 5), ("のむ", 3));
         var first = (await Archives()).Single();
 
-        (await ImportJpdb(("飲む", 2), ("のむ", 3))).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ImportJpdb(("飲む", 5), ("のむ", 3))).StatusCode.Should().Be(HttpStatusCode.OK);
 
         var archives = await Archives();
         archives.Should().ContainSingle();
@@ -839,7 +839,7 @@ public class CardArchiveTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task JpdbImport_ASecondFileWithLaterReviewsGrowsTheSameArchiveRow()
     {
-        await ImportJpdb(("飲む", 2), ("のむ", 3));
+        await ImportJpdb(("飲む", 5), ("のむ", 3));
 
         var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/user/vocabulary/import-jpdb-reviews")
                                                .WithUser(TestUsers.UserA)
@@ -847,7 +847,7 @@ public class CardArchiveTests(JitenWebApplicationFactory factory)
                                                                 {
                                                                     cards = new[]
                                                                             {
-                                                                                JpdbCard("飲む", 0, 2),
+                                                                                JpdbCard("飲む", 0, 5),
                                                                                 JpdbCard("のむ", 0, 3),
                                                                                 JpdbCard("のむ", 10, 2)
                                                                             }
@@ -866,7 +866,7 @@ public class CardArchiveTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task JpdbImport_RestoresTheArchivedHistoryWhenTheFormIsNoLongerRedundant()
     {
-        await ImportJpdb(("飲む", 2), ("のむ", 3));
+        await ImportJpdb(("飲む", 5), ("のむ", 3));
 
         using (var scope = factory.Services.CreateScope())
         {
@@ -888,9 +888,88 @@ public class CardArchiveTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task JpdbImport_KeepsAKanaFormWithMoreHistoryThanItsKanjiSibling()
+    {
+        var response = await ImportJpdb(("飲む", 1), ("のむ", 5));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+        payload.GetProperty("archivedRedundant").GetInt32().Should().Be(0);
+        payload.GetProperty("skipped").GetInt32().Should().Be(0);
+
+        (await Archives()).Should().BeEmpty();
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var live = await userDb.FsrsCards.Include(c => c.ReviewLogs)
+                               .Where(c => c.UserId == TestUsers.UserA).OrderBy(c => c.ReadingIndex).ToListAsync();
+        live.Should().HaveCount(2, "the studied kana form is not thrown away for a barely reviewed kanji form");
+        live[1].ReadingIndex.Should().Be(1);
+        live[1].ReviewLogs.Should().HaveCount(5);
+    }
+
+    [Fact]
+    public async Task JpdbImport_ArchivesAKanaFormWhenTheKanjiSiblingHasAsMuchHistory()
+    {
+        (await ImportJpdb(("飲む", 3), ("のむ", 3))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await Archives()).Should().ContainSingle().Which.ReadingIndex.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ImportingKnownWords_WithASpelling_MarksOnlyThatForm()
+    {
+        (await ImportKnownCards(("のむ", "known"))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var live = await userDb.FsrsCards.Where(c => c.UserId == TestUsers.UserA).ToListAsync();
+        var card = live.Should().ContainSingle().Which;
+        card.ReadingIndex.Should().Be(1, "JPDB said the kana spelling is the studied one");
+        card.State.Should().Be(FsrsState.Mastered);
+    }
+
+    [Fact]
+    public async Task ImportingKnownWords_WithAKanjiSpelling_LeavesTheKanaFormAlone()
+    {
+        (await ImportKnownCards(("飲む", "known"))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var live = await userDb.FsrsCards.Where(c => c.UserId == TestUsers.UserA).ToListAsync();
+        live.Should().ContainSingle().Which.ReadingIndex.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ImportingKnownWords_WithBothSpellings_KeepsOnlyTheKanjiCard()
+    {
+        (await ImportKnownCards(("飲む", "known"), ("のむ", "known"))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await Archives()).Should().BeEmpty("neither form carries history");
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var live = await userDb.FsrsCards.Where(c => c.UserId == TestUsers.UserA).ToListAsync();
+        live.Should().ContainSingle().Which.ReadingIndex.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ImportingKnownWords_WithASpellingJmdictLacks_FallsBackToTheMainForm()
+    {
+        (await ImportKnownCards(("呑む", "blacklisted"))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var live = await userDb.FsrsCards.Where(c => c.UserId == TestUsers.UserA).ToListAsync();
+        var card = live.Should().ContainSingle().Which;
+        card.ReadingIndex.Should().Be(0);
+        card.State.Should().Be(FsrsState.Blacklisted);
+    }
+
+    [Fact]
     public async Task BackupImport_ArchivesTheHistoryOfAFormTheFileItselfMakesRedundant()
     {
-        await SeedCard(900, 0, FsrsState.Review, 2);
+        await SeedCard(900, 0, FsrsState.Review, 6);
         await SeedCard(900, 1, FsrsState.Review, 5);
 
         var export = await (await _client.SendAsync(
@@ -1105,6 +1184,11 @@ public class CardArchiveTests(JitenWebApplicationFactory factory)
                                                     grade = "okay"
                                                 })
            };
+
+    private Task<HttpResponseMessage> ImportKnownCards(params (string Spelling, string State)[] cards)
+        => _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/user/vocabulary/import-from-ids")
+                             .WithUser(TestUsers.UserA)
+                             .WithJsonContent(new { cards = cards.Select(c => new { wordId = 900, spelling = c.Spelling, state = c.State }) }));
 
     private Task<HttpResponseMessage> ImportKnownWords(params int[] wordIds)
         => _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/user/vocabulary/import-from-ids")

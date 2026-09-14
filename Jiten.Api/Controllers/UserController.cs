@@ -319,7 +319,8 @@ public partial class UserController(
     }
 
     /// <summary>
-    /// Add known words for the current user by JMdict word IDs, filtered by reading frequency.
+    /// Add known words for the current user. Per-spelling cards mark only the studied form; bare word IDs fall back
+    /// to the most frequent form, widened by <c>FrequencyThreshold</c>.
     /// </summary>
     [HttpPost("vocabulary/import-from-ids")]
     public async Task<IResult> ImportWordsFromIds([FromBody] ImportFromIdsRequest request)
@@ -330,8 +331,11 @@ public partial class UserController(
         var knownIds = (request.WordIds ?? []).Where(id => id > 0).Distinct().ToList();
         var blacklistedIds = (request.BlacklistedWordIds ?? []).Where(id => id > 0).Distinct().ToList();
         var suspendedIds = (request.SuspendedWordIds ?? []).Where(id => id > 0).Distinct().ToList();
+        var cards = (request.Cards ?? [])
+                    .Where(c => c.WordId is > 0 and <= int.MaxValue && ParseImportState(c.State) != null)
+                    .ToList();
 
-        var allIds = knownIds.Union(blacklistedIds).Union(suspendedIds).ToList();
+        var allIds = knownIds.Union(blacklistedIds).Union(suspendedIds).Union(cards.Select(c => c.WordId)).ToList();
         if (allIds.Count == 0) return Results.BadRequest("No word IDs provided");
 
         var jmdictWords = await jitenContext.JMDictWords
@@ -342,6 +346,7 @@ public partial class UserController(
         if (jmdictWords.Count == 0) return Results.BadRequest("Invalid words provided");
 
         var jmdictWordIds = jmdictWords.Select(w => w.WordId).ToList();
+        var jmdictWordIdSet = jmdictWordIds.ToHashSet();
 
         var formFrequencies = await jitenContext.WordFormFrequencies
                                                 .AsNoTracking()
@@ -351,44 +356,60 @@ public partial class UserController(
             .GroupBy(wff => wff.WordId)
             .ToDictionary(g => g.Key, g => g.OrderBy(wff => wff.ReadingIndex).ToList());
 
+        var cardWordIds = cards.Select(c => (int)c.WordId).Distinct().ToList();
+        var formsByWord = cardWordIds.Count == 0
+            ? new Dictionary<int, List<JmDictWordForm>>()
+            : (await jitenContext.WordForms
+                                 .AsNoTracking()
+                                 .Where(wf => cardWordIds.Contains(wf.WordId))
+                                 .ToListAsync())
+              .GroupBy(wf => wf.WordId)
+              .ToDictionary(g => g.Key, g => g.ToList());
+
         var alreadyKnown = await userContext.FsrsCards
                                             .AsNoTracking()
                                             .Where(uk => uk.UserId == userId && jmdictWordIds.Contains(uk.WordId))
                                             .ToListAsync();
+        var alreadyKnownSet = alreadyKnown.Select(uk => (uk.WordId, uk.ReadingIndex)).ToHashSet();
 
-        List<FsrsCard> toInsert = new();
-        var alreadyKnownSet = alreadyKnown.Select(uk => (uk.WordId, (int)uk.ReadingIndex)).ToHashSet();
         var blacklistedSet = blacklistedIds.ToHashSet();
         var suspendedSet = suspendedIds.ToHashSet();
 
-        var allImportCardKeys = new HashSet<(int WordId, byte ReadingIndex)>();
-        foreach (var word in jmdictWords)
-        {
-            var indices = GetReadingIndicesToImport(formFreqsByWord.GetValueOrDefault(word.WordId), request.FrequencyThreshold);
-            foreach (var i in indices)
-                allImportCardKeys.Add((word.WordId, (byte)i));
-        }
-        foreach (var k in alreadyKnownSet)
-            allImportCardKeys.Add((k.WordId, (byte)k.Item2));
+        var targets = new Dictionary<(int WordId, byte ReadingIndex), FsrsState>();
 
         foreach (var word in jmdictWords)
         {
-            var wordFormFreqs = formFreqsByWord.GetValueOrDefault(word.WordId);
-            var readingIndicesToImport = GetReadingIndicesToImport(wordFormFreqs, request.FrequencyThreshold);
+            if (!knownIds.Contains(word.WordId) && !blacklistedSet.Contains(word.WordId) && !suspendedSet.Contains(word.WordId))
+                continue;
 
             var state = blacklistedSet.Contains(word.WordId) ? FsrsState.Blacklisted
                       : suspendedSet.Contains(word.WordId)   ? FsrsState.Suspended
                       : FsrsState.Mastered;
 
-            foreach (var i in readingIndicesToImport)
-            {
-                if (alreadyKnownSet.Contains((word.WordId, i)))
-                    continue;
-
-                toInsert.Add(new FsrsCard(userId, word.WordId, (byte)i, due: DateTime.UtcNow, lastReview: DateTime.UtcNow,
-                                          state: state));
-            }
+            foreach (var i in GetReadingIndicesToImport(formFreqsByWord.GetValueOrDefault(word.WordId), request.FrequencyThreshold))
+                AddImportTarget(targets, (word.WordId, (byte)i), state);
         }
+
+        foreach (var card in cards)
+        {
+            var wordId = (int)card.WordId;
+            if (!jmdictWordIdSet.Contains(wordId))
+                continue;
+
+            var readingIndex = formsByWord.TryGetValue(wordId, out var forms) && forms.Any(f => f.Text == card.Spelling)
+                ? ResolveReadingIndex(forms, card.Spelling)
+                : (byte)GetReadingIndicesToImport(formFreqsByWord.GetValueOrDefault(wordId), null)[0];
+
+            AddImportTarget(targets, (wordId, readingIndex), ParseImportState(card.State)!.Value);
+        }
+
+        var allImportCardKeys = targets.Keys.Concat(alreadyKnownSet).ToHashSet();
+
+        var toInsert = targets
+                       .Where(t => !alreadyKnownSet.Contains(t.Key))
+                       .Select(t => new FsrsCard(userId, t.Key.WordId, t.Key.ReadingIndex, due: DateTime.UtcNow,
+                                                 lastReview: DateTime.UtcNow, state: t.Value))
+                       .ToList();
 
         var redundantIds = await WordFormHelper.ArchiveRedundantImportCards(
             userContext, wordFormCache, userId, toInsert, allImportCardKeys, _ => []);
@@ -412,6 +433,29 @@ public partial class UserController(
                               userId, toInsert.Count, alreadyKnown.Count, pruned);
         return Results.Ok(new { added = toInsert.Count, skipped = alreadyKnown.Count, pruned });
     }
+
+    /// <summary>Blacklisted beats Suspended beats Mastered when the same form arrives with several states.</summary>
+    private static void AddImportTarget(Dictionary<(int WordId, byte ReadingIndex), FsrsState> targets,
+                                        (int WordId, byte ReadingIndex) key, FsrsState state)
+    {
+        if (!targets.TryGetValue(key, out var existing) || ImportStateRank(state) > ImportStateRank(existing))
+            targets[key] = state;
+    }
+
+    private static int ImportStateRank(FsrsState state) => state switch
+    {
+        FsrsState.Blacklisted => 2,
+        FsrsState.Suspended => 1,
+        _ => 0
+    };
+
+    private static FsrsState? ParseImportState(string state) => state switch
+    {
+        "known" => FsrsState.Mastered,
+        "blacklisted" => FsrsState.Blacklisted,
+        "suspended" => FsrsState.Suspended,
+        _ => null
+    };
 
     private static List<int> GetReadingIndicesToImport(
         List<JmDictWordFormFrequency>? formFreqs,

@@ -111,7 +111,8 @@ public static class WordFormHelper
         IReadOnlyList<FsrsCard> candidates, HashSet<(int WordId, byte ReadingIndex)> collectionKeys,
         Func<FsrsCard, IReadOnlyList<PackedReview>> historyOf, FsrsScheduler? scheduler = null)
     {
-        var redundant = FindRedundantImportCards(cache, candidates, GroupCardKeysByWord(collectionKeys));
+        var historyCounts = await LoadCollectionHistoryCounts(userContext, userId, candidates, historyOf);
+        var redundant = FindRedundantImportCards(cache, candidates, GroupCardKeysByWord(collectionKeys), historyCounts);
         if (redundant.Count == 0)
             return new RedundantImportResult(redundant, 0);
 
@@ -148,12 +149,41 @@ public static class WordFormHelper
                   .ToList();
 
     /// <summary>
+    /// Review count of every form in the import's collection: incoming history for candidates, stored logs for the
+    /// caller's live cards on the same words.
+    /// </summary>
+    private static async Task<Dictionary<(int WordId, byte ReadingIndex), int>> LoadCollectionHistoryCounts(
+        UserDbContext userContext, string userId, IReadOnlyList<FsrsCard> candidates,
+        Func<FsrsCard, IReadOnlyList<PackedReview>> historyOf)
+    {
+        var counts = new Dictionary<(int WordId, byte ReadingIndex), int>();
+        if (candidates.Count == 0)
+            return counts;
+
+        var wordIds = candidates.Select(c => c.WordId).Distinct().ToList();
+        var live = await userContext.FsrsCards
+                                    .AsNoTracking()
+                                    .Where(c => c.UserId == userId && wordIds.Contains(c.WordId))
+                                    .Select(c => new { c.CardId, c.WordId, c.ReadingIndex })
+                                    .ToListAsync();
+        var liveCounts = await LoadReviewCounts(userContext, live.Select(c => c.CardId).ToList());
+        foreach (var c in live)
+            counts[(c.WordId, c.ReadingIndex)] = liveCounts.GetValueOrDefault(c.CardId);
+
+        foreach (var card in candidates)
+            counts[(card.WordId, card.ReadingIndex)] = historyOf(card).Count;
+
+        return counts;
+    }
+
+    /// <summary>
     /// The dominating sibling present in <paramref name="cardKeysByWord"/> that makes this form redundant, or
-    /// null if none is
+    /// null if none is. A sibling with fewer reviews than the form never covers it: the studied form wins.
     /// </summary>
     private static byte? FindCoveringIndex(
         IWordFormSiblingCache cache, int wordId, byte readingIndex,
         Dictionary<int, List<byte>> cardKeysByWord,
+        Dictionary<(int WordId, byte ReadingIndex), int> historyCounts,
         HashSet<(int WordId, byte ReadingIndex)>? excluded = null)
     {
         var dominators = cache.GetKanjiIndexesForKana(wordId, readingIndex);
@@ -162,10 +192,14 @@ public static class WordFormHelper
         if (!cardKeysByWord.TryGetValue(wordId, out var siblings))
             return null;
 
+        var ownHistory = historyCounts.GetValueOrDefault((wordId, readingIndex));
+
         byte? covering = null;
         foreach (var ri in siblings)
         {
             if (!dominators.Contains(ri) || excluded?.Contains((wordId, ri)) == true)
+                continue;
+            if (historyCounts.GetValueOrDefault((wordId, ri)) < ownHistory)
                 continue;
             if (covering == null || ri < covering)
                 covering = ri;
@@ -179,14 +213,15 @@ public static class WordFormHelper
     /// paired with that sibling
     /// </summary>
     private static Dictionary<FsrsCard, byte> FindRedundantImportCards(
-        IWordFormSiblingCache cache, IEnumerable<FsrsCard> cards, Dictionary<int, List<byte>> cardKeysByWord)
+        IWordFormSiblingCache cache, IEnumerable<FsrsCard> cards, Dictionary<int, List<byte>> cardKeysByWord,
+        Dictionary<(int WordId, byte ReadingIndex), int> historyCounts)
     {
         var redundant = new Dictionary<FsrsCard, byte>();
         var dropped = new HashSet<(int WordId, byte ReadingIndex)>();
 
         foreach (var card in cards.OrderBy(c => c.WordId).ThenBy(c => c.ReadingIndex))
         {
-            var covering = FindCoveringIndex(cache, card.WordId, card.ReadingIndex, cardKeysByWord, dropped);
+            var covering = FindCoveringIndex(cache, card.WordId, card.ReadingIndex, cardKeysByWord, historyCounts, dropped);
             if (covering == null)
                 continue;
 
