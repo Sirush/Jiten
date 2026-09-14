@@ -367,6 +367,10 @@
     () => srsStore.lastReviewError,
     (err) => {
       if (!err) return;
+      if (err.dropped) {
+        toast.add({ severity: 'warn', summary: 'Card removed from this session', detail: `“${err.wordText}” is suspended or blacklisted and can no longer be reviewed.`, life: 6000 });
+        return;
+      }
       toast.add({ severity: 'error', summary: 'Review not saved due to an error', detail: `“${err.wordText}” will be shown again.`, life: 5000 });
     }
   );

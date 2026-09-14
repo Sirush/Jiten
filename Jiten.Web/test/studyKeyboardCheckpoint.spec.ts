@@ -10,6 +10,7 @@ vi.stubGlobal('computed', computed);
 vi.stubGlobal('watch', watch);
 vi.stubGlobal('readonly', readonly);
 vi.stubGlobal('trackActivation', () => {});
+vi.stubGlobal('trackEvent', () => {});
 class NotAnInput {
   readonly stub = true;
 }
