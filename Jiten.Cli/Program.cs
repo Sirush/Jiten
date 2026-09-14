@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using CommandLine;
 using Jiten.Cli;
 using Jiten.Cli.Commands;
@@ -47,6 +47,22 @@ public class Program
         var rubyExtractCommands = new RubyExtractCommands(context);
         var webNovelCommands = new WebNovelCommands();
         var youTubeCommands = new YouTubeCommands(context);
+        var dictDiffCommands = new DictDiffCommands(context);
+
+        if (!string.IsNullOrEmpty(options.DictDiff))
+        {
+            await dictDiffCommands.RunFullFlow(options, importCommands);
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(options.DictDiffReport))
+        {
+            if (string.IsNullOrEmpty(options.DictDiffBefore) || string.IsNullOrEmpty(options.DictDiffAfter))
+                Console.WriteLine("--dict-diff-report needs --dict-diff-before and --dict-diff-after.");
+            else
+                await dictDiffCommands.WriteReport(options.DictDiffBefore, options.DictDiffAfter, options.DictDiffReport);
+            return;
+        }
 
         if (!string.IsNullOrEmpty(options.YtTest))
         {
@@ -115,19 +131,26 @@ public class Program
             await importCommands.ImportVocabularyOrigin(options);
         }
 
-        if (!string.IsNullOrEmpty(options.SyncJMNedict))
-        {
-            await importCommands.SyncJMNedict(options);
-        }
-
         if (options.SyncJmDict)
         {
             await importCommands.SyncJmDict(options);
         }
 
+        // JMnedict runs after JMdict: both rewrite the name entries JMdict shares with JMnedict, and name-type POS must win.
+        if (!string.IsNullOrEmpty(options.SyncJMNedict))
+        {
+            await importCommands.SyncJMNedict(options);
+        }
+
         if (options.BuildDerivations)
         {
             await importCommands.BuildDerivations(options);
+        }
+
+        if (options.MigrateMovedForms)
+        {
+            var moved = await Jiten.Core.Data.JMDict.MovedFormMigrator.Run(context.ContextFactory, options.DryRun, options.Output);
+            Jiten.Core.Data.JMDict.MovedFormMigrator.PrintSummary(moved, options.DryRun);
         }
 
         if (options.CompareJMDict)
@@ -260,6 +283,11 @@ public class Program
         if (options.WarmJmDictCache)
         {
             await diagnosticCommands.WarmJmDictCache();
+        }
+
+        if (!string.IsNullOrEmpty(options.DictDiffSnapshot))
+        {
+            await dictDiffCommands.TakeSnapshot(options);
         }
 
         if (options.WarmupTts > 0)

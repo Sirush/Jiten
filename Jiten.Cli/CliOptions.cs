@@ -1,4 +1,4 @@
-using CommandLine;
+﻿using CommandLine;
 
 namespace Jiten.Cli;
 
@@ -131,6 +131,9 @@ public class CliOptions
     [Option(longName: "sync-jmdict", Required = false, HelpText = "Sync JMDict metadata on WordForms and Definitions from XML source.")]
     public bool SyncJmDict { get; set; }
 
+    [Option(longName: "migrate-moved-forms", Required = false, HelpText = "Follow JMdict forms that moved to another entry: remove the old entry's lookups for them and copy frequency ranks to the new entry. Runs automatically inside --sync-jmdict; combine with --dry-run and --output to preview.")]
+    public bool MigrateMovedForms { get; set; }
+
     [Option(longName: "skip-kanji-rebuild", Required = false,
             HelpText = "Skip the WordKanji/KanjiReadingWords rebuild that normally closes a JMDict sync.")]
     public bool SkipKanjiRebuild { get; set; }
@@ -247,6 +250,24 @@ public class CliOptions
 
     [Option(longName: "export-ml-tags", Required = false, HelpText = "Export genre/tag labels and raw text for ML training to the specified output directory.")]
     public string? ExportMlTags { get; set; }
+
+    [Option(longName: "dict-diff", Required = false, HelpText = "Dictionary update harness: snapshot the parse of --dict-diff-decks, run the JMnedict + JMdict sync (needs --xml, --dic, --furi, --sync-jmnedict), snapshot again and write report.html into this directory.")]
+    public string? DictDiff { get; set; }
+
+    [Option(longName: "dict-diff-decks", Required = false, HelpText = "Comma-separated deck ids forming the dict-diff corpus (parent decks expand to their children).")]
+    public string? DictDiffDecks { get; set; }
+
+    [Option(longName: "dict-diff-snapshot", Required = false, HelpText = "Parse --dict-diff-decks and write a dict-diff snapshot (parse output + dictionary forms) to this JSON path. Runs after --flush-redis and --warm-jmdict-cache when combined.")]
+    public string? DictDiffSnapshot { get; set; }
+
+    [Option(longName: "dict-diff-report", Required = false, HelpText = "Write the dict-diff HTML report to this path from --dict-diff-before and --dict-diff-after snapshots.")]
+    public string? DictDiffReport { get; set; }
+
+    [Option(longName: "dict-diff-before", Required = false, HelpText = "Snapshot taken before the dictionary sync (for --dict-diff-report).")]
+    public string? DictDiffBefore { get; set; }
+
+    [Option(longName: "dict-diff-after", Required = false, HelpText = "Snapshot taken after the dictionary sync (for --dict-diff-report).")]
+    public string? DictDiffAfter { get; set; }
 
     [Option(longName: "benchmark", Required = false, HelpText = "Run benchmark on txt files in a directory.")]
     public string? Benchmark { get; set; }

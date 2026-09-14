@@ -20,6 +20,9 @@ using WanaKanaShaapu;
 
 namespace Jiten.Parser
 {
+    /// <summary>One resolved token in text order, before per-deck deduplication into DeckWords.</summary>
+    public sealed record ParsedOccurrence(int WordId, byte ReadingIndex, string Surface);
+
     public static class Parser
     {
         public static bool RubyPriorsEnabled
@@ -97,7 +100,7 @@ namespace Jiten.Parser
             (1592150, 2), (1467040, 6), (1311350, 1), (1175280, 1), (1578150, 4), (2029650, 0),
             (1154770, 1), (1401940, 2), (2264280,0), (2264280, 1), (1323350, 2), (1950890, 2),
             (1429010, 1), (2871946, 0), (2871946, 1), (2872080, 0), (2872080, 1),
-            (1583240, 5), (2619520, 0)
+            (1583240, 5), (2619520, 0), (1319210, 8)
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -842,7 +845,8 @@ namespace Jiten.Parser
                                                               MediaType mediatype = MediaType.Novel,
                                                               ParserDiagnostics? diagnostics = null,
                                                               BenchmarkTimings? timings = null,
-                                                              List<DeckDictionaryEntry>? dictionaryEntries = null)
+                                                              List<DeckDictionaryEntry>? dictionaryEntries = null,
+                                                              List<List<ParsedOccurrence>>? occurrenceSink = null)
         {
             if (texts.Count == 0) return [];
 
@@ -899,7 +903,7 @@ namespace Jiten.Parser
                     ? FuriganaHintExtractor.RelocateToCleanedOriginal(coFlat, hintsByText[textIndex], cleanTexts[textIndex])
                     : null;
 
-                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, timings, dictionaryEntriesBySurface, relocated, rawCharCounts[textIndex], diagnostics);
+                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, timings, dictionaryEntriesBySurface, relocated, rawCharCounts[textIndex], diagnostics, occurrenceSink);
                 decks.Add(deck);
                 batchedSentences[textIndex] = null!;
             }
@@ -922,7 +926,8 @@ namespace Jiten.Parser
             Dictionary<string, DeckDictionaryEntry>? dictionaryEntriesBySurface = null,
             FuriganaHint[]? relocatedHints = null,
             int? rawContentCharCount = null,
-            ParserDiagnostics? diagnostics = null)
+            ParserDiagnostics? diagnostics = null,
+            List<List<ParsedOccurrence>>? occurrenceSink = null)
         {
             var sw = timings != null ? Stopwatch.StartNew() : null;
 
@@ -1001,6 +1006,14 @@ namespace Jiten.Parser
             var processedWords = processedList.ToArray();
 
             processedWords = ExcludeFinalMisparses(processedWords, diagnostics).ToArray();
+
+            if (occurrenceSink != null)
+            {
+                var kept = new HashSet<(int, byte)>(processedWords.Select(w => (w.WordId, w.ReadingIndex)));
+                occurrenceSink.Add(corrected.Where(x => kept.Contains((x.WordId, x.ReadingIndex)))
+                                          .Select(x => new ParsedOccurrence(x.WordId, x.ReadingIndex, x.OriginalText))
+                                          .ToList());
+            }
 
             List<ExampleSentence>? exampleSentences = null;
 
@@ -5732,6 +5745,7 @@ namespace Jiten.Parser
                     WordInfo? nextInfo = i < sentenceWords.Count - 1 ? sentenceWords[i + 1].word : null;
                     bool nextIsCopula = nextInfo != null && TransitionRuleSets.CopulaForms.Contains(nextInfo.Text);
                     bool nextIsForwardAnchor = nextInfo != null && TransitionRuleSets.ForwardAnchorSurfaces.Contains(nextInfo.Text);
+                    bool prevNominalTarget = i > 0 && TransitionRuleSets.PrevNominalBoostSurfaces.Contains(currentInfo.Text);
 
                     // A token with a counter homograph right after numeric material (第二|話) must stay
                     // rescorable even on a confident first pass — only pass 2's numeral-counter
@@ -5767,14 +5781,14 @@ namespace Jiten.Parser
                     bool sentenceFinalVerb = i == sentenceWords.Count - 1
                         && currentResult.PartsOfSpeech.Any(p => p is PartOfSpeech.Verb);
 
-                    if (!isArchaicPass1 && !nextIsCopula && !nextIsForwardAnchor && !prevNumericCounter && !hasHint && !infinitiveAfterNominal && !sentenceFinalVerb
+                    if (!isArchaicPass1 && !nextIsCopula && !nextIsForwardAnchor && !prevNominalTarget && !prevNumericCounter && !hasHint && !infinitiveAfterNominal && !sentenceFinalVerb
                         && ScoringPolicy.IsHighConfidence(currentMargin))
                     {
                         Interlocked.Increment(ref ParserCounters.AdjHighConfidenceSkips);
                         continue;
                     }
 
-                    bool forceRederive = hasHint || nextIsForwardAnchor || prevNumericCounter || ScoringPolicy.IsLowConfidence(currentMargin);
+                    bool forceRederive = hasHint || nextIsForwardAnchor || prevNominalTarget || prevNumericCounter || ScoringPolicy.IsLowConfidence(currentMargin);
 
                     if (!forceRederive)
                         for (int k = Math.Max(0, i - 3); k < i; k++)
@@ -6005,6 +6019,23 @@ namespace Jiten.Parser
                         }
                     }
 
+                    // Backward-nominal disambiguation: a nominal on the left selects the enumerating
+                    // homograph (NといいNといい) over the predicate-following one.
+                    Dictionary<int, int>? prevNominalMap = null;
+                    if (prevResult != null
+                        && TransitionRuleSets.PrevNominalBoostSurfaces.Contains(currentInfo.Text)
+                        && prevResult.PartsOfSpeech.Any(p => PosMask.Has(PosMask.NounLike, PosMask.Bit(p))))
+                    {
+                        foreach (var (targetWordId, boost) in TransitionRuleSets.PrevNominalBoosts)
+                        {
+                            if (boost.Surface != currentInfo.Text) continue;
+                            collocMap ??= new Dictionary<int, int>();
+                            prevNominalMap ??= new Dictionary<int, int>();
+                            collocMap[targetWordId] = collocMap.GetValueOrDefault(targetWordId) + boost.Bonus;
+                            prevNominalMap[targetWordId] = boost.Bonus;
+                        }
+                    }
+
                     // Copula can only follow nominals — clear the POS-incompatibility flag so
                     // noun candidates can receive their grammatical bonus from noun-copula-synergy.
                     if (nextIsCopula)
@@ -6041,7 +6072,8 @@ namespace Jiten.Parser
                         int effectiveRubyBonus = collocMap != null ? 0 : rubyContextBonus;
                         int bonus = AdjacentWordScorer.CalculateContextBonus(candidate, context, rules) + collocBonus + effectiveRubyBonus + furiganaBonus;
                         if (collocBonus != 0)
-                            (rules ??= []).Add("noun-verb-collocation");
+                            (rules ??= []).Add(prevNominalMap != null && prevNominalMap.ContainsKey(candidate.Word.WordId)
+                                                   ? "prev-nominal-boost" : "noun-verb-collocation");
                         if (furiganaBonus != 0)
                             (rules ??= []).Add($"furigana-hint:{matchingHint!.Value.Reading}");
                         bonusCache[candidate] = (bonus, rules, rubyContextBonus);

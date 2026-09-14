@@ -1,4 +1,4 @@
-using Jiten.Core;
+﻿using Jiten.Core;
 using Jiten.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -50,6 +50,11 @@ public class FormSelectionTests
         // 一分 before 前/後 is the time reading いっぷん (one minute, 1166290 RI1), not the
         // news-ranked いちぶ (one tenth, 1166270) the priority scorer defaults to.
         yield return ["一分前の会話を再開した", "一分", 1166290, (byte)1];
+
+        // NといいNといい after a nominal is the enumerating "both N and N" (2844736), not the
+        // priority-marked sentence-final wish "(I) hope that" (2872982), which follows a predicate.
+        yield return ["小島洋子といい、なんでまたうしろの少女の事ばかり聞いてくるんじゃ？", "といい", 2844736, (byte)1];
+        yield return ["今日も楽しいといい", "といい", 2872982, (byte)1];
         yield return ["約一分後におじさんが戻ってきた", "一分", 1166290, (byte)1];
 
         // 改 standalone before と呼ぶ is the on-reading かい (2019230), a noun/title — not the
