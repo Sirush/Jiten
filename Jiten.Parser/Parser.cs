@@ -2741,8 +2741,10 @@ namespace Jiten.Parser
         /// <summary>
         /// Direct lookup variant keyed by (surface, reading)
         /// </summary>
+        /// <summary>Resolves (surface, reading) pairs; a reading may list alternatives separated by ; , 、 or /. Surfaces found in the dictionary at all are added to <paramref name="surfacesInDictionary"/>.</summary>
         public static async Task<Dictionary<(string Word, string Reading), DeckWord>> GetWordsDirectLookupByReading(
-            IDbContextFactory<JitenDbContext> contextFactory, List<(string Word, string Reading)> pairs)
+            IDbContextFactory<JitenDbContext> contextFactory, List<(string Word, string Reading)> pairs,
+            ISet<string>? surfacesInDictionary = null)
         {
             await EnsureInitializedAsync(contextFactory);
 
@@ -2754,6 +2756,7 @@ namespace Jiten.Parser
                 var key = (word, reading ?? "");
                 if (result.ContainsKey(key)) continue;
                 if (!candidates.TryGetValue(word, out var matches)) continue;
+                surfacesInDictionary?.Add(word);
 
                 var best = PickBestDirectLookupMatch(matches, formFrequencies, reading, requireReadingMatch: true);
                 if (best == null) continue;
@@ -2833,10 +2836,13 @@ namespace Jiten.Parser
 
             if (!string.IsNullOrWhiteSpace(readingHint))
             {
-                var hintHira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(readingHint, convertLongVowelMark: false));
-                var byReading = matches.Where(m => WordHasKanaReading(m.match, hintHira)).ToList();
-                if (byReading.Count > 0)
-                    return byReading.OrderBy(FreqRank).First();
+                foreach (var hint in readingHint.Split(ReadingHintSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var hintHira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(hint, convertLongVowelMark: false));
+                    var byReading = matches.Where(m => WordHasKanaReading(m.match, hintHira)).ToList();
+                    if (byReading.Count > 0)
+                        return byReading.OrderBy(FreqRank).First();
+                }
 
                 if (requireReadingMatch)
                     return null;
@@ -2844,6 +2850,8 @@ namespace Jiten.Parser
 
             return matches.OrderBy(FreqRank).First();
         }
+
+        private static readonly char[] ReadingHintSeparators = [';', '；', ',', '，', '、', '/', '／', '|'];
 
         // True if the word has a kana reading equal (normalised hiragana) to the hint.
         private static bool WordHasKanaReading(JmDictWord word, string hintHira) =>

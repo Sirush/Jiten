@@ -1608,6 +1608,7 @@ public partial class UserController(
         // us disambiguate cards that share a surface but have different readings — without it they
         // would collapse to a single resolution. ParseWords (conjugated) path stays surface-only.
         var wordLookup = new Dictionary<(string Word, string Reading), (int WordId, byte ReadingIndex)>();
+        var surfacesInDictionary = new HashSet<string>();
         if (request.ParseWords)
         {
             var combinedText = string.Join(Environment.NewLine, uniqueWords);
@@ -1623,7 +1624,7 @@ public partial class UserController(
                                      .Distinct()
                                      .ToList();
 
-            var resolved = await Parser.Parser.GetWordsDirectLookupByReading(contextFactory, uniquePairs);
+            var resolved = await Parser.Parser.GetWordsDirectLookupByReading(contextFactory, uniquePairs, surfacesInDictionary);
             foreach (var kv in resolved)
                 wordLookup[kv.Key] = (kv.Value.WordId, kv.Value.ReadingIndex);
         }
@@ -1648,6 +1649,7 @@ public partial class UserController(
         // Track skipped words (not in dictionary)
         int skippedCount = 0;
         var skippedWords = new List<string>();
+        var skippedWordsReadingMismatch = new List<string>();
 
         foreach (var wrapper in request.Cards)
         {
@@ -1662,7 +1664,10 @@ public partial class UserController(
             if (!wordLookup.TryGetValue((word, reading), out var wordInfo)
                 && (!request.ParseWords || reading.Length == 0 || !wordLookup.TryGetValue((word, ""), out wordInfo)))
             {
-                skippedWords.Add(word);
+                if (reading.Length > 0 && surfacesInDictionary.Contains(word))
+                    skippedWordsReadingMismatch.Add($"{word} ({reading})");
+                else
+                    skippedWords.Add(word);
                 skippedCount++;
                 continue;
             }
@@ -1766,6 +1771,7 @@ public partial class UserController(
                               {
                                   imported = 0, updated = 0, skipped = skippedCount, reviewLogs = 0,
                                   skippedWords = skippedWords.Take(50).ToList(),
+                                  skippedWordsReadingMismatch = skippedWordsReadingMismatch.Take(50).ToList(),
                                   skippedWordsNoReviews = skippedWordsNoReviews.Take(50).ToList(), skippedCountNoReviews,
                                   archivedRedundant, restoredCards = 0, pruned = 0
                               });
@@ -1869,7 +1875,7 @@ public partial class UserController(
             return Results.Ok(new
                               {
                                   imported = cardsToAdd.Count, updated = cardsToUpdate.Count, skipped = skippedCount,
-                                  reviewLogs = logsToAdd.Count, skippedWords = skippedWords,
+                                  reviewLogs = logsToAdd.Count, skippedWords = skippedWords, skippedWordsReadingMismatch,
                                   skippedWordsNoReviews = skippedWordsNoReviews.ToList(), skippedCountNoReviews = skippedCountNoReviews,
                                   archivedRedundant, restoredCards, pruned
                               });
