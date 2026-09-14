@@ -56,27 +56,8 @@ public class DescriptionSearchService(
         foreach (var row in rows)
             vectors[row.DeckId] = BytesToFloats(row.Vector);
 
-        var ids = vectors.Keys.ToList();
-        var descriptions = await context.Decks.AsNoTracking()
-                                        .Where(d => ids.Contains(d.DeckId) && d.Description != null)
-                                        .Select(d => new
-                                        {
-                                            d.DeckId,
-                                            d.Description,
-                                            Genres = d.DeckGenres.Select(g => g.Genre).ToList(),
-                                            Tags = d.DeckTags.Where(t => t.Percentage >= MinTagPercentage).Select(t => t.Tag.Name).ToList()
-                                        })
-                                        .ToListAsync();
-        var folded = new Dictionary<int, string>(descriptions.Count);
-        foreach (var d in descriptions)
-        {
-            // Tags and genres join the lexical text only; the vector stays synopsis-only so this needs no re-embed.
-            var labels = d.Tags.Concat(d.Genres.Select(GenreLabel));
-            folded[d.DeckId] = DescriptionKeywords.Fold(d.Description! + " | " + string.Join(" | ", labels));
-        }
-
         _vectors = vectors;
-        _foldedTexts = folded;
+        _foldedTexts = await BuildFoldedTextsAsync(context, vectors.Keys.ToList());
         return vectors.Count;
     }
 
@@ -131,12 +112,8 @@ public class DescriptionSearchService(
             work.Count, deferred, stale.Count);
 
         var merged = new Dictionary<int, float[]>(_vectors);
-        var mergedTexts = new Dictionary<int, string>(_foldedTexts);
         foreach (var id in stale)
-        {
             merged.Remove(id);
-            mergedTexts.Remove(id);
-        }
 
         for (var offset = 0; offset < work.Count; offset += EmbedBatchSize)
         {
@@ -157,7 +134,6 @@ public class DescriptionSearchService(
                     Model = embedder.ModelName
                 });
                 merged[batch[i].DeckId] = vectors[i];
-                mergedTexts[batch[i].DeckId] = DescriptionKeywords.Fold(batch[i].Text);
             }
 
             await context.SaveChangesAsync(ct);
@@ -170,7 +146,9 @@ public class DescriptionSearchService(
         }
 
         _vectors = merged;
-        _foldedTexts = mergedTexts;
+        // Rebuilt every run, not just for re-embedded decks: a tag or genre edit leaves the description hash untouched.
+        await using (var textContext = await contextFactory.CreateDbContextAsync(ct))
+            _foldedTexts = await BuildFoldedTextsAsync(textContext, merged.Keys.ToList(), ct);
         return (work.Count, stale.Count);
     }
 
@@ -219,6 +197,29 @@ public class DescriptionSearchService(
         if (scored.Count > limit)
             scored.RemoveRange(limit, scored.Count - limit);
         return scored;
+    }
+
+    private static async Task<Dictionary<int, string>> BuildFoldedTextsAsync(JitenDbContext context, List<int> deckIds,
+                                                                             CancellationToken ct = default)
+    {
+        var rows = await context.Decks.AsNoTracking()
+                                .Where(d => deckIds.Contains(d.DeckId) && d.Description != null)
+                                .Select(d => new
+                                {
+                                    d.DeckId,
+                                    d.Description,
+                                    Genres = d.DeckGenres.Select(g => g.Genre).ToList(),
+                                    Tags = d.DeckTags.Where(t => t.Percentage >= MinTagPercentage).Select(t => t.Tag.Name).ToList()
+                                })
+                                .ToListAsync(ct);
+        var folded = new Dictionary<int, string>(rows.Count);
+        foreach (var row in rows)
+        {
+            var labels = row.Tags.Concat(row.Genres.Select(GenreLabel));
+            folded[row.DeckId] = DescriptionKeywords.Fold(NormalizeDescription(row.Description!) + " | " + string.Join(" | ", labels));
+        }
+
+        return folded;
     }
 
     private static string GenreLabel(Genre genre)
