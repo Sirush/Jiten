@@ -1,3 +1,4 @@
+using Jiten.Api.Dtos;
 using Jiten.Core.Data.FSRS;
 
 namespace Jiten.Api.Helpers;
@@ -14,4 +15,16 @@ public static class LeechHelper
         leechThreshold > 0
         && lapses >= leechThreshold
         && (stability ?? 0) < RetentionCalculator.MatureThresholdDays;
+
+    public static bool ShouldSuspend(LeechAction action, FsrsRating rating, bool isLeech) =>
+        action == LeechAction.Suspend && rating == FsrsRating.Again && isLeech;
+
+    public static bool IsNotifyStep(int lapses, int leechThreshold)
+    {
+        if (leechThreshold <= 0) return false;
+        if (lapses == leechThreshold) return true;
+
+        var halfThreshold = Math.Max(leechThreshold / 2, 1);
+        return lapses > leechThreshold && (lapses - leechThreshold) % halfThreshold == 0;
+    }
 }

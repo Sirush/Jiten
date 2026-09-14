@@ -197,7 +197,7 @@ export const useSrsStore = defineStore('srs', () => {
     relearningSteps: [10],
     learnAheadMinutes: 20,
     leechThreshold: 8,
-    leechAction: 'Suspend',
+    leechAction: 'NotifyOnly',
     timedReview: {
       enabled: false,
       showTimer: true,
