@@ -1257,6 +1257,22 @@ namespace Jiten.Core.Migrations
                     b.ToTable("WordFormFrequenciesByType", "jmdict");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWordFormRedundancy", b =>
+                {
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.Property<byte>("SourceReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<byte>("TargetReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("WordId", "SourceReadingIndex", "TargetReadingIndex");
+
+                    b.ToTable("WordFormRedundancies", "jmdict");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWordFrequency", b =>
                 {
                     b.Property<int>("WordId")

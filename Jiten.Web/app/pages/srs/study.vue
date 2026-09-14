@@ -188,8 +188,7 @@
     if (counts.hard > 0) segments.push({ key: 'hard', width: (counts.hard / total) * 100, color: c.hard });
     if (counts.action > 0) segments.push({ key: 'action', width: (counts.action / total) * 100, color: c.action });
     if (srsStore.againCardsAhead > 0) segments.push({ key: 'again', width: (srsStore.againCardsAhead / total) * 100, color: c.again });
-    if (srsStore.learningCardsAhead > 0)
-      segments.push({ key: 'learning', width: (srsStore.learningCardsAhead / total) * 100, color: c.learning });
+    if (srsStore.learningCardsAhead > 0) segments.push({ key: 'learning', width: (srsStore.learningCardsAhead / total) * 100, color: c.learning });
     return segments;
   });
 
@@ -368,6 +367,10 @@
     () => srsStore.lastReviewError,
     (err) => {
       if (!err) return;
+      if (err.dropped) {
+        toast.add({ severity: 'warn', summary: 'Card removed from this session', detail: `“${err.wordText}” is suspended or blacklisted and can no longer be reviewed.`, life: 6000 });
+        return;
+      }
       toast.add({ severity: 'error', summary: 'Review not saved due to an error', detail: `“${err.wordText}” will be shown again.`, life: 5000 });
     }
   );

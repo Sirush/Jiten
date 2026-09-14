@@ -32,6 +32,7 @@
 
   const showSkippedDialog = ref(false);
   const skippedWords = ref<string[]>([]);
+  const skippedWordsReadingMismatch = ref<string[]>([]);
 
   const showErrorDialog = ref(false);
   const errorMessage = ref('');
@@ -864,6 +865,7 @@
       mediaImport.reset();
 
       const allSkippedWords: string[] = [];
+      const allSkippedReadingMismatch: string[] = [];
       let skippedCountNoReviews = 0;
       const skipStats: SkipStats = { suspended: 0, newCard: 0, missingField: 0, emptyWord: 0 };
 
@@ -902,6 +904,7 @@
             reviewLogs: importResults.value.reviewLogs + (result.reviewLogs || 0),
           };
           if (result.skippedWords) allSkippedWords.push(...result.skippedWords);
+          if (result.skippedWordsReadingMismatch) allSkippedReadingMismatch.push(...result.skippedWordsReadingMismatch);
           skippedCountNoReviews += result.skippedCountNoReviews || 0;
         };
 
@@ -1045,8 +1048,9 @@
           });
         }
 
-        if (allSkippedWords.length > 0) {
+        if (allSkippedWords.length > 0 || allSkippedReadingMismatch.length > 0) {
           skippedWords.value = allSkippedWords;
+          skippedWordsReadingMismatch.value = allSkippedReadingMismatch;
           showSkippedDialog.value = true;
         }
 
@@ -1404,15 +1408,30 @@
   </Card>
 
   <Dialog v-model:visible="showSkippedDialog" modal header="Some words could not be imported" class="w-[95vw] sm:w-[90vw] md:w-[36rem]">
-    <div class="flex flex-col gap-3">
-      <Message severity="warn" :closable="false">
-        {{ skippedWords.length }} word{{ skippedWords.length === 1 ? '' : 's' }} could not be parsed or {{ skippedWords.length === 1 ? 'was' : 'were' }} not
-        found in the dictionary.
-      </Message>
-      <div class="max-h-[50vh] overflow-y-auto rounded border border-surface-200 dark:border-surface-700 p-3">
-        <ul class="flex flex-col gap-1">
-          <li v-for="(word, index) in skippedWords" :key="index" class="font-noto-sans">{{ word }}</li>
-        </ul>
+    <div class="flex flex-col gap-4">
+      <div v-if="skippedWordsReadingMismatch.length > 0" class="flex flex-col gap-3">
+        <Message severity="warn" :closable="false">
+          {{ skippedWordsReadingMismatch.length }} word{{ skippedWordsReadingMismatch.length === 1 ? '' : 's' }}
+          {{ skippedWordsReadingMismatch.length === 1 ? 'was' : 'were' }} found in the dictionary, but the reading on the card did not match any
+          of its readings. Words are skipped rather than guessed so the wrong entry is not imported. Check the reading field you selected, or fix
+          the reading on the card.
+        </Message>
+        <div class="max-h-[40vh] overflow-y-auto rounded border border-surface-200 dark:border-surface-700 p-3">
+          <ul class="flex flex-col gap-1">
+            <li v-for="(word, index) in skippedWordsReadingMismatch" :key="index" class="font-noto-sans">{{ word }}</li>
+          </ul>
+        </div>
+      </div>
+      <div v-if="skippedWords.length > 0" class="flex flex-col gap-3">
+        <Message severity="warn" :closable="false">
+          {{ skippedWords.length }} word{{ skippedWords.length === 1 ? '' : 's' }} could not be parsed or {{ skippedWords.length === 1 ? 'was' : 'were' }}
+          not found in the dictionary.
+        </Message>
+        <div class="max-h-[40vh] overflow-y-auto rounded border border-surface-200 dark:border-surface-700 p-3">
+          <ul class="flex flex-col gap-1">
+            <li v-for="(word, index) in skippedWords" :key="index" class="font-noto-sans">{{ word }}</li>
+          </ul>
+        </div>
       </div>
     </div>
     <template #footer>

@@ -1,4 +1,4 @@
-﻿namespace Jiten.Api.Dtos;
+namespace Jiten.Api.Dtos;
 
 public class StudyBatchResponse
 {
@@ -32,6 +32,7 @@ public class StudyCardDto
     public IntervalPreviewDto? IntervalPreview { get; set; }
     public List<StudyDeckOccurrenceDto>? DeckOccurrences { get; set; }
     public string? SourceDeckName { get; set; }
+    public SmartDeckReasonDto? SmartReason { get; set; }
     public List<string>? ConfusableReadings { get; set; }
 }
 
@@ -159,6 +160,8 @@ public class StudyDeckDto
     public int DueReviewCount { get; set; }
     public bool IsActive { get; set; }
     public string? Warning { get; set; }
+    public bool Building { get; set; }
+    public DateTime? LastRebuiltAt { get; set; }
     public int? ParentDeckId { get; set; }
     public string? ParentTitle { get; set; }
     public string? ParentRomajiTitle { get; set; }

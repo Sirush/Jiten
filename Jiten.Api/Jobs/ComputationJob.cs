@@ -17,6 +17,7 @@ public class ComputationJob(
     IConfiguration configuration,
     IBackgroundJobClient backgroundJobs,
     IPendingCoverageQueue pendingCoverageQueue,
+    Jiten.Api.Services.SmartDeck.IWordReferenceCache wordReferenceCache,
     ILogger<ComputationJob> logger)
 {
     private static readonly object CoverageComputeLock = new();
@@ -1009,6 +1010,7 @@ public class ComputationJob(
             await File.WriteAllTextAsync(indexFilePath, index);
         }
 
+        await wordReferenceCache.Reload();
         backgroundJobs.Enqueue<FrequencyListJob>(job => job.RegenerateAutoUpdateLists());
     }
 

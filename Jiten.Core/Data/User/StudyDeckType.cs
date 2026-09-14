@@ -4,5 +4,6 @@ public enum StudyDeckType
 {
     MediaDeck = 0,
     GlobalDynamic = 1,
-    StaticWordList = 2
+    StaticWordList = 2,
+    Smart = 3
 }

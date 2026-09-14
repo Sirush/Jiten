@@ -854,8 +854,17 @@ export interface DictionaryEntry {
   rubyText: string;
   primaryKanjiText?: string;
   partsOfSpeech: string[];
+  /** First sense only; the one-line summary. */
   meanings: string[];
+  senses?: DictionarySense[];
   frequencyRank: number;
+}
+
+export interface DictionarySense {
+  index: number;
+  meanings: string[];
+  partsOfSpeech: string[];
+  misc: string[];
 }
 
 export interface StaticDeckWordDto extends DictionaryEntry {
@@ -1090,12 +1099,118 @@ export interface StudyDeckDto {
   suspendedCount: number;
   dueReviewCount: number;
   warning?: string;
+  building?: boolean;
+  lastRebuiltAt?: string | null;
   parentDeckId?: number;
   parentTitle?: string;
   parentRomajiTitle?: string;
   parentEnglishTitle?: string;
   parentCoverName?: string;
 }
+
+export interface SmartDeckSettings {
+  enabled: boolean;
+  promoDismissed: boolean;
+  weighPlanning: boolean;
+  lookaheadUnits: number;
+  targetPercentage: number;
+  recencyHalfLifeDays: number;
+  pinnedDeckIds: number[];
+  includedDeckIds: number[];
+  excludedDeckIds: number[];
+  sequenceOverrides: Record<number, boolean>;
+}
+
+export interface SmartDeckUnitDto {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle?: string | null;
+  englishTitle?: string | null;
+  deckOrder: number;
+}
+
+export interface SmartDeckTitleDto {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle?: string | null;
+  englishTitle?: string | null;
+  coverName?: string | null;
+  mediaType: MediaType;
+  status: DeckStatus;
+  weight: number;
+  pinned: boolean;
+  boosted: boolean;
+  planning: boolean;
+  manuallyIncluded: boolean;
+  lastActivity: string;
+  cursorDeckId?: number | null;
+  window: SmartDeckUnitDto[];
+  completedUnits: number;
+  totalUnits: number;
+  sequential: boolean;
+  windowSource: 'none' | 'ongoing' | 'sequence';
+}
+
+export interface SmartDeckStatusDto {
+  locked: boolean;
+  exists: boolean;
+  isActive: boolean;
+  userStudyDeckId?: number | null;
+  settings: SmartDeckSettings;
+  excludeKana: boolean;
+  minGlobalFrequency?: number | null;
+  maxGlobalFrequency?: number | null;
+  posFilter?: string | null;
+  titles: SmartDeckTitleDto[];
+  listedTitles: SmartDeckUnitDto[];
+  titlesBeyondCap: number;
+  wordCount: number;
+  lastRebuiltAt?: string | null;
+  building: boolean;
+  /** Only present when the request carried preview values. */
+  preview?: { words: number; newWords: number; windowWords: number } | null;
+  maxPins: number;
+  maxTitles: number;
+}
+
+export interface SmartDeckReasonDto {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle?: string | null;
+  englishTitle?: string | null;
+  occurrences: number;
+  unitDeckId?: number | null;
+  unitOriginalTitle?: string | null;
+  unitRomajiTitle?: string | null;
+  unitEnglishTitle?: string | null;
+  unitOccurrences: number;
+  share: number;
+}
+
+export interface SmartDeckUnitReportDto {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle?: string | null;
+  englishTitle?: string | null;
+  parentDeckId?: number | null;
+  parentOriginalTitle?: string | null;
+  parentRomajiTitle?: string | null;
+  parentEnglishTitle?: string | null;
+  totalWords: number;
+  trackedWords: number;
+  learnedLast7Days: number;
+  learning: number;
+  young: number;
+  mature: number;
+  notYetStudied: number;
+  learnedLast7DaysExamples: DictionaryEntry[];
+  learningExamples: DictionaryEntry[];
+  youngExamples: DictionaryEntry[];
+  matureExamples: DictionaryEntry[];
+  computedAt: string;
+}
+
+export type SmartDeckSourceAction = 'pin' | 'unpin' | 'include' | 'exclude' | 'clear';
 
 export type StudyMoreMode = 'extraNew' | 'extraReview' | 'ahead' | 'mistakes';
 
@@ -1136,6 +1251,7 @@ export interface StudyCardDto {
   intervalPreview?: IntervalPreviewDto;
   deckOccurrences?: StudyDeckOccurrenceDto[];
   sourceDeckName?: string;
+  smartReason?: SmartDeckReasonDto;
   confusableReadings?: string[];
   dueAt?: number;
 }

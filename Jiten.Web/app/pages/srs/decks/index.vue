@@ -3,6 +3,7 @@
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { DeckOrder, MediaType, StudyDeckType, type StudyDeckDto } from '~/types';
+  import { formatRelativeTime } from '~/utils/relativeTime';
   import { Bar } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip as ChartTooltip } from 'chart.js';
   import ChartDataLabels from 'chartjs-plugin-datalabels';
@@ -19,6 +20,10 @@
   const router = useRouter();
 
   const showAddDialog = ref(false);
+  const showSmartDialog = ref(false);
+  const smartDeck = computed(() => srsStore.studyDecks.find((d) => d.deckType === StudyDeckType.Smart));
+  const { promoDismissed, fetchPromo, dismissPromo } = useSmartDeck();
+  const showSmartPromo = computed(() => !smartDeck.value && promoDismissed.value === false);
   const editingDeck = ref<StudyDeckDto | undefined>(undefined);
   const showEditDialog = ref(false);
   const downloadDeck = ref<StudyDeckDto | undefined>(undefined);
@@ -39,6 +44,7 @@
       srsStore.refreshOverview();
     }
     srsStore.fetchReviewForecast30d();
+    if (!smartDeck.value) fetchPromo();
   });
 
   async function refresh() {
@@ -48,6 +54,10 @@
   }
 
   function openEdit(deck: StudyDeckDto) {
+    if (deck.deckType === StudyDeckType.Smart) {
+      showSmartDialog.value = true;
+      return;
+    }
     editingDeck.value = deck;
     showEditDialog.value = true;
   }
@@ -611,7 +621,10 @@
     <div v-else-if="!decksLoading && srsStore.studyDecks.length === 0" class="text-center py-16">
       <div class="text-gray-400 text-lg mb-4">No study decks yet</div>
       <p class="text-gray-500 dark:text-gray-400 mb-6">Add decks to start learning vocabulary with spaced repetition.</p>
-      <Button icon="pi pi-plus" label="Add Your First Deck" @click="showAddDialog = true" />
+      <div class="flex flex-wrap justify-center gap-2">
+        <Button icon="pi pi-plus" label="Add Your First Deck" @click="showAddDialog = true" />
+        <Button label="Set up a Smart Deck" severity="secondary" outlined @click="showSmartDialog = true" />
+      </div>
     </div>
 
     <template v-else-if="srsStore.studyDecks.length > 0">
@@ -631,6 +644,29 @@
         </Tooltip>
         <NuxtLink v-if="!isPlus" to="/jiten-plus" class="text-primary-600 dark:text-primary-400 hover:underline whitespace-nowrap"> Need more? </NuxtLink>
         <Button icon="pi pi-plus" label="Add Deck" size="small" class="sm:!hidden ml-auto flex-shrink-0" @click="showAddDialog = true" />
+      </div>
+
+      <div
+        v-if="showSmartPromo"
+        class="group relative flex items-center gap-4 p-4 mb-3 bg-surface-0 dark:bg-surface-900 rounded-xl shadow-sm border border-surface-200 dark:border-surface-700 hover:border-primary-400 dark:hover:border-primary-500 transition-colors"
+      >
+        <button type="button" class="absolute inset-0 rounded-xl cursor-pointer" aria-label="Set up a Smart Deck" @click="showSmartDialog = true" />
+        <div class="w-12 h-16 sm:w-16 sm:h-20 flex-shrink-0 rounded bg-surface-100 dark:bg-surface-700 flex items-center justify-center text-primary-500">
+          <Icon name="material-symbols:track-changes" size="28" />
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold flex items-center gap-2">
+            Smart Deck
+            <JitenPlusBadge v-if="!isPlus" :link="false" />
+          </div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">Automatically selects the best words to learn for what you're currently immersing in.</div>
+        </div>
+        <div class="relative flex items-center gap-1 flex-shrink-0">
+          <Button label="Set up" size="small" class="!hidden sm:!inline-flex" @click="showSmartDialog = true" />
+          <Tooltip content="Not interested" placement="top">
+            <Button icon="pi pi-times" severity="secondary" text size="small" aria-label="Hide Smart Deck suggestion" @click="dismissPromo" />
+          </Tooltip>
+        </div>
       </div>
 
       <!-- Active Decks -->
@@ -694,6 +730,9 @@
                     <Icon name="material-symbols:book-2" size="24" />
                   </div>
                 </div>
+                <div v-else-if="deck.deckType === StudyDeckType.Smart" class="w-full h-full flex items-center justify-center text-primary-500">
+                  <Icon name="material-symbols:track-changes" size="28" />
+                </div>
                 <div v-else class="w-full h-full flex items-center justify-center text-green-400">
                   <Icon name="material-symbols:list-alt" size="28" />
                 </div>
@@ -720,8 +759,13 @@
                 <div class="text-sm text-gray-500 dark:text-gray-400">
                   <template v-if="deck.deckType === StudyDeckType.MediaDeck">{{ getMediaTypeText(deck.mediaType) }}</template>
                   <template v-else-if="deck.deckType === StudyDeckType.GlobalDynamic">{{ frequencyDeckLabel(deck) }}</template>
+                  <template v-else-if="deck.deckType === StudyDeckType.Smart">Your current immersion</template>
                   <template v-else>Word List</template>
                   <span v-if="deck.totalWords"> · {{ deck.totalWords }} words</span>
+                  <span v-else-if="deck.building"> · Building</span>
+                  <span v-else-if="deck.deckType === StudyDeckType.Smart"> · No words matched</span>
+                  <span v-if="deck.deckType === StudyDeckType.Smart && deck.totalWords && deck.building"> · Rebuild in progress</span>
+                  <span v-else-if="deck.deckType === StudyDeckType.Smart && deck.lastRebuiltAt"> · Rebuilt {{ formatRelativeTime(deck.lastRebuiltAt) }}</span>
                   <span v-if="deckOrderLabel(deck)"> · {{ deckOrderLabel(deck) }}</span>
                   <span v-if="deck.description"> · {{ deck.description }}</span>
                   <span v-if="newCardDeckIds.has(deck.userStudyDeckId)" class="text-green-400 dark:text-green-600 font-medium"> · New cards from here</span>
@@ -729,8 +773,14 @@
                 <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">
                   <Tooltip :content="`${maturePct(deck)}% mature<br>${knownPct(deck)}% known (young + mature)`" placement="top">
                     <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
-                      <div class="absolute bg-purple-500/30 dark:bg-purple-400/25 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
-                      <div class="absolute bg-purple-500/60 dark:bg-purple-300/50 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                      <div
+                        class="absolute bg-purple-500/30 dark:bg-purple-400/25 h-6 rounded-lg transition-all duration-700"
+                        :style="{ width: combinedPct(deck) + '%' }"
+                      />
+                      <div
+                        class="absolute bg-purple-500/60 dark:bg-purple-300/50 h-6 rounded-lg transition-all duration-700"
+                        :style="{ width: knownPct(deck) + '%' }"
+                      />
                       <div class="absolute bg-purple-600 h-6 rounded-lg transition-all duration-700" :style="{ width: maturePct(deck) + '%' }" />
                       <span class="absolute inset-0 flex items-center justify-between px-2 z-10 pointer-events-none">
                         <span class="text-xs font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]">{{ maturePct(deck) }}% mature</span>
@@ -860,6 +910,9 @@
                     <Icon name="material-symbols:book-2" size="24" />
                   </div>
                 </div>
+                <div v-else-if="deck.deckType === StudyDeckType.Smart" class="w-full h-full flex items-center justify-center text-primary-500">
+                  <Icon name="material-symbols:track-changes" size="28" />
+                </div>
                 <div v-else class="w-full h-full flex items-center justify-center text-green-400">
                   <Icon name="material-symbols:list-alt" size="28" />
                 </div>
@@ -886,16 +939,27 @@
                 <div class="text-sm text-gray-500 dark:text-gray-400">
                   <template v-if="deck.deckType === StudyDeckType.MediaDeck">{{ getMediaTypeText(deck.mediaType) }}</template>
                   <template v-else-if="deck.deckType === StudyDeckType.GlobalDynamic">{{ frequencyDeckLabel(deck) }}</template>
+                  <template v-else-if="deck.deckType === StudyDeckType.Smart">Your current immersion</template>
                   <template v-else>Word List</template>
                   <span v-if="deck.totalWords"> · {{ deck.totalWords }} words</span>
+                  <span v-else-if="deck.building"> · Building</span>
+                  <span v-else-if="deck.deckType === StudyDeckType.Smart"> · No words matched</span>
+                  <span v-if="deck.deckType === StudyDeckType.Smart && deck.totalWords && deck.building"> · Rebuild in progress</span>
+                  <span v-else-if="deck.deckType === StudyDeckType.Smart && deck.lastRebuiltAt"> · Rebuilt {{ formatRelativeTime(deck.lastRebuiltAt) }}</span>
                   <span v-if="deckOrderLabel(deck)"> · {{ deckOrderLabel(deck) }}</span>
                   <span v-if="deck.description"> · {{ deck.description }}</span>
                 </div>
                 <div v-if="deck.totalWords > 0" class="mt-2 clear-left sm:clear-none">
                   <Tooltip :content="`${maturePct(deck)}% mature<br>${knownPct(deck)}% known (young + mature)`" placement="top">
                     <div class="relative w-full bg-surface-200 dark:bg-surface-700 rounded-lg h-6 overflow-hidden">
-                      <div class="absolute bg-purple-500/30 dark:bg-purple-400/25 h-6 rounded-lg transition-all duration-700" :style="{ width: combinedPct(deck) + '%' }" />
-                      <div class="absolute bg-purple-500/60 dark:bg-purple-300/50 h-6 rounded-lg transition-all duration-700" :style="{ width: knownPct(deck) + '%' }" />
+                      <div
+                        class="absolute bg-purple-500/30 dark:bg-purple-400/25 h-6 rounded-lg transition-all duration-700"
+                        :style="{ width: combinedPct(deck) + '%' }"
+                      />
+                      <div
+                        class="absolute bg-purple-500/60 dark:bg-purple-300/50 h-6 rounded-lg transition-all duration-700"
+                        :style="{ width: knownPct(deck) + '%' }"
+                      />
                       <div class="absolute bg-purple-600 h-6 rounded-lg transition-all duration-700" :style="{ width: maturePct(deck) + '%' }" />
                       <span class="absolute inset-0 flex items-center justify-between px-2 z-10 pointer-events-none">
                         <span class="text-xs font-bold text-white drop-shadow-[0_0_2px_rgba(0,0,0,0.6)]">{{ maturePct(deck) }}% mature</span>
@@ -936,7 +1000,10 @@
                   </Tooltip>
                 </div>
               </div>
-              <Tooltip content="Activate" placement="top">
+              <Tooltip v-if="deck.deckType === StudyDeckType.Smart && !isPlus" content="An active Jiten+ subscription is needed" placement="top">
+                <Button icon="pi pi-play" severity="success" text size="small" disabled />
+              </Tooltip>
+              <Tooltip v-else content="Activate" placement="top">
                 <Button icon="pi pi-play" severity="success" text size="small" @click="srsStore.toggleDeckActive(deck.userStudyDeckId)" />
               </Tooltip>
               <Tooltip content="Vocabulary" placement="top">
@@ -963,8 +1030,9 @@
       </div>
     </template>
 
-    <SrsAddDeckDialog v-model:visible="showAddDialog" />
+    <SrsAddDeckDialog v-model:visible="showAddDialog" @smart="showSmartDialog = true" />
     <SrsAddDeckDialog v-model:visible="showEditDialog" :edit-deck="editingDeck" />
+    <SrsSmartDeckDialog v-model:visible="showSmartDialog" />
     <MediaDeckDownloadDialog v-if="downloadDeck" v-model:visible="showDownloadDialog" :study-deck="downloadDeck" />
 
     <Teleport to="body">

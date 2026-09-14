@@ -182,7 +182,6 @@ public class SrsController(
         var previousState = card.State;
         var cardAndLog = scheduler.ReviewCard(card, request.Rating, reviewedAt, request.ReviewDuration);
 
-        var leechDetected = false;
         var leechSuspended = false;
         var isLapse = previousState == FsrsState.Review && request.Rating == FsrsRating.Again;
         var threshold = studySettings.LeechThreshold;
@@ -190,20 +189,15 @@ public class SrsController(
 
         cardAndLog.UpdatedCard.Lapses = isLapse ? card.Lapses + 1 : card.Lapses;
 
-        if (isLapse && threshold > 0)
-        {
-            var lapseCount = cardAndLog.UpdatedCard.Lapses;
-            var halfThreshold = Math.Max(threshold / 2, 1);
-            leechDetected = lapseCount == threshold || (lapseCount > threshold && (lapseCount - threshold) % halfThreshold == 0);
-        }
-
         var isLeech = LeechHelper.IsLeech(cardAndLog.UpdatedCard.Lapses, cardAndLog.UpdatedCard.Stability, threshold);
-        if (!wasLeech && isLeech) leechDetected = true;
+        var leechDetected = (isLapse && LeechHelper.IsNotifyStep(cardAndLog.UpdatedCard.Lapses, threshold))
+                            || (!wasLeech && isLeech);
 
-        if (leechDetected && studySettings.LeechAction == LeechAction.Suspend)
+        if (LeechHelper.ShouldSuspend(studySettings.LeechAction, request.Rating, isLeech))
         {
             cardAndLog.UpdatedCard.State = FsrsState.Suspended;
             leechSuspended = true;
+            leechDetected = true;
         }
 
         if (card.CardId == 0)
@@ -353,28 +347,14 @@ public class SrsController(
             var cardAndLog = scheduler.ReviewCard(card, rating, now);
 
             var isLapse = previousState == FsrsState.Review && rating == FsrsRating.Again;
-            if (isLapse)
-            {
-                cardAndLog.UpdatedCard.Lapses = card.Lapses + 1;
+            cardAndLog.UpdatedCard.Lapses = isLapse ? card.Lapses + 1 : card.Lapses;
 
-                var threshold = studySettings.LeechThreshold;
-                if (threshold > 0)
-                {
-                    var lapseCount = cardAndLog.UpdatedCard.Lapses;
-                    var halfThreshold = Math.Max(threshold / 2, 1);
-                    if (lapseCount == threshold || (lapseCount > threshold && (lapseCount - threshold) % halfThreshold == 0))
-                    {
-                        if (studySettings.LeechAction == LeechAction.Suspend)
-                        {
-                            cardAndLog.UpdatedCard.State = FsrsState.Suspended;
-                            leechSuspended.Add(key.WordId);
-                        }
-                    }
-                }
-            }
-            else
+            var isLeech = LeechHelper.IsLeech(cardAndLog.UpdatedCard.Lapses, cardAndLog.UpdatedCard.Stability,
+                                              studySettings.LeechThreshold);
+            if (LeechHelper.ShouldSuspend(studySettings.LeechAction, rating, isLeech))
             {
-                cardAndLog.UpdatedCard.Lapses = card.Lapses;
+                cardAndLog.UpdatedCard.State = FsrsState.Suspended;
+                leechSuspended.Add(key.WordId);
             }
 
             if (isNew)

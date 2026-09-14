@@ -259,6 +259,20 @@ public class YouTubeIngestController(
         }
     }
 
+    /// <summary>Every tracked source with sync enabled, for a whole-site bootstrap from the CLI.</summary>
+    [HttpGet("sources")]
+    public async Task<IActionResult> ListSources()
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var sources = await context.YouTubeSources.AsNoTracking()
+                                   .Where(s => s.SyncEnabled)
+                                   .OrderBy(s => s.DeckId)
+                                   .Select(s => new { s.DeckId, s.SourceKind, s.SourceId })
+                                   .ToListAsync();
+
+        return Ok(sources.Select(s => new { s.DeckId, Kind = s.SourceKind.ToString(), s.SourceId, Url = YouTubeUrlParser.SourceUrl(s.SourceKind, s.SourceId) }));
+    }
+
     /// <summary>What the CLI needs to re-list a tracked source with its own yt-dlp.</summary>
     [HttpGet("sources/{deckId:int}")]
     public async Task<IActionResult> GetSource(int deckId)

@@ -60,9 +60,8 @@ public class StudyDeckMembershipService(
 
         var wordIds = keysSet.Select(k => k.WordId).Distinct().ToList();
 
-        // Static word-list decks: direct, exact, scoped query. Cheap and always current, so never cached.
         var staticDeckIds = studyDecks
-            .Where(sd => sd.DeckType == StudyDeckType.StaticWordList)
+            .Where(sd => sd.DeckType.HasMaterialisedWords())
             .Select(sd => sd.UserStudyDeckId)
             .ToList();
         if (staticDeckIds.Count > 0)

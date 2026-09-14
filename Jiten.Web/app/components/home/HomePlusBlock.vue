@@ -4,6 +4,7 @@
   const { tier, sources, fetched } = useJitenPlus();
 
   const PITCHES = [
+    'a Smart Deck that selects the best words for what you are currently immersing in',
     'richer cards with images and audio',
     'custom frequency lists',
     'a personalised immersion plan',

@@ -192,8 +192,8 @@ public class YouTubeCommands(CliContext context)
     }
 
     /// <summary>
-    /// Full re-enumeration of a tracked source from this machine: seeds the videos the feed or a truncated
-    /// first listing never showed, then drains them.
+    /// Full re-enumeration of tracked sources from this machine: seeds the videos the feed or a truncated
+    /// first listing never showed, then drains them. Takes one parent deck id or "all".
     /// </summary>
     public async Task Bootstrap(CliOptions options)
     {
@@ -204,34 +204,64 @@ public class YouTubeCommands(CliContext context)
             return;
         }
 
-        var deckId = options.YtBootstrap!.Value;
-        YouTubeIngestClient.TrackedSource tracked;
-        try
+        var all = options.YtBootstrap!.Equals("all", StringComparison.OrdinalIgnoreCase);
+        if (!all && !int.TryParse(options.YtBootstrap, out _))
         {
-            tracked = await ingest.GetSourceAsync(deckId);
-        }
-        catch (HttpRequestException ex)
-        {
-            Console.WriteLine($"Deck {deckId} is not a tracked YouTube source: {ex.Message}");
+            Console.WriteLine("--yt-bootstrap takes a parent deck id or 'all'.");
             return;
         }
 
-        var source = await ResolveAndReport(CreateClient(), tracked.Url, null);
-        if (source == null)
-            return;
-
-        try
+        List<YouTubeIngestClient.TrackedSource> sources;
+        if (all)
         {
-            var (listed, added) = await ingest.BootstrapAsync(deckId, source);
-            Console.WriteLine($"Deck {deckId}: {listed} videos listed, {added} new pending.");
+            sources = await ingest.GetSourcesAsync();
+            Console.WriteLine($"{sources.Count} tracked sources with sync enabled.");
         }
-        catch (HttpRequestException ex)
+        else
         {
-            Console.WriteLine($"Bootstrap refused: {ex.Message}");
-            return;
+            var deckId = int.Parse(options.YtBootstrap!);
+            try
+            {
+                sources = [await ingest.GetSourceAsync(deckId)];
+            }
+            catch (HttpRequestException ex)
+            {
+                Console.WriteLine($"Deck {deckId} is not a tracked YouTube source: {ex.Message}");
+                return;
+            }
         }
 
-        await DrainRemote(ingest, deckId, options);
+        var client = CreateClient();
+        var seeded = new List<int>();
+        foreach (var tracked in sources)
+        {
+            Console.WriteLine($"=== Deck {tracked.DeckId}: {tracked.Url}");
+            var source = await ResolveAndReport(client, tracked.Url, null);
+            if (source == null)
+                continue;
+
+            try
+            {
+                var (listed, added) = await ingest.BootstrapAsync(tracked.DeckId, source);
+                Console.WriteLine($"Deck {tracked.DeckId}: {listed} videos listed, {added} new pending.");
+                if (added > 0)
+                    seeded.Add(tracked.DeckId);
+            }
+            catch (HttpRequestException ex)
+            {
+                Console.WriteLine($"Bootstrap refused for deck {tracked.DeckId}: {ex.Message}");
+            }
+        }
+
+        if (all)
+        {
+            Console.WriteLine($"{seeded.Count} sources gained new videos.");
+            await DrainRemote(ingest, null, options);
+        }
+        else
+        {
+            await DrainRemote(ingest, sources[0].DeckId, options);
+        }
     }
 
     /// <summary>

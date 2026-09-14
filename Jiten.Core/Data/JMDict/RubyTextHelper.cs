@@ -1,7 +1,6 @@
 using System.Text;
-using Jiten.Core.Data.JMDict;
 
-namespace Jiten.Api.Helpers;
+namespace Jiten.Core.Data.JMDict;
 
 public static class RubyTextHelper
 {

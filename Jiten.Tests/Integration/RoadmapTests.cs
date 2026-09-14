@@ -471,6 +471,181 @@ public class RoadmapTests(JitenWebApplicationFactory factory)
         known.Should().NotContain(RoadmapEngine.PackKey(303, 0));
     }
 
+    /// <summary>A blacklisted (or otherwise mature) form covers its sibling-graph targets, so the plan never
+    /// lists a spelling the vocabulary page already shows as Redundant. A target with a card of its own keeps
+    /// that card's tier.</summary>
+    [Fact]
+    public async Task LoadKnownWords_ExpandsThroughFormRedundancies_ExceptWhereACardOfItsOwnDecides()
+    {
+        var now = DateTime.UtcNow;
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+
+            userDb.FsrsCards.RemoveRange(userDb.FsrsCards.Where(c => c.UserId == TestUsers.UserA));
+            userDb.UserWordSetStates.RemoveRange(userDb.UserWordSetStates.Where(s => s.UserId == TestUsers.UserA));
+            await userDb.SaveChangesAsync();
+
+            userDb.FsrsCards.AddRange(
+                new FsrsCard { UserId = TestUsers.UserA, WordId = 400, ReadingIndex = 0, State = FsrsState.Blacklisted, Due = now.AddDays(30), CreatedAt = now },
+                // Partial-kana sibling the user chose to study on its own: its never-reviewed card decides.
+                new FsrsCard { UserId = TestUsers.UserA, WordId = 400, ReadingIndex = 2, State = FsrsState.New, Due = now.AddDays(1), CreatedAt = now },
+                // Young source: its targets join only when learning words count.
+                new FsrsCard { UserId = TestUsers.UserA, WordId = 401, ReadingIndex = 0, State = FsrsState.Learning, LastReview = now.AddDays(-1), Due = now.AddDays(5), CreatedAt = now });
+            await userDb.SaveChangesAsync();
+
+            jitenDb.JMDictWords.AddRange(new JmDictWord { WordId = 400 }, new JmDictWord { WordId = 401 });
+            await jitenDb.SaveChangesAsync();
+
+            jitenDb.WordForms.AddRange(
+                new JmDictWordForm { WordId = 400, ReadingIndex = 0, Text = "落ち着ける", RubyText = "落[お]ち着[つ]ける", FormType = JmDictFormType.KanjiForm },
+                new JmDictWordForm { WordId = 400, ReadingIndex = 1, Text = "落ちつける", RubyText = "落[お]ちつける", FormType = JmDictFormType.KanjiForm },
+                new JmDictWordForm { WordId = 400, ReadingIndex = 2, Text = "おち着ける", RubyText = "おち着[つ]ける", FormType = JmDictFormType.KanjiForm },
+                new JmDictWordForm { WordId = 400, ReadingIndex = 3, Text = "おちつける", FormType = JmDictFormType.KanaForm },
+                new JmDictWordForm { WordId = 401, ReadingIndex = 0, Text = "すごい", FormType = JmDictFormType.KanaForm },
+                new JmDictWordForm { WordId = 401, ReadingIndex = 1, Text = "スゴイ", FormType = JmDictFormType.KanaForm });
+            await jitenDb.SaveChangesAsync();
+
+            await jitenDb.WordFormRedundancies.ExecuteDeleteAsync();
+            jitenDb.WordFormRedundancies.AddRange(
+                new JmDictWordFormRedundancy { WordId = 400, SourceReadingIndex = 0, TargetReadingIndex = 1 },
+                new JmDictWordFormRedundancy { WordId = 400, SourceReadingIndex = 0, TargetReadingIndex = 2 },
+                new JmDictWordFormRedundancy { WordId = 400, SourceReadingIndex = 0, TargetReadingIndex = 3 },
+                new JmDictWordFormRedundancy { WordId = 401, SourceReadingIndex = 0, TargetReadingIndex = 1 },
+                new JmDictWordFormRedundancy { WordId = 401, SourceReadingIndex = 1, TargetReadingIndex = 0 });
+            await jitenDb.SaveChangesAsync();
+        }
+
+        using var readScope = factory.Services.CreateScope();
+        var loader = readScope.ServiceProvider.GetRequiredService<IRoadmapDataLoader>();
+
+        var withYoung = await loader.LoadKnownWordsAsync(TestUsers.UserA, includeLearningWords: true);
+        withYoung.Should().Contain(RoadmapEngine.PackKey(400, 1));
+        withYoung.Should().NotContain(RoadmapEngine.PackKey(400, 2));
+        withYoung.Should().Contain(RoadmapEngine.PackKey(400, 3));
+        withYoung.Should().Contain(RoadmapEngine.PackKey(401, 1));
+
+        var matureOnly = await loader.LoadKnownWordsAsync(TestUsers.UserA, includeLearningWords: false);
+        matureOnly.Should().Contain(RoadmapEngine.PackKey(400, 1));
+        matureOnly.Should().NotContain(RoadmapEngine.PackKey(401, 1));
+    }
+
+    /// <summary>The builder must produce the same edges the in-process sibling cache derives, since both feed
+    /// a Redundant verdict somewhere on the site.</summary>
+    [Fact]
+    public async Task FormRedundancyBuilder_WritesSiblingGraphEdges()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            jitenDb.JMDictWords.Add(new JmDictWord { WordId = 500 });
+            await jitenDb.SaveChangesAsync();
+            jitenDb.WordForms.AddRange(
+                new JmDictWordForm { WordId = 500, ReadingIndex = 0, Text = "落ち着ける", RubyText = "落[お]ち着[つ]ける", FormType = JmDictFormType.KanjiForm },
+                new JmDictWordForm { WordId = 500, ReadingIndex = 1, Text = "落ちつける", RubyText = "落[お]ちつける", FormType = JmDictFormType.KanjiForm },
+                new JmDictWordForm { WordId = 500, ReadingIndex = 2, Text = "おちつける", FormType = JmDictFormType.KanaForm },
+                new JmDictWordForm { WordId = 500, ReadingIndex = 3, Text = "オチツケル", FormType = JmDictFormType.KanaForm });
+            await jitenDb.SaveChangesAsync();
+        }
+
+        var contextFactory = factory.Services.GetRequiredService<IDbContextFactory<JitenDbContext>>();
+        await WordFormRedundancyBuilder.Build(contextFactory);
+
+        using var readScope = factory.Services.CreateScope();
+        var db = readScope.ServiceProvider.GetRequiredService<JitenDbContext>();
+        var edges = (await db.WordFormRedundancies.Where(r => r.WordId == 500).ToListAsync())
+                    .Select(r => (r.SourceReadingIndex, r.TargetReadingIndex))
+                    .ToList();
+
+        edges.Should().BeEquivalentTo(new[]
+        {
+            ((byte)0, (byte)1), ((byte)0, (byte)2), ((byte)0, (byte)3),
+            ((byte)1, (byte)2), ((byte)1, (byte)3),
+            ((byte)2, (byte)3), ((byte)3, (byte)2)
+        });
+    }
+
+    /// <summary>Cross-checks the loader against the live Redundant resolver: every form the vocabulary page
+    /// would show as known (directly or through a covering sibling) must be in the roadmap's known set, and
+    /// nothing else.</summary>
+    [Fact]
+    public async Task LoadKnownWords_AgreesWithRuntimeKnownStates_OverSiblingGraph()
+    {
+        var now = DateTime.UtcNow;
+        var forms = new List<JmDictWordForm>
+        {
+            new() { WordId = 600, ReadingIndex = 0, Text = "落ち着ける", RubyText = "落[お]ち着[つ]ける", FormType = JmDictFormType.KanjiForm },
+            new() { WordId = 600, ReadingIndex = 1, Text = "落ちつける", RubyText = "落[お]ちつける", FormType = JmDictFormType.KanjiForm },
+            new() { WordId = 600, ReadingIndex = 2, Text = "おち着ける", RubyText = "おち着[つ]ける", FormType = JmDictFormType.KanjiForm },
+            new() { WordId = 600, ReadingIndex = 3, Text = "落ち付ける", RubyText = "落[お]ち付[つ]ける", FormType = JmDictFormType.KanjiForm },
+            new() { WordId = 600, ReadingIndex = 4, Text = "おちつける", FormType = JmDictFormType.KanaForm },
+            new() { WordId = 600, ReadingIndex = 5, Text = "オチツケル", FormType = JmDictFormType.KanaForm },
+            new() { WordId = 601, ReadingIndex = 0, Text = "すごい", FormType = JmDictFormType.KanaForm },
+            new() { WordId = 601, ReadingIndex = 1, Text = "スゴイ", FormType = JmDictFormType.KanaForm },
+            new() { WordId = 601, ReadingIndex = 2, Text = "凄い", RubyText = "凄[すご]い", FormType = JmDictFormType.KanjiForm },
+            new() { WordId = 602, ReadingIndex = 0, Text = "全然", RubyText = "全[ぜん]然[ぜん]", FormType = JmDictFormType.KanjiForm },
+            new() { WordId = 602, ReadingIndex = 1, Text = "ぜんぜん", FormType = JmDictFormType.KanaForm },
+        };
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+
+            userDb.FsrsCards.RemoveRange(userDb.FsrsCards.Where(c => c.UserId == TestUsers.UserA));
+            userDb.UserWordSetStates.RemoveRange(userDb.UserWordSetStates.Where(s => s.UserId == TestUsers.UserA));
+            userDb.UserFsrsSettings.RemoveRange(userDb.UserFsrsSettings.Where(s => s.UserId == TestUsers.UserA));
+            await userDb.SaveChangesAsync();
+
+            userDb.FsrsCards.AddRange(
+                new FsrsCard { UserId = TestUsers.UserA, WordId = 600, ReadingIndex = 0, State = FsrsState.Blacklisted, Due = now.AddDays(30), CreatedAt = now },
+                new FsrsCard { UserId = TestUsers.UserA, WordId = 600, ReadingIndex = 2, State = FsrsState.New, Due = now.AddDays(1), CreatedAt = now },
+                new FsrsCard { UserId = TestUsers.UserA, WordId = 601, ReadingIndex = 1, State = FsrsState.Mastered, Due = now.AddDays(30), CreatedAt = now },
+                new FsrsCard { UserId = TestUsers.UserA, WordId = 602, ReadingIndex = 1, State = FsrsState.Blacklisted, Due = now.AddDays(30), CreatedAt = now });
+            await userDb.SaveChangesAsync();
+
+            jitenDb.JMDictWords.AddRange(new JmDictWord { WordId = 600 }, new JmDictWord { WordId = 601 }, new JmDictWord { WordId = 602 });
+            await jitenDb.SaveChangesAsync();
+            jitenDb.WordForms.AddRange(forms);
+            await jitenDb.SaveChangesAsync();
+        }
+
+        await WordFormRedundancyBuilder.Build(factory.Services.GetRequiredService<IDbContextFactory<JitenDbContext>>());
+        factory.Services.GetRequiredService<IWordFormSiblingCache>().Reload();
+
+        using var readScope = factory.Services.CreateScope();
+        var loader = readScope.ServiceProvider.GetRequiredService<IRoadmapDataLoader>();
+        var known = await loader.LoadKnownWordsAsync(TestUsers.UserA, includeLearningWords: true);
+
+        var principal = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, TestUsers.UserA)], "Test"));
+        var runtime = new CurrentUserService(
+            new Microsoft.AspNetCore.Http.HttpContextAccessor { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext { User = principal } },
+            readScope.ServiceProvider.GetRequiredService<JitenDbContext>(),
+            readScope.ServiceProvider.GetRequiredService<UserDbContext>(),
+            readScope.ServiceProvider.GetRequiredService<IWordFormSiblingCache>(),
+            readScope.ServiceProvider.GetRequiredService<IDerivationLinkCache>(),
+            readScope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>());
+
+        var keys = forms.Select(f => (f.WordId, (byte)f.ReadingIndex)).ToList();
+        var states = await runtime.GetKnownWordsState(keys);
+
+        var knownTiers = new[] { KnownState.Young, KnownState.Mature, KnownState.Blacklisted, KnownState.Mastered, KnownState.Suspended };
+        var runtimeKnown = keys.Where(k => states.TryGetValue(k, out var s) && s.Any(knownTiers.Contains))
+                               .Select(k => RoadmapEngine.PackKey(k.WordId, k.Item2))
+                               .ToHashSet();
+        var loaderKnown = keys.Select(k => RoadmapEngine.PackKey(k.WordId, k.Item2)).Where(known.Contains).ToHashSet();
+
+        loaderKnown.Should().BeEquivalentTo(runtimeKnown);
+        // Sanity: the sibling graph actually did work here, so the equivalence is not vacuous.
+        runtimeKnown.Should().Contain(RoadmapEngine.PackKey(600, 1));
+        runtimeKnown.Should().NotContain(RoadmapEngine.PackKey(600, 2));
+        runtimeKnown.Should().NotContain(RoadmapEngine.PackKey(600, 3));
+        runtimeKnown.Should().Contain(RoadmapEngine.PackKey(601, 0));
+    }
+
     [Fact]
     public async Task Read_AfterAccessLapses_StillWorks()
     {

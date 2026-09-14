@@ -117,15 +117,7 @@
         </button>
       </div>
 
-      <IconField class="w-full">
-        <InputIcon>
-          <Icon name="material-symbols:search-rounded" />
-        </InputIcon>
-        <InputText v-model="searchQuery" type="text" placeholder="Search tags..." class="w-full" />
-        <InputIcon v-if="searchQuery" class="cursor-pointer" @click="searchQuery = ''">
-          <Icon name="material-symbols:close" />
-        </InputIcon>
-      </IconField>
+      <SearchInput v-model="searchQuery" placeholder="Search tags..." class="w-full" />
 
       <div class="flex-1 overflow-y-auto -mr-1 pr-1 max-md:min-h-0 md:min-h-[min(32rem,45vh)]">
         <Accordion v-model:value="openPanels" multiple lazy>

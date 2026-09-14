@@ -2518,6 +2518,11 @@ public static class JmDictHelper
             }
         }
 
+        // Forms that reappear on another entry (a JMdict split) must stop resolving to the old
+        // entry; forms that vanished entirely keep their lookups so pruned expressions still parse.
+        Console.WriteLine("Following forms moved to other entries...");
+        MovedFormMigrator.PrintSummary(await MovedFormMigrator.Run(contextFactory, dryRun), dryRun);
+
         if (!dryRun)
         {
             // Re-apply custom data
@@ -2609,6 +2614,9 @@ public static class JmDictHelper
 
             Console.WriteLine("Rebuilding derivation links...");
             DerivationBuilder.PrintSummary(await DerivationBuilder.Build(contextFactory));
+
+            Console.WriteLine("Rebuilding form redundancies...");
+            Console.WriteLine($"WordFormRedundancies rebuilt: {await WordFormRedundancyBuilder.Build(contextFactory)} edges.");
         }
 
         // Print statistics

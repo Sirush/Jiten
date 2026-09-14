@@ -41,14 +41,17 @@ public static class PopularityWeights
     public const double RankDisplayShare = 0.25;
     public const int RankMinPool = 20;
 
-    public const int TrendingWindowDays = 7;
-    public const int TrendingBaselineDays = 90;
-    public const double TrendingMinRecentPoints = 6;
+    /// <summary>Trending compares the last two UTC days (the current one is partial) against the deck's own daily average before them.</summary>
+    public const int TrendingWindowDays = 2;
+    public const int TrendingBaselineDays = 28;
+    /// <summary>One intent point is worth this many distinct daily visitors, so a handful of humans acting outweighs a page of views.</summary>
+    public const double TrendingIntentVisitorValue = 3;
+    public const double TrendingMinRecentPoints = 10;
     public const double TrendingMinRatio = 3;
-    /// <summary>One account cannot trend a deck on its own, whatever it toggles.</summary>
-    public const int TrendingMinRecentUsers = 3;
-    /// <summary>Views feed the trending signal, so no deck trends until the activity table has this much history.</summary>
-    public const int TrendingMinActivityDays = 14;
+    /// <summary>Usual is floored so a deck nobody looks at needs a real burst, not two visitors against a zero baseline.</summary>
+    public const double TrendingUsualFloorPerDay = 1;
+    /// <summary>Peak-day visitors plus acting accounts; one account viewing daily and adding its own deck cannot trend it.</summary>
+    public const int TrendingMinActors = 3;
 
     public static double ForStatus(DeckStatus status) => status switch
     {
@@ -81,6 +84,7 @@ public static class PopularityCalculator
         var views = new Dictionary<int, double>(roots.Count);
         var guestDownloads = new Dictionary<int, double>(roots.Count);
         var recentViews = new Dictionary<int, double>(roots.Count);
+        var recentPeakViews = new Dictionary<int, int>(roots.Count);
         var recentGuestDownloads = new Dictionary<int, double>(roots.Count);
         var baselineViews = new Dictionary<int, double>(roots.Count);
         var baselineGuestDownloads = new Dictionary<int, double>(roots.Count);
@@ -88,7 +92,12 @@ public static class PopularityCalculator
         {
             decayed[id] = raw[id] = recentIntent[id] = baselineIntent[id] = 0;
             views[id] = guestDownloads[id] = recentViews[id] = recentGuestDownloads[id] = baselineViews[id] = baselineGuestDownloads[id] = 0;
+            recentPeakViews[id] = 0;
         }
+
+        var today = DateOnly.FromDateTime(now);
+        var windowStart = today.AddDays(1 - PopularityWeights.TrendingWindowDays);
+        var baselineStart = windowStart.AddDays(-PopularityWeights.TrendingBaselineDays);
 
         foreach (var e in intents)
         {
@@ -97,7 +106,8 @@ public static class PopularityCalculator
             raw[root] += e.Weight;
             decayed[root] += e.Weight * Decay(age, PopularityWeights.IntentHalfLifeDays);
             if (e.Weight <= 0) continue;
-            if (age < PopularityWeights.TrendingWindowDays)
+            var day = DateOnly.FromDateTime(e.At);
+            if (day >= windowStart)
             {
                 recentIntent[root] += e.Weight;
                 if (e.UserId != null)
@@ -106,31 +116,29 @@ public static class PopularityCalculator
                     users.Add(e.UserId);
                 }
             }
-            if (age < PopularityWeights.TrendingBaselineDays) baselineIntent[root] += e.Weight;
+            else if (day >= baselineStart) baselineIntent[root] += e.Weight;
         }
 
-        var activityDates = new HashSet<DateOnly>();
         foreach (var a in activity)
         {
-            activityDates.Add(a.Date);
             if (!rootOf.TryGetValue(a.DeckId, out var root) || !rootIds.Contains(root)) continue;
             var age = AgeDays(a.Date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), now);
             var factor = Decay(age, PopularityWeights.AttentionHalfLifeDays);
             views[root] += a.Views * factor;
             guestDownloads[root] += a.GuestDownloads * factor;
-            if (age < PopularityWeights.TrendingWindowDays)
+            if (a.Date >= windowStart)
             {
                 recentViews[root] += a.Views;
                 recentGuestDownloads[root] += a.GuestDownloads;
+                recentPeakViews[root] = Math.Max(recentPeakViews[root], a.Views);
             }
-            if (age < PopularityWeights.TrendingBaselineDays)
+            else if (a.Date >= baselineStart)
             {
                 baselineViews[root] += a.Views;
                 baselineGuestDownloads[root] += a.GuestDownloads;
             }
         }
 
-        var trendingAllowed = activityDates.Count >= PopularityWeights.TrendingMinActivityDays;
         var decayedTotal = new Dictionary<int, double>(roots.Count);
         var allTime = new Dictionary<int, double>(roots.Count);
         var trending = new Dictionary<int, bool>(roots.Count);
@@ -142,14 +150,14 @@ public static class PopularityCalculator
             decayedTotal[id] = Math.Max(0, decayed[id]) + Attention(views[id], guestDownloads[id]) + boost;
             allTime[id] = Math.Log2(1 + Math.Max(0, raw[id]));
 
-            var recent = recentIntent[id] + Attention(recentViews[id], recentGuestDownloads[id]);
-            var baselineWeekly = (baselineIntent[id] + Attention(baselineViews[id], baselineGuestDownloads[id]))
-                                 * PopularityWeights.TrendingWindowDays / PopularityWeights.TrendingBaselineDays;
-            trending[id] = trendingAllowed
-                           && age >= PopularityWeights.NewDeckBoostDays
-                           && (recentUsers.GetValueOrDefault(id)?.Count ?? 0) >= PopularityWeights.TrendingMinRecentUsers
+            var recent = TrendingPoints(recentViews[id], recentGuestDownloads[id], recentIntent[id]);
+            var baselineDays = Math.Clamp(Math.Ceiling(age) - PopularityWeights.TrendingWindowDays, 1, PopularityWeights.TrendingBaselineDays);
+            var usualPerDay = Math.Max(PopularityWeights.TrendingUsualFloorPerDay,
+                                       TrendingPoints(baselineViews[id], baselineGuestDownloads[id], baselineIntent[id]) / baselineDays);
+            var actors = recentPeakViews[id] + (recentUsers.GetValueOrDefault(id)?.Count ?? 0);
+            trending[id] = actors >= PopularityWeights.TrendingMinActors
                            && recent >= PopularityWeights.TrendingMinRecentPoints
-                           && recent >= PopularityWeights.TrendingMinRatio * baselineWeekly;
+                           && recent >= PopularityWeights.TrendingMinRatio * usualPerDay * PopularityWeights.TrendingWindowDays;
         }
 
         var decayedRank = Percentile(decayedTotal);
@@ -210,6 +218,10 @@ public static class PopularityCalculator
     private static double Attention(double views, double guestDownloads) =>
         Math.Min(PopularityWeights.AttentionCap,
                  PopularityWeights.ViewWeight * Math.Log2(1 + views) + PopularityWeights.GuestDownloadWeight * Math.Log2(1 + guestDownloads));
+
+    /// <summary>Views are already one per visitor per day, so they count linearly; the log cap only guards the popularity score.</summary>
+    private static double TrendingPoints(double views, double guestDownloads, double intent) =>
+        views + guestDownloads + intent * PopularityWeights.TrendingIntentVisitorValue;
 
     private static double AgeDays(DateTime at, DateTime now) => Math.Max(0, (now - at).TotalDays);
 

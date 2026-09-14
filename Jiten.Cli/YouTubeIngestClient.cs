@@ -58,6 +58,11 @@ public class YouTubeIngestClient
 
     public record TrackedSource(int DeckId, string Kind, string SourceId, string Url);
 
+    public async Task<List<TrackedSource>> GetSourcesAsync()
+    {
+        return await _http.GetFromJsonAsync<List<TrackedSource>>("api/ingest/youtube/sources", Json) ?? [];
+    }
+
     public async Task<TrackedSource> GetSourceAsync(int deckId)
     {
         using var response = await _http.GetAsync($"api/ingest/youtube/sources/{deckId}");

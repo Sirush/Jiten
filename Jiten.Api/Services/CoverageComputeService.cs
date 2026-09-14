@@ -136,6 +136,15 @@ public static class CoverageComputeService
                 FROM fsrs_mature_direct fmd
                 JOIN "jmdict"."WordForms" kanji_wf ON kanji_wf."WordId" = fmd."WordId" AND kanji_wf."ReadingIndex" = fmd."ReadingIndex" AND kanji_wf."FormType" = 0
                 JOIN "jmdict"."WordForms" kana_wf ON kana_wf."WordId" = fmd."WordId" AND kana_wf."FormType" = 1
+                UNION
+                -- Sibling-graph redundancy (partial-kana and script variants), matching GetKnownWordsState; a form with its own card keeps that card's tier.
+                SELECT r."WordId", r."TargetReadingIndex"
+                FROM fsrs_mature_direct fmd
+                JOIN "jmdict"."WordFormRedundancies" r ON r."WordId" = fmd."WordId" AND r."SourceReadingIndex" = fmd."ReadingIndex"
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM "user"."FsrsCards" own
+                    WHERE own."UserId" = {0}::uuid AND own."WordId" = r."WordId" AND own."ReadingIndex" = r."TargetReadingIndex"
+                )
             )
             SELECT "WordId", "ReadingIndex" FROM fsrs_mature
             UNION
@@ -173,6 +182,14 @@ public static class CoverageComputeService
                 FROM fsrs_young_direct fyd
                 JOIN "jmdict"."WordForms" kanji_wf ON kanji_wf."WordId" = fyd."WordId" AND kanji_wf."ReadingIndex" = fyd."ReadingIndex" AND kanji_wf."FormType" = 0
                 JOIN "jmdict"."WordForms" kana_wf ON kana_wf."WordId" = fyd."WordId" AND kana_wf."FormType" = 1
+                UNION
+                SELECT r."WordId", r."TargetReadingIndex"
+                FROM fsrs_young_direct fyd
+                JOIN "jmdict"."WordFormRedundancies" r ON r."WordId" = fyd."WordId" AND r."SourceReadingIndex" = fyd."ReadingIndex"
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM "user"."FsrsCards" own
+                    WHERE own."UserId" = {0}::uuid AND own."WordId" = r."WordId" AND own."ReadingIndex" = r."TargetReadingIndex"
+                )
             )
             SELECT ye."WordId", ye."ReadingIndex"
             FROM young_expanded ye

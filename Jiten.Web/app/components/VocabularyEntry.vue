@@ -14,6 +14,7 @@
     selected?: boolean;
     /** Names the requested ranking ("Anime"); each row swaps it for "global" when its own rank fell back. */
     rankSourceLabel?: string;
+    hideOccurrences?: boolean;
   }>();
 
   const emit = defineEmits<{
@@ -67,7 +68,7 @@
           <span @click.stop>
             <VocabularyStatus :word="word" />
           </span>
-          x{{ word.occurrences }} | Rank #{{ rankLabel.rank }}
+          <template v-if="!hideOccurrences">x{{ word.occurrences }} | </template>Rank #{{ rankLabel.rank }}
           <Tooltip v-if="rankLabel.source && rankLabel.hint" :content="rankLabel.hint">
             <span class="text-xs whitespace-nowrap cursor-help">in {{ rankLabel.source }}</span>
           </Tooltip>

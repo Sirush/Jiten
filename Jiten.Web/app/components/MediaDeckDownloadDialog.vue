@@ -16,7 +16,8 @@
   const isStudyDeckMode = computed(() => !!props.studyDeck);
   const isMediaListMode = computed(() => !!props.mediaList);
   const isMediaStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.MediaDeck);
-  const isStaticStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.StaticWordList);
+  const isSmartStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.Smart);
+  const isStaticStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.StaticWordList || isSmartStudyDeck.value);
   const isGlobalDynamicStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.GlobalDynamic);
   const apiBase = computed(() =>
     isMediaListMode.value
@@ -81,7 +82,7 @@
 
   // Import Order only exists for word lists; word lists have no chronological position beyond it.
   const deckOrders = computed(() => {
-    const orders = getEnumOptions(DeckOrder, getDeckOrderText);
+    const orders = getEnumOptions(DeckOrder, (o) => (isSmartStudyDeck.value && o === DeckOrder.ImportOrder ? 'Smart Order' : getDeckOrderText(o)));
     return isStaticStudyDeck.value ? orders.filter((o) => o.value !== DeckOrder.Chronological) : orders.filter((o) => o.value !== DeckOrder.ImportOrder);
   });
   const downloadTypes = computed(() =>

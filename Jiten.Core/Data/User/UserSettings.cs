@@ -6,4 +6,6 @@ public class UserSettings
     public string UserId { get; set; } = string.Empty;
 
     public string MediaFilterPresetsJson { get; set; } = "{}";
+
+    public string SmartDeckJson { get; set; } = "{}";
 }

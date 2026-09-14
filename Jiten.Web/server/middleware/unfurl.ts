@@ -1,5 +1,5 @@
 const UNFURL_BOTS =
-  /(Discordbot|Twitterbot|Slackbot|TelegramBot|facebookexternalhit|redditbot|WhatsApp|LinkedInBot|Mastodon|Bluesky|Applebot|Embedly|Iframely|SkypeUriPreview|Pinterestbot)/i;
+  /(Discordbot|Twitterbot|Slackbot|TelegramBot|facebookexternalhit|redditbot|WhatsApp|LinkedInBot|Mastodon|Bluesky|Embedly|Iframely|SkypeUriPreview|Pinterestbot)/i;
 const SKIP_PREFIXES = ['/_nuxt', '/__nuxt', '/api/', '/healthz', '/_scripts', '/_fonts', '/_ipx', '/__og-image__'];
 const SKIP_EXTENSIONS = /\.(?:js|mjs|css|map|png|jpe?g|svg|webp|ico|woff2?|ttf|wasm|txt|xml|json)$/i;
 

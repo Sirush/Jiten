@@ -122,6 +122,9 @@ public class CliOptions
     [Option(longName: "build-derivations", Required = false, HelpText = "Truncate and rebuild jmdict.WordDerivations from the derivation rules and derivation_overrides.json. Runs automatically at the end of --sync-jmdict. Combine with --dry-run to report counts without writing, and --output to dump per-pair outcomes.")]
     public bool BuildDerivations { get; set; }
 
+    [Option(longName: "build-form-redundancies", Required = false, HelpText = "Rebuild jmdict.WordFormRedundancies (intra-word kana-degradation and script-variant edges) from WordForms. Runs automatically at the end of --sync-jmdict.")]
+    public bool BuildFormRedundancies { get; set; }
+
     [Option(longName: "derivation-classify-output", Required = false, HelpText = "With --build-derivations, write the pairs the automatic rule demotes that no override has judged yet (derived rank above the classified slice, or unranked) to this JSON path, as input for the agent classification pass.")]
     public string? DerivationClassifyOutput { get; set; }
 
@@ -130,6 +133,9 @@ public class CliOptions
 
     [Option(longName: "sync-jmdict", Required = false, HelpText = "Sync JMDict metadata on WordForms and Definitions from XML source.")]
     public bool SyncJmDict { get; set; }
+
+    [Option(longName: "migrate-moved-forms", Required = false, HelpText = "Follow JMdict forms that moved to another entry: remove the old entry's lookups for them and copy frequency ranks to the new entry. Runs automatically inside --sync-jmdict; combine with --dry-run and --output to preview.")]
+    public bool MigrateMovedForms { get; set; }
 
     [Option(longName: "skip-kanji-rebuild", Required = false,
             HelpText = "Skip the WordKanji/KanjiReadingWords rebuild that normally closes a JMDict sync.")]
@@ -248,6 +254,24 @@ public class CliOptions
     [Option(longName: "export-ml-tags", Required = false, HelpText = "Export genre/tag labels and raw text for ML training to the specified output directory.")]
     public string? ExportMlTags { get; set; }
 
+    [Option(longName: "dict-diff", Required = false, HelpText = "Dictionary update harness: snapshot the parse of --dict-diff-decks, run the JMnedict + JMdict sync (needs --xml, --dic, --furi, --sync-jmnedict), snapshot again and write report.html into this directory.")]
+    public string? DictDiff { get; set; }
+
+    [Option(longName: "dict-diff-decks", Required = false, HelpText = "Comma-separated deck ids forming the dict-diff corpus (parent decks expand to their children).")]
+    public string? DictDiffDecks { get; set; }
+
+    [Option(longName: "dict-diff-snapshot", Required = false, HelpText = "Parse --dict-diff-decks and write a dict-diff snapshot (parse output + dictionary forms) to this JSON path. Runs after --flush-redis and --warm-jmdict-cache when combined.")]
+    public string? DictDiffSnapshot { get; set; }
+
+    [Option(longName: "dict-diff-report", Required = false, HelpText = "Write the dict-diff HTML report to this path from --dict-diff-before and --dict-diff-after snapshots.")]
+    public string? DictDiffReport { get; set; }
+
+    [Option(longName: "dict-diff-before", Required = false, HelpText = "Snapshot taken before the dictionary sync (for --dict-diff-report).")]
+    public string? DictDiffBefore { get; set; }
+
+    [Option(longName: "dict-diff-after", Required = false, HelpText = "Snapshot taken after the dictionary sync (for --dict-diff-report).")]
+    public string? DictDiffAfter { get; set; }
+
     [Option(longName: "benchmark", Required = false, HelpText = "Run benchmark on txt files in a directory.")]
     public string? Benchmark { get; set; }
 
@@ -262,6 +286,15 @@ public class CliOptions
 
     [Option(longName: "benchmark-sections", Required = false, HelpText = "Enable the fine-grained section timers (adjacent scoring phases, deconjugator BFS time). They cost a few percent themselves.")]
     public bool BenchmarkSections { get; set; }
+
+    [Option(longName: "smart-deck-bench", Required = false, HelpText = "Time every stage of a Smart Deck rebuild and read at the plan caps against the local database.")]
+    public bool SmartDeckBench { get; set; }
+
+    [Option(longName: "smart-deck-bench-random", Required = false, HelpText = "Sample the benchmark titles at random instead of taking the largest decks.")]
+    public bool SmartDeckBenchRandom { get; set; }
+
+    [Option(longName: "smart-deck-bench-user", Required = false, HelpText = "User id whose cards and word sets act as exclusions for --smart-deck-bench (default: the user with the most cards).")]
+    public string? SmartDeckBenchUser { get; set; }
 
     [Option(longName: "scan-confidence", Required = false, HelpText = "Scan a corpus file for low-confidence token resolutions. Requires --input.")]
     public bool ScanConfidence { get; set; }
@@ -375,8 +408,8 @@ public class CliOptions
     public int? YtRegister { get; set; }
 
     [Option(longName: "yt-bootstrap", Required = false,
-            HelpText = "Re-list a tracked YouTube source (parent deck id) with this machine's yt-dlp, add unseen videos as pending on the API, then drain it.")]
-    public int? YtBootstrap { get; set; }
+            HelpText = "Re-list a tracked YouTube source (parent deck id) or 'all' with this machine's yt-dlp, add unseen videos as pending on the API, then drain them.")]
+    public string? YtBootstrap { get; set; }
 
     [Option(longName: "yt-drain", Required = false,
             HelpText = "Fetch pending videos for a tracked YouTube source (parent deck id) or 'all' from this machine's connection. Parsing happens server-side.")]

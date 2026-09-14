@@ -17,9 +17,16 @@
     initialMinOccurrences?: number;
   }>();
 
-  const emit = defineEmits(['update:visible']);
+  const emit = defineEmits(['update:visible', 'smart']);
   const { $api } = useNuxtApp();
   const srsStore = useSrsStore();
+  const { isPlus } = useJitenPlus();
+  const hasSmartDeck = computed(() => srsStore.studyDecks.some((d) => d.deckType === StudyDeckType.Smart));
+
+  function pickSmart() {
+    localVisible.value = false;
+    emit('smart');
+  }
   const toast = useToast();
   const localiseTitle = useLocaliseTitle();
   const router = useRouter();
@@ -659,6 +666,17 @@
         <div>
           <div class="font-semibold">Word List</div>
           <div class="text-sm text-gray-500 dark:text-gray-400">Create a custom word list or import from file. Also used for mining with Jiten Reader.</div>
+        </div>
+      </button>
+      <button
+        v-if="!hasSmartDeck"
+        class="flex items-center gap-4 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-400 dark:hover:border-primary-500 transition-colors text-left cursor-pointer"
+        @click="pickSmart"
+      >
+        <Icon name="material-symbols:track-changes" size="28" class="text-primary-500 shrink-0" />
+        <div>
+          <div class="font-semibold flex items-center gap-2">Smart Deck <JitenPlusBadge v-if="!isPlus" :link="false" /></div>
+          <div class="text-sm text-gray-500 dark:text-gray-400">Automatically selects the best words to learn for what you're currently immersing in.</div>
         </div>
       </button>
     </div>

@@ -966,6 +966,10 @@ namespace Jiten.Core.Migrations.UserDb
                         .IsUnique()
                         .HasFilter("\"DeckId\" IS NOT NULL");
 
+                    b.HasIndex(new[] { "UserId" }, "IX_UserStudyDeck_UserId_Smart")
+                        .IsUnique()
+                        .HasFilter("\"DeckType\" = 3");
+
                     b.ToTable("UserStudyDecks", "user");
                 });
 
@@ -1250,6 +1254,12 @@ namespace Jiten.Core.Migrations.UserDb
                         .HasColumnType("uuid");
 
                     b.Property<string>("MediaFilterPresetsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("{}");
+
+                    b.Property<string>("SmartDeckJson")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")

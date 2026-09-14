@@ -197,7 +197,7 @@ export const useSrsStore = defineStore('srs', () => {
     relearningSteps: [10],
     learnAheadMinutes: 20,
     leechThreshold: 8,
-    leechAction: 'Suspend',
+    leechAction: 'NotifyOnly',
     timedReview: {
       enabled: false,
       showTimer: true,
@@ -260,7 +260,7 @@ export const useSrsStore = defineStore('srs', () => {
   const gradeLock = ref(false);
   const fetchError = ref<string | null>(null);
   // Surfaced to the study page so it can toast when an optimistic review failed to persist.
-  const lastReviewError = ref<{ wordText: string } | null>(null);
+  const lastReviewError = ref<{ wordText: string; dropped: boolean } | null>(null);
   // In-flight background review requests, keyed by card. Lets undo wait for the right one.
   const inFlightReviews = new Map<string, Promise<void>>();
   // Bumped whenever the session is reset, so late background results from an old session are ignored.
@@ -665,7 +665,15 @@ export const useSrsStore = defineStore('srs', () => {
   }
 
   async function sendReorder(items: { userStudyDeckId: number; sortOrder: number; isActive: boolean }[]) {
-    await $api('srs/study-decks/reorder', { method: 'PUT', body: { items } });
+    const response = await $api<{ items?: { userStudyDeckId: number; isActive: boolean }[] }>('srs/study-decks/reorder', {
+      method: 'PUT',
+      body: { items },
+    });
+    
+    for (const saved of response?.items ?? []) {
+      const deck = studyDecks.value.find((d) => d.userStudyDeckId === saved.userStudyDeckId);
+      if (deck && deck.isActive !== saved.isActive) deck.isActive = saved.isActive;
+    }
     invalidateSession();
   }
 
@@ -1181,27 +1189,56 @@ export const useSrsStore = defineStore('srs', () => {
 
   async function submitReview(body: any, ctx: PendingReview): Promise<void> {
     let reviewResult: any;
-    let failed = false;
+    let failure: { status?: number } | null = null;
     try {
       reviewResult = await $api('srs/review', { method: 'POST', body });
     } catch (firstError: any) {
       const status = firstError?.status;
-      if (status === 409 || status === 429) await new Promise((r) => setTimeout(r, 1100));
-      try {
-        reviewResult = await $api('srs/review', { method: 'POST', body });
-      } catch {
-        failed = true;
+      if (status === 400) {
+        failure = firstError;
+      } else {
+        if (status === 409 || status === 429) await new Promise((r) => setTimeout(r, 1100));
+        try {
+          reviewResult = await $api('srs/review', { method: 'POST', body });
+        } catch (secondError) {
+          failure = secondError as { status?: number };
+        }
       }
     }
 
     if (ctx.epoch !== sessionEpoch) return; // session was reset; drop this late result
 
-    if (failed) {
-      console.error('Failed to persist review for', ctx.cardKey);
-      handleReviewFailure(ctx);
+    if (failure) {
+      console.error('Failed to persist review for', ctx.cardKey, failure);
+      if (failure.status === 400) dropRejectedCard(ctx);
+      else handleReviewFailure(ctx);
     } else {
       applyReviewResult(reviewResult, ctx);
     }
+  }
+
+  // Copies behind the cursor are graded history and stay, so indices ahead of them are untouched.
+  function purgeQueuedCopies(cardKey: string): boolean {
+    const isCopy = (c: StudyCardDto) => `${c.wordId}-${c.readingIndex}` === cardKey;
+    const batch = currentBatch.value;
+    const kept = batch.filter((c, i) => i < currentCardIndex.value || !isCopy(c));
+    const removed = kept.length !== batch.length;
+    if (removed) currentBatch.value = kept;
+    if (preWrapUpBatch.value.some(isCopy)) preWrapUpBatch.value = preWrapUpBatch.value.filter((c) => !isCopy(c));
+
+    if (againCardKeys.value.has(cardKey)) {
+      const newSet = new Set(againCardKeys.value);
+      newSet.delete(cardKey);
+      againCardKeys.value = newSet;
+    }
+    if (learningCardKeys.value.has(cardKey)) {
+      const newSet = new Set(learningCardKeys.value);
+      newSet.delete(cardKey);
+      learningCardKeys.value = newSet;
+    }
+    // Snapshots taken while the copy was queued would put it back on undo.
+    undoStack.value = [];
+    return removed;
   }
 
   // Reconcile the server response with the optimistic state once the review lands.
@@ -1233,15 +1270,7 @@ export const useSrsStore = defineStore('srs', () => {
     if (ctx.rating === FsrsRating.Again && ctx.reinsertedAgainCard) {
       if (reviewResult?.leechSuspended) {
         // The card was suspended server-side — pull the optimistically re-queued copy back out.
-        const idx = currentBatch.value.indexOf(ctx.reinsertedAgainCard);
-        if (idx >= 0) {
-          const batch = [...currentBatch.value];
-          batch.splice(idx, 1);
-          currentBatch.value = batch;
-        }
-        const newSet = new Set(againCardKeys.value);
-        newSet.delete(ctx.cardKey);
-        againCardKeys.value = newSet;
+        purgeQueuedCopies(ctx.cardKey);
         clearedGrades.value = [...clearedGrades.value, 'action'];
 
         if (currentCardIndex.value >= currentBatch.value.length) void onBatchExhausted();
@@ -1254,9 +1283,7 @@ export const useSrsStore = defineStore('srs', () => {
     }
   }
 
-  // A review failed to persist (after one retry). Revert just this card's optimistic effects and
-  // re-queue it so the user grades it again, without disturbing later cards already graded.
-  function handleReviewFailure(ctx: PendingReview): void {
+  function revertOptimisticGrade(ctx: PendingReview): void {
     const s = sessionStats.value;
     if (ctx.deltas.counted) s.cardsReviewed = Math.max(0, s.cardsReviewed - 1);
     if (ctx.deltas.wasNew) s.newCardsLearned = Math.max(0, s.newCardsLearned - 1);
@@ -1273,6 +1300,20 @@ export const useSrsStore = defineStore('srs', () => {
         clearedGrades.value = arr;
       }
     }
+  }
+
+  // The server refused the grade outright (card suspended or blacklisted); re-queuing would loop forever.
+  function dropRejectedCard(ctx: PendingReview): void {
+    revertOptimisticGrade(ctx);
+    purgeQueuedCopies(ctx.cardKey);
+    lastReviewError.value = { wordText: ctx.card.wordTextPlain, dropped: true };
+    if (currentCardIndex.value >= currentBatch.value.length) void onBatchExhausted();
+  }
+
+  // A review failed to persist (after one retry). Revert just this card's optimistic effects and
+  // re-queue it so the user grades it again, without disturbing later cards already graded.
+  function handleReviewFailure(ctx: PendingReview): void {
+    revertOptimisticGrade(ctx);
 
     // An "Again" card that was re-queued is already back in the queue.
     if (!ctx.reinsertedAgainCard) {
@@ -1295,7 +1336,7 @@ export const useSrsStore = defineStore('srs', () => {
     // The re-queue shifts indices, so snapshots taken after this card can no longer be trusted.
     undoStack.value = [];
 
-    lastReviewError.value = { wordText: ctx.card.wordTextPlain };
+    lastReviewError.value = { wordText: ctx.card.wordTextPlain, dropped: false };
   }
 
   async function quickAction(action: 'blacklist' | 'master' | 'forget' | 'suspend' | 'bury'): Promise<boolean> {
@@ -1358,6 +1399,7 @@ export const useSrsStore = defineStore('srs', () => {
         body: { wordId, readingIndex, state: 'suspend-add' },
       });
       sessionLeeches.value = sessionLeeches.value.map((l) => (l.wordId === wordId && l.readingIndex === readingIndex ? { ...l, suspended: true } : l));
+      if (purgeQueuedCopies(`${wordId}-${readingIndex}`) && currentCardIndex.value >= currentBatch.value.length) void onBatchExhausted();
       return true;
     } catch {
       return false;

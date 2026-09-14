@@ -1,4 +1,4 @@
-namespace Jiten.Parser.Grammar;
+﻿namespace Jiten.Parser.Grammar;
 
 internal static class TransitionRuleSets
 {
@@ -90,6 +90,19 @@ internal static class TransitionRuleSets
     // otherwise-confident token rescorable when a forward anchor could flip its homograph.
     internal static readonly HashSet<string> ForwardAnchorSurfaces =
         ForwardAnchorBoosts.Values.SelectMany(a => a.NextAnchors).ToHashSet();
+
+    // Backward-nominal homograph disambiguation: when the previous resolved token is nominal,
+    // the target wordId candidate is boosted to beat a higher-priority homograph of the same surface.
+    // (targetWordId) → (surface, bonus)
+    internal static readonly Dictionary<int, (string Surface, int Bonus)> PrevNominalBoosts = new()
+    {
+        // NといいNといい "both N and N" (2844736) vs the sentence-final wish 〜といい "(I) hope" (2872982):
+        // only the enumerating sense follows a nominal; the wish sense follows a predicate.
+        { 2844736, ("といい", 40) },
+    };
+
+    internal static readonly HashSet<string> PrevNominalBoostSurfaces =
+        PrevNominalBoosts.Values.Select(v => v.Surface).ToHashSet();
 
     internal static readonly ScoringRule[] SoftRules =
     [

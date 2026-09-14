@@ -178,10 +178,12 @@ public class UserDbContext : IdentityDbContext<User>
             {
                 entity.Property(us => us.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
                 entity.Property(us => us.MediaFilterPresetsJson).HasColumnType("jsonb").HasDefaultValue("{}");
+                entity.Property(us => us.SmartDeckJson).HasColumnType("jsonb").HasDefaultValue("{}");
             }
             else
             {
                 entity.Property(us => us.MediaFilterPresetsJson).HasDefaultValue("{}");
+                entity.Property(us => us.SmartDeckJson).HasDefaultValue("{}");
             }
 
             entity.HasOne<User>()
@@ -406,6 +408,10 @@ public class UserDbContext : IdentityDbContext<User>
                 entity.HasIndex(usd => new { usd.UserId, usd.DeckId })
                       .IsUnique()
                       .HasFilter("\"DeckId\" IS NOT NULL");
+
+                entity.HasIndex([nameof(UserStudyDeck.UserId)], "IX_UserStudyDeck_UserId_Smart")
+                      .IsUnique()
+                      .HasFilter("\"DeckType\" = 3");
             }
 
             entity.HasIndex(usd => usd.UserId).HasDatabaseName("IX_UserStudyDeck_UserId");

@@ -242,6 +242,7 @@ if (enableOtlpExporter)
                    })
                    .AddSource(HangfireActivityFilter.SourceName)
                    .AddHttpClientInstrumentation(options => { options.RecordException = true; })
+                   .AddProcessor(new ProbeStatusProcessor())
                    .AddEntityFrameworkCoreInstrumentation(options => { options.SetDbStatementForText = true; });
 
                if (enableConsoleExporter)
@@ -472,6 +473,9 @@ builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Ap
 builder.Services.AddScoped<Jiten.Api.Services.Stripe.StripeService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
 builder.Services.AddSingleton<IDerivationLinkCache, DerivationLinkCache>();
+builder.Services.AddSingleton<Jiten.Api.Services.SmartDeck.IWordReferenceCache, Jiten.Api.Services.SmartDeck.WordReferenceCache>();
+builder.Services.AddScoped<Jiten.Api.Services.SmartDeck.ISmartDeckBuilder, Jiten.Api.Services.SmartDeck.SmartDeckBuilder>();
+builder.Services.AddSingleton<Jiten.Api.Services.SmartDeck.ISmartDeckDirtyService, Jiten.Api.Services.SmartDeck.SmartDeckDirtyService>();
 builder.Services.AddSingleton<Jiten.Core.Services.DeckVectorService>();
 builder.Services.AddSingleton<Jiten.Core.Services.DescriptionSearchService>(sp =>
 {
@@ -655,6 +659,20 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 20, Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
+    options.AddPolicy("smart-deck-rebuild", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3, Window = TimeSpan.FromHours(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
                 AutoReplenishment = true
             });
@@ -1050,6 +1068,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         job => job.Recompute(),
         Cron.Daily(4));
 
+    recurringJobs.AddOrUpdate<SmartDeckJob>(
+        "smart-deck-nightly",
+        job => job.NightlySweep(),
+        Cron.Daily(3));
+
     recurringJobs.AddOrUpdate<RecomputeVectorsJob>(
         "embed-pending-decks",
         job => job.EmbedPending(),
@@ -1106,7 +1129,7 @@ if (!app.Environment.IsEnvironment("Testing"))
     recurringJobs.AddOrUpdate<PopularityScoreJob>(
         "popularity-score",
         job => job.RecomputeAll(),
-        "30 3 * * *");
+        "30 */6 * * *");
 }
 
 app.UseResponseCompression();

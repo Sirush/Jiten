@@ -25,7 +25,7 @@ namespace Jiten.Api.Controllers;
 [ApiController]
 [Route("api/srs")]
 [Authorize]
-public class StudyController(
+public partial class StudyController(
     JitenDbContext context,
     IDbContextFactory<JitenDbContext> contextFactory,
     IDbContextFactory<UserDbContext> userContextFactory,
@@ -45,6 +45,9 @@ public class StudyController(
     IBackgroundJobClient backgroundJobs,
     IMemoryCache memoryCache,
     IExampleSentenceQueryService exampleSentences,
+    Jiten.Api.Services.SmartDeck.ISmartDeckBuilder smartDeckBuilder,
+    Jiten.Api.Services.SmartDeck.ISmartDeckDirtyService smartDeckDirty,
+    StackExchange.Redis.IConnectionMultiplexer redis,
     ILogger<StudyController> logger) : ControllerBase
 {
     private static readonly Regex SentenceMarkerRegex =
@@ -200,7 +203,7 @@ public class StudyController(
 
         // Batch load all StaticWordList data in one query instead of per-deck
         Dictionary<int, HashSet<long>>? staticWordKeysByDeck = null;
-        var staticDecks = studyDecks.Where(sd => sd.DeckType == StudyDeckType.StaticWordList).ToList();
+        var staticDecks = studyDecks.Where(sd => sd.DeckType.HasMaterialisedWords()).ToList();
         if (staticDecks.Count > 0)
         {
             var staticDeckIds = staticDecks.Select(sd => sd.UserStudyDeckId).ToList();
@@ -279,7 +282,7 @@ public class StudyController(
                                  scope: FrequencyScope.From(sd)),
                         deckQueryGate)));
             }
-            else if (sd.DeckType == StudyDeckType.StaticWordList)
+            else if (sd.DeckType.HasMaterialisedWords())
             {
                 resolvedDecks.Add((sd, null));
                 if (staticWordKeysByDeck != null && staticWordKeysByDeck.TryGetValue(sd.UserStudyDeckId, out var wordKeys))
@@ -395,6 +398,13 @@ public class StudyController(
 
             return dto;
         }).ToList();
+
+        var smart = result.FirstOrDefault(d => d.DeckType == StudyDeckType.Smart);
+        if (smart != null)
+        {
+            smart.Building = await smartDeckDirty.IsRebuildPending(userId);
+            smart.LastRebuiltAt = await smartDeckBuilder.GetLastRebuilt(userId);
+        }
 
         return Results.Ok(result);
     }
@@ -596,7 +606,7 @@ public class StudyController(
     private async Task<(int DeckCount, UserLimits Limits)> GetStudyDeckUsage(string userId)
     {
         var limits = await userLimits.GetLimitsAsync(userId);
-        var deckCount = await userContext.UserStudyDecks.CountAsync(sd => sd.UserId == userId);
+        var deckCount = await userContext.UserStudyDecks.CountAsync(sd => sd.UserId == userId && sd.DeckType != StudyDeckType.Smart);
         return (deckCount, limits);
     }
 
@@ -642,6 +652,8 @@ public class StudyController(
         var studyDeck = await userContext.UserStudyDecks
             .FirstOrDefaultAsync(sd => sd.UserStudyDeckId == id && sd.UserId == userId);
         if (studyDeck == null) return Results.NotFound();
+        if (studyDeck.DeckType == StudyDeckType.Smart)
+            return Results.BadRequest("The Smart Deck has its own settings.");
 
         if (studyDeck.DeckType == StudyDeckType.MediaDeck && request.MaxFrequency > 0 && request.MinFrequency > request.MaxFrequency)
             return Results.BadRequest("MinFrequency cannot exceed MaxFrequency.");
@@ -708,8 +720,15 @@ public class StudyController(
             .FirstOrDefaultAsync(sd => sd.UserStudyDeckId == id && sd.UserId == userId);
         if (studyDeck == null) return Results.NotFound();
 
-        userContext.UserStudyDecks.Remove(studyDeck);
-        await userContext.SaveChangesAsync();
+        if (studyDeck.DeckType == StudyDeckType.Smart)
+        {
+            await ForgetSmartDeck(userId, studyDeck);
+        }
+        else
+        {
+            userContext.UserStudyDecks.Remove(studyDeck);
+            await userContext.SaveChangesAsync();
+        }
         await sessionService.BumpStudyOverviewVersion(userId);
         await deckMembership.Invalidate(userId, studyDeck.UserStudyDeckId);
 
@@ -742,20 +761,25 @@ public class StudyController(
             .Where(sd => sd.UserId == userId && ids.Contains(sd.UserStudyDeckId))
             .ToListAsync();
 
+        var canRunSmartDeck = !decks.Any(d => d.DeckType == StudyDeckType.Smart) || (await userLimits.GetLimitsAsync(userId)).IsPlus;
         var deckMap = decks.ToDictionary(d => d.UserStudyDeckId);
         foreach (var item in request.Items)
         {
             if (deckMap.TryGetValue(item.UserStudyDeckId, out var deck))
             {
                 deck.SortOrder = item.SortOrder;
-                deck.IsActive = item.IsActive;
+                deck.IsActive = item.IsActive && (canRunSmartDeck || deck.DeckType != StudyDeckType.Smart);
             }
         }
 
         await userContext.SaveChangesAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
 
-        return Results.Ok(new { success = true });
+        return Results.Ok(new
+        {
+            success = true,
+            items = decks.Select(d => new { d.UserStudyDeckId, d.SortOrder, d.IsActive }).ToList(),
+        });
     }
 
     [HttpPost("study-decks/{id:int}/words")]
@@ -1051,7 +1075,7 @@ public class StudyController(
             .AsNoTracking()
             .FirstOrDefaultAsync(sd => sd.UserStudyDeckId == id && sd.UserId == userId);
         if (studyDeck == null) return Results.NotFound();
-        if (studyDeck.DeckType != StudyDeckType.StaticWordList)
+        if (!studyDeck.DeckType.HasMaterialisedWords())
             return Results.BadRequest("Only static word list decks support word listing.");
 
         var query = userContext.UserStudyDeckWords
@@ -1428,6 +1452,7 @@ public class StudyController(
             }
 
             case StudyDeckType.StaticWordList:
+            case StudyDeckType.Smart:
             {
                 var query = userContext.UserStudyDeckWords.AsNoTracking()
                     .Where(w => w.UserStudyDeckId == id);
@@ -1942,7 +1967,7 @@ public class StudyController(
                 studyDeckWordKeys = await GetFilteredMediaWordKeys(mediaDecks);
 
                 var staticDeckIds = activeStudyDecks
-                    .Where(sd => sd.DeckType == StudyDeckType.StaticWordList)
+                    .Where(sd => sd.DeckType.HasMaterialisedWords())
                     .Select(sd => sd.UserStudyDeckId).ToList();
                 if (staticDeckIds.Count > 0)
                     studyDeckWordKeys.UnionWith(await deckWordResolver.GetStaticDeckWordKeys(staticDeckIds));
@@ -2029,6 +2054,7 @@ public class StudyController(
 
         // ── Phase 4: Resolve new word candidates from study decks ──
         var sourceDeckNames = new Dictionary<long, string>();
+        var smartDeckKeys = new HashSet<long>();
         if (newCardBudget > 0)
         {
             var activeDecks = studyDecks.Where(sd => sd.IsActive).ToList();
@@ -2073,7 +2099,7 @@ public class StudyController(
                     if (studyDeck.Order == (int)DeckOrder.Random)
                         DeckWordResolver.ShuffleInPlace(wordPairs);
                 }
-                else if (studyDeck.DeckType == StudyDeckType.StaticWordList)
+                else if (studyDeck.DeckType.HasMaterialisedWords())
                 {
                     var resolved = await deckWordResolver.ResolveStaticDeckWords(studyDeck.UserStudyDeckId, studyDeck.Order);
                     wordPairs = resolved.Select(w => (w.WordId, w.ReadingIndex)).ToList();
@@ -2107,7 +2133,8 @@ public class StudyController(
 
                     existingKeys!.Add(key);
                     deckCandidates.Add((word.WordId, word.ReadingIndex));
-                    sourceDeckNames.TryAdd(key, deckName);
+                    if (sourceDeckNames.TryAdd(key, deckName) && studyDeck.DeckType == StudyDeckType.Smart)
+                        smartDeckKeys.Add(key);
                 }
 
                 if (isCrossDeck)
@@ -2260,6 +2287,13 @@ public class StudyController(
             : new();
 
         var cards = new List<StudyCardDto>();
+        var smartReasons = new Dictionary<long, SmartDeckReasonDto>();
+        if (smartDeckKeys.Count > 0)
+        {
+            var newKeys = ordered.Where(o => o.IsNew).Select(o => WordFormHelper.EncodeWordKey(o.WordId, o.ReadingIndex)).ToHashSet();
+            smartReasons = await BuildSmartReasons(userId, smartDeckKeys.Where(newKeys.Contains).ToList());
+        }
+
         foreach (var item in ordered)
         {
             wordsData.TryGetValue(item.WordId, out var word);
@@ -2326,6 +2360,7 @@ public class StudyController(
                         }).ToList()
                     : null,
                 SourceDeckName = item.IsNew && sourceDeckNames.TryGetValue(exKey, out var srcName) ? srcName : null,
+                SmartReason = item.IsNew && smartDeckKeys.Contains(exKey) ? smartReasons.GetValueOrDefault(exKey) : null,
                 ConfusableReadings = confusables.GetValueOrDefault((item.WordId, item.ReadingIndex))
             });
         }
@@ -2905,7 +2940,7 @@ public class StudyController(
                     allCandidateKeys.UnionWith(await GetFilteredMediaWordKeys(mediaDecks));
 
                 var staticDeckIds = studyDecks
-                    .Where(sd => sd.DeckType == StudyDeckType.StaticWordList)
+                    .Where(sd => sd.DeckType.HasMaterialisedWords())
                     .Select(sd => sd.UserStudyDeckId).ToList();
                 if (staticDeckIds.Count > 0)
                     allCandidateKeys.UnionWith(await deckWordResolver.GetStaticDeckWordKeys(staticDeckIds));
@@ -4551,6 +4586,7 @@ public class StudyController(
                 break;
             }
             case StudyDeckType.StaticWordList:
+            case StudyDeckType.Smart:
             {
                 if (request.Format == DeckFormat.Yomitan)
                 {
@@ -4649,6 +4685,7 @@ public class StudyController(
                 break;
             }
             case StudyDeckType.StaticWordList:
+            case StudyDeckType.Smart:
             {
                 var downloadType = request.DownloadType == 0 ? DeckDownloadType.Full : request.DownloadType;
                 if (downloadType == DeckDownloadType.TargetCoverage && request.TargetPercentage is null or < 1 or > 100)
@@ -4744,6 +4781,7 @@ public class StudyController(
                 break;
             }
             case StudyDeckType.StaticWordList:
+            case StudyDeckType.Smart:
             {
                 var downloadType = request.DownloadType == 0 ? DeckDownloadType.Full : request.DownloadType;
                 if (downloadType == DeckDownloadType.TargetCoverage && request.TargetPercentage is null or < 1 or > 100)
@@ -4784,7 +4822,7 @@ public class StudyController(
             .FirstOrDefaultAsync(sd => sd.UserStudyDeckId == id && sd.UserId == userId);
         if (studyDeck == null) return Results.NotFound();
 
-        if (studyDeck.DeckType == StudyDeckType.StaticWordList)
+        if (studyDeck.DeckType.HasMaterialisedWords())
         {
             var pairs = await userContext.UserStudyDeckWords.AsNoTracking()
                 .Where(w => w.UserStudyDeckId == id)
@@ -4829,7 +4867,7 @@ public class StudyController(
             .FirstOrDefaultAsync(sd => sd.UserStudyDeckId == id && sd.UserId == userId);
         if (studyDeck == null) return Results.NotFound();
 
-        if (studyDeck.DeckType == StudyDeckType.StaticWordList)
+        if (studyDeck.DeckType.HasMaterialisedWords())
         {
             var staticQuery = userContext.UserStudyDeckWords.AsNoTracking().Where(w => w.UserStudyDeckId == id);
             if (minOccurrences.HasValue)
@@ -4872,7 +4910,7 @@ public class StudyController(
         var wordKeys = await GetFilteredMediaWordKeys(mediaDecks);
 
         var staticDeckIds = activeStudyDecks
-            .Where(sd => sd.DeckType == StudyDeckType.StaticWordList)
+            .Where(sd => sd.DeckType.HasMaterialisedWords())
             .Select(sd => sd.UserStudyDeckId).ToList();
         if (staticDeckIds.Count > 0)
             wordKeys.UnionWith(await deckWordResolver.GetStaticDeckWordKeys(staticDeckIds));
@@ -4967,7 +5005,7 @@ public class StudyController(
     private async Task<string?> ValidateWordLimits(string userId, int deckId, int wordsToAdd)
     {
         var userDeckIds = await userContext.UserStudyDecks
-            .Where(sd => sd.UserId == userId)
+            .Where(sd => sd.UserId == userId && sd.DeckType != StudyDeckType.Smart)
             .Select(sd => sd.UserStudyDeckId)
             .ToListAsync();
         var totalUserWords = await userContext.UserStudyDeckWords
