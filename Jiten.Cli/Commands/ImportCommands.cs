@@ -116,6 +116,12 @@ public class ImportCommands(CliContext context)
         DerivationBuilder.PrintSummary(report);
     }
 
+    public async Task BuildFormRedundancies()
+    {
+        var rows = await WordFormRedundancyBuilder.Build(context.ContextFactory);
+        Console.WriteLine($"WordFormRedundancies rebuilt: {rows} edges.");
+    }
+
     public async Task CompareJMDict(CliOptions options)
     {
         if (string.IsNullOrEmpty(options.XmlPath) || string.IsNullOrEmpty(options.DictionaryPath) || options.Extra == null)

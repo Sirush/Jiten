@@ -79,7 +79,7 @@ public class RoadmapDataLoader(
     public static DifficultyFamily FamilyOf(MediaType mediaType) =>
         NovelFamilyTypes.Contains(mediaType) ? DifficultyFamily.Novels : DifficultyFamily.Shows;
 
-    /// <summary>Must mirror <c>CoverageComputeService.CreateKnownWordsTempTablesAsync</c> (mature + optional young, kana-expanded, word sets) so roadmap figures match deck-page coverage; LINQ because it must also run on SQLite.</summary>
+    /// <summary>Must mirror <c>CoverageComputeService.CreateKnownWordsTempTablesAsync</c> (mature + optional young, kana- and sibling-expanded, word sets) so roadmap figures match deck-page coverage; LINQ because it must also run on SQLite.</summary>
     public async Task<HashSet<long>> LoadKnownWordsAsync(string userId, bool includeLearningWords,
                                                          CancellationToken ct = default)
     {
@@ -142,10 +142,27 @@ public class RoadmapDataLoader(
         }
 
         // Mirrors the coverage service's NOT EXISTS: a carded form counts by its own card, never by a set it
-        // belongs to or a derivation family it sits in.
+        // belongs to, a sibling form, or a derivation family it sits in.
         var cardedKeys = new HashSet<long>(cards.Count);
         foreach (var c in cards)
             cardedKeys.Add(RoadmapEngine.PackKey(c.WordId, (int)c.ReadingIndex));
+
+        if (kanjiFormWordIds.Count > 0)
+        {
+            var directKeys = direct.Select(d => RoadmapEngine.PackKey(d.WordId, d.ReadingIndex)).ToHashSet();
+            var redundancies = await jiten.WordFormRedundancies.AsNoTracking()
+                                          .Where(r => kanjiFormWordIds.Contains(r.WordId))
+                                          .Select(r => new { r.WordId, r.SourceReadingIndex, r.TargetReadingIndex })
+                                          .ToListAsync(ct);
+
+            foreach (var edge in redundancies)
+            {
+                if (!directKeys.Contains(RoadmapEngine.PackKey(edge.WordId, edge.SourceReadingIndex))) continue;
+                var target = RoadmapEngine.PackKey(edge.WordId, edge.TargetReadingIndex);
+                if (!cardedKeys.Contains(target))
+                    known.Add(target);
+            }
+        }
 
         var setIds = await userContext.UserWordSetStates.AsNoTracking()
                                       .Where(s => s.UserId == userId)

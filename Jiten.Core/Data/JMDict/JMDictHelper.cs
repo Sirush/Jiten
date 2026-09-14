@@ -2614,6 +2614,9 @@ public static class JmDictHelper
 
             Console.WriteLine("Rebuilding derivation links...");
             DerivationBuilder.PrintSummary(await DerivationBuilder.Build(contextFactory));
+
+            Console.WriteLine("Rebuilding form redundancies...");
+            Console.WriteLine($"WordFormRedundancies rebuilt: {await WordFormRedundancyBuilder.Build(contextFactory)} edges.");
         }
 
         // Print statistics

@@ -122,6 +122,9 @@ public class CliOptions
     [Option(longName: "build-derivations", Required = false, HelpText = "Truncate and rebuild jmdict.WordDerivations from the derivation rules and derivation_overrides.json. Runs automatically at the end of --sync-jmdict. Combine with --dry-run to report counts without writing, and --output to dump per-pair outcomes.")]
     public bool BuildDerivations { get; set; }
 
+    [Option(longName: "build-form-redundancies", Required = false, HelpText = "Rebuild jmdict.WordFormRedundancies (intra-word kana-degradation and script-variant edges) from WordForms. Runs automatically at the end of --sync-jmdict.")]
+    public bool BuildFormRedundancies { get; set; }
+
     [Option(longName: "derivation-classify-output", Required = false, HelpText = "With --build-derivations, write the pairs the automatic rule demotes that no override has judged yet (derived rank above the classified slice, or unranked) to this JSON path, as input for the agent classification pass.")]
     public string? DerivationClassifyOutput { get; set; }
 

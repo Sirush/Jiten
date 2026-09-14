@@ -40,6 +40,7 @@ public class JitenDbContext : DbContext
     public DbSet<KanjiReadingWord> KanjiReadingWords { get; set; }
     public DbSet<JmDictWordComposition> WordCompositions { get; set; }
     public DbSet<JmDictWordDerivation> WordDerivations { get; set; }
+    public DbSet<JmDictWordFormRedundancy> WordFormRedundancies { get; set; }
 
     public DbSet<ExampleSentence> ExampleSentences { get; set; }
     public DbSet<ExampleSentenceWord> ExampleSentenceWords { get; set; }
@@ -736,6 +737,12 @@ public class JitenDbContext : DbContext
             entity.HasIndex(e => new { e.BaseWordId, e.BaseReadingIndex, e.DerivedWordId, e.DerivedReadingIndex, e.Category })
                   .IsUnique()
                   .HasDatabaseName("IX_WordDerivations_Pair");
+        });
+
+        modelBuilder.Entity<JmDictWordFormRedundancy>(entity =>
+        {
+            entity.ToTable("WordFormRedundancies", "jmdict");
+            entity.HasKey(e => new { e.WordId, e.SourceReadingIndex, e.TargetReadingIndex });
         });
 
         modelBuilder.Entity<ExampleSentence>(entity =>

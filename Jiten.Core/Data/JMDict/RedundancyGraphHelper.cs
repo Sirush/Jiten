@@ -1,10 +1,9 @@
 using Jiten.Core;
-using Jiten.Core.Data.JMDict;
 
-namespace Jiten.Api.Helpers;
+namespace Jiten.Core.Data.JMDict;
 
 /// <summary>
-/// Builds the per-word redundancy graph used by <see cref="Jiten.Api.Services.WordFormSiblingCache"/>.
+/// Builds the per-word redundancy graph used by <c>WordFormSiblingCache</c>.
 /// A directed edge (source -> target) means "if the form at <c>source</c> is known, the form at
 /// <c>target</c> is redundant". Two sources of edges:
 ///   1. Kana-degradation: a kanji form dominates any form obtained by replacing a subset of its kanji

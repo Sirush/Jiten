@@ -147,6 +147,11 @@ public class Program
             await importCommands.BuildDerivations(options);
         }
 
+        if (options.BuildFormRedundancies)
+        {
+            await importCommands.BuildFormRedundancies();
+        }
+
         if (options.MigrateMovedForms)
         {
             var moved = await Jiten.Core.Data.JMDict.MovedFormMigrator.Run(context.ContextFactory, options.DryRun, options.Output);
