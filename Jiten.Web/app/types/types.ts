@@ -854,8 +854,17 @@ export interface DictionaryEntry {
   rubyText: string;
   primaryKanjiText?: string;
   partsOfSpeech: string[];
+  /** First sense only; the one-line summary. */
   meanings: string[];
+  senses?: DictionarySense[];
   frequencyRank: number;
+}
+
+export interface DictionarySense {
+  index: number;
+  meanings: string[];
+  partsOfSpeech: string[];
+  misc: string[];
 }
 
 export interface StaticDeckWordDto extends DictionaryEntry {

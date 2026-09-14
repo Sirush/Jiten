@@ -1,4 +1,4 @@
-﻿using Jiten.Api.Dtos;
+using Jiten.Api.Dtos;
 using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
@@ -536,7 +536,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         if (trimmed.Length > 200)
             return Results.BadRequest("Query too long");
 
-        var cacheKey = $"jiten:dict-search:v2:{trimmed}:{limit}:{offset}";
+        var cacheKey = $"jiten:dict-search:v3:{trimmed}:{limit}:{offset}";
         var redisDb = redis.GetDatabase();
         try
         {
@@ -868,6 +868,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                     PrimaryKanjiText = primaryKanjiText,
                     PartsOfSpeech = w.PartsOfSpeech,
                     Meanings = firstDef?.EnglishMeanings ?? [],
+                    Senses = DictionarySenseDto.FromDefinitions(w.Definitions),
                     FrequencyRank = freq?.FrequencyRank ?? int.MaxValue
                 };
             })

@@ -474,6 +474,7 @@ public partial class StudyController
             {
                 WordId = wordId, ReadingIndex = (byte)form.ReadingIndex, Text = form.Text, RubyText = form.RubyText,
                 PrimaryKanjiText = kanjiHint, PartsOfSpeech = word.PartsOfSpeech, Meanings = firstDef?.EnglishMeanings ?? [],
+                Senses = DictionarySenseDto.FromDefinitions(word.Definitions),
                 FrequencyRank = rank > 0 ? rank : int.MaxValue,
             };
         }
