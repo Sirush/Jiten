@@ -129,6 +129,10 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
             services.RemoveAll<Jiten.Api.Services.ISrsDebounceService>();
             services.AddSingleton<Jiten.Api.Services.ISrsDebounceService, NoOpSrsDebounceService>();
 
+            services.RemoveAll<Jiten.Api.Services.SmartDeck.ISmartDeckDirtyService>();
+            services.AddSingleton<RecordingSmartDeckDirtyService>();
+            services.AddSingleton<Jiten.Api.Services.SmartDeck.ISmartDeckDirtyService>(sp => sp.GetRequiredService<RecordingSmartDeckDirtyService>());
+
             // Replace study session service with in-memory for testing
             services.RemoveAll<Jiten.Api.Services.IStudySessionService>();
             services.AddSingleton<Jiten.Api.Services.IStudySessionService, InMemoryStudySessionService>();
