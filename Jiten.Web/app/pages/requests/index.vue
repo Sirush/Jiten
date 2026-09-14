@@ -466,7 +466,7 @@
                       </div>
                     </div>
 
-                    <div class="shrink-0 hidden md:flex items-center gap-2" @click.prevent>
+                    <div class="shrink-0 flex flex-col md:flex-row items-center gap-2" @click.prevent>
                       <RequestBoostButton
                         :request-id="request.id"
                         :boost-count="request.boostCount"
