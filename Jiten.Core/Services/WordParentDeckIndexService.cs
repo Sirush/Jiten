@@ -10,8 +10,12 @@ public static class WordParentDeckIndexService
     /// <summary>A parse stamps LastUpdate before its DeckWords COPY lands, so parents touched this close to a build are treated as not covered by it.</summary>
     public static readonly TimeSpan BuildSafetyMargin = TimeSpan.FromHours(1);
 
-    /// <summary>Above this many stale parents a rebuild is cheaper than the per-deck fallback, and it keeps that fallback too small for a bad plan.</summary>
+    /// <summary>Above this many stale parents the per-deck fallback is skipped for reparsed parents; it also keeps that fallback too small for a bad plan.</summary>
     public const int StaleParentRebuildThreshold = 1000;
+
+    public static readonly TimeSpan RebuildCooldown = TimeSpan.FromMinutes(15);
+
+    private static readonly DateTime NeverStale = DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc);
 
     private const long RebuildLockKey = 7_212_026_001;
 
@@ -27,6 +31,12 @@ public static class WordParentDeckIndexService
     public sealed record BuildState(DateTime BuiltAt, int[] DeckIds)
     {
         public DateTime CoveredUntil => BuiltAt - BuildSafetyMargin;
+    }
+
+    /// <summary>StaleBounded: only parents absent from the build go through the DeckWords fallback, reparsed ones keep their indexed values. RebuildWanted: the caller should queue a rebuild off the user's path.</summary>
+    public sealed record Freshness(BuildState Build, bool StaleBounded, bool RebuildWanted)
+    {
+        public DateTime StaleCutoff => StaleBounded ? NeverStale : Build.CoveredUntil;
     }
 
     private sealed class BuildRow
@@ -49,8 +59,8 @@ public static class WordParentDeckIndexService
                                build.CoveredUntil, build.DeckIds)
              .SingleAsync();
 
-    /// <summary>Returns a build the recompute can rely on, rebuilding first when the index is missing, empty, or has more stale parents than the fallback should carry.</summary>
-    public static async Task<BuildState> EnsureFreshAsync(DbContext db, ILogger logger)
+    /// <summary>Rebuilds inline only when the index is missing or empty; an over-stale index is used as-is so a user's recompute never waits on a full DeckWords scan.</summary>
+    public static async Task<Freshness> EnsureFreshAsync(DbContext db, ILogger logger)
     {
         var requestedAt = DateTime.UtcNow;
         var build = await GetBuildAsync(db);
@@ -59,16 +69,22 @@ public static class WordParentDeckIndexService
             var hasRows = await db.Database
                                   .SqlQueryRaw<bool>("""SELECT EXISTS (SELECT 1 FROM "jiten"."WordParentDeckIndex") AS "Value" """)
                                   .SingleAsync();
-            var stale = hasRows ? await CountStaleParentsAsync(db, build) : int.MaxValue;
-            if (stale <= StaleParentRebuildThreshold)
-                return build;
+            if (hasRows)
+            {
+                var stale = await CountStaleParentsAsync(db, build);
+                if (stale <= StaleParentRebuildThreshold)
+                    return new Freshness(build, StaleBounded: false, RebuildWanted: false);
 
-            logger.LogInformation("WordParentDeckIndex: {Stale} stale parents exceed {Threshold}, rebuilding", stale,
-                                  StaleParentRebuildThreshold);
+                var rebuildWanted = build.BuiltAt <= requestedAt - RebuildCooldown;
+                logger.LogInformation("WordParentDeckIndex: {Stale} stale parents exceed {Threshold}, using indexed values (rebuild wanted: {RebuildWanted})",
+                                      stale, StaleParentRebuildThreshold, rebuildWanted);
+                return new Freshness(build, StaleBounded: true, RebuildWanted: rebuildWanted);
+            }
         }
 
         await RebuildAsync(db, logger, skipIfBuiltAfter: requestedAt);
-        return await GetBuildAsync(db) ?? throw new InvalidOperationException("WordParentDeckIndex has no build row after a rebuild");
+        var fresh = await GetBuildAsync(db) ?? throw new InvalidOperationException("WordParentDeckIndex has no build row after a rebuild");
+        return new Freshness(fresh, StaleBounded: false, RebuildWanted: false);
     }
 
     /// <summary>Rebuilds the index from DeckWords in one transaction, serialised on an advisory lock; a rebuild that landed after <paramref name="skipIfBuiltAfter"/> makes this one a no-op.</summary>

@@ -61,6 +61,16 @@ public class ComputationJob(
 
     [AutomaticRetry(Attempts = 0)]
     [Queue(CoverageQueues.Full)]
+    public async Task RebuildWordParentDeckIndexIfCooledDown()
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        context.Database.SetCommandTimeout(TimeSpan.FromMinutes(15));
+        await WordParentDeckIndexService.RebuildAsync(context, logger,
+                                                      skipIfBuiltAfter: DateTime.UtcNow - WordParentDeckIndexService.RebuildCooldown);
+    }
+
+    [AutomaticRetry(Attempts = 0)]
+    [Queue(CoverageQueues.Full)]
     public async Task ComputeUserCoverage(string userId)
     {
         // Prevent duplicate concurrent computations for the same user
@@ -99,16 +109,18 @@ public class ComputationJob(
             }
 
             var totalSw = System.Diagnostics.Stopwatch.StartNew();
-            // A first-time or catch-up rebuild scans all of DeckWords and needs more than the per-statement budget below.
+            // A first-time rebuild scans all of DeckWords and needs more than the per-statement budget below.
             userContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(15));
-            var build = await WordParentDeckIndexService.EnsureFreshAsync(userContext, logger);
+            var freshness = await WordParentDeckIndexService.EnsureFreshAsync(userContext, logger);
             userContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(3));
+            if (freshness.RebuildWanted)
+                backgroundJobs.Enqueue<ComputationJob>(job => job.RebuildWordParentDeckIndexIfCooledDown());
 
             await using var transaction = await userContext.Database.BeginTransactionAsync();
             await userContext.Database.ExecuteSqlRawAsync($"SET LOCAL work_mem = '{COVERAGE_WORK_MEM}';");
             await userContext.UserCoverageChunks.Where(uc => uc.UserId == userId).ExecuteDeleteAsync();
             logger.LogInformation("Coverage: old chunks deleted in {Elapsed}ms", totalSw.ElapsedMilliseconds);
-            await RecomputeUserCoverageChunks(userContext, userId, computedAt, build);
+            await RecomputeUserCoverageChunks(userContext, userId, computedAt, freshness);
             await transaction.CommitAsync();
 
             await UpsertCoverageMetadata(userContext, userId, computedAt, isDirty: false);
@@ -311,7 +323,7 @@ public class ComputationJob(
     }
 
     private async Task RecomputeUserCoverageChunks(UserDbContext userContext, string userId, DateTime computedAt,
-                                                   WordParentDeckIndexService.BuildState build)
+                                                   WordParentDeckIndexService.Freshness freshness)
     {
         var userGuid = Guid.Parse(userId);
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -354,11 +366,11 @@ public class ComputationJob(
         logger.LogInformation("Coverage: hits computed from WordParentDeckIndex in {Elapsed}ms", sw.ElapsedMilliseconds);
         sw.Restart();
 
-        // EnsureFreshAsync bounds this set, so the whole-deck fetch below stays small.
+        // StaleCutoff bounds this set (to unindexed parents only when the index is over-stale), so the whole-deck fetch below stays small.
         await userContext.Database.ExecuteSqlRawAsync($"""
             CREATE TEMP TABLE _stale_parents ON COMMIT DROP AS
             {WordParentDeckIndexService.StaleParentsQuery};
-            """, build.CoveredUntil, build.DeckIds);
+            """, freshness.StaleCutoff, freshness.Build.DeckIds);
         await userContext.Database.ExecuteSqlRawAsync("ANALYZE _stale_parents;");
         var staleCount = await userContext.Database.SqlQueryRaw<int>("SELECT COUNT(*)::int AS \"Value\" FROM _stale_parents").SingleAsync();
         if (staleCount > 0)
