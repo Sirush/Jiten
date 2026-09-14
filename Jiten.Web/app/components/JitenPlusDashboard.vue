@@ -150,6 +150,22 @@
         </div>
       </div>
 
+      <div class="jp-tile sm:col-span-2 border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+        <div class="jp-tile__head">
+          <Icon name="material-symbols:track-changes" class="jp-tile__icon" />
+          <h3 class="jp-tile__title text-gray-900 dark:text-white">Smart Deck</h3>
+        </div>
+        <p class="jp-tile__body text-gray-600 dark:text-gray-300">
+          A special, automatic deck, that selects the best words to learn for what you're currently immersing in. Using the inbuilt status system, mark the
+          media you're going through, and this deck will show you the words you're most likely to encounter and update itself as you go through other media.
+        </p>
+        <div class="jp-tile__actions">
+          <NuxtLink to="/srs/decks">
+            <Button label="Set up your Smart Deck" size="small" severity="secondary" />
+          </NuxtLink>
+        </div>
+      </div>
+
       <div class="jp-tile border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
         <div class="jp-tile__head">
           <Icon name="material-symbols:explore-rounded" class="jp-tile__icon" />

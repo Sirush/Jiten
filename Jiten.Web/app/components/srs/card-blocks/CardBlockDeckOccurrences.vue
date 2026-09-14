@@ -27,6 +27,15 @@
 
   const occurrences = computed(() => (isPreview ? (sample?.deckOccurrences ?? []) : (card.value?.deckOccurrences ?? [])));
   const sourceDeckName = computed(() => (isPreview ? '' : (card.value?.sourceDeckName ?? '')));
+  const smartReason = computed(() => (isPreview ? null : (card.value?.smartReason ?? null)));
+  const smartReasonText = computed(() => {
+    const r = smartReason.value;
+    if (!r) return '';
+    const unit = r.unitOriginalTitle
+      ? ` (${localiseTitle({ originalTitle: r.unitOriginalTitle, romajiTitle: r.unitRomajiTitle, englishTitle: r.unitEnglishTitle })})`
+      : '';
+    return `Smart Deck: ${r.occurrences}× in ${localiseTitle(r)}${unit}`;
+  });
   const visible = computed(() => occurrences.value.length > 0 || !!sourceDeckName.value);
 </script>
 
@@ -57,6 +66,7 @@
         </template>
         <span v-else-if="sourceDeckName">{{ sourceDeckName }}</span>
       </div>
+      <div v-if="smartReasonText" class="text-xs text-primary-600 dark:text-primary-300 mt-1">{{ smartReasonText }}</div>
       <button
         v-if="occurrences.length > 3"
         type="button"

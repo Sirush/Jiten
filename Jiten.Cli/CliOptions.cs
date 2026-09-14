@@ -1,4 +1,4 @@
-﻿using CommandLine;
+using CommandLine;
 
 namespace Jiten.Cli;
 
@@ -263,6 +263,15 @@ public class CliOptions
     [Option(longName: "benchmark-sections", Required = false, HelpText = "Enable the fine-grained section timers (adjacent scoring phases, deconjugator BFS time). They cost a few percent themselves.")]
     public bool BenchmarkSections { get; set; }
 
+    [Option(longName: "smart-deck-bench", Required = false, HelpText = "Time every stage of a Smart Deck rebuild and read at the plan caps against the local database.")]
+    public bool SmartDeckBench { get; set; }
+
+    [Option(longName: "smart-deck-bench-random", Required = false, HelpText = "Sample the benchmark titles at random instead of taking the largest decks.")]
+    public bool SmartDeckBenchRandom { get; set; }
+
+    [Option(longName: "smart-deck-bench-user", Required = false, HelpText = "User id whose cards and word sets act as exclusions for --smart-deck-bench (default: the user with the most cards).")]
+    public string? SmartDeckBenchUser { get; set; }
+
     [Option(longName: "scan-confidence", Required = false, HelpText = "Scan a corpus file for low-confidence token resolutions. Requires --input.")]
     public bool ScanConfidence { get; set; }
 
@@ -375,8 +384,8 @@ public class CliOptions
     public int? YtRegister { get; set; }
 
     [Option(longName: "yt-bootstrap", Required = false,
-            HelpText = "Re-list a tracked YouTube source (parent deck id) with this machine's yt-dlp, add unseen videos as pending on the API, then drain it.")]
-    public int? YtBootstrap { get; set; }
+            HelpText = "Re-list a tracked YouTube source (parent deck id) or 'all' with this machine's yt-dlp, add unseen videos as pending on the API, then drain them.")]
+    public string? YtBootstrap { get; set; }
 
     [Option(longName: "yt-drain", Required = false,
             HelpText = "Fetch pending videos for a tracked YouTube source (parent deck id) or 'all' from this machine's connection. Parsing happens server-side.")]

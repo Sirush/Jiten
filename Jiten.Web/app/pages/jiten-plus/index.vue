@@ -79,7 +79,7 @@
   useSeoMeta({
     title: 'Jiten+ - Get more from Jiten and help it grow',
     description:
-      'Jiten+ adds richer cards, custom frequency lists, a personalised immersion plan, media request boosts, your coverage journey, higher limits and more while helping support Jiten. Everything free stays free.',
+      'Jiten+ adds a richer cards, custom frequency lists, a Smart Deck, a personalised immersion plan, media request boosts, your coverage journey, higher limits and more while helping support Jiten. Everything free stays free.',
     ogTitle: 'Jiten+ - Get more from Jiten and help it grow',
     ogDescription: 'Get useful extras while helping support Jiten. Everything free stays free.',
     ogType: 'website',
@@ -155,6 +155,10 @@
             </li>
             <li class="inline-flex items-center gap-1.5">
               <Icon name="material-symbols:check-circle-rounded" class="text-primary-500" />
+              Smart Deck
+            </li>
+            <li class="inline-flex items-center gap-1.5">
+              <Icon name="material-symbols:check-circle-rounded" class="text-primary-500" />
               Personalised immersion plans
             </li>
             <li class="inline-flex items-center gap-1.5">
@@ -186,9 +190,11 @@
         <section class="mt-10 max-w-3xl mx-auto text-center border-y border-gray-200 dark:border-gray-800 py-7">
           <h2 class="jp-note__title text-gray-900 dark:text-white">Made by one person</h2>
           <p class="jp-note__body text-gray-600 dark:text-gray-300">
-            Jiten is built and maintained by me alone. It's not a side project: I have been working on it full time for over a year now, and have spent
-            thousands of hours on the parser, the decks and everything in between. I am very grateful for all the contributions and donations, but they don't
-            cover a salary yet, and Jiten+ is what gets it there, without putting anything that's currently free behind a paywall.
+            Hey, I'm Sirus, the sole developer and maintainer of Jiten. What started as a hobby project has grown into a wonderful community over the last year
+            and a half, and I've decided to start working on it full time. <br />
+            Jiten represents thousands of hours, whether it's on the parser, all the features you can find but also adding and curating new media. I am very
+            grateful for all the contributions and donations from all of you, and I hope to be able to continue working on it full time. <br />
+            Jiten+ helps cover the costs of running Jiten and provides me with a salary, without putting anything that's currently free behind a paywall.
           </p>
           <p class="jp-note__sign">
             <span class="jp-note__name text-gray-800 dark:text-gray-100">Sirus</span>
@@ -222,6 +228,18 @@
               <p class="jp-feature__body text-gray-600 dark:text-gray-300">
                 Build frequency lists from any media available on Jiten, use them in Yomitan, and share them with a link. Saved lists update automatically as
                 Jiten grows.
+              </p>
+            </div>
+
+            <div class="jp-feature sm:col-span-2 border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+              <div class="jp-feature__head">
+                <Icon name="material-symbols:track-changes" class="jp-feature__icon" />
+                <h3 class="jp-feature__title text-gray-900 dark:text-white">Smart Deck</h3>
+              </div>
+              <p class="jp-feature__body text-gray-600 dark:text-gray-300">
+                A special, automatic deck, that selects the best words to learn for what you're currently immersing in. Using the inbuilt status system, mark
+                the media you're going through, and this deck will show you the words you're most likely to encounter and update itself as you go through other
+                media.
               </p>
             </div>
 
