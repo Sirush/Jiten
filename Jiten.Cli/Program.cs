@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using CommandLine;
 using Jiten.Cli;
 using Jiten.Cli.Commands;
@@ -43,6 +43,7 @@ public class Program
         var mlCommands = new MlCommands(context);
         var metadataCommands = new MetadataCommands();
         var benchmarkCommands = new BenchmarkCommands(context);
+        var smartDeckBenchCommands = new SmartDeckBenchCommands(context);
         var rubyExtractCommands = new RubyExtractCommands(context);
         var webNovelCommands = new WebNovelCommands();
         var youTubeCommands = new YouTubeCommands(context);
@@ -71,7 +72,7 @@ public class Program
             return;
         }
 
-        if (options.YtBootstrap != null)
+        if (!string.IsNullOrEmpty(options.YtBootstrap))
         {
             await youTubeCommands.Bootstrap(options);
             return;
@@ -420,6 +421,11 @@ public class Program
         if (!string.IsNullOrEmpty(options.Benchmark))
         {
             await benchmarkCommands.RunBenchmark(options);
+        }
+
+        if (options.SmartDeckBench)
+        {
+            await smartDeckBenchCommands.Run(options);
         }
 
         // SRS maintenance commands

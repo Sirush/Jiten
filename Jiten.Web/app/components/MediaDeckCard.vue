@@ -12,6 +12,7 @@
   import { useAuthStore } from '~/stores/authStore';
   import { useConfirm } from 'primevue/useconfirm';
   import { useToast } from 'primevue/usetoast';
+  import { apiErrorMessage } from '~/utils/apiErrorMessage';
 
   const props = defineProps<{
     deck: Deck;
@@ -61,6 +62,27 @@
   const localiseTitle = useLocaliseTitle();
   const confirm = useConfirm();
   const toast = useToast();
+  const smartDeck = useSmartDeck();
+  const { isPlus: isPlusUser } = useJitenPlus();
+  const smartSourceState = computed(() => smartDeck.sourceState(props.deck.deckId));
+
+  const smartMenuVisible = computed(() => isPlusUser.value && !props.deck.parentDeckId && smartDeck.exists.value);
+
+  async function applySmartAction(action: 'pin' | 'unpin' | 'include' | 'exclude' | 'clear') {
+    try {
+      await smartDeck.applySourceAction(props.deck.deckId, action);
+      const done: Record<string, string> = {
+        pin: 'Pinned to the top of your Smart Deck',
+        unpin: 'Unpinned',
+        include: 'Included in your Smart Deck',
+        exclude: 'Excluded from your Smart Deck',
+        clear: 'Smart Deck override removed',
+      };
+      toast.add({ severity: 'success', summary: done[action], life: 2500 });
+    } catch (e) {
+      toast.add({ severity: 'warn', summary: apiErrorMessage(e, 'Could not update the Smart Deck'), life: 3000 });
+    }
+  }
 
   const displayAdminFunctions = computed(() => store.displayAdminFunctions);
   const readingSpeed = computed(() => store.readingSpeed);
@@ -117,6 +139,7 @@
 
   const toggleMenu = async (event: Event) => {
     menuActivated.value = true;
+    if (isPlusUser.value && !props.deck.parentDeckId) smartDeck.fetchStatus();
     await nextTick();
     menu.value?.toggle(event);
   };
@@ -233,6 +256,7 @@
 
   const handleMarkCompleted = async () => {
     const response = await setStatus(DeckStatus.Completed);
+    if (response && props.deck.parentDeckId) showUnitReport();
 
     if (response?.parentDeckId != null && response.parentStatus != null) {
       emit('parent-status-changed', response.parentDeckId, response.parentStatus);
@@ -256,6 +280,16 @@
       if (rating == null) openRatingDialog();
     }
   };
+
+  // Fire-and-forget: the status change already happened, the report is a bonus and free users get nothing back.
+  async function showUnitReport() {
+    if (!isPlusUser.value) return;
+    await smartDeck.fetchStatus();
+    if (!smartDeck.exists.value) return;
+    const report = await smartDeck.fetchUnitReport(props.deck.deckId);
+    if (!report) return;
+    toast.add({ severity: 'info', summary: 'Smart Deck', detail: smartDeck.unitReportSentence(report, localiseTitle(props.deck)), life: 6000 });
+  }
 
   const completionCurrentPair = computed(() =>
     completionComparisonIndex.value < completionSuggestions.value.length ? completionSuggestions.value[completionComparisonIndex.value] : null
@@ -298,6 +332,28 @@
       command: () => {
         showIssueDialog.value = true;
       },
+    },
+    {
+      separator: true,
+      visible: smartMenuVisible.value,
+    },
+    {
+      label: smartSourceState.value === 'pinned' ? 'Unpin from Smart Deck' : 'Pin in Smart Deck',
+      icon: 'pi pi-bookmark',
+      visible: smartMenuVisible.value,
+      command: () => applySmartAction(smartSourceState.value === 'pinned' ? 'unpin' : 'pin'),
+    },
+    {
+      label: smartSourceState.value === 'excluded' ? 'Stop excluding from Smart Deck' : 'Exclude from Smart Deck',
+      icon: 'pi pi-ban',
+      visible: smartMenuVisible.value,
+      command: () => applySmartAction(smartSourceState.value === 'excluded' ? 'clear' : 'exclude'),
+    },
+    {
+      label: 'Include in Smart Deck',
+      icon: 'pi pi-plus-circle',
+      visible: smartMenuVisible.value && smartSourceState.value === 'none' && props.deck.status !== DeckStatus.Ongoing,
+      command: () => applySmartAction('include'),
     },
   ]);
 

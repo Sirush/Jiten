@@ -43,6 +43,7 @@ public partial class UserController(
     IExternalMediaListClient externalListClient,
     IUserLimitsService userLimits,
     IStudySessionService sessionService,
+    Jiten.Api.Services.SmartDeck.ISmartDeckDirtyService smartDeckDirty,
     ILogger<UserController> logger) : ControllerBase
 {
     private const int MaxAnkiTxtBytes = 50 * 1024 * 1024;
@@ -2189,6 +2190,8 @@ public partial class UserController(
                 parentDeckId ??= deck.ParentDeckId;
         }
 
+        await smartDeckDirty.MarkDirty(userId);
+
         return Results.Ok(new { preference.DeckId, preference.Status, preference.IsFavourite, preference.IsIgnored, parentDeckId, parentStatus, allChildrenCompleted });
     }
 
@@ -2268,6 +2271,7 @@ public partial class UserController(
 
         userContext.UserDeckPreferences.Remove(preference);
         await userContext.SaveChangesAsync();
+        await smartDeckDirty.MarkDirty(userId);
 
         return Results.Ok(new { deleted = true });
     }

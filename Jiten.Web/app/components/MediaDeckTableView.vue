@@ -92,7 +92,7 @@
               <div class="text-xs text-gray-600 dark:text-gray-300">Popularity</div>
               <div class="flex items-center gap-1 font-medium tabular-nums">
                 <span v-if="deck.popularityRank">#{{ deck.popularityRank }}</span>
-                <Tooltip v-if="deck.isTrending" content="Trending: well above its usual activity this week">
+                <Tooltip v-if="deck.isTrending" content="Trending: well above its usual activity recently">
                   <i class="pi pi-arrow-up-right text-xs text-purple-700 dark:text-purple-200" />
                 </Tooltip>
               </div>

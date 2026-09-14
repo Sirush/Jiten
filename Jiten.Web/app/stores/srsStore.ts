@@ -665,7 +665,15 @@ export const useSrsStore = defineStore('srs', () => {
   }
 
   async function sendReorder(items: { userStudyDeckId: number; sortOrder: number; isActive: boolean }[]) {
-    await $api('srs/study-decks/reorder', { method: 'PUT', body: { items } });
+    const response = await $api<{ items?: { userStudyDeckId: number; isActive: boolean }[] }>('srs/study-decks/reorder', {
+      method: 'PUT',
+      body: { items },
+    });
+    
+    for (const saved of response?.items ?? []) {
+      const deck = studyDecks.value.find((d) => d.userStudyDeckId === saved.userStudyDeckId);
+      if (deck && deck.isActive !== saved.isActive) deck.isActive = saved.isActive;
+    }
     invalidateSession();
   }
 

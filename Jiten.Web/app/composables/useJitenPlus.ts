@@ -2,7 +2,7 @@ import { useAuthStore } from '~/stores/authStore';
 
 export type JitenPlusTier = 'none' | 'trial' | 'full';
 
-export type JitenPlusFeature = 'card-media' | 'freq-list-save' | 'freq-list-generate' | 'request-boosts' | 'immersion-plan-generate' | 'coverage-journey';
+export type JitenPlusFeature = 'card-media' | 'freq-list-save' | 'freq-list-generate' | 'request-boosts' | 'immersion-plan-generate' | 'coverage-journey' | 'smart-deck';
 
 export interface PromoCreditInfo {
   userPromoCreditId: number;
@@ -80,6 +80,7 @@ const FEATURE_TIERS: Record<JitenPlusFeature, 'trial' | 'full'> = {
   'request-boosts': 'trial',
   'immersion-plan-generate': 'trial',
   'coverage-journey': 'trial',
+  'smart-deck': 'trial',
 };
 
 // Deduplicates concurrent first-fetches across the many gates that mount at once (client-only,

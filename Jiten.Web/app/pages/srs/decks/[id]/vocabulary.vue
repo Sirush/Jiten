@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import Breadcrumb from 'primevue/breadcrumb';
   import { useSrsStore } from '~/stores/srsStore';
   import { type Word, KnownState, SortOrder, StudyDeckType } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
@@ -26,6 +27,7 @@
 
   const deck = computed(() => srsStore.studyDecks.find((d) => d.userStudyDeckId === deckId));
   const isStaticDeck = computed(() => deck.value?.deckType === StudyDeckType.StaticWordList);
+  const isSmartDeck = computed(() => deck.value?.deckType === StudyDeckType.Smart);
 
   srsStore.fetchSettings();
 
@@ -39,6 +41,9 @@
   });
 
   useHead(() => ({ title: `${deckName.value} - Vocabulary` }));
+
+  const breadcrumbHome = { icon: 'pi pi-home', route: '/' };
+  const breadcrumbItems = computed(() => [{ label: 'Decks', route: '/srs/decks' }, { label: deckName.value }, { label: 'Vocabulary' }]);
 
   const sortByOptions = computed(() => {
     const d = deck.value;
@@ -58,6 +63,11 @@
           { label: 'Import Order', value: 'importOrder' },
           { label: frequencySortLabel.value, value: 'globalFreq' },
           { label: 'Occurrences', value: 'occurrences' },
+        ];
+      case StudyDeckType.Smart:
+        return [
+          { label: 'Smart order', value: 'importOrder' },
+          { label: frequencySortLabel.value, value: 'globalFreq' },
         ];
       default:
         return [{ label: frequencySortLabel.value, value: 'globalFreq' }];
@@ -90,6 +100,7 @@
       case StudyDeckType.GlobalDynamic:
         return 'globalFreq';
       case StudyDeckType.StaticWordList:
+      case StudyDeckType.Smart:
         return 'importOrder';
       default:
         return 'globalFreq';
@@ -330,90 +341,100 @@
 <template>
   <div class="container mx-auto p-2 md:p-4 pb-24">
     <SrsSubNav />
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
-      <div class="flex items-center gap-2 min-w-0">
-        <NuxtLink to="/srs/decks" class="text-sm text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 whitespace-nowrap">
-          ‹ Decks
-        </NuxtLink>
-        <span class="text-surface-300 dark:text-surface-400">·</span>
-        <h1 class="text-2xl font-bold truncate">{{ deckName }}</h1>
-        <span v-if="totalItems > 0" class="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ totalItems }} words</span>
+    <div class="flex flex-col gap-2">
+      <Breadcrumb :home="breadcrumbHome" :model="breadcrumbItems" class="!bg-transparent !p-0 !text-xs !gap-1 overflow-x-auto">
+        <template #item="{ item }">
+          <NuxtLink v-if="item.route" :to="item.route" class="flex items-center gap-1 text-primary hover:underline">
+            <span v-if="item.icon" :class="item.icon" />
+            <span v-if="item.label" class="truncate max-w-[45vw] md:max-w-xs">{{ item.label }}</span>
+          </NuxtLink>
+          <span v-else class="flex items-center gap-1 text-muted-color">
+            <span v-if="item.label" class="truncate max-w-[45vw] md:max-w-xs">{{ item.label }}</span>
+          </span>
+        </template>
+      </Breadcrumb>
+      <div class="flex items-center justify-between gap-2 min-h-[2.5rem]">
+        <h1 class="text-lg font-bold md:text-2xl truncate">
+          {{ deckName }}
+          <span class="hidden md:inline">- Vocabulary List</span>
+        </h1>
+        <div v-if="isStaticDeck" class="flex gap-2 shrink-0">
+          <Button icon="pi pi-plus" label="Add Words" class="!hidden sm:!inline-flex" @click="showAddDialog = true" />
+          <Button icon="pi pi-plus" class="sm:!hidden" @click="showAddDialog = true" />
+        </div>
       </div>
-      <div v-if="isStaticDeck" class="flex gap-2">
-        <Button icon="pi pi-plus" label="Add Words" class="!hidden sm:!inline-flex" @click="showAddDialog = true" />
-        <Button icon="pi pi-plus" class="sm:!hidden" @click="showAddDialog = true" />
+
+      <VocabularyFilters
+        v-model:sort-by="sortBy"
+        v-model:sort-descending="sortDescending"
+        v-model:display-tiers="displayTiers"
+        v-model:suspended="suspended"
+        v-model:redundant="redundant"
+        v-model:search="search"
+        v-model:include-pos="includePos"
+        v-model:exclude-pos="excludePos"
+        v-model:hide-kana-only="hideKanaOnly"
+        :sort-by-options="sortByOptions"
+        :show-display-filter="auth.isAuthenticated"
+      />
+
+      <PaginationControls
+        v-if="response?.data?.length"
+        :previous-link="previousLink"
+        :next-link="nextLink"
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :page-link-for="pageLinkFor"
+        :start="start"
+        :end="end"
+        :total-items="totalItems"
+        item-label="words"
+        :page-size="pageSize"
+        :page-size-options="[50, 100, 200]"
+        mobile-compact
+      />
+
+      <div v-if="pageWords.length > 0" class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500 dark:text-surface-400">
+        <Checkbox :model-value="allOnPageSelected" :binary="true" @change="toggleSelectAll" />
+        <span class="text-xs cursor-pointer select-none" @click="toggleSelectAll">
+          {{ selectedWords.length > 0 ? `${selectedWords.length} selected` : `Select page (${pageWords.length})` }}
+        </span>
       </div>
+
+      <VocabularyList
+        :words="response?.data ?? []"
+        :list-context="listContext"
+        :rank-source-label="rankSourceLabel"
+        :hide-occurrences="isSmartDeck"
+        :status="status"
+        :error="error"
+        :removable="isStaticDeck"
+        :removing-key="removingKey"
+        :selectable="true"
+        :selected-keys="selectedKeys"
+        empty-message="Try adjusting your search or filters"
+        @remove="confirmRemoveWord"
+        @select="toggleSelect"
+      >
+        <template #error="{ error: err }">
+          <div>Error: {{ err }}</div>
+        </template>
+      </VocabularyList>
+
+      <PaginationControls
+        v-if="response?.data?.length"
+        :previous-link="previousLink"
+        :next-link="nextLink"
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :page-link-for="pageLinkFor"
+        :start="start"
+        :end="end"
+        :total-items="totalItems"
+        :show-summary="false"
+        :scroll-to-top-on-navigate="true"
+      />
     </div>
-
-    <VocabularyFilters
-      v-model:sort-by="sortBy"
-      v-model:sort-descending="sortDescending"
-      v-model:display-tiers="displayTiers"
-      v-model:suspended="suspended"
-      v-model:redundant="redundant"
-      v-model:search="search"
-      v-model:include-pos="includePos"
-      v-model:exclude-pos="excludePos"
-      v-model:hide-kana-only="hideKanaOnly"
-      :sort-by-options="sortByOptions"
-      :show-display-filter="auth.isAuthenticated"
-    />
-
-    <PaginationControls
-      v-if="response?.data?.length"
-      :previous-link="previousLink"
-      :next-link="nextLink"
-      :current-page="currentPage"
-      :total-pages="totalPages"
-      :page-link-for="pageLinkFor"
-      :start="start"
-      :end="end"
-      :total-items="totalItems"
-      item-label="words"
-      :page-size="pageSize"
-      :page-size-options="[50, 100, 200]"
-      mobile-compact
-    />
-
-    <div v-if="pageWords.length > 0" class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500 dark:text-surface-400">
-      <Checkbox :model-value="allOnPageSelected" :binary="true" @change="toggleSelectAll" />
-      <span class="text-xs cursor-pointer select-none" @click="toggleSelectAll">
-        {{ selectedWords.length > 0 ? `${selectedWords.length} selected` : `Select page (${pageWords.length})` }}
-      </span>
-    </div>
-
-    <VocabularyList
-      :words="response?.data ?? []"
-      :list-context="listContext"
-      :rank-source-label="rankSourceLabel"
-      :status="status"
-      :error="error"
-      :removable="isStaticDeck"
-      :removing-key="removingKey"
-      :selectable="true"
-      :selected-keys="selectedKeys"
-      empty-message="Try adjusting your search or filters"
-      @remove="confirmRemoveWord"
-      @select="toggleSelect"
-    >
-      <template #error="{ error: err }">
-        <div>Error: {{ err }}</div>
-      </template>
-    </VocabularyList>
-
-    <PaginationControls
-      v-if="response?.data?.length"
-      :previous-link="previousLink"
-      :next-link="nextLink"
-      :current-page="currentPage"
-      :total-pages="totalPages"
-      :page-link-for="pageLinkFor"
-      :start="start"
-      :end="end"
-      :total-items="totalItems"
-      :show-summary="false"
-      :scroll-to-top-on-navigate="true"
-    />
 
     <SrsAddWordsDialog v-if="isStaticDeck" v-model:visible="showAddDialog" :deck-id="deckId" @words-added="onWordsAdded" />
 

@@ -188,8 +188,7 @@
     if (counts.hard > 0) segments.push({ key: 'hard', width: (counts.hard / total) * 100, color: c.hard });
     if (counts.action > 0) segments.push({ key: 'action', width: (counts.action / total) * 100, color: c.action });
     if (srsStore.againCardsAhead > 0) segments.push({ key: 'again', width: (srsStore.againCardsAhead / total) * 100, color: c.again });
-    if (srsStore.learningCardsAhead > 0)
-      segments.push({ key: 'learning', width: (srsStore.learningCardsAhead / total) * 100, color: c.learning });
+    if (srsStore.learningCardsAhead > 0) segments.push({ key: 'learning', width: (srsStore.learningCardsAhead / total) * 100, color: c.learning });
     return segments;
   });
 

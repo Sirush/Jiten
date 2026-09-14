@@ -211,6 +211,7 @@ public partial class UserController
         }
 
         await userContext.SaveChangesAsync();
+        await smartDeckDirty.MarkDirty(userId);
 
         if (completedTransition)
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
@@ -382,6 +383,7 @@ public partial class UserController
         }
 
         await userContext.SaveChangesAsync();
+        await smartDeckDirty.MarkDirty(userId);
 
         if (completedTransition)
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
