@@ -27,6 +27,9 @@ public partial class MorphologicalAnalyser
     private byte[]? _sudachiUserDictCsv;
     private bool _retokeniseOovDisabled;
 
+    /// <summary>Request-path parse: takes the reserved Sudachi slot instead of queueing behind bulk jobs.</summary>
+    public bool Interactive { get; init; }
+
     private Dictionary<string, IReadOnlyList<DeconjugationForm>>? _pipelineDeconjCache;
     private Dictionary<string, IReadOnlyList<DeconjugationForm>>.AlternateLookup<ReadOnlySpan<char>> _pipelineDeconjCacheAlt;
 
@@ -188,7 +191,8 @@ public partial class MorphologicalAnalyser
             var (words, rawOutput) = await SudachiInterop.ProcessTextStreamingAsync(configPath, combinedText, dic,
                                                                                     captureRaw: diagnostics != null,
                                                                                     mode: mode, userDictCsv: userDictCsv,
-                                                                                    emitMargins: diagnostics != null);
+                                                                                    emitMargins: diagnostics != null,
+                                                                                    interactive: Interactive);
             allWordInfos = words;
             sudachiStopwatch?.Stop();
 

@@ -106,6 +106,8 @@ namespace Jiten.Parser
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
         {
             await EnsureInitializedAsync(contextFactory, log);
+            var settings = ParserRuntimeSettings.Current;
+            SudachiInterop.WarmPool(settings.SudachiConfigPath, settings.DictionaryPath, log);
         }
 
         public static async Task WaitForJmDictPrefillAsync(IDbContextFactory<JitenDbContext> contextFactory)
@@ -741,7 +743,7 @@ namespace Jiten.Parser
 
             var (cleanText, furiganaHints) = FuriganaHintExtractor.Extract(text);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasExpressionLookup = HasExpressionLookup, HasCounterSenseLookup = HasCounterSenseAvailable };
+            var parser = new MorphologicalAnalyser { Interactive = true, HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasExpressionLookup = HasExpressionLookup, HasCounterSenseLookup = HasCounterSenseAvailable };
             var (sentences, cleanedOriginal) = await parser.ParseWithCleanedOriginal(cleanText, preserveStopToken: preserveStopToken, diagnostics: diagnostics);
 
             // ComputeTokenOffsets strips \r\n — relocate against the same coordinate space
@@ -1166,7 +1168,6 @@ namespace Jiten.Parser
         {
             Resolved,
             FilteredOut,
-            TimedOut,
             Unresolved
         }
 
@@ -1197,7 +1198,6 @@ namespace Jiten.Parser
                 => new(ProcessWordStatus.Resolved, word, cacheKey, cacheWord, margin, firstPassCandidates);
 
             public static ProcessWordResult FilteredOut { get; } = new(ProcessWordStatus.FilteredOut);
-            public static ProcessWordResult TimedOut { get; } = new(ProcessWordStatus.TimedOut);
             public static ProcessWordResult Unresolved { get; } = new(ProcessWordStatus.Unresolved);
         }
 
@@ -1206,15 +1206,8 @@ namespace Jiten.Parser
                                                                  ParserDiagnostics? diagnostics = null,
                                                                  ConcurrentDictionary<int, JmDictWord>? batchWordCache = null)
         {
-            // Try to acquire semaphore with timeout to prevent deadlock
-            if (!await _processSemaphore.WaitAsync(TimeSpan.FromSeconds(5)))
-            {
-                // If we can't get the semaphore in a reasonable time, surface an explicit timeout status.
-                // This is better than hanging indefinitely
-                diagnostics?.RunSummary.IncrementProcessSemaphoreTimeoutCount();
-                diagnostics?.RunSummary.IncrementUnresolvedTokenCount();
-                return ProcessWordResult.TimedOut;
-            }
+
+            await _processSemaphore.WaitAsync();
 
             try
             {
