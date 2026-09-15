@@ -84,7 +84,9 @@ public class SmartDeckSettingsRequest
 {
     public bool WeighPlanning { get; set; }
     public int LookaheadUnits { get; set; } = SmartDeckConstants.DefaultLookaheadUnits;
+    public Dictionary<MediaType, int> LookaheadByMediaType { get; set; } = new();
     public int TargetPercentage { get; set; } = SmartDeckConstants.DefaultTargetPercentage;
+    public int RestTargetPercentage { get; set; } = SmartDeckConstants.DefaultRestTargetPercentage;
     public int RecencyHalfLifeDays { get; set; } = SmartDeckConstants.DefaultRecencyHalfLifeDays;
     public List<int> PinnedDeckIds { get; set; } = [];
     public List<int> IncludedDeckIds { get; set; } = [];

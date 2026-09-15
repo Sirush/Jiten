@@ -2,7 +2,8 @@ namespace Jiten.Core.Services.SmartDeck;
 
 public readonly record struct SmartDeckWordOccurrence(int WordId, byte ReadingIndex, int Occurrences);
 
-public sealed record SmartDeckPart(int DeckId, double Weight, IReadOnlyList<SmartDeckWordOccurrence> Words);
+public sealed record SmartDeckPart(int DeckId, double Weight, IReadOnlyList<SmartDeckWordOccurrence> Words,
+                                   int TargetPercentage = SmartDeckConstants.MaxTargetPercentage);
 
 public sealed record SmartDeckTitleInput(int ParentDeckId, double TitleWeight, IReadOnlyList<SmartDeckPart> Parts);
 
@@ -16,13 +17,12 @@ public static class SmartDeckScorer
 {
     public static long EncodeKey(int wordId, byte readingIndex) => ((long)wordId << 8) | readingIndex;
 
-    /// <summary>score = sum over titles of w_title * sum over parts of w_part * log2(1 + occ). Ties break on frequency rank then WordId. Each part only contributes the words inside its coverage target.</summary>
+    /// <summary>score = sum over titles of w_title * sum over parts of w_part * log2(1 + occ). Ties break on frequency rank then WordId. Each part only contributes the words inside its own coverage target.</summary>
     public static List<SmartDeckScoredWord> Score(
         IReadOnlyList<SmartDeckTitleInput> titles,
         Func<long, bool> isExcluded,
         Func<long, int> frequencyRank,
         int cap,
-        int targetPercentage = SmartDeckConstants.MaxTargetPercentage,
         Func<long, bool>? hasCard = null)
     {
         hasCard ??= _ => false;
@@ -37,7 +37,7 @@ public static class SmartDeckScorer
                 var factor = title.TitleWeight * part.Weight;
                 if (factor <= 0) continue;
 
-                foreach (var word in CoverageSlice(part.Words, isExcluded, targetPercentage, hasCard))
+                foreach (var word in CoverageSlice(part.Words, isExcluded, part.TargetPercentage, hasCard))
                 {
                     var key = EncodeKey(word.WordId, word.ReadingIndex);
                     var contribution = factor * Math.Log2(1 + word.Occurrences);

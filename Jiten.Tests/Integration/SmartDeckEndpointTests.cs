@@ -124,6 +124,10 @@ public class SmartDeckEndpointTests(JitenWebApplicationFactory factory)
         var wide = await (await Send(HttpMethod.Get, "/api/srs/smart-deck?lookaheadUnits=2")).Content.ReadFromJsonAsync<JsonElement>();
         wide.GetProperty("titles").EnumerateArray().Single().GetProperty("window").GetArrayLength().Should().Be(2);
 
+        var perType = await (await Send(HttpMethod.Get, "/api/srs/smart-deck?lookaheadByMediaType={\"1\":2}")).Content.ReadFromJsonAsync<JsonElement>();
+        perType.GetProperty("titles").EnumerateArray().Single().GetProperty("window").GetArrayLength().Should().Be(2, "numeric media type keys are accepted");
+        (await Send(HttpMethod.Get, "/api/srs/smart-deck?lookaheadByMediaType=nope")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
         var unordered = await (await Send(HttpMethod.Get, $"/api/srs/smart-deck?sequenceOverrides={{\"{parentId}\":false}}")).Content.ReadFromJsonAsync<JsonElement>();
         unordered.GetProperty("titles").EnumerateArray().Single().GetProperty("window").GetArrayLength().Should().Be(0);
 
@@ -148,8 +152,15 @@ public class SmartDeckEndpointTests(JitenWebApplicationFactory factory)
         preview.GetProperty("newWords").GetInt32().Should().Be(1);
         preview.GetProperty("windowWords").GetInt32().Should().Be(1, "the one word also appears in the upcoming episode");
 
-        var saved = await (await Send(HttpMethod.Put, "/api/srs/smart-deck/settings", new { targetPercentage = 80 })).Content.ReadFromJsonAsync<SmartDeckSettings>();
+        var restOnly = await (await Send(HttpMethod.Get, "/api/srs/smart-deck?restTargetPercentage=0")).Content.ReadFromJsonAsync<JsonElement>();
+        restOnly.GetProperty("preview").GetProperty("words").GetInt32().Should().Be(1, "the word sits in the upcoming episode, so it survives a 0% rest target");
+
+        var saved = await (await Send(HttpMethod.Put, "/api/srs/smart-deck/settings",
+                                      new { targetPercentage = 80, restTargetPercentage = 0, lookaheadByMediaType = new Dictionary<string, int> { ["1"] = 3, ["7"] = 2 } }))
+                    .Content.ReadFromJsonAsync<SmartDeckSettings>();
         saved!.TargetPercentage.Should().Be(80);
+        saved.RestTargetPercentage.Should().Be(0);
+        saved.LookaheadByMediaType.Should().Equal(new Dictionary<MediaType, int> { [MediaType.Anime] = 3 }, "visual novels cannot have a pick-ahead");
     }
 
     [Fact]

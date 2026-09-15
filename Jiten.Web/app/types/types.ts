@@ -1113,7 +1113,9 @@ export interface SmartDeckSettings {
   promoDismissed: boolean;
   weighPlanning: boolean;
   lookaheadUnits: number;
+  lookaheadByMediaType: Record<string, number>;
   targetPercentage: number;
+  restTargetPercentage: number;
   recencyHalfLifeDays: number;
   pinnedDeckIds: number[];
   includedDeckIds: number[];

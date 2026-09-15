@@ -3,7 +3,7 @@
   import { useConfirm } from 'primevue/useconfirm';
   import { useSrsStore } from '~/stores/srsStore';
   import { debounce } from 'perfect-debounce';
-  import type { MediaSuggestion, SmartDeckTitleDto } from '~/types';
+  import { MediaType, type MediaSuggestion, type SmartDeckTitleDto } from '~/types';
   import { coverUrl } from '~/utils/coverImage';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { apiErrorMessage, apiStatusCode } from '~/utils/apiErrorMessage';
@@ -42,7 +42,10 @@
   const isNew = computed(() => !smart.status.value?.exists);
 
   const lookahead = ref(1);
+  const lookaheadByType = ref<Record<number, number>>({});
+  const showPerTypeLookahead = ref(false);
   const targetPercentage = ref(95);
+  const restTargetPercentage = ref(90);
   const halfLife = ref(14);
   const weighPlanning = ref(false);
   const previewDirty = ref(false);
@@ -61,6 +64,38 @@
     { label: '2 units', value: 2 },
     { label: '3 units', value: 3 },
   ];
+
+  const lookaheadMediaTypes = [
+    MediaType.Anime,
+    MediaType.Audio,
+    MediaType.Drama,
+    MediaType.Manga,
+    MediaType.Movie,
+    MediaType.NonFiction,
+    MediaType.Novel,
+    MediaType.WebNovel,
+  ];
+
+  const perTypeOptions = [{ label: 'Default', value: 0 }, ...lookaheadOptions];
+  const perTypeOverrideCount = computed(() => Object.keys(lookaheadByType.value).length);
+  function perTypeValue(type: MediaType): number {
+    return lookaheadByType.value[type] ?? 0;
+  }
+  function setPerType(type: MediaType, value: number) {
+    const next = Object.fromEntries(Object.entries(lookaheadByType.value).filter(([key]) => Number(key) !== type));
+    if (value > 0) next[type] = value;
+    lookaheadByType.value = next;
+    refreshPreview();
+  }
+  function parseLookaheadByType(raw: Record<string, number> | undefined): Record<number, number> {
+    const out: Record<number, number> = {};
+    for (const [key, units] of Object.entries(raw ?? {})) {
+      const type = Number.isNaN(Number(key)) ? (MediaType as unknown as Record<string, number>)[key] : Number(key);
+      if (type != null && lookaheadMediaTypes.includes(type)) out[type] = units;
+    }
+    return out;
+  }
+  const restTargetLabel = computed(() => (restTargetPercentage.value === 0 ? 'Units ahead only' : `${restTargetPercentage.value}%`));
   const halfLifeSteps = [
     { label: '1 week', value: 7 },
     { label: '2 weeks', value: 14 },
@@ -92,7 +127,10 @@
     hydrating = true;
     await nextTick();
     lookahead.value = s.settings.lookaheadUnits;
+    lookaheadByType.value = parseLookaheadByType(s.settings.lookaheadByMediaType);
+    showPerTypeLookahead.value = perTypeOverrideCount.value > 0;
     targetPercentage.value = s.settings.targetPercentage;
+    restTargetPercentage.value = s.settings.restTargetPercentage;
     halfLife.value = s.settings.recencyHalfLifeDays;
     weighPlanning.value = s.settings.weighPlanning;
     excludeKana.value = s.excludeKana;
@@ -115,7 +153,9 @@
     await smart.fetchStatus(true, {
       weighPlanning: weighPlanning.value,
       lookaheadUnits: lookahead.value,
+      lookaheadByMediaType: lookaheadByType.value,
       targetPercentage: targetPercentage.value,
+      restTargetPercentage: restTargetPercentage.value,
       sequenceOverrides: sequenceOverrides.value,
       excludeKana: excludeKana.value,
       minGlobalFrequency: minRank.value || null,
@@ -124,7 +164,7 @@
     });
   }
   const refreshPreviewDebounced = debounce(refreshPreview, 400);
-  watch([targetPercentage, minRank, maxRank, posFilter, excludeKana], () => {
+  watch([targetPercentage, restTargetPercentage, minRank, maxRank, posFilter, excludeKana], () => {
     if (!hydrating && localVisible.value && smart.status.value) refreshPreviewDebounced();
   });
 
@@ -305,7 +345,9 @@
       await smart.saveSettings({
         weighPlanning: weighPlanning.value,
         lookaheadUnits: lookahead.value,
+        lookaheadByMediaType: lookaheadByType.value,
         targetPercentage: targetPercentage.value,
+        restTargetPercentage: restTargetPercentage.value,
         recencyHalfLifeDays: halfLife.value,
         pinnedDeckIds: pinned.value,
         includedDeckIds: included.value,
@@ -500,6 +542,31 @@
                     @update:model-value="refreshPreview"
                   />
                   <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Determines the words of how many upcoming volumes/episodes that should be prioritized.</p>
+                  <button
+                    type="button"
+                    class="text-xs text-primary-600 dark:text-primary-400 hover:underline mt-1"
+                    :aria-expanded="showPerTypeLookahead"
+                    aria-controls="smartPerTypeLookahead"
+                    @click="showPerTypeLookahead = !showPerTypeLookahead"
+                  >
+                    {{ showPerTypeLookahead ? 'Hide per media type' : 'Set per media type' }}{{ perTypeOverrideCount > 0 ? ` (${perTypeOverrideCount} set)` : '' }}
+                  </button>
+                  <div v-if="showPerTypeLookahead" id="smartPerTypeLookahead" class="mt-2 flex flex-col gap-1.5">
+                    <div v-for="type in lookaheadMediaTypes" :key="type" class="flex items-center justify-between gap-3">
+                      <label :for="`smartLookahead-${type}`" class="text-sm">{{ getMediaTypeText(type) }}</label>
+                      <Select
+                        :model-value="perTypeValue(type)"
+                        :options="perTypeOptions"
+                        option-label="label"
+                        option-value="value"
+                        :input-id="`smartLookahead-${type}`"
+                        class="w-28 shrink-0"
+                        size="small"
+                        @update:model-value="setPerType(type, $event)"
+                      />
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Other media types don't support pick ahead.</p>
+                  </div>
                 </div>
                 <div>
                   <div class="flex items-baseline justify-between mb-1">
@@ -604,7 +671,17 @@
               </div>
               <Slider v-model="targetPercentage" input-id="smartDeckTarget" :min="50" :max="100" :step="1" class="w-full my-3" aria-label="Coverage target" />
               <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Stop adding new words once you would understand this share of each title and of each upcoming unit.
+                Stop adding new words once you would understand this share of each upcoming unit or titles without episodes or volumes.
+              </p>
+            </section>
+            <section>
+              <div class="flex items-baseline justify-between mb-1">
+                <label for="smartDeckRestTarget" class="text-sm font-medium">Rest of each title</label>
+                <span class="text-sm font-semibold text-primary tabular-nums">{{ restTargetLabel }}</span>
+              </div>
+              <Slider v-model="restTargetPercentage" input-id="smartDeckRestTarget" :min="0" :max="100" :step="1" class="w-full my-3" aria-label="Rest of each title" />
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                The share for the whole title beyond your pick ahead. At 0, the deck will only add words from your units ahead.
               </p>
             </section>
             <section>

@@ -57,12 +57,28 @@ public class SmartDeckScorerTests
         [
             new SmartDeckTitleInput(1, 1.0,
             [
-                Part(1, SmartDeckConstants.WholeTitleWeight, (100, 97), (200, 2), (300, 1)),
-                Part(11, SmartDeckConstants.WindowWeight - SmartDeckConstants.WholeTitleWeight, (300, 1)),
+                Part(1, SmartDeckConstants.WholeTitleWeight, (100, 97), (200, 2), (300, 1)) with { TargetPercentage = 95 },
+                Part(11, SmartDeckConstants.WindowWeight - SmartDeckConstants.WholeTitleWeight, (300, 1)) with { TargetPercentage = 95 },
             ]),
-        ], _ => false, _ => int.MaxValue, SmartDeckConstants.MaxWords, 95);
+        ], _ => false, _ => int.MaxValue, SmartDeckConstants.MaxWords);
 
         ranked.Select(w => w.WordId).Should().BeEquivalentTo([100, 300], "200 is past the whole-title target and 300 is kept by the window unit");
+    }
+
+    [Fact]
+    public void RestTargetZero_LeavesOnlyWindowWords_AndCardedWords()
+    {
+        var cardKey = SmartDeckScorer.EncodeKey(100, 0);
+        var ranked = SmartDeckScorer.Score(
+        [
+            new SmartDeckTitleInput(1, 1.0,
+            [
+                Part(1, SmartDeckConstants.WholeTitleWeight, (100, 97), (200, 50), (300, 1)) with { TargetPercentage = 0 },
+                Part(11, SmartDeckConstants.WindowWeight - SmartDeckConstants.WholeTitleWeight, (300, 1)),
+            ]),
+        ], _ => false, _ => int.MaxValue, SmartDeckConstants.MaxWords, hasCard: key => key == cardKey);
+
+        ranked.Select(w => w.WordId).Should().BeEquivalentTo([100, 300], "the rest of the title only keeps carded words; 200 is skipped");
     }
 
     [Fact]

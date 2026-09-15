@@ -77,7 +77,10 @@ public class SmartDeckBuilderTests(JitenWebApplicationFactory factory)
             new UserDeckPreference { UserId = TestUsers.UserA, DeckId = ep1.DeckId, Status = DeckStatus.Completed },
             new UserDeckPreference { UserId = TestUsers.UserA, DeckId = dropped.DeckId, Status = DeckStatus.Dropped });
         userDb.FsrsCards.Add(new FsrsCard { UserId = TestUsers.UserA, WordId = CardWord, ReadingIndex = 0 });
-        userDb.UserSettings.Add(new UserSettings { UserId = TestUsers.UserA, SmartDeckJson = new SmartDeckSettings { Enabled = true }.Serialize() });
+        userDb.UserSettings.Add(new UserSettings
+        {
+            UserId = TestUsers.UserA, SmartDeckJson = new SmartDeckSettings { Enabled = true, RestTargetPercentage = 95 }.Serialize(),
+        });
         var smartDeck = new UserStudyDeck { UserId = TestUsers.UserA, DeckType = StudyDeckType.Smart, Name = "Smart Deck", IsActive = true };
         userDb.UserStudyDecks.Add(smartDeck);
         await userDb.SaveChangesAsync();
@@ -102,6 +105,94 @@ public class SmartDeckBuilderTests(JitenWebApplicationFactory factory)
         var sources = await builder.LoadSources(TestUsers.UserA, new SmartDeckSettings { Enabled = true });
         sources.Windows[series.DeckId].CursorDeckId.Should().Be(ep1.DeckId);
         sources.Windows[series.DeckId].WindowDeckIds.Should().Equal(ep2.DeckId);
+    }
+
+    [Fact]
+    public async Task Rebuild_RestTargetZero_KeepsWindowOnly_UnitlessTitleUsesAheadTarget()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+        var series = new Deck { OriginalTitle = "Series", MediaType = MediaType.Anime };
+        var novel = new Deck { OriginalTitle = "Novel", MediaType = MediaType.VisualNovel };
+        jitenDb.Decks.AddRange(series, novel);
+        await jitenDb.SaveChangesAsync();
+        var ep1 = new Deck { OriginalTitle = "Ep 1", MediaType = MediaType.Anime, ParentDeckId = series.DeckId, DeckOrder = 0 };
+        var ep2 = new Deck { OriginalTitle = "Ep 2", MediaType = MediaType.Anime, ParentDeckId = series.DeckId, DeckOrder = 1 };
+        jitenDb.Decks.AddRange(ep1, ep2);
+        await jitenDb.SaveChangesAsync();
+
+        const int novelWord = 905;
+        jitenDb.DeckWords.AddRange(
+            new DeckWord { Deck = series, WordId = CardWord, ReadingIndex = 0, Occurrences = 500 },
+            new DeckWord { Deck = series, WordId = PassedOnlyWord, ReadingIndex = 0, Occurrences = 40 },
+            new DeckWord { Deck = series, WordId = WindowWord, ReadingIndex = 0, Occurrences = 2 },
+            new DeckWord { Deck = ep1, WordId = PassedOnlyWord, ReadingIndex = 0, Occurrences = 40 },
+            new DeckWord { Deck = ep2, WordId = WindowWord, ReadingIndex = 0, Occurrences = 2 },
+            new DeckWord { Deck = novel, WordId = novelWord, ReadingIndex = 0, Occurrences = 30 });
+        await jitenDb.SaveChangesAsync();
+
+        userDb.UserDeckPreferences.AddRange(
+            new UserDeckPreference { UserId = TestUsers.UserA, DeckId = series.DeckId, Status = DeckStatus.Ongoing },
+            new UserDeckPreference { UserId = TestUsers.UserA, DeckId = ep1.DeckId, Status = DeckStatus.Completed },
+            new UserDeckPreference { UserId = TestUsers.UserA, DeckId = novel.DeckId, Status = DeckStatus.Ongoing });
+        userDb.FsrsCards.Add(new FsrsCard { UserId = TestUsers.UserA, WordId = CardWord, ReadingIndex = 0 });
+        userDb.UserSettings.Add(new UserSettings
+        {
+            UserId = TestUsers.UserA, SmartDeckJson = new SmartDeckSettings { Enabled = true, RestTargetPercentage = 0 }.Serialize(),
+        });
+        var smartDeck = new UserStudyDeck { UserId = TestUsers.UserA, DeckType = StudyDeckType.Smart, Name = "Smart Deck", IsActive = true };
+        userDb.UserStudyDecks.Add(smartDeck);
+        await userDb.SaveChangesAsync();
+
+        var builder = scope.ServiceProvider.GetRequiredService<ISmartDeckBuilder>();
+        var result = await builder.Rebuild(TestUsers.UserA);
+        result.Built.Should().BeTrue(result.SkipReason);
+
+        var rows = await userDb.UserStudyDeckWords.AsNoTracking()
+                               .Where(w => w.UserStudyDeckId == smartDeck.UserStudyDeckId)
+                               .Select(w => w.WordId)
+                               .ToListAsync();
+
+        rows.Should().BeEquivalentTo([WindowWord, novelWord]);
+        rows.Should().NotContain(PassedOnlyWord, "the rest of a title with units contributes nothing at 0%");
+        rows.Should().NotContain(CardWord, "at 0% the deck is range-bound, so a card outside the window leaves the rows too");
+        rows.Should().Contain(novelWord, "a title without units has no rest and follows the units-ahead target");
+
+        var sources = await builder.LoadSources(TestUsers.UserA, new SmartDeckSettings { Enabled = true });
+        sources.TitlesWithUnits.Should().BeEquivalentTo([series.DeckId]);
+    }
+
+    [Fact]
+    public async Task LoadSources_PerMediaTypeLookahead_OverridesTheGeneralValue()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+        var anime = new Deck { OriginalTitle = "Anime", MediaType = MediaType.Anime };
+        var manga = new Deck { OriginalTitle = "Manga", MediaType = MediaType.Manga };
+        jitenDb.Decks.AddRange(anime, manga);
+        await jitenDb.SaveChangesAsync();
+        foreach (var parent in new[] { anime, manga })
+            for (var i = 0; i < 4; i++)
+                jitenDb.Decks.Add(new Deck { OriginalTitle = $"Unit {i}", MediaType = parent.MediaType, ParentDeckId = parent.DeckId, DeckOrder = i });
+        await jitenDb.SaveChangesAsync();
+
+        userDb.UserDeckPreferences.AddRange(
+            new UserDeckPreference { UserId = TestUsers.UserA, DeckId = anime.DeckId, Status = DeckStatus.Ongoing },
+            new UserDeckPreference { UserId = TestUsers.UserA, DeckId = manga.DeckId, Status = DeckStatus.Ongoing });
+        await userDb.SaveChangesAsync();
+
+        var builder = scope.ServiceProvider.GetRequiredService<ISmartDeckBuilder>();
+        var sources = await builder.LoadSources(TestUsers.UserA, new SmartDeckSettings
+        {
+            Enabled = true, LookaheadUnits = 1, LookaheadByMediaType = new() { [MediaType.Anime] = 3 },
+        });
+
+        sources.Windows[anime.DeckId].WindowDeckIds.Should().HaveCount(3);
+        sources.Windows[manga.DeckId].WindowDeckIds.Should().HaveCount(1, "manga has no override and follows the general value");
     }
 
     [Fact]
