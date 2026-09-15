@@ -1921,65 +1921,101 @@ public partial class MorphologicalAnalyser
             || _retokeniseOovDisabled || !SudachiInterop.StreamingAvailable)
             return wordInfos;
 
-        Dictionary<string, List<WordInfo>?>? memo = null;
+        List<string>? blobs = null;
+        HashSet<string>? seen = null;
+        foreach (var w in wordInfos)
+        {
+            if (!IsOovBlobCandidate(w)) continue;
+            seen ??= new HashSet<string>(StringComparer.Ordinal);
+            if (seen.Add(w.Text))
+                (blobs ??= []).Add(w.Text);
+        }
+        if (blobs == null)
+            return wordInfos;
+
+        Dictionary<string, List<WordInfo>?> memo;
+        try
+        {
+            memo = RetokeniseBlobs(blobs);
+        }
+        catch (Exception ex)
+        {
+            // Keep the blobs and stop retokenising for the rest of the parse.
+            Console.WriteLine($"[Warning] RetokeniseOovBlobs: Sudachi FFI failed, disabling retokenisation for this parse: {ex.Message}");
+            _retokeniseOovDisabled = true;
+            return wordInfos;
+        }
+
         List<WordInfo>? result = null;
         for (int i = 0; i < wordInfos.Count; i++)
         {
             var w = wordInfos[i];
-            bool candidate = w.Text.Length >= 5
-                             && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
-                             && w.Text.All(c => c is >= 'ぁ' and <= 'ゟ' or 'ー')
-                             && !HasNonNameCompoundLookup(w.Text)
-                             // A token whose dictionary form is a different, resolvable word is not a
-                             // Sudachi OOV blob (those carry their surface as the dictionary form) — it is
-                             // an earlier repair's deliberate merge (わがまま+な → Text わがままな, dict form
-                             // わがまま) and must not be torn apart again.
-                             && (w.DictionaryForm == w.Text || string.IsNullOrEmpty(w.DictionaryForm)
-                                 || !HasNonNameCompoundLookup(w.DictionaryForm));
-            if (candidate)
+            if (memo.TryGetValue(w.Text, out var retok) && retok is { Count: > 1 } && IsOovBlobCandidate(w))
             {
-                memo ??= new Dictionary<string, List<WordInfo>?>(StringComparer.Ordinal);
-                if (!memo.TryGetValue(w.Text, out var retok))
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
+                int off = w.StartOffset;
+                foreach (var rt in retok)
                 {
-                    try
-                    {
-                        retok = SudachiInterop.ProcessTextStreaming(_sudachiConfigPath, w.Text, _sudachiDicPath,
-                                                                    mode: _sudachiMode, userDictCsv: _sudachiUserDictCsv);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Keep this blob and stop retokenising for the rest of the parse.
-                        Console.WriteLine($"[Warning] RetokeniseOovBlobs: Sudachi FFI failed on '{w.Text}', disabling retokenisation for this parse: {ex.Message}");
-                        _retokeniseOovDisabled = true;
-                        result?.Add(w);
-                        for (int j = i + 1; j < wordInfos.Count; j++)
-                            result?.Add(wordInfos[j]);
-                        return result ?? wordInfos;
-                    }
-
-                    memo[w.Text] = retok;
+                    // Clone: the memoized pieces are spliced at every occurrence of the blob, and
+                    // later stages mutate tokens in place.
+                    var piece = new WordInfo(rt);
+                    piece.StartOffset = off >= 0 ? off : -1;
+                    off = off >= 0 ? off + piece.Text.Length : -1;
+                    piece.EndOffset = off >= 0 ? off : -1;
+                    result.Add(piece);
                 }
-
-                if (retok is { Count: > 1 })
-                {
-                    result ??= CopyAccumulatorUpTo(wordInfos, i);
-                    int off = w.StartOffset;
-                    foreach (var rt in retok)
-                    {
-                        // Clone: the memoized pieces are spliced at every occurrence of the blob, and
-                        // later stages mutate tokens in place.
-                        var piece = new WordInfo(rt);
-                        piece.StartOffset = off >= 0 ? off : -1;
-                        off = off >= 0 ? off + piece.Text.Length : -1;
-                        piece.EndOffset = off >= 0 ? off : -1;
-                        result.Add(piece);
-                    }
-                    continue;
-                }
+                continue;
             }
             result?.Add(w);
         }
         return result ?? wordInfos;
+    }
+
+    private bool IsOovBlobCandidate(WordInfo w) =>
+        w.Text.Length >= 5
+        && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+        && w.Text.All(c => c is >= 'ぁ' and <= 'ゟ' or 'ー')
+        && !HasNonNameCompoundLookup!(w.Text)
+        // A token whose dictionary form is a different, resolvable word is not a
+        // Sudachi OOV blob (those carry their surface as the dictionary form) — it is
+        // an earlier repair's deliberate merge (わがまま+な → Text わがままな, dict form
+        // わがまま) and must not be torn apart again.
+        && (w.DictionaryForm == w.Text || string.IsNullOrEmpty(w.DictionaryForm)
+            || !HasNonNameCompoundLookup(w.DictionaryForm));
+
+    // One call, one blob per line: the native side analyses lines in isolation, so this equals per-blob calls.
+    private Dictionary<string, List<WordInfo>?> RetokeniseBlobs(List<string> blobs)
+    {
+        var memo = new Dictionary<string, List<WordInfo>?>(blobs.Count, StringComparer.Ordinal);
+        var tokens = SudachiInterop.ProcessTextStreaming(_sudachiConfigPath!, string.Join("\n", blobs), _sudachiDicPath!,
+                                                         mode: _sudachiMode, userDictCsv: _sudachiUserDictCsv,
+                                                         interactive: Interactive);
+
+        // A blob whose surfaces do not add up to its length falls back to its own call rather than shifting its neighbours.
+        int t = 0;
+        for (int b = 0; b < blobs.Count; b++)
+        {
+            var blob = blobs[b];
+            var pieces = new List<WordInfo>();
+            int len = 0;
+            while (t < tokens.Count && len < blob.Length)
+            {
+                pieces.Add(tokens[t]);
+                len += tokens[t].Text.Length;
+                t++;
+            }
+            if (len == blob.Length)
+            {
+                memo[blob] = pieces;
+                continue;
+            }
+            for (int r = b; r < blobs.Count; r++)
+                memo[blobs[r]] = SudachiInterop.ProcessTextStreaming(_sudachiConfigPath!, blobs[r], _sudachiDicPath!,
+                                                                     mode: _sudachiMode, userDictCsv: _sudachiUserDictCsv,
+                                                                     interactive: Interactive);
+            break;
+        }
+        return memo;
     }
 
     /// <summary>なく belongs to a bound auxiliary verb stem after a て-form (出て+こ+なく), not to a following なった.</summary>

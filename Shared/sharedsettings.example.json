@@ -41,6 +41,13 @@
   "BunnyCdnUserStorageZone": "jiten-user",
   "BunnyCdnUserSecret": "",
   "DictionaryPath": "path/to/system_full.dic",
+  "Parser": {
+    "SudachiBulkContexts": 4,
+    "SudachiInteractiveContexts": 1
+  },
+  "Hangfire": {
+    "ReparseWorkers": 2
+  },
   "FastTextModelPath": "path/to/cc.ja.300.bin",
   "DescriptionEmbeddingModelDir": "path/to/bge-m3",
   "DescriptionEmbeddingThreads": 2,

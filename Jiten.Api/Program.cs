@@ -1009,8 +1009,18 @@ builder.Services.AddHangfireServer((options) =>
 builder.Services.AddHangfireServer((options) =>
 {
     options.ServerName = "ParseServer";
-    options.Queues = ["parse", "reparse"];
+    options.Queues = ["parse"];
     options.WorkerCount = Math.Max(1, Environment.ProcessorCount / 4);
+    options.ShutdownTimeout = TimeSpan.FromMinutes(30);
+    options.StopTimeout = TimeSpan.FromMinutes(30);
+});
+
+// Separate server so an admin "reparse all" cannot take every parse worker and Sudachi slot.
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "ReparseServer";
+    options.Queues = ["reparse"];
+    options.WorkerCount = builder.Configuration.GetValue("Hangfire:ReparseWorkers", 2);
     options.ShutdownTimeout = TimeSpan.FromMinutes(30);
     options.StopTimeout = TimeSpan.FromMinutes(30);
 });

@@ -1,4 +1,6 @@
 using System.Buffers;
+using System.Collections.Concurrent;
+using Microsoft.Extensions.Configuration;
 using System.Runtime.InteropServices;
 using System.Text;
 using Jiten.Core.Utils;
@@ -79,27 +81,32 @@ static class SudachiInterop
 
     private static readonly IntPtr _libHandle;
 
-    // Context management (lazy, reusable with periodic recycling to prevent native memory growth)
-    // Keyed by configPath so callers can alternate configs (e.g. with/without user dictionary)
-    private static readonly Dictionary<string, IntPtr> _sudachiContexts = new();
-    private static long _contextCallCount;
+    // A slot owns its contexts and the user-dictionary CSV they were built with; a per-deck dictionary swap rebuilds only that slot.
+    private sealed class ContextSlot
+    {
+        public readonly Dictionary<string, IntPtr> Contexts = new();
+        public byte[]? UserDictCsv;
+        public long CallCount;
+    }
+
     private const long ContextRecycleThreshold = 5_000;
 
-    // Dynamic user dictionary CSV bytes (set per-deck, used at context creation)
-    private static byte[]? _dynamicUserDictCsv;
+    // Request-path callers own InteractiveSlots and may borrow an idle bulk slot; bulk callers never take an interactive one.
+    private static readonly int BulkSlots;
+    private static readonly int InteractiveSlots;
+    private static readonly SemaphoreSlim _bulkGate;
+    private static readonly SemaphoreSlim _interactiveGate;
+    private static readonly ConcurrentStack<ContextSlot> _freeSlots = new();
 
-    // One permit, because ProcessTextLock serialises the native calls anyway: a second permit only
-    // buys a thread parked on the monitor. Prefer the *Async entry points from request paths so
-    // queued callers wait on a task rather than occupying a thread-pool thread.
-    private const int MaxConcurrentProcessing = 1;
-    private static readonly SemaphoreSlim _processingSemaphore = new(MaxConcurrentProcessing, MaxConcurrentProcessing);
-
-    // Thread-static callback state
-    [ThreadStatic] private static byte[]? _leftover;
-    [ThreadStatic] private static int _leftoverLen;
-    [ThreadStatic] private static List<WordInfo>? _wordInfos;
-    [ThreadStatic] private static Exception? _cbError;
-    [ThreadStatic] private static StringBuilder? _rawCapture;
+    // Passed to the native side as userData; concurrent calls must never share callback state.
+    private sealed class CallbackState(bool captureRaw)
+    {
+        public byte[] Leftover = new byte[4096];
+        public int LeftoverLen;
+        public readonly List<WordInfo> WordInfos = new();
+        public Exception? Error;
+        public readonly StringBuilder? RawCapture = captureRaw ? new StringBuilder() : null;
+    }
 
     // Precomputed lookup table for allowed characters (replaces expensive regex)
     private static readonly bool[] _allowedChars = BuildAllowedCharsTable();
@@ -257,9 +264,78 @@ static class SudachiInterop
             _freeContext = Marshal.GetDelegateForFunctionPointer<FreeContextDelegate>(freeCtxPtr);
         if (NativeLibrary.TryGetExport(_libHandle, "create_context_with_user_csv_ffi", out IntPtr createCtxCsvPtr))
             _createContextWithUserCsv = Marshal.GetDelegateForFunctionPointer<CreateContextWithUserCsvDelegate>(createCtxCsvPtr);
+
+        var config = Runtime.ParserRuntimeSettings.Current.Configuration;
+        BulkSlots = Math.Max(1, config.GetValue("Parser:SudachiBulkContexts", Math.Max(2, Environment.ProcessorCount / 4)));
+        InteractiveSlots = Math.Max(0, config.GetValue("Parser:SudachiInteractiveContexts", 1));
+        _bulkGate = new SemaphoreSlim(BulkSlots, BulkSlots);
+        _interactiveGate = new SemaphoreSlim(InteractiveSlots, Math.Max(1, InteractiveSlots));
+        for (int i = 0; i < BulkSlots + InteractiveSlots; i++)
+            _freeSlots.Push(new ContextSlot());
     }
 
-    private static readonly object ProcessTextLock = new object();
+    private static SemaphoreSlim AcquireGate(bool interactive)
+    {
+        if (interactive && InteractiveSlots > 0)
+        {
+            if (_interactiveGate.Wait(0)) return _interactiveGate;
+            if (_bulkGate.Wait(0)) return _bulkGate;
+            _interactiveGate.Wait();
+            return _interactiveGate;
+        }
+        _bulkGate.Wait();
+        return _bulkGate;
+    }
+
+    private static async Task<SemaphoreSlim> AcquireGateAsync(bool interactive, CancellationToken cancellationToken)
+    {
+        if (interactive && InteractiveSlots > 0)
+        {
+            if (_interactiveGate.Wait(0)) return _interactiveGate;
+            if (_bulkGate.Wait(0)) return _bulkGate;
+            await _interactiveGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return _interactiveGate;
+        }
+        await _bulkGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        return _bulkGate;
+    }
+
+    /// <summary>Builds the default-dictionary context in every slot so no caller pays the first-use load.</summary>
+    public static void WarmPool(string configPath, string dictionaryPath, Action<string>? log = null)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var slots = new List<ContextSlot>();
+        while (_freeSlots.TryPop(out var slot))
+            slots.Add(slot);
+        try
+        {
+            foreach (var slot in slots)
+                if (slot.UserDictCsv == null)
+                    GetOrCreateContext(slot, configPath, dictionaryPath);
+        }
+        finally
+        {
+            foreach (var slot in slots)
+                _freeSlots.Push(slot);
+        }
+        log?.Invoke($"Sudachi pool warmed: {slots.Count} contexts in {sw.ElapsedMilliseconds}ms");
+    }
+
+    // Permits equal slots, so a miss only means WarmPool is holding them briefly.
+    private static ContextSlot TakeSlot()
+    {
+        var spin = new SpinWait();
+        ContextSlot? slot;
+        while (!_freeSlots.TryPop(out slot))
+            spin.SpinOnce();
+        return slot;
+    }
+
+    private static void ReturnSlot(ContextSlot slot, SemaphoreSlim gate)
+    {
+        _freeSlots.Push(slot);
+        gate.Release();
+    }
 
 
     public static string RunCli(string configPath, string filePath, string dictionaryPath, string outputPath)
@@ -279,35 +355,33 @@ static class SudachiInterop
     public static string ProcessText(string configPath, string inputText, string dictionaryPath, char mode = 'C', bool printAll = true,
                                      bool wakati = false)
     {
-        _processingSemaphore.Wait();
+        var gate = AcquireGate(interactive: false);
+        var slot = TakeSlot();
         try
         {
-            lock (ProcessTextLock)
-            {
-                // Clean up text using fast lookup table filter
-                inputText = FilterAllowedChars(inputText);
+            // Clean up text using fast lookup table filter
+            inputText = FilterAllowedChars(inputText);
 
-                // if there's no kanas, kanjis, or fullwidth letters, abort
-                if (HasNoJapaneseChars(inputText))
-                    return "";
+            // if there's no kanas, kanjis, or fullwidth letters, abort
+            if (HasNoJapaneseChars(inputText))
+                return "";
 
-                byte[] inputBytes = Encoding.UTF8.GetBytes(inputText + "\0");
-                IntPtr inputTextPtr = Marshal.AllocHGlobal(inputBytes.Length);
-                Marshal.Copy(inputBytes, 0, inputTextPtr, inputBytes.Length);
+            byte[] inputBytes = Encoding.UTF8.GetBytes(inputText + "\0");
+            IntPtr inputTextPtr = Marshal.AllocHGlobal(inputBytes.Length);
+            Marshal.Copy(inputBytes, 0, inputTextPtr, inputBytes.Length);
 
-                IntPtr resultPtr = _processTextFfi(configPath, inputTextPtr, dictionaryPath, mode, printAll, wakati);
-                string result = Marshal.PtrToStringUTF8(resultPtr) ?? string.Empty;
+            IntPtr resultPtr = _processTextFfi(configPath, inputTextPtr, dictionaryPath, mode, printAll, wakati);
+            string result = Marshal.PtrToStringUTF8(resultPtr) ?? string.Empty;
 
-                _freeString(resultPtr);
+            _freeString(resultPtr);
 
-                Marshal.FreeHGlobal(inputTextPtr);
+            Marshal.FreeHGlobal(inputTextPtr);
 
-                return result;
-            }
+            return result;
         }
         finally
         {
-            _processingSemaphore.Release();
+            ReturnSlot(slot, gate);
         }
     }
 
@@ -328,10 +402,11 @@ static class SudachiInterop
         bool printAll = true,
         bool wakati = false,
         byte[]? userDictCsv = null,
-        bool emitMargins = false)
+        bool emitMargins = false,
+        bool interactive = false)
     {
         return ProcessTextStreaming(configPath, inputText, dictionaryPath, out _, captureRaw: false,
-                                    mode, printAll, wakati, userDictCsv, emitMargins);
+                                    mode, printAll, wakati, userDictCsv, emitMargins, interactive);
     }
 
     public static List<WordInfo> ProcessTextStreaming(
@@ -344,24 +419,23 @@ static class SudachiInterop
         bool printAll = true,
         bool wakati = false,
         byte[]? userDictCsv = null,
-        bool emitMargins = false)
+        bool emitMargins = false,
+        bool interactive = false)
     {
-        _processingSemaphore.Wait();
+        var gate = AcquireGate(interactive);
+        var slot = TakeSlot();
         try
         {
-            return ProcessTextStreamingCore(configPath, inputText, dictionaryPath, out rawOutput, captureRaw,
+            return ProcessTextStreamingCore(slot, configPath, inputText, dictionaryPath, out rawOutput, captureRaw,
                                             mode, printAll, wakati, userDictCsv, emitMargins);
         }
         finally
         {
-            _processingSemaphore.Release();
+            ReturnSlot(slot, gate);
         }
     }
 
-    /// <summary>
-    /// Awaits the processing gate instead of blocking it. Use from request paths: a blocking wait here
-    /// parks a thread-pool thread for the whole queue depth, which starves unrelated requests.
-    /// </summary>
+    /// <summary>Awaits a pool slot instead of blocking a thread-pool thread on it.</summary>
     public static async Task<(List<WordInfo> Words, string? RawOutput)> ProcessTextStreamingAsync(
         string configPath,
         string inputText,
@@ -372,22 +446,25 @@ static class SudachiInterop
         bool wakati = false,
         byte[]? userDictCsv = null,
         bool emitMargins = false,
+        bool interactive = false,
         CancellationToken cancellationToken = default)
     {
-        await _processingSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var gate = await AcquireGateAsync(interactive, cancellationToken).ConfigureAwait(false);
+        var slot = TakeSlot();
         try
         {
-            var words = ProcessTextStreamingCore(configPath, inputText, dictionaryPath, out var rawOutput, captureRaw,
+            var words = ProcessTextStreamingCore(slot, configPath, inputText, dictionaryPath, out var rawOutput, captureRaw,
                                                  mode, printAll, wakati, userDictCsv, emitMargins);
             return (words, rawOutput);
         }
         finally
         {
-            _processingSemaphore.Release();
+            ReturnSlot(slot, gate);
         }
     }
 
     private static List<WordInfo> ProcessTextStreamingCore(
+        ContextSlot slot,
         string configPath,
         string inputText,
         string dictionaryPath,
@@ -405,12 +482,11 @@ static class SudachiInterop
         if (emitMargins && _processTextCtxStreamV3 == null)
             emitMargins = false; // old native library without margin support
 
-        lock (ProcessTextLock)
         {
-            if (!CsvUnchanged(_dynamicUserDictCsv, userDictCsv))
+            if (!CsvUnchanged(slot.UserDictCsv, userDictCsv))
             {
-                _dynamicUserDictCsv = userDictCsv;
-                RecycleContext();
+                slot.UserDictCsv = userDictCsv;
+                RecycleContext(slot);
             }
             // Clean up text using fast lookup table filter
             inputText = FilterAllowedChars(inputText);
@@ -419,85 +495,92 @@ static class SudachiInterop
             if (HasNoJapaneseChars(inputText))
                 return new List<WordInfo>();
 
-            ResetCallbackState(captureRaw);
+            var state = new CallbackState(captureRaw);
+            var stateHandle = GCHandle.Alloc(state);
 
-            IntPtr ctx = GetOrCreateContext(configPath, dictionaryPath);
+            IntPtr ctx = GetOrCreateContext(slot, configPath, dictionaryPath);
 
             byte[] inputBytes = Encoding.UTF8.GetBytes(inputText);
 
-            unsafe
+            try
             {
-                fixed (byte* inputPtr = inputBytes)
+                unsafe
                 {
-                    IntPtr errPtr = emitMargins
-                        ? _processTextCtxStreamV3!(
-                            ctx,
-                            inputPtr,
-                            (nuint)inputBytes.Length,
-                            (sbyte)mode,
-                            (byte)(printAll ? 1 : 0),
-                            (byte)(wakati ? 1 : 0),
-                            1,
-                            _outputCallback,
-                            IntPtr.Zero)
-                        : _processTextCtxStreamV2(
-                            ctx,
-                            inputPtr,
-                            (nuint)inputBytes.Length,
-                            (sbyte)mode,
-                            (byte)(printAll ? 1 : 0),
-                            (byte)(wakati ? 1 : 0),
-                            _outputCallback,
-                            IntPtr.Zero);
-
-                    string err = Marshal.PtrToStringUTF8(errPtr) ?? "";
-                    _freeString(errPtr);
-
-                    if (!string.IsNullOrEmpty(err))
+                    fixed (byte* inputPtr = inputBytes)
                     {
-                        RecycleContext();
-                        throw new InvalidOperationException($"Sudachi streaming error: {err}");
+                        IntPtr errPtr = emitMargins
+                            ? _processTextCtxStreamV3!(
+                                ctx,
+                                inputPtr,
+                                (nuint)inputBytes.Length,
+                                (sbyte)mode,
+                                (byte)(printAll ? 1 : 0),
+                                (byte)(wakati ? 1 : 0),
+                                1,
+                                _outputCallback,
+                                GCHandle.ToIntPtr(stateHandle))
+                            : _processTextCtxStreamV2(
+                                ctx,
+                                inputPtr,
+                                (nuint)inputBytes.Length,
+                                (sbyte)mode,
+                                (byte)(printAll ? 1 : 0),
+                                (byte)(wakati ? 1 : 0),
+                                _outputCallback,
+                                GCHandle.ToIntPtr(stateHandle));
+
+                        string err = Marshal.PtrToStringUTF8(errPtr) ?? "";
+                        _freeString(errPtr);
+
+                        if (!string.IsNullOrEmpty(err))
+                        {
+                            RecycleContext(slot);
+                            throw new InvalidOperationException($"Sudachi streaming error: {err}");
+                        }
                     }
                 }
             }
+            finally
+            {
+                stateHandle.Free();
+            }
 
             // Flush any remaining leftover
-            if (_leftoverLen > 0)
+            if (state.LeftoverLen > 0)
             {
-                string line = Encoding.UTF8.GetString(_leftover!, 0, _leftoverLen);
+                string line = Encoding.UTF8.GetString(state.Leftover, 0, state.LeftoverLen);
                 if (line != "EOS" && line.Length != 0)
                 {
-                    _rawCapture?.Append(line).Append('\n');
+                    state.RawCapture?.Append(line).Append('\n');
                     var wi = new WordInfo(line);
-                    if (!wi.IsInvalid) _wordInfos!.Add(wi);
+                    if (!wi.IsInvalid) state.WordInfos.Add(wi);
                 }
             }
 
-            if (_cbError != null)
-                throw new InvalidOperationException("Sudachi streaming callback error", _cbError);
+            if (state.Error != null)
+                throw new InvalidOperationException("Sudachi streaming callback error", state.Error);
 
-            rawOutput = _rawCapture?.ToString();
-            _rawCapture = null;
+            rawOutput = state.RawCapture?.ToString();
 
-            var result = _wordInfos!;
-            _wordInfos = null;
+            var result = state.WordInfos;
 
-            if (Interlocked.Increment(ref _contextCallCount) % ContextRecycleThreshold == 0)
-                RecycleContext();
+            // Periodic recycle bounds native memory growth inside a long-lived context.
+            if (++slot.CallCount % ContextRecycleThreshold == 0)
+                RecycleContext(slot);
 
             return result;
         }
     }
 
-    private static void RecycleContext()
+    private static void RecycleContext(ContextSlot slot)
     {
         if (_freeContext != null)
         {
-            foreach (var ctx in _sudachiContexts.Values)
+            foreach (var ctx in slot.Contexts.Values)
                 if (ctx != IntPtr.Zero)
                     _freeContext(ctx);
         }
-        _sudachiContexts.Clear();
+        slot.Contexts.Clear();
     }
 
     private static bool CsvUnchanged(byte[]? a, byte[]? b)
@@ -507,22 +590,22 @@ static class SudachiInterop
         return a.AsSpan().SequenceEqual(b);
     }
 
-    private static IntPtr GetOrCreateContext(string configPath, string dictionaryPath)
+    private static IntPtr GetOrCreateContext(ContextSlot slot, string configPath, string dictionaryPath)
     {
-        if (_sudachiContexts.TryGetValue(configPath, out var existing) && existing != IntPtr.Zero)
+        if (slot.Contexts.TryGetValue(configPath, out var existing) && existing != IntPtr.Zero)
             return existing;
 
         IntPtr errPtr;
         IntPtr ctx;
 
-        if (_dynamicUserDictCsv is { Length: > 0 } && _createContextWithUserCsv != null)
+        if (slot.UserDictCsv is { Length: > 0 } && _createContextWithUserCsv != null)
         {
-            var handle = GCHandle.Alloc(_dynamicUserDictCsv, GCHandleType.Pinned);
+            var handle = GCHandle.Alloc(slot.UserDictCsv, GCHandleType.Pinned);
             try
             {
                 errPtr = _createContextWithUserCsv(
                     configPath, dictionaryPath,
-                    handle.AddrOfPinnedObject(), (nuint)_dynamicUserDictCsv.Length,
+                    handle.AddrOfPinnedObject(), (nuint)slot.UserDictCsv.Length,
                     out ctx);
             }
             finally
@@ -545,7 +628,7 @@ static class SudachiInterop
         if (!string.IsNullOrEmpty(err) || ctx == IntPtr.Zero)
             throw new InvalidOperationException(err.Length != 0 ? err : "Failed to create Sudachi context");
 
-        _sudachiContexts[configPath] = ctx;
+        slot.Contexts[configPath] = ctx;
         return ctx;
     }
 
@@ -554,20 +637,13 @@ static class SudachiInterop
     /// </summary>
     public static void Cleanup()
     {
-        RecycleContext();
+        while (_freeSlots.TryPop(out var slot))
+            RecycleContext(slot);
     }
 
-    private static void ResetCallbackState(bool captureRaw = false)
+    private static unsafe void OnSudachiOutput(IntPtr userData, byte* data, nuint len)
     {
-        _leftover ??= new byte[4096];
-        _leftoverLen = 0;
-        _wordInfos = new List<WordInfo>();
-        _cbError = null;
-        _rawCapture = captureRaw ? new StringBuilder() : null;
-    }
-
-    private static unsafe void OnSudachiOutput(IntPtr _, byte* data, nuint len)
-    {
+        var state = (CallbackState)GCHandle.FromIntPtr(userData).Target!;
         try
         {
             var span = new ReadOnlySpan<byte>(data, checked((int)len));
@@ -581,12 +657,12 @@ static class SudachiInterop
                 ReadOnlySpan<byte> part = span.Slice(i, nl);
                 string line;
 
-                if (_leftoverLen != 0)
+                if (state.LeftoverLen != 0)
                 {
-                    var tmp = new byte[_leftoverLen + part.Length];
-                    Buffer.BlockCopy(_leftover!, 0, tmp, 0, _leftoverLen);
-                    part.CopyTo(tmp.AsSpan(_leftoverLen));
-                    _leftoverLen = 0;
+                    var tmp = new byte[state.LeftoverLen + part.Length];
+                    Buffer.BlockCopy(state.Leftover, 0, tmp, 0, state.LeftoverLen);
+                    part.CopyTo(tmp.AsSpan(state.LeftoverLen));
+                    state.LeftoverLen = 0;
                     line = Encoding.UTF8.GetString(tmp);
                 }
                 else
@@ -596,9 +672,9 @@ static class SudachiInterop
 
                 if (line != "EOS" && line.Length != 0)
                 {
-                    _rawCapture?.Append(line).Append('\n');
+                    state.RawCapture?.Append(line).Append('\n');
                     var wi = new WordInfo(line);
-                    if (!wi.IsInvalid) _wordInfos!.Add(wi);
+                    if (!wi.IsInvalid) state.WordInfos.Add(wi);
                 }
 
                 i += nl + 1;
@@ -608,15 +684,15 @@ static class SudachiInterop
             var tail = span.Slice(i);
             if (!tail.IsEmpty)
             {
-                if (_leftover!.Length < _leftoverLen + tail.Length)
-                    Array.Resize(ref _leftover, Math.Max(_leftoverLen + tail.Length, _leftoverLen * 2 + 1024));
-                tail.CopyTo(_leftover.AsSpan(_leftoverLen));
-                _leftoverLen += tail.Length;
+                if (state.Leftover.Length < state.LeftoverLen + tail.Length)
+                    Array.Resize(ref state.Leftover, Math.Max(state.LeftoverLen + tail.Length, state.LeftoverLen * 2 + 1024));
+                tail.CopyTo(state.Leftover.AsSpan(state.LeftoverLen));
+                state.LeftoverLen += tail.Length;
             }
         }
         catch (Exception ex)
         {
-            _cbError = ex;
+            state.Error = ex;
         }
     }
 }
