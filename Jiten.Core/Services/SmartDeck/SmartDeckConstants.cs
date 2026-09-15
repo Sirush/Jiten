@@ -18,9 +18,12 @@ public static class SmartDeckConstants
     public const double MinRecencyWeight = 0.1;
 
     public const int DefaultLookaheadUnits = 1;
+    public const int MaxLookaheadUnits = 3;
     public const int DefaultTargetPercentage = 95;
     public const int MinTargetPercentage = 50;
     public const int MaxTargetPercentage = 100;
+    public const int DefaultRestTargetPercentage = 85;
+    public const int MinRestTargetPercentage = 0;
     public const int MaxOngoingUnits = 3;
     public const int DefaultRecencyHalfLifeDays = 14;
     public const int NeverFadesHalfLife = 0;
@@ -29,6 +32,8 @@ public static class SmartDeckConstants
 
     public static bool IsSequentialByDefault(MediaType mediaType)
         => mediaType is not (MediaType.VisualNovel or MediaType.VideoGame or MediaType.YouTube);
+
+    public static readonly MediaType[] LookaheadMediaTypes = Enum.GetValues<MediaType>().Where(IsSequentialByDefault).ToArray();
 
     public static double RecencyWeight(double ageDays, int halfLifeDays)
     {

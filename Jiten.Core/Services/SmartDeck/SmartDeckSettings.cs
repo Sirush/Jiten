@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Jiten.Core.Data;
 
 namespace Jiten.Core.Services.SmartDeck;
 
@@ -15,7 +16,9 @@ public sealed record SmartDeckSettings
     public bool PromoDismissed { get; init; }
     public bool WeighPlanning { get; init; }
     public int LookaheadUnits { get; init; } = SmartDeckConstants.DefaultLookaheadUnits;
+    public Dictionary<MediaType, int> LookaheadByMediaType { get; init; } = new();
     public int TargetPercentage { get; init; } = SmartDeckConstants.DefaultTargetPercentage;
+    public int RestTargetPercentage { get; init; } = SmartDeckConstants.DefaultRestTargetPercentage;
     public int RecencyHalfLifeDays { get; init; } = SmartDeckConstants.DefaultRecencyHalfLifeDays;
     public List<int> PinnedDeckIds { get; init; } = [];
     public List<int> IncludedDeckIds { get; init; } = [];
@@ -28,7 +31,11 @@ public sealed record SmartDeckSettings
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        Converters = { new JsonStringEnumConverter() },
     };
+
+    public int LookaheadFor(MediaType mediaType)
+        => LookaheadByMediaType.TryGetValue(mediaType, out var units) ? units : LookaheadUnits;
 
     public static SmartDeckSettings Parse(string? json)
     {
@@ -54,8 +61,12 @@ public sealed record SmartDeckSettings
 
         return this with
         {
-            LookaheadUnits = Math.Clamp(LookaheadUnits, 1, 3),
+            LookaheadUnits = Math.Clamp(LookaheadUnits, 1, SmartDeckConstants.MaxLookaheadUnits),
+            LookaheadByMediaType = LookaheadByMediaType
+                                   .Where(kv => SmartDeckConstants.LookaheadMediaTypes.Contains(kv.Key))
+                                   .ToDictionary(kv => kv.Key, kv => Math.Clamp(kv.Value, 1, SmartDeckConstants.MaxLookaheadUnits)),
             TargetPercentage = Math.Clamp(TargetPercentage, SmartDeckConstants.MinTargetPercentage, SmartDeckConstants.MaxTargetPercentage),
+            RestTargetPercentage = Math.Clamp(RestTargetPercentage, SmartDeckConstants.MinRestTargetPercentage, SmartDeckConstants.MaxTargetPercentage),
             RecencyHalfLifeDays = AllowedHalfLives.Contains(RecencyHalfLifeDays) ? RecencyHalfLifeDays : SmartDeckConstants.DefaultRecencyHalfLifeDays,
             PinnedDeckIds = pinned,
             IncludedDeckIds = included,

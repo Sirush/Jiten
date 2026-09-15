@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Hangfire;
 using Jiten.Api.Authorization;
 using Jiten.Api.Dtos;
@@ -37,6 +38,19 @@ public partial class StudyController
         if (preview.WeighPlanning.HasValue) settings = settings with { WeighPlanning = preview.WeighPlanning.Value };
         if (preview.LookaheadUnits.HasValue) settings = settings with { LookaheadUnits = preview.LookaheadUnits.Value };
         if (preview.TargetPercentage.HasValue) settings = settings with { TargetPercentage = preview.TargetPercentage.Value };
+        if (preview.RestTargetPercentage.HasValue) settings = settings with { RestTargetPercentage = preview.RestTargetPercentage.Value };
+        if (!string.IsNullOrWhiteSpace(preview.LookaheadByMediaType))
+        {
+            try
+            {
+                var perType = JsonSerializer.Deserialize<Dictionary<MediaType, int>>(preview.LookaheadByMediaType, PreviewJson);
+                if (perType != null) settings = settings with { LookaheadByMediaType = perType };
+            }
+            catch (JsonException)
+            {
+                return Results.BadRequest("lookaheadByMediaType must be a JSON object of media type to unit count.");
+            }
+        }
         if (!string.IsNullOrWhiteSpace(preview.SequenceOverrides))
         {
             try
@@ -88,19 +102,24 @@ public partial class StudyController
         return Results.Ok(dto);
     }
 
+    private static readonly JsonSerializerOptions PreviewJson = new() { Converters = { new JsonStringEnumConverter() } };
+
     /// <summary>Unsaved dialog values; nulls mean "as stored". Bound from the query string.</summary>
     public sealed class SmartDeckPreviewQuery
     {
         public bool? WeighPlanning { get; set; }
         public int? LookaheadUnits { get; set; }
+        public string? LookaheadByMediaType { get; set; }
         public int? TargetPercentage { get; set; }
+        public int? RestTargetPercentage { get; set; }
         public string? SequenceOverrides { get; set; }
         public bool? ExcludeKana { get; set; }
         public int? MinGlobalFrequency { get; set; }
         public int? MaxGlobalFrequency { get; set; }
         public string? PosFilter { get; set; }
 
-        public bool IsPreview => WeighPlanning.HasValue || LookaheadUnits.HasValue || TargetPercentage.HasValue
+        public bool IsPreview => WeighPlanning.HasValue || LookaheadUnits.HasValue || LookaheadByMediaType != null
+                                 || TargetPercentage.HasValue || RestTargetPercentage.HasValue
                                  || SequenceOverrides != null || ExcludeKana.HasValue || MinGlobalFrequency.HasValue
                                  || MaxGlobalFrequency.HasValue || PosFilter != null;
     }
@@ -145,7 +164,9 @@ public partial class StudyController
             PromoDismissed = true,
             WeighPlanning = request.WeighPlanning,
             LookaheadUnits = request.LookaheadUnits,
+            LookaheadByMediaType = request.LookaheadByMediaType,
             TargetPercentage = request.TargetPercentage,
+            RestTargetPercentage = request.RestTargetPercentage,
             RecencyHalfLifeDays = request.RecencyHalfLifeDays,
             PinnedDeckIds = request.PinnedDeckIds,
             IncludedDeckIds = request.IncludedDeckIds,

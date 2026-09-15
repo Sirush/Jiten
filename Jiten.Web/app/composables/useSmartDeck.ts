@@ -15,7 +15,9 @@ let statusRequestSeq = 0;
 export interface SmartDeckPreview {
   weighPlanning: boolean;
   lookaheadUnits: number;
+  lookaheadByMediaType: Record<number, number>;
   targetPercentage: number;
+  restTargetPercentage: number;
   sequenceOverrides: Record<number, boolean>;
   excludeKana: boolean;
   minGlobalFrequency?: number | null;
@@ -50,7 +52,9 @@ export function useSmartDeck() {
           ? {
               weighPlanning: preview.weighPlanning,
               lookaheadUnits: preview.lookaheadUnits,
+              lookaheadByMediaType: JSON.stringify(preview.lookaheadByMediaType),
               targetPercentage: preview.targetPercentage,
+              restTargetPercentage: preview.restTargetPercentage,
               sequenceOverrides: Object.keys(preview.sequenceOverrides).length ? JSON.stringify(preview.sequenceOverrides) : undefined,
               excludeKana: preview.excludeKana,
               minGlobalFrequency: preview.minGlobalFrequency ?? undefined,

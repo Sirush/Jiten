@@ -17,7 +17,13 @@ public sealed record SmartDeckSources(
     SmartDeckSettings Settings,
     IReadOnlyList<SmartDeckTitle> Titles,
     IReadOnlyDictionary<int, SmartDeckUnitWindow> Windows,
-    int TitlesBeyondCap);
+    int TitlesBeyondCap,
+    IReadOnlySet<int>? TitlesWithUnits = null)
+{
+    public IReadOnlySet<int> TitlesWithUnits { get; init; } = TitlesWithUnits ?? new HashSet<int>();
+
+    public bool ContributesWholeTitle(int parentDeckId) => Settings.RestTargetPercentage > 0 || !TitlesWithUnits.Contains(parentDeckId);
+}
 
 public sealed record SmartDeckBuildResult(bool Built, string? SkipReason, int TitleCount, int WordCount, TimeSpan Duration);
 
@@ -104,14 +110,18 @@ public class SmartDeckBuilder(
         var titles = SmartDeckSourceResolver.ResolveTitles(effective, rows, now);
         var eligibleCount = CountEligible(effective, rows);
 
+        var titleIds = titles.Select(t => t.ParentDeckId).ToList();
         var boostedIds = titles.Where(t => t.Boosted).Select(t => t.ParentDeckId).ToList();
         var windows = new Dictionary<int, SmartDeckUnitWindow>();
-        if (boostedIds.Count > 0)
+        var titlesWithUnits = new HashSet<int>();
+        if (titleIds.Count > 0)
         {
-            var units = await context.Decks.AsNoTracking()
-                                     .Where(d => d.ParentDeckId != null && boostedIds.Contains(d.ParentDeckId.Value))
-                                     .Select(d => new { d.DeckId, ParentDeckId = d.ParentDeckId!.Value, d.DeckOrder })
-                                     .ToListAsync(ct);
+            var allUnits = await context.Decks.AsNoTracking()
+                                        .Where(d => d.ParentDeckId != null && titleIds.Contains(d.ParentDeckId.Value))
+                                        .Select(d => new { d.DeckId, ParentDeckId = d.ParentDeckId!.Value, d.DeckOrder })
+                                        .ToListAsync(ct);
+            foreach (var u in allUnits) titlesWithUnits.Add(u.ParentDeckId);
+            var units = allUnits.Where(u => boostedIds.Contains(u.ParentDeckId)).ToList();
             var mediaTypes = await context.Decks.AsNoTracking()
                                           .Where(d => boostedIds.Contains(d.DeckId))
                                           .Select(d => new { d.DeckId, d.MediaType })
@@ -121,15 +131,16 @@ public class SmartDeckBuilder(
 
             foreach (var group in units.GroupBy(u => u.ParentDeckId))
             {
+                var mediaType = mediaTypes.GetValueOrDefault(group.Key);
                 var sequential = effective.SequenceOverrides.TryGetValue(group.Key, out var forced)
                     ? forced
-                    : SmartDeckConstants.IsSequentialByDefault(mediaTypes.GetValueOrDefault(group.Key));
+                    : SmartDeckConstants.IsSequentialByDefault(mediaType);
                 windows[group.Key] = SmartDeckSourceResolver.ResolveWindow(
-                    group.Key, group.Select(u => (u.DeckId, u.DeckOrder)).ToList(), completed, effective.LookaheadUnits, ongoing, sequential);
+                    group.Key, group.Select(u => (u.DeckId, u.DeckOrder)).ToList(), completed, effective.LookaheadFor(mediaType), ongoing, sequential);
             }
         }
 
-        return new SmartDeckSources(effective, titles, windows, Math.Max(0, eligibleCount - titles.Count));
+        return new SmartDeckSources(effective, titles, windows, Math.Max(0, eligibleCount - titles.Count), titlesWithUnits);
     }
 
     public async Task<SmartDeckSources> LoadSourcesCached(string userId, CancellationToken ct = default)
@@ -195,7 +206,7 @@ public class SmartDeckBuilder(
     {
         await referenceCache.EnsureLoaded(ct);
 
-        var parentIds = sources.Titles.Select(t => t.ParentDeckId).ToList();
+        var parentIds = sources.Titles.Select(t => t.ParentDeckId).Where(sources.ContributesWholeTitle).ToList();
         var windowIds = sources.Windows.Values.SelectMany(w => w.WindowDeckIds).Distinct().ToList();
         var parentWords = await LoadWords(parentIds, ct);
         var windowWords = await LoadWords(windowIds, ct);
@@ -217,7 +228,7 @@ public class SmartDeckBuilder(
         int Rank(long key) => HasRank(key, out var rank) ? rank : int.MaxValue;
 
         var needsPosFilter = !string.IsNullOrWhiteSpace(filters.PosFilter);
-        var ranked = SmartDeckScorer.Score(inputs, IsExcluded, Rank, needsPosFilter ? int.MaxValue : cap, sources.Settings.TargetPercentage, HasCard);
+        var ranked = SmartDeckScorer.Score(inputs, IsExcluded, Rank, needsPosFilter ? int.MaxValue : cap, HasCard);
         if (needsPosFilter) ranked = await ApplyPosFilter(ranked, filters.PosFilter!, cap, ct);
         return (ranked, cardKeys, windowWords);
     }
@@ -258,7 +269,7 @@ public class SmartDeckBuilder(
             var contributions = new List<(SmartDeckContribution Item, double Raw)>();
             foreach (var title in sources.Titles)
             {
-                var occ = byKeyAndDeck.GetValueOrDefault((key, title.ParentDeckId));
+                var occ = sources.ContributesWholeTitle(title.ParentDeckId) ? byKeyAndDeck.GetValueOrDefault((key, title.ParentDeckId)) : 0;
                 var raw = title.Weight * SmartDeckConstants.WholeTitleWeight * Math.Log2(1 + occ);
                 int? unitId = null;
                 var unitOcc = 0;
@@ -305,14 +316,16 @@ public class SmartDeckBuilder(
         Dictionary<int, List<SmartDeckWordOccurrence>> parentWords, Dictionary<int, List<SmartDeckWordOccurrence>> windowWords)
         => sources.Titles.Select(title =>
         {
-            var parts = new List<SmartDeckPart>
-            {
-                new(title.ParentDeckId, SmartDeckConstants.WholeTitleWeight, parentWords.GetValueOrDefault(title.ParentDeckId, []))
-            };
+            var wholeTarget = sources.TitlesWithUnits.Contains(title.ParentDeckId)
+                ? sources.Settings.RestTargetPercentage
+                : sources.Settings.TargetPercentage;
+            var parts = new List<SmartDeckPart>();
+            if (sources.ContributesWholeTitle(title.ParentDeckId))
+                parts.Add(new SmartDeckPart(title.ParentDeckId, SmartDeckConstants.WholeTitleWeight, parentWords.GetValueOrDefault(title.ParentDeckId, []), wholeTarget));
             if (title.Boosted && sources.Windows.TryGetValue(title.ParentDeckId, out var window))
                 foreach (var unitId in window.WindowDeckIds)
                     parts.Add(new SmartDeckPart(unitId, SmartDeckConstants.WindowWeight - SmartDeckConstants.WholeTitleWeight,
-                                                windowWords.GetValueOrDefault(unitId, [])));
+                                                windowWords.GetValueOrDefault(unitId, []), sources.Settings.TargetPercentage));
             return new SmartDeckTitleInput(title.ParentDeckId, title.Weight, parts);
         }).ToList();
 
