@@ -240,10 +240,21 @@
   const replayLine = () => seekToIndex(focusIndex.value);
   const stepLine = (delta: number) => seekToIndex(focusIndex.value + delta);
 
+  // ---- mobile layout: pinned player, line controls in a bottom bar, one context line each side ----
+  const isMobile = ref(false);
+  onMounted(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    isMobile.value = mq.matches;
+    const onChange = (e: MediaQueryListEvent) => (isMobile.value = e.matches);
+    mq.addEventListener('change', onChange);
+    onBeforeUnmount(() => mq.removeEventListener('change', onChange));
+  });
+
   // ---- karaoke window: the current line, faded neighbours, the outermost invisible so lines fade in and out ----
-  const KARAOKE_WINDOW = 3;
+  const karaokeWindow = computed(() => (isMobile.value ? 2 : 3));
   const karaokeLines = computed(() => {
     const centre = focusIndex.value;
+    const KARAOKE_WINDOW = karaokeWindow.value;
     const out: { index: number; offset: number; cue: WatchCue }[] = [];
     for (let offset = -KARAOKE_WINDOW; offset <= KARAOKE_WINDOW; offset++) {
       const cue = lines.value.get(centre + offset);
@@ -257,7 +268,7 @@
   watch(
     focusIndex,
     (next, prev) => {
-      if (Math.abs(next - prev) <= KARAOKE_WINDOW) return;
+      if (Math.abs(next - prev) <= karaokeWindow.value) return;
       cutTransition.value = true;
       clearTimeout(cutTimer);
       cutTimer = setTimeout(() => (cutTransition.value = false), 50);
@@ -272,12 +283,34 @@
     line.style.left = `${line.offsetLeft}px`;
     line.style.width = `${line.offsetWidth}px`;
   };
-  const karaokeLineStyle = (offset: number) => {
+  // Past this length a cue no longer fits beside the pinned player at full size
+  const LONG_CUE_CHARS = 60;
+  const karaokeLineStyle = (offset: number, cue: WatchCue) => {
     const distance = Math.abs(offset);
-    const size = ['clamp(1.25rem, 2.5vw, 1.5rem)', '1.125rem', '1rem', '1rem'][distance] ?? '1rem';
-    const opacity = [1, 0.75, 0.4, 0][distance] ?? 0;
-    return { fontSize: size, opacity, fontWeight: distance === 0 ? 600 : 400, gridRow: offset + KARAOKE_WINDOW + 1 };
+    const shrink = isMobile.value && cue.text.length > LONG_CUE_CHARS;
+    const size = [shrink ? '1.125rem' : 'clamp(1.25rem, 2.5vw, 1.5rem)', shrink ? '1rem' : '1.125rem', '1rem', '1rem'][distance] ?? '1rem';
+    const opacity = distance >= karaokeWindow.value ? 0 : [1, 0.75, 0.4][distance];
+    return { fontSize: size, opacity, fontWeight: distance === 0 ? 600 : 400, gridRow: offset + karaokeWindow.value + 1 };
   };
+
+  // On mobile the current line is brought into the gap between the pinned player and the bottom bar when it falls outside it
+  const stickyHost = ref<HTMLElement | null>(null);
+  const karaokeHost = ref<HTMLElement | null>(null);
+  const bottomBar = ref<HTMLElement | null>(null);
+  const keepLineInView = async () => {
+    if (!isMobile.value || panelOpen.value) return;
+    await nextTick();
+    const line = karaokeHost.value?.querySelector<HTMLElement>('.karaoke-line[data-offset="0"]');
+    if (!line) return;
+    const top = (stickyHost.value?.getBoundingClientRect().bottom ?? 0) + 8;
+    const bottom = bottomBar.value?.getBoundingClientRect().top ?? window.innerHeight;
+    const rect = line.getBoundingClientRect();
+    if (rect.top >= top && rect.bottom <= bottom) return;
+    const contextAbove = karaokeHost.value?.querySelector<HTMLElement>('.karaoke-line[data-offset="-1"]');
+    const anchor = contextAbove && contextAbove.offsetHeight > 0 ? contextAbove.getBoundingClientRect().top : rect.top;
+    window.scrollBy({ top: anchor - top, behavior: 'smooth' });
+  };
+  watch(focusIndex, keepLineInView);
 
   // ---- word colours ----
   const colourRows: { key: WatchColourKey; label: string }[] = [
@@ -306,6 +339,9 @@
   const resetColours = () => setPref('colours', { ...DEFAULT_WATCH_COLOURS });
   const coloursOp = ref();
   const toggleColours = (event: Event) => coloursOp.value?.toggle(event);
+  const mobileMenuOp = ref();
+  const toggleMobileMenu = (event: Event) => mobileMenuOp.value?.toggle(event);
+  const togglePlay = () => (player.playing.value ? player.pause() : player.play());
   // Native colour inputs need a concrete value; unset rows show the theme text colour
   const colourInputValue = (key: WatchColourKey) => prefs.value.colours[key] ?? (isDark.value ? '#f3f4f6' : '#111827');
   const isDark = ref(false);
@@ -335,7 +371,16 @@
   const onWordClick = (line: { index: number; offset: number }, segment: Segment) => {
     if (window.getSelection()?.toString()) return;
     if (line.offset !== 0) seekToIndex(line.index);
-    else if (segment.word) openWord(segment.word, segment.conjugation, { index: line.index, start: segment.start, length: segment.text.length });
+    else if (segment.word) {
+      pinPlayerToTop();
+      openWord(segment.word, segment.conjugation, { index: line.index, start: segment.start, length: segment.text.length });
+    }
+  };
+  // The half-height drawer would cover the player unless the page sits at the pinned position
+  const pinPlayerToTop = () => {
+    if (!isMobile.value) return;
+    const top = stickyHost.value?.getBoundingClientRect().top ?? 0;
+    if (top > 0) window.scrollBy({ top });
   };
 
   // ---- unknown-word timeline (counts only) ----
@@ -504,8 +549,7 @@
     else if (event.key === 'k') stepLine(-1);
     else if (event.key === ' ' && canEmbed.value) {
       event.preventDefault();
-      if (player.playing.value) player.pause();
-      else player.play();
+      togglePlay();
     }
   };
 
@@ -574,25 +618,31 @@
       </Transition>
     </Teleport>
 
-    <div v-if="loggedIn && infoStatus === 'success'" class="flex flex-col gap-3" :class="lightsOff ? 'relative z-[35] -m-3 p-3 rounded-xl bg-surface-0 dark:bg-surface-950' : ''">
-      <div class="aspect-video w-full rounded-lg overflow-hidden bg-surface-900 [&>iframe]:w-full [&>iframe]:h-full">
-        <div v-if="canEmbed" ref="playerHost" class="w-full h-full" />
-        <div v-else class="w-full h-full flex flex-col items-center justify-center gap-3 text-surface-100 p-6 text-center">
-          <p>The channel has disabled embeds, please watch it directly on YouTube instead.</p>
-          <a
-            :href="watchOnYouTubeUrl"
-            target="_blank"
-            rel="noopener"
-            class="inline-flex items-center gap-2 rounded bg-surface-0 text-surface-900 px-3 py-1.5 text-sm font-medium"
-          >
-            <i class="pi pi-youtube" /> Watch on YouTube
-          </a>
+    <div
+      v-if="loggedIn && infoStatus === 'success'"
+      class="flex flex-col gap-3 pb-24 sm:pb-0"
+      :class="lightsOff ? 'relative z-[35] -m-3 p-3 rounded-xl bg-surface-0 dark:bg-surface-950' : ''"
+    >
+      <div ref="stickyHost" class="sticky top-0 z-20 -mx-4 bg-surface-0 dark:bg-surface-950 sm:static sm:mx-0 sm:bg-transparent">
+        <div class="aspect-video w-full overflow-hidden bg-surface-900 sm:rounded-lg [&>iframe]:w-full [&>iframe]:h-full">
+          <div v-if="canEmbed" ref="playerHost" class="w-full h-full" />
+          <div v-else class="w-full h-full flex flex-col items-center justify-center gap-3 text-surface-100 p-6 text-center">
+            <p>The channel has disabled embeds, please watch it directly on YouTube instead.</p>
+            <a
+              :href="watchOnYouTubeUrl"
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center gap-2 rounded bg-surface-0 text-surface-900 px-3 py-1.5 text-sm font-medium"
+            >
+              <i class="pi pi-youtube" /> Watch on YouTube
+            </a>
+          </div>
         </div>
       </div>
 
       <div v-if="canEmbed" class="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-surface-200 dark:border-surface-700 pb-3 text-sm">
-        <div role="group" aria-label="Playback controls" class="flex items-center gap-3">
-          <div class="flex items-center gap-1">
+        <div role="group" aria-label="Playback controls" class="flex items-center gap-3 max-sm:w-full max-sm:justify-between">
+          <div class="hidden sm:flex items-center gap-1">
             <Tooltip content="Previous line (k)">
               <Button
                 icon="pi pi-step-backward"
@@ -639,8 +689,53 @@
             aria-label="Playback speed"
             @update:model-value="player.setRate"
           />
+          <div class="flex items-center gap-1 sm:hidden">
+            <Button icon="pi pi-palette" text rounded size="small" severity="secondary" aria-label="Customise vocabulary colours" @click="toggleColours" />
+            <Button
+              icon="pi pi-lightbulb"
+              text
+              rounded
+              size="small"
+              severity="secondary"
+              :class="lightsOff ? '!text-amber-500' : ''"
+              :aria-label="lightsOff ? 'Lights on' : 'Lights off'"
+              @click="lightsOff = !lightsOff"
+            />
+            <Button icon="pi pi-ellipsis-v" text rounded size="small" severity="secondary" aria-label="More options" @click="toggleMobileMenu" />
+          </div>
         </div>
-        <div role="group" aria-label="Learning controls" class="watch-learning-controls flex flex-wrap items-center gap-x-4 gap-y-3">
+        <Popover ref="mobileMenuOp" :pt="{ content: { class: 'p-3' } }">
+          <div class="flex flex-col gap-3 text-sm">
+            <div class="flex items-center gap-2 whitespace-nowrap">
+              <ToggleSwitch v-model="autoPause" input-id="autoPauseMobile" />
+              <label for="autoPauseMobile">Pause after each line</label>
+            </div>
+            <div v-if="autoPause" class="flex items-center gap-2 pl-1">
+              <label for="pauseOffsetMobile" class="text-surface-500 dark:text-surface-400">Offset</label>
+              <InputNumber
+                v-model="pauseOffsetMs"
+                input-id="pauseOffsetMobile"
+                show-buttons
+                :min="-1000"
+                :max="1000"
+                :step="25"
+                suffix=" ms"
+                size="small"
+                :input-style="{ width: '8.5rem' }"
+                aria-label="Pause offset in milliseconds"
+              />
+            </div>
+            <div class="flex items-center gap-2 whitespace-nowrap">
+              <ToggleSwitch v-model="blurKnown" input-id="blurKnownMobile" />
+              <label for="blurKnownMobile">Blur known words</label>
+            </div>
+            <div class="flex items-center gap-2 whitespace-nowrap">
+              <ToggleSwitch v-model="pauseOnLookup" input-id="pauseOnLookupMobile" />
+              <label for="pauseOnLookupMobile">Pause on lookup</label>
+            </div>
+          </div>
+        </Popover>
+        <div role="group" aria-label="Learning controls" class="watch-learning-controls hidden sm:flex flex-wrap items-center gap-x-4 gap-y-3">
           <div class="flex items-center gap-2 whitespace-nowrap">
             <ToggleSwitch v-model="autoPause" input-id="autoPause" />
             <label for="autoPause">Pause after each line</label>
@@ -698,7 +793,7 @@
             <Button label="Reset all" text size="small" severity="secondary" class="self-end" @click="resetColours" />
           </div>
         </Popover>
-        <div v-if="autoPause" class="flex w-full items-center gap-2">
+        <div v-if="autoPause" class="hidden sm:flex w-full items-center gap-2">
           <label for="pauseOffset" class="text-surface-500 dark:text-surface-400">Offset</label>
           <InputNumber
             v-model="pauseOffsetMs"
@@ -715,7 +810,7 @@
         </div>
       </div>
 
-      <div v-if="canEmbed && (timeline || cueCount)" class="flex flex-col gap-2">
+      <div v-if="canEmbed && (timeline || cueCount)" class="flex flex-col gap-2 max-sm:order-last">
         <div class="flex items-center justify-between gap-3 text-xs text-surface-500 dark:text-surface-400">
           <span v-if="timeline && timelineMax > 0" class="font-medium">Vocabulary timeline</span>
           <span v-else class="font-medium">Transcript</span>
@@ -751,7 +846,7 @@
       </div>
 
       <Skeleton v-if="canEmbed && !player.ready.value" height="14rem" />
-      <div v-else-if="canEmbed" class="relative">
+      <div v-else-if="canEmbed" ref="karaokeHost" class="relative">
         <TransitionGroup
           tag="div"
           :name="cutTransition ? 'karaoke-cut' : 'karaoke'"
@@ -763,9 +858,10 @@
             v-for="line in karaokeLines"
             :key="line.index"
             class="karaoke-line w-full max-w-3xl leading-relaxed font-noto-sans"
-            :class="{ 'karaoke-context': line.offset !== 0, 'invisible h-0 overflow-hidden': Math.abs(line.offset) === KARAOKE_WINDOW }"
-            :style="karaokeLineStyle(line.offset)"
-            :aria-hidden="Math.abs(line.offset) === KARAOKE_WINDOW ? true : undefined"
+            :class="{ 'karaoke-context': line.offset !== 0, 'invisible h-0 overflow-hidden': Math.abs(line.offset) === karaokeWindow }"
+            :style="karaokeLineStyle(line.offset, line.cue)"
+            :aria-hidden="Math.abs(line.offset) === karaokeWindow ? true : undefined"
+            :data-offset="line.offset"
             lang="ja"
           >
             <template v-for="(segment, j) in segmentsOf(line.cue)" :key="j">
@@ -786,7 +882,7 @@
               <span v-else :class="line.offset !== 0 ? 'cursor-pointer' : ''" @click="onWordClick(line, segment)">{{ segment.text }}</span>
             </template>
           </p>
-          <p v-if="karaokeLines.length === 0" key="empty" class="row-start-4 text-surface-500 dark:text-surface-400">Press play to follow the transcript.</p>
+          <p v-if="karaokeLines.length === 0" key="empty" class="text-surface-500 dark:text-surface-400" :style="{ gridRow: karaokeWindow + 1 }">Press play to follow the transcript.</p>
         </TransitionGroup>
         <WatchWordPanel
           v-if="panelOpen"
@@ -806,6 +902,27 @@
           @mine="mineSentence"
           @update:sentence-context="sentenceContext = $event"
         />
+      </div>
+
+      <div
+        v-if="canEmbed && !panelOpen"
+        ref="bottomBar"
+        role="group"
+        aria-label="Line controls"
+        class="watch-bottom-bar fixed inset-x-0 bottom-0 z-[36] flex items-center justify-around border-t border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-950 px-4 pt-2 sm:hidden"
+      >
+        <Button icon="pi pi-step-backward" severity="secondary" text rounded aria-label="Previous line" :disabled="!player.ready.value" @click="stepLine(-1)" />
+        <Button icon="pi pi-replay" severity="secondary" text rounded aria-label="Replay line" :disabled="!player.ready.value" @click="replayLine" />
+        <Button
+          :icon="player.playing.value ? 'pi pi-pause' : 'pi pi-play'"
+          severity="secondary"
+          rounded
+          size="large"
+          :aria-label="player.playing.value ? 'Pause' : 'Play'"
+          :disabled="!player.ready.value"
+          @click="togglePlay"
+        />
+        <Button icon="pi pi-step-forward" severity="secondary" text rounded aria-label="Next line" :disabled="!player.ready.value" @click="stepLine(1)" />
       </div>
     </div>
   </div>
@@ -836,6 +953,17 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 0 minmax(2.75rem, auto) minmax(2.75rem, auto) minmax(4rem, auto) minmax(2.75rem, auto) minmax(2.75rem, auto) 0;
     padding: 0.5rem 0.75rem;
+  }
+
+  @media (max-width: 639px) {
+    .karaoke-window {
+      grid-template-rows: 0 minmax(2.75rem, auto) minmax(4rem, auto) minmax(2.75rem, auto) 0;
+      padding: 0.25rem 0;
+    }
+  }
+
+  .watch-bottom-bar {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
   }
 
   .karaoke-context {

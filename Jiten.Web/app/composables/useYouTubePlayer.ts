@@ -52,6 +52,7 @@ const SEEK_SETTLE_TIMEOUT_MS = 3000;
 export function useYouTubePlayer(container: Ref<HTMLElement | null>) {
   const ready = ref(false);
   const playing = ref(false);
+  let intendsToPlay = false;
   const ended = ref(false);
   // Error 101/150 = embedding disabled by the uploader, 100 = gone; either way the embed is dead
   const embedBlocked = ref(false);
@@ -106,8 +107,11 @@ export function useYouTubePlayer(container: Ref<HTMLElement | null>) {
           }
         },
         onStateChange: (event: { data: number }) => {
-          playing.value = event.data === yt.PlayerState.PLAYING;
-          ended.value = event.data === yt.PlayerState.ENDED;
+          const state = event.data;
+          if (state === yt.PlayerState.PLAYING) intendsToPlay = true;
+          else if (state !== yt.PlayerState.BUFFERING) intendsToPlay = false;
+          playing.value = state === yt.PlayerState.PLAYING || (state === yt.PlayerState.BUFFERING && intendsToPlay);
+          ended.value = state === yt.PlayerState.ENDED;
           if (playing.value) startPolling();
           else {
             poll();
@@ -118,15 +122,24 @@ export function useYouTubePlayer(container: Ref<HTMLElement | null>) {
     });
   };
 
-  const play = () => player?.playVideo();
-  const pause = () => player?.pauseVideo();
+  const play = () => {
+    intendsToPlay = true;
+    player?.playVideo();
+  };
+  const pause = () => {
+    intendsToPlay = false;
+    player?.pauseVideo();
+  };
   const seek = (seconds: number, andPlay = true) => {
     if (!player) return;
     const target = Math.max(0, seconds);
     pendingSeek = { seconds: target, until: performance.now() + SEEK_SETTLE_TIMEOUT_MS };
     player.seekTo(target, true);
     currentTime.value = target;
-    if (andPlay) player.playVideo();
+    if (andPlay) {
+      intendsToPlay = true;
+      player.playVideo();
+    }
   };
   const setRate = (rate: number) => {
     playbackRate.value = rate;

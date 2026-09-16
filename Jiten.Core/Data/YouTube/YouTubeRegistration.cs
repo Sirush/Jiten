@@ -38,6 +38,8 @@ public class YouTubeRegistration
 
     public int? MaxRuntimeSeconds { get; set; }
 
+    public int? MinCharacters { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset? CompletedAt { get; set; }

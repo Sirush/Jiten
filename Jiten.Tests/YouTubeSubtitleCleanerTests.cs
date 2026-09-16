@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Jiten.Core.Data.YouTube;
 using Jiten.Core.YouTube;
 using Xunit;
@@ -98,6 +98,12 @@ public class YouTubeSubtitleCleanerTests
             $"{i + 1}\n00:00:{i:00},000 --> 00:00:{i:00},900\n今日は天気がいいので散歩に行きました\n\n")));
 
         YouTubeContentPolicy.CheckDensity(dense, runtimeSeconds: 60).Should().BeNull();
+
+        var shortClip = YouTubeSubtitleCleaner.Clean(string.Concat(Enumerable.Range(0, 12).Select(i =>
+            $"{i + 1}\n00:00:{i:00},000 --> 00:00:{i:00},900\n今日は天気がいいので散歩に行きました\n\n")));
+
+        YouTubeContentPolicy.CheckDensity(shortClip, runtimeSeconds: 160).Should().StartWith("density:");
+        YouTubeContentPolicy.CheckDensity(shortClip, runtimeSeconds: 160, YouTubeSourceFilters.None with { MinCharacters = 100 }).Should().BeNull();
     }
 
     [Fact]

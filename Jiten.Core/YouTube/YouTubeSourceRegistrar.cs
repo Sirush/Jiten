@@ -71,6 +71,7 @@ public class YouTubeSourceRegistrar(IDbContextFactory<JitenDbContext> contextFac
             TitleFilterExclude = filters.TitleExclude,
             MinRuntimeSeconds = filters.MinRuntimeSeconds,
             MaxRuntimeSeconds = filters.MaxRuntimeSeconds,
+            MinCharacters = filters.MinCharacters,
             NextCheckAt = DateTimeOffset.UtcNow.AddDays(7),
             SyncEnabled = true
         });
