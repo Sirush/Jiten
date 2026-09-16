@@ -77,6 +77,7 @@
   const titleExclude = ref('');
   const minMinutes = ref<number | null>(null);
   const maxMinutes = ref<number | null>(null);
+  const minChars = ref<number | null>(null);
 
   // Server mode needs a successful preview first; CLI mode only needs a URL
   const canSubmit = computed(() => (mode.value === 'cli' ? !!url.value.trim() : !!preview.value && !preview.value.conflict && !!originalTitle.value.trim()));
@@ -142,6 +143,7 @@
     titleExclude.value = '';
     minMinutes.value = null;
     maxMinutes.value = null;
+    minChars.value = null;
   };
 
   const submit = async () => {
@@ -160,6 +162,7 @@
       if (titleExclude.value.trim()) formData.append('titleExclude', titleExclude.value.trim());
       if (minMinutes.value) formData.append('minRuntimeSeconds', String(minMinutes.value * 60));
       if (maxMinutes.value) formData.append('maxRuntimeSeconds', String(maxMinutes.value * 60));
+      if (minChars.value) formData.append('minCharacters', String(minChars.value));
 
       const result = await $api<{ command?: string }>('admin/add-youtube-source', { method: 'POST', body: formData });
 
@@ -311,6 +314,11 @@
                 <InputNumber v-model="maxMinutes" input-id="maxMinutes" :min="0" suffix=" min" placeholder="no maximum" fluid class="flex-1" />
               </div>
               <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">For channels mixing shorts with long-form, or to keep multi-hour streams out.</p>
+            </div>
+            <div>
+              <label for="minChars" class="block text-sm font-medium mb-1">Minimum subtitle length</label>
+              <InputNumber v-model="minChars" input-id="minChars" :min="1" suffix=" chars" placeholder="default 300" fluid />
+              <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">Lower it for channels of short clips. The 20 chars per minute rate still applies.</p>
             </div>
           </div>
         </div>

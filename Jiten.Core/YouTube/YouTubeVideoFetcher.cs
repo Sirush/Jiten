@@ -109,7 +109,7 @@ public class YouTubeVideoFetcher(YtDlpClient client)
         var cleanedPath = Path.Combine(workDirectory, $"{info.VideoId}.clean.srt");
         var cleaned = await YouTubeSubtitleCleaner.CleanFileAsync(info.SubtitlePath!, cleanedPath);
 
-        var densityReason = YouTubeContentPolicy.CheckDensity(cleaned, info.DurationSeconds);
+        var densityReason = YouTubeContentPolicy.CheckDensity(cleaned, info.DurationSeconds, filters);
         if (densityReason != null)
             return new YouTubeFetchOutcome { Status = YouTubeVideoStatus.FilteredOut, SkipReason = densityReason, Info = info, Cleaned = cleaned };
 

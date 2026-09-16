@@ -39,6 +39,8 @@
     titleFilterExclude: string | null;
     minRuntimeSeconds: number | null;
     maxRuntimeSeconds: number | null;
+    minCharacters: number | null;
+    defaultMinCharacters: number;
     lastSourceUpdate: string | null;
     lastSyncedAt: string | null;
     nextCheckAt: string;
@@ -76,6 +78,7 @@
   const filterExclude = ref('');
   const minMinutes = ref<number | null>(null);
   const maxMinutes = ref<number | null>(null);
+  const minChars = ref<number | null>(null);
   const toMinutes = (seconds: number | null) => (seconds ? Math.round(seconds / 60) : null);
   const filtersDirty = computed(
     () =>
@@ -83,7 +86,8 @@
       (filterInclude.value !== (source.value.titleFilterInclude ?? '') ||
         filterExclude.value !== (source.value.titleFilterExclude ?? '') ||
         minMinutes.value !== toMinutes(source.value.minRuntimeSeconds) ||
-        maxMinutes.value !== toMinutes(source.value.maxRuntimeSeconds))
+        maxMinutes.value !== toMinutes(source.value.maxRuntimeSeconds) ||
+        minChars.value !== source.value.minCharacters)
   );
 
   const statusOptions = computed(() => [
@@ -101,6 +105,7 @@
       filterExclude.value = source.value.titleFilterExclude ?? '';
       minMinutes.value = toMinutes(source.value.minRuntimeSeconds);
       maxMinutes.value = toMinutes(source.value.maxRuntimeSeconds);
+      minChars.value = source.value.minCharacters;
     } catch {
       // Not a tracked source: the panel stays hidden
       source.value = null;
@@ -154,6 +159,7 @@
             titleExclude: filterExclude.value || null,
             minRuntimeSeconds: minMinutes.value ? minMinutes.value * 60 : null,
             maxRuntimeSeconds: maxMinutes.value ? maxMinutes.value * 60 : null,
+            minCharacters: minChars.value || null,
           },
         });
       }
@@ -297,6 +303,11 @@
               <InputNumber v-model="maxMinutes" input-id="ytMaxMinutes" :min="0" suffix=" min" size="small" placeholder="no maximum" fluid class="flex-1" />
             </div>
             <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">Skips videos outside the range before anything is fetched.</p>
+          </div>
+          <div>
+            <label for="ytMinChars" class="block text-sm mb-1">Minimum subtitle length</label>
+            <InputNumber v-model="minChars" input-id="ytMinChars" :min="1" suffix=" chars" size="small" :placeholder="`default ${source.defaultMinCharacters}`" fluid />
+            <p class="text-xs text-surface-500 dark:text-surface-400 mt-1">Lower it for channels of short clips. Re-check "density" videos after saving.</p>
           </div>
           <div>
             <label for="ytInterval" class="block text-sm mb-1">Check the feed every</label>

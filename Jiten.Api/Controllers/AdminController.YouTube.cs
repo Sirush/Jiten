@@ -86,8 +86,12 @@ public partial class AdminController
             await model.CoverImage.CopyToAsync(stream);
         }
 
+        if (model.MinCharacters is < 0)
+            return BadRequest(new { Message = "The minimum character count must be positive." });
+
         var filters = new YouTubeSourceFilters(Normalise(model.TitleInclude), Normalise(model.TitleExclude),
-                                               model.MinRuntimeSeconds, model.MaxRuntimeSeconds);
+                                               model.MinRuntimeSeconds, model.MaxRuntimeSeconds,
+                                               model.MinCharacters is > 0 ? model.MinCharacters : null);
         var titles = new YouTubeSourceTitles
         {
             OriginalTitle = Normalise(model.OriginalTitle),
@@ -113,6 +117,7 @@ public partial class AdminController
                 TitleFilterExclude = filters.TitleExclude,
                 MinRuntimeSeconds = filters.MinRuntimeSeconds,
                 MaxRuntimeSeconds = filters.MaxRuntimeSeconds,
+                MinCharacters = filters.MinCharacters,
                 CreatedAt = DateTimeOffset.UtcNow
             };
             dbContext.YouTubeRegistrations.Add(registration);
@@ -230,6 +235,8 @@ public partial class AdminController
             tracked.TitleFilterExclude,
             tracked.MinRuntimeSeconds,
             tracked.MaxRuntimeSeconds,
+            tracked.MinCharacters,
+            DefaultMinCharacters = YouTubeContentPolicy.MinCharacters,
             tracked.LastSourceUpdate,
             tracked.LastSyncedAt,
             tracked.NextCheckAt,
@@ -354,13 +361,17 @@ public partial class AdminController
             (model.MinRuntimeSeconds is > 0 && model.MaxRuntimeSeconds is > 0 && model.MinRuntimeSeconds > model.MaxRuntimeSeconds))
             return BadRequest(new { Message = "The runtime bounds must be positive and the minimum below the maximum." });
 
+        if (model.MinCharacters is < 0)
+            return BadRequest(new { Message = "The minimum character count must be positive." });
+
         tracked.TitleFilterInclude = Normalise(model.TitleInclude);
         tracked.TitleFilterExclude = Normalise(model.TitleExclude);
         tracked.MinRuntimeSeconds = model.MinRuntimeSeconds is > 0 ? model.MinRuntimeSeconds : null;
         tracked.MaxRuntimeSeconds = model.MaxRuntimeSeconds is > 0 ? model.MaxRuntimeSeconds : null;
+        tracked.MinCharacters = model.MinCharacters is > 0 ? model.MinCharacters : null;
         await dbContext.SaveChangesAsync();
 
-        return Ok(new { tracked.DeckId, tracked.TitleFilterInclude, tracked.TitleFilterExclude, tracked.MinRuntimeSeconds, tracked.MaxRuntimeSeconds });
+        return Ok(new { tracked.DeckId, tracked.TitleFilterInclude, tracked.TitleFilterExclude, tracked.MinRuntimeSeconds, tracked.MaxRuntimeSeconds, tracked.MinCharacters });
     }
 
     /// <summary>Pending re-checks a video on the next drain; Excluded blacklists it. Imported rows are left alone.</summary>
@@ -452,6 +463,7 @@ public class AddYouTubeSourceRequest
     public string? TitleExclude { get; set; }
     public int? MinRuntimeSeconds { get; set; }
     public int? MaxRuntimeSeconds { get; set; }
+    public int? MinCharacters { get; set; }
 }
 
 public class SetYouTubeCheckIntervalRequest
@@ -465,6 +477,7 @@ public class SetYouTubeFiltersRequest
     public string? TitleExclude { get; set; }
     public int? MinRuntimeSeconds { get; set; }
     public int? MaxRuntimeSeconds { get; set; }
+    public int? MinCharacters { get; set; }
 }
 
 public class SetYouTubeVideoStatusRequest

@@ -156,7 +156,7 @@ public class YouTubeIngestController(
             ReleaseDate = registration.ReleaseDate
         };
         var filters = new YouTubeSourceFilters(registration.TitleFilterInclude, registration.TitleFilterExclude,
-                                               registration.MinRuntimeSeconds, registration.MaxRuntimeSeconds);
+                                               registration.MinRuntimeSeconds, registration.MaxRuntimeSeconds, registration.MinCharacters);
 
         var conflict = await registrar.CheckConflictsAsync(model.Source, titles.OriginalTitle);
         if (conflict != null)
@@ -243,7 +243,7 @@ public class YouTubeIngestController(
                 await model.Subtitles.CopyToAsync(stream);
 
             var cleaned = YouTubeSubtitleCleaner.Clean(await System.IO.File.ReadAllTextAsync(srtPath));
-            var densityReason = YouTubeContentPolicy.CheckDensity(cleaned, info.DurationSeconds);
+            var densityReason = YouTubeContentPolicy.CheckDensity(cleaned, info.DurationSeconds, YouTubeSourceFilters.From(source!));
 
             var outcome = densityReason != null
                 ? new YouTubeFetchOutcome { Status = YouTubeVideoStatus.FilteredOut, SkipReason = densityReason, Info = info, Cleaned = cleaned }

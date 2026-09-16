@@ -37,6 +37,9 @@ public class YouTubeSource
 
     public int? MaxRuntimeSeconds { get; set; }
 
+    /// <summary>Subtitle character floor for this source; null = YouTubeContentPolicy.MinCharacters</summary>
+    public int? MinCharacters { get; set; }
+
     /// <summary>Newest video upload seen at the last check</summary>
     public DateTimeOffset? LastSourceUpdate { get; set; }
 

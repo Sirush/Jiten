@@ -430,6 +430,9 @@ public class CliOptions
     [Option(longName: "yt-max-minutes", Required = false, HelpText = "With --yt-test/--yt-import: skip videos longer than this many minutes.")]
     public double? YtMaxMinutes { get; set; }
 
+    [Option(longName: "yt-min-chars", Required = false, HelpText = "With --yt-test/--yt-import: subtitle character floor per video (default 300).")]
+    public int? YtMinChars { get; set; }
+
     [Option(longName: "yt-staging", Required = false, HelpText = "Directory for fetched subtitles and metadata (default: <StaticFilesPath>/tmp/youtube).")]
     public string? YtStaging { get; set; }
 }

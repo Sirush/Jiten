@@ -494,7 +494,8 @@ public class YouTubeCommands(CliContext context)
     private static YouTubeSourceFilters Filters(CliOptions options) =>
         new(options.YtInclude, options.YtExclude,
             options.YtMinMinutes is > 0 ? (int)(options.YtMinMinutes.Value * 60) : null,
-            options.YtMaxMinutes is > 0 ? (int)(options.YtMaxMinutes.Value * 60) : null);
+            options.YtMaxMinutes is > 0 ? (int)(options.YtMaxMinutes.Value * 60) : null,
+            options.YtMinChars is > 0 ? options.YtMinChars : null);
 
     private TimeSpan DelayBetweenVideos() => TimeSpan.FromMilliseconds(context.Configuration.GetValue("YtDlp:DelayMs", 1500));
 
