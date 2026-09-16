@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json;
 using Jiten.Api.Helpers;
 using Jiten.Core;
@@ -358,8 +358,8 @@ public class SmartDeckBuilder(
     {
         var keys = new HashSet<long>();
         var cardKeys = new HashSet<long>();
-        var kanjiKnown = new List<(int WordId, byte ReadingIndex)>();
-        var derivationKnown = new List<(int WordId, byte ReadingIndex)>();
+        // One conductor set for kana and derivation covers, the same one the study-batch picker uses.
+        var known = new List<(int WordId, byte ReadingIndex)>();
 
         await foreach (var c in userContext.FsrsCards.AsNoTracking()
                                           .Where(c => c.UserId == userId)
@@ -369,8 +369,7 @@ public class SmartDeckBuilder(
             var cardKey = WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex);
             keys.Add(cardKey);
             cardKeys.Add(cardKey);
-            kanjiKnown.Add((c.WordId, c.ReadingIndex));
-            derivationKnown.Add((c.WordId, c.ReadingIndex));
+            known.Add((c.WordId, c.ReadingIndex));
         }
 
         var setStates = await userContext.UserWordSetStates.AsNoTracking()
@@ -380,7 +379,6 @@ public class SmartDeckBuilder(
         if (setStates.Count > 0)
         {
             var setIds = setStates.Select(s => s.SetId).ToList();
-            var mastered = setStates.Where(s => s.State == WordSetStateType.Mastered).Select(s => s.SetId).ToHashSet();
             var conducting = setStates.Where(s => s.State is WordSetStateType.Mastered or WordSetStateType.Blacklisted)
                                       .Select(s => s.SetId).ToHashSet();
 
@@ -392,14 +390,13 @@ public class SmartDeckBuilder(
             {
                 var ri = (byte)m.ReadingIndex;
                 keys.Add(WordFormHelper.EncodeWordKey(m.WordId, ri));
-                if (mastered.Contains(m.SetId)) kanjiKnown.Add((m.WordId, ri));
-                if (conducting.Contains(m.SetId)) derivationKnown.Add((m.WordId, ri));
+                if (conducting.Contains(m.SetId)) known.Add((m.WordId, ri));
             }
         }
 
-        WordFormHelper.ExpandKanaRedundancyKeys(siblingCache, kanjiKnown, keys);
+        WordFormHelper.ExpandKanaRedundancyKeys(siblingCache, known, keys);
         var categories = await DerivationSettingsHelper.GetEnabledCategories(memoryCache, userContext, userId);
-        WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache, categories, derivationKnown, keys);
+        WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache, categories, known, keys);
         return (keys, cardKeys);
     }
 

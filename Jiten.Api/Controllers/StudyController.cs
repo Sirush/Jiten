@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hangfire;
 using Jiten.Api.Dtos;
@@ -1745,27 +1745,24 @@ public partial class StudyController(
             cardStateMap[(c.WordId, c.ReadingIndex)] = c.State;
 
         var wordSetStates = await currentUserService.GetWordSetDerivedStates();
-        var trackedKeys = new HashSet<(int, byte)>(cardStateMap.Keys);
+        var trackedKeys = new HashSet<long>();
+        var knownKeys = new List<(int WordId, byte ReadingIndex)>();
 
-        foreach (var (key, _) in wordSetStates)
+        foreach (var ((wordId, ri), _) in cardStateMap)
         {
-            if (!trackedKeys.Contains(key))
-                trackedKeys.Add(key);
+            trackedKeys.Add(WordFormHelper.EncodeWordKey(wordId, ri));
+            knownKeys.Add((wordId, ri));
         }
 
-        foreach (var ((wordId, ri), state) in cardStateMap)
+        foreach (var ((wordId, ri), _) in wordSetStates)
         {
-            if (state is FsrsState.New) continue;
-            var kanaIndexes = wordFormCache.GetKanaIndexesForKanji(wordId, ri);
-            if (kanaIndexes == null) continue;
-            foreach (var kanaRi in kanaIndexes)
-            {
-                if (!trackedKeys.Contains((wordId, kanaRi)))
-                    trackedKeys.Add((wordId, kanaRi));
-            }
+            trackedKeys.Add(WordFormHelper.EncodeWordKey(wordId, ri));
+            knownKeys.Add((wordId, ri));
         }
 
-        var unlearned = wordPairs.Count(w => !trackedKeys.Contains((w.WordId, (byte)w.ReadingIndex)));
+        WordFormHelper.ExpandKanaRedundancyKeys(wordFormCache, knownKeys, trackedKeys);
+
+        var unlearned = wordPairs.Count(w => !trackedKeys.Contains(WordFormHelper.EncodeWordKey(w.WordId, (byte)w.ReadingIndex)));
 
         return Results.Ok(new { total, unlearned });
     }
@@ -1826,8 +1823,7 @@ public partial class StudyController(
         if (aheadMinutes.HasValue || mistakeDays.HasValue)
             newCardBudget = 0;
 
-        // ── Phase 1: Build kanji knowledge set for kana redundancy ──
-        var knownKanjiWordIds = new HashSet<int>();
+        // ── Phase 1: Build the known-key set that makes deck forms redundant ──
         HashSet<long>? existingKeys = newCardBudget > 0 ? new HashSet<long>() : null;
         var derivationCategories = DerivationSettingsHelper.Parse(settings.DerivationalRedundancyCategories);
         var derivationKnownKeys = new List<(int WordId, byte ReadingIndex)>();
@@ -1842,9 +1838,6 @@ public partial class StudyController(
                 .Select(c => new { c.WordId, c.ReadingIndex })
                 .AsAsyncEnumerable())
             {
-                if (wordFormCache.GetKanaIndexesForKanji(c.WordId, c.ReadingIndex) != null)
-                    knownKanjiWordIds.Add(c.WordId);
-
                 existingKeys?.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex));
                 derivationKnownKeys.Add((c.WordId, c.ReadingIndex));
             }
@@ -1858,10 +1851,6 @@ public partial class StudyController(
             if (wordSetStates.Count > 0)
             {
                 var allSetIds = wordSetStates.Select(s => s.SetId).ToList();
-                var masteredSetIdSet = wordSetStates
-                    .Where(s => s.State == WordSetStateType.Mastered)
-                    .Select(s => s.SetId)
-                    .ToHashSet();
 
                 // A blacklisted base conducts onto its derivations, as runtime and coverage already have it.
                 var derivationSetIdSet = wordSetStates
@@ -1877,9 +1866,6 @@ public partial class StudyController(
 
                 foreach (var m in setMembers)
                 {
-                    if (masteredSetIdSet.Contains(m.SetId)
-                        && wordFormCache.GetKanaIndexesForKanji(m.WordId, (byte)m.ReadingIndex) != null)
-                        knownKanjiWordIds.Add(m.WordId);
                     existingKeys?.Add(WordFormHelper.EncodeWordKey(m.WordId, (byte)m.ReadingIndex));
                     if (derivationSetIdSet.Contains(m.SetId))
                         derivationKnownKeys.Add((m.WordId, (byte)m.ReadingIndex));
@@ -1887,8 +1873,13 @@ public partial class StudyController(
             }
 
             if (existingKeys != null)
+            {
+                // Pair-level covers only: a form is skipped when one of its own covering siblings is known,
+                // which is the same rule the deck counter and vocabulary page apply.
+                WordFormHelper.ExpandKanaRedundancyKeys(wordFormCache, derivationKnownKeys, existingKeys);
                 WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache, derivationCategories,
                                                               derivationKnownKeys, existingKeys);
+            }
         }
 
         // ── Load study decks (used by both review filtering and new card selection) ──
@@ -1971,6 +1962,9 @@ public partial class StudyController(
                     .Select(sd => sd.UserStudyDeckId).ToList();
                 if (staticDeckIds.Count > 0)
                     studyDeckWordKeys.UnionWith(await deckWordResolver.GetStaticDeckWordKeys(staticDeckIds));
+
+                // The card that covers a deck form is the one that gets reviewed for it, so it belongs to the deck too.
+                WordFormHelper.ExpandCoveringKeys(wordFormCache, derivationCache, derivationCategories, studyDeckWordKeys);
             }
 
             List<FsrsCard> dueCards;
@@ -2126,10 +2120,6 @@ public partial class StudyController(
                 {
                     var key = WordFormHelper.EncodeWordKey(word.WordId, word.ReadingIndex);
                     if (existingKeys!.Contains(key)) continue;
-
-                    if (knownKanjiWordIds.Contains(word.WordId)
-                        && wordFormCache.GetKanjiIndexesForKana(word.WordId, word.ReadingIndex) != null)
-                        continue;
 
                     existingKeys!.Add(key);
                     deckCandidates.Add((word.WordId, word.ReadingIndex));
@@ -2745,10 +2735,6 @@ public partial class StudyController(
             foreach (var c in cards)
                 existingKeys.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex));
 
-            WordFormHelper.ExpandKanaRedundancyKeys(wordFormCache,
-                cards.Where(c => c.State != FsrsState.New).Select(c => (c.WordId, c.ReadingIndex)),
-                existingKeys);
-
             // Same known set as the selection path, or the count promises new cards the batch then filters out.
             var derivationKnownKeys = cards.Select(c => (c.WordId, c.ReadingIndex)).ToList();
 
@@ -2779,6 +2765,7 @@ public partial class StudyController(
                 }
             }
 
+            WordFormHelper.ExpandKanaRedundancyKeys(wordFormCache, derivationKnownKeys, existingKeys);
             WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache,
                 DerivationSettingsHelper.Parse(settings.DerivationalRedundancyCategories),
                 derivationKnownKeys, existingKeys);

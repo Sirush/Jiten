@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Jiten.Api.Helpers;
 using Jiten.Core;
@@ -119,15 +119,19 @@ public class CurrentUserService(
                     candidates.Add((covered.WordId, covered.ReadingIndex));
         }
 
-        if (categories.Count > 0)
+        foreach (var ((wordId, ri), setState) in setDerivedStates)
         {
-            foreach (var ((wordId, ri), setState) in setDerivedStates)
-            {
-                if (setState is not (WordSetStateType.Mastered or WordSetStateType.Blacklisted)) continue;
-                if (cardsByKey.ContainsKey((wordId, ri))) continue;
+            if (setState is not (WordSetStateType.Mastered or WordSetStateType.Blacklisted)) continue;
+            if (cardsByKey.ContainsKey((wordId, ri))) continue;
+
+            var kanaIndexes = wordFormCache.GetKanaIndexesForKanji(wordId, ri);
+            if (kanaIndexes != null)
+                foreach (var kanaRi in kanaIndexes)
+                    candidates.Add((wordId, kanaRi));
+
+            if (categories.Count > 0)
                 foreach (var covered in derivationCache.GetCoveredKeys(wordId, ri, categories))
                     candidates.Add((covered.WordId, covered.ReadingIndex));
-            }
         }
 
         foreach (var key in candidates)
@@ -168,6 +172,23 @@ public class CurrentUserService(
 
             if (bestKanjiCard != null)
                 return AsRedundant(GetKnownStatesFromCard(bestKanjiCard.Value));
+
+            // A card on any kanji sibling shadows word-set state, as it does in the derivation family.
+            var bestSetRank = -1;
+            List<KnownState>? bestSetStates = null;
+            foreach (var kanjiRi in kanjiIndexes)
+            {
+                if (!setDerivedStates.TryGetValue((key.WordId, kanjiRi), out var setState)) continue;
+                if (setState is not (WordSetStateType.Mastered or WordSetStateType.Blacklisted)) continue;
+                var mastered = setState == WordSetStateType.Mastered;
+                var rank = mastered ? MasteredRank : BlacklistedRank;
+                if (rank <= bestSetRank) continue;
+                bestSetRank = rank;
+                bestSetStates = mastered ? [KnownState.Mastered] : [KnownState.Blacklisted];
+            }
+
+            if (bestSetStates != null)
+                return AsRedundant(bestSetStates);
         }
 
         if (covers != null && covers.Count > 0)

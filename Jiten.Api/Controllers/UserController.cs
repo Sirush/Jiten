@@ -101,25 +101,6 @@ public partial class UserController(
                 ComputeEffectiveCategory(c.State, c.Due, c.LastReview, now) ?? KnownState.New;
         }
 
-        // Expand kanji-kana redundancy: build set of kana forms covered by known kanji cards
-        // (deferred merge — WordSets take priority over kana redundancy)
-        var redundantExpansions = new Dictionary<(int, int), KnownState>();
-        foreach (var kvp in effectiveForms)
-        {
-            if (kvp.Value == KnownState.New) continue;
-            var kanaIndexes = wordFormCache.GetKanaIndexesForKanji(kvp.Key.WordId, (byte)kvp.Key.ReadingIndex);
-            if (kanaIndexes == null) continue;
-            foreach (var kanaIdx in kanaIndexes)
-            {
-                var kanaKey = (kvp.Key.WordId, (int)kanaIdx);
-                if (effectiveForms.ContainsKey(kanaKey)) continue;
-
-                if (!redundantExpansions.TryGetValue(kanaKey, out var existing) ||
-                    StateRank(kvp.Value) > StateRank(existing))
-                    redundantExpansions[kanaKey] = kvp.Value;
-            }
-        }
-
         // Count FSRS-only forms and words
         int youngForms = 0, matureForms = 0, masteredForms = 0, blacklistedForms = 0;
         foreach (var state in effectiveForms.Values)
@@ -211,11 +192,29 @@ public partial class UserController(
             }
         }
 
-        // Merge kana redundancy after WordSets (WordSet > KanaRedundancy priority)
+        // Same conductor set as the study-batch picker: every card plus Mastered/Blacklisted set members.
+        var redundantExpansions = new Dictionary<(int, int), KnownState>();
+        foreach (var kvp in effectiveForms)
+        {
+            var kanaIndexes = wordFormCache.GetKanaIndexesForKanji(kvp.Key.WordId, (byte)kvp.Key.ReadingIndex);
+            if (kanaIndexes == null) continue;
+            foreach (var kanaIdx in kanaIndexes)
+            {
+                var kanaKey = (kvp.Key.WordId, (int)kanaIdx);
+                if (effectiveForms.ContainsKey(kanaKey)) continue;
+
+                if (!redundantExpansions.TryGetValue(kanaKey, out var existing) ||
+                    StateRank(kvp.Value) > StateRank(existing))
+                    redundantExpansions[kanaKey] = kvp.Value;
+            }
+        }
+
+        // Blacklisted covers still resolve as redundant, but they are not knowledge and would swamp the line
+        // for anyone who blacklisted the name set.
         int redundantForms = 0;
         foreach (var (key, state) in redundantExpansions)
         {
-            if (effectiveForms.TryAdd(key, state))
+            if (effectiveForms.TryAdd(key, state) && state != KnownState.Blacklisted)
                 redundantForms++;
         }
 
