@@ -181,7 +181,7 @@
     document.addEventListener('click', handleClickOutside);
     // Native autofocus dies on hydration/client-side navigation; skipped on touch devices where it would pop the keyboard over the page.
     if (props.autofocus && window.matchMedia('(pointer: fine)').matches) {
-      inputRef.value?.querySelector('input')?.focus();
+      nextTick(() => inputRef.value?.querySelector('input')?.focus());
     }
   });
 
