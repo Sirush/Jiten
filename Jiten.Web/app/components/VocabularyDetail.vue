@@ -391,7 +391,7 @@
   <Card class="p-4 transition-opacity duration-300 ease-in-out" :class="{ 'opacity-60': isTransitioning }">
     <template v-if="word" #content>
       <div class="flex flex-col justify-between md:flex-row">
-        <div class="flex flex-col gap-4 max-w-2xl">
+        <div class="flex flex-col gap-4 w-full min-w-0 max-w-2xl">
           <div class="flex justify-between">
             <div>
               <div v-if="conjugationString != null" class="text-gray-500 dark:text-gray-400 text-xs font-noto-sans">(Conjugation: {{ conjugationString }})</div>
