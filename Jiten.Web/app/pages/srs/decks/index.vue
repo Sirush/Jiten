@@ -790,9 +790,9 @@
                   </Tooltip>
                   <div class="flex gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
                     <span>{{ deck.unseenCount }} unknown</span>
-                    <span class="text-purple-400">{{ deck.learningCount }} learning</span>
-                    <span class="text-purple-500">{{ deck.youngCount }} young</span>
-                    <span class="text-purple-700 dark:text-purple-300">{{ deck.matureCount + deck.masteredCount }} mature</span>
+                    <span class="text-purple-400 dark:text-purple-200/80">{{ deck.learningCount }} learning</span>
+                    <span class="text-purple-500 dark:text-purple-300">{{ deck.youngCount }} young</span>
+                    <span class="text-purple-700 dark:text-purple-500">{{ deck.matureCount + deck.masteredCount }} mature</span>
                     <span v-if="deck.suspendedCount > 0" class="text-amber-500">{{ deck.suspendedCount }} suspended</span>
                     <span v-if="deck.blacklistedCount > 0" class="text-gray-400 dark:text-gray-400">{{ deck.blacklistedCount }} blacklisted</span>
                     <span v-if="deck.dueReviewCount > 0" class="text-blue-500 font-semibold">{{ deck.dueReviewCount }} due</span>
@@ -969,9 +969,9 @@
                   </Tooltip>
                   <div class="flex gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
                     <span>{{ deck.unseenCount }} unknown</span>
-                    <span class="text-purple-400">{{ deck.learningCount }} learning</span>
-                    <span class="text-purple-500">{{ deck.youngCount }} young</span>
-                    <span class="text-purple-700 dark:text-purple-300">{{ deck.matureCount + deck.masteredCount }} mature</span>
+                    <span class="text-purple-400 dark:text-purple-200/80">{{ deck.learningCount }} learning</span>
+                    <span class="text-purple-500 dark:text-purple-300">{{ deck.youngCount }} young</span>
+                    <span class="text-purple-700 dark:text-purple-500">{{ deck.matureCount + deck.masteredCount }} mature</span>
                     <span v-if="deck.suspendedCount > 0" class="text-amber-500">{{ deck.suspendedCount }} suspended</span>
                     <span v-if="deck.blacklistedCount > 0" class="text-gray-400 dark:text-gray-400">{{ deck.blacklistedCount }} blacklisted</span>
                     <span v-if="deck.dueReviewCount > 0" class="text-blue-500 font-semibold">{{ deck.dueReviewCount }} due</span>
