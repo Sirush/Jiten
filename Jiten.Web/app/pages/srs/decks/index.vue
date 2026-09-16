@@ -405,9 +405,9 @@
 <template>
   <div class="container mx-auto p-2 md:p-4">
     <SrsSubNav hide-mobile-study />
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
-      <h1 class="text-2xl font-bold">Study Decks</h1>
-      <div class="flex gap-2">
+    <div class="flex items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
+      <h1 class="text-xl sm:text-2xl font-bold min-w-0 truncate">Study Decks</h1>
+      <div class="flex gap-2 shrink-0">
         <Tooltip content="Refresh decks and due counts" placement="bottom">
           <Button icon="pi pi-refresh" severity="secondary" :loading="refreshing" @click="refresh" />
         </Tooltip>
