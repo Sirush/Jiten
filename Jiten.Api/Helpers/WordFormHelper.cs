@@ -539,8 +539,6 @@ public static class WordFormHelper
         return new WordPresentation(forms, frequencies, definitions, scoped);
     }
 
-    public static (int WordId, byte ReadingIndex) DecodeWordKey(long key) => ((int)(key >> 8), (byte)(key & 0xFF));
-
     public static long EncodeWordKey(int wordId, byte readingIndex)
         => ((long)wordId << 8) | readingIndex;
 
@@ -559,28 +557,6 @@ public static class WordFormHelper
         return kanaForms
             .Select(wf => EncodeWordKey(wf.WordId, wf.ReadingIndex))
             .ToHashSet();
-    }
-
-    /// <summary>Adds the kana-sibling and derivation-family covers of every key in <paramref name="keys"/>.</summary>
-    public static void ExpandCoveringKeys(
-        IWordFormSiblingCache cache,
-        IDerivationLinkCache derivationCache,
-        IReadOnlySet<DerivationCategory> categories,
-        HashSet<long> keys)
-    {
-        var useDerivations = categories.Count > 0 && !derivationCache.IsEmpty;
-        foreach (var key in keys.ToList())
-        {
-            var (wordId, readingIndex) = DecodeWordKey(key);
-            var kanjiIndexes = cache.GetKanjiIndexesForKana(wordId, readingIndex);
-            if (kanjiIndexes != null)
-                foreach (var kanjiRi in kanjiIndexes)
-                    keys.Add(EncodeWordKey(wordId, kanjiRi));
-
-            if (!useDerivations) continue;
-            foreach (var cover in derivationCache.GetCoveringKeys(wordId, readingIndex, categories))
-                keys.Add(EncodeWordKey(cover.WordId, cover.ReadingIndex));
-        }
     }
 
     public static void ExpandKanaRedundancyKeys(

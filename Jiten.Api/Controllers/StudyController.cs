@@ -1963,8 +1963,6 @@ public partial class StudyController(
                 if (staticDeckIds.Count > 0)
                     studyDeckWordKeys.UnionWith(await deckWordResolver.GetStaticDeckWordKeys(staticDeckIds));
 
-                // The card that covers a deck form is the one that gets reviewed for it, so it belongs to the deck too.
-                WordFormHelper.ExpandCoveringKeys(wordFormCache, derivationCache, derivationCategories, studyDeckWordKeys);
             }
 
             List<FsrsCard> dueCards;
