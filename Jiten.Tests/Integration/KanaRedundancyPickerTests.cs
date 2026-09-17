@@ -160,7 +160,7 @@ public class KanaRedundancyPickerTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task StudyDecksOnly_ReviewsTheCardThatCoversADeckForm()
+    public async Task StudyDecksOnly_NeverServesASiblingThatIsNotInTheDeck()
     {
         await SeedCard(3, FsrsState.Review, due: DateTime.UtcNow.AddDays(-1), lastReview: DateTime.UtcNow.AddDays(-10));
         await AddDeckWith((Word, 2));
@@ -168,8 +168,22 @@ public class KanaRedundancyPickerTests(JitenWebApplicationFactory factory)
 
         var cards = await GetBatchCards();
 
-        cards.Should().Contain(c => !c.IsNew && c.WordId == Word && c.ReadingIndex == 3);
+        cards.Should().NotContain(c => c.WordId == Word && c.ReadingIndex == 3);
         cards.Should().NotContain(c => c.IsNew && c.WordId == Word && c.ReadingIndex == 2);
+    }
+
+    [Fact]
+    public async Task StudyDecksOnly_KeepsTheUsersOwnCardWhenTheDeckFormIsCarded()
+    {
+        await SeedCard(2, FsrsState.Review, due: DateTime.UtcNow.AddDays(-1), lastReview: DateTime.UtcNow.AddDays(-10));
+        await SeedCard(3, FsrsState.Review, due: DateTime.UtcNow.AddDays(-1), lastReview: DateTime.UtcNow.AddDays(-10));
+        await AddDeckWith((Word, 2));
+        await PutSettings(new StudySettingsDto { ReviewFrom = StudyReviewFrom.StudyDecksOnly });
+
+        var cards = await GetBatchCards();
+
+        cards.Should().Contain(c => !c.IsNew && c.WordId == Word && c.ReadingIndex == 2);
+        cards.Should().NotContain(c => c.WordId == Word && c.ReadingIndex == 3);
     }
 
     private async Task SeedCard(byte readingIndex, FsrsState state, DateTime? due = null, DateTime? lastReview = null)
