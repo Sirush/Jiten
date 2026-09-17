@@ -1,4 +1,4 @@
-﻿using Hangfire;
+using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
@@ -1807,7 +1807,7 @@ public partial class UserController(
             if (archivedRedundant > 0)
             {
                 await userContext.SaveChangesAsync();
-                await MarkReviewRollupDirty(userId);
+                await ReviewRollupHelper.MarkDirty(userContext, userId);
             }
 
             return Results.Ok(new
@@ -1903,11 +1903,10 @@ public partial class UserController(
 
             await transaction.CommitAsync();
 
+            // Chunked uploads hit this once per chunk; the dirty flags let the sweeps rebuild once instead.
             await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+            await ReviewRollupHelper.MarkDirty(userContext, userId);
             await userContext.SaveChangesAsync();
-            backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
-
-            await MarkReviewRollupDirty(userId);
 
             logger.LogInformation(
                                   "Anki import completed: UserId={UserId}, Imported={Imported}, Updated={Updated}, Skipped={Skipped}, Logs={Logs}, NotFound={NotFound}, Archived={Archived}, Restored={Restored}, Pruned={Pruned}",

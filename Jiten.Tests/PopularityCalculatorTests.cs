@@ -193,8 +193,8 @@ public class PopularityCalculatorTests
     public void A_burst_of_visitors_trends_a_deck_nobody_usually_visits()
     {
         var decks = new[] { Parent(1), Parent(2) };
-        var quietThenBurst = DailyViews(1, 2, 27, 1).Concat(DailyViews(1, 0, 1, 8)).ToList();
-        var flat = DailyViews(2, 0, 27, 8);
+        var quietThenBurst = DailyViews(1, 2, 27, 1).Concat(DailyViews(1, 0, 1, 12)).ToList();
+        var flat = DailyViews(2, 0, 27, 12);
 
         var results = PopularityCalculator.Compute(decks, [], quietThenBurst.Concat(flat), Now);
 
@@ -228,9 +228,34 @@ public class PopularityCalculatorTests
     public void A_few_people_acting_trend_a_deck_immediately()
     {
         var decks = new[] { Parent(1) };
-        var adds = Enumerable.Range(0, 3).Select(i => new IntentEvent(1, PopularityWeights.StudyDeck, Now, $"u{i}")).ToList();
+        var adds = Enumerable.Range(0, 7).Select(i => new IntentEvent(1, PopularityWeights.Planning, Now, $"u{i}")).ToList();
 
         PopularityCalculator.Compute(decks, adds, [], Now)[1].IsTrending.Should().BeTrue();
+    }
+
+    [Fact]
+    public void An_account_counts_once_however_much_it_does()
+    {
+        var decks = new[] { Parent(1) };
+        var stacked = Enumerable.Range(0, 4).SelectMany(i => new[]
+        {
+            new IntentEvent(1, PopularityWeights.StudyDeck, Now, $"u{i}"),
+            new IntentEvent(1, PopularityWeights.Completed, Now, $"u{i}"),
+            new IntentEvent(1, PopularityWeights.Favourite, Now, $"u{i}"),
+        }).ToList();
+        var spread = Enumerable.Range(0, 7).Select(i => new IntentEvent(1, PopularityWeights.Planning, Now, $"u{i}")).ToList();
+
+        PopularityCalculator.Compute(decks, stacked, [], Now)[1].IsTrending.Should().BeFalse();
+        PopularityCalculator.Compute(decks, spread, [], Now)[1].IsTrending.Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_handful_of_visitors_and_one_list_add_do_not_trend()
+    {
+        var decks = new[] { Parent(1) };
+        var add = new[] { new IntentEvent(1, PopularityWeights.Completed, Now, "u1"), new IntentEvent(1, PopularityWeights.Favourite, Now, "u1") };
+
+        PopularityCalculator.Compute(decks, add, DailyViews(1, 0, 1, 3), Now)[1].IsTrending.Should().BeFalse();
     }
 
     [Fact]

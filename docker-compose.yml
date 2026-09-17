@@ -16,7 +16,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d
       - ./postgres-config:/etc/postgresql/conf.d
-    command: postgres -c config_file=/var/lib/postgresql/data/postgresql.conf -c hba_file=/var/lib/postgresql/data/pg_hba.conf
+    command: postgres -c config_file=/etc/postgresql/conf.d/custom.conf -c hba_file=/var/lib/postgresql/data/pg_hba.conf
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${DB_USER}" ]
       interval: 5s
