@@ -44,14 +44,14 @@ public static class PopularityWeights
     /// <summary>Trending compares the last two UTC days (the current one is partial) against the deck's own daily average before them.</summary>
     public const int TrendingWindowDays = 2;
     public const int TrendingBaselineDays = 28;
-    /// <summary>One intent point is worth this many distinct daily visitors, so a handful of humans acting outweighs a page of views.</summary>
+    /// <summary>An acting account is worth this many daily visitors, whatever it did; weights stay out so one account cannot stack points.</summary>
     public const double TrendingIntentVisitorValue = 3;
-    public const double TrendingMinRecentPoints = 10;
+    public const double TrendingMinRecentPoints = 20;
     public const double TrendingMinRatio = 3;
     /// <summary>Usual is floored so a deck nobody looks at needs a real burst, not two visitors against a zero baseline.</summary>
-    public const double TrendingUsualFloorPerDay = 1;
+    public const double TrendingUsualFloorPerDay = 3;
     /// <summary>Peak-day visitors plus acting accounts; one account viewing daily and adding its own deck cannot trend it.</summary>
-    public const int TrendingMinActors = 3;
+    public const int TrendingMinActors = 5;
 
     public static double ForStatus(DeckStatus status) => status switch
     {
@@ -78,9 +78,8 @@ public static class PopularityCalculator
 
         var decayed = new Dictionary<int, double>(roots.Count);
         var raw = new Dictionary<int, double>(roots.Count);
-        var recentIntent = new Dictionary<int, double>(roots.Count);
-        var recentUsers = new Dictionary<int, HashSet<string>>();
-        var baselineIntent = new Dictionary<int, double>(roots.Count);
+        var recentActors = new Dictionary<int, HashSet<string>>();
+        var baselineActors = new Dictionary<int, HashSet<string>>();
         var views = new Dictionary<int, double>(roots.Count);
         var guestDownloads = new Dictionary<int, double>(roots.Count);
         var recentViews = new Dictionary<int, double>(roots.Count);
@@ -90,7 +89,7 @@ public static class PopularityCalculator
         var baselineGuestDownloads = new Dictionary<int, double>(roots.Count);
         foreach (var id in rootIds)
         {
-            decayed[id] = raw[id] = recentIntent[id] = baselineIntent[id] = 0;
+            decayed[id] = raw[id] = 0;
             views[id] = guestDownloads[id] = recentViews[id] = recentGuestDownloads[id] = baselineViews[id] = baselineGuestDownloads[id] = 0;
             recentPeakViews[id] = 0;
         }
@@ -107,16 +106,8 @@ public static class PopularityCalculator
             decayed[root] += e.Weight * Decay(age, PopularityWeights.IntentHalfLifeDays);
             if (e.Weight <= 0) continue;
             var day = DateOnly.FromDateTime(e.At);
-            if (day >= windowStart)
-            {
-                recentIntent[root] += e.Weight;
-                if (e.UserId != null)
-                {
-                    if (!recentUsers.TryGetValue(root, out var users)) recentUsers[root] = users = new HashSet<string>();
-                    users.Add(e.UserId);
-                }
-            }
-            else if (day >= baselineStart) baselineIntent[root] += e.Weight;
+            if (day >= windowStart) AddActor(recentActors, root, e);
+            else if (day >= baselineStart) AddActor(baselineActors, root, e);
         }
 
         foreach (var a in activity)
@@ -150,11 +141,12 @@ public static class PopularityCalculator
             decayedTotal[id] = Math.Max(0, decayed[id]) + Attention(views[id], guestDownloads[id]) + boost;
             allTime[id] = Math.Log2(1 + Math.Max(0, raw[id]));
 
-            var recent = TrendingPoints(recentViews[id], recentGuestDownloads[id], recentIntent[id]);
+            var recentActorCount = recentActors.GetValueOrDefault(id)?.Count ?? 0;
+            var recent = TrendingPoints(recentViews[id], recentGuestDownloads[id], recentActorCount);
             var baselineDays = Math.Clamp(Math.Ceiling(age) - PopularityWeights.TrendingWindowDays, 1, PopularityWeights.TrendingBaselineDays);
             var usualPerDay = Math.Max(PopularityWeights.TrendingUsualFloorPerDay,
-                                       TrendingPoints(baselineViews[id], baselineGuestDownloads[id], baselineIntent[id]) / baselineDays);
-            var actors = recentPeakViews[id] + (recentUsers.GetValueOrDefault(id)?.Count ?? 0);
+                                       TrendingPoints(baselineViews[id], baselineGuestDownloads[id], baselineActors.GetValueOrDefault(id)?.Count ?? 0) / baselineDays);
+            var actors = recentPeakViews[id] + recentActorCount;
             trending[id] = actors >= PopularityWeights.TrendingMinActors
                            && recent >= PopularityWeights.TrendingMinRecentPoints
                            && recent >= PopularityWeights.TrendingMinRatio * usualPerDay * PopularityWeights.TrendingWindowDays;
@@ -220,8 +212,15 @@ public static class PopularityCalculator
                  PopularityWeights.ViewWeight * Math.Log2(1 + views) + PopularityWeights.GuestDownloadWeight * Math.Log2(1 + guestDownloads));
 
     /// <summary>Views are already one per visitor per day, so they count linearly; the log cap only guards the popularity score.</summary>
-    private static double TrendingPoints(double views, double guestDownloads, double intent) =>
-        views + guestDownloads + intent * PopularityWeights.TrendingIntentVisitorValue;
+    private static double TrendingPoints(double views, double guestDownloads, int actors) =>
+        views + guestDownloads + actors * PopularityWeights.TrendingIntentVisitorValue;
+
+    /// <summary>An anonymous intent has no account to dedupe on, so each one stands as its own actor.</summary>
+    private static void AddActor(Dictionary<int, HashSet<string>> map, int root, IntentEvent e)
+    {
+        if (!map.TryGetValue(root, out var users)) map[root] = users = new HashSet<string>();
+        users.Add(e.UserId ?? $"anon:{users.Count}");
+    }
 
     private static double AgeDays(DateTime at, DateTime now) => Math.Max(0, (now - at).TotalDays);
 
