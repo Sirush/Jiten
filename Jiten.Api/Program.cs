@@ -1027,6 +1027,13 @@ builder.Services.AddHangfireServer((options) =>
 
 builder.Services.AddHangfireServer((options) =>
 {
+    options.ServerName = "ReviewRollupServer";
+    options.Queues = [ReviewRollupJob.Queue];
+    options.WorkerCount = 1;
+});
+
+builder.Services.AddHangfireServer((options) =>
+{
     options.ServerName = "DefaultServer";
     options.Queues = ["default"];
     options.WorkerCount = Math.Max(1, Environment.ProcessorCount / 4);

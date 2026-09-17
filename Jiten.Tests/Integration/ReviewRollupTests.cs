@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Jiten.Api.Helpers;
 using Jiten.Api.Jobs;
 using Jiten.Api.Services;
 using Jiten.Core;
@@ -630,5 +631,32 @@ public class ReviewRollupTests(JitenWebApplicationFactory factory)
         var payload = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
         payload.GetProperty("totalReviews").GetInt32().Should().Be(2);
         payload.GetProperty("currentStreak").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RebuildForUser_SkipsWhenTheFlagIsClean_AndRunsAgainOnceDirty()
+    {
+        await Review(910, FsrsRating.Good, 2500);
+
+        using (var scope = factory.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<ReviewRollupJob>().RebuildForUser(TestUsers.UserA);
+        (await Rollup()).Should().ContainSingle();
+
+        // A clean flag after a completed rebuild means a queued duplicate has nothing to do.
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            await userDb.UserReviewDailies.Where(d => d.UserId == TestUsers.UserA).ExecuteDeleteAsync();
+            await scope.ServiceProvider.GetRequiredService<ReviewRollupJob>().RebuildForUser(TestUsers.UserA);
+        }
+        (await Rollup()).Should().BeEmpty();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            await ReviewRollupHelper.MarkDirty(userDb, TestUsers.UserA);
+            await scope.ServiceProvider.GetRequiredService<ReviewRollupJob>().RebuildForUser(TestUsers.UserA);
+        }
+        (await Rollup()).Should().ContainSingle();
     }
 }

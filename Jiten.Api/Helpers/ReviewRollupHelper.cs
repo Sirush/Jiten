@@ -101,6 +101,68 @@ public static class ReviewRollupHelper
     }
 
     /// <summary>
+    /// Clears the dirty flag ahead of a rebuild and reports whether one is owed. Clearing first means a write
+    /// that lands mid-rebuild re-dirties the user instead of being wiped by the finishing stamp.
+    /// </summary>
+    public static async Task<bool> TryClaimDirty(UserDbContext ctx, string userId)
+    {
+        if (ctx.Database.ProviderName?.Contains("Npgsql") == true)
+        {
+            var rows = await ctx.Database.ExecuteSqlRawAsync("""
+                UPDATE "user"."UserMetadatas" SET "ReviewRollupDirty" = FALSE
+                WHERE "UserId" = {0}::uuid AND ("ReviewRollupDirty" OR "ReviewRollupRebuiltAt" IS NULL)
+                """, Guid.Parse(userId));
+
+            return rows > 0 || !await ctx.UserMetadatas.AsNoTracking().AnyAsync(m => m.UserId == userId);
+        }
+
+        var metadata = await ctx.UserMetadatas.FirstOrDefaultAsync(m => m.UserId == userId);
+        if (metadata == null)
+            return true;
+        if (!metadata.ReviewRollupDirty && metadata.ReviewRollupRebuiltAt != null)
+            return false;
+
+        metadata.ReviewRollupDirty = false;
+        await ctx.SaveChangesAsync();
+        return true;
+    }
+
+    /// <summary>Stamps the rebuild time without touching the dirty flag; see <see cref="TryClaimDirty"/>.</summary>
+    public static async Task StampRebuilt(UserDbContext ctx, string userId)
+    {
+        var now = DateTime.UtcNow;
+
+        if (ctx.Database.ProviderName?.Contains("Npgsql") == true)
+        {
+            var userGuid = Guid.Parse(userId);
+            var rows = await ctx.Database.ExecuteSqlRawAsync("""
+                UPDATE "user"."UserMetadatas" SET "ReviewRollupRebuiltAt" = {1} WHERE "UserId" = {0}::uuid
+                """, userGuid, now);
+
+            if (rows == 0)
+            {
+                await ctx.Database.ExecuteSqlRawAsync("""
+                    INSERT INTO "user"."UserMetadatas" ("UserId", "CoverageDirty", "ReviewRollupDirty", "ReviewRollupRebuiltAt")
+                    VALUES ({0}::uuid, FALSE, FALSE, {1})
+                    ON CONFLICT DO NOTHING
+                    """, userGuid, now);
+            }
+
+            return;
+        }
+
+        var metadata = await ctx.UserMetadatas.FirstOrDefaultAsync(m => m.UserId == userId);
+        if (metadata == null)
+        {
+            metadata = new UserMetadata { UserId = userId };
+            ctx.UserMetadatas.Add(metadata);
+        }
+
+        metadata.ReviewRollupRebuiltAt = now;
+        await ctx.SaveChangesAsync();
+    }
+
+    /// <summary>
     /// Clears the dirty flag and stamps the rebuild time. Touches only those two columns, so it cannot
     /// clobber a concurrent write to the rest of the row (activity bumps, coverage flags).
     /// </summary>

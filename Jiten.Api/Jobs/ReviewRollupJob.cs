@@ -16,6 +16,7 @@ public class ReviewRollupJob(
     IBackgroundJobClient backgroundJobs,
     ILogger<ReviewRollupJob> logger)
 {
+    public const string Queue = "review-rollup";
     private const int CardBatchSize = 2000;
 
     /// Namespaces this job's advisory locks so the per-user key cannot collide with another feature's.
@@ -29,15 +30,33 @@ public class ReviewRollupJob(
         public long TotalDurationMs;
     }
 
-    [Queue("default")]
+    [Queue(Queue)]
     public async Task RebuildForUser(string userId)
     {
         await using var ctx = await userContextFactory.CreateDbContextAsync();
 
+        // The user lock is session-scoped, so the whole job has to ride one connection.
+        await ctx.Database.OpenConnectionAsync();
+        await LockUser(ctx, userId);
+        try
+        {
+            // Queued duplicates coalesce here: the first job claims the flag, the rest find it clean and exit.
+            if (!await ReviewRollupHelper.TryClaimDirty(ctx, userId))
+                return;
+
+            await Rebuild(ctx, userId);
+        }
+        finally
+        {
+            await UnlockUser(ctx, userId);
+        }
+    }
+
+    private async Task Rebuild(UserDbContext ctx, string userId)
+    {
         var settings = await FsrsSettingsHelper.LoadAsync(ctx, userId);
         var timezone = FsrsSettingsHelper.ResolveTimeZone(FsrsSettingsHelper.GetStudySettings(settings).Timezone);
 
-        var startedAt = DateTime.UtcNow;
         var days = new Dictionary<DateOnly, DayCounters>();
 
         // Both passes read under one snapshot: archiving moves a card's history out of the live logs and into
@@ -50,14 +69,6 @@ public class ReviewRollupJob(
         }
 
         await using var transaction = await ctx.Database.BeginTransactionAsync();
-
-        await LockUser(ctx, userId);
-
-        if (await WasRebuiltSince(ctx, userId, startedAt))
-        {
-            logger.LogInformation("Discarded review rollup for user {UserId}: a newer rebuild landed while it ran", userId);
-            return;
-        }
 
         await ctx.UserReviewDailies.Where(d => d.UserId == userId).ExecuteDeleteAsync();
 
@@ -75,7 +86,7 @@ public class ReviewRollupJob(
         }
 
         await ctx.SaveChangesAsync();
-        await ReviewRollupHelper.MarkRebuilt(ctx, userId);
+        await ReviewRollupHelper.StampRebuilt(ctx, userId);
         await transaction.CommitAsync();
 
         logger.LogInformation("Rebuilt review rollup for user {UserId}: {DayCount} days", userId, days.Count);
@@ -120,6 +131,11 @@ public class ReviewRollupJob(
                                     .ToListAsync();
 
         var userIds = withLiveLogs.Concat(withArchives).Distinct().ToList();
+
+        // A backfill is a forced rebuild; without the flag a user rebuilt before would be skipped as clean.
+        await ctx.UserMetadatas.Where(m => userIds.Contains(m.UserId))
+                 .ExecuteUpdateAsync(s => s.SetProperty(m => m.ReviewRollupDirty, true));
+
         foreach (var userId in userIds)
             backgroundJobs.Enqueue<ReviewRollupJob>(job => job.RebuildForUser(userId));
 
@@ -132,23 +148,18 @@ public class ReviewRollupJob(
             : ctx.Database.BeginTransactionAsync();
 
     /// <summary>
-    /// Serialises rebuilds of one user against each other, so two overlapping jobs cannot interleave their
-    /// delete and insert halves or write results from the older snapshot last.
+    /// Serialises rebuilds of one user so a waiting duplicate sees the claimed flag instead of repeating the
+    /// scan, and two builds can never interleave their delete and insert halves.
     /// </summary>
     private static Task LockUser(UserDbContext ctx, string userId)
         => ctx.Database.ProviderName?.Contains("Npgsql") == true
-            ? ctx.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0}, hashtext({1}))", AdvisoryLockClass, userId)
+            ? ctx.Database.ExecuteSqlRawAsync("SELECT pg_advisory_lock({0}, hashtext({1}))", AdvisoryLockClass, userId)
             : Task.CompletedTask;
 
-    private static async Task<bool> WasRebuiltSince(UserDbContext ctx, string userId, DateTime instant)
-    {
-        var rebuiltAt = await ctx.UserMetadatas.AsNoTracking()
-                                 .Where(m => m.UserId == userId)
-                                 .Select(m => m.ReviewRollupRebuiltAt)
-                                 .FirstOrDefaultAsync();
-
-        return rebuiltAt > instant;
-    }
+    private static Task UnlockUser(UserDbContext ctx, string userId)
+        => ctx.Database.ProviderName?.Contains("Npgsql") == true
+            ? ctx.Database.ExecuteSqlRawAsync("SELECT pg_advisory_unlock({0}, hashtext({1}))", AdvisoryLockClass, userId)
+            : Task.CompletedTask;
 
     private static async Task AccumulateLiveLogs(
         UserDbContext ctx, string userId, TimeZoneInfo? timezone, Dictionary<DateOnly, DayCounters> days)
