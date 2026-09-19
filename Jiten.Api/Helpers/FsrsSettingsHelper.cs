@@ -92,6 +92,21 @@ public static class FsrsSettingsHelper
     public static double ResolveOffsetHours(DateTime utcNow, string? timezone)
         => ResolveTimeZone(timezone)?.GetUtcOffset(utcNow).TotalHours ?? 0;
 
+    /// <summary>UTC instant of local midnight <paramref name="daysOffset"/> days from the user's current local day; UTC days when the zone is unset or unknown.</summary>
+    public static DateTime LocalDayStartUtc(DateTime utcNow, string? timezone, int daysOffset = 0)
+    {
+        var tz = ResolveTimeZone(timezone);
+        if (tz == null)
+            return utcNow.Date.AddDays(daysOffset);
+
+        var localDay = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz).Date.AddDays(daysOffset);
+        var localStart = DateTime.SpecifyKind(localDay, DateTimeKind.Unspecified);
+        // Zones that spring forward at 00:00 (Santiago, Asuncion, Havana, Cairo, Beirut) have no midnight that day; the day starts at the first instant that exists.
+        while (tz.IsInvalidTime(localStart))
+            localStart = localStart.AddMinutes(30);
+        return TimeZoneInfo.ConvertTimeToUtc(localStart, tz);
+    }
+
     /// <summary>Null means UTC, both for an unset setting and for an id this machine cannot resolve.</summary>
     public static TimeZoneInfo? ResolveTimeZone(string? timezone)
     {

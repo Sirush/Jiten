@@ -3920,40 +3920,10 @@ public partial class StudyController(
                  .ToList();
 
     private static (DateTime dayStart, double offsetHours) ResolveTimezone(DateTime utcNow, string? timezone)
-    {
-        if (string.IsNullOrEmpty(timezone))
-            return (utcNow.Date, 0);
-
-        try
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
-            var offsetHours = tz.GetUtcOffset(utcNow).TotalHours;
-            var localNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz);
-            var localMidnight = localNow.Date;
-            var dayStart = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localMidnight, DateTimeKind.Unspecified), tz);
-            return (dayStart, offsetHours);
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            return (utcNow.Date, 0);
-        }
-    }
+        => (FsrsSettingsHelper.LocalDayStartUtc(utcNow, timezone), FsrsSettingsHelper.ResolveOffsetHours(utcNow, timezone));
 
     private static DateTime LocalDayStartUtc(DateTime utcNow, string? timezone, int daysOffset)
-    {
-        if (string.IsNullOrEmpty(timezone))
-            return utcNow.Date.AddDays(daysOffset);
-        try
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
-            var localDay = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz).Date.AddDays(daysOffset);
-            return TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localDay, DateTimeKind.Unspecified), tz);
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            return utcNow.Date.AddDays(daysOffset);
-        }
-    }
+        => FsrsSettingsHelper.LocalDayStartUtc(utcNow, timezone, daysOffset);
 
     private static DateTime GetDueCutoff(DateTime utcNow, StudySettingsDto settings)
         => settings.DayBoundaryScheduling ? LocalDayStartUtc(utcNow, settings.Timezone, 1) : utcNow;

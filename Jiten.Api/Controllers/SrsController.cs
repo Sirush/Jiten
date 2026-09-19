@@ -1985,20 +1985,7 @@ public class SrsController(
         => ComputeLocalMidnightUtc(utcNow, timezone, daysAhead: 1).AddSeconds(1);
 
     private static DateTime ComputeLocalMidnightUtc(DateTime utcNow, string? timezone, int daysAhead)
-    {
-        if (string.IsNullOrEmpty(timezone))
-            return utcNow.Date.AddDays(daysAhead);
-        try
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
-            var localDay = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz).Date.AddDays(daysAhead);
-            return TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localDay, DateTimeKind.Unspecified), tz);
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            return utcNow.Date.AddDays(daysAhead);
-        }
-    }
+        => FsrsSettingsHelper.LocalDayStartUtc(utcNow, timezone, daysAhead);
 
     private static StudySettingsDto GetStudySettings(UserFsrsSettings? settings) => FsrsSettingsHelper.GetStudySettings(settings);
 
