@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hangfire;
 using Jiten.Api.Dtos;
@@ -1793,10 +1793,12 @@ public partial class StudyController(
         else
             sessionId = await sessionService.CreateSession(userId);
 
-        var settings = await LoadStudySettings(userId);
+        var userSettingsRow = await FsrsSettingsHelper.LoadAsync(userContext, userId);
+        var settings = FsrsSettingsHelper.GetStudySettings(userSettingsRow);
         limit = Math.Clamp(limit, 1, settings.BatchSize);
         var now = DateTime.UtcNow;
         var (todayStart, _) = ResolveTimezone(now, settings.Timezone);
+        Dictionary<long, int>? cursorHintByKey = null;
 
         var todayStats = await userContext.FsrsCards
             .Where(c => c.UserId == userId)
@@ -2057,10 +2059,9 @@ public partial class StudyController(
 
             var isCrossDeck = settings.NewCardGathering == StudyNewCardGathering.CrossDeckFrequency;
             var isRoundRobin = settings.NewCardGathering == StudyNewCardGathering.RoundRobin;
-            var perDeckCandidates = new List<List<(int WordId, byte ReadingIndex)>>();
+            var lanes = new List<NewCardLane>();
             var totalCandidates = 0;
             var allEligibleMediaKeys = isCrossDeck ? new HashSet<long>() : null;
-            var nonMediaCandidates = isCrossDeck ? new List<(int WordId, byte ReadingIndex)>() : null;
 
             foreach (var studyDeck in activeDecks)
             {
@@ -2125,82 +2126,69 @@ public partial class StudyController(
                         smartDeckKeys.Add(key);
                 }
 
-                if (isCrossDeck)
+                if (isCrossDeck && studyDeck.DeckType == StudyDeckType.MediaDeck)
                 {
-                    if (studyDeck.DeckType == StudyDeckType.MediaDeck)
-                    {
-                        foreach (var c in deckCandidates)
-                            allEligibleMediaKeys!.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex));
-                    }
-                    else
-                    {
-                        nonMediaCandidates!.AddRange(deckCandidates);
-                    }
+                    foreach (var c in deckCandidates)
+                        allEligibleMediaKeys!.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex));
+                    continue;
                 }
-                else
-                {
-                    if (deckCandidates.Count > 0)
-                        perDeckCandidates.Add(deckCandidates);
 
-                    totalCandidates += deckCandidates.Count;
+                if (deckCandidates.Count > 0)
+                    lanes.Add(new NewCardLane(studyDeck.UserStudyDeckId, studyDeck.SortOrder, deckCandidates));
 
-                    if (!isRoundRobin && totalCandidates >= newCardBudget)
-                        break;
-                }
+                totalCandidates += deckCandidates.Count;
+
+                if (!isRoundRobin && !isCrossDeck && totalCandidates >= newCardBudget)
+                    break;
             }
 
-            var candidates = new List<(int WordId, byte ReadingIndex)>();
-
-            if (isCrossDeck)
+            if (isCrossDeck && allEligibleMediaKeys!.Count > 0)
             {
-                if (allEligibleMediaKeys!.Count > 0)
-                {
-                    var crossDeckOccurrences = await context.DeckWords
-                        .AsNoTracking()
-                        .Where(dw => mediaDeckIds.Contains(dw.DeckId))
-                        .GroupBy(dw => new { dw.WordId, dw.ReadingIndex })
-                        .Select(g => new
-                        {
-                            g.Key.WordId,
-                            g.Key.ReadingIndex,
-                            TotalOccurrences = g.Sum(x => x.Occurrences)
-                        })
-                        .OrderByDescending(x => x.TotalOccurrences)
-                        .ToListAsync();
-
-                    foreach (var item in crossDeckOccurrences)
+                var crossDeckOccurrences = await context.DeckWords
+                    .AsNoTracking()
+                    .Where(dw => mediaDeckIds.Contains(dw.DeckId))
+                    .GroupBy(dw => new { dw.WordId, dw.ReadingIndex })
+                    .Select(g => new
                     {
-                        var key = WordFormHelper.EncodeWordKey(item.WordId, (byte)item.ReadingIndex);
-                        if (allEligibleMediaKeys.Contains(key))
-                            candidates.Add((item.WordId, (byte)item.ReadingIndex));
-                    }
+                        g.Key.WordId,
+                        g.Key.ReadingIndex,
+                        TotalOccurrences = g.Sum(x => x.Occurrences)
+                    })
+                    .OrderByDescending(x => x.TotalOccurrences)
+                    .ToListAsync();
+
+                var ranked = new List<(int WordId, byte ReadingIndex)>();
+                foreach (var item in crossDeckOccurrences)
+                {
+                    var key = WordFormHelper.EncodeWordKey(item.WordId, (byte)item.ReadingIndex);
+                    if (allEligibleMediaKeys.Contains(key))
+                        ranked.Add((item.WordId, (byte)item.ReadingIndex));
                 }
 
-                candidates.AddRange(nonMediaCandidates!);
+                // Every media deck shares one ranked lane; the first media deck by sort order identifies it for the cursor.
+                var firstMedia = activeDecks.First(sd => sd.DeckType == StudyDeckType.MediaDeck && sd.DeckId.HasValue && deckMap.ContainsKey(sd.DeckId.Value));
+                lanes.Insert(0, new NewCardLane(firstMedia.UserStudyDeckId, firstMedia.SortOrder, ranked));
             }
-            else if (isRoundRobin && perDeckCandidates.Count > 1)
+
+            var rotates = (isRoundRobin || isCrossDeck) && lanes.Count > 1;
+            List<(int WordId, byte ReadingIndex, int Lane)> candidates;
+            if (rotates)
             {
-                var indexes = new int[perDeckCandidates.Count];
-                var exhausted = 0;
-                while (exhausted < perDeckCandidates.Count)
-                {
-                    for (var d = 0; d < perDeckCandidates.Count; d++)
-                    {
-                        if (indexes[d] >= perDeckCandidates[d].Count) continue;
-                        candidates.Add(perDeckCandidates[d][indexes[d]++]);
-                        if (indexes[d] >= perDeckCandidates[d].Count) exhausted++;
-                    }
-                }
+                var startLane = ResolveCursorLane(lanes, userSettingsRow?.NewCardCursorStudyDeckId, studyDecks);
+                candidates = InterleaveLanes(lanes, startLane);
             }
             else
             {
-                foreach (var deckCandidates in perDeckCandidates)
-                    candidates.AddRange(deckCandidates);
+                candidates = lanes.SelectMany((lane, i) => lane.Candidates.Select(c => (c.WordId, c.ReadingIndex, i))).ToList();
             }
 
-            var taken = candidates.Take(newCardBudget).ToList();
-            foreach (var c in taken)
+            if (rotates) cursorHintByKey = new Dictionary<long, int>();
+            foreach (var c in candidates.Take(newCardBudget))
+            {
                 batch.Add((c.WordId, c.ReadingIndex, 0, true, (int)FsrsState.New));
+                if (rotates)
+                    cursorHintByKey![WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)] = lanes[(c.Lane + 1) % lanes.Count].UserStudyDeckId;
+            }
         }
 
         if (batch.Count == 0)
@@ -2224,6 +2212,14 @@ public partial class StudyController(
         };
 
         ordered = ordered.Take(limit).ToList();
+
+        if (cursorHintByKey != null)
+        {
+            // The cursor moves on first grade, not on fetch, so a peeked or abandoned batch never skips decks.
+            var servedKeys = ordered.Where(c => c.IsNew).Select(c => WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)).ToHashSet();
+            await sessionService.StoreNewCardCursorHints(userId,
+                cursorHintByKey.Where(kv => servedKeys.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value));
+        }
 
         var wordIds = ordered.Select(c => c.WordId).Distinct().ToList();
 
@@ -2614,6 +2610,44 @@ public partial class StudyController(
     {
         if (string.IsNullOrEmpty(value)) return value ?? string.Empty;
         return value.Length > maxLength ? value[..maxLength] : value;
+    }
+
+    private sealed record NewCardLane(int UserStudyDeckId, int SortOrder, List<(int WordId, byte ReadingIndex)> Candidates);
+
+    /// <summary>A cursor deck without a lane hands over to the next lane by sort order; a vanished deck restarts at lane 0.</summary>
+    private static int ResolveCursorLane(List<NewCardLane> lanes, int? cursorDeckId, List<UserStudyDeck> studyDecks)
+    {
+        if (cursorDeckId == null) return 0;
+
+        for (var i = 0; i < lanes.Count; i++)
+            if (lanes[i].UserStudyDeckId == cursorDeckId) return i;
+
+        var cursorDeck = studyDecks.FirstOrDefault(sd => sd.UserStudyDeckId == cursorDeckId);
+        if (cursorDeck == null) return 0;
+
+        for (var i = 0; i < lanes.Count; i++)
+            if (lanes[i].SortOrder > cursorDeck.SortOrder) return i;
+        return 0;
+    }
+
+    private static List<(int WordId, byte ReadingIndex, int Lane)> InterleaveLanes(List<NewCardLane> lanes, int startLane)
+    {
+        var result = new List<(int, byte, int)>(lanes.Sum(l => l.Candidates.Count));
+        var indexes = new int[lanes.Count];
+        var exhausted = 0;
+        while (exhausted < lanes.Count)
+        {
+            for (var d = 0; d < lanes.Count; d++)
+            {
+                var lane = (d + startLane) % lanes.Count;
+                var candidates = lanes[lane].Candidates;
+                if (indexes[lane] >= candidates.Count) continue;
+                var c = candidates[indexes[lane]++];
+                result.Add((c.WordId, c.ReadingIndex, lane));
+                if (indexes[lane] >= candidates.Count) exhausted++;
+            }
+        }
+        return result;
     }
 
     private static List<(int WordId, byte ReadingIndex, long CardId, bool IsNew, int State)> InterleaveMixed(

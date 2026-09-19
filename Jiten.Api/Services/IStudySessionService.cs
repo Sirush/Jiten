@@ -10,4 +10,7 @@ public interface IStudySessionService
     Task RefreshSession(string sessionId);
     Task<long> BumpStudyOverviewVersion(string userId);
     Task<long> GetStudyOverviewVersion(string userId);
+
+    Task StoreNewCardCursorHints(string userId, IReadOnlyDictionary<long, int> nextDeckByWordKey);
+    Task<int?> TakeNewCardCursorHint(string userId, long wordKey);
 }

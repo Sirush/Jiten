@@ -13,6 +13,9 @@ public class UserFsrsSettings
 
     public string SettingsJson { get; set; } = "{}";
 
+    /// <summary>Study deck that supplies the next new card under round-robin gathering; null or a vanished deck restarts at the top.</summary>
+    public int? NewCardCursorStudyDeckId { get; set; }
+
     [NotMapped]
     private double[]? _cachedParameters;
 

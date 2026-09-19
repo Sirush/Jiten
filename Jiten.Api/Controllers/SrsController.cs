@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.Json;
 using Hangfire;
 using Jiten.Api.Dtos;
@@ -240,6 +240,8 @@ public class SrsController(
             durationDeltaMs: request.ReviewDuration ?? 0);
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        if (isFirstReview)
+            await AdvanceNewCardCursor(userId, request.WordId, request.ReadingIndex);
         await userContext.SaveChangesAsync();
         await transaction.CommitAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
@@ -1886,6 +1888,19 @@ public class SrsController(
     }
 
     private Task<UserFsrsSettings?> LoadUserSettings(string userId) => FsrsSettingsHelper.LoadAsync(userContext, userId);
+
+    /// <summary>Only cards served by a rotating study batch carry a hint; grades from elsewhere leave the cursor alone.</summary>
+    private async Task AdvanceNewCardCursor(string userId, int wordId, byte readingIndex)
+    {
+        var nextDeckId = await sessionService.TakeNewCardCursorHint(userId, WordFormHelper.EncodeWordKey(wordId, readingIndex));
+        if (nextDeckId == null) return;
+
+        var updated = await userContext.UserFsrsSettings
+            .Where(s => s.UserId == userId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.NewCardCursorStudyDeckId, nextDeckId));
+        if (updated == 0)
+            userContext.UserFsrsSettings.Add(new UserFsrsSettings { UserId = userId, NewCardCursorStudyDeckId = nextDeckId });
+    }
 
     private static bool AreParametersDefault(double[] parameters)
     {
