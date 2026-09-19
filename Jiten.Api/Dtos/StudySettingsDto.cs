@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Jiten.Api.Dtos;
@@ -275,6 +275,10 @@ public class StudySettingsDto
 
     [JsonPropertyName("leechAction")]
     public LeechAction LeechAction { get; set; } = LeechAction.NotifyOnly;
+
+    /// <summary>Bury a card until the next local midnight once it has been rated Again this many times today; 0 for disabled.</summary>
+    [JsonPropertyName("againBuryThreshold")]
+    public int AgainBuryThreshold { get; set; } = 0;
 
     /// <summary>
     /// "Speed Focus" timed-review preferences. Purely client-side behaviour — the server stores and

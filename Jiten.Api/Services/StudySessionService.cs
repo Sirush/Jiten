@@ -6,6 +6,7 @@ public class StudySessionService(IConnectionMultiplexer redis, ILogger<StudySess
 {
     private static readonly TimeSpan SessionTtl = TimeSpan.FromHours(2);
     private static readonly TimeSpan IdempotencyTtl = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan CursorHintTtl = TimeSpan.FromHours(24);
     private readonly IDatabase _db = redis.GetDatabase();
 
     public async Task<string> CreateSession(string userId)
@@ -95,4 +96,38 @@ public class StudySessionService(IConnectionMultiplexer redis, ILogger<StudySess
             return 0;
         }
     }
+
+    public async Task StoreNewCardCursorHints(string userId, IReadOnlyDictionary<long, int> nextDeckByWordKey)
+    {
+        if (nextDeckByWordKey.Count == 0) return;
+        try
+        {
+            var key = CursorHintKey(userId);
+            var entries = nextDeckByWordKey.Select(kv => new HashEntry(kv.Key, kv.Value)).ToArray();
+            await _db.HashSetAsync(key, entries);
+            await _db.KeyExpireAsync(key, CursorHintTtl);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to store new-card cursor hints in Redis");
+        }
+    }
+
+    public async Task<int?> TakeNewCardCursorHint(string userId, long wordKey)
+    {
+        try
+        {
+            var key = CursorHintKey(userId);
+            var value = await _db.HashGetAsync(key, wordKey);
+            if (value.IsNullOrEmpty) return null;
+            await _db.HashDeleteAsync(key, wordKey);
+            return (int)value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string CursorHintKey(string userId) => $"srs:new-cursor:{userId}";
 }

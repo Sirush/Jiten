@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { type Deck, type StudyDeckDto, StudyDeckType, DeckDownloadType, DeckFormat, DeckOrder, MediaType } from '~/types';
+  import { type DeckCard, type StudyDeckDto, StudyDeckType, DeckDownloadType, DeckFormat, DeckOrder, MediaType } from '~/types';
   import { SelectButton, Select, Slider, InputNumber, Checkbox, Dialog, Button, ProgressSpinner } from 'primevue';
   import { debounce } from 'perfect-debounce';
   import { useAuthStore } from '~/stores/authStore';
@@ -7,7 +7,7 @@
   import { useToast } from 'primevue/usetoast';
   import { computed, onMounted, ref, watch } from 'vue';
   const props = defineProps<{
-    deck?: Deck;
+    deck?: DeckCard;
     studyDeck?: StudyDeckDto;
     mediaList?: { apiBase: string; title: string; totalWords: number; hasExampleSentences: boolean };
     visible: boolean;

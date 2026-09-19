@@ -5,6 +5,7 @@ import { TabSyncManager } from '~/utils/tabSync';
 import { CookieMonitor, readCookie } from '~/utils/cookieMonitor';
 import { useSrsStore } from '~/stores/srsStore';
 import { useLegalStore } from '~/stores/legalStore';
+import { trackPendingSignup } from '~/utils/analytics';
 
 const dbg = (...args: unknown[]) => {
   if (import.meta.dev) console.log(...args);
@@ -454,6 +455,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function onLoginSuccess() {
+    trackPendingSignup();
     nuxtApp.runWithContext(() => {
       useSrsStore().refreshOverview(true);
       useJitenPlus().refresh();

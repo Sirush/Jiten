@@ -19,7 +19,7 @@ public static class UserCoverageChunkHelper
         /// <summary>
         /// Decorates a set of DeckDtos with the viewer's coverage
         /// </summary>
-        public void ApplyTo(IEnumerable<DeckDto> dtos)
+        public void ApplyTo(IEnumerable<IDeckCoverageTarget> dtos)
         {
             foreach (var dto in dtos)
             {

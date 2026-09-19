@@ -47,4 +47,18 @@ public class InMemoryStudySessionService : IStudySessionService
     {
         return Task.FromResult(_versions.GetValueOrDefault(userId, 0));
     }
+
+    private readonly ConcurrentDictionary<string, int> _cursorHints = new();
+
+    public Task StoreNewCardCursorHints(string userId, IReadOnlyDictionary<long, int> nextDeckByWordKey)
+    {
+        foreach (var (wordKey, deckId) in nextDeckByWordKey)
+            _cursorHints[$"{userId}:{wordKey}"] = deckId;
+        return Task.CompletedTask;
+    }
+
+    public Task<int?> TakeNewCardCursorHint(string userId, long wordKey)
+    {
+        return Task.FromResult(_cursorHints.TryRemove($"{userId}:{wordKey}", out var deckId) ? deckId : (int?)null);
+    }
 }

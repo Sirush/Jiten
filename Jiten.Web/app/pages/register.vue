@@ -153,6 +153,7 @@
       registeredEmail.value = form.email.trim();
       registered.value = true;
       trackEvent('signup_completed', { method: 'email' });
+      markPendingSignup('email');
     } catch (err) {
       const data = (err as { response?: { _data?: { message?: string; errors?: string[] } } }).response?._data;
       const fallback = err instanceof Error && err.message ? err.message : 'An unexpected error occurred.';

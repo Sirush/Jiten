@@ -1638,6 +1638,32 @@
 
       <Divider />
 
+      <!-- Auto bury -->
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Auto bury</h3>
+      <p class="text-sm text-surface-500 dark:text-surface-400 -mt-1 mb-2">
+        Automatically bury a card for the rest of the day if you fail it a certain number of times. It will come back naturally the next day.
+      </p>
+      <div class="flex items-center gap-2">
+        <ToggleSwitch :model-value="form.againBuryThreshold > 0" input-id="againBury" @update:model-value="(on: boolean) => (form.againBuryThreshold = on ? 3 : 0)" />
+        <label for="againBury" class="text-sm cursor-pointer">Auto bury after multiple failures</label>
+      </div>
+      <div v-if="form.againBuryThreshold > 0" :class="props.inline ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'">
+        <div class="min-w-0">
+          <label class="block text-sm font-medium mb-1">
+            Auto bury threshold
+            <Tooltip
+              content="The number of times you can press again until the card will be buried for the day."
+              placement="top"
+            >
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+          <InputNumber v-model="form.againBuryThreshold" :min="1" :max="99" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
+        </div>
+      </div>
+
+      <Divider />
+
       <!-- Keyboard shortcuts -->
       <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Keyboard shortcuts</h3>
       <p class="text-xs text-surface-500 dark:text-surface-400">Click a key and press the new key to rebind. Escape cancels.</p>

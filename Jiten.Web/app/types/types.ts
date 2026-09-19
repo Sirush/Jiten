@@ -80,8 +80,32 @@ export interface DeckDetail {
   subDecks: Deck[];
 }
 
+export interface DeckCard {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle?: string;
+  englishTitle?: string;
+  mediaType: MediaType;
+  coverName?: string;
+  parentDeckId?: number | null;
+  characterCount: number;
+  uniqueWordCount: number;
+  speechDuration: number;
+  difficulty: number;
+  difficultyRaw: number;
+  difficultyAlgorithmic: number;
+  distinctVoterCount: number;
+  userAdjustment: number;
+  adjustmentConfidence: number;
+  selectedWordOccurrences: number;
+  coverage: number;
+  uniqueCoverage: number;
+  youngCoverage: number;
+  youngUniqueCoverage: number;
+}
+
 export interface SimilarDeck {
-  deck: Deck;
+  deck: DeckCard;
   similarity: number;
   similarityPercent: number;
 }
@@ -142,9 +166,21 @@ export interface TagWithPercentage {
   percentage: number;
 }
 
+export interface DeckSummary {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle: string;
+  englishTitle: string;
+  mediaType: MediaType;
+  coverName: string;
+  difficulty: number;
+  characterCount: number;
+  parentDeckId?: number | null;
+}
+
 export interface DeckRelationship {
   targetDeckId: number;
-  targetDeck: Deck;
+  targetDeck: DeckSummary;
   relationshipType: DeckRelationshipType;
   isInverse: boolean;
 }
@@ -1442,6 +1478,7 @@ export interface StudySettingsDto {
   learnAheadMinutes: number;
   leechThreshold: number;
   leechAction: LeechAction;
+  againBuryThreshold: number;
   timedReview: TimedReviewSettings;
   writeInReview: WriteInReviewSettings;
   keybinds: StudyKeybinds;

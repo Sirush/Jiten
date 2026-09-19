@@ -2,7 +2,7 @@ using Jiten.Core.Data;
 
 namespace Jiten.Api.Dtos;
 
-public class DeckDto
+public class DeckDto : IDeckCoverageTarget
 {
     public int DeckId { get; set; }
     public DateTimeOffset CreationDate { get; set; }
@@ -201,10 +201,38 @@ public class DeckDto
 
 }
 
+public class DeckRefDto
+{
+    public int DeckId { get; set; }
+    public string OriginalTitle { get; set; } = "Unknown";
+    public string RomajiTitle { get; set; } = "";
+    public string EnglishTitle { get; set; } = "";
+    public MediaType MediaType { get; set; }
+    public string CoverName { get; set; } = "nocover.jpg";
+    public int Difficulty { get; set; }
+    public int CharacterCount { get; set; }
+    public int? ParentDeckId { get; set; }
+
+    public DeckRefDto() { }
+
+    public DeckRefDto(Deck deck)
+    {
+        DeckId = deck.DeckId;
+        OriginalTitle = deck.OriginalTitle;
+        RomajiTitle = deck.RomajiTitle ?? "";
+        EnglishTitle = deck.EnglishTitle ?? "";
+        MediaType = deck.MediaType;
+        CoverName = deck.CoverName;
+        Difficulty = DifficultyMapper.MapDifficulty(DifficultyMapper.GetAdjustedDifficulty(deck));
+        CharacterCount = deck.CharacterCount;
+        ParentDeckId = deck.ParentDeckId;
+    }
+}
+
 public class DeckRelationshipDto
 {
     public int TargetDeckId { get; set; }
-    public DeckDto TargetDeck { get; set; } = new();
+    public DeckRefDto TargetDeck { get; set; } = new();
     public DeckRelationshipType RelationshipType { get; set; }
     public bool IsInverse { get; set; }
 
@@ -215,7 +243,7 @@ public class DeckRelationshipDto
         var direct = asSource.Select(r => new DeckRelationshipDto
         {
             TargetDeckId = r.TargetDeckId,
-            TargetDeck = new DeckDto(r.TargetDeck),
+            TargetDeck = new DeckRefDto(r.TargetDeck),
             RelationshipType = r.RelationshipType,
             IsInverse = false
         });
@@ -223,7 +251,7 @@ public class DeckRelationshipDto
         var inverse = asTarget.Select(r => new DeckRelationshipDto
         {
             TargetDeckId = r.SourceDeckId,
-            TargetDeck = new DeckDto(r.SourceDeck),
+            TargetDeck = new DeckRefDto(r.SourceDeck),
             RelationshipType = DeckRelationship.GetInverse(r.RelationshipType),
             IsInverse = true
         });

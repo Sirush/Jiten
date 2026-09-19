@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { HardestCard, LeechCard } from '~/stores/srsStore';
+  import type { BuriedCard, HardestCard, LeechCard } from '~/stores/srsStore';
   import { useSrsStore } from '~/stores/srsStore';
   import type { ReviewForecastDto, SessionStreakDto } from '~/types';
 
@@ -11,6 +11,7 @@
     hardestCards: HardestCard[];
     gradeCounts: { again: number; hard: number; good: number; easy: number };
     leeches: LeechCard[];
+    buried?: BuriedCard[];
   }>();
 
   const emit = defineEmits<{
@@ -252,6 +253,24 @@
             class="shrink-0 ml-2"
             @click="handleSuspendLeech(leech)"
           />
+        </div>
+      </div>
+    </div>
+
+    <!-- Auto-buried -->
+    <div v-if="buried && buried.length > 0" class="w-full mb-6">
+      <div class="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Buried until tomorrow, daily failure limit reached</div>
+      <div class="space-y-1.5">
+        <div
+          v-for="card in buried"
+          :key="`${card.wordId}-${card.readingIndex}`"
+          class="flex items-center justify-between px-3 py-2 rounded-lg bg-sky-50 dark:bg-sky-900/20"
+        >
+          <NuxtLink :to="`/vocabulary/${card.wordId}/${card.readingIndex}`" target="_blank" class="flex items-center gap-2 min-w-0 hover:underline">
+            <span class="font-medium text-gray-800 dark:text-gray-200 truncate" lang="ja">{{ card.wordText }}</span>
+            <span v-if="card.reading !== card.wordText" class="text-xs text-gray-400 truncate" lang="ja">{{ card.reading }}</span>
+          </NuxtLink>
+          <span class="text-xs px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 shrink-0 ml-2">Buried</span>
         </div>
       </div>
     </div>

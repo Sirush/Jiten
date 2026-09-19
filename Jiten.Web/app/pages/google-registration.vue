@@ -65,6 +65,7 @@
 
     if (success) {
       trackEvent('signup_completed', { method: 'google' });
+      trackEvent('signup_activated', { method: 'google' });
       router.push(safeRedirectPath(route.query.redirect) ?? '/');
     }
   }

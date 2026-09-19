@@ -26,3 +26,27 @@ export function trackActivation(action: 'review' | 'deck_download'): void {
   }
   trackEvent('first_activation', { action });
 }
+
+const PENDING_SIGNUP_KEY = 'jiten.pendingSignup';
+
+export type SignupMethod = 'email' | 'google';
+
+export function markPendingSignup(method: SignupMethod): void {
+  if (import.meta.server) return;
+  try {
+    localStorage.setItem(PENDING_SIGNUP_KEY, method);
+  } catch {}
+}
+
+export function trackPendingSignup(): void {
+  if (import.meta.server) return;
+  let method: string | null = null;
+  try {
+    method = localStorage.getItem(PENDING_SIGNUP_KEY);
+    if (!method) return;
+    localStorage.removeItem(PENDING_SIGNUP_KEY);
+  } catch {
+    return;
+  }
+  trackEvent('signup_activated', { method });
+}
