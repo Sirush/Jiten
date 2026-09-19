@@ -485,7 +485,7 @@
                   <i :class="deck.isFavourite ? 'pi pi-star-fill text-yellow-500' : 'pi pi-star utility-icon'" />
                 </button>
               </Tooltip>
-              <Tooltip v-if="authStore.isAuthenticated" content="Set status">
+              <Tooltip v-if="authStore.isAuthenticated" :content="isCompact && currentStatus !== DeckStatus.None ? getDeckStatusText(currentStatus) : 'Set status'">
                 <button
                   type="button"
                   class="flex items-center gap-1 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
@@ -494,7 +494,7 @@
                   @click="toggleStatusPopover"
                 >
                   <i :class="['pi', currentStatus === DeckStatus.None ? 'pi-flag utility-icon' : `pi-flag-fill ${statusColor}`]" />
-                  <span v-if="currentStatus !== DeckStatus.None" :class="['text-sm font-bold leading-none', statusColor]">
+                  <span v-if="!isCompact && currentStatus !== DeckStatus.None" :class="['text-sm font-bold leading-none', statusColor]">
                     {{ getDeckStatusText(currentStatus) }}
                   </span>
                 </button>
