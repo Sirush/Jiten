@@ -46,6 +46,12 @@ export function normalizeKey(e: KeyboardEvent): string {
   return e.key;
 }
 
+const OPEN_OVERLAY_SELECTOR = '[role="dialog"][aria-modal="true"], [role="alertdialog"]';
+
+function hasOpenOverlay(): boolean {
+  return !!globalThis.document?.querySelector(OPEN_OVERLAY_SELECTOR);
+}
+
 function matchesKeybind(e: KeyboardEvent, boundKey: string): boolean {
   if (/^[0-9]$/.test(boundKey)) {
     return e.code === `Digit${boundKey}` || e.code === `Numpad${boundKey}`;
@@ -105,6 +111,7 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
     if (e.repeat) return;
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (hasOpenOverlay()) return;
     if (store.isBusy) return;
     // Timed-review "fail & learn" absorption window locks out grading while the answer is studied.
     if (store.gradeLock) return;
