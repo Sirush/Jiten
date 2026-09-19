@@ -274,6 +274,17 @@ public class NewCardGatheringTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task RoundRobin_LaterDecksKeepTheirOwnOrderWhenWordsOverlap()
+    {
+        await SetGathering("roundRobin", 4);
+        await AddWordListDeck("A", 1, 2, 3, 4);
+        await AddWordListDeck("B", 2, 1, 5, 6);
+        await AddWordListDeck("C", 3, 2, 1, 7);
+
+        (await FetchNewCards()).Should().Equal([1, 2, 3, 4], "each deck yields its first unclaimed word in its own order");
+    }
+
+    [Fact]
     public async Task TopDeck_DrainsTheFirstDeckBeforeTheSecond()
     {
         await SetGathering("topDeck", 2);

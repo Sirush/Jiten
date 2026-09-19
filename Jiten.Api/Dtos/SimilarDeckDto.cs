@@ -5,7 +5,7 @@ namespace Jiten.Api.Dtos;
 /// </summary>
 public class SimilarDeckDto
 {
-    public DeckDto Deck { get; set; } = new();
+    public DeckCardDto Deck { get; set; } = new();
 
     /// <summary>Cosine similarity of the dense embedding vectors (0-1).</summary>
     public float Similarity { get; set; }

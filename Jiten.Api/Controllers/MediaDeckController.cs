@@ -60,6 +60,19 @@ public class MediaDeckController(
         public Deck Deck { get; set; } = null!;
         public int Occurrences { get; set; }
     }
+    /// <summary>Fills ChildrenDeckCount with one grouped count instead of loading every child row.</summary>
+    private async Task ApplyChildDeckCountsAsync(List<DeckDto> dtos)
+    {
+        if (dtos.Count == 0) return;
+        var ids = dtos.Select(d => d.DeckId).ToList();
+        var counts = await context.Decks.AsNoTracking()
+                                  .Where(d => d.ParentDeckId != null && ids.Contains(d.ParentDeckId.Value))
+                                  .GroupBy(d => d.ParentDeckId!.Value)
+                                  .Select(g => new { ParentDeckId = g.Key, Count = g.Count() })
+                                  .ToDictionaryAsync(x => x.ParentDeckId, x => x.Count);
+        foreach (var dto in dtos)
+            dto.ChildrenDeckCount = counts.GetValueOrDefault(dto.DeckId);
+    }
 
     /// <summary>
     /// Returns the IDs of all parent media decks.
@@ -125,7 +138,7 @@ public class MediaDeckController(
     public async Task<PaginatedResponse<List<DeckRankingRowDto>>> GetMediaDecksByTypeRanked(MediaType mediaType, int page = 1,
                                                                                             bool descending = false)
     {
-        const int pageSize = 500;
+        const int pageSize = 250;
         page = Math.Max(page, 1);
 
         var query = context.Decks.AsNoTracking()
@@ -255,18 +268,7 @@ public class MediaDeckController(
 
         var decks = await context.Decks.AsNoTracking()
                                  .Where(d => finalIds.Contains(d.DeckId))
-                                 .Include(d => d.Children)
-                                 .Include(d => d.Links)
-                                 .Include(d => d.Titles)
-                                 .Include(d => d.DeckGenres)
-                                 .Include(d => d.DeckTags)
-                                 .ThenInclude(dt => dt.Tag)
                                  .Include(d => d.DeckDifficulty)
-                                 .Include(d => d.RelationshipsAsSource)
-                                 .ThenInclude(r => r.TargetDeck)
-                                 .Include(d => d.RelationshipsAsTarget)
-                                 .ThenInclude(r => r.SourceDeck)
-                                 .AsSplitQuery()
                                  .ToDictionaryAsync(d => d.DeckId);
 
         var similarityById = sims.ToDictionary(s => s.DeckId, s => s.Similarity);
@@ -276,9 +278,7 @@ public class MediaDeckController(
             if (!decks.TryGetValue(id, out var deck))
                 continue;
 
-            var dto = new DeckDto(deck);
-            dto.Relationships = DeckRelationshipDto.FromDeck(deck.RelationshipsAsSource, deck.RelationshipsAsTarget);
-            result.Add(new SimilarDeckDto { Deck = dto, Similarity = similarityById[id] });
+            result.Add(new SimilarDeckDto { Deck = new DeckCardDto(deck), Similarity = similarityById[id] });
         }
 
         // Decorate with the viewer's coverage so the frontend can render coverage borders.
@@ -1013,8 +1013,7 @@ public class MediaDeckController(
             query = query.Where(d => !ignoredDeckIds.Contains(d.DeckId));
         }
 
-        query = query.Include(d => d.Children)
-                     .Include(d => d.Links)
+        query = query.Include(d => d.Links)
                      .Include(d => d.Titles)
                      .Include(d => d.DeckGenres)
                      .Include(d => d.DeckTags)
@@ -1177,6 +1176,7 @@ public class MediaDeckController(
             }
         }
 
+        await ApplyChildDeckCountsAsync(dtos);
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset ?? 0);
     }
 
@@ -1229,7 +1229,6 @@ public class MediaDeckController(
 
             var fullDecks = await context.Decks.AsNoTracking()
                                          .Where(d => deckIdsToHydrate.Contains(d.DeckId))
-                                         .Include(d => d.Children)
                                          .Include(d => d.Links)
                                          .Include(d => d.Titles)
                                          .Include(d => d.DeckGenres)
@@ -1275,6 +1274,7 @@ public class MediaDeckController(
                 if (youngUniqueCoverageDict.TryGetValue(dto.DeckId, out var yuCov)) dto.YoungUniqueCoverage = yuCov;
             }
 
+            await ApplyChildDeckCountsAsync(dtos);
             return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
         }
         else
@@ -1309,6 +1309,7 @@ public class MediaDeckController(
                 if (youngUniqueCoverageDict.TryGetValue(dto.DeckId, out var yuCov)) dto.YoungUniqueCoverage = yuCov;
             }
 
+            await ApplyChildDeckCountsAsync(dtos);
             return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
         }
     }
@@ -1516,7 +1517,6 @@ public class MediaDeckController(
         var deckIdsToHydrate = paginatedProjections.Select(p => p.Deck.DeckId).ToList();
         var fullDecks = await context.Decks.AsNoTracking()
                                      .Where(d => deckIdsToHydrate.Contains(d.DeckId))
-                                     .Include(d => d.Children)
                                      .Include(d => d.Links)
                                      .Include(d => d.Titles)
                                      .Include(d => d.DeckGenres)
@@ -1606,6 +1606,7 @@ public class MediaDeckController(
             }
         }
 
+        await ApplyChildDeckCountsAsync(dtos);
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
     }
 

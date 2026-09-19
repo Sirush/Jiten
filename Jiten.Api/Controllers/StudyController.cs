@@ -2060,6 +2060,7 @@ public partial class StudyController(
             var isCrossDeck = settings.NewCardGathering == StudyNewCardGathering.CrossDeckFrequency;
             var isRoundRobin = settings.NewCardGathering == StudyNewCardGathering.RoundRobin;
             var lanes = new List<NewCardLane>();
+            var laneSources = new Dictionary<int, (string Name, bool IsSmart)>();
             var totalCandidates = 0;
             var allEligibleMediaKeys = isCrossDeck ? new HashSet<long>() : null;
 
@@ -2114,17 +2115,21 @@ public partial class StudyController(
                     ? deckForName.OriginalTitle
                     : studyDeck.Name;
 
+                var claimsOnScan = !isRoundRobin && !isCrossDeck;
+                var namesOnScan = claimsOnScan || (isCrossDeck && studyDeck.DeckType == StudyDeckType.MediaDeck);
                 var deckCandidates = new List<(int WordId, byte ReadingIndex)>();
                 foreach (var word in filtered)
                 {
                     var key = WordFormHelper.EncodeWordKey(word.WordId, word.ReadingIndex);
                     if (existingKeys!.Contains(key)) continue;
-
-                    existingKeys!.Add(key);
+                    if (claimsOnScan)
+                        existingKeys!.Add(key);
                     deckCandidates.Add((word.WordId, word.ReadingIndex));
-                    if (sourceDeckNames.TryAdd(key, deckName) && studyDeck.DeckType == StudyDeckType.Smart)
+                    if (namesOnScan && sourceDeckNames.TryAdd(key, deckName) && studyDeck.DeckType == StudyDeckType.Smart)
                         smartDeckKeys.Add(key);
                 }
+                if (!namesOnScan)
+                    laneSources[studyDeck.UserStudyDeckId] = (deckName, studyDeck.DeckType == StudyDeckType.Smart);
 
                 if (isCrossDeck && studyDeck.DeckType == StudyDeckType.MediaDeck)
                 {
@@ -2175,7 +2180,13 @@ public partial class StudyController(
             if (rotates)
             {
                 var startLane = ResolveCursorLane(lanes, userSettingsRow?.NewCardCursorStudyDeckId, studyDecks);
-                candidates = InterleaveLanes(lanes, startLane);
+                candidates = InterleaveLanes(lanes, startLane, existingKeys!);
+            }
+            else if (isRoundRobin || isCrossDeck)
+            {
+                candidates = lanes.SelectMany((lane, i) => lane.Candidates.Select(c => (c.WordId, c.ReadingIndex, i)))
+                    .Where(c => existingKeys!.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)))
+                    .ToList();
             }
             else
             {
@@ -2186,8 +2197,14 @@ public partial class StudyController(
             foreach (var c in candidates.Take(newCardBudget))
             {
                 batch.Add((c.WordId, c.ReadingIndex, 0, true, (int)FsrsState.New));
+                var key = WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex);
+                if (laneSources.TryGetValue(lanes[c.Lane].UserStudyDeckId, out var source))
+                {
+                    sourceDeckNames[key] = source.Name;
+                    if (source.IsSmart) smartDeckKeys.Add(key);
+                }
                 if (rotates)
-                    cursorHintByKey![WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)] = lanes[(c.Lane + 1) % lanes.Count].UserStudyDeckId;
+                    cursorHintByKey![key] = lanes[(c.Lane + 1) % lanes.Count].UserStudyDeckId;
             }
         }
 
@@ -2630,9 +2647,10 @@ public partial class StudyController(
         return 0;
     }
 
-    private static List<(int WordId, byte ReadingIndex, int Lane)> InterleaveLanes(List<NewCardLane> lanes, int startLane)
+    /// <summary>Each turn a lane yields its first word no other lane has claimed yet, so overlap never costs a lane its turn.</summary>
+    private static List<(int WordId, byte ReadingIndex, int Lane)> InterleaveLanes(List<NewCardLane> lanes, int startLane, HashSet<long> claimed)
     {
-        var result = new List<(int, byte, int)>(lanes.Sum(l => l.Candidates.Count));
+        var result = new List<(int, byte, int)>();
         var indexes = new int[lanes.Count];
         var exhausted = 0;
         while (exhausted < lanes.Count)
@@ -2642,8 +2660,14 @@ public partial class StudyController(
                 var lane = (d + startLane) % lanes.Count;
                 var candidates = lanes[lane].Candidates;
                 if (indexes[lane] >= candidates.Count) continue;
-                var c = candidates[indexes[lane]++];
-                result.Add((c.WordId, c.ReadingIndex, lane));
+
+                while (indexes[lane] < candidates.Count)
+                {
+                    var c = candidates[indexes[lane]++];
+                    if (!claimed.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex))) continue;
+                    result.Add((c.WordId, c.ReadingIndex, lane));
+                    break;
+                }
                 if (indexes[lane] >= candidates.Count) exhausted++;
             }
         }

@@ -3,7 +3,7 @@
 </script>
 
 <script setup lang="ts">
-  import { type Deck, MediaType } from '~/types';
+  import { type DeckCard, MediaType } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import Card from 'primevue/card';
   import { useAuthStore } from '~/stores/authStore';
@@ -23,7 +23,7 @@
   const localiseTitle = useLocaliseTitle();
 
   const props = defineProps<{
-    deck: Deck;
+    deck: DeckCard;
     lazyCover?: boolean;
   }>();
 

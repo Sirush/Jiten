@@ -61,7 +61,7 @@
 
   const rows = computed(() => response.value?.data ?? []);
   const totalItems = computed(() => response.value?.totalItems ?? 0);
-  const pageSize = computed(() => response.value?.pageSize ?? 500);
+  const pageSize = computed(() => response.value?.pageSize ?? 250);
   const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / pageSize.value)));
   const rankOffset = computed(() => response.value?.currentOffset ?? 0);
 
