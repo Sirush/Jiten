@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using Hangfire;
 using Jiten.Api.Dtos;
@@ -200,6 +200,22 @@ public class SrsController(
             leechDetected = true;
         }
 
+        var autoBuried = false;
+        if (request.Rating == FsrsRating.Again && !leechSuspended && studySettings.AgainBuryThreshold > 0)
+        {
+            var dayStartUtc = ComputeLocalMidnightUtc(reviewedAt, studySettings.Timezone, daysAhead: 0);
+            var againsToday = card.CardId == 0
+                ? 0
+                : await userContext.FsrsReviewLogs.CountAsync(l => l.CardId == card.CardId
+                                                                    && l.Rating == FsrsRating.Again
+                                                                    && l.ReviewDateTime >= dayStartUtc);
+            if (againsToday + 1 >= studySettings.AgainBuryThreshold)
+            {
+                cardAndLog.UpdatedCard.Due = BuryDue(reviewedAt, studySettings.Timezone);
+                autoBuried = true;
+            }
+        }
+
         if (card.CardId == 0)
         {
             await userContext.FsrsCards.AddAsync(cardAndLog.UpdatedCard);
@@ -240,6 +256,7 @@ public class SrsController(
             difficulty = cardAndLog.UpdatedCard.Difficulty,
             leechDetected,
             leechSuspended,
+            autoBuried,
             isLeech,
             lapses = cardAndLog.UpdatedCard.Lapses,
             intervalPreview = new
@@ -322,8 +339,20 @@ public class SrsController(
             .ToHashSet();
         var firstReviews = 0;
 
+        var againsToday = new Dictionary<long, int>();
+        if (studySettings.AgainBuryThreshold > 0 && existingCardIds.Count > 0)
+        {
+            var dayStartUtc = ComputeLocalMidnightUtc(now, studySettings.Timezone, daysAhead: 0);
+            againsToday = await userContext.FsrsReviewLogs
+                .Where(l => existingCardIds.Contains(l.CardId) && l.Rating == FsrsRating.Again && l.ReviewDateTime >= dayStartUtc)
+                .GroupBy(l => l.CardId)
+                .Select(g => new { g.Key, Count = g.Count() })
+                .ToDictionaryAsync(g => g.Key, g => g.Count);
+        }
+
         var results = new List<object>(deduped.Count);
         var leechSuspended = new List<int>();
+        var autoBuried = new List<int>();
         var skipped = new List<object>();
         // New cards must be inserted before their review logs can reference a CardId.
         var pendingNewLogs = new List<(FsrsCard Card, FsrsReviewLog Log)>();
@@ -351,10 +380,19 @@ public class SrsController(
 
             var isLeech = LeechHelper.IsLeech(cardAndLog.UpdatedCard.Lapses, cardAndLog.UpdatedCard.Stability,
                                               studySettings.LeechThreshold);
+            var suspendedNow = false;
             if (LeechHelper.ShouldSuspend(studySettings.LeechAction, rating, isLeech))
             {
                 cardAndLog.UpdatedCard.State = FsrsState.Suspended;
                 leechSuspended.Add(key.WordId);
+                suspendedNow = true;
+            }
+
+            if (rating == FsrsRating.Again && !suspendedNow && studySettings.AgainBuryThreshold > 0
+                && againsToday.GetValueOrDefault(card.CardId) + 1 >= studySettings.AgainBuryThreshold)
+            {
+                cardAndLog.UpdatedCard.Due = BuryDue(now, studySettings.Timezone);
+                autoBuried.Add(key.WordId);
             }
 
             if (isNew)
@@ -406,6 +444,7 @@ public class SrsController(
             success = true,
             processed,
             leechSuspended,
+            autoBuried,
             skipped,
             results
         });
@@ -1052,8 +1091,7 @@ public class SrsController(
                 if (card != null)
                 {
                     var burySettings = GetStudySettings(await LoadUserSettings(userId));
-                    // A second past midnight, because day-boundary scheduling's due cutoff is midnight inclusive.
-                    card.Due = ComputeNextMidnightUtc(DateTime.UtcNow, burySettings.Timezone).AddSeconds(1);
+                    card.Due = BuryDue(DateTime.UtcNow, burySettings.Timezone);
                 }
                 break;
 
@@ -1927,19 +1965,23 @@ public class SrsController(
         return string.Join(", ", parameters.Select(value => value.ToString("0.####", CultureInfo.InvariantCulture)));
     }
 
-    private static DateTime ComputeNextMidnightUtc(DateTime utcNow, string? timezone)
+
+    private static DateTime BuryDue(DateTime utcNow, string? timezone)
+        => ComputeLocalMidnightUtc(utcNow, timezone, daysAhead: 1).AddSeconds(1);
+
+    private static DateTime ComputeLocalMidnightUtc(DateTime utcNow, string? timezone, int daysAhead)
     {
         if (string.IsNullOrEmpty(timezone))
-            return utcNow.Date.AddDays(1);
+            return utcNow.Date.AddDays(daysAhead);
         try
         {
             var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
-            var localDay = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz).Date.AddDays(1);
+            var localDay = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz).Date.AddDays(daysAhead);
             return TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(localDay, DateTimeKind.Unspecified), tz);
         }
         catch (TimeZoneNotFoundException)
         {
-            return utcNow.Date.AddDays(1);
+            return utcNow.Date.AddDays(daysAhead);
         }
     }
 

@@ -2462,6 +2462,7 @@ public partial class StudyController(
         if (request.RelearningSteps != null && FsrsStepSettings.Validate(request.RelearningSteps, "Relearning steps") is { } relearningError)
             return Results.BadRequest(relearningError);
         request.LearnAheadMinutes = Math.Clamp(request.LearnAheadMinutes, 0, 120);
+        request.AgainBuryThreshold = Math.Clamp(request.AgainBuryThreshold, 0, 99);
 
         if (request.CardLayout != null)
             SanitizeCardLayout(request.CardLayout);

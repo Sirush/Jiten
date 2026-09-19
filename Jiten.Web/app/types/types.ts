@@ -1442,6 +1442,7 @@ export interface StudySettingsDto {
   learnAheadMinutes: number;
   leechThreshold: number;
   leechAction: LeechAction;
+  againBuryThreshold: number;
   timedReview: TimedReviewSettings;
   writeInReview: WriteInReviewSettings;
   keybinds: StudyKeybinds;

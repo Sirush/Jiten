@@ -47,6 +47,7 @@ interface PersistedSession {
   clearedGrades: ('hard' | 'good' | 'easy' | 'action')[];
   sessionReviews: SessionReview[];
   sessionLeeches: LeechCard[];
+  sessionBuried?: BuriedCard[];
   sessionStats: {
     cardsReviewed: number;
     newCardsLearned: number;
@@ -75,6 +76,13 @@ export interface LeechCard {
   wordText: string;
   reading: string;
   suspended: boolean;
+}
+
+export interface BuriedCard {
+  wordId: number;
+  readingIndex: number;
+  wordText: string;
+  reading: string;
 }
 
 export interface HardestCard {
@@ -115,6 +123,7 @@ interface UndoSnapshot {
   grades: ('hard' | 'good' | 'easy' | 'action')[];
   reviews: SessionReview[];
   leeches: LeechCard[];
+  buried: BuriedCard[];
   stats: {
     cardsReviewed: number;
     newCardsLearned: number;
@@ -197,6 +206,7 @@ export const useSrsStore = defineStore('srs', () => {
     relearningSteps: [10],
     learnAheadMinutes: 20,
     leechThreshold: 8,
+    againBuryThreshold: 0,
     leechAction: 'NotifyOnly',
     timedReview: {
       enabled: false,
@@ -248,6 +258,8 @@ export const useSrsStore = defineStore('srs', () => {
   const undoStack = ref<UndoSnapshot[]>([]);
   const sessionReviews = ref<SessionReview[]>([]);
   const sessionLeeches = ref<LeechCard[]>([]);
+  const sessionBuried = ref<BuriedCard[]>([]);
+  const lastAutoBuryEvent = ref<{ wordText: string } | null>(null);
   const cardShownAt = ref<number | null>(null);
   const thinkingDuration = ref<number | undefined>(undefined);
   // Wall-clock seconds the last few cards were on screen; breaks over a minute are left out as AFK.
@@ -384,6 +396,7 @@ export const useSrsStore = defineStore('srs', () => {
       grades: [...clearedGrades.value],
       reviews: [...sessionReviews.value],
       leeches: [...sessionLeeches.value],
+      buried: [...sessionBuried.value],
       stats: JSON.parse(JSON.stringify(sessionStats.value)),
     };
     const stack = [...undoStack.value, snapshot];
@@ -1218,7 +1231,7 @@ export const useSrsStore = defineStore('srs', () => {
   }
 
   // Copies behind the cursor are graded history and stay, so indices ahead of them are untouched.
-  function purgeQueuedCopies(cardKey: string): boolean {
+  function purgeQueuedCopies(cardKey: string, keepUndoThrough?: UndoSnapshot): boolean {
     const isCopy = (c: StudyCardDto) => `${c.wordId}-${c.readingIndex}` === cardKey;
     const batch = currentBatch.value;
     const kept = batch.filter((c, i) => i < currentCardIndex.value || !isCopy(c));
@@ -1236,8 +1249,9 @@ export const useSrsStore = defineStore('srs', () => {
       newSet.delete(cardKey);
       learningCardKeys.value = newSet;
     }
-    // Snapshots taken while the copy was queued would put it back on undo.
-    undoStack.value = [];
+    // Snapshots taken while the copy was queued would put it back on undo; the one taken before the grade is sound.
+    const keep = keepUndoThrough ? undoStack.value.indexOf(keepUndoThrough) : -1;
+    undoStack.value = keep >= 0 ? undoStack.value.slice(0, keep + 1) : [];
     return removed;
   }
 
@@ -1267,10 +1281,21 @@ export const useSrsStore = defineStore('srs', () => {
       }
     }
 
+    if (reviewResult?.autoBuried) {
+      lastAutoBuryEvent.value = { wordText: ctx.card.wordTextPlain };
+      if (!sessionBuried.value.some((b) => `${b.wordId}-${b.readingIndex}` === ctx.cardKey)) {
+        sessionBuried.value = [
+          ...sessionBuried.value,
+          { wordId: ctx.card.wordId, readingIndex: ctx.card.readingIndex, wordText: ctx.card.wordTextPlain, reading: ctx.reviewEntry.reading },
+        ];
+      }
+    }
+
     if (ctx.rating === FsrsRating.Again && ctx.reinsertedAgainCard) {
-      if (reviewResult?.leechSuspended) {
-        // The card was suspended server-side — pull the optimistically re-queued copy back out.
-        purgeQueuedCopies(ctx.cardKey);
+      if (reviewResult?.leechSuspended || reviewResult?.autoBuried) {
+        // The card left the queue server-side, so pull the optimistically re-queued copy back out.
+        const gradeSnapshot = undoStack.value.find((s) => s.type === 'grade' && s.card === ctx.card);
+        purgeQueuedCopies(ctx.cardKey, gradeSnapshot);
         clearedGrades.value = [...clearedGrades.value, 'action'];
 
         if (currentCardIndex.value >= currentBatch.value.length) void onBatchExhausted();
@@ -1449,6 +1474,7 @@ export const useSrsStore = defineStore('srs', () => {
       clearedGrades.value = [...snap.grades];
       sessionReviews.value = [...snap.reviews];
       sessionLeeches.value = [...snap.leeches];
+      sessionBuried.value = [...snap.buried];
       sessionStats.value = {
         ...JSON.parse(JSON.stringify(snap.stats)),
         startTime: snap.stats.startTime ? new Date(snap.stats.startTime) : null,
@@ -1537,6 +1563,7 @@ export const useSrsStore = defineStore('srs', () => {
         clearedGrades: clearedGrades.value,
         sessionReviews: sessionReviews.value,
         sessionLeeches: sessionLeeches.value,
+        sessionBuried: sessionBuried.value,
         sessionStats: {
           ...sessionStats.value,
           startTime: sessionStats.value.startTime ? sessionStats.value.startTime.getTime() : null,
@@ -1602,6 +1629,7 @@ export const useSrsStore = defineStore('srs', () => {
     clearedGrades.value = blob.clearedGrades ?? [];
     sessionReviews.value = blob.sessionReviews ?? [];
     sessionLeeches.value = blob.sessionLeeches ?? [];
+    sessionBuried.value = blob.sessionBuried ?? [];
     sessionStats.value = {
       cardsReviewed: blob.sessionStats?.cardsReviewed ?? 0,
       newCardsLearned: blob.sessionStats?.newCardsLearned ?? 0,
@@ -1656,6 +1684,8 @@ export const useSrsStore = defineStore('srs', () => {
     clearedGrades.value = [];
     sessionReviews.value = [];
     sessionLeeches.value = [];
+    sessionBuried.value = [];
+    lastAutoBuryEvent.value = null;
     sessionStats.value = { cardsReviewed: 0, newCardsLearned: 0, correctCount: 0, startTime: null, gradeCounts: { again: 0, hard: 0, good: 0, easy: 0 } };
     undoStack.value = [];
     isBusy.value = false;
@@ -1754,6 +1784,8 @@ export const useSrsStore = defineStore('srs', () => {
     learningCardsAhead,
     lastLeechEvent,
     sessionLeeches,
+    sessionBuried,
+    lastAutoBuryEvent,
     suspendLeech,
     cancelWrapUp,
     fetchSettings,

@@ -364,6 +364,19 @@
   );
 
   watch(
+    () => srsStore.lastAutoBuryEvent,
+    (event) => {
+      if (!event) return;
+      toast.add({
+        severity: 'info',
+        summary: 'Buried until tomorrow',
+        detail: `“${event.wordText}” hit your daily bury threshold. It will be shown again tomorrow.`,
+        life: 4000,
+      });
+    }
+  );
+
+  watch(
     () => srsStore.lastReviewError,
     (err) => {
       if (!err) return;
@@ -536,6 +549,7 @@
         :hardest-cards="srsStore.hardestCards"
         :grade-counts="srsStore.sessionStats.gradeCounts"
         :leeches="srsStore.sessionLeeches"
+        :buried="srsStore.sessionBuried"
         @close="exitStudy"
         @study-more="studyMore"
         @suspend-leech="(wordId, readingIndex) => srsStore.suspendLeech(wordId, readingIndex)"
