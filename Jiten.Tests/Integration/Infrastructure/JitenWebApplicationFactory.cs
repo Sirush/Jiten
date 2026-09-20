@@ -1,4 +1,4 @@
-﻿using Hangfire;
+using Hangfire;
 using Jiten.Core;
 using Jiten.Core.Data.Authentication;
 using Microsoft.AspNetCore.Authentication;
@@ -136,6 +136,11 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
             // Replace study session service with in-memory for testing
             services.RemoveAll<Jiten.Api.Services.IStudySessionService>();
             services.AddSingleton<Jiten.Api.Services.IStudySessionService, InMemoryStudySessionService>();
+
+            // Description search needs the ONNX model; the stub ranks decks by id in a fixed order.
+            services.RemoveAll<Jiten.Core.Services.DescriptionSearchService>();
+            services.AddSingleton<StubDescriptionSearchService>();
+            services.AddSingleton<Jiten.Core.Services.DescriptionSearchService>(sp => sp.GetRequiredService<StubDescriptionSearchService>());
 
             // Replace CDN
             services.RemoveAll<ICdnService>();

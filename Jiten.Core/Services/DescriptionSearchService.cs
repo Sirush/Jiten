@@ -39,7 +39,7 @@ public class DescriptionSearchService(
     private readonly Lazy<SentenceEmbedder?> _embedder = new(embedderFactory, LazyThreadSafetyMode.ExecutionAndPublication);
 
     public int VectorCount => _vectors.Count;
-    public bool IsAvailable => _embedder.Value != null;
+    public virtual bool IsAvailable => _embedder.Value != null;
 
     public async Task<int> LoadFromDbAsync()
     {
@@ -160,7 +160,7 @@ public class DescriptionSearchService(
     /// but the noise floor is set by the best score over every deck: a filter that removes the real
     /// matches must yield few or no rows, not the same number of rows drawn from padding.
     /// </summary>
-    public List<Match> Search(string query, int limit, IReadOnlySet<int>? allowedDeckIds = null, bool cutNoise = true)
+    public virtual List<Match> Search(string query, int limit, IReadOnlySet<int>? allowedDeckIds = null, bool cutNoise = true)
     {
         var embedder = _embedder.Value;
         var vectors = _vectors;
