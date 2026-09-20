@@ -3933,6 +3933,9 @@ public partial class StudyController(
     {
         var dueCutoff = GetDueCutoff(utcNow, settings);
         var learnAhead = utcNow.AddMinutes(settings.LearnAheadMinutes);
+
+        var nextLocalMidnight = LocalDayStartUtc(utcNow, settings.Timezone, 1);
+        if (learnAhead > nextLocalMidnight) learnAhead = nextLocalMidnight;
         return learnAhead > dueCutoff ? learnAhead : dueCutoff;
     }
 
