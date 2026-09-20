@@ -6,6 +6,8 @@ public class StudySessionService(IConnectionMultiplexer redis, ILogger<StudySess
 {
     private static readonly TimeSpan SessionTtl = TimeSpan.FromHours(2);
     private static readonly TimeSpan IdempotencyTtl = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan PendingClaimTtl = TimeSpan.FromSeconds(30);
+    private const string PendingMarker = "\u0001pending";
     private static readonly TimeSpan CursorHintTtl = TimeSpan.FromHours(24);
     private readonly IDatabase _db = redis.GetDatabase();
 
@@ -37,17 +39,32 @@ public class StudySessionService(IConnectionMultiplexer redis, ILogger<StudySess
         }
     }
 
-    public async Task<string?> GetCachedReviewResult(string sessionId, string clientRequestId)
+    public async Task<ReviewClaim> TryClaimReview(string sessionId, string clientRequestId)
+    {
+        var key = $"srs:review:{sessionId}:{clientRequestId}";
+        try
+        {
+            // The pending marker outlives any request that could still commit, but not a crashed one.
+            if (await _db.StringSetAsync(key, PendingMarker, PendingClaimTtl, When.NotExists))
+                return ReviewClaim.Acquired;
+            var stored = await _db.StringGetAsync(key);
+            if (stored.IsNullOrEmpty) return ReviewClaim.Acquired;
+            return stored == PendingMarker ? ReviewClaim.InFlight : new ReviewClaim(ReviewClaimStatus.Completed, (string?)stored);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to claim review idempotency key in Redis");
+            return ReviewClaim.Acquired;
+        }
+    }
+
+    public async Task ReleaseReviewClaim(string sessionId, string clientRequestId)
     {
         try
         {
-            var cached = await _db.StringGetAsync($"srs:review:{sessionId}:{clientRequestId}");
-            return cached.IsNullOrEmpty ? null : (string?)cached;
+            await _db.KeyDeleteAsync($"srs:review:{sessionId}:{clientRequestId}");
         }
-        catch
-        {
-            return null;
-        }
+        catch {}
     }
 
     public async Task StoreCachedReviewResult(string sessionId, string clientRequestId, string resultJson)

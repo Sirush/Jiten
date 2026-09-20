@@ -8,6 +8,8 @@ public class SrsBatchReviewRequest
     [Required]
     public List<SrsBatchReviewItem> Reviews { get; set; } = new();
     public string? SessionId { get; set; }
+    [MaxLength(64)]
+    public string? ClientRequestId { get; set; }
 }
 
 public class SrsBatchReviewItem

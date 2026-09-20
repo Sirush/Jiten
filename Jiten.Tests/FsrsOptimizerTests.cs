@@ -32,8 +32,8 @@ public class FsrsOptimizerTests
         var item = new FsrsTrainingItem(reviews);
         var predictions = FsrsOptimizer.ForwardPass(item, _defaultParameters);
 
-        // Forward pass should produce one prediction per review after the first
-        Assert.Equal(ratings.Length - 1, predictions.Count);
+        // The two same-day reviews update state only; the four long-term ones are targets
+        Assert.Equal(intervals.Count(d => d >= 1), predictions.Count);
 
         // After the full sequence, run one more review through scheduler to get final state
         (card, _) = scheduler.ReviewCard(card, FsrsRating.Good, reviewDateTime);
@@ -85,19 +85,61 @@ public class FsrsOptimizerTests
     }
 
     [Fact]
-    public void ForwardPass_ShortTermReviews_AreIncluded()
+    public void ForwardPass_ShortTermReviews_UpdateStateButAreNotTargets()
     {
-        var reviews = new[]
+        var withSteps = new FsrsTrainingItem(new[]
         {
             new FsrsTrainingReview(3, 0),
-            new FsrsTrainingReview(3, 0),   // same-day
+            new FsrsTrainingReview(1, 0),   // same-day lapse
             new FsrsTrainingReview(3, 0.5), // half day
             new FsrsTrainingReview(3, 5),   // long-term
-        };
-        var item = new FsrsTrainingItem(reviews);
-        var predictions = FsrsOptimizer.ForwardPass(item, _defaultParameters);
+        });
+        var withoutSteps = new FsrsTrainingItem(new[]
+        {
+            new FsrsTrainingReview(3, 0),
+            new FsrsTrainingReview(3, 5),
+        });
 
-        Assert.Equal(3, predictions.Count);
+        var predictions = FsrsOptimizer.ForwardPass(withSteps, _defaultParameters);
+        var baseline = FsrsOptimizer.ForwardPass(withoutSteps, _defaultParameters);
+
+        Assert.Single(predictions);
+        Assert.Single(baseline);
+        Assert.NotEqual(baseline[0].Predicted, predictions[0].Predicted);
+    }
+
+    [Fact]
+    public void ComputeGradients_ShortTermReviews_ContributeNoLoss()
+    {
+        var withSteps = new FsrsTrainingItem(new[]
+        {
+            new FsrsTrainingReview(3, 0),
+            new FsrsTrainingReview(1, 0.007),
+            new FsrsTrainingReview(3, 0.007),
+            new FsrsTrainingReview(3, 5),
+        });
+        var lossWithSteps = FsrsOptimizer.ComputeLoss([withSteps], _defaultParameters);
+        var predicted = FsrsOptimizer.ForwardPass(withSteps, _defaultParameters)[0].Predicted;
+
+        Assert.Equal(FsrsOptimizer.BinaryCrossEntropy(predicted, 1.0), lossWithSteps, 10);
+    }
+
+    [Fact]
+    public void Optimize_ItemsWithoutLongTermReviews_AreDropped()
+    {
+        var items = Enumerable.Range(0, 2000)
+            .Select(_ => new FsrsTrainingItem(new[]
+            {
+                new FsrsTrainingReview(3, 0),
+                new FsrsTrainingReview(1, 0.007),
+                new FsrsTrainingReview(3, 0.007),
+            }))
+            .ToList();
+
+        var result = FsrsOptimizer.Optimize(items);
+
+        Assert.Equal(0, result.ReviewCount);
+        Assert.Equal(FsrsConstants.DefaultParameters, result.Parameters);
     }
 
     [Fact]
@@ -515,7 +557,7 @@ public class FsrsOptimizerTests
     public void Optimize_SetsCorrectReviewCount()
     {
         var items = GenerateSyntheticData(_defaultParameters, cardCount: 20, seed: 42);
-        var expectedReviews = items.Sum(i => i.Reviews.Length - 1);
+        var expectedReviews = items.Sum(i => i.Reviews.Skip(1).Count(r => r.DeltaT >= 1.0));
 
         var result = FsrsOptimizer.Optimize(items, new FsrsOptimizerConfig { Epochs = 1 });
 

@@ -1,4 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Jiten.Api.Helpers;
 using Jiten.Core;
@@ -475,6 +475,14 @@ public class CurrentUserService(
                 existingUk.State = targetState;
                 updated++;
             }
+        }
+
+        if (targetState == FsrsState.Mastered)
+        {
+            var redundantCreated = await WordFormHelper.ArchiveRedundantImportCards(
+                userContext, wordFormCache, UserId!, toInsert, pairs.ToHashSet(), _ => []);
+            toInsert.RemoveAll(redundantCreated.Contains);
+            await WordFormHelper.RemoveRedundantKanaSrsCards(userContext, wordFormCache, UserId!, pairs);
         }
 
         // Spread backwards from now, oldest first, so the batch keeps the order the deck supplied and no card

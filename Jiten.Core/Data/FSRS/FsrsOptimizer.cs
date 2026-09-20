@@ -67,8 +67,9 @@ public class FsrsOptimizer
     {
         config ??= new FsrsOptimizerConfig();
 
-        // Filter items with excessively long review histories
-        items = items.Where(i => i.Reviews.Length <= MAX_SEQUENCE_LENGTH).ToList();
+        items = items
+            .Where(i => i.Reviews.Length <= MAX_SEQUENCE_LENGTH && HasLongTermReview(i))
+            .ToList();
 
         if (items.Count < MIN_ITEMS_FOR_DEFAULTS)
             return new FsrsOptimizationResult(
@@ -78,7 +79,7 @@ public class FsrsOptimizer
         EstimateInitialStability(items, parameters);
         ClampParameters(parameters);
 
-        var totalReviews = items.Sum(i => i.Reviews.Length - 1);
+        var totalReviews = items.Sum(CountLongTermReviews);
 
         // With sparse data, return only the estimated initial stability without full optimization
         if (items.Count < MIN_ITEMS_FOR_FULL_OPTIMIZATION)
@@ -137,6 +138,16 @@ public class FsrsOptimizer
         return new FsrsOptimizationResult(bestParameters, bestLoss, totalReviews, config.Epochs);
     }
 
+    private static bool HasLongTermReview(FsrsTrainingItem item) => CountLongTermReviews(item) > 0;
+
+    private static int CountLongTermReviews(FsrsTrainingItem item)
+    {
+        var count = 0;
+        for (var i = 1; i < item.Reviews.Length; i++)
+            if (item.Reviews[i].DeltaT >= 1.0) count++;
+        return count;
+    }
+
     public static double ComputeLoss(List<FsrsTrainingItem> items, double[] parameters, IReadOnlyList<double>? weights = null)
     {
         var totalLoss = 0.0;
@@ -175,10 +186,8 @@ public class FsrsOptimizer
             var deltaT = review.DeltaT;
             var currentRating = (FsrsRating)review.Rating;
 
-            var retrievability = PowerForgettingCurve(deltaT, stability, parameters);
-            var label = review.Rating > 1 ? 1.0 : 0.0;
-            predictions.Add((retrievability, label));
-
+            // Same-day reviews shape the state walk but are not prediction targets: at a fractional
+            // deltaT the curve predicts R about 1 whatever the parameters, so an Again there is pure noise.
             if (deltaT < 1.0)
             {
                 stability = FsrsHelper.CalculateShortTermStability(stability, currentRating, parameters);
@@ -186,6 +195,10 @@ public class FsrsOptimizer
             }
             else
             {
+                var retrievability = PowerForgettingCurve(deltaT, stability, parameters);
+                var label = review.Rating > 1 ? 1.0 : 0.0;
+                predictions.Add((retrievability, label));
+
                 stability = FsrsHelper.CalculateNextStability(difficulty, stability, retrievability, currentRating, parameters);
                 difficulty = FsrsHelper.CalculateNextDifficulty(difficulty, currentRating, parameters);
             }
@@ -261,11 +274,6 @@ public class FsrsOptimizer
                     var deltaT = review.DeltaT;
                     var currentRating = (FsrsRating)review.Rating;
 
-                    var retrievability = DiffForgettingCurve(w, deltaT, stability);
-                    var label = review.Rating > 1 ? 1.0 : 0.0;
-                    totalBce = totalBce + DiffBce(retrievability, label);
-                    predCount++;
-
                     if (deltaT < 1.0)
                     {
                         stability = DiffShortTermStability(w, stability, currentRating);
@@ -273,6 +281,11 @@ public class FsrsOptimizer
                     }
                     else
                     {
+                        var retrievability = DiffForgettingCurve(w, deltaT, stability);
+                        var label = review.Rating > 1 ? 1.0 : 0.0;
+                        totalBce = totalBce + DiffBce(retrievability, label);
+                        predCount++;
+
                         stability = DiffNextStability(w, difficulty, stability, retrievability, currentRating);
                         difficulty = DiffNextDifficulty(w, difficulty, currentRating);
                     }

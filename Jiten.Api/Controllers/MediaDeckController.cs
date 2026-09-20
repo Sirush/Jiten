@@ -227,7 +227,7 @@ public class MediaDeckController(
                                    .Select(d => d.DeckId)
                                    .ToHashSetAsync();
         var matches = descriptionSearchService.Search(parsed.Text, limit, allowed);
-        var results = await HydrateRankedDecks(matches.Select(m => (m.DeckId, m.Score)).ToList(), limit, mediaType: null);
+        var results = await HydrateDescriptionMatches(matches.Select(m => (m.DeckId, m.Score)).ToList());
         return new DescriptionSearchResponseDto
         {
             Query = query,
@@ -236,6 +236,51 @@ public class MediaDeckController(
             MediaType = effectiveType,
             Results = results
         };
+    }
+
+    /// <summary>Loads the full list-page DeckDto for ranked description matches; the slim card DTO lacks fields the card and table views render.</summary>
+    private async Task<List<DescriptionMatchDto>> HydrateDescriptionMatches(List<(int DeckId, float Similarity)> sims)
+    {
+        if (sims.Count == 0)
+            return [];
+
+        var ids = sims.Select(s => s.DeckId).ToList();
+        var decks = await context.Decks.AsNoTracking()
+                                 .Where(d => ids.Contains(d.DeckId))
+                                 .Include(d => d.Links)
+                                 .Include(d => d.Titles)
+                                 .Include(d => d.DeckGenres)
+                                 .Include(d => d.DeckTags)
+                                 .ThenInclude(dt => dt.Tag)
+                                 .Include(d => d.DeckDifficulty)
+                                 .Include(d => d.RelationshipsAsSource)
+                                 .ThenInclude(r => r.TargetDeck)
+                                 .Include(d => d.RelationshipsAsTarget)
+                                 .ThenInclude(r => r.SourceDeck)
+                                 .AsSplitQuery()
+                                 .ToDictionaryAsync(d => d.DeckId);
+
+        var result = new List<DescriptionMatchDto>(sims.Count);
+        foreach (var (deckId, similarity) in sims)
+        {
+            if (!decks.TryGetValue(deckId, out var deck))
+                continue;
+            var dto = new DeckDto(deck);
+            dto.Relationships = DeckRelationshipDto.FromDeck(deck.RelationshipsAsSource, deck.RelationshipsAsTarget);
+            result.Add(new DescriptionMatchDto { Deck = dto, Similarity = similarity });
+        }
+
+        await ApplyChildDeckCountsAsync(result.Select(r => r.Deck).ToList());
+
+        // Per-user data must not be shared from the response cache.
+        if (currentUserService.IsAuthenticated)
+        {
+            Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+            var coverages = await UserCoverageChunkHelper.GetCoverage(userContext, currentUserService.UserId!, result.Select(r => r.Deck.DeckId).ToList());
+            coverages.ApplyTo(result.Select(r => r.Deck));
+        }
+
+        return result;
     }
 
     /// <summary>Applies the media-type filter to a ranked candidate list, then loads only the surviving decks.</summary>

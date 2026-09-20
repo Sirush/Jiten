@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Jiten.Api.Dtos;
+using Jiten.Api.Helpers;
 using Jiten.Core;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.User;
@@ -30,7 +31,10 @@ public class AgainBuryTests(JitenWebApplicationFactory factory)
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private static DateTime Tomorrow => DateTime.UtcNow.Date.AddDays(1);
+    // Local noon keeps every 10-minute step and "yesterday" seed on one side of the day boundary whenever the suite runs.
+    private readonly string _middayZone = TestZones.WithLocalHour(DateTime.UtcNow, 12);
+    private DateTime Tomorrow => FsrsSettingsHelper.LocalDayStartUtc(DateTime.UtcNow, _middayZone, 1);
+    private DateTime TodayStart => FsrsSettingsHelper.LocalDayStartUtc(DateTime.UtcNow, _middayZone);
 
     private async Task SetThreshold(int threshold, LeechAction leechAction = LeechAction.NotifyOnly)
     {
@@ -43,7 +47,8 @@ public class AgainBuryTests(JitenWebApplicationFactory factory)
                                                                                 {
                                                                                     AgainBuryThreshold = threshold,
                                                                                     LeechThreshold = 8,
-                                                                                    LeechAction = leechAction
+                                                                                    LeechAction = leechAction,
+                                                                                    Timezone = _middayZone
                                                                                 })
                                     });
         await userDb.SaveChangesAsync();
@@ -90,6 +95,72 @@ public class AgainBuryTests(JitenWebApplicationFactory factory)
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
 
+    private async Task SetLateEveningLearnAhead(string timezone, int learnAheadMinutes)
+    {
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        userDb.UserFsrsSettings.Add(new UserFsrsSettings
+                                    {
+                                        UserId = TestUsers.UserA,
+                                        SettingsJson = JsonSerializer.Serialize(new StudySettingsDto
+                                                                                {
+                                                                                    AgainBuryThreshold = 3,
+                                                                                    LearnAheadMinutes = learnAheadMinutes,
+                                                                                    DayBoundaryScheduling = false,
+                                                                                    Timezone = timezone
+                                                                                })
+                                    });
+        await userDb.SaveChangesAsync();
+    }
+
+    private async Task<(List<int> BatchWordIds, int ReviewsDue)> FetchBatchAndDue()
+    {
+        var batch = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-batch?limit=10").WithUser(TestUsers.UserA));
+        batch.EnsureSuccessStatusCode();
+        var wordIds = (await batch.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("cards").EnumerateArray()
+                      .Select(c => c.GetProperty("wordId").GetInt32()).ToList();
+        var summary = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/srs/due-summary").WithUser(TestUsers.UserA));
+        summary.EnsureSuccessStatusCode();
+        var due = (await summary.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("reviewsDue").GetInt32();
+        return (wordIds, due);
+    }
+
+    [Fact]
+    public async Task BuriedLearningCard_LateEvening_DoesNotResurfaceThroughLearnAhead()
+    {
+        var now = DateTime.UtcNow;
+        await SetLateEveningLearnAhead(TestZones.WithLocalHour(now, 23), learnAheadMinutes: 120);
+        await SeedCard(10, FsrsState.Learning);
+
+        await Review(10, FsrsRating.Again);
+        await Review(10, FsrsRating.Again);
+        var third = await Review(10, FsrsRating.Again);
+        third.GetProperty("autoBuried").GetBoolean().Should().BeTrue();
+        (await GetCard(10)).Due.Should().BeBefore(now.AddMinutes(120), "the bury lands inside the raw learn-ahead window");
+
+        var (batch, due) = await FetchBatchAndDue();
+        batch.Should().NotContain(10);
+        due.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task LearnAhead_LateEvening_StillServesAStepEndingBeforeMidnight()
+    {
+        var now = DateTime.UtcNow;
+        await SetLateEveningLearnAhead(TestZones.WithLocalHour(now, 23), learnAheadMinutes: 120);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 11, 0, state: FsrsState.Learning, step: 0,
+                                              stability: 1, difficulty: 5, due: now.AddSeconds(30), lastReview: now.AddMinutes(-2)));
+            await userDb.SaveChangesAsync();
+        }
+
+        var (batch, due) = await FetchBatchAndDue();
+        batch.Should().Contain(11);
+        due.Should().Be(1);
+    }
+
     [Fact]
     public async Task ThresholdZero_NeverBuries()
     {
@@ -123,7 +194,7 @@ public class AgainBuryTests(JitenWebApplicationFactory factory)
     {
         await SetThreshold(3);
         var cardId = await SeedCard(3, FsrsState.Review);
-        await SeedAgainLogs(cardId, 5, DateTime.UtcNow.Date.AddHours(-2));
+        await SeedAgainLogs(cardId, 5, TodayStart.AddHours(-2));
 
         (await Review(3, FsrsRating.Again)).GetProperty("autoBuried").GetBoolean().Should().BeFalse();
         (await GetCard(3)).Due.Should().BeBefore(Tomorrow);

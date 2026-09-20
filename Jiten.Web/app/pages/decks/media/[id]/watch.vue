@@ -17,6 +17,7 @@
   import { DEFAULT_WATCH_COLOURS, DEFAULT_WATCH_PREFS, useJitenStore, type WatchColourKey, type WatchPrefs } from '~/stores/jitenStore';
   import { useYouTubePlayer } from '~/composables/useYouTubePlayer';
   import { formatRuntime } from '~/utils/formatRuntime';
+  import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
   import Popover from 'primevue/popover';
   import Select from 'primevue/select';
   import ToggleSwitch from 'primevue/toggleswitch';
@@ -331,6 +332,10 @@
     return 'new';
   };
   const isKnown = (states: KnownState[] | undefined) => colourKeyOf(states) === 'mature';
+  const readingTip = (word: WatchWord) => {
+    const kana = stripRubyMarkup(word.reading);
+    return kana !== word.spelling ? kana : '';
+  };
   const wordStyle = (word: WatchWord) => {
     const colour = prefs.value.colours[colourKeyOf(word.knownStates)];
     return colour ? { color: colour } : undefined;
@@ -425,22 +430,29 @@
     return recent && Date.now() - recent.at < GRADE_COOLDOWN_MS ? recent.rating : null;
   });
 
-  // The word payload is client-cached for five minutes, which would hide a grade the user just gave
   const fetchWord = (wordId: number, readingIndex: number) => $api<Word>(`vocabulary/${wordId}/${readingIndex}`, { query: { t: Date.now() } });
+  let lookupSeq = 0;
   const openWord = async (word: WatchWord | undefined, conjugation: string[] = [], origin: { index: number; start: number; length: number } | null = null) => {
     if (!word) return;
     if (pauseOnLookup.value && player.playing.value) player.pause();
+    const seq = ++lookupSeq;
     panelLoading.value = true;
     panelWord.value = null;
     panelConjugation.value = conjugation;
     panelOrigin.value = origin;
+    let fetched: Word | null = null;
     try {
-      panelWord.value = await fetchWord(word.wordId, word.readingIndex);
+      fetched = await fetchWord(word.wordId, word.readingIndex);
     } finally {
-      panelLoading.value = false;
+      if (seq === lookupSeq) {
+        panelWord.value = fetched;
+        panelLoading.value = false;
+      }
     }
   };
   const closeWord = () => {
+    lookupSeq++;
+    panelLoading.value = false;
     panelWord.value = null;
   };
   // A status change in the panel changes colours everywhere the word appears.
@@ -865,7 +877,7 @@
             lang="ja"
           >
             <template v-for="(segment, j) in segmentsOf(line.cue)" :key="j">
-              <Tooltip v-if="segment.word" :content="segment.word.reading !== segment.word.spelling ? segment.word.reading : ''">
+              <Tooltip v-if="segment.word" :content="readingTip(segment.word)">
                 <span
                   role="button"
                   tabindex="0"

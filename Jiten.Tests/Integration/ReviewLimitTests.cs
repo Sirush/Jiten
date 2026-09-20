@@ -5,6 +5,7 @@ using FluentAssertions;
 using Jiten.Api.Dtos;
 using Jiten.Core;
 using Jiten.Core.Data.FSRS;
+using Jiten.Core.Data.User;
 using Jiten.Parser.Tests.Integration.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,9 +26,18 @@ public class ReviewLimitTests(JitenWebApplicationFactory factory)
         await userDb.FsrsCards.ExecuteDeleteAsync();
         await userDb.UserFsrsSettings.ExecuteDeleteAsync();
         await userDb.UserReviewDailies.ExecuteDeleteAsync();
+        // "Today" is the user's local day, so pin it to local noon or the minutes-ago seeds straddle midnight near 00:00 UTC.
+        userDb.UserFsrsSettings.Add(new UserFsrsSettings
+                                    {
+                                        UserId = TestUsers.UserA,
+                                        SettingsJson = JsonSerializer.Serialize(new StudySettingsDto { Timezone = _middayZone })
+                                    });
+        await userDb.SaveChangesAsync();
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
+
+    private readonly string _middayZone = TestZones.WithLocalHour(DateTime.UtcNow, 12);
 
     /// <summary>A card introduced today with three learning-step logs, and a card reviewed ten days ago, lapsed and recovered today.</summary>
     private async Task SeedTodaysActivity()
@@ -65,7 +75,14 @@ public class ReviewLimitTests(JitenWebApplicationFactory factory)
     private async Task PutSettings(StudySettingsDto dto)
         => (await _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
                                     .WithUser(TestUsers.UserA)
-                                    .WithJsonContent(dto))).EnsureSuccessStatusCode();
+                                    .WithJsonContent(WithMiddayZone(dto)))).EnsureSuccessStatusCode();
+
+    private StudySettingsDto WithMiddayZone(StudySettingsDto dto)
+    {
+        dto.Timezone ??= _middayZone;
+        return dto;
+    }
+
 
     private async Task<JsonElement> Get(string path)
     {

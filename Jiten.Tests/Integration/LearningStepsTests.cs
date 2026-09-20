@@ -128,9 +128,11 @@ public class LearningStepsTests(JitenWebApplicationFactory factory)
     [InlineData(5, false)]
     public async Task LearnAhead_ServesALearningCardDueInsideTheWindow(int learnAheadMinutes, bool served)
     {
-        (await PutSettings(new StudySettingsDto { LearnAheadMinutes = learnAheadMinutes })).EnsureSuccessStatusCode();
-
         var now = DateTime.UtcNow;
+
+        (await PutSettings(new StudySettingsDto { LearnAheadMinutes = learnAheadMinutes, Timezone = TestZones.WithLocalHour(now, 12) }))
+            .EnsureSuccessStatusCode();
+
         using (var scope = factory.Services.CreateScope())
         {
             var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();

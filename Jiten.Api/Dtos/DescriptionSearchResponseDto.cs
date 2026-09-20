@@ -16,5 +16,5 @@ public class DescriptionSearchResponseDto
     /// <summary>Filter actually applied: the explicit parameter, else the detected type.</summary>
     public MediaType? MediaType { get; set; }
 
-    public List<SimilarDeckDto> Results { get; set; } = [];
+    public List<DescriptionMatchDto> Results { get; set; } = [];
 }

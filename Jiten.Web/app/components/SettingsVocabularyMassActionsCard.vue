@@ -49,12 +49,16 @@
   const showPreview = ref(false);
   const previewData = ref<{ totalCount: number; cards: any[] } | null>(null);
 
+  function toCalendarDate(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
   function buildRequest(offset = 0, limit = 50) {
     return {
       stateFilter: selectedStates.value.length > 0 ? selectedStates.value : null,
       dateType: dateType.value || null,
-      dateFrom: dateFrom.value?.toISOString() ?? null,
-      dateTo: dateTo.value?.toISOString() ?? null,
+      dateFrom: dateFrom.value ? toCalendarDate(dateFrom.value) : null,
+      dateTo: dateTo.value ? toCalendarDate(dateTo.value) : null,
       action: action.value!,
       targetState: action.value === 'change-state' ? targetState.value : null,
       pushDays: action.value === 'push-due' ? pushDays.value : null,
