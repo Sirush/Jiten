@@ -406,8 +406,9 @@ public partial class UserController(
 
         var toInsert = targets
                        .Where(t => !alreadyKnownSet.Contains(t.Key))
+                       // A suspended card with a LastReview derives as Young and counts as known; the UI suspend path leaves it null.
                        .Select(t => new FsrsCard(userId, t.Key.WordId, t.Key.ReadingIndex, due: DateTime.UtcNow,
-                                                 lastReview: DateTime.UtcNow, state: t.Value))
+                                                 lastReview: t.Value == FsrsState.Suspended ? null : DateTime.UtcNow, state: t.Value))
                        .ToList();
 
         var redundantIds = await WordFormHelper.ArchiveRedundantImportCards(
@@ -1874,10 +1875,17 @@ public partial class UserController(
 
                 logsToAdd.AddRange(mergedLogs);
 
-                if (updatedCards.Contains(card) && mergedLogs.Count > 0)
+                if (updatedCards.Contains(card))
                 {
-                    card.Lapses = CountLapsesFromLogs(card.ReviewLogs.Concat(mergedLogs)
-                                                          .Select(l => (l.Rating, l.ReviewDateTime, l.ReviewDuration)), lapseScheduler);
+                    if (mergedLogs.Count > 0)
+                        card.Lapses = CountLapsesFromLogs(card.ReviewLogs.Concat(mergedLogs)
+                                                              .Select(l => (l.Rating, l.ReviewDateTime, l.ReviewDuration)), lapseScheduler);
+                }
+                else
+                {
+                    // Anki's own counter covers history the export left out; the log replay covers Anki decks that never tracked it.
+                    card.Lapses = Math.Max(cardToAnkiMap[card].Card.Lapses,
+                                           CountLapsesFromLogs(mergedLogs.Select(l => (l.Rating, l.ReviewDateTime, l.ReviewDuration)), lapseScheduler));
                 }
             }
 

@@ -21,10 +21,20 @@ public class InMemoryStudySessionService : IStudySessionService
         return Task.FromResult(owner == userId);
     }
 
-    public Task<string?> GetCachedReviewResult(string sessionId, string clientRequestId)
+    private const string PendingMarker = "\u0001pending";
+
+    public Task<ReviewClaim> TryClaimReview(string sessionId, string clientRequestId)
     {
-        _reviews.TryGetValue($"{sessionId}:{clientRequestId}", out var result);
-        return Task.FromResult(result);
+        var key = $"{sessionId}:{clientRequestId}";
+        if (_reviews.TryAdd(key, PendingMarker)) return Task.FromResult(ReviewClaim.Acquired);
+        var stored = _reviews[key];
+        return Task.FromResult(stored == PendingMarker ? ReviewClaim.InFlight : new ReviewClaim(ReviewClaimStatus.Completed, stored));
+    }
+
+    public Task ReleaseReviewClaim(string sessionId, string clientRequestId)
+    {
+        _reviews.TryRemove($"{sessionId}:{clientRequestId}", out _);
+        return Task.CompletedTask;
     }
 
     public Task StoreCachedReviewResult(string sessionId, string clientRequestId, string resultJson)

@@ -100,6 +100,19 @@ public static class FsrsSettingsHelper
             return utcNow.Date.AddDays(daysOffset);
 
         var localDay = TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz).Date.AddDays(daysOffset);
+        return DayStartUtc(localDay, tz);
+    }
+
+    /// <summary>UTC instant at which the given calendar day begins in the user's zone.</summary>
+    public static DateTime LocalDateStartUtc(DateOnly date, string? timezone)
+    {
+        var tz = ResolveTimeZone(timezone);
+        var day = date.ToDateTime(TimeOnly.MinValue);
+        return tz == null ? DateTime.SpecifyKind(day, DateTimeKind.Utc) : DayStartUtc(day, tz);
+    }
+
+    private static DateTime DayStartUtc(DateTime localDay, TimeZoneInfo tz)
+    {
         var localStart = DateTime.SpecifyKind(localDay, DateTimeKind.Unspecified);
         // Zones that spring forward at 00:00 (Santiago, Asuncion, Havana, Cairo, Beirut) have no midnight that day; the day starts at the first instant that exists.
         while (tz.IsInvalidTime(localStart))

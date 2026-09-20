@@ -141,16 +141,37 @@ public class SrsController(
 
         if (hasIdempotency)
         {
-            var cached = await sessionService.GetCachedReviewResult(idempotencyScope, request.ClientRequestId!);
-            if (cached != null)
-                return Results.Content(cached, "application/json");
+            var claim = await sessionService.TryClaimReview(idempotencyScope, request.ClientRequestId!);
+            if (claim.Status == ReviewClaimStatus.Completed)
+                return Results.Content(claim.ResultJson!, "application/json");
+            if (claim.Status == ReviewClaimStatus.InFlight)
+                return DuplicateInFlight();
         }
         else if (!debounceService.TryAcquire("review", userId, request.WordId, request.ReadingIndex))
         {
-            // 409, not 429: a duplicate must not be retried as if it were a rate limit.
-            return Results.Conflict(new { error_message = "A review for this word was just recorded. Duplicate ignored." });
+            return DuplicateJustRecorded();
         }
 
+        try
+        {
+            return await ReviewClaimed(request, userId, hasIdempotency, idempotencyScope);
+        }
+        catch
+        {
+            if (hasIdempotency) await sessionService.ReleaseReviewClaim(idempotencyScope, request.ClientRequestId!);
+            throw;
+        }
+    }
+
+    // 409, not 429: a duplicate must not be retried as if it were a rate limit.
+    private static IResult DuplicateJustRecorded()
+        => Results.Conflict(new { error_message = "A review for this word was just recorded. Duplicate ignored." });
+
+    private static IResult DuplicateInFlight()
+        => Results.Conflict(new { error_message = "This review is still being recorded. Duplicate ignored." });
+
+    private async Task<IResult> ReviewClaimed(SrsReviewRequest request, string userId, bool hasIdempotency, string idempotencyScope)
+    {
         await using var transaction = await userContext.Database.BeginTransactionAsync();
 
         var card = await userContext.FsrsCards.FirstOrDefaultAsync(c => c.UserId == userId &&
@@ -171,6 +192,7 @@ public class SrsController(
         }
         else if (IsTerminalState(card.State))
         {
+            if (hasIdempotency) await sessionService.ReleaseReviewClaim(idempotencyScope, request.ClientRequestId!);
             return Results.BadRequest($"Card is {card.State} and cannot be reviewed. Release it first.");
         }
 
@@ -271,10 +293,7 @@ public class SrsController(
         };
 
         if (hasIdempotency)
-        {
-            var resultJson = System.Text.Json.JsonSerializer.Serialize(resultObj);
-            _ = sessionService.StoreCachedReviewResult(idempotencyScope, request.ClientRequestId!, resultJson);
-        }
+            await sessionService.StoreCachedReviewResult(idempotencyScope, request.ClientRequestId!, System.Text.Json.JsonSerializer.Serialize(resultObj));
 
         logger.LogInformation("User reviewed SRS card: WordId={WordId}, ReadingIndex={ReadingIndex}, Rating={Rating}, NewState={NewState}",
                               request.WordId, request.ReadingIndex, request.Rating, cardAndLog.UpdatedCard.State);
@@ -303,12 +322,49 @@ public class SrsController(
         if (request.Reviews.Count > 500)
             return Results.BadRequest("Maximum of 500 reviews per batch.");
 
+        if (!string.IsNullOrEmpty(request.SessionId) && !await sessionService.ValidateSession(request.SessionId, userId))
+            return Results.Unauthorized();
+
+        var hasIdempotency = !string.IsNullOrEmpty(request.ClientRequestId);
+        var idempotencyScope = !string.IsNullOrEmpty(request.SessionId) ? request.SessionId : $"user:{userId}";
+
+        if (hasIdempotency)
+        {
+            var claim = await sessionService.TryClaimReview(idempotencyScope, request.ClientRequestId!);
+            if (claim.Status == ReviewClaimStatus.Completed)
+                return Results.Content(claim.ResultJson!, "application/json");
+            if (claim.Status == ReviewClaimStatus.InFlight)
+                return DuplicateInFlight();
+        }
+        // The reader sends no per-card id, so an id-less resend inside the window is the duplicate.
+        else if (!debounceService.TryAcquire("batch-review", userId, 0, 0))
+        {
+            return DuplicateJustRecorded();
+        }
+
+        try
+        {
+            return await BatchReviewClaimed(request, userId, hasIdempotency, idempotencyScope);
+        }
+        catch
+        {
+            if (hasIdempotency) await sessionService.ReleaseReviewClaim(idempotencyScope, request.ClientRequestId!);
+            throw;
+        }
+    }
+
+    private async Task<IResult> BatchReviewClaimed(SrsBatchReviewRequest request, string userId, bool hasIdempotency, string idempotencyScope)
+    {
+
         // Dedupe by (WordId, ReadingIndex), keeping the last rating for each word.
         var deduped = new Dictionary<(int WordId, byte ReadingIndex), FsrsRating>();
         foreach (var item in request.Reviews)
         {
             if (!Enum.IsDefined(item.Rating))
+            {
+                if (hasIdempotency) await sessionService.ReleaseReviewClaim(idempotencyScope, request.ClientRequestId!);
                 return Results.BadRequest($"Invalid rating: {(int)item.Rating}. Must be 1 (Again), 2 (Hard), 3 (Good), or 4 (Easy).");
+            }
 
             deduped[(item.WordId, item.ReadingIndex)] = item.Rating;
         }
@@ -441,7 +497,7 @@ public class SrsController(
         logger.LogInformation("User batch-reviewed {Count} SRS cards ({Suspended} suspended as leeches, {Skipped} skipped).",
                               processed, leechSuspended.Count, skipped.Count);
 
-        return Results.Json(new
+        var batchResult = new
         {
             success = true,
             processed,
@@ -449,7 +505,10 @@ public class SrsController(
             autoBuried,
             skipped,
             results
-        });
+        };
+        if (hasIdempotency)
+            await sessionService.StoreCachedReviewResult(idempotencyScope, request.ClientRequestId!, System.Text.Json.JsonSerializer.Serialize(batchResult));
+        return Results.Json(batchResult);
     }
 
     private static bool IsTerminalState(FsrsState state)
@@ -716,7 +775,7 @@ public class SrsController(
                 var deltaT = Math.Max(0, (logs[i].ReviewUtc - logs[i - 1].ReviewUtc).TotalDays);
                 reviews[i] = new FsrsTrainingReview((int)logs[i].Rating, deltaT);
             }
-            items.Add(new FsrsTrainingItem(reviews));
+            items.Add(new FsrsTrainingItem(reviews, logs[^1].ReviewUtc.Ticks));
         }
 
         if (items.Count == 0)
@@ -1205,8 +1264,10 @@ public class SrsController(
         if (request.Items.Count > 10000)
             return Results.BadRequest("Too many cards in one request (max 10000).");
 
-        var requestedPairs = request.Items.Select(i => (i.WordId, i.ReadingIndex)).ToHashSet();
-        var wordIds = request.Items.Select(i => i.WordId).Distinct().ToList();
+        // Two entries for one pair would insert the same new card twice and trip the unique index.
+        var items = request.Items.DistinctBy(i => (i.WordId, i.ReadingIndex)).ToList();
+        var requestedPairs = items.Select(i => (i.WordId, i.ReadingIndex)).ToHashSet();
+        var wordIds = items.Select(i => i.WordId).Distinct().ToList();
         var cards = (await userContext.FsrsCards
                                       .Where(c => c.UserId == userId && wordIds.Contains(c.WordId))
                                       .ToListAsync())
@@ -1236,7 +1297,7 @@ public class SrsController(
                 }
 
                 var existingPairs = cards.Select(c => (c.WordId, c.ReadingIndex)).ToHashSet();
-                foreach (var item in request.Items.Where(i => !existingPairs.Contains((i.WordId, i.ReadingIndex))))
+                foreach (var item in items.Where(i => !existingPairs.Contains((i.WordId, i.ReadingIndex))))
                 {
                     var created = target == FsrsState.Mastered
                         ? new FsrsCard(userId, item.WordId, item.ReadingIndex,
@@ -1253,12 +1314,12 @@ public class SrsController(
                     // to a sibling this request also masters, never to a card in an unknown state.
                     var redundantCreated = await WordFormHelper.ArchiveRedundantImportCards(
                         userContext, wordFormCache, userId, createdCards,
-                        request.Items.Select(i => (i.WordId, i.ReadingIndex)).ToHashSet(), _ => []);
+                        items.Select(i => (i.WordId, i.ReadingIndex)).ToHashSet(), _ => []);
                     createdCards.RemoveAll(redundantCreated.Contains);
 
                     await WordFormHelper.RemoveRedundantKanaSrsCards(
                         userContext, wordFormCache, userId,
-                        request.Items.Select(i => (i.WordId, i.ReadingIndex)).ToList());
+                        items.Select(i => (i.WordId, i.ReadingIndex)).ToList());
                 }
 
                 foreach (var created in createdCards)
@@ -1330,7 +1391,7 @@ public class SrsController(
             await MarkReviewRollupDirty(userId);
 
         logger.LogInformation("User bulk set vocabulary state: State={State}, Requested={Requested}, Affected={Affected}",
-                              request.State, request.Items.Count, affected);
+                              request.State, items.Count, affected);
         return Results.Json(new { success = true, affectedCount = affected, autoRestored });
     }
 
@@ -1345,7 +1406,7 @@ public class SrsController(
         var validationError = ValidateMassActionRequest(request, previewOnly: true);
         if (validationError != null) return Results.BadRequest(validationError);
 
-        var query = BuildMassActionQuery(userId, request);
+        var query = await BuildMassActionQuery(userId, request);
         var totalCount = await query.CountAsync();
 
         var limit = Math.Clamp(request.Limit, 1, 100);
@@ -1402,7 +1463,7 @@ public class SrsController(
         var validationError = ValidateMassActionRequest(request, previewOnly: false);
         if (validationError != null) return Results.BadRequest(validationError);
 
-        var query = BuildMassActionQuery(userId, request);
+        var query = await BuildMassActionQuery(userId, request);
         int affected;
 
         switch (request.Action)
@@ -1816,7 +1877,7 @@ public class SrsController(
         }).ToList();
     }
 
-    private IQueryable<FsrsCard> BuildMassActionQuery(string userId, MassActionRequest request)
+    private async Task<IQueryable<FsrsCard>> BuildMassActionQuery(string userId, MassActionRequest request)
     {
         var query = userContext.FsrsCards.Where(c => c.UserId == userId);
 
@@ -1832,9 +1893,10 @@ public class SrsController(
         if (request.DateType is "created" or "due")
         {
             var isCreated = request.DateType == "created";
+            var timezone = GetStudySettings(await LoadUserSettings(userId)).Timezone;
             if (request.DateFrom.HasValue)
             {
-                var from = DateTime.SpecifyKind(request.DateFrom.Value.Date, DateTimeKind.Utc);
+                var from = FsrsSettingsHelper.LocalDateStartUtc(request.DateFrom.Value, timezone);
                 query = isCreated
                     ? query.Where(c => c.CreatedAt >= from)
                     : query.Where(c => c.Due >= from);
@@ -1842,7 +1904,7 @@ public class SrsController(
 
             if (request.DateTo.HasValue)
             {
-                var to = DateTime.SpecifyKind(request.DateTo.Value.Date.AddDays(1), DateTimeKind.Utc);
+                var to = FsrsSettingsHelper.LocalDateStartUtc(request.DateTo.Value.AddDays(1), timezone);
                 query = isCreated
                     ? query.Where(c => c.CreatedAt < to)
                     : query.Where(c => c.Due < to);

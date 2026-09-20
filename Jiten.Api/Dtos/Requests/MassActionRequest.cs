@@ -4,8 +4,8 @@ public class MassActionRequest
 {
     public int[]? StateFilter { get; set; }
     public string? DateType { get; set; }
-    public DateTime? DateFrom { get; set; }
-    public DateTime? DateTo { get; set; }
+    public DateOnly? DateFrom { get; set; }
+    public DateOnly? DateTo { get; set; }
 
     public required string Action { get; set; }
     public int? TargetState { get; set; }

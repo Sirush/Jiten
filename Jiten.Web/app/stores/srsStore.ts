@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { toRaw } from 'vue';
 import type {
   StudyDeckDto,
   StudyBatchResponse,
@@ -33,7 +34,7 @@ interface SessionReview {
 
 // In-progress session cache (localStorage) so a mobile tab killed in the background can resume
 // where it left off. Bumped if the persisted shape changes.
-const SESSION_CACHE_VERSION = 1;
+const SESSION_CACHE_VERSION = 2;
 const SESSION_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2h, matches the server srs:session TTL
 
 interface PersistedSession {
@@ -1315,7 +1316,7 @@ export const useSrsStore = defineStore('srs', () => {
     if (ctx.deltas.correct) s.correctCount = Math.max(0, s.correctCount - 1);
     s.gradeCounts[ctx.deltas.gradeKey] = Math.max(0, s.gradeCounts[ctx.deltas.gradeKey] - 1);
 
-    sessionReviews.value = sessionReviews.value.filter((r) => r !== ctx.reviewEntry);
+    sessionReviews.value = sessionReviews.value.filter((r) => toRaw(r) !== ctx.reviewEntry);
 
     if (ctx.deltas.clearedGrade) {
       const i = clearedGrades.value.indexOf(ctx.deltas.clearedGrade);
@@ -1344,7 +1345,8 @@ export const useSrsStore = defineStore('srs', () => {
     if (!ctx.reinsertedAgainCard) {
       const batch = [...currentBatch.value];
       if (ctx.reinsertedLearningCard) {
-        const idx = batch.indexOf(ctx.reinsertedLearningCard);
+        // The queue hands back reactive proxies, so identity has to be checked on the raw object.
+        const idx = batch.findIndex((c) => toRaw(c) === ctx.reinsertedLearningCard);
         if (idx >= 0) batch.splice(idx, 1);
         const newSet = new Set(learningCardKeys.value);
         newSet.delete(ctx.cardKey);
@@ -1495,14 +1497,15 @@ export const useSrsStore = defineStore('srs', () => {
   function wrapUp() {
     if (isWrappingUp.value) return;
     isWrappingUp.value = true;
-    preWrapUpBatch.value = [...currentBatch.value];
 
     // Keep the current card + any "again" cards and learning-step repeats still in the queue
     const upcoming = currentBatch.value.slice(currentCardIndex.value + 1);
-    const keptAgain = upcoming.filter((c) => {
+    const isKept = (c: StudyCardDto) => {
       const key = `${c.wordId}-${c.readingIndex}`;
       return againCardKeys.value.has(key) || learningCardKeys.value.has(key);
-    });
+    };
+    const keptAgain = upcoming.filter(isKept);
+    preWrapUpBatch.value = upcoming.filter((c) => !isKept(c));
 
     const current = currentBatch.value[currentCardIndex.value];
     currentBatch.value = [...currentBatch.value.slice(0, currentCardIndex.value), ...(current ? [current] : []), ...keptAgain];
@@ -1512,11 +1515,16 @@ export const useSrsStore = defineStore('srs', () => {
     }
   }
 
+  // Grades made during the wrap-up stay behind the cursor; the set-aside cards return behind any pending copies.
   function cancelWrapUp() {
     if (!isWrappingUp.value) return;
     isWrappingUp.value = false;
-    currentBatch.value = preWrapUpBatch.value;
+    currentBatch.value = [...currentBatch.value, ...preWrapUpBatch.value];
     preWrapUpBatch.value = [];
+    if (currentCardIndex.value < currentBatch.value.length) {
+      isSessionComplete.value = false;
+      batchComplete.value = false;
+    }
   }
 
   async function fetchSettings(force = false) {
@@ -1595,6 +1603,12 @@ export const useSrsStore = defineStore('srs', () => {
   // Restore a cached session if one is present, fresh and still has ungraded cards. Returns true
   // if the session was restored (caller should skip the initial fetchBatch).
   async function tryRestoreSession(): Promise<boolean> {
+    if (sessionDirty.value) return false;
+    if (currentBatch.value.length > 0 && !isSessionComplete.value) {
+      isFlipped.value = false;
+      cardShownAt.value = Date.now();
+      return true;
+    }
     if (!import.meta.client) return false;
     let blob: PersistedSession;
     try {
@@ -1652,7 +1666,6 @@ export const useSrsStore = defineStore('srs', () => {
     isLoading.value = false;
     undoStack.value = [];
     inFlightReviews.clear();
-    sessionDirty.value = false;
     cardShownAt.value = Date.now();
     sessionEpoch++;
 
@@ -1795,6 +1808,8 @@ export const useSrsStore = defineStore('srs', () => {
     sessionForecast,
     persistSession,
     tryRestoreSession,
+    invalidateSession,
+    sessionDirty,
     clearPersistedSession,
   };
 });

@@ -38,8 +38,12 @@ export function useSrsSessionCache() {
   onUnmounted(() => {
     document.removeEventListener('visibilitychange', onVisibilityChange);
     window.removeEventListener('pagehide', save);
-    if (debounceTimer) clearTimeout(debounceTimer);
     stopWatch();
     stopCompleteWatch();
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+      save();
+    }
   });
 }
