@@ -1,4 +1,4 @@
-namespace Jiten.Api.Dtos;
+﻿namespace Jiten.Api.Dtos;
 
 public class DefinitionDto
 {
@@ -26,6 +26,8 @@ public class CrossReferenceDto
 {
     public string Type { get; set; } = "see"; // see | ant | syn
     public int? TargetWordId { get; set; }
+    /// <summary>Index of the target form named by the xref; 0 when the text matches no form.</summary>
+    public byte TargetReadingIndex { get; set; }
     public string TargetText { get; set; } = "";
     public string? TargetKanji { get; set; }
     public string? TargetReading { get; set; }

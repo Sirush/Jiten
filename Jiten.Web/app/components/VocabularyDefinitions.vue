@@ -230,7 +230,7 @@
           <template v-for="(x, i) in grp.items" :key="grp.type + i">
             <NuxtLink
               v-if="x.targetWordId"
-              :to="`/vocabulary/${x.targetWordId}/0`"
+              :to="`/vocabulary/${x.targetWordId}/${x.targetReadingIndex ?? 0}`"
               :title="x.targetSenseIndex ? `sense ${x.targetSenseIndex}` : undefined"
               class="inline-block rounded-full px-2 py-0.5 text-xs bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50"
               >{{ xrefBaseText(x) }}<sup v-if="x.targetSenseIndex" class="text-[0.65em] opacity-60">{{ x.targetSenseIndex }}</sup></NuxtLink

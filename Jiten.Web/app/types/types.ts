@@ -281,6 +281,7 @@ export interface LanguageSource {
 export interface CrossReference {
   type: string; // see | ant | syn
   targetWordId?: number;
+  targetReadingIndex?: number;
   targetText: string;
   targetKanji?: string;
   targetReading?: string;
