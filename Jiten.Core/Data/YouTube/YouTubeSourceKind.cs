@@ -3,5 +3,6 @@ namespace Jiten.Core.Data.YouTube;
 public enum YouTubeSourceKind
 {
     Channel = 1,
-    Playlist = 2
+    Playlist = 2,
+    ChannelStreams = 3
 }
