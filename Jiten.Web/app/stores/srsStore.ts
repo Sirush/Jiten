@@ -54,6 +54,7 @@ interface PersistedSession {
     newCardsLearned: number;
     correctCount: number;
     startTime: number | null;
+    activeMs?: number;
     gradeCounts: { again: number; hard: number; good: number; easy: number };
   };
   newCardsRemaining: number;
@@ -130,6 +131,7 @@ interface UndoSnapshot {
     newCardsLearned: number;
     correctCount: number;
     startTime: Date | null;
+    activeMs: number;
     gradeCounts: { again: number; hard: number; good: number; easy: number };
   };
 }
@@ -147,11 +149,10 @@ export const useSrsStore = defineStore('srs', () => {
   const isSessionComplete = ref(false);
   watch(isSessionComplete, (complete) => {
     if (!complete || sessionStats.value.cardsReviewed === 0) return;
-    const started = sessionStats.value.startTime?.getTime();
     trackEvent('srs_session_finished', {
       cards: sessionStats.value.cardsReviewed,
       new: sessionStats.value.newCardsLearned,
-      minutes: started ? Math.round((Date.now() - started) / 60000) : 0,
+      minutes: Math.round(sessionStats.value.activeMs / 60000),
     });
   });
   const isWrappingUp = ref(false);
@@ -244,6 +245,7 @@ export const useSrsStore = defineStore('srs', () => {
     newCardsLearned: 0,
     correctCount: 0,
     startTime: null as Date | null,
+    activeMs: 0,
     gradeCounts: { again: 0, hard: 0, good: 0, easy: 0 },
   });
   const newCardsRemaining = ref(0);
@@ -1035,6 +1037,22 @@ export const useSrsStore = defineStore('srs', () => {
     recentCardSeconds.value = [...recentCardSeconds.value, seconds].slice(-PACE_SAMPLE_COUNT);
   }
 
+  const SESSION_CARD_CAP_MS = 120_000;
+
+  function accrueCardTime(): void {
+    if (!cardShownAt.value) return;
+    sessionStats.value.activeMs += Math.min(Date.now() - cardShownAt.value, SESSION_CARD_CAP_MS);
+  }
+
+  function currentCardActiveMs(): number {
+    if (!cardShownAt.value || isSessionComplete.value || !currentCard.value) return 0;
+    return Math.min(Date.now() - cardShownAt.value, SESSION_CARD_CAP_MS);
+  }
+
+  function sessionActiveMs(): number {
+    return sessionStats.value.activeMs + currentCardActiveMs();
+  }
+
   function secondsPerCard(): number {
     const samples = [...recentCardSeconds.value].sort((a, b) => a - b);
     if (samples.length < 3) return 10;
@@ -1073,6 +1091,7 @@ export const useSrsStore = defineStore('srs', () => {
 
     takeSnapshot(card, 'grade', rating);
     recordCardPace();
+    accrueCardTime();
 
     const AFK_THRESHOLD = 60_000;
     const reviewDuration = thinkingDuration.value !== undefined ? Math.min(thinkingDuration.value, AFK_THRESHOLD) : undefined;
@@ -1398,6 +1417,7 @@ export const useSrsStore = defineStore('srs', () => {
 
       lastAutoRestoredCount.value = result?.autoRestored ?? 0;
 
+      accrueCardTime();
       sessionStats.value.cardsReviewed++;
       clearedGrades.value = [...clearedGrades.value, 'action'];
       currentCardIndex.value++;
@@ -1649,6 +1669,7 @@ export const useSrsStore = defineStore('srs', () => {
       newCardsLearned: blob.sessionStats?.newCardsLearned ?? 0,
       correctCount: blob.sessionStats?.correctCount ?? 0,
       startTime: blob.sessionStats?.startTime ? new Date(blob.sessionStats.startTime) : new Date(),
+      activeMs: blob.sessionStats?.activeMs ?? 0,
       gradeCounts: blob.sessionStats?.gradeCounts ?? { again: 0, hard: 0, good: 0, easy: 0 },
     };
     newCardsRemaining.value = blob.newCardsRemaining ?? 0;
@@ -1699,7 +1720,7 @@ export const useSrsStore = defineStore('srs', () => {
     sessionLeeches.value = [];
     sessionBuried.value = [];
     lastAutoBuryEvent.value = null;
-    sessionStats.value = { cardsReviewed: 0, newCardsLearned: 0, correctCount: 0, startTime: null, gradeCounts: { again: 0, hard: 0, good: 0, easy: 0 } };
+    sessionStats.value = { cardsReviewed: 0, newCardsLearned: 0, correctCount: 0, startTime: null, activeMs: 0, gradeCounts: { again: 0, hard: 0, good: 0, easy: 0 } };
     undoStack.value = [];
     isBusy.value = false;
     fetchError.value = null;
@@ -1739,6 +1760,7 @@ export const useSrsStore = defineStore('srs', () => {
     endSessionFromBatch,
     studySettings,
     sessionStats,
+    sessionActiveMs,
     newCardsRemaining,
     reviewsRemaining,
     newCardsToday,
