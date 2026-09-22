@@ -103,7 +103,7 @@
       >
         <NuxtLink
           :to="`/vocabulary/${component.wordId}/${component.readingIndex}`"
-          class="text-lg font-medium hover:text-primary-600 dark:hover:text-primary-400 transition-colors whitespace-nowrap !no-underline hover:!no-underline self-end"
+          class="text-lg font-medium hover:text-primary-600 dark:hover:text-primary-400 transition-colors !no-underline hover:!no-underline self-end"
         >
           <span lang="ja" v-html="renderParent(component)" />
         </NuxtLink>

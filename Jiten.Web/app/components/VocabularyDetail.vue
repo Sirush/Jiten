@@ -392,24 +392,24 @@
     <template v-if="word" #content>
       <div class="flex flex-col justify-between md:flex-row">
         <div class="flex flex-col gap-4 w-full min-w-0 max-w-2xl">
-          <div class="flex justify-between">
-            <div>
+          <div class="flex flex-col gap-2">
+            <div class="min-w-0">
               <div v-if="conjugationString != null" class="text-gray-500 dark:text-gray-400 text-xs font-noto-sans">(Conjugation: {{ conjugationString }})</div>
-              <div class="flex items-center gap-2">
-                <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`">
-                  <div class="text-3xl font-noto-sans" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
+              <div class="flex items-center gap-2 min-w-0">
+                <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`" class="min-w-0">
+                  <div class="font-noto-sans leading-relaxed" :class="headwordSizeClass(word.mainReading.text)" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
                 </NuxtLink>
-                <div v-if="!showRedirect" class="text-3xl font-noto-sans" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
-                <TtsButton :text="stripRubyMarkup(word.mainReading.text)" :word-id="wordId" :reading-index="currentReadingIndex" size="md" />
+                <div v-if="!showRedirect" class="font-noto-sans leading-relaxed min-w-0" :class="headwordSizeClass(word.mainReading.text)" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
+                <TtsButton :text="stripRubyMarkup(word.mainReading.text)" :word-id="wordId" :reading-index="currentReadingIndex" size="md" class="shrink-0" />
               </div>
             </div>
-            <div class="flex flex-col md:flex-row items-end md:hidden">
+            <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 md:hidden">
               <VocabularyFrequencyRank
                 class="text-gray-500 dark:text-gray-300"
                 :ranks="frequencyRanks"
                 :fallback-rank="word.mainReading.frequencyRank"
                 :lists-loading="listsLoading"
-                align="right"
+                align="left"
                 @request-lists="loadFrequencyLists"
                 @changed="refreshFrequencyRanks"
               />
