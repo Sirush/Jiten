@@ -13,6 +13,7 @@ public static class ParserCounters
     public static long AdjRederived;
     public static long AdjCandidatesBuilt;
     public static long AdjTokensScored;
+    public static long AdjCandidatesScored;
     public static long AdjMemoHits;
     public static long AdjTokensChanged;
     public static long EnumerateFormsCalls;
@@ -63,6 +64,7 @@ public static class ParserCounters
         Line("AdjRederived", AdjRederived);
         Line("AdjCandidatesBuilt", AdjCandidatesBuilt);
         Line("AdjTokensScored", AdjTokensScored);
+        Line("AdjCandidatesScored", AdjCandidatesScored);
         Line("AdjMemoHits", AdjMemoHits);
         Line("AdjTokensChanged", AdjTokensChanged);
         Line("EnumerateFormsCalls", EnumerateFormsCalls);
@@ -85,7 +87,7 @@ public static class ParserCounters
     public static void Reset()
     {
         AdjTokens = AdjHighConfidenceSkips = AdjSoftRuleSkips = AdjFirstPassCandidates = AdjRederived =
-            AdjCandidatesBuilt = AdjTokensScored = AdjMemoHits = AdjTokensChanged = EnumerateFormsCalls =
+            AdjCandidatesBuilt = AdjTokensScored = AdjCandidatesScored = AdjMemoHits = AdjTokensChanged = EnumerateFormsCalls =
                 JmDictInProcessHits = JmDictInProcessMisses = JmDictRedisMisses = JmDictDbRows =
                     DeckWordInProcessHits = DeckWordCacheHits = DeckWordCacheMisses = 0;
         Array.Clear(SectionTicks);

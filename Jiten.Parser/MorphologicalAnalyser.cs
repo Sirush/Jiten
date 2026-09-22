@@ -231,10 +231,11 @@ public partial class MorphologicalAnalyser
 
             var output = rawOutput.Split("\n");
             allWordInfos = new List<WordInfo>();
+            var strings = new SudachiStringPool();
             foreach (var line in output)
             {
                 if (line == "EOS") continue;
-                var wi = new WordInfo(line);
+                var wi = new WordInfo(Encoding.UTF8.GetBytes(line), strings);
                 if (!wi.IsInvalid) allWordInfos.Add(wi);
             }
         }
