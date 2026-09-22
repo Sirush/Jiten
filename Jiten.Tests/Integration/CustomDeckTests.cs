@@ -647,6 +647,105 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
         wordCount.Should().Be(3);
     }
 
+    [Fact]
+    public async Task JpdbImport_CreatesOneListPerDeckAndResolvesSpellingToForm()
+    {
+        await SeedJmDictWords(10, 12);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            jitenDb.WordForms.Add(new JmDictWordForm { WordId = 10, ReadingIndex = 1, Text = "alt10", RubyText = "alt10", FormType = JmDictFormType.KanjiForm });
+            await jitenDb.SaveChangesAsync();
+        }
+
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks/import/jpdb")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new
+            {
+                decks = new[]
+                {
+                    new { jpdbDeckId = 1L, name = "Mining", words = new[] { new { wordId = 10, spelling = "alt10", occurrences = 7 }, new { wordId = 11, spelling = "word11", occurrences = 0 }, new { wordId = 999, spelling = "nope", occurrences = 1 } } },
+                    new { jpdbDeckId = 2L, name = "Drama", words = new[] { new { wordId = 12, spelling = "word12", occurrences = 1 } } }
+                }
+            });
+        var res = await _client.SendAsync(req);
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+
+        var body = JsonSerializer.Deserialize<JsonElement>(await res.Content.ReadAsStringAsync());
+        var decks = body.GetProperty("decks");
+        decks.GetArrayLength().Should().Be(2);
+        decks[0].GetProperty("matched").GetInt32().Should().Be(2);
+        decks[0].GetProperty("unmatched").GetInt32().Should().Be(1);
+        decks[0].GetProperty("replaced").GetBoolean().Should().BeFalse();
+
+        using var verifyScope = factory.Services.CreateScope();
+        var userDb = verifyScope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var mining = await userDb.UserStudyDecks.FirstAsync(sd => sd.Name == "Mining");
+        mining.DeckType.Should().Be(StudyDeckType.StaticWordList);
+        var miningWords = await userDb.UserStudyDeckWords.Where(w => w.UserStudyDeckId == mining.UserStudyDeckId).ToListAsync();
+        miningWords.Should().HaveCount(2);
+        miningWords.Single(w => w.WordId == 10).ReadingIndex.Should().Be(1);
+        miningWords.Single(w => w.WordId == 10).Occurrences.Should().Be(7);
+        miningWords.Single(w => w.WordId == 11).ReadingIndex.Should().Be(0);
+        miningWords.Single(w => w.WordId == 11).Occurrences.Should().Be(1, "a zero count is floored to one");
+        (await userDb.UserStudyDecks.CountAsync(sd => sd.Name == "Drama")).Should().Be(1);
+        (await userDb.FsrsCards.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task JpdbImport_ReplacesSameNamedListInsteadOfDuplicating()
+    {
+        await SeedJmDictWords(10, 13);
+
+        async Task<HttpResponseMessage> Import(params int[] wordIds)
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks/import/jpdb")
+                .WithUser(TestUsers.UserA)
+                .WithJsonContent(new { decks = new[] { new { jpdbDeckId = 1L, name = "Mining", words = wordIds.Select(id => new { wordId = id, spelling = $"word{id}" }).ToArray() } } });
+            return await _client.SendAsync(req);
+        }
+
+        (await Import(10, 11)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var second = await Import(12, 13);
+        second.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = JsonSerializer.Deserialize<JsonElement>(await second.Content.ReadAsStringAsync());
+        body.GetProperty("decks")[0].GetProperty("replaced").GetBoolean().Should().BeTrue();
+
+        using var verifyScope = factory.Services.CreateScope();
+        var userDb = verifyScope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var decks = await userDb.UserStudyDecks.Where(sd => sd.Name == "Mining").ToListAsync();
+        decks.Should().HaveCount(1);
+        var words = await userDb.UserStudyDeckWords.Where(w => w.UserStudyDeckId == decks[0].UserStudyDeckId).Select(w => w.WordId).ToListAsync();
+        words.Should().BeEquivalentTo(new[] { 12, 13 });
+    }
+
+    [Fact]
+    public async Task JpdbImport_OverDeckLimit_CreatesNothing()
+    {
+        await SeedJmDictWords(10, 10);
+        var freeDeckLimit = new JitenPlusLimitsOptions().StudyDecks.Free;
+        for (var i = 0; i < freeDeckLimit - 1; i++)
+            (await CreateStaticDeck($"Deck {i}")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks/import/jpdb")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new
+            {
+                decks = new[]
+                {
+                    new { jpdbDeckId = 1L, name = "Fits", words = new[] { new { wordId = 10, spelling = "word10" } } },
+                    new { jpdbDeckId = 2L, name = "Overflow", words = new[] { new { wordId = 10, spelling = "word10" } } }
+                }
+            });
+        var res = await _client.SendAsync(req);
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain(freeDeckLimit.ToString());
+
+        using var verifyScope = factory.Services.CreateScope();
+        var userDb = verifyScope.ServiceProvider.GetRequiredService<UserDbContext>();
+        (await userDb.UserStudyDecks.AnyAsync(sd => sd.Name == "Fits" || sd.Name == "Overflow")).Should().BeFalse();
+    }
+
     private async Task<HttpResponseMessage> CreateStaticDeck(string name)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")

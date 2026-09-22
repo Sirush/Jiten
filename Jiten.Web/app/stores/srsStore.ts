@@ -646,6 +646,26 @@ export const useSrsStore = defineStore('srs', () => {
     });
   }
 
+  async function importJpdbDecks(decks: { jpdbDeckId: number; name: string; words: { wordId: number; spelling: string; occurrences: number }[] }[]) {
+    const result = await $api<{
+      decks: {
+        jpdbDeckId: number;
+        userStudyDeckId: number;
+        name: string;
+        matched: number;
+        unmatched: number;
+        replaced: boolean;
+        unmatchedWords: { wordId: number; spelling: string }[];
+      }[];
+    }>(
+      'srs/study-decks/import/jpdb',
+      { method: 'POST', body: { decks } },
+    );
+    refreshOverview();
+    invalidateSession();
+    return result;
+  }
+
   async function importToExistingDeck(deckId: number, previewToken: string, excludeWordIds?: number[]) {
     const result = await $api<{ added: boolean }>(`srs/study-decks/${deckId}/import`, {
       method: 'POST',
@@ -1799,6 +1819,7 @@ export const useSrsStore = defineStore('srs', () => {
     importCommit,
     importPreviewText,
     importToExistingDeck,
+    importJpdbDecks,
     reorderStudyDecks,
     flushStudyDeckReorder,
     toggleDeckActive,

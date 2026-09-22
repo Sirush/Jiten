@@ -389,11 +389,15 @@ public partial class UserController(
                 AddImportTarget(targets, (word.WordId, (byte)i), state);
         }
 
+        var unmatchedWords = new List<ImportSkippedWord>();
         foreach (var card in cards)
         {
             var wordId = (int)card.WordId;
             if (!jmdictWordIdSet.Contains(wordId))
+            {
+                unmatchedWords.Add(new ImportSkippedWord(wordId, card.Spelling, ImportSkipReason.NotInDictionary));
                 continue;
+            }
 
             var readingIndex = formsByWord.TryGetValue(wordId, out var forms) && forms.Any(f => f.Text == card.Spelling)
                 ? ResolveReadingIndex(forms, card.Spelling)
@@ -431,7 +435,11 @@ public partial class UserController(
 
         logger.LogInformation("User imported words from IDs: UserId={UserId}, AddedCount={AddedCount}, SkippedCount={SkippedCount}, PrunedCount={PrunedCount}",
                               userId, toInsert.Count, alreadyKnown.Count, pruned);
-        return Results.Ok(new { added = toInsert.Count, skipped = alreadyKnown.Count, pruned });
+        return Results.Ok(new
+                          {
+                              added = toInsert.Count, skipped = alreadyKnown.Count, pruned,
+                              unmatched = unmatchedWords.Count, unmatchedWords = ImportSkippedWord.Cap(unmatchedWords)
+                          });
     }
 
     /// <summary>Blacklisted beats Suspended beats Mastered when the same form arrives with several states.</summary>
@@ -537,21 +545,22 @@ public partial class UserController(
         var logsToAdd = new List<FsrsReviewLog>();
         var pendingLogKeys = new HashSet<(int WordId, int ReadingIndex, DateTime ReviewDateTime)>();
         var cardsToReplay = new List<FsrsCard>();
-        int skipped = 0;
+        var skippedWords = new List<ImportSkippedWord>();
+        var spellingByCard = new Dictionary<FsrsCard, string>();
         int updatedLogs = 0;
 
         foreach (var jpdbCard in request.Cards)
         {
             if (jpdbCard.WordId is <= 0 or > int.MaxValue)
             {
-                skipped++;
+                skippedWords.Add(new ImportSkippedWord(jpdbCard.WordId, jpdbCard.Spelling, ImportSkipReason.NotInDictionary));
                 continue;
             }
 
             var wordId = (int)jpdbCard.WordId;
             if (!formsByWord.TryGetValue(wordId, out var forms))
             {
-                skipped++;
+                skippedWords.Add(new ImportSkippedWord(wordId, jpdbCard.Spelling, ImportSkipReason.NotInDictionary));
                 continue;
             }
 
@@ -562,7 +571,7 @@ public partial class UserController(
 
             if (validReviews.Count == 0)
             {
-                skipped++;
+                skippedWords.Add(new ImportSkippedWord(wordId, jpdbCard.Spelling, ImportSkipReason.NoReviews));
                 continue;
             }
 
@@ -579,6 +588,7 @@ public partial class UserController(
                 card = new FsrsCard(userId, wordId, readingIndex);
                 cardsToAdd.Add(card);
                 existingCards[key] = card;
+                spellingByCard[card] = jpdbCard.Spelling;
             }
 
             foreach (var review in validReviews)
@@ -624,11 +634,13 @@ public partial class UserController(
 
         if (coveringByCard.Count > 0)
         {
+            foreach (var card in coveringByCard.Covering.Keys)
+                skippedWords.Add(new ImportSkippedWord(card.WordId, spellingByCard.GetValueOrDefault(card, ""), ImportSkipReason.Redundant));
             cardsToAdd.RemoveAll(coveringByCard.Contains);
             cardsToReplay.RemoveAll(coveringByCard.Contains);
             logsToAdd.RemoveAll(l => coveringByCard.Contains(l.Card));
-            skipped += coveringByCard.Count;
         }
+        var skipped = skippedWords.Count;
 
         var restoredCards = await CardRestoreService.AutoRestoreAsync(
             userContext, userId, cardsToAdd, restoreSchedule: false,
@@ -700,7 +712,8 @@ public partial class UserController(
         return Results.Ok(new
                           {
                               cardsProcessed = cardsToReplay.Count, reviewsImported = logsToAdd.Count,
-                              reviewsUpdated = updatedLogs, skipped, archivedRedundant, restoredCards, pruned
+                              reviewsUpdated = updatedLogs, skipped, archivedRedundant, restoredCards, pruned,
+                              skippedWords = ImportSkippedWord.Cap(skippedWords)
                           });
     }
 
@@ -739,6 +752,22 @@ public partial class UserController(
                                                    })
                                       .ToList(),
                                   scheduler);
+
+    public record ImportSkippedWord(long WordId, string Spelling, ImportSkipReason Reason)
+    {
+        public const int MaxReturned = 500;
+
+        public static List<ImportSkippedWord> Cap(List<ImportSkippedWord> words) =>
+            words.Count <= MaxReturned ? words : words.Take(MaxReturned).ToList();
+    }
+
+    [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
+    public enum ImportSkipReason
+    {
+        NotInDictionary,
+        NoReviews,
+        Redundant
+    }
 
     private static byte ResolveReadingIndex(List<JmDictWordForm> forms, string spelling)
     {

@@ -1636,6 +1636,26 @@ public partial class StudyController(
         return Results.Ok(result);
     }
 
+    [HttpPost("study-decks/import/jpdb")]
+    [SwaggerOperation(Summary = "Import JPDB decks as word lists, replacing lists with the same name")]
+    [RequestSizeLimit(50 * 1024 * 1024)]
+    public async Task<IResult> ImportJpdbDecks([FromBody] JpdbDeckImportRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        if (request.Decks == null || request.Decks.Count == 0)
+            return Results.BadRequest("No decks provided.");
+        if (request.Decks.Any(d => d.Name.Length > 200))
+            return Results.BadRequest("Deck name exceeds 200 characters.");
+
+        var result = await importService.ImportJpdbDecks(userId, request);
+        if (result.Error != null) return Results.BadRequest(result.Error);
+        await sessionService.BumpStudyOverviewVersion(userId);
+
+        return Results.Ok(new { decks = result.Decks });
+    }
+
     [HttpPost("study-decks/{id:int}/import")]
     [SwaggerOperation(Summary = "Import words from preview token into an existing static deck")]
     public async Task<IResult> ImportToExistingDeck(int id, [FromBody] ImportToExistingRequest request)

@@ -109,8 +109,8 @@
 
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const limit = computed(() => (route.query.limit ? Number(route.query.limit) : undefined));
-  const sortDescending = ref(route.query.sortOrder === String(SortOrder.Descending));
   const sortBy = ref(route.query.sortBy?.toString() || defaultSort.value);
+  const sortDescending = ref(route.query.sortOrder ? route.query.sortOrder === String(SortOrder.Descending) : sortBy.value === 'occurrences');
   const { tiers: displayTiers, suspended, redundant, query: displayQuery } = useVocabularyDisplayFilter();
   const search = ref(route.query.search?.toString() || '');
   const debouncedSearch = ref(search.value);
@@ -126,7 +126,8 @@
   });
 
   watch(sortBy, (newValue) => {
-    router.replace({ query: { ...route.query, sortBy: newValue } });
+    sortDescending.value = newValue === 'occurrences';
+    router.replace({ query: { ...route.query, sortBy: newValue, sortOrder: sortOrder.value } });
   });
 
   const updateSearch = debounce((val: string) => {

@@ -1,3 +1,48 @@
+export interface JpdbDeck {
+  id: number;
+  name: string;
+  vocabularyCount: number;
+  isBuiltIn: boolean;
+}
+
+export interface JpdbDeckWord {
+  wordId: number;
+  spelling: string;
+  occurrences: number;
+}
+
+export interface JpdbSkippedWord {
+  wordId: number;
+  spelling: string;
+  reason: 'NotInDictionary' | 'NoReviews' | 'Redundant';
+}
+
+export interface JpdbImportSummary {
+  reviews?: {
+    cardsInFile: number;
+    cardsProcessed: number;
+    reviewsImported: number;
+    reviewsUpdated: number;
+    skipped: number;
+    archivedRedundant: number;
+    skippedWords: JpdbSkippedWord[];
+  };
+  knownWords?: {
+    added: number;
+    skipped: number;
+    unmatched: number;
+    unmatchedWords: JpdbSkippedWord[];
+  };
+  wordLists?: {
+    userStudyDeckId: number;
+    name: string;
+    matched: number;
+    unmatched: number;
+    replaced: boolean;
+    unmatchedWords: { wordId: number; spelling: string }[];
+  }[];
+}
+
 export const useJpdbApi = () => {
   const JpdbRateLimiter = {
     lastRequestTime: 0,
@@ -19,6 +64,7 @@ export const useJpdbApi = () => {
   interface VocabularyIdPair {
     id1: number;
     id2: number;
+    occurrences?: number;
   }
 
   type JpdbCardState = 'known' | 'blacklisted' | 'suspended';
@@ -28,6 +74,7 @@ export const useJpdbApi = () => {
     spelling: string;
     state: JpdbCardState;
   }
+
 
   class JpdbApiClient {
     private apiKey: string;
@@ -62,6 +109,53 @@ export const useJpdbApi = () => {
       }
     }
 
+    async listDecks(): Promise<JpdbDeck[]> {
+      const requestBody = { fields: ['id', 'name', 'vocabulary_count', 'is_built_in'] };
+      const response = await this.makeApiRequest('https://jpdb.io/api/v1/list-user-decks', requestBody);
+
+      const decks: JpdbDeck[] = [];
+      if (response.decks && Array.isArray(response.decks)) {
+        for (const deck of response.decks) {
+          if (!Array.isArray(deck) || deck.length < 2) continue;
+          decks.push({
+            id: deck[0],
+            name: String(deck[1] ?? '').trim() || `Deck ${deck[0]}`,
+            vocabularyCount: typeof deck[2] === 'number' ? deck[2] : 0,
+            isBuiltIn: deck[3] === true,
+          });
+        }
+      }
+      return decks;
+    }
+
+    async getDeckWords(deckId: number): Promise<JpdbDeckWord[]> {
+      const pairs = await this.getDeckVocabulary(deckId, true);
+      const chunkSize = 2500;
+      const result: JpdbDeckWord[] = [];
+
+      for (let i = 0; i < pairs.length; i += chunkSize) {
+        const chunk = pairs.slice(i, i + chunkSize);
+        const requestBody = {
+          list: chunk.map((vp) => [vp.id1, vp.id2]),
+          fields: ['vid', 'spelling', 'card_state'],
+        };
+        const response = await this.makeApiRequest('https://jpdb.io/api/v1/lookup-vocabulary', requestBody);
+
+        if (!response.vocabulary_info || !Array.isArray(response.vocabulary_info)) continue;
+        response.vocabulary_info.forEach((vocabInfo: unknown, index: number) => {
+          if (!Array.isArray(vocabInfo) || vocabInfo.length < 2) return;
+          const wordId = vocabInfo[0];
+          const spelling = vocabInfo[1];
+          const states = vocabInfo[2];
+          if (typeof wordId !== 'number' || typeof spelling !== 'string') return;
+          if (Array.isArray(states) && states.includes('redundant')) return;
+          result.push({ wordId, spelling, occurrences: chunk[index]?.occurrences ?? 1 });
+        });
+      }
+
+      return result;
+    }
+
     private async getUserDecks(): Promise<any[]> {
       const requestBody = { fields: ['id'] };
 
@@ -79,21 +173,23 @@ export const useJpdbApi = () => {
       return deckIds;
     }
 
-    private async getDeckVocabulary(deckId: number): Promise<VocabularyIdPair[]> {
-      const requestBody = { id: deckId, fetch_occurences: false };
+    private async getDeckVocabulary(deckId: number, fetchOccurrences = false): Promise<VocabularyIdPair[]> {
+      const requestBody = { id: deckId, fetch_occurences: fetchOccurrences };
 
       const response = await this.makeApiRequest('https://jpdb.io/api/v1/deck/list-vocabulary', requestBody);
 
       const vocabularyPairs: VocabularyIdPair[] = [];
       if (response.vocabulary && Array.isArray(response.vocabulary)) {
-        for (const vocabItem of response.vocabulary) {
+        const occurrences = Array.isArray(response.occurences) ? response.occurences : [];
+        response.vocabulary.forEach((vocabItem: unknown, index: number) => {
           if (Array.isArray(vocabItem) && vocabItem.length >= 2) {
             vocabularyPairs.push({
               id1: vocabItem[0],
               id2: vocabItem[1],
+              occurrences: typeof occurrences[index] === 'number' ? occurrences[index] : undefined,
             });
           }
-        }
+        });
       }
 
       return vocabularyPairs;
