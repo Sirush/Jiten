@@ -7,6 +7,7 @@
   import type { TagCloudEntry } from '~/components/MediaListTagCloud.vue';
   import { countActiveFilters, MEDIA_RANGE_SPECS, readRangeBounds, type MediaRangeKey, type MediaRangeRefs } from '~/utils/mediaFilterRanges';
   import type { RangeBounds } from '~/utils/rangeFilters';
+  import type { MediaStatusToken } from '~/utils/mediaStatusFilter';
 
   const props = withDefaults(
     defineProps<{
@@ -23,7 +24,7 @@
     reset: [];
   }>();
 
-  const statusFilter = defineModel<string>('statusFilter', { required: true });
+  const statusFilter = defineModel<MediaStatusToken[]>('statusFilter', { required: true });
   const charCountMin = defineModel<number | null>('charCountMin', { required: true });
   const charCountMax = defineModel<number | null>('charCountMax', { required: true });
   const difficultyMin = defineModel<number | null>('difficultyMin', { required: true });
@@ -114,16 +115,6 @@
     breakpoint.addEventListener('change', syncBreakpoint);
   });
   onBeforeUnmount(() => breakpoint?.removeEventListener('change', syncBreakpoint));
-
-  const statusFilterOptions = [
-    { label: 'Show All', value: 'none' },
-    { label: 'Without Status', value: 'nostatus' },
-    { label: 'Only Ignored', value: 'ignore' },
-    { label: 'Only Planning', value: 'planning' },
-    { label: 'Only Ongoing', value: 'ongoing' },
-    { label: 'Only Completed', value: 'completed' },
-    { label: 'Only Dropped', value: 'dropped' },
-  ];
 
   const { data: availableTags } = useApiFetch<Tag[]>('media-deck/tags', {
     server: true,
@@ -335,7 +326,6 @@
           split
           :is-connected="isConnected"
           :char-count-steps="CHAR_COUNT_STEPS"
-          :status-options="statusFilterOptions"
         >
           <template #panes>
             <template v-if="showGenreSection">
@@ -417,8 +407,7 @@
               mobile
               :is-connected="isConnected"
               :char-count-steps="CHAR_COUNT_STEPS"
-              :status-options="statusFilterOptions"
-            >
+                >
               <template #before>
                 <button
                   type="button"

@@ -11,6 +11,7 @@
   import { useAuthStore } from '~/stores/authStore';
   import { LazyHydrateMediaDeckCard, LazyHydrateMediaDeckCompactView, LazyHydrateMediaDeckTableView } from '~/utils/lazyHydratedComponents';
   import { type DeckSortOption, deckSortMeta, deckSortOption, deckSortOrdering, deckSortLabels } from '~/utils/deckSorting';
+  import { type MediaStatusToken, parseStatusFilter, serialiseStatusFilter, statusFilterHasFav } from '~/utils/mediaStatusFilter';
   import {
     MEDIA_FILTER_PRESETS_ENDPOINT,
     type MediaFilterPreset,
@@ -102,7 +103,8 @@
 
   // Legacy URLs carried status=fav before favourite became its own flag.
   const rawStatus = Array.isArray(route.query.status) ? route.query.status[0] : route.query.status;
-  const statusFilter = ref(rawStatus && rawStatus !== 'fav' ? rawStatus : 'none');
+  const statusFilter = ref<MediaStatusToken[]>(parseStatusFilter(rawStatus));
+  const statusQuery = computed(() => serialiseStatusFilter(statusFilter.value) ?? undefined);
 
   const authStore = useAuthStore();
   const isConnected = computed(() => authStore.isAuthenticated);
@@ -149,7 +151,7 @@
   const uTotalCoverageMin = ref<number | null>(toNumOrNull(route.query.uTotalCoverageMin));
   const uTotalCoverageMax = ref<number | null>(toNumOrNull(route.query.uTotalCoverageMax));
   const excludeSequels = ref<boolean | null>(toBooleanOrNull(route.query.excludeSequels));
-  const favourite = ref<boolean | null>(rawStatus === 'fav' ? true : toBooleanOrNull(route.query.favourite));
+  const favourite = ref<boolean | null>(statusFilterHasFav(rawStatus) ? true : toBooleanOrNull(route.query.favourite));
 
   // Genre and Tag filter state
   const includeGenres = ref<number[]>([]);
@@ -411,7 +413,7 @@
     excludeTags.value = [];
 
     // Status filter
-    statusFilter.value = 'none';
+    statusFilter.value = [];
 
     // Update URL state
     router.replace({
@@ -466,7 +468,7 @@
       title: titleFilter.value,
       sortBy: sortBy.value,
       sortOrder: sortOrder.value,
-      status: statusFilter.value === 'none' ? null : statusFilter.value,
+      status: serialiseStatusFilter(statusFilter.value),
       charCountMin: charCountMin.value,
       charCountMax: charCountMax.value,
       difficultyMin: difficultyMin.value,
@@ -517,8 +519,8 @@
     titleFilter.value = query.title ?? null;
     debouncedTitleFilter.value = titleFilter.value;
     // Presets saved before the split may still carry status=fav.
-    statusFilter.value = query.status && query.status !== 'fav' ? query.status : 'none';
-    favourite.value = query.status === 'fav' ? true : toBooleanOrNull(query.favourite);
+    statusFilter.value = parseStatusFilter(query.status);
+    favourite.value = statusFilterHasFav(query.status) ? true : toBooleanOrNull(query.favourite);
     sortBy.value = query.sortBy ?? sortByOptions.value[0].value;
     sortOrder.value = query.sortOrder != null ? Number(query.sortOrder) : (deckSortMeta[sortBy.value as string]?.default ?? SortOrder.Ascending);
 
@@ -715,12 +717,12 @@
     });
   });
 
-  watch(statusFilter, (newValue) => {
+  watch(statusQuery, (newValue) => {
     if (applyingPreset.value) return;
     router.replace({
       query: {
         ...route.query,
-        status: newValue === 'none' ? undefined : newValue,
+        status: newValue,
         offset: 0,
       },
     });
@@ -746,7 +748,7 @@
       titleFilter: debouncedTitleFilter,
       sortBy: sortBy,
       sortOrder: sortOrder,
-      status: statusFilter,
+      status: statusQuery,
       charCountMin: computed(() => debouncedFilters.value.charCountMin),
       charCountMax: computed(() => debouncedFilters.value.charCountMax),
       difficultyMin: computed(() => debouncedFilters.value.difficultyMin),

@@ -835,7 +835,7 @@ public class MediaDeckController(
     /// <param name="titleFilter">Full‑text filter on title (supports romaji/english/japanese).</param>
     /// <param name="sortBy">Sort field (title, difficulty, charCount, wordCount, sentenceLength, dialoguePercentage, subtitleRate, uKanji, uWordCount, uKanjiOnce, filter, releaseDate, coverage, uCoverage, totalCoverage, uTotalCoverage, communityVotes, popularity, etc.).</param>
     /// <param name="sortOrder">Ascending or Descending.</param>
-    /// <param name="status">Status (none, nostatus, ignore, planning, ongoing, completed, dropped; "fav" is a legacy alias for favourite=true)</param>
+    /// <param name="status">Comma-separated statuses, OR-ed together (nostatus, ignore, planning, ongoing, completed, dropped; empty or "none" shows all). Ignored decks are hidden unless "ignore" is listed. "fav" is a legacy alias for favourite=true.</param>
     /// <param name="favourite">If true, only decks the user has favourited are returned.</param>
     /// <returns>Paginated list of decks.</returns>
     [HttpGet("get-media-decks")]
@@ -1004,58 +1004,21 @@ public class MediaDeckController(
             ignoredDeckIds = prefsList.Where(p => p.IsIgnored).Select(p => p.DeckId).ToHashSet();
         }
 
-        // Legacy alias: "fav" predates the standalone favourite flag and must keep working for old URLs and presets.
-        var normalizedStatus = status?.ToLowerInvariant() ?? "";
-        if (normalizedStatus == "fav")
-        {
+        var statusFilter = MediaStatusFilter.Parse(status);
+        if (statusFilter.Favourite)
             favourite = true;
-            normalizedStatus = "none";
-        }
 
         if (currentUserService.IsAuthenticated && favourite == true)
         {
             query = query.Where(d => favDeckIds.Contains(d.DeckId));
         }
 
-        if (currentUserService.IsAuthenticated && normalizedStatus.Length > 0)
+        if (currentUserService.IsAuthenticated)
         {
-            if (normalizedStatus == "ignore")
-            {
-                query = query.Where(d => ignoredDeckIds.Contains(d.DeckId));
-            }
-            else if (normalizedStatus == "nostatus")
-            {
-                var decksWithStatus = allUserPrefs
-                                      .Where(p => p.Value.Status != DeckStatus.None)
-                                      .Select(p => p.Key)
-                                      .ToHashSet();
-                query = query.Where(d => !decksWithStatus.Contains(d.DeckId));
-            }
-            else if (normalizedStatus != "none")
-            {
-                DeckStatus? deckStatus = normalizedStatus switch
-                {
-                    "planning" => DeckStatus.Planning,
-                    "ongoing" => DeckStatus.Ongoing,
-                    "completed" => DeckStatus.Completed,
-                    "dropped" => DeckStatus.Dropped,
-                    _ => null
-                };
-
-                if (deckStatus.HasValue)
-                {
-                    var statusDeckIds = allUserPrefs
-                                        .Where(p => p.Value.Status == deckStatus.Value)
-                                        .Select(p => p.Key)
-                                        .ToHashSet();
-                    query = query.Where(d => statusDeckIds.Contains(d.DeckId));
-                }
-            }
-        }
-
-        if (currentUserService.IsAuthenticated && normalizedStatus != "ignore")
-        {
-            query = query.Where(d => !ignoredDeckIds.Contains(d.DeckId));
+            var (deckIds, exclude) = statusFilter.ResolveDeckIds(allUserPrefs.Values, ignoredDeckIds);
+            query = exclude
+                ? query.Where(d => !deckIds.Contains(d.DeckId))
+                : query.Where(d => deckIds.Contains(d.DeckId));
         }
 
         query = query.Include(d => d.Links)

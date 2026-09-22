@@ -5,12 +5,13 @@
   import { getGenreText } from '~/utils/genreMapper';
   import { NOT_ORIGINALLY_JP_TAG_ID } from '~/utils/tags';
   import { buildRangeChips, readRangeBounds, type MediaRangeRefs } from '~/utils/mediaFilterRanges';
+  import { mediaStatusLabel, type MediaStatusToken } from '~/utils/mediaStatusFilter';
 
   const emit = defineEmits<{
     reset: [];
   }>();
 
-  const statusFilter = defineModel<string>('statusFilter', { required: true });
+  const statusFilter = defineModel<MediaStatusToken[]>('statusFilter', { required: true });
   const charCountMin = defineModel<number | null>('charCountMin', { required: true });
   const charCountMax = defineModel<number | null>('charCountMax', { required: true });
   const difficultyMin = defineModel<number | null>('difficultyMin', { required: true });
@@ -62,15 +63,6 @@
 
   const { data: availableTags } = useApiFetch<Tag[]>('media-deck/tags', { server: true, lazy: false });
 
-  const statusChipLabels: Record<string, string> = {
-    nostatus: 'Without status',
-    ignore: 'Ignored',
-    planning: 'Planning',
-    ongoing: 'Ongoing',
-    completed: 'Completed',
-    dropped: 'Dropped',
-  };
-
   const tagName = (tagId: number) => availableTags.value?.find((tag) => tag.tagId === tagId)?.name ?? `Tag ${tagId}`;
 
   const removeFrom = (list: Ref<number[]>, id: number) => {
@@ -82,13 +74,13 @@
   const chips = computed<FilterChip[]>(() => {
     const result: FilterChip[] = [];
 
-    if (statusFilter.value !== 'none') {
+    for (const token of statusFilter.value) {
       result.push({
-        key: 'status',
-        label: statusChipLabels[statusFilter.value] ?? 'Status',
+        key: `status-${token}`,
+        label: mediaStatusLabel(token),
         excluded: false,
         clear: () => {
-          statusFilter.value = 'none';
+          statusFilter.value = statusFilter.value.filter((entry) => entry !== token);
         },
       });
     }

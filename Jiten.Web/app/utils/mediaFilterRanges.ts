@@ -94,7 +94,7 @@ export const buildRangeChips = (ranges: Record<MediaRangeKey, RangeBounds>): { k
 
 export type MediaFilterSnapshot = {
   ranges: Record<MediaRangeKey, RangeBounds>;
-  statusFilter: string;
+  statusFilter: readonly string[];
   includeGenres: number[];
   excludeGenres: number[];
   includeTags: number[];
@@ -109,7 +109,7 @@ export const countActiveFilters = (snapshot: MediaFilterSnapshot): number => {
     const bounds = snapshot.ranges[spec.key];
     if (bounds && (bounds.min != null || bounds.max != null)) count++;
   }
-  if (snapshot.statusFilter !== 'none') count++;
+  count += snapshot.statusFilter.length;
   if (snapshot.excludeSequels) count++;
   if (snapshot.favourite) count++;
   count += snapshot.includeGenres.length + snapshot.excludeGenres.length;
