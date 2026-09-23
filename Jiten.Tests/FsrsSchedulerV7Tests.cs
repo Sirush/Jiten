@@ -114,6 +114,19 @@ public class FsrsSchedulerV7Tests
     }
 
     [Fact]
+    public void MinimumReviewInterval_FloorsReviewGradesButNotSteps()
+    {
+        var card = new FsrsCard("u", 1, 0, state: FsrsState.Review, stability: 0.4254, difficulty: 9.76, lastReview: Start) { StabilityFast = 5.0 };
+        var scheduler = new FsrsScheduler(parameters: W, enableFuzzing: false, minimumReviewIntervalDays: 1);
+
+        var preview = scheduler.PreviewOutcomes(card, Start.AddSeconds(15));
+
+        preview[FsrsRating.Good].Interval.Should().Be(TimeSpan.FromDays(1));
+        preview[FsrsRating.Hard].Interval.Should().Be(TimeSpan.FromDays(1));
+        preview[FsrsRating.Again].Interval.Should().Be(scheduler.RelearningSteps[0]);
+    }
+
+    [Fact]
     public void Retrievability_AndStabilityDays_UseTheFullState()
     {
         var scheduler = Scheduler();

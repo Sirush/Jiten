@@ -142,7 +142,7 @@ dotnet run --project Jiten.Cli -- --search-lookup "そうする"    # Lookups ta
 
 **Key files for parser fixes:**
 
-- `Jiten.Parser/MorphologicalAnalyser.cs`: `SpecialCases2`/`SpecialCases3` (hardcoded token combinations), `MisparsesRemove` (tokens to filter), `Combine*` methods (merging logic), `PreprocessText()` (forced splits), `RepairNTokenisation()` (ん-form fixes)
+- `MorphologicalAnalyser` is a partial class: `SpecialCases2`/`SpecialCases3` (hardcoded token combinations) in `Jiten.Parser/Helpers/MorphologicalAnalyser.RuleData.cs`, `Combine*` methods (merging logic) in `Stages/MorphologicalAnalyser.CombineStages.cs`, `RepairNTokenisation()` (ん-form fixes) in `Stages/MorphologicalAnalyser.RepairStages.cs`, `PreprocessText()` (forced splits) in `Helpers/MorphologicalAnalyser.TextProcessing.cs`. `MisparsesRemove` (tokens to filter) is in `Jiten.Parser/Parser.cs`
 - `Jiten.Parser/Stages/MorphologicalAnalyser.RewriteRules.cs`: declarative token-rewrite table + engine. **A new single-surface lexical fix (pin a WordId, or split/merge a specific surface into fixed tokens) should be a `RewriteRule` row here, not a hand-rolled `if`-block.** The engine owns offsets, readings-from-templates, cloning, and pin/conjugation recovery. Phases: `Cleanup` (runs before `FilterMisparse`), `Late` (mora-theft position), `Early` (ProcessSpecialCases position). A rule pin is soft by default (lookup-time compound matching may absorb the token into a longer attested span); set `HardPin` when the pin is a final word decision that compound matching must not swallow. Add a new pipeline **stage** only for a pattern-general mechanism, never a single lexical pattern. Context-heavy logic (wider/dynamic window scans, dynamic readings, POS-section edits, multi-token mutation, order-dependent-on-another-block) legitimately stays as code.
 - `Shared/resources/deconjugator.json`: Rule-based deconjugation (~1500 rules). Types: `stdrule`, `rewriterule`, `onlyfinalrule`, `neverfinalrule`, `contextrule`. Fields: `dec_end`/`con_end` (endings), `dec_tag`/`con_tag` (grammar tags). Search for specific endings or `"detail": "past"` etc.
 - `Shared/resources/user_dic.xml`: Custom Sudachi dictionary entries. Format: `surface,leftId,rightId,cost,display,pos1,pos2,pos3,pos4,conjType,conjForm,reading,normalised,dictFormId,splitType,splitA,splitB,unused`. Regenerate after editing: `sudachi ubuild "Y:\CODE\Jiten\Shared\resources\user_dic.xml" -s "S:\Jiten\sudachi.rs\resources\system_full.dic" -o "Y:\CODE\Jiten\Shared\resources\user_dic.dic"`
@@ -151,7 +151,7 @@ dotnet run --project Jiten.Cli -- --search-lookup "そうする"    # Lookups ta
 1. `--run-parser-tests` → identify failures
 2. `--parse-test "input"` → full diagnostics per failure
 3. Analyse `sudachi` and `tokenStages` to identify cause
-4. Apply fix: Sudachi issue → `user_dic.xml`/`PreprocessText()`; missing combination → `SpecialCases2/3`; wrong merge → Combine* method; deconjugation → `deconjugator.json`; word matching → `FindValidCompoundWordId`/`GetBestReadingIndex`
+4. Apply fix: Sudachi issue → `user_dic.xml`/`PreprocessText()`; missing combination → `SpecialCases2/3`; wrong merge → Combine* method; deconjugation → `deconjugator.json`; word matching → `TryLookupUsableCompound`/`GetBestReadingIndex` in `Parser.cs`
 5. **Flush Redis** with `--flush-redis`
 6. Re-run failing test, then full suite for regressions
 

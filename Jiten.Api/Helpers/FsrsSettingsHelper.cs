@@ -97,7 +97,8 @@ public static class FsrsSettingsHelper
                relearningSteps: GetRelearningSteps(studySettings),
                enableFuzzing: enableFuzzing,
                loadBalancer: loadBalancer,
-               easyDays: easyDays);
+               easyDays: easyDays,
+               minimumReviewIntervalDays: studySettings.DayBoundaryScheduling ? 1 : 0);
 
     public static async Task<FsrsScheduler> CreateSchedulerAsync(UserDbContext userContext, string userId, bool enableFuzzing)
         => CreateScheduler(await LoadAsync(userContext, userId), enableFuzzing);

@@ -171,6 +171,34 @@ public class LearningStepsTests(JitenWebApplicationFactory factory)
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DayBoundary_GivesAReviewCardAtLeastADay(bool dayBoundary)
+    {
+        var now = DateTime.UtcNow;
+        (await PutSettings(new StudySettingsDto { DayBoundaryScheduling = dayBoundary, Timezone = TestZones.WithLocalHour(now, 12) }))
+            .EnsureSuccessStatusCode();
+        var fsrs7 = string.Join(",", FsrsConstants.DefaultParametersV7.Select(v => v.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        (await _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, "/api/srs/settings").WithUser(TestUsers.UserA)
+                                     .WithJsonContent(new { parameters = fsrs7 }))).EnsureSuccessStatusCode();
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 1, 0, state: FsrsState.Review, stability: 0.4254, difficulty: 9.76,
+                                          due: now, lastReview: now.AddSeconds(-15)) { StabilityFast = 5.0 });
+        await userDb.SaveChangesAsync();
+
+        var review = await Review(3);
+        review.GetProperty("newState").GetInt32().Should().Be((int)FsrsState.Review);
+
+        var card = await userDb.FsrsCards.AsNoTracking().SingleAsync(c => c.UserId == TestUsers.UserA && c.WordId == 1);
+        if (dayBoundary)
+            card.Due.Should().BeOnOrAfter(now.AddDays(1));
+        else
+            card.Due.Should().BeBefore(now.AddDays(1), "FSRS-7 schedules this card minutes out");
+    }
+
+    [Theory]
     [InlineData(false, true)]
     [InlineData(true, false)]
     public async Task ReviewAhead_SkipsAReviewCardGradedToday(bool reviewedToday, bool served)
