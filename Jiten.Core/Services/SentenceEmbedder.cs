@@ -64,7 +64,12 @@ public sealed class SentenceEmbedder : IDisposable
         using var spm = File.OpenRead(spmPath);
         _tokenizer = SentencePieceTokenizer.Create(spm, false, false);
 
-        var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+        var options = new SessionOptions
+        {
+            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
+            // The arena grows to the largest batch (GBs at 32 x 512 tokens) and never shrinks in this long-lived session.
+            EnableCpuMemArena = false,
+        };
         if (intraOpThreads is > 0)
             options.IntraOpNumThreads = intraOpThreads.Value;
         _session = new InferenceSession(modelPath, options);
