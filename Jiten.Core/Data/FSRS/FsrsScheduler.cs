@@ -322,9 +322,12 @@ public class FsrsScheduler
     }
 
     public Dictionary<FsrsRating, TimeSpan> PreviewIntervals(FsrsCard card, DateTime? reviewDateTime = null)
+        => PreviewOutcomes(card, reviewDateTime).ToDictionary(p => p.Key, p => p.Value.Interval);
+
+    public Dictionary<FsrsRating, FsrsPreviewOutcome> PreviewOutcomes(FsrsCard card, DateTime? reviewDateTime = null)
     {
         reviewDateTime ??= DateTime.UtcNow;
-        var result = new Dictionary<FsrsRating, TimeSpan>();
+        var result = new Dictionary<FsrsRating, FsrsPreviewOutcome>();
 
         foreach (var rating in new[] { FsrsRating.Again, FsrsRating.Hard, FsrsRating.Good, FsrsRating.Easy })
         {
@@ -335,9 +338,15 @@ public class FsrsScheduler
 
             UpdateCardParameters(clone, rating, reviewDateTime.Value, daysSinceLastReview);
             var interval = CalculateNextInterval(clone, rating);
-            result[rating] = interval;
+            result[rating] = new FsrsPreviewOutcome(interval, clone.State);
         }
 
         return result;
     }
+}
+
+/// <summary>A grade's interval and the state it leaves the card in; FSRS-7 Review intervals can be minutes, so only the state tells a step from a review.</summary>
+public readonly record struct FsrsPreviewOutcome(TimeSpan Interval, FsrsState State)
+{
+    public bool IsStep => State is FsrsState.Learning or FsrsState.Relearning;
 }

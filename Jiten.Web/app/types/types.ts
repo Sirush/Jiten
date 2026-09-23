@@ -1347,6 +1347,9 @@ export interface IntervalPreviewDto {
   hardSeconds: number;
   goodSeconds: number;
   easySeconds: number;
+  hardIsStep?: boolean;
+  goodIsStep?: boolean;
+  easyIsStep?: boolean;
 }
 
 export interface StudyReadingDto {

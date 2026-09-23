@@ -156,6 +156,78 @@ public class LearningStepsTests(JitenWebApplicationFactory factory)
         due.Should().Be(served ? 1 : 0);
     }
 
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task DayBoundary_HoldsAReviewCardGradedTodayUntilItIsDue(bool reviewedToday, bool served)
+    {
+        var now = DateTime.UtcNow;
+        (await PutSettings(new StudySettingsDto { DayBoundaryScheduling = true, Timezone = TestZones.WithLocalHour(now, 12) }))
+            .EnsureSuccessStatusCode();
+        await SeedReviewCard(due: now.AddMinutes(9), lastReview: reviewedToday ? now.AddMinutes(-1) : now.AddDays(-10));
+
+        (await BatchWordIds("")).Contains(1).Should().Be(served);
+        (await ReviewsDue()).Should().Be(served ? 1 : 0);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task ReviewAhead_SkipsAReviewCardGradedToday(bool reviewedToday, bool served)
+    {
+        var now = DateTime.UtcNow;
+        (await PutSettings(new StudySettingsDto { Timezone = TestZones.WithLocalHour(now, 12) })).EnsureSuccessStatusCode();
+        await SeedReviewCard(due: now.AddHours(3), lastReview: reviewedToday ? now.AddMinutes(-1) : now.AddDays(-10));
+
+        (await BatchWordIds("&aheadMinutes=1440")).Contains(1).Should().Be(served);
+    }
+
+    [Fact]
+    public async Task IntervalPreview_FlagsOnlyGradesThatStayOnAStep()
+    {
+        (await PutSettings(new StudySettingsDto { LearningSteps = [10, 30] })).EnsureSuccessStatusCode();
+
+        var learning = await Review(3);
+        var preview = learning.GetProperty("intervalPreview");
+        learning.GetProperty("newState").GetInt32().Should().Be((int)FsrsState.Learning);
+        preview.GetProperty("hardIsStep").GetBoolean().Should().BeTrue();
+        preview.GetProperty("goodIsStep").GetBoolean().Should().BeFalse("Good on the last step graduates");
+        preview.GetProperty("easyIsStep").GetBoolean().Should().BeFalse();
+    }
+
+    private async Task SeedReviewCard(DateTime due, DateTime lastReview)
+    {
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 1, 0, state: FsrsState.Review,
+                                          stability: 0.01, difficulty: 9, due: due, lastReview: lastReview));
+        await userDb.SaveChangesAsync();
+    }
+
+    private async Task<List<int>> BatchWordIds(string query)
+    {
+        var batch = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, $"/api/srs/study-batch?limit=10{query}").WithUser(TestUsers.UserA));
+        batch.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await batch.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("cards").EnumerateArray().Select(c => c.GetProperty("wordId").GetInt32()).ToList();
+    }
+
+    private async Task<int> ReviewsDue()
+    {
+        var summary = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/srs/due-summary").WithUser(TestUsers.UserA));
+        summary.StatusCode.Should().Be(HttpStatusCode.OK);
+        return (await summary.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("reviewsDue").GetInt32();
+    }
+
+    private async Task<JsonElement> Review(int rating)
+    {
+        var review = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/srs/review")
+                                             .WithUser(TestUsers.UserA)
+                                             .WithJsonContent(new { wordId = 1, readingIndex = 0, rating }));
+        review.StatusCode.Should().Be(HttpStatusCode.OK);
+        return await review.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
     private async Task<HttpResponseMessage> PutSettings(StudySettingsDto dto)
         => await _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
                                    .WithUser(TestUsers.UserA)
