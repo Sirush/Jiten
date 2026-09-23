@@ -13,6 +13,10 @@ public class KanjiDto
     public List<WordSummaryDto>? TopWords { get; set; }
     public List<KanjiReadingWordsDto>? WordsByReading { get; set; }
     public List<KanjiComponentDto> Components { get; set; } = [];
+
+    /// <summary>Set only when the radical sits inside a component rather than being one.</summary>
+    public KanjiNestedRadicalDto? NestedRadical { get; set; }
+
     public List<KanjiUsedInDto> UsedIn { get; set; } = [];
     public int UsedInTotal { get; set; }
     public KanjiStrokesDto? Strokes { get; set; }
@@ -28,6 +32,17 @@ public class KanjiComponentDto
     public string? Meaning { get; set; }
     public bool IsRadical { get; set; }
     public bool IsPhonetic { get; set; }
+}
+
+public class KanjiNestedRadicalDto
+{
+    public string Character { get; set; } = "";
+    public string? Original { get; set; }
+    public string? LinkCharacter { get; set; }
+    public string? Meaning { get; set; }
+
+    /// <summary>The direct component of the kanji that contains the radical.</summary>
+    public string Inside { get; set; } = "";
 }
 
 public class KanjiUsedInDto

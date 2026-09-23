@@ -134,7 +134,7 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                 .ToList()
         }).ToList();
 
-        var components = await LoadComponents(character);
+        var (components, nestedRadical) = await LoadComponents(character);
 
         var usedInQuery = UsedInQuery(character);
         var usedInTotal = await usedInQuery.CountAsync();
@@ -151,7 +151,7 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                               Character = kanji.Character, OnReadings = kanji.OnReadings, KunReadings = kanji.KunReadings,
                               Meanings = kanji.Meanings, StrokeCount = kanji.StrokeCount, JlptLevel = kanji.JlptLevel, Grade = kanji.Grade,
                               FrequencyRank = kanji.FrequencyRank, TopWords = topWords, WordsByReading = wordsByReading,
-                              Components = components, UsedIn = usedIn, UsedInTotal = usedInTotal, Strokes = strokes
+                              Components = components, NestedRadical = nestedRadical, UsedIn = usedIn, UsedInTotal = usedInTotal, Strokes = strokes
                           });
     }
 
@@ -291,20 +291,22 @@ public class KanjiController(JitenDbContext context) : ControllerBase
 
     private const int UsedInPreviewCount = 30;
 
-    private async Task<List<KanjiComponentDto>> LoadComponents(string character)
+    private async Task<(List<KanjiComponentDto> Components, KanjiNestedRadicalDto? NestedRadical)> LoadComponents(string character)
     {
-        var nodes = await context.KanjiComponents
-                                 .AsNoTracking()
-                                 .Where(c => c.KanjiCharacter == character && c.ParentIndex == null)
-                                 .OrderBy(c => c.NodeIndex)
-                                 .ToListAsync();
-        if (nodes.Count == 0)
-            return [];
+        var tree = await context.KanjiComponents
+                                .AsNoTracking()
+                                .Where(c => c.KanjiCharacter == character)
+                                .OrderBy(c => c.NodeIndex)
+                                .ToListAsync();
+        if (tree.Count == 0)
+            return ([], null);
 
-        nodes = nodes.DistinctBy(n => n.Component).ToList();
+        var nodes = tree.Where(n => n.ParentIndex == null).DistinctBy(n => n.Component).ToList();
+        var nestedRadical = nodes.Any(n => n.IsRadical) ? null : tree.FirstOrDefault(n => n.IsRadical && n.ParentIndex != null);
 
-        var candidates = nodes.Select(n => n.Component)
-                              .Concat(nodes.Where(n => n.Original != null).Select(n => n.Original!))
+        var shown = nestedRadical == null ? nodes : nodes.Append(nestedRadical).ToList();
+        var candidates = shown.Select(n => n.Component)
+                              .Concat(shown.Where(n => n.Original != null).Select(n => n.Original!))
                               .Distinct()
                               .ToList();
         var meanings = await context.Kanjis
@@ -313,18 +315,35 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                                     .Select(k => new { k.Character, k.Meanings })
                                     .ToDictionaryAsync(k => k.Character, k => k.Meanings.FirstOrDefault());
 
-        return nodes.Select(n =>
-                    {
-                        var link = meanings.ContainsKey(n.Component) ? n.Component
-                            : n.Original != null && meanings.ContainsKey(n.Original) ? n.Original
-                            : null;
-                        return new KanjiComponentDto
-                               {
-                                   Character = n.Component, Original = n.Original, LinkCharacter = link,
-                                   Meaning = link != null ? meanings[link] : null, IsRadical = n.IsRadical, IsPhonetic = n.IsPhonetic
-                               };
-                    })
-                    .ToList();
+        string? LinkFor(Core.Data.JMDict.KanjiComponent n) =>
+            meanings.ContainsKey(n.Component) ? n.Component
+            : n.Original != null && meanings.ContainsKey(n.Original) ? n.Original
+            : null;
+
+        var components = nodes.Select(n =>
+                              {
+                                  var link = LinkFor(n);
+                                  return new KanjiComponentDto
+                                         {
+                                             Character = n.Component, Original = n.Original, LinkCharacter = link,
+                                             Meaning = link != null ? meanings[link] : null, IsRadical = n.IsRadical, IsPhonetic = n.IsPhonetic
+                                         };
+                              })
+                              .ToList();
+
+        if (nestedRadical == null)
+            return (components, null);
+
+        var top = nestedRadical;
+        while (top.ParentIndex != null)
+            top = tree[top.ParentIndex.Value];
+
+        var radicalLink = LinkFor(nestedRadical);
+        return (components, new KanjiNestedRadicalDto
+                            {
+                                Character = nestedRadical.Component, Original = nestedRadical.Original, LinkCharacter = radicalLink,
+                                Meaning = radicalLink != null ? meanings[radicalLink] : null, Inside = top.Component
+                            });
     }
 
     // Matching Original too lists 休 (亻, a variant of 人) under 人.

@@ -794,6 +794,7 @@ export interface Kanji {
   topWords?: WordSummary[];
   wordsByReading?: KanjiReadingWords[];
   components?: KanjiComponent[];
+  nestedRadical?: KanjiNestedRadical | null;
   usedIn?: KanjiUsedIn[];
   usedInTotal?: number;
   strokes?: KanjiStrokes | null;
@@ -806,6 +807,14 @@ export interface KanjiComponent {
   meaning: string | null;
   isRadical: boolean;
   isPhonetic: boolean;
+}
+
+export interface KanjiNestedRadical {
+  character: string;
+  original: string | null;
+  linkCharacter: string | null;
+  meaning: string | null;
+  inside: string;
 }
 
 export interface KanjiUsedIn {

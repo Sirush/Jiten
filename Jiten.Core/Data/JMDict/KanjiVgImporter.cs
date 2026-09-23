@@ -119,6 +119,8 @@ public static class KanjiVgImporter
             {
                 first.IsRadical |= isRadical;
                 first.IsPhonetic |= isPhonetic;
+                if (Depth(parentIndex, components) < Depth(first.ParentIndex, components))
+                    first.ParentIndex = parentIndex;
                 return first;
             }
         }
@@ -130,6 +132,14 @@ public static class KanjiVgImporter
                         };
         components.Add(component);
         return component;
+    }
+
+    private static int Depth(short? nodeIndex, List<KanjiComponent> components)
+    {
+        var depth = 0;
+        for (var index = nodeIndex; index != null; index = components[index.Value].ParentIndex)
+            depth++;
+        return depth;
     }
 
     private static List<float> ParseNumberPositions(XElement numberGroup)
