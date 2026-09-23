@@ -74,6 +74,9 @@ export default defineNuxtConfig({
     // The default 'automatic' only recovers on router navigation, leaving hydration-time preload
     // failures to render the error page
     emitRouteChunkError: 'automatic-immediate',
+    // Nuxt's own poll fires app:manifest:update, which 'automatic-immediate' turns into a reload mid-review;
+    // plugins/05.build-update.client.ts polls instead and prompts.
+    checkOutdatedBuildInterval: false,
   },
   primevue: {
     // Build-time theme import; putting the preset in `options.theme` instead would serialise

@@ -43,8 +43,11 @@
     window.removeEventListener('click', dismissProgressTooltip);
   });
 
+  const reloadingForUpdate = useState('build-update-reloading', () => false);
+
   function onBeforeUnload(e: BeforeUnloadEvent) {
-    if (hasActiveSession.value) {
+    // The session cache persists on pagehide, so an update reload resumes where the user left off.
+    if (hasActiveSession.value && !reloadingForUpdate.value) {
       e.preventDefault();
     }
   }

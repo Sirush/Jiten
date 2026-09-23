@@ -295,8 +295,8 @@ public class SrsController(
         if (hasIdempotency)
             await sessionService.StoreCachedReviewResult(idempotencyScope, request.ClientRequestId!, System.Text.Json.JsonSerializer.Serialize(resultObj));
 
-        logger.LogInformation("User reviewed SRS card: WordId={WordId}, ReadingIndex={ReadingIndex}, Rating={Rating}, NewState={NewState}",
-                              request.WordId, request.ReadingIndex, request.Rating, cardAndLog.UpdatedCard.State);
+        logger.LogInformation("User reviewed SRS card: WordId={WordId}, ReadingIndex={ReadingIndex}, Rating={Rating}, NewState={NewState}, AutoBuried={AutoBuried}, LeechSuspended={LeechSuspended}",
+                              request.WordId, request.ReadingIndex, request.Rating, cardAndLog.UpdatedCard.State, autoBuried, leechSuspended);
         return Results.Json(resultObj);
     }
 
