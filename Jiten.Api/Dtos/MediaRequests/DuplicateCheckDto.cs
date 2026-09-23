@@ -15,7 +15,10 @@ public class DuplicateCheckDeckDto
 {
     public int DeckId { get; set; }
     public required string Title { get; set; }
+    public string? RomajiTitle { get; set; }
+    public string? EnglishTitle { get; set; }
     public MediaType MediaType { get; set; }
+    public bool IsExactMatch { get; set; }
 }
 
 public class DuplicateCheckRequestDto
@@ -25,4 +28,5 @@ public class DuplicateCheckRequestDto
     public MediaType MediaType { get; set; }
     public MediaRequestStatus Status { get; set; }
     public int UpvoteCount { get; set; }
+    public bool IsExactMatch { get; set; }
 }

@@ -12,7 +12,8 @@
   import { useToast } from 'primevue/usetoast';
   import JSZip from 'jszip';
   import type { Metadata, DuplicateCheckDeckDto } from '~/types';
-  import type { MediaRequestDto, MediaRequestUploadAdminDto } from '~/types/types';
+  import type { DuplicateCheckRequestDto, DuplicateCheckResultDto, MediaRequestDto, MediaRequestUploadAdminDto } from '~/types/types';
+  import { getRequestStatusText } from '~/utils/requestStatusMapper';
   import { MediaType } from '~/types';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getLinkLabel } from '~/utils/linkTypeMapper';
@@ -36,6 +37,7 @@
   const route = useRoute();
   const { $api } = useNuxtApp();
   const { fetchRequest, fetchComments, downloadUploadFile, reviewUpload } = useMediaRequests();
+  const localiseTitle = useLocaliseTitle();
 
   const fulfillingRequest = ref<MediaRequestDto | null>(null);
   const isPrefilling = ref(false);
@@ -55,21 +57,71 @@
   const selectedFile = ref<File | null>(null);
   const originalTitle = ref('');
   const duplicateDecks = ref<DuplicateCheckDeckDto[]>([]);
+  const matchingRequests = ref<DuplicateCheckRequestDto[]>([]);
+  const attachingRequestId = ref<number | null>(null);
+
+  const selectedMetadata = ref<Metadata | null>(null);
+  const metadataLinkUrls = computed(() => (selectedMetadata.value?.links ?? []).map((l) => l.url).filter((url): url is string => !!url));
 
   let duplicateTimeout: ReturnType<typeof setTimeout> | null = null;
-  watch(originalTitle, (newTitle) => {
-    if (duplicateTimeout) clearTimeout(duplicateTimeout);
-    if (newTitle.trim().length < 2) {
-      duplicateDecks.value = [];
-      return;
+  let duplicateCheckSeq = 0;
+  watch(
+    [originalTitle, selectedMediaType, metadataLinkUrls],
+    () => {
+      if (duplicateTimeout) clearTimeout(duplicateTimeout);
+      const seq = ++duplicateCheckSeq;
+      const trimmed = originalTitle.value.trim();
+      const links = metadataLinkUrls.value;
+      if (trimmed.length < 2 && links.length === 0) {
+        duplicateDecks.value = [];
+        matchingRequests.value = [];
+        return;
+      }
+      duplicateTimeout = setTimeout(async () => {
+        try {
+          const result = await $api<DuplicateCheckResultDto>('admin/duplicate-check', {
+            query: { title: trimmed, mediaType: selectedMediaType.value ?? undefined, links },
+          });
+          if (seq !== duplicateCheckSeq) return;
+          duplicateDecks.value = result?.existingDecks ?? [];
+          matchingRequests.value = result?.existingRequests ?? [];
+        } catch {
+          if (seq !== duplicateCheckSeq) return;
+          duplicateDecks.value = [];
+          matchingRequests.value = [];
+        }
+      }, 500);
+    },
+    { deep: true }
+  );
+
+  function attachRequest(request: MediaRequestDto) {
+    fulfillingRequest.value = request;
+    requestUploads.value = [];
+    fetchComments(request.id).then((comments) => {
+      if (fulfillingRequest.value?.id !== request.id) return;
+      requestUploads.value = comments
+        .map((c) => c.upload as MediaRequestUploadAdminDto | undefined)
+        .filter((u): u is MediaRequestUploadAdminDto => !!u && !u.fileDeleted);
+    });
+  }
+
+  function detachRequest() {
+    fulfillingRequest.value = null;
+    requestUploads.value = [];
+  }
+
+  async function selectMatchingRequest(requestId: number) {
+    if (attachingRequestId.value !== null) return;
+    attachingRequestId.value = requestId;
+    try {
+      const request = await fetchRequest(requestId);
+      if (request) attachRequest(request);
+      else showToast('warn', 'Request not found', `Request #${requestId} could not be loaded.`);
+    } finally {
+      attachingRequestId.value = null;
     }
-    duplicateTimeout = setTimeout(async () => {
-      duplicateDecks.value =
-        (await $api<DuplicateCheckDeckDto[]>('admin/duplicate-check', {
-          query: { title: newTitle.trim(), mediaType: selectedMediaType.value },
-        })) ?? [];
-    }, 500);
-  });
+  }
 
   const romajiTitle = ref('');
   const englishTitle = ref('');
@@ -86,7 +138,6 @@
 
   const searchResults = ref<Metadata[]>([]);
   const showSearchResultsDialog = ref(false);
-  const selectedMetadata = ref<Metadata | null>(null);
 
   const newSubdeckUploaderRef = ref<InstanceType<typeof FileUpload> | null>(null);
 
@@ -413,17 +464,11 @@
         return;
       }
 
-      fulfillingRequest.value = request;
+      attachRequest(request);
       selectedMediaType.value = request.mediaType;
       currentScreen.value = SCREEN_FILE_UPLOAD;
       searchQuery.value = request.title;
       originalTitle.value = request.title;
-
-      fetchComments(requestId).then((comments) => {
-        requestUploads.value = comments
-          .map((c) => c.upload as MediaRequestUploadAdminDto | undefined)
-          .filter((u): u is MediaRequestUploadAdminDto => !!u && !u.fileDeleted);
-      });
 
       if (!request.externalUrl) return;
 
@@ -473,6 +518,7 @@
       subdecks.value = [];
       rating.value = 0;
       duplicateDecks.value = [];
+      matchingRequests.value = [];
     }
   }
 
@@ -715,9 +761,43 @@
                     <p class="text-sm font-semibold text-orange-600 dark:text-orange-400 mb-1">This media may already exist:</p>
                     <div v-for="deck in duplicateDecks" :key="deck.deckId" class="flex items-center gap-2 text-sm py-1">
                       <NuxtLink :to="`/decks/media/${deck.deckId}/detail`" class="text-primary hover:underline" target="_blank">
-                        {{ deck.title }}
+                        {{ localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) }}
                       </NuxtLink>
+                      <Tag v-if="deck.isExactMatch" value="Exact match" severity="warn" class="text-xs" />
                     </div>
+                  </div>
+                  <div v-if="matchingRequests.length > 0" class="mt-3">
+                    <p class="text-sm font-semibold mb-1">Requests this could fulfil:</p>
+                    <div v-for="req in matchingRequests" :key="req.id" class="flex items-center gap-2 flex-wrap text-sm py-1">
+                      <Tag :value="getRequestStatusText(req.status)" severity="secondary" class="text-xs" />
+                      <NuxtLink :to="`/requests/${req.id}`" class="text-primary hover:underline break-words" target="_blank">
+                        #{{ req.id }} {{ req.title }}
+                      </NuxtLink>
+                      <span class="text-muted-color">({{ req.upvoteCount }} votes)</span>
+                      <Tag v-if="req.isExactMatch" value="Exact match" severity="warn" class="text-xs" />
+                      <Button
+                        v-if="fulfillingRequest?.id === req.id"
+                        label="Unlink"
+                        icon="pi pi-times"
+                        size="small"
+                        severity="secondary"
+                        text
+                        class="ml-auto"
+                        @click="detachRequest"
+                      />
+                      <Button
+                        v-else
+                        label="Fulfil this"
+                        icon="pi pi-link"
+                        size="small"
+                        severity="secondary"
+                        class="ml-auto"
+                        :loading="attachingRequestId === req.id"
+                        :disabled="attachingRequestId !== null"
+                        @click="selectMatchingRequest(req.id)"
+                      />
+                    </div>
+                    <small class="text-muted-color">Submitting links one request. Close any others by hand.</small>
                   </div>
                 </div>
                 <div class="mb-4">

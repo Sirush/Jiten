@@ -313,11 +313,16 @@ export function useMediaRequests() {
     }
   };
 
-  const checkDuplicates = async (title: string, targetDeckId?: number): Promise<DuplicateCheckResultDto | null> => {
+  const checkDuplicates = async (
+    title: string,
+    targetDeckId?: number,
+    externalUrl?: string,
+    mediaType?: MediaType
+  ): Promise<DuplicateCheckResultDto | null> => {
     error.value = null;
     try {
       return await $api<DuplicateCheckResultDto>('requests/duplicate-check', {
-        query: { title, targetDeckId },
+        query: { title, targetDeckId, externalUrl, mediaType },
       });
     } catch (e) {
       error.value = e as Error;

@@ -51,9 +51,9 @@ public class MediaDeckController(
     ICoverageJourneyService coverageJourneyService,
     Jiten.Core.Services.DeckVectorService deckVectorService,
     DescriptionSearchService descriptionSearchService,
+    MediaTitleSearchService titleSearch,
     IDeckActivityBuffer activityBuffer) : ControllerBase
 {
-    private record DeckIdWithCount(int DeckId, int TotalCount);
 
     private class DeckWithOccurrences
     {
@@ -503,82 +503,7 @@ public class MediaDeckController(
 
         limit = Math.Clamp(limit, 1, 10);
 
-        var originalFilter = query.Trim();
-        var romajiFilter = TextNormalizationHelper.ContainsRomaji(originalFilter)
-            ? TextNormalizationHelper.NormaliseRomaji(originalFilter)
-            : originalFilter;
-        var hasRomajiVariant = romajiFilter != originalFilter.ToLowerInvariant();
-        var filterNoSpaces = originalFilter.Replace(" ", "");
-        var romajiFilterNoSpaces = romajiFilter.Replace(" ", "");
-        var queryLength = originalFilter.Length;
-
-        FormattableString sql = $$"""
-                                  WITH exact_matches AS (
-                                      SELECT DISTINCT dt."DeckId",
-                                             0 AS match_priority,
-                                             100.0 AS score,
-                                             dt."TitleType",
-                                             LENGTH(dt."Title") AS title_length
-                                      FROM jiten."DeckTitles" dt
-                                      WHERE LOWER(dt."Title") = LOWER({{originalFilter}})
-                                         OR LOWER(dt."TitleNoSpaces") = LOWER({{filterNoSpaces}})
-                                         OR ({{hasRomajiVariant}} AND (LOWER(dt."Title") = {{romajiFilter}} OR LOWER(dt."TitleNoSpaces") = {{romajiFilterNoSpaces}}))
-                                  ),
-                                  fuzzy_title_matches AS (
-                                      SELECT dt."DeckId",
-                                             1 AS match_priority,
-                                             pgroonga_score(dt.tableoid, dt.ctid) AS score,
-                                             dt."TitleType",
-                                             LENGTH(dt."Title") AS title_length
-                                      FROM jiten."DeckTitles" dt
-                                      WHERE (dt."Title" &@~ {{originalFilter}} OR ({{hasRomajiVariant}} AND dt."Title" &@~ {{romajiFilter}}))
-                                        AND dt."DeckId" NOT IN (SELECT "DeckId" FROM exact_matches)
-                                  ),
-                                  fuzzy_nospace_matches AS (
-                                      SELECT dt."DeckId",
-                                             2 AS match_priority,
-                                             pgroonga_score(dt.tableoid, dt.ctid) AS score,
-                                             dt."TitleType",
-                                             LENGTH(dt."TitleNoSpaces") AS title_length
-                                      FROM jiten."DeckTitles" dt
-                                      WHERE dt."TitleType" IN (1, 3)
-                                        AND (dt."TitleNoSpaces" &@~ {{filterNoSpaces}} OR ({{hasRomajiVariant}} AND dt."TitleNoSpaces" &@~ {{romajiFilterNoSpaces}}))
-                                        AND dt."DeckId" NOT IN (SELECT "DeckId" FROM exact_matches)
-                                        AND dt."DeckId" NOT IN (SELECT "DeckId" FROM fuzzy_title_matches)
-                                  ),
-                                  all_matches AS (
-                                      SELECT * FROM exact_matches
-                                      UNION ALL
-                                      SELECT * FROM fuzzy_title_matches
-                                      UNION ALL
-                                      SELECT * FROM fuzzy_nospace_matches
-                                  ),
-                                  ranked AS (
-                                      SELECT "DeckId",
-                                             MIN(match_priority) AS best_match,
-                                             MIN(CASE "TitleType"
-                                                 WHEN 0 THEN 1
-                                                 WHEN 1 THEN 2
-                                                 WHEN 2 THEN 3
-                                                 ELSE 4
-                                             END) AS best_type,
-                                             MAX(score) AS best_score,
-                                             {{queryLength}}::float / NULLIF(MIN(title_length), 0)::float AS length_ratio
-                                      FROM all_matches
-                                      GROUP BY "DeckId"
-                                  )
-                                  SELECT r."DeckId", COUNT(*) OVER() AS "TotalCount"
-                                  FROM ranked r
-                                  JOIN jiten."Decks" d ON r."DeckId" = d."DeckId"
-                                  WHERE d."ParentDeckId" IS NULL
-                                  ORDER BY r.best_match ASC, r.length_ratio DESC, r.best_type ASC, r.best_score DESC
-                                  LIMIT {{limit}}
-                                  """;
-
-        var results = await context.Database.SqlQuery<DeckIdWithCount>(sql).ToListAsync();
-
-        if (results.Count == 0)
-            results = await LevenshteinSuggestionsFallback(originalFilter, filterNoSpaces, limit);
+        var results = await titleSearch.SearchPrimaryDecks(query, limit);
 
         if (results.Count == 0)
             return Ok(new MediaSuggestionsResponse());
@@ -3012,42 +2937,9 @@ public class MediaDeckController(
                    .Replace("_", LikeEscapeCharacter + "_");
     }
 
-    private static int GetLevenshteinMaxDistance(string query)
-    {
-        return query.Length switch
-        {
-            <= 5 => 1,
-            <= 12 => 2,
-            _ => 3
-        };
-    }
-
-    private async Task<List<DeckIdWithCount>> LevenshteinSuggestionsFallback(string filter, string filterNoSpaces, int limit)
-    {
-        var maxDist = GetLevenshteinMaxDistance(filter);
-
-        FormattableString sql = $$"""
-                                  SELECT DISTINCT ON (dt."DeckId") dt."DeckId", COUNT(*) OVER() AS "TotalCount"
-                                  FROM jiten."DeckTitles" dt
-                                  JOIN jiten."Decks" d ON dt."DeckId" = d."DeckId"
-                                  WHERE d."ParentDeckId" IS NULL
-                                    AND (levenshtein(LEFT(LOWER(dt."Title"), 255), LEFT(LOWER({{filter}}), 255)) <= {{maxDist}}
-                                      OR levenshtein(LEFT(LOWER(dt."TitleNoSpaces"), 255), LEFT(LOWER({{filterNoSpaces}}), 255)) <= {{maxDist}})
-                                  ORDER BY dt."DeckId",
-                                           LEAST(
-                                               levenshtein(LEFT(LOWER(dt."Title"), 255), LEFT(LOWER({{filter}}), 255)),
-                                               levenshtein(LEFT(LOWER(dt."TitleNoSpaces"), 255), LEFT(LOWER({{filterNoSpaces}}), 255))
-                                           ) ASC,
-                                           LENGTH(dt."Title") ASC
-                                  LIMIT {{limit}}
-                                  """;
-
-        return await context.Database.SqlQuery<DeckIdWithCount>(sql).ToListAsync();
-    }
-
     private async Task<List<int>> LevenshteinDeckIdsFallback(string filter, string filterNoSpaces)
     {
-        var maxDist = GetLevenshteinMaxDistance(filter);
+        var maxDist = MediaTitleSearchService.GetLevenshteinMaxDistance(filter);
 
         FormattableString sql = $$"""
                                   SELECT DISTINCT ON (dt."DeckId") dt."DeckId"

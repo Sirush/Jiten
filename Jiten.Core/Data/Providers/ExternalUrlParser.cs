@@ -13,8 +13,33 @@ public enum ExternalUrlKind
 /// <param name="Id">The provider's own identifier, in the form its by-id fetcher expects.</param>
 public readonly record struct ExternalUrlRef(LinkType LinkType, string Id, ExternalUrlKind Kind);
 
+/// <summary>Equal for every URL form that points at the same catalogue entry.</summary>
+/// <param name="Token">The id as it appears inside the URL text, so stored URLs can be narrowed with a substring match first.</param>
+public readonly record struct ExternalEntityKey(LinkType LinkType, ExternalUrlKind Kind, string Token);
+
 public static class ExternalUrlParser
 {
+    public static bool TryGetEntityKey(string? input, out ExternalEntityKey key)
+    {
+        key = default;
+
+        if (!TryParse(input, out var parsed))
+            return false;
+
+        var token = parsed.LinkType == LinkType.Igdb ? IgdbSlug(parsed.Id) : parsed.Id;
+        if (string.IsNullOrEmpty(token))
+            return false;
+
+        key = new ExternalEntityKey(parsed.LinkType, parsed.Kind, token);
+        return true;
+    }
+
+    /// <summary>The IGDB id is the whole URL, which differs by scheme, host and casing between two links to one game.</summary>
+    private static string IgdbSlug(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            ? uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).ElementAtOrDefault(1)?.ToLowerInvariant() ?? string.Empty
+            : string.Empty;
+
     /// <summary>
     /// Picks the first link of a type that a by-id fetcher can actually use. A deck may hold several links of one
     /// type pointing at different catalogue pages (a VNDB release alongside its visual novel), and the order they

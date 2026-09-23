@@ -497,6 +497,8 @@ builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
 builder.Services.AddScoped<IFrequencySourceResolver, FrequencySourceResolver>();
 builder.Services.AddScoped<IStudyDeckMembershipService, StudyDeckMembershipService>();
 builder.Services.AddScoped<DeckMetadataService>();
+builder.Services.AddScoped<MediaTitleSearchService>();
+builder.Services.AddScoped<MediaDuplicateService>();
 builder.Services.AddScoped<IDeckDownloadService, DeckDownloadService>();
 builder.Services.AddSingleton<Jiten.Api.Services.ExternalMediaList.ExternalFetchGate>();
 builder.Services.AddScoped<Jiten.Api.Services.ExternalMediaList.IExternalMediaListClient, Jiten.Api.Services.ExternalMediaList.ExternalMediaListClient>();

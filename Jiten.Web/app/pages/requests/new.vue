@@ -4,6 +4,7 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getRequestStatusText } from '~/utils/requestStatusMapper';
   import { detectLinkTypeFromUrl, getLinkTypeText } from '~/utils/linkTypeMapper';
+  import { hasExactDuplicate, isDuplicateGateSatisfied } from '~/utils/duplicateGate';
 
   definePageMeta({
     middleware: ['auth'],
@@ -70,17 +71,26 @@
   });
 
   let duplicateTimeout: ReturnType<typeof setTimeout> | null = null;
-  watch([title, isUpdate, targetDeckId], () => {
+  let duplicateCheckSeq = 0;
+  watch([title, isUpdate, targetDeckId, externalUrl, mediaType], () => {
     if (duplicateTimeout) clearTimeout(duplicateTimeout);
+    const seq = ++duplicateCheckSeq;
     const trimmed = title.value.trim();
     const deckId = isUpdate.value ? (targetDeckId.value ?? undefined) : undefined;
-    if (trimmed.length < 2 && deckId === undefined) {
+    const url = externalUrl.value.trim() || undefined;
+    const type = mediaType.value ?? undefined;
+    if (trimmed.length < 2 && deckId === undefined && !url) {
       duplicates.value = null;
       return;
     }
     duplicateTimeout = setTimeout(async () => {
-      duplicates.value = await checkDuplicates(trimmed, deckId);
+      const result = await checkDuplicates(trimmed, deckId, url, type);
+      if (seq === duplicateCheckSeq) duplicates.value = result;
     }, 500);
+  });
+
+  onBeforeUnmount(() => {
+    if (duplicateTimeout) clearTimeout(duplicateTimeout);
   });
 
   const duplicateDecks = computed(() => (isUpdate.value ? [] : (duplicates.value?.existingDecks ?? [])));
@@ -91,11 +101,18 @@
   });
   const hasDuplicateHints = computed(() => duplicateDecks.value.length > 0 || duplicateUpdateRequests.value.length > 0 || duplicateRequests.value.length > 0);
 
+  const hasExactMatch = computed(() => hasExactDuplicate(duplicateDecks.value, duplicateRequests.value));
+  const duplicateAcknowledged = ref(false);
+  watch(hasExactMatch, (exact) => {
+    if (!exact) duplicateAcknowledged.value = false;
+  });
+
   const canSubmit = computed(
     () =>
       title.value.trim().length > 0 &&
       mediaType.value !== null &&
       (!isUpdate.value || targetDeckId.value !== null) &&
+      isDuplicateGateSatisfied(hasExactMatch.value, duplicateAcknowledged.value) &&
       !isSubmitting.value &&
       !isAtQuotaLimit.value
   );
@@ -220,7 +237,7 @@
                 <p class="text-sm font-semibold text-orange-600 dark:text-orange-400 mb-1">There are already open update requests for this media:</p>
                 <div v-for="req in duplicateUpdateRequests" :key="req.id" class="flex items-center gap-2 text-sm py-1">
                   <Tag :value="getRequestStatusText(req.status)" severity="secondary" class="text-xs" />
-                  <NuxtLink :to="`/requests/${req.id}`" class="text-primary hover:underline" @click.stop>
+                  <NuxtLink :to="`/requests/${req.id}`" class="text-primary hover:underline" target="_blank" @click.stop>
                     {{ req.title }}
                   </NuxtLink>
                   <span class="text-muted-color">({{ req.upvoteCount }} votes)</span>
@@ -230,23 +247,30 @@
 
               <div v-if="duplicateDecks.length > 0" class="mb-3">
                 <p class="text-sm font-semibold text-orange-600 dark:text-orange-400 mb-1">This media may already exist:</p>
-                <div v-for="deck in duplicateDecks" :key="deck.deckId" class="flex items-center gap-2 text-sm py-1">
-                  <Tag :value="getMediaTypeText(deck.mediaType)" severity="secondary" class="text-xs" />
-                  <NuxtLink :to="`/decks/media/${deck.deckId}/detail`" class="text-primary hover:underline" @click.stop>
-                    {{ deck.title }}
+                <div v-for="deck in duplicateDecks" :key="deck.deckId" class="flex items-center gap-2 text-sm py-1 min-w-0">
+                  <Tag :value="getMediaTypeText(deck.mediaType)" severity="secondary" class="text-xs shrink-0" />
+                  <NuxtLink :to="`/decks/media/${deck.deckId}/detail`" class="text-primary hover:underline min-w-0 break-words" target="_blank" @click.stop>
+                    {{ localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) }}
                   </NuxtLink>
+                  <Tag v-if="deck.isExactMatch" value="Exact match" severity="warn" class="text-xs shrink-0" />
                 </div>
               </div>
 
               <div v-if="duplicateRequests.length > 0">
                 <p class="text-sm font-semibold text-orange-600 dark:text-orange-400 mb-1">Similar requests already exist:</p>
-                <div v-for="req in duplicateRequests" :key="req.id" class="flex items-center gap-2 text-sm py-1">
-                  <Tag :value="getRequestStatusText(req.status)" severity="secondary" class="text-xs" />
-                  <NuxtLink :to="`/requests/${req.id}`" class="text-primary hover:underline" @click.stop>
+                <div v-for="req in duplicateRequests" :key="req.id" class="flex items-center gap-2 text-sm py-1 min-w-0">
+                  <Tag :value="getRequestStatusText(req.status)" severity="secondary" class="text-xs shrink-0" />
+                  <NuxtLink :to="`/requests/${req.id}`" class="text-primary hover:underline min-w-0 break-words" target="_blank" @click.stop>
                     {{ req.title }}
                   </NuxtLink>
-                  <span class="text-muted-color">({{ req.upvoteCount }} votes)</span>
+                  <span class="text-muted-color shrink-0">({{ req.upvoteCount }} votes)</span>
+                  <Tag v-if="req.isExactMatch" value="Exact match" severity="warn" class="text-xs shrink-0" />
                 </div>
+              </div>
+
+              <div v-if="hasExactMatch" class="flex items-start gap-2 mt-3">
+                <Checkbox v-model="duplicateAcknowledged" input-id="duplicateAcknowledged" binary class="shrink-0" />
+                <label for="duplicateAcknowledged" class="text-sm cursor-pointer">I checked the matches above and my request is for something else.</label>
               </div>
             </div>
           </div>

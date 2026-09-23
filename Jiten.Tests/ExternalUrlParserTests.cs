@@ -180,4 +180,41 @@ public class ExternalUrlParserTests
     {
         ExternalUrlParser.TryParse("https://vndb.org.evil.com/v1234", out _).Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData("https://vndb.org/v17", "https://vndb.org/v17/")]
+    [InlineData("https://vndb.org/v17", "https://www.vndb.org/V17/releases")]
+    [InlineData("https://www.themoviedb.org/movie/550-fight-club", "https://themoviedb.org/movie/550")]
+    [InlineData("https://anilist.co/anime/21/One-Piece", "https://anilist.co/anime/21")]
+    [InlineData("https://www.igdb.com/games/persona-5", "http://igdb.com/games/Persona-5/")]
+    [InlineData("https://www.imdb.com/title/tt0111161/", "https://m.imdb.com/title/tt0111161")]
+    public void EntityKey_SameEntryInDifferentForms_IsEqual(string first, string second)
+    {
+        ExternalUrlParser.TryGetEntityKey(first, out var a).Should().BeTrue();
+        ExternalUrlParser.TryGetEntityKey(second, out var b).Should().BeTrue();
+        a.Should().Be(b);
+    }
+
+    [Theory]
+    [InlineData("https://vndb.org/v17", "https://vndb.org/v170")]
+    [InlineData("https://www.themoviedb.org/movie/550", "https://www.themoviedb.org/tv/550")]
+    [InlineData("https://anilist.co/anime/21", "https://anilist.co/manga/21")]
+    [InlineData("https://anilist.co/manga/21", "https://myanimelist.net/manga/21")]
+    public void EntityKey_DifferentEntries_AreNotEqual(string first, string second)
+    {
+        ExternalUrlParser.TryGetEntityKey(first, out var a).Should().BeTrue();
+        ExternalUrlParser.TryGetEntityKey(second, out var b).Should().BeTrue();
+        a.Should().NotBe(b);
+    }
+
+    [Theory]
+    [InlineData("https://ncode.syosetu.com/n1234ab/")]
+    [InlineData("https://www.amazon.co.jp/dp/B00000000")]
+    [InlineData("not a url")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void EntityKey_UnsupportedOrJunk_ReturnsFalse(string? url)
+    {
+        ExternalUrlParser.TryGetEntityKey(url, out _).Should().BeFalse();
+    }
 }

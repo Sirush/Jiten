@@ -1015,7 +1015,10 @@ export interface DuplicateCheckResultDto {
 export interface DuplicateCheckDeckDto {
   deckId: number;
   title: string;
+  romajiTitle?: string | null;
+  englishTitle?: string | null;
   mediaType: MediaType;
+  isExactMatch: boolean;
 }
 
 export interface DuplicateCheckRequestDto {
@@ -1024,6 +1027,7 @@ export interface DuplicateCheckRequestDto {
   mediaType: MediaType;
   status: RequestStatus;
   upvoteCount: number;
+  isExactMatch: boolean;
 }
 
 export interface RequestActivityLogDto {

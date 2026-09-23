@@ -44,6 +44,7 @@ public partial class RequestController(
     private const long MaxUploadBytesPerDay = 500 * 1024 * 1024; // 500MB per 24h
     private const int MonthlyBoostLimit = 5;
     private const string TurnaroundCacheKey = "requests:turnaround";
+    private const int DuplicateHintLimit = 5;
     private const int BoostWeight = 5;
     private const int MaxCommentLength = 500;
     private const int CommentRateLimitPerFiveMin = 5;
@@ -1477,7 +1478,8 @@ public partial class RequestController(
     }
 
     [HttpGet("duplicate-check")]
-    public async Task<IResult> DuplicateCheck([FromQuery] string? title, [FromQuery] int? targetDeckId)
+    public async Task<IResult> DuplicateCheck([FromQuery] string? title, [FromQuery] int? targetDeckId, [FromQuery] string? externalUrl,
+        [FromQuery] MediaType? mediaType, [FromServices] MediaDuplicateService duplicateFinder)
     {
         var userId = currentUserService.UserId;
         if (string.IsNullOrEmpty(userId))
@@ -1501,47 +1503,9 @@ public partial class RequestController(
                 .ToListAsync()
             : [];
 
-        var normalisedTitle = title?.Trim() ?? string.Empty;
-        if (normalisedTitle.Length < 2)
-            return Results.Ok(new DuplicateCheckResultDto { ExistingUpdateRequests = existingUpdateRequests });
-
-        var likePattern = $"%{EscapeLikePattern(normalisedTitle)}%";
-
-        // Search existing decks by title (simple ILIKE)
-        var existingDecks = await context.DeckTitles.AsNoTracking()
-            .Where(dt => EF.Functions.ILike(dt.Title, likePattern, "\\"))
-            .OrderBy(dt => dt.Title.Length)
-            .Take(5)
-            .Select(dt => new DuplicateCheckDeckDto
-            {
-                DeckId = dt.DeckId,
-                Title = dt.Title,
-                MediaType = dt.Deck!.MediaType
-            })
-            .ToListAsync();
-
-        // Deduplicate by DeckId
-        existingDecks = existingDecks
-            .GroupBy(d => d.DeckId)
-            .Select(g => g.First())
-            .Take(5)
-            .ToList();
-
-        // Search open/in-progress requests
-        var existingRequests = await context.MediaRequests.AsNoTracking()
-            .Where(r => (r.Status == MediaRequestStatus.Open || r.Status == MediaRequestStatus.InProgress)
-                        && EF.Functions.ILike(r.Title, likePattern, "\\"))
-            .OrderBy(r => r.Title.Length)
-            .Take(5)
-            .Select(r => new DuplicateCheckRequestDto
-            {
-                Id = r.Id,
-                Title = r.Title,
-                MediaType = r.MediaType,
-                Status = r.Status,
-                UpvoteCount = r.UpvoteCount
-            })
-            .ToListAsync();
+        string?[] urls = [externalUrl];
+        var existingDecks = await duplicateFinder.FindDecks(title, urls, DuplicateHintLimit, mediaType);
+        var existingRequests = await duplicateFinder.FindRequests(title, urls, DuplicateHintLimit, mediaType);
 
         return Results.Ok(new DuplicateCheckResultDto
         {
@@ -2051,9 +2015,6 @@ public partial class RequestController(
         var name = Path.GetFileName(fileName);
         return SanitiseFileNameRegex().Replace(name, "_");
     }
-
-    private static string EscapeLikePattern(string input) =>
-        input.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     [GeneratedRegex(@"[<>:""/\\|?*\x00-\x1F]")]
     private static partial Regex SanitiseFileNameRegex();
