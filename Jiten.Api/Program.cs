@@ -495,6 +495,7 @@ builder.Services.AddSingleton<Jiten.Core.Services.DescriptionSearchService>(sp =
 builder.Services.AddScoped<IRoadmapDataLoader, RoadmapDataLoader>();
 builder.Services.AddScoped<ICoverageJourneyService, CoverageJourneyService>();
 builder.Services.AddScoped<IDeckWordResolver, DeckWordResolver>();
+builder.Services.AddScoped<IStudyDeckReviewScope, StudyDeckReviewScope>();
 builder.Services.AddScoped<IFrequencySourceResolver, FrequencySourceResolver>();
 builder.Services.AddScoped<IStudyDeckMembershipService, StudyDeckMembershipService>();
 builder.Services.AddScoped<DeckMetadataService>();

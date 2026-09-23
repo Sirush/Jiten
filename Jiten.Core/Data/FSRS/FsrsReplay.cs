@@ -62,6 +62,34 @@ public static class FsrsReplay
         return true;
     }
 
+    /// <summary>
+    /// The state, due date and last review each of <paramref name="finalSchedulers"/> would give the card after a
+    /// replay, sharing one pass over the earlier reviews; null when there is nothing to replay.
+    /// </summary>
+    /// <remarks>Earlier reviews' memory state depends only on ratings and timestamps, so only the final placement differs between schedulers.</remarks>
+    public static (FsrsState State, DateTime Due, DateTime? LastReview)[]? ProjectFinalPlacements(
+        IReadOnlyList<FsrsReviewLog> logs, FsrsScheduler replayScheduler, IReadOnlyList<FsrsScheduler> finalSchedulers)
+    {
+        var ordered = logs.Where(l => l.Rating.IsValid())
+                          .OrderBy(l => l.ReviewDateTime).ThenBy(l => l.ReviewLogId).ToList();
+        if (ordered.Count == 0)
+            return null;
+
+        var tempCard = new FsrsCard("", 0, 0);
+        for (var i = 0; i < ordered.Count - 1; i++)
+            tempCard = replayScheduler.ReviewCard(tempCard, ordered[i].Rating, AsUtc(ordered[i].ReviewDateTime), ordered[i].ReviewDuration).UpdatedCard;
+
+        var last = ordered[^1];
+        var placements = new (FsrsState, DateTime, DateTime?)[finalSchedulers.Count];
+        for (var i = 0; i < finalSchedulers.Count; i++)
+        {
+            var placed = finalSchedulers[i].ReviewCard(tempCard, last.Rating, AsUtc(last.ReviewDateTime), last.ReviewDuration).UpdatedCard;
+            placements[i] = (placed.State, placed.Due, placed.LastReview);
+        }
+
+        return placements;
+    }
+
     /// <summary>Fits S and D from a source that records no FSRS version (backups) to the owner's model: FSRS-7 replays them, FSRS-6 drops the fast trace.</summary>
     public static void AdoptMemoryModel(FsrsCard card, IReadOnlyList<FsrsReviewLog> logs, FsrsScheduler scheduler)
     {

@@ -34,6 +34,7 @@ public partial class StudyController(
     ICurrentUserService currentUserService,
     IHttpContextAccessor httpContextAccessor,
     IDeckWordResolver deckWordResolver,
+    IStudyDeckReviewScope studyDeckReviewScope,
     IFrequencySourceResolver frequencySource,
     IStudyDeckMembershipService deckMembership,
     IDeckDownloadService downloadService,
@@ -58,7 +59,6 @@ public partial class StudyController(
     private const int RandomSourcePoolSize = 30;
 
     private const int MaxConcurrentDeckQueries = 6;
-    private const int MaxHoistedFrequencyKeys = 400_000;
 
     [HttpGet("overview-version")]
     [SwaggerOperation(Summary = "Get current overview version for cache validation")]
@@ -3953,18 +3953,10 @@ public partial class StudyController(
         => FsrsSettingsHelper.LocalDayStartUtc(utcNow, timezone, daysOffset);
 
     private static DateTime GetDueCutoff(DateTime utcNow, StudySettingsDto settings)
-        => settings.DayBoundaryScheduling ? LocalDayStartUtc(utcNow, settings.Timezone, 1) : utcNow;
+        => SrsDueWindow.ReviewCutoff(utcNow, settings);
 
-    /// <summary>Learning and relearning cards are due from this point, so a step can end inside the current session.</summary>
     private static DateTime GetLearnAheadCutoff(DateTime utcNow, StudySettingsDto settings)
-    {
-        var dueCutoff = GetDueCutoff(utcNow, settings);
-        var learnAhead = utcNow.AddMinutes(settings.LearnAheadMinutes);
-
-        var nextLocalMidnight = LocalDayStartUtc(utcNow, settings.Timezone, 1);
-        if (learnAhead > nextLocalMidnight) learnAhead = nextLocalMidnight;
-        return learnAhead > dueCutoff ? learnAhead : dueCutoff;
-    }
+        => SrsDueWindow.LearningCutoff(utcNow, settings);
 
     /// <summary>Day-boundary and review-ahead cutoffs serve cards early; a Review card graded today (FSRS-7 can schedule it minutes out) waits for its real due time, or it would loop within the session.</summary>
     private static Expression<Func<FsrsCard, bool>> ReviewNotServedEarlySameDay(DateTime utcNow, DateTime todayStart)
@@ -3974,15 +3966,8 @@ public partial class StudyController(
                 || !c.LastReview.HasValue
                 || c.LastReview < todayStart;
 
-    private static DueWindow GetDueWindow(DateTime utcNow, StudySettingsDto settings)
-        => new(GetDueCutoff(utcNow, settings), GetLearnAheadCutoff(utcNow, settings));
-
-    /// <summary>Review cards count as due up to <see cref="Review"/>; learning-state cards up to <see cref="Learning"/>.</summary>
-    private readonly record struct DueWindow(DateTime Review, DateTime Learning)
-    {
-        public bool IsDue(FsrsState state, DateTime due)
-            => due <= (state is FsrsState.Learning or FsrsState.Relearning ? Learning : Review);
-    }
+    private static SrsDueWindow GetDueWindow(DateTime utcNow, StudySettingsDto settings)
+        => SrsDueWindow.At(utcNow, settings);
 
     private static DateTime? SnapToLocalDayStart(DateTime? utc, StudySettingsDto settings)
     {
@@ -4313,36 +4298,8 @@ public partial class StudyController(
         }
     }
 
-    // Resolves each distinct frequency range once instead of re-running the same range scan per deck.
-    // A range wider than the hoist cap is left out, so those decks keep the in-query filter.
-    private async Task<Dictionary<(int Min, int Max), HashSet<long>>> LoadGlobalFrequencyRanges(List<UserStudyDeck> studyDecks)
-    {
-        var ranges = studyDecks
-            .Where(sd => sd.DeckType == StudyDeckType.MediaDeck
-                         && (DeckDownloadType)sd.DownloadType == DeckDownloadType.TopGlobalFrequency)
-            .Select(sd => (Min: sd.MinFrequency, Max: sd.MaxFrequency))
-            .Distinct()
-            .ToList();
-
-        var result = new Dictionary<(int Min, int Max), HashSet<long>>();
-        if (ranges.Count == 0) return result;
-
-        foreach (var range in ranges)
-        {
-            var rows = await context.WordFormFrequencies
-                .AsNoTracking()
-                .Where(wff => wff.FrequencyRank >= range.Min && wff.FrequencyRank <= range.Max)
-                .Select(wff => new { wff.WordId, wff.ReadingIndex })
-                .Take(MaxHoistedFrequencyKeys + 1)
-                .ToListAsync();
-
-            if (rows.Count > MaxHoistedFrequencyKeys) continue;
-
-            result[range] = rows.Select(r => WordFormHelper.EncodeWordKey(r.WordId, r.ReadingIndex)).ToHashSet();
-        }
-
-        return result;
-    }
+    private Task<Dictionary<(int Min, int Max), HashSet<long>>> LoadGlobalFrequencyRanges(List<UserStudyDeck> studyDecks)
+        => studyDeckReviewScope.LoadGlobalFrequencyRanges(studyDecks);
 
     /// <summary>Null when the requested frequency source is usable; otherwise the error to return.</summary>
     private Task<IResult?> ValidateFrequencySource(string userId, int? frequencyMediaType, long? frequencyListId)
@@ -4386,7 +4343,7 @@ public partial class StudyController(
     private static (int Tracked, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due, int Young, int Mature)
         CountCardStats(
             IEnumerable<(FsrsState State, DateTime Due, DateTime? LastReview)> cards,
-            DueWindow dueCutoff)
+            SrsDueWindow dueCutoff)
     {
         int learning = 0, review = 0, mastered = 0, blacklisted = 0, suspended = 0, dueCount = 0, tracked = 0, young = 0, mature = 0;
         foreach (var (state, due, lastReview) in cards)
@@ -4420,7 +4377,7 @@ public partial class StudyController(
             Dictionary<(int, byte), int> freqRanks,
             HashSet<long>? kanaFormKeys,
             HashSet<int>? posMatchedWordIds,
-            DueWindow dueCutoff,
+            SrsDueWindow dueCutoff,
             Dictionary<(int, byte), WordSetStateType>? wordSetStates = null,
             Dictionary<(int, byte), VocabularyTier>? redundantTiers = null)
     {
@@ -4469,7 +4426,7 @@ public partial class StudyController(
         ComputeCardStatsFromWordKeys(
             HashSet<long> wordKeys,
             Dictionary<long, (FsrsState State, DateTime Due, DateTime? LastReview)> cardStateByKey,
-            DueWindow dueCutoff,
+            SrsDueWindow dueCutoff,
             Dictionary<long, WordSetStateType>? wordSetKeys = null,
             Dictionary<long, VocabularyTier>? redundantTiers = null)
     {
@@ -4531,7 +4488,7 @@ public partial class StudyController(
         StudyDeckDto dto,
         List<(int WordId, byte ReadingIndex)> wordPairs,
         Dictionary<(int, byte), (FsrsState State, DateTime Due, DateTime? LastReview)> cardStateMap,
-        DueWindow dueCutoff,
+        SrsDueWindow dueCutoff,
         Dictionary<long, WordSetStateType>? wordSetKeys = null,
         Dictionary<long, VocabularyTier>? redundantTiers = null)
     {
@@ -4946,113 +4903,20 @@ public partial class StudyController(
     }
 
     private Task<List<UserStudyDeck>> LoadActiveStudyDecks(string userId)
-    {
-        return userContext.UserStudyDecks
-            .AsNoTracking()
-            .Where(sd => sd.UserId == userId && sd.IsActive)
-            .ToListAsync();
-    }
+        => studyDeckReviewScope.LoadActiveStudyDecks(userId);
 
-    /// <summary>Word keys of the active media and static decks; global-dynamic membership is matched per caller.</summary>
-    private async Task<HashSet<long>> GetStudyDeckBaseKeys(List<UserStudyDeck> activeStudyDecks)
-    {
-        var mediaDecks = activeStudyDecks
-            .Where(sd => sd.DeckType == StudyDeckType.MediaDeck && sd.DeckId.HasValue)
-            .ToList();
-        var wordKeys = await GetFilteredMediaWordKeys(mediaDecks);
+    private Task<HashSet<long>> GetStudyDeckBaseKeys(List<UserStudyDeck> activeStudyDecks)
+        => studyDeckReviewScope.GetStudyDeckBaseKeys(activeStudyDecks);
 
-        var staticDeckIds = activeStudyDecks
-            .Where(sd => sd.DeckType.HasMaterialisedWords())
-            .Select(sd => sd.UserStudyDeckId).ToList();
-        if (staticDeckIds.Count > 0)
-            wordKeys.UnionWith(await deckWordResolver.GetStaticDeckWordKeys(staticDeckIds));
-
-        return wordKeys;
-    }
-
-    private async Task<HashSet<long>> BuildDeckReviewFilter(
+    private Task<HashSet<long>> BuildDeckReviewFilter(
         string userId,
         List<(int WordId, byte ReadingIndex)>? cardKeys = null,
         List<UserStudyDeck>? activeStudyDecks = null,
         HashSet<long>? baseKeys = null)
-    {
-        var studyDecks = activeStudyDecks ?? await LoadActiveStudyDecks(userId);
-        var wordKeys = baseKeys != null ? new HashSet<long>(baseKeys) : await GetStudyDeckBaseKeys(studyDecks);
+        => studyDeckReviewScope.BuildDeckReviewFilter(userId, cardKeys, activeStudyDecks, baseKeys);
 
-        if (cardKeys != null)
-        {
-            var globalDynamicDecks = studyDecks.Where(sd => sd.DeckType == StudyDeckType.GlobalDynamic).ToList();
-            if (globalDynamicDecks.Count > 0)
-            {
-                var unmatchedWordIds = cardKeys
-                    .Where(k => !wordKeys.Contains(WordFormHelper.EncodeWordKey(k.WordId, k.ReadingIndex)))
-                    .Select(k => k.WordId)
-                    .Distinct()
-                    .ToList();
-
-                if (unmatchedWordIds.Count > 0)
-                {
-                    foreach (var gd in globalDynamicDecks)
-                    {
-                        wordKeys.UnionWith(await deckWordResolver.GetGlobalDynamicWordKeysForWordIds(
-                            gd.MinGlobalFrequency, gd.MaxGlobalFrequency, gd.PosFilter, unmatchedWordIds, gd.ExcludeKana,
-                                FrequencyScope.From(gd)));
-                    }
-                }
-            }
-        }
-
-        return wordKeys;
-    }
-
-    private async Task<HashSet<long>> GetFilteredMediaWordKeys(List<UserStudyDeck> mediaStudyDecks)
-    {
-        var wordKeys = new HashSet<long>();
-        if (mediaStudyDecks.Count == 0) return wordKeys;
-
-        var deckIds = mediaStudyDecks.Select(sd => sd.DeckId!.Value).Distinct().ToList();
-        var wordCounts = await context.Decks.AsNoTracking()
-            .Where(d => deckIds.Contains(d.DeckId))
-            .Select(d => new { d.DeckId, d.WordCount })
-            .ToDictionaryAsync(d => d.DeckId, d => d.WordCount);
-
-        var globalFrequencyKeysByRange = await LoadGlobalFrequencyRanges(mediaStudyDecks);
-        var deckQueryGate = new SemaphoreSlim(MaxConcurrentDeckQueries);
-        var countTasks = new List<Task<(int Count, HashSet<long> WordKeys)>>();
-
-        foreach (var sd in mediaStudyDecks)
-        {
-            if (!wordCounts.TryGetValue(sd.DeckId!.Value, out var wordCount)) continue;
-            var deck = new Deck { DeckId = sd.DeckId.Value, WordCount = wordCount };
-
-            if ((DeckDownloadType)sd.DownloadType == DeckDownloadType.TargetCoverage && sd.TargetPercentage.HasValue)
-            {
-                countTasks.Add(CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache, memoryCache)
-                    .CountTargetCoverageWords(sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown),
-                    deckQueryGate));
-            }
-            else
-            {
-                var request = new DeckWordResolveRequest(
-                    sd.DeckId.Value, deck,
-                    (DeckDownloadType)sd.DownloadType, (DeckOrder)sd.Order,
-                    sd.MinFrequency, sd.MaxFrequency,
-                    false, false,
-                    sd.TargetPercentage,
-                    sd.MinOccurrences, sd.MaxOccurrences,
-                    sd.PosFilter, sd.StartFromKnown);
-                globalFrequencyKeysByRange.TryGetValue((sd.MinFrequency, sd.MaxFrequency), out var frequencyKeys);
-                countTasks.Add(CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache, memoryCache)
-                    .CountDeckWords(request, sd.ExcludeKana, frequencyKeys),
-                    deckQueryGate));
-            }
-        }
-
-        foreach (var (_, keys) in await Task.WhenAll(countTasks))
-            wordKeys.UnionWith(keys);
-
-        return wordKeys;
-    }
+    private Task<HashSet<long>> GetFilteredMediaWordKeys(List<UserStudyDeck> mediaStudyDecks)
+        => studyDeckReviewScope.GetFilteredMediaWordKeys(mediaStudyDecks);
 
     private async Task<string?> ValidateWordLimits(string userId, int deckId, int wordsToAdd)
     {

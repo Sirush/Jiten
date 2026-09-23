@@ -29,6 +29,7 @@ public class SrsController(
     IStudySessionService sessionService,
     IWordFormSiblingCache wordFormCache,
     SrsRecomputeJob recomputeJob,
+    IStudyDeckReviewScope studyDeckReviewScope,
     IFrequencySourceResolver frequencySource,
     IBackgroundJobClient backgroundJobs,
     ILogger<SrsController> logger) : ControllerBase
@@ -757,16 +758,163 @@ public class SrsController(
         if (userId == null)
             return Results.Unauthorized();
 
+        var settings = await userContext.UserFsrsSettings.FirstOrDefaultAsync(s => s.UserId == userId);
+        var desiredRetention = GetDesiredRetention(settings);
+        var (_, version) = FsrsSettingsHelper.ResolveParameters(settings);
+
+        var (error, result) = await RunOptimizer(userId, version);
+        if (error != null)
+            return error;
+
+        await SaveAndReschedule(userId, settings, result!.Parameters, desiredRetention, reschedule);
+
+        return Results.Ok(new
+        {
+            parameters = SerializeParametersCsv(result.Parameters),
+            loss = Math.Round(result.Loss, 6),
+            reviewCount = result.ReviewCount,
+            isDefault = false,
+            desiredRetention,
+            rescheduled = reschedule,
+            version = (int)version
+        });
+    }
+
+    [HttpPost("settings/optimize/preview")]
+    [EnableRateLimiting("compute")]
+    [SwaggerOperation(Summary = "Preview FSRS optimisation",
+                      Description = "Optimizes parameters from the user's review history and projects how many cards a reschedule would leave due at each requested retention. Saves nothing; send the parameters to settings/apply to keep them.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> PreviewOptimizeParameters(ReschedulePreviewRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null)
+            return Results.Unauthorized();
+
+        var settings = await LoadUserSettings(userId);
+        var desiredRetention = GetDesiredRetention(settings);
+        if (ResolvePreviewRetentions(request, desiredRetention) is not { } retentions)
+            return Results.BadRequest(new { error = PreviewRetentionsError });
+
+        var (_, version) = FsrsSettingsHelper.ResolveParameters(settings);
+        var (error, result) = await RunOptimizer(userId, version);
+        if (error != null)
+            return error;
+
+        return Results.Ok(new OptimizePreviewResponse
+        {
+            Parameters = SerializeParametersCsv(result!.Parameters),
+            ParameterValues = result.Parameters,
+            Loss = Math.Round(result.Loss, 6),
+            ReviewCount = result.ReviewCount,
+            Version = (int)version,
+            DesiredRetention = desiredRetention,
+            Preview = await recomputeJob.PreviewDueCounts(userId, result.Parameters, retentions, ReviewScopeFor(userId, settings))
+        });
+    }
+
+    [HttpPost("settings/reschedule-preview")]
+    [EnableRateLimiting("compute")]
+    [SwaggerOperation(Summary = "Preview a reschedule",
+                      Description = "Projects how many cards rescheduling with the stored parameters would leave due at each requested retention. Saves nothing.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> PreviewReschedule(ReschedulePreviewRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null)
+            return Results.Unauthorized();
+
+        var settings = await LoadUserSettings(userId);
+        if (ResolvePreviewRetentions(request, GetDesiredRetention(settings)) is not { } retentions)
+            return Results.BadRequest(new { error = PreviewRetentionsError });
+
+        return Results.Ok(await recomputeJob.PreviewDueCounts(userId, GetParameters(settings), retentions, ReviewScopeFor(userId, settings)));
+    }
+
+    [HttpPost("settings/apply")]
+    [EnableRateLimiting("compute")]
+    [SwaggerOperation(Summary = "Apply previewed FSRS settings",
+                      Description = "Saves the parameters and desired retention chosen from a preview, then reschedules every card when asked.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IResult> ApplySettings(ApplyFsrsSettingsRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null)
+            return Results.Unauthorized();
+
+        if (!IsDesiredRetentionValid(request.DesiredRetention))
+            return Results.BadRequest(new { error = "Desired retention must be between 0 and 1." });
+
+        var settings = await userContext.UserFsrsSettings.FirstOrDefaultAsync(s => s.UserId == userId);
+        if (request.Parameters != null)
+        {
+            if (request.Parameters.Any(value => !double.IsFinite(value))
+                || FsrsVersions.FromParameterCount(request.Parameters.Length) is not { } requestedVersion)
+                return Results.BadRequest(new { error = "Invalid parameters." });
+
+            // A preview is tied to the model it was optimised for; applying it after a switch would silently undo the switch.
+            if (requestedVersion != FsrsSettingsHelper.ResolveParameters(settings).Version)
+                return Results.Conflict(new { error = "Your memory model changed since this preview. Please optimise again." });
+        }
+
+        await SaveAndReschedule(userId, settings, request.Parameters, request.DesiredRetention, request.Reschedule);
+
+        var (parameters, version) = FsrsSettingsHelper.ResolveParameters(await LoadUserSettings(userId));
+        return Results.Ok(new
+        {
+            parameters = SerializeParametersCsv(parameters),
+            isDefault = IsSettingsDefault(parameters, request.DesiredRetention),
+            desiredRetention = request.DesiredRetention,
+            version = (int)version,
+            defaultParameters = FsrsVersions.DefaultParameters(version),
+            rescheduled = request.Reschedule
+        });
+    }
+
+    private Func<List<(int WordId, byte ReadingIndex)>, Task<HashSet<long>>>? ReviewScopeFor(string userId, UserFsrsSettings? settings)
+        => GetStudySettings(settings).ReviewFrom == StudyReviewFrom.StudyDecksOnly
+            ? keys => studyDeckReviewScope.BuildDeckReviewFilter(userId, keys)
+            : null;
+
+    private const int MaxPreviewRetentions = 6;
+    private const string PreviewRetentionsError = "Pick up to 6 desired retentions, each between 0 and 1.";
+
+    /// <summary>The current retention first, then the requested ones; null when the request is unusable.</summary>
+    private static List<double>? ResolvePreviewRetentions(ReschedulePreviewRequest request, double currentRetention)
+    {
+        var requested = request.DesiredRetentions ?? [];
+        if (requested.Length > MaxPreviewRetentions || !requested.All(IsDesiredRetentionValid))
+            return null;
+
+        var retentions = new List<double> { currentRetention };
+        foreach (var retention in requested)
+        {
+            if (!retentions.Any(r => Math.Abs(r - retention) < 1e-6))
+                retentions.Add(retention);
+        }
+
+        return retentions;
+    }
+
+    private async Task<(IResult? Error, FsrsOptimizationResult? Result)> RunOptimizer(string userId, FsrsVersion version)
+    {
         // An archived row is a complete per-card interval chain, which is exactly the shape the optimizer
         // trains on, so removing a card no longer shrinks the training corpus.
         var reviewLogs = await CardArchiveService.LoadAllReviewsAsync(userContext, userId);
 
         var totalReviews = reviewLogs.Count;
         if (totalReviews < FsrsOptimizer.MinimumReviews)
-            return Results.BadRequest(new
+            return (Results.BadRequest(new
             {
                 error = $"At least {FsrsOptimizer.MinimumReviews} reviews are required to optimise parameters. You have {totalReviews}."
-            });
+            }), null);
 
         var grouped = reviewLogs
             .GroupBy(r => r.CardId)
@@ -788,45 +936,38 @@ public class SrsController(
         }
 
         if (items.Count == 0)
-            return Results.BadRequest(new { error = "Not enough review data to optimise." });
+            return (Results.BadRequest(new { error = "Not enough review data to optimise." }), null);
 
-        var settings = await userContext.UserFsrsSettings.FirstOrDefaultAsync(s => s.UserId == userId);
-        var desiredRetention = GetDesiredRetention(settings);
-        var (_, version) = FsrsSettingsHelper.ResolveParameters(settings);
+        return (null, version == FsrsVersion.V7 ? FsrsOptimizerV7.Optimize(items) : FsrsOptimizer.Optimize(items));
+    }
 
-        var result = version == FsrsVersion.V7 ? FsrsOptimizerV7.Optimize(items) : FsrsOptimizer.Optimize(items);
-
+    /// <param name="settings">The tracked settings row, or null when the user has none yet.</param>
+    /// <param name="parameters">Null keeps the stored parameters.</param>
+    private async Task SaveAndReschedule(string userId, UserFsrsSettings? settings, double[]? parameters, double desiredRetention, bool reschedule)
+    {
         if (settings == null)
         {
             settings = new UserFsrsSettings { UserId = userId };
             userContext.UserFsrsSettings.Add(settings);
         }
-        settings.Parameters = result.Parameters;
+        if (parameters != null)
+            settings.Parameters = parameters;
+        settings.DesiredRetention = IsDesiredRetentionDefault(desiredRetention) ? null : desiredRetention;
         await userContext.SaveChangesAsync();
 
+        var (resolvedParameters, version) = FsrsSettingsHelper.ResolveParameters(settings);
         if (reschedule)
         {
             var studySettings = GetStudySettings(settings);
-            await recomputeJob.RecomputeUserSrs(userId, result.Parameters, desiredRetention,
+            await recomputeJob.RecomputeUserSrs(userId, resolvedParameters, desiredRetention,
                                                 studySettings.LoadBalancing, BuildEasyDaysPolicy(studySettings));
         }
-        else if (version == FsrsVersion.V7)
+        else if (parameters != null && version == FsrsVersion.V7)
         {
             // FSRS-7 states only mean something under the parameters that produced them; due dates still wait for a reschedule.
             await recomputeJob.RecomputeMemoryStates(userId);
         }
         await sessionService.BumpStudyOverviewVersion(userId);
-
-        return Results.Ok(new
-        {
-            parameters = SerializeParametersCsv(result.Parameters),
-            loss = Math.Round(result.Loss, 6),
-            reviewCount = result.ReviewCount,
-            isDefault = false,
-            desiredRetention,
-            rescheduled = reschedule,
-            version = (int)version
-        });
     }
 
     [HttpPost("settings/model")]

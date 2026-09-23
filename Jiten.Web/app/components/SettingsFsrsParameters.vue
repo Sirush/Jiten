@@ -4,7 +4,14 @@
   import { Line } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, type ChartOptions, type ChartData } from 'chart.js';
   import { extractApiError } from '~/utils/toast';
-  import type { FsrsParametersResponse, FsrsWorkloadCurveResponse, WorkloadCurvePoint, FsrsHealthResponse } from '~/types';
+  import type {
+    FsrsParametersResponse,
+    FsrsWorkloadCurveResponse,
+    WorkloadCurvePoint,
+    FsrsHealthResponse,
+    OptimizePreviewResponse,
+    ReschedulePreviewResponse,
+  } from '~/types';
 
   ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip);
 
@@ -25,7 +32,6 @@
   const isOptimising = ref(false);
   const hasUserEdited = ref(false);
   const optimiseError = ref<string | null>(null);
-  const rescheduleAfterOptimise = ref(true);
   const showBreakdown = ref(false);
   const showAdvanced = ref(false);
   const reviewCount = ref(0);
@@ -284,42 +290,35 @@
     }
   };
 
-  const confirmRecomputeSchedule = () => {
-    confirm.require({
-      message:
-        'This will recompute the schedule for all your cards using your current parameters. Depending on your history, this could result in a large number of immediate reviews. Are you sure you want to proceed?',
-      header: 'Reschedule all cards',
-      icon: 'pi pi-exclamation-triangle',
-      rejectProps: {
-        label: 'Cancel',
-        severity: 'secondary',
-        outlined: true,
-      },
-      acceptProps: {
-        label: 'Reschedule',
-      },
-      accept: async () => {
-        await recomputeSchedule();
-      },
-    });
+  // --- Reschedule preview: projected due counts before anything is saved ----
+  const previewVisible = ref(false);
+  const previewMode = ref<'optimise' | 'reschedule'>('reschedule');
+  const reschedulePreview = ref<ReschedulePreviewResponse | null>(null);
+  const optimisePreview = ref<OptimizePreviewResponse | null>(null);
+  const isApplying = ref(false);
+
+  // The server always adds the saved retention first; these are the lower targets offered next to it.
+  const previewRetentions = () => {
+    const base = Number(desiredRetention.value) || defaultDesiredRetention;
+    const candidates = [base, base - 0.05, base - 0.1, base - 0.15].map((r) => Math.round(r * 100) / 100);
+    return [...new Set(candidates)].filter((r, i) => i === 0 || r >= 0.7);
   };
 
-  const recomputeSchedule = async () => {
+  const openReschedulePreview = async () => {
     try {
       isRecomputing.value = true;
-      await $api('srs/settings/recompute', { method: 'POST' });
-      toast.add({
-        severity: 'success',
-        summary: 'Reschedule complete',
-        detail: 'Your SRS schedule has been recomputed.',
-        life: 4000,
+      reschedulePreview.value = await $api<ReschedulePreviewResponse>('srs/settings/reschedule-preview', {
+        method: 'POST',
+        body: { desiredRetentions: previewRetentions() },
       });
+      optimisePreview.value = null;
+      previewMode.value = 'reschedule';
+      previewVisible.value = true;
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Failed to queue rescheduling.';
       toast.add({
         severity: 'error',
         summary: 'Error',
-        detail: message,
+        detail: extractApiError(error, 'Could not calculate the new schedule.'),
         life: 5000,
       });
     } finally {
@@ -327,10 +326,56 @@
     }
   };
 
+  const applyPreview = async (choice: { desiredRetention: number; reschedule: boolean }) => {
+    const optimised = previewMode.value === 'optimise' ? optimisePreview.value : null;
+    try {
+      isApplying.value = true;
+      const result = await $api<FsrsParametersResponse & { rescheduled: boolean }>('srs/settings/apply', {
+        method: 'POST',
+        body: {
+          parameters: optimised?.parameterValues ?? null,
+          desiredRetention: choice.desiredRetention,
+          reschedule: choice.reschedule,
+        },
+      });
+      parametersCsv.value = result.parameters;
+      isDefault.value = result.isDefault;
+      version.value = result.version ?? version.value;
+      defaultParameters.value = result.defaultParameters ?? defaultParameters.value;
+      desiredRetention.value = result.desiredRetention;
+      hasUserEdited.value = false;
+      previewVisible.value = false;
+      if (workloadCurve.value) void loadWorkloadCurve();
+
+      const retentionText = `Desired retention set to ${Math.round(result.desiredRetention * 1000) / 10}%.`;
+      const detail = optimised
+        ? `FSRS-${version.value} parameters saved. ${result.rescheduled ? 'Cards have been rescheduled. ' : ''}${retentionText}`
+        : `Your cards have been rescheduled. ${retentionText}`;
+      toast.add({
+        severity: 'success',
+        summary: optimised ? 'Optimisation saved' : 'Reschedule complete',
+        detail,
+        life: 6000,
+      });
+    } catch (error: unknown) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: extractApiError(error, 'Could not save your settings. Please try again.'),
+        life: 5000,
+      });
+    } finally {
+      isApplying.value = false;
+    }
+  };
+
   const confirmSwitchModel = (target: number) => {
     if (target === version.value || isSwitchingModel.value) return;
+    const optimiseAfter = canOptimise.value;
     confirm.require({
-      message: "Switching memory model will only change future reviews, until you click optimise or reschedule your cards. It is recommended to optimise now for maximum benefits.",
+      message: optimiseAfter
+        ? "Switching memory model only changes future reviews until you optimise or reschedule. After switching, Jiten optimises your parameters and shows how many cards would become due before anything is rescheduled."
+        : 'Switching memory model only changes future reviews until you reschedule your cards.',
       header: `Switch to FSRS-${target}`,
       rejectProps: {
         label: 'Cancel',
@@ -338,10 +383,10 @@
         outlined: true,
       },
       acceptProps: {
-        label: 'Switch',
+        label: optimiseAfter ? 'Switch and optimise' : 'Switch',
       },
       accept: async () => {
-        await switchModel(target);
+        if ((await switchModel(target)) && optimiseAfter) await optimiseParameters();
       },
     });
   };
@@ -367,6 +412,7 @@
         detail: 'Memory model updated.',
         life: 5000,
       });
+      return true;
     } catch (error: unknown) {
       toast.add({
         severity: 'error',
@@ -374,58 +420,26 @@
         detail: extractApiError(error, 'The model could not be switched. Please try again.'),
         life: 5000,
       });
+      return false;
     } finally {
       isSwitchingModel.value = false;
     }
-  };
-
-  const confirmOptimise = () => {
-    const message = rescheduleAfterOptimise.value
-      ? 'This will analyse your review history to find optimal parameters and reschedule all your cards. Due dates may change.'
-      : 'This will analyse your review history to find optimal parameters. Your cards will not be rescheduled and you will be able to do that manually later.';
-    confirm.require({
-      message,
-      header: 'Optimise parameters',
-      icon: 'pi pi-sparkles',
-      rejectProps: {
-        label: 'Cancel',
-        severity: 'secondary',
-        outlined: true,
-      },
-      acceptProps: {
-        label: 'Optimise',
-      },
-      accept: async () => {
-        await optimiseParameters();
-      },
-    });
   };
 
   const optimiseParameters = async () => {
     try {
       isOptimising.value = true;
       optimiseError.value = null;
-      const result = await $api<{ parameters: string; loss: number; reviewCount: number; desiredRetention: number; rescheduled: boolean; version: number }>(
-        `srs/settings/optimize?reschedule=${rescheduleAfterOptimise.value}`,
-        { method: 'POST' }
-      );
-      parametersCsv.value = result.parameters;
-      desiredRetention.value = result.desiredRetention;
-      version.value = result.version ?? version.value;
-      isDefault.value = false;
-      hasUserEdited.value = false;
-      if (workloadCurve.value) void loadWorkloadCurve();
-      const detail = result.rescheduled
-        ? `FSRS-${version.value} parameters optimised from ${result.reviewCount} reviews. Cards have been rescheduled.`
-        : `FSRS-${version.value} parameters optimised from ${result.reviewCount} reviews.`;
-      toast.add({
-        severity: 'success',
-        summary: 'Optimisation complete',
-        detail,
-        life: 6000,
+      const result = await $api<OptimizePreviewResponse>('srs/settings/optimize/preview', {
+        method: 'POST',
+        body: { desiredRetentions: previewRetentions() },
       });
+      optimisePreview.value = result;
+      reschedulePreview.value = result.preview;
+      previewMode.value = 'optimise';
+      previewVisible.value = true;
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Failed to optimise parameters.';
+      const message = extractApiError(error, 'Failed to optimise parameters.');
       optimiseError.value = message;
       toast.add({
         severity: 'error',
@@ -926,16 +940,12 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-2 mb-2">
-          <Checkbox v-model="rescheduleAfterOptimise" inputId="rescheduleAfterOptimise" :binary="true" :disabled="!canOptimise" />
-          <label for="rescheduleAfterOptimise" class="text-sm cursor-pointer">Also reschedule all my cards after optimisation</label>
-        </div>
         <Button
           :label="canOptimise ? 'Optimise' : `Available after ${minimumReviews} reviews`"
           icon="pi pi-sparkles"
           :loading="isOptimising"
-          :disabled="!canOptimise || isLoading || isSaving || isRecomputing || isResetting"
-          @click="confirmOptimise"
+          :disabled="!canOptimise || isLoading || isSaving || isRecomputing || isResetting || isSwitchingModel"
+          @click="optimiseParameters"
         />
         <p v-if="!canOptimise && !isLoading" class="text-sm text-surface-500 dark:text-surface-400 mt-2">
           You have {{ reviewCount }} of {{ minimumReviews }} reviews needed. Keep studying to unlock optimisation.
@@ -1023,11 +1033,22 @@
       </div>
       <div class="mt-4">
         <h4 class="text-md font-semibold mb-1">Reschedule</h4>
-        <p class="text-sm text-amber-600 dark:text-amber-400 mb-2">
-          Warning: Be careful with this setting, as it could result in an overwhelming number of immediate reviews.
+        <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">
+          Recalculates every due date from your review history. You will see how many cards would become due before anything changes.
         </p>
-        <Button label="Reschedule all cards" :loading="isRecomputing" :disabled="isLoading || isSaving" @click="confirmRecomputeSchedule" />
+        <Button label="Reschedule all cards" :loading="isRecomputing" :disabled="isLoading || isSaving || isOptimising" @click="openReschedulePreview" />
       </div>
+
+      <SettingsFsrsReschedulePreview
+        v-if="reschedulePreview"
+        v-model:visible="previewVisible"
+        :mode="previewMode"
+        :preview="reschedulePreview"
+        :version="optimisePreview?.version ?? version"
+        :review-count="optimisePreview?.reviewCount"
+        :applying="isApplying"
+        @apply="applyPreview"
+      />
     </template>
   </Card>
 </template>
