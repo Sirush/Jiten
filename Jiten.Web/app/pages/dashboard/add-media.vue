@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import Card from 'primevue/card';
+  import Checkbox from 'primevue/checkbox';
   import Button from 'primevue/button';
   import FileUpload from 'primevue/fileupload';
   import InputNumber from 'primevue/inputnumber';
@@ -151,6 +152,12 @@
     }>
   >([]);
   let nextSubdeckId = 1;
+
+  const hasText = computed(() => (subdecks.value.length ? subdecks.value.some((sd) => sd.file) : !!selectedFile.value));
+  const confirmNoText = ref(false);
+  watch(hasText, (value) => {
+    if (value) confirmNoText.value = false;
+  });
 
   const mediaTypes = computed(() => {
     return Object.values(MediaType)
@@ -516,6 +523,7 @@
       searchResults.value = [];
       selectedMetadata.value = null;
       subdecks.value = [];
+      confirmNoText.value = false;
       rating.value = 0;
       duplicateDecks.value = [];
       matchingRequests.value = [];
@@ -530,6 +538,11 @@
 
     if (!coverImage.value && !coverImageUrl.value) {
       showToast('warn', 'Validation Error', 'Cover image is required');
+      return;
+    }
+
+    if (!hasText.value && !confirmNoText.value) {
+      showToast('warn', 'Validation Error', 'No text is attached. Add a file or confirm the deck has no text.');
       return;
     }
 
@@ -1029,8 +1042,17 @@
           </Card>
         </div>
 
-        <div class="mt-6 flex justify-center">
-          <Button label="Submit" class="p-button-lg p-button-success" :disabled="!originalTitle.trim() || (!coverImage && !coverImageUrl)" @click="submitMedia">
+        <div class="mt-6 flex flex-col items-center gap-4">
+          <div v-if="!hasText" class="flex items-center gap-2">
+            <Checkbox v-model="confirmNoText" input-id="confirm-no-text" binary />
+            <label for="confirm-no-text" class="text-sm">No text attached. Add this deck without text.</label>
+          </div>
+          <Button
+            label="Submit"
+            class="p-button-lg p-button-success"
+            :disabled="!originalTitle.trim() || (!coverImage && !coverImageUrl) || (!hasText && !confirmNoText)"
+            @click="submitMedia"
+          >
             <Icon name="material-symbols-light:check-circle" class="w-full" size="2em" />
             Submit
           </Button>
