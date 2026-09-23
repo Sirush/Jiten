@@ -7,6 +7,7 @@ using CsvHelper.Configuration;
 using Jiten.Api.Helpers;
 using Jiten.Cli;
 using Jiten.Core;
+using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.User;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
@@ -52,12 +53,45 @@ public class ImportToExistingRequest
     public List<int>? ExcludeWordIds { get; set; }
 }
 
+public class JpdbDeckImportRequest
+{
+    public List<JpdbDeckImportItem> Decks { get; set; } = new();
+}
+
+public class JpdbDeckImportItem
+{
+    public long JpdbDeckId { get; set; }
+    public string Name { get; set; } = "";
+    public List<JpdbWordRef> Words { get; set; } = new();
+}
+
+public class JpdbWordRef
+{
+    public int WordId { get; set; }
+    public string Spelling { get; set; } = "";
+    public int Occurrences { get; set; } = 1;
+}
+
+public class JpdbDeckImportDeckResult
+{
+    public long JpdbDeckId { get; set; }
+    public int UserStudyDeckId { get; set; }
+    public string Name { get; set; } = "";
+    public int Matched { get; set; }
+    public int Unmatched { get; set; }
+    public bool Replaced { get; set; }
+    public List<JpdbWordRef> UnmatchedWords { get; set; } = new();
+}
+
+public record JpdbDeckImportResult(List<JpdbDeckImportDeckResult> Decks, string? Error);
+
 public interface IDeckImportService
 {
     Task<ImportPreviewResponse> ParseAndPreview(Stream fileStream, string fileName, bool parseFullText = false);
     Task<ImportPreviewResponse> ParseAndPreviewText(List<string> texts, bool parseFullText = false);
     Task<ImportCommitResult> CommitImport(string userId, ImportCommitRequest request);
     Task<ImportCommitResult> ImportToExistingDeck(string userId, int deckId, ImportToExistingRequest request);
+    Task<JpdbDeckImportResult> ImportJpdbDecks(string userId, JpdbDeckImportRequest request);
 }
 
 public partial class DeckImportService(
@@ -292,6 +326,119 @@ public partial class DeckImportService(
         await db.KeyDeleteAsync($"import-preview:{request.PreviewToken}");
 
         return new(studyDeck.UserStudyDeckId, null);
+    }
+
+    public async Task<JpdbDeckImportResult> ImportJpdbDecks(string userId, JpdbDeckImportRequest request)
+    {
+        var items = request.Decks
+                           .Where(d => !string.IsNullOrWhiteSpace(d.Name))
+                           .GroupBy(d => d.Name.Trim())
+                           .Select(g => g.First())
+                           .ToList();
+        if (items.Count == 0) return new([], "No decks to import.");
+
+        var wordIds = items.SelectMany(d => d.Words).Select(w => w.WordId).Distinct().ToList();
+        Dictionary<int, List<JmDictWordForm>> formsByWord;
+        await using (var jitenContext = await contextFactory.CreateDbContextAsync())
+        {
+            var forms = await jitenContext.WordForms
+                                          .Where(f => wordIds.Contains(f.WordId))
+                                          .Select(f => new JmDictWordForm { WordId = f.WordId, ReadingIndex = f.ReadingIndex, Text = f.Text })
+                                          .ToListAsync();
+            formsByWord = forms.GroupBy(f => f.WordId).ToDictionary(g => g.Key, g => g.ToList());
+        }
+
+        var resolved = new List<(JpdbDeckImportItem Item, List<(int WordId, short ReadingIndex, int Occurrences)> Words, List<JpdbWordRef> Unmatched)>();
+        foreach (var item in items)
+        {
+            var seen = new HashSet<(int, short)>();
+            var words = new List<(int, short, int)>();
+            var unmatched = new List<JpdbWordRef>();
+            foreach (var w in item.Words)
+            {
+                if (!formsByWord.TryGetValue(w.WordId, out var forms))
+                {
+                    unmatched.Add(w);
+                    continue;
+                }
+
+                var readingIndex = (short)(forms.FirstOrDefault(f => f.Text == w.Spelling)?.ReadingIndex ?? 0);
+                if (seen.Add((w.WordId, readingIndex))) words.Add((w.WordId, readingIndex, Math.Max(1, w.Occurrences)));
+            }
+
+            resolved.Add((item, words, unmatched));
+        }
+
+        var limits = await userLimits.GetLimitsAsync(userId);
+        if (resolved.Any(r => r.Words.Count > limits.ImportWords)) return new([], LimitMessages.ImportTooLarge(limits));
+
+        var userDecks = await userContext.UserStudyDecks
+                                         .Where(sd => sd.UserId == userId)
+                                         .ToListAsync();
+        var userDeckIds = userDecks.Select(sd => sd.UserStudyDeckId).ToList();
+
+        var targets = resolved
+                      .Select(r => (r.Item, r.Words, r.Unmatched,
+                                    Existing: userDecks.FirstOrDefault(sd => sd.DeckType == StudyDeckType.StaticWordList
+                                                                             && sd.Name == r.Item.Name.Trim())))
+                      .ToList();
+
+        var newDeckCount = targets.Count(t => t.Existing == null);
+        if (userDecks.Count + newDeckCount > limits.StudyDecks) return new([], LimitMessages.StudyDeckCount(limits));
+
+        var replacedDeckIds = targets.Where(t => t.Existing != null).Select(t => t.Existing!.UserStudyDeckId).ToList();
+        var wordCounts = await userContext.UserStudyDeckWords
+                                          .Where(w => userDeckIds.Contains(w.UserStudyDeckId))
+                                          .GroupBy(w => w.UserStudyDeckId)
+                                          .Select(g => new { g.Key, Count = g.Count() })
+                                          .ToDictionaryAsync(g => g.Key, g => g.Count);
+        var retainedWords = wordCounts.Where(kv => !replacedDeckIds.Contains(kv.Key)).Sum(kv => kv.Value);
+        var incomingWords = targets.Sum(t => t.Words.Count);
+        if (retainedWords + incomingWords > limits.StudyDeckWords)
+            return new([], LimitMessages.StudyDeckWordsTotal(limits, incomingWords));
+
+        await using var transaction = await userContext.Database.BeginTransactionAsync();
+
+        if (replacedDeckIds.Count > 0)
+            await userContext.UserStudyDeckWords
+                             .Where(w => replacedDeckIds.Contains(w.UserStudyDeckId))
+                             .ExecuteDeleteAsync();
+
+        var maxOrder = userDecks.Count > 0 ? userDecks.Max(sd => sd.SortOrder) : -1;
+        var results = new List<JpdbDeckImportDeckResult>();
+        foreach (var (item, words, unmatched, existing) in targets)
+        {
+            var deck = existing;
+            if (deck == null)
+            {
+                deck = new UserStudyDeck
+                       {
+                           UserId = userId, DeckType = StudyDeckType.StaticWordList, Name = item.Name.Trim(),
+                           SortOrder = ++maxOrder, Order = (int)Dtos.DeckOrder.ImportOrder, CreatedAt = DateTime.UtcNow
+                       };
+                userContext.UserStudyDecks.Add(deck);
+                await userContext.SaveChangesAsync();
+            }
+
+            for (var i = 0; i < words.Count; i++)
+                userContext.UserStudyDeckWords.Add(new UserStudyDeckWord
+                                                   {
+                                                       UserStudyDeckId = deck.UserStudyDeckId, WordId = words[i].WordId,
+                                                       ReadingIndex = words[i].ReadingIndex, SortOrder = i, Occurrences = words[i].Occurrences
+                                                   });
+
+            results.Add(new JpdbDeckImportDeckResult
+                        {
+                            JpdbDeckId = item.JpdbDeckId, UserStudyDeckId = deck.UserStudyDeckId, Name = deck.Name,
+                            Matched = words.Count, Unmatched = unmatched.Count, Replaced = existing != null,
+                            UnmatchedWords = unmatched.Take(500).ToList()
+                        });
+        }
+
+        await userContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return new(results, null);
     }
 
     public async Task<ImportCommitResult> ImportToExistingDeck(string userId, int deckId, ImportToExistingRequest request)

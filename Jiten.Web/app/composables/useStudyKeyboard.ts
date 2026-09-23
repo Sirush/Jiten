@@ -21,7 +21,25 @@ export const DEFAULT_KEYBINDS: StudyKeybinds = {
   dictNext: 'ArrowRight',
 };
 
+const MOUSE_TOKEN_PREFIX = 'Mouse';
+
+const MOUSE_LABELS: Record<string, string> = {
+  Mouse1: 'Middle click',
+  Mouse2: 'Right click',
+  Mouse3: 'Back button',
+  Mouse4: 'Forward button',
+};
+
+export function mouseToken(button: number): string | null {
+  return button >= 1 && button <= 4 ? `${MOUSE_TOKEN_PREFIX}${button}` : null;
+}
+
+export function isMouseToken(key: string): boolean {
+  return key in MOUSE_LABELS;
+}
+
 export function displayKeyName(key: string): string {
+  if (isMouseToken(key)) return MOUSE_LABELS[key]!;
   switch (key) {
     case ' ':
       return 'Space';
@@ -52,7 +70,15 @@ function hasOpenOverlay(): boolean {
   return !!globalThis.document?.querySelector(OPEN_OVERLAY_SELECTOR);
 }
 
-function matchesKeybind(e: KeyboardEvent, boundKey: string): boolean {
+type StudyInput = KeyboardEvent | MouseEvent;
+
+function isMouse(e: StudyInput): e is MouseEvent {
+  return 'button' in e;
+}
+
+function matchesKeybind(e: StudyInput, boundKey: string): boolean {
+  if (isMouseToken(boundKey)) return isMouse(e) && mouseToken(e.button) === boundKey;
+  if (isMouse(e)) return false;
   if (/^[0-9]$/.test(boundKey)) {
     return e.code === `Digit${boundKey}` || e.code === `Numpad${boundKey}`;
   }
@@ -107,8 +133,22 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
     }, 150);
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.repeat) return;
+  function keybinds(): StudyKeybinds {
+    return store.studySettings.keybinds ?? DEFAULT_KEYBINDS;
+  }
+
+  function isMouseButtonBound(button: number): boolean {
+    const token = mouseToken(button);
+    return token !== null && Object.values(keybinds()).includes(token);
+  }
+
+  function handleInput(e: StudyInput) {
+    if (isMouse(e)) {
+      if (!isMouseButtonBound(e.button)) return;
+      e.preventDefault();
+    } else if (e.repeat) {
+      return;
+    }
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     if (hasOpenOverlay()) return;
@@ -116,24 +156,25 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
     // Timed-review "fail & learn" absorption window locks out grading while the answer is studied.
     if (store.gradeLock) return;
 
-    const kb = store.studySettings.keybinds ?? DEFAULT_KEYBINDS;
+    const kb = keybinds();
+    const key = isMouse(e) ? null : e.key;
     const is4Btn = store.studySettings.gradingButtons === 4;
     const gradeKeys = is4Btn ? [kb.grade1, kb.grade2, kb.grade3, kb.grade4] : [kb.grade1, kb.grade2];
     const ratings = is4Btn ? RATINGS_4 : RATINGS_2;
 
     // Swallows every other study key: replayAudio, pauseTimer, undo and wrapUp are not card-gated and would fire against a finished batch.
     if (store.batchComplete) {
-      if (e.key === 'Enter') {
+      if (key === 'Enter') {
         // Owns Enter outright so the focused Continue button cannot activate a second time.
         e.preventDefault();
         if (Date.now() - batchCompletedAt >= REVEAL_DWELL_MS) callbacks.onContinueBatch();
-      } else if (e.key === 'Escape' || matchesKeybind(e, kb.wrapUp)) {
+      } else if (key === 'Escape' || matchesKeybind(e, kb.wrapUp)) {
         callbacks.onEndSession();
       }
       return;
     }
 
-    if (e.key === 'Escape') {
+    if (key === 'Escape') {
       flashKey(kb.wrapUp);
       callbacks.onWrapUp();
       return;
@@ -149,7 +190,7 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
       }
     }
 
-    if (matchesKeybind(e, kb.flipCard) || e.key === 'Enter') {
+    if (matchesKeybind(e, kb.flipCard) || key === 'Enter') {
       e.preventDefault();
       if (!store.isFlipped) {
         flashKey(kb.flipCard);
@@ -226,12 +267,28 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
     }
   }
 
+  function suppressBoundDefault(e: MouseEvent) {
+    if (isMouseButtonBound(e.button)) e.preventDefault();
+  }
+
+  function handleContextMenu(e: MouseEvent) {
+    if (isMouseButtonBound(2)) e.preventDefault();
+  }
+
   onMounted(() => {
-    window.addEventListener('keydown', handleKeydown);
+    window.addEventListener('keydown', handleInput);
+    window.addEventListener('mousedown', handleInput);
+    window.addEventListener('mouseup', suppressBoundDefault);
+    window.addEventListener('auxclick', suppressBoundDefault);
+    window.addEventListener('contextmenu', handleContextMenu);
   });
 
   onUnmounted(() => {
-    window.removeEventListener('keydown', handleKeydown);
+    window.removeEventListener('keydown', handleInput);
+    window.removeEventListener('mousedown', handleInput);
+    window.removeEventListener('mouseup', suppressBoundDefault);
+    window.removeEventListener('auxclick', suppressBoundDefault);
+    window.removeEventListener('contextmenu', handleContextMenu);
     stopBatchWatch();
   });
 

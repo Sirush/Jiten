@@ -1,4 +1,4 @@
-using Jiten.Api.Dtos;
+﻿using Jiten.Api.Dtos;
 using Jiten.Core.Data.JMDict;
 
 namespace Jiten.Api.Helpers;
@@ -15,12 +15,15 @@ public static class ApiExtensions
     /// <summary>Groups cross-references for many words: WordId → (SenseIndex → xrefs). Pass the per-word
     /// inner map to <see cref="ToDefinitionDtos"/>.</summary>
     public static Dictionary<int, Dictionary<int, List<CrossReferenceDto>>> GroupXrefsByWord(
-        this List<JmDictCrossReference> xrefs)
+        this List<JmDictCrossReference> xrefs,
+        IReadOnlyDictionary<(int, short), JmDictWordForm>? targetForms = null)
         => xrefs.GroupBy(x => x.FromWordId)
-                .ToDictionary(g => g.Key, g => g.ToList().ToXrefsBySense());
+                .ToDictionary(g => g.Key, g => g.ToList().ToXrefsBySense(targetForms));
 
-    /// <summary>Groups a word's cross-references by source sense index for attachment to definitions.</summary>
-    public static Dictionary<int, List<CrossReferenceDto>> ToXrefsBySense(this List<JmDictCrossReference> xrefs)
+    /// <summary>Groups a word's cross-references by source sense index for attachment to definitions.
+    /// <paramref name="targetForms"/> (keyed WordId, ReadingIndex) lets each xref link to the form it names.</summary>
+    public static Dictionary<int, List<CrossReferenceDto>> ToXrefsBySense(this List<JmDictCrossReference> xrefs,
+        IReadOnlyDictionary<(int, short), JmDictWordForm>? targetForms = null)
     {
         return xrefs
             .GroupBy(x => x.FromSenseIndex ?? -1)
@@ -30,11 +33,32 @@ public static class ApiExtensions
                 {
                     Type = x.Type.ToWireString(),
                     TargetWordId = x.TargetWordId,
+                    TargetReadingIndex = ResolveTargetReadingIndex(x, targetForms),
                     TargetText = x.RawText,
                     TargetKanji = x.TargetKanji,
                     TargetReading = x.TargetReading,
                     TargetSenseIndex = x.TargetSenseIndex
                 }).ToList());
+    }
+
+    /// <summary>Reading index of the target form an xref names (xk wins over xr); 0 when nothing matches.</summary>
+    public static byte ResolveTargetReadingIndex(JmDictCrossReference xref,
+        IReadOnlyDictionary<(int, short), JmDictWordForm>? targetForms)
+    {
+        if (xref.TargetWordId is not { } targetWordId || targetForms == null)
+            return 0;
+
+        var text = string.IsNullOrEmpty(xref.TargetKanji) ? xref.TargetReading : xref.TargetKanji;
+        if (string.IsNullOrEmpty(text))
+            return 0;
+
+        var match = targetForms.Values
+                               .Where(f => f.WordId == targetWordId && f.Text == text)
+                               .OrderBy(f => f.IsSearchOnly)
+                               .ThenByDescending(f => f.IsActiveInLatestSource)
+                               .ThenBy(f => f.ReadingIndex)
+                               .FirstOrDefault();
+        return match == null ? (byte)0 : (byte)match.ReadingIndex;
     }
 
     public static List<LanguageSourceDto>? ToDto(this List<JmDictLanguageSource> sources) =>

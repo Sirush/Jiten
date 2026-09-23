@@ -104,6 +104,7 @@ static class SudachiInterop
         public byte[] Leftover = new byte[4096];
         public int LeftoverLen;
         public readonly List<WordInfo> WordInfos = new();
+        public readonly SudachiStringPool Strings = new();
         public Exception? Error;
         public readonly StringBuilder? RawCapture = captureRaw ? new StringBuilder() : null;
     }
@@ -548,11 +549,11 @@ static class SudachiInterop
             // Flush any remaining leftover
             if (state.LeftoverLen > 0)
             {
-                string line = Encoding.UTF8.GetString(state.Leftover, 0, state.LeftoverLen);
-                if (line != "EOS" && line.Length != 0)
+                ReadOnlySpan<byte> line = state.Leftover.AsSpan(0, state.LeftoverLen);
+                if (!line.SequenceEqual("EOS"u8))
                 {
-                    state.RawCapture?.Append(line).Append('\n');
-                    var wi = new WordInfo(line);
+                    state.RawCapture?.Append(Encoding.UTF8.GetString(line)).Append('\n');
+                    var wi = new WordInfo(line, state.Strings);
                     if (!wi.IsInvalid) state.WordInfos.Add(wi);
                 }
             }
@@ -654,26 +655,21 @@ static class SudachiInterop
                 int nl = span.Slice(i).IndexOf((byte)'\n');
                 if (nl < 0) break;
 
-                ReadOnlySpan<byte> part = span.Slice(i, nl);
-                string line;
+                ReadOnlySpan<byte> line = span.Slice(i, nl);
 
                 if (state.LeftoverLen != 0)
                 {
-                    var tmp = new byte[state.LeftoverLen + part.Length];
+                    var tmp = new byte[state.LeftoverLen + line.Length];
                     Buffer.BlockCopy(state.Leftover, 0, tmp, 0, state.LeftoverLen);
-                    part.CopyTo(tmp.AsSpan(state.LeftoverLen));
+                    line.CopyTo(tmp.AsSpan(state.LeftoverLen));
                     state.LeftoverLen = 0;
-                    line = Encoding.UTF8.GetString(tmp);
-                }
-                else
-                {
-                    line = Encoding.UTF8.GetString(part);
+                    line = tmp;
                 }
 
-                if (line != "EOS" && line.Length != 0)
+                if (line.Length != 0 && !line.SequenceEqual("EOS"u8))
                 {
-                    state.RawCapture?.Append(line).Append('\n');
-                    var wi = new WordInfo(line);
+                    state.RawCapture?.Append(Encoding.UTF8.GetString(line)).Append('\n');
+                    var wi = new WordInfo(line, state.Strings);
                     if (!wi.IsInvalid) state.WordInfos.Add(wi);
                 }
 

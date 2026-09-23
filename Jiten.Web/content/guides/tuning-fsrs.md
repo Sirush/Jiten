@@ -6,12 +6,12 @@ level: advanced
 order: 10
 icon: material-symbols-light:tune
 draft: false
-updated: 2026-07-28
+updated: 2026-09-23
 ---
 
 FSRS works well on its defaults, so none of this is needed to get started. Once you have a few months of reviews, the controls in **Settings → Study (SRS)** can cut your daily workload or push your recall higher.
 
-That page has two cards. **SRS Study** comes first and holds load balancing, easy days and your timezone. **FSRS Settings** is below it and holds everything else here: the retention target, the simulation, the optimiser, the health check, the raw parameters and the reschedule button. You can check [Understanding your SRS stats](/guides/understanding-your-stats) for more detailed explanations.
+That page has two cards. **SRS Study** comes first and holds load balancing, easy days and your timezone. **FSRS Settings** is below it and holds everything else here: the retention target, the simulation, the memory model, the optimiser, the health check, the raw parameters and the reschedule button. You can check [Understanding your SRS stats](/guides/understanding-your-stats) for more detailed explanations.
 
 ## Desired retention
 
@@ -25,9 +25,19 @@ Rather than guessing the trade-off, press **Simulate**. Jiten projects a year fo
 
 **Include future new cards in the estimate** show the estimates if you continue adding new cards daily as your rate set in **New cards per day**, which is more accurate if you plan to continue studying at the same rate.
 
+## Memory model
+
+Jiten offers two versions of FSRS that you can switch between using the **Memory model** setting. **FSRS-7** is the default for new accounts and for anyone who never optimised or edited their parameters. If you optimised before FSRS-7 arrived, you stay on **FSRS-6** until you switch manually.
+
+FSRS-7 also learns from the reviews you do on the same day, like learning steps and relearning a card after **Again**, so it predicts short gaps much better.
+
+Switching only affect future reviews until you reschedule or optimise.
+
+Anki still runs FSRS-6, so parameters copied from Anki are FSRS-6 parameters.
+
 ## Optimise parameters
 
-The defaults describe an average learner. **Optimise** fits them to your own review history.
+The defaults describe an average learner. **Optimise** fits them to your own review history, for whichever model is selected under **Memory model**.
 
 It is recommended to wait to have a few hundreds reviews to start optimising, then to optimise monthly or whenever your reviews double.
 
@@ -56,9 +66,9 @@ Balancing is best effort: cards will be moved within their window, so a day you 
 
 ## The raw parameters
 
-**Advanced: edit raw parameters** opens the 21 numbers behind the scheduler. **Show parameter breakdown**, inside it, adds a table naming each one and giving its default. **Optimise** writes these for you; editing them by hand is for people who know exactly which value they want to change.
+**Advanced: edit raw parameters** opens the numbers behind the scheduler: 21 for FSRS-6, 34 for FSRS-7. **Show parameter breakdown**, inside it, adds a table naming each one and giving its default. **Optimise** writes these for you; editing them by hand is for people who know exactly which value they want to change.
 
-**Reset to default** puts both the parameters and the retention target to the default.
+**Reset to default** puts both the parameters and the retention target to the default, which also moves you to FSRS-7.
 
 ## Rescheduling
 

@@ -1636,6 +1636,26 @@ public partial class StudyController(
         return Results.Ok(result);
     }
 
+    [HttpPost("study-decks/import/jpdb")]
+    [SwaggerOperation(Summary = "Import JPDB decks as word lists, replacing lists with the same name")]
+    [RequestSizeLimit(50 * 1024 * 1024)]
+    public async Task<IResult> ImportJpdbDecks([FromBody] JpdbDeckImportRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null) return Results.Unauthorized();
+
+        if (request.Decks == null || request.Decks.Count == 0)
+            return Results.BadRequest("No decks provided.");
+        if (request.Decks.Any(d => d.Name.Length > 200))
+            return Results.BadRequest("Deck name exceeds 200 characters.");
+
+        var result = await importService.ImportJpdbDecks(userId, request);
+        if (result.Error != null) return Results.BadRequest(result.Error);
+        await sessionService.BumpStudyOverviewVersion(userId);
+
+        return Results.Ok(new { decks = result.Decks });
+    }
+
     [HttpPost("study-decks/{id:int}/import")]
     [SwaggerOperation(Summary = "Import words from preview token into an existing static deck")]
     public async Task<IResult> ImportToExistingDeck(int id, [FromBody] ImportToExistingRequest request)
@@ -1795,6 +1815,7 @@ public partial class StudyController(
 
         var userSettingsRow = await FsrsSettingsHelper.LoadAsync(userContext, userId);
         var settings = FsrsSettingsHelper.GetStudySettings(userSettingsRow);
+        var memoryScheduler = FsrsSettingsHelper.CreateScheduler(userSettingsRow, enableFuzzing: false);
         limit = Math.Clamp(limit, 1, settings.BatchSize);
         var now = DateTime.UtcNow;
         var (todayStart, _) = ResolveTimezone(now, settings.Timezone);
@@ -2025,10 +2046,10 @@ public partial class StudyController(
                 .ThenByDescending(c =>
                 {
                     double overdueness;
-                    if (c.Stability is > 0 && c.LastReview.HasValue)
+                    if (c.Stability is > 0 && c.LastReview.HasValue && memoryScheduler.GetStabilityDays(c) is > 0 and var stabilityDays)
                     {
                         var elapsed = (now - c.LastReview.Value).TotalDays;
-                        overdueness = elapsed / c.Stability.Value;
+                        overdueness = elapsed / stabilityDays;
                     }
                     else
                     {
@@ -2255,7 +2276,7 @@ public partial class StudyController(
             .ToListAsync();
         RubyTextHelper.EnrichForms(wordForms);
         var wordFormsMap = wordForms.GroupBy(wf => wf.WordId)
-            .ToDictionary(g => g.Key, g => g.ToList());
+            .ToDictionary(g => g.Key, g => g.OrderBy(wf => wf.ReadingIndex).ToList());
         var freqs = await frequencySource.LoadFrequencies(context, wordIds);
         var confusables = await confusablesTask;
 
@@ -2314,9 +2335,10 @@ public partial class StudyController(
                 IsNewCard = item.IsNew,
                 Due = fsrsCard?.Due,
                 Lapses = fsrsCard?.Lapses ?? 0,
-                IsLeech = fsrsCard != null && LeechHelper.IsLeech(fsrsCard.Lapses, fsrsCard.Stability, settings.LeechThreshold),
+                IsLeech = fsrsCard != null && LeechHelper.IsLeech(fsrsCard.Lapses, memoryScheduler.GetStabilityDays(fsrsCard), settings.LeechThreshold),
                 WordText = mainForm?.RubyText ?? mainForm?.Text ?? "",
                 WordTextPlain = mainForm?.Text ?? "",
+                Reading = mainForm != null ? RubyTextHelper.FormReading(mainForm, forms!) : "",
                 Readings = forms?.Select(f => new StudyReadingDto
                 {
                     Text = f.Text,
@@ -3299,7 +3321,7 @@ public partial class StudyController(
         var userSettings = await userContext.UserFsrsSettings
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.UserId == userId);
-        var fsrsParams = userSettings?.Parameters is { Length: > 0 } p ? p : FsrsConstants.DefaultParameters;
+        var fsrsParams = FsrsSettingsHelper.GetParameters(userSettings);
         var baseRetention = userSettings?.DesiredRetention is double dr and > 0 and < 1 ? dr : FsrsConstants.DefaultDesiredRetention;
 
         var studySettings = await LoadStudySettings(userId);
@@ -3312,7 +3334,7 @@ public partial class StudyController(
                         && c.State != FsrsState.Blacklisted
                         && c.State != FsrsState.Mastered
                         && c.State != FsrsState.Suspended)
-            .Select(c => new { c.WordId, c.ReadingIndex, c.State, c.Step, c.Stability, c.Difficulty, c.Due, c.LastReview })
+            .Select(c => new { c.WordId, c.ReadingIndex, c.State, c.Step, c.Stability, c.Difficulty, c.StabilityFast, c.Due, c.LastReview })
             .ToListAsync();
 
         if (respectStudyDecksOnly && studySettings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
@@ -3332,6 +3354,7 @@ public partial class StudyController(
                 Step = c.Step,
                 Stability = c.Stability,
                 Difficulty = c.Difficulty,
+                StabilityFast = c.StabilityFast,
                 Due = c.Due,
                 LastReview = c.LastReview,
             });
@@ -3715,7 +3738,7 @@ public partial class StudyController(
         var cards = await userContext.FsrsCards
             .AsNoTracking()
             .Where(c => c.UserId == userId)
-            .Select(c => new { c.WordId, c.ReadingIndex, c.State, c.Stability, c.Difficulty, c.Due, c.LastReview, c.Lapses })
+            .Select(c => new { c.WordId, c.ReadingIndex, c.State, c.Stability, c.Difficulty, c.StabilityFast, c.Due, c.LastReview, c.Lapses })
             .ToListAsync();
 
         int newCount = 0, learning = 0, relearning = 0, young = 0, mature = 0, suspended = 0, mastered = 0, blacklisted = 0;
@@ -3735,10 +3758,17 @@ public partial class StudyController(
 
         foreach (var c in cards)
         {
+            var memory = new FsrsCard
+            {
+                State = c.State, Stability = c.Stability, Difficulty = c.Difficulty, StabilityFast = c.StabilityFast,
+                LastReview = c.LastReview, Due = c.Due
+            };
+            double? stabilityDays = c.Stability != null ? scheduler.GetStabilityDays(memory) : null;
+
             if (leechThreshold > 0 && c.Lapses >= leechThreshold
                 && c.State is not (FsrsState.Mastered or FsrsState.Blacklisted))
             {
-                if ((c.Stability ?? 0) >= RetentionCalculator.MatureThresholdDays)
+                if ((stabilityDays ?? 0) >= RetentionCalculator.MatureThresholdDays)
                 {
                     recoveredLeeches++;
                 }
@@ -3773,7 +3803,7 @@ public partial class StudyController(
                 difficultyBuckets[idx]++;
             }
 
-            if (c.Stability is { } s)
+            if (stabilityDays is { } s)
             {
                 stabilityValues.Add(s);
                 var bucket = StabilityEdgesDays.Length;
@@ -3784,11 +3814,10 @@ public partial class StudyController(
                 stabilityBuckets[bucket]++;
             }
 
-            if (c.Stability is { } stab && c.LastReview is { } last
+            if (c.Stability != null && c.LastReview != null
                 && c.State is FsrsState.Review or FsrsState.Relearning)
             {
-                var card = new FsrsCard { State = c.State, Stability = stab, LastReview = last, Due = c.Due };
-                var r = scheduler.GetCardRetrievability(card, now);
+                var r = scheduler.GetCardRetrievability(memory, now);
                 retrievabilityValues.Add(r);
                 retrievabilitySum += r;
                 var pct = Math.Clamp(r * 100, 0, 100);

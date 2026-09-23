@@ -1363,6 +1363,41 @@ namespace Jiten.Core.Migrations
                     b.ToTable("Kanji", "jmdict");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.JMDict.KanjiComponent", b =>
+                {
+                    b.Property<string>("KanjiCharacter")
+                        .HasColumnType("text");
+
+                    b.Property<short>("NodeIndex")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("Component")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsPhonetic")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsRadical")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Original")
+                        .HasColumnType("text");
+
+                    b.Property<short?>("ParentIndex")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("KanjiCharacter", "NodeIndex");
+
+                    b.HasIndex("Component")
+                        .HasDatabaseName("IX_KanjiComponents_Component");
+
+                    b.HasIndex("Original")
+                        .HasDatabaseName("IX_KanjiComponents_Original");
+
+                    b.ToTable("KanjiComponents", "jmdict");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.JMDict.KanjiReadingWord", b =>
                 {
                     b.Property<string>("KanjiCharacter")
@@ -1386,6 +1421,24 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_KanjiReadingWords_KanjiCharacter_Reading");
 
                     b.ToTable("KanjiReadingWords", "jmdict");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.JMDict.KanjiStrokes", b =>
+                {
+                    b.Property<string>("Character")
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<List<float>>("NumberPositions")
+                        .IsRequired()
+                        .HasColumnType("real[]");
+
+                    b.PrimitiveCollection<List<string>>("Paths")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.HasKey("Character");
+
+                    b.ToTable("KanjiStrokes", "jmdict");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.JMDict.WordKanji", b =>

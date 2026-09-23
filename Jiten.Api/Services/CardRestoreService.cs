@@ -140,6 +140,7 @@ public static class CardRestoreService
             {
                 card.Stability = row.Stability;
                 card.Difficulty = row.Difficulty;
+                card.StabilityFast = row.StabilityFast;
                 card.Lapses = row.Lapses;
             }
 
@@ -173,6 +174,7 @@ public static class CardRestoreService
                        Step = row.Step,
                        Stability = row.Stability,
                        Difficulty = row.Difficulty,
+                       StabilityFast = row.StabilityFast,
                        Due = row.Due,
                        LastReview = row.LastReview,
                        Lapses = row.Lapses,
@@ -189,6 +191,8 @@ public static class CardRestoreService
 
         if (row.HistoryMerged)
             FsrsReplay.Recompute(card, card.ReviewLogs.ToList(), scheduler, replayScheduler);
+        else
+            FsrsReplay.AdoptMemoryModel(card, card.ReviewLogs.ToList(), replayScheduler);
 
         ctx.FsrsCards.Add(card);
         return card.ReviewLogs.Count;

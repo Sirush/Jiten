@@ -3,6 +3,7 @@
   import { useConfirm } from 'primevue/useconfirm';
   import { Line } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, type ChartOptions, type ChartData } from 'chart.js';
+  import { extractApiError } from '~/utils/toast';
   import type { FsrsParametersResponse, FsrsWorkloadCurveResponse, WorkloadCurvePoint, FsrsHealthResponse } from '~/types';
 
   ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip);
@@ -11,7 +12,8 @@
   const toast = useToast();
   const confirm = useConfirm();
 
-  const expectedCount = 21;
+  // FSRS-6 and FSRS-7 parameter counts; the server decides which versions it accepts.
+  const acceptedCounts = [21, 34];
   const defaultDesiredRetention = 0.9;
   const parametersCsv = ref('');
   const desiredRetention = ref(defaultDesiredRetention);
@@ -28,6 +30,12 @@
   const showAdvanced = ref(false);
   const reviewCount = ref(0);
   const minimumReviews = ref(50);
+  const version = ref(6);
+  const isSwitchingModel = ref(false);
+  const modelOptions = [
+    { label: 'FSRS-7', value: 7 },
+    { label: 'FSRS-6', value: 6 },
+  ];
 
   const canOptimise = computed(() => reviewCount.value >= minimumReviews.value);
 
@@ -42,8 +50,8 @@
       .map((part) => part.trim())
       .filter((part) => part.length > 0);
     const count = parts.length;
-    if (count !== expectedCount) {
-      return { count, error: `Expected ${expectedCount} values, got ${count}.` };
+    if (!acceptedCounts.includes(count)) {
+      return { count, error: `Expected ${expectedCount.value} values, got ${count}.` };
     }
 
     const numbers = parts.map((part) => Number(part));
@@ -62,18 +70,18 @@
       .split(',')
       .map((p) => p.trim())
       .filter((p) => p.length > 0);
-    if (parts.length !== expectedCount) return null;
+    if (parts.length !== parameterDescriptions.value.length) return null;
     const nums = parts.map(Number);
     if (nums.some((n) => Number.isNaN(n) || !Number.isFinite(n))) return null;
     return nums;
   });
 
-  const defaultParameters = [
-    0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796, 1.4835, 0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658,
-    0.1542,
-  ];
+  const defaultParameters = ref<number[]>([]);
+  const expectedCount = computed(() => defaultParameters.value.length || acceptedCounts[0]!);
 
-  const parameterDescriptions: { label: string; description: string; unit?: string; decimals?: number }[] = [
+  type ParameterDescription = { label: string; description: string; unit?: string; decimals?: number };
+
+  const parameterDescriptionsV6: ParameterDescription[] = [
     { label: 'Initial stability (Again)', description: 'Days of memory stability when you press Again on a new card', unit: 'd', decimals: 2 },
     { label: 'Initial stability (Hard)', description: 'Days of memory stability when you press Hard on a new card', unit: 'd', decimals: 2 },
     { label: 'Initial stability (Good)', description: 'Days of memory stability when you press Good on a new card', unit: 'd', decimals: 2 },
@@ -96,6 +104,43 @@
     { label: 'Short-term power', description: 'Decay exponent for short-term stability' },
     { label: 'Forgetting curve decay', description: 'Shape of the forgetting curve (lower = slower memory decay)' },
   ];
+
+  // FSRS-7 tracks two memories per card: a long-term one and a short-term one that covers same-day reviews.
+  const traceBlock = (term: 'long-term' | 'short-term'): ParameterDescription[] => [
+    { label: `Recall gain (${term})`, description: `How much ${term} memory grows after a successful review` },
+    { label: `Saturation (${term})`, description: `How much harder a strong ${term} memory is to grow further` },
+    { label: `Retrievability effect (${term})`, description: 'Extra growth when you recall a card you were close to forgetting' },
+    { label: `Forget scale (${term})`, description: `Base factor for ${term} memory after you forget a card` },
+    { label: `Forget power (${term})`, description: 'How much of the previous memory survives a lapse' },
+    { label: `Forget retrievability effect (${term})`, description: 'How your recall odds at the lapse affect what survives' },
+    { label: `Hard penalty (${term})`, description: 'Growth multiplier for Hard ratings' },
+    { label: `Easy bonus (${term})`, description: 'Growth multiplier for Easy ratings' },
+  ];
+
+  const parameterDescriptionsV7: ParameterDescription[] = [
+    { label: 'Initial stability (Again)', description: 'Starting memory strength when the first rating is Again', decimals: 2 },
+    { label: 'Initial stability (Hard)', description: 'Starting memory strength when the first rating is Hard', decimals: 2 },
+    { label: 'Initial stability (Good)', description: 'Starting memory strength when the first rating is Good', decimals: 2 },
+    { label: 'Initial stability (Easy)', description: 'Starting memory strength when the first rating is Easy', decimals: 2 },
+    { label: 'Initial difficulty', description: 'Baseline difficulty for new cards (1 to 10 scale)', decimals: 2 },
+    { label: 'Difficulty sensitivity', description: 'How much the first rating affects initial difficulty' },
+    { label: 'Difficulty update rate', description: 'How quickly difficulty changes with each review' },
+    ...traceBlock('long-term'),
+    ...traceBlock('short-term'),
+    { label: 'Short-term decay', description: 'How fast short-term memory fades' },
+    { label: 'Long-term decay', description: 'How fast long-term memory fades' },
+    { label: 'Short-term curve shape', description: 'Shape of the short-term forgetting curve' },
+    { label: 'Long-term curve shape', description: 'Shape of the long-term forgetting curve' },
+    { label: 'Short-term weight', description: 'How much short-term memory counts toward recall' },
+    { label: 'Long-term weight', description: 'How much long-term memory counts toward recall' },
+    { label: 'Short-term weight falloff', description: 'How quickly short-term memory counts less as it strengthens' },
+    { label: 'Long-term weight growth', description: 'How quickly long-term memory counts more as it strengthens' },
+    { label: 'Difficulty effect on weight', description: 'How difficulty shifts recall between short-term and long-term memory' },
+    { label: 'Difficulty effect on forgetting', description: 'How difficulty changes how fast long-term memory fades' },
+    { label: 'Short-term decay change', description: 'How the short-term fading speed changes as that memory strengthens' },
+  ];
+
+  const parameterDescriptions = computed(() => (version.value === 7 ? parameterDescriptionsV7 : parameterDescriptionsV6));
 
   const validationError = computed(() => parsedState.value.error);
   const retentionError = computed(() => {
@@ -121,6 +166,8 @@
         hasUserEdited.value = false;
       }
       isDefault.value = result.isDefault;
+      version.value = result.version ?? 6;
+      defaultParameters.value = result.defaultParameters ?? [];
       desiredRetention.value = result.desiredRetention ?? defaultDesiredRetention;
       reviewCount.value = result.reviewCount ?? 0;
       minimumReviews.value = result.minimumReviewsForOptimize ?? 50;
@@ -160,6 +207,8 @@
       });
       parametersCsv.value = result.parameters;
       isDefault.value = result.isDefault;
+      version.value = result.version ?? version.value;
+      defaultParameters.value = result.defaultParameters ?? defaultParameters.value;
       desiredRetention.value = result.desiredRetention ?? defaultDesiredRetention;
       hasUserEdited.value = false;
       // Re-anchor the workload curve (baseline multipliers + recommendation) to the saved settings.
@@ -171,11 +220,10 @@
         life: 4000,
       });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Failed to update FSRS parameters.';
       toast.add({
         severity: 'error',
         summary: 'Error',
-        detail: message,
+        detail: extractApiError(error, 'Failed to update FSRS parameters.'),
         life: 5000,
       });
     } finally {
@@ -212,6 +260,8 @@
       });
       parametersCsv.value = result.parameters;
       isDefault.value = result.isDefault;
+      version.value = result.version ?? version.value;
+      defaultParameters.value = result.defaultParameters ?? defaultParameters.value;
       desiredRetention.value = result.desiredRetention ?? defaultDesiredRetention;
       hasUserEdited.value = false;
       if (workloadCurve.value) void loadWorkloadCurve();
@@ -277,6 +327,58 @@
     }
   };
 
+  const confirmSwitchModel = (target: number) => {
+    if (target === version.value || isSwitchingModel.value) return;
+    confirm.require({
+      message: "Switching memory model will only change future reviews, until you click optimise or reschedule your cards. It is recommended to optimise now for maximum benefits.",
+      header: `Switch to FSRS-${target}`,
+      rejectProps: {
+        label: 'Cancel',
+        severity: 'secondary',
+        outlined: true,
+      },
+      acceptProps: {
+        label: 'Switch',
+      },
+      accept: async () => {
+        await switchModel(target);
+      },
+    });
+  };
+
+  const switchModel = async (target: number) => {
+    try {
+      isSwitchingModel.value = true;
+      const result = await $api<FsrsParametersResponse>('srs/settings/model', {
+        method: 'POST',
+        body: { version: target },
+      });
+      parametersCsv.value = result.parameters;
+      isDefault.value = result.isDefault;
+      version.value = result.version;
+      defaultParameters.value = result.defaultParameters;
+      desiredRetention.value = result.desiredRetention;
+      hasUserEdited.value = false;
+      showBreakdown.value = false;
+      if (workloadCurve.value) void loadWorkloadCurve();
+      toast.add({
+        severity: 'success',
+        summary: `Switched to FSRS-${result.version}`,
+        detail: 'Memory model updated.',
+        life: 5000,
+      });
+    } catch (error: unknown) {
+      toast.add({
+        severity: 'error',
+        summary: 'Switch failed',
+        detail: extractApiError(error, 'The model could not be switched. Please try again.'),
+        life: 5000,
+      });
+    } finally {
+      isSwitchingModel.value = false;
+    }
+  };
+
   const confirmOptimise = () => {
     const message = rescheduleAfterOptimise.value
       ? 'This will analyse your review history to find optimal parameters and reschedule all your cards. Due dates may change.'
@@ -303,18 +405,19 @@
     try {
       isOptimising.value = true;
       optimiseError.value = null;
-      const result = await $api<{ parameters: string; loss: number; reviewCount: number; desiredRetention: number; rescheduled: boolean }>(
+      const result = await $api<{ parameters: string; loss: number; reviewCount: number; desiredRetention: number; rescheduled: boolean; version: number }>(
         `srs/settings/optimize?reschedule=${rescheduleAfterOptimise.value}`,
         { method: 'POST' }
       );
       parametersCsv.value = result.parameters;
       desiredRetention.value = result.desiredRetention;
+      version.value = result.version ?? version.value;
       isDefault.value = false;
       hasUserEdited.value = false;
       if (workloadCurve.value) void loadWorkloadCurve();
       const detail = result.rescheduled
-        ? `Parameters optimised from ${result.reviewCount} reviews. Cards have been rescheduled.`
-        : `Parameters optimised from ${result.reviewCount} reviews.`;
+        ? `FSRS-${version.value} parameters optimised from ${result.reviewCount} reviews. Cards have been rescheduled.`
+        : `FSRS-${version.value} parameters optimised from ${result.reviewCount} reviews.`;
       toast.add({
         severity: 'success',
         summary: 'Optimisation complete',
@@ -733,9 +836,29 @@
       </div>
 
       <div class="mb-5">
+        <h4 class="text-md font-semibold mb-1">Memory model</h4>
+        <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">
+          The new FSRS-7 learns from reviews done on the same day, like your learning steps and relearning after Again, making it better at predicting short gaps than FSRS-6. Switching will only affect your future reviews until you reschedule or optimise.
+        </p>
+        <div class="flex flex-wrap items-center gap-3">
+          <SelectButton
+            :model-value="version"
+            :options="modelOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+            :disabled="isLoading || isSwitchingModel || isOptimising"
+            aria-label="Memory model"
+            @update:model-value="confirmSwitchModel"
+          />
+          <ProgressSpinner v-if="isSwitchingModel" style="width: 1.5rem; height: 1.5rem" stroke-width="6" aria-label="Switching model" />
+        </div>
+      </div>
+
+      <div class="mb-5">
         <h4 class="text-md font-semibold mb-1">Optimise parameters</h4>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">
-          Analyse your review history to find the optimal FSRS parameters for your memory patterns. <br />
+          Analyse your review history to find the optimal FSRS-{{ version }} parameters for your memory patterns. <br />
           The more reviews you have, the more accurate the optimisation will be. It is recommended to optimise every time your number of reviews doubles.
           <br />You currently have {{ reviewCount }} reviews.
         </p>
@@ -832,7 +955,8 @@
       <div v-if="showAdvanced" class="mt-4">
         <h4 class="text-md font-semibold mb-1">FSRS Parameters</h4>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">
-          21 comma-separated numbers that control FSRS scheduling. These are set automatically when you optimise, but you can also edit them manually.
+          {{ expectedCount }} comma-separated numbers that control FSRS scheduling. These are set automatically when you optimise, but you can also edit them
+          manually.
         </p>
         <Textarea v-model="parametersCsv" class="w-full" rows="3" placeholder="0.2172, 1.1771, 3.2602, ..." @update:modelValue="hasUserEdited = true" />
         <div class="mt-2 text-sm text-surface-600 dark:text-surface-400">
@@ -843,7 +967,7 @@
         </Message>
         <Message v-else-if="isDefault" key="fsrs-params-default" severity="info" :closable="false" class="mt-2"> Using default FSRS settings. </Message>
 
-        <div v-if="parsedValues" class="mt-3">
+        <div v-if="parsedValues && defaultParameters.length === parameterDescriptions.length" class="mt-3">
           <button class="text-sm text-primary cursor-pointer underline" @click="showBreakdown = !showBreakdown">
             {{ showBreakdown ? 'Hide' : 'Show' }} parameter breakdown
           </button>
@@ -874,7 +998,7 @@
                     <span v-if="desc.unit" class="text-surface-400 ml-0.5">{{ desc.unit }}</span>
                   </td>
                   <td class="px-3 py-1.5 text-right tabular-nums text-surface-400">
-                    {{ desc.decimals != null ? defaultParameters[i].toFixed(desc.decimals) : defaultParameters[i].toPrecision(4) }}
+                    {{ desc.decimals != null ? defaultParameters[i]!.toFixed(desc.decimals) : defaultParameters[i]!.toPrecision(4) }}
                     <span v-if="desc.unit" class="ml-0.5">{{ desc.unit }}</span>
                   </td>
                   <td class="px-3 py-1.5 text-surface-500 dark:text-surface-400 hidden md:table-cell">{{ desc.description }}</td>

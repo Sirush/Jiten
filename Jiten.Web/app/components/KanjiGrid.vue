@@ -23,7 +23,7 @@
     error.value = null;
 
     try {
-      const data = await $api<KanjiGridResponse>(`user/profile/${props.username}/kanji-grid`, { query: { onlySeen: onlySeen.value } });
+      const data = await $api<KanjiGridResponse>(`user/profile/${props.username}/kanji-grid`);
       gridData.value = data;
     } catch (err: unknown) {
       const fetchError = err as { response?: { status?: number } };
@@ -58,7 +58,7 @@
     if (k.readings?.length) {
       for (const r of k.readings) {
         const rpct = (r.weight * 100).toFixed(0);
-        text += `\n  ${r.reading}: ${r.known}/${r.required} (${rpct}% weight)`;
+        text += `\n  ${r.reading}: ${Number(r.known.toFixed(2))}/${r.required} (${rpct}% weight)`;
       }
     }
     return text;
@@ -69,13 +69,7 @@
     return groupKanji(gridData.value.kanji, displayType.value);
   });
 
-  const groupStats = computed(() => {
-    return groups.value.map((g) => {
-      const seen = g.kanji.filter((k) => k.score > 0).length;
-      const mastered = g.kanji.filter((k) => k.score >= 0.9).length;
-      return { total: g.kanji.length, seen, mastered };
-    });
-  });
+  const groupStats = computed(() => groups.value.map((g) => kanjiGroupStats(g.kanji)));
 
   const renderGrid = () => {
     if (!gridRef.value || !gridData.value?.kanji) return;
@@ -99,10 +93,13 @@
         container.appendChild(header);
       }
 
+      const cells = onlySeen.value ? group.kanji.filter(isTrackedKanji) : group.kanji;
+      if (cells.length === 0) continue;
+
       const grid = document.createElement('div');
       grid.className = 'kanji-grid';
 
-      const html = group.kanji
+      const html = cells
         .map((k) => {
           const bg = getKanjiColour(k.score);
           const fg = k.score > 0 ? 'white' : 'inherit';
@@ -128,7 +125,7 @@
 
   const masteredCount = computed(() => {
     if (!gridData.value?.kanji) return 0;
-    return gridData.value.kanji.filter((k) => k.score >= 0.9).length;
+    return gridData.value.kanji.filter(isMasteredKanji).length;
   });
 
   const masteredPercentage = computed(() => {
@@ -164,10 +161,7 @@
     fetchKanjiGrid();
   };
 
-  watch(onlySeen, () => {
-    if (manuallyLoaded.value) fetchKanjiGrid();
-  });
-  watch([gridData, displayType], () => nextTick(renderGrid));
+  watch([gridData, displayType, onlySeen], () => nextTick(renderGrid));
 </script>
 
 <template>
@@ -205,7 +199,7 @@
         <span class="flex items-center gap-1">
           Reading coverage:
           <Icon
-            v-tooltip="'Score reflects how many readings of each kanji you know, weighted by reading frequency. 90%+ = mastered.'"
+            v-tooltip="'Score reflects how many readings of each kanji you know, weighted by reading frequency. Young card only count for half a point. 90%+ = mastered.'"
             name="material-symbols:info-outline"
             class="text-primary-700 dark:text-primary-300 cursor-help"
             style="font-size: 1rem"

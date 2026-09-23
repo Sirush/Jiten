@@ -144,10 +144,20 @@ public static class RubyTextHelper
         return sb.Length > 0 ? sb.ToString() : null;
     }
 
+    /// <summary>Kana reading of this specific form, falling back to the word's lowest-index kana form when its ruby can't be parsed.</summary>
+    public static string FormReading(JmDictWordForm form, IEnumerable<JmDictWordForm> wordForms)
+    {
+        if (form.FormType == JmDictFormType.KanaForm) return form.Text;
+        return KanaFromRubyText(form.RubyText)
+               ?? wordForms.Where(f => f.FormType == JmDictFormType.KanaForm).MinBy(f => f.ReadingIndex)?.Text
+               ?? form.Text;
+    }
+
     private static string? FindBestGuess(JmDictWordForm kanjiForm, IEnumerable<JmDictWordForm> allForms)
     {
         var kanaForms = allForms
             .Where(f => f.FormType == JmDictFormType.KanaForm)
+            .OrderBy(f => f.ReadingIndex)
             .ToList();
         if (kanaForms.Count == 0) return null;
 

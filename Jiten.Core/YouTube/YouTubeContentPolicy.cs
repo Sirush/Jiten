@@ -4,12 +4,16 @@ using Jiten.Core.Data.YouTube;
 namespace Jiten.Core.YouTube;
 
 /// <summary>Per-source admission rules, applied before any subtitle is fetched where the listing allows it.</summary>
-public record YouTubeSourceFilters(string? TitleInclude, string? TitleExclude, int? MinRuntimeSeconds, int? MaxRuntimeSeconds, int? MinCharacters = null)
+public record YouTubeSourceFilters(string? TitleInclude, string? TitleExclude, int? MinRuntimeSeconds, int? MaxRuntimeSeconds, int? MinCharacters = null,
+                                   bool StreamsOnly = false)
 {
     public static readonly YouTubeSourceFilters None = new(null, null, null, null);
 
     public static YouTubeSourceFilters From(YouTubeSource source) =>
-        new(source.TitleFilterInclude, source.TitleFilterExclude, source.MinRuntimeSeconds, source.MaxRuntimeSeconds, source.MinCharacters);
+        new(source.TitleFilterInclude, source.TitleFilterExclude, source.MinRuntimeSeconds, source.MaxRuntimeSeconds, source.MinCharacters,
+            source.SourceKind == YouTubeSourceKind.ChannelStreams);
+
+    public YouTubeSourceFilters For(YouTubeSourceKind kind) => this with { StreamsOnly = kind == YouTubeSourceKind.ChannelStreams };
 }
 
 /// <summary>Hard requirements every video must pass before it becomes a subdeck. Reasons use the ledger's machine prefixes.</summary>

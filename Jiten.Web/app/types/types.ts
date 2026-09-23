@@ -281,6 +281,7 @@ export interface LanguageSource {
 export interface CrossReference {
   type: string; // see | ant | syn
   targetWordId?: number;
+  targetReadingIndex?: number;
   targetText: string;
   targetKanji?: string;
   targetReading?: string;
@@ -383,6 +384,8 @@ export interface FsrsParametersResponse {
   desiredRetention: number;
   reviewCount: number;
   minimumReviewsForOptimize: number;
+  version: number;
+  defaultParameters: number[];
 }
 
 export interface SrsRecomputeBatchResponse {
@@ -790,6 +793,29 @@ export interface Kanji {
   frequencyRank: number | null;
   topWords?: WordSummary[];
   wordsByReading?: KanjiReadingWords[];
+  components?: KanjiComponent[];
+  usedIn?: KanjiUsedIn[];
+  usedInTotal?: number;
+  strokes?: KanjiStrokes | null;
+}
+
+export interface KanjiComponent {
+  character: string;
+  original: string | null;
+  linkCharacter: string | null;
+  meaning: string | null;
+  isRadical: boolean;
+  isPhonetic: boolean;
+}
+
+export interface KanjiUsedIn {
+  character: string;
+  meaning: string | null;
+}
+
+export interface KanjiStrokes {
+  paths: string[];
+  numberPositions: number[];
 }
 
 export interface KanjiList {
@@ -991,7 +1017,10 @@ export interface DuplicateCheckResultDto {
 export interface DuplicateCheckDeckDto {
   deckId: number;
   title: string;
+  romajiTitle?: string | null;
+  englishTitle?: string | null;
   mediaType: MediaType;
+  isExactMatch: boolean;
 }
 
 export interface DuplicateCheckRequestDto {
@@ -1000,6 +1029,7 @@ export interface DuplicateCheckRequestDto {
   mediaType: MediaType;
   status: RequestStatus;
   upvoteCount: number;
+  isExactMatch: boolean;
 }
 
 export interface RequestActivityLogDto {
@@ -1286,6 +1316,7 @@ export interface StudyCardDto {
   isLeech: boolean;
   wordText: string;
   wordTextPlain: string;
+  reading?: string;
   readings: StudyReadingDto[];
   definitions: StudyDefinitionDto[];
   partsOfSpeech: string[];

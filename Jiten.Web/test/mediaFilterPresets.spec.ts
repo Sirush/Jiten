@@ -113,6 +113,13 @@ describe('capturing the live query', () => {
     expect(presetQueryEquals({ sortBy: 'title', title: '' }, { sortBy: 'title' })).toBe(true);
   });
 
+  it('keeps a multi-status value intact through capture, match and apply', () => {
+    const query = capturePresetQuery({ sortBy: 'title', status: 'planning,nostatus' });
+    expect(query.status).toBe('planning,nostatus');
+    expect(presetQueryEquals(query, { sortBy: 'title', status: 'planning,nostatus' })).toBe(true);
+    expect(buildPresetQuery({ status: 'completed' }, preset('Backlog', query)).status).toBe('planning,nostatus');
+  });
+
   it('skips ignored keys so an embed match can disregard the media tab', () => {
     expect(presetQueryEquals({ sortBy: 'title', mediaType: '1' }, { sortBy: 'title', mediaType: '3' }, ['mediaType'])).toBe(true);
     expect(presetQueryEquals({ sortBy: 'title', mediaType: '1' }, { sortBy: 'difficulty', mediaType: '3' }, ['mediaType'])).toBe(false);

@@ -9,6 +9,9 @@ public class UserFsrsSettings
 
     public string ParametersJson { get; set; } = "[]";
 
+    /// <summary>Parameters in force before the last FSRS model switch, so switching back restores them instead of defaults.</summary>
+    public string? PreviousParametersJson { get; set; }
+
     public double? DesiredRetention { get; set; }
 
     public string SettingsJson { get; set; } = "{}";

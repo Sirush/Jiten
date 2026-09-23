@@ -4511,6 +4511,18 @@ namespace Jiten.Parser
             return true;
         }
 
+        /// <summary>False only when the rolling hash proves no lookup key equals prefix + tail; unsafe chars always pass.</summary>
+        private static bool PrefixTailMayMatch(bool prefixSafe, bool prefixLenOk, long prefixHash, int prefixLen, string tail)
+        {
+            if (!prefixSafe || !IsHashFoldSafe(tail))
+                return true;
+
+            return prefixLenOk
+                   && tail.Length <= _maxLookupKeyLength
+                   && prefixLen + tail.Length <= _maxLookupKeyLength
+                   && _compoundHashSet!.Contains(unchecked(prefixHash * _hashBasePowers![tail.Length] + HiraRollingHash(tail)));
+        }
+
         private static readonly HashSet<long> ExpressionExclusionHashes = BuildExpressionExclusionHashes();
 
         private static HashSet<long> BuildExpressionExclusionHashes()
@@ -4706,19 +4718,12 @@ namespace Jiten.Parser
                                 && lastWord.DictionaryForm != lastWord.Text)
                             {
                                 var dictForm = lastWord.DictionaryForm;
-                                bool dictMayMatch = true;
-                                if (safeUpTo >= windowSize - 1 && IsHashFoldSafe(dictForm))
-                                {
-                                    int dictLen = cumLen[windowSize - 1] + dictForm.Length;
-                                    dictMayMatch = cumLenOk[windowSize - 1] &&
-                                                   dictForm.Length <= _maxLookupKeyLength &&
-                                                   dictLen <= _maxLookupKeyLength &&
-                                                   _compoundHashSet!.Contains(
-                                                       unchecked(cumHash[windowSize - 1] * _hashBasePowers[dictForm.Length] +
-                                                                 HiraRollingHash(dictForm)));
-                                }
+                                bool prefixSafe = safeUpTo >= windowSize - 1;
+                                bool prefixLenOk = cumLenOk[windowSize - 1];
+                                long prefixHash = cumHash[windowSize - 1];
+                                int prefixLen = cumLen[windowSize - 1];
 
-                                if (dictMayMatch)
+                                if (PrefixTailMayMatch(prefixSafe, prefixLenOk, prefixHash, prefixLen, dictForm))
                                 {
                                     var prefix = ConcatTokenTexts(sentence.Words, i, windowSize - 1);
                                     var dictCandidate = prefix + dictForm;
@@ -4734,11 +4739,14 @@ namespace Jiten.Parser
                                 // tail via single-step deconjugation instead.
                                 if (!matched && windowSize <= 4)
                                 {
-                                    var prefix = ConcatTokenTexts(sentence.Words, i, windowSize - 1);
+                                    string? prefix = null;
                                     foreach (var form in Deconjugator.Instance.Deconjugate(lastWord.Text))
                                     {
                                         if (form.Process.Length > 2 || form.Text == lastWord.Text || form.Text == dictForm)
                                             continue;
+                                        if (!PrefixTailMayMatch(prefixSafe, prefixLenOk, prefixHash, prefixLen, form.Text))
+                                            continue;
+                                        prefix ??= ConcatTokenTexts(sentence.Words, i, windowSize - 1);
                                         var candidate = prefix + form.Text;
                                         if (IsExpressionLookupMatch(candidate))
                                         {
@@ -5661,8 +5669,9 @@ namespace Jiten.Parser
             return await ApplyAdjacentScoringCore(sentencePairs, candidateLookup, diagnostics, relocatedHints);
         }
 
+        // State stands in for the dedup key: pass 1 builds exactly one RederiveState per dedup key.
         private readonly record struct ScoredCandidatesKey(
-            (string, PartOfSpeech, string, string, bool, bool, int?) DedupKey,
+            RederivationHelper.RederiveState State,
             string NormalizedForm,
             bool IsPossibleDependant,
             bool IsArchaicSentence,
@@ -5670,6 +5679,16 @@ namespace Jiten.Parser
             bool IsSentenceFinal,
             bool NextIsCopula,
             bool AdmitCounters);
+
+        private sealed record ScoredCandidates(List<FormCandidate> Candidates, FormScoringContext Context);
+
+        private static FormCandidate? FindCandidate(List<FormCandidate> candidates, int wordId, byte readingIndex)
+        {
+            foreach (var c in candidates)
+                if (c.Word.WordId == wordId && c.ReadingIndex == readingIndex)
+                    return c;
+            return null;
+        }
 
         private static bool IsInfinitiveResult(DeckWord? word) =>
             word?.LastConjugation is "(infinitive)" or "(unstressed infinitive)";
@@ -5723,8 +5742,8 @@ namespace Jiten.Parser
 
             // Pass 1: identify tokens needing rederivation and collect all word IDs
             var allWordIds = new HashSet<int>();
-            var rederiveStates = new Dictionary<(int sentIdx, int tokIdx), RederivationHelper.RederiveState>();
-            var cachedCandidates = new Dictionary<(int sentIdx, int tokIdx), List<FormCandidate>>();
+            var rederiveStates = new RederivationHelper.RederiveState?[sentencePairs.Count][];
+            var cachedCandidates = new List<FormCandidate>?[sentencePairs.Count][];
             var rederiveCache = new Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), RederivationHelper.RederiveState?>();
             var softRuleMemo = new Dictionary<TransitionRuleEngine.SoftRulePrefilterKey, bool>();
 
@@ -5774,13 +5793,13 @@ namespace Jiten.Parser
                     bool infinitiveAfterNominal = IsInfinitiveResult(currentResult) && i > 0 &&
                         (prevInfo!.Text == "の"
                          || IsInfinitiveResult(prevResult)
-                         || prevResult?.PartsOfSpeech.Any(p => PosMask.Has(PosMask.NounLike, PosMask.Bit(p))) == true);
+                         || (prevResult != null && PosMask.Has(PosMask.NounLike, PosMask.FromList(prevResult.PartsOfSpeech))));
 
                     // A sentence-final verb result may be a lexicalised interjection homograph the
                     // first pass can't see (来い ← 来る vs. 来い "come!"); keep it rescorable so the
                     // sentence-final interjection override can run even on a confident first pass.
                     bool sentenceFinalVerb = i == sentenceWords.Count - 1
-                        && currentResult.PartsOfSpeech.Any(p => p is PartOfSpeech.Verb);
+                        && currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb);
 
                     if (!isArchaicPass1 && !nextIsCopula && !nextIsForwardAnchor && !prevNominalTarget && !prevNumericCounter && !hasHint && !infinitiveAfterNominal && !sentenceFinalVerb
                         && ScoringPolicy.IsHighConfidence(currentMargin))
@@ -5818,7 +5837,7 @@ namespace Jiten.Parser
                     {
                         if (candidateLookup.TryGetValue(dedupKey, out var fpCandidates))
                         {
-                            cachedCandidates[(si, i)] = fpCandidates;
+                            (cachedCandidates[si] ??= new List<FormCandidate>?[sentenceWords.Count])[i] = fpCandidates;
                             Interlocked.Increment(ref ParserCounters.AdjFirstPassCandidates);
                             continue;
                         }
@@ -5834,7 +5853,7 @@ namespace Jiten.Parser
                     }
                     if (state == null) continue;
 
-                    rederiveStates[(si, i)] = state;
+                    (rederiveStates[si] ??= new RederivationHelper.RederiveState?[sentenceWords.Count])[i] = state;
                     Interlocked.Increment(ref ParserCounters.AdjRederived);
                     allWordIds.UnionWith(state.CandidateIds);
                 }
@@ -5858,13 +5877,16 @@ namespace Jiten.Parser
             if (timing) ParserCounters.Lap(ParserCounters.Section.AdjWordFetch, ref mark);
 
             // Pass 2: score and pick best candidates
-            var corrected = new List<DeckWord>();
+            int tokenCount = 0;
+            foreach (var sentenceWords in sentencePairs)
+                tokenCount += sentenceWords.Count;
+            var corrected = new List<DeckWord>(tokenCount);
             int globalPos = 0;
             var bonusCache = new Dictionary<FormCandidate, (int bonus, List<string>? rules, int rubyBonus)>();
             // Rederived candidate lists, base-scored, keyed by every input that shapes them. Tokens
             // sharing a key get the same list: base scores are context-free and the only list
             // mutation (the copula flag clear) is part of the key. Bonuses stay per token.
-            var scoredMemo = new Dictionary<ScoredCandidatesKey, (List<FormCandidate> candidates, FormScoringContext context)>();
+            var scoredMemo = new Dictionary<ScoredCandidatesKey, ScoredCandidates>();
 
             for (int si = 0; si < sentencePairs.Count; si++)
             {
@@ -5897,12 +5919,12 @@ namespace Jiten.Parser
                     bool hasMemoKey = false;
                     ScoredCandidatesKey memoKey = default;
                     FormScoringContext? memoContext = null;
-                    if (cachedCandidates.TryGetValue((si, i), out var cached))
+                    if (cachedCandidates[si]?[i] is { } cached)
                     {
                         candidates = cached;
                         fromFirstPassCache = true;
                     }
-                    else if (rederiveStates.TryGetValue((si, i), out var state))
+                    else if (rederiveStates[si]?[i] is { } state)
                     {
                         // Kanji surfaces only: a kana counter homograph after numeric-like material
                         // is usually something else entirely (何|か = question particle, not 箇/課).
@@ -5914,7 +5936,7 @@ namespace Jiten.Parser
                         // Hinted tokens skip the memo: the hint changes the POS filter and is per position.
                         if (!tokenHasHint)
                         {
-                            memoKey = new ScoredCandidatesKey(GetDedupKey(currentInfo), currentInfo.NormalizedForm,
+                            memoKey = new ScoredCandidatesKey(state, currentInfo.NormalizedForm,
                                 currentInfo.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant),
                                 isArchaicSentence, i == 0, i == sentenceWords.Count - 1, nextIsCopula, admitCounters);
                             hasMemoKey = true;
@@ -5922,8 +5944,8 @@ namespace Jiten.Parser
 
                         if (hasMemoKey && scoredMemo.TryGetValue(memoKey, out var memo))
                         {
-                            candidates = memo.candidates;
-                            memoContext = memo.context;
+                            candidates = memo.Candidates;
+                            memoContext = memo.Context;
                             memoHit = true;
                             Interlocked.Increment(ref ParserCounters.AdjMemoHits);
                         }
@@ -5977,8 +5999,7 @@ namespace Jiten.Parser
                     // Only this pass knows the token is sentence-final, so force the refine path to run
                     // even without an adjacency bonus when the override would flip the pick.
                     var sfInterjCurrent = scoringContext.IsSentenceFinal
-                        ? candidates.FirstOrDefault(c => c.Word.WordId == currentResult.WordId
-                                                         && c.ReadingIndex == currentResult.ReadingIndex)
+                        ? FindCandidate(candidates, currentResult.WordId, currentResult.ReadingIndex)
                         : null;
                     bool interjectionFlip = sfInterjCurrent != null
                         && FormCandidateSelector.ApplySentenceFinalInterjection(sfInterjCurrent, candidates, scoringContext) != null;
@@ -5988,9 +6009,10 @@ namespace Jiten.Parser
                     // (行けよ → 行ける), only the interjection override.
                     bool onlyInterjectionAllowed = scoringContext.IsSentenceFinal
                         && ScoringPolicy.IsHighConfidence(currentMargin)
-                        && currentResult.PartsOfSpeech.Any(p => p is PartOfSpeech.Verb);
+                        && currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb);
 
                     Interlocked.Increment(ref ParserCounters.AdjTokensScored);
+                    ParserCounters.Add(ref ParserCounters.AdjCandidatesScored, candidates.Count);
                     bool anyNonZeroBonus = false;
                     bonusCache.Clear();
 
@@ -6025,7 +6047,7 @@ namespace Jiten.Parser
                     Dictionary<int, int>? prevNominalMap = null;
                     if (prevResult != null
                         && TransitionRuleSets.PrevNominalBoostSurfaces.Contains(currentInfo.Text)
-                        && prevResult.PartsOfSpeech.Any(p => PosMask.Has(PosMask.NounLike, PosMask.Bit(p))))
+                        && PosMask.Has(PosMask.NounLike, PosMask.FromList(prevResult.PartsOfSpeech)))
                     {
                         foreach (var (targetWordId, boost) in TransitionRuleSets.PrevNominalBoosts)
                         {
@@ -6083,7 +6105,7 @@ namespace Jiten.Parser
 
                     if (timing) ParserCounters.AddSection(ParserCounters.Section.AdjScoreCandidates, tScore);
                     if (hasMemoKey && !memoHit)
-                        scoredMemo[memoKey] = (candidates, scoringContext);
+                        scoredMemo[memoKey] = new ScoredCandidates(candidates, scoringContext);
 
                     // Archaic sentence context changes base scores; if it would flip the winner, also re-select.
                     if (!anyNonZeroBonus && isArchaicSentence)
@@ -6116,9 +6138,7 @@ namespace Jiten.Parser
                     if (diagnostics != null && newBest != null &&
                         bonusCache.TryGetValue(newBest, out var dnb) && dnb.rules is { Count: > 0 })
                     {
-                        var firstPassCandidate = candidates.FirstOrDefault(c =>
-                                                                           c.Word.WordId == currentResult.WordId &&
-                                                                           c.ReadingIndex == currentResult.ReadingIndex);
+                        var firstPassCandidate = FindCandidate(candidates, currentResult.WordId, currentResult.ReadingIndex);
                         var firstPassScore = firstPassCandidate?.TotalScore ?? 0;
                         int firstPassRuby = firstPassCandidate != null && bonusCache.TryGetValue(firstPassCandidate, out var fpb) ? fpb.rubyBonus : 0;
 

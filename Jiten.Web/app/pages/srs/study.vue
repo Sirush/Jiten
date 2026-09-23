@@ -291,8 +291,7 @@
   function startElapsedTimer() {
     stopElapsedTimer();
     elapsedTimer = setInterval(() => {
-      const start = srsStore.sessionStats.startTime;
-      if (start) elapsedSeconds.value = Math.floor((Date.now() - start.getTime()) / 1000);
+      elapsedSeconds.value = Math.floor(srsStore.sessionActiveMs() / 1000);
     }, 1000);
   }
   function stopElapsedTimer() {
@@ -545,7 +544,7 @@
         :cards-reviewed="srsStore.sessionStats.cardsReviewed"
         :new-cards-learned="srsStore.sessionStats.newCardsLearned"
         :correct-count="srsStore.sessionStats.correctCount"
-        :start-time="srsStore.sessionStats.startTime"
+        :active-ms="srsStore.sessionStats.activeMs"
         :hardest-cards="srsStore.hardestCards"
         :grade-counts="srsStore.sessionStats.gradeCounts"
         :leeches="srsStore.sessionLeeches"
@@ -759,8 +758,10 @@
                   :message="writeInMessage"
                   :card-key="cardKey"
                   :disabled="srsStore.isBusy"
+                  :can-undo="srsStore.canUndo"
                   @submit="writeInSubmit"
                   @give-up="writeInGiveUp"
+                  @undo="handleUndo"
                 />
               </template>
             </SrsStudyCard>
@@ -788,8 +789,10 @@
             :message="writeInMessage"
             :card-key="cardKey"
             :disabled="srsStore.isBusy"
+            :can-undo="srsStore.canUndo"
             @submit="writeInSubmit"
             @give-up="writeInGiveUp"
+            @undo="handleUndo"
           />
           <!-- Inline placement: the input lives in the card, so the bar just guides the user. -->
           <div

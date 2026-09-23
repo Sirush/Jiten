@@ -70,13 +70,6 @@ public sealed record RoadmapEngineDrill(
     double Coverage,
     IReadOnlyList<RoadmapWord> Words);
 
-/// <summary>
-/// The roadmap search. Deliberately free of EF, HTTP and configuration so it can be unit-tested against
-/// hand-built candidate sets; <c>RoadmapDataLoader</c> owns everything I/O.
-///
-/// The objective is <b>maximise value-weighted words acquired, subject to coverage ≥ floor</b>. "Fewer new
-/// words / gentler steps" is not a separate mode — it is the floor moving up. See PLAN_LearningRoadmap.md.
-/// </summary>
 public static class RoadmapEngine
 {
     /// <summary>ReadingIndex is a byte on DeckWord, so 8 bits is exact, not a lossy hash.</summary>

@@ -179,7 +179,7 @@ public class SrsController(
                                                                         c.ReadingIndex == request.ReadingIndex);
 
         var userSettings = await LoadUserSettings(userId);
-        var parameters = GetParameters(userSettings);
+        var (parameters, version) = FsrsSettingsHelper.ResolveParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var studySettings = GetStudySettings(userSettings);
         var loadBalancer = await BuildLoadBalancer(userId, studySettings);
@@ -207,11 +207,11 @@ public class SrsController(
         var leechSuspended = false;
         var isLapse = previousState == FsrsState.Review && request.Rating == FsrsRating.Again;
         var threshold = studySettings.LeechThreshold;
-        var wasLeech = LeechHelper.IsLeech(card.Lapses, card.Stability, threshold);
+        var wasLeech = LeechHelper.IsLeech(card.Lapses, scheduler.GetStabilityDays(card), threshold);
 
         cardAndLog.UpdatedCard.Lapses = isLapse ? card.Lapses + 1 : card.Lapses;
 
-        var isLeech = LeechHelper.IsLeech(cardAndLog.UpdatedCard.Lapses, cardAndLog.UpdatedCard.Stability, threshold);
+        var isLeech = LeechHelper.IsLeech(cardAndLog.UpdatedCard.Lapses, scheduler.GetStabilityDays(cardAndLog.UpdatedCard), threshold);
         var leechDetected = (isLapse && LeechHelper.IsNotifyStep(cardAndLog.UpdatedCard.Lapses, threshold))
                             || (!wasLeech && isLeech);
 
@@ -276,7 +276,7 @@ public class SrsController(
             success = true,
             nextDue = cardAndLog.UpdatedCard.Due,
             newState = (int)cardAndLog.UpdatedCard.State,
-            stability = cardAndLog.UpdatedCard.Stability,
+            stability = scheduler.GetStabilityDays(cardAndLog.UpdatedCard),
             difficulty = cardAndLog.UpdatedCard.Difficulty,
             leechDetected,
             leechSuspended,
@@ -372,7 +372,7 @@ public class SrsController(
         var now = DateTime.UtcNow;
 
         var userSettings = await LoadUserSettings(userId);
-        var parameters = GetParameters(userSettings);
+        var (parameters, version) = FsrsSettingsHelper.ResolveParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var studySettings = GetStudySettings(userSettings);
         var loadBalancer = await BuildLoadBalancer(userId, studySettings);
@@ -436,7 +436,7 @@ public class SrsController(
             var isLapse = previousState == FsrsState.Review && rating == FsrsRating.Again;
             cardAndLog.UpdatedCard.Lapses = isLapse ? card.Lapses + 1 : card.Lapses;
 
-            var isLeech = LeechHelper.IsLeech(cardAndLog.UpdatedCard.Lapses, cardAndLog.UpdatedCard.Stability,
+            var isLeech = LeechHelper.IsLeech(cardAndLog.UpdatedCard.Lapses, scheduler.GetStabilityDays(cardAndLog.UpdatedCard),
                                               studySettings.LeechThreshold);
             var suspendedNow = false;
             if (LeechHelper.ShouldSuspend(studySettings.LeechAction, rating, isLeech))
@@ -540,12 +540,14 @@ public class SrsController(
         if (card == null)
             return Results.Ok(new ReviewHistoryDto());
 
+        var scheduler = FsrsSettingsHelper.CreateScheduler(await LoadUserSettings(userId), enableFuzzing: false);
+
         return Results.Ok(new ReviewHistoryDto
         {
             Card = new CardStateDto
             {
                 State = (int)card.State,
-                Stability = card.Stability,
+                Stability = card.Stability != null ? scheduler.GetStabilityDays(card) : null,
                 Difficulty = card.Difficulty,
                 Due = card.Due,
                 LastReview = card.LastReview,
@@ -631,7 +633,7 @@ public class SrsController(
         }
 
         var userSettings = await LoadUserSettings(userId);
-        var parameters = GetParameters(userSettings);
+        var (parameters, version) = FsrsSettingsHelper.ResolveParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var isDefault = IsSettingsDefault(parameters, desiredRetention);
         var liveReviewCount = await userContext.FsrsReviewLogs.CountAsync(r => r.Card.UserId == userId);
@@ -647,7 +649,9 @@ public class SrsController(
             IsDefault = isDefault,
             DesiredRetention = desiredRetention,
             ReviewCount = reviewCount,
-            MinimumReviewsForOptimize = FsrsOptimizer.MinimumReviews
+            MinimumReviewsForOptimize = FsrsOptimizer.MinimumReviews,
+            Version = (int)version,
+            DefaultParameters = FsrsVersions.DefaultParameters(version)
         };
 
         return Results.Ok(response);
@@ -668,7 +672,7 @@ public class SrsController(
         }
 
         var settings = await userContext.UserFsrsSettings.FirstOrDefaultAsync(s => s.UserId == userId);
-        var currentParameters = GetParameters(settings);
+        var (currentParameters, currentVersion) = FsrsSettingsHelper.ResolveParameters(settings);
         var currentDesiredRetention = GetDesiredRetention(settings);
 
         var nextParameters = currentParameters;
@@ -678,9 +682,9 @@ public class SrsController(
         {
             if (string.IsNullOrWhiteSpace(request.Parameters))
             {
-                nextParameters = FsrsConstants.DefaultParameters;
+                nextParameters = [];
             }
-            else if (!TryParseParametersCsv(request.Parameters, out var parsedParameters, out var error))
+            else if (!TryParseParametersCsv(request.Parameters, out var parsedParameters, out _, out var error))
             {
                 return Results.BadRequest(error);
             }
@@ -702,7 +706,9 @@ public class SrsController(
 
         var parametersAreDefault = AreParametersDefault(nextParameters);
         var desiredRetentionIsDefault = IsDesiredRetentionDefault(nextDesiredRetention);
-        var shouldRemoveSettings = parametersAreDefault && desiredRetentionIsDefault;
+        var nextVersion = parametersAreDefault ? FsrsVersions.Unoptimised : FsrsVersions.FromParameterCount(nextParameters.Length) ?? currentVersion;
+        var switchesModel = nextVersion != currentVersion;
+        var shouldRemoveSettings = parametersAreDefault && desiredRetentionIsDefault && !switchesModel;
 
         if (shouldRemoveSettings)
         {
@@ -721,17 +727,26 @@ public class SrsController(
                 userContext.UserFsrsSettings.Add(settings);
             }
 
-            settings.Parameters = nextParameters;
+            if (switchesModel)
+                settings.PreviousParametersJson = JsonSerializer.Serialize(currentParameters);
+
+            // Stored empty so default users follow FsrsVersions.Unoptimised instead of pinning today's defaults.
+            settings.Parameters = parametersAreDefault ? [] : nextParameters;
             settings.DesiredRetention = desiredRetentionIsDefault ? null : nextDesiredRetention;
             await userContext.SaveChangesAsync();
         }
 
+        var (resolvedParameters, resolvedVersion) = FsrsSettingsHelper.ResolveParameters(settings);
+        if (switchesModel)
+            await recomputeJob.RecomputeMemoryStates(userId);
         await sessionService.BumpStudyOverviewVersion(userId);
         return Results.Ok(new FsrsParametersResponse
         {
-            Parameters = SerializeParametersCsv(nextParameters),
-            IsDefault = shouldRemoveSettings,
-            DesiredRetention = nextDesiredRetention
+            Parameters = SerializeParametersCsv(resolvedParameters),
+            IsDefault = parametersAreDefault && desiredRetentionIsDefault,
+            DesiredRetention = nextDesiredRetention,
+            Version = (int)resolvedVersion,
+            DefaultParameters = FsrsVersions.DefaultParameters(resolvedVersion)
         });
     }
 
@@ -781,10 +796,11 @@ public class SrsController(
         if (items.Count == 0)
             return Results.BadRequest(new { error = "Not enough review data to optimise." });
 
-        var result = FsrsOptimizer.Optimize(items);
-
         var settings = await userContext.UserFsrsSettings.FirstOrDefaultAsync(s => s.UserId == userId);
         var desiredRetention = GetDesiredRetention(settings);
+        var (_, version) = FsrsSettingsHelper.ResolveParameters(settings);
+
+        var result = version == FsrsVersion.V7 ? FsrsOptimizerV7.Optimize(items) : FsrsOptimizer.Optimize(items);
 
         if (settings == null)
         {
@@ -800,6 +816,11 @@ public class SrsController(
             await recomputeJob.RecomputeUserSrs(userId, result.Parameters, desiredRetention,
                                                 studySettings.LoadBalancing, BuildEasyDaysPolicy(studySettings));
         }
+        else if (version == FsrsVersion.V7)
+        {
+            // FSRS-7 states only mean something under the parameters that produced them; due dates still wait for a reschedule.
+            await recomputeJob.RecomputeMemoryStates(userId);
+        }
         await sessionService.BumpStudyOverviewVersion(userId);
 
         return Results.Ok(new
@@ -809,8 +830,78 @@ public class SrsController(
             reviewCount = result.ReviewCount,
             isDefault = false,
             desiredRetention,
-            rescheduled = reschedule
+            rescheduled = reschedule,
+            version = (int)version
         });
+    }
+
+    [HttpPost("settings/model")]
+    [SwaggerOperation(Summary = "Switch FSRS model version",
+                      Description = "Switches between FSRS-6 and FSRS-7, restoring the parameters used before the previous switch when they match the target version, and rebuilds memory states without rescheduling.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> SwitchModel(SwitchFsrsModelRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null)
+            return Results.Unauthorized();
+
+        if (request.Version is not ((int)FsrsVersion.V6 or (int)FsrsVersion.V7))
+            return Results.BadRequest("Version must be 6 or 7.");
+
+        var target = (FsrsVersion)request.Version;
+        var settings = await userContext.UserFsrsSettings.FirstOrDefaultAsync(s => s.UserId == userId);
+        var (currentParameters, currentVersion) = FsrsSettingsHelper.ResolveParameters(settings);
+
+        if (currentVersion != target)
+        {
+            if (settings == null)
+            {
+                settings = new UserFsrsSettings { UserId = userId };
+                userContext.UserFsrsSettings.Add(settings);
+            }
+
+            var previous = ParseStoredParameters(settings.PreviousParametersJson);
+            var next = previous != null && FsrsVersions.FromParameterCount(previous.Length) == target
+                ? previous
+                : FsrsVersions.DefaultParameters(target);
+
+            settings.PreviousParametersJson = JsonSerializer.Serialize(currentParameters);
+            settings.Parameters = FsrsVersions.FollowsUnoptimised(next) ? [] : next;
+            await userContext.SaveChangesAsync();
+
+            logger.LogInformation("User {UserId} switched FSRS model {From} -> {To}", userId, (int)currentVersion, (int)target);
+            await recomputeJob.RecomputeMemoryStates(userId);
+            await sessionService.BumpStudyOverviewVersion(userId);
+        }
+
+        var (parameters, version) = FsrsSettingsHelper.ResolveParameters(settings);
+        var desiredRetention = GetDesiredRetention(settings);
+        return Results.Ok(new FsrsParametersResponse
+        {
+            Parameters = SerializeParametersCsv(parameters),
+            IsDefault = IsSettingsDefault(parameters, desiredRetention),
+            DesiredRetention = desiredRetention,
+            Version = (int)version,
+            DefaultParameters = FsrsVersions.DefaultParameters(version)
+        });
+    }
+
+    private static double[]? ParseStoredParameters(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<double[]>(json) is { Length: > 0 } parameters && parameters.All(double.IsFinite)
+                ? parameters
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     [HttpGet("settings/health")]
@@ -987,7 +1078,7 @@ public class SrsController(
         }
 
         var userSettings = await LoadUserSettings(userId);
-        var parameters = GetParameters(userSettings);
+        var (parameters, version) = FsrsSettingsHelper.ResolveParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var studySettings = GetStudySettings(userSettings);
         await recomputeJob.RecomputeUserSrs(userId, parameters, desiredRetention,
@@ -1017,7 +1108,7 @@ public class SrsController(
         }
 
         var userSettings = await LoadUserSettings(userId);
-        var parameters = GetParameters(userSettings);
+        var (parameters, version) = FsrsSettingsHelper.ResolveParameters(userSettings);
         var desiredRetention = GetDesiredRetention(userSettings);
         var studySettings = GetStudySettings(userSettings);
         var result = await recomputeJob.RecomputeUserSrsBatch(userId, parameters, desiredRetention, lastCardId, batchSize,
@@ -1243,6 +1334,7 @@ public class SrsController(
         card.Step = 0;
         card.Stability = null;
         card.Difficulty = null;
+        card.StabilityFast = null;
         card.Due = DateTime.UtcNow;
         card.LastReview = null;
         card.Lapses = 0;
@@ -1532,6 +1624,7 @@ public class SrsController(
                     .SetProperty(c => c.Step, 0)
                     .SetProperty(c => c.Stability, (double?)null)
                     .SetProperty(c => c.Difficulty, (double?)null)
+                    .SetProperty(c => c.StabilityFast, (double?)null)
                     .SetProperty(c => c.Due, DateTime.UtcNow)
                     .SetProperty(c => c.LastReview, (DateTime?)null)
                     .SetProperty(c => c.Lapses, 0));
@@ -1964,23 +2057,7 @@ public class SrsController(
             userContext.UserFsrsSettings.Add(new UserFsrsSettings { UserId = userId, NewCardCursorStudyDeckId = nextDeckId });
     }
 
-    private static bool AreParametersDefault(double[] parameters)
-    {
-        if (parameters.Length != FsrsConstants.DefaultParameters.Length)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < parameters.Length; i++)
-        {
-            if (Math.Abs(parameters[i] - FsrsConstants.DefaultParameters[i]) > 1e-6)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    private static bool AreParametersDefault(double[] parameters) => FsrsVersions.FollowsUnoptimised(parameters);
 
     private static bool IsDesiredRetentionDefault(double desiredRetention)
     {
@@ -2001,9 +2078,10 @@ public class SrsController(
     private static bool TryGetStoredParameters(UserFsrsSettings? settings, out double[] parameters)
         => FsrsSettingsHelper.TryGetStoredParameters(settings, out parameters);
 
-    private static bool TryParseParametersCsv(string? csv, out double[] parameters, out string error)
+    private static bool TryParseParametersCsv(string? csv, out double[] parameters, out FsrsVersion version, out string error)
     {
         parameters = Array.Empty<double>();
+        version = FsrsVersion.V6;
         error = string.Empty;
 
         if (string.IsNullOrWhiteSpace(csv))
@@ -2013,14 +2091,14 @@ public class SrsController(
         }
 
         var parts = csv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        var expectedCount = FsrsConstants.DefaultParameters.Length;
-        if (parts.Length != expectedCount)
+        if (FsrsVersions.FromParameterCount(parts.Length) is not { } parsedVersion)
         {
-            error = $"Parameters must contain {expectedCount} comma-separated values.";
+            error = $"Parameters must contain {FsrsVersions.ParameterCount(FsrsVersion.V6)} comma-separated values (FSRS-6) or {FsrsVersions.ParameterCount(FsrsVersion.V7)} (FSRS-7).";
             return false;
         }
 
-        var parsed = new double[expectedCount];
+        version = parsedVersion;
+        var parsed = new double[parts.Length];
         for (var i = 0; i < parts.Length; i++)
         {
             if (!double.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||

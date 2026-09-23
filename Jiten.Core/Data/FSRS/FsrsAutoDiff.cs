@@ -14,10 +14,11 @@ internal sealed class AdTape
     private double[] _clampLo;
     private double[] _clampHi;
     private int _count;
-    private readonly int[] _paramNodes = new int[21];
+    private readonly int[] _paramNodes;
 
-    public AdTape(int capacity = 512)
+    public AdTape(int capacity = 512, int parameterCount = 21)
     {
+        _paramNodes = new int[parameterCount];
         _values = new double[capacity];
         _ops = new byte[capacity];
         _parentA = new int[capacity];
@@ -73,6 +74,13 @@ internal sealed class AdTape
     }
 
     internal double Value(int i) => _values[i];
+
+    /// <summary>Replaces a node's forward value while keeping its gradient path (implicit-function lifts).</summary>
+    internal Var WithValue(Var v, double value)
+    {
+        _values[v.Index] = value;
+        return v;
+    }
 
     internal Var Binary(AdOp op, Var a, Var b, double value) =>
         new(Push(value, op, a.Index, b.Index), this);

@@ -33,6 +33,17 @@ public class ImportCommands(CliContext context)
         await KanjidicHelper.Import(context.ContextFactory, path);
     }
 
+    public async Task ImportKanjiVg(string path)
+    {
+        if (!File.Exists(path))
+        {
+            Console.WriteLine($"KanjiVG archive not found: {path}");
+            return;
+        }
+
+        await KanjiVgImporter.Import(context.ContextFactory, path);
+    }
+
     public async Task PopulateWordKanji()
     {
         Console.WriteLine("Populating WordKanji junction table...");

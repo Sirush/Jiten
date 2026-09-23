@@ -17,6 +17,7 @@ Place these in a consistent location (e.g., a `data/` folder in the root, though
 3. **JmdictFurigana**: Download `JmdictFurigana.json` from the [latest GitHub release](https://github.com/Doublevil/JmdictFurigana/releases/latest).
 4. **JMnedict**: Download from [EDRDG](http://ftp.edrdg.org/pub/Nihongo/JMnedict.xml.gz) and extract.
 5. **Sudachi Dictionary**: Download `system_full.dic` from the [SudachiDict releases](https://github.com/WorksApplications/SudachiDict/releases/latest).
+6. **Kanji data** (optional, for kanji pages): download [KANJIDIC2](http://www.edrdg.org/kanjidic/kanjidic2.xml.gz) and extract it, and download `kanjivg-<date>-main.zip` from the [KanjiVG releases](https://github.com/KanjiVG/kanjivg/releases/latest) (keep it zipped).
 
 You can download the FTP files using a variety of different tools, but you can do it with `curl` like so:
 ```sh
@@ -88,6 +89,12 @@ dotnet run --project Jiten.Cli/Jiten.Cli.csproj -- --verbose -i \
   --dic /path/to/JMdict \
   --namedic /path/to/JMnedict.xml \
   --furi /path/to/JmdictFurigana.json
+```
+
+**Import Kanji Data (optional):**
+```sh
+dotnet run --project Jiten.Cli/Jiten.Cli.csproj -- --import-kanjidic /path/to/kanjidic2.xml
+dotnet run --project Jiten.Cli/Jiten.Cli.csproj -- --import-kanjivg /path/to/kanjivg-main.zip
 ```
 
 **Create Admin User:**

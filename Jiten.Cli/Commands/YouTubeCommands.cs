@@ -34,7 +34,7 @@ public class YouTubeCommands(CliContext context)
         foreach (var chunk in source.Videos.Chunk(fetcher.BatchSize))
         {
             var requests = chunk.Select(v => new YouTubeFetchRequest(v.VideoId, v.Title, v.DurationSeconds)).ToList();
-            var batch = await fetcher.FetchManyAsync(requests, stagingDirectory, Filters(options));
+            var batch = await fetcher.FetchManyAsync(requests, stagingDirectory, Filters(options).For(source.Kind));
 
             foreach (var (videoId, outcome) in batch.Outcomes)
             {

@@ -47,38 +47,18 @@ public partial class AdminController(
         return Results.Ok(new { queued = true });
     }
 
+    /// <summary>Decks that already hold this media, and the requests adding it would fulfil.</summary>
     [HttpGet("duplicate-check")]
-    public async Task<IResult> DuplicateCheck([FromQuery] string? title, [FromQuery] MediaType? mediaType)
+    public async Task<IResult> DuplicateCheck([FromQuery] string? title, [FromQuery] MediaType? mediaType, [FromQuery] string[]? links,
+        [FromServices] MediaDuplicateService duplicateFinder)
     {
-        if (string.IsNullOrWhiteSpace(title) || title.Length < 2)
-            return Results.Ok(new List<DuplicateCheckDeckDto>());
+        var urls = links ?? [];
 
-        var normalisedTitle = title.Trim();
-
-        var query = dbContext.DeckTitles.AsNoTracking()
-            .Where(dt => EF.Functions.ILike(dt.Title, $"%{normalisedTitle}%"));
-
-        if (mediaType.HasValue)
-            query = query.Where(dt => dt.Deck!.MediaType == mediaType.Value);
-
-        var decks = await query
-            .OrderBy(dt => dt.Title.Length)
-            .Take(10)
-            .Select(dt => new DuplicateCheckDeckDto
-            {
-                DeckId = dt.DeckId,
-                Title = dt.Title,
-                MediaType = dt.Deck!.MediaType
-            })
-            .ToListAsync();
-
-        decks = decks
-            .GroupBy(d => d.DeckId)
-            .Select(g => g.First())
-            .Take(5)
-            .ToList();
-
-        return Results.Ok(decks);
+        return Results.Ok(new DuplicateCheckResultDto
+        {
+            ExistingDecks = await duplicateFinder.FindDecks(title, urls, 5, mediaType),
+            ExistingRequests = await duplicateFinder.FindRequests(title, urls, 20, mediaType, fulfillableOnly: true)
+        });
     }
 
     [HttpGet("recent-decks")]

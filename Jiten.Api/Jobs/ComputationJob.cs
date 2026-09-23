@@ -558,20 +558,28 @@ public class ComputationJob(
                     FROM kanji_reading_weighted
                     WHERE raw_weight >= 0.03
                 ),
-                user_known_per_reading AS (
-                    SELECT krw."KanjiCharacter", krw."Reading",
-                           COUNT(DISTINCT ukw."WordId") as known_count
+                user_known_word_per_reading AS (
+                    SELECT krw."KanjiCharacter", krw."Reading", ukw."WordId",
+                           MAX(ukw.weight) as weight
                     FROM user_known_words ukw
                     JOIN jmdict."KanjiReadingWords" krw
                         ON krw."WordId" = ukw."WordId" AND krw."ReadingIndex" = ukw."ReadingIndex"
                     WHERE ukw.weight > 0
-                    GROUP BY krw."KanjiCharacter", krw."Reading"
+                    GROUP BY krw."KanjiCharacter", krw."Reading", ukw."WordId"
+                ),
+                user_known_per_reading AS (
+                    SELECT "KanjiCharacter", "Reading",
+                           COUNT(*) as known_count,
+                           SUM(weight) as known_weight
+                    FROM user_known_word_per_reading
+                    GROUP BY "KanjiCharacter", "Reading"
                 ),
                 all_reading_scores AS (
                     SELECT krs."KanjiCharacter", krs."Reading",
                            krs.freq_weight, krs.total_words,
                            COALESCE(ukr.known_count, 0) as known_count,
-                           LEAST(1.0, COALESCE(ukr.known_count, 0)::float
+                           COALESCE(ukr.known_weight, 0) as known_weight,
+                           LEAST(1.0, COALESCE(ukr.known_weight, 0)::float
                                / LEAST(5, CEIL(0.3 * krs.total_words))) as reading_score
                     FROM kanji_reading_stats krs
                     LEFT JOIN user_known_per_reading ukr
@@ -582,7 +590,7 @@ public class ComputationJob(
                        SUM(reading_score * freq_weight) as "Score",
                        SUM(known_count)::int as "WordCount",
                        json_agg(json_build_object(
-                           'r', "Reading", 'k', known_count,
+                           'r', "Reading", 'k', ROUND(known_weight::numeric, 2),
                            'q', LEAST(5, CEIL(0.3 * total_words))::int,
                            'w', ROUND(freq_weight::numeric, 3)
                        ) ORDER BY freq_weight DESC) as "ReadingsJson"

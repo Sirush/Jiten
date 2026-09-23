@@ -728,8 +728,12 @@ public class RoadmapDataLoader(
 
         var forms = await jiten.WordForms.AsNoTracking()
                                .Where(f => wordIds.Contains(f.WordId))
-                               .Select(f => new { f.WordId, f.ReadingIndex, f.Text, f.FormType })
+                               .Select(f => new JmDictWordForm
+                               {
+                                   WordId = f.WordId, ReadingIndex = f.ReadingIndex, Text = f.Text, RubyText = f.RubyText, FormType = f.FormType
+                               })
                                .ToListAsync(ct);
+        RubyTextHelper.EnrichForms(forms);
 
         var byWord = forms.GroupBy(f => f.WordId).ToDictionary(g => g.Key, g => g.ToList());
 
@@ -741,10 +745,9 @@ public class RoadmapDataLoader(
             if (!byWord.TryGetValue(wordId, out var wordForms) || wordForms.Count == 0)
                 continue;
 
-            var form = wordForms.FirstOrDefault(f => f.ReadingIndex == readingIndex) ?? wordForms[0];
-            var kana = wordForms.FirstOrDefault(f => f.FormType == JmDictFormType.KanaForm);
+            var form = wordForms.FirstOrDefault(f => f.ReadingIndex == readingIndex) ?? wordForms.MinBy(f => f.ReadingIndex)!;
 
-            result[key] = (form.Text, kana?.Text ?? form.Text);
+            result[key] = (form.Text, RubyTextHelper.FormReading(form, wordForms));
         }
 
         return result;

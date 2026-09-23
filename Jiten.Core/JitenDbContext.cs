@@ -38,6 +38,8 @@ public class JitenDbContext : DbContext
     public DbSet<Kanji> Kanjis { get; set; }
     public DbSet<WordKanji> WordKanjis { get; set; }
     public DbSet<KanjiReadingWord> KanjiReadingWords { get; set; }
+    public DbSet<KanjiComponent> KanjiComponents { get; set; }
+    public DbSet<KanjiStrokes> KanjiStrokes { get; set; }
     public DbSet<JmDictWordComposition> WordCompositions { get; set; }
     public DbSet<JmDictWordDerivation> WordDerivations { get; set; }
     public DbSet<JmDictWordFormRedundancy> WordFormRedundancies { get; set; }
@@ -690,6 +692,38 @@ public class JitenDbContext : DbContext
 
             entity.HasIndex(e => new { e.KanjiCharacter, e.Reading })
                   .HasDatabaseName("IX_KanjiReadingWords_KanjiCharacter_Reading");
+        });
+
+        modelBuilder.Entity<KanjiComponent>(entity =>
+        {
+            entity.ToTable("KanjiComponents", "jmdict");
+            entity.HasKey(e => new { e.KanjiCharacter, e.NodeIndex });
+
+            entity.Property(e => e.KanjiCharacter).HasColumnType("text").IsRequired();
+            entity.Property(e => e.Component).HasColumnType("text").IsRequired();
+            entity.Property(e => e.Original).HasColumnType("text");
+
+            entity.HasIndex(e => e.Component)
+                  .HasDatabaseName("IX_KanjiComponents_Component");
+
+            entity.HasIndex(e => e.Original)
+                  .HasDatabaseName("IX_KanjiComponents_Original");
+        });
+
+        modelBuilder.Entity<KanjiStrokes>(entity =>
+        {
+            entity.ToTable("KanjiStrokes", "jmdict");
+            entity.HasKey(e => e.Character);
+            entity.Property(e => e.Character)
+                  .HasColumnType("text")
+                  .ValueGeneratedNever()
+                  .IsRequired();
+
+            if (isNpgsql)
+            {
+                entity.Property(e => e.Paths).HasColumnType("text[]");
+                entity.Property(e => e.NumberPositions).HasColumnType("real[]");
+            }
         });
 
         modelBuilder.Entity<JmDictWordComposition>(entity =>

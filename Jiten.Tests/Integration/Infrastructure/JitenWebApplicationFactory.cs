@@ -1,6 +1,7 @@
 using Hangfire;
 using Jiten.Core;
 using Jiten.Core.Data.Authentication;
+using Jiten.Core.Data.FSRS;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
@@ -51,6 +52,9 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         Environment.SetEnvironmentVariable("Stripe__YearlyPriceId", "price_yearly");
         Environment.SetEnvironmentVariable("Stripe__LifetimePriceId", "price_lifetime");
         Environment.SetEnvironmentVariable("Stripe__LifetimeWindowEnd", "2999-01-01T00:00:00Z");
+
+        // The SRS suites assert intervals computed from the FSRS-6 defaults for users without parameters.
+        FsrsVersions.ConfigureUnoptimised(FsrsVersion.V6);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

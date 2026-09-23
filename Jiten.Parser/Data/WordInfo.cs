@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using Jiten.Core;
 using Jiten.Core.Data;
 
@@ -92,15 +94,15 @@ public class WordInfo
         HardPinned = other.HardPinned;
     }
 
-    public WordInfo(string sudachiLine)
+    /// <summary>Parses one UTF-8 Sudachi output line, drawing the string fields from <paramref name="strings"/>.</summary>
+    public WordInfo(ReadOnlySpan<byte> sudachiLine, SudachiStringPool strings)
     {
-        // Parse tab-separated Sudachi output without Regex.Split
         // Format: Text\tPOS\tNormalizedForm\tDictionaryForm\tKatakanaReading\tPitchIndex\tSplits
-        var span = sudachiLine.AsSpan();
+        var span = sudachiLine;
 
         // Optional trailing segmentation margin column ("\tM=<int>", emitted by FFI v3)
-        int marginIdx = sudachiLine.LastIndexOf("\tM=", StringComparison.Ordinal);
-        if (marginIdx >= 0 && int.TryParse(span[(marginIdx + 3)..], out int margin))
+        int marginIdx = span.LastIndexOf("\tM="u8);
+        if (marginIdx >= 0 && int.TryParse(span[(marginIdx + 3)..], NumberStyles.Integer, NumberFormatInfo.CurrentInfo, out int margin))
         {
             if (margin >= 0)
                 SudachiBoundaryMargin = margin;
@@ -112,7 +114,7 @@ public class WordInfo
         int tabCount = 0;
         for (int i = 0; i < span.Length && tabCount < 6; i++)
         {
-            if (span[i] == '\t')
+            if (span[i] == (byte)'\t')
             {
                 tabPositions[tabCount++] = i;
             }
@@ -125,10 +127,12 @@ public class WordInfo
         }
 
         // Extract Text (before first tab)
-        Text = span[..tabPositions[0]].ToString();
+        Text = strings.GetString(span[..tabPositions[0]]);
 
         // Extract and parse POS (between first and second tab)
-        var posSpan = span[(tabPositions[0] + 1)..tabPositions[1]];
+        var posBytes = span[(tabPositions[0] + 1)..tabPositions[1]];
+        Span<char> posChars = posBytes.Length <= 256 ? stackalloc char[posBytes.Length] : new char[posBytes.Length];
+        ReadOnlySpan<char> posSpan = posChars[..Encoding.UTF8.GetChars(posBytes, posChars)];
 
         Span<int> commaPositions = stackalloc int[5];
         int commaCount = 0;
@@ -154,11 +158,9 @@ public class WordInfo
             : posSpan[(commaPositions[2] + 1)..]);
 
         // Extract remaining fields
-        NormalizedForm = span[(tabPositions[1] + 1)..tabPositions[2]].ToString();
-        DictionaryForm = span[(tabPositions[2] + 1)..tabPositions[3]].ToString();
-        Reading = tabCount >= 5
-            ? span[(tabPositions[3] + 1)..tabPositions[4]].ToString()
-            : span[(tabPositions[3] + 1)..].ToString();
+        NormalizedForm = strings.GetString(span[(tabPositions[1] + 1)..tabPositions[2]]);
+        DictionaryForm = strings.GetString(span[(tabPositions[2] + 1)..tabPositions[3]]);
+        Reading = strings.GetString(span[(tabPositions[3] + 1)..tabPositions[4]]);
 
         // Parse conjugation form (6th POS field) for imperative detection
         if (commaCount >= 5)

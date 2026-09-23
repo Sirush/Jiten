@@ -13,8 +13,16 @@ public static class FsrsSettingsHelper
     public static Task<UserFsrsSettings?> LoadAsync(UserDbContext userContext, string userId)
         => userContext.UserFsrsSettings.AsNoTracking().FirstOrDefaultAsync(s => s.UserId == userId);
 
-    public static double[] GetParameters(UserFsrsSettings? settings)
-        => TryGetStoredParameters(settings, out var parameters) ? parameters : FsrsConstants.DefaultParameters;
+    public static double[] GetParameters(UserFsrsSettings? settings) => ResolveParameters(settings).Parameters;
+
+    /// <summary>Stored parameters carry their own version; empty, unoptimised-default or unusable ones follow the unoptimised version.</summary>
+    public static (double[] Parameters, FsrsVersion Version) ResolveParameters(UserFsrsSettings? settings)
+    {
+        if (TryGetStoredParameters(settings, out var parameters, out var version) && !FsrsVersions.FollowsUnoptimised(parameters))
+            return (parameters, version);
+
+        return (FsrsVersions.DefaultParameters(FsrsVersions.Unoptimised), FsrsVersions.Unoptimised);
+    }
 
     public static double GetDesiredRetention(UserFsrsSettings? settings)
         => settings?.DesiredRetention is double retention && IsDesiredRetentionValid(retention)
@@ -25,18 +33,23 @@ public static class FsrsSettingsHelper
         => desiredRetention is > 0 and < 1 && !double.IsNaN(desiredRetention) && !double.IsInfinity(desiredRetention);
 
     public static bool TryGetStoredParameters(UserFsrsSettings? settings, out double[] parameters)
+        => TryGetStoredParameters(settings, out parameters, out _);
+
+    public static bool TryGetStoredParameters(UserFsrsSettings? settings, out double[] parameters, out FsrsVersion version)
     {
         parameters = [];
+        version = FsrsVersions.Unoptimised;
         if (settings == null)
             return false;
 
         var stored = settings.GetParametersOnce();
-        if (stored.Length != FsrsConstants.DefaultParameters.Length)
+        if (FsrsVersions.FromParameterCount(stored.Length) is not { } storedVersion)
             return false;
         if (stored.Any(value => double.IsNaN(value) || double.IsInfinity(value)))
             return false;
 
         parameters = stored;
+        version = storedVersion;
         return true;
     }
 

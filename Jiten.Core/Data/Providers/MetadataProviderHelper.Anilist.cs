@@ -58,7 +58,7 @@ public static partial class MetadataProviderHelper
                                                     meanScore,
                                                     relations {
                                                       edges {
-                                                        relationType(version: 2)
+                                                        relationType(version: 3)
                                                         node {
                                                           id
                                                           type
@@ -93,7 +93,10 @@ public static partial class MetadataProviderHelper
         var result = JsonSerializer.Deserialize<AnilistResult>(contentStream,
                                                                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-        return result?.Data?.Page?.Media.Select(media => new Metadata
+        var medias = result?.Data?.Page?.Media ?? [];
+        var relationsById = await MapAnilistRelations(medias);
+
+        return medias.Select(media => new Metadata
                                                          {
                                                              OriginalTitle = media.Title.Native, RomajiTitle = media.Title.Romaji,
                                                              EnglishTitle = media.Title.English, ReleaseDate = media.ReleaseDate,
@@ -117,9 +120,9 @@ public static partial class MetadataProviderHelper
                                                                  }).ToList(),
                                                              IsAdultOnly = media.IsAdult,
                                                              IsNotOriginallyJapanese = media.CountryOfOrigin != "JP",
-                                                             Relations = MapAnilistRelations(media.Relations),
+                                                             Relations = relationsById[media.Id],
                                                              DictionaryEntries = ExtractAnilistCharacterNames(media.Characters)
-                                                         }).ToList() ?? [];
+                                                         }).ToList();
     }
 
     public static async Task<Metadata?> AnilistApi(int id)
@@ -159,7 +162,7 @@ public static partial class MetadataProviderHelper
                                                     meanScore,
                                                     relations {
                                                       edges {
-                                                        relationType(version: 2)
+                                                        relationType(version: 3)
                                                         node {
                                                           id
                                                           type
@@ -200,6 +203,7 @@ public static partial class MetadataProviderHelper
 
         var genres = media.Genres.Distinct().ToList();
         var tags = media.Tags.Where(t => !t.IsMediaSpoiler).Distinct().ToList();
+        var relations = (await MapAnilistRelations([media]))[media.Id];
 
         return new Metadata
                {
@@ -215,7 +219,7 @@ public static partial class MetadataProviderHelper
                        Percentage = tag.Rank
                    }).ToList(), IsAdultOnly = media.IsAdult,
                    IsNotOriginallyJapanese = media.CountryOfOrigin != "JP",
-                   Relations = MapAnilistRelations(media.Relations),
+                   Relations = relations,
                    DictionaryEntries = ExtractAnilistCharacterNames(media.Characters)
                };
     }
@@ -257,7 +261,7 @@ public static partial class MetadataProviderHelper
                                                     meanScore,
                                                     relations {
                                                       edges {
-                                                        relationType(version: 2)
+                                                        relationType(version: 3)
                                                         node {
                                                           id
                                                           type
@@ -302,6 +306,7 @@ public static partial class MetadataProviderHelper
 
         var genres = media.Genres.Distinct().ToList();
         var tags = media.Tags.Where(t => !t.IsMediaSpoiler).Distinct().ToList();
+        var relations = (await MapAnilistRelations([media]))[media.Id];
 
         return new Metadata
                {
@@ -318,7 +323,7 @@ public static partial class MetadataProviderHelper
                        Percentage = tag.Rank
                    }).ToList(), IsAdultOnly = media.IsAdult,
                    IsNotOriginallyJapanese = media.CountryOfOrigin != "JP",
-                   Relations = MapAnilistRelations(media.Relations),
+                   Relations = relations,
                    DictionaryEntries = ExtractAnilistCharacterNames(media.Characters)
                };
     }
@@ -335,32 +340,137 @@ public static partial class MetadataProviderHelper
         return BuildDictionaryEntriesFromNames(names);
     }
 
-    private static List<MetadataRelation> MapAnilistRelations(AnilistRelations? relations)
+    private static async Task<Dictionary<int, List<MetadataRelation>>> MapAnilistRelations(List<AnilistMedia> medias)
     {
-        if (relations?.Edges == null)
-            return [];
+        var result = medias.ToDictionary(m => m.Id, _ => new List<MetadataRelation>());
+        var parentEdges = new List<(int ChildId, AnilistRelationNode Parent)>();
 
-        var result = new List<MetadataRelation>();
-
-        foreach (var edge in relations.Edges)
+        foreach (var media in medias)
         {
-            var mapping = MapAnilistRelationType(edge.RelationType);
+            foreach (var edge in media.Relations?.Edges ?? [])
+            {
+                if (edge.RelationType == "PARENT")
+                {
+                    parentEdges.Add((media.Id, edge.Node));
+                    continue;
+                }
+
+                var mapping = MapAnilistRelationType(edge.RelationType);
+                if (mapping == null)
+                    continue;
+
+                result[media.Id].Add(new MetadataRelation
+                {
+                    ExternalId = edge.Node.Id.ToString(),
+                    LinkType = LinkType.Anilist,
+                    RelationshipType = mapping.Value.Type,
+                    TargetMediaType = MapAnilistTypeToMediaType(edge.Node.Type, edge.Node.Format),
+                    SwapDirection = mapping.Value.SwapDirection
+                });
+            }
+        }
+
+        if (parentEdges.Count == 0)
+            return result;
+
+        var parentRelations = await FetchAnilistRelationEdges(parentEdges.Select(p => p.Parent.Id).Distinct().ToList());
+
+        foreach (var (childId, parent) in parentEdges)
+        {
+            if (!parentRelations.TryGetValue(parent.Id, out var edges))
+                continue;
+
+            var backEdgeType = edges.FirstOrDefault(e => e.Node.Id == childId)?.RelationType;
+            var mapping = ResolveParentRelation(backEdgeType);
             if (mapping == null)
                 continue;
 
-            var targetMediaType = MapAnilistTypeToMediaType(edge.Node.Type, edge.Node.Format);
-
-            result.Add(new MetadataRelation
+            result[childId].Add(new MetadataRelation
             {
-                ExternalId = edge.Node.Id.ToString(),
+                ExternalId = parent.Id.ToString(),
                 LinkType = LinkType.Anilist,
                 RelationshipType = mapping.Value.Type,
-                TargetMediaType = targetMediaType,
+                TargetMediaType = MapAnilistTypeToMediaType(parent.Type, parent.Format),
                 SwapDirection = mapping.Value.SwapDirection
             });
         }
 
         return result;
+    }
+
+    /// <summary>PARENT is the lossy inverse of SIDE_STORY, SPIN_OFF and SUMMARY; the parent's own edge back to the child names which.</summary>
+    public static (DeckRelationshipType Type, bool SwapDirection)? ResolveParentRelation(string? parentBackEdgeType)
+    {
+        if (parentBackEdgeType == null)
+            return (DeckRelationshipType.SideStory, false);
+
+        var mapping = MapAnilistRelationType(parentBackEdgeType);
+        return mapping == null ? null : (mapping.Value.Type, !mapping.Value.SwapDirection);
+    }
+
+    private static async Task<Dictionary<int, List<AnilistRelationEdge>>> FetchAnilistRelationEdges(List<int> ids)
+    {
+        var result = new Dictionary<int, List<AnilistRelationEdge>>();
+        var httpClient = new HttpClient();
+
+        foreach (var chunk in ids.Chunk(50))
+        {
+            var requestBody = new
+                              {
+                                  query = """
+                                          query ($ids: [Int]) {
+                                            Page (perPage: 50) {
+                                              media (id_in: $ids) {
+                                                id
+                                                relations {
+                                                  edges {
+                                                    relationType(version: 3)
+                                                    node {
+                                                      id
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                          """,
+                                  variables = new { ids = chunk }
+                              };
+
+            var requestContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+            var response = await httpClient.PostAsync("https://graphql.anilist.co", requestContent);
+            if (!response.IsSuccessStatusCode)
+                continue;
+
+            var page = JsonSerializer.Deserialize<AnilistRelationEdgesResult>(await response.Content.ReadAsStringAsync(),
+                                                                              new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            foreach (var media in page?.Data?.Page?.Media ?? [])
+                result[media.Id] = media.Relations?.Edges ?? [];
+        }
+
+        return result;
+    }
+
+    private class AnilistRelationEdgesResult
+    {
+        public AnilistRelationEdgesData? Data { get; set; }
+    }
+
+    private class AnilistRelationEdgesData
+    {
+        public AnilistRelationEdgesPage? Page { get; set; }
+    }
+
+    private class AnilistRelationEdgesPage
+    {
+        public List<AnilistRelationEdgesMedia> Media { get; set; } = [];
+    }
+
+    private class AnilistRelationEdgesMedia
+    {
+        public int Id { get; set; }
+        public AnilistRelations? Relations { get; set; }
     }
 
     private static (DeckRelationshipType Type, bool SwapDirection)? MapAnilistRelationType(string relationType)
@@ -370,11 +480,11 @@ public static partial class MetadataProviderHelper
             "SEQUEL" => (DeckRelationshipType.Sequel, true),
             "PREQUEL" => (DeckRelationshipType.Sequel, false),
             "SIDE_STORY" => (DeckRelationshipType.SideStory, true),
-            // "PARENT" => (DeckRelationshipType.SideStory, false),
             "SPIN_OFF" => (DeckRelationshipType.Spinoff, true),
             "ALTERNATIVE" => (DeckRelationshipType.Alternative, false),
             "ADAPTATION" => (DeckRelationshipType.Adaptation, false),
             "SOURCE" => (DeckRelationshipType.Adaptation, true),
+            "SAME_UNIVERSE" => (DeckRelationshipType.SameSetting, false),
             _ => null
         };
     }

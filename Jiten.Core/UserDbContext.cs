@@ -371,6 +371,7 @@ public class UserDbContext : IdentityDbContext<User>
             {
                 entity.Property(ufs => ufs.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
                 entity.Property(ufs => ufs.ParametersJson).HasColumnType("jsonb").IsRequired();
+                entity.Property(ufs => ufs.PreviousParametersJson).HasColumnType("jsonb");
             }
             else
             {

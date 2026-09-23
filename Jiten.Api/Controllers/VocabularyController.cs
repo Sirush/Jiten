@@ -1,4 +1,4 @@
-using Jiten.Api.Dtos;
+﻿using Jiten.Api.Dtos;
 using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
@@ -85,6 +85,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         var xrefs = await ctx1.JmDictCrossReferences.AsNoTracking()
                               .Where(x => x.FromWordId == wordId)
                               .ToListAsync();
+        var xrefTargetForms = await LoadXrefTargetForms(ctx1, xrefs);
 
         var wordForms = await wordFormsTask;
         var mainForm = wordForms.FirstOrDefault(wf => wf.ReadingIndex == readingIndex);
@@ -120,7 +121,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         return Results.Ok(new WordDto
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
-                              Definitions = word.Definitions.ToDefinitionDtos(xrefs.ToXrefsBySense()), PartsOfSpeech = word.PartsOfSpeech,
+                              Definitions = word.Definitions.ToDefinitionDtos(xrefs.ToXrefsBySense(xrefTargetForms)), PartsOfSpeech = word.PartsOfSpeech,
                               PitchAccents = word.PitchAccents, KnownStates = await knownStatesTask,
                               ComposedOf = await composedOfTask,
                               UsedIn = usedInTask.Result.Items,
@@ -166,6 +167,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         var xrefs = await ctx1.JmDictCrossReferences.AsNoTracking()
                               .Where(x => x.FromWordId == wordId)
                               .ToListAsync();
+        var xrefTargetForms = await LoadXrefTargetForms(ctx1, xrefs);
 
         var wordForms = await wordFormsTask;
         var mainForm = wordForms.FirstOrDefault(wf => wf.ReadingIndex == readingIndex);
@@ -191,7 +193,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         return Results.Ok(new WordDto
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
-                              Definitions = word.Definitions.ToDefinitionDtos(xrefs.ToXrefsBySense()), PartsOfSpeech = word.PartsOfSpeech,
+                              Definitions = word.Definitions.ToDefinitionDtos(xrefs.ToXrefsBySense(xrefTargetForms)), PartsOfSpeech = word.PartsOfSpeech,
                               PitchAccents = word.PitchAccents, ComposedOf = await composedOfTask,
                               UsedIn = usedInTask.Result.Items,
                               UsedInTotal = usedInTask.Result.Total,
@@ -200,6 +202,13 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                               DerivedFrom = derivedFrom.Count > 0 ? derivedFrom : null,
                               Derives = derives.Count > 0 ? derives : null
                           });
+    }
+
+    private static async Task<Dictionary<(int, short), JmDictWordForm>?> LoadXrefTargetForms(JitenDbContext ctx,
+        List<JmDictCrossReference> xrefs)
+    {
+        var targetIds = xrefs.Where(x => x.TargetWordId != null).Select(x => x.TargetWordId!.Value).Distinct().ToList();
+        return targetIds.Count == 0 ? null : await WordFormHelper.LoadWordForms(ctx, targetIds);
     }
 
     [HttpGet("{wordId}/{readingIndex}/used-in")]

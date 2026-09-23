@@ -12,6 +12,34 @@ public class KanjiDto
     public int? FrequencyRank { get; set; }
     public List<WordSummaryDto>? TopWords { get; set; }
     public List<KanjiReadingWordsDto>? WordsByReading { get; set; }
+    public List<KanjiComponentDto> Components { get; set; } = [];
+    public List<KanjiUsedInDto> UsedIn { get; set; } = [];
+    public int UsedInTotal { get; set; }
+    public KanjiStrokesDto? Strokes { get; set; }
+}
+
+public class KanjiComponentDto
+{
+    public string Character { get; set; } = "";
+    public string? Original { get; set; }
+
+    public string? LinkCharacter { get; set; }
+
+    public string? Meaning { get; set; }
+    public bool IsRadical { get; set; }
+    public bool IsPhonetic { get; set; }
+}
+
+public class KanjiUsedInDto
+{
+    public string Character { get; set; } = "";
+    public string? Meaning { get; set; }
+}
+
+public class KanjiStrokesDto
+{
+    public List<string> Paths { get; set; } = [];
+    public List<float> NumberPositions { get; set; } = [];
 }
 
 public class KanjiReadingWordsDto
@@ -57,7 +85,7 @@ public class KanjiGridItemDto
 public class KanjiGridReadingDto
 {
     public string Reading { get; set; } = "";
-    public int Known { get; set; }
+    public double Known { get; set; }
     public int Required { get; set; }
     public double Weight { get; set; }
 }

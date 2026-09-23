@@ -48,6 +48,85 @@ public class SrsRecomputeJob(
         logger.LogInformation("Recomputed FSRS scheduling for user {UserId}", userId);
     }
 
+    /// <summary>Rebuilds every card's and archive row's memory state from its log, keeping due dates; run whenever the user's FSRS version changes.</summary>
+    [Queue("default")]
+    public async Task RecomputeMemoryStates(string userId)
+    {
+        await using var userContext = await userContextFactory.CreateDbContextAsync();
+        var scheduler = FsrsSettingsHelper.CreateScheduler(await FsrsSettingsHelper.LoadAsync(userContext, userId), enableFuzzing: false);
+
+        var lastCardId = 0L;
+        while (true)
+        {
+            var cards = await userContext.FsrsCards
+                                         .Where(card => card.UserId == userId && card.CardId > lastCardId)
+                                         .OrderBy(card => card.CardId)
+                                         .Take(BatchSize)
+                                         .ToListAsync();
+            if (cards.Count == 0)
+                break;
+
+            var cardIds = cards.Select(card => card.CardId).ToList();
+            var logsByCard = (await userContext.FsrsReviewLogs
+                                               .AsNoTracking()
+                                               .Where(log => cardIds.Contains(log.CardId))
+                                               .ToListAsync())
+                             .GroupBy(log => log.CardId)
+                             .ToDictionary(group => group.Key, group => group.ToList());
+
+            foreach (var card in cards)
+            {
+                if (logsByCard.TryGetValue(card.CardId, out var cardLogs))
+                    FsrsReplay.Recompute(card, cardLogs, scheduler, scheduler, preserveSchedule: true);
+                else if (scheduler.Version != FsrsVersion.V7)
+                    card.StabilityFast = null;
+                else if (card.Stability != null)
+                    // Without a log there is nothing to replay; pinning the fallback keeps the migration job from revisiting the card.
+                    card.StabilityFast ??= FsrsHelperV7.FromCard(card).StabilityFast;
+            }
+
+            lastCardId = cards[^1].CardId;
+            await userContext.SaveChangesAsync();
+            userContext.ChangeTracker.Clear();
+        }
+
+        var lastArchiveId = 0L;
+        while (true)
+        {
+            var rows = await userContext.FsrsCardArchives
+                                        .Where(a => a.UserId == userId && a.ArchiveId > lastArchiveId)
+                                        .OrderBy(a => a.ArchiveId)
+                                        .Take(BatchSize)
+                                        .ToListAsync();
+            if (rows.Count == 0)
+                break;
+
+            foreach (var row in rows)
+            {
+                var (reviews, corrupt) = CardArchiveService.ReadReviews(row);
+                if (corrupt || reviews.Count == 0)
+                {
+                    if (scheduler.Version != FsrsVersion.V7)
+                        row.StabilityFast = null;
+                    continue;
+                }
+
+                var probe = new FsrsCard(userId, row.WordId, row.ReadingIndex);
+                var logs = reviews.Select(r => new FsrsReviewLog(0, r.Rating, r.ReviewDateTime, r.ReviewDuration)).ToList();
+                FsrsReplay.Recompute(probe, logs, scheduler, scheduler, preserveTerminalState: false);
+                row.Stability = probe.Stability;
+                row.Difficulty = probe.Difficulty;
+                row.StabilityFast = probe.StabilityFast;
+            }
+
+            lastArchiveId = rows[^1].ArchiveId;
+            await userContext.SaveChangesAsync();
+            userContext.ChangeTracker.Clear();
+        }
+
+        logger.LogInformation("Recomputed FSRS-{Version} memory states for user {UserId}", (int)scheduler.Version, userId);
+    }
+
     /// <param name="sharedBalancer">
     /// When provided (single-shot loop), used and accumulated across batches. When null and
     /// <paramref name="loadBalance"/> is true (stateless client-driven batches), a fresh balancer is seeded

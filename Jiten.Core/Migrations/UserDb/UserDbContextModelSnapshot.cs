@@ -536,6 +536,9 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<double?>("Stability")
                         .HasColumnType("double precision");
 
+                    b.Property<double?>("StabilityFast")
+                        .HasColumnType("double precision");
+
                     b.Property<int>("State")
                         .HasColumnType("integer");
 
@@ -616,6 +619,9 @@ namespace Jiten.Core.Migrations.UserDb
                         .HasColumnType("integer");
 
                     b.Property<double?>("Stability")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("StabilityFast")
                         .HasColumnType("double precision");
 
                     b.Property<int>("State")
@@ -851,6 +857,9 @@ namespace Jiten.Core.Migrations.UserDb
 
                     b.Property<string>("ParametersJson")
                         .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("PreviousParametersJson")
                         .HasColumnType("jsonb");
 
                     b.Property<string>("SettingsJson")

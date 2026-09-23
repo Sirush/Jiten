@@ -150,6 +150,10 @@ public class CliOptions
     [Option(longName: "populate-word-kanji", Required = false, HelpText = "Populate WordKanji junction table after kanji import.")]
     public bool PopulateWordKanji { get; set; }
 
+    [Option(longName: "import-kanjivg", Required = false,
+            HelpText = "Import kanji stroke order and component trees from a KanjiVG main release zip.")]
+    public string? ImportKanjiVg { get; set; }
+
     [Option(longName: "compute-kanji-readings", Required = false, HelpText = "Pre-compute kanji reading associations for the kanji grid.")]
     public bool ComputeKanjiReadings { get; set; }
 
@@ -295,6 +299,15 @@ public class CliOptions
 
     [Option(longName: "smart-deck-bench-user", Required = false, HelpText = "User id whose cards and word sets act as exclusions for --smart-deck-bench (default: the user with the most cards).")]
     public string? SmartDeckBenchUser { get; set; }
+
+    [Option(longName: "fsrs-eval", Required = false, HelpText = "Evaluate FSRS models on held-out reviews from a directory.")]
+    public string? FsrsEval { get; set; }
+
+    [Option(longName: "fsrs-eval-output", Required = false, HelpText = "JSON path for --fsrs-eval results (default: <dir>/fsrs_eval_<timestamp>.json).")]
+    public string? FsrsEvalOutput { get; set; }
+
+    [Option(longName: "fsrs-eval-max-users", Required = false, HelpText = "With --fsrs-eval: only evaluate the first N users.")]
+    public int? FsrsEvalMaxUsers { get; set; }
 
     [Option(longName: "scan-confidence", Required = false, HelpText = "Scan a corpus file for low-confidence token resolutions. Requires --input.")]
     public bool ScanConfidence { get; set; }

@@ -70,7 +70,7 @@ public class YtDlpClient(YtDlpOptions options, HttpClient httpClient)
             Description = GetString(root, "description")
         };
 
-        if (kind == YouTubeSourceKind.Channel)
+        if (YouTubeUrlParser.IsChannel(kind))
         {
             info.SourceId = info.ChannelId ?? throw new YtDlpFailedException($"yt-dlp returned no channel_id for {listingUrl}");
             info.Title = info.ChannelName;

@@ -16,9 +16,10 @@ public static class FsrsReplay
     /// Keeps an existing Mastered/Blacklisted/Suspended state instead of the replayed one, and routes the
     /// final review through <paramref name="replayScheduler"/> as well, since such a card never comes due.
     /// </param>
+    /// <param name="preserveSchedule">Rebuilds only the memory state and lapses; a model switch must not move due dates the user did not ask to move.</param>
     public static bool Recompute(FsrsCard card, IReadOnlyList<FsrsReviewLog> logs,
                                  FsrsScheduler scheduler, FsrsScheduler replayScheduler,
-                                 bool preserveTerminalState = true)
+                                 bool preserveTerminalState = true, bool preserveSchedule = false)
     {
         if (logs.Count == 0)
             return false;
@@ -46,15 +47,31 @@ public static class FsrsReplay
             tempCard = review.UpdatedCard;
         }
 
-        card.State = overrideState ?? tempCard.State;
-        card.Step = tempCard.Step;
         card.Stability = tempCard.Stability;
         card.Difficulty = tempCard.Difficulty;
-        card.Due = tempCard.Due;
+        card.StabilityFast = tempCard.StabilityFast;
         card.LastReview = tempCard.LastReview;
         card.Lapses = lapses;
+        if (preserveSchedule)
+            return true;
+
+        card.State = overrideState ?? tempCard.State;
+        card.Step = tempCard.Step;
+        card.Due = tempCard.Due;
 
         return true;
+    }
+
+    /// <summary>Fits S and D from a source that records no FSRS version (backups) to the owner's model: FSRS-7 replays them, FSRS-6 drops the fast trace.</summary>
+    public static void AdoptMemoryModel(FsrsCard card, IReadOnlyList<FsrsReviewLog> logs, FsrsScheduler scheduler)
+    {
+        if (scheduler.Version != FsrsVersion.V7)
+        {
+            card.StabilityFast = null;
+            return;
+        }
+
+        Recompute(card, logs, scheduler, scheduler, preserveSchedule: true);
     }
 
     /// <summary>

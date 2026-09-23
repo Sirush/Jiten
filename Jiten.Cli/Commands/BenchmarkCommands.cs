@@ -59,6 +59,7 @@ public class BenchmarkCommands(CliContext context)
         }
         if (options.BenchmarkPasses > 1) Console.WriteLine();
 
+        var cpuBefore = Process.GetCurrentProcess().TotalProcessorTime;
         var gcPauseBefore = GC.GetTotalPauseDuration();
         var gcAllocBefore = GC.GetTotalAllocatedBytes(precise: true);
         int gc0Before = GC.CollectionCount(0), gc1Before = GC.CollectionCount(1), gc2Before = GC.CollectionCount(2);
@@ -123,6 +124,7 @@ public class BenchmarkCommands(CliContext context)
         Console.WriteLine($"  Total chars:     {totalCharacters:N0}");
         Console.WriteLine($"  Total words:     {totalWords:N0}");
         Console.WriteLine($"  Total time:      {totalElapsedMs:N0} ms");
+        Console.WriteLine($"  Process CPU:     {(Process.GetCurrentProcess().TotalProcessorTime - cpuBefore).TotalMilliseconds:N0} ms");
         Console.WriteLine($"  Avg time/file:   {averageTimePerFileMs:N1} ms");
         Console.WriteLine($"  Avg chars/sec:   {averageCharsPerSecond:N0}");
         Console.WriteLine($"  Min time:        {minTimeMs:N0} ms");

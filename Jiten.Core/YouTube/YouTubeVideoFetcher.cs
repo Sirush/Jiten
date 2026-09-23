@@ -106,6 +106,10 @@ public class YouTubeVideoFetcher(YtDlpClient client)
         if (info.IsLive || info.LiveStatus is "is_live" or "is_upcoming")
             return new YouTubeFetchOutcome { Status = YouTubeVideoStatus.FilteredOut, SkipReason = "not-accessible: not-yet-available", Info = info };
 
+        // The channel feed used for sync lists uploads as well as streams
+        if (filters.StreamsOnly && info.LiveStatus is not ("was_live" or "post_live"))
+            return new YouTubeFetchOutcome { Status = YouTubeVideoStatus.FilteredOut, SkipReason = "not-a-stream", Info = info };
+
         var cleanedPath = Path.Combine(workDirectory, $"{info.VideoId}.clean.srt");
         var cleaned = await YouTubeSubtitleCleaner.CleanFileAsync(info.SubtitlePath!, cleanedPath);
 

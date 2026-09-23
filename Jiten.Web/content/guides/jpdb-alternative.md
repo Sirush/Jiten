@@ -7,7 +7,7 @@ level: beginner
 order: 10
 icon: material-symbols-light:compare-arrows
 draft: false
-updated: 2026-09-06
+updated: 2026-09-23
 published: 2026-07-28
 verified: 2026-08-23
 ---
@@ -32,7 +32,7 @@ One of the core tenets of Jiten is that **your data is yours** and you should be
 | Media tracking          | Set status on your media and get your completed stats in your profile                                                                                         | Bookmark media                                                                                                                                                                 |
 | Coverage tracking       | Yes, including subdecks                                                                                                                                       | Yes, but only parent decks                                                                                                                                                     |
 | Vocabulary onboarding   | **Easily import** your known words from other sources like Anki, JPDB, and other features like word sets                                                      | Import from anki, import from WaniKani (paid above level 3)                                                                                                                    |
-| Built-in SRS            | FSRS-6                                                                                                                                                        | Custom closed-source algorithm                                                                                                                                                 |
+| Built-in SRS            | FSRS-7                                                                                                                                                        | Custom closed-source algorithm                                                                                                                                                 |
 | SRS decks               | Per-media, global frequency or custom lists from a text or individual words, all with **powerful filters**. Limited to **150k words total**, 300k with Jiten+ | Per-media, global frequency or custom lists from a text or individual words, basic filters and paid ones. Limited to **10k words per-deck and 60k words total** without paying |
 | Kanji study             | None                                                                                                                                                          | Individual kanji study + vocabulary gating                                                                                                                                     |
 | Anki deck export        | **Yes**, with powerful filters                                                                                                                                | None                                                                                                                                                                           |

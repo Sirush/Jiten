@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_DB: ${DB_NAME}
-      POSTGRES_MULTIPLE_DATABASES: ${DB_NAME},umami
+      POSTGRES_MULTIPLE_DATABASES: ${DB_NAME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d
@@ -136,30 +136,6 @@ services:
       - "traefik.http.middlewares.jiten-errors.errors.status=502-504"
       - "traefik.http.middlewares.jiten-errors.errors.service=error-pages"
       - "traefik.http.middlewares.jiten-errors.errors.query=/503.html"
-
-  umami:
-    image: ghcr.io/umami-software/umami:3.3.0
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://umami:umami@postgres:5432/umami
-      DATABASE_TYPE: postgresql
-      APP_SECRET: ${UMAMI_APP_SECRET:-replace-me-with-a-random-string}
-      HASH_SALT: ${UMAMI_HASH_SALT:-some-random-string}
-      PORT: 3005
-      TRACKER_SCRIPT_NAME: ${UMAMI_TRACKER_SCRIPT_NAME:-umm.js}
-    init: true
-    healthcheck:
-      test: [ "CMD-SHELL", "curl --fail http://localhost:3005/api/heartbeat || exit 1" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.umami.rule=Host(`umami.jiten.moe`)"
-      - "traefik.http.services.umami.loadbalancer.server.port=3005"
 
   voicevox:
     image: voicevox/voicevox_engine:cpu-latest

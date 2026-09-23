@@ -40,13 +40,12 @@
 <template>
   <Card>
     <template #title>
-      <!-- Click-anywhere is a mouse convenience only; the chevron stays the real control so the
-           nested word link and status actions aren't trapped inside an interactive ancestor. -->
-      <div class="flex justify-between cursor-pointer" @click="toggleCompact">
-        <div class="flex flex-row md:gap-4 flex-wrap items-center">
+      <div class="flex flex-wrap justify-between gap-x-3 gap-y-1 cursor-pointer" @click="toggleCompact">
+        <div class="flex flex-row md:gap-4 flex-wrap items-center min-w-0 grow">
           <Checkbox v-if="selectable" :model-value="selected" :binary="true" class="mr-2" @change="emit('select', word)" @click.stop />
           <router-link
-            class="text-2xl"
+            class="leading-relaxed"
+            :class="headwordSizeClass(word.mainReading.text, true)"
             :to="`/vocabulary/${word.wordId}/${word.mainReading.readingIndex}`"
             lang="ja"
             @click.stop
@@ -64,7 +63,7 @@
             @click.stop="toggleCompact"
           />
         </div>
-        <div class="text-gray-500 dark:text-gray-300 text-sm text-right">
+        <div class="text-gray-500 dark:text-gray-300 text-sm text-right shrink-0 ml-auto">
           <span @click.stop>
             <VocabularyStatus :word="word" />
           </span>

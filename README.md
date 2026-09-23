@@ -13,6 +13,7 @@ A free, open-source platform for Japanese immersion learners. Jiten offers detai
 - [Hatsuon](https://github.com/DJTB/hatsuon) - Pitch accent display
 - [FSRS.Core](https://github.com/TranPhucTien/FSRS.Core) - .NET FSRS Implementation
 - [Kanji Grid](https://github.com/Kuuuube/kanjigrid) - Kanji grouping data (Kanken, WaniKani, RTK, KLC)
+- [KanjiVG](https://kanjivg.tagaini.net) - Kanji stroke order and component data (CC BY-SA 3.0)
 
 # Installation
 

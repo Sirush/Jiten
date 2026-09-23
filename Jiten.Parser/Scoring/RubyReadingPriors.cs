@@ -28,6 +28,17 @@ internal sealed class ReadingTable
     }
 }
 
+// Context n-grams grouped under their centre kanji form so lookups hit small per-form maps, not corpus-wide tables.
+internal sealed class FormPriors(ReadingTable unigram)
+{
+    public readonly ReadingTable Unigram = unigram;
+    public Dictionary<string, ReadingTable>? Left;
+    public Dictionary<string, ReadingTable>? Right;
+    public Dictionary<string, ReadingTable>? Left2;
+    public Dictionary<string, ReadingTable>? Right2;
+    public Dictionary<(string Left, string Right), ReadingTable>? Trigrams;
+}
+
 internal sealed class RubyReadingPriors
 {
     private static readonly Lazy<RubyReadingPriors?> Instance =
@@ -37,42 +48,18 @@ internal sealed class RubyReadingPriors
 
     public static RubyReadingPriors? Current => Enabled ? Instance.Value : null;
 
-    private readonly Dictionary<string, ReadingTable> _unigrams;
-    private readonly Dictionary<(string, string), ReadingTable> _leftBigrams;
-    private readonly Dictionary<(string, string), ReadingTable> _rightBigrams;
-    private readonly Dictionary<(string, string), ReadingTable> _left2Bigrams;
-    private readonly Dictionary<(string, string), ReadingTable> _right2Bigrams;
-    private readonly Dictionary<(string, string, string), ReadingTable> _trigrams;
+    private readonly Dictionary<string, FormPriors> _forms;
 
     private readonly Dictionary<string, List<(string kanjiForm, int count)>> _reverseIndex;
 
-    private static Dictionary<TKey, ReadingTable> Wrap<TKey>(Dictionary<TKey, Dictionary<string, int>> src)
-        where TKey : notnull
+    private RubyReadingPriors(Dictionary<string, FormPriors> forms)
     {
-        var result = new Dictionary<TKey, ReadingTable>(src.Count);
-        foreach (var (k, v) in src) result[k] = new ReadingTable(v);
-        return result;
-    }
-
-    private RubyReadingPriors(
-        Dictionary<string, Dictionary<string, int>> unigrams,
-        Dictionary<(string, string), Dictionary<string, int>> leftBigrams,
-        Dictionary<(string, string), Dictionary<string, int>> rightBigrams,
-        Dictionary<(string, string), Dictionary<string, int>> left2Bigrams,
-        Dictionary<(string, string), Dictionary<string, int>> right2Bigrams,
-        Dictionary<(string, string, string), Dictionary<string, int>> trigrams)
-    {
-        _unigrams = Wrap(unigrams);
-        _leftBigrams = Wrap(leftBigrams);
-        _rightBigrams = Wrap(rightBigrams);
-        _left2Bigrams = Wrap(left2Bigrams);
-        _right2Bigrams = Wrap(right2Bigrams);
-        _trigrams = Wrap(trigrams);
+        _forms = forms;
 
         _reverseIndex = new Dictionary<string, List<(string, int)>>();
-        foreach (var (kanjiForm, table) in _unigrams)
+        foreach (var (kanjiForm, formPriors) in _forms)
         {
-            foreach (var (reading, count) in table.Readings)
+            foreach (var (reading, count) in formPriors.Unigram.Readings)
             {
                 if (!_reverseIndex.TryGetValue(reading, out var list))
                 {
@@ -110,8 +97,14 @@ internal sealed class RubyReadingPriors
         string? left2Context = null, string? right2Context = null)
     {
         if (kanjiForm == null || reading == null) return default;
-        if (!_unigrams.TryGetValue(kanjiForm, out var uniTable)) return default;
+        if (!_forms.TryGetValue(kanjiForm, out var formPriors)) return default;
+        return ScoreFormDetailed(formPriors, reading, leftContext, rightContext, left2Context, right2Context);
+    }
 
+    private RubyScoreResult ScoreFormDetailed(FormPriors formPriors, string reading,
+        string? leftContext, string? rightContext, string? left2Context, string? right2Context)
+    {
+        var uniTable = formPriors.Unigram;
         int uniTotal = uniTable.Total;
         if (uniTotal < MinUnigramTotal) return default;
 
@@ -120,7 +113,7 @@ internal sealed class RubyReadingPriors
 
         if (leftContext != null && rightContext != null)
         {
-            var bestTri = TryTrigramExpanded(leftContext, kanjiForm, rightContext, reading, uniformLogP);
+            var bestTri = TryTrigramExpanded(formPriors.Trigrams, leftContext, rightContext, reading, uniformLogP);
             if (bestTri.Level != null) return bestTri;
         }
 
@@ -128,9 +121,9 @@ internal sealed class RubyReadingPriors
         int bestBiTotal = 0;
         string? bestBiLevel = null;
 
-        TryBigramExpanded(_leftBigrams, leftContext, kanjiForm, true,
+        TryBigramExpanded(formPriors.Left, leftContext,
             reading, "left-bigram", ref bestBiLogP, ref bestBiTotal, ref bestBiLevel);
-        TryBigramExpanded(_rightBigrams, rightContext, kanjiForm, false,
+        TryBigramExpanded(formPriors.Right, rightContext,
             reading, "right-bigram", ref bestBiLogP, ref bestBiTotal, ref bestBiLevel);
 
         if (bestBiLogP.HasValue)
@@ -140,9 +133,9 @@ internal sealed class RubyReadingPriors
         int bestSkipTotal = 0;
         string? bestSkipLevel = null;
 
-        TryBigramExpanded(_left2Bigrams, left2Context, kanjiForm, true,
+        TryBigramExpanded(formPriors.Left2, left2Context,
             reading, "left2-bigram", ref bestSkipLogP, ref bestSkipTotal, ref bestSkipLevel);
-        TryBigramExpanded(_right2Bigrams, right2Context, kanjiForm, false,
+        TryBigramExpanded(formPriors.Right2, right2Context,
             reading, "right2-bigram", ref bestSkipLogP, ref bestSkipTotal, ref bestSkipLevel);
 
         if (bestSkipLogP.HasValue)
@@ -163,15 +156,13 @@ internal sealed class RubyReadingPriors
     }
 
     private void TryBigramExpanded(
-        Dictionary<(string, string), ReadingTable> table,
-        string? context, string kanjiForm, bool contextIsLeft,
+        Dictionary<string, ReadingTable>? table, string? context,
         string reading, string level,
         ref double? bestLogP, ref int bestTotal, ref string? bestLevel)
     {
-        if (context == null) return;
+        if (table == null || context == null) return;
 
-        var key = contextIsLeft ? (context, kanjiForm) : (kanjiForm, context);
-        TryBigram(table, key, reading, level, ref bestLogP, ref bestTotal, ref bestLevel);
+        TryBigram(table, context, reading, level, ref bestLogP, ref bestTotal, ref bestLevel);
 
         if (!ShouldExpandContext(context) || !_reverseIndex.TryGetValue(context, out var altForms))
             return;
@@ -180,19 +171,20 @@ internal sealed class RubyReadingPriors
         foreach (var (altCtx, _) in altForms)
         {
             if (tried >= 3) break;
-            var altKey = contextIsLeft ? (altCtx, kanjiForm) : (kanjiForm, altCtx);
-            TryBigram(table, altKey, reading, level, ref bestLogP, ref bestTotal, ref bestLevel);
+            TryBigram(table, altCtx, reading, level, ref bestLogP, ref bestTotal, ref bestLevel);
             tried++;
         }
     }
 
     private RubyScoreResult TryTrigramExpanded(
-        string leftContext, string kanjiForm, string rightContext,
+        Dictionary<(string Left, string Right), ReadingTable>? trigrams,
+        string leftContext, string rightContext,
         string reading, double uniformLogP)
     {
         var best = default(RubyScoreResult);
+        if (trigrams == null) return best;
 
-        TryTrigramSingle(leftContext, kanjiForm, rightContext, reading, uniformLogP, ref best);
+        TryTrigramSingle(trigrams, leftContext, rightContext, reading, uniformLogP, ref best);
 
         if (ShouldExpandContext(leftContext) && _reverseIndex.TryGetValue(leftContext, out var leftAlts))
         {
@@ -200,7 +192,7 @@ internal sealed class RubyReadingPriors
             foreach (var (altLeft, _) in leftAlts)
             {
                 if (tried >= 3) break;
-                TryTrigramSingle(altLeft, kanjiForm, rightContext, reading, uniformLogP, ref best);
+                TryTrigramSingle(trigrams, altLeft, rightContext, reading, uniformLogP, ref best);
                 tried++;
             }
         }
@@ -211,7 +203,7 @@ internal sealed class RubyReadingPriors
             foreach (var (altRight, _) in rightAlts)
             {
                 if (tried >= 3) break;
-                TryTrigramSingle(leftContext, kanjiForm, altRight, reading, uniformLogP, ref best);
+                TryTrigramSingle(trigrams, leftContext, altRight, reading, uniformLogP, ref best);
                 tried++;
             }
         }
@@ -219,11 +211,12 @@ internal sealed class RubyReadingPriors
         return best;
     }
 
-    private void TryTrigramSingle(
-        string leftCtx, string kanjiForm, string rightCtx,
+    private static void TryTrigramSingle(
+        Dictionary<(string Left, string Right), ReadingTable> trigrams,
+        string leftCtx, string rightCtx,
         string reading, double uniformLogP, ref RubyScoreResult best)
     {
-        if (!_trigrams.TryGetValue((leftCtx, kanjiForm, rightCtx), out var triTable))
+        if (!trigrams.TryGetValue((leftCtx, rightCtx), out var triTable))
             return;
         int triTotal = triTable.Total;
         double triReliability = (double)triTotal / (triTotal + TrigramHalfLife);
@@ -236,12 +229,11 @@ internal sealed class RubyReadingPriors
             best = new RubyScoreResult(score, triTotal, "trigram");
     }
 
-    private void TryBigram(Dictionary<(string, string), ReadingTable> table,
-        (string, string) key, string reading, string level,
+    private static void TryBigram(Dictionary<string, ReadingTable> table,
+        string context, string reading, string level,
         ref double? bestLogP, ref int bestTotal, ref string? bestLevel)
     {
-        if (key.Item1 == null || key.Item2 == null) return;
-        if (!table.TryGetValue(key, out var rt)) return;
+        if (!table.TryGetValue(context, out var rt)) return;
 
         int total = rt.Total;
         double reliability = (double)total / (total + BigramHalfLife);
@@ -274,21 +266,16 @@ internal sealed class RubyReadingPriors
         string? leftContext, string? rightContext,
         string? left2Context = null, string? right2Context = null)
     {
-        if (!_reverseIndex.TryGetValue(reading, out var allKanjiForms)) return default;
         if (leftContext == null && rightContext == null) return default;
 
         var best = default(RubyScoreResult);
         foreach (var form in word.Forms)
         {
             if (form.FormType != JmDictFormType.KanjiForm) continue;
-            bool found = false;
-            foreach (var (kanjiForm, _) in allKanjiForms)
-            {
-                if (kanjiForm == form.Text) { found = true; break; }
-            }
-            if (!found) continue;
+            if (!_forms.TryGetValue(form.Text, out var formPriors) || !formPriors.Unigram.Readings.ContainsKey(reading))
+                continue;
 
-            var result = ScoreCandidateDetailed(form.Text, reading,
+            var result = ScoreFormDetailed(formPriors, reading,
                 leftContext, rightContext, left2Context, right2Context);
             if (result.Level is not ("trigram" or "left-bigram" or "right-bigram"
                 or "left2-bigram" or "right2-bigram"))
@@ -355,14 +342,14 @@ internal sealed class RubyReadingPriors
         {
             foreach (var form in word.Forms)
             {
-                if (form.FormType == JmDictFormType.KanjiForm && form.Text == surface && _unigrams.ContainsKey(form.Text))
+                if (form.FormType == JmDictFormType.KanjiForm && form.Text == surface && _forms.ContainsKey(form.Text))
                     return form.Text;
             }
         }
 
         foreach (var form in word.Forms)
         {
-            if (form.FormType == JmDictFormType.KanjiForm && _unigrams.ContainsKey(form.Text))
+            if (form.FormType == JmDictFormType.KanjiForm && _forms.ContainsKey(form.Text))
                 return form.Text;
         }
         return null;
@@ -385,48 +372,42 @@ internal sealed class RubyReadingPriors
         var options = ContractlessStandardResolver.Options;
         var raw = MessagePackSerializer.Deserialize<Dictionary<string, Dictionary<string, Dictionary<string, int>>>>(bytes, options);
 
-        var leftBigrams = new Dictionary<(string, string), Dictionary<string, int>>();
-        var rightBigrams = new Dictionary<(string, string), Dictionary<string, int>>();
-        var left2Bigrams = new Dictionary<(string, string), Dictionary<string, int>>();
-        var right2Bigrams = new Dictionary<(string, string), Dictionary<string, int>>();
-        var trigrams = new Dictionary<(string, string, string), Dictionary<string, int>>();
+        var forms = new Dictionary<string, FormPriors>();
+        foreach (var (kanjiForm, readings) in raw.GetValueOrDefault("Unigrams") ?? [])
+            forms[kanjiForm] = new FormPriors(new ReadingTable(readings));
 
+        // Scoring reaches n-grams only through their centre form's unigram, so orphan n-grams are dropped.
         foreach (var (key, readings) in raw.GetValueOrDefault("LeftBigrams") ?? [])
-        {
-            var parts = key.Split('\t', 2);
-            if (parts.Length == 2) leftBigrams[(parts[0], parts[1])] = readings;
-        }
+            if (TrySplitPair(key, out var left, out var form) && forms.TryGetValue(form, out var fp))
+                (fp.Left ??= [])[left] = new ReadingTable(readings);
 
         foreach (var (key, readings) in raw.GetValueOrDefault("RightBigrams") ?? [])
-        {
-            var parts = key.Split('\t', 2);
-            if (parts.Length == 2) rightBigrams[(parts[0], parts[1])] = readings;
-        }
+            if (TrySplitPair(key, out var form, out var right) && forms.TryGetValue(form, out var fp))
+                (fp.Right ??= [])[right] = new ReadingTable(readings);
 
         foreach (var (key, readings) in raw.GetValueOrDefault("Left2Bigrams") ?? [])
-        {
-            var parts = key.Split('\t', 2);
-            if (parts.Length == 2) left2Bigrams[(parts[0], parts[1])] = readings;
-        }
+            if (TrySplitPair(key, out var left, out var form) && forms.TryGetValue(form, out var fp))
+                (fp.Left2 ??= [])[left] = new ReadingTable(readings);
 
         foreach (var (key, readings) in raw.GetValueOrDefault("Right2Bigrams") ?? [])
-        {
-            var parts = key.Split('\t', 2);
-            if (parts.Length == 2) right2Bigrams[(parts[0], parts[1])] = readings;
-        }
+            if (TrySplitPair(key, out var form, out var right) && forms.TryGetValue(form, out var fp))
+                (fp.Right2 ??= [])[right] = new ReadingTable(readings);
 
         foreach (var (key, readings) in raw.GetValueOrDefault("Trigrams") ?? [])
         {
             var parts = key.Split('\t', 3);
-            if (parts.Length == 3) trigrams[(parts[0], parts[1], parts[2])] = readings;
+            if (parts.Length == 3 && forms.TryGetValue(parts[1], out var fp))
+                (fp.Trigrams ??= [])[(parts[0], parts[2])] = new ReadingTable(readings);
         }
 
-        return new RubyReadingPriors(
-            raw.GetValueOrDefault("Unigrams") ?? new(),
-            leftBigrams,
-            rightBigrams,
-            left2Bigrams,
-            right2Bigrams,
-            trigrams);
+        return new RubyReadingPriors(forms);
+    }
+
+    private static bool TrySplitPair(string key, out string first, out string second)
+    {
+        var parts = key.Split('\t', 2);
+        first = parts[0];
+        second = parts.Length == 2 ? parts[1] : "";
+        return parts.Length == 2;
     }
 }

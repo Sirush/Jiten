@@ -7,12 +7,12 @@ level: beginner
 order: 20
 icon: material-symbols-light:compare-arrows
 draft: false
-updated: 2026-08-23
+updated: 2026-09-23
 published: 2026-07-28
 verified: 2026-08-23
 ---
 
-Migaku and Jiten both help you learn Japanese through immersion, but they are different kinds of product, so "versus" is a little misleading. This page explains how they compare so you can decide which fits your workflow — or whether to use them together.
+Migaku and Jiten both help you learn Japanese through immersion, but they are different kinds of product and can even be complementary to each other. This page explains how they compare so you can decide which fits your workflow, or whether to use them together.
 
 ## The short version
 
@@ -35,7 +35,7 @@ Jiten offers most of the features of Migaku and more, for absolutely free. The b
 | Ready-made frequency decks     | **Yes**, one click per title, free                                                                                                                                      | No, you mine cards one at a time as you watch or read                                                                                            |
 | Read any web page with parsing | **[Jiten Reader](/reader)** browser extension: free & open source, parses any page, word colouring by known status, one-click lookups/SRS/mining synced to your account | Migaku browser extension (paid): parses any page, word colouring by status, one-click lookups and mining synced to your account, AI explanations |
 | Sentence mining from video     | Yes, with [Jiten Reader](/reader) and asbplayer                                                                                                                         | Yes, one-click cards with screenshot, audio, and sentence from Netflix, YouTube, Disney+, Rakuten Viki, Animelon, and local files                |
-| Built-in SRS                   | FSRS-6                                                                                                                                                                  | Migaku Memory (proprietary algorithm)                                                                                                            |
+| Built-in SRS                   | FSRS-7                                                                                                                                                                  | Migaku Memory (proprietary algorithm)                                                                                                            |
 | SRS control                    | **Retention target, workload curve, optimisation**                                                                                                                      | Fixed algorithm, no tuning                                                                                                                       |
 | Custom dictionaries            | **Yes** (Yomitan format)                                                                                                                                                | Built-in dictionaries only                                                                                                                       |
 | Anki support                   | **Full deck export** with powerful filters                                                                                                                              | Official add-on to send mined cards to Anki                                                                                                      |
@@ -58,7 +58,7 @@ This trade-off is deliberate: instead of one closed pipeline, you get open tools
 
 The extra setup buys you a level of control Migaku doesn't offer:
 
-- **An SRS you can tune.** Jiten uses FSRS-6, the open algorithm also used by modern Anki. You can set your retention target, see the workload-vs-retention curve before changing it, and optimise it so it adapts to your own memory. See [Tuning FSRS](/guides/tuning-fsrs). Migaku Memory is a fixed algorithm with no knobs.
+- **An SRS you can tune.** Jiten uses FSRS-7, the latest version of the open algorithm behind modern Anki. You can set your retention target, see the workload-vs-retention curve before changing it, and optimise it so it adapts to your own memory. See [Tuning FSRS](/guides/tuning-fsrs). Migaku Memory is a fixed algorithm with no knobs.
 - **Decks built with filters, not one card at a time.** Generate a deck from any title and filter it by frequency, known status, word sets, and more. Pre-mine instead of mining every card manually. See [Generating Anki decks](/guides/generating-anki-decks).
 - **Custom dictionaries.** Load your own Yomitan-format dictionaries. See [Custom Yomitan dictionaries](/guides/custom-yomitan-dictionaries).
 - **Custom meanings and sentences.** Add custom definitions, mnemonics or example sentences to any word. See [Custom meanings and sentences](/guides/custom-meanings-and-sentences).

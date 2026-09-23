@@ -1664,9 +1664,11 @@
 
       <Divider />
 
-      <!-- Keyboard shortcuts -->
-      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Keyboard shortcuts</h3>
-      <p class="text-xs text-surface-500 dark:text-surface-400">Click a key and press the new key to rebind. Escape cancels.</p>
+      <!-- Shortcuts -->
+      <h3 class="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">Shortcuts</h3>
+      <p class="text-xs text-surface-500 dark:text-surface-400">
+        Click a binding, then press a key or a mouse button to rebind. Escape or left click to cancel.
+      </p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="flex flex-col gap-2">
           <h4 class="text-xs font-medium text-surface-400 uppercase tracking-wide">Grading</h4>

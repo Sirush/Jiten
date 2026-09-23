@@ -322,7 +322,8 @@ public class YouTubeIngestController(
     {
         var idValid = source.Kind switch
         {
-            YouTubeSourceKind.Channel => YouTubeUrlParser.TryParse(source.SourceId, out var k, out _, out var id) && k == YouTubeSourceKind.Channel && id == source.SourceId,
+            YouTubeSourceKind.Channel or YouTubeSourceKind.ChannelStreams =>
+                YouTubeUrlParser.TryParse(source.SourceId, out var k, out _, out var id) && k == YouTubeSourceKind.Channel && id == source.SourceId,
             YouTubeSourceKind.Playlist => YouTubeUrlParser.TryParse(source.SourceId, out var k, out _, out var id) && k == YouTubeSourceKind.Playlist && id == source.SourceId,
             _ => false
         };

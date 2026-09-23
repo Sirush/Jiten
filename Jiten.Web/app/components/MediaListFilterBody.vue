@@ -1,12 +1,12 @@
 <script setup lang="ts">
   import { MEDIA_RANGE_SECTIONS, MEDIA_RANGE_SPECS, type MediaRangeKey } from '~/utils/mediaFilterRanges';
   import type { RangeBounds } from '~/utils/rangeFilters';
+  import { MEDIA_STATUS_OPTIONS, normaliseStatusTokens, type MediaStatusToken } from '~/utils/mediaStatusFilter';
 
   const props = withDefaults(
     defineProps<{
       isConnected: boolean;
       charCountSteps: number[];
-      statusOptions: { label: string; value: string }[];
       mobile?: boolean;
       split?: boolean;
     }>(),
@@ -16,7 +16,7 @@
   const ranges = defineModel<Record<MediaRangeKey, RangeBounds>>('ranges', { required: true });
   const search = defineModel<string>('search', { required: true });
   const expandedKey = defineModel<MediaRangeKey | null>('expandedKey', { required: true });
-  const statusFilter = defineModel<string>('statusFilter', { required: true });
+  const statusFilter = defineModel<MediaStatusToken[]>('statusFilter', { required: true });
   const excludeSequels = defineModel<boolean | null>('excludeSequels', { required: false });
   const favourite = defineModel<boolean | null>('favourite', { required: false });
   const excludeNotOriginallyJp = defineModel<boolean>('excludeNotOriginallyJp', { required: true });
@@ -66,15 +66,20 @@
       <div :class="split ? 'flex w-2/5 shrink-0 flex-col border-r border-surface-200 pr-4 dark:border-surface-700' : 'contents'">
         <div v-if="showStatus" class="flex shrink-0 items-center gap-2 px-2" :class="mobile ? 'h-11' : 'h-[34px]'">
           <label for="statusFilter" class="shrink-0 text-sm text-surface-700 dark:text-surface-200">Status</label>
-          <Select
-            v-model="statusFilter"
-            :options="statusOptions"
+          <MultiSelect
+            :model-value="statusFilter"
+            :options="MEDIA_STATUS_OPTIONS"
             option-label="label"
             option-value="value"
             input-id="statusFilter"
-            :class="['min-w-44', split ? 'flex-1' : 'ml-auto']"
+            placeholder="All statuses"
+            :show-toggle-all="false"
+            :max-selected-labels="2"
+            selected-items-label="{0} statuses"
+            :class="['w-44 min-w-0', split ? 'flex-1' : 'ml-auto']"
             size="small"
             scroll-height="30vh"
+            @update:model-value="(value: string[]) => (statusFilter = normaliseStatusTokens(value))"
           />
         </div>
 

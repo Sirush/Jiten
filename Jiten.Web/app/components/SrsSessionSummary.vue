@@ -7,7 +7,7 @@
     cardsReviewed: number;
     newCardsLearned: number;
     correctCount: number;
-    startTime: Date | null;
+    activeMs: number;
     hardestCards: HardestCard[];
     gradeCounts: { again: number; hard: number; good: number; easy: number };
     leeches: LeechCard[];
@@ -53,8 +53,7 @@
   });
 
   const duration = computed(() => {
-    if (!props.startTime) return '0m';
-    const ms = Date.now() - props.startTime.getTime();
+    const ms = props.activeMs;
     const minutes = Math.floor(ms / 60000);
     const seconds = Math.floor((ms % 60000) / 1000);
     if (minutes === 0) return `${seconds}s`;

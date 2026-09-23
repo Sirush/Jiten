@@ -62,7 +62,13 @@ Two things worth knowing:
 - **Data exposed through the API key is limited**: only known, never-forget, blacklisted and suspended cards are discoverable. Anything else, including words you are part-way through, are skipped. The reviews file is the only way to bring those in.
 - **Words you already track in Jiten are left alone by the key import**, for the spelling you track them under. If a word has other spellings that the additional-readings option picks up, those still arrive as new **Mastered** entries.
 
-Deck names, JPDB's card levels, kanji cards, example sentences, JPDB's media, etc, are not imported.
+JPDB's card levels, kanji cards, example sentences, JPDB's media, etc, are not imported.
+
+## Bringing your decks over as word lists
+
+You can import your existing decks from JPDB, whether it's the built-in media ones or your custom lists, by, ticking **Decks as word lists**. You will then be able to choose the ones you want to import by ticking them.
+
+They will be turned into word list decks in your study list.
 
 ::note
 JPDB's own scheduling does not transfer. Jiten replays your review history through FSRS from scratch, using your own FSRS settings, so intervals will not match what JPDB showed. Your progress is preserved but the dates might be different depending on the settings you used on JPDB.

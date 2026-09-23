@@ -97,6 +97,7 @@ public static class CardArchiveService
             row.Step = card.Step;
             row.Stability = card.Stability;
             row.Difficulty = card.Difficulty;
+            row.StabilityFast = card.StabilityFast;
             row.Due = card.Due;
             row.LastReview = card.LastReview;
             row.Lapses = card.Lapses;
@@ -158,6 +159,7 @@ public static class CardArchiveService
         target.Step = source.Step;
         target.Stability = source.Stability;
         target.Difficulty = source.Difficulty;
+        target.StabilityFast = source.StabilityFast;
         target.Due = source.Due;
         target.LastReview = source.LastReview;
         target.Lapses = source.Lapses;

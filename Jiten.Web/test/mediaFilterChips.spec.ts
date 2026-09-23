@@ -18,7 +18,7 @@ const emptyRanges = () =>
 
 const snapshot = (overrides: Partial<MediaFilterSnapshot> = {}): MediaFilterSnapshot => ({
   ranges: emptyRanges(),
-  statusFilter: 'none',
+  statusFilter: [],
   includeGenres: [],
   excludeGenres: [],
   includeTags: [],
@@ -45,11 +45,11 @@ describe('active filter count', () => {
     expect(countActiveFilters(snapshot({ ranges: withRange('difficulty', { min: 2, max: 4 }) }))).toBe(1);
   });
 
-  it('counts status, favourite, each genre, each tag and the sequel exclusion separately', () => {
+  it('counts each ticked status, favourite, each genre, each tag and the sequel exclusion separately', () => {
     const count = countActiveFilters(
       snapshot({
         ranges: withRange('charCount', { min: null, max: 500_000 }),
-        statusFilter: 'completed',
+        statusFilter: ['planning', 'nostatus'],
         includeGenres: [7],
         excludeGenres: [5],
         includeTags: [1, 2],
@@ -57,7 +57,7 @@ describe('active filter count', () => {
         favourite: true,
       })
     );
-    expect(count).toBe(8);
+    expect(count).toBe(9);
   });
 });
 
@@ -92,6 +92,11 @@ describe('applied filter chips', () => {
 
   it('renders no chip for an untouched range', () => {
     expect(buildRangeChips(emptyRanges())).toEqual([]);
+  });
+
+  it('renders one removable chip per ticked status', () => {
+    expect(CHIPS).toMatch(/for \(const token of statusFilter\.value\)/);
+    expect(CHIPS).toContain('status-${token}');
   });
 
   it('gives every chip a way to clear itself and offers a clear-all', () => {

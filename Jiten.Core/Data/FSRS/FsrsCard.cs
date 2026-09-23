@@ -34,6 +34,9 @@ public class FsrsCard
     /// </summary>
     public double? Difficulty { get; set; }
 
+    /// <summary>FSRS-7 fast-trace stability; null under FSRS-6. Derived from the review log, so a replay rebuilds it.</summary>
+    public double? StabilityFast { get; set; }
+
     /// <summary>
     /// When the card is next due for review
     /// </summary>
@@ -93,7 +96,8 @@ public class FsrsCard
         return new FsrsCard(UserId, WordId, ReadingIndex, CardId, State, Step, Stability, Difficulty, Due, LastReview)
         {
             Lapses = Lapses,
-            CreatedAt = CreatedAt
+            CreatedAt = CreatedAt,
+            StabilityFast = StabilityFast
         };
     }
 }
