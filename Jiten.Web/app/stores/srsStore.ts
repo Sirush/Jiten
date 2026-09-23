@@ -22,6 +22,7 @@ import { FsrsRating, FsrsState } from '~/types';
 import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
 import { DEFAULT_CARD_DISPLAY_SETTINGS } from '~/utils/defaultStudySettings';
 import { useAuthStore } from '~/stores/authStore';
+import { cardReading } from '~/utils/srsWriteIn';
 
 interface SessionReview {
   wordId: number;
@@ -1118,7 +1119,7 @@ export const useSrsStore = defineStore('srs', () => {
 
     const cardKey = `${card.wordId}-${card.readingIndex}`;
     const isRepeat = againCardKeys.value.has(cardKey);
-    const kanaReading = card.readings.find((r) => r.formType === 1)?.text ?? card.wordTextPlain;
+    const kanaReading = cardReading(card);
 
     const reviewEntry: SessionReview = {
       wordId: card.wordId,

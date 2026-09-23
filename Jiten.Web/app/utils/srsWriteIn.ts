@@ -49,8 +49,8 @@ export function hasKanji(text: string): boolean {
   return KANJI_RE.test(text ?? '');
 }
 
-function primaryReading(card: StudyCardDto): string {
-  return card.readings.find((r) => r.formType === 1)?.text ?? card.readings[0]?.text ?? card.wordTextPlain;
+export function cardReading(card: StudyCardDto): string {
+  return card.reading || card.readings.find((r) => r.formType === 1)?.text || card.readings[0]?.text || card.wordTextPlain;
 }
 
 /** Reading mode: any registered reading (or the surface form), compared exactly as hiragana. */
@@ -61,7 +61,7 @@ export function checkReading(input: string, card: StudyCardDto): WriteInResult {
   for (const r of card.readings) if (r.text) accepted.add(canon(r.text));
   if (card.wordTextPlain) accepted.add(canon(card.wordTextPlain));
   const ok = candidates.some((c) => c.length > 0 && accepted.has(c));
-  return { ok, normalized: norm, expected: primaryReading(card) };
+  return { ok, normalized: norm, expected: cardReading(card) };
 }
 
 // Function words and dictionary-note tokens that don't count as a "content word" answer.

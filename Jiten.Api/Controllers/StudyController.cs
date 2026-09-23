@@ -2275,7 +2275,7 @@ public partial class StudyController(
             .ToListAsync();
         RubyTextHelper.EnrichForms(wordForms);
         var wordFormsMap = wordForms.GroupBy(wf => wf.WordId)
-            .ToDictionary(g => g.Key, g => g.ToList());
+            .ToDictionary(g => g.Key, g => g.OrderBy(wf => wf.ReadingIndex).ToList());
         var freqs = await frequencySource.LoadFrequencies(context, wordIds);
         var confusables = await confusablesTask;
 
@@ -2337,6 +2337,7 @@ public partial class StudyController(
                 IsLeech = fsrsCard != null && LeechHelper.IsLeech(fsrsCard.Lapses, fsrsCard.Stability, settings.LeechThreshold),
                 WordText = mainForm?.RubyText ?? mainForm?.Text ?? "",
                 WordTextPlain = mainForm?.Text ?? "",
+                Reading = mainForm != null ? RubyTextHelper.FormReading(mainForm, forms!) : "",
                 Readings = forms?.Select(f => new StudyReadingDto
                 {
                     Text = f.Text,

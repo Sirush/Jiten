@@ -1314,6 +1314,7 @@ export interface StudyCardDto {
   isLeech: boolean;
   wordText: string;
   wordTextPlain: string;
+  reading?: string;
   readings: StudyReadingDto[];
   definitions: StudyDefinitionDto[];
   partsOfSpeech: string[];

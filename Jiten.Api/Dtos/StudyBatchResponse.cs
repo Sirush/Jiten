@@ -23,6 +23,7 @@ public class StudyCardDto
     public bool IsLeech { get; set; }
     public string WordText { get; set; } = "";
     public string WordTextPlain { get; set; } = "";
+    public string Reading { get; set; } = "";
     public List<StudyReadingDto> Readings { get; set; } = new();
     public List<StudyDefinitionDto> Definitions { get; set; } = new();
     public string[] PartsOfSpeech { get; set; } = Array.Empty<string>();

@@ -3,6 +3,7 @@
   import { pitchAccentDefaults, resolveOptions } from './cardBlockOptions';
   import { useCardContext } from './useCardContext';
   import CardBlockSpoiler from './CardBlockSpoiler.vue';
+  import { cardReading } from '~/utils/srsWriteIn';
 
   const props = defineProps<{ block: CardLayoutBlock; side: 'front' | 'back' }>();
   const opts = computed(() => resolveOptions<PitchAccentBlockOptions>(pitchAccentDefaults, props.block.options));
@@ -12,8 +13,7 @@
   const pitchReadingText = computed(() => {
     if (isPreview) return sample!.reading;
     if (wordData.value) return wordData.value.mainReading.text;
-    const kanaReading = card.value?.readings.find((r) => r.formType === 1);
-    return kanaReading?.text || card.value?.wordTextPlain || '';
+    return card.value ? cardReading(card.value) : '';
   });
 
   const pitchAccents = computed<number[] | null>(() => {
