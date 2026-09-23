@@ -1030,10 +1030,13 @@ export const useSrsStore = defineStore('srs', () => {
   }
 
   // The interval the server will schedule for this grade when it is a learning step inside the
-  // learn-ahead window, else null. Review intervals are at least a day, so the window alone separates them.
+  // learn-ahead window, else null. FSRS-7 review intervals can be minutes, so the step flag, not the
+  // window, keeps a graduated card from repeating at near-full recall.
   function learningStepSeconds(card: StudyCardDto, rating: FsrsRating): number | null {
     const preview = card.intervalPreview;
     if (!preview || rating === FsrsRating.Again) return null;
+    const isStep = rating === FsrsRating.Hard ? preview.hardIsStep : rating === FsrsRating.Easy ? preview.easyIsStep : preview.goodIsStep;
+    if (isStep === false) return null;
     const seconds = rating === FsrsRating.Hard ? preview.hardSeconds : rating === FsrsRating.Easy ? preview.easySeconds : preview.goodSeconds;
     const windowSeconds = (studySettings.value.learnAheadMinutes ?? 0) * 60;
     if (seconds <= 0 || windowSeconds <= 0 || seconds > windowSeconds) return null;

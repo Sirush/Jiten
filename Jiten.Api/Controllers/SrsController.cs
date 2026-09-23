@@ -269,7 +269,7 @@ public class SrsController(
         await sessionService.BumpStudyOverviewVersion(userId);
 
         var previewScheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: false);
-        var intervals = previewScheduler.PreviewIntervals(cardAndLog.UpdatedCard, DateTime.UtcNow);
+        var outcomes = previewScheduler.PreviewOutcomes(cardAndLog.UpdatedCard, DateTime.UtcNow);
 
         var resultObj = new
         {
@@ -283,20 +283,14 @@ public class SrsController(
             autoBuried,
             isLeech,
             lapses = cardAndLog.UpdatedCard.Lapses,
-            intervalPreview = new
-            {
-                againSeconds = (int)intervals[FsrsRating.Again].TotalSeconds,
-                hardSeconds = (int)intervals[FsrsRating.Hard].TotalSeconds,
-                goodSeconds = (int)intervals[FsrsRating.Good].TotalSeconds,
-                easySeconds = (int)intervals[FsrsRating.Easy].TotalSeconds,
-            }
+            intervalPreview = IntervalPreviewDto.From(outcomes)
         };
 
         if (hasIdempotency)
             await sessionService.StoreCachedReviewResult(idempotencyScope, request.ClientRequestId!, System.Text.Json.JsonSerializer.Serialize(resultObj));
 
-        logger.LogInformation("User reviewed SRS card: WordId={WordId}, ReadingIndex={ReadingIndex}, Rating={Rating}, NewState={NewState}",
-                              request.WordId, request.ReadingIndex, request.Rating, cardAndLog.UpdatedCard.State);
+        logger.LogInformation("User reviewed SRS card: WordId={WordId}, ReadingIndex={ReadingIndex}, Rating={Rating}, NewState={NewState}, AutoBuried={AutoBuried}, LeechSuspended={LeechSuspended}",
+                              request.WordId, request.ReadingIndex, request.Rating, cardAndLog.UpdatedCard.State, autoBuried, leechSuspended);
         return Results.Json(resultObj);
     }
 

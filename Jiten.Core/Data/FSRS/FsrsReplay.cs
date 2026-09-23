@@ -21,15 +21,15 @@ public static class FsrsReplay
                                  FsrsScheduler scheduler, FsrsScheduler replayScheduler,
                                  bool preserveTerminalState = true, bool preserveSchedule = false)
     {
-        if (logs.Count == 0)
+        var ordered = logs.Where(l => l.Rating.IsValid())
+                          .OrderBy(l => l.ReviewDateTime).ThenBy(l => l.ReviewLogId).ToList();
+        if (ordered.Count == 0)
             return false;
 
         var overrideState = preserveTerminalState
                             && card.State is FsrsState.Mastered or FsrsState.Blacklisted or FsrsState.Suspended
             ? card.State
             : (FsrsState?)null;
-
-        var ordered = logs.OrderBy(l => l.ReviewDateTime).ThenBy(l => l.ReviewLogId).ToList();
 
         var tempCard = new FsrsCard(card.UserId, card.WordId, card.ReadingIndex);
         var lapses = 0;

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Linq.Expressions;
 using System.Text.RegularExpressions;
 using Hangfire;
 using Jiten.Api.Dtos;
@@ -1966,7 +1967,8 @@ public partial class StudyController(
                             && c.State != FsrsState.Mastered
                             && c.State != FsrsState.Suspended
                             && (c.Due <= dueCutoff
-                                || ((c.State == FsrsState.Learning || c.State == FsrsState.Relearning) && c.Due <= learnAheadCutoff)));
+                                || ((c.State == FsrsState.Learning || c.State == FsrsState.Relearning) && c.Due <= learnAheadCutoff)))
+                .Where(ReviewNotServedEarlySameDay(now, todayStart));
 
             HashSet<long>? studyDeckWordKeys = null;
             var activeStudyDecks = studyDecks.Where(sd => sd.IsActive).ToList();
@@ -2402,14 +2404,7 @@ public partial class StudyController(
                 else
                     fsrsCard = new FsrsCard(userId, dto.WordId, (byte)dto.ReadingIndex);
 
-                var intervals = previewScheduler.PreviewIntervals(fsrsCard, now2);
-                dto.IntervalPreview = new IntervalPreviewDto
-                {
-                    AgainSeconds = (int)intervals[FsrsRating.Again].TotalSeconds,
-                    HardSeconds = (int)intervals[FsrsRating.Hard].TotalSeconds,
-                    GoodSeconds = (int)intervals[FsrsRating.Good].TotalSeconds,
-                    EasySeconds = (int)intervals[FsrsRating.Easy].TotalSeconds,
-                };
+                dto.IntervalPreview = IntervalPreviewDto.From(previewScheduler.PreviewOutcomes(fsrsCard, now2));
             }
         }
 
@@ -2752,7 +2747,8 @@ public partial class StudyController(
                         && c.State != FsrsState.Suspended);
         var dueNowQuery = dueBaseQuery
             .Where(c => c.Due <= dueCutoff
-                        || ((c.State == FsrsState.Learning || c.State == FsrsState.Relearning) && c.Due <= learnAheadCutoff));
+                        || ((c.State == FsrsState.Learning || c.State == FsrsState.Relearning) && c.Due <= learnAheadCutoff))
+            .Where(ReviewNotServedEarlySameDay(now, todayStart));
 
         HashSet<long>? deckFilter = null;
         List<UserStudyDeck>? activeStudyDecks = null;
@@ -3028,7 +3024,8 @@ public partial class StudyController(
                                 && c.State != FsrsState.Blacklisted
                                 && c.State != FsrsState.Mastered
                                 && c.State != FsrsState.Suspended
-                                && c.Due <= dueCutoff);
+                                && c.Due <= dueCutoff)
+                    .Where(ReviewNotServedEarlySameDay(now, todayStart));
 
                 int totalDue;
                 if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
@@ -3057,7 +3054,8 @@ public partial class StudyController(
                                 && c.State != FsrsState.Blacklisted
                                 && c.State != FsrsState.Mastered
                                 && c.State != FsrsState.Suspended
-                                && c.Due <= aheadCutoff);
+                                && c.Due <= aheadCutoff)
+                    .Where(ReviewNotServedEarlySameDay(now, todayStart));
 
                 if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
                 {
@@ -3967,6 +3965,14 @@ public partial class StudyController(
         if (learnAhead > nextLocalMidnight) learnAhead = nextLocalMidnight;
         return learnAhead > dueCutoff ? learnAhead : dueCutoff;
     }
+
+    /// <summary>Day-boundary and review-ahead cutoffs serve cards early; a Review card graded today (FSRS-7 can schedule it minutes out) waits for its real due time, or it would loop within the session.</summary>
+    private static Expression<Func<FsrsCard, bool>> ReviewNotServedEarlySameDay(DateTime utcNow, DateTime todayStart)
+        => c => c.Due <= utcNow
+                || c.State == FsrsState.Learning
+                || c.State == FsrsState.Relearning
+                || !c.LastReview.HasValue
+                || c.LastReview < todayStart;
 
     private static DueWindow GetDueWindow(DateTime utcNow, StudySettingsDto settings)
         => new(GetDueCutoff(utcNow, settings), GetLearnAheadCutoff(utcNow, settings));

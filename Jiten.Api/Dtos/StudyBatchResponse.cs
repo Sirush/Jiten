@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using Jiten.Core.Data.FSRS;
+
 namespace Jiten.Api.Dtos;
 
 public class StudyBatchResponse
@@ -49,12 +52,41 @@ public class StudyDeckOccurrenceDto
     public string? ParentEnglishTitle { get; set; }
 }
 
+/// <summary>Names are pinned because the review endpoint caches this through plain System.Text.Json for idempotent replays.</summary>
 public class IntervalPreviewDto
 {
+    [JsonPropertyName("againSeconds")]
     public int AgainSeconds { get; set; }
+
+    [JsonPropertyName("hardSeconds")]
     public int HardSeconds { get; set; }
+
+    [JsonPropertyName("goodSeconds")]
     public int GoodSeconds { get; set; }
+
+    [JsonPropertyName("easySeconds")]
     public int EasySeconds { get; set; }
+
+    /// <summary>True when the grade keeps the card on a learning or relearning step; the client re-queues only these in-session.</summary>
+    [JsonPropertyName("hardIsStep")]
+    public bool HardIsStep { get; set; }
+
+    [JsonPropertyName("goodIsStep")]
+    public bool GoodIsStep { get; set; }
+
+    [JsonPropertyName("easyIsStep")]
+    public bool EasyIsStep { get; set; }
+
+    public static IntervalPreviewDto From(IReadOnlyDictionary<FsrsRating, FsrsPreviewOutcome> outcomes) => new()
+    {
+        AgainSeconds = (int)outcomes[FsrsRating.Again].Interval.TotalSeconds,
+        HardSeconds = (int)outcomes[FsrsRating.Hard].Interval.TotalSeconds,
+        GoodSeconds = (int)outcomes[FsrsRating.Good].Interval.TotalSeconds,
+        EasySeconds = (int)outcomes[FsrsRating.Easy].Interval.TotalSeconds,
+        HardIsStep = outcomes[FsrsRating.Hard].IsStep,
+        GoodIsStep = outcomes[FsrsRating.Good].IsStep,
+        EasyIsStep = outcomes[FsrsRating.Easy].IsStep,
+    };
 }
 
 public class StudyReadingDto

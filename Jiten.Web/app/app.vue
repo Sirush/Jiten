@@ -42,6 +42,7 @@
     <NuxtLoadingIndicator />
     <ClientOnly>
       <MaintenanceBanner />
+      <UpdateAvailablePrompt v-if="isStudyMode" inline />
     </ClientOnly>
 
     <div
@@ -65,5 +66,8 @@
     <LazyToast />
     <LazyToast position="bottom-center" group="bottom" />
     <LazyConfirmDialog />
+    <ClientOnly>
+      <UpdateAvailablePrompt v-if="!isStudyMode" />
+    </ClientOnly>
   </div>
 </template>

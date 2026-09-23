@@ -85,6 +85,40 @@ describe('learn-ahead re-queue', () => {
     expect(store.sessionStats.newCardsLearned).toBe(1);
   });
 
+  it('does not re-queue a review interval inside the window', async () => {
+    const store = useSrsStore();
+    store.studySettings.pauseBetweenBatches = false;
+    store.studySettings.learnAheadMinutes = 120;
+    const review = card(1, 540);
+    review.intervalPreview = { ...review.intervalPreview!, hardIsStep: false, goodIsStep: false, easyIsStep: false };
+    batchCards = [review, ...Array.from({ length: 20 }, (_, i) => card(10 + i, 86400))];
+    await store.fetchBatch();
+    store.isFlipped = true;
+
+    store.gradeCard(3);
+    await flush();
+
+    expect(store.currentBatch.filter((c) => c.wordId === 1)).toHaveLength(1);
+    expect(store.learningCardKeys.size).toBe(0);
+  });
+
+  it('re-queues a flagged step inside the window', async () => {
+    const store = useSrsStore();
+    store.studySettings.pauseBetweenBatches = false;
+    store.studySettings.learnAheadMinutes = 20;
+    const learning = card(1, 600);
+    learning.intervalPreview = { ...learning.intervalPreview!, hardIsStep: true, goodIsStep: true, easyIsStep: false };
+    batchCards = [learning, ...Array.from({ length: 20 }, (_, i) => card(10 + i, 86400))];
+    await store.fetchBatch();
+    store.isFlipped = true;
+
+    store.gradeCard(3);
+    await flush();
+
+    expect(store.currentBatch.filter((c) => c.wordId === 1)).toHaveLength(2);
+    expect(store.learningCardKeys.has('1-0')).toBe(true);
+  });
+
   it('does not re-queue a step that ends outside the window', async () => {
     const store = await start(600, 5);
     store.gradeCard(3);

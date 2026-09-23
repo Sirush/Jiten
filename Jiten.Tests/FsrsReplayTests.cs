@@ -114,4 +114,29 @@ public class FsrsReplayTests
         act.Should().NotThrow();
         card.LastReview.Should().Be(Base.AddDays(2));
     }
+
+    [Fact]
+    public void Recompute_SkipsOutOfRangeRatings()
+    {
+        var clean = Logs((0, FsrsRating.Good), (5, FsrsRating.Good));
+        var dirty = Logs((0, FsrsRating.Good), (2, (FsrsRating)0), (5, FsrsRating.Good), (6, (FsrsRating)7));
+
+        var a = new FsrsCard("u", 1, 0) { CardId = 1 };
+        var b = new FsrsCard("u", 1, 0) { CardId = 1 };
+
+        FsrsReplay.Recompute(a, clean, NoFuzz(), NoFuzz());
+        FsrsReplay.Recompute(b, dirty, NoFuzz(), NoFuzz());
+
+        b.Stability.Should().Be(a.Stability);
+        b.Due.Should().Be(a.Due);
+    }
+
+    [Fact]
+    public void Recompute_ReturnsFalseWhenNoRatingIsValid()
+    {
+        var card = new FsrsCard("u", 1, 0) { CardId = 1, Stability = 3.0 };
+
+        FsrsReplay.Recompute(card, Logs((0, (FsrsRating)0)), NoFuzz(), NoFuzz()).Should().BeFalse();
+        card.Stability.Should().Be(3.0);
+    }
 }

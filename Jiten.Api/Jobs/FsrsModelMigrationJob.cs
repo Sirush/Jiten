@@ -31,17 +31,30 @@ public class FsrsModelMigrationJob(
                                               .ToDictionaryAsync(s => s.UserId);
 
         var migrated = 0;
+        var failed = 0;
         foreach (var userId in candidates)
         {
             var (_, version) = FsrsSettingsHelper.ResolveParameters(settingsByUser.GetValueOrDefault(userId));
             if (version != target)
                 continue;
 
-            await recomputeJob.RecomputeMemoryStates(userId);
-            migrated++;
+            try
+            {
+                await recomputeJob.RecomputeMemoryStates(userId);
+                migrated++;
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                logger.LogError(ex, "FSRS model migration failed for user {UserId}", userId);
+            }
         }
 
-        logger.LogInformation("FSRS model migration to FSRS-{Version}: recomputed {Migrated} of {Candidates} candidate users",
-                              (int)target, migrated, candidates.Count);
+        logger.LogInformation("FSRS model migration to FSRS-{Version}: recomputed {Migrated} of {Candidates} candidate users, {Failed} failed",
+                              (int)target, migrated, candidates.Count, failed);
+
+        // Surfaces the failures in Hangfire; the retry only revisits users still holding the other model's states.
+        if (failed > 0)
+            throw new InvalidOperationException($"FSRS model migration failed for {failed} user(s)");
     }
 }

@@ -2733,6 +2733,11 @@ public partial class UserController(
 
         exportDto.Cards ??= [];
 
+        foreach (var card in exportDto.Cards)
+            card.ReviewLogs?.RemoveAll(l => !l.Rating.IsValid());
+        foreach (var archived in exportDto.Archive ?? [])
+            archived.ReviewLogs?.RemoveAll(l => !l.Rating.IsValid());
+
         var result = new FsrsImportResultDto
                      {
                          ValidationErrors = [], CardsImported = 0, CardsSkipped = 0, CardsUpdated = 0, ReviewLogsImported = 0

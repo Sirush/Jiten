@@ -100,6 +100,20 @@ public class FsrsSchedulerV7Tests
     }
 
     [Fact]
+    public void PreviewOutcomes_MinuteReviewIntervalIsNotAStep()
+    {
+        var card = new FsrsCard("u", 1, 0, state: FsrsState.Review, stability: 0.4254, difficulty: 9.76, lastReview: Start) { StabilityFast = 5.0 };
+
+        var preview = Scheduler().PreviewOutcomes(card, Start.AddSeconds(15));
+
+        preview[FsrsRating.Good].Interval.Should().BeLessThan(TimeSpan.FromMinutes(20));
+        preview[FsrsRating.Good].IsStep.Should().BeFalse();
+        preview[FsrsRating.Easy].IsStep.Should().BeFalse();
+        preview[FsrsRating.Again].State.Should().Be(FsrsState.Relearning);
+        preview[FsrsRating.Again].IsStep.Should().BeTrue();
+    }
+
+    [Fact]
     public void Retrievability_AndStabilityDays_UseTheFullState()
     {
         var scheduler = Scheduler();

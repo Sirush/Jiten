@@ -224,6 +224,39 @@
     }
   }
 
+  // Mobile browsers never fire `paste` without a focused editable field, so touch users need an
+  // explicit button that reads the clipboard. Set on mount to keep SSR markup identical.
+  const showPasteButton = ref(false);
+  const readingClipboard = ref(false);
+
+  async function pasteFromClipboard() {
+    if (readingClipboard.value) return;
+    readingClipboard.value = true;
+    try {
+      // iOS Safari only honours clipboard.read() when it is the first await inside the tap handler.
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find((t) => IMAGE_MIME.includes(t));
+        if (!type) continue;
+        const blob = await item.getType(type);
+        const ext = type === 'image/jpeg' ? 'jpg' : type.split('/')[1];
+        stageFile(new File([blob], `pasted-image.${ext}`, { type }));
+        return;
+      }
+      toast.add({ severity: 'warn', summary: 'No image to paste', detail: 'Copy an image first, then tap Paste again.', life: 4000 });
+    } catch (e) {
+      const denied = e instanceof DOMException && e.name === 'NotAllowedError';
+      toast.add({
+        severity: 'warn',
+        summary: denied ? 'Clipboard access blocked' : 'Could not read the clipboard',
+        detail: denied ? 'Allow clipboard access for this site, or choose the file instead.' : 'Choose the file instead.',
+        life: 5000,
+      });
+    } finally {
+      readingClipboard.value = false;
+    }
+  }
+
   watch(
     () => props.droppedFile,
     (file) => {
@@ -268,6 +301,8 @@
   }
 
   onMounted(() => {
+    // Desktop already pastes via Ctrl+V, and its browsers gate clipboard.read() behind prompts or deny it outright.
+    showPasteButton.value = typeof navigator.clipboard?.read === 'function' && window.matchMedia('(pointer: coarse)').matches;
     window.addEventListener('paste', onPaste);
     if (props.compact) {
       window.addEventListener('dragenter', onWindowDragEnter);
@@ -447,6 +482,16 @@
             @click="openPicker"
           />
         </JitenPlusGate>
+
+        <Button
+          v-if="canUpload && showPasteButton"
+          size="small"
+          text
+          icon="pi pi-clipboard"
+          aria-label="Paste image from clipboard"
+          :loading="readingClipboard"
+          @click="pasteFromClipboard"
+        />
       </div>
 
       <div
@@ -538,20 +583,33 @@
 
       <!-- Dropzone -->
       <JitenPlusGate feature="card-media" feature-label="Card media">
-        <button
-          type="button"
-          class="flex w-full flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-4 py-4 text-center transition-colors cursor-pointer"
-          :class="
-            dragOver
-              ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/40'
-              : 'border-surface-300 dark:border-surface-600 hover:border-primary-400 hover:bg-surface-50 dark:hover:bg-surface-800/60'
-          "
-          @click="openPicker"
-        >
-          <i class="pi pi-cloud-upload text-lg text-surface-400 dark:text-surface-400" />
-          <span class="text-sm text-surface-600 dark:text-surface-300">Drop, paste, or click to add an image or audio clip</span>
-          <span class="text-[0.7rem] text-surface-400 dark:text-surface-400">Max 5 MB. Replaces the existing image or audio.</span>
-        </button>
+        <div class="flex flex-col gap-2">
+          <button
+            type="button"
+            class="flex w-full flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-4 py-4 text-center transition-colors cursor-pointer"
+            :class="
+              dragOver
+                ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/40'
+                : 'border-surface-300 dark:border-surface-600 hover:border-primary-400 hover:bg-surface-50 dark:hover:bg-surface-800/60'
+            "
+            @click="openPicker"
+          >
+            <i class="pi pi-cloud-upload text-lg text-surface-400 dark:text-surface-400" />
+            <span class="text-sm text-surface-600 dark:text-surface-300">Drop, paste, or click to add an image or audio clip</span>
+            <span class="text-[0.7rem] text-surface-400 dark:text-surface-400">Max 5 MB. Replaces the existing image or audio.</span>
+          </button>
+          <Button
+            v-if="showPasteButton"
+            class="w-full"
+            size="small"
+            severity="secondary"
+            outlined
+            icon="pi pi-clipboard"
+            label="Paste image"
+            :loading="readingClipboard"
+            @click="pasteFromClipboard"
+          />
+        </div>
       </JitenPlusGate>
     </template>
 

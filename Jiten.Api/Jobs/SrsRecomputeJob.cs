@@ -76,9 +76,11 @@ public class SrsRecomputeJob(
 
             foreach (var card in cards)
             {
-                if (logsByCard.TryGetValue(card.CardId, out var cardLogs))
-                    FsrsReplay.Recompute(card, cardLogs, scheduler, scheduler, preserveSchedule: true);
-                else if (scheduler.Version != FsrsVersion.V7)
+                if (logsByCard.TryGetValue(card.CardId, out var cardLogs)
+                    && FsrsReplay.Recompute(card, cardLogs, scheduler, scheduler, preserveSchedule: true))
+                    continue;
+
+                if (scheduler.Version != FsrsVersion.V7)
                     card.StabilityFast = null;
                 else if (card.Stability != null)
                     // Without a log there is nothing to replay; pinning the fallback keeps the migration job from revisiting the card.
