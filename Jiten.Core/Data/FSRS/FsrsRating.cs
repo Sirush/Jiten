@@ -25,3 +25,8 @@ public enum FsrsRating
     /// </summary>
     Easy = 4
 }
+
+public static class FsrsRatingExtensions
+{
+    public static bool IsValid(this FsrsRating rating) => rating is >= FsrsRating.Again and <= FsrsRating.Easy;
+}

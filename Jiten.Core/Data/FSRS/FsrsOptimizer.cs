@@ -599,7 +599,7 @@ public class FsrsOptimizer
 
         foreach (var group in reviewLogsByCard)
         {
-            var logs = group.OrderBy(l => l.ReviewDateTime).ToList();
+            var logs = group.Where(l => l.Rating.IsValid()).OrderBy(l => l.ReviewDateTime).ToList();
             if (logs.Count < 2) continue;
 
             var reviews = new FsrsTrainingReview[logs.Count];

@@ -216,7 +216,8 @@ public static class CardArchiveService
     {
         var live = await ctx.FsrsReviewLogs
                             .AsNoTracking()
-                            .Where(l => l.Card.UserId == userId)
+                            .Where(l => l.Card.UserId == userId
+                                        && l.Rating >= FsrsRating.Again && l.Rating <= FsrsRating.Easy)
                             .Select(l => new { l.CardId, l.ReviewDateTime, l.Rating, l.ReviewDuration })
                             .ToListAsync();
 
