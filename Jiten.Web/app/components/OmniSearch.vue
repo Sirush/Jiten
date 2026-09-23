@@ -179,7 +179,6 @@
 
   onMounted(() => {
     document.addEventListener('click', handleClickOutside);
-    // Native autofocus dies on hydration/client-side navigation; skipped on touch devices where it would pop the keyboard over the page.
     if (props.autofocus && window.matchMedia('(pointer: fine)').matches) {
       nextTick(() => inputRef.value?.querySelector('input')?.focus());
     }
@@ -237,7 +236,6 @@
           :placeholder="placeholder || 'Search words, sentences, or media. Use * for wildcard'"
           class="w-full text-sm sm:text-base"
           maxlength="2000"
-          :autofocus="autofocus"
           role="combobox"
           aria-autocomplete="list"
           :aria-expanded="isDropdownOpen"
