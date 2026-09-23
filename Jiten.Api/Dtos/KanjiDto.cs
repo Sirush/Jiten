@@ -85,7 +85,7 @@ public class KanjiGridItemDto
 public class KanjiGridReadingDto
 {
     public string Reading { get; set; } = "";
-    public int Known { get; set; }
+    public double Known { get; set; }
     public int Required { get; set; }
     public double Weight { get; set; }
 }

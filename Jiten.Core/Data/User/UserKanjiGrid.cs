@@ -57,7 +57,7 @@ public class KanjiScoreEntry
 public class ReadingEntry
 {
     [JsonPropertyName("r")] public string Reading { get; set; } = "";
-    [JsonPropertyName("k")] public int Known { get; set; }
+    [JsonPropertyName("k")] public double Known { get; set; }
     [JsonPropertyName("q")] public int Required { get; set; }
     [JsonPropertyName("w")] public double Weight { get; set; }
 }

@@ -58,7 +58,7 @@
     if (k.readings?.length) {
       for (const r of k.readings) {
         const rpct = (r.weight * 100).toFixed(0);
-        text += `\n  ${r.reading}: ${r.known}/${r.required} (${rpct}% weight)`;
+        text += `\n  ${r.reading}: ${Number(r.known.toFixed(2))}/${r.required} (${rpct}% weight)`;
       }
     }
     return text;
@@ -199,7 +199,7 @@
         <span class="flex items-center gap-1">
           Reading coverage:
           <Icon
-            v-tooltip="'Score reflects how many readings of each kanji you know, weighted by reading frequency. 90%+ = mastered.'"
+            v-tooltip="'Score reflects how many readings of each kanji you know, weighted by reading frequency. Young card only count for half a point. 90%+ = mastered.'"
             name="material-symbols:info-outline"
             class="text-primary-700 dark:text-primary-300 cursor-help"
             style="font-size: 1rem"
