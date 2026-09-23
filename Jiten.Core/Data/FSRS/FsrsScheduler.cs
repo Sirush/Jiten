@@ -35,6 +35,9 @@ public class FsrsScheduler
     /// </summary>
     public bool EnableFuzzing { get; }
 
+    /// <summary>Floor on a Review-state interval in days; 1 keeps FSRS-7's sub-day intervals from bringing a card back the same day.</summary>
+    public double MinimumReviewIntervalDays { get; }
+
     /// <summary>
     /// Optional load balancer. When set (and fuzzing is enabled), a review card's fuzzed due date is
     /// placed on the least-loaded day within its fuzz window instead of a random day, flattening
@@ -60,6 +63,7 @@ public class FsrsScheduler
     /// <param name="enableFuzzing">Enable interval randomization (default: true)</param>
     /// <param name="loadBalancer">Optional load balancer for spreading fuzzed due dates across days</param>
     /// <param name="easyDays">Optional per-weekday load preference applied on top of load balancing</param>
+    /// <param name="minimumReviewIntervalDays">Floor on Review-state intervals in days (default: none)</param>
     public FsrsScheduler(
         double desiredRetention = FsrsConstants.DefaultDesiredRetention,
         double[]? parameters = null,
@@ -68,7 +72,8 @@ public class FsrsScheduler
         int maximumInterval = 36500,
         bool enableFuzzing = true,
         IFsrsLoadBalancer? loadBalancer = null,
-        EasyDaysPolicy? easyDays = null)
+        EasyDaysPolicy? easyDays = null,
+        double minimumReviewIntervalDays = 0)
     {
         Parameters = parameters is { Length: > 0 } ? parameters : FsrsConstants.DefaultParameters;
         Version = FsrsVersions.FromParameterCount(Parameters.Length) ?? FsrsVersion.V6;
@@ -77,6 +82,7 @@ public class FsrsScheduler
         RelearningSteps = relearningSteps ?? FsrsStepSettings.DefaultRelearningSteps;
         MaximumInterval = maximumInterval;
         EnableFuzzing = enableFuzzing;
+        MinimumReviewIntervalDays = minimumReviewIntervalDays;
         _loadBalancer = loadBalancer;
         _easyDays = easyDays;
     }
@@ -195,9 +201,12 @@ public class FsrsScheduler
     }
 
     private double NextIntervalDays(FsrsCard card)
-        => Version == FsrsVersion.V7
+    {
+        var days = Version == FsrsVersion.V7
             ? FsrsHelperV7.NextIntervalDays(FsrsHelperV7.FromCard(card), DesiredRetention, Parameters, MaximumInterval)
             : FsrsHelper.CalculateNextInterval(card.Stability ?? 1.0d, DesiredRetention, Parameters, MaximumInterval);
+        return Math.Max(days, MinimumReviewIntervalDays);
+    }
 
     private TimeSpan CalculateNextInterval(FsrsCard card, FsrsRating rating)
     {

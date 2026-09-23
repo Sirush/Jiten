@@ -13,6 +13,7 @@ public class SrsRecomputeJob(
     ILogger<SrsRecomputeJob> logger)
 {
     private const int BatchSize = 500;
+    private const int PreviewBatchSize = 2000;
 
     private static async Task<double> ResolveOffsetHours(UserDbContext userContext, string userId)
     {
@@ -128,6 +129,106 @@ public class SrsRecomputeJob(
 
         logger.LogInformation("Recomputed FSRS-{Version} memory states for user {UserId}", (int)scheduler.Version, userId);
     }
+
+    /// <summary>
+    /// How many cards a full reschedule would leave due at each retention, without saving. Fuzz and load
+    /// balancing are skipped: they shift a due date by a few percent of its interval, not across today's cutoff.
+    /// </summary>
+    /// <param name="reviewScope">
+    /// Given the due cards, returns the keys the study page serves; null when every card counts. Mirrors
+    /// "review from study decks only", so the numbers match the due count the user sees.
+    /// </param>
+    public async Task<ReschedulePreviewResponse> PreviewDueCounts(string userId, double[] parameters, IReadOnlyList<double> desiredRetentions,
+                                                                  Func<List<(int WordId, byte ReadingIndex)>, Task<HashSet<long>>>? reviewScope = null)
+    {
+        await using var userContext = await userContextFactory.CreateDbContextAsync();
+        var studySettings = FsrsSettingsHelper.GetStudySettings(await FsrsSettingsHelper.LoadAsync(userContext, userId));
+        var now = DateTime.UtcNow;
+        var window = SrsDueWindow.At(now, studySettings);
+        var todayStart = FsrsSettingsHelper.LocalDayStartUtc(now, studySettings.Timezone);
+
+        var schedulers = desiredRetentions
+                         .Select(retention => FsrsSettingsHelper.CreateScheduler(studySettings, parameters, retention, enableFuzzing: false))
+                         .ToList();
+        var replayScheduler = schedulers[0];
+
+        // Bit 0: due now; bit i + 1: due after rescheduling at desiredRetentions[i].
+        var dueMasks = new Dictionary<(int WordId, byte ReadingIndex), int>();
+        var lastCardId = 0L;
+
+        while (true)
+        {
+            var cards = await userContext.FsrsCards
+                                         .AsNoTracking()
+                                         .Where(card => card.UserId == userId && card.CardId > lastCardId)
+                                         .OrderBy(card => card.CardId)
+                                         .Take(PreviewBatchSize)
+                                         .Select(card => new { card.CardId, card.WordId, card.ReadingIndex, card.State, card.Due, card.LastReview })
+                                         .ToListAsync();
+            if (cards.Count == 0)
+                break;
+
+            var cardIds = cards.Select(card => card.CardId).ToList();
+            var logsByCard = (await userContext.FsrsReviewLogs
+                                               .AsNoTracking()
+                                               .Where(log => cardIds.Contains(log.CardId))
+                                               .ToListAsync())
+                             .GroupBy(log => log.CardId)
+                             .ToDictionary(group => group.Key, group => group.ToList());
+
+            foreach (var card in cards)
+            {
+                var mask = CountsAsDueReview(window, now, todayStart, card.State, card.Due, card.LastReview) ? 1 : 0;
+
+                // Replay keeps these states, and they never come due.
+                if (card.State is not (FsrsState.Mastered or FsrsState.Blacklisted or FsrsState.Suspended))
+                {
+                    var placements = logsByCard.TryGetValue(card.CardId, out var cardLogs)
+                        ? FsrsReplay.ProjectFinalPlacements(cardLogs, replayScheduler, schedulers)
+                        : null;
+
+                    for (var i = 0; i < schedulers.Count; i++)
+                    {
+                        var (state, due, lastReview) = placements?[i] ?? (card.State, card.Due, card.LastReview);
+                        if (CountsAsDueReview(window, now, todayStart, state, due, lastReview))
+                            mask |= 1 << (i + 1);
+                    }
+                }
+
+                if (mask != 0)
+                    dueMasks[(card.WordId, card.ReadingIndex)] = mask;
+            }
+
+            lastCardId = cards[^1].CardId;
+        }
+
+        var served = reviewScope == null ? null : await reviewScope(dueMasks.Keys.ToList());
+        var counts = new int[schedulers.Count + 1];
+        foreach (var (key, mask) in dueMasks)
+        {
+            if (served != null && !served.Contains(WordFormHelper.EncodeWordKey(key.WordId, key.ReadingIndex)))
+                continue;
+            for (var bit = 0; bit < counts.Length; bit++)
+            {
+                if ((mask & (1 << bit)) != 0)
+                    counts[bit]++;
+            }
+        }
+
+        return new ReschedulePreviewResponse
+        {
+            CurrentDue = counts[0],
+            Options = desiredRetentions.Select((retention, i) => new ReschedulePreviewOption { DesiredRetention = retention, Due = counts[i + 1] })
+                                       .ToList()
+        };
+    }
+
+    /// <summary>Mirrors the study page: a Review card graded today waits for its real due time even inside the day-boundary cutoff.</summary>
+    private static bool CountsAsDueReview(SrsDueWindow window, DateTime utcNow, DateTime todayStart,
+                                          FsrsState state, DateTime due, DateTime? lastReview)
+        => (state is FsrsState.Learning or FsrsState.Review or FsrsState.Relearning)
+           && window.IsDue(state, due)
+           && (due <= utcNow || state != FsrsState.Review || lastReview == null || lastReview < todayStart);
 
     /// <param name="sharedBalancer">
     /// When provided (single-shot loop), used and accumulated across batches. When null and

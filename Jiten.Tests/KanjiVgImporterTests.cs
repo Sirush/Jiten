@@ -109,6 +109,43 @@ public class KanjiVgImporterTests
     }
 
     [Fact]
+    public void Parse_SplitComponentStartingInsideSibling_LiftsItToShallowestPart()
+    {
+        var parsed = Parse("戠", """
+            <svg xmlns="http://www.w3.org/2000/svg" width="109" height="109" viewBox="0 0 109 109">
+            <g id="kvg:StrokePaths_06220" style="fill:none;">
+            <g id="kvg:06220" kvg:element="戠">
+                <g id="kvg:06220-g1" kvg:element="音">
+                    <g id="kvg:06220-g2" kvg:element="立" kvg:position="top">
+                        <g id="kvg:06220-g3" kvg:element="戈" kvg:part="1" kvg:radical="general">
+                            <g id="kvg:06220-g4" kvg:element="弋" kvg:part="1">
+                                <path id="kvg:06220-s1" d="M1,1"/>
+                            </g>
+                        </g>
+                    </g>
+                    <g id="kvg:06220-g5" kvg:element="日" kvg:position="bottom">
+                        <path id="kvg:06220-s2" d="M2,2"/>
+                    </g>
+                </g>
+                <g id="kvg:06220-g6" kvg:element="戈" kvg:part="2" kvg:radical="general">
+                    <g id="kvg:06220-g7" kvg:element="弋" kvg:part="2">
+                        <path id="kvg:06220-s3" d="M3,3"/>
+                    </g>
+                    <g id="kvg:06220-g8" kvg:element="丿">
+                        <path id="kvg:06220-s4" d="M4,4"/>
+                    </g>
+                </g>
+            </g>
+            </g>
+            </svg>
+            """);
+
+        parsed.Components.Select(c => (c.Component, c.ParentIndex))
+              .Should().Equal(("音", (short?)null), ("立", (short?)0), ("戈", (short?)null), ("弋", (short?)2), ("日", (short?)0), ("丿", (short?)2));
+        parsed.Components[2].IsRadical.Should().BeTrue();
+    }
+
+    [Fact]
     public void Parse_VariantComponent_KeepsOriginalForm()
     {
         var parsed = Parse("休", """

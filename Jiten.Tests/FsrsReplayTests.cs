@@ -131,6 +131,36 @@ public class FsrsReplayTests
         b.Due.Should().Be(a.Due);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ProjectFinalPlacements_MatchesAFullReplayPerRetention(bool fsrs7)
+    {
+        var logs = Logs((0, FsrsRating.Good), (1, FsrsRating.Again), (2, FsrsRating.Good),
+                        (10, FsrsRating.Again), (11, FsrsRating.Easy), (40, FsrsRating.Hard));
+        var parameters = fsrs7 ? FsrsConstants.DefaultParametersV7 : FsrsConstants.DefaultParameters;
+        var schedulers = new[] { 0.9, 0.8, 0.7 }
+                         .Select(r => new FsrsScheduler(desiredRetention: r, parameters: parameters, enableFuzzing: false))
+                         .ToList();
+
+        var placements = FsrsReplay.ProjectFinalPlacements(logs, schedulers[0], schedulers);
+
+        placements.Should().HaveCount(3);
+        for (var i = 0; i < schedulers.Count; i++)
+        {
+            var card = new FsrsCard("u", 1, 0) { CardId = 1 };
+            FsrsReplay.Recompute(card, logs, schedulers[i], schedulers[i]);
+            placements![i].Should().Be((card.State, card.Due, card.LastReview));
+        }
+        placements![2].Due.Should().BeAfter(placements[0].Due);
+    }
+
+    [Fact]
+    public void ProjectFinalPlacements_NullWhenNothingToReplay()
+    {
+        FsrsReplay.ProjectFinalPlacements(Logs((0, (FsrsRating)0)), NoFuzz(), [NoFuzz()]).Should().BeNull();
+    }
+
     [Fact]
     public void Recompute_ReturnsFalseWhenNoRatingIsValid()
     {

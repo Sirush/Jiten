@@ -1,9 +1,10 @@
 <script setup lang="ts">
-  import type { KanjiComponent, KanjiUsedIn } from '~/types';
+  import type { KanjiComponent, KanjiNestedRadical, KanjiUsedIn } from '~/types';
 
   const props = defineProps<{
     character: string;
     components: KanjiComponent[];
+    nestedRadical: KanjiNestedRadical | null;
     usedIn: KanjiUsedIn[];
     usedInTotal: number;
   }>();
@@ -53,6 +54,17 @@
         </component>
       </Tooltip>
     </div>
+    <p v-if="nestedRadical" class="mt-3 text-sm text-surface-600 dark:text-surface-400">
+      Radical:
+      <NuxtLink
+        v-if="nestedRadical.linkCharacter"
+        :to="`/kanji/${nestedRadical.linkCharacter}`"
+        class="text-base font-medium text-primary-600 dark:text-primary-400 hover:underline"
+        lang="ja"
+      >{{ nestedRadical.character }}</NuxtLink>
+      <span v-else class="text-base font-medium text-surface-800 dark:text-surface-100" lang="ja">{{ nestedRadical.character }}</span>
+      <template v-if="nestedRadical.meaning"> ({{ nestedRadical.meaning }})</template>, inside <span class="text-base" lang="ja">{{ nestedRadical.inside }}</span>
+    </p>
     <KanjiVgCredit />
   </div>
 

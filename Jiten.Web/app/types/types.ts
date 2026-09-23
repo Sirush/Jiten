@@ -388,6 +388,27 @@ export interface FsrsParametersResponse {
   defaultParameters: number[];
 }
 
+export interface ReschedulePreviewOption {
+  desiredRetention: number;
+  due: number;
+}
+
+export interface ReschedulePreviewResponse {
+  currentDue: number;
+  // The first option is always the saved desired retention.
+  options: ReschedulePreviewOption[];
+}
+
+export interface OptimizePreviewResponse {
+  parameters: string;
+  parameterValues: number[];
+  loss: number;
+  reviewCount: number;
+  version: number;
+  desiredRetention: number;
+  preview: ReschedulePreviewResponse;
+}
+
 export interface SrsRecomputeBatchResponse {
   processed: number;
   total: number;
@@ -794,6 +815,7 @@ export interface Kanji {
   topWords?: WordSummary[];
   wordsByReading?: KanjiReadingWords[];
   components?: KanjiComponent[];
+  nestedRadical?: KanjiNestedRadical | null;
   usedIn?: KanjiUsedIn[];
   usedInTotal?: number;
   strokes?: KanjiStrokes | null;
@@ -806,6 +828,14 @@ export interface KanjiComponent {
   meaning: string | null;
   isRadical: boolean;
   isPhonetic: boolean;
+}
+
+export interface KanjiNestedRadical {
+  character: string;
+  original: string | null;
+  linkCharacter: string | null;
+  meaning: string | null;
+  inside: string;
 }
 
 export interface KanjiUsedIn {

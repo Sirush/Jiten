@@ -285,6 +285,7 @@
       <KanjiComposition
         :character="kanji.character"
         :components="kanji.components ?? []"
+        :nested-radical="kanji.nestedRadical ?? null"
         :used-in="kanji.usedIn ?? []"
         :used-in-total="kanji.usedInTotal ?? 0"
       />
