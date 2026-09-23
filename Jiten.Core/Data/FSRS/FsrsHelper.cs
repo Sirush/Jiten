@@ -60,19 +60,22 @@ public static class FsrsHelper
                                         IFsrsLoadBalancer? loadBalancer = null, EasyDaysPolicy? easyDays = null)
     {
         var intervalDays = interval.Days;
-
         if (intervalDays < 2.5)
             return interval;
 
+        var dayFraction = interval - TimeSpan.FromDays(intervalDays);
         var (minInterval, maxInterval) = GetFuzzRange(intervalDays, maximumInterval);
+        var cap = TimeSpan.FromDays(maximumInterval);
 
         if (loadBalancer != null && anchorDate.HasValue)
         {
-            var balancedDays = SelectBalancedInterval(minInterval, maxInterval, intervalDays, anchorDate.Value, loadBalancer, easyDays);
-            return TimeSpan.FromDays(balancedDays);
+            var balancedDays = SelectBalancedInterval(minInterval, maxInterval, intervalDays, anchorDate.Value + dayFraction, loadBalancer, easyDays);
+            return Min(TimeSpan.FromDays(balancedDays) + dayFraction, cap);
         }
 
-        return TimeSpan.FromDays(Random.Next(minInterval, maxInterval + 1));
+        return Min(TimeSpan.FromDays(Random.Next(minInterval, maxInterval + 1)) + dayFraction, cap);
+
+        static TimeSpan Min(TimeSpan a, TimeSpan b) => a < b ? a : b;
     }
 
     // Floor on an Easy-Days weekday weight, so a fully-avoided day stays finitely costly ("avoid if

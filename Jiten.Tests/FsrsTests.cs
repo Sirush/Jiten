@@ -377,6 +377,27 @@ public class FsrsTests
     }
 
     [Fact]
+    public void Fuzz_FractionalInterval_MovesByWholeDaysAndKeepsTheTimeOfDay()
+    {
+        var interval = TimeSpan.FromDays(30.3);
+        var fraction = interval - TimeSpan.FromDays(30);
+
+        var balanced = FsrsHelper.ApplyFuzzing(interval, 36500, BalancerAnchor, new DictionaryFsrsLoadBalancer());
+        var random = FsrsHelper.ApplyFuzzing(interval, 36500);
+
+        Assert.Equal(interval, balanced);
+        Assert.Equal(fraction, random - TimeSpan.FromDays(random.Days));
+        Assert.InRange(random.Days, 27, 33);
+    }
+
+    [Fact]
+    public void Fuzz_FractionalInterval_StaysWithinTheMaximumInterval()
+    {
+        for (var i = 0; i < 50; i++)
+            Assert.True(FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(99.6), 100) <= TimeSpan.FromDays(100));
+    }
+
+    [Fact]
     public void LoadBalancing_NullBalancer_FallsBackToRandomFuzz()
     {
         // Without a balancer the result must land uniformly within the fuzz window [27, 33].

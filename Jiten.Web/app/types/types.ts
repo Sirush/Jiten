@@ -384,6 +384,8 @@ export interface FsrsParametersResponse {
   desiredRetention: number;
   reviewCount: number;
   minimumReviewsForOptimize: number;
+  version: number;
+  defaultParameters: number[];
 }
 
 export interface SrsRecomputeBatchResponse {

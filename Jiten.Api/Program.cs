@@ -8,6 +8,7 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using Jiten.Api.Helpers;
 using Jiten.Api.Jobs;
+using Jiten.Core.Data.FSRS;
 using Jiten.Api.Services;
 using Jiten.Api.Telemetry;
 using Jiten.Api.Authentication;
@@ -889,6 +890,7 @@ builder.Services.AddScoped<YouTubeSyncSweepJob>();
 builder.Services.AddScoped<ReparseJob>();
 builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
+builder.Services.AddScoped<FsrsModelMigrationJob>();
 builder.Services.AddScoped<ReviewRollupJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
 builder.Services.AddScoped<PopularityScoreJob>();
@@ -1050,6 +1052,8 @@ var app = builder.Build();
 
 if (!app.Environment.IsEnvironment("Testing"))
 {
+    FsrsVersions.ConfigureUnoptimised(app.Configuration.GetValue("Fsrs:UnoptimisedVersion", 7) == 6 ? FsrsVersion.V6 : FsrsVersion.V7);
+
     using var scope = app.Services.CreateScope();
 
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
@@ -1149,6 +1153,8 @@ if (!app.Environment.IsEnvironment("Testing"))
         "popularity-score",
         job => job.RecomputeAll(),
         "30 */6 * * *");
+
+    scope.ServiceProvider.GetRequiredService<IBackgroundJobClient>().Enqueue<FsrsModelMigrationJob>(job => job.Run());
 }
 
 app.UseResponseCompression();

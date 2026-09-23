@@ -6,10 +6,10 @@ level: beginner
 order: 10
 icon: material-symbols-light:school-outline
 draft: false
-updated: 2026-07-28
+updated: 2026-09-23
 ---
 
-Jiten has a built-in spaced repetition system (SRS) powered by the modern FSRS-6. It shows you each word so you see it just before you would forget it, which helps you remember words while minimizing the time you spend studying them. You can access directly from the **Study** in the header while you are logged in.
+Jiten has a built-in spaced repetition system (SRS) powered by the modern FSRS-7. It shows you each word so you see it just before you would forget it, which helps you remember words while minimizing the time you spend studying them. You can access directly from the **Study** in the header while you are logged in.
 
 ## Setting up a study deck
 

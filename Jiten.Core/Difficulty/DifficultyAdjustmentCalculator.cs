@@ -84,11 +84,6 @@ public record DifficultyAdjustmentParameters
     public static DifficultyAdjustmentParameters Default { get; } = new();
 }
 
-/// <summary>
-/// Pure (EF-free, side-effect-free) computation of community difficulty adjustments from pairwise
-/// votes and absolute ratings. See PLAN: ordinal threshold loss (A), bracketing-balance confidence (B),
-/// ridge prior + constant clamp (C), and robust IRLS reweighting (D).
-/// </summary>
 public static class DifficultyAdjustmentCalculator
 {
     public static IReadOnlyList<DifficultyAdjustmentResult> Compute(

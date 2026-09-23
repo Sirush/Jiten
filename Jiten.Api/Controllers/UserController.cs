@@ -740,6 +740,33 @@ public partial class UserController(
     /// <summary>Second precision is the resolution shared by Anki exports and Jiten's own logs.</summary>
     private static DateTime TruncateToSecond(DateTime value) => new(value.Ticks - value.Ticks % TimeSpan.TicksPerSecond, value.Kind);
 
+    /// <summary>FSRS-7 cannot read Anki's FSRS-6/SM-2 stability, so it replays the history or bridges from the interval; lapses stay as the import set them.</summary>
+    private static void AdoptAnkiMemoryState(FsrsCard card, List<FsrsReviewLog> logs, FsrsScheduler scheduler)
+    {
+        var lapses = card.Lapses;
+        if (logs.Count > 0)
+        {
+            FsrsReplay.Recompute(card, logs, scheduler, scheduler, preserveSchedule: true);
+        }
+        else if (card.Stability is > 0 and var interval)
+        {
+            var state = FsrsHelperV7.FromSm2(interval, Math.Min(scheduler.DesiredRetention, 0.99), scheduler.Parameters);
+            card.Stability = state.Stability;
+            card.Difficulty = state.Difficulty;
+            card.StabilityFast = state.StabilityFast;
+        }
+
+        card.Lapses = lapses;
+    }
+
+    private static List<FsrsReviewLog> ToReviewLogs(IEnumerable<FsrsReviewLogExportDto> logs)
+        => logs.Select(l => new FsrsReviewLog
+                            {
+                                Rating = l.Rating,
+                                ReviewDateTime = DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime,
+                                ReviewDuration = l.ReviewDuration
+                            }).ToList();
+
     private static int CountLapsesFromLogs(List<FsrsReviewLogExportDto> logs, FsrsScheduler scheduler)
         => CountLapsesFromLogs(logs.Select(l => (l.Rating, DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime, l.ReviewDuration)), scheduler);
 
@@ -898,6 +925,7 @@ public partial class UserController(
                                Step = dto.Step,
                                Stability = dto.Stability,
                                Difficulty = dto.Difficulty,
+                               StabilityFast = dto.StabilityFast,
                                Due = DateTimeOffset.FromUnixTimeSeconds(dto.Due).UtcDateTime,
                                LastReview = dto.LastReview.HasValue
                                    ? DateTimeOffset.FromUnixTimeSeconds(dto.LastReview.Value).UtcDateTime
@@ -1916,6 +1944,9 @@ public partial class UserController(
                     card.Lapses = Math.Max(cardToAnkiMap[card].Card.Lapses,
                                            CountLapsesFromLogs(mergedLogs.Select(l => (l.Rating, l.ReviewDateTime, l.ReviewDuration)), lapseScheduler));
                 }
+
+                if (lapseScheduler.Version == FsrsVersion.V7)
+                    AdoptAnkiMemoryState(card, card.ReviewLogs.Concat(mergedLogs).ToList(), lapseScheduler);
             }
 
             if (logsToAdd.Count > 0)
@@ -2427,6 +2458,7 @@ public partial class UserController(
                                 {
                                     WordId = c.WordId, ReadingIndex = c.ReadingIndex, State = c.State, Step = c.Step,
                                     Stability = EnsureValidNumber(c.Stability), Difficulty = EnsureValidNumber(c.Difficulty),
+                                    StabilityFast = EnsureValidNumber(c.StabilityFast),
                                     Due = new DateTimeOffset(c.Due).ToUnixTimeSeconds(), LastReview = c.LastReview.HasValue
                                         ? new DateTimeOffset(c.LastReview.Value).ToUnixTimeSeconds()
                                         : null,
@@ -2451,6 +2483,7 @@ public partial class UserController(
                                                Reason = a.Reason, CoveringReadingIndex = a.CoveringReadingIndex,
                                                State = a.State, Step = a.Step,
                                                Stability = EnsureValidNumber(a.Stability), Difficulty = EnsureValidNumber(a.Difficulty),
+                                               StabilityFast = EnsureValidNumber(a.StabilityFast),
                                                Due = new DateTimeOffset(a.Due).ToUnixTimeSeconds(),
                                                LastReview = a.LastReview.HasValue
                                                    ? new DateTimeOffset(a.LastReview.Value).ToUnixTimeSeconds()
@@ -2647,6 +2680,7 @@ public partial class UserController(
                                      .ToListAsync();
 
         var wordIds = cards.Select(c => c.WordId).Distinct().ToList();
+        var memoryScheduler = await FsrsSettingsHelper.CreateSchedulerAsync(userContext, userId, enableFuzzing: false);
 
         var cardForms = await WordFormHelper.LoadWordForms(jitenContext, wordIds);
         var cardFormFreqs = await frequencySource.LoadFrequencies(jitenContext, wordIds);
@@ -2659,7 +2693,8 @@ public partial class UserController(
             return new FsrsCardWithWordDto
                    {
                        CardId = c.CardId, WordId = c.WordId, ReadingIndex = c.ReadingIndex, State = c.State, Step = c.Step,
-                       Stability = EnsureValidNumber(c.Stability), Difficulty = EnsureValidNumber(c.Difficulty), Due = c.Due,
+                       Stability = EnsureValidNumber(c.Stability != null ? memoryScheduler.GetStabilityDays(c) : null),
+                       Difficulty = EnsureValidNumber(c.Difficulty), Due = c.Due,
                        LastReview = c.LastReview, CreatedAt = c.CreatedAt, WordText = form?.Text ?? "",
                        ReadingType = form != null ? (JmDictReadingType)(int)form.FormType : JmDictReadingType.Reading,
                        FrequencyRank = formFreq.Rank,
@@ -2869,6 +2904,7 @@ public partial class UserController(
                                                     });
                     }
 
+                    FsrsReplay.AdoptMemoryModel(existingCard, ToReviewLogs(uniqueIncomingLogs), lapseScheduler);
                     result.CardsUpdated++;
                     result.ReviewLogsImported += cardDto.ReviewLogs.Count;
                     liveTimesByCard[existingCard] = uniqueIncomingLogs
@@ -2897,6 +2933,7 @@ public partial class UserController(
                                                                                   }).ToList()
                                   };
 
+                    FsrsReplay.AdoptMemoryModel(newCard, newCard.ReviewLogs.ToList(), lapseScheduler);
                     cardsToAdd.Add(newCard);
                     result.CardsImported++;
                     result.ReviewLogsImported += cardDto.ReviewLogs.Count;

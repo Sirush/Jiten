@@ -466,6 +466,11 @@ public class Program
             await smartDeckBenchCommands.Run(options);
         }
 
+        if (options.FsrsEval != null)
+        {
+            await new FsrsEvalCommands().Run(options);
+        }
+
         // SRS maintenance commands
         if (options.CleanupGhostCards)
         {

@@ -17,6 +17,7 @@ public class FsrsCardArchive
     public int? Step { get; set; }
     public double? Stability { get; set; }
     public double? Difficulty { get; set; }
+    public double? StabilityFast { get; set; }
     public DateTime Due { get; set; }
     public DateTime? LastReview { get; set; }
     public int Lapses { get; set; }

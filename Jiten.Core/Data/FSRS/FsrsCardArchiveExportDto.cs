@@ -35,6 +35,11 @@ public class FsrsCardArchiveExportDto
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? Difficulty { get; set; }
 
+    /// <summary>FSRS-7 fast-trace stability; absent under FSRS-6 and in older backups, where import replays it from the logs.</summary>
+    [JsonPropertyName("sf")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? StabilityFast { get; set; }
+
     [JsonPropertyName("du")]
     public long Due { get; set; }
 
