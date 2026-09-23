@@ -12,11 +12,13 @@
     message?: string | null;
     cardKey: string;
     disabled?: boolean;
+    canUndo?: boolean;
   }>();
 
   const emit = defineEmits<{
     submit: [value: string];
     giveUp: [];
+    undo: [];
   }>();
 
   const inputRef = ref<HTMLInputElement | null>(null);
@@ -141,16 +143,29 @@
     </div>
 
     <div class="mt-3 flex justify-center">
-      <button
-        type="button"
-        class="inline-flex items-center gap-1.5 rounded-lg border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 px-3.5 py-2 text-sm font-medium text-surface-600 dark:text-surface-300 shadow-sm hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/30 active:scale-95 transition cursor-pointer"
-        aria-label="Reveal the answer without guessing"
-        @click="emit('giveUp')"
-      >
-        <Icon name="material-symbols:visibility-outline" size="18" />
-        Reveal answer
-        <span class="hidden md:inline opacity-60">(Esc)</span>
-      </button>
+      <div class="relative">
+        <button
+          v-if="canUndo"
+          type="button"
+          :disabled="disabled"
+          class="absolute top-0 right-full mr-2 whitespace-nowrap inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-surface-500 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/30 focus-visible:outline-2 focus-visible:outline-primary-500 active:scale-95 transition cursor-pointer disabled:opacity-60 disabled:cursor-default"
+          aria-label="Undo the last review"
+          @click="emit('undo')"
+        >
+          <Icon name="material-symbols:undo" size="18" />
+          Undo
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-surface-300 dark:border-surface-600 bg-surface-0 dark:bg-surface-800 px-3.5 py-2 text-sm font-medium text-surface-600 dark:text-surface-300 shadow-sm hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/30 active:scale-95 transition cursor-pointer"
+          aria-label="Reveal the answer without guessing"
+          @click="emit('giveUp')"
+        >
+          <Icon name="material-symbols:visibility-outline" size="18" />
+          Reveal answer
+          <span class="hidden md:inline opacity-60">(Esc)</span>
+        </button>
+      </div>
     </div>
   </div>
 </template>

@@ -758,8 +758,10 @@
                   :message="writeInMessage"
                   :card-key="cardKey"
                   :disabled="srsStore.isBusy"
+                  :can-undo="srsStore.canUndo"
                   @submit="writeInSubmit"
                   @give-up="writeInGiveUp"
+                  @undo="handleUndo"
                 />
               </template>
             </SrsStudyCard>
@@ -787,8 +789,10 @@
             :message="writeInMessage"
             :card-key="cardKey"
             :disabled="srsStore.isBusy"
+            :can-undo="srsStore.canUndo"
             @submit="writeInSubmit"
             @give-up="writeInGiveUp"
+            @undo="handleUndo"
           />
           <!-- Inline placement: the input lives in the card, so the bar just guides the user. -->
           <div
