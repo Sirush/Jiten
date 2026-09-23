@@ -1,12 +1,17 @@
 ---
 title: Where does the data come from?
-summary: The metadata APIs, text sources, and audio voices Jiten relies on.
+summary: The dictionaries, metadata APIs, text sources, and audio voices Jiten relies on.
 category: FAQ
 level: beginner
 order: 60
 icon: material-symbols-light:database-outline
-updated: 2026-07-28
+updated: 2026-09-23
 ---
+
+The dictionary data comes from:
+
+- [JMdict](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project), [JMnedict](https://www.edrdg.org/wiki/index.php/JMnedict) and [KANJIDIC](https://www.edrdg.org/wiki/KANJIDIC_Project.html), property of the [Electronic Dictionary Research and Development Group](https://www.edrdg.org/) and used under its [licence](https://www.edrdg.org/edrdg/licence.html).
+- Kanji stroke order and components from [KanjiVG](https://kanjivg.tagaini.net) by Ulrich Apel, licensed under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
 
 For the metadata, these APIs are used:
 

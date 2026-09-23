@@ -150,6 +150,10 @@ public class CliOptions
     [Option(longName: "populate-word-kanji", Required = false, HelpText = "Populate WordKanji junction table after kanji import.")]
     public bool PopulateWordKanji { get; set; }
 
+    [Option(longName: "import-kanjivg", Required = false,
+            HelpText = "Import kanji stroke order and component trees from a KanjiVG main release zip.")]
+    public string? ImportKanjiVg { get; set; }
+
     [Option(longName: "compute-kanji-readings", Required = false, HelpText = "Pre-compute kanji reading associations for the kanji grid.")]
     public bool ComputeKanjiReadings { get; set; }
 

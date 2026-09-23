@@ -1,6 +1,8 @@
 <script setup lang="ts">
+  import { storeToRefs } from 'pinia';
   import type { Kanji, WordSummary } from '~/types';
   import { type KanjiScale, kanjiScaleMembership } from '~/data/kanjiGroupings';
+  import { useJitenStore } from '~/stores/jitenStore';
 
   type BadgeSeverity = 'primary' | 'info' | 'secondary' | 'success' | 'warn' | 'danger' | 'contrast';
 
@@ -129,6 +131,26 @@
     allTopWords.value = null;
   };
 
+  const showStrokeNumbers = ref(true);
+  const strokePlayKey = ref(0);
+  const { kanjiStrokeSpeed: strokeSpeed, kanjiStrokeOrderShown: showStrokeOrder } = storeToRefs(useJitenStore());
+
+  let speedReplayTimer: ReturnType<typeof setTimeout> | undefined;
+  watch(strokeSpeed, () => {
+    clearTimeout(speedReplayTimer);
+    speedReplayTimer = setTimeout(() => {
+      if (showStrokeOrder.value) strokePlayKey.value++;
+    }, 300);
+  });
+  onBeforeUnmount(() => clearTimeout(speedReplayTimer));
+
+  const strokeDiagramVisible = computed(() => showStrokeOrder.value && !!kanji.value?.strokes?.paths.length);
+
+  const toggleStrokeOrder = () => {
+    showStrokeOrder.value = !showStrokeOrder.value;
+    if (showStrokeOrder.value) strokePlayKey.value++;
+  };
+
   const headlineMeaning = computed(() => kanji.value?.meanings.slice(0, 3).join(', ') ?? '');
 
   const metaDescription = computed(() => {
@@ -167,11 +189,59 @@
       <!-- Main kanji display -->
       <div class="text-center">
         <h1>
-          <span class="block text-9xl font-bold mb-2" lang="ja">{{ kanji.character }}</span>
-          <span v-if="headlineMeaning" class="block text-base font-normal mb-4 text-surface-600 dark:text-surface-400">
+          <span class="relative inline-block mb-2">
+            <span class="block text-9xl font-bold" :class="{ invisible: strokeDiagramVisible }" lang="ja">{{ kanji.character }}</span>
+            <KanjiStrokeOrder
+              v-if="strokeDiagramVisible && kanji.strokes"
+              class="absolute inset-0 w-full h-full"
+              :strokes="kanji.strokes"
+              :character="kanji.character"
+              :show-numbers="showStrokeNumbers"
+              :speed="strokeSpeed"
+              :play-key="strokePlayKey"
+            />
+          </span>
+          <span v-if="headlineMeaning" class="block text-base font-normal mb-2 text-surface-600 dark:text-surface-400">
             Kanji meaning "{{ headlineMeaning }}"
           </span>
         </h1>
+
+        <div v-if="kanji.strokes?.paths.length" class="mb-3">
+          <div class="flex flex-wrap items-center justify-center gap-1">
+            <Button
+              label="Stroke order"
+              size="small"
+              text
+              :severity="showStrokeOrder ? 'primary' : 'secondary'"
+              :aria-pressed="showStrokeOrder"
+              @click="toggleStrokeOrder"
+            >
+              <template #icon>
+                <Icon name="mdi:gesture" size="1.1em" />
+              </template>
+            </Button>
+          </div>
+          <div v-if="showStrokeOrder" class="flex flex-wrap items-center justify-center gap-x-1">
+            <Button icon="pi pi-replay" label="Replay" size="small" severity="secondary" text @click="strokePlayKey++" />
+            <Button
+              icon="pi pi-sort-numeric-down"
+              label="Numbers"
+              size="small"
+              text
+              :severity="showStrokeNumbers ? 'primary' : 'secondary'"
+              :aria-pressed="showStrokeNumbers"
+              @click="showStrokeNumbers = !showStrokeNumbers"
+            />
+            <label class="flex items-center gap-2 px-2 py-1 text-sm text-surface-600 dark:text-surface-400">
+              Speed
+              <Slider v-model="strokeSpeed" :min="0.25" :max="3" :step="0.25" class="w-24" aria-label="Stroke animation speed" />
+              <span class="w-9 text-left tabular-nums">{{ strokeSpeed }}×</span>
+            </label>
+          </div>
+          <p v-if="showStrokeOrder" class="mt-1 text-[11px] text-surface-500 dark:text-surface-400">
+            Stroke data: <a href="https://kanjivg.tagaini.net" target="_blank" rel="noopener" class="underline">KanjiVG</a>
+          </p>
+        </div>
 
         <!-- Metadata badges -->
         <div class="flex flex-wrap justify-center gap-2 mb-4">
@@ -204,6 +274,20 @@
           </div>
         </div>
       </div>
+
+      <KanjiStrokeSteps
+        v-if="kanji.strokes?.paths.length"
+        :strokes="kanji.strokes"
+        :character="kanji.character"
+        :show-credit="!kanji.components?.length && !kanji.usedInTotal"
+      />
+
+      <KanjiComposition
+        :character="kanji.character"
+        :components="kanji.components ?? []"
+        :used-in="kanji.usedIn ?? []"
+        :used-in-total="kanji.usedInTotal ?? 0"
+      />
 
       <!-- Reading usage in words -->
       <div v-if="kanji.wordsByReading?.length" class="border-surface-200 dark:border-surface-700 border rounded-lg p-4">

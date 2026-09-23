@@ -105,6 +105,10 @@ export const useJitenStore = defineStore('jiten', () => {
   const ttsVoice = createCookieState<'female' | 'female2' | 'male' | 'male2' | 'asmr' | 'system' | 'random'>('tts-voice', 'female');
   const difficultyDisplayStyle = createCookieState<DifficultyDisplayStyle>('difficulty-display-style', 0);
   const kanjiScale = createCookieState<KanjiScalePref>('kanji-scale', 'jlpt');
+  const kanjiStrokeStepsOpen = createCookieState<boolean>('kanji-stroke-steps-open', false);
+  const kanjiStrokeSpeed = createCookieState<number>('kanji-stroke-speed', 1);
+  const kanjiStrokeOrderShown = createCookieState<boolean>('kanji-stroke-order-shown', false);
+  const kanjiStrokeStepsZoom = createCookieState<number>('kanji-stroke-steps-zoom', 0);
   const similarMediaPinnedType = createCookieState<number>('similar-media-pinned-type', 0);
   const preferredDictionaryId = createCookieState<string>('preferred-dictionary-id', '');
   // Media types left out of the All tab; the browse URL carries the same list once set.
@@ -206,6 +210,10 @@ export const useJitenStore = defineStore('jiten', () => {
     difficultyDisplayStyle,
     difficultyValueDisplayStyle,
     kanjiScale,
+    kanjiStrokeStepsOpen,
+    kanjiStrokeSpeed,
+    kanjiStrokeOrderShown,
+    kanjiStrokeStepsZoom,
     similarMediaPinnedType,
     preferredDictionaryId,
     hideCoverageJourney,

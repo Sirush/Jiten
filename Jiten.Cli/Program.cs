@@ -116,6 +116,11 @@ public class Program
             await importCommands.PopulateWordKanji();
         }
 
+        if (!string.IsNullOrEmpty(options.ImportKanjiVg))
+        {
+            await importCommands.ImportKanjiVg(options.ImportKanjiVg);
+        }
+
         if (options.ComputeKanjiReadings)
         {
             await importCommands.ComputeKanjiReadings();

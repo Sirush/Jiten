@@ -53,7 +53,9 @@
         <p class="mb-4">
           Dictionary data comes from
           <a href="https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project" target="_blank" rel="noopener">JMdict</a>, JMnedict and KANJIDIC,
-          property of the Electronic Dictionary Research and Development Group and used under its licence. The media metadata (covers, titles, descriptions,
+          property of the Electronic Dictionary Research and Development Group and used under its licence. Kanji stroke order and components come from
+          <a href="https://kanjivg.tagaini.net" target="_blank" rel="noopener">KanjiVG</a> by Ulrich Apel, under
+          <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>. The media metadata (covers, titles, descriptions,
           release dates, ...) comes from sources such as AniList, VNDB, TMDB, IGDB and Google Books. They are fully listed in the
           <NuxtLink to="/guides/data-sources">data sources guide</NuxtLink>.
         </p>

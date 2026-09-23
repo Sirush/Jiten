@@ -791,6 +791,29 @@ export interface Kanji {
   frequencyRank: number | null;
   topWords?: WordSummary[];
   wordsByReading?: KanjiReadingWords[];
+  components?: KanjiComponent[];
+  usedIn?: KanjiUsedIn[];
+  usedInTotal?: number;
+  strokes?: KanjiStrokes | null;
+}
+
+export interface KanjiComponent {
+  character: string;
+  original: string | null;
+  linkCharacter: string | null;
+  meaning: string | null;
+  isRadical: boolean;
+  isPhonetic: boolean;
+}
+
+export interface KanjiUsedIn {
+  character: string;
+  meaning: string | null;
+}
+
+export interface KanjiStrokes {
+  paths: string[];
+  numberPositions: number[];
 }
 
 export interface KanjiList {

@@ -25,7 +25,7 @@ public class KanjiController(JitenDbContext context) : ControllerBase
     [HttpGet("{character}")]
     [SwaggerOperation(Summary = "Get kanji by character",
                       Description =
-                          "Returns a kanji with readings, meanings, stroke count, JLPT level, grade, frequency rank, and top 20 words containing it.")]
+                          "Returns a kanji with readings, meanings, stroke count, JLPT level, grade, frequency rank, top 20 words containing it, its components, the kanji it appears in, and its stroke order. Component and stroke data come from KanjiVG (CC BY-SA 3.0).")]
     [ProducesResponseType(typeof(KanjiDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ResponseCache(Duration = 3600)]
@@ -134,12 +134,45 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                 .ToList()
         }).ToList();
 
+        var components = await LoadComponents(character);
+
+        var usedInQuery = UsedInQuery(character);
+        var usedInTotal = await usedInQuery.CountAsync();
+        var usedIn = usedInTotal > 0 ? await ToUsedInDtos(usedInQuery.Take(UsedInPreviewCount)) : [];
+
+        var strokes = await context.KanjiStrokes
+                                   .AsNoTracking()
+                                   .Where(s => s.Character == character)
+                                   .Select(s => new KanjiStrokesDto { Paths = s.Paths, NumberPositions = s.NumberPositions })
+                                   .FirstOrDefaultAsync();
+
         return Results.Ok(new KanjiDto
                           {
                               Character = kanji.Character, OnReadings = kanji.OnReadings, KunReadings = kanji.KunReadings,
                               Meanings = kanji.Meanings, StrokeCount = kanji.StrokeCount, JlptLevel = kanji.JlptLevel, Grade = kanji.Grade,
-                              FrequencyRank = kanji.FrequencyRank, TopWords = topWords, WordsByReading = wordsByReading
+                              FrequencyRank = kanji.FrequencyRank, TopWords = topWords, WordsByReading = wordsByReading,
+                              Components = components, UsedIn = usedIn, UsedInTotal = usedInTotal, Strokes = strokes
                           });
+    }
+
+    /// <summary>
+    /// Gets every kanji that contains a given kanji as a component, at any depth.
+    /// </summary>
+    /// <param name="character">The kanji character.</param>
+    /// <returns>Kanji ordered by frequency, then stroke count.</returns>
+    [HttpGet("{character}/used-in")]
+    [SwaggerOperation(Summary = "Get kanji containing a component",
+                      Description = "Returns every kanji that contains the specified kanji as a component, most frequent first. Component data comes from KanjiVG (CC BY-SA 3.0).")]
+    [ProducesResponseType(typeof(List<KanjiUsedInDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ResponseCache(Duration = 3600)]
+    public async Task<IResult> GetKanjiUsedIn([FromRoute] string character)
+    {
+        var kanjiExists = await context.Kanjis.AnyAsync(k => k.Character == character);
+        if (!kanjiExists)
+            return Results.NotFound();
+
+        return Results.Ok(await ToUsedInDtos(UsedInQuery(character)));
     }
 
     /// <summary>
@@ -254,6 +287,62 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                             .Where(g => g.Select(wk => wk.WordId).Distinct().Count() >= MinWordsForSitemap)
                             .Select(g => g.Key)
                             .ToListAsync();
+    }
+
+    private const int UsedInPreviewCount = 30;
+
+    private async Task<List<KanjiComponentDto>> LoadComponents(string character)
+    {
+        var nodes = await context.KanjiComponents
+                                 .AsNoTracking()
+                                 .Where(c => c.KanjiCharacter == character && c.ParentIndex == null)
+                                 .OrderBy(c => c.NodeIndex)
+                                 .ToListAsync();
+        if (nodes.Count == 0)
+            return [];
+
+        nodes = nodes.DistinctBy(n => n.Component).ToList();
+
+        var candidates = nodes.Select(n => n.Component)
+                              .Concat(nodes.Where(n => n.Original != null).Select(n => n.Original!))
+                              .Distinct()
+                              .ToList();
+        var meanings = await context.Kanjis
+                                    .AsNoTracking()
+                                    .Where(k => candidates.Contains(k.Character))
+                                    .Select(k => new { k.Character, k.Meanings })
+                                    .ToDictionaryAsync(k => k.Character, k => k.Meanings.FirstOrDefault());
+
+        return nodes.Select(n =>
+                    {
+                        var link = meanings.ContainsKey(n.Component) ? n.Component
+                            : n.Original != null && meanings.ContainsKey(n.Original) ? n.Original
+                            : null;
+                        return new KanjiComponentDto
+                               {
+                                   Character = n.Component, Original = n.Original, LinkCharacter = link,
+                                   Meaning = link != null ? meanings[link] : null, IsRadical = n.IsRadical, IsPhonetic = n.IsPhonetic
+                               };
+                    })
+                    .ToList();
+    }
+
+    // Matching Original too lists 休 (亻, a variant of 人) under 人.
+    private IQueryable<Core.Data.JMDict.Kanji> UsedInQuery(string character) =>
+        context.Kanjis
+               .AsNoTracking()
+               .Where(k => k.Character != character &&
+                           context.KanjiComponents.Any(c => c.KanjiCharacter == k.Character &&
+                                                            (c.Component == character || c.Original == character)))
+               .OrderBy(k => k.FrequencyRank == null)
+               .ThenBy(k => k.FrequencyRank)
+               .ThenBy(k => k.StrokeCount)
+               .ThenBy(k => k.Character);
+
+    private static async Task<List<KanjiUsedInDto>> ToUsedInDtos(IQueryable<Core.Data.JMDict.Kanji> query)
+    {
+        var rows = await query.Select(k => new { k.Character, k.Meanings }).ToListAsync();
+        return rows.Select(r => new KanjiUsedInDto { Character = r.Character, Meaning = r.Meanings.FirstOrDefault() }).ToList();
     }
 
     private class WordRankResult
