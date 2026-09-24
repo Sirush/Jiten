@@ -11,6 +11,7 @@ public class StudyBatchResponse
     public int ReviewsRemaining { get; set; }
     public int NewCardsToday { get; set; }
     public int ReviewsToday { get; set; }
+    public DateTime ServerTime { get; set; }
 }
 
 public class StudyCardDto

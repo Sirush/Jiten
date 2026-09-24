@@ -1796,7 +1796,8 @@ public partial class StudyController(
         [FromQuery] int? extraNewCards = null,
         [FromQuery] int? extraReviews = null,
         [FromQuery] int? aheadMinutes = null,
-        [FromQuery] int? mistakeDays = null)
+        [FromQuery] int? mistakeDays = null,
+        [FromQuery] DateTimeOffset? reviewedBefore = null)
     {
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
@@ -1942,12 +1943,19 @@ public partial class StudyController(
 
             if (mistakeCardIds.Count > 0)
             {
-                var mistakeCards = await userContext.FsrsCards
+                var mistakeQuery = userContext.FsrsCards
                     .AsNoTracking()
                     .Where(c => mistakeCardIds.Contains(c.CardId)
                                 && c.State == FsrsState.Review
-                                && c.Due > now
-                                && (!c.LastReview.HasValue || c.LastReview < todayStart))
+                                && c.Due > now);
+
+                if (reviewedBefore.HasValue)
+                {
+                    var sessionStart = reviewedBefore.Value.UtcDateTime;
+                    mistakeQuery = mistakeQuery.Where(c => !c.LastReview.HasValue || c.LastReview < sessionStart);
+                }
+
+                var mistakeCards = await mistakeQuery
                     .OrderBy(c => c.Due)
                     .Take(reviewBudget)
                     .ToListAsync();
@@ -2241,7 +2249,8 @@ public partial class StudyController(
                 NewCardsRemaining = Math.Max(0, settings.NewCardsPerDay - newCardsToday),
                 ReviewsRemaining = 0,
                 NewCardsToday = newCardsToday,
-                ReviewsToday = reviewsToday
+                ReviewsToday = reviewsToday,
+                ServerTime = now
             });
         }
 
@@ -2420,6 +2429,7 @@ public partial class StudyController(
             ReviewsRemaining = Math.Max(0, remainingReviews),
             NewCardsToday = newCardsToday,
             ReviewsToday = reviewsToday,
+            ServerTime = now,
         });
     }
 
@@ -3094,8 +3104,7 @@ public partial class StudyController(
                     count = await userContext.FsrsCards
                         .CountAsync(c => mistakeCardIds.Contains(c.CardId)
                                          && c.State == FsrsState.Review
-                                         && c.Due > now
-                                         && (!c.LastReview.HasValue || c.LastReview < todayStart));
+                                         && c.Due > now);
                 }
                 break;
             }

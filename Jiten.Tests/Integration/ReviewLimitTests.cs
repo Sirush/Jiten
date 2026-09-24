@@ -203,7 +203,7 @@ public class ReviewLimitTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task RecentMistakes_ServesCardsPastAnExhaustedDailyCap_AndCountMatchesBatch()
+    public async Task RecentMistakes_ServesCardsPastAnExhaustedDailyCap_IncludingOnesRecoveredToday()
     {
         await PutSettings(new StudySettingsDto { MaxReviewsPerDay = 2 });
         await SeedTodaysActivity();
@@ -220,8 +220,17 @@ public class ReviewLimitTests(JitenWebApplicationFactory factory)
             await userDb.SaveChangesAsync();
         }
 
-        // The lapsed card also failed recently, but it was reviewed today so neither the count nor the batch offers it.
-        (await Get("/api/srs/study-more-count?mode=mistakes&mistakeDays=3")).GetProperty("count").GetInt32().Should().Be(1);
-        (await BatchWordIds("&mistakeDays=3")).Should().Equal(5);
+        // Word 2 lapsed and recovered today; word 1 is still in its learning steps, so only it is left out.
+        (await Get("/api/srs/study-more-count?mode=mistakes&mistakeDays=3")).GetProperty("count").GetInt32().Should().Be(2);
+        var first = await Get("/api/srs/study-batch?limit=10&mistakeDays=3");
+        first.GetProperty("cards").EnumerateArray().Select(c => c.GetProperty("wordId").GetInt32()).Should().BeEquivalentTo([2, 5]);
+
+        var review = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/srs/review")
+                                             .WithUser(TestUsers.UserA)
+                                             .WithJsonContent(new { wordId = 5, readingIndex = 0, rating = FsrsRating.Good }));
+        review.EnsureSuccessStatusCode();
+
+        var anchor = Uri.EscapeDataString(first.GetProperty("serverTime").GetString()!);
+        (await BatchWordIds($"&mistakeDays=3&reviewedBefore={anchor}")).Should().Equal(2);
     }
 }
