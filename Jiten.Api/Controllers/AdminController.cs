@@ -35,15 +35,12 @@ public partial class AdminController(
     ILogger<AdminController> logger)
     : ControllerBase
 {
-    /// <summary>
-    /// Builds the review activity rollup for every user who has history. Stats endpoints keep using the
-    /// log-join query for each user until their rebuild lands, so this is safe to run at any time.
-    /// </summary>
-    [HttpPost("review-rollup/backfill")]
-    public IResult BackfillReviewRollup()
+    /// <summary>Lowers lapse counts that replays under changed step settings inflated; safe to rerun.</summary>
+    [HttpPost("srs/recount-lapses")]
+    public IResult RecountLapses()
     {
-        backgroundJobs.Enqueue<ReviewRollupJob>(job => job.BackfillAll());
-        logger.LogInformation("Admin queued review rollup backfill");
+        backgroundJobs.Enqueue<LapseRecountJob>(job => job.RecountAll());
+        logger.LogInformation("Admin queued lapse recount");
         return Results.Ok(new { queued = true });
     }
 
