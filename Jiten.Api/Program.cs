@@ -892,6 +892,7 @@ builder.Services.AddScoped<ReparseJob>();
 builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
 builder.Services.AddScoped<FsrsModelMigrationJob>();
+builder.Services.AddScoped<LapseRecountJob>();
 builder.Services.AddScoped<ReviewRollupJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
 builder.Services.AddScoped<PopularityScoreJob>();
@@ -902,7 +903,6 @@ builder.Services.AddScoped<RenewalReminderJob>();
 builder.Services.AddScoped<DecrementPromoCreditsJob>();
 builder.Services.AddScoped<FrequencyListJob>();
 builder.Services.AddScoped<RoadmapJob>();
-builder.Services.AddScoped<CardMediaRenormalizeJob>();
 
 builder.Services.AddHangfire(configuration =>
                                  configuration.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -1136,9 +1136,6 @@ if (!app.Environment.IsEnvironment("Testing"))
         "promo-credits-decrement",
         job => job.Run(),
         Cron.Daily(1));
-
-    // Auto-update lists are regenerated at the end of ComputationJob.RecomputeFrequencies instead of on a schedule.
-    recurringJobs.RemoveIfExists("freq-list-auto-update");
 
     recurringJobs.AddOrUpdate<FrequencyListJob>(
         "freq-list-transient-cleanup",

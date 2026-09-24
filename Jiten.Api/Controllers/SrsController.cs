@@ -164,6 +164,24 @@ public class SrsController(
         }
     }
 
+    /// <summary>Each card's most recent rating, which <see cref="FsrsReplay.IsLapse"/> needs to tell a lapse from a repeat Again.</summary>
+    private async Task<Dictionary<long, FsrsRating>> LastRatings(IReadOnlyCollection<long> cardIds)
+    {
+        if (cardIds.Count == 0)
+            return [];
+
+        return await userContext.FsrsReviewLogs
+                                .Where(l => cardIds.Contains(l.CardId) && l.Rating >= FsrsRating.Again && l.Rating <= FsrsRating.Easy)
+                                .GroupBy(l => l.CardId)
+                                .Select(g => new
+                                {
+                                    CardId = g.Key,
+                                    Rating = g.OrderByDescending(l => l.ReviewDateTime).ThenByDescending(l => l.ReviewLogId)
+                                              .Select(l => l.Rating).First()
+                                })
+                                .ToDictionaryAsync(x => x.CardId, x => x.Rating);
+    }
+
     // 409, not 429: a duplicate must not be retried as if it were a rate limit.
     private static IResult DuplicateJustRecorded()
         => Results.Conflict(new { error_message = "A review for this word was just recorded. Duplicate ignored." });
@@ -206,7 +224,11 @@ public class SrsController(
         var cardAndLog = scheduler.ReviewCard(card, request.Rating, reviewedAt, request.ReviewDuration);
 
         var leechSuspended = false;
-        var isLapse = previousState == FsrsState.Review && request.Rating == FsrsRating.Again;
+        FsrsRating? previousRating = null;
+        if (request.Rating == FsrsRating.Again && previousState == FsrsState.Review && !isFirstReview
+            && (await LastRatings([card.CardId])).TryGetValue(card.CardId, out var lastRating))
+            previousRating = lastRating;
+        var isLapse = FsrsReplay.IsLapse(previousState, previousRating, request.Rating);
         var threshold = studySettings.LeechThreshold;
         var wasLeech = LeechHelper.IsLeech(card.Lapses, scheduler.GetStabilityDays(card), threshold);
 
@@ -403,6 +425,12 @@ public class SrsController(
                 .ToDictionaryAsync(g => g.Key, g => g.Count);
         }
 
+        var lastRatings = await LastRatings(existingCards
+                                            .Where(c => c.State == FsrsState.Review
+                                                        && deduped.GetValueOrDefault((c.WordId, c.ReadingIndex)) == FsrsRating.Again)
+                                            .Select(c => c.CardId)
+                                            .ToList());
+
         var results = new List<object>(deduped.Count);
         var leechSuspended = new List<int>();
         var autoBuried = new List<int>();
@@ -428,7 +456,9 @@ public class SrsController(
             var previousState = card.State;
             var cardAndLog = scheduler.ReviewCard(card, rating, now);
 
-            var isLapse = previousState == FsrsState.Review && rating == FsrsRating.Again;
+            var isLapse = FsrsReplay.IsLapse(previousState,
+                                             lastRatings.TryGetValue(card.CardId, out var lastRating) ? lastRating : null,
+                                             rating);
             cardAndLog.UpdatedCard.Lapses = isLapse ? card.Lapses + 1 : card.Lapses;
 
             var isLeech = LeechHelper.IsLeech(cardAndLog.UpdatedCard.Lapses, scheduler.GetStabilityDays(cardAndLog.UpdatedCard),

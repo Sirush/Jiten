@@ -1324,6 +1324,8 @@ export interface StudyMoreParams {
   extraReviews?: number;
   aheadMinutes?: number;
   mistakeDays?: number;
+  // Server time of the session's first batch; later fetches skip cards reviewed after it.
+  reviewedBefore?: string;
 }
 
 export interface StudyBatchResponse {
@@ -1333,6 +1335,7 @@ export interface StudyBatchResponse {
   reviewsRemaining: number;
   newCardsToday: number;
   reviewsToday: number;
+  serverTime: string;
 }
 
 export interface StudyCardDto {

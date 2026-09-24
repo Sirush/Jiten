@@ -33,6 +33,7 @@ public static class FsrsReplay
 
         var tempCard = new FsrsCard(card.UserId, card.WordId, card.ReadingIndex);
         var lapses = 0;
+        FsrsRating? previousRating = null;
 
         for (var i = 0; i < ordered.Count; i++)
         {
@@ -42,8 +43,9 @@ public static class FsrsReplay
 
             var prevState = tempCard.State;
             var review = activeScheduler.ReviewCard(tempCard, log.Rating, AsUtc(log.ReviewDateTime), log.ReviewDuration);
-            if (prevState == FsrsState.Review && log.Rating == FsrsRating.Again)
+            if (IsLapse(prevState, previousRating, log.Rating))
                 lapses++;
+            previousRating = log.Rating;
             tempCard = review.UpdatedCard;
         }
 
@@ -101,6 +103,12 @@ public static class FsrsReplay
 
         Recompute(card, logs, scheduler, scheduler, preserveSchedule: true);
     }
+
+    /// <summary>
+    /// Forgetting a card in Review that was recalled last time (or has no history)
+    /// </summary>
+    public static bool IsLapse(FsrsState stateBefore, FsrsRating? previousRating, FsrsRating rating)
+        => rating == FsrsRating.Again && stateBefore == FsrsState.Review && previousRating != FsrsRating.Again;
 
     /// <summary>
     /// The lapse count a history implies, for a card whose schedule comes from elsewhere and must not be

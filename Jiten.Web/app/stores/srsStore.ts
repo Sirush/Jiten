@@ -807,6 +807,7 @@ export const useSrsStore = defineStore('srs', () => {
       }
       if (sm.aheadMinutes) params.append('aheadMinutes', String(sm.aheadMinutes));
       if (sm.mistakeDays) params.append('mistakeDays', String(sm.mistakeDays));
+      if (sm.reviewedBefore) params.append('reviewedBefore', sm.reviewedBefore);
     }
     return $api<StudyBatchResponse>(`srs/study-batch?${params}`);
   }
@@ -815,6 +816,8 @@ export const useSrsStore = defineStore('srs', () => {
   // it can be reused to apply a response that was prefetched in the background.
   function applyBatchResponse(response: StudyBatchResponse, effectiveLimit: number) {
     const isRefetch = sessionStats.value.cardsReviewed > 0;
+    const sm = studyMoreParams.value;
+    if (sm?.mistakeDays && !sm.reviewedBefore) studyMoreParams.value = { ...sm, reviewedBefore: response.serverTime };
     sessionId.value = response.sessionId;
     if (isRefetch && response.cards.length > 0) {
       currentBatch.value = [...currentBatch.value, ...response.cards];

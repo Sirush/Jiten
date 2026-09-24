@@ -114,34 +114,6 @@ public class ReviewRollupJob(
             logger.LogInformation("Queued review rollup rebuild for {UserCount} dirty users", userIds.Count);
     }
 
-    /// <summary>Enqueues a rebuild for every user who has any review history, live or archived.</summary>
-    [Queue("default")]
-    public async Task BackfillAll()
-    {
-        await using var ctx = await userContextFactory.CreateDbContextAsync();
-
-        var withLiveLogs = await ctx.FsrsCards.AsNoTracking()
-                                    .Select(c => c.UserId)
-                                    .Distinct()
-                                    .ToListAsync();
-        var withArchives = await ctx.FsrsCardArchives.AsNoTracking()
-                                    .Where(a => a.ReviewCount > 0)
-                                    .Select(a => a.UserId)
-                                    .Distinct()
-                                    .ToListAsync();
-
-        var userIds = withLiveLogs.Concat(withArchives).Distinct().ToList();
-
-        // A backfill is a forced rebuild; without the flag a user rebuilt before would be skipped as clean.
-        await ctx.UserMetadatas.Where(m => userIds.Contains(m.UserId))
-                 .ExecuteUpdateAsync(s => s.SetProperty(m => m.ReviewRollupDirty, true));
-
-        foreach (var userId in userIds)
-            backgroundJobs.Enqueue<ReviewRollupJob>(job => job.RebuildForUser(userId));
-
-        logger.LogInformation("Queued review rollup backfill for {UserCount} users", userIds.Count);
-    }
-
     private static Task<IDbContextTransaction> BeginSnapshotTransaction(UserDbContext ctx)
         => ctx.Database.ProviderName?.Contains("Npgsql") == true
             ? ctx.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead)

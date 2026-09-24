@@ -175,4 +175,62 @@ public class ReviewLimitTests(JitenWebApplicationFactory factory)
         var wordIds = batch.GetProperty("cards").EnumerateArray().Select(c => c.GetProperty("wordId").GetInt32()).ToList();
         wordIds.Should().Contain(3);
     }
+
+    private async Task<List<int>> BatchWordIds(string query)
+        => (await Get($"/api/srs/study-batch?limit=10{query}")).GetProperty("cards").EnumerateArray()
+                                                               .Select(c => c.GetProperty("wordId").GetInt32()).ToList();
+
+    [Fact]
+    public async Task ReviewAhead_ServesCardsPastAnExhaustedDailyCap()
+    {
+        await PutSettings(new StudySettingsDto { MaxReviewsPerDay = 2 });
+        await SeedTodaysActivity();
+        var now = DateTime.UtcNow;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, 4, 0, state: FsrsState.Review, stability: 10, difficulty: 5,
+                                              due: now.AddHours(12), lastReview: now.AddDays(-10)) { CreatedAt = now.AddDays(-30) });
+            await userDb.SaveChangesAsync();
+        }
+
+        (await Get("/api/srs/due-summary")).GetProperty("reviewBudgetLeft").GetInt32().Should().Be(0);
+        (await BatchWordIds("")).Should().BeEmpty();
+        var count = (await Get("/api/srs/study-more-count?mode=ahead&aheadMinutes=1440")).GetProperty("count").GetInt32();
+        var ahead = await BatchWordIds("&aheadMinutes=1440");
+        ahead.Should().Contain(4);
+        ahead.Should().HaveCount(count);
+    }
+
+    [Fact]
+    public async Task RecentMistakes_ServesCardsPastAnExhaustedDailyCap_IncludingOnesRecoveredToday()
+    {
+        await PutSettings(new StudySettingsDto { MaxReviewsPerDay = 2 });
+        await SeedTodaysActivity();
+        var now = DateTime.UtcNow;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var recovered = new FsrsCard(TestUsers.UserA, 5, 0, state: FsrsState.Review, stability: 3, difficulty: 7,
+                                         due: now.AddDays(2), lastReview: now.AddDays(-1)) { CreatedAt = now.AddDays(-30) };
+            recovered.ReviewLogs.Add(new FsrsReviewLog { Rating = FsrsRating.Good, ReviewDateTime = now.AddDays(-12) });
+            recovered.ReviewLogs.Add(new FsrsReviewLog { Rating = FsrsRating.Again, ReviewDateTime = now.AddDays(-2) });
+            recovered.ReviewLogs.Add(new FsrsReviewLog { Rating = FsrsRating.Good, ReviewDateTime = now.AddDays(-1) });
+            userDb.FsrsCards.Add(recovered);
+            await userDb.SaveChangesAsync();
+        }
+
+        // Word 2 lapsed and recovered today; word 1 is still in its learning steps, so only it is left out.
+        (await Get("/api/srs/study-more-count?mode=mistakes&mistakeDays=3")).GetProperty("count").GetInt32().Should().Be(2);
+        var first = await Get("/api/srs/study-batch?limit=10&mistakeDays=3");
+        first.GetProperty("cards").EnumerateArray().Select(c => c.GetProperty("wordId").GetInt32()).Should().BeEquivalentTo([2, 5]);
+
+        var review = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/srs/review")
+                                             .WithUser(TestUsers.UserA)
+                                             .WithJsonContent(new { wordId = 5, readingIndex = 0, rating = FsrsRating.Good }));
+        review.EnsureSuccessStatusCode();
+
+        var anchor = Uri.EscapeDataString(first.GetProperty("serverTime").GetString()!);
+        (await BatchWordIds($"&mistakeDays=3&reviewedBefore={anchor}")).Should().Equal(2);
+    }
 }

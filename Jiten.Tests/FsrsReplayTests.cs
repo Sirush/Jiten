@@ -84,6 +84,25 @@ public class FsrsReplayTests
     }
 
     [Fact]
+    public void Recompute_LapseCount_DoesNotDependOnStepSettings()
+    {
+        // Two graduations, each followed by a day of repeated Agains: two lapses whatever the steps were.
+        var ratings = new (double Hours, FsrsRating Rating)[]
+        {
+            (0, FsrsRating.Again), (0.1, FsrsRating.Again), (0.2, FsrsRating.Again), (0.3, FsrsRating.Good),
+            (24, FsrsRating.Again), (24.1, FsrsRating.Again), (24.2, FsrsRating.Again), (24.3, FsrsRating.Good),
+            (48, FsrsRating.Again), (48.1, FsrsRating.Again), (48.2, FsrsRating.Good)
+        };
+        var logs = ratings.Select((r, i) => new FsrsReviewLog(1, r.Rating, Base.AddHours(r.Hours)) { ReviewLogId = i + 1 }).ToList();
+
+        var withSteps = new FsrsScheduler(learningSteps: [TimeSpan.FromMinutes(10)], relearningSteps: [TimeSpan.FromMinutes(10)], enableFuzzing: false);
+        var withoutSteps = new FsrsScheduler(learningSteps: [], relearningSteps: [], enableFuzzing: false);
+
+        FsrsReplay.CountLapses(logs, withSteps).Should().Be(2);
+        FsrsReplay.CountLapses(logs, withoutSteps).Should().Be(2);
+    }
+
+    [Fact]
     public void Recompute_UnorderedLogs_ReplaysChronologically()
     {
         var ordered = Logs((0, FsrsRating.Good), (3, FsrsRating.Again), (5, FsrsRating.Good));
