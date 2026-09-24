@@ -1921,7 +1921,9 @@ public partial class StudyController(
         var batch = new List<(int WordId, byte ReadingIndex, long CardId, bool IsNew, int State)>();
         var dueCardLookup = new Dictionary<(int, byte), FsrsCard>();
 
-        var reviewBudget = extraReviews ?? Math.Max(0, settings.MaxReviewsPerDay - reviewsToday);
+        var reviewBudget = aheadMinutes.HasValue || mistakeDays.HasValue
+            ? int.MaxValue
+            : extraReviews ?? Math.Max(0, settings.MaxReviewsPerDay - reviewsToday);
         var totalDueCount = 0;
         if (reviewBudget > 0 && mistakeDays.HasValue)
         {
@@ -3092,7 +3094,8 @@ public partial class StudyController(
                     count = await userContext.FsrsCards
                         .CountAsync(c => mistakeCardIds.Contains(c.CardId)
                                          && c.State == FsrsState.Review
-                                         && c.Due > now);
+                                         && c.Due > now
+                                         && (!c.LastReview.HasValue || c.LastReview < todayStart));
                 }
                 break;
             }
