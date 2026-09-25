@@ -9,7 +9,7 @@ namespace Jiten.Api.Services;
 /// and the upload sniffer already restricts input to raster/audio magic bytes. This is the second layer:
 /// resource ceilings that bound a decompression bomb (a tiny file that inflates to gigabytes of pixels), plus a
 /// coder policy that neutralises the ImageMagick RCE/SSRF classes (MVG/MSL scripting, PS/PDF delegates,
-/// url/http coders, indirect @file reads) in case a crafted file ever reaches the decoder.
+/// url/http coders, indirect @file reads, libheif) in case a crafted file ever reaches the decoder.
 /// </summary>
 public static class ImageMagickHardening
 {
@@ -18,8 +18,8 @@ public static class ImageMagickHardening
     private const int MaxDimension = 30_000;
 
     // policymap format is ImageMagick's own policy.xml. "none" rights fully disable a coder; the delegate and
-    // path rules kill external-program invocation and indirect file reads. Raster coders (JPEG/PNG/GIF/WebP/
-    // HEIC/AVIF) are deliberately left enabled — those are the formats card-media upload accepts.
+    // path rules kill external-program invocation and indirect file reads. HEIC/HEIF/AVIF go through libheif
+    // (RCE-grade bugs, HEIF Heist 2026) and are converted to JPEG in the browser, so the server never decodes them.
     private const string PolicyXml =
         """
         <policymap>
@@ -30,6 +30,7 @@ public static class ImageMagickHardening
           <policy domain="coder" rights="none" pattern="{URL,HTTPS,HTTP,FTP}" />
           <policy domain="coder" rights="none" pattern="EPHEMERAL" />
           <policy domain="coder" rights="none" pattern="{TEXT,LABEL,CAPTION}" />
+          <policy domain="coder" rights="none" pattern="{HEIC,HEIF,AVIF}" />
           <policy domain="delegate" rights="none" pattern="{ps,eps,pdf,xps,url,https,http,show,win}" />
           <policy domain="path" rights="none" pattern="@*" />
         </policymap>

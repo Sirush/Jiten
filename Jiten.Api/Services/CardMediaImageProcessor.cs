@@ -4,9 +4,9 @@ using Jiten.Core.Data.User;
 namespace Jiten.Api.Services;
 
 /// <summary>
-/// Upload-time image normalization for card media. Every image (jpeg/png/webp/gif/heic/avif) is downscaled to
+/// Upload-time image normalization for card media. Every image (jpeg/png/webp/gif) is downscaled to
 /// fit a 1600 px long edge (never upscaled), stripped of metadata (EXIF/GPS privacy), and re-encoded to WebP
-/// q82. This converts HEIC/AVIF into a format every browser can render, and re-encodes multi-frame inputs
+/// q82. It also re-encodes multi-frame inputs
 /// (animated GIF/WebP/APNG) to animated WebP with their frames and timing preserved. Audio and non-image kinds
 /// pass through. Never throws: on failure the original bytes are returned so an upload can't fail because
 /// normalization did.

@@ -84,7 +84,7 @@ public class CardMediaController(
             case CardMediaWriteStatus.Invalid:
                 return Results.BadRequest(new
                 {
-                    error = "Unsupported file. Upload an image (JPEG, PNG, WebP, GIF, HEIC, AVIF) or audio (MP3, M4A, OGG, Opus, WebM, WAV, FLAC)."
+                    error = "Unsupported file. Upload an image (JPEG, PNG, WebP, GIF) or audio (MP3, M4A, OGG, Opus, WebM, WAV, FLAC)."
                 });
             case CardMediaWriteStatus.TooLarge:
                 return Results.BadRequest(new { error = $"File is too large. The maximum is {MaxFileBytes / (1024 * 1024)} MB." });

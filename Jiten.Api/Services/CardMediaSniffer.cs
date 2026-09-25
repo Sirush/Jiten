@@ -30,14 +30,9 @@ public static class CardMediaSniffer
         if (Ascii(bytes, 0, "RIFF") && Ascii(bytes, 8, "WEBP"))
             return new Sniffed(CardMediaKind.Image, "webp", "image/webp");
 
-        // ISO-BMFF / HEIF-family images (.heic/.avif) also carry a "ftyp" box at offset 4, so they must be
-        // classified by brand BEFORE the .m4a audio branch below, or an iPhone photo would be stored as audio.
-        if (Ascii(bytes, 4, "ftyp"))
-        {
-            var heif = DetectHeifImage(bytes);
-            if (heif is not null)
-                return heif;
-        }
+        // HEIC/AVIF share m4a's "ftyp" box, so they must be refused before the audio branch; browsers send them as JPEG.
+        if (Ascii(bytes, 4, "ftyp") && IsHeifImage(bytes))
+            return null;
 
         // --- Audio ---
         // MP3: ID3 tag or an MPEG audio frame sync (0xFF followed by 0xE0-set bits).
@@ -67,40 +62,29 @@ public static class CardMediaSniffer
         return null;
     }
 
-    // HEIF-family image brands (still images). AVIF is separated out so we can label it distinctly; every
-    // other listed brand is treated as HEIC. Sequence brands (heim/heis/avis) are HEIF too and safe to decode.
-    private static readonly HashSet<string> HeicBrands =
-        new(StringComparer.Ordinal) { "heic", "heix", "heim", "heis", "hevc", "hevx", "heif", "mif1", "msf1" };
+    // Sequence brands (heim/heis/avis) count too: ImageMagick would still hand them to libheif.
+    private static readonly HashSet<string> HeifBrands = new(StringComparer.Ordinal)
+    {
+        "heic", "heix", "heim", "heis", "hevc", "hevx", "heif", "mif1", "msf1", "avif", "avis"
+    };
 
-    private static readonly HashSet<string> AvifBrands = new(StringComparer.Ordinal) { "avif", "avis" };
-
-    /// <summary>
-    /// Inspects the ftyp box (major brand at offset 8 plus the compatible-brand list) and returns an image
-    /// descriptor when any brand identifies a HEIF-family still image, or null when it looks like AV/audio MP4.
-    /// </summary>
-    private static Sniffed? DetectHeifImage(byte[] bytes)
+    /// <summary>True when the ftyp box (major brand plus compatible brands) names any HEIF-family image brand.</summary>
+    private static bool IsHeifImage(byte[] bytes)
     {
         // ftyp box: [size:4][ 'ftyp':4 ][ major_brand:4 ][ minor_version:4 ][ compatible_brands:4*n ].
         var boxSize = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
         var end = boxSize is > 8 and <= 4096 ? Math.Min(boxSize, bytes.Length) : bytes.Length;
 
-        var isAvif = false;
-        var isHeic = false;
-        // Major brand sits at 8; compatible brands follow from 16 in 4-byte chunks. Skip minor_version (12..15).
         for (var offset = 8; offset + 4 <= end; offset += 4)
         {
             if (offset == 12)
                 continue;
             var brand = new string(new[] { (char)bytes[offset], (char)bytes[offset + 1], (char)bytes[offset + 2], (char)bytes[offset + 3] });
-            if (AvifBrands.Contains(brand)) isAvif = true;
-            else if (HeicBrands.Contains(brand)) isHeic = true;
+            if (HeifBrands.Contains(brand))
+                return true;
         }
 
-        if (isAvif)
-            return new Sniffed(CardMediaKind.Image, "avif", "image/avif");
-        if (isHeic)
-            return new Sniffed(CardMediaKind.Image, "heic", "image/heic");
-        return null;
+        return false;
     }
 
     private static bool StartsWith(byte[] bytes, params byte[] prefix)

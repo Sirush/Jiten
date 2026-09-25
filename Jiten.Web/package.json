@@ -38,6 +38,7 @@
     "harfbuzzjs": "0.10.0",
     "hatsuon": "2.0.0",
     "jszip": "3.10.1",
+    "libheif-js": "1.23.2",
     "nuxt": "4.5.2",
     "nuxt-vue3-google-signin": "0.0.13",
     "patch-package": "8.0.1",
