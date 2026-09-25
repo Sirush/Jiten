@@ -1,5 +1,6 @@
 import type { CardMediaBatchEntry, CardMediaBatchResponse, CardMediaImportResponse, ResolveWordsResponse } from '~/types';
 import { base64ToBytes, extractAudioRef, extractImageRef } from '~/utils/ankiMediaExtract';
+import { convertHeifImage, isHeifImage } from '~/utils/heifImage';
 
 /** Matches the server's per-request manifest cap. */
 const UPLOAD_CHUNK = 20;
@@ -264,21 +265,31 @@ export function useAnkiMediaImport() {
       // A mismatched batch cannot say which file is which, so it must not be mapped to per-file outcomes.
       if (results.length !== batch.length) throw new Error('Media fetch returned a mismatched batch.');
 
-      batch.forEach((target, index) => {
+      for (const [index, target] of batch.entries()) {
         const base64 = results[index];
         if (!base64) {
           stats.value.missingInAnki++;
-          return;
+          continue;
         }
 
-        const bytes = base64ToBytes(base64);
+        let bytes = base64ToBytes(base64);
+        // The server refuses HEIC/AVIF, so they go up as the JPEG/PNG the browser re-encodes them to.
+        if (isHeifImage(bytes)) {
+          try {
+            bytes = new Uint8Array(await (await convertHeifImage(new Blob([bytes as BlobPart]))).blob.arrayBuffer());
+          } catch {
+            stats.value.invalid++;
+            continue;
+          }
+        }
+
         if (bytes.length > MAX_FILE_BYTES) {
           stats.value.tooLarge++;
-          return;
+          continue;
         }
 
         files.push({ target, bytes });
-      });
+      }
     }
 
     return { attempted: targets.length, files };

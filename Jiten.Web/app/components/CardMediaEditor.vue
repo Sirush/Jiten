@@ -68,18 +68,11 @@
   const deletingKind = ref<CardMediaKind | null>(null);
   const dragOver = ref(false);
 
-  // Staged file awaiting the "Upload as image/audio?" confirmation.
-  const pending = ref<{ file: File; kind: CardMediaKind; url: string } | null>(null);
-
-  // HEIC/HEIF can't be rendered by browsers (Safari aside), so the staged blob preview would show broken.
-  // The server converts them to WebP on upload; here we just show a placeholder instead of a dead <img>.
-  const pendingPreviewable = computed(() => {
-    const p = pending.value;
-    if (!p || p.kind !== 'image') return false;
-    const ext = p.file.name.split('.').pop()?.toLowerCase() ?? '';
-    const type = (p.file.type || '').toLowerCase();
-    return !(['heic', 'heif'].includes(ext) || type === 'image/heic' || type === 'image/heif');
-  });
+  // Staged file awaiting the "Upload as image/audio?" confirmation. `converting` covers the HEIC/AVIF to
+  // JPEG step, which the server requires because it never decodes those formats.
+  const pending = ref<{ file: File; kind: CardMediaKind; url: string; converting: boolean } | null>(null);
+  // Bumped per staged file so a conversion that finishes after a cancel or a newer pick is dropped.
+  let stageToken = 0;
   const fileInput = ref<HTMLInputElement | null>(null);
   const rootEl = ref<HTMLElement | null>(null);
 
@@ -156,7 +149,7 @@
     return null;
   }
 
-  function stageFile(file: File) {
+  async function stageFile(file: File) {
     if (!canUpload.value) return;
     const kind = detectKind(file);
     if (!kind) {
@@ -168,16 +161,50 @@
       });
       return;
     }
-    if (file.size > MAX_BYTES) {
-      toast.add({ severity: 'error', summary: 'File too large', detail: 'Card media must be 5 MB or smaller.', life: 4000 });
+
+    clearPending();
+    const token = stageToken;
+
+    // HEIC/AVIF get the size check after conversion, which shrinks them to at most 1600 px.
+    if (kind !== 'image' || !(await isHeifBlob(file).catch(() => false))) {
+      if (token !== stageToken) return;
+      if (file.size > MAX_BYTES) {
+        toast.add({ severity: 'error', summary: 'File too large', detail: 'Card media must be 5 MB or smaller.', life: 4000 });
+        return;
+      }
+      pending.value = { file, kind, url: URL.createObjectURL(file), converting: false };
       return;
     }
-    clearPending();
-    pending.value = { file, kind, url: URL.createObjectURL(file) };
+
+    if (token !== stageToken) return;
+    pending.value = { file, kind, url: '', converting: true };
+    try {
+      const converted = await convertHeifImage(file);
+      if (token !== stageToken) return;
+      const name = `${file.name.replace(/\.[^.]*$/, '') || 'image'}.${converted.extension}`;
+      const convertedFile = new File([converted.blob], name, { type: converted.blob.type });
+      if (convertedFile.size > MAX_BYTES) {
+        clearPending();
+        toast.add({ severity: 'error', summary: 'File too large', detail: 'Card media must be 5 MB or smaller.', life: 4000 });
+        return;
+      }
+      pending.value = { file: convertedFile, kind, url: URL.createObjectURL(convertedFile), converting: false };
+    } catch (e) {
+      if (token !== stageToken) return;
+      console.warn('HEIC/AVIF conversion failed', e);
+      clearPending();
+      toast.add({
+        severity: 'error',
+        summary: "Couldn't read this image",
+        detail: 'Save it as JPEG or PNG and try again.',
+        life: 5000,
+      });
+    }
   }
 
   function clearPending() {
-    if (pending.value) URL.revokeObjectURL(pending.value.url);
+    stageToken++;
+    if (pending.value?.url) URL.revokeObjectURL(pending.value.url);
     pending.value = null;
   }
 
@@ -341,7 +368,7 @@
   }
 
   async function confirmUpload() {
-    if (!pending.value || uploading.value) return;
+    if (!pending.value || pending.value.converting || uploading.value) return;
     uploading.value = true;
     try {
       await cardMedia.upload(props.wordId, props.readingIndex, pending.value.file);
@@ -627,24 +654,27 @@
       "
     >
       <div v-if="pending" class="flex flex-col items-center gap-3">
-        <SrsCardImage
-          v-if="pending.kind === 'image' && pendingPreviewable"
-          :url="pending.url"
-          img-class="max-h-52 min-w-52 max-w-full w-auto rounded-md object-contain"
-        />
         <div
-          v-else-if="pending.kind === 'image'"
+          v-if="pending.converting"
+          role="status"
           class="flex flex-col items-center justify-center gap-2 w-full rounded-md border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800 py-8 text-surface-500 dark:text-surface-400"
         >
-          <i class="pi pi-image text-2xl" />
-          <span class="text-xs text-center px-4">Preview isn't available for this format. It will be converted when you upload.</span>
+          <i class="pi pi-spin pi-spinner text-2xl" />
+          <span class="text-xs text-center px-4">Converting to JPEG…</span>
         </div>
+        <SrsCardImage v-else-if="pending.kind === 'image'" :url="pending.url" img-class="max-h-52 min-w-52 max-w-full w-auto rounded-md object-contain" />
         <audio v-else :src="pending.url" controls class="w-full" />
         <p class="text-xs text-surface-500 dark:text-surface-400 self-start truncate w-full">{{ pending.file.name }}</p>
       </div>
       <template #footer>
         <Button label="Cancel" severity="secondary" text :disabled="uploading" @click="clearPending" />
-        <Button :label="pending?.kind === 'image' ? 'Upload image' : 'Upload audio'" icon="pi pi-check" :loading="uploading" @click="confirmUpload" />
+        <Button
+          :label="pending?.kind === 'image' ? 'Upload image' : 'Upload audio'"
+          icon="pi pi-check"
+          :loading="uploading"
+          :disabled="pending?.converting"
+          @click="confirmUpload"
+        />
       </template>
     </Dialog>
   </div>

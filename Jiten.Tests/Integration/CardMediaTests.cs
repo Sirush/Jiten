@@ -335,6 +335,52 @@ public class CardMediaTests(JitenWebApplicationFactory factory)
         resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    private static byte[] Ftyp(string majorBrand, params string[] compatibleBrands)
+    {
+        var brands = new[] { majorBrand, "\0\0\0\0" }.Concat(compatibleBrands).ToArray();
+        var box = new byte[8 + brands.Length * 4];
+        box[3] = (byte)box.Length;
+        Encoding.ASCII.GetBytes("ftyp").CopyTo(box, 4);
+        for (var i = 0; i < brands.Length; i++)
+            Encoding.ASCII.GetBytes(brands[i]).CopyTo(box, 8 + i * 4);
+        return box.Concat(new byte[32]).ToArray();
+    }
+
+    [Theory]
+    [InlineData("heic", new[] { "mif1", "heic" })]
+    [InlineData("avif", new[] { "avif", "mif1", "miaf" })]
+    [InlineData("mif1", new[] { "mif1", "heic" })]
+    [InlineData("avis", new[] { "avis", "msf1" })]
+    public async Task Upload_HeifFamily_RejectedNotStoredAsAudio(string majorBrand, string[] compatibleBrands)
+    {
+        var resp = await Upload(TestUsers.UserA, 102, 0, Ftyp(majorBrand, compatibleBrands), "photo.heic");
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        (await userDb.UserCardMedia.AnyAsync(m => m.UserId == TestUsers.UserA)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Upload_M4aAudio_StillAccepted()
+    {
+        var resp = await Upload(TestUsers.UserA, 102, 0, Ftyp("M4A ", "M4A ", "mp42", "isom"), "clip.m4a");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("media").GetProperty("contentType").GetString().Should().Be("audio/mp4");
+    }
+
+    [Theory]
+    [InlineData(MagickFormat.Heic)]
+    [InlineData(MagickFormat.Heif)]
+    [InlineData(MagickFormat.Avif)]
+    public void HardeningPolicy_BlocksLibheifCoders(MagickFormat format)
+    {
+        // The factory has already run Program.cs, which applies ImageMagickHardening.
+        var act = () => new MagickImage(Ftyp("heic", "mif1", "heic"), new MagickReadSettings { Format = format });
+        act.Should().Throw<MagickPolicyErrorException>();
+    }
+
     [Fact]
     public async Task Upload_OverFiveMB_Rejected()
     {
