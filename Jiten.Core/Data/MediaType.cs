@@ -23,5 +23,8 @@ namespace Jiten.Core.Data
         public static bool IsListed(MediaType type) => !Unlisted.Contains(type);
 
         public static IEnumerable<MediaType> Listed => Enum.GetValues<MediaType>().Where(IsListed);
+
+        /// <summary>Subtitle-sourced text, whose sentence ends come from the speech boundary model rather than punctuation.</summary>
+        public static bool IsSubtitleSpeech(MediaType type) => type is MediaType.Anime or MediaType.Drama or MediaType.Movie;
     }
 }

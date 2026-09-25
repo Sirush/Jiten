@@ -448,4 +448,22 @@ public class CliOptions
 
     [Option(longName: "yt-staging", Required = false, HelpText = "Directory for fetched subtitles and metadata (default: <StaticFilesPath>/tmp/youtube).")]
     public string? YtStaging { get; set; }
+
+    [Option(longName: "export-speech-boundaries", Required = false, HelpText = "Write a TSV of labelled line breaks from archived subtitle files, for training the speech sentence-boundary model. Needs --speech-boundary-roots.")]
+    public string? ExportSpeechBoundaries { get; set; }
+
+    [Option(longName: "speech-boundary-roots", Required = false, Separator = ',', HelpText = "With --export-speech-boundaries: comma-separated archive roots whose subfolders each hold one title's subtitle files.")]
+    public IEnumerable<string>? SpeechBoundaryRoots { get; set; }
+
+    [Option(longName: "speech-boundary-files-per-folder", Required = false, Default = 2, HelpText = "With --export-speech-boundaries: subtitle files sampled from each title folder.")]
+    public int SpeechBoundaryFilesPerFolder { get; set; }
+
+    [Option(longName: "speech-boundary-parity", Required = false, HelpText = "Score the <model>.parity.tsv rows written by scripts/speech_boundaries/train.py with the C# tree walker, and report the largest difference from LightGBM's own probabilities and the time per decision.")]
+    public string? SpeechBoundaryParity { get; set; }
+
+    [Option(longName: "speech-preview", Required = false, HelpText = "Compare today's sentence cuts with model-based cuts for a subtitle file (prints the sentences) or a folder (prints totals over up to 300 files). Needs --speech-boundary-model.")]
+    public string? SpeechPreview { get; set; }
+
+    [Option(longName: "speech-boundary-model", Required = false, HelpText = "With --speech-preview: path to the model.json written by scripts/speech_boundaries/train.py.")]
+    public string? SpeechBoundaryModel { get; set; }
 }

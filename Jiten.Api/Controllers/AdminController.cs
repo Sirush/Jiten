@@ -427,7 +427,10 @@ public partial class AdminController(
             var (text, stats) = await GetTextFromFile(parentFile);
             deck.OriginalFileName = parentFile.FileName;
             if (deck.RawText != null)
+            {
                 deck.RawText.RawText = text;
+                deck.RawText.SpeechBoundaries = null;
+            }
             else
                 deck.RawText = new DeckRawText(text);
             if (stats.DurationMs > 0)
@@ -508,6 +511,7 @@ public partial class AdminController(
                         var (text, stats) = await GetTextFromFile(subdeck.File);
                         existingSubdeck.OriginalFileName = subdeck.File.FileName;
                         existingSubdeck.RawText!.RawText = text;
+                        existingSubdeck.RawText.SpeechBoundaries = null;
                         if (stats.DurationMs > 0)
                         {
                             existingSubdeck.SpeechDuration = stats.DurationMs;

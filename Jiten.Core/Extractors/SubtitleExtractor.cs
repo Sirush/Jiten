@@ -51,6 +51,13 @@ public partial class SubtitleExtractor
     /// </summary>
     public async Task<string> Extract(string filePath)
     {
+        var lines = await ExtractCueLines(filePath);
+        return string.Join(Environment.NewLine, lines.Select(l => l.Text));
+    }
+
+    /// <summary>The lines <see cref="Extract"/> joins, flagged when a line is the last one kept from its subtitle cue.</summary>
+    public async Task<List<CueLine>> ExtractCueLines(string filePath)
+    {
         var extension = Path.GetExtension(filePath).ToLowerInvariant();
 
         // Preprocess ASS files (remove comments, cn lines)
@@ -59,28 +66,31 @@ public partial class SubtitleExtractor
             filePath = await PreprocessAssFile(filePath);
         }
 
-        // Parse subtitle file
         var parser = new SubParser();
         await using var fileStream = File.OpenRead(filePath);
         var items = parser.ParseStream(fileStream, Encoding.UTF8);
 
-        // Extract and clean lines
-        var lines = items.SelectMany(it => it.PlaintextLines).ToList();
-        for (int i = lines.Count - 1; i >= 0; i--)
+        var lines = new List<CueLine>();
+        foreach (var item in items)
         {
-            // Remove ruby/furigana annotations in both half-width and full-width parentheses
-            lines[i] = RubyPattern().Replace(lines[i], "");
-            lines[i] = FullWidthRubyPattern().Replace(lines[i], "");
-            lines[i] = SquareBracketPattern().Replace(lines[i], "");
-            lines[i] = CurlyBracesPattern().Replace(lines[i], "");
-
-            if (string.IsNullOrWhiteSpace(lines[i]))
+            int cueStart = lines.Count;
+            foreach (var rawLine in item.PlaintextLines)
             {
-                lines.RemoveAt(i);
+                // Remove ruby/furigana annotations in both half-width and full-width parentheses
+                var line = RubyPattern().Replace(rawLine, "");
+                line = FullWidthRubyPattern().Replace(line, "");
+                line = SquareBracketPattern().Replace(line, "");
+                line = CurlyBracesPattern().Replace(line, "");
+
+                if (!string.IsNullOrWhiteSpace(line))
+                    lines.Add(new CueLine(line, false));
             }
+
+            if (lines.Count > cueStart)
+                lines[^1] = lines[^1] with { EndsCue = true };
         }
 
-        return string.Join(Environment.NewLine, lines);
+        return lines;
     }
 
     /// <summary>
@@ -439,3 +449,5 @@ public partial class SubtitleExtractor
 }
 
 public readonly record struct SubtitleItem(int StartMs, int EndMs, string Text, int TrackIndex = 0);
+
+public readonly record struct CueLine(string Text, bool EndsCue);

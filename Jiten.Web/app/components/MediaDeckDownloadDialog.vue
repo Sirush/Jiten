@@ -155,7 +155,16 @@
   const hasExampleSentences = computed(() => {
     if (isMediaListMode.value) return props.mediaList!.hasExampleSentences;
     const mt = props.deck?.mediaType ?? props.studyDeck?.mediaType;
-    return mt === MediaType.Novel || mt === MediaType.NonFiction || mt === MediaType.VideoGame || mt === MediaType.VisualNovel || mt === MediaType.WebNovel;
+    return (
+      mt === MediaType.Novel ||
+      mt === MediaType.NonFiction ||
+      mt === MediaType.VideoGame ||
+      mt === MediaType.VisualNovel ||
+      mt === MediaType.WebNovel ||
+      mt === MediaType.Anime ||
+      mt === MediaType.Drama ||
+      mt === MediaType.Movie
+    );
   });
 
   const modeOptions = computed(() => [

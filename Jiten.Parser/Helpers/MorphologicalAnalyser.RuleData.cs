@@ -246,6 +246,9 @@ public partial class MorphologicalAnalyser
     private static readonly string _stopToken = "|";
     private static readonly string _batchDelimiter = "|||";
 
+    // Private-use char tagging a line-final ）; preprocessing erases line structure, so the tag carries it to the sentence splitter.
+    private const char LineEndParenMark = '\uE000';
+
     private static readonly HashSet<string> NCompoundSuffixes =
         ["だ", "です", "じゃ", "なら", "ても", "でも", "だろ", "だろう", "だって", "だけど", "だけ", "だが", "だし", "だから"];
 

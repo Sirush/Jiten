@@ -55,6 +55,12 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"…{2,}")]
     private static partial Regex EllipsisRunRegex();
 
+    [GeneratedRegex(@"…(?=\r?\n(?![ 　]*[」』）]))")]
+    private static partial Regex LineEndEllipsisRegex();
+
+    [GeneratedRegex(@"[）)](?=\r?\n)")]
+    private static partial Regex LineEndParenRegex();
+
     [GeneratedRegex(@"([ァ-ヴ]ンッ)(?=[ァ-ヴぁ-ゔ\p{IsCJKUnifiedIdeographs}])")]
     private static partial Regex KatakanaInterjectionTsuRegex();
 
@@ -208,6 +214,7 @@ public partial class MorphologicalAnalyser
     private void PreprocessText(ref string text, bool preserveStopToken, out int rawContentCharCount)
     {
         text = text.Replace("<", " ").Replace(">", " ").Replace("〝", " ").Replace("〟", " ");
+        text = text.Replace('‥', '…');
         text = text.ToFullWidthDigits();
         text = NonJapaneseCharRegex().Replace(text, "");
 
@@ -215,6 +222,8 @@ public partial class MorphologicalAnalyser
 
         if (!preserveStopToken)
             text = text.Replace(_stopToken, "");
+
+        text = LineEndParenRegex().Replace(text, m => m.Value + LineEndParenMark);
 
         text = text
             .Replace("「", "\n「 ")
@@ -411,7 +420,7 @@ public partial class MorphologicalAnalyser
 
         text = EllipsisRunRegex().Replace(text, "…");
         text = MidSentenceEllipsisRegex().Replace(text, "");
-        text = text.Replace("…\r", "。\r").Replace("…\n", "。\n");
+        text = LineEndEllipsisRegex().Replace(text, "。");
     }
 
     private static int CountContentChars(string text)
@@ -450,7 +459,33 @@ public partial class MorphologicalAnalyser
         }
     }
 
-    private List<SentenceInfo> SplitIntoSentences(string text, List<WordInfo> wordInfos)
+    /// <returns>Positions of the tagged ）, counted in the text with line breaks removed.</returns>
+    private static HashSet<int> TakeLineEndParenMarks(ref string text)
+    {
+        var positions = new HashSet<int>();
+        if (text.IndexOf(LineEndParenMark) < 0)
+            return positions;
+
+        var sb = new StringBuilder(text.Length);
+        int flatPos = 0;
+        foreach (char c in text)
+        {
+            if (c == LineEndParenMark)
+            {
+                positions.Add(flatPos - 1);
+                continue;
+            }
+
+            sb.Append(c);
+            if (c is not ('\r' or '\n'))
+                flatPos++;
+        }
+
+        text = sb.ToString();
+        return positions;
+    }
+
+    private List<SentenceInfo> SplitIntoSentences(string text, List<WordInfo> wordInfos, HashSet<int> lineEndParens)
     {
         // Normalise text - remove line breaks for consistent sentence boundaries
         text = text.Replace("\r", "").Replace("\n", "");
@@ -467,7 +502,7 @@ public partial class MorphologicalAnalyser
             char current = text[i];
             sb.Append(current);
 
-            if (_sentenceEnders.Contains(current))
+            if (_sentenceEnders.Contains(current) || lineEndParens.Contains(i))
             {
                 seenEnder = true;
                 continue;

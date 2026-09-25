@@ -187,7 +187,7 @@ static class SudachiInterop
     /// Fast character filter using lookup table and ArrayPool.
     /// Returns original string if no characters were removed (fast path).
     /// </summary>
-    private static string FilterAllowedChars(string input)
+    internal static string FilterAllowedChars(string input)
     {
         if (string.IsNullOrEmpty(input))
             return input;

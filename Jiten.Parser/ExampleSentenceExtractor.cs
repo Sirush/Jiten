@@ -1,27 +1,24 @@
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Jiten.Core.Data;
 
 namespace Jiten.Parser;
 
-public static class ExampleSentenceExtractor
+public static partial class ExampleSentenceExtractor
 {
-    private const int FIRST_PASS_MIN_LENGTH = 15;
-    private const int FIRST_PASS_MAX_LENGTH = 35;
-    private const float FIRST_PASS_PERCENTAGE = 0.25f;
+    private readonly record struct Pass(int MinLength, int MaxLength, float Percentage);
 
-    private const int SECOND_PASS_MIN_LENGTH = 10;
-    private const int SECOND_PASS_MAX_LENGTH = 45;
-    private const float SECOND_PASS_PERCENTAGE = 0.5f;
+    private static readonly Pass[] ProsePasses = [new(15, 35, 0.25f), new(10, 45, 0.5f), new(10, 55, 1f)];
 
-    private const int THIRD_PASS_MIN_LENGTH = 10;
-    private const int THIRD_PASS_MAX_LENGTH = 55;
-    private const float THIRD_PASS_PERCENTAGE = 1f;
+    // Subtitle sentences run short (median cue 13 chars), so prose windows would discard most of them.
+    private static readonly Pass[] SubtitlePasses = [new(8, 30, 0.25f), new(8, 40, 0.5f), new(8, 45, 1f)];
 
     public static List<ExampleSentence> ExtractSentences(
         List<SentenceInfo> sentences,
         DeckWord[] words,
         Dictionary<(int WordId, byte ReadingIndex), int> formFreqRanks,
-        Dictionary<int, int> wordFreqRanks)
+        Dictionary<int, int> wordFreqRanks,
+        bool subtitleSpeech = false)
     {
         static bool IsPosMatch(DeckWord deckWord, WordInfo token)
         {
@@ -64,7 +61,7 @@ public static class ExampleSentenceExtractor
                 if (distinctChars.Count >= 6) break;
             }
 
-            if (distinctChars.Count >= 6)
+            if (distinctChars.Count >= 6 && !(subtitleSpeech && EndsInOpenParticle(sentence)))
             {
                 validSentences.Add(sentence);
             }
@@ -112,17 +109,7 @@ public static class ExampleSentenceExtractor
         var exampleSentences = new List<ExampleSentence>();
         var usedSentences = new HashSet<SentenceInfo>();
 
-        var passes = new[]
-                     {
-                         new { MinLength = FIRST_PASS_MIN_LENGTH, MaxLength = FIRST_PASS_MAX_LENGTH, Percentage = FIRST_PASS_PERCENTAGE },
-                         new
-                         {
-                             MinLength = SECOND_PASS_MIN_LENGTH, MaxLength = SECOND_PASS_MAX_LENGTH, Percentage = SECOND_PASS_PERCENTAGE
-                         },
-                         new { MinLength = THIRD_PASS_MIN_LENGTH, MaxLength = THIRD_PASS_MAX_LENGTH, Percentage = THIRD_PASS_PERCENTAGE }
-                     };
-
-        foreach (var pass in passes)
+        foreach (var pass in subtitleSpeech ? SubtitlePasses : ProsePasses)
         {
             // Only consider sentences from the first X% of the text
             int maxPosition = (int)(sentences.Count * pass.Percentage);
@@ -315,7 +302,7 @@ public static class ExampleSentenceExtractor
         return text;
     }
 
-    private static string NormalizeTrailingPunctuation(string text)
+    internal static string NormalizeTrailingPunctuation(string text)
     {
         if (text.Length < 2) return text;
 
@@ -324,6 +311,28 @@ public static class ExampleSentenceExtractor
                text[end - 1] is '。' or '！' or '？' or '!' or '?' or '.' or '…' or '‥')
             end--;
 
-        return end == text.Length ? text : text[..end];
+        text = end == text.Length ? text : text[..end];
+        // The parser writes a line-final … as 。, which lands in front of an ！？ that followed it (……？ → 。？).
+        return PeriodBeforeFinalMark().Replace(text, "");
+    }
+
+    [GeneratedRegex(@"。(?=[！？!?]+[」』）]*$)")]
+    private static partial Regex PeriodBeforeFinalMark();
+
+    /// <summary>A subtitle sentence ending in a case, binding or adverbial particle is usually half of a sentence split across cues.</summary>
+    private static bool EndsInOpenParticle(SentenceInfo sentence)
+    {
+        for (int i = sentence.Words.Count - 1; i >= 0; i--)
+        {
+            var word = sentence.Words[i].word;
+            if (word.PartOfSpeech is PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol or PartOfSpeech.BlankSpace)
+                continue;
+
+            return word.PartOfSpeech == PartOfSpeech.Particle &&
+                   word.PartOfSpeechSection1 is PartOfSpeechSection.CaseMarkingParticle or PartOfSpeechSection.BindingParticle
+                       or PartOfSpeechSection.AdverbialParticle;
+        }
+
+        return false;
     }
 }

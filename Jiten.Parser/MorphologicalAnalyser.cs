@@ -138,6 +138,7 @@ public partial class MorphologicalAnalyser
         const int sudachiMaxBytes = 49_000;
         var processedTexts = new List<string>(texts.Count);
         var originalTexts = new List<string>(texts.Count);
+        var lineEndParens = new List<HashSet<int>>(texts.Count);
         foreach (var text in texts)
         {
             var copy = text;
@@ -145,6 +146,7 @@ public partial class MorphologicalAnalyser
             {
                 processedTexts.Add("");
                 originalTexts.Add("");
+                lineEndParens.Add([]);
                 cleanedOriginals?.Add("");
                 rawContentCharCounts?.Add(0);
                 continue;
@@ -152,11 +154,12 @@ public partial class MorphologicalAnalyser
 
             PreprocessText(ref copy, preserveStopToken, out int rawCharCount);
             rawContentCharCounts?.Add(rawCharCount);
-            processedTexts.Add(copy);
 
             var cleanedOriginal = copy.Replace(" ", "");
             if (!preserveStopToken)
                 cleanedOriginal = cleanedOriginal.Replace(_stopToken, "");
+            lineEndParens.Add(TakeLineEndParenMarks(ref cleanedOriginal));
+            processedTexts.Add(copy.Replace(LineEndParenMark.ToString(), ""));
             originalTexts.Add(cleanedOriginal);
             cleanedOriginals?.Add(cleanedOriginal);
         }
@@ -301,7 +304,7 @@ public partial class MorphologicalAnalyser
 
             if (sw != null) { timings!.PipelineMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
-            results.Add(SplitIntoSentences(originalTexts[i], wordInfos));
+            results.Add(SplitIntoSentences(originalTexts[i], wordInfos, lineEndParens[i]));
 
             if (sw != null) { timings!.SentenceSplitMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
         }

@@ -46,7 +46,7 @@ public class ReparseJob(
         if (deck.Children.Count == 0)
         {
             Deck newDeck = await Parser.Parser.ParseTextToDeck(contextFactory, deck.RawText!.RawText, true, true, deck.MediaType,
-                dictionaryEntries: dictEntries);
+                dictionaryEntries: dictEntries, speechBoundaries: deck.RawText.SpeechBoundaries);
             deck.CharacterCount = newDeck.CharacterCount;
             deck.WordCount = newDeck.WordCount;
             deck.UniqueWordCount = newDeck.UniqueWordCount;
@@ -57,8 +57,9 @@ public class ReparseJob(
             deck.DeckWords = newDeck.DeckWords;
             deck.ExampleSentences = newDeck.ExampleSentences;
             deck.DialoguePercentage = newDeck.DialoguePercentage;
+            deck.RawText.SpeechBoundaries = newDeck.RawText?.SpeechBoundaries ?? deck.RawText.SpeechBoundaries;
 
-            if (deck.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
+            if (deck.MediaType is MediaType.Manga or MediaType.Audio)
                 deck.SentenceCount = 0;
         }
         else
@@ -78,7 +79,8 @@ public class ReparseJob(
                 storeRawText: true,
                 predictDifficulty: true,
                 deck.MediaType,
-                dictionaryEntries: dictEntries);
+                dictionaryEntries: dictEntries,
+                speechBoundaries: children.Select(c => c.RawText!.SpeechBoundaries).ToList());
 
             // Copy properties back to original deck objects
             for (int i = 0; i < children.Count; i++)
@@ -96,8 +98,9 @@ public class ReparseJob(
                 original.DeckWords = parsed.DeckWords;
                 original.ExampleSentences = parsed.ExampleSentences;
                 original.DialoguePercentage = parsed.DialoguePercentage;
+                original.RawText!.SpeechBoundaries = parsed.RawText?.SpeechBoundaries ?? original.RawText.SpeechBoundaries;
 
-                if (original.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
+                if (original.MediaType is MediaType.Manga or MediaType.Audio)
                     original.SentenceCount = 0;
             }
 

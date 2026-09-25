@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Parser.SpeechBoundaries;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Utils;
 using Jiten.Parser.Data.Redis;
@@ -834,9 +835,11 @@ namespace Jiten.Parser
                                                        MediaType mediatype = MediaType.Novel,
                                                        ParserDiagnostics? diagnostics = null,
                                                        BenchmarkTimings? timings = null,
-                                                       List<DeckDictionaryEntry>? dictionaryEntries = null)
+                                                       List<DeckDictionaryEntry>? dictionaryEntries = null,
+                                                       byte[]? speechBoundaries = null)
         {
-            var results = await ParseTextsToDeck(contextFactory, [text], storeRawText, predictDifficulty, mediatype, diagnostics, timings, dictionaryEntries);
+            var results = await ParseTextsToDeck(contextFactory, [text], storeRawText, predictDifficulty, mediatype, diagnostics, timings, dictionaryEntries,
+                                                 speechBoundaries: [speechBoundaries]);
             return results.Count > 0 ? results[0] : new Deck();
         }
 
@@ -848,7 +851,8 @@ namespace Jiten.Parser
                                                               ParserDiagnostics? diagnostics = null,
                                                               BenchmarkTimings? timings = null,
                                                               List<DeckDictionaryEntry>? dictionaryEntries = null,
-                                                              List<List<ParsedOccurrence>>? occurrenceSink = null)
+                                                              List<List<ParsedOccurrence>>? occurrenceSink = null,
+                                                              IReadOnlyList<byte[]?>? speechBoundaries = null)
         {
             if (texts.Count == 0) return [];
 
@@ -862,9 +866,25 @@ namespace Jiten.Parser
                 ? dictionaryEntries.ToDictionary(e => e.Surface.Trim())
                 : null;
 
+            // Subtitle lines rarely end in punctuation, so they are rejoined into one sentence per line before parsing.
+            var parseTexts = texts;
+            byte[][]? boundariesByText = null;
+            if (MediaTypes.IsSubtitleSpeech(mediatype))
+            {
+                parseTexts = new List<string>(texts.Count);
+                boundariesByText = new byte[texts.Count][];
+                for (int i = 0; i < texts.Count; i++)
+                {
+                    var stored = speechBoundaries != null && i < speechBoundaries.Count ? speechBoundaries[i] : null;
+                    var (assembled, boundaries) = SpeechTextAssembler.Prepare(texts[i], stored, SpeechBoundaryModel.Default);
+                    parseTexts.Add(assembled);
+                    boundariesByText[i] = boundaries;
+                }
+            }
+
             var cleanTexts = new List<string>(texts.Count);
             var hintsByText = new List<FuriganaHint[]>(texts.Count);
-            foreach (var t in texts)
+            foreach (var t in parseTexts)
             {
                 var (clean, hints) = FuriganaHintExtractor.Extract(t);
                 cleanTexts.Add(clean);
@@ -906,6 +926,8 @@ namespace Jiten.Parser
                     : null;
 
                 var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, timings, dictionaryEntriesBySurface, relocated, rawCharCounts[textIndex], diagnostics, occurrenceSink);
+                if (deck.RawText != null && boundariesByText != null)
+                    deck.RawText.SpeechBoundaries = boundariesByText[textIndex];
                 decks.Add(deck);
                 batchedSentences[textIndex] = null!;
             }
@@ -1019,7 +1041,8 @@ namespace Jiten.Parser
 
             List<ExampleSentence>? exampleSentences = null;
 
-            if (mediatype is MediaType.Novel or MediaType.NonFiction or MediaType.VideoGame or MediaType.VisualNovel or MediaType.WebNovel)
+            var subtitleSpeech = MediaTypes.IsSubtitleSpeech(mediatype);
+            if (subtitleSpeech || mediatype is MediaType.Novel or MediaType.NonFiction or MediaType.VideoGame or MediaType.VisualNovel or MediaType.WebNovel)
             {
                 var wordIds = processedWords.Select(w => w.WordId).Distinct().ToList();
                 await using var freqCtx = await _contextFactory.CreateDbContextAsync();
@@ -1031,7 +1054,7 @@ namespace Jiten.Parser
                         wff => wff.FrequencyRank);
 
                 exampleSentences = ExampleSentenceExtractor.ExtractSentences(
-                    sentences, processedWords, formFreqRanks, _wordFrequencyRanks);
+                    sentences, processedWords, formFreqRanks, _wordFrequencyRanks, subtitleSpeech);
             }
 
             var totalWordCount = processedWords.Select(w => w.Occurrences).Sum();

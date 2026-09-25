@@ -53,7 +53,8 @@ public class ParseNewSubdecksJob(
             storeRawText: true,
             predictDifficulty: true,
             parent.MediaType,
-            dictionaryEntries: dictEntries.Count > 0 ? dictEntries : null);
+            dictionaryEntries: dictEntries.Count > 0 ? dictEntries : null,
+            speechBoundaries: childrenWithText.Select(c => c.RawText!.SpeechBoundaries).ToList());
 
         for (int i = 0; i < childrenWithText.Count; i++)
         {
@@ -68,8 +69,9 @@ public class ParseNewSubdecksJob(
             original.UniqueKanjiUsedOnceCount = parsed.UniqueKanjiUsedOnceCount;
             original.SentenceCount = parsed.SentenceCount;
             original.DialoguePercentage = parsed.DialoguePercentage;
+            original.RawText!.SpeechBoundaries = parsed.RawText?.SpeechBoundaries ?? original.RawText.SpeechBoundaries;
 
-            if (original.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio or MediaType.YouTube)
+            if (original.MediaType is MediaType.Manga or MediaType.Audio or MediaType.YouTube)
                 original.SentenceCount = 0;
 
             await context.SaveChangesAsync();

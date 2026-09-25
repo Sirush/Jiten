@@ -419,7 +419,7 @@ public class DeckCommands(CliContext context)
                     if (SubtitleCleanStartsWith.Any(s => lines[i].StartsWith(s)))
                     {
                         lines.RemoveAt(i);
-                        break;
+                        continue;
                     }
 
                     lines[i] = Regex.Replace(lines[i], @"\((.*?)\)", "");

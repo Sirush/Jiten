@@ -351,7 +351,7 @@
       }
     }
 
-    const showAvgSentenceLengthOptionMediaTypes = [MediaType.Novel, MediaType.VisualNovel, MediaType.WebNovel, MediaType.NonFiction, MediaType.VideoGame];
+    const showAvgSentenceLengthOptionMediaTypes = [MediaType.Novel, MediaType.VisualNovel, MediaType.WebNovel, MediaType.NonFiction, MediaType.VideoGame, MediaType.Anime, MediaType.Drama, MediaType.Movie];
 
     if (mediaType.value == null || showAvgSentenceLengthOptionMediaTypes.includes(Number(mediaType.value))) {
       if (!sortByOptions.value.some((o) => o.value === 'sentenceLength')) {

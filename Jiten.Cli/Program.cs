@@ -250,6 +250,21 @@ public class Program
             await diagnosticCommands.MineMargins(options);
         }
 
+        if (options.ExportSpeechBoundaries != null)
+        {
+            await new SpeechBoundaryCommands(context).Export(options);
+        }
+
+        if (options.SpeechBoundaryParity != null)
+        {
+            new SpeechBoundaryCommands(context).Parity(options.SpeechBoundaryParity);
+        }
+
+        if (options.SpeechPreview != null)
+        {
+            await new SpeechBoundaryCommands(context).Preview(options);
+        }
+
         if (options.AuditUserDic != null)
         {
             await diagnosticCommands.AuditUserDic(options);
