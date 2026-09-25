@@ -35,11 +35,11 @@ public static class SentenceDifficultyScorer
 
     public static float Score(
         SentenceInfo sentence,
-        List<ExampleSentenceWord> matchedWords,
+        IReadOnlyList<(int Position, int WordId, byte ReadingIndex)> matchedWords,
         Dictionary<(int WordId, byte ReadingIndex), int> formFreqRanks,
         Dictionary<int, int> wordFreqRanks)
     {
-        var positionToMatch = new Dictionary<int, ExampleSentenceWord>();
+        var positionToMatch = new Dictionary<int, (int Position, int WordId, byte ReadingIndex)>();
         foreach (var mw in matchedWords)
             positionToMatch.TryAdd(mw.Position, mw);
 

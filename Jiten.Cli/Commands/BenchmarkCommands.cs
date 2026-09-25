@@ -238,7 +238,7 @@ public class BenchmarkCommands(CliContext context)
             foreach (var s in deck.ExampleSentences)
             {
                 sb.Append("S ").Append(s.Position).Append(':').Append(s.Difficulty.ToString("R")).Append(':').Append(s.Text).Append(" | ");
-                foreach (var sw in s.Words)
+                foreach (var sw in ExampleSentenceTokens.Decode(s.Tokens).Where(t => t.IsTarget))
                     sb.Append(sw.WordId).Append('/').Append(sw.ReadingIndex).Append('/').Append(sw.Position).Append('/').Append(sw.Length).Append(' ');
                 sb.Append('\n');
             }

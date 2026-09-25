@@ -1,5 +1,6 @@
 <script setup lang="ts">
-  import type { ExampleSentence } from '~/types';
+  import type { ExampleSentence, SentenceFuriganaMode } from '~/types';
+  import { sentenceRubyHtml, visibleFurigana } from '~/utils/sentenceRuby';
   import { computed, ref } from 'vue';
   import { useToast } from 'primevue/usetoast';
 
@@ -13,6 +14,9 @@
     // Marked text of the custom sentences already saved for this word, so a sentence saved in an
     // earlier visit still shows as starred.
     savedTexts?: string[];
+    // Defaults to the site-wide furigana preference.
+    furiganaMode?: SentenceFuriganaMode;
+    hiddenWordId?: number;
   }>();
 
   const emit = defineEmits<{
@@ -32,7 +36,12 @@
   const isRevealed = computed(() => store.displayAllNsfw || revealedLocally.value);
 
   const formattedText = computed(() => {
-    const { text, wordPosition, wordLength } = props.exampleSentence;
+    const { text, wordPosition, wordLength, furigana } = props.exampleSentence;
+    const mode = props.furiganaMode ?? (store.displayFurigana ? 'all' : 'off');
+    const shown = visibleFurigana(furigana, mode, props.hiddenWordId);
+    if (shown.length > 0) {
+      return sanitiseHtml(sentenceRubyHtml(text, wordPosition, wordLength, shown));
+    }
     if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) {
       return sanitiseHtml(text);
     }

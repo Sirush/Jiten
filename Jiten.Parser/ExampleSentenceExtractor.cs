@@ -44,6 +44,88 @@ public static partial class ExampleSentenceExtractor
             return false;
         }
 
+        // Claims the deck word this token stands for, if one is still waiting for a sentence.
+        static DeckWord? TakeTargetWord(WordInfo wordInfo, Dictionary<string, List<DeckWord>> wordsByText,
+                                        HashSet<string> textsWithNonNameEntry)
+        {
+            if (!wordsByText.TryGetValue(wordInfo.Text, out var wordList) || wordList.Count <= 0) return null;
+
+            // Find best word with matching POS — prefer direct POS match over name-like fallback.
+            // When multiple DeckWords share the same text and POS (e.g. 身体 as からだ vs しんたい),
+            // prefer the one whose SudachiReading matches the token's reading.
+            int matchIndex = -1;
+            int fallbackIndex = -1;
+            int posMatchNoReading = -1;
+
+            // Priority 0: exact WordId match from parser resolution — avoids assigning
+            // an example sentence to a wrong DeckWord when the same surface text resolved
+            // to different WordIds in different sentences (e.g. さっき → 1005180 vs misparse 1299060).
+            if (wordInfo.ResolvedWordId.HasValue)
+            {
+                for (int j = 0; j < wordList.Count; j++)
+                {
+                    if (wordList[j].WordId == wordInfo.ResolvedWordId.Value && IsPosMatch(wordList[j], wordInfo))
+                    {
+                        matchIndex = j;
+                        break;
+                    }
+                }
+            }
+
+            if (matchIndex == -1)
+            {
+                for (int j = 0; j < wordList.Count; j++)
+                {
+                    if (IsPosMatch(wordList[j], wordInfo))
+                    {
+                        if (!string.IsNullOrEmpty(wordInfo.Reading) &&
+                            !string.IsNullOrEmpty(wordList[j].SudachiReading) &&
+                            wordList[j].SudachiReading == wordInfo.Reading)
+                        {
+                            matchIndex = j;
+                            break;
+                        }
+
+                        if (posMatchNoReading == -1)
+                            posMatchNoReading = j;
+                    }
+
+                    if (fallbackIndex == -1 && IsPosCompatible(wordList[j], wordInfo))
+                        fallbackIndex = j;
+                }
+
+                if (matchIndex == -1 && posMatchNoReading >= 0)
+                {
+                    var fallbackWord = wordList[posMatchNoReading];
+                    bool readingConflict = !string.IsNullOrEmpty(wordInfo.Reading) &&
+                                           (string.IsNullOrEmpty(fallbackWord.SudachiReading) ||
+                                            fallbackWord.SudachiReading != wordInfo.Reading);
+                    if (!readingConflict)
+                        matchIndex = posMatchNoReading;
+                }
+
+                // Only use the name-like fallback when either:
+                // - this surface text has no competing non-Name DeckWord (pure name word), OR
+                // - the token is in person name context (followed by さん/くん/etc.)
+                if (matchIndex == -1 &&
+                    (!textsWithNonNameEntry.Contains(wordInfo.Text) || wordInfo.IsPersonNameContext))
+                    matchIndex = fallbackIndex;
+            }
+
+            if (matchIndex < 0) return null;
+
+            var foundWord = wordList[matchIndex];
+            wordList.RemoveAt(matchIndex);
+            if (wordList.Count == 0)
+                wordsByText.Remove(wordInfo.Text);
+
+            return foundWord;
+        }
+
+        var keptForms = new HashSet<(int, byte)>(words.Length);
+        foreach (var word in words)
+            keptForms.Add((word.WordId, word.ReadingIndex));
+
         // Pre-filter sentences with insufficient character diversity
         var validSentences = new HashSet<SentenceInfo>(); 
         for (int i = 0; i < sentences.Count; i++)
@@ -147,110 +229,38 @@ public static partial class ExampleSentenceExtractor
 
                 var balancedText = BalanceBrackets(trimmedText, out int bracketPrepend);
 
-                var exampleSentence = new ExampleSentence
-                                      {
-                                          Text = balancedText,
-                                          Position = sentencePositions[sentence],
-                                          Words = new List<ExampleSentenceWord>()
-                                      };
-
-                bool foundAnyWord = false;
+                var picks = new List<(int Position, int WordId, byte ReadingIndex)>();
+                var tokens = new List<SentenceToken>(sentence.Words.Count);
 
                 foreach (var (wordInfo, position, length) in sentence.Words)
                 {
-                    if (!wordsByText.TryGetValue(wordInfo.Text, out var wordList) || wordList.Count <= 0) continue;
+                    int textPosition = position - leadingTrim + bracketPrepend;
+                    var foundWord = TakeTargetWord(wordInfo, wordsByText, textsWithNonNameEntry);
 
-                    // Find best word with matching POS — prefer direct POS match over name-like fallback.
-                    // When multiple DeckWords share the same text and POS (e.g. 身体 as からだ vs しんたい),
-                    // prefer the one whose SudachiReading matches the token's reading.
-                    int matchIndex = -1;
-                    int fallbackIndex = -1;
-                    int posMatchNoReading = -1;
+                    if (foundWord != null)
+                        picks.Add((Math.Clamp(textPosition, 0, 255), foundWord.WordId, foundWord.ReadingIndex));
 
-                    // Priority 0: exact WordId match from parser resolution — avoids assigning
-                    // an example sentence to a wrong DeckWord when the same surface text resolved
-                    // to different WordIds in different sentences (e.g. さっき → 1005180 vs misparse 1299060).
-                    if (wordInfo.ResolvedWordId.HasValue)
-                    {
-                        for (int j = 0; j < wordList.Count; j++)
-                        {
-                            if (wordList[j].WordId == wordInfo.ResolvedWordId.Value && IsPosMatch(wordList[j], wordInfo))
-                            {
-                                matchIndex = j;
-                                break;
-                            }
-                        }
-                    }
+                    // A pick carries the deck word it was matched to, which the fallback matching can resolve differently.
+                    var form = foundWord != null ? (foundWord.WordId, foundWord.ReadingIndex) : wordInfo.KeptForm;
+                    if (form is not { } f || (foundWord == null && !keptForms.Contains(f))) continue;
+                    if (textPosition + length > balancedText.Length ||
+                        !ExampleSentenceTokens.CanEncode(f.WordId, textPosition, length)) continue;
 
-                    if (matchIndex == -1)
-                    {
-                        for (int j = 0; j < wordList.Count; j++)
-                        {
-                            if (IsPosMatch(wordList[j], wordInfo))
-                            {
-                                if (!string.IsNullOrEmpty(wordInfo.Reading) &&
-                                    !string.IsNullOrEmpty(wordList[j].SudachiReading) &&
-                                    wordList[j].SudachiReading == wordInfo.Reading)
-                                {
-                                    matchIndex = j;
-                                    break;
-                                }
-
-                                if (posMatchNoReading == -1)
-                                    posMatchNoReading = j;
-                            }
-
-                            if (fallbackIndex == -1 && IsPosCompatible(wordList[j], wordInfo))
-                                fallbackIndex = j;
-                        }
-
-                        if (matchIndex == -1 && posMatchNoReading >= 0)
-                        {
-                            var fallbackWord = wordList[posMatchNoReading];
-                            bool readingConflict = !string.IsNullOrEmpty(wordInfo.Reading) &&
-                                                   (string.IsNullOrEmpty(fallbackWord.SudachiReading) ||
-                                                    fallbackWord.SudachiReading != wordInfo.Reading);
-                            if (!readingConflict)
-                                matchIndex = posMatchNoReading;
-                        }
-
-                        // Only use the name-like fallback when either:
-                        // - this surface text has no competing non-Name DeckWord (pure name word), OR
-                        // - the token is in person name context (followed by さん/くん/etc.)
-                        if (matchIndex == -1 &&
-                            (!textsWithNonNameEntry.Contains(wordInfo.Text) || wordInfo.IsPersonNameContext))
-                            matchIndex = fallbackIndex;
-                    }
-
-                    // If we found a match, add it and remove from the list
-                    if (matchIndex >= 0)
-                    {
-                        var foundWord = wordList[matchIndex];
-                        exampleSentence.Words.Add(new ExampleSentenceWord
-                                                  {
-                                                      WordId = foundWord.WordId, ReadingIndex = foundWord.ReadingIndex,
-                                                      Position = (byte)Math.Clamp(position - leadingTrim + bracketPrepend, 0, 255),
-                                                      Length = (byte)Math.Min(length, 255)
-                                                  });
-
-                        foundAnyWord = true;
-
-                        // Remove the matched word from the list
-                        wordList.RemoveAt(matchIndex);
-
-                        // Remove empty lists to avoid future lookups
-                        if (wordList.Count == 0)
-                        {
-                            wordsByText.Remove(wordInfo.Text);
-                        }
-                    }
+                    tokens.Add(new SentenceToken(f.WordId, f.ReadingIndex, (byte)textPosition, (byte)length,
+                                                 IsTarget: foundWord != null,
+                                                 IsFunctionWord: wordInfo.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary));
                 }
 
-                if (foundAnyWord)
+                if (picks.Count > 0)
                 {
-                    exampleSentence.Difficulty = SentenceDifficultyScorer.Score(
-                        sentence, exampleSentence.Words, formFreqRanks, wordFreqRanks);
-                    exampleSentences.Add(exampleSentence);
+                    exampleSentences.Add(new ExampleSentence
+                    {
+                        Text = balancedText,
+                        Position = sentencePositions[sentence],
+                        Difficulty = SentenceDifficultyScorer.Score(sentence, picks, formFreqRanks, wordFreqRanks),
+                        Tokens = ExampleSentenceTokens.Encode(tokens),
+                        WordKeys = ExampleSentenceTokens.WordKeys(tokens, Random.Shared.Next(ExampleSentenceTokens.FineBucketCount))
+                    });
                 }
 
                 usedSentences.Add(sentence);

@@ -52,7 +52,8 @@ public class MediaDeckController(
     Jiten.Core.Services.DeckVectorService deckVectorService,
     DescriptionSearchService descriptionSearchService,
     MediaTitleSearchService titleSearch,
-    IDeckActivityBuffer activityBuffer) : ControllerBase
+    IDeckActivityBuffer activityBuffer,
+    ISentenceTokenService sentenceTokens) : ControllerBase
 {
 
     private class DeckWithOccurrences
@@ -1415,6 +1416,35 @@ public class MediaDeckController(
         };
     }
 
+    private async Task<Dictionary<int, ExampleSentenceDto>> FirstSentencePerTitle(List<int> titleDeckIds, int wordId, byte readingIndex)
+    {
+        var key = ExampleSentenceTokens.WordKey(wordId, readingIndex);
+        var rows = await context.ExampleSentences
+                                .AsNoTracking()
+                                .Join(context.Decks.AsNoTracking(), es => es.DeckId, d => d.DeckId, (es, d) => new { es, d })
+                                .Where(x => titleDeckIds.Contains(x.d.ParentDeckId ?? x.d.DeckId) && x.es.WordKeys.Contains(key))
+                                .GroupBy(x => x.d.ParentDeckId ?? x.d.DeckId)
+                                .Select(g => g.OrderBy(x => x.es.SentenceId)
+                                              .Select(x => new { TitleId = g.Key, x.es.SentenceId, x.es.Text, x.es.Tokens })
+                                              .First())
+                                .ToListAsync();
+
+        var furigana = await sentenceTokens.BuildFuriganaDtosAsync(rows.Select(r => (r.SentenceId, r.Text, (byte[]?)r.Tokens)));
+
+        var result = new Dictionary<int, ExampleSentenceDto>();
+        foreach (var row in rows)
+        {
+            if (ExampleSentenceTokens.FindForm(ExampleSentenceTokens.Decode(row.Tokens), wordId, readingIndex) is not { } token) continue;
+            result[row.TitleId] = new ExampleSentenceDto
+            {
+                SentenceId = row.SentenceId, Text = row.Text, WordPosition = token.Position, WordLength = token.Length,
+                Furigana = furigana.GetValueOrDefault(row.SentenceId)
+            };
+        }
+
+        return result;
+    }
+
     private async Task<PaginatedResponse<List<DeckDto>>> HandleWordBasedQuery(
         IQueryable<DeckWithOccurrences> projectedQuery, int wordId, int readingIndex, string sortBy, SortOrder sortOrder, int offset,
         int pageSize, Dictionary<int, float> coverageDict, Dictionary<int, float> uniqueCoverageDict,
@@ -1487,30 +1517,7 @@ public class MediaDeckController(
 
         var targetDeckIds = paginatedResults.Select(r => r.Deck.DeckId).ToList();
 
-        var minimalExamples = await context.ExampleSentences
-                                           .AsNoTracking()
-                                           .Join(context.Decks.AsNoTracking(),
-                                                 es => es.DeckId,
-                                                 d => d.DeckId,
-                                                 (es, d) => new { es, d })
-                                           .Where(x => targetDeckIds.Contains(x.d.ParentDeckId ?? x.d.DeckId))
-                                           .Select(x => new
-                                                        {
-                                                            EffectiveDeckId = x.d.ParentDeckId ?? x.d.DeckId, x.es.SentenceId, x.es.Text, Match = x.es.Words
-                                                                .Where(w => w.WordId == wordId && w.ReadingIndex == readingIndex)
-                                                                .Select(w => new { w.Position, w.Length })
-                                                                .FirstOrDefault()
-                                                        })
-                                           .Where(x => x.Match != null)
-                                           .GroupBy(x => x.EffectiveDeckId)
-                                           .Select(g => g.First())
-                                           .ToListAsync();
-
-        // Create dictionary for O(1) lookup instead of O(n) per deck
-        var exampleSentencesByDeck = minimalExamples
-            .ToDictionary(
-                          x => x.EffectiveDeckId,
-                          x => new ExampleSentenceDto { SentenceId = x.SentenceId, Text = x.Text, WordPosition = x.Match!.Position, WordLength = x.Match!.Length });
+        var exampleSentencesByDeck = await FirstSentencePerTitle(targetDeckIds, wordId, (byte)readingIndex);
 
         var dtos = paginatedResults
                    .Select(r => new DeckDto(

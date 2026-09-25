@@ -2,6 +2,7 @@
   import type { CardLayoutBlock, ExampleSentenceBlockOptions, UserExampleSentenceDto } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { sanitiseHtml } from '~/utils/sanitiseHtml';
+  import { sentenceRubyHtml, visibleFurigana } from '~/utils/sentenceRuby';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
   import InlineSentenceEditor from '~/components/InlineSentenceEditor.vue';
   import { useToast } from 'primevue/usetoast';
@@ -24,6 +25,8 @@
 
   const sizeClass = computed(() => (opts.value.size === 'small' ? 'text-sm' : opts.value.size === 'large' ? 'text-lg' : 'text-base'));
 
+  const hiddenWordId = computed(() => (isFlipped.value ? undefined : card.value?.wordId));
+
   const previewHtml = computed(() => {
     if (!isPreview) return '';
     const { text, word } = sample!.example;
@@ -39,6 +42,10 @@
       return parseCustomSentenceHtml(ex.customText);
     }
     const { text, wordPosition, wordLength } = ex;
+    const furigana = visibleFurigana(ex.furigana, opts.value.furigana, hiddenWordId.value);
+    if (furigana.length > 0) {
+      return sanitiseHtml(sentenceRubyHtml(text, wordPosition, wordLength, furigana));
+    }
     if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) {
       return text;
     }
@@ -245,7 +252,14 @@
       </button>
 
       <div v-if="extraSentencesExpanded" class="mt-2 space-y-2">
-        <ExampleSentenceEntry v-for="(sentence, i) in extraSentences" :key="i" :example-sentence="sentence" :show-source="true" />
+        <ExampleSentenceEntry
+          v-for="(sentence, i) in extraSentences"
+          :key="i"
+          :example-sentence="sentence"
+          :show-source="true"
+          :furigana-mode="opts.furigana"
+          :hidden-word-id="hiddenWordId"
+        />
         <div v-if="isLoadingMoreSentences" class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r">
           <div class="h-5 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
         </div>

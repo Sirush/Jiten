@@ -5152,8 +5152,11 @@ namespace Jiten.Parser
             }
 
             var result = new List<DeckWord>(corrected.Count);
-            foreach (var (_, deckWord) in kept)
+            foreach (var (i, deckWord) in kept)
+            {
+                flatTokens[i].KeptForm = (deckWord.WordId, deckWord.ReadingIndex);
                 result.Add(deckWord);
+            }
 
             while (ci < corrected.Count)
                 result.Add(corrected[ci++]);

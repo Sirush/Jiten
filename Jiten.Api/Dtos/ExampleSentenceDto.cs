@@ -12,6 +12,19 @@ public class ExampleSentenceDto
 
     /// <summary>Set only by the authenticated study endpoint: the sentence comes from one of the caller's study decks.</summary>
     public bool FromStudyDeck { get; set; }
+
+    /// <summary>Null for sentences parsed before token spans existed.</summary>
+    public List<SentenceFuriganaDto>? Furigana { get; set; }
+}
+
+/// <summary>One ruby group over the sentence Text. Known is the caller's own state for the word and false when signed out.</summary>
+public class SentenceFuriganaDto
+{
+    public int Position { get; set; }
+    public int Length { get; set; }
+    public string Reading { get; set; } = "";
+    public int WordId { get; set; }
+    public bool Known { get; set; }
 }
 
 public class ExampleSentencesByDifficultyResponse

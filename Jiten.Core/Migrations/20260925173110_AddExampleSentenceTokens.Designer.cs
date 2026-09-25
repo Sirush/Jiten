@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Jiten.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using NpgsqlTypes;
 namespace Jiten.Core.Migrations
 {
     [DbContext(typeof(JitenDbContext))]
-    partial class JitenDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260925173110_AddExampleSentenceTokens")]
+    partial class AddExampleSentenceTokens
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -784,14 +787,20 @@ namespace Jiten.Core.Migrations
                         .HasColumnType("text");
 
                     b.Property<byte[]>("Tokens")
-                        .IsRequired()
                         .HasColumnType("bytea");
 
                     b.PrimitiveCollection<int[]>("WordKeys")
-                        .IsRequired()
                         .HasColumnType("integer[]");
 
                     b.HasKey("SentenceId");
+
+                    b.HasIndex("DeckId")
+                        .HasDatabaseName("IX_ExampleSentence_DeckId");
+
+                    b.HasIndex("SentenceId")
+                        .HasDatabaseName("IX_ExampleSentence_SentenceId_IncDeckId");
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("SentenceId"), new[] { "DeckId" });
 
                     b.HasIndex("WordKeys")
                         .HasDatabaseName("IX_ExampleSentence_WordKeys");
@@ -802,6 +811,33 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_ExampleSentence_DeckId_Difficulty");
 
                     b.ToTable("ExampleSentences", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.ExampleSentenceWord", b =>
+                {
+                    b.Property<long>("ExampleSentenceId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.Property<byte>("Position")
+                        .HasColumnType("smallint");
+
+                    b.Property<byte>("Length")
+                        .HasColumnType("smallint");
+
+                    b.Property<byte>("ReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("ExampleSentenceId", "WordId", "Position");
+
+                    b.HasIndex("WordId", "ReadingIndex")
+                        .HasDatabaseName("IX_ExampleSentenceWord_WordIdReadingIndex_IncSentenceId");
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("WordId", "ReadingIndex"), new[] { "ExampleSentenceId" });
+
+                    b.ToTable("ExampleSentenceWords", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.ExternalGenreMapping", b =>
@@ -2676,6 +2712,25 @@ namespace Jiten.Core.Migrations
                     b.Navigation("Deck");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.ExampleSentenceWord", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.ExampleSentence", "ExampleSentence")
+                        .WithMany("Words")
+                        .HasForeignKey("ExampleSentenceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Jiten.Core.Data.JMDict.JmDictWord", "Word")
+                        .WithMany()
+                        .HasForeignKey("WordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExampleSentence");
+
+                    b.Navigation("Word");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.ExternalTagMapping", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Tag", "Tag")
@@ -2974,6 +3029,11 @@ namespace Jiten.Core.Migrations
             modelBuilder.Entity("Jiten.Core.Data.DifficultyRankGroup", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.ExampleSentence", b =>
+                {
+                    b.Navigation("Words");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWord", b =>

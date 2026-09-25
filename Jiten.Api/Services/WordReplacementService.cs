@@ -2,6 +2,7 @@ using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Core;
+using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
@@ -240,22 +241,8 @@ public class WordReplacementService(
                 WHERE ""WordId"" = {2} AND ""ReadingIndex"" = {3}",
                 newWordId, newReadingIndex, oldWordId, oldReadingIndex);
 
-            // Step 4: ExampleSentenceWords - Delete potential conflicts (extremely rare)
-            await context.Database.ExecuteSqlRawAsync(@"
-                DELETE FROM jiten.""ExampleSentenceWords"" wrong
-                USING jiten.""ExampleSentenceWords"" correct
-                WHERE wrong.""WordId"" = {0}
-                  AND correct.""WordId"" = {1}
-                  AND wrong.""ExampleSentenceId"" = correct.""ExampleSentenceId""
-                  AND wrong.""Position"" = correct.""Position""",
-                oldWordId, newWordId);
-
-            // Step 5: ExampleSentenceWords - Update remaining
-            result.ExampleSentenceWordsUpdated = await context.Database.ExecuteSqlRawAsync(@"
-                UPDATE jiten.""ExampleSentenceWords""
-                SET ""WordId"" = {0}, ""ReadingIndex"" = {1}
-                WHERE ""WordId"" = {2} AND ""ReadingIndex"" = {3}",
-                newWordId, newReadingIndex, oldWordId, oldReadingIndex);
+            result.ExampleSentenceWordsUpdated = await RewriteSentenceTokens(
+                context, oldWordId, oldReadingIndex, token => [token with { WordId = newWordId, ReadingIndex = newReadingIndex }]);
 
             // Step 6: FsrsCards - Only update if user doesn't have the new reading already
             result.FsrsCardsUpdated = await userContext.Database.ExecuteSqlRawAsync(@"
@@ -410,9 +397,7 @@ public class WordReplacementService(
             .Distinct()
             .CountAsync();
 
-        // Count ExampleSentenceWords
-        result.ExampleSentenceWordsUpdated = await context.ExampleSentenceWords
-            .CountAsync(esw => esw.WordId == oldWordId && esw.ReadingIndex == oldReadingIndex);
+        result.ExampleSentenceWordsUpdated = await CountSentencesWithForm(context, oldWordId, oldReadingIndex);
 
         // Count FsrsCards - those that would be updated (user doesn't have new reading)
         var usersWithOld = userContext.FsrsCards
@@ -584,74 +569,30 @@ public class WordReplacementService(
                 WHERE ""WordId"" = {0} AND ""ReadingIndex"" = {1}",
                 oldWordId, oldReadingIndex);
 
-            // Handle ExampleSentenceWords - need to calculate positions
-            var oldExampleWords = await context.ExampleSentenceWords
-                .Where(esw => esw.WordId == oldWordId && esw.ReadingIndex == oldReadingIndex)
-                .Select(esw => new { esw.ExampleSentenceId, esw.Position, esw.Length })
-                .ToListAsync();
+            // Look up reading lengths for each new word
+            var newWordIds = newWords.Select(w => w.WordId).ToList();
+            var replForms = await context.WordForms
+                .AsNoTracking()
+                .Where(wf => newWordIds.Contains(wf.WordId))
+                .ToDictionaryAsync(wf => (wf.WordId, wf.ReadingIndex));
 
-            result.ExampleSentenceWordsDeleted = oldExampleWords.Count;
-
-            if (oldExampleWords.Count > 0)
+            // Calculate lengths for each new word
+            var wordLengths = new List<int>();
+            foreach (var newWord in newWords)
             {
-                // Look up reading lengths for each new word
-                var newWordIds = newWords.Select(w => w.WordId).ToList();
-                var replForms = await context.WordForms
-                    .AsNoTracking()
-                    .Where(wf => newWordIds.Contains(wf.WordId))
-                    .ToDictionaryAsync(wf => (wf.WordId, wf.ReadingIndex));
-
-                // Calculate lengths for each new word
-                var wordLengths = new List<int>();
-                foreach (var newWord in newWords)
+                if (replForms.TryGetValue((newWord.WordId, (short)newWord.ReadingIndex), out var form))
                 {
-                    if (replForms.TryGetValue((newWord.WordId, (short)newWord.ReadingIndex), out var form))
-                    {
-                        wordLengths.Add(form.Text.Length);
-                    }
-                    else
-                    {
-                        wordLengths.Add(1);
-                    }
+                    wordLengths.Add(form.Text.Length);
                 }
-
-                // Insert new ExampleSentenceWords with calculated positions
-                foreach (var oldEsw in oldExampleWords)
+                else
                 {
-                    int cumulativePos = oldEsw.Position;
-                    for (int i = 0; i < newWords.Count; i++)
-                    {
-                        var newWord = newWords[i];
-                        var length = wordLengths[i];
-                        var bytePos = (byte)cumulativePos;
-
-                        // Check if this entry already exists (conflict)
-                        var exists = await context.ExampleSentenceWords
-                            .AnyAsync(e => e.ExampleSentenceId == oldEsw.ExampleSentenceId
-                                        && e.WordId == newWord.WordId
-                                        && e.Position == bytePos);
-
-                        if (!exists)
-                        {
-                            await context.Database.ExecuteSqlRawAsync(@"
-                                INSERT INTO jiten.""ExampleSentenceWords""
-                                (""ExampleSentenceId"", ""WordId"", ""Position"", ""Length"", ""ReadingIndex"")
-                                VALUES ({0}, {1}, {2}, {3}, {4})",
-                                oldEsw.ExampleSentenceId, newWord.WordId, bytePos, length, newWord.ReadingIndex);
-
-                            result.ExampleSentenceWordsInserted++;
-                        }
-
-                        cumulativePos += length;
-                    }
+                    wordLengths.Add(1);
                 }
-
-                // Delete old ExampleSentenceWords
-                await context.Database.ExecuteSqlRawAsync(@"
-                    DELETE FROM jiten.""ExampleSentenceWords""
-                    WHERE ""WordId"" = {0} AND ""ReadingIndex"" = {1}",
-                    oldWordId, oldReadingIndex);
             }
+
+            result.ExampleSentenceWordsDeleted = await RewriteSentenceTokens(
+                context, oldWordId, oldReadingIndex, token => SplitToken(token, newWords, wordLengths));
+            result.ExampleSentenceWordsInserted = result.ExampleSentenceWordsDeleted * newWords.Count;
 
             // Update UniqueWordCount on affected decks
             if (affectedDeckIds.Count > 0)
@@ -739,11 +680,7 @@ public class WordReplacementService(
             result.DeckWordsInserted += result.DeckWordsDeleted - mergeCount;
         }
 
-        // Count ExampleSentenceWords
-        result.ExampleSentenceWordsDeleted = await context.ExampleSentenceWords
-            .CountAsync(esw => esw.WordId == oldWordId && esw.ReadingIndex == oldReadingIndex);
-
-        // For split, each deleted entry produces N new entries (one per new word)
+        result.ExampleSentenceWordsDeleted = await CountSentencesWithForm(context, oldWordId, oldReadingIndex);
         result.ExampleSentenceWordsInserted = result.ExampleSentenceWordsDeleted * newWords.Count;
 
         // Count parent decks
@@ -806,11 +743,7 @@ public class WordReplacementService(
                 WHERE ""WordId"" = {0} AND ""ReadingIndex"" = {1}",
                 wordId, readingIndex);
 
-            // Delete ExampleSentenceWords
-            result.ExampleSentenceWordsDeleted = await context.Database.ExecuteSqlRawAsync(@"
-                DELETE FROM jiten.""ExampleSentenceWords""
-                WHERE ""WordId"" = {0} AND ""ReadingIndex"" = {1}",
-                wordId, readingIndex);
+            result.ExampleSentenceWordsDeleted = await RewriteSentenceTokens(context, wordId, readingIndex, _ => []);
 
             // Update UniqueWordCount on affected decks
             if (affectedDeckIds.Count > 0)
@@ -873,8 +806,7 @@ public class WordReplacementService(
             .Distinct()
             .CountAsync();
 
-        result.ExampleSentenceWordsDeleted = await context.ExampleSentenceWords
-            .CountAsync(esw => esw.WordId == wordId && esw.ReadingIndex == readingIndex);
+        result.ExampleSentenceWordsDeleted = await CountSentencesWithForm(context, wordId, readingIndex);
 
         var affectedDeckIds = await context.DeckWords
             .Where(dw => dw.WordId == wordId && dw.ReadingIndex == readingIndex)
@@ -889,5 +821,79 @@ public class WordReplacementService(
             .CountAsync();
 
         return result;
+    }
+
+    private const int TokenRewriteChunk = 2000;
+
+    /// <summary>Rewrites the form's tokens in every sentence holding it, in the caller's transaction, keeping each sampling bucket.</summary>
+    private static async Task<int> RewriteSentenceTokens(JitenDbContext context, int wordId, byte readingIndex,
+                                                         Func<SentenceToken, IEnumerable<SentenceToken>> rewrite)
+    {
+        var key = ExampleSentenceTokens.WordKey(wordId, readingIndex);
+        var sentenceIds = await context.ExampleSentences
+            .Where(s => s.WordKeys.Contains(key))
+            .Select(s => s.SentenceId)
+            .ToListAsync();
+
+        int changed = 0;
+        foreach (var chunk in sentenceIds.Chunk(TokenRewriteChunk))
+        {
+            var sentences = await context.ExampleSentences
+                .Where(s => chunk.Contains(s.SentenceId))
+                .ToListAsync();
+
+            foreach (var sentence in sentences)
+            {
+                var rewritten = new List<SentenceToken>();
+                var seen = new HashSet<(byte Position, int WordKey)>();
+                foreach (var token in ExampleSentenceTokens.Decode(sentence.Tokens))
+                {
+                    var replacements = token.WordId == wordId && token.ReadingIndex == readingIndex
+                        ? rewrite(token)
+                        : [token];
+
+                    foreach (var replacement in replacements)
+                    {
+                        if (seen.Add((replacement.Position, replacement.WordKey)))
+                            rewritten.Add(replacement);
+                    }
+                }
+
+                sentence.Tokens = ExampleSentenceTokens.Encode(rewritten, ExampleSentenceTokens.IsPartial(sentence.Tokens));
+                sentence.WordKeys = ExampleSentenceTokens.WordKeys(rewritten,
+                    ExampleSentenceTokens.FineBucketOf(sentence.WordKeys) ?? Random.Shared.Next(ExampleSentenceTokens.FineBucketCount));
+                changed++;
+            }
+
+            await context.SaveChangesAsync();
+            context.ChangeTracker.Clear();
+        }
+
+        return changed;
+    }
+
+    private static Task<int> CountSentencesWithForm(JitenDbContext context, int wordId, byte readingIndex)
+    {
+        var key = ExampleSentenceTokens.WordKey(wordId, readingIndex);
+        return context.ExampleSentences.CountAsync(s => s.WordKeys.Contains(key));
+    }
+
+    /// <summary>Lays the new words end to end from the old token's start, clipped to its span, as the link rows are.</summary>
+    private static IEnumerable<SentenceToken> SplitToken(SentenceToken token, List<WordReadingPair> newWords, List<int> wordLengths)
+    {
+        int end = token.Position + token.Length;
+        int position = token.Position;
+        for (int i = 0; i < newWords.Count && position < end; i++)
+        {
+            int length = Math.Min(wordLengths[i], end - position);
+            if (ExampleSentenceTokens.CanEncode(newWords[i].WordId, position, length))
+                yield return token with
+                {
+                    WordId = newWords[i].WordId, ReadingIndex = newWords[i].ReadingIndex,
+                    Position = (byte)position, Length = (byte)length, IsFunctionWord = false
+                };
+
+            position += wordLengths[i];
+        }
     }
 }

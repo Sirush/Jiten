@@ -48,6 +48,15 @@ ruby rt {
   font-size: max(0.5em, 10px);
 }
 
+ruby {
+  ruby-align: center;
+}
+
+ruby rt,
+ruby rp {
+  user-select: none;
+}
+
 .p-card {
   border: 1px solid #e6e6e6;
 }

@@ -30,7 +30,6 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
 
         await jitenDb.DeckWords.Where(dw => dw.WordId == WordId).ExecuteDeleteAsync();
-        await jitenDb.ExampleSentenceWords.ExecuteDeleteAsync();
         await jitenDb.ExampleSentences.ExecuteDeleteAsync();
         await jitenDb.JMDictWords.Where(w => w.WordId == WordId).ExecuteDeleteAsync();
         await userDb.UserStudyDecks.Where(d => d.UserId == TestUsers.UserA).ExecuteDeleteAsync();
@@ -91,16 +90,21 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
 
     private static async Task<long> AddSentence(JitenDbContext db, int deckId, string text, float difficulty)
     {
-        var sentence = new ExampleSentence { DeckId = deckId, Text = text, Difficulty = difficulty };
+        var sentence = NewSentence(deckId, text, difficulty, WordId);
         db.ExampleSentences.Add(sentence);
         await db.SaveChangesAsync();
-
-        db.ExampleSentenceWords.Add(new ExampleSentenceWord
-        {
-            ExampleSentenceId = sentence.SentenceId, WordId = WordId, ReadingIndex = 0, Position = 0, Length = 2,
-        });
-        await db.SaveChangesAsync();
         return sentence.SentenceId;
+    }
+
+    private static ExampleSentence NewSentence(int deckId, string text, float difficulty, int wordId)
+    {
+        SentenceToken[] tokens = [new(wordId, 0, 0, 2, IsTarget: true, IsFunctionWord: false)];
+        return new ExampleSentence
+        {
+            DeckId = deckId, Text = text, Difficulty = difficulty,
+            Tokens = ExampleSentenceTokens.Encode(tokens),
+            WordKeys = ExampleSentenceTokens.WordKeys(tokens, Random.Shared.Next(ExampleSentenceTokens.FineBucketCount)),
+        };
     }
 
     private async Task<SentencesResponse> Query(object payload, string? userId = TestUsers.UserA)
@@ -357,15 +361,9 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
             var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
             await jitenDb.JMDictWords.Where(w => w.WordId == bigWordId).ExecuteDeleteAsync();
             jitenDb.JMDictWords.Add(new JmDictWord { WordId = bigWordId, PartsOfSpeech = ["noun"] });
-            jitenDb.ExampleSentences.Add(new ExampleSentence
-            {
-                SentenceId = bigSentenceId, DeckId = _otherDeckIds[0], Text = "big id sentence", Difficulty = 0.2f,
-            });
-            await jitenDb.SaveChangesAsync();
-            jitenDb.ExampleSentenceWords.Add(new ExampleSentenceWord
-            {
-                ExampleSentenceId = bigSentenceId, WordId = bigWordId, ReadingIndex = 0, Position = 0, Length = 2,
-            });
+            var sentence = NewSentence(_otherDeckIds[0], "big id sentence", 0.2f, bigWordId);
+            sentence.SentenceId = bigSentenceId;
+            jitenDb.ExampleSentences.Add(sentence);
             await jitenDb.SaveChangesAsync();
         }
 

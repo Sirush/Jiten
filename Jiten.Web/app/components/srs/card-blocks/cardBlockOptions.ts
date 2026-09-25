@@ -16,7 +16,14 @@ import type {
 } from '~/types';
 
 export const headwordDefaults: HeadwordBlockOptions = { furigana: 'afterFlip', showAudioButton: true, size: 'medium' };
-export const exampleSentenceDefaults: ExampleSentenceBlockOptions = { blur: false, showSource: true, showActions: true, unblurOnFlip: false, size: 'medium' };
+export const exampleSentenceDefaults: ExampleSentenceBlockOptions = {
+  blur: false,
+  showSource: true,
+  showActions: true,
+  unblurOnFlip: false,
+  size: 'medium',
+  furigana: 'unknown',
+};
 export const frequencyRankDefaults: FrequencyRankBlockOptions = { onlyAfterFlip: true };
 export const definitionsDefaults: DefinitionsBlockOptions = { maxDefinitions: null, size: 'medium', spoiler: false };
 export const customMeaningDefaults: CustomMeaningBlockOptions = { size: 'medium', spoiler: false };

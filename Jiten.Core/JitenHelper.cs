@@ -6,6 +6,7 @@ using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace Jiten.Core;
 
@@ -347,7 +348,7 @@ public static class JitenHelper
 
                 // Step 2: COPY sentences
                 await using (var writer = await conn.BeginBinaryImportAsync(
-                    @"COPY jiten.""ExampleSentences"" (""SentenceId"", ""Text"", ""Position"", ""DeckId"", ""Difficulty"") FROM STDIN (FORMAT BINARY)"))
+                    @"COPY jiten.""ExampleSentences"" (""SentenceId"", ""Text"", ""Position"", ""DeckId"", ""Difficulty"", ""Tokens"", ""WordKeys"") FROM STDIN (FORMAT BINARY)"))
                 {
                     var idx = 0;
                     foreach (var sentence in exampleSentences)
@@ -360,42 +361,14 @@ public static class JitenHelper
                         await writer.WriteAsync(deckId);
                         await writer.WriteAsync(sentence.Difficulty);
 
+                        await writer.WriteAsync(sentence.Tokens, NpgsqlDbType.Bytea);
+                        await writer.WriteAsync(sentence.WordKeys, NpgsqlDbType.Array | NpgsqlDbType.Integer);
+
                         sentence.SentenceId = id;
                         sentence.DeckId = deckId;
                     }
 
                     await writer.CompleteAsync();
-                }
-
-                // Collect example sentence words and assign ExampleSentenceId
-                var allWords = new List<ExampleSentenceWord>();
-                foreach (var sentence in exampleSentences)
-                {
-                    foreach (var word in sentence.Words)
-                    {
-                        word.ExampleSentenceId = sentence.SentenceId;
-                        allWords.Add(word);
-                    }
-                }
-
-                // Step 3: COPY words if any
-                if (allWords.Any())
-                {
-                    await using (var wordWriter = await conn.BeginBinaryImportAsync(
-                        @"COPY jiten.""ExampleSentenceWords"" (""ExampleSentenceId"", ""WordId"", ""ReadingIndex"", ""Position"", ""Length"") FROM STDIN (FORMAT BINARY)"))
-                    {
-                        foreach (var w in allWords)
-                        {
-                            await wordWriter.StartRowAsync();
-                            await wordWriter.WriteAsync(w.ExampleSentenceId);
-                            await wordWriter.WriteAsync(w.WordId);
-                            await wordWriter.WriteAsync(w.ReadingIndex);
-                            await wordWriter.WriteAsync(w.Position);
-                            await wordWriter.WriteAsync(w.Length);
-                        }
-
-                        await wordWriter.CompleteAsync();
-                    }
                 }
             }
         }
@@ -404,7 +377,7 @@ public static class JitenHelper
             CopySemaphore.Release();
         }
 
-        Console.WriteLine($"[{DateTime.UtcNow:O}] Bulk insert (example sentences+words) took {timer.ElapsedMilliseconds} ms for DeckId {deckId} with {exampleSentences.Count} sentences.");
+        Console.WriteLine($"[{DateTime.UtcNow:O}] Bulk insert (example sentences) took {timer.ElapsedMilliseconds} ms for DeckId {deckId} with {exampleSentences.Count} sentences.");
     }
 
     private static (List<DeckWord> deckWords, List<ExampleSentence> exampleSentences) UpdateDeckMetadata(JitenDbContext context, Deck existingDeck, Deck deck)

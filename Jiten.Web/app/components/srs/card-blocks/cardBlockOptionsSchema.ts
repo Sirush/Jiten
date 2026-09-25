@@ -46,6 +46,16 @@ export const blockOptionsSchema: Partial<Record<CardBlockType, OptionControl[]>>
     { key: 'showAudioButton', label: 'Audio button', type: 'toggle' },
   ],
   exampleSentence: [
+    {
+      key: 'furigana',
+      label: 'Furigana',
+      type: 'select',
+      options: [
+        { label: 'Words you don’t know', value: 'unknown' },
+        { label: 'All words', value: 'all' },
+        { label: 'Hidden', value: 'off' },
+      ],
+    },
     { key: 'blur', label: 'Blur until clicked', type: 'toggle' },
     { key: 'unblurOnFlip', label: 'Reveal on flip', type: 'toggle' },
     sizeControl,

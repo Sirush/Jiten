@@ -574,7 +574,19 @@ export interface ExampleSentence {
   sourceDeck: StudyExampleSourceDto;
   sourceDeckParent?: StudyExampleSourceDto;
   fromStudyDeck?: boolean;
+  furigana?: SentenceFurigana[] | null;
 }
+
+/** A ruby group over a sentence's text; `known` is the signed-in user's own state for the word. */
+export interface SentenceFurigana {
+  position: number;
+  length: number;
+  reading: string;
+  wordId: number;
+  known: boolean;
+}
+
+export type SentenceFuriganaMode = 'off' | 'unknown' | 'all';
 
 export interface UserExampleSentenceDto {
   userExampleSentenceId: number;
@@ -1408,6 +1420,7 @@ export interface StudyExampleSentenceDto {
   isCustom?: boolean;
   customSource?: string;
   customText?: string;
+  furigana?: SentenceFurigana[] | null;
 }
 
 export interface StudyExampleSourceDto {
@@ -2108,6 +2121,7 @@ export interface ExampleSentenceBlockOptions {
   showActions: boolean;
   unblurOnFlip: boolean;
   size: CardTextSize;
+  furigana: SentenceFuriganaMode;
 }
 
 export interface FrequencyRankBlockOptions {

@@ -3990,7 +3990,8 @@ public partial class StudyController(
 
     [HttpPost("card-examples")]
     [SwaggerOperation(Summary = "Get example sentences for specific word pairs")]
-    public async Task<IResult> GetCardExamples([FromBody] CardExamplesRequest request)
+    public async Task<IResult> GetCardExamples([FromBody] CardExamplesRequest request,
+                                               [FromServices] ISentenceTokenService sentenceTokens)
     {
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
@@ -4041,148 +4042,54 @@ public partial class StudyController(
                 .ToArrayAsync();
         }
 
-        var remainingWordIds = remainingPairs.Select(p => p.WordId).ToArray();
-        var remainingReadingIndexes = remainingPairs.Select(p => (short)p.ReadingIndex).ToArray();
-        var wordIds = remainingWordIds.Distinct().ToList();
+        var pairForms = remainingPairs.Select(p => (p.WordId, ReadingIndex: (byte)p.ReadingIndex)).Distinct().ToList();
 
-        var isNpgsql = context.Database.ProviderName?.Contains("Npgsql") == true;
-
-        List<long> studyExampleIds;
-        List<long> fallbackExampleIds;
-        if (isNpgsql)
-        {
-            // DeckWords answers "which study decks hold which form" from one covering index, so forms no
-            // study deck contains never reach the sentence tables and the study query is skipped outright.
-            var held = studyDeckIdArray.Length > 0
-                ? await context.Database
-                    .SqlQueryRaw<HeldForm>(@"
-                        SELECT dw.""WordId"" AS ""WordId"", dw.""ReadingIndex"" AS ""ReadingIndex"", dw.""DeckId"" AS ""DeckId""
-                        FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
-                        JOIN jiten.""DeckWords"" dw
-                          ON dw.""WordId"" = v.wid AND dw.""ReadingIndex"" = v.ri AND dw.""DeckId"" = ANY({2})
-                    ", remainingWordIds, remainingReadingIndexes, studyDeckIdArray)
-                    .ToListAsync()
-                : [];
-
-            // The study decks' sentence ids are materialised once and hash-joined against the forms' sentence
-            // ids: both sides are single index range scans. Joining ExampleSentences row by row instead probes
-            // it once per candidate sentence, ~6k per common word, which is what made this endpoint slow.
-            // The window keeps several ids per form so a form covered by more than one study deck can be
-            // picked among in memory. Both pools are sampled with random(): ordering by id would pin common
-            // words to the same handful of oldest sentences.
-            var heldForms = held.Select(h => (h.WordId, h.ReadingIndex)).Distinct().ToList();
-            studyExampleIds = heldForms.Count > 0
-                ? await context.Database
-                    .SqlQueryRaw<long>(@"
-                        WITH deck_sentences AS MATERIALIZED (
-                            SELECT es.""SentenceId"" FROM jiten.""ExampleSentences"" es WHERE es.""DeckId"" = ANY({2})
-                        )
-                        SELECT t.""ExampleSentenceId""
-                        FROM (
-                            SELECT esw.""ExampleSentenceId"",
-                                   row_number() OVER (PARTITION BY esw.""WordId"", esw.""ReadingIndex""
-                                                      ORDER BY random()) AS rn
-                            FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
-                            JOIN jiten.""ExampleSentenceWords"" esw
-                              ON esw.""WordId"" = v.wid AND esw.""ReadingIndex"" = v.ri
-                            JOIN deck_sentences ds ON ds.""SentenceId"" = esw.""ExampleSentenceId""
-                        ) t
-                        WHERE t.rn <= {3}
-                    ", heldForms.Select(f => f.WordId).ToArray(), heldForms.Select(f => f.ReadingIndex).ToArray(),
-                        held.Select(h => h.DeckId).Distinct().ToArray(), RandomSourcePoolSize)
-                    .ToListAsync()
-                : [];
-
-            // Always run: the windowed query returns many ids per form, so its row count no longer tells us
-            // which forms it covered, and a form with no study-deck sentence still needs its fallback.
-            fallbackExampleIds = await context.Database
-                .SqlQueryRaw<long>(@"
-                    SELECT esw.""ExampleSentenceId""
-                    FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
-                    CROSS JOIN LATERAL (
-                        SELECT esw2.""ExampleSentenceId""
-                        FROM jiten.""ExampleSentenceWords"" esw2
-                        WHERE esw2.""WordId"" = v.wid AND esw2.""ReadingIndex"" = v.ri
-                        ORDER BY random()
-                        LIMIT {2}
-                    ) esw
-                ", remainingWordIds, remainingReadingIndexes, randomSource ? RandomSourcePoolSize : 1)
-                .ToListAsync();
-        }
-        else
-        {
-            studyExampleIds = studyDeckIdArray.Length > 0
-                ? await context.ExampleSentenceWords
-                    .AsNoTracking()
-                    .Where(esw => wordIds.Contains(esw.WordId))
-                    .Join(context.ExampleSentences.AsNoTracking(),
-                          esw => esw.ExampleSentenceId, es => es.SentenceId,
-                          (esw, es) => new { esw.ExampleSentenceId, es.DeckId })
-                    .Where(x => studyDeckIdArray.Contains(x.DeckId))
-                    .Select(x => x.ExampleSentenceId)
-                    .ToListAsync()
-                : [];
-
-            fallbackExampleIds = randomSource
-                ? await context.ExampleSentenceWords
-                    .AsNoTracking()
-                    .Where(esw => wordIds.Contains(esw.WordId))
-                    .Select(esw => esw.ExampleSentenceId)
-                    .ToListAsync()
-                : await context.ExampleSentenceWords
-                    .AsNoTracking()
-                    .Where(esw => wordIds.Contains(esw.WordId))
-                    .GroupBy(esw => new { esw.WordId, esw.ReadingIndex })
-                    .Select(g => g.Min(esw => esw.ExampleSentenceId))
-                    .ToListAsync();
-        }
+        var studyExampleIds = studyDeckIdArray.Length > 0 ? await StudyDeckCandidates(pairForms, studyDeckIdArray) : [];
+        var fallbackExampleIds = (await SentenceSampler.SampleAsync(context,
+                                                                    pairForms.Select(f => ExampleSentenceTokens.WordKey(f.WordId, f.ReadingIndex)).ToList(),
+                                                                    randomSource ? RandomSourcePoolSize : 1))
+            .Values.SelectMany(ids => ids).ToList();
 
         var exampleIds = studyExampleIds.Union(fallbackExampleIds).Distinct().ToList();
 
         if (exampleIds.Count == 0)
             return Results.Ok(new CardExamplesResponse { Examples = result });
 
-        var exampleWords = await context.ExampleSentenceWords
-            .AsNoTracking()
-            .Where(esw => exampleIds.Contains(esw.ExampleSentenceId)
-                        && wordIds.Contains(esw.WordId))
-            .ToListAsync();
-
-        var studyIdSet = studyExampleIds.ToHashSet();
-
-        // One sentence per form, picked at random: over every candidate in Random mode, over the study-deck
-        // candidates otherwise, so a form several study decks cover is not always answered by the same deck.
-        exampleWords = exampleWords
-            .GroupBy(esw => (esw.WordId, esw.ReadingIndex))
-            .Select(g =>
-            {
-                var pool = randomSource ? g.ToList() : g.Where(e => studyIdSet.Contains(e.ExampleSentenceId)).ToList();
-                return pool.Count > 0
-                    ? pool[Random.Shared.Next(pool.Count)]
-                    : g.OrderBy(e => e.ExampleSentenceId).First();
-            })
-            .ToList();
-        exampleIds = exampleWords.Select(esw => esw.ExampleSentenceId).Distinct().ToList();
-
         var sentences = await context.ExampleSentences
             .AsNoTracking()
             .Where(es => exampleIds.Contains(es.SentenceId))
             .ToDictionaryAsync(es => es.SentenceId);
 
+        var studyIdSet = studyExampleIds.ToHashSet();
 
-        var exampleDeckIds = sentences.Values.Select(s => s.DeckId).Distinct().ToList();
+        // One sentence per form, picked at random: over every candidate in Random mode, over the study-deck
+        // candidates otherwise, so a form several study decks cover is not always answered by the same deck.
+        var matches = FormMatches(sentences.Values, pairForms)
+            .GroupBy(m => (m.WordId, m.ReadingIndex))
+            .Select(g =>
+            {
+                var pool = randomSource ? g.ToList() : g.Where(m => studyIdSet.Contains(m.SentenceId)).ToList();
+                return pool.Count > 0
+                    ? pool[Random.Shared.Next(pool.Count)]
+                    : g.OrderBy(m => m.SentenceId).First();
+            })
+            .ToList();
+
+        var exampleDeckIds = matches.Select(m => sentences[m.SentenceId].DeckId).Distinct().ToList();
         var exampleDecks = await context.Decks.AsNoTracking()
             .Where(d => exampleDeckIds.Contains(d.DeckId)
                         || context.Decks.Any(c => exampleDeckIds.Contains(c.DeckId) && c.ParentDeckId == d.DeckId))
             .Select(d => new DeckProjection(d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle, d.MediaType, d.ParentDeckId))
             .ToDictionaryAsync(d => d.DeckId);
 
-        foreach (var esw in exampleWords)
-        {
-            if (!sentences.TryGetValue(esw.ExampleSentenceId, out var sentence)) continue;
-            var key = $"{esw.WordId}-{esw.ReadingIndex}";
-            result.TryAdd(key, BuildStudyExampleSentence(esw, sentence, exampleDecks, exampleDecks));
-        }
+        foreach (var match in matches)
+            result.TryAdd($"{match.WordId}-{match.ReadingIndex}", BuildStudyExampleSentence(match, sentences[match.SentenceId], exampleDecks, exampleDecks));
+
+        var corpusExamples = result.Values.Where(e => !e.IsCustom).ToList();
+        var furigana = await sentenceTokens.BuildFuriganaDtosAsync(
+            corpusExamples.Select(e => (e.SentenceId, e.Text, (byte[]?)sentences.GetValueOrDefault(e.SentenceId)?.Tokens)));
+        foreach (var example in corpusExamples)
+            example.Furigana = furigana.GetValueOrDefault(example.SentenceId);
 
         return Results.Ok(new CardExamplesResponse { Examples = result });
     }
@@ -4235,8 +4142,86 @@ public partial class StudyController(
         public int DeckId { get; set; }
     }
 
+    private sealed class KeyedSentenceRow
+    {
+        public long SentenceId { get; set; }
+        public int[] WordKeys { get; set; } = [];
+    }
+
+    private record FormMatch(long SentenceId, int WordId, byte ReadingIndex, byte Position, byte Length);
+
+    /// <summary>Up to a pool of random sentences per form from the given study decks.</summary>
+    private async Task<List<long>> StudyDeckCandidates(List<(int WordId, byte ReadingIndex)> forms, int[] studyDeckIds)
+    {
+        List<KeyedSentenceRow> rows;
+        if (context.Database.ProviderName?.Contains("Npgsql") == true)
+        {
+            // DeckWords answers "which study decks hold which form" from one covering index, so forms no
+            // study deck contains never reach the sentence table and the query is skipped outright.
+            var held = await context.Database
+                .SqlQueryRaw<HeldForm>(@"
+                    SELECT dw.""WordId"" AS ""WordId"", dw.""ReadingIndex"" AS ""ReadingIndex"", dw.""DeckId"" AS ""DeckId""
+                    FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
+                    JOIN jiten.""DeckWords"" dw
+                      ON dw.""WordId"" = v.wid AND dw.""ReadingIndex"" = v.ri AND dw.""DeckId"" = ANY({2})
+                ", forms.Select(f => f.WordId).ToArray(), forms.Select(f => (short)f.ReadingIndex).ToArray(), studyDeckIds)
+                .ToListAsync();
+            if (held.Count == 0) return [];
+
+            var heldKeys = held.Select(h => ExampleSentenceTokens.WordKey(h.WordId, (byte)h.ReadingIndex)).Distinct().ToArray();
+
+            // The held decks' rows are materialised first: letting the planner probe the GIN index instead builds a
+            // bitmap of every sentence holding any of the forms, which for a common word is millions of rows.
+            rows = await context.Database
+                .SqlQueryRaw<KeyedSentenceRow>(@"
+                    WITH deck_rows AS MATERIALIZED (
+                        SELECT es.""SentenceId"", es.""WordKeys"" FROM jiten.""ExampleSentences"" es WHERE es.""DeckId"" = ANY({0})
+                    )
+                    SELECT ""SentenceId"", ""WordKeys"" FROM deck_rows WHERE ""WordKeys"" && {1}",
+                    held.Select(h => h.DeckId).Distinct().ToArray(), heldKeys)
+                .ToListAsync();
+        }
+        else
+        {
+            var keys = forms.Select(f => ExampleSentenceTokens.WordKey(f.WordId, f.ReadingIndex)).ToArray();
+            rows = await context.ExampleSentences
+                .AsNoTracking()
+                .Where(es => studyDeckIds.Contains(es.DeckId) && es.WordKeys.Any(k => keys.Contains(k)))
+                .Select(es => new KeyedSentenceRow { SentenceId = es.SentenceId, WordKeys = es.WordKeys })
+                .ToListAsync();
+        }
+
+        var ids = new List<long>();
+        foreach (var (wordId, readingIndex) in forms)
+        {
+            var key = ExampleSentenceTokens.WordKey(wordId, readingIndex);
+            ids.AddRange(rows.Where(r => Array.BinarySearch(r.WordKeys, key) >= 0)
+                             .Select(r => r.SentenceId)
+                             .OrderBy(_ => Random.Shared.Next())
+                             .Take(RandomSourcePoolSize));
+        }
+
+        return ids;
+    }
+
+    private static List<FormMatch> FormMatches(IEnumerable<ExampleSentence> sentences, List<(int WordId, byte ReadingIndex)> forms)
+    {
+        var matches = new List<FormMatch>();
+        foreach (var sentence in sentences)
+        {
+            var tokens = ExampleSentenceTokens.Decode(sentence.Tokens);
+            foreach (var (wordId, readingIndex) in forms)
+            {
+                if (ExampleSentenceTokens.FindForm(tokens, wordId, readingIndex) is { } token)
+                    matches.Add(new FormMatch(sentence.SentenceId, wordId, readingIndex, token.Position, token.Length));
+            }
+        }
+
+        return matches;
+    }
+
     private static StudyExampleSentenceDto BuildStudyExampleSentence(
-        ExampleSentenceWord exWord,
+        FormMatch match,
         ExampleSentence sentence,
         Dictionary<int, DeckProjection> decks,
         Dictionary<int, DeckProjection> parentDecks)
@@ -4245,8 +4230,8 @@ public partial class StudyController(
         {
             SentenceId = sentence.SentenceId,
             Text = sentence.Text,
-            WordPosition = exWord.Position,
-            WordLength = exWord.Length
+            WordPosition = match.Position,
+            WordLength = match.Length
         };
 
         if (decks.TryGetValue(sentence.DeckId, out var deck))

@@ -255,7 +255,7 @@ public class DictDiffCommands(CliContext context)
         if (parsed.ExampleSentences != null)
         {
             foreach (var sentence in parsed.ExampleSentences)
-            foreach (var w in sentence.Words)
+            foreach (var w in ExampleSentenceTokens.Decode(sentence.Tokens).Where(t => t.IsTarget))
                 snap.Context.TryAdd($"{w.WordId}:{w.ReadingIndex}", sentence.Text);
         }
 

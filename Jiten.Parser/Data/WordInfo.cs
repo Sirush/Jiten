@@ -34,6 +34,9 @@ public class WordInfo
     public bool IsMergedInflection { get; set; }
     public int? ResolvedWordId { get; set; }
 
+    /// Form this occurrence counts as once the misparse gates ran; null for tokens that are not vocabulary.
+    public (int WordId, byte ReadingIndex)? KeptForm { get; set; }
+
     /// Set when Sudachi originally tagged this pure-kana token as an interjection/filler.
     /// POS-relaxed lookup fallbacks must not let such exclamations match kanji-backed words
     /// through their reading keys (イエーイ → 遺影/家居). Survives the POS rewrites that the
@@ -87,6 +90,7 @@ public class WordInfo
         WasReclassifiedFromSuffix = other.WasReclassifiedFromSuffix;
         IsMergedInflection = other.IsMergedInflection;
         ResolvedWordId = other.ResolvedWordId;
+        KeptForm = other.KeptForm;
         SudachiBoundaryMargin = other.SudachiBoundaryMargin;
         IsKanaExclamation = other.IsKanaExclamation;
         IsKatakanaNounSurface = other.IsKatakanaNounSurface;

@@ -463,6 +463,7 @@ builder.Services.Configure<Jiten.Core.Services.CardMediaStorageOptions>(
 builder.Services.AddScoped<ICardMediaQuotaService, CardMediaQuotaService>();
 builder.Services.AddScoped<ICardMediaWriteService, CardMediaWriteService>();
 builder.Services.AddScoped<IExampleSentenceQueryService, ExampleSentenceQueryService>();
+builder.Services.AddScoped<ISentenceTokenService, SentenceTokenService>();
 builder.Services.Configure<Jiten.Core.Services.JitenPlusLimitsOptions>(
     builder.Configuration.GetSection(Jiten.Core.Services.JitenPlusLimitsOptions.SectionName));
 builder.Services.AddScoped<IUserLimitsService, UserLimitsService>();
