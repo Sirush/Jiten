@@ -60,6 +60,7 @@
   const duplicateDecks = ref<DuplicateCheckDeckDto[]>([]);
   const matchingRequests = ref<DuplicateCheckRequestDto[]>([]);
   const attachingRequestId = ref<number | null>(null);
+  const otherMatchingRequests = computed(() => matchingRequests.value.filter((r) => r.id !== fulfillingRequest.value?.id));
 
   const selectedMetadata = ref<Metadata | null>(null);
   const metadataLinkUrls = computed(() => (selectedMetadata.value?.links ?? []).map((l) => l.url).filter((url): url is string => !!url));
@@ -667,9 +668,14 @@
       </div>
 
       <Message v-if="fulfillingRequest" severity="info" :closable="false" class="mb-6">
-        Fulfilling request #{{ fulfillingRequest.id }}:
-        <NuxtLink :to="`/requests/${fulfillingRequest.id}`" target="_blank" class="underline">{{ fulfillingRequest.title }}</NuxtLink>
-        <span v-if="isPrefilling" class="ml-2 text-sm">Loading metadata...</span>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span>
+            Fulfilling request #{{ fulfillingRequest.id }}:
+            <NuxtLink :to="`/requests/${fulfillingRequest.id}`" target="_blank" class="underline">{{ fulfillingRequest.title }}</NuxtLink>
+            <span v-if="isPrefilling" class="ml-2 text-sm">Loading metadata...</span>
+          </span>
+          <Button label="Unlink" icon="pi pi-times" size="small" severity="secondary" text class="ml-auto" @click="detachRequest" />
+        </div>
       </Message>
 
       <!-- Media Type Selection Screen -->
@@ -779,9 +785,9 @@
                       <Tag v-if="deck.isExactMatch" value="Exact match" severity="warn" class="text-xs" />
                     </div>
                   </div>
-                  <div v-if="matchingRequests.length > 0" class="mt-3">
-                    <p class="text-sm font-semibold mb-1">Requests this could fulfil:</p>
-                    <div v-for="req in matchingRequests" :key="req.id" class="flex items-center gap-2 flex-wrap text-sm py-1">
+                  <div v-if="otherMatchingRequests.length > 0" class="mt-3">
+                    <p class="text-sm font-semibold mb-1">{{ fulfillingRequest ? 'Other matching requests:' : 'Requests this could fulfil:' }}</p>
+                    <div v-for="req in otherMatchingRequests" :key="req.id" class="flex items-center gap-2 flex-wrap text-sm py-1">
                       <Tag :value="getRequestStatusText(req.status)" severity="secondary" class="text-xs" />
                       <NuxtLink :to="`/requests/${req.id}`" class="text-primary hover:underline break-words" target="_blank">
                         #{{ req.id }} {{ req.title }}
@@ -789,18 +795,7 @@
                       <span class="text-muted-color">({{ req.upvoteCount }} votes)</span>
                       <Tag v-if="req.isExactMatch" value="Exact match" severity="warn" class="text-xs" />
                       <Button
-                        v-if="fulfillingRequest?.id === req.id"
-                        label="Unlink"
-                        icon="pi pi-times"
-                        size="small"
-                        severity="secondary"
-                        text
-                        class="ml-auto"
-                        @click="detachRequest"
-                      />
-                      <Button
-                        v-else
-                        label="Fulfil this"
+                        :label="fulfillingRequest ? 'Fulfil this instead' : 'Fulfil this'"
                         icon="pi pi-link"
                         size="small"
                         severity="secondary"
