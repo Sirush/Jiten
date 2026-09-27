@@ -13,6 +13,7 @@
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
+  import { pitchColourClasses } from '~/utils/pitchAccent';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
   import CustomExampleSentenceEntry from '~/components/CustomExampleSentenceEntry.vue';
   import Button from 'primevue/button';
@@ -43,6 +44,7 @@
   const { $api } = useNuxtApp();
 
   const store = useJitenStore();
+  const stateColour = useWordStateColour();
   const authStore = useAuthStore();
   const convertToRuby = useConvertToRuby();
 
@@ -94,6 +96,9 @@
   });
 
   const knownStatesOverride = computed(() => fetchedKnownStates.value ?? word.value?.knownStates ?? undefined);
+  const headwordPitchClass = computed(() =>
+    store.pitchAccentColours && word.value ? pitchColourClasses(word.value.mainReading.text, word.value.pitchAccents) : ''
+  );
 
   // The word payload is publicly cached, so the covering entry — which is per-user — is fetched on its own,
   // and only once the state actually says Redundant.
@@ -397,9 +402,28 @@
               <div v-if="conjugationString != null" class="text-gray-500 dark:text-gray-400 text-xs font-noto-sans">(Conjugation: {{ conjugationString }})</div>
               <div class="flex items-center gap-2 min-w-0">
                 <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`" class="min-w-0">
-                  <div class="font-noto-sans leading-relaxed" :class="headwordSizeClass(word.mainReading.text)" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
+                  <div
+                    class="font-noto-sans leading-relaxed"
+                    :class="[headwordSizeClass(word.mainReading.text, false, store.headwordSize), headwordPitchClass]"
+                    :style="stateColour(knownStatesOverride)"
+                    lang="ja"
+                    v-html="convertToRuby(word.mainReading.text, undefined, knownStatesOverride)"
+                  />
                 </NuxtLink>
-                <div v-if="!showRedirect" class="font-noto-sans leading-relaxed min-w-0" :class="headwordSizeClass(word.mainReading.text)" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
+                <div
+                  v-if="!showRedirect"
+                  class="font-noto-sans leading-relaxed min-w-0"
+                  :class="[headwordSizeClass(word.mainReading.text, false, store.headwordSize), headwordPitchClass]"
+                  :style="stateColour(knownStatesOverride)"
+                  lang="ja"
+                  v-html="convertToRuby(word.mainReading.text, undefined, knownStatesOverride)"
+                />
+                <PitchAccentNumbers
+                  v-if="(store.pitchAccentDisplay === 'number' || store.pitchAccentDisplay === 'both') && word.pitchAccents?.length"
+                  :accents="word.pitchAccents"
+                  :reading="word.mainReading.text"
+                  class="shrink-0"
+                />
                 <TtsButton :text="stripRubyMarkup(word.mainReading.text)" :word-id="wordId" :reading-index="currentReadingIndex" size="md" class="shrink-0" />
               </div>
             </div>
@@ -474,18 +498,13 @@
             </div>
           </div>
 
-          <ClientOnly>
-            <div v-if="word.pitchAccents && word.pitchAccents.length > 0" :key="`pitch-${wordId}-${currentReadingIndex}`">
-              <h1 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm">Pitch accents</h1>
-              <div class="pl-2 flex flex-row flex-wrap gap-8">
-                <span v-for="pitchAccent in word.pitchAccents" :key="pitchAccent">
-                  <div>
-                    <LazyPitchDiagram :reading="word.mainReading.text" :pitch-accent="pitchAccent" />
-                  </div>
-                </span>
-              </div>
-            </div>
-          </ClientOnly>
+          <div
+            v-if="word.pitchAccents?.length && (store.pitchAccentDisplay === 'graph' || store.pitchAccentDisplay === 'both')"
+            :key="`pitch-${wordId}-${currentReadingIndex}`"
+          >
+            <h1 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm">Pitch accents</h1>
+            <PitchAccentView :reading="word.mainReading.text" :accents="word.pitchAccents" numbers-beside-word class="pl-2" />
+          </div>
 
           <KanjiBreakdown :key="`${wordId}-${currentReadingIndex}`" :word-id="wordId" :reading-index="currentReadingIndex" />
 

@@ -185,6 +185,7 @@
           :to="`/decks/media/${item.deck.deckId}/detail`"
           class="line-clamp-2 w-full text-center text-sm hover:underline"
           :title="localiseTitle(item.deck)"
+          v-bind="japaneseTextAttrs(localiseTitle(item.deck))"
         >
           {{ localiseTitle(item.deck) }}
         </NuxtLink>

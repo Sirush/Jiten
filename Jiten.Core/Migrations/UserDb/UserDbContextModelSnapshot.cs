@@ -1265,6 +1265,12 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("DisplayProfilesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("{}");
+
                     b.Property<string>("MediaFilterPresetsJson")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

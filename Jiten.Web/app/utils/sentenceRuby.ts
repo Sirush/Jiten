@@ -9,10 +9,27 @@ export function visibleFurigana(
   hiddenWordId?: number
 ): SentenceFurigana[] {
   if (!furigana || mode === 'off') return [];
-  return furigana.filter((g) => (mode === 'all' || !g.known) && g.wordId !== hiddenWordId);
+  return furigana.filter((g) => (mode !== 'unknown' || !g.known) && g.wordId !== hiddenWordId);
 }
 
-export function sentenceRubyHtml(text: string, wordPosition: number, wordLength: number, furigana: SentenceFurigana[]): string {
+/** The word under the sentence's highlight, so every occurrence of it can lose its reading. */
+export function targetWordId(furigana: SentenceFurigana[] | null | undefined, wordPosition: number, wordLength: number): number | undefined {
+  if (wordLength <= 0) return undefined;
+  return furigana?.find((g) => g.position < wordPosition + wordLength && g.position + g.length > wordPosition)?.wordId;
+}
+
+export interface SentenceRubyOptions {
+  /** Groups left out keep their colour but lose the reading; defaults to showing every group. */
+  showReading?: (group: SentenceFurigana) => boolean;
+  /** For a group whose reading is hidden: render it anyway, invisible until the word is hovered. */
+  revealOnHover?: (group: SentenceFurigana) => boolean;
+  /** A #rrggbb colour for the group's word, or null for the ordinary text colour. */
+  colourOf?: (group: SentenceFurigana) => string | null;
+}
+
+const hexColour = /^#[0-9a-fA-F]{6}$/;
+
+export function sentenceRubyHtml(text: string, wordPosition: number, wordLength: number, furigana: SentenceFurigana[], options: SentenceRubyOptions = {}): string {
   const groups = [...furigana].sort((a, b) => a.position - b.position);
 
   const render = (start: number, end: number) => {
@@ -21,7 +38,12 @@ export function sentenceRubyHtml(text: string, wordPosition: number, wordLength:
     for (const g of groups) {
       if (g.position < cursor || g.position + g.length > end) continue;
       html += escapeHtml(text.slice(cursor, g.position));
-      html += `<ruby>${escapeHtml(text.slice(g.position, g.position + g.length))}<rp>(</rp><rt>${escapeHtml(g.reading)}</rt><rp>)</rp></ruby>`;
+      const base = escapeHtml(text.slice(g.position, g.position + g.length));
+      const shown = options.showReading?.(g) !== false;
+      const rt = shown ? '<rt>' : options.revealOnHover?.(g) ? '<rt class="furigana-peek">' : null;
+      const word = rt ? `<ruby>${base}<rp>(</rp>${rt}${escapeHtml(g.reading)}</rt><rp>)</rp></ruby>` : base;
+      const colour = options.colourOf?.(g);
+      html += colour && hexColour.test(colour) ? `<span style="color:${colour}">${word}</span>` : word;
       cursor = g.position + g.length;
     }
     return html + escapeHtml(text.slice(cursor, end));

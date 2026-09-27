@@ -178,7 +178,7 @@
       class="text-xs whitespace-nowrap no-underline hover:underline underline-offset-2 transition-colors"
     >
       <span class="text-gray-600 dark:text-gray-400">{{ getRelationshipTypeLabel(rel.relationshipType) }}:</span>
-      <span class="ml-1 text-primary">{{ localiseTitle(rel.targetDeck) }}</span>
+      <span class="ml-1 text-primary" v-bind="japaneseTextAttrs(localiseTitle(rel.targetDeck))">{{ localiseTitle(rel.targetDeck) }}</span>
     </NuxtLink>
 
     <Tag

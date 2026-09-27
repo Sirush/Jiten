@@ -17,6 +17,10 @@
   const toast = useToast();
   const confirm = useConfirm();
   const localiseTitle = useLocaliseTitle();
+  const deckTitle = (deck: StudyDeckDto) =>
+    deck.deckType === StudyDeckType.MediaDeck ? localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) : deck.name;
+  const parentTitle = (deck: StudyDeckDto) =>
+    localiseTitle({ originalTitle: deck.parentTitle ?? '', romajiTitle: deck.parentRomajiTitle, englishTitle: deck.parentEnglishTitle });
   const router = useRouter();
 
   const showAddDialog = ref(false);
@@ -740,10 +744,10 @@
 
               <!-- Info -->
               <div class="flex-1 min-w-0">
-                <div v-if="deck.parentTitle" class="text-xs text-surface-400 dark:text-surface-400 truncate">
-                  {{ localiseTitle({ originalTitle: deck.parentTitle, romajiTitle: deck.parentRomajiTitle, englishTitle: deck.parentEnglishTitle }) }}
+                <div v-if="deck.parentTitle" class="text-xs text-surface-400 dark:text-surface-400 truncate" v-bind="japaneseTextAttrs(parentTitle(deck))">
+                  {{ parentTitle(deck) }}
                 </div>
-                <div class="font-semibold truncate">
+                <div class="font-semibold truncate" v-bind="japaneseTextAttrs(deckTitle(deck))">
                   <NuxtLink
                     v-if="deck.deckType === StudyDeckType.MediaDeck && deck.deckId"
                     :to="`/decks/media/${deck.deckId}/detail`"
@@ -920,10 +924,10 @@
 
               <!-- Info -->
               <div class="flex-1 min-w-0">
-                <div v-if="deck.parentTitle" class="text-xs text-surface-400 dark:text-surface-400 truncate">
-                  {{ localiseTitle({ originalTitle: deck.parentTitle, romajiTitle: deck.parentRomajiTitle, englishTitle: deck.parentEnglishTitle }) }}
+                <div v-if="deck.parentTitle" class="text-xs text-surface-400 dark:text-surface-400 truncate" v-bind="japaneseTextAttrs(parentTitle(deck))">
+                  {{ parentTitle(deck) }}
                 </div>
-                <div class="font-semibold truncate">
+                <div class="font-semibold truncate" v-bind="japaneseTextAttrs(deckTitle(deck))">
                   <NuxtLink
                     v-if="deck.deckType === StudyDeckType.MediaDeck && deck.deckId"
                     :to="`/decks/media/${deck.deckId}/detail`"

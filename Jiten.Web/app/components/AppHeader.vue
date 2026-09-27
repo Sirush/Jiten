@@ -61,6 +61,8 @@
     return 'Auto';
   });
 
+  watch(themeMode, (mode) => applyTheme(mode));
+
   onMounted(() => {
     applyTheme(store.themeMode);
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {

@@ -537,7 +537,7 @@
               <Checkbox :model-value="selected.includes(deck.deckId)" :binary="true" @update:model-value="toggleSelected(deck.deckId)" />
               <img :src="coverUrl(deck.coverName)" alt="" class="h-12 w-8 flex-none rounded-xs object-cover" loading="lazy" />
               <div class="min-w-0 flex-1">
-                <div class="truncate font-medium">{{ localiseTitle(deck) }}</div>
+                <div class="truncate font-medium" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</div>
                 <div class="text-xs text-surface-500 dark:text-surface-400">{{ getMediaTypeText(deck.mediaType) }}</div>
               </div>
               <i v-if="deck.isFavourite" class="pi pi-star-fill text-sm text-amber-400" aria-hidden="true" />

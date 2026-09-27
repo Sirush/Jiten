@@ -48,7 +48,7 @@
         <div class="flex flex-row flex-wrap items-center gap-y-2">
           <!-- Title and Media Type -->
           <div class="flex-grow min-w-0 basis-full sm:basis-0">
-            <div class="font-bold truncate max-w-100" :title="localiseTitle(deck)">{{ localiseTitle(deck) }}</div>
+            <div class="font-bold truncate max-w-100" :title="localiseTitle(deck)" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</div>
             <div class="text-xs text-gray-500 dark:text-gray-400">{{ getMediaTypeText(deck.mediaType) }}</div>
           </div>
 

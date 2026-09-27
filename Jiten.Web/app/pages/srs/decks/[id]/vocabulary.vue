@@ -356,7 +356,7 @@
       </Breadcrumb>
       <div class="flex items-center justify-between gap-2 min-h-[2.5rem]">
         <h1 class="text-lg font-bold md:text-2xl truncate">
-          {{ deckName }}
+          <span v-bind="japaneseTextAttrs(deckName)">{{ deckName }}</span>
           <span class="hidden md:inline">- Vocabulary List</span>
         </h1>
         <div v-if="isStaticDeck" class="flex gap-2 shrink-0">

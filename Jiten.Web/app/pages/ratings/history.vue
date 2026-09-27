@@ -62,13 +62,10 @@
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  const ratingOptions = [
-    { label: 'Beginner', value: 0, bg: 'rgba(21, 128, 61, 0.8)', bgHover: 'rgba(21, 128, 61, 0.3)' },
-    { label: 'Easy', value: 1, bg: 'rgba(34, 197, 94, 0.8)', bgHover: 'rgba(34, 197, 94, 0.3)' },
-    { label: 'Average', value: 2, bg: 'rgba(6, 182, 212, 0.8)', bgHover: 'rgba(6, 182, 212, 0.3)' },
-    { label: 'Hard', value: 3, bg: 'rgba(217, 119, 6, 0.8)', bgHover: 'rgba(217, 119, 6, 0.3)' },
-    { label: 'Expert', value: 4, bg: 'rgba(220, 38, 38, 0.8)', bgHover: 'rgba(220, 38, 38, 0.3)' },
-  ];
+  const { chartColour } = useDifficultyColours();
+  const ratingOptions = computed(() =>
+    ['Beginner', 'Easy', 'Average', 'Hard', 'Expert'].map((label, value) => ({ label, value, bg: chartColour(value), bgHover: chartColour(value, 0.3) }))
+  );
 
   async function loadComparisons() {
     isLoading.value = true;

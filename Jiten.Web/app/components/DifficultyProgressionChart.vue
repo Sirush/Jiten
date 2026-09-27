@@ -49,20 +49,7 @@
   const AXIS = '#6b7280';
   const GRID = 'rgba(107, 114, 128, 0.15)';
 
-  // Colours matching DifficultyDisplay.vue (Tailwind color values)
-  const difficultyColours = [
-    'rgba(21, 128, 61, 0.8)', // green-700 - Beginner
-    'rgba(34, 197, 94, 0.8)', // green-500 - Easy
-    'rgba(6, 182, 212, 0.8)', // cyan-500 - Moderate
-    'rgba(217, 119, 6, 0.8)', // amber-600 - Hard
-    'rgba(220, 38, 38, 0.8)', // red-600 - Expert
-    'rgba(220, 38, 38, 0.8)', // red-600 - Insane
-  ];
-
-  const getDifficultyColour = (difficulty: number): string => {
-    const index = Math.min(Math.max(Math.floor(difficulty), 0), difficultyColours.length - 1);
-    return difficultyColours[index];
-  };
+  const { chartColour: getDifficultyColour } = useDifficultyColours();
 
   const chartData = computed<ChartData<'bar'>>(() => {
     const sorted = [...props.progression].sort((a, b) => a.segment - b.segment);

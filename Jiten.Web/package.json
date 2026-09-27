@@ -19,6 +19,9 @@
   "dependencies": {
     "@floating-ui/vue": "1.1.11",
     "@fontsource-variable/noto-sans-jp": "5.2.10",
+    "@fontsource/biz-udpgothic": "^5.3.0",
+    "@fontsource/klee-one": "5.3.0",
+    "@fontsource/zen-maru-gothic": "^5.3.0",
     "@nuxt/content": "^3.14.0",
     "@nuxt/fonts": "^0.14.0",
     "@nuxt/icon": "1.15.0",

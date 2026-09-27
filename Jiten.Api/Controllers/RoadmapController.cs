@@ -255,8 +255,34 @@ public class RoadmapController(
 
         var payload = roadmap.Payload;
         await FillMissingLengthsAsync(payload);
+        await FillAdjustedDifficultiesAsync(payload);
 
         return Results.Ok(ToDto(roadmap, includePayload: true, payload));
+    }
+
+    /// <summary>Plans store the difficulty from when they were built; votes since then only reach the reader through this.</summary>
+    private async Task FillAdjustedDifficultiesAsync(RoadmapPayload payload)
+    {
+        var deckIds = payload.Steps.Select(s => s.DeckId).Distinct().ToList();
+        if (deckIds.Count == 0)
+            return;
+
+        await using var jiten = await jitenFactory.CreateDbContextAsync();
+        var difficulties = await jiten.Decks.AsNoTracking()
+                                      .Where(d => deckIds.Contains(d.DeckId))
+                                      .Select(d => new
+                                      {
+                                          d.DeckId,
+                                          Base = d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty,
+                                          Adjustment = d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0,
+                                      })
+                                      .ToDictionaryAsync(d => d.DeckId);
+
+        foreach (var step in payload.Steps)
+        {
+            if (difficulties.TryGetValue(step.DeckId, out var d) && d.Base >= 0)
+                step.AdjustedDifficulty = d.Base + (double)d.Adjustment;
+        }
     }
 
     private async Task FillMissingLengthsAsync(RoadmapPayload payload)

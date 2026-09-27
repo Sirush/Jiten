@@ -1,6 +1,8 @@
 export interface ReorderList {
   name: string;
   el: HTMLElement | null;
+  /** Overrides the composable's layout for this list. */
+  layout?: 'vertical' | 'wrap';
 }
 
 export interface ReorderPoint {
@@ -15,6 +17,8 @@ interface TouchReorderMultiOptions {
   /** Touch lift delay; a move beyond the tolerance before it fires is treated as a scroll, not a drag. */
   longPressMs?: number;
   itemSelector?: string;
+  /** 'wrap' resolves the drop slot in two dimensions, for items that flow in wrapping rows. */
+  layout?: 'vertical' | 'wrap';
 }
 
 const MOVE_TOLERANCE = 8;
@@ -27,6 +31,19 @@ const MAX_SCROLL_SPEED = 16;
  * release slightly outside should still land) — a drag from a source that is not itself a drop target
  * (e.g. a palette chip) must land inside a panel or resolve to nothing, so a stray release never inserts.
  */
+/** Insertion index among item rects in reading order; wrapping rows compare against the row's items left to right. */
+export function insertionIndex(rects: Pick<DOMRect, 'top' | 'bottom' | 'left' | 'width' | 'height'>[], x: number, y: number, layout: 'vertical' | 'wrap'): number {
+  for (let i = 0; i < rects.length; i++) {
+    const r = rects[i]!;
+    if (layout === 'vertical') {
+      if (y < r.top + r.height / 2) return i;
+    } else if (y < r.top || (y <= r.bottom && x < r.left + r.width / 2)) {
+      return i;
+    }
+  }
+  return rects.length;
+}
+
 export function pickDropList<T>(inside: T | null, nearest: T | null, sourceIsDropTarget: boolean): T | null {
   return inside ?? (sourceIsDropTarget ? nearest : null);
 }
@@ -118,16 +135,13 @@ export function useTouchReorderMulti(options: TouchReorderMultiOptions) {
       return;
     }
     const items = [...target.el.querySelectorAll<HTMLElement>(itemSelector)].filter((el) => el !== sourceEl);
-    let idx = items.length;
-    for (let i = 0; i < items.length; i++) {
-      const r = items[i].getBoundingClientRect();
-      if (clientY < r.top + r.height / 2) {
-        idx = i;
-        break;
-      }
-    }
     dropList.value = target.name;
-    dropIndex.value = idx;
+    dropIndex.value = insertionIndex(
+      items.map((el) => el.getBoundingClientRect()),
+      clientX,
+      clientY,
+      target.layout ?? options.layout ?? 'vertical'
+    );
   }
 
   // Nearest ancestor that actually scrolls vertically, so edge auto-scroll works inside a scrollable
@@ -162,8 +176,14 @@ export function useTouchReorderMulti(options: TouchReorderMultiOptions) {
     scrollRAF = requestAnimationFrame(tickScroll);
   }
 
+  // Lets sources without touch-action: none still drag on touch: once lifted, the gesture no longer pans the page.
+  function blockTouchScroll(ev: TouchEvent) {
+    ev.preventDefault();
+  }
+
   function lift(clientX: number, clientY: number) {
     isDragging.value = true;
+    document.addEventListener('touchmove', blockTouchScroll, { passive: false });
     document.body.style.userSelect = 'none';
     scrollParent = findScrollParent(sourceEl);
     createGhost(clientX, clientY);
@@ -222,6 +242,7 @@ export function useTouchReorderMulti(options: TouchReorderMultiOptions) {
     document.removeEventListener('pointerup', onUp);
     document.removeEventListener('pointercancel', onUp);
     window.removeEventListener('blur', cancel);
+    document.removeEventListener('touchmove', blockTouchScroll);
     if (scrollRAF) {
       cancelAnimationFrame(scrollRAF);
       scrollRAF = null;

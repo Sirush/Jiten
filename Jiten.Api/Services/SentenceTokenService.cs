@@ -53,10 +53,16 @@ public class SentenceTokenService(JitenDbContext context, ICurrentUserService cu
         var forms = groups.Values.SelectMany(g => g).Select(g => (g.WordId, g.ReadingIndex)).ToHashSet();
         var states = currentUser.IsAuthenticated ? await currentUser.GetKnownWordsState(forms) : [];
 
-        return groups.ToDictionary(s => s.Key, s => s.Value.Select(g => new SentenceFuriganaDto
+        var authenticated = currentUser.IsAuthenticated;
+        return groups.ToDictionary(s => s.Key, s => s.Value.Select(g =>
         {
-            Position = g.Position, Length = g.Length, Reading = g.Reading, WordId = g.WordId,
-            Known = states.TryGetValue((g.WordId, g.ReadingIndex), out var state) && SentenceComprehension.IsKnown(state)
+            var state = states.GetValueOrDefault((g.WordId, g.ReadingIndex));
+            return new SentenceFuriganaDto
+            {
+                Position = g.Position, Length = g.Length, Reading = g.Reading, WordId = g.WordId,
+                Known = state != null && SentenceComprehension.IsKnown(state),
+                States = authenticated ? state ?? [] : null,
+            };
         }).ToList());
     }
 

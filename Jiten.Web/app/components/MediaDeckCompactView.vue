@@ -100,7 +100,7 @@
           class="absolute inset-0 bg-black bg-opacity-80 text-white p-2 flex flex-col transition-opacity duration-200"
           :class="showOverlay ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
         >
-          <div class="font-bold mb-2 truncate">{{ localiseTitle(deck) }}</div>
+          <div class="font-bold mb-2 truncate" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</div>
           <div class="text-xs mb-1">{{ getMediaTypeText(deck.mediaType) }}</div>
 
           <div class="text-xs space-y-1 mt-auto">

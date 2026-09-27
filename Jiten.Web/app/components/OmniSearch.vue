@@ -380,7 +380,7 @@
           >
             <img :src="getCoverUrl(match.deck.coverName || 'nocover.jpg')" :alt="localiseTitle(match.deck)" class="w-10 h-14 object-cover rounded flex-shrink-0" />
             <div class="min-w-0 flex-1">
-              <div class="font-medium truncate" :lang="localiseTitle(match.deck) === match.deck.originalTitle ? 'ja' : undefined">
+              <div class="font-medium truncate" v-bind="japaneseTextAttrs(localiseTitle(match.deck))">
                 {{ localiseTitle(match.deck) }}
               </div>
               <div class="text-sm text-gray-500 dark:text-gray-400 truncate">

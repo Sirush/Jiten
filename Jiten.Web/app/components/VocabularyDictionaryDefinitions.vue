@@ -1,7 +1,8 @@
 <script setup lang="ts">
   import type { Reading } from '~/types';
   import type { ResolvedDefinitionGroup } from '~/composables/useYomitanDictionary';
-  import { definitionsToHtml } from '~/composables/useYomitanDictionary';
+  import { definitionsToHtml, definitionsToText } from '~/composables/useYomitanDictionary';
+  import { isMostlyJapanese } from '~/utils/japaneseTextAttrs';
 
   const props = withDefaults(
     defineProps<{
@@ -24,6 +25,7 @@
 
   const hasMultipleGroups = computed(() => props.resolvedGroups.length > 1);
   const customFontStyle = computed(() => ({ fontSize: `${store.customDictionaryFontSize}px` }));
+  const definitionsLang = (definitions: unknown[]) => (isMostlyJapanese(definitionsToText(definitions)) ? 'ja' : undefined);
   const visibleGroupCount = computed(() => props.resolvedGroups.length);
   const activeTab = ref<string | undefined>(undefined);
 
@@ -112,7 +114,13 @@
               :word-id="wordId"
               :hidden-behaviour="hiddenBehaviour"
             />
-            <div v-else-if="group.customDefinitions" class="custom-dict-content" :style="customFontStyle" v-html="definitionsToHtml(group.customDefinitions)" />
+            <div
+              v-else-if="group.customDefinitions"
+              class="custom-dict-content ja-dictionary"
+              :lang="definitionsLang(group.customDefinitions)"
+              :style="customFontStyle"
+              v-html="definitionsToHtml(group.customDefinitions)"
+            />
           </div>
         </TabPanel>
       </TabPanels>
@@ -123,7 +131,12 @@
   <template v-else-if="!isCompact">
     <div v-if="resolvedGroups.length > 0 && resolvedGroups[0].customDefinitions">
       <DictionaryFontSizeControl v-if="fontControls" class="mb-1" />
-      <div class="custom-dict-content" :style="customFontStyle" v-html="definitionsToHtml(resolvedGroups[0].customDefinitions)" />
+      <div
+        class="custom-dict-content ja-dictionary"
+        :lang="definitionsLang(resolvedGroups[0].customDefinitions)"
+        :style="customFontStyle"
+        v-html="definitionsToHtml(resolvedGroups[0].customDefinitions)"
+      />
     </div>
   </template>
 
@@ -141,7 +154,12 @@
         />
       </template>
       <template v-else-if="resolvedGroups[0].customDefinitions && !store.hideVocabularyDefinitions">
-        <span class="custom-dict-compact" :style="customFontStyle" v-html="definitionsToHtml(resolvedGroups[0].customDefinitions)" />
+        <span
+          class="custom-dict-compact ja-dictionary"
+          :lang="definitionsLang(resolvedGroups[0].customDefinitions)"
+          :style="customFontStyle"
+          v-html="definitionsToHtml(resolvedGroups[0].customDefinitions)"
+        />
       </template>
       <span v-if="visibleGroupCount > 1" class="text-xs text-gray-400 dark:text-gray-400 ml-1">
         +{{ visibleGroupCount - 1 }} more {{ visibleGroupCount - 1 === 1 ? 'dictionary' : 'dictionaries' }}

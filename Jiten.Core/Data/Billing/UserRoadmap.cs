@@ -230,6 +230,9 @@ public class RoadmapStepDto
     public List<int> Genres { get; set; } = new();
     public double Difficulty { get; set; }
 
+    /// <summary>Current difficulty with community votes applied; filled when the plan is read, never stored.</summary>
+    public double? AdjustedDifficulty { get; set; }
+
     /// <summary>Coverage of this deck at the moment the step is reached, 0-1.</summary>
     public double Coverage { get; set; }
 

@@ -1,4 +1,6 @@
-﻿namespace Jiten.Api.Dtos;
+﻿using Jiten.Core.Data;
+
+namespace Jiten.Api.Dtos;
 
 public class ExampleSentenceDto
 {
@@ -25,6 +27,9 @@ public class SentenceFuriganaDto
     public string Reading { get; set; } = "";
     public int WordId { get; set; }
     public bool Known { get; set; }
+
+    /// <summary>The caller's states for the word; null when signed out.</summary>
+    public List<KnownState>? States { get; set; }
 }
 
 public class ExampleSentencesByDifficultyResponse

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import {
     FsrsRating,
-    KnownState,
+    type KnownState,
     MediaType,
     type Deck,
     type DeckDetail,
@@ -18,6 +18,7 @@
   import { useYouTubePlayer } from '~/composables/useYouTubePlayer';
   import { formatRuntime } from '~/utils/formatRuntime';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
+  import { WORD_STATE_COLOUR_KEYS, WORD_STATE_COLOUR_LABELS, wordStateColourKey } from '~/utils/wordState';
   import Popover from 'primevue/popover';
   import Select from 'primevue/select';
   import ToggleSwitch from 'primevue/toggleswitch';
@@ -179,8 +180,9 @@
   const prefs = computed<WatchPrefs>(() => ({
     ...DEFAULT_WATCH_PREFS,
     ...jitenStore.watchPrefs,
-    colours: { ...DEFAULT_WATCH_COLOURS, ...(jitenStore.watchPrefs?.colours ?? {}) },
   }));
+  // The colours belong to the display profile, so they match vocabulary lists and follow the account.
+  const colours = computed(() => jitenStore.resolvedStateColours);
   const setPref = <K extends keyof WatchPrefs>(key: K, value: WatchPrefs[K]) => {
     jitenStore.watchPrefs = { ...prefs.value, [key]: value };
   };
@@ -314,41 +316,26 @@
   watch(focusIndex, keepLineInView);
 
   // ---- word colours ----
-  const colourRows: { key: WatchColourKey; label: string }[] = [
-    { key: 'new', label: 'Unknown' },
-    { key: 'young', label: 'Young' },
-    { key: 'due', label: 'Due' },
-    { key: 'mature', label: 'Mature / Mastered' },
-    { key: 'redundant', label: 'Redundant' },
-    { key: 'ignored', label: 'Blacklisted / Suspended' },
-  ];
-  const colourKeyOf = (states: KnownState[] | undefined): WatchColourKey => {
-    if (!states || states.length === 0) return 'new';
-    if (states.includes(KnownState.Blacklisted) || states.includes(KnownState.Suspended)) return 'ignored';
-    if (states.includes(KnownState.Redundant)) return 'redundant';
-    if (states.includes(KnownState.Mastered) || states.includes(KnownState.Mature)) return 'mature';
-    if (states.includes(KnownState.Due)) return 'due';
-    if (states.includes(KnownState.Young)) return 'young';
-    return 'new';
-  };
+  const colourRows = WORD_STATE_COLOUR_KEYS.map((key) => ({ key, label: WORD_STATE_COLOUR_LABELS[key] }));
+  const colourKeyOf = wordStateColourKey;
   const isKnown = (states: KnownState[] | undefined) => colourKeyOf(states) === 'mature';
   const readingTip = (word: WatchWord) => {
     const kana = stripRubyMarkup(word.reading);
     return kana !== word.spelling ? kana : '';
   };
   const wordStyle = (word: WatchWord) => {
-    const colour = prefs.value.colours[colourKeyOf(word.knownStates)];
+    const colour = colours.value[colourKeyOf(word.knownStates)];
     return colour ? { color: colour } : undefined;
   };
-  const setColour = (key: WatchColourKey, value: string | null) => setPref('colours', { ...prefs.value.colours, [key]: value });
-  const resetColours = () => setPref('colours', { ...DEFAULT_WATCH_COLOURS });
+  const setColour = (key: WatchColourKey, value: string | null) => (jitenStore.stateColours = { ...colours.value, [key]: value });
+  const resetColours = () => (jitenStore.stateColours = { ...DEFAULT_WATCH_COLOURS });
   const coloursOp = ref();
   const toggleColours = (event: Event) => coloursOp.value?.toggle(event);
   const mobileMenuOp = ref();
   const toggleMobileMenu = (event: Event) => mobileMenuOp.value?.toggle(event);
   const togglePlay = () => (player.playing.value ? player.pause() : player.play());
   // Native colour inputs need a concrete value; unset rows show the theme text colour
-  const colourInputValue = (key: WatchColourKey) => prefs.value.colours[key] ?? (isDark.value ? '#f3f4f6' : '#111827');
+  const colourInputValue = (key: WatchColourKey) => colours.value[key] ?? (isDark.value ? '#f3f4f6' : '#111827');
   const isDark = ref(false);
   onMounted(() => {
     isDark.value = document.documentElement.classList.contains('dark-mode');
@@ -780,7 +767,7 @@
           <div class="flex flex-col gap-1.5 text-sm">
             <label v-for="row in colourRows" :key="row.key" class="flex items-center justify-between gap-4">
               <span class="flex items-center gap-2">
-                <span class="font-noto-sans text-base" lang="ja" :style="prefs.colours[row.key] ? { color: prefs.colours[row.key]! } : undefined">言葉</span>
+                <span class="font-noto-sans text-base" lang="ja" :style="colours[row.key] ? { color: colours[row.key]! } : undefined">言葉</span>
                 {{ row.label }}
               </span>
               <span class="flex items-center gap-1">
@@ -797,7 +784,7 @@
                   size="small"
                   severity="secondary"
                   aria-label="Reset colour"
-                  :class="prefs.colours[row.key] === DEFAULT_WATCH_COLOURS[row.key] ? 'invisible' : ''"
+                  :class="colours[row.key] === DEFAULT_WATCH_COLOURS[row.key] ? 'invisible' : ''"
                   @click="setColour(row.key, DEFAULT_WATCH_COLOURS[row.key])"
                 />
               </span>

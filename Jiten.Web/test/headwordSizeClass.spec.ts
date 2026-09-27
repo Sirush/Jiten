@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { headwordSizeClass } from '../app/utils/headwordSizeClass';
+import { headwordSizeClass, sentenceSizeClass } from '../app/utils/headwordSizeClass';
 
 describe('headwordSizeClass', () => {
   it('keeps short words at the default size everywhere', () => {
@@ -19,5 +19,27 @@ describe('headwordSizeClass', () => {
   it('starts one step smaller in compact mode', () => {
     expect(headwordSizeClass('猫', true)).toBe('text-2xl');
     expect(headwordSizeClass('人の恋路を邪魔する奴は馬に蹴られて死んじまえ', true)).toBe('text-lg md:text-xl');
+  });
+});
+
+describe('headwordSizeClass size setting', () => {
+  it('shifts the whole ladder by one step per size', () => {
+    expect(headwordSizeClass('猫', false, 'sm')).toBe('text-2xl');
+    expect(headwordSizeClass('猫', false, 'lg')).toBe('text-4xl');
+    expect(headwordSizeClass('猫', false, 'xl')).toBe('text-5xl');
+    expect(headwordSizeClass('人の恋路を邪魔する', false, 'lg')).toBe('text-3xl md:text-4xl');
+  });
+
+  it('keeps stepping long words down at every size', () => {
+    const proverb = '人の恋路を邪魔する奴は馬に蹴られて死んじまえ';
+    expect(headwordSizeClass(proverb, false, 'xl')).toBe('text-3xl md:text-4xl');
+    expect(headwordSizeClass(proverb, true, 'sm')).toBe('text-base md:text-lg');
+  });
+});
+
+describe('sentenceSizeClass', () => {
+  it('matches the old fixed size by default', () => {
+    expect(sentenceSizeClass()).toBe('text-sm md:text-lg');
+    expect(sentenceSizeClass('xl')).toBe('text-lg md:text-2xl');
   });
 });

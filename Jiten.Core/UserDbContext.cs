@@ -179,11 +179,13 @@ public class UserDbContext : IdentityDbContext<User>
                 entity.Property(us => us.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
                 entity.Property(us => us.MediaFilterPresetsJson).HasColumnType("jsonb").HasDefaultValue("{}");
                 entity.Property(us => us.SmartDeckJson).HasColumnType("jsonb").HasDefaultValue("{}");
+                entity.Property(us => us.DisplayProfilesJson).HasColumnType("jsonb").HasDefaultValue("{}");
             }
             else
             {
                 entity.Property(us => us.MediaFilterPresetsJson).HasDefaultValue("{}");
                 entity.Property(us => us.SmartDeckJson).HasDefaultValue("{}");
+                entity.Property(us => us.DisplayProfilesJson).HasDefaultValue("{}");
             }
 
             entity.HasOne<User>()

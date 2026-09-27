@@ -16,6 +16,7 @@
 
   const { $api } = useNuxtApp();
   const authStore = useAuthStore();
+  const jitenStore = useJitenStore();
   const localiseTitle = useLocaliseTitle();
   const srsStore = useSrsStore();
   const toast = useToast();
@@ -42,9 +43,15 @@
       return parseCustomSentenceHtml(ex.customText);
     }
     const { text, wordPosition, wordLength } = ex;
-    const furigana = visibleFurigana(ex.furigana, opts.value.furigana, hiddenWordId.value);
-    if (furigana.length > 0) {
-      return sanitiseHtml(sentenceRubyHtml(text, wordPosition, wordLength, furigana));
+    const shown = new Set(visibleFurigana(ex.furigana, opts.value.furigana, hiddenWordId.value));
+    const peek = jitenStore.furiganaOnHover;
+    if (ex.furigana?.length && (shown.size > 0 || peek)) {
+      return sanitiseHtml(
+        sentenceRubyHtml(text, wordPosition, wordLength, ex.furigana, {
+          showReading: (g) => shown.has(g),
+          revealOnHover: peek ? (g) => g.wordId !== hiddenWordId.value : undefined,
+        })
+      );
     }
     if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) {
       return text;

@@ -711,7 +711,7 @@
             class="w-10 h-14 object-cover rounded shrink-0"
           />
           <div class="flex-1 min-w-0">
-            <div class="text-sm font-medium truncate">{{ localiseTitle(result) }}</div>
+            <div class="text-sm font-medium truncate" v-bind="japaneseTextAttrs(localiseTitle(result))">{{ localiseTitle(result) }}</div>
             <div class="text-xs text-gray-500 dark:text-gray-400">{{ getMediaTypeText(result.mediaType) }}</div>
           </div>
         </div>
@@ -725,7 +725,7 @@
     <div v-if="step === 'filters' && selectedDeck">
       <div class="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
         <Button v-if="!preselectedDeck && !isEditMode" icon="pi pi-arrow-left" severity="secondary" text size="small" @click="goBack" />
-        <span class="font-semibold">{{ selectedDeck.title }}</span>
+        <span class="font-semibold" v-bind="japaneseTextAttrs(selectedDeck.title)">{{ selectedDeck.title }}</span>
       </div>
 
       <div class="mb-4">

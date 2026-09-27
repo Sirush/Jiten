@@ -584,9 +584,11 @@ export interface SentenceFurigana {
   reading: string;
   wordId: number;
   known: boolean;
+  /** The signed-in user's states for the word; null when signed out. */
+  states?: KnownState[] | null;
 }
 
-export type SentenceFuriganaMode = 'off' | 'unknown' | 'all';
+export type SentenceFuriganaMode = 'off' | 'unknown' | 'all' | 'exceptTarget';
 
 export interface UserExampleSentenceDto {
   userExampleSentenceId: number;
