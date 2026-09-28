@@ -15,6 +15,9 @@ public class ExampleSentenceDto
     /// <summary>Set only by the authenticated study endpoint: the sentence comes from one of the caller's study decks.</summary>
     public bool FromStudyDeck { get; set; }
 
+    /// <summary>Set only by the authenticated study endpoint, and only for cards served in a study batch: every other content word is known.</summary>
+    public bool IsIPlusOne { get; set; }
+
     /// <summary>Null for sentences parsed before token spans existed.</summary>
     public List<SentenceFuriganaDto>? Furigana { get; set; }
 }

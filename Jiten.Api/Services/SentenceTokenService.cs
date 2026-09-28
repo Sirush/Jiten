@@ -24,6 +24,10 @@ public interface ISentenceTokenService
 
     /// <summary>Sentences with every other content word known to the current user, from a random sample of fully parsed sentences.</summary>
     Task<List<IPlusOneSentence>> FindIPlusOneAsync(int wordId, byte readingIndex, int take, int maxUnknown = 0);
+
+    /// <summary>Unknown content words of each (sentence, target word) pair for the current user; partial rows are absent.</summary>
+    Task<Dictionary<(long SentenceId, int TargetWordId), int>> CountUnknownAsync(
+        IEnumerable<(long SentenceId, int TargetWordId, byte[] Tokens)> candidates);
 }
 
 public class SentenceTokenService(JitenDbContext context, ICurrentUserService currentUser) : ISentenceTokenService
@@ -78,25 +82,15 @@ public class SentenceTokenService(JitenDbContext context, ICurrentUserService cu
             .Select(s => new { s.SentenceId, s.DeckId, s.Text, s.Difficulty, s.Tokens })
             .ToListAsync();
 
-        // A partial row lists only its picked words, so every other word in it would wrongly read as known
-        var decoded = candidates.Where(c => !ExampleSentenceTokens.IsPartial(c.Tokens))
-                                .Select(c => (Sentence: c, Tokens: ExampleSentenceTokens.Decode(c.Tokens)))
-                                .ToList();
+        var unknownCounts = await CountUnknownAsync(candidates.Select(c => (c.SentenceId, wordId, c.Tokens)));
 
-        var contentForms = decoded.SelectMany(d => d.Tokens)
-                                  .Where(t => !t.IsFunctionWord && t.WordId != wordId)
-                                  .Select(t => (t.WordId, t.ReadingIndex))
-                                  .ToHashSet();
-        var states = await currentUser.GetKnownWordsState(contentForms);
-
-        bool IsKnown(int id, byte ri) => states.TryGetValue((id, ri), out var s) && SentenceComprehension.IsKnown(s);
-
-        var picked = decoded.Select(d => (d.Sentence, d.Tokens, Unknown: SentenceComprehension.CountUnknown(d.Tokens, wordId, IsKnown)))
-                            .Where(d => d.Unknown <= maxUnknown)
-                            .OrderBy(d => d.Unknown)
-                            .ThenBy(_ => Random.Shared.Next())
-                            .Take(take)
-                            .ToList();
+        var picked = candidates.Where(c => unknownCounts.ContainsKey((c.SentenceId, wordId)))
+                               .Select(c => (Sentence: c, Unknown: unknownCounts[(c.SentenceId, wordId)]))
+                               .Where(d => d.Unknown <= maxUnknown)
+                               .OrderBy(d => d.Unknown)
+                               .ThenBy(_ => Random.Shared.Next())
+                               .Take(take)
+                               .ToList();
 
         var furigana = await BuildFuriganaAsync(picked.Select(p => (p.Sentence.SentenceId, p.Sentence.Text, (byte[]?)p.Sentence.Tokens)));
 
@@ -104,5 +98,29 @@ public class SentenceTokenService(JitenDbContext context, ICurrentUserService cu
                                                        p.Sentence.Difficulty, p.Unknown,
                                                        furigana.GetValueOrDefault(p.Sentence.SentenceId, [])))
                      .ToList();
+    }
+
+    public async Task<Dictionary<(long SentenceId, int TargetWordId), int>> CountUnknownAsync(
+        IEnumerable<(long SentenceId, int TargetWordId, byte[] Tokens)> candidates)
+    {
+        if (!currentUser.IsAuthenticated) return [];
+
+        var decoded = candidates.Where(c => !ExampleSentenceTokens.IsPartial(c.Tokens))
+                                .Select(c => (c.SentenceId, c.TargetWordId, Tokens: ExampleSentenceTokens.Decode(c.Tokens)))
+                                .ToList();
+        if (decoded.Count == 0) return [];
+
+        var contentForms = decoded.SelectMany(d => d.Tokens)
+                                  .Where(t => !t.IsFunctionWord)
+                                  .Select(t => (t.WordId, t.ReadingIndex))
+                                  .ToHashSet();
+        var states = await currentUser.GetKnownWordsState(contentForms);
+
+        bool IsKnown(int id, byte ri) => states.TryGetValue((id, ri), out var s) && SentenceComprehension.IsKnown(s);
+
+        var counts = new Dictionary<(long, int), int>();
+        foreach (var (sentenceId, targetWordId, tokens) in decoded)
+            counts.TryAdd((sentenceId, targetWordId), SentenceComprehension.CountUnknown(tokens, targetWordId, IsKnown));
+        return counts;
     }
 }

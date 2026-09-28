@@ -143,6 +143,7 @@
             @click="handleReveal"
             v-html="formattedText"
           />
+          <span v-if="exampleSentence.isIPlusOne" class="mt-0.5 h-5 shrink-0 inline-flex items-center"><IPlusOneBadge /></span>
           <TtsButton :text="exampleSentence.text" :sentence-id="exampleSentence.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
           <button
             v-if="canEdit"

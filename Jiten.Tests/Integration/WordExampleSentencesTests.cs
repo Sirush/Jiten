@@ -331,6 +331,46 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task StudyDeckSeries_DrawsFromItsVolumes()
+    {
+        await SetExampleSentenceSource("StudyDecks");
+
+        long volumeSentenceId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+            var series = NewDeck("Series");
+            jitenDb.Decks.Add(series);
+            await jitenDb.SaveChangesAsync();
+            var volume = NewDeck("Volume 1");
+            volume.ParentDeckId = series.DeckId;
+            jitenDb.Decks.Add(volume);
+            await jitenDb.SaveChangesAsync();
+
+            volumeSentenceId = await AddSentence(jitenDb, volume.DeckId, "volume sentence", 0.2f);
+            await jitenDb.Database.ExecuteSqlRawAsync(
+                "INSERT INTO DeckWords (DeckId, WordId, ReadingIndex, Occurrences) VALUES ({0}, {1}, 0, 1)",
+                volume.DeckId, WordId);
+
+            await userDb.UserStudyDecks.Where(d => d.UserId == TestUsers.UserA).ExecuteDeleteAsync();
+            userDb.UserStudyDecks.Add(new UserStudyDeck
+            {
+                UserId = TestUsers.UserA, DeckType = StudyDeckType.MediaDeck, Name = "Series", DeckId = series.DeckId,
+            });
+            await userDb.SaveChangesAsync();
+        }
+
+        for (var i = 0; i < 10; i++)
+            (await CardExampleSentenceId()).Should().Be(volumeSentenceId);
+
+        var more = await Query(new { wordId = WordId, readingIndex = 0, sorting = "Random", take = 3 });
+        more.Sentences[0].SentenceId.Should().Be(volumeSentenceId);
+        more.Sentences[0].FromStudyDeck.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task CardExamples_RandomSource_StillPrefersCustomSentences()
     {
         await SetExampleSentenceSource("Random");

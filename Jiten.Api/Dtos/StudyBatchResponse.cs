@@ -117,6 +117,9 @@ public class StudyExampleSentenceDto
     public string? CustomSource { get; set; }
     public string? CustomText { get; set; }
 
+    /// <summary>Every other content word is known</summary>
+    public bool IsIPlusOne { get; set; }
+
     /// <summary>Null for custom sentences and for corpus sentences parsed before token spans existed.</summary>
     public List<SentenceFuriganaDto>? Furigana { get; set; }
 }

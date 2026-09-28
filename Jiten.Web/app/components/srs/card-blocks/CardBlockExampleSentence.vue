@@ -191,6 +191,7 @@
         >
           <div class="flex items-start gap-2">
             <div class="leading-relaxed flex-1" :class="sizeClass" lang="ja" v-html="exampleSentenceHtml" />
+            <span v-if="cardExample?.isIPlusOne" class="mt-0.5 h-5 shrink-0 inline-flex items-center"><IPlusOneBadge /></span>
             <div v-if="opts.showActions" class="flex items-center gap-1 mt-0.5 shrink-0" :class="{ 'pointer-events-none': blurred }">
               <TtsButton
                 v-if="cardExample"

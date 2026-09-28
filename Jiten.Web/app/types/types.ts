@@ -574,6 +574,7 @@ export interface ExampleSentence {
   sourceDeck: StudyExampleSourceDto;
   sourceDeckParent?: StudyExampleSourceDto;
   fromStudyDeck?: boolean;
+  isIPlusOne?: boolean;
   furigana?: SentenceFurigana[] | null;
 }
 
@@ -1422,6 +1423,7 @@ export interface StudyExampleSentenceDto {
   isCustom?: boolean;
   customSource?: string;
   customText?: string;
+  isIPlusOne?: boolean;
   furigana?: SentenceFurigana[] | null;
 }
 
