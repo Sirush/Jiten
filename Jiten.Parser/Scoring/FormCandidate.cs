@@ -22,8 +22,7 @@ internal sealed class FormCandidate(
     private HashSet<string>? _cachedReadingPos;
     public HashSet<string> CachedReadingPos => _cachedReadingPos ??= ReadingPosHelper.GetPosForReading(Word, ReadingIndex);
 
-    /// Reading-restricted POS when available, else the word-level POS — the set callers should
-    /// check for grammatical class. Mirrors the inline `CachedReadingPos.Count > 0 ? … : Word.PartsOfSpeech`.
+    /// <summary>Reading-restricted POS when available, else word-level POS; the set to check for grammatical class.</summary>
     public IEnumerable<string> EffectivePos => CachedReadingPos.Count > 0 ? CachedReadingPos : Word.PartsOfSpeech;
 
     private string? _rubyReading;

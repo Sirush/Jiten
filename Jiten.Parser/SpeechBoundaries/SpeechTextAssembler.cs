@@ -32,8 +32,7 @@ public static class SpeechTextAssembler
         return bits;
     }
 
-    /// <summary>Assembles stored subtitle text, reusing its stored bitmap when it still matches the text's line count.</summary>
-    /// <returns>The text to parse, and the bitmap to store back.</returns>
+    /// <summary>Reuses the stored bitmap only while it still matches the text's line count.</summary>
     public static (string Text, byte[] Boundaries) Prepare(string rawText, byte[]? storedBoundaries, SpeechBoundaryModel model)
     {
         var lines = rawText.Split('\n');

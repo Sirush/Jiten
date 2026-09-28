@@ -25,44 +25,29 @@ public class WordInfo
     public List<int>? PreMatchedCandidateWordIds { get; set; }
     public bool IsImperative { get; set; }
 
-    /// Set when a merge absorbed an ん that Sudachi tagged as the negative auxiliary ぬ
-    /// (認め+られ+ん). The deconjugator alone can't tell that ん from a slurred る (してん),
-    /// and its slur path is shorter, so chain selection needs this to keep the negative sense.
+    /// <summary>Merged ん was Sudachi's negative ぬ (認め+られ+ん); the deconjugator prefers the slurred-る path (してん).</summary>
     public bool IsSlurredNegative { get; set; }
 
     public bool WasReclassifiedFromSuffix { get; set; }
     public bool IsMergedInflection { get; set; }
     public int? ResolvedWordId { get; set; }
 
-    /// Form this occurrence counts as once the misparse gates ran; null for tokens that are not vocabulary.
+    /// <summary>Null for tokens that are not vocabulary; set once the misparse gates ran.</summary>
     public (int WordId, byte ReadingIndex)? KeptForm { get; set; }
 
-    /// Set when Sudachi originally tagged this pure-kana token as an interjection/filler.
-    /// POS-relaxed lookup fallbacks must not let such exclamations match kanji-backed words
-    /// through their reading keys (イエーイ → 遺影/家居). Survives the POS rewrites that the
-    /// ProcessWord escalation chain performs.
+    /// <summary>Sudachi's original interjection tag, kept across POS rewrites; blocks reading matches (イエーイ → 遺影).</summary>
     public bool IsKanaExclamation { get; set; }
 
-    /// Set when Sudachi originally tagged this all-katakana token as a noun — a name/loanword
-    /// shape. Deconjugation of its hiragana conversion must not land on kanji-primary words
-    /// (ハガナ → はが+な → 剥ぐ fabricates vocabulary out of a name). Survives the POS rewrites
-    /// that the ProcessWord escalation chain performs.
+    /// <summary>Sudachi's original katakana-noun tag, kept across POS rewrites; blocks kanji deconjugation (ハガナ → 剥ぐ).</summary>
     public bool IsKatakanaNounSurface { get; set; }
 
-    /// Set when a rewrite-rule template pinned this token — a deliberate lexical decision the
-    /// misparse gates must not overrule (え|っつった). PreMatchedWordId alone can't carry this:
-    /// parser-level machinery (compound matches, fallbacks) reuses it for ordinary tokens.
+    /// <summary>Misparse gates must not overrule it (え|っつった); PreMatchedWordId is also set by compound matches.</summary>
     public bool PinnedByRewriteRule { get; set; }
 
-    /// Set when a gate's pin is a final word decision that compound formation must not absorb
-    /// or override (the ぶん of a fraction frame, the ordinal 目). Soft pins — reading defaults
-    /// like the する-family — stay absorbable: an attested expression spanning them (そうした,
-    /// 臆病風に吹かれる) is the better parse.
+    /// <summary>Compounds must not absorb it (ordinal 目); soft pins stay absorbable by attested spans (そうした).</summary>
     public bool HardPinned { get; set; }
 
-    /// Sudachi lattice segmentation margin: extra cost of the cheapest competing lattice path
-    /// crossing one of this token's boundaries (clamped to 99999 = no competitor).
-    /// Null when margin output was not requested. Low values = uncertain segmentation.
+    /// <summary>Extra cost of the cheapest rival lattice path; 99999 = no rival, null = not requested.</summary>
     public int? SudachiBoundaryMargin { get; set; }
 
     public WordInfo(){}
@@ -101,10 +86,9 @@ public class WordInfo
     /// <summary>Parses one UTF-8 Sudachi output line, drawing the string fields from <paramref name="strings"/>.</summary>
     public WordInfo(ReadOnlySpan<byte> sudachiLine, SudachiStringPool strings)
     {
-        // Format: Text\tPOS\tNormalizedForm\tDictionaryForm\tKatakanaReading\tPitchIndex\tSplits
+        // Text\tPOS\tNormalizedForm\tDictionaryForm\tKatakanaReading\tPitchIndex\tSplits[\tM=<margin>]
         var span = sudachiLine;
 
-        // Optional trailing segmentation margin column ("\tM=<int>", emitted by FFI v3)
         int marginIdx = span.LastIndexOf("\tM="u8);
         if (marginIdx >= 0 && int.TryParse(span[(marginIdx + 3)..], NumberStyles.Integer, NumberFormatInfo.CurrentInfo, out int margin))
         {
@@ -113,7 +97,6 @@ public class WordInfo
             span = span[..marginIdx];
         }
 
-        // Find first 6 tab positions
         Span<int> tabPositions = stackalloc int[6];
         int tabCount = 0;
         for (int i = 0; i < span.Length && tabCount < 6; i++)
@@ -130,10 +113,8 @@ public class WordInfo
             return;
         }
 
-        // Extract Text (before first tab)
         Text = strings.GetString(span[..tabPositions[0]]);
 
-        // Extract and parse POS (between first and second tab)
         var posBytes = span[(tabPositions[0] + 1)..tabPositions[1]];
         Span<char> posChars = posBytes.Length <= 256 ? stackalloc char[posBytes.Length] : new char[posBytes.Length];
         ReadOnlySpan<char> posSpan = posChars[..Encoding.UTF8.GetChars(posBytes, posChars)];
@@ -161,12 +142,11 @@ public class WordInfo
             ? posSpan[(commaPositions[2] + 1)..commaPositions[3]]
             : posSpan[(commaPositions[2] + 1)..]);
 
-        // Extract remaining fields
         NormalizedForm = strings.GetString(span[(tabPositions[1] + 1)..tabPositions[2]]);
         DictionaryForm = strings.GetString(span[(tabPositions[2] + 1)..tabPositions[3]]);
         Reading = strings.GetString(span[(tabPositions[3] + 1)..tabPositions[4]]);
 
-        // Parse conjugation form (6th POS field) for imperative detection
+        // 6th POS field is the conjugation form.
         if (commaCount >= 5)
         {
             var conjForm = posSpan[(commaPositions[4] + 1)..];

@@ -7,9 +7,7 @@ namespace Jiten.Parser.Scoring;
 
 internal static class RubyPriorsScorer
 {
-    // No-context ScoreDetailed result depends only on (WordId, RubyReading, Surface, IsKanaSurface) —
-    // SudachiPOS enters only via the IsContentWord guard (cached entries are always content words).
-    // 2-generation bounded cache (mirrors KanaConverter), ~2x MaxGen0Entries resident.
+    // Key omits SudachiPOS: it only gates IsContentWord and cached entries are content words. Holds ~2x MaxGen0Entries.
     private const int MaxGen0Entries = 50_000;
     private static volatile ConcurrentDictionary<(int, string, string, bool), RubyScoreResult> _gen0 = new();
     private static volatile ConcurrentDictionary<(int, string, string, bool), RubyScoreResult>? _gen1;

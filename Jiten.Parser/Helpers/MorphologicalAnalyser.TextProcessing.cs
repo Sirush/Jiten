@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Utils;
 
@@ -49,7 +50,8 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(?<=(?:どー|どう|そー|そう|こー|こう|ああ|あー))ゆう")]
     private static partial Regex ColloquialYuuRegex();
 
-    [GeneratedRegex(@"(?<=[\p{IsHiragana}\p{IsKatakana}\p{IsCJKUnifiedIdeographs}]{2})…+(?=[^\r\n…])")]
+    // A lone kana closed by punctuation after the pause is its own interjection (だが…ん？ must not become がん).
+    [GeneratedRegex(@"(?<=[\p{IsHiragana}\p{IsKatakana}\p{IsCJKUnifiedIdeographs}]{2})…+(?=[^\r\n…])(?![\p{IsHiragana}\p{IsKatakana}][？！?!、。」』）\r\n])")]
     private static partial Regex MidSentenceEllipsisRegex();
 
     [GeneratedRegex(@"…{2,}")]
@@ -64,22 +66,15 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"([ァ-ヴ]ンッ)(?=[ァ-ヴぁ-ゔ\p{IsCJKUnifiedIdeographs}])")]
     private static partial Regex KatakanaInterjectionTsuRegex();
 
-    // Guard: in particle など (本などして) the ど is the 2nd mora of など, not colloquial どし(た/て/よ),
-    // and in a renyoukei + もどす compound (取りもどして, 押しもどして, 追いもどして) the どし belongs to
-    // 戻す — the class is the stem-final morae that front もどす; particles (でも, かも) never end
-    // in them, so those stay expandable.
+    // Not after など (本などして) or a stem-final mora fronting もどす (取りもどして); でも/かも never end in those.
     [GeneratedRegex(@"(?<!な)(?<![りれびきちしい]も)どし(?=[たてよ])")]
     private static partial Regex ColloquialDoshiRegex();
 
-    // ー followed by っ/っ after hiragana is emphatic/expressive (けどーっ → けど, 写るーっ → 写る)
-    // EXCEPT before と, where ーっ is part of a mimetic adverb (ぼーっと, じーっと, ずーっと).
+    // ーっ after hiragana is emphatic (けどーっ → けど), except before と where it is a mimetic adverb (ぼーっと).
     [GeneratedRegex(@"(?<=[぀-ゟ])ー+[っッ]+(?!と)")]
     private static partial Regex EmphLongVowelSokuonRegex();
 
-    // A small vowel stretching a mimetic adverb before っと (すぅっと, ふわぁっと, ざぁっと) is expressive
-    // lengthening of the base form (すっと, ふわっと, ざっと) — collapse it so the adverb matches its
-    // entry. Deleted only when the small vowel repeats the preceding mora's vowel: a different-row
-    // small forms a digraph (ファ, ティ), which is that mora's spelling, not a stretch.
+    // Small vowel stretching a mimetic adverb (すぅっと → すっと); same-vowel only, since ファ/ティ are digraphs.
     [GeneratedRegex(@"([ぁ-ゖァ-ヴ])([ぁぃぅぇぉァィゥェォ]+)(?=[っッ]と)")]
     private static partial Regex SmallVowelBeforeSokuonToRegex();
 
@@ -105,88 +100,58 @@ public partial class MorphologicalAnalyser
                 : m.Value;
         });
 
-    // A small vowel before a clause-final ー run (行けぇーー, 切ったぁーー) is a shouted stretch; drop
-    // the small vowel and keep the ー so the base form survives tokenisation (行けー, 切ったー).
+    // Shouted stretch before a clause-final ー run (行けぇーー → 行けー): drop the small vowel, keep the ー.
     [GeneratedRegex(@"(?<=[ぁ-ゖ])[ぁぃぅぇぉ](?=ー+([\s\n！？!?]|$))")]
     private static partial Regex SmallVowelBeforeFinalLongVowelRegex();
 
-    // ー stretching the final い of a shouted word (せんぱーい, すごーい, かわいーい) — drop it so
-    // the base word survives. Hiragana context only (katakana ーイ endings are real loanword
-    // orthography: ボーイ), at least two kana before the ー (おーい is itself a word), not after な
-    // (なーい is the stretched negative), and no earlier ー in the run (わーいわーい repeats the
-    // whole word わーい — its second ー is lexical, not a stretch).
+    // ー stretching a shouted final い (せんぱーい); hiragana only (ボーイ), and not おーい, なーい or a repeat (わーいわーい).
     [GeneratedRegex(@"(?<=[ぁ-ゖ][ぁ-ゖ])(?<!な)(?<!ー[ぁ-ゖ]{1,8})ー+(?=い([\s\n！？!?」』）]|$))")]
     private static partial Regex LongVowelBeforeFinalIRegex();
 
-    // Script-crossing emphatic small vowels: 黙れェッ！ / ヤダぁ！. A small vowel kana never
-    // follows the opposite script as part of a real word (digraphs like ファ/ティ are same-script),
-    // so the boundary is always real — Sudachi otherwise shreds 黙れェ into 黙|れ|ェ.
+    // A small vowel after the opposite script (黙れェッ, ヤダぁ) is never a digraph; Sudachi shreds 黙れェ otherwise.
     [GeneratedRegex(@"(?<=[ぁ-ゖ])([ァィゥェォ]+[っッ]?)|(?<=[ァ-ヴ])([ぁぃぅぇぉ]+[っッ]?)")]
     private static partial Regex ScriptCrossingSmallVowelRegex();
 
-    // Same-script hiragana small-vowel elongation that defeats Sudachi (撃てぇ→撃|てぇ, 急げぇぇ→急|げぇぇ,
-    // 移れぇぇ, 続けぇ, 行けぇぇ, 考えやがれぇ, 気をつけぇ). Two safe shapes (ぁぃぅぇぉ are vowel smalls, not the
-    // digraph smalls ゃゅょゎ, so neither touches きゃ/しょ/ちゅ):
-    //  (a) a RUN of ≥2 small vowels is unambiguous elongation — delete it.
+    // A run of 2+ hiragana small vowels is elongation (急げぇぇ → 急|げぇぇ otherwise); ゃゅょ digraphs are untouched.
     [GeneratedRegex(@"(?<=[ぁ-ゖ])[ぁぃぅぇぉ]{2,}")]
     private static partial Regex SameScriptSmallVowelRunRegex();
-    //  (b) a single small vowel right before っ/ッ at clause end is the shouted-imperative shape
-    //      (撃てぇっ!) — drop the small vowel, keep the sokuon. Protects てめぇの / すげぇ! / 食べてぇ / ねぇ.
+    // A lone small vowel before clause-final っ is a shouted imperative (撃てぇっ!); すげぇ! and ねぇ stay.
     [GeneratedRegex(@"(?<=[ぁ-ゖ])[ぁぃぅぇぉ]([っッ]+)(?=[\s\n]|$)")]
     private static partial Regex ShoutedImperativeSmallVowelRegex();
 
-    // Comma-separated stutter fragment attached to the word it stutters: ぼ、ぼく / ぼっ、ぼぼ僕 / ば、ばっか.
-    // The fragment must not be preceded by kana or kanji: stutters follow punctuation/quotes/start,
-    // while a preceding word means a real particle (今は、はっきり) or repetition (ええ、ええ).
+    // Stutter fragment (ぼ、ぼく); a preceding kana/kanji means a real particle or repeat (今は、はっきり, ええ、ええ).
     [GeneratedRegex(@"(?<![ぁ-んァ-ヶー一-龯々])([ぁ-んァ-ヶ])[っッ]?[、,，]\s*(?=\1)")]
     private static partial Regex StutterFragmentRegex();
 
-    // 4+ identical kana with optional っ/ッ/space between reps — spam/sound effects (ぼぼぼぼぼ).
-    // Runs of exactly 3 are left alone: they occur in real words and across word boundaries
-    // (落ち着いた+たたずまい, とっとと); short stutters are handled with context by MisparseGates.
-    // Range ぁ-んァ-ヶ excludes ー (U+30FC) which is handled by MultipleLongVowelRegex.
+    // 4+ identical kana are sound effects (ぼぼぼぼぼ); runs of 3 occur in real words (とっとと), left to MisparseGates.
     [GeneratedRegex(@"([ぁ-んァ-ヶ])([\sっッ]*\1){3,}")]
     private static partial Regex StutteringRunRegex();
 
-    // 3+ identical digraph mora (じょじょじょ, ちゅちゅちゅ, しょしょしょ, etc.)
-    // Small kana (ぁぃぅぇぉっゃゅょゎ / ァィゥェォッャュョヮ) cannot start a mora,
-    // so (normal kana + small kana) captures exactly one digraph mora.
+    // 3+ identical digraph morae (じょじょじょ); small kana never start a mora, so each capture is one digraph.
     [GeneratedRegex(@"([ぁ-んァ-ヶ][ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ])([\sっッ]*\1){2,}")]
     private static partial Regex StutteringDigraphRunRegex();
 
-    // 〜通り/〜どおり directly before quotative って: keep the compound whole (計画通り|って) instead of
-    // letting って's gemination steal the り (計画+通+りって).
+    // Quotative って's gemination steals 〜通り's り (計画+通+りって).
     [GeneratedRegex(@"(?<=通り|どおり)(?=って)")]
     private static partial Regex TooriQuotativeRegex();
 
-    // A trailing hiragana long vowel (じゃ+あ) glued onto a following katakana word: Sudachi shifts the
-    // boundary one char right (じゃ+あア→interjection ああ + ヒル), shredding アヒル. Re-assert the boundary.
+    // Sudachi shifts a hiragana long-vowel tail into a katakana word (じゃあアヒル → ああ + ヒル).
     [GeneratedRegex(@"(?<=[ぁ-ゖ][あぁ])(?=[ァ-ヴ])")]
     private static partial Regex VowelTailKatakanaBoundaryRegex();
 
-    // もし (if/perhaps) directly before a katakana run: Sudachi prefers the spurious token もしカ (2133220)
-    // and steals the leading mora of an OOV katakana name (もしカ|ティア instead of もし|カティア), which the
-    // name lookup then can't resolve. もし never forms a compound with a following katakana, so force the
-    // boundary — this recovers ANY katakana name after もし, not one hardcoded entry. もしも/もしか/もしかして
-    // are followed by hiragana, so the katakana lookahead leaves them untouched.
+    // Sudachi's spurious もしカ (2133220) steals a katakana name's first mora (もしカ|ティア); もしも/もしか stay.
     [GeneratedRegex(@"もし(?=[ァ-ヴ])")]
     private static partial Regex MoshiKatakanaBoundaryRegex();
 
-    // A case particle を/へ directly before a quotative って: Sudachi fuses them into a bogus verb token
-    // (あんなことを、って → こと + をって[Verb], which is then dropped). No Japanese word contains をって/へって,
-    // so forcing the boundary is always correct — generalises the literal にって split for the safe particles.
+    // Sudachi fuses を/へ + quotative って into a bogus verb (ことをって); no word contains をって/へって.
     [GeneratedRegex(@"(?<=[をへ])(?=って)")]
     private static partial Regex CaseParticleTteRegex();
 
-    // Colloquial っしょ (=でしょ) after an i-adjective (すごい|っしょ, いい|っしょ). ColloquialSshoRegex's
-    // (?<!い) guard protects 一緒 but also blocks adjective+っしょ; this branch splits when a hiragana
-    // precedes the final い, excluding と so 〜と一緒/ずっと一緒 stay whole.
+    // っしょ after an i-adjective (すごいっしょ), which ColloquialSshoRegex's い guard blocks; と excluded for ずっと一緒.
     [GeneratedRegex(@"(?<=[ぁ-ゖ]い)(?<!とい)っしょ[ーう]?(?=[\s\n]|$)")]
     private static partial Regex IAdjSshoRegex();
 
-    // こいつ/そいつ/あいつ/どいつ and place pronouns ここ/そこ/あそこ/どこ + って: Sudachi shreds the
-    // demonstrative (こい|つっ|て; あそこって → あ|そ|こっ|て). Force the boundary so the pronoun stays
-    // whole and って is the particle (こいつ + ってば).
+    // Sudachi shreds a demonstrative before って (こい|つっ|て, あ|そ|こっ|て).
     [GeneratedRegex(@"([こそあど]いつ|ここ|そこ|あそこ|どこ)って")]
     private static partial Regex DemonstrativePronounTteRegex();
 
@@ -194,8 +159,7 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"景気づけよ(?!う)")]
     private static partial Regex KeikizukeYoRegex();
 
-    // pronoun + plural ら + って: Sudachi OOV-swallows らって… (キミ|らってやっぱり). Force the boundary
-    // before って after a pronoun's plural ら so ら stays the suffix and って the particle.
+    // Sudachi OOV-swallows らって after a pronoun's plural ら (キミ|らってやっぱり).
     [GeneratedRegex(@"(?<=(?:キミ|きみ|君|僕|ぼく|俺|おれ|お前|おまえ|あいつ|こいつ|そいつ|あなた|彼|彼女|私|わたし|あたし|うち)ら)(?=って)")]
     private static partial Regex PronounRaTteRegex();
 
@@ -203,16 +167,60 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"(が|なら)あら[ァぁ]")]
     private static partial Regex ElongatedAruRegex();
 
-    // Colloquial copula っす (=です) after an i-adjective (いい|っす, うまい|っす): split so っす resolves
-    // to the copula 2269410 instead of being swallowed into a noun (いいっすか → 交喙/イスカ bird,
-    // いいっすわ → すわ). Gated on what can follow the copula — a sentence-final particle (か/よ/ね/ぞ/な/
-    // わ/ぜ/さ), a connective (けど/し/もん/から/が), punctuation, or clause end — so っす mid-word stays
-    // untouched.
+    // Copula っす (2269410) after an i-adjective, else swallowed into a noun (いいっすか → イスカ); gated on what follows.
     [GeneratedRegex(@"(?<=[ぁ-ゖ]い)(?<!とい)っす(?=[かよねぞなわぜさ、。！？…」]|けど|し|もん|から|が|[\s\n]|$)")]
     private static partial Regex IAdjSsuRegex();
 
+    // Han characters outside Shift_JIS (爱, 们, 这): simplified Chinese, never Japanese text.
+    private static readonly bool[] NonShiftJisHan = BuildNonShiftJisHan();
+
+    private static bool[] BuildNonShiftJisHan()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var sjis = Encoding.GetEncoding(932, new EncoderReplacementFallback("?"), DecoderFallback.ReplacementFallback);
+        var map = new bool[0x9FFF - 0x4E00 + 1];
+        Span<char> one = stackalloc char[1];
+        Span<byte> bytes = stackalloc byte[8];
+        for (int c = 0x4E00; c <= 0x9FFF; c++)
+        {
+            one[0] = (char)c;
+            map[c - 0x4E00] = sjis.GetBytes(one, bytes) == 1 && bytes[0] == (byte)'?';
+        }
+
+        return map;
+    }
+
+    private static bool IsNonShiftJisHan(char c) => c is >= '\u4E00' and <= '\u9FFF' && NonShiftJisHan[c - 0x4E00];
+
+    // Subtitle archives interleave Chinese tracks; kana-less lines with 2+ non-Shift_JIS hanzi are dropped.
+    private static string StripChineseLines(string text)
+    {
+        bool any = false;
+        foreach (var c in text)
+            if (IsNonShiftJisHan(c)) { any = true; break; }
+        if (!any) return text;
+
+        var lines = text.Split('\n');
+        for (int l = 0; l < lines.Length; l++)
+        {
+            int nonSjis = 0;
+            bool hasKana = false;
+            foreach (var c in lines[l])
+            {
+                if (JapaneseTextHelper.IsKana(c)) { hasKana = true; break; }
+                if (IsNonShiftJisHan(c)) nonSjis++;
+            }
+
+            if (!hasKana && nonSjis >= 2)
+                lines[l] = lines[l].EndsWith('\r') ? "\r" : "";
+        }
+
+        return string.Join('\n', lines);
+    }
+
     private void PreprocessText(ref string text, bool preserveStopToken, out int rawContentCharCount)
     {
+        text = StripChineseLines(text);
         text = text.Replace("<", " ").Replace(">", " ").Replace("〝", " ").Replace("〟", " ");
         text = text.Replace('‥', '…');
         text = text.ToFullWidthDigits();
@@ -247,15 +255,12 @@ public partial class MorphologicalAnalyser
         text = EmphLongVowelSokuonRegex().Replace(text, "");
         text = CollapseSameVowelSmallBeforeSokuonTo(text);
         text = SmallVowelBeforeFinalLongVowelRegex().Replace(text, "");
-        // が/ならあらァ: rough-speech elongated ある (覚えがあらァ, 金ならあらぁ). Must run before the
-        // script-crossing small-vowel split detaches the ァ and strands あら as the interjection. The
-        // preceding particle keeps the clause-initial exclamation あらぁ untouched.
+        // Before the script-crossing split, which would strand あら as the interjection; clause-initial あらぁ stays.
         text = ElongatedAruRegex().Replace(text, "$1ある");
         text = ScriptCrossingSmallVowelRegex().Replace(text, $"{_stopToken}$1$2");
         text = SameScriptSmallVowelRunRegex().Replace(text, "");
         text = ShoutedImperativeSmallVowelRegex().Replace(text, "$1");
-        // After the small-vowel deletions so a shielded lookbehind cannot misfire
-        // (おぉぉーーい must reduce to おーい, not おい).
+        // After the small-vowel deletions: おぉぉーーい must reduce to おーい, not おい.
         text = LongVowelBeforeFinalIRegex().Replace(text, "");
 
         text = StutterFragmentRegex().Replace(text, "");
@@ -268,11 +273,9 @@ public partial class MorphologicalAnalyser
         text = HayameWithoutWoRegex().Replace(text, $"は{_stopToken}やめ");
         text = text.Replace("もやる", $"も{_stopToken}やる");
         text = HayaruWithoutGaRegex().Replace(text, $"は{_stopToken}やる");
-        // やるって: quotative って fragments the verb やる into や+る. Keep やる whole (run after the
-        // はやる split so 流行る is unaffected).
+        // Quotative って fragments やる into や+る; after the はやる split so 流行る is unaffected.
         text = text.Replace("やるって", $"やる{_stopToken}って");
-        // なんとなくって: the って is quotative after the adverb なんとなく — without the split the tail
-        // re-analyses as なんと + なくって (the ない te-form).
+        // Quotative って after なんとなく, else re-read as なんと + なくって.
         text = text.Replace("なんとなくって", $"なんとなく{_stopToken}って");
         text = text
             .Replace("ええんや", $"ええ{_stopToken}んや")
@@ -291,11 +294,9 @@ public partial class MorphologicalAnalyser
             .Replace("もうすぐそこ", $"もうすぐ{_stopToken}そこ")
             ;
 
-        // Forced boundaries where Sudachi mis-cuts a colloquial/compound run.
-        // (すいませんでした is handled lexically by the existing user_dic すいません 表現 entry; すみません
-        //  needs the split because the kana string collides with the verb 済む — 済みませんでした.)
+        // Kana すみません collides with the verb 済む; すいませんでした is covered by a user_dic entry.
         text = text
-            .Replace("すみませんでした", $"すみません{_stopToken}でした")  // すみ|ませんでした → すみません|でした (kana-only; verb 済 is kanji)
+            .Replace("すみませんでした", $"すみません{_stopToken}でした")  // すみ|ませんでした
             .Replace("この世界", $"この{_stopToken}世界")                  // この世+界 → この|世界
             .Replace("だけって", $"だけ{_stopToken}って")                  // 広がっ+ただけ phantom けっ → だけ|って
             .Replace("ははーん", "ははん")                                // は+はーん(ハーン khan) → ははん(2096970)
@@ -304,43 +305,29 @@ public partial class MorphologicalAnalyser
             .Replace("繋がりって", $"繋がり{_stopToken}って")             // 繋|が|り shredded by って → 繋がり + って
             .Replace("んったら", $"ん{_stopToken}ったら")                 // ちゃ|んっ|たら → ちゃん + ったら
             .Replace("にいる", $"に{_stopToken}いる")                     // にいる(name 5408860) → に + いる(居る)
-            .Replace("さっきこ", $"さっき{_stopToken}こ")                 // さっきこ→name さきこ(咲子) via sokuon-norm → さっき + こ(この/これ/ここ)
+            .Replace("さっきこ", $"さっき{_stopToken}こ")                 // sokuon-norm reads name さきこ(咲子)
             .Replace("ないっていう", $"ない{_stopToken}っていう")          // って must not attach left into 〜ない expr
-            // Sudachi's lexicon has the kana-row nouns (ガ行, ハ行…); in hiragana running text the
-            // particle + 行〜 reading is the only real one (母が行かせまい, 聖域には行けっこない),
-            // and the split boundary is also correct before every other 行-word (が行方, は行事).
-            // The genuine row nouns stay reachable through their katakana spellings.
+            // In hiragana text が行/は行 is always particle + 行〜 (母が行かせまい, が行方); row nouns keep katakana ガ行.
             .Replace("が行", $"が{_stopToken}行")                         // ガ行(1040670) fusion → が + 行〜
             .Replace("は行", $"は{_stopToken}行")                         // ハ行(1096940) fusion → は + 行〜
-            // 金のこ (金ノコ, hacksaw abbr) swallows the start of 金のこと; gated on the full のこと
-            // tail so a real hacksaw (金のこで切る) keeps its entry.
-            .Replace("金のこと", $"金{_stopToken}のこと")                  // お金のこと → 金 + の + こと
-            // 誰's だあれ kana form must not eat the copula of a preceding なんだ/何だ ("なんだあれ"
-            // = なんだ + あれ). Keyed on the full なんだ/何だ so a genuine child-speech だあれ after an
-            // ん-final nominal (お姉さんだあれ？) keeps 誰; a standalone だあれ？ is untouched too.
-            .Replace("なんだあれ", $"なんだ{_stopToken}あれ")              // なんだあれ → なんだ + あれ
-            .Replace("何だあれ", $"何だ{_stopToken}あれ")                  // 何だあれは → 何だ + あれ + は
-            // Sudachi's てく contraction steals the く of a following くだせえ (勘弁して|く|だ|せえ);
-            // the boundary keeps the te-form whole so the slurred 下さい can resolve as one token.
-            .Replace("てくだせえ", $"て{_stopToken}くだせえ")              // ~してくだせえ → ~して + くだせえ
-            // Dictionary-form verb + っす copula (わかるっす): Sudachi fuses るっす into a noun shard
-            // and the verb loses its final mora. る never ends a word before っす otherwise.
-            .Replace("るっす", $"る{_stopToken}っす")                      // わかるっすよ → わかる + っす + よ
-            // です steals the す of a following 済まして (顔ですましている); the sequence です+まし
-            // only exists as で + 澄まし/済まし in prose, never as polite です+まして.
-            .Replace("ですまし", $"で{_stopToken}すまし")                  // ~ですましている → で + すまして + いる
-            // ったらありゃしない ("nothing more ... than this") after an i-adjective: the いっ shard
-            // otherwise reads as 行ったら. The full-expression tail keeps 会いに行ったら untouched.
+            // 金のこ (hacksaw) swallows 金のこと; gated on のこと so 金のこで切る keeps its entry.
+            .Replace("金のこと", $"金{_stopToken}のこと")
+            // 誰's だあれ must not eat なんだ's copula; keyed on なんだ/何だ so child-speech お姉さんだあれ？ keeps 誰.
+            .Replace("なんだあれ", $"なんだ{_stopToken}あれ")
+            .Replace("何だあれ", $"何だ{_stopToken}あれ")
+            // Sudachi's てく contraction steals the く of くだせえ (勘弁して|く|だ|せえ).
+            .Replace("てくだせえ", $"て{_stopToken}くだせえ")
+            // Sudachi fuses るっす into a noun shard (わかるっす); る never ends a word before っす otherwise.
+            .Replace("るっす", $"る{_stopToken}っす")
+            // です steals the す of 済まして (顔ですましている); です+まし never occurs in prose.
+            .Replace("ですまし", $"で{_stopToken}すまし")
+            // After an i-adjective the いっ shard reads as 行ったら; the full tail keeps 会いに行ったら.
             .Replace("いったらありゃしない", $"い{_stopToken}ったらありゃしない")
-            // Counter つ + もらう: Sudachi cuts ２つ|も|らって, feeding らって to the ラッテ loanword.
-            // つもらっ has no other reading (積もる's te-form is 積もって).
+            // Sudachi cuts ２つ|も|らって (ラッテ); 積もる's te-form is 積もって, so つもらっ has no other reading.
             .Replace("つもらっ", $"つ{_stopToken}もらっ")
-            // Desiderative たい before a quotative って: Sudachi hands the い to 行って
-            // (知りた|いって, 会いた|いって, 見た|いって). Splitting is correct in every reading —
-            // an adjective tail (重たいって) and kana 鯛って take the same cut.
+            // Sudachi hands たい's い to 行って (知りた|いって); the cut also suits 重たいって and 鯛って.
             .Replace("たいって", $"たい{_stopToken}って")
-            // Dictionary-form verb + っていう (あるっていうなら): Sudachi fuses るっていう into a blob
-            // that drops; る never ends a word before っていう otherwise.
+            // Sudachi fuses るっていう into a dropped blob; る never ends a word before っていう otherwise.
             .Replace("るっていう", $"る{_stopToken}っていう");
         text = TooriQuotativeRegex().Replace(text, _stopToken);
         text = VowelTailKatakanaBoundaryRegex().Replace(text, _stopToken);
@@ -359,24 +346,20 @@ public partial class MorphologicalAnalyser
         // Sudachi's archaic 射出す(いだす) eats the noun 射出 before される/して
         text = text.Replace("射出さ", $"射出{_stopToken}さ");
         text = text.Replace("射出し", $"射出{_stopToken}し");
-        // Boundary anchors so connection costs can't drag these user_dic entries apart:
-        // や+連れて行く must not eat やつれ (操れ=あやつれ excluded), 小木+曽って must not eat
-        // 小木曽, 耳にする+する must not eat するすると
+        // Anchors user_dic entries against connection costs: やつれ (not 操れ), 小木曽, するすると.
         text = YatsureRegex().Replace(text, $"{_stopToken}やつれ");
         // quotative と + かぶりを振る: SpecialCases とか otherwise steals the か (と|か|ぶり)
         text = text.Replace("とかぶりを振", $"と{_stopToken}かぶりを振");
-        // Sudachi has 虫を殺す as one lattice token (the rare "control one's temper" idiom);
-        // fiction overwhelmingly means literal insect-killing — keep it compositional
+        // Sudachi's 虫を殺す is the rare temper idiom; fiction means literal insect-killing.
         text = text.Replace("虫を殺", $"虫を{_stopToken}殺");
         text = text.Replace("小木曽", $"小木曽{_stopToken}");
         text = text.Replace("するすると", $"{_stopToken}するすると");
         text = text.Replace("ぶっち切", "ぶち切");
+        // The playful おっはよー is おはよう; left alone the emphatic-っ boundary strands お (→ 尾).
+        text = text.Replace("おっはよ", "おはよ");
         text = EllipsisBeforeEmphaticTsuRegex().Replace(text, "");
         text = EmphaticTsuRegex().Replace(text, $"{_stopToken}$1");
-        // Split the intensifying prefix ぶっ from 壊れ AFTER EmphaticTsuRegex (脳味噌|が|ぶっ|壊れた).
-        // Doing it before would leave っ in front of the stop token (not the 壊 kanji), so EmphaticTsuRegex
-        // would cut ぶ|っ and Sudachi would merge the preceding が+ぶ→がぶ (then dropped as a kana name).
-        // ぶっ壊れる has no JMDict entry, so ぶっ (2698210) stays a standalone prefix + 壊れた.
+        // After EmphaticTsuRegex, else it cuts ぶ|っ and が+ぶ merges; ぶっ壊れる has no JMDict entry, so ぶっ (2698210) + 壊れた.
         text = text.Replace("ぶっ壊れ", $"{_stopToken}ぶっ{_stopToken}壊れ");
         text = BanCompoundTsuRegex().Replace(text, $"番{_stopToken}っ");
 
@@ -393,7 +376,7 @@ public partial class MorphologicalAnalyser
         text = text
             .Replace("バカバカ", $"バカ{_stopToken}バカ")
             .Replace("事大", $"事{_stopToken}大")
-            // 前大戦: Sudachi cuts 前大(surname Maeo)+戦 → force 前 + 大戦
+            // Sudachi cuts 前大 (surname) + 戦
             .Replace("前大戦", $"前{_stopToken}大戦")
             .Replace("人魚姫", $"人魚{_stopToken}姫")
             .Replace("日間", $"日{_stopToken}間")
@@ -431,7 +414,7 @@ public partial class MorphologicalAnalyser
             if (c is >= '぀' and <= 'ゟ'   // hiragana
                   or >= '゠' and <= 'ヿ'    // katakana (incl. ー)
                   or >= '一' and <= '龯'    // CJK
-                  or '々'                       // 々
+                  or '々'
                   or >= 'Ａ' and <= 'Ｚ'    // fullwidth A-Z
                   or >= 'ａ' and <= 'ｚ'    // fullwidth a-z
                   or >= '０' and <= '９')   // fullwidth 0-9
@@ -459,7 +442,7 @@ public partial class MorphologicalAnalyser
         }
     }
 
-    /// <returns>Positions of the tagged ）, counted in the text with line breaks removed.</returns>
+    /// <summary>Strips the ） marks; returns their positions in the text with line breaks removed.</summary>
     private static HashSet<int> TakeLineEndParenMarks(ref string text)
     {
         var positions = new HashSet<int>();
@@ -487,11 +470,9 @@ public partial class MorphologicalAnalyser
 
     private List<SentenceInfo> SplitIntoSentences(string text, List<WordInfo> wordInfos, HashSet<int> lineEndParens)
     {
-        // Normalise text - remove line breaks for consistent sentence boundaries
         text = text.Replace("\r", "").Replace("\n", "");
 
-        // Phase 1: Build sentences AND track their start positions in the normalised text
-        // This allows O(1) sentence lookup by position instead of repeated IndexOf calls
+        // Start positions give O(1) sentence lookup by offset.
         var sentenceData = new List<(SentenceInfo info, int startPos)>();
         var sb = new StringBuilder();
         bool seenEnder = false;
@@ -513,11 +494,10 @@ public partial class MorphologicalAnalyser
                 if (_sentenceEnders.Contains(current))
                     continue;
 
-                // Flush sentence (without the last character which belongs to next)
+                // The current character belongs to the next sentence.
                 var sentenceText = sb.ToString(0, sb.Length - 1);
                 sentenceData.Add((new SentenceInfo(sentenceText), sentenceStartPos));
 
-                // Next sentence starts at current character position
                 sentenceStartPos = i;
                 sb.Clear();
                 sb.Append(current);
@@ -533,10 +513,7 @@ public partial class MorphologicalAnalyser
         if (sentenceData.Count == 0)
             return [];
 
-        // Phase 2: Assign words using precomputed offsets
-        // Token offsets were computed once from raw Sudachi output (before pipeline stages),
-        // then propagated through all merge/split stages. This avoids fragile IndexOf matching
-        // that breaks when stages modify token Text (e.g., RepairVowelElongation strips ー).
+        // Offsets come from raw Sudachi output and survive merge/split stages; IndexOf breaks when a stage edits Text.
         int sentenceIdx = 0;
 
         foreach (var word in wordInfos)
@@ -550,7 +527,6 @@ public partial class MorphologicalAnalyser
             int wordPos = word.StartOffset;
             int wordEnd = word.EndOffset;
 
-            // Advance to the correct sentence based on word position
             while (sentenceIdx < sentenceData.Count - 1)
             {
                 int nextSentenceStart = sentenceData[sentenceIdx + 1].startPos;
@@ -562,7 +538,7 @@ public partial class MorphologicalAnalyser
             var (sentence, sentenceStart) = sentenceData[sentenceIdx];
             int sentenceEnd = sentenceStart + sentence.Text.Length;
 
-            // Handle words that span sentence boundaries - merge sentences
+            // A word spanning a boundary merges the sentences.
             while (wordEnd > sentenceEnd && sentenceIdx + 1 < sentenceData.Count)
             {
                 var nextSentence = sentenceData[sentenceIdx + 1].info;
@@ -571,7 +547,6 @@ public partial class MorphologicalAnalyser
                 sentenceEnd = sentenceStart + sentence.Text.Length;
             }
 
-            // Calculate position within the sentence and add word
             int posInSentence = wordPos - sentenceStart;
             int spanLength = wordEnd - wordPos;
             sentence.Words.Add((word, posInSentence, spanLength));

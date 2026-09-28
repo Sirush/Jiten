@@ -139,8 +139,7 @@ public static partial class YouTubeSpeechText
     /// <summary>Best accuracy on the hand-labelled YouTube gold set (86.8%); at 0.5 the model over-cuts.</summary>
     public const double UntrustedModelThreshold = 0.7;
 
-    /// <param name="model">Null keeps punctuation-only boundaries, and untrusted videos then get none.</param>
-    /// <returns>The text to parse, and the bitmap to store, or a null bitmap when no boundaries could be found.</returns>
+    /// <summary>A null model keeps punctuation-only boundaries (none for untrusted videos); the bitmap is null when none are found.</summary>
     public static (string Text, byte[]? Boundaries) Prepare(string rawText, SpeechBoundaryModel? model = null)
     {
         var normalised = Normalise(rawText);

@@ -56,8 +56,7 @@ internal sealed class ParserRuntime
 
         var overallSw = Stopwatch.StartNew();
 
-        // Sudachi context creation and Deconjugator JSON load are independent of the DB —
-        // run them concurrently with the three preload queries so they're free on the critical path.
+        // Sudachi and Deconjugator loads don't need the DB, so they overlap the preload queries.
         var sudachiSw = Stopwatch.StartNew();
         var sudachiWarmupTask = Task.Run(static async () =>
         {
@@ -78,8 +77,7 @@ internal sealed class ParserRuntime
             $"(DB wall: {dbWallMs}ms) | sudachi: {sudachiSw.ElapsedMilliseconds}ms " +
             $"(waited {Math.Max(0, sudachiSw.ElapsedMilliseconds - dbWallMs)}ms after DB)");
 
-        // Redis prefill runs in the background — GetWordsAsync has a DB fallback so parsing
-        // works correctly even while the cache is still being populated on a cold start.
+        // Safe to prefill in the background: GetWordsAsync falls back to the DB during a cold start.
         var prefillTask = Task.Run(() => PrefillRedisCacheAsync(jmDictCache, contextFactory));
 
         var kanjiBackedWordIds = BuildKanjiBackedWordIds(lookups);
@@ -87,9 +85,7 @@ internal sealed class ParserRuntime
         return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta, wordObservedFrequencies, kanjiBackedWordIds, prefillTask);
     }
 
-    /// Word ids reachable from a lookup key containing at least one kanji — i.e. words that have
-    /// a kanji written form. A pure-kana surface matching one of these via reading-key collision
-    /// is only plausible when the word is also usually-kana (see Parser.IsKanaAppropriateId).
+    /// <summary>Words with a kanji form; a kana surface hitting one fits only if it is usually-kana (Parser.IsKanaAppropriateId).</summary>
     private static HashSet<int> BuildKanjiBackedWordIds(Dictionary<string, List<int>> lookups)
     {
         var result = new HashSet<int>();
@@ -255,12 +251,10 @@ internal sealed class ParserRuntime
 
             await using var ctx = await contextFactory.CreateDbContextAsync();
 
-            // Pre-compute the archaic flag from a small targeted query (only arch-tagged words + their def POS).
-            // This avoids loading all 215K definitions into memory just to strip them immediately after.
+            // Archaic flag from a targeted query, so the 215K definitions are never loaded.
             var fullyArchaicIds = await JmDictHelper.LoadFullyArchaicWordIds(ctx);
 
-            // Stream words in small batches WITHOUT definitions (~2-3GB savings vs. LoadAllWords).
-            // ComputeArchaicFlag in SetWordsAsync respects IsFullyArchaic when Definitions is empty.
+            // No definitions (~2-3 GB saved); SetWordsAsync then trusts the precomputed IsFullyArchaic.
             await JmDictHelper.StreamWordBatchesAsync(ctx, 2000, async batch =>
             {
                 foreach (var word in batch)

@@ -10,8 +10,7 @@ internal readonly struct JmDictWordMeta(PartOfSpeech[] pos, short priorityScoreK
     public readonly short PriorityScoreKanji = priorityScoreKanji;
     public readonly WordOrigin Origin = origin;
 
-    /// True for actual name entries (surname, given, place, name-fem...) but NOT JMnedict
-    /// "unclass" entries, which cover slang/cultural terms (ダサ) despite mapping to Name.
+    /// <summary>False for JMnedict "unclass" entries, which cover slang like ダサ despite mapping to Name.</summary>
     public readonly bool IsTrueName = isTrueName;
 
     public int GetPriorityScore(bool isKana) => isKana ? PriorityScoreKana : PriorityScoreKanji;

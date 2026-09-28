@@ -34,8 +34,7 @@ public static class LineBreakFeatureExtractor
     private static readonly HashSet<string> FunctionalPos =
         ["助詞", "助動詞", "接尾辞", "感動詞", "接続詞", "代名詞", "副詞", "連体詞"];
 
-    /// <param name="rawLines">Stored text split on '\n'; each line goes through <see cref="SpeechLineCleaner.Clean"/> first.</param>
-    /// <returns>One break between each pair of consecutive kept lines, or null when Sudachi's tokens cannot be mapped back onto the lines.</returns>
+    /// <summary>Takes raw lines (cleaned here); null when Sudachi's tokens cannot be mapped back onto the lines.</summary>
     public static LineBreakSet? Extract(IReadOnlyList<string> rawLines)
     {
         var cleaned = rawLines.Select(SpeechLineCleaner.Clean).ToArray();

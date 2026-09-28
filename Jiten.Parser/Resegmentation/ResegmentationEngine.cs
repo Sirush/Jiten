@@ -94,7 +94,7 @@ internal static class ResegmentationEngine
             var posScore  = ResegmentationScorer.ScorePosTransitions(path, wordPosByWordId, prevPos, nextPos, frequencyRanks);
             if (freqScore + posScore < MinAcceptScore)
                 continue;
-            ReplaceSpan(sentence, span, path, frequencyRanks, wordMeta,
+            ReplaceSpan(sentence, span, path, lookups, frequencyRanks, wordMeta,
                         "Resegmentation.UncertainSpan", freqScore, posScore, diagnostics);
         }
     }
@@ -177,7 +177,7 @@ internal static class ResegmentationEngine
             var posScore  = ResegmentationScorer.ScorePosTransitions(path, wordPosByWordId, prevPos, nextPos, frequencyRanks);
             if (freqScore + posScore < MinAcceptScoreConfidence)
                 continue;
-            ReplaceSpan(sentence, span, path, frequencyRanks, wordMeta,
+            ReplaceSpan(sentence, span, path, lookups, frequencyRanks, wordMeta,
                         "Resegmentation.LowConfidence", freqScore, posScore, diagnostics);
             anyApplied = true;
         }
@@ -185,12 +185,7 @@ internal static class ResegmentationEngine
         return anyApplied;
     }
 
-    // Splits compound kanji numerals at the last place marker (十/百/千/万/億/兆).
-    // E.g. 五十七 → 五十+七, 三十八 → 三十+八, 六十一 → 六十+一.
-    // Pieces must be attested as non-name words: JMnedict covers some numeral surfaces as
-    // personal names (二十三, 五十六), and a number must never resolve through those. A piece
-    // attested only as a name splits recursively instead (二十三 → 二十+三), so the run still
-    // lands on real number words.
+    // Splits at the last place marker (五十七 → 五十+七); a piece JMnedict has only as a name (二十三) splits further.
     private static SpanPath? TrySplitCompoundNumeral(string text, Dictionary<string, List<int>> lookups,
         Dictionary<int, JmDictWordMeta> wordMeta)
     {
@@ -224,9 +219,7 @@ internal static class ResegmentationEngine
         return null;
     }
 
-    // Name-band means every POS is Name/Unknown — this deliberately includes JMnedict "unclass"
-    // entries (五十五 "Isoi"), which IsTrueName excludes: on a numeral surface an unclass entry is
-    // never legitimate vocabulary either.
+    // Drops all-Name/Unknown entries, including JMnedict "unclass" (五十五 "Isoi"), unlike IsTrueName.
     private static List<int>? NonNameLookupIds(string text, Dictionary<string, List<int>> lookups,
         Dictionary<int, JmDictWordMeta> wordMeta)
     {
@@ -238,10 +231,7 @@ internal static class ResegmentationEngine
         return filtered.Count > 0 ? filtered : null;
     }
 
-    // A short segment whose every candidate is a pure JMnedict name entry is not evidence of a
-    // word boundary — it shreds OOV names into coincidental fragments (ファルマ → ファ+ルマ "Ruma").
-    // Long pure-name segments stay allowed: fused name sequences legitimately resegment through
-    // them (ラムシャーリー → ラム+シャーリー, 南アルプス市 → 南アルプス+市).
+    // Short pure-name segments shred OOV names (ファルマ → ファ+ルマ); long ones are real (ラムシャーリー → ラム+シャーリー).
     private static bool HasShortPureNameSegment(SpanPath path, Dictionary<int, JmDictWordMeta> wordMeta)
     {
         foreach (var s in path.Segments)
@@ -249,8 +239,7 @@ internal static class ResegmentationEngine
             if (s.Length > 2)
                 continue;
 
-            // Only actual name entries (name-fem, surname, place...) count as fragments;
-            // JMnedict "unclass" entries cover legitimate slang like ダサ despite mapping to Name.
+            // IsTrueName, since JMnedict "unclass" entries cover real slang like ダサ.
             bool anyName = false, allNameLike = true;
             foreach (var id in s.WordIds)
             {
@@ -268,11 +257,7 @@ internal static class ResegmentationEngine
         return false;
     }
 
-    // Suffixes that license a name component: person honorifics (ラムシャーリー様 →
-    // ラム+シャーリー) and geographic/administrative markers (南アルプス市 → 南アルプス+市).
-    // Without such context, a name entry inside an OOV span is a shred: a loanword that
-    // merely contains a known name (ブリタニカ → ブリ+タニカ) must not fabricate name tokens.
-    // Seeded from the shared honorific set so the person-honorific vocabulary lives in one place.
+    // Suffixes that license a name segment (南アルプス市); without one it is a shred (ブリタニカ → ブリ+タニカ).
     private static readonly HashSet<string> NameContextSuffixes =
     [
         .. Grammar.TransitionRuleSets.HonorificSuffixes,
@@ -284,15 +269,13 @@ internal static class ResegmentationEngine
     private static bool HasNameSegmentOutsidePersonContext(
         SpanPath path, UncertainSpan span, SentenceInfo sentence, Dictionary<int, JmDictWordMeta> wordMeta)
     {
-        // A name-only span being re-split into constituent names is the intended outcome
-        // of the name respray, whatever its context.
+        // Re-splitting a name-only span into names is the intended outcome, whatever the context.
         if (span.NameOnly) return false;
 
         var word = sentence.Words[span.WordIndex].word;
         if (word.IsPersonNameContext) return false;
 
-        // A katakana-styled particle segment marks a styled sentence (ボクノナマエハ) — those
-        // spans legitimately mix vocabulary with name-looking fragments.
+        // A katakana particle marks a styled sentence (ボクノナマエハ) where name-like fragments are fine.
         foreach (var s in path.Segments)
             if (s.Length == 1 && ResegmentationScorer.IsKatakanaParticleChar(span.Text[s.StartChar]))
                 return false;
@@ -310,8 +293,7 @@ internal static class ResegmentationEngine
 
             if (!anyName || !allName) continue;
 
-            // A name segment is licensed by the surface that follows it — the next segment
-            // in the path, or for a span-final segment the next token in the sentence.
+            // The following surface is the next segment, or the next sentence token for a span-final one.
             string? following = j + 1 < path.Segments.Count
                 ? span.Text.Substring(path.Segments[j + 1].StartChar, path.Segments[j + 1].Length)
                 : span.WordIndex + 1 < sentence.Words.Count
@@ -324,22 +306,14 @@ internal static class ResegmentationEngine
         return false;
     }
 
-    // Single-kana segments are noise matches (high-frequency entries like 部/リ/ン win on
-    // frequency score and shred OOV katakana names, e.g. ゴブリンスレイヤー → ゴ+ブ+リ+ン+スレイヤー).
-    // Exceptions: honorific お/ご at the start, and katakana-styled particles anywhere
-    // (オマエガ → オマエ+ガ, ナニガ悪イ → ナニ+ガ+悪イ).
-    // A bare する-conjugation surface can never be a compound component: its only lookup matches
-    // are noun homographs (した→舌), while the real reading — a verb ending — is not reachable
-    // from a resegmentation path (キャッキャウフフした must not shed a 舌 token).
+    // A bare する-conjugation tail only matches noun homographs (キャッキャウフフした must not shed 舌).
     private static bool HasSuruConjugationTail(SpanPath path, string text)
     {
         var last = path.Segments[^1];
         return text.Substring(last.StartChar, last.Length) is "し" or "した" or "して";
     }
 
-    // An all-katakana span that is the katakana spelling of a conjugated word (オカシクナイ →
-    // おかしくない → おかしい) is one word — splitting it into nominal fragments (オカ|シク) can
-    // only produce phonetic coincidences.
+    // A katakana-spelled conjugated word is one word (オカシクナイ → おかしい), never fragments like オカ|シク.
     private static bool IsKatakanaConjugatedWordSpelling(string text,
         Dictionary<string, List<int>> lookups, Dictionary<int, JmDictWordMeta> wordMeta)
     {
@@ -359,10 +333,7 @@ internal static class ResegmentationEngine
         return false;
     }
 
-    // A kana span whose best path is the same segment repeated (ずりずり → ずり|ずり) is a
-    // reduplicated mimetic: one word formed by doubling, never two occurrences of the base noun.
-    // Repeated interjections (はいはいはい) are the exception — emphatic speech genuinely is the
-    // unit uttered several times, so those stay splittable.
+    // A repeated kana segment is one mimetic (ずりずり), except repeated interjections (はいはいはい) which stay split.
     private static bool IsReduplicatedKanaSplit(SpanPath path, string text,
         Dictionary<int, JmDictWordMeta> wordMeta)
     {
@@ -382,6 +353,7 @@ internal static class ResegmentationEngine
         return true;
     }
 
+    // Frequent single kana (リ/ン) shred OOV names (ゴブリン → ゴ+ブ+リ+ン); leading お/ご and katakana particles (オマエガ) pass.
     private static bool HasBadSingleKana(SpanPath path, string text)
     {
         foreach (var s in path.Segments)
@@ -401,19 +373,21 @@ internal static class ResegmentationEngine
 
     private static bool IsHiragana(char c) => JapaneseTextHelper.IsHiragana(c);
 
-    // Homograph pins for segments born here, which never pass FilterMisparse: casual writing
-    // uses katakana ナシ for the negation 無し, but the pear 梨 lists the same katakana form and
-    // wins the frequency-rank tiebreak below.
+    private const int CompoundTailVerbRankAdvantage = 2;
+
+    // Segments born here skip ApplyContextPins; ナシ means 無し, but the pear 梨 would win the rank tiebreak.
     private static readonly Dictionary<string, int> SegmentSurfacePins = new() { ["ナシ"] = 1529560 };
 
     private static void ReplaceSpan(SentenceInfo sentence, UncertainSpan span, SpanPath path,
-        Dictionary<int, int> frequencyRanks, Dictionary<int, JmDictWordMeta> wordMeta,
+        Dictionary<string, List<int>> lookups, Dictionary<int, int> frequencyRanks, Dictionary<int, JmDictWordMeta> wordMeta,
         string source, int freqScore, int posScore, ParserDiagnostics? diagnostics)
     {
         if (path.Segments.Count == 0
             || path.Segments[0].StartChar != 0
             || path.Segments.Any(s => s.WordIds == null || s.WordIds.Count == 0))
             return;
+
+        int RankOf(int id) => frequencyRanks.TryGetValue(id, out var r) ? r : int.MaxValue;
 
         var replacements = path.Segments.Select((seg, segIdx) =>
         {
@@ -442,6 +416,13 @@ internal static class ResegmentationEngine
                     ? [bestWordId.Value]
                     : seg.WordIds,
             };
+
+            // An unattested compound's tail is a nominalised verb (逆回し → 回す) unless the noun is nearly as frequent (越し).
+            if (segIdx > 0 && !surfacePinned
+                && VerbStemLookup.Find(text, replacement.Reading, lookups, wordMeta, frequencyRanks) is { } verb
+                && (long)RankOf(verb.WordId) * CompoundTailVerbRankAdvantage < seg.WordIds.Min(RankOf))
+                VerbStemLookup.Pin(replacement, verb);
+
             return (replacement, span.Position + seg.StartChar, seg.Length);
         }).ToList();
 

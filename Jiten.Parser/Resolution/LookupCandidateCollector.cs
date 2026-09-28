@@ -33,10 +33,7 @@ internal static class LookupCandidateCollector
         return false;
     }
 
-    /// Collects distinct word IDs from lookups by raw text, hiragana, and optionally kana-normalized and long-vowel-stripped variants.
-    /// `normalizedTierGate`, when set, filters ids found ONLY via the kana-normalized / long-vowel-stripped
-    /// tiers: those rewrites invent readings the author never wrote (いえー → いえい), so a hit there must be
-    /// a word plausibly written in kana, not a kanji word reached through its reading key (遺影).
+    /// <summary>normalizedTierGate filters normalized-only hits, which invent readings (いえー → いえい must not reach 遺影).</summary>
     public static List<int> CollectIds(
         Dictionary<string, List<int>> lookups,
         string text,

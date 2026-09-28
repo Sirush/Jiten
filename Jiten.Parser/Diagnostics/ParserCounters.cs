@@ -2,8 +2,7 @@ using System.Text;
 
 namespace Jiten.Parser.Diagnostics;
 
-/// Process-wide event counters for the parse hot path. Increments are lock-free and cheap enough
-/// to stay on in production; the benchmark command prints and resets them.
+/// <summary>Process-wide, cheap enough to stay on in production; the benchmark command prints and resets them.</summary>
 public static class ParserCounters
 {
     public static long AdjTokens;
@@ -39,7 +38,7 @@ public static class ParserCounters
         AdjSelect,
     }
 
-    /// Off by default: the per-section timestamps cost a few ms per document and only the benchmark reads them.
+    /// <summary>Off by default: timestamps cost a few ms per document and only the benchmark reads them.</summary>
     public static bool SectionTiming;
     private static readonly long[] SectionTicks = new long[Enum.GetValues<Section>().Length];
 

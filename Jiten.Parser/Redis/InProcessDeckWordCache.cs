@@ -5,15 +5,7 @@ using StackExchange.Redis;
 
 namespace Jiten.Parser.Data.Redis;
 
-/// <summary>
-/// In-process bounded cache of resolved <see cref="DeckWord"/> entries in front of the Redis cache,
-/// so recurring vocabulary skips the MGET + MessagePack round trip. Two-generation approximate LRU
-/// like <see cref="InProcessJmDictCache"/>.
-///
-/// Callers mutate the DeckWord they receive (occurrence counting), so every read hands out a fresh
-/// clone and every write stores one. Only positive results are cached: a miss must keep reaching
-/// Redis, where another process may have resolved the word since.
-/// </summary>
+/// <summary>Clones on read and write (callers mutate occurrences); caches hits only, since another process may fill a miss.</summary>
 public sealed class InProcessDeckWordCache : IDeckWordCache
 {
     private readonly IDeckWordCache _inner;

@@ -6,9 +6,6 @@ using Jiten.Parser.Scoring;
 
 namespace Jiten.Parser.Diagnostics;
 
-/// <summary>
-/// Root diagnostics container for parser analysis
-/// </summary>
 public class ParserDiagnostics
 {
     public string InputText { get; set; } = string.Empty;
@@ -36,8 +33,7 @@ public class ParserDiagnostics
         DroppedTokens.Add(new DroppedTokenEntry(text, pos, reason));
     }
 
-    /// Records Parser-level structural mutations (resegmentation splits, misparse filters, etc.)
-    /// that happen after the morphological token stages and are otherwise invisible in diagnostics.
+    /// <summary>Mutations made after the token stages (resegmentation, misparse filters), invisible to them.</summary>
     internal void LogParserEvent(string source, string type, string[] inputTokens, string[]? outputTokens, string reason)
     {
         lock (_eventLock)
@@ -93,9 +89,6 @@ public sealed record TransitionViolationEntry(
     [property: JsonConverter(typeof(JsonStringEnumConverter))]
     PartOfSpeech? PrevPos);
 
-/// <summary>
-/// Lightweight counters for parse-run-level health and fallback behavior.
-/// </summary>
 public class ParserRunSummary
 {
     private int _processSemaphoreTimeoutCount;
@@ -111,9 +104,6 @@ public class ParserRunSummary
         Interlocked.Increment(ref _unresolvedTokenCount);
 }
 
-/// <summary>
-/// Diagnostics from Sudachi morphological analysis
-/// </summary>
 public class SudachiDiagnostics
 {
     public double ElapsedMs { get; set; }
@@ -121,9 +111,6 @@ public class SudachiDiagnostics
     public List<SudachiToken> Tokens { get; set; } = [];
 }
 
-/// <summary>
-/// Individual token from Sudachi output
-/// </summary>
 public class SudachiToken
 {
     public string Surface { get; set; } = string.Empty;
@@ -133,15 +120,11 @@ public class SudachiToken
     public string Reading { get; set; } = string.Empty;
     public string NormalizedForm { get; set; } = string.Empty;
 
-    /// Lattice segmentation margin (extra cost of cheapest competing path crossing a token
-    /// boundary; 99999 = no competitor). Null when margins were not requested/supported.
+    /// <summary>Extra cost of the cheapest rival lattice path; 99999 = no rival, null = margins not requested.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? Margin { get; set; }
 }
 
-/// <summary>
-/// Records processing at a single stage of the token pipeline
-/// </summary>
 public class TokenProcessingStage
 {
     public string StageName { get; set; } = string.Empty;
@@ -151,9 +134,7 @@ public class TokenProcessingStage
     public int OutputTokenCount { get; set; }
     public List<TokenModification> Modifications { get; set; } = [];
 
-    /// Full token surfaces entering/leaving the stage. Serialized only when the
-    /// stage changed something — unchanged stages carry state forward implicitly,
-    /// so consumers can reconstruct the exact token list at every pipeline point.
+    /// <summary>Set only when the stage changed something; consumers carry the previous list forward otherwise.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? InputTokens { get; set; }
 
@@ -164,26 +145,19 @@ public class TokenProcessingStage
     public bool Skipped { get; set; }
 }
 
-/// <summary>
-/// Individual modification made during token processing
-/// </summary>
 public class TokenModification
 {
     public string Type { get; set; } = string.Empty; // "merge", "split", "remove", "insert", "replace", "resegment", "reclassify"
     public string[] InputTokens { get; set; } = [];
     public string[] OutputTokens { get; set; } = [];
 
-    /// Positions of the affected run in the stage's input/output token lists,
-    /// so repeated surfaces stay unambiguous for consumers.
+    /// <summary>Index of the affected run, so repeated surfaces stay unambiguous.</summary>
     public int InputIndex { get; set; }
     public int OutputIndex { get; set; }
 
     public string Reason { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// Final word result after all processing
-/// </summary>
 public class WordResult
 {
     public string Text { get; set; } = string.Empty;
@@ -232,9 +206,6 @@ public class FormCandidateDiagnostic
     public string? RubyPriorLevel { get; set; }
 }
 
-/// <summary>
-/// Result from running the diagnostic test suite
-/// </summary>
 public class TestRunResult
 {
     public int TotalTests { get; set; }
@@ -243,9 +214,6 @@ public class TestRunResult
     public List<TestFailure> Failures { get; set; } = [];
 }
 
-/// <summary>
-/// Individual test failure with full diagnostics
-/// </summary>
 public class TestFailure
 {
     public string Input { get; set; } = string.Empty;
@@ -255,9 +223,6 @@ public class TestFailure
     public FailureAnalysis? Analysis { get; set; }
 }
 
-/// <summary>
-/// Analysis of why a test failed and suggested fix
-/// </summary>
 public class FailureAnalysis
 {
     public string Type { get; set; } = string.Empty; // "OverSegmentation", "UnderSegmentation", "TokenMismatch"

@@ -3,10 +3,7 @@ using StackExchange.Redis;
 
 namespace Jiten.Parser.Data.Redis;
 
-/// <summary>
-/// Manages a shared ConnectionMultiplexer instance.
-/// ConnectionMultiplexer is designed to be shared and reused - creating multiple instances is expensive.
-/// </summary>
+/// <summary>One shared ConnectionMultiplexer; multiple instances are expensive.</summary>
 public static class RedisConnectionManager
 {
     private static ConnectionMultiplexer? _connection;

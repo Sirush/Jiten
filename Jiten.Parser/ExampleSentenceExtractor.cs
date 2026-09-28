@@ -50,16 +50,12 @@ public static partial class ExampleSentenceExtractor
         {
             if (!wordsByText.TryGetValue(wordInfo.Text, out var wordList) || wordList.Count <= 0) return null;
 
-            // Find best word with matching POS — prefer direct POS match over name-like fallback.
-            // When multiple DeckWords share the same text and POS (e.g. 身体 as からだ vs しんたい),
-            // prefer the one whose SudachiReading matches the token's reading.
+            // Direct POS match beats name-like fallback; same text+POS picks by SudachiReading (身体 からだ vs しんたい).
             int matchIndex = -1;
             int fallbackIndex = -1;
             int posMatchNoReading = -1;
 
-            // Priority 0: exact WordId match from parser resolution — avoids assigning
-            // an example sentence to a wrong DeckWord when the same surface text resolved
-            // to different WordIds in different sentences (e.g. さっき → 1005180 vs misparse 1299060).
+            // Resolved WordId wins: one surface can resolve differently per sentence (さっき → 1005180 vs misparse 1299060).
             if (wordInfo.ResolvedWordId.HasValue)
             {
                 for (int j = 0; j < wordList.Count; j++)
@@ -104,9 +100,7 @@ public static partial class ExampleSentenceExtractor
                         matchIndex = posMatchNoReading;
                 }
 
-                // Only use the name-like fallback when either:
-                // - this surface text has no competing non-Name DeckWord (pure name word), OR
-                // - the token is in person name context (followed by さん/くん/etc.)
+                // Name-like fallback only for pure name words or tokens in person-name context (followed by さん/くん).
                 if (matchIndex == -1 &&
                     (!textsWithNonNameEntry.Contains(wordInfo.Text) || wordInfo.IsPersonNameContext))
                     matchIndex = fallbackIndex;
@@ -126,7 +120,6 @@ public static partial class ExampleSentenceExtractor
         foreach (var word in words)
             keptForms.Add((word.WordId, word.ReadingIndex));
 
-        // Pre-filter sentences with insufficient character diversity
         var validSentences = new HashSet<SentenceInfo>(); 
         for (int i = 0; i < sentences.Count; i++)
         {
@@ -149,7 +142,6 @@ public static partial class ExampleSentenceExtractor
             }
         }
 
-        // Create position lookup for valid sentences only
         var sentencePositions = new Dictionary<SentenceInfo, int>();
         for (int i = 0; i < sentences.Count; i++)
         {
@@ -159,7 +151,6 @@ public static partial class ExampleSentenceExtractor
             }
         }
 
-        // Group words by text for O(1) lookup instead of linear search
         var wordsByText = new Dictionary<string, List<DeckWord>>();
         foreach (var word in words)
         {
@@ -177,10 +168,7 @@ public static partial class ExampleSentenceExtractor
                                                });
         }
 
-        // Track surface texts that have at least one non-Name DeckWord. When a text has both
-        // Name and non-Name entries (e.g. 深雪 = name + deep snow), the name-like POS fallback
-        // should only match tokens in person name context — otherwise the Name entry steals
-        // example sentences from the Noun entry after it's consumed.
+        // Texts with a non-Name entry (深雪 name + deep snow) restrict the name fallback, or the Name entry steals the noun's sentences.
         var textsWithNonNameEntry = new HashSet<string>();
         foreach (var word in words)
         {
@@ -193,10 +181,8 @@ public static partial class ExampleSentenceExtractor
 
         foreach (var pass in subtitleSpeech ? SubtitlePasses : ProsePasses)
         {
-            // Only consider sentences from the first X% of the text
             int maxPosition = (int)(sentences.Count * pass.Percentage);
 
-            // Pre-filter and sort sentences for this pass
             var candidateSentences = new List<SentenceInfo>();
             foreach (var sentence in validSentences)
             {
@@ -209,7 +195,6 @@ public static partial class ExampleSentenceExtractor
                 }
             }
 
-            // Sort by length descending
             candidateSentences.Sort((a, b) => b.Text.Length.CompareTo(a.Text.Length));
 
             for (int i = 0; i < candidateSentences.Count; i++)
@@ -265,14 +250,12 @@ public static partial class ExampleSentenceExtractor
 
                 usedSentences.Add(sentence);
 
-                // Early exit if no more words available
                 if (wordsByText.Count == 0)
                 {
                     return exampleSentences;
                 }
             }
 
-            // Early exit if no more words available
             if (wordsByText.Count == 0)
             {
                 break;

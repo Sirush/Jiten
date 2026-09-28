@@ -20,7 +20,7 @@ public class RedisDeckWordCache : IDeckWordCache
 
     private static string BuildRedisKey(DeckWordCacheKey key)
     {
-        // Context flags are part of the key because they can affect dictionary matching (e.g., honorifics, name-likeness).
+        // Context flags are keyed because they change dictionary matching (honorifics, name-likeness).
         return $"deckword:{key.Text}:{key.PartOfSpeech}:{key.DictionaryForm}:{key.Reading}:{(key.IsPersonNameContext ? 1 : 0)}:{(key.IsNameLikeSudachiNoun ? 1 : 0)}";
     }
 

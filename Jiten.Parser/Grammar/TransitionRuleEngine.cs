@@ -15,16 +15,12 @@ internal static class TransitionRuleEngine
     private static readonly TransitionRule[] ContextHardRules = Array.FindAll(
         TransitionRuleSets.HardRules, r => r.Id is not ("leading-aux-strip" or "particle-at-sentence-start"));
 
-    // Two-pass approach
-    //   Pass 1 — while-loop strips all leading verb-attaching auxiliaries
-    //   Pass 2 — backwards loop validates aux context and counter placement
     internal static void ApplyHardRules(
         List<(WordInfo word, int pos, int len)> words,
         Func<string, bool> hasLookup,
         ParserDiagnostics? diagnostics = null)
     {
-        // Pass 1: strip all sentence-initial tokens that can never begin a clause (needs while loop:
-        // removing index 0 exposes a new index 0 that also needs to be checked)
+        // Loops because removing index 0 exposes a new index 0.
         bool leadingRemoved;
         do
         {
@@ -42,7 +38,7 @@ internal static class TransitionRuleEngine
             }
         } while (leadingRemoved);
 
-        // Pass 2: backwards pass for context-dependent rules (aux following wrong POS, orphaned counters)
+        // Backwards so merges and removals never shift unvisited indices.
         for (int i = words.Count - 1; i >= 0; i--)
         {
             var window = BuildWindow(words, i);
@@ -58,8 +54,7 @@ internal static class TransitionRuleEngine
         }
     }
 
-    // ValidIf semantics: empty means "never valid" (always a violation when WhenToken matches).
-    // Non-empty: valid only when ALL conditions match.
+    // Empty ValidIf means never valid.
     private static bool IsValidState(TokenWindow w, MatchCondition[] validIf)
     {
         if (validIf.Length == 0) return false;
@@ -145,20 +140,22 @@ internal static class TransitionRuleEngine
                 MatchCondition.NextIsNotQuotative =>
                     w.Next == null || !w.Next.Text.StartsWith("という", StringComparison.Ordinal),
 
-                // Valid hosts for a sentence-final particle: auxiliaries/particles (だな, はね), plain
-                // predicates before な (prohibitive えぐるな, exclamatory 欲しいな), and plain
-                // predicates before よ/ね only when the next token looks vocative
-                // (やべえよ母ちゃん). The vocative gate keeps ordinary run-on text such as
-                // 食べるよ明日 subject to the existing merge/remove repair.
+                // Plain predicate + よ/ね is valid only before a vocative (やべえよ母ちゃん), not run-on text (食べるよ明日).
                 MatchCondition.PrevIsSfpValidHost =>
                     w.Prev?.PartOfSpeech is PartOfSpeech.Auxiliary or PartOfSpeech.Particle
                     || (w.Current.Text == "な"
                         && w.Prev is { PartOfSpeech: PartOfSpeech.Verb or PartOfSpeech.IAdjective }
                         && w.Prev.Text == w.Prev.DictionaryForm)
+                    || (w.Current.Text == "か" && w.Prev is { PartOfSpeech: PartOfSpeech.Verb }
+                        && w.Prev.Text == w.Prev.DictionaryForm)
                     || (w.Current.Text is "よ" or "ね"
                         && w.Prev is { PartOfSpeech: PartOfSpeech.Verb or PartOfSpeech.IAdjective }
                         && w.Prev.Text == w.Prev.DictionaryForm
-                        && IsVocativeFollower(w.Next)),
+                        && IsVocativeFollower(w.Next))
+                    // Clause-initial noun + よ is the vocative (主よ, 神よ); merging it fabricates a verb (主る).
+                    || (w.Current.Text == "よ" && w.Index == 1
+                        && w.Prev?.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                            or PartOfSpeech.Pronoun or PartOfSpeech.Name),
 
                 _ => false
             };
@@ -246,19 +243,13 @@ internal static class TransitionRuleEngine
         return new TokenWindow(prev, words[i].word, next, i, words.Count);
     }
 
-    // The ContextMatch conditions of every soft rule reference only context fields (prev/next/sentence
-    // position), which are constant across all candidates of a token. So the set of context-applicable
-    // rules can be computed once per token and reused: bit r is set iff SoftRules[r].ContextMatch passes.
-    // The bitmask covers the first 64 rules; rules at index >= 64 fall back to live ContextMatch
-    // evaluation in EvaluateSoftRules (output-identical, just unoptimized), so adding rules is always
-    // safe — no silent overflow.
+    // ContextMatch must read only prev/next/position fields, so its mask is per token; rules past 64 evaluate live.
     private const int MaskCapacity = 64;
 
     internal static ulong ComputeContextApplicableMask(
         uint prevMask, bool hasPrev, string? prevText,
         uint nextMask, bool hasNext, string? nextText)
     {
-        // Candidate fields are unused by ContextMatch conditions, so leave them at defaults.
         var ctx = new ConditionContext(0, "", prevMask, hasPrev, prevText, nextMask, hasNext, nextText);
         var rules = TransitionRuleSets.SoftRules;
 
@@ -278,7 +269,6 @@ internal static class TransitionRuleEngine
 
         for (int r = 0; r < rules.Length; r++)
         {
-            // Rules 0..63 use the precomputed mask; any beyond fall back to live evaluation.
             bool contextApplicable = r < MaskCapacity
                 ? (contextApplicableMask & (1UL << r)) != 0
                 : MatchesAll(ctx, rules[r].ContextMatch);
@@ -351,8 +341,7 @@ internal static class TransitionRuleEngine
         string? NextText,
         bool CandidateIsSuruNounVal = false,
         bool CandidateHasHonorificRegister = false,
-        // Defaults to true: the CouldAnySoftRuleApply prefilter has no candidate, so
-        // deconjugation-dependent rules must be assumed applicable there.
+        // True by default: the prefilter has no candidate, so deconjugation-dependent rules must stay applicable.
         bool CandidateHasVolitionalChainVal = true,
         bool CandidateIsInfinitiveVal = true)
     {
@@ -404,7 +393,6 @@ internal static class TransitionRuleEngine
                 ScoringCondition.NextIsNaConnector =>
                     ctx.NextText is "な",
 
-                // Adverbial に after an adj-na homograph (露に晒す = あらわ, not dew; 変に, 楽に).
                 ScoringCondition.NextIsNiParticle =>
                     ctx.NextText == "に" && PosMask.Has(ctx.NextMask, PosMask.Particle),
 

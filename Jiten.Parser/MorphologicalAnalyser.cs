@@ -19,8 +19,7 @@ public partial class MorphologicalAnalyser
     public Func<string, bool>? HasExpressionLookup { get; set; }
     public Func<string, bool>? HasCounterSenseLookup { get; set; }
 
-    // Captured per Parse call for RetokeniseOovBlobs; an instance must not serve two parses with
-    // different Sudachi configs concurrently (all production paths construct one instance per parse).
+    // Captured per Parse for RetokeniseOovBlobs; one instance must not run concurrent parses with different Sudachi configs.
     private string? _sudachiConfigPath;
     private string? _sudachiDicPath;
     private char _sudachiMode = 'B';
@@ -90,15 +89,7 @@ public partial class MorphologicalAnalyser
         return forms;
     }
 
-    /// <summary>
-    /// Parses the given text into a list of SentenceInfo objects by performing morphological analysis.
-    /// Delegates to ParseBatch for a single codepath.
-    /// </summary>
-    /// <param name="text">The input text to be analyzed.</param>
-    /// <param name="morphemesOnly">A boolean indicating whether the parsing should output only morphemes. When true, parsing will use mode 'A' for morpheme parsing.</param>
-    /// <param name="preserveStopToken">A boolean indicating whether the stop token should be preserved in the processed text. Used in the ReaderController</param>
-    /// <param name="diagnostics">Optional diagnostics container for verbose debug output.</param>
-    /// <returns>A list of SentenceInfo objects representing the parsed output.</returns>
+    /// <summary>morphemesOnly uses Sudachi mode A; preserveStopToken keeps the stop token for the reader.</summary>
     public async Task<List<SentenceInfo>> Parse(string text, bool morphemesOnly = false, bool preserveStopToken = false,
                                                 ParserDiagnostics? diagnostics = null,
                                                 BenchmarkTimings? timings = null,
@@ -134,7 +125,6 @@ public partial class MorphologicalAnalyser
 
         var sw = timings != null ? Stopwatch.StartNew() : null;
 
-        // Preprocess each text separately (preserves transformations per-text)
         const int sudachiMaxBytes = 49_000;
         var processedTexts = new List<string>(texts.Count);
         var originalTexts = new List<string>(texts.Count);
@@ -164,14 +154,12 @@ public partial class MorphologicalAnalyser
             cleanedOriginals?.Add(cleanedOriginal);
         }
 
-        // Join with batch delimiter (only if multiple texts)
         var combinedText = texts.Count == 1
             ? processedTexts[0]
             : string.Join($" {_batchDelimiter} ", processedTexts);
 
         if (sw != null) { timings!.TextPreprocessMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
-        // Single Sudachi call
         var configPath = morphemesOnly
             ? runtimeSettings.SudachiNoUserDicConfigPath
             : runtimeSettings.SudachiConfigPath;
@@ -179,8 +167,7 @@ public partial class MorphologicalAnalyser
         var sudachiStopwatch = diagnostics != null ? Stopwatch.StartNew() : null;
         var mode = morphemesOnly ? 'A' : 'B';
 
-        // Capture the Sudachi handle so a late stage can re-tokenise an OOV kana mega-blob in isolation
-        // (Sudachi only blobs it because of surrounding-lattice context; alone it segments cleanly).
+        // A late stage re-tokenises OOV kana blobs alone; Sudachi only blobs them because of surrounding context.
         _sudachiConfigPath = configPath;
         _sudachiDicPath = dic;
         _sudachiMode = mode;
@@ -190,7 +177,6 @@ public partial class MorphologicalAnalyser
 
         if (SudachiInterop.StreamingAvailable)
         {
-            // Diagnostics runs capture raw output and request lattice segmentation margins
             var (words, rawOutput) = await SudachiInterop.ProcessTextStreamingAsync(configPath, combinedText, dic,
                                                                                     captureRaw: diagnostics != null,
                                                                                     mode: mode, userDictCsv: userDictCsv,
@@ -247,7 +233,6 @@ public partial class MorphologicalAnalyser
             throw new InvalidOperationException("Sudachi streaming FFI unavailable and no diagnostics fallback requested");
         }
 
-        // Split by delimiter tokens (if batch)
         var batches = new List<List<WordInfo>>();
         if (texts.Count == 1)
         {
@@ -276,14 +261,13 @@ public partial class MorphologicalAnalyser
                 }
             }
 
-            batches.Add(currentBatch); // Last batch
+            batches.Add(currentBatch);
         }
 
         allWordInfos = null!;
 
         if (sw != null) { timings!.TokenParsingMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
-        // Process each batch through normal pipeline
         var results = new List<List<SentenceInfo>>();
         for (int i = 0; i < batches.Count && i < originalTexts.Count; i++)
         {

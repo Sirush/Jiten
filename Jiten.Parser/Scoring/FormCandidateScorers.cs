@@ -73,17 +73,13 @@ internal static class WordPriorityScorer
             bool hasFrequencyMarker = KanaScoringHelpers.HasFrequencyMarker(word.Priorities);
             if (!hasFrequencyMarker)
             {
-                // Archaic pronouns (汝 なんじ, 我 われ, etc.) appear regularly in literary/fantasy
-                // prose without the sentence being fully classical. Softer penalty for pronouns.
+                // Archaic pronouns (汝 なんじ) are common in modern literary/fantasy prose, so they get a softer penalty.
                 bool isPronoun = word.CachedPOS.Contains(PartOfSpeech.Pronoun);
                 wordScore -= isArchaicSentence ? 50 : (isPronoun ? 100 : 350);
             }
         }
 
-        // Only penalise when the word has NO non-archaic primary POS.
-        // E.g. 無し has adj-ku (archaic) BUT also n — modern usage still valid, skip penalty.
-        // "suf"/"pref" are sub-categorisations, not primary word classes — a word can be
-        // simultaneously archaic (v2a-s) and a suffix, so they must not exempt it from the penalty.
+        // Any modern primary POS exempts (無し adj-ku also has n); "suf" doesn't, since a v2a-s word can also be a suffix.
         var posToCheck = candidate.EffectivePos;
         if (posToCheck.Any(archaicPosTypes.Contains)
             && !posToCheck.Any(p => p is "n" or "n-adv" or "n-t" or "n-pref" or "n-suf"
@@ -101,30 +97,23 @@ internal static class WordPriorityScorer
         if (word.PartsOfSpeech.Any(p => p is "on-mim"))
             wordScore += 10;
 
-        // Adverbs commonly start clauses; mild boost when sentence-initial.
         if (isSentenceInitial && word.PartsOfSpeech.Any(p => p is "adv" or "adv-to"))
             wordScore += 10;
 
-        // Sentence-final particles (ね/よ/ぞ/わ/な/さ/か/の …) get a bonus only at true
-        // end-of-sentence
-        // Resolves homograph conflicts like 〜な (na-adj ending) vs. final 〜な (particle).
+        // Separates the final particle な from homographs like the na-adjective ending.
         if (isSentenceFinal
             && word.PartsOfSpeech.Any(p => p is "prt")
             && SentenceFinalParticleSurfaces.Contains(candidate.FormTextHiragana))
             wordScore += 25;
 
-        // Unclass entries (JMnedict names with no category) are last-resort matches.
-        // Penalise them when not in a name context so proper words score higher.
+        // Unclass entries are uncategorised JMnedict names, a last resort outside name context.
         if (!isNameContext && word.PartsOfSpeech.All(p => p is "unclass"))
             wordScore -= 40;
 
-        // Pure counters (words whose only real POS is "ctr") almost always follow a number.
-        // Penalise them so noun/adjective homophones win in non-numeric contexts
-        // (e.g. 色/ショク counter vs 色/いろ noun).
+        // Pure counters almost always follow a number, so homophones win elsewhere (色 いろ over counter ショク).
         if (word.PartsOfSpeech.All(p => p is "ctr"))
             wordScore -= 10;
 
-        // Shorter deconjugation chains are preferred for morphological plausibility.
         int chainCount = candidate.DeconjForm?.Process.Length ?? 0;
         if (chainCount <= 2)
             wordScore += 8;
@@ -168,8 +157,7 @@ internal static class EntryPriorityScorer
             if (wordPri.Contains("spec2")) entryPriorityScore += 2;
         }
 
-        // Grammatical copula words (である, だ, etc.) compete against high-frequency content words.
-        // Boost them so they aren't crowded out by ichi1/news1 verbs in grammatical positions.
+        // Copulas (である, だ) lack the ichi1/news1 tags that would keep frequent verbs from crowding them out.
         if (candidate.Word.PartsOfSpeech.Contains("cop"))
             entryPriorityScore += 20;
 
@@ -205,10 +193,9 @@ internal static class FormPriorityScorer
 
         if (priorities.Contains("jiten")) formPriorityScore += 25;
 
-        // "uk" (usually-kana) bias, scaled by whether the word has stronger frequency evidence.
         if (word.PartsOfSpeech.Contains("uk"))
         {
-            // "uk" bias — jiten is excluded because it's an internal priority, not public frequency evidence
+            // jiten is excluded: it's an internal priority, not public frequency evidence.
             bool hasFreqMarker = KanaScoringHelpers.HasFrequencyMarker(wordPri, includeJiten: false);
             int ukBonus = hasFreqMarker ? 10 : 3;
             if (candidate.Form.FormType == JmDictFormType.KanaForm || isKanaSurface)
@@ -242,26 +229,17 @@ internal static class FormFlagScorer
         if (isPureKanaWord && form.FormType == JmDictFormType.KanaForm && context.IsKanaSurface)
             formFlagScore += 20;
 
-        // JMDict lists a kanji entry's readings in order of prevalence, so a kana surface reaching a
-        // secondary reading (そうか as the on-reading of 草花, whose primary reading is くさばな) is weak
-        // evidence — it must not outrank an entry actually written that way (そうか "I see").
-        // Usually-kana entries are exempt: their kana forms are how the word is really written.
+        // JMDict orders readings by prevalence, so a secondary one (草花 そうか) must not beat そうか "I see"; uk is exempt.
         if (!isPureKanaWord && form.FormType == JmDictFormType.KanaForm && context.IsKanaSurface
             && !word.PartsOfSpeech.Contains("uk")
             && !IsFirstKanaReading(word, candidate.FormTextHiragana))
             formFlagScore -= 15;
 
-        // Colloquial expressions (e.g. こった = ことだ contraction, めでたいこった) are often
-        // tagged [exp, col]. When the surface exactly matches such an entry's form, prefer it
-        // over adjectival/nominal homographs (e.g. 1238990 こった "elaborate" adj-f) that happen
-        // to share the kana form — the colloquial reading is usually intended in running speech.
+        // Exact-surface [exp, col] entries (こった = ことだ) beat homographs like こった "elaborate" (1238990) in speech.
         if (formMatchesSurface && word.PartsOfSpeech.Contains("col") && word.PartsOfSpeech.Contains("exp"))
             formFlagScore += 15;
 
-        // High-frequency kanji words (jiten priority) should not beat grammatical words
-        // via a single-char kana match. Single-char kana tokens are virtually always
-        // grammatical (copula/aux/particle); jiten content words like 打(だ) compete
-        // unfairly through their kana reading and must be suppressed.
+        // Single-kana tokens are almost always grammatical, so a jiten kanji word (打 だ) must not win through its reading.
         if (!isPureKanaWord && form.FormType == JmDictFormType.KanaForm
             && context.IsKanaSurface && context.Surface.Length == 1
             && word.Priorities?.Contains("jiten") == true)
@@ -270,8 +248,7 @@ internal static class FormFlagScorer
         return formFlagScore;
     }
 
-    /// Compares against the first kana form phonetically, so a katakana spelling of the primary
-    /// reading (懐炉: かいろ then カイロ) counts as that reading rather than a secondary one.
+    /// <summary>Phonetic compare, so a katakana spelling of the primary reading (懐炉 カイロ) counts as primary.</summary>
     private static bool IsFirstKanaReading(JmDictWord word, string formTextHiragana)
     {
         foreach (var f in word.Forms)
@@ -295,9 +272,7 @@ internal static class SurfaceScorer
         if (surface == formText)
         {
             score += 300;
-            // Katakana-exact match usually indicates a gairaigo entry intentionally written in
-            // katakana; give a small edge over otherwise-equal hiragana forms of kanji words
-            // (e.g. タンゴ dance vs. 単語 hiragana form たんご).
+            // A katakana-exact match is usually intended gairaigo (タンゴ over 単語's たんご).
             bool isPureKatakana = surface.Length > 0;
             foreach (var c in surface)
             {
@@ -308,14 +283,16 @@ internal static class SurfaceScorer
         }
         else if (context.SurfaceHiragana == candidate.FormTextHiragana)
         {
-            // A hiragana surface matching a PURE-KATAKANA form is a coincidental cross-script fold to a
-            // different word (ある verb vs アル=二 numeral; まま vs ママ "mom"), not a kana spelling variant —
-            // give only a small bonus so the same-script (hiragana) match wins. The reverse direction
-            // (katakana surface → hiragana/kanji kana form, e.g. gairaigo written in kana) keeps the bonus.
-            if (JapaneseTextHelper.IsAllHiragana(surface) && JapaneseTextHelper.IsAllKatakana(formText))
+            // Hiragana → katakana folds hit different words (まま vs ママ), as do mixed → hiragana (ショートして → しょうとして).
+            // Katakana surface → hiragana form keeps the full bonus (gairaigo written in kana).
+            bool pureScriptDifference = KanaScoringHelpers.IsPureKanaScriptDifference(surface, formText);
+            if (JapaneseTextHelper.IsAllHiragana(surface)
+                    ? formText.Any(JapaneseTextHelper.IsKatakana)
+                    : !pureScriptDifference && JapaneseTextHelper.IsAllHiragana(formText)
+                      && surface.Any(JapaneseTextHelper.IsKatakana) && surface.Any(JapaneseTextHelper.IsHiragana))
                 score += 40;
             else
-                score += KanaScoringHelpers.IsPureKanaScriptDifference(surface, formText) ? 280 : 120;
+                score += pureScriptDifference ? 280 : 120;
         }
         else
         {
@@ -352,14 +329,11 @@ internal static class LemmaScorer
         if (candidate.DeconjForm?.Process is { Length: > 0 } deconjProcess)
             lemmaScale = Math.Max(0.0, 1.0 - (deconjProcess.Length - 1) * 0.35);
 
-        // Lemma match — only when dictionaryForm differs from surface.
         if (!string.IsNullOrEmpty(dictionaryForm) && dictionaryForm != surface)
         {
             if (dictionaryForm == formText)
             {
-                // When deconjugation traces back to the DictionaryForm, Sudachi and the
-                // deconjugator independently agree on the base form — use a higher floor
-                // so deep chains (e.g. 来てない→来る via teru contraction) aren't crushed.
+                // Sudachi and the deconjugator agreeing earns a higher floor so deep chains (来てない→来る) aren't crushed.
                 bool deconjConfirmsDictForm = candidate.DeconjForm is { Process.Length: > 0 }
                     && candidate.DeconjForm.Text == context.DictionaryFormHiragana;
                 double floor = deconjConfirmsDictForm ? 0.8 : 0.3;
@@ -375,7 +349,6 @@ internal static class LemmaScorer
             }
         }
 
-        // NormalizedForm bonus — only when it differs from both surface and dictionaryForm.
         if (!string.IsNullOrEmpty(normalizedForm) && normalizedForm != surface && normalizedForm != dictionaryForm)
         {
             if (normalizedForm == formText)
@@ -387,14 +360,10 @@ internal static class LemmaScorer
                 if (context.NormalizedFormHiragana == candidate.FormTextHiragana)
                     score += (int)(20 * lemmaScale);
 
-                // Sudachi normalized form matches a form of this word (e.g. リス → 栗鼠).
                 if (word.Forms.Any(f => f.Text == normalizedForm))
                 {
                     int normBonus = 50;
-                    // Suffix-only words (n-suf without n) getting a kanji NormalizedForm boost
-                    // on a kana surface are almost always wrong — e.g. ねえ (interjection) being
-                    // matched to 姉 (n-suf "older sister"). Suffixes are bound morphemes; standalone
-                    // kana tokens are virtually always the function-word reading.
+                    // A standalone kana token is not a bound suffix: ねえ must not become 姉 (n-suf) via its NormalizedForm.
                     if (context.IsKanaSurface && KanaScoringHelpers.ContainsKanji(normalizedForm)
                         && word.PartsOfSpeech.Contains("n-suf")
                         && !word.PartsOfSpeech.Any(p => p is "n" or "n-adv" or "n-t"))
@@ -404,7 +373,6 @@ internal static class LemmaScorer
             }
         }
 
-        // Deconjugation-based lemma fallback when standard lemma evidence is absent.
         if (candidate.DeconjForm?.Text != null && existingSurfaceScore + score == 0)
         {
             var deconjHira = KanaScoringHelpers.ToNormalizedHiragana(
@@ -413,9 +381,7 @@ internal static class LemmaScorer
 
             if (deconjHira == candidate.FormTextHiragana)
             {
-                // When Sudachi's DictionaryForm points to a different word and this candidate
-                // has no frequency evidence, the deconjugation match is likely spurious.
-                // E.g. 背負っていた deconj→背負ってる (exp "conceited") instead of 背負う ("carry").
+                // Against a conflicting DictionaryForm, an unprioritized deconj match is spurious (背負っていた → 背負ってる exp).
                 bool dictFormConflicts = !string.IsNullOrEmpty(context.DictionaryForm)
                     && context.DictionaryForm != context.Surface
                     && !KanaScoringHelpers.WordHasFormEquivalentTo(word, context.DictionaryForm);
@@ -443,60 +409,40 @@ internal static class PenaltyScorer
             && surfaceMatchesFormDirectly
             && (candidate.DeconjForm == null || candidate.DeconjForm.Process.Length == 0))
         {
-            // Non-inflectable words (adj-pn, etc.) cannot be conjugated forms,
-            // so the penalty should not apply (e.g. 亡き is adj-pn, not a conjugation of 亡い)
             var posToCheck = candidate.EffectivePos;
             bool isInflectable = KanaScoringHelpers.IsInflectableVerbOrAdj(posToCheck);
 
             if (!isInflectable)
             {
-                // Expressions have their own ExpressionConflictPenalty mechanism; skip this penalty for them.
+                // Expressions are handled by ApplyExpressionConflictPenalty.
                 bool isExpression = posToCheck.Any(p => p is "exp" or "on-mim");
                 if (isExpression) return false;
 
-                // Numerals (一つ, 二つ, 三つ …) have DictionaryForm=つ (the counter suffix)
-                // from Sudachi, not a conjugation base. Skip the penalty.
+                // Sudachi gives numerals (一つ) DictionaryForm=つ, the counter, not a conjugation base.
                 bool isNumeral = posToCheck.Any(p => p is "num");
                 if (isNumeral) return false;
 
-                // Standalone adverbs with frequency evidence (e.g. 悪しからず ichi1) are not
-                // conjugated forms — they're fixed expressions found via direct lookup.
-                // The DictionaryForm comes from a Sudachi sub-token and is irrelevant.
+                // Frequent adverbs (悪しからず ichi1) are fixed forms; their DictionaryForm comes from a Sudachi sub-token.
                 bool isAdverb = posToCheck.Any(p => p is "adv" or "adv-to");
                 if (isAdverb && KanaScoringHelpers.HasFrequencyMarker(candidate.Word.Priorities))
                     return false;
 
-                // Particles are function words whose surface form IS their canonical form.
-                // Sudachi may give DictionaryForm=だ for で (etymological), but で the particle
-                // is not a conjugation — don't penalise it.
-                // Restrict to kana surfaces: kanji forms of particles (e.g. 許し for ばかし)
-                // are archaic and virtually never intended; let them fall through to the penalty.
+                // Particle で gets DictionaryForm=だ but isn't a conjugation; kanji particle forms (許し for ばかし) stay penalised.
                 bool isParticle = posToCheck.Any(p => p is "prt");
                 if (isParticle && context.IsKanaSurface) return false;
 
-                // adj-pn/adj-t are standalone prenominal adjectives (e.g. 亡き, 無き, 堂々たる).
-                // Their surface IS their dictionary form; Sudachi may give a different DictionaryForm
-                // (the archaic base), but only skip the penalty when that DictForm IS one of this
-                // word's own forms. If DictForm points to a completely different word
-                // (e.g. させる→する), fall through to the nounHasDictForm check below.
+                // adj-pn/adj-t (亡き, 堂々たる) are exempt only when DictionaryForm is their own form, not another word's (させる→する).
                 bool isAdnominal = posToCheck.Any(p => p is "adj-pn" or "adj-t");
                 if (isAdnominal && KanaScoringHelpers.WordHasFormEquivalentTo(candidate.Word, context.DictionaryForm))
                     return false;
 
-                // Honorific/auxiliary suffix entries (給え/たまえ [suf] "please", attached to a
-                // verb 連用形: 入りたまえ, 食べたまえ) carry a verb DictionaryForm from Sudachi
-                // (たまえ → 給う) because Sudachi analyses them as the imperative of the base verb.
-                // But the suffix entry's own kana form IS the surface, and Sudachi flags the token
-                // 非自立可能 (a bound, dependent reading) — exactly the auxiliary usage. The exact
-                // surface match is intended, not a coincidental homograph, so skip the penalty.
+                // Sudachi reads suffix たまえ (食べたまえ) as 給う's imperative; its 非自立可能 flag marks the auxiliary use.
                 bool isBoundSuffix = posToCheck.Any(p => p is "suf")
                                      && !posToCheck.Any(p => p is "n" or "n-adv" or "n-t");
                 if (isBoundSuffix && context.IsSudachiPossibleDependant)
                     return false;
 
-                // Classical attributive き-forms (由々しき, 悪しき…) have the modern い-adjective
-                // (or its stem) as Sudachi's DictionaryForm. That lemma is a different JMDict
-                // entry, but the き-entry IS the canonical surface here — not a coincidental homograph.
+                // Classical き-forms (悪しき) get the modern い-adjective as DictionaryForm, but the き entry is the right word.
                 if ((isAdnominal || posToCheck.Contains("adj-f"))
                     && candidate.Form.Text.EndsWith('き'))
                 {
@@ -507,15 +453,11 @@ internal static class PenaltyScorer
                         return false;
                 }
 
-                // For non-inflectable words (e.g., plain nouns), still apply the penalty when Sudachi's
-                // DictionaryForm doesn't appear in this word's forms — it points to a different (inflectable) word.
-                // E.g., surface=答え, DictForm=答える: noun 答え shouldn't beat verb 答える via surface match.
+                // A DictionaryForm outside this word's forms names another word: noun 答え must not beat verb 答える.
                 bool nounHasDictForm = KanaScoringHelpers.WordHasFormEquivalentTo(candidate.Word, context.DictionaryForm);
                 if (!nounHasDictForm)
                 {
-                    // Interjections (e.g. やった "hooray!") can never be conjugated verb forms.
-                    // When DictForm points to a verb, the -200 base penalty leaves them too close to the
-                    // verb candidate. Use -300 to fully cancel the surface-match bonus.
+                    // An interjection (やった) is never a verb form, so -300 fully cancels its surface bonus.
                     bool isInterjection = posToCheck.Any(p => p is "int");
                     if (isInterjection)
                     {
@@ -523,9 +465,7 @@ internal static class PenaltyScorer
                         return true;
                     }
 
-                    // Ichidan verb stems (DictForm = Surface + る) commonly stand alone as nouns
-                    // (目覚め, 答え, 始め) or prefixes (生き). Softer penalty when reading matches.
-                    // Godan masu-stems (立ち from 立つ, 持ち from 持つ) are almost always verbal.
+                    // Ichidan stems often stand alone as nouns (目覚め) or prefixes (生き); godan masu-stems (立ち) are verbal.
                     if (!string.IsNullOrEmpty(context.SudachiReading) && !context.IsKanaSurface
                         && context.DictionaryForm == context.Surface + "る")
                     {
@@ -550,10 +490,7 @@ internal static class PenaltyScorer
                         }
                     }
 
-                    // adj-pn/adj-t (無き, 堂々たる) and aux-v (如く) have archaic bases as
-                    // DictionaryForm; keep the softer penalty so they can still beat competitors.
-                    // Plain nouns (e.g. 支店 matching してん) get the full -300 to fully cancel
-                    // the coincidental surface-match bonus.
+                    // adj-pn/adj-t/aux-v (無き, 如く) get archaic-base DictionaryForms; plain nouns (支店 as してん) get the full -300.
                     bool isNonNounWithLegitimateForm = posToCheck.Any(p => p is "adj-pn" or "adj-t" or "aux-v");
                     surfaceMatchScore -= isNonNounWithLegitimateForm ? 200 : 300;
                     return true;
@@ -561,21 +498,16 @@ internal static class PenaltyScorer
                 return false;
             }
 
-            // adj-ix (e.g. いい/よい) has irregular conjugations; its base forms are not conjugated
-            // forms of other words, even if Sudachi misidentifies them (e.g. いい as verb いう).
+            // adj-ix base forms aren't other words' conjugations, even when Sudachi reads いい as いう.
             if (posToCheck.Any(p => p is "adj-ix"))
                 return false;
 
-            // High-priority fixed expressions (e.g. いけない "must not", exp+adj-i, ichi1) whose
-            // surface exactly matches their form should not be penalised just because Sudachi
-            // analysed them as a conjugation of a different verb (e.g. いけない → いける+ない).
+            // Frequent fixed expressions (いけない ichi1) keep their exact match though Sudachi reads いける+ない.
             bool isInflectableExpression = posToCheck.Any(p => p is "exp" or "on-mim");
             if (isInflectableExpression && KanaScoringHelpers.HasFrequencyMarker(candidate.Word.Priorities))
                 return false;
 
-            // Inflectable words whose forms include DictionaryForm (e.g. 食べ from 食べる)
-            // get a softer penalty; truly unrelated words (e.g. 一転 matching いってん when
-            // DictionaryForm=いう) get the full -300 to cancel the coincidental surface match.
+            // Words owning the DictionaryForm (食べ from 食べる) get -200; unrelated ones (一転 for いってん ← いう) get -300.
             bool inflectableHasDictForm = KanaScoringHelpers.WordHasFormEquivalentTo(candidate.Word, context.DictionaryForm);
             surfaceMatchScore -= inflectableHasDictForm ? 200 : 300;
             return true;
@@ -608,9 +540,7 @@ internal static class PenaltyScorer
         bool dictFormMatchesWord = KanaScoringHelpers.WordHasFormEquivalentTo(candidate.Word, context.DictionaryForm);
         if (!dictFormMatchesWord)
         {
-            // If DictionaryForm is a strict prefix of the surface, the expression likely derives
-            // from a dialectal or auxiliary base (e.g. Kansai copula や → やろ from やろう).
-            // Apply a softer penalty to avoid suppressing the correct expression entry.
+            // A DictionaryForm prefixing the surface signals a dialectal or auxiliary base (Kansai や → やろ), so softer.
             bool dictFormIsPrefixOfSurface = context.DictionaryFormHiragana is { Length: > 0 }
                 && context.SurfaceHiragana.Length > context.DictionaryFormHiragana.Length
                 && context.SurfaceHiragana.StartsWith(context.DictionaryFormHiragana, StringComparison.Ordinal);
@@ -624,9 +554,8 @@ internal static class PenaltyScorer
 
 internal static class ScriptScorer
 {
-    // Superlinear prefix scoring: 5*n*(n+1)/2 capped at n=5 → 5, 15, 30, 50, 75
+    // Superlinear by common-prefix length: 5*n*(n+1)/2 for kanji forms, 3*n*(n+1)/2 for kana, capped at n=5.
     private static readonly int[] KanjiScale = [0, 5, 15, 30, 50, 75];
-    // Weaker scaling for kana-only forms: 3*n*(n+1)/2 capped at n=5 → 3, 9, 18, 30, 45
     private static readonly int[] KanaScale = [0, 3, 9, 18, 30, 45];
 
     public static int Score(FormCandidate candidate, FormScoringContext context)
@@ -640,7 +569,6 @@ internal static class ScriptScorer
         var scale = hasKanji ? KanjiScale : KanaScale;
         int scriptScore = scale[Math.Min(prefixLen, scale.Length - 1)];
 
-        // Ichidan stem bonus — suppress when Sudachi identifies a different verb.
         if (form.Text.Length > 2
             && form.Text[^1] == 'る'
             && candidate.EffectivePos.Any(p => p is "v1" or "v1-s")
@@ -653,9 +581,7 @@ internal static class ScriptScorer
             }
         }
 
-        // When Sudachi identifies a DictionaryForm that doesn't belong to this word,
-        // the prefix overlap with the conjugated surface is coincidental
-        // (e.g. noun 気づかれ matching the passive form of verb 気づく). Cap the script score.
+        // Prefix overlap is coincidental when DictionaryForm names another word (noun 気づかれ vs passive of 気づく).
         if (scriptScore > 15 && KanaScoringHelpers.DictFormPointsToDifferentWord(context, word))
         {
             scriptScore = Math.Min(scriptScore, 15);
@@ -811,13 +737,8 @@ internal static class ReadingScorer
         if (identityPenaltyApplied && readingMatchScore > 0)
             readingMatchScore = 0;
 
-        // Kanji with multiple valid readings (e.g. 得る える/うる, 色 いろ/しょく)
-        // shouldn't be crushed when Sudachi picks a different reading — the kanji
-        // surface is inherently ambiguous. This also prevents the SurfaceMatch 0.3
-        // slash in FormCandidateScorer.Score from triggering. A bare single kanji is
-        // the extreme case: Sudachi must lemmatise it to SOME reading (often a given
-        // name, 智→サトシ), so that choice can't crush an exactly-attested homograph
-        // even without frequency data.
+        // Multi-reading kanji (得る える/うる) aren't crushed by Sudachi's pick, which also skips the 0.3 surface slash.
+        // A bare single kanji qualifies without frequency data: Sudachi must pick some reading (智→サトシ).
         if (readingMatchScore < 0
             && candidate.Form.FormType == JmDictFormType.KanjiForm
             && context.Surface == candidate.Form.Text
@@ -827,33 +748,21 @@ internal static class ReadingScorer
             readingMatchScore = 0;
         }
 
-        // A name entry's reading agreement on a bare single kanji is circular evidence:
-        // Sudachi picked a name lemma for the isolated kanji and the name entry carries
-        // that same reading. Without actual name context it must not outweigh a JMDict
-        // homograph's exact attestation (仁も義も礼も智も = the virtue noun, not サトシ).
+        // A name agreeing with Sudachi's name lemma on a bare kanji is circular (仁も義も礼も智も is the noun, not サトシ).
         if (readingMatchScore > 0 && !context.IsKanaSurface && context.Surface.Length == 1
             && !context.IsNameContext && candidate.Word.CachedPOS.Contains(PartOfSpeech.Name))
         {
             readingMatchScore = 0;
         }
 
-        // Same circularity one step removed: with no honorific or injected name to go on, Sudachi's
-        // 固有名詞/人名 bucket for a bare kanji is a lemma guess, so the reading it reports there is a
-        // name reading. It must not vouch for a common-noun homograph that merely collides with it
-        // (忍/シノブ handing the fern しのぶ a win over 忍び しのび). Name entries are left to the guard
-        // above, which weighs them against surrounding name evidence (太郎と智が来た).
+        // A Sudachi 人名 guess on a bare kanji is a name reading; it must not vouch for a common noun (忍 → fern しのぶ).
         if (readingMatchScore > 0 && !context.IsKanaSurface && context.Surface.Length == 1
             && context.IsSudachiNameGuess && !candidate.Word.CachedPOS.Contains(PartOfSpeech.Name))
         {
             readingMatchScore = 0;
         }
 
-        // Sudachi normalizes a bare all-kanji surface to an okurigana-bearing lemma
-        // (改 → 改め/アラタメ, 答 → 答え/こたえ). Its chosen reading then belongs to that fuller
-        // form and can't legitimately attach to the bare kanji, yet it earns the okurigana
-        // homograph +70 while penalizing the exact-surface on-reading entry (改 かい) by -70.
-        // When the surface carries no kana but NormalizedForm = surface + kana, the reading is
-        // not trustworthy evidence — neutralize it so surface match and ruby priors decide.
+        // Sudachi normalizes bare kanji to an okurigana lemma (改 → 改め); that reading must not beat 改 かい.
         if (readingMatchScore != 0 && SudachiNormalizedBareKanjiToOkurigana(context))
             readingMatchScore = 0;
 
@@ -892,9 +801,7 @@ internal static class ReadingPosHelper
             .ToHashSet();
     }
 
-    // JMdict's stagk (kanji sp elling) and stagr (reading) restrictions share one flat index list,
-    // so the axis is recovered from the form type each index points at: a reading restriction never
-    // excludes a kanji form, and vice versa.
+    // stagk and stagr share one flat index list, so a restriction only excludes forms of its own type (kanji vs kana).
     private static bool AppliesToReading(JmDictWord word, JmDictDefinition definition, byte readingIndex)
     {
         var restrictions = definition.RestrictedToReadingIndices;
@@ -937,9 +844,6 @@ internal static class KanaScoringHelpers
         return true;
     }
 
-    /// True when the word has a form equal to <paramref name="text"/>, treating hiragana/katakana
-    /// script-only differences as equal. Centralises the
-    /// `Forms.Any(f => f.Text == X || IsPureKanaScriptDifference(f.Text, X))` predicate.
     public static bool WordHasFormEquivalentTo(JmDictWord word, string? text)
     {
         if (string.IsNullOrEmpty(text)) return false;
@@ -949,20 +853,14 @@ internal static class KanaScoringHelpers
         return false;
     }
 
-    /// True when Sudachi's DictionaryForm is a real lemma that is NOT one of this word's own forms
-    /// (i.e. the surface overlap is coincidental — the DictForm points to a different entry).
     public static bool DictFormPointsToDifferentWord(FormScoringContext context, JmDictWord word) =>
         context.DictionaryForm is not null
         && context.DictionaryForm != context.Surface
         && !WordHasFormEquivalentTo(word, context.DictionaryForm);
 
-    /// True when the surface equals the form text, treating hiragana/katakana script-only
-    /// differences as equal.
     public static bool SurfaceEquivalentTo(string surface, string formText) =>
         surface == formText || IsPureKanaScriptDifference(surface, formText);
 
-    /// True when any POS marks the word as an inflectable verb or i-adjective
-    /// (excludes the non-verbal "v*" tags vulg/vet/vidg).
     public static bool IsInflectableVerbOrAdj(IEnumerable<string> pos)
     {
         foreach (var p in pos)
@@ -1027,7 +925,6 @@ internal static class KanaScoringHelpers
         return false;
     }
 
-    /// True when the token is written entirely in katakana (long-vowel marks and iteration marks allowed).
     public static bool IsPureKatakanaToken(string text)
     {
         bool hasKatakana = false;
@@ -1075,16 +972,12 @@ internal static class PosAffinityScorer
 
         int score = 25;
 
-        // When Sudachi says Suffix but the candidate also has Noun POS, it's a noun+suffix
-        // hybrid (e.g. ゲ [n-suf, n] "videogame") competing with a pure suffix (e.g. げ [suf]).
-        // Penalize the hybrid so noun-particle-synergy can't flip the winner.
+        // A noun+suffix hybrid (ゲ [n-suf, n]) must not beat a pure suffix (げ) via noun-particle synergy.
         if (context.SudachiPOS == PartOfSpeech.Suffix
             && PosMask.Has(candidate.Word.CachedPOSMask, PosMask.NounLike))
             score -= 50;
 
-        // Verb-class matching: when Sudachi identifies a specific godan row via DictionaryForm,
-        // penalize candidates from a different row (e.g. こく→v5k vs こる→v5r).
-        // Only for unambiguous endings (る is ambiguous between v5r and v1).
+        // A DictionaryForm's godan row rules out other rows (こく v5k vs こる v5r).
         if (context.SudachiPOS == PartOfSpeech.Verb
             && context.DictionaryForm is { Length: > 0 }
             && context.DictionaryForm != context.Surface)
@@ -1099,9 +992,7 @@ internal static class PosAffinityScorer
             }
         }
 
-        // Plain suru-verb nouns (vs without a direct verb class) conjugate via する,
-        // not directly. Penalize kana-form matches against verb conjugations — e.g.
-        // 遺棄 "いき" [n, vs] should not match いきました; that's 行く.
+        // Suru nouns conjugate only via する: 遺棄 いき must not match いきました (行く).
         if (context.SudachiPOS == PartOfSpeech.Verb
             && candidate.Form.FormType == JmDictFormType.KanaForm
             && candidate.Word.PartsOfSpeech.Contains("vs")
@@ -1110,9 +1001,7 @@ internal static class PosAffinityScorer
                 or "v5a" or "v5b" or "v5g" or "v5k" or "v5k-s"
                 or "v5m" or "v5n" or "v5r" or "v5r-i" or "v5s" or "v5t"
                 or "v5u" or "v5u-s" or "v5uru" or "vk" or "vz" or "aux-v")
-            // Exempt the genuine <noun>する verb: when the deconjugated dictionary form is exactly
-            // this candidate's form + する (きす + する == きすする), the noun IS the correct stem, not a
-            // kana-reading homograph verb (記す/きす). Without this キスさせてくれ resolves to 記す.
+            // Exempts DictionaryForm = form + する, or キスさせてくれ resolves to 記す.
             && !(context.DictionaryFormHiragana is { Length: > 2 } dfh
                  && dfh.EndsWith("する", StringComparison.Ordinal)
                  && candidate.FormTextHiragana + "する" == dfh))
@@ -1120,8 +1009,7 @@ internal static class PosAffinityScorer
             score -= 60;
         }
 
-        // Sudachi 非自立可能 means the verb is used as an auxiliary (e.g. くれる after te-form).
-        // Boost candidates with aux-v, penalize those without — e.g. 呉れる (aux-v) over 暮れる.
+        // Sudachi 非自立可能 marks auxiliary use (te-form + くれる → 呉れる, not 暮れる).
         if (context.IsSudachiPossibleDependant
             && context.SudachiPOS == PartOfSpeech.Verb)
         {
@@ -1147,7 +1035,7 @@ internal static class PosAffinityScorer
             'ぶ' => "v5b",
             'む' => "v5m",
             'う' => "v5u",
-            _ => null // る is ambiguous (v5r vs v1), others not godan
+            _ => null // る is ambiguous between v5r and v1
         };
     }
 }
