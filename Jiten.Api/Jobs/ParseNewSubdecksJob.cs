@@ -71,7 +71,7 @@ public class ParseNewSubdecksJob(
             original.DialoguePercentage = parsed.DialoguePercentage;
             original.RawText!.SpeechBoundaries = parsed.RawText?.SpeechBoundaries ?? original.RawText.SpeechBoundaries;
 
-            if (original.MediaType is MediaType.Manga or MediaType.Audio or MediaType.YouTube)
+            if (original.MediaType is MediaType.Manga or MediaType.Audio)
                 original.SentenceCount = 0;
 
             await context.SaveChangesAsync();

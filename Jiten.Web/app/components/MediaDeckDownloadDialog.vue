@@ -163,7 +163,8 @@
       mt === MediaType.WebNovel ||
       mt === MediaType.Anime ||
       mt === MediaType.Drama ||
-      mt === MediaType.Movie
+      mt === MediaType.Movie ||
+      mt === MediaType.YouTube
     );
   });
 

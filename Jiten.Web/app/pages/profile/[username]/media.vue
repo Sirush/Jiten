@@ -58,7 +58,17 @@
   });
 
   const audioVisualTypes = [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio, MediaType.YouTube];
-  const sentenceLengthTypes = [MediaType.Novel, MediaType.NonFiction, MediaType.VideoGame, MediaType.VisualNovel, MediaType.WebNovel, MediaType.Anime, MediaType.Drama, MediaType.Movie];
+  const sentenceLengthTypes = [
+    MediaType.Novel,
+    MediaType.NonFiction,
+    MediaType.VideoGame,
+    MediaType.VisualNovel,
+    MediaType.WebNovel,
+    MediaType.Anime,
+    MediaType.Drama,
+    MediaType.Movie,
+    MediaType.YouTube,
+  ];
 
   const sortGroups = computed(() => {
     const types = [...presentTypes.value];
@@ -362,7 +372,17 @@
     { label: 'Remove', icon: 'pi pi-trash', severity: 'danger', run: () => bulkRemove() },
   ]);
 
-  const sentenceMediaTypes = [MediaType.Novel, MediaType.NonFiction, MediaType.VideoGame, MediaType.VisualNovel, MediaType.WebNovel, MediaType.Anime, MediaType.Drama, MediaType.Movie];
+  const sentenceMediaTypes = [
+    MediaType.Novel,
+    MediaType.NonFiction,
+    MediaType.VideoGame,
+    MediaType.VisualNovel,
+    MediaType.WebNovel,
+    MediaType.Anime,
+    MediaType.Drama,
+    MediaType.Movie,
+    MediaType.YouTube,
+  ];
   const downloadVisible = ref(false);
   const downloadMediaList = ref<{ apiBase: string; title: string; totalWords: number; hasExampleSentences: boolean } | null>(null);
 

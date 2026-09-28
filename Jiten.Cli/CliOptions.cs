@@ -466,4 +466,13 @@ public class CliOptions
 
     [Option(longName: "speech-boundary-model", Required = false, HelpText = "With --speech-preview: path to the model.json written by scripts/speech_boundaries/train.py.")]
     public string? SpeechBoundaryModel { get; set; }
+
+    [Option(longName: "youtube-speech-preview", Required = false, HelpText = "YouTube sentence boundaries: 'all' prints per-channel counts of videos with trusted punctuation and their usable sentences; a video deck id runs the full parser on it and prints its example sentences. Read-only.")]
+    public string? YouTubeSpeechPreview { get; set; }
+
+    [Option(longName: "export-youtube-speech-boundaries", Required = false, HelpText = "Write a TSV of line breaks from YouTube videos with trusted punctuation, punctuation stripped and labelled by it, in the --export-speech-boundaries format. Read-only.")]
+    public string? ExportYouTubeSpeechBoundaries { get; set; }
+
+    [Option(longName: "youtube-videos-csv", Required = false, HelpText = "With --export-youtube-speech-boundaries or --youtube-speech-preview all: read videos from a CSV (deck_id, channel_b64, raw_b64) exported from another database instead of the configured one.")]
+    public string? YouTubeVideosCsv { get; set; }
 }

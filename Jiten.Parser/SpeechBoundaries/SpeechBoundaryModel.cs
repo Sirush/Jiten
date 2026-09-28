@@ -104,24 +104,27 @@ public sealed class SpeechBoundaryModel
         }
     }
 
-    private const string ResourceFileName = "speech_boundary_model.json";
+    private static readonly Lazy<SpeechBoundaryModel> DefaultModel = new(() => Load(ResolveResourcePath("speech_boundary_model.json")));
 
-    private static readonly Lazy<SpeechBoundaryModel> DefaultModel = new(() => Load(ResolveResourcePath()));
+    private static readonly Lazy<SpeechBoundaryModel> YouTubeModel = new(() => Load(ResolveResourcePath("speech_boundary_model_youtube.json")));
 
-    /// <summary>The model shipped in Shared/resources, loaded on first use.</summary>
+    /// <summary>The anime/drama/movie model shipped in Shared/resources, loaded on first use.</summary>
     public static SpeechBoundaryModel Default => DefaultModel.Value;
 
-    private static string ResolveResourcePath()
+    /// <summary>Trained only on YouTube videos with their punctuation stripped; the anime model cuts nearly every YouTube line break.</summary>
+    public static SpeechBoundaryModel YouTube => YouTubeModel.Value;
+
+    private static string ResolveResourcePath(string fileName)
     {
         string[] candidates =
         [
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", ResourceFileName),
-            Path.Combine("Shared", "resources", ResourceFileName),
-            Path.Combine("..", "Shared", "resources", ResourceFileName)
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", fileName),
+            Path.Combine("Shared", "resources", fileName),
+            Path.Combine("..", "Shared", "resources", fileName)
         ];
 
         return candidates.FirstOrDefault(File.Exists)
-               ?? throw new FileNotFoundException($"{ResourceFileName} not found in the resources folder", ResourceFileName);
+               ?? throw new FileNotFoundException($"{fileName} not found in the resources folder", fileName);
     }
 
     public static SpeechBoundaryModel Load(string path)

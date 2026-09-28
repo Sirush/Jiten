@@ -868,7 +868,7 @@ namespace Jiten.Parser
 
             // Subtitle lines rarely end in punctuation, so they are rejoined into one sentence per line before parsing.
             var parseTexts = texts;
-            byte[][]? boundariesByText = null;
+            byte[]?[]? boundariesByText = null;
             if (MediaTypes.IsSubtitleSpeech(mediatype))
             {
                 parseTexts = new List<string>(texts.Count);
@@ -878,6 +878,17 @@ namespace Jiten.Parser
                     var stored = speechBoundaries != null && i < speechBoundaries.Count ? speechBoundaries[i] : null;
                     var (assembled, boundaries) = SpeechTextAssembler.Prepare(texts[i], stored, SpeechBoundaryModel.Default);
                     parseTexts.Add(assembled);
+                    boundariesByText[i] = boundaries;
+                }
+            }
+            else if (mediatype == MediaType.YouTube)
+            {
+                parseTexts = new List<string>(texts.Count);
+                boundariesByText = new byte[texts.Count][];
+                for (int i = 0; i < texts.Count; i++)
+                {
+                    var (prepared, boundaries) = YouTubeSpeechText.Prepare(texts[i], SpeechBoundaryModel.YouTube);
+                    parseTexts.Add(prepared);
                     boundariesByText[i] = boundaries;
                 }
             }
@@ -925,7 +936,8 @@ namespace Jiten.Parser
                     ? FuriganaHintExtractor.RelocateToCleanedOriginal(coFlat, hintsByText[textIndex], cleanTexts[textIndex])
                     : null;
 
-                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, timings, dictionaryEntriesBySurface, relocated, rawCharCounts[textIndex], diagnostics, occurrenceSink);
+                var subtitleSpeech = boundariesByText?[textIndex] != null;
+                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, subtitleSpeech, timings, dictionaryEntriesBySurface, relocated, rawCharCounts[textIndex], diagnostics, occurrenceSink);
                 if (deck.RawText != null && boundariesByText != null)
                     deck.RawText.SpeechBoundaries = boundariesByText[textIndex];
                 decks.Add(deck);
@@ -946,6 +958,7 @@ namespace Jiten.Parser
             bool storeRawText,
             bool predictDifficulty,
             MediaType mediatype,
+            bool subtitleSpeech,
             BenchmarkTimings? timings = null,
             Dictionary<string, DeckDictionaryEntry>? dictionaryEntriesBySurface = null,
             FuriganaHint[]? relocatedHints = null,
@@ -1041,7 +1054,6 @@ namespace Jiten.Parser
 
             List<ExampleSentence>? exampleSentences = null;
 
-            var subtitleSpeech = MediaTypes.IsSubtitleSpeech(mediatype);
             if (subtitleSpeech || mediatype is MediaType.Novel or MediaType.NonFiction or MediaType.VideoGame or MediaType.VisualNovel or MediaType.WebNovel)
             {
                 var wordIds = processedWords.Select(w => w.WordId).Distinct().ToList();

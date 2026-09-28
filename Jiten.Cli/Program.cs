@@ -265,6 +265,16 @@ public class Program
             await new SpeechBoundaryCommands(context).Preview(options);
         }
 
+        if (options.YouTubeSpeechPreview != null)
+        {
+            await new YouTubeSpeechCommands(context).Preview(options.YouTubeSpeechPreview, options.YouTubeVideosCsv);
+        }
+
+        if (options.ExportYouTubeSpeechBoundaries != null)
+        {
+            await new YouTubeSpeechCommands(context).Export(options.ExportYouTubeSpeechBoundaries, options.YouTubeVideosCsv);
+        }
+
         if (options.AuditUserDic != null)
         {
             await diagnosticCommands.AuditUserDic(options);

@@ -234,13 +234,13 @@ public class SpeechBoundaryCommands(CliContext context)
             $"{_usable * 1000.0 / Math.Max(_contentChars, 1):F1} usable per 1000 chars";
     }
 
-    private static bool IsUsable(string sentence) => ContentLength(sentence) is >= UsableMinChars and <= UsableMaxChars;
+    internal static bool IsUsable(string sentence) => ContentLength(sentence) is >= UsableMinChars and <= UsableMaxChars;
 
     private static int ContentLength(string text) =>
         text.Count(c => c is >= 'ぁ' and <= 'ヺ' or 'ー' or >= '一' and <= '龯' or '々' or >= '０' and <= '９' or >= 'Ａ' and <= 'ｚ');
 
     /// <summary>Mirrors the prose splitter: a sentence ends after a run of enders.</summary>
-    private static IEnumerable<string> CutOnEnders(string text)
+    internal static IEnumerable<string> CutOnEnders(string text)
     {
         int start = 0;
         for (int i = 0; i < text.Length; i++)

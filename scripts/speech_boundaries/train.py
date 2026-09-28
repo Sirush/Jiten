@@ -3,7 +3,11 @@
 Splits by title folder so no show appears on both sides, scores the Phase 2 rule on the same
 test titles, and writes a JSON model (tree dump + category vocabularies) for the C# tree walker.
 
-    python scripts/speech_boundaries/train.py path/to/breaks.tsv path/to/model.json [relabel_tau]
+    python scripts/speech_boundaries/train.py path/to/breaks.tsv[,path/to/youtube.tsv] path/to/model.json [test_groups.txt]
+
+Several TSVs (comma-separated) are concatenated; YouTube rows come from `--export-youtube-speech-boundaries`.
+test_groups.txt lists groups (one per line) forced into the test split, so a held-out domain can be measured;
+"all" instead trains the final model on every group.
 """
 import hashlib
 import json
@@ -40,13 +44,13 @@ def split_of(group: str) -> str:
     return "test" if bucket == 0 else "valid" if bucket == 1 else "train"
 
 
-def load(path: str) -> pd.DataFrame:
+def load(path: str, forced_test: frozenset[str] = frozenset()) -> pd.DataFrame:
     df = pd.read_csv(
         path, sep="\t", quoting=3, keep_default_na=False, na_values=[],
         usecols=["group", "file", "idx", "next_idx", "label", "cue_end"] + FEATURES,
         dtype={c: "string" for c in CATEGORICAL + ["group", "file"]},
     )
-    df["split"] = df["group"].map(split_of)
+    df["split"] = df["group"].map(lambda g: "test" if g in forced_test else split_of(g))
     return df
 
 
@@ -109,14 +113,28 @@ def prune_tree(node: dict) -> dict:
     return {k: (prune_tree(v) if k in ("left_child", "right_child") else v) for k, v in node.items() if k in NODE_FIELDS}
 
 
-def main(tsv_path: str, model_path: str) -> None:
+def main(tsv_path: str, model_path: str, test_groups_path: str | None = None) -> None:
     t0 = time.time()
-    df = load(tsv_path)
+    train_on_all = test_groups_path == "all"
+    forced_test = frozenset()
+    if test_groups_path and not train_on_all:
+        with open(test_groups_path, encoding="utf-8") as f:
+            forced_test = frozenset(line.strip() for line in f if line.strip())
+    df = pd.concat([load(p, forced_test) for p in tsv_path.split(",")], ignore_index=True)
+    if train_on_all:
+        df["split"] = "train"
     print(f"{len(df):,} breaks from {df['group'].nunique():,} titles, {df['label'].mean():.1%} boundaries "
           f"({time.time() - t0:.0f}s to load)")
     print(df.groupby("split").agg(rows=("label", "size"), titles=("group", "nunique"), boundary=("label", "mean")))
 
+    if not (df["split"] == "valid").any():
+        # Too few groups for one to hash into valid; hold out whole files from train for early stopping.
+        held = (df["split"] == "train") & (df["file"].map(split_of) == "valid")
+        df.loc[held, "split"] = "valid"
     train, valid, test = (df[df["split"] == s] for s in ("train", "valid", "test"))
+    if train_on_all:
+        # Final model: every group trains; the file-level valid split stands in for test in the reports and parity rows.
+        test = valid
     vocab = build_vocab(train)
     print("vocab sizes:", {k: len(v) for k, v in vocab.items()})
 
@@ -150,6 +168,13 @@ def main(tsv_path: str, model_path: str) -> None:
     for threshold in (0.3, 0.4, 0.5, 0.6, 0.7):
         report(f"model @{threshold}", y, (prob >= threshold).astype(np.int8), prob)
 
+    youtube = test["group"].str.startswith("youtube/").to_numpy()
+    if youtube.any() and not youtube.all():
+        for name, mask in (("anime", ~youtube), ("youtube", youtube)):
+            print(f"\n{name} test rows only ({mask.sum():,}):")
+            report("every break", y[mask], np.ones_like(y[mask]))
+            report("model @0.5", y[mask], (prob[mask] >= 0.5).astype(np.int8), prob[mask])
+
     importance = sorted(zip(FEATURES, booster.feature_importance("gain")), key=lambda p: -p[1])
     print("\ngain:", ", ".join(f"{n} {g:.0f}" for n, g in importance))
 
@@ -172,4 +197,4 @@ def main(tsv_path: str, model_path: str) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
