@@ -1412,6 +1412,22 @@ public partial class AdminController(
         }
     }
 
+    [HttpGet("moved-forms/preview")]
+    public async Task<ActionResult<List<MovedFormMigrationRow>>> PreviewMovedForms(
+        [FromServices] WordReplacementService wordReplacementService)
+    {
+        return await wordReplacementService.MigrateMovedFormsAsync(dryRun: true);
+    }
+
+    [HttpPost("moved-forms/migrate")]
+    public IActionResult MigrateMovedForms()
+    {
+        backgroundJobs.Enqueue<WordReplacementService>(s => s.MigrateMovedFormsAsync(false));
+
+        logger.LogWarning("Admin queued moved-form migration");
+        return Ok(new { Message = "Moved-form migration has been queued" });
+    }
+
     [HttpPost("split-word")]
     public async Task<IActionResult> SplitWord(
         [FromBody] SplitWordRequest request,

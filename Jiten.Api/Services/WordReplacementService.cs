@@ -1,9 +1,11 @@
 using Hangfire;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
+using Jiten.Api.Helpers;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
+using Jiten.Core.Data.JMDict;
 using Jiten.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
@@ -247,6 +249,20 @@ public class WordReplacementService(
             await SentenceProfileService.RewriteWordAsync(context, affectedDeckIds, ExampleSentenceTokens.WordKey(oldWordId, oldReadingIndex),
                                                           [ExampleSentenceTokens.WordKey(newWordId, newReadingIndex)]);
 
+            var cardUserIds = await userContext.FsrsCards
+                .Where(c => c.WordId == oldWordId && c.ReadingIndex == oldReadingIndex)
+                .Select(c => c.UserId)
+                .Distinct()
+                .ToListAsync();
+
+            var affectedSetIds = await context.WordSetMembers
+                .Where(m => m.WordId == oldWordId && m.ReadingIndex == oldReadingIndex)
+                .Select(m => m.SetId)
+                .Distinct()
+                .ToListAsync();
+
+            result.FsrsCardsSkipped = await ResolveCardCollisions(userContext, oldWordId, oldReadingIndex, newWordId, newReadingIndex);
+
             // Step 6: FsrsCards - Only update if user doesn't have the new reading already
             result.FsrsCardsUpdated = await userContext.Database.ExecuteSqlRawAsync(@"
                 UPDATE ""user"".""FsrsCards"" old
@@ -260,24 +276,6 @@ public class WordReplacementService(
                       AND existing.""ReadingIndex"" = {1}
                   )",
                 newWordId, newReadingIndex, oldWordId, oldReadingIndex);
-
-            // Step 6b: whatever the remap skipped belongs to a user who owns both sides. The old card now points
-            // at a reading JMdict no longer has, so it is archived and dropped rather than left orphaned.
-            var orphanedCards = await userContext.FsrsCards
-                .Where(c => c.WordId == oldWordId && c.ReadingIndex == oldReadingIndex)
-                .ToListAsync();
-
-            result.FsrsCardsSkipped = orphanedCards.Count;
-
-            if (orphanedCards.Count > 0)
-            {
-                foreach (var byUser in orphanedCards.GroupBy(c => c.UserId))
-                    await CardArchiveService.ArchiveCardsAsync(userContext, byUser.Key, byUser.ToList(),
-                                                               CardArchiveReason.WordReplacementMerge);
-
-                userContext.FsrsCards.RemoveRange(orphanedCards);
-                await userContext.SaveChangesAsync();
-            }
 
             // Step 6c: archive rows need the same remap, or they rot into (WordId, ReadingIndex) pairs that fail
             // validation on every future restore.
@@ -315,6 +313,10 @@ public class WordReplacementService(
                 await userContext.SaveChangesAsync();
             }
 
+            await RemapStudyDeckWords(userContext, oldWordId, oldReadingIndex, newWordId, newReadingIndex, result);
+            await RemapWordSetMembers(context, oldWordId, oldReadingIndex, newWordId, newReadingIndex, result);
+            await RemapUserAuthoredContent(userContext, oldWordId, oldReadingIndex, newWordId, newReadingIndex, result);
+
             // Step 7: Update UniqueWordCount on affected decks
             if (affectedDeckIds.Count > 0)
             {
@@ -335,6 +337,18 @@ public class WordReplacementService(
             await transaction.CommitAsync();
             await userTransaction.CommitAsync();
 
+            var setUserIds = affectedSetIds.Count == 0
+                ? []
+                : await userContext.UserWordSetStates
+                                   .Where(s => affectedSetIds.Contains(s.SetId))
+                                   .Select(s => s.UserId)
+                                   .Distinct()
+                                   .ToListAsync();
+            var dirtyUserIds = cardUserIds.Union(setUserIds).ToList();
+            foreach (var userId in dirtyUserIds)
+                await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+            result.CoverageUsersMarked = dirtyUserIds.Count;
+
             // Step 8: Queue incremental parent updates (outside transaction)
             foreach (var delta in parentDeltas)
             {
@@ -350,10 +364,14 @@ public class WordReplacementService(
             logger.LogInformation(
                 "Word replacement completed: {OldWordId}:{OldReadingIndex} -> {NewWordId}:{NewReadingIndex}. " +
                 "DeckWords: {Updated} updated, {Merged} merged. ExampleSentences: {ESUpdated}. " +
-                "FsrsCards: {FsrsUpdated} updated, {FsrsSkipped} skipped. Parent decks queued: {Parents}",
+                "FsrsCards: {FsrsUpdated} updated, {FsrsSkipped} collisions. StudyDeckWords: {StudyDeckWords}. " +
+                "WordSetMembers: {WordSetMembers}. CardMedia: {CardMedia}. UserSentences: {UserSentences}. " +
+                "Coverage marked: {CoverageUsers}. Parent decks queued: {Parents}",
                 oldWordId, oldReadingIndex, newWordId, newReadingIndex,
                 result.DeckWordsUpdated, result.DeckWordsMerged, result.ExampleSentenceWordsUpdated,
-                result.FsrsCardsUpdated, result.FsrsCardsSkipped, result.ParentDecksQueued);
+                result.FsrsCardsUpdated, result.FsrsCardsSkipped, result.StudyDeckWordsUpdated,
+                result.WordSetMembersUpdated, result.CardMediaMoved, result.UserSentencesMoved,
+                result.CoverageUsersMarked, result.ParentDecksQueued);
         }
         catch (Exception ex)
         {
@@ -365,6 +383,168 @@ public class WordReplacementService(
         }
 
         return result;
+    }
+
+    /// <summary>Remaps every form JMdict moved to another entry; ambiguous moves and deleted entries are left to a reparse.</summary>
+    public async Task<List<MovedFormMigrationRow>> MigrateMovedFormsAsync(bool dryRun)
+    {
+        List<MovedFormMigrator.DetectedMove> moves;
+        await using (var context = await contextFactory.CreateDbContextAsync())
+            moves = await MovedFormMigrator.DetectMoves(context);
+
+        var rows = new List<MovedFormMigrationRow>();
+        foreach (var m in moves)
+        {
+            var row = new MovedFormMigrationRow
+            {
+                Text = m.Text, OldWordId = m.OldWordId, OldReadingIndex = m.OldReadingIndex,
+                NewWordId = m.NewWordId, NewReadingIndex = m.NewReadingIndex, OwnerCount = m.OwnerCount,
+                Skipped = m.OldEntryDeleted ? "deleted" : m.Ambiguous ? "ambiguous" : null,
+            };
+
+            if (row.Skipped == null)
+                row.Result = await ReplaceAsync(m.OldWordId, (byte)m.OldReadingIndex, m.NewWordId, (byte)m.NewReadingIndex, dryRun);
+
+            rows.Add(row);
+        }
+
+        logger.LogInformation("Moved-form migration {Mode}: {Remapped} remapped, {Skipped} skipped",
+                              dryRun ? "dry run" : "applied", rows.Count(r => r.Skipped == null), rows.Count(r => r.Skipped != null));
+        return rows;
+    }
+
+    /// <summary>More reviews wins, then the more recent review; a full tie keeps the card already on the new pair.</summary>
+    public static bool KeepsOldCard(FsrsCard oldCard, int oldReviews, FsrsCard newCard, int newReviews)
+    {
+        if (oldReviews != newReviews)
+            return oldReviews > newReviews;
+
+        return (oldCard.LastReview ?? DateTime.MinValue) > (newCard.LastReview ?? DateTime.MinValue);
+    }
+
+    /// <summary>For users holding cards on both pairs, archives and deletes the weaker card so the remap has no unique-key clash.</summary>
+    private static async Task<int> ResolveCardCollisions(
+        UserDbContext userContext,
+        int oldWordId, byte oldReadingIndex,
+        int newWordId, byte newReadingIndex)
+    {
+        var oldCards = await userContext.FsrsCards
+            .Where(c => c.WordId == oldWordId && c.ReadingIndex == oldReadingIndex)
+            .ToListAsync();
+        if (oldCards.Count == 0)
+            return 0;
+
+        var userIds = oldCards.Select(c => c.UserId).ToList();
+        var newCards = await userContext.FsrsCards
+            .Where(c => c.WordId == newWordId && c.ReadingIndex == newReadingIndex && userIds.Contains(c.UserId))
+            .ToDictionaryAsync(c => c.UserId);
+        if (newCards.Count == 0)
+            return 0;
+
+        var collisions = oldCards.Where(c => newCards.ContainsKey(c.UserId)).ToList();
+        var cardIds = collisions.Select(c => c.CardId).Concat(newCards.Values.Select(c => c.CardId)).ToList();
+        var reviewCounts = await userContext.FsrsReviewLogs
+            .Where(l => cardIds.Contains(l.CardId))
+            .GroupBy(l => l.CardId)
+            .Select(g => new { CardId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.CardId, x => x.Count);
+
+        foreach (var oldCard in collisions)
+        {
+            var newCard = newCards[oldCard.UserId];
+            var loser = KeepsOldCard(oldCard, reviewCounts.GetValueOrDefault(oldCard.CardId),
+                                     newCard, reviewCounts.GetValueOrDefault(newCard.CardId))
+                ? newCard
+                : oldCard;
+
+            await CardArchiveService.ArchiveCardsAsync(userContext, loser.UserId, [loser], CardArchiveReason.WordReplacementMerge);
+            userContext.FsrsCards.Remove(loser);
+        }
+
+        // Flushed before the remap UPDATE, which would otherwise hit the unique key on a surviving old card.
+        await userContext.SaveChangesAsync();
+        return collisions.Count;
+    }
+
+    private static async Task RemapStudyDeckWords(
+        UserDbContext userContext,
+        int oldWordId, byte oldReadingIndex,
+        int newWordId, byte newReadingIndex,
+        WordReplacementResult result)
+    {
+        await userContext.Database.ExecuteSqlRawAsync(@"
+            UPDATE ""user"".""UserStudyDeckWords"" correct
+            SET ""Occurrences"" = correct.""Occurrences"" + wrong.""Occurrences""
+            FROM ""user"".""UserStudyDeckWords"" wrong
+            WHERE correct.""UserStudyDeckId"" = wrong.""UserStudyDeckId""
+              AND correct.""WordId"" = {0} AND correct.""ReadingIndex"" = {1}
+              AND wrong.""WordId"" = {2} AND wrong.""ReadingIndex"" = {3}",
+            newWordId, newReadingIndex, oldWordId, oldReadingIndex);
+
+        result.StudyDeckWordsUpdated = await userContext.Database.ExecuteSqlRawAsync(@"
+            DELETE FROM ""user"".""UserStudyDeckWords"" wrong
+            USING ""user"".""UserStudyDeckWords"" correct
+            WHERE correct.""UserStudyDeckId"" = wrong.""UserStudyDeckId""
+              AND correct.""WordId"" = {0} AND correct.""ReadingIndex"" = {1}
+              AND wrong.""WordId"" = {2} AND wrong.""ReadingIndex"" = {3}",
+            newWordId, newReadingIndex, oldWordId, oldReadingIndex);
+
+        result.StudyDeckWordsUpdated += await userContext.Database.ExecuteSqlRawAsync(@"
+            UPDATE ""user"".""UserStudyDeckWords""
+            SET ""WordId"" = {0}, ""ReadingIndex"" = {1}
+            WHERE ""WordId"" = {2} AND ""ReadingIndex"" = {3}",
+            newWordId, newReadingIndex, oldWordId, oldReadingIndex);
+    }
+
+    private static async Task RemapWordSetMembers(
+        JitenDbContext context,
+        int oldWordId, byte oldReadingIndex,
+        int newWordId, byte newReadingIndex,
+        WordReplacementResult result)
+    {
+        result.WordSetMembersUpdated = await context.Database.ExecuteSqlRawAsync(@"
+            DELETE FROM jiten.""WordSetMembers"" wrong
+            USING jiten.""WordSetMembers"" correct
+            WHERE correct.""SetId"" = wrong.""SetId""
+              AND correct.""WordId"" = {0} AND correct.""ReadingIndex"" = {1}
+              AND wrong.""WordId"" = {2} AND wrong.""ReadingIndex"" = {3}",
+            newWordId, newReadingIndex, oldWordId, oldReadingIndex);
+
+        result.WordSetMembersUpdated += await context.Database.ExecuteSqlRawAsync(@"
+            UPDATE jiten.""WordSetMembers""
+            SET ""WordId"" = {0}, ""ReadingIndex"" = {1}
+            WHERE ""WordId"" = {2} AND ""ReadingIndex"" = {3}",
+            newWordId, newReadingIndex, oldWordId, oldReadingIndex);
+    }
+
+    /// <summary>Card media and custom sentences move only where the new pair is free; a clashing row stays on the old pair rather than be deleted.</summary>
+    private static async Task RemapUserAuthoredContent(
+        UserDbContext userContext,
+        int oldWordId, byte oldReadingIndex,
+        int newWordId, byte newReadingIndex,
+        WordReplacementResult result)
+    {
+        result.CardMediaMoved = await userContext.Database.ExecuteSqlRawAsync(@"
+            UPDATE ""user"".""UserCardMedia"" old
+            SET ""WordId"" = {0}, ""ReadingIndex"" = {1}
+            WHERE old.""WordId"" = {2} AND old.""ReadingIndex"" = {3}
+              AND NOT EXISTS (
+                SELECT 1 FROM ""user"".""UserCardMedia"" existing
+                WHERE existing.""UserId"" = old.""UserId"" AND existing.""Kind"" = old.""Kind""
+                  AND existing.""WordId"" = {0} AND existing.""ReadingIndex"" = {1}
+              )",
+            newWordId, newReadingIndex, oldWordId, oldReadingIndex);
+
+        result.UserSentencesMoved = await userContext.Database.ExecuteSqlRawAsync(@"
+            UPDATE ""user"".""UserExampleSentences"" old
+            SET ""WordId"" = {0}, ""ReadingIndex"" = {1}
+            WHERE old.""WordId"" = {2} AND old.""ReadingIndex"" = {3}
+              AND NOT EXISTS (
+                SELECT 1 FROM ""user"".""UserExampleSentences"" existing
+                WHERE existing.""UserId"" = old.""UserId""
+                  AND existing.""WordId"" = {0} AND existing.""ReadingIndex"" = {1}
+              )",
+            newWordId, newReadingIndex, oldWordId, oldReadingIndex);
     }
 
     private async Task<WordReplacementResult> ComputeDryRunCounts(
@@ -417,6 +597,15 @@ public class WordReplacementService(
 
         result.FsrsCardsUpdated = totalWithOld - usersWithBoth;
         result.FsrsCardsSkipped = usersWithBoth;
+
+        result.StudyDeckWordsUpdated = await userContext.UserStudyDeckWords
+            .CountAsync(w => w.WordId == oldWordId && w.ReadingIndex == oldReadingIndex);
+        result.WordSetMembersUpdated = await context.WordSetMembers
+            .CountAsync(m => m.WordId == oldWordId && m.ReadingIndex == oldReadingIndex);
+        result.CardMediaMoved = await userContext.UserCardMedia
+            .CountAsync(m => m.WordId == oldWordId && m.ReadingIndex == oldReadingIndex);
+        result.UserSentencesMoved = await userContext.UserExampleSentences
+            .CountAsync(s => s.WordId == oldWordId && s.ReadingIndex == oldReadingIndex);
 
         // Count parent decks that would need recalculation
         var affectedDeckIds = await context.DeckWords
