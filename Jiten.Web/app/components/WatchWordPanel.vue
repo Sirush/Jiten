@@ -17,7 +17,13 @@
     canExpandSentence: boolean;
     sentenceMined: boolean;
     mining: boolean;
+    placement?: 'right' | 'over-player';
   }>();
+
+  const contentProps = computed(() => {
+    const { placement: _placement, ...rest } = props;
+    return rest;
+  });
 
   const emit = defineEmits<{
     close: [];
@@ -45,11 +51,12 @@
 <template>
   <aside
     v-if="isDesktop"
-    class="z-40 flex flex-col rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-xl text-sm absolute top-1/2 -translate-y-1/2 max-h-[min(36rem,calc(100vh-2rem))] w-[22rem] left-[min(calc(100%+1.5rem),calc(50vw+5rem))]"
+    class="z-40 flex flex-col rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-xl text-sm absolute top-1/2 -translate-y-1/2 max-h-[min(36rem,calc(100vh-2rem))] w-[22rem]"
+    :class="placement === 'over-player' ? 'right-[calc(100%+1rem)]' : 'left-[min(calc(100%+1.5rem),calc(50vw+5rem))]'"
     aria-label="Word"
   >
     <WatchWordPanelContent
-      v-bind="props"
+      v-bind="contentProps"
       @close="emit('close')"
       @grade="emit('grade', $event)"
       @changed="emit('changed')"
@@ -71,7 +78,7 @@
           <div class="h-1 w-9 rounded-full bg-surface-300 dark:bg-surface-600" />
         </div>
         <WatchWordPanelContent
-          v-bind="props"
+          v-bind="contentProps"
           @close="drawerOpen = false"
           @grade="emit('grade', $event)"
           @changed="emit('changed')"

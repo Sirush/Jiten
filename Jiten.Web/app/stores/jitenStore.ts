@@ -21,6 +21,8 @@ import { readJarCookie, registerSettingResync, sameSetting, settingChangedInOthe
 
 export type WatchColourKey = WordStateColourKey;
 
+export type WatchTranscriptLayout = 'auto' | 'below' | 'side';
+
 export interface WatchPrefs {
   autoPause: boolean;
   pauseOffsetMs: number;
@@ -28,6 +30,8 @@ export interface WatchPrefs {
   pauseOnLookup: boolean;
   /** Neighbouring lines added on each side when mining a sentence */
   sentenceContext: number;
+  /** Desktop transcript placement; auto puts it beside the player only on short screens */
+  transcriptLayout: WatchTranscriptLayout;
   /** Superseded by the profile's stateColours; read once to carry old choices over. */
   colours?: Partial<WordStateColours>;
 }
@@ -40,6 +44,7 @@ export const DEFAULT_WATCH_PREFS: WatchPrefs = {
   blurKnown: false,
   pauseOnLookup: true,
   sentenceContext: 0,
+  transcriptLayout: 'auto',
 };
 
 const YEAR = 60 * 60 * 24 * 365;
