@@ -706,6 +706,9 @@ public class MorphologicalAnalyserTests
         yield return ["読んだけど", new[] { "読んだ", "けど" }];
         yield return ["飲んだから", new[] { "飲んだ", "から" }];
         yield return ["遊んだし", new[] { "遊んだ", "し" }];
+        // Only clause-initial ですが is the conjunction; after a noun it stays copula + particle.
+        yield return ["ですが、私は行く。", new[] { "ですが", "私", "は", "行く" }];
+        yield return ["学生ですが、", new[] { "学生", "です", "が" }];
         yield return ["客を待ってるんだけど", new[] { "客", "を", "待ってる", "んだ", "けど" }];
         yield return ["学生さんだって", new[] { "学生", "さん", "だって" }];
         yield return ["ちょっと休憩ーなんて言って", new[] { "ちょっと", "休憩", "なんて", "言って" }];

@@ -9,16 +9,16 @@ public partial class MorphologicalAnalyser
     /// <summary>Splits Sudachi aux-verb compounds absent from JMDict into their parts (し終わっ → し + 終わっ).</summary>
     private List<WordInfo> SplitCompoundAuxiliaryVerbs(List<WordInfo> wordInfos)
     {
-        var result = new List<WordInfo>(wordInfos.Count + 4);
-        bool changed = false;
+        List<WordInfo>? result = null;
 
-        foreach (var word in wordInfos)
+        for (int i = 0; i < wordInfos.Count; i++)
         {
+            var word = wordInfos[i];
             if (word.PartOfSpeech != PartOfSpeech.Verb ||
                 string.IsNullOrEmpty(word.DictionaryForm) ||
                 word.DictionaryForm.Length < 3)
             {
-                result.Add(word);
+                result?.Add(word);
                 continue;
             }
 
@@ -34,14 +34,14 @@ public partial class MorphologicalAnalyser
 
             if (matchedAux == null)
             {
-                result.Add(word);
+                result?.Add(word);
                 continue;
             }
 
             // Attested compounds stay whole so form scoring can use Sudachi's reading (滲み出す: にじみだす vs しみだす).
             if (HasCompoundLookup != null && HasCompoundLookup(word.DictionaryForm))
             {
-                result.Add(word);
+                result?.Add(word);
                 continue;
             }
 
@@ -51,7 +51,7 @@ public partial class MorphologicalAnalyser
             // Main verb surface is assumed to share the dict-form prefix length (し終わっ → し + 終わっ).
             if (word.Text.Length <= mainVerbDictLen)
             {
-                result.Add(word);
+                result?.Add(word);
                 continue;
             }
 
@@ -61,7 +61,7 @@ public partial class MorphologicalAnalyser
             if (!AuxiliaryVerbStems.TryGetValue(matchedAux, out var auxStem) ||
                 !auxVerbSurface.StartsWith(auxStem, StringComparison.Ordinal))
             {
-                result.Add(word);
+                result?.Add(word);
                 continue;
             }
 
@@ -82,12 +82,12 @@ public partial class MorphologicalAnalyser
                               EndOffset = word.EndOffset
                           };
 
+            result ??= CopyAccumulatorUpTo(wordInfos, i);
             result.Add(mainVerb);
             result.Add(auxVerb);
-            changed = true;
         }
 
-        return changed ? result : wordInfos;
+        return result ?? wordInfos;
     }
 
     private static readonly Dictionary<char, char> RenyokeiToGodanBase = new()
@@ -200,7 +200,7 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            result ??= [..wordInfos[..idx]];
+            result ??= CopyAccumulatorUpTo(wordInfos, idx);
 
             var (stemBase, at, stemIsVerb) = split.Value;
             var stemSurface = word.Text[..at];
@@ -279,7 +279,7 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            result ??= [..wordInfos[..idx]];
+            result ??= CopyAccumulatorUpTo(wordInfos, idx);
             var (at, lBase, rBase) = split.Value;
             var leftSurface = word.Text[..at];
             var rightSurface = word.Text[at..];
@@ -347,7 +347,7 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            result ??= [..wordInfos[..idx]];
+            result ??= CopyAccumulatorUpTo(wordInfos, idx);
 
             result.Add(new WordInfo
             {
@@ -429,7 +429,7 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            result ??= [..wordInfos[..idx]];
+            result ??= CopyAccumulatorUpTo(wordInfos, idx);
 
             var nounSurface = text[..splitAt];
             var suruSurface = text[splitAt..];
@@ -734,7 +734,7 @@ public partial class MorphologicalAnalyser
     /// <summary>Re-cuts どうして directly before た as どう + し + て (どうしてた contraction); どうして来たの stays whole.</summary>
     private static List<WordInfo> SplitDoushiteContraction(List<WordInfo> wordInfos)
     {
-        var result = new List<WordInfo>(wordInfos.Count + 2);
+        List<WordInfo>? result = null;
 
         for (int i = 0; i < wordInfos.Count; i++)
         {
@@ -746,6 +746,7 @@ public partial class MorphologicalAnalyser
                 && word.StartOffset >= 0)
             {
                 int s = word.StartOffset;
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
                 result.Add(new WordInfo
                 {
                     Text = "どう", DictionaryForm = "どう", NormalizedForm = "どう",
@@ -767,16 +768,16 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            result.Add(word);
+            result?.Add(word);
         }
 
-        return result;
+        return result ?? wordInfos;
     }
 
     /// <summary>Re-cuts adverb もし after a 連用形 and before a negation/polite tail as も + し (かすりもしない).</summary>
     private static List<WordInfo> SplitEmphaticMoSuru(List<WordInfo> wordInfos)
     {
-        var result = new List<WordInfo>(wordInfos.Count + 1);
+        List<WordInfo>? result = null;
 
         for (int i = 0; i < wordInfos.Count; i++)
         {
@@ -791,6 +792,7 @@ public partial class MorphologicalAnalyser
                 && word.StartOffset >= 0)
             {
                 int s = word.StartOffset;
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
                 result.Add(new WordInfo
                 {
                     Text = "も", DictionaryForm = "も", NormalizedForm = "も",
@@ -809,10 +811,10 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            result.Add(word);
+            result?.Add(word);
         }
 
-        return result;
+        return result ?? wordInfos;
     }
 
     private static bool IsSuruNegationOrPoliteContinuation(string text) =>

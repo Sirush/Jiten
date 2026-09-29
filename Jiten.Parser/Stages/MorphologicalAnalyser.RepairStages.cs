@@ -3205,19 +3205,20 @@ public partial class MorphologicalAnalyser
     {
         if (wordInfos.Count == 0) return wordInfos;
 
-        var result = new List<WordInfo>(wordInfos.Count + 2);
+        List<WordInfo>? result = null;
 
-        foreach (var word in wordInfos)
+        for (int i = 0; i < wordInfos.Count; i++)
         {
+            var word = wordInfos[i];
             if (word.PartOfSpeech != PartOfSpeech.Interjection || word.Text.Length < 3)
             {
-                result.Add(word);
+                result?.Add(word);
                 continue;
             }
 
             if (HasCompoundLookup != null && HasCompoundLookup(word.Text))
             {
-                result.Add(word);
+                result?.Add(word);
                 continue;
             }
 
@@ -3231,6 +3232,7 @@ public partial class MorphologicalAnalyser
 
                 if (HasCompoundLookup != null && !HasCompoundLookup(baseText)) continue;
 
+                result ??= CopyAccumulatorUpTo(wordInfos, i);
                 result.Add(new WordInfo
                 {
                     Text = baseText,
@@ -3254,10 +3256,10 @@ public partial class MorphologicalAnalyser
             }
 
             if (!split)
-                result.Add(word);
+                result?.Add(word);
         }
 
-        return result;
+        return result ?? wordInfos;
     }
 
     // A trailing run of ≥2 identical small vowels (ぇぇぇ) is expressive elongation, not part of a word.
@@ -4328,8 +4330,7 @@ public partial class MorphologicalAnalyser
         var hasKanaAppropriateLookup = HasKanaAppropriateCompoundLookup ?? hasNonNameLookup;
 
         var deconjugator = Deconjugator.Instance;
-        var result = new List<WordInfo>(wordInfos.Count);
-        bool changed = false;
+        List<WordInfo>? result = null;
 
         int i = 0;
         while (i < wordInfos.Count)
@@ -4392,6 +4393,7 @@ public partial class MorphologicalAnalyser
 
                 if (hasKanaAppropriateLookup(combinedText))
                 {
+                    result ??= CopyAccumulatorUpTo(wordInfos, i);
                     result.Add(BuildMergedHiraganaToken(wordInfos, i, spanLen, combinedText, combinedText, PartOfSpeech.CommonNoun));
                     i += spanLen;
                     combined = true;
@@ -4429,6 +4431,7 @@ public partial class MorphologicalAnalyser
                         _ => PartOfSpeech.Verb
                     };
 
+                    result ??= CopyAccumulatorUpTo(wordInfos, i);
                     result.Add(BuildMergedHiraganaToken(wordInfos, i, spanLen, combinedText, form.Text, pos));
                     i += spanLen;
                     combined = true;
@@ -4436,16 +4439,14 @@ public partial class MorphologicalAnalyser
                 }
             }
 
-            if (combined)
-                changed = true;
-            else
+            if (!combined)
             {
-                result.Add(wordInfos[i]);
+                result?.Add(wordInfos[i]);
                 i++;
             }
         }
 
-        return changed ? result : wordInfos;
+        return result ?? wordInfos;
     }
 
     private static WordInfo BuildMergedHiraganaToken(

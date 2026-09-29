@@ -286,35 +286,17 @@ internal static class TransitionRuleEngine
         return bonus;
     }
 
-    internal readonly record struct SoftRulePrefilterKey(
-        uint CurrentMask, string CurrentText,
-        uint PrevMask, bool HasPrev, string? PrevText,
-        uint NextMask, bool HasNext, string? NextText);
-
-    /// <param name="memo">Per-document cache: the answer depends only on the three masks and texts.</param>
     internal static bool CouldAnySoftRuleApply(
         List<PartOfSpeech> currentPOS, string currentText,
         List<PartOfSpeech>? prevPOS, string? prevText,
-        List<PartOfSpeech>? nextPOS, string? nextText,
-        Dictionary<SoftRulePrefilterKey, bool>? memo = null)
+        List<PartOfSpeech>? nextPOS, string? nextText)
     {
         if (currentPOS.Count == 0) return false;
 
-        var ctx = new ConditionContext(
+        return AnySoftRuleMatches(new ConditionContext(
             PosMask.FromList(currentPOS), currentText,
             prevPOS != null ? PosMask.FromList(prevPOS) : 0, prevPOS != null, prevText,
-            nextPOS != null ? PosMask.FromList(nextPOS) : 0, nextPOS != null, nextText);
-
-        if (memo == null)
-            return AnySoftRuleMatches(ctx);
-
-        var key = new SoftRulePrefilterKey(ctx.CandidateMask, currentText, ctx.PrevMask, ctx.HasPrev, prevText,
-                                           ctx.NextMask, ctx.HasNext, nextText);
-        if (memo.TryGetValue(key, out var cached))
-            return cached;
-        bool result = AnySoftRuleMatches(ctx);
-        memo[key] = result;
-        return result;
+            nextPOS != null ? PosMask.FromList(nextPOS) : 0, nextPOS != null, nextText));
     }
 
     private static bool AnySoftRuleMatches(ConditionContext ctx)

@@ -264,7 +264,8 @@ public partial class MorphologicalAnalyser
 
     private static List<WordInfo> CopyAccumulatorUpTo(List<WordInfo> source, int upToExclusive)
     {
-        var list = new List<WordInfo>(source.Count);
+        // Slack for split stages, which append more tokens than they consume; a regrow copies the whole document.
+        var list = new List<WordInfo>(source.Count + source.Count / 32 + 8);
         for (int i = 0; i < upToExclusive; i++)
             list.Add(source[i]);
         return list;

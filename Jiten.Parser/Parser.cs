@@ -49,7 +49,7 @@ namespace Jiten.Parser
         private static int _maxLookupKeyLength;
         private static Dictionary<string, List<int>>.AlternateLookup<ReadOnlySpan<char>> _lookupsAlt;
 
-        private static HashSet<long>? _compoundHashSet;
+        private static FilteredHashSet? _compoundHashSet;
         private static long[]? _hashBasePowers;
         private const long HASH_BASE = 131L;
 
@@ -133,7 +133,7 @@ namespace Jiten.Parser
 
         private static void BuildCompoundHashSet()
         {
-            var set = new HashSet<long>(_lookups.Count);
+            var set = new FilteredHashSet(_lookups.Count);
             int maxLen = 0;
             foreach (var key in _lookups.Keys)
             {
@@ -1043,22 +1043,12 @@ namespace Jiten.Parser
                                           .ToList());
             }
 
-            List<ExampleSentence>? exampleSentences = null;
-
-            if (subtitleSpeech || mediatype is MediaType.Novel or MediaType.NonFiction or MediaType.VideoGame or MediaType.VisualNovel or MediaType.WebNovel)
-            {
-                var wordIds = processedWords.Select(w => w.WordId).Distinct().ToList();
-                await using var freqCtx = await _contextFactory.CreateDbContextAsync();
-                var formFreqRanks = await freqCtx.WordFormFrequencies
-                    .AsNoTracking()
-                    .Where(wff => wordIds.Contains(wff.WordId))
-                    .ToDictionaryAsync(
-                        wff => (wff.WordId, (byte)wff.ReadingIndex),
-                        wff => wff.FrequencyRank);
-
-                exampleSentences = ExampleSentenceExtractor.ExtractSentences(
-                    sentences, processedWords, formFreqRanks, _wordFrequencyRanks, subtitleSpeech);
-            }
+            bool extractExamples = subtitleSpeech || mediatype is MediaType.Novel or MediaType.NonFiction or MediaType.VideoGame
+                or MediaType.VisualNovel or MediaType.WebNovel;
+            // Started here so the round trip overlaps the stats below, which don't need it.
+            var formFreqRanksTask = extractExamples
+                ? LoadFormFrequencyRanksAsync(processedWords.Select(w => w.WordId).Distinct().ToList())
+                : null;
 
             var totalWordCount = processedWords.Select(w => w.Occurrences).Sum();
 
@@ -1090,6 +1080,16 @@ namespace Jiten.Parser
                 ? (float)dialogueCharacterCount / textWithoutPunctuation.Length * 100f
                 : 0f;
 
+            var sentenceProfile = SentenceProfileBuilder.Build(sentences, processedWords, profileLineBreaks);
+
+            List<ExampleSentence>? exampleSentences = null;
+            if (formFreqRanksTask != null)
+            {
+                var formFreqRanks = await formFreqRanksTask;
+                exampleSentences = ExampleSentenceExtractor.ExtractSentences(
+                    sentences, processedWords, formFreqRanks, _wordFrequencyRanks, subtitleSpeech);
+            }
+
             var deck = new Deck
                        {
                            CharacterCount = characterCount, WordCount = totalWordCount, UniqueWordCount = processedWords.Length,
@@ -1097,12 +1097,23 @@ namespace Jiten.Parser
                            UniqueKanjiCount = uniqueKanjiCount, UniqueKanjiUsedOnceCount = uniqueKanjiUsedOnceCount,
                            SentenceCount = sentences.Count, DialoguePercentage = dialoguePercentage, DeckWords = processedWords,
                            RawText = storeRawText ? new DeckRawText(text) : null, ExampleSentences = exampleSentences,
-                           SentenceProfile = SentenceProfileBuilder.Build(sentences, processedWords, profileLineBreaks)
+                           SentenceProfile = sentenceProfile
                        };
 
             if (sw != null) timings!.StatsBuildMs += sw.Elapsed.TotalMilliseconds;
 
             return deck;
+        }
+
+        private static async Task<Dictionary<(int WordId, byte ReadingIndex), int>> LoadFormFrequencyRanksAsync(List<int> wordIds)
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            return await context.WordFormFrequencies
+                .AsNoTracking()
+                .Where(wff => wordIds.Contains(wff.WordId))
+                .ToDictionaryAsync(
+                    wff => (wff.WordId, (byte)wff.ReadingIndex),
+                    wff => wff.FrequencyRank);
         }
 
         public static async Task<List<DeckWord?>> ParseMorphenes(IDbContextFactory<JitenDbContext> contextFactory, string text,
@@ -4717,9 +4728,16 @@ namespace Jiten.Parser
             var droppedByGate = new Dictionary<int, string>();
             int ci = 0;
 
-            MisparseDecision EvaluateAt(int i, DeckWord deckWord)
+            // A stutter-dedup drop's surviving twin is vocabulary (はいはい), not burst material.
+            bool IsGateDropped(int idx) => idx >= 0 && idx < flatTokens.Count
+                                           && droppedByGate.TryGetValue(idx, out var gate)
+                                           && gate != "kana-stutter-before-word";
+
+            // pi/ni are the neighbours whose drop state the decision read; -1 when it read none.
+            MisparseDecision EvaluateAt(int i, DeckWord deckWord, out int pi, out int ni)
             {
                 var token = flatTokens[i];
+                pi = ni = -1;
 
                 // Rewrite-rule pins (え|っつった) are never SFX; PreMatchedWordId alone isn't enough (ぐすっ → 具す would return).
                 if (token.PinnedByRewriteRule && token.PreMatchedWordId != null)
@@ -4736,7 +4754,7 @@ namespace Jiten.Parser
                     deckWord.OriginalText.Length > 0 ? deckWord.OriginalText : token.Text);
 
                 // Empty remnants are skipped as neighbours, but their symbol gaps still count.
-                int pi = i - 1;
+                pi = i - 1;
                 bool spaceBefore = false;
                 while (pi >= 0 && (flatTokens[pi].Text.Length == 0
                                    || flatTokens[pi].PartOfSpeech == PartOfSpeech.BlankSpace))
@@ -4746,7 +4764,7 @@ namespace Jiten.Parser
                 }
                 var prev = pi >= 0 ? flatTokens[pi] : null;
 
-                int ni = i + 1;
+                ni = i + 1;
                 string symAfter = "";
                 bool spaceAfter = false;
                 while (ni < flatTokens.Count)
@@ -4760,11 +4778,8 @@ namespace Jiten.Parser
                 if (ni >= flatTokens.Count) symAfter += trailingSymbols;
                 var next = ni < flatTokens.Count ? flatTokens[ni] : null;
 
-                // A stutter-dedup drop's surviving twin is vocabulary (はいはい), not burst material.
-                bool prevDropped = pi >= 0 && droppedByGate.TryGetValue(pi, out var prevGate)
-                                   && prevGate != "kana-stutter-before-word";
-                bool nextDropped = ni < flatTokens.Count && droppedByGate.TryGetValue(ni, out var nextGate)
-                                   && nextGate != "kana-stutter-before-word";
+                bool prevDropped = IsGateDropped(pi);
+                bool nextDropped = IsGateDropped(ni);
 
                 // Scraps flanking a token form one blob (ず|がんっ); a non-word blob has no word fragments.
                 // Symbols split blobs (って、くっさ), and a vowel after a verb is its elongation (わかる|う).
@@ -4798,13 +4813,13 @@ namespace Jiten.Parser
                 return MisparseGates.Evaluate(in ctx);
             }
 
-            var kept = new List<(int flatIdx, DeckWord word)>(corrected.Count);
+            var kept = new List<(int flatIdx, DeckWord word, int pi, int ni, bool prevDropped, bool nextDropped)>(corrected.Count);
             for (int i = 0; i < flatTokens.Count && ci < corrected.Count; i++)
             {
                 if (flatTokens[i].ResolvedWordId == null) continue;
 
                 var deckWord = corrected[ci++];
-                var decision = EvaluateAt(i, deckWord);
+                var decision = EvaluateAt(i, deckWord, out int pi, out int ni);
                 if (decision.IsMisparsed)
                 {
                     droppedByGate[i] = decision.GateId ?? "";
@@ -4813,7 +4828,7 @@ namespace Jiten.Parser
                     continue;
                 }
 
-                kept.Add((i, deckWord));
+                kept.Add((i, deckWord, pi, ni, IsGateDropped(pi), IsGateDropped(ni)));
             }
 
             // A drop can orphan its neighbour (ず|がんっ: がん falls, then ず), so re-check until stable.
@@ -4822,22 +4837,29 @@ namespace Jiten.Parser
                 bool changed = false;
                 for (int k = kept.Count - 1; k >= 0; k--)
                 {
-                    var (i, deckWord) = kept[k];
-                    var decision = EvaluateAt(i, deckWord);
-                    if (decision.IsMisparsed)
+                    var (i, deckWord, pi, ni, prevDropped, nextDropped) = kept[k];
+                    // Gates read other decisions only through these two flags; unchanged flags repeat the keep.
+                    if (IsGateDropped(pi) == prevDropped && IsGateDropped(ni) == nextDropped)
+                        continue;
+
+                    var decision = EvaluateAt(i, deckWord, out pi, out ni);
+                    if (!decision.IsMisparsed)
                     {
-                        droppedByGate[i] = decision.GateId ?? "";
-                        diagnostics?.LogDroppedToken(flatTokens[i].Text, flatTokens[i].PartOfSpeech,
-                            $"misparsed:{decision.GateId}");
-                        kept.RemoveAt(k);
-                        changed = true;
+                        kept[k] = (i, deckWord, pi, ni, IsGateDropped(pi), IsGateDropped(ni));
+                        continue;
                     }
+
+                    droppedByGate[i] = decision.GateId ?? "";
+                    diagnostics?.LogDroppedToken(flatTokens[i].Text, flatTokens[i].PartOfSpeech,
+                        $"misparsed:{decision.GateId}");
+                    kept.RemoveAt(k);
+                    changed = true;
                 }
                 if (!changed) break;
             }
 
             var result = new List<DeckWord>(corrected.Count);
-            foreach (var (i, deckWord) in kept)
+            foreach (var (i, deckWord, _, _, _, _) in kept)
             {
                 flatTokens[i].KeptForm = (deckWord.WordId, deckWord.ReadingIndex);
                 result.Add(deckWord);
@@ -5440,7 +5462,6 @@ namespace Jiten.Parser
             var rederiveStates = new RederivationHelper.RederiveState?[sentencePairs.Count][];
             var cachedCandidates = new List<FormCandidate>?[sentencePairs.Count][];
             var rederiveCache = new Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), RederivationHelper.RederiveState?>();
-            var softRuleMemo = new Dictionary<TransitionRuleEngine.SoftRulePrefilterKey, bool>();
 
             // Surface text is immutable across both passes.
             var isClassicalBySentence = new bool[sentencePairs.Count];
@@ -5510,7 +5531,7 @@ namespace Jiten.Parser
                         && !TransitionRuleEngine.CouldAnySoftRuleApply(
                          currentResult.PartsOfSpeech, currentInfo.Text,
                          prevResult?.PartsOfSpeech, prevInfo?.Text,
-                         nextResult?.PartsOfSpeech, nextInfo?.Text, softRuleMemo))
+                         nextResult?.PartsOfSpeech, nextInfo?.Text))
                     {
                         Interlocked.Increment(ref ParserCounters.AdjSoftRuleSkips);
                         continue;

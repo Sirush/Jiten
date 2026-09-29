@@ -857,6 +857,20 @@ public partial class MorphologicalAnalyser
             Prev: new ContextCond(ClauseBoundary: true),
             Next: new ContextCond(TextAnyOf: ["、", "!", "！"])),
 
+        // Clause-initial ですが/ですけど are polite conjunctions ("however"); with no predicate before them they cannot be copula + particle.
+        new RewriteRule("desuga-conj", RewritePhase.Early,
+            [new TokenPattern(Text: "です", Pos: [PartOfSpeech.Auxiliary]),
+             new TokenPattern(Text: "が", Pos: [PartOfSpeech.Particle])],
+            [new TokenTemplate("ですが", DictForm: "ですが", NormalizedForm: "ですが", Pos: PartOfSpeech.Conjunction,
+                Reading: "デスガ", Pin: 2850805)],
+            Prev: new ContextCond(ClauseBoundary: true)),
+        new RewriteRule("desukedo-conj", RewritePhase.Early,
+            [new TokenPattern(Text: "です", Pos: [PartOfSpeech.Auxiliary]),
+             new TokenPattern(Text: "けど", Pos: [PartOfSpeech.Particle])],
+            [new TokenTemplate("ですけど", DictForm: "ですけど", NormalizedForm: "ですけど", Pos: PartOfSpeech.Conjunction,
+                Reading: "デスケド", Pin: 2871534)],
+            Prev: new ContextCond(ClauseBoundary: true)),
+
         // Noun ひと with lemma 一 is almost always 人; prefix uses (ひと月) are tagged 接頭辞 or stay fused.
         new RewriteRule("hito-dict", RewritePhase.Early,
             [new TokenPattern(Text: "ひと", Pos: [PartOfSpeech.Noun], DictFormAnyOf: ["一"], RequireUnpinned: false)],

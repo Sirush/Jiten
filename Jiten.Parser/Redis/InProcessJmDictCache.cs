@@ -87,7 +87,7 @@ public sealed class InProcessJmDictCache : IJmDictCache
 
     public async Task<Dictionary<int, JmDictWord>> GetWordsAsync(IEnumerable<int> wordIds)
     {
-        var result = new Dictionary<int, JmDictWord>();
+        var result = new Dictionary<int, JmDictWord>(wordIds.TryGetNonEnumeratedCount(out int count) ? count : 0);
         List<int>? missed = null;
 
         foreach (var id in wordIds)

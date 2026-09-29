@@ -473,6 +473,8 @@ builder.Services.Configure<Jiten.Core.Services.JitenPlusLimitsOptions>(
 builder.Services.AddScoped<IUserLimitsService, UserLimitsService>();
 builder.Services.AddSingleton<IBillingAlertService, BillingAlertService>();
 builder.Services.Configure<Jiten.Api.Services.Stripe.StripeOptions>(builder.Configuration.GetSection("Stripe"));
+builder.Services.Configure<Jiten.Api.Services.DiscourseOptions>(
+    builder.Configuration.GetSection(Jiten.Api.Services.DiscourseOptions.SectionName));
 builder.Services.Configure<Jiten.Api.Services.Legal.LegalDocumentsOptions>(
     builder.Configuration.GetSection(Jiten.Api.Services.Legal.LegalDocumentsOptions.SectionName));
 builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Api.Services.Stripe.StripeGateway>();

@@ -1887,6 +1887,9 @@ public class FormSelectionTests
         yield return ["はずって……。これでよく引率が務まるなあ。", "はず", 1476430, (byte)2];
         yield return ["１０度？１０度って。", "度", 1445160, (byte)0];
         yield return ["「じゃあってなによ、じゃあって」", "じゃあ", 1005900, (byte)0];
+        // Clause-initial ですが/ですけど are the polite conjunctions; Sudachi cuts です|が.
+        yield return ["「ですが、私は、アトレは、お兄様のお役に立つことが私の生き甲斐なので。」", "ですが", 2850805, (byte)0];
+        yield return ["ですけど、それは無理です。", "ですけど", 2871534, (byte)0];
         yield return ["と言ってくれた。", "言ってくれた", 1587040, (byte)0];
         yield return ["花が散っていた。", "散っていた", 1303490, (byte)0];
         yield return ["食べちゃってごめん。", "食べちゃって", 1358280, (byte)0];
