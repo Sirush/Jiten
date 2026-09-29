@@ -151,6 +151,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                     break;
 
                 case DeckOrder.DeckFrequency:
+                case DeckOrder.SentenceUnlock:
                     deckWordsQuery = deckWordsQuery.OrderByDescending(dw => dw.Occurrences);
                     break;
                 case DeckOrder.Random:

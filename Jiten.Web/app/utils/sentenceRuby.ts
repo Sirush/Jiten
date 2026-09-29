@@ -2,6 +2,7 @@ import type { SentenceFurigana, SentenceFuriganaMode } from '~/types';
 import { escapeHtml } from '~/utils/sanitiseHtml';
 
 const highlightClass = 'text-primary-500 dark:text-primary-500 font-bold';
+const unknownMarkClass = 'bg-blue-100 dark:bg-blue-900/60 rounded-sm';
 
 export function visibleFurigana(
   furigana: SentenceFurigana[] | null | undefined,
@@ -25,6 +26,8 @@ export interface SentenceRubyOptions {
   revealOnHover?: (group: SentenceFurigana) => boolean;
   /** A #rrggbb colour for the group's word, or null for the ordinary text colour. */
   colourOf?: (group: SentenceFurigana) => string | null;
+  /** Spans to highlight as words the reader doesn't know yet. */
+  unknownSpans?: { position: number; length: number }[];
 }
 
 const hexColour = /^#[0-9a-fA-F]{6}$/;
@@ -49,12 +52,24 @@ export function sentenceRubyHtml(text: string, wordPosition: number, wordLength:
     return html + escapeHtml(text.slice(cursor, end));
   };
 
+  const spans = [...(options.unknownSpans ?? [])].sort((a, b) => a.position - b.position);
+  const renderMarked = (start: number, end: number) => {
+    let html = '';
+    let cursor = start;
+    for (const s of spans) {
+      if (s.position < cursor || s.position + s.length > end) continue;
+      html += render(cursor, s.position) + `<span class="${unknownMarkClass}">${render(s.position, s.position + s.length)}</span>`;
+      cursor = s.position + s.length;
+    }
+    return html + render(cursor, end);
+  };
+
   const hasWord = wordLength > 0 && wordPosition >= 0 && wordPosition + wordLength <= text.length;
-  if (!hasWord) return render(0, text.length);
+  if (!hasWord) return renderMarked(0, text.length);
 
   return (
-    render(0, wordPosition) +
+    renderMarked(0, wordPosition) +
     `<span class="${highlightClass}">${render(wordPosition, wordPosition + wordLength)}</span>` +
-    render(wordPosition + wordLength, text.length)
+    renderMarked(wordPosition + wordLength, text.length)
   );
 }

@@ -11,7 +11,7 @@ public class AddStudyDeckRequest
     public int? DeckId { get; set; }
     [Range(1, 6)]
     public int DownloadType { get; set; } = 1;
-    [Range(1, 5)]
+    [Range(1, 6)]
     public int Order { get; set; } = 2;
     [Range(0, int.MaxValue)]
     public int MinFrequency { get; set; }

@@ -28,6 +28,10 @@ public interface ISentenceTokenService
     /// <summary>Unknown content words of each (sentence, target word) pair for the current user; partial rows are absent.</summary>
     Task<Dictionary<(long SentenceId, int TargetWordId), int>> CountUnknownAsync(
         IEnumerable<(long SentenceId, int TargetWordId, byte[] Tokens)> candidates);
+
+    /// <summary>Every occurrence of an unknown content word in each (sentence, target word) pair for the current user; partial rows are absent.</summary>
+    Task<Dictionary<(long SentenceId, int TargetWordId), List<SentenceToken>>> UnknownTokensAsync(
+        IEnumerable<(long SentenceId, int TargetWordId, byte[] Tokens)> candidates);
 }
 
 public class SentenceTokenService(JitenDbContext context, ICurrentUserService currentUser) : ISentenceTokenService
@@ -101,6 +105,10 @@ public class SentenceTokenService(JitenDbContext context, ICurrentUserService cu
     }
 
     public async Task<Dictionary<(long SentenceId, int TargetWordId), int>> CountUnknownAsync(
+        IEnumerable<(long SentenceId, int TargetWordId, byte[] Tokens)> candidates) =>
+        (await UnknownTokensAsync(candidates)).ToDictionary(kv => kv.Key, kv => kv.Value.Select(t => t.WordKey).Distinct().Count());
+
+    public async Task<Dictionary<(long SentenceId, int TargetWordId), List<SentenceToken>>> UnknownTokensAsync(
         IEnumerable<(long SentenceId, int TargetWordId, byte[] Tokens)> candidates)
     {
         if (!currentUser.IsAuthenticated) return [];
@@ -118,9 +126,9 @@ public class SentenceTokenService(JitenDbContext context, ICurrentUserService cu
 
         bool IsKnown(int id, byte ri) => states.TryGetValue((id, ri), out var s) && SentenceComprehension.IsKnown(s);
 
-        var counts = new Dictionary<(long, int), int>();
+        var unknown = new Dictionary<(long, int), List<SentenceToken>>();
         foreach (var (sentenceId, targetWordId, tokens) in decoded)
-            counts.TryAdd((sentenceId, targetWordId), SentenceComprehension.CountUnknown(tokens, targetWordId, IsKnown));
-        return counts;
+            unknown.TryAdd((sentenceId, targetWordId), SentenceComprehension.UnknownTokens(tokens, targetWordId, IsKnown).ToList());
+        return unknown;
     }
 }

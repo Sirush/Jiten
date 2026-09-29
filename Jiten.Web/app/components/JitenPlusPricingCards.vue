@@ -340,7 +340,8 @@
   }
 
   .jp-card__amount {
-    font-size: 2rem;
+    font-size: 2.75rem;
+    line-height: 1.1;
     font-weight: 800;
   }
 

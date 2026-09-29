@@ -21,6 +21,7 @@ public class JitenDbContext : DbContext
     public DbSet<DeckRawText> DeckRawTexts { get; set; }
     public DbSet<DeckTitle> DeckTitles { get; set; }
     public DbSet<DeckStats> DeckStats { get; set; }
+    public DbSet<DeckSentenceProfile> DeckSentenceProfiles { get; set; }
     public DbSet<DeckDifficulty> DeckDifficulties { get; set; }
     public DbSet<DeckDictionaryEntry> DeckDictionaryEntries { get; set; }
     public DbSet<WordParentDeckIndex> WordParentDeckIndex { get; set; }
@@ -374,6 +375,18 @@ public class JitenDbContext : DbContext
             entity.HasOne(t => t.Deck)
                   .WithOne(d => d.SubtitleTrack)
                   .HasForeignKey<DeckSubtitleTrack>(t => t.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DeckSentenceProfile>(entity =>
+        {
+            entity.ToTable("DeckSentenceProfiles", "jiten");
+            entity.HasKey(p => p.DeckId);
+            entity.Property(p => p.DeckId).ValueGeneratedNever();
+
+            entity.HasOne<Deck>()
+                  .WithOne()
+                  .HasForeignKey<DeckSentenceProfile>(p => p.DeckId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
 

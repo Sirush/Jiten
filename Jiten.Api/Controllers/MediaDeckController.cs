@@ -14,6 +14,7 @@ using Jiten.Api.Services;
 using Jiten.Api.Telemetry;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.Billing;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Services;
@@ -53,7 +54,8 @@ public class MediaDeckController(
     DescriptionSearchService descriptionSearchService,
     MediaTitleSearchService titleSearch,
     IDeckActivityBuffer activityBuffer,
-    ISentenceTokenService sentenceTokens) : ControllerBase
+    ISentenceTokenService sentenceTokens,
+    IJitenPlusService jitenPlusService) : ControllerBase
 {
 
     private class DeckWithOccurrences
@@ -976,21 +978,29 @@ public class MediaDeckController(
             sortBy = string.IsNullOrEmpty(titleFilter) ? "popularity" : "filter";
         var order = sortOrder ?? (sortBy is "popularity" or "filter" ? SortOrder.Descending : SortOrder.Ascending);
 
-        Dictionary<int, float> coverageDict = new();
-        Dictionary<int, float> uniqueCoverageDict = new();
-        Dictionary<int, float> youngCoverageDict = new();
-        Dictionary<int, float> youngUniqueCoverageDict = new();
+        var coverages = new UserCoverageChunkHelper.CoverageDictionaries();
+        var coverageDict = coverages.MatureCoverage;
+        var uniqueCoverageDict = coverages.MatureUniqueCoverage;
+        var youngCoverageDict = coverages.YoungCoverage;
+        var youngUniqueCoverageDict = coverages.YoungUniqueCoverage;
+
+        var sentenceMetricsGranted = currentUserService.IsAuthenticated
+                                     && await jitenPlusService.GetTierAsync(currentUserService.UserId!) >= JitenPlusTier.Trial;
+        if (sortBy is "readable" or "iPlusOne" && !sentenceMetricsGranted)
+            sortBy = string.IsNullOrEmpty(titleFilter) ? "popularity" : "filter";
 
         if (currentUserService.IsAuthenticated)
         {
             var allDeckIds = await query.OrderBy(d => d.DeckId).Select(d => d.DeckId).ToListAsync();
             var userId = currentUserService.UserId!;
 
-            var coverages = await UserCoverageChunkHelper.GetCoverage(userContext, userId, allDeckIds);
+            coverages = await UserCoverageChunkHelper.GetCoverage(userContext, userId, allDeckIds, includeSentences: sentenceMetricsGranted);
             coverageDict = coverages.MatureCoverage;
             uniqueCoverageDict = coverages.MatureUniqueCoverage;
             youngCoverageDict = coverages.YoungCoverage;
             youngUniqueCoverageDict = coverages.YoungUniqueCoverage;
+            if (coverages.SentenceMetricsMissing)
+                await RequestSentenceMetrics(userId);
 
             var totalCoverageDict = CombineCoverage(coverageDict, youngCoverageDict);
             var uniqueTotalCoverageDict = CombineCoverage(uniqueCoverageDict, youngUniqueCoverageDict);
@@ -1036,26 +1046,26 @@ public class MediaDeckController(
             }
 
 
-            if (sortBy is "coverage" or "uCoverage" or "totalCoverage" or "uTotalCoverage")
+            if (sortBy is "coverage" or "uCoverage" or "totalCoverage" or "uTotalCoverage" or "readable" or "iPlusOne")
             {
                 var sortDict = sortBy switch
                 {
                     "uCoverage" => uniqueCoverageDict,
                     "totalCoverage" => totalCoverageDict,
                     "uTotalCoverage" => uniqueTotalCoverageDict,
+                    "readable" => coverages.ReadableSentences,
+                    "iPlusOne" => coverages.IPlusOneSentences,
                     _ => coverageDict
                 };
 
-                return await HandleCoverageSorting(query, projectedQuery, order, offset ?? 0, pageSize, coverageDict,
-                                                   uniqueCoverageDict, youngCoverageDict, youngUniqueCoverageDict, sortDict,
-                                                   allUserPrefs);
+                return await HandleCoverageSorting(query, projectedQuery, order, offset ?? 0, pageSize, coverages, sortDict, allUserPrefs);
             }
         }
 
         if (wordId != 0)
         {
-            return await HandleWordBasedQuery(projectedQuery!, wordId, readingIndex, sortBy, order, offset ?? 0, pageSize, coverageDict,
-                                              uniqueCoverageDict, youngCoverageDict, youngUniqueCoverageDict, allUserPrefs, orderedDeckIds);
+            return await HandleWordBasedQuery(projectedQuery!, wordId, readingIndex, sortBy, order, offset ?? 0, pageSize, coverages,
+                                              allUserPrefs, orderedDeckIds);
         }
 
         query = ApplySorting(query, sortBy, order);
@@ -1095,12 +1105,9 @@ public class MediaDeckController(
 
         if (currentUserService.IsAuthenticated)
         {
+            coverages.ApplyTo(dtos);
             foreach (var dto in dtos)
             {
-                if (coverageDict.TryGetValue(dto.DeckId, out var c)) dto.Coverage = c;
-                if (uniqueCoverageDict.TryGetValue(dto.DeckId, out var uc)) dto.UniqueCoverage = uc;
-                if (youngCoverageDict.TryGetValue(dto.DeckId, out var yc)) dto.YoungCoverage = yc;
-                if (youngUniqueCoverageDict.TryGetValue(dto.DeckId, out var yuc)) dto.YoungUniqueCoverage = yuc;
                 if (allUserPrefs.TryGetValue(dto.DeckId, out var pref))
                 {
                     dto.Status = pref.Status;
@@ -1112,6 +1119,16 @@ public class MediaDeckController(
 
         await ApplyChildDeckCountsAsync(dtos);
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset ?? 0);
+    }
+
+    /// <summary>Queues one coverage recompute to fill in a Jiten+ viewer's sentence metrics; skipped while one is already pending.</summary>
+    private async Task RequestSentenceMetrics(string userId)
+    {
+        var alreadyDirty = await userContext.UserMetadatas.AsNoTracking().AnyAsync(m => m.UserId == userId && m.CoverageDirty);
+        if (alreadyDirty) return;
+
+        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
+        backgroundJobClient.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
     }
 
     /// <summary>
@@ -1133,10 +1150,7 @@ public class MediaDeckController(
         SortOrder sortOrder,
         int offset,
         int pageSize,
-        Dictionary<int, float> coverageDict,
-        Dictionary<int, float> uniqueCoverageDict,
-        Dictionary<int, float> youngCoverageDict,
-        Dictionary<int, float> youngUniqueCoverageDict,
+        UserCoverageChunkHelper.CoverageDictionaries coverages,
         Dictionary<int, float> selectedDict,
         Dictionary<int, UserDeckPreference> preferencesDict)
     {
@@ -1202,11 +1216,9 @@ public class MediaDeckController(
                     }
                 }
 
-                if (coverageDict.TryGetValue(dto.DeckId, out var cov)) dto.Coverage = cov;
-                if (uniqueCoverageDict.TryGetValue(dto.DeckId, out var uCov)) dto.UniqueCoverage = uCov;
-                if (youngCoverageDict.TryGetValue(dto.DeckId, out var yCov)) dto.YoungCoverage = yCov;
-                if (youngUniqueCoverageDict.TryGetValue(dto.DeckId, out var yuCov)) dto.YoungUniqueCoverage = yuCov;
             }
+
+            coverages.ApplyTo(dtos);
 
             await ApplyChildDeckCountsAsync(dtos);
             return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
@@ -1237,11 +1249,9 @@ public class MediaDeckController(
                     }
                 }
 
-                if (coverageDict.TryGetValue(dto.DeckId, out var cov)) dto.Coverage = cov;
-                if (uniqueCoverageDict.TryGetValue(dto.DeckId, out var uCov)) dto.UniqueCoverage = uCov;
-                if (youngCoverageDict.TryGetValue(dto.DeckId, out var yCov)) dto.YoungCoverage = yCov;
-                if (youngUniqueCoverageDict.TryGetValue(dto.DeckId, out var yuCov)) dto.YoungUniqueCoverage = yuCov;
             }
+
+            coverages.ApplyTo(dtos);
 
             await ApplyChildDeckCountsAsync(dtos);
             return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
@@ -1447,8 +1457,7 @@ public class MediaDeckController(
 
     private async Task<PaginatedResponse<List<DeckDto>>> HandleWordBasedQuery(
         IQueryable<DeckWithOccurrences> projectedQuery, int wordId, int readingIndex, string sortBy, SortOrder sortOrder, int offset,
-        int pageSize, Dictionary<int, float> coverageDict, Dictionary<int, float> uniqueCoverageDict,
-        Dictionary<int, float> youngCoverageDict, Dictionary<int, float> youngUniqueCoverageDict,
+        int pageSize, UserCoverageChunkHelper.CoverageDictionaries coverages,
         Dictionary<int, UserDeckPreference> preferencesDict, List<int>? orderedDeckIds)
     {
         projectedQuery = ApplySorting(projectedQuery, sortBy, sortOrder);
@@ -1531,12 +1540,9 @@ public class MediaDeckController(
 
         if (currentUserService.IsAuthenticated)
         {
+            coverages.ApplyTo(dtos);
             foreach (var dto in dtos)
             {
-                if (coverageDict.TryGetValue(dto.DeckId, out var c)) dto.Coverage = c;
-                if (uniqueCoverageDict.TryGetValue(dto.DeckId, out var uc)) dto.UniqueCoverage = uc;
-                if (youngCoverageDict.TryGetValue(dto.DeckId, out var yc)) dto.YoungCoverage = yc;
-                if (youngUniqueCoverageDict.TryGetValue(dto.DeckId, out var yuc)) dto.YoungUniqueCoverage = yuc;
                 if (preferencesDict.TryGetValue(dto.DeckId, out var pref))
                 {
                     dto.Status = pref.Status;
@@ -1878,7 +1884,8 @@ public class MediaDeckController(
                                                                            SortOrder subdeckSortOrder = SortOrder.Ascending,
                                                                            int pageSize = 25,
                                                                            int? runtimeMin = null, int? runtimeMax = null,
-                                                                           bool hideCompleted = false)
+                                                                           bool hideCompleted = false,
+                                                                           [FromServices] ISentenceStatsService? sentenceStats = null)
     {
         pageSize = pageSize switch { 50 => 50, 100 => 100, _ => 25 };
 
@@ -2028,8 +2035,16 @@ public class MediaDeckController(
                 mainDeckDto.IsIgnored = mpref.IsIgnored;
             }
 
+            // Stored sentence metrics exist per title only, so the visible subdecks are read exactly from their own text.
+            var subdeckSentences = sentenceStats != null && subdeckDtos.Count > 0
+                                   && await jitenPlusService.GetTierAsync(userId) >= JitenPlusTier.Trial
+                ? await sentenceStats.GetOwnTextReadabilityAsync(subdeckDtos.Select(d => d.DeckId).ToList())
+                : [];
+
             foreach (var subdeckDto in subdeckDtos)
             {
+                if (subdeckSentences.TryGetValue(subdeckDto.DeckId, out var sentences))
+                    (subdeckDto.ReadableSentences, subdeckDto.IPlusOneSentences) = (sentences.Readable, sentences.IPlusOne);
                 if (coverageDict.TryGetValue(subdeckDto.DeckId, out var c)) subdeckDto.Coverage = c;
                 if (uCoverageDict.TryGetValue(subdeckDto.DeckId, out var uc)) subdeckDto.UniqueCoverage = uc;
                 if (yCoverageDict.TryGetValue(subdeckDto.DeckId, out var yc)) subdeckDto.YoungCoverage = yc;
@@ -2101,7 +2116,8 @@ public class MediaDeckController(
         userContext.Database.SetCommandTimeout(TimeSpan.FromSeconds(120));
         try
         {
-            await CoverageComputeService.ComputeSpecificDecksAsync(userContext, userId, deckIds);
+            var sentenceProfiles = await jitenPlusService.GetTierAsync(userId) >= JitenPlusTier.Trial ? contextFactory : null;
+            await CoverageComputeService.ComputeSpecificDecksAsync(userContext, userId, deckIds, sentenceProfiles);
         }
         finally
         {
@@ -2742,6 +2758,57 @@ public class MediaDeckController(
                                               Coverage = p.coverage < 99.0 ? Math.Round(p.coverage, 0) : Math.Round(p.coverage, 2)
                                           }).ToList());
     }
+
+    [HttpGet("{id:int}/sentence-summary")]
+    [Authorize]
+    [JitenPlus(Feature = "sentence-stats")]
+    [EnableRateLimiting("sentence-stats")]
+    [SwaggerOperation(Summary = "Share of the deck's sentences the user can read",
+                      Description = "Sentences by how many content words the user doesn't know: none, one, two, three or more.")]
+    [ProducesResponseType(typeof(DeckSentenceStatsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DeckSentenceStatsDto>> GetSentenceSummary(int id, [FromServices] ISentenceStatsService sentenceStats,
+                                                                             [FromQuery] string? v = null)
+    {
+        var stats = await sentenceStats.GetStatsAsync(id, summaryOnly: true, KnownVersion(v));
+        return stats == null ? NotFound() : Ok(stats);
+    }
+
+    [HttpGet("{id:int}/sentence-stats")]
+    [Authorize]
+    [JitenPlus(Feature = "sentence-stats")]
+    [EnableRateLimiting("sentence-stats")]
+    [SwaggerOperation(Summary = "Sentence comprehension statistics for the deck",
+                      Description = "Distribution, progression across the work, the words that unlock the most sentences and a projection.")]
+    [ProducesResponseType(typeof(DeckSentenceStatsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DeckSentenceStatsDto>> GetSentenceStats(int id, [FromServices] ISentenceStatsService sentenceStats,
+                                                                           [FromQuery] string? v = null)
+    {
+        var stats = await sentenceStats.GetStatsAsync(id, summaryOnly: false, KnownVersion(v));
+        return stats == null ? NotFound() : Ok(stats);
+    }
+
+    [HttpGet("{id:int}/iplusone-sentences")]
+    [Authorize]
+    [JitenPlus(Feature = "sentence-stats")]
+    [EnableRateLimiting("sentence-stats")]
+    [SwaggerOperation(Summary = "The deck's example sentences with one unknown word",
+                      Description = "Grouped by that word, the words standing alone in the most sentences first. Pages of 20.")]
+    [ProducesResponseType(typeof(DeckIPlusOneSentencesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DeckIPlusOneSentencesResponse>> GetIPlusOneSentences(int id, [FromServices] ISentenceStatsService sentenceStats,
+                                                                                         [FromQuery] int offset = 0, [FromQuery] string? v = null)
+    {
+        var page = await sentenceStats.GetIPlusOneSentencesAsync(id, offset, KnownVersion(v));
+        return page == null ? NotFound() : Ok(page);
+    }
+
+    /// <summary>Caps the client-supplied cache version so it can't grow cache keys without bound.</summary>
+    private static string? KnownVersion(string? v) => v is { Length: > 0 and <= 32 } ? v : null;
 
     [HttpGet("{id}/coverage-journey")]
     [Authorize]

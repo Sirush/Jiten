@@ -259,6 +259,21 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
         result.Sentences.Should().HaveCount(1, "six route subdecks share one parent title");
     }
 
+    [Theory]
+    [InlineData("?mediaTypes=1", 0)]
+    [InlineData("?mediaTypes=1&mediaTypes=4", 3)]
+    [InlineData("/1?mediaTypes=4", 3)]
+    [InlineData("", 3)]
+    public async Task Anonymous_FiltersBySeveralMediaTypes(string filter, int expected)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/vocabulary/{WordId}/0/random-example-sentences{filter}")
+            .WithJsonContent(Array.Empty<int>());
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<List<SentenceDto>>())!.Should().HaveCount(expected);
+    }
+
     [Fact]
     public async Task Anonymous_RejectsOversizedExclusionList()
     {

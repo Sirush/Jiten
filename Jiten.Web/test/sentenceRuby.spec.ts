@@ -20,6 +20,18 @@ describe('sentenceRubyHtml', () => {
     expect(html).toBe(`${ruby('昨日', 'きのう')}は${highlight(ruby('猫', 'ねこ'))}を${ruby('見', 'み')}た`);
   });
 
+  it('highlights unknown words around the highlight, ruby included and kana words alike', () => {
+    const unknown = (html: string) => `<span class="bg-blue-100 dark:bg-blue-900/60 rounded-sm">${html}</span>`;
+    const html = sentenceRubyHtml('昨日は猫をじっと見た', 3, 1, [group(0, 2, 'きのう', 1), group(3, 1, 'ねこ', 2)], {
+      unknownSpans: [
+        { position: 0, length: 2 },
+        { position: 5, length: 3 },
+      ],
+    });
+
+    expect(html).toBe(`${unknown(ruby('昨日', 'きのう'))}は${highlight(ruby('猫', 'ねこ'))}を${unknown('じっと')}見た`);
+  });
+
   it('leaves a group crossing the highlight edge bare instead of splitting it', () => {
     const html = sentenceRubyHtml('今日は', 1, 2, [group(0, 2, 'きょう', 1)]);
 

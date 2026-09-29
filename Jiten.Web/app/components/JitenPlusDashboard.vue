@@ -117,6 +117,34 @@
     <div class="mt-8 grid gap-4 sm:grid-cols-2">
       <div class="jp-tile border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
         <div class="jp-tile__head">
+          <Icon name="material-symbols:analytics-outline-rounded" class="jp-tile__icon" />
+          <h3 class="jp-tile__title text-gray-900 dark:text-white">Sentence stats</h3>
+        </div>
+        <p class="jp-tile__body text-gray-600 dark:text-gray-300">
+          Find out how many sentences you understand from a media, learn the words in the order that unlocks the most new sentences. Open it from any title's page.
+        </p>
+        <div class="jp-tile__actions">
+          <NuxtLink to="/decks/media?sortBy=readable&sortOrder=1">
+            <Button label="Sort titles by readable sentences" size="small" severity="secondary" />
+          </NuxtLink>
+          <NuxtLink to="/decks/media?sortBy=iPlusOne&sortOrder=1">
+            <Button label="Sort by i+1 sentences" size="small" severity="secondary" />
+          </NuxtLink>
+        </div>
+      </div>
+
+      <div class="jp-tile border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+        <div class="jp-tile__head">
+          <Icon name="material-symbols:format-quote-outline-rounded" class="jp-tile__icon" />
+          <h3 class="jp-tile__title text-gray-900 dark:text-white">Sentences you can read</h3>
+        </div>
+        <p class="jp-tile__body text-gray-600 dark:text-gray-300">
+          On any vocabulary page, get i+1, i+2 or i+3 sentences from real media, favourite them to use them during your studies.
+        </p>
+      </div>
+
+      <div class="jp-tile border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+        <div class="jp-tile__head">
           <Icon name="material-symbols:image-outline-rounded" class="jp-tile__icon" />
           <h3 class="jp-tile__title text-gray-900 dark:text-white">Card images &amp; audio</h3>
         </div>

@@ -25,6 +25,8 @@ public class DeckCardDto : IDeckCoverageTarget
     public float UniqueCoverage { get; set; }
     public float YoungCoverage { get; set; }
     public float YoungUniqueCoverage { get; set; }
+    public float? ReadableSentences { get; set; }
+    public float? IPlusOneSentences { get; set; }
 
     public DeckCardDto() { }
 
@@ -58,4 +60,10 @@ public interface IDeckCoverageTarget
     float UniqueCoverage { get; set; }
     float YoungCoverage { get; set; }
     float YoungUniqueCoverage { get; set; }
+
+    /// <summary>Jiten+ only: percent of sentences with every content word known; null for free users or before the deck has a profile.</summary>
+    float? ReadableSentences { get; set; }
+
+    /// <summary>Jiten+ only: percent of sentences with exactly one unknown content word.</summary>
+    float? IPlusOneSentences { get; set; }
 }

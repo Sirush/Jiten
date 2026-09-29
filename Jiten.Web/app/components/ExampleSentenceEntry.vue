@@ -17,6 +17,8 @@
     // Defaults to the site-wide furigana preference.
     furiganaMode?: SentenceFuriganaMode;
     hiddenWordId?: number;
+    /** The sentence's own word is known, so the i+N badge counts from i+0. */
+    targetKnown?: boolean;
   }>();
 
   const emit = defineEmits<{
@@ -46,9 +48,11 @@
     const shown = new Set(visibleFurigana(furigana, mode, hiddenWordId));
     const coloured = store.colourWordsByState && authStore.isAuthenticated;
     const peek = store.furiganaOnHover;
-    if (furigana?.length && (shown.size > 0 || coloured || peek)) {
+    const unknownSpans = props.exampleSentence.unknownSpans ?? [];
+    if (unknownSpans.length > 0 || (furigana?.length && (shown.size > 0 || coloured || peek))) {
       return sanitiseHtml(
-        sentenceRubyHtml(text, wordPosition, wordLength, furigana, {
+        sentenceRubyHtml(text, wordPosition, wordLength, furigana ?? [], {
+          unknownSpans,
           showReading: (g) => shown.has(g),
           // The caller's hidden word is the answer being tested, so it never peeks.
           revealOnHover: peek ? (g) => g.wordId !== props.hiddenWordId : undefined,
@@ -143,7 +147,9 @@
             @click="handleReveal"
             v-html="formattedText"
           />
-          <span v-if="exampleSentence.isIPlusOne" class="mt-0.5 h-5 shrink-0 inline-flex items-center"><IPlusOneBadge /></span>
+          <span v-if="exampleSentence.isIPlusOne || exampleSentence.unknownCount != null" class="mt-0.5 h-5 shrink-0 inline-flex items-center">
+            <IPlusOneBadge :unknown="exampleSentence.unknownCount ?? 0" :target-known="targetKnown" />
+          </span>
           <TtsButton :text="exampleSentence.text" :sentence-id="exampleSentence.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
           <button
             v-if="canEdit"

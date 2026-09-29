@@ -294,8 +294,9 @@ public static class CoverageComputeService
     }
 
     // Called inline from the controller: compute coverage for the visible page of children
+    /// <param name="sentenceProfiles">Set only for a Jiten+ user, whose sentence metrics for these decks are refreshed too.</param>
     public static async Task ComputeSpecificDecksAsync(
-        UserDbContext userContext, string userId, IReadOnlyList<int> deckIds)
+        UserDbContext userContext, string userId, IReadOnlyList<int> deckIds, IDbContextFactory<JitenDbContext>? sentenceProfiles = null)
     {
         var userGuid = Guid.Parse(userId);
         var computedAt = DateTime.UtcNow;
@@ -305,6 +306,8 @@ public static class CoverageComputeService
         await CreateKnownWordsTempTablesAsync(userContext, userGuid, derivationCategoryIds);
         var rows = await ComputeCoverageRowsAsync(userContext, """d."DeckId" = ANY({0})""", deckIds.ToArray());
         await UpsertCoverageChunksAsync(userContext, userId, rows, computedAt);
+        if (sentenceProfiles != null)
+            await SentenceCoverageWriter.UpdateDecksAsync(userContext, sentenceProfiles, userId, deckIds, computedAt);
         await tx.CommitAsync();
     }
 

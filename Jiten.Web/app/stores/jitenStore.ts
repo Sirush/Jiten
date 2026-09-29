@@ -242,6 +242,7 @@ export const useJitenStore = defineStore('jiten', () => {
 
   // Only consulted while the user lacks Jiten+; getting the tier brings the section back.
   const hideCoverageJourney = createLocalStorageState<boolean>('hide-coverage-journey', false);
+  const hideSentenceStats = createLocalStorageState<boolean>('hide-sentence-stats', false);
 
   // Off means bulk-declared words are folded into the curve, spike and all.
   const separatePriorKnowledge = createLocalStorageState<boolean>('separate-prior-knowledge', true);
@@ -322,6 +323,7 @@ export const useJitenStore = defineStore('jiten', () => {
     similarMediaPinnedType,
     preferredDictionaryId,
     hideCoverageJourney,
+    hideSentenceStats,
     separatePriorKnowledge,
     coverageJourneyScale,
     lastSeenUpdateId,

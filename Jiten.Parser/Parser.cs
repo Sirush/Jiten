@@ -910,7 +910,9 @@ namespace Jiten.Parser
                     : null;
 
                 var subtitleSpeech = boundariesByText?[textIndex] != null;
-                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, subtitleSpeech, timings, dictionaryEntriesBySurface, relocated, rawCharCounts[textIndex], diagnostics, occurrenceSink);
+                // Manga text holds one speech bubble per line and bubbles rarely end in punctuation.
+                var profileLineBreaks = mediatype == MediaType.Manga ? FlatLineBreakOffsets(cleanedOriginals[textIndex]) : null;
+                var deck = await ProcessSentencesToDeck(sentences, text, deconjugator, storeRawText, predictDifficulty, mediatype, subtitleSpeech, timings, dictionaryEntriesBySurface, relocated, rawCharCounts[textIndex], diagnostics, occurrenceSink, profileLineBreaks);
                 if (deck.RawText != null && boundariesByText != null)
                     deck.RawText.SpeechBoundaries = boundariesByText[textIndex];
                 decks.Add(deck);
@@ -918,6 +920,27 @@ namespace Jiten.Parser
             }
 
             return decks;
+        }
+
+        /// <summary>Line break positions counted in the text with line breaks removed, which is what word offsets index.</summary>
+        private static List<int> FlatLineBreakOffsets(string text)
+        {
+            var offsets = new List<int>();
+            int flatPos = 0;
+            foreach (char c in text)
+            {
+                if (c == '\n')
+                {
+                    if (flatPos > 0 && (offsets.Count == 0 || offsets[^1] != flatPos))
+                        offsets.Add(flatPos);
+                }
+                else if (c != '\r')
+                {
+                    flatPos++;
+                }
+            }
+
+            return offsets;
         }
 
         private static async Task<Deck> ProcessSentencesToDeck(
@@ -933,7 +956,8 @@ namespace Jiten.Parser
             FuriganaHint[]? relocatedHints = null,
             int? rawContentCharCount = null,
             ParserDiagnostics? diagnostics = null,
-            List<List<ParsedOccurrence>>? occurrenceSink = null)
+            List<List<ParsedOccurrence>>? occurrenceSink = null,
+            IReadOnlyList<int>? profileLineBreaks = null)
         {
             var sw = timings != null ? Stopwatch.StartNew() : null;
 
@@ -1072,7 +1096,8 @@ namespace Jiten.Parser
                            UniqueWordUsedOnceCount = processedWords.Count(x => x.Occurrences == 1),
                            UniqueKanjiCount = uniqueKanjiCount, UniqueKanjiUsedOnceCount = uniqueKanjiUsedOnceCount,
                            SentenceCount = sentences.Count, DialoguePercentage = dialoguePercentage, DeckWords = processedWords,
-                           RawText = storeRawText ? new DeckRawText(text) : null, ExampleSentences = exampleSentences
+                           RawText = storeRawText ? new DeckRawText(text) : null, ExampleSentences = exampleSentences,
+                           SentenceProfile = SentenceProfileBuilder.Build(sentences, processedWords, profileLineBreaks)
                        };
 
             if (sw != null) timings!.StatsBuildMs += sw.Elapsed.TotalMilliseconds;

@@ -10,6 +10,7 @@ using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.Billing;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.User;
@@ -50,6 +51,8 @@ public partial class StudyController(
     Jiten.Api.Services.SmartDeck.ISmartDeckBuilder smartDeckBuilder,
     Jiten.Api.Services.SmartDeck.ISmartDeckDirtyService smartDeckDirty,
     StackExchange.Redis.IConnectionMultiplexer redis,
+    ISentenceStatsService sentenceStats,
+    IJitenPlusService jitenPlusService,
     ILogger<StudyController> logger) : ControllerBase
 {
     private static readonly Regex SentenceMarkerRegex =
@@ -463,6 +466,12 @@ public partial class StudyController(
         if (!IsValidPosFilter(request.PosFilter))
             return Results.BadRequest("PosFilter must be a valid JSON array of strings.");
 
+        if (request.Order == (int)DeckOrder.SentenceUnlock)
+        {
+            var orderError = await ValidateSentenceUnlockOrder(userId, request.DeckType);
+            if (orderError != null) return orderError;
+        }
+
         var maxOrder = await GetMaxStudyDeckSortOrder(userId);
         var studyDeck = CreateStudyDeck(userId, request, maxOrder + 1);
 
@@ -671,6 +680,12 @@ public partial class StudyController(
 
         if (!IsValidPosFilter(request.PosFilter))
             return Results.BadRequest("PosFilter must be a valid JSON array of strings.");
+
+        if (request.Order == (int)DeckOrder.SentenceUnlock && studyDeck.Order != request.Order)
+        {
+            var orderError = await ValidateSentenceUnlockOrder(userId, studyDeck.DeckType);
+            if (orderError != null) return orderError;
+        }
 
         if (request.Name != null) studyDeck.Name = request.Name;
         if (request.Description != null) studyDeck.Description = request.Description;
@@ -1346,6 +1361,8 @@ public partial class StudyController(
 
                 IOrderedQueryable<DeckWord> sorted = sortBy switch
                 {
+                    // The study order starts from deck frequency; ranked words are moved ahead once the list is filtered.
+                    "sentenceUnlock" => query.OrderByDescending(d => d.Occurrences).ThenBy(d => d.DeckWordId),
                     "deckFreq" => sortOrder == SortOrder.Ascending
                         ? query.OrderByDescending(d => d.Occurrences).ThenBy(d => d.DeckWordId)
                         : query.OrderBy(d => d.Occurrences).ThenBy(d => d.DeckWordId),
@@ -1385,6 +1402,13 @@ public partial class StudyController(
                     var kanaFormKeys = await WordFormHelper.GetKanaFormKeys(context, allItems.Select(i => i.WordId).Distinct());
                     if (kanaFormKeys.Count > 0)
                         allItems = allItems.Where(i => !kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(i.WordId, i.ReadingIndex))).ToList();
+                }
+
+                if (sortBy == "sentenceUnlock")
+                {
+                    if (await SentenceUnlockRanks(userId, studyDeck.DeckId.Value) is { } ranks)
+                        allItems = allItems.OrderBy(i => SentenceUnlockRank(ranks, i.WordId, (byte)i.ReadingIndex)).ToList();
+                    if (sortOrder == SortOrder.Descending) allItems.Reverse();
                 }
 
                 break;
@@ -2117,6 +2141,8 @@ public partial class StudyController(
 
                     if (error != null || words == null) continue;
                     wordPairs = words.Select(w => (w.WordId, w.ReadingIndex)).ToList();
+                    if (studyDeck.Order == (int)DeckOrder.SentenceUnlock)
+                        wordPairs = await OrderBySentenceUnlock(userId, studyDeck.DeckId.Value, wordPairs);
                 }
                 else if (studyDeck.DeckType == StudyDeckType.GlobalDynamic)
                 {
@@ -4351,6 +4377,44 @@ public partial class StudyController(
     /// <summary>Null when the requested frequency source is usable; otherwise the error to return.</summary>
     private Task<IResult?> ValidateFrequencySource(string userId, int? frequencyMediaType, long? frequencyListId)
         => FrequencySourceValidator.Validate(userContext, backgroundJobs, userId, frequencyMediaType, frequencyListId);
+
+    /// <summary>Null when the user may pick the sentence unlock order for this deck type; otherwise the error to return.</summary>
+    private async Task<IResult?> ValidateSentenceUnlockOrder(string userId, StudyDeckType deckType)
+    {
+        if (deckType != StudyDeckType.MediaDeck)
+            return Results.BadRequest("Sentence unlock order only applies to media decks.");
+
+        var tier = await jitenPlusService.GetTierAsync(userId);
+        if (tier >= JitenPlusTier.Trial) return null;
+
+        return Results.Json(new
+        {
+            jitenPlus = true,
+            feature = "sentence-order",
+            requiredTier = "trial",
+            currentTier = tier.ToString().ToLowerInvariant(),
+            message = "This feature requires Jiten+."
+        }, statusCode: StatusCodes.Status403Forbidden);
+    }
+
+    /// <summary>Null when Jiten+ has lapsed or the title has no sentence profiles yet; callers then keep deck-frequency order.</summary>
+    private async Task<IReadOnlyDictionary<int, int>?> SentenceUnlockRanks(string userId, int deckId)
+    {
+        if (await jitenPlusService.GetTierAsync(userId) < JitenPlusTier.Trial) return null;
+
+        var ranks = await sentenceStats.GetUnlockRanksAsync(deckId);
+        return ranks is { Count: > 0 } ? ranks : null;
+    }
+
+    private static int SentenceUnlockRank(IReadOnlyDictionary<int, int> ranks, int wordId, byte readingIndex) =>
+        ranks.TryGetValue(ExampleSentenceTokens.WordKey(wordId, readingIndex), out var rank) ? rank : int.MaxValue;
+
+    // OrderBy is stable, so unranked words keep their deck-frequency order after the ranked ones.
+    private async Task<List<(int WordId, byte ReadingIndex)>> OrderBySentenceUnlock(string userId, int deckId,
+                                                                                   List<(int WordId, byte ReadingIndex)> wordPairs) =>
+        await SentenceUnlockRanks(userId, deckId) is { } ranks
+            ? wordPairs.OrderBy(w => SentenceUnlockRank(ranks, w.WordId, w.ReadingIndex)).ToList()
+            : wordPairs;
 
     private static bool IsValidPosFilter(string? posFilter)
     {

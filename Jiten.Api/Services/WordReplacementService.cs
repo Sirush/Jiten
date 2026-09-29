@@ -4,6 +4,7 @@ using Jiten.Api.Dtos.Requests;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
+using Jiten.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
 
@@ -243,6 +244,8 @@ public class WordReplacementService(
 
             result.ExampleSentenceWordsUpdated = await RewriteSentenceTokens(
                 context, oldWordId, oldReadingIndex, token => [token with { WordId = newWordId, ReadingIndex = newReadingIndex }]);
+            await SentenceProfileService.RewriteWordAsync(context, affectedDeckIds, ExampleSentenceTokens.WordKey(oldWordId, oldReadingIndex),
+                                                          [ExampleSentenceTokens.WordKey(newWordId, newReadingIndex)]);
 
             // Step 6: FsrsCards - Only update if user doesn't have the new reading already
             result.FsrsCardsUpdated = await userContext.Database.ExecuteSqlRawAsync(@"
@@ -592,6 +595,8 @@ public class WordReplacementService(
 
             result.ExampleSentenceWordsDeleted = await RewriteSentenceTokens(
                 context, oldWordId, oldReadingIndex, token => SplitToken(token, newWords, wordLengths));
+            await SentenceProfileService.RewriteWordAsync(context, affectedDeckIds, ExampleSentenceTokens.WordKey(oldWordId, oldReadingIndex),
+                                                          newWords.Select(w => ExampleSentenceTokens.WordKey(w.WordId, (byte)w.ReadingIndex)).ToList());
             result.ExampleSentenceWordsInserted = result.ExampleSentenceWordsDeleted * newWords.Count;
 
             // Update UniqueWordCount on affected decks
@@ -744,6 +749,7 @@ public class WordReplacementService(
                 wordId, readingIndex);
 
             result.ExampleSentenceWordsDeleted = await RewriteSentenceTokens(context, wordId, readingIndex, _ => []);
+            await SentenceProfileService.RewriteWordAsync(context, affectedDeckIds, ExampleSentenceTokens.WordKey(wordId, readingIndex), []);
 
             // Update UniqueWordCount on affected decks
             if (affectedDeckIds.Count > 0)

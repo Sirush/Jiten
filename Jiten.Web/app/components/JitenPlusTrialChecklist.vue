@@ -18,6 +18,8 @@
   });
 
   const included = computed(() => [
+    'Sentence stats: how many sentences of each title you can understand, and which words to learn next',
+    'i+1, i+2 and i+3 sentences for any word',
     trialStorage.value ? `Card images & audio uploads (${trialStorage.value} of storage)` : 'Card images & audio uploads',
     'Custom frequency lists (generate & download)',
     'A Smart Deck that selects the best words for what you are currently immersing in',

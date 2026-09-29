@@ -120,6 +120,10 @@
               <span>Coverage:</span>
               <span class="tabular-nums">{{ deck.coverage.toFixed(1) }}%</span>
             </div>
+            <div v-if="deck.readableSentences != null" class="flex justify-between">
+              <span>Sentences:</span>
+              <span class="tabular-nums">{{ Math.floor(deck.readableSentences) }}%</span>
+            </div>
             <div v-if="deck.difficulty != -1" class="flex justify-between">
               <span>Difficulty:</span>
               <Tooltip :content="difficultyRef?.tooltip ?? ''">

@@ -56,6 +56,7 @@ public class ReparseJob(
             deck.SentenceCount = newDeck.SentenceCount;
             deck.DeckWords = newDeck.DeckWords;
             deck.ExampleSentences = newDeck.ExampleSentences;
+            deck.SentenceProfile = newDeck.SentenceProfile;
             deck.DialoguePercentage = newDeck.DialoguePercentage;
             deck.RawText.SpeechBoundaries = newDeck.RawText?.SpeechBoundaries ?? deck.RawText.SpeechBoundaries;
 
@@ -97,6 +98,7 @@ public class ReparseJob(
                 original.SentenceCount = parsed.SentenceCount;
                 original.DeckWords = parsed.DeckWords;
                 original.ExampleSentences = parsed.ExampleSentences;
+                original.SentenceProfile = parsed.SentenceProfile;
                 original.DialoguePercentage = parsed.DialoguePercentage;
                 original.RawText!.SpeechBoundaries = parsed.RawText?.SpeechBoundaries ?? original.RawText.SpeechBoundaries;
 

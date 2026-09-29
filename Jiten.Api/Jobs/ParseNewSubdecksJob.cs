@@ -85,6 +85,9 @@ public class ParseNewSubdecksJob(
                 original.DeckId, original.OriginalTitle);
         }
 
+        await JitenHelper.SaveSentenceProfiles(contextFactory, parentDeckId,
+            childrenWithText.Select((c, i) => (c.DeckId, parsedDecks[i].SentenceProfile)));
+
         var parentWithChildren = await context.Decks
                                               .Include(d => d.Children).ThenInclude(c => c.DeckWords)
                                               .FirstAsync(d => d.DeckId == parentDeckId);

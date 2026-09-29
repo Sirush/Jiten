@@ -8,19 +8,13 @@ public static class SentenceComprehension
                              or KnownState.Redundant or KnownState.Blacklisted);
 
     /// <summary>JMnedict entries; custom entries from 8,000,000 up are vocabulary and still count.</summary>
-    private static bool IsNameEntry(int wordId) => wordId is >= 5_000_000 and < 8_000_000;
+    public static bool IsNameEntry(int wordId) => wordId is >= 5_000_000 and < 8_000_000;
 
-    /// <summary>Distinct unknown content words other than the target word; particles, auxiliaries and names never count.</summary>
-    public static int CountUnknown(IEnumerable<SentenceToken> tokens, int targetWordId, Func<int, byte, bool> isKnown)
-    {
-        var unknown = new HashSet<int>();
-        foreach (var token in tokens)
-        {
-            if (token.IsFunctionWord || token.WordId == targetWordId || IsNameEntry(token.WordId)) continue;
-            if (!isKnown(token.WordId, token.ReadingIndex))
-                unknown.Add(token.WordKey);
-        }
+    /// <summary>Every occurrence of an unknown content word other than the target; particles, auxiliaries and names never count.</summary>
+    public static IEnumerable<SentenceToken> UnknownTokens(IEnumerable<SentenceToken> tokens, int targetWordId, Func<int, byte, bool> isKnown) =>
+        tokens.Where(t => !t.IsFunctionWord && t.WordId != targetWordId && !IsNameEntry(t.WordId) && !isKnown(t.WordId, t.ReadingIndex));
 
-        return unknown.Count;
-    }
+    /// <summary>Distinct unknown content words other than the target word, as <see cref="UnknownTokens"/> finds them.</summary>
+    public static int CountUnknown(IEnumerable<SentenceToken> tokens, int targetWordId, Func<int, byte, bool> isKnown) =>
+        UnknownTokens(tokens, targetWordId, isKnown).Select(t => t.WordKey).Distinct().Count();
 }

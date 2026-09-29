@@ -4,6 +4,7 @@ using System.Threading;
 using ImageMagick;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
+using Jiten.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using NpgsqlTypes;
@@ -116,6 +117,9 @@ public static class JitenHelper
                     BulkInsertDeckData(contextFactory, c.deckId, c.deckWords, c.exampleSentences));
                 await Task.WhenAll(childBulkTasks);
 
+                await SaveSentenceProfiles(contextFactory, existingDeck.DeckId,
+                    childBulkData.Select(c => (c.deckId, c.sentenceProfile)).Append((existingDeck.DeckId, deck.SentenceProfile)));
+
                 Console.WriteLine($"[{DateTime.UtcNow:O}] Update completed.");
                 return;
             }
@@ -192,6 +196,9 @@ public static class JitenHelper
 
                 // Wait for all bulk operations (deck words, sentences, children) to finish
                 await Task.WhenAll(deckWordTask, exampleSentencesTask, childBulkTasks);
+
+                await SaveSentenceProfiles(contextFactory, deck.DeckId,
+                    childrenToInsert.Select(c => (c.DeckId, c.SentenceProfile)).Append((deck.DeckId, deck.SentenceProfile)));
 
                 // Update deck entity to reflect cover url if any
                 await using var updateCtx = await contextFactory.CreateDbContextAsync();
@@ -406,6 +413,22 @@ public static class JitenHelper
         return (deck.DeckWords?.ToList() ?? [], deck.ExampleSentences?.ToList() ?? []);
     }
 
+    /// <summary>Stores the parser's sentence profiles and refreshes the top-level sample; a failure here never fails the deck write.</summary>
+    public static async Task SaveSentenceProfiles(IDbContextFactory<JitenDbContext> contextFactory, int deckId,
+                                                  IEnumerable<(int DeckId, byte[]? Profile)> profiles)
+    {
+        try
+        {
+            var stored = profiles.Where(p => p.DeckId > 0 && p.Profile != null).Select(p => (p.DeckId, p.Profile!)).ToList();
+            await SentenceProfileService.SaveProfilesAsync(contextFactory, stored);
+            await SentenceProfileService.RebuildSampleAsync(contextFactory, deckId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[{DateTime.UtcNow:O}] Warning: sentence profiles for deck {deckId} not saved: {ex.Message}");
+        }
+    }
+
     public static async Task DeleteDeckData(JitenDbContext context, int deckId)
     {
         await context.Database.ExecuteSqlRawAsync($@"DELETE FROM jiten.""DeckWords"" WHERE ""DeckId"" = {{0}}", deckId);
@@ -425,10 +448,10 @@ public static class JitenHelper
         await Task.WhenAll(tasks);
     }
 
-    private static async Task<List<(int deckId, List<DeckWord> deckWords, List<ExampleSentence> exampleSentences)>> CollectChildDeckUpdates(
+    private static async Task<List<(int deckId, List<DeckWord> deckWords, List<ExampleSentence> exampleSentences, byte[]? sentenceProfile)>> CollectChildDeckUpdates(
         IDbContextFactory<JitenDbContext> contextFactory, JitenDbContext context, Deck existingDeck, ICollection<Deck> children)
     {
-        var bulkData = new List<(int deckId, List<DeckWord> deckWords, List<ExampleSentence> exampleSentences)>();
+        var bulkData = new List<(int deckId, List<DeckWord> deckWords, List<ExampleSentence> exampleSentences, byte[]? sentenceProfile)>();
 
         if (children == null || children.Count == 0)
             return bulkData;
@@ -459,7 +482,7 @@ public static class JitenHelper
 
                 var (childWords, childSentences) = UpdateDeckMetadata(context, existingChild, child);
                 await DeleteDeckData(context, existingChild.DeckId);
-                bulkData.Add((existingChild.DeckId, childWords, childSentences));
+                bulkData.Add((existingChild.DeckId, childWords, childSentences, child.SentenceProfile));
             }
             else
             {
@@ -491,7 +514,7 @@ public static class JitenHelper
                 context.Decks.Add(newChildDeck);
                 await context.SaveChangesAsync();
 
-                bulkData.Add((newChildDeck.DeckId, child.DeckWords?.ToList() ?? [], child.ExampleSentences?.ToList() ?? []));
+                bulkData.Add((newChildDeck.DeckId, child.DeckWords?.ToList() ?? [], child.ExampleSentences?.ToList() ?? [], child.SentenceProfile));
             }
         }
 

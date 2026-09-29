@@ -99,6 +99,7 @@
     [DeckOrder.DeckFrequency]: 'Deck frequency',
     [DeckOrder.ImportOrder]: 'Import order',
     [DeckOrder.Random]: 'Random',
+    [DeckOrder.SentenceUnlock]: 'Sentence unlock',
   };
 
   function pct(count: number, total: number) {
@@ -142,7 +143,7 @@
     return ids;
   });
 
-  const { limits: planLimits, isPlus } = useJitenPlus();
+  const { limits: planLimits, isPlus, fetched: planFetched, hasFeature } = useJitenPlus();
 
   const deckUsage = computed(() => srsStore.studyDecks.length);
   const staticWordUsage = computed(() =>
@@ -395,6 +396,8 @@
 
   function deckOrderLabel(deck: StudyDeckDto): string | undefined {
     if (deck.deckType === StudyDeckType.GlobalDynamic && deck.order === DeckOrder.GlobalFrequency) return undefined;
+    if (deck.order === DeckOrder.SentenceUnlock && planFetched.value && !hasFeature('sentence-order'))
+      return 'Deck frequency (sentence unlock needs Jiten+)';
     return orderLabels[deck.order];
   }
 

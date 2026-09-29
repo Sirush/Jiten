@@ -456,6 +456,34 @@ namespace Jiten.Core.Migrations
                     b.ToTable("DeckRelationships", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.DeckSentenceProfile", b =>
+                {
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("BuiltAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("Profile")
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("Sample")
+                        .HasColumnType("bytea");
+
+                    b.Property<int>("SampleCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SentenceCount")
+                        .HasColumnType("integer");
+
+                    b.Property<short>("Version")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("DeckId");
+
+                    b.ToTable("DeckSentenceProfiles", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.DeckStats", b =>
                 {
                     b.Property<int>("DeckId")
@@ -2551,6 +2579,15 @@ namespace Jiten.Core.Migrations
                     b.Navigation("SourceDeck");
 
                     b.Navigation("TargetDeck");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DeckSentenceProfile", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", null)
+                        .WithOne()
+                        .HasForeignKey("Jiten.Core.Data.DeckSentenceProfile", "DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.DeckStats", b =>

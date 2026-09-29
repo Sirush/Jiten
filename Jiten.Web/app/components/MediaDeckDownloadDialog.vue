@@ -83,7 +83,10 @@
   // Import Order only exists for word lists; word lists have no chronological position beyond it.
   const deckOrders = computed(() => {
     const orders = getEnumOptions(DeckOrder, (o) => (isSmartStudyDeck.value && o === DeckOrder.ImportOrder ? 'Smart Order' : getDeckOrderText(o)));
-    return isStaticStudyDeck.value ? orders.filter((o) => o.value !== DeckOrder.Chronological) : orders.filter((o) => o.value !== DeckOrder.ImportOrder);
+    const downloadable = orders.filter((o) => o.value !== DeckOrder.SentenceUnlock);
+    return isStaticStudyDeck.value
+      ? downloadable.filter((o) => o.value !== DeckOrder.Chronological)
+      : downloadable.filter((o) => o.value !== DeckOrder.ImportOrder);
   });
   const downloadTypes = computed(() =>
     getEnumOptions(DeckDownloadType, getDownloadTypeText).filter(
