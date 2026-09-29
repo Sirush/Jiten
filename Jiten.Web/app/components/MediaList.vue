@@ -10,7 +10,7 @@
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
   import { LazyHydrateMediaDeckCard, LazyHydrateMediaDeckCompactView, LazyHydrateMediaDeckTableView } from '~/utils/lazyHydratedComponents';
-  import { type DeckSortOption, deckSortMeta, deckSortOption, deckSortOrdering, deckSortLabels } from '~/utils/deckSorting';
+  import { type DeckSortOption, deckSortGroups, deckSortMeta, deckSortOption, deckSortLabels } from '~/utils/deckSorting';
   import { type MediaStatusToken, parseStatusFilter, serialiseStatusFilter, statusFilterHasFav } from '~/utils/mediaStatusFilter';
   import {
     MEDIA_FILTER_PRESETS_ENDPOINT,
@@ -84,16 +84,9 @@
   const novelSortOptions = ref<DeckSortOption[]>([]);
   const speechSortOptions = ref<DeckSortOption[]>([]);
 
-  const sortByGrouped = computed(() => {
-    const groups: { label: string; items: DeckSortOption[] }[] = [{ label: 'General', items: sortByOptions.value }];
-    if (novelSortOptions.value.length > 0) {
-      groups.push({ label: 'Novel', items: novelSortOptions.value });
-    }
-    if (speechSortOptions.value.length > 0) {
-      groups.push({ label: 'Audio-Video', items: speechSortOptions.value });
-    }
-    return groups;
-  });
+  const sortGroups = computed(() =>
+    deckSortGroups(new Set([...sortByOptions.value, ...novelSortOptions.value, ...speechSortOptions.value].map((o) => o.value)))
+  );
 
   const sortOrderLabel = computed(() => {
     const meta = deckSortMeta[sortBy.value as string];
@@ -121,6 +114,17 @@
       }
     }
   }
+
+  const { isPlus } = useJitenPlus();
+  const sentenceSortKeys = ['readable', 'iPlusOne'];
+  watch(
+    () => isConnected.value && isPlus.value,
+    (granted) => {
+      const others = sortByOptions.value.filter((o) => !sentenceSortKeys.includes(o.value));
+      sortByOptions.value = granted ? [...others, ...sentenceSortKeys.map(deckSortOption)] : others;
+    },
+    { immediate: true }
+  );
 
   // Advanced filter state
   const currentYear = new Date().getFullYear();
@@ -375,8 +379,6 @@
         sortBy.value = 'popularity';
       }
     }
-
-    sortByOptions.value.sort((a, b) => deckSortOrdering.indexOf(a.value) - deckSortOrdering.indexOf(b.value));
   };
 
   updateOptions();
@@ -963,13 +965,14 @@
   watch(mediaType, revealActiveMediaType);
 
   const sortPopover = ref();
-  const sortLabel = computed(() => deckSortLabels[sortBy.value as string] ?? 'Sort');
+  const desktopSortPopover = ref();
+  const desktopSortOpen = ref(false);
+  const sortLabel = computed(() => (sortBy.value === 'filter' ? 'Relevance' : (deckSortLabels[sortBy.value as string] ?? 'Sort')));
 
-  // Listbox emits null when the selected row is tapped again; keep the current sort instead.
-  const onSortByPicked = (value: unknown) => {
-    if (value == null) return;
-    sortBy.value = value as string;
+  const onSortByPicked = (value: string) => {
+    sortBy.value = value;
     sortPopover.value?.hide();
+    desktopSortPopover.value?.hide();
   };
 
   const sortDirectionOptions = computed(() => {
@@ -1062,25 +1065,26 @@
     >
       <div class="flex gap-2 max-md:flex-row max-md:flex-wrap max-md:items-center md:flex-row">
         <div class="hidden md:flex flex-row gap-2">
+          <!-- The p-inputwrapper classes let FloatLabel treat the button as a filled, focused field. -->
           <FloatLabel variant="on" class="w-full">
-            <Select
-              v-model="sortBy"
-              :options="sortByGrouped"
-              option-label="label"
-              option-value="value"
-              option-group-label="label"
-              option-group-children="items"
-              placeholder="Sort by"
-              input-id="sortBy"
-              class="w-full md:w-56"
-              scroll-height="50vh"
+            <button
+              id="sortBy"
+              type="button"
+              aria-haspopup="dialog"
+              :aria-expanded="desktopSortOpen"
+              :aria-label="`Sort by ${sortLabel}`"
+              class="p-inputwrapper-filled flex w-60 items-center gap-2 rounded-[var(--p-form-field-border-radius)] border border-[var(--p-form-field-border-color)] bg-[var(--p-form-field-background)] px-[var(--p-form-field-padding-x)] py-[var(--p-form-field-padding-y)] text-left text-[var(--p-form-field-color)] shadow-[var(--p-form-field-shadow)] transition-colors hover:border-[var(--p-form-field-hover-border-color)] focus-visible:border-[var(--p-form-field-focus-border-color)] focus-visible:outline-none"
+              :class="{ 'p-inputwrapper-focus border-[var(--p-form-field-focus-border-color)]!': desktopSortOpen }"
+              @click="desktopSortPopover.toggle($event)"
             >
-              <template #optiongroup="{ option }">
-                <div class="text-xs font-semibold text-surface-500 dark:text-surface-400 py-0.5 px-1">{{ option.label }}</div>
-              </template>
-            </Select>
+              <span class="min-w-0 flex-1 truncate">{{ sortLabel }}</span>
+              <Icon name="material-symbols:keyboard-arrow-down-rounded" size="1.25em" class="shrink-0 text-surface-400" />
+            </button>
             <label for="sortBy">Sort by</label>
           </FloatLabel>
+          <Popover ref="desktopSortPopover" @show="desktopSortOpen = true" @hide="desktopSortOpen = false">
+            <MediaSortPicker :groups="sortGroups" :model-value="sortBy as string" class="w-[34rem]" @update:model-value="onSortByPicked" />
+          </Popover>
           <Button
             :icon="sortOrder === SortOrder.Ascending ? 'pi pi-arrow-up' : 'pi pi-arrow-down'"
             class="!px-4"
@@ -1107,7 +1111,7 @@
         </div>
 
         <Popover ref="sortPopover" class="md:hidden">
-          <div class="flex w-68 flex-col gap-3">
+          <div class="flex w-[min(22rem,calc(100vw-2.5rem))] flex-col gap-3">
             <SelectButton
               v-model="sortOrder"
               :options="sortDirectionOptions"
@@ -1117,21 +1121,12 @@
               size="small"
               class="w-full"
             />
-            <Listbox
-              :model-value="sortBy"
-              :options="sortByGrouped"
-              option-label="label"
-              option-value="value"
-              option-group-label="label"
-              option-group-children="items"
-              scroll-height="50vh"
-              class="w-full border-0!"
+            <MediaSortPicker
+              :groups="sortGroups"
+              :model-value="sortBy as string"
+              class="-m-1 max-h-[60vh] overflow-y-auto overscroll-contain p-1"
               @update:model-value="onSortByPicked"
-            >
-              <template #optiongroup="{ option }">
-                <div class="text-xs font-semibold text-surface-500 dark:text-surface-400 py-0.5 px-1">{{ option.label }}</div>
-              </template>
-            </Listbox>
+            />
           </div>
         </Popover>
 
