@@ -34,6 +34,8 @@ public class SentenceSpanDto
 {
     public int Position { get; set; }
     public int Length { get; set; }
+    public int WordId { get; set; }
+    public byte ReadingIndex { get; set; }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<ReadableSentenceSort>))]

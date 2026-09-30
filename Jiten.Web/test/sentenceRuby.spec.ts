@@ -32,6 +32,13 @@ describe('sentenceRubyHtml', () => {
     expect(html).toBe(`${unknown(ruby('昨日', 'きのう'))}は${highlight(ruby('猫', 'ねこ'))}を${unknown('じっと')}見た`);
   });
 
+  it('links an unknown word to its vocabulary page in a new tab', () => {
+    const html = sentenceRubyHtml('猫を見た', 0, 1, [], { unknownSpans: [{ position: 2, length: 1, wordId: 42, readingIndex: 1 }] });
+
+    expect(html).toContain('<a href="/vocabulary/42/1" target="_blank" rel="noopener" class="bg-blue-100');
+    expect(html).toMatch(/>見<\/a>た$/);
+  });
+
   it('leaves a group crossing the highlight edge bare instead of splitting it', () => {
     const html = sentenceRubyHtml('今日は', 1, 2, [group(0, 2, 'きょう', 1)]);
 
