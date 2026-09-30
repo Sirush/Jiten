@@ -47,11 +47,11 @@
     <template #item="{ item }">
       <NuxtLink v-if="item.route" :to="item.route" :rel="item.rel" class="flex items-center gap-1 text-primary hover:underline">
         <span v-if="item.icon" :class="item.icon" />
-        <span v-if="item.label" class="truncate max-w-[45vw] md:max-w-xs">{{ item.label }}</span>
+        <span v-if="item.label" class="truncate max-w-[45vw] md:max-w-xs" v-bind="japaneseTextAttrs(String(item.label))">{{ item.label }}</span>
       </NuxtLink>
       <span v-else class="flex items-center gap-1 text-muted-color">
         <span v-if="item.icon" :class="item.icon" />
-        <span v-if="item.label" class="truncate max-w-[45vw] md:max-w-xs">{{ item.label }}</span>
+        <span v-if="item.label" class="truncate max-w-[45vw] md:max-w-xs" v-bind="japaneseTextAttrs(String(item.label))">{{ item.label }}</span>
       </span>
     </template>
   </Breadcrumb>

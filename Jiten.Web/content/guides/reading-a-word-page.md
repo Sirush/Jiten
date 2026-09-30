@@ -27,14 +27,14 @@ Most words in Japanese can be written more than one way: kanji, kana, alternativ
 
 ## Pitch accents and kanji breakdown
 
-**Pitch accents** are drawn as diagrams over the kana, one per attested pattern. Below, the **kanji breakdown** shows each kanji in the word with its stroke count, mnemonic, and level on your preferred scale (JLPT by default, you can [customize it](/guides/customising-display)); each button links to the full kanji page with even more info.
+**Pitch accents** are drawn as diagrams over the kana by default, one per attested pattern. You can [switch them](/guides/customising-display) to numbers or hide them. Below, the **kanji breakdown** shows each kanji in the word with its stroke count, mnemonic, and level on your preferred scale (JLPT by default, you can [change it](/guides/customising-display)); each button links to the full kanji page with even more info.
 
 ## Where the word appears
 
 This is an extremely informative part that will tell you if the word is really used in media:
 
-- **"Appears in x media"** — how many titles in the library use the word, with a percentage. A word in 80% of media is a must-learn; a word in three titles is very niche.
-- The **per-media-type table** breaks that down — some words live almost entirely in novels, others in games. Clicking a row filters the example sentences and media list to that type.
+- **"Appears in x media"**: how many titles in the library use the word, with a percentage. A word in 80% of media is a must-learn; a word in three titles is very niche.
+- The **per-media-type table** breaks that down. Some words live almost entirely in novels, others in games. Clicking a row filters the example sentences and media list to that type.
 - **Composed of** and **Used in** show the word's building blocks and the compounds it appears in, each linked. This is great for learning how words are connected and help you remember them more easily.
 
 ## Example sentences

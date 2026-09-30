@@ -470,10 +470,6 @@
   const flashNode = ref<number | null>(null);
   let flashTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function prefersReducedMotion(): boolean {
-    return import.meta.client && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  }
-
   function positionPopover(id: number) {
     if (!import.meta.client) return;
     const p = projectedById.value.get(id);
@@ -883,7 +879,7 @@
           {{ getMediaTypeText(p.node.mediaType) }}
         </span>
         <div class="flex flex-col gap-0.5 p-1.5">
-          <span class="line-clamp-2 text-xs font-medium leading-tight" :title="localiseTitle(p.node)">
+          <span class="line-clamp-2 text-xs font-medium leading-tight" :title="localiseTitle(p.node)" v-bind="japaneseTextAttrs(localiseTitle(p.node))">
             {{ localiseTitle(p.node) }}
           </span>
           <div class="flex items-center justify-between gap-1 text-[10px]">
@@ -908,7 +904,7 @@
       :style="popoverStyle"
     >
       <div class="flex items-baseline justify-between gap-2 border-b border-surface-200 px-2 py-1.5 dark:border-surface-700">
-        <span class="truncate text-xs font-semibold" :title="localiseTitle(activeNodeData)">{{ localiseTitle(activeNodeData) }}</span>
+        <span class="truncate text-xs font-semibold" :title="localiseTitle(activeNodeData)" v-bind="japaneseTextAttrs(localiseTitle(activeNodeData))">{{ localiseTitle(activeNodeData) }}</span>
         <NuxtLink :to="`/decks/media/${activeNode}/detail`" class="shrink-0 text-xs font-semibold text-primary hover:underline">Open →</NuxtLink>
       </div>
       <div v-if="activeCaptions.length" class="flex flex-col gap-1 p-2">

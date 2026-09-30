@@ -1,9 +1,11 @@
 using System.Text;
 using CsvHelper;
 using Hangfire;
+using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.Billing;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Services;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +20,7 @@ public class ComputationJob(
     IBackgroundJobClient backgroundJobs,
     IPendingCoverageQueue pendingCoverageQueue,
     Jiten.Api.Services.SmartDeck.IWordReferenceCache wordReferenceCache,
+    IJitenPlusService jitenPlusService,
     ILogger<ComputationJob> logger)
 {
     private static readonly object CoverageComputeLock = new();
@@ -34,13 +37,24 @@ public class ComputationJob(
         // Only refresh coverage for users who've been active recently. Inactive users get a
         // catch-up compute on their next login/refresh via UserActivityTracker.
         var activeThreshold = DateTime.UtcNow.AddDays(-UserActivityTracker.InactiveThresholdDays);
+        // Sentence metrics only exist for users who had Jiten+ at their last recompute; they go stale as backfilled profiles land.
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var newestProfile = await context.DeckSentenceProfiles.MaxAsync(p => (DateTime?)p.BuiltAt) ?? DateTime.MinValue;
+
         var userIds = await (from u in userContext.Users.AsNoTracking()
                              join um in userContext.UserMetadatas.AsNoTracking()
                                  on u.Id equals um.UserId
                              where um.LastActivity != null && um.LastActivity >= activeThreshold
                                    && (um.CoverageDirty
-                                       || !userContext.UserCoverageChunks.Any(c => c.UserId == u.Id))
+                                       || !userContext.UserCoverageChunks.Any(c => c.UserId == u.Id)
+                                       || userContext.UserCoverageChunks.Any(c => c.UserId == u.Id
+                                                                                  && c.Metric == (short)UserCoverageMetric.ReadableSentences
+                                                                                  && c.ComputedAt < newestProfile))
                              select u.Id).ToListAsync();
+
+        // ComputeUserCoverage skips clean users, and a stale-sentence user is otherwise clean.
+        foreach (var staleUserId in userIds)
+            await CoverageDirtyHelper.MarkCoverageDirty(userContext, staleUserId);
 
         // Same single-worker queue as the user jobs, so the index is fresh before the first of them runs.
         backgroundJobs.Enqueue<ComputationJob>(job => job.RebuildWordParentDeckIndex());
@@ -121,6 +135,12 @@ public class ComputationJob(
             await userContext.UserCoverageChunks.Where(uc => uc.UserId == userId).ExecuteDeleteAsync();
             logger.LogInformation("Coverage: old chunks deleted in {Elapsed}ms", totalSw.ElapsedMilliseconds);
             await RecomputeUserCoverageChunks(userContext, userId, computedAt, freshness);
+            if (await jitenPlusService.GetTierAsync(userId) >= JitenPlusTier.Trial)
+            {
+                var sentenceSw = System.Diagnostics.Stopwatch.StartNew();
+                await SentenceCoverageWriter.WriteAsync(userContext, contextFactory, userId, computedAt);
+                logger.LogInformation("Coverage: sentence metrics written in {Elapsed}ms", sentenceSw.ElapsedMilliseconds);
+            }
             await transaction.CommitAsync();
 
             await UpsertCoverageMetadata(userContext, userId, computedAt, isDirty: false);
@@ -256,7 +276,8 @@ public class ComputationJob(
             if (!hasSufficientFsrsCards && !hasWordSetSubscriptions)
                 return;
 
-            await CoverageComputeService.ComputeSpecificDecksAsync(userContext, userId, deckIds);
+            var sentenceProfiles = await jitenPlusService.GetTierAsync(userId) >= JitenPlusTier.Trial ? contextFactory : null;
+            await CoverageComputeService.ComputeSpecificDecksAsync(userContext, userId, deckIds, sentenceProfiles);
         }
         finally
         {

@@ -1,6 +1,9 @@
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
+using Jiten.Api.Services;
+using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.User;
 using Jiten.Core.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +13,7 @@ namespace Jiten.Api.Controllers;
 public partial class AdminController
 {
     private const string SITE_UPDATE_DEFAULT_TEASER = "A new site update has been published.";
+    private const long SITE_UPDATE_IMAGE_MAX_BYTES = 10L * 1024 * 1024;
 
     [HttpGet("updates")]
     public async Task<IActionResult> GetSiteUpdates()
@@ -131,6 +135,46 @@ public partial class AdminController
 
         logger.LogInformation("Admin published site update: Id={Id}, Notified={Count}", id, userIds.Count);
         return Ok(new { Message = $"Published and notified {userIds.Count} users", Count = userIds.Count });
+    }
+
+    [HttpPost("updates/images")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(SITE_UPDATE_IMAGE_MAX_BYTES + 4096)]
+    public async Task<IActionResult> UploadSiteUpdateImage(IFormFile? file, [FromServices] ICdnService cdn)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { Message = "No file was uploaded." });
+
+        if (file.Length > SITE_UPDATE_IMAGE_MAX_BYTES)
+            return BadRequest(new { Message = $"Image is too large. The maximum is {SITE_UPDATE_IMAGE_MAX_BYTES / (1024 * 1024)} MB." });
+
+        byte[] bytes;
+        using (var ms = new MemoryStream())
+        {
+            await file.CopyToAsync(ms);
+            bytes = ms.ToArray();
+        }
+
+        var sniff = CardMediaSniffer.Detect(bytes);
+        if (sniff is not { Kind: CardMediaKind.Image })
+            return BadRequest(new { Message = "Unsupported file. Upload a JPEG, PNG, WebP or GIF image." });
+
+        var processed = CardMediaImageProcessor.Normalize(sniff.Kind, sniff.Extension, sniff.ContentType, bytes, logger);
+
+        var path = $"site-updates/{Guid.NewGuid():N}.{processed.Extension}";
+        string url;
+        try
+        {
+            url = await cdn.UploadFile(processed.Bytes, path);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Site update image upload failed: {Path}", path);
+            return StatusCode(StatusCodes.Status502BadGateway, new { Message = "Storing the image failed. Please try again." });
+        }
+
+        logger.LogInformation("Admin uploaded site update image: {Path} ({Bytes} bytes)", path, processed.Bytes.Length);
+        return Ok(new { Url = url });
     }
 
     [HttpDelete("updates/{id:int}")]

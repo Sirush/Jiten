@@ -32,9 +32,7 @@
     <div v-if="pitchAccents" class="mb-3">
       <h3 v-if="!opts.hideHeading" class="text-gray-500 dark:text-gray-300 text-sm mb-2">Pitch accent</h3>
       <CardBlockSpoiler :enabled="opts.spoiler">
-        <div class="flex flex-wrap gap-2">
-          <LazyPitchDiagram v-for="pitch in pitchAccents" :key="pitch" :reading="pitchReadingText" :pitch-accent="pitch" />
-        </div>
+        <PitchAccentView :reading="pitchReadingText" :accents="pitchAccents" when-hidden="graph" />
       </CardBlockSpoiler>
     </div>
   </ClientOnly>

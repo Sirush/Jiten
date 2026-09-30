@@ -21,6 +21,7 @@ public class JitenDbContext : DbContext
     public DbSet<DeckRawText> DeckRawTexts { get; set; }
     public DbSet<DeckTitle> DeckTitles { get; set; }
     public DbSet<DeckStats> DeckStats { get; set; }
+    public DbSet<DeckSentenceProfile> DeckSentenceProfiles { get; set; }
     public DbSet<DeckDifficulty> DeckDifficulties { get; set; }
     public DbSet<DeckDictionaryEntry> DeckDictionaryEntries { get; set; }
     public DbSet<WordParentDeckIndex> WordParentDeckIndex { get; set; }
@@ -45,7 +46,6 @@ public class JitenDbContext : DbContext
     public DbSet<JmDictWordFormRedundancy> WordFormRedundancies { get; set; }
 
     public DbSet<ExampleSentence> ExampleSentences { get; set; }
-    public DbSet<ExampleSentenceWord> ExampleSentenceWords { get; set; }
 
     public DbSet<Tag> Tags { get; set; }
     public DbSet<DeckGenre> DeckGenres { get; set; }
@@ -375,6 +375,18 @@ public class JitenDbContext : DbContext
             entity.HasOne(t => t.Deck)
                   .WithOne(d => d.SubtitleTrack)
                   .HasForeignKey<DeckSubtitleTrack>(t => t.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DeckSentenceProfile>(entity =>
+        {
+            entity.ToTable("DeckSentenceProfiles", "jiten");
+            entity.HasKey(p => p.DeckId);
+            entity.Property(p => p.DeckId).ValueGeneratedNever();
+
+            entity.HasOne<Deck>()
+                  .WithOne()
+                  .HasForeignKey<DeckSentenceProfile>(p => p.DeckId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -785,41 +797,23 @@ public class JitenDbContext : DbContext
             entity.HasKey(e => e.SentenceId);
             entity.Property(e => e.SentenceId).ValueGeneratedOnAdd();
             entity.Property(e => e.Text).IsRequired();
-            
-            entity.HasIndex(e => e.DeckId).HasDatabaseName("IX_ExampleSentence_DeckId");
+            entity.Property(e => e.Tokens).IsRequired();
+            entity.Property(e => e.WordKeys).IsRequired();
+
             entity.HasIndex(e => new { e.DeckId, e.Difficulty }).HasDatabaseName("IX_ExampleSentence_DeckId_Difficulty");
 
             if (isNpgsql)
-                entity.HasIndex(e => e.SentenceId)
-                      .HasDatabaseName("IX_ExampleSentence_SentenceId_IncDeckId")
-                      .IncludeProperties(e => e.DeckId);
-            
+            {
+                entity.Property(e => e.WordKeys).HasColumnType("integer[]");
+                entity.HasIndex(e => e.WordKeys)
+                      .HasMethod("gin")
+                      .HasDatabaseName("IX_ExampleSentence_WordKeys");
+            }
+
             entity.HasOne(e => e.Deck)
                   .WithMany(d => d.ExampleSentences)
                   .HasForeignKey(e => e.DeckId)
                   .OnDelete(DeleteBehavior.Cascade);
-                  
-            entity.HasMany(e => e.Words)
-                  .WithOne(w => w.ExampleSentence)
-                  .HasForeignKey(w => w.ExampleSentenceId);
-        });
-        
-        modelBuilder.Entity<ExampleSentenceWord>(entity =>
-        {
-            entity.ToTable("ExampleSentenceWords", "jiten");
-            entity.HasKey(e => new { e.ExampleSentenceId, e.WordId, e.Position });
-
-            var wordReadingIndex = entity.HasIndex(dw => new { dw.WordId, dw.ReadingIndex });
-
-            if (isNpgsql)
-                wordReadingIndex.HasDatabaseName("IX_ExampleSentenceWord_WordIdReadingIndex_IncSentenceId")
-                                .IncludeProperties(e => e.ExampleSentenceId);
-            else
-                wordReadingIndex.HasDatabaseName("IX_ExampleSentenceWord_WordIdReadingIndex");
-
-            entity.HasOne(e => e.Word)
-                  .WithMany()
-                  .HasForeignKey(e => e.WordId);
         });
 
         modelBuilder.Entity<Tag>(entity =>

@@ -17,13 +17,11 @@ internal enum TokenFeatures : uint
 {
     None            = 0,
 
-    // POS-based
     Prefix          = 1 << 0,
     Suffix          = 1 << 1,
     Auxiliary        = 1 << 2,
     Interjection    = 1 << 3,
 
-    // POS section-based
     AuxVerbStem     = 1 << 4,
     ConjParticle    = 1 << 5,
     NumericAmount   = 1 << 6,
@@ -31,7 +29,6 @@ internal enum TokenFeatures : uint
     Dependant       = 1 << 8,
     VerbLike        = 1 << 9,
 
-    // Text patterns
     LongVowelMark   = 1 << 10,
     EndsWithTsu     = 1 << 11,
     TextTanSuffix   = 1 << 12,
@@ -54,7 +51,6 @@ internal enum TokenFeatures : uint
     SingleKanjiNoun = 1u << 30,
     TextKaratte     = 1u << 31,
 
-    // Composite
     InflectableBase = 1 << 18,
 }
 
@@ -144,13 +140,12 @@ internal static class TokenFeatureScanner
             if (text.Length > 0 && text[^1] is 'っ' or 'ッ')
                 f |= TokenFeatures.EndsWithTsu;
 
-            // Candidate positions are needed only immediately before the structural block. Normal
-            // feature rescans skip these extra string walks; the pipeline requests a candidate scan
-            // before it evaluates the four stages.
+            // Only candidate stages need positions; plain rescans skip these string walks.
             if (candidates != null)
             {
                 if (text.EndsWith('っ') || text.EndsWith("っぱ", StringComparison.Ordinal)
-                                        || text.EndsWith("っぷ", StringComparison.Ordinal))
+                                        || text.EndsWith("っぷ", StringComparison.Ordinal)
+                                        || (text.Length > 3 && text.EndsWith("っぷり", StringComparison.Ordinal)))
                     AddCandidate(TokenFeatures.GeminateSuffixShape, index);
                 if (text.Length > 0 && IsKatakanaRun(text))
                     AddCandidate(TokenFeatures.KatakanaRun, index);
@@ -163,17 +158,25 @@ internal static class TokenFeatureScanner
                     && text[..2] is "その" or "この" or "あの" or "どの"
                     && JapaneseTextHelper.IsKanji(text[2]))
                     AddCandidate(TokenFeatures.CompoundBoundaryShape, index);
-                // Verb-tagged bare kanji enter too: a stranded okurigana leaves the stem tagged
-                // either way (探[Noun]|しっス vs 捜[Verb]|しっ|ス).
+                if (index > 0 && w.PartOfSpeech == PartOfSpeech.Expression && text.Length > 2
+                    && JapaneseTextHelper.IsKanji(text[0]) && text.AsSpan(1).IndexOfAny('を', 'が', 'に') >= 0)
+                    AddCandidate(TokenFeatures.CompoundBoundaryShape, index - 1);
+                if (index > 0 && text.Length == 1 && JapaneseTextHelper.IsKanji(text[0])
+                    && tokens[index - 1].Text is { Length: 2 } pt
+                    && JapaneseTextHelper.IsKanji(pt[0]) && JapaneseTextHelper.IsKanji(pt[1]))
+                    AddCandidate(TokenFeatures.CompoundBoundaryShape, index - 1);
+                if (index > 0 && w.PartOfSpeech == PartOfSpeech.Verb && text.Length >= 2 && text[1] == 'し'
+                    && JapaneseTextHelper.IsKanji(text[0]) && tokens[index - 1].Text is { Length: > 0 } st
+                    && JapaneseTextHelper.IsKanji(st[^1]))
+                    AddCandidate(TokenFeatures.CompoundBoundaryShape, index - 1);
+                if (text.Length >= 2 && text[^1] == 'っ' && index + 1 < tokens.Count && tokens[index + 1].Text.Length >= 3)
+                    AddCandidate(TokenFeatures.CompoundBoundaryShape, index);
+                // A stranded okurigana leaves the stem tagged Noun or Verb (探[Noun]|しっス vs 捜[Verb]|しっ|ス).
                 if (text.Length == 1 && JapaneseTextHelper.IsKanji(text[0])
                     && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Verb)
                     AddCandidate(TokenFeatures.SingleKanjiNoun, index);
             }
-            // Fused-mora theft where って rides inside a kana/kanji-headed token (ケン|カって, エリ|アっての,
-            // 結|果って[果て], 偶|然って[然て], 寒|さって[さて], 婆|さ|んって[んて]), handled by RepairQuotativeTte
-            // alongside the two-token Xっ|て shape. Contains (not EndsWith) catches an idiom-fused tail too
-            // (アっての = ア+って+の → あっての). The hiragana head covers さ/ん-mora theft; a standalone
-            // quotative って (Particle) is 2 chars so it never trips this.
+            // って fused inside a token after mora theft (ケン|カって, 寒|さって) also feeds RepairQuotativeTte; Contains catches アっての.
             if (text.Length >= 3 && (text[0] is >= 'ぁ' and <= 'ゖ' or >= 'ァ' and <= 'ヺ' or >= '一' and <= '鿿')
                 && text.Contains("って", StringComparison.Ordinal))
                 f |= TokenFeatures.EndsWithTsu;
@@ -186,7 +189,7 @@ internal static class TokenFeatureScanner
                 case "たんか" when w.PartOfSpeech == PartOfSpeech.Noun:
                     f |= TokenFeatures.TextTanka;
                     break;
-                // たか mis-tokenised as 鷹/高 when it's past た + question か (言い過ぎ|たか) — same repair stage
+                // たか mis-tokenised as 鷹/高 (言い過ぎ|たか) is past た + か, handled by the same repair stage.
                 case "たか" when w.PartOfSpeech == PartOfSpeech.Noun:
                     f |= TokenFeatures.TextTanka;
                     break;
@@ -221,8 +224,7 @@ internal static class TokenFeatureScanner
                 case "飛ばし":
                     f |= TokenFeatures.TextTobashi;
                     break;
-                // The emphatic prefix ど arrives as Adverb (truncated どう) — CombinePrefixes
-                // re-checks precisely.
+                // The emphatic prefix ど arrives as Adverb (truncated どう); CombinePrefixes re-checks precisely.
                 case "ど" when w.PartOfSpeech == PartOfSpeech.Adverb:
                     f |= TokenFeatures.Prefix;
                     break;
@@ -231,18 +233,14 @@ internal static class TokenFeatureScanner
             if (w.DictionaryForm == "切る")
                 f |= TokenFeatures.DictKiru;
 
-            // A verb normalised to X返る is a candidate intensifier compound; RepairIntensifierKaeru
-            // splits only the OOV ones (a real 静まり返る is a JMDict entry and is excluded there).
+            // Superset: RepairIntensifierKaeru splits only OOV X返る, not entries like 静まり返る.
             if (w.PartOfSpeech == PartOfSpeech.Verb && w.NormalizedForm.EndsWith("返る", StringComparison.Ordinal))
                 f |= TokenFeatures.VerbKaeru;
 
-            // SplitUnattestedToAdverbs only acts on adverb tokens ending in と (凛と, 堂々と).
             if (w.PartOfSpeech == PartOfSpeech.Adverb && text.Length >= 2 && text[^1] == 'と')
                 f |= TokenFeatures.AdverbEndsTo;
 
-            // A 2-mora-unit kana repetition long enough to be a collapsible run by itself
-            // (ごろごろごろ), or continuing the previous token's unit (ごろごろ|ごろ) — a cheap
-            // superset of what CollapseReduplicatedMimetic can act on (it needs 3+ units total).
+            // Cheap superset of CollapseReduplicatedMimetic's 3+ unit runs, alone (ごろごろごろ) or across tokens (ごろごろ|ごろ).
             if ((f & TokenFeatures.KanaRepetition) == 0 && IsUnitRepetition(text))
             {
                 if (text.Length >= 6
@@ -263,7 +261,6 @@ internal static class TokenFeatureScanner
                     f |= TokenFeatures.OovGarbage;
             }
 
-            // RetokeniseOovBlobs only re-cuts long hiragana(+ー) noun blobs.
             if (w.Text.Length >= 5
                 && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
                 && (f & TokenFeatures.HiraganaOovBlob) == 0)
@@ -279,8 +276,7 @@ internal static class TokenFeatureScanner
         return f;
     }
 
-    // Even-length kana text that is its own leading 2-char unit repeated (ごろ, ごろごろ, ぐるぐるぐる).
-    // Character test is a cheap kana-range superset; the consuming stage re-checks precisely.
+    // Kana text repeating its leading 2-char unit (ごろごろ); a cheap superset the consuming stage re-checks.
     private static bool IsUnitRepetition(string s)
     {
         if (s.Length < 2 || (s.Length & 1) != 0) return false;

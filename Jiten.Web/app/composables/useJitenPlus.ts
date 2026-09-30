@@ -2,7 +2,17 @@ import { useAuthStore } from '~/stores/authStore';
 
 export type JitenPlusTier = 'none' | 'trial' | 'full';
 
-export type JitenPlusFeature = 'card-media' | 'freq-list-save' | 'freq-list-generate' | 'request-boosts' | 'immersion-plan-generate' | 'coverage-journey' | 'smart-deck';
+export type JitenPlusFeature =
+  | 'card-media'
+  | 'freq-list-save'
+  | 'freq-list-generate'
+  | 'request-boosts'
+  | 'immersion-plan-generate'
+  | 'coverage-journey'
+  | 'smart-deck'
+  | 'readable-sentences'
+  | 'sentence-stats'
+  | 'sentence-order';
 
 export interface PromoCreditInfo {
   userPromoCreditId: number;
@@ -81,6 +91,9 @@ const FEATURE_TIERS: Record<JitenPlusFeature, 'trial' | 'full'> = {
   'immersion-plan-generate': 'trial',
   'coverage-journey': 'trial',
   'smart-deck': 'trial',
+  'readable-sentences': 'trial',
+  'sentence-stats': 'trial',
+  'sentence-order': 'trial',
 };
 
 // Deduplicates concurrent first-fetches across the many gates that mount at once (client-only,

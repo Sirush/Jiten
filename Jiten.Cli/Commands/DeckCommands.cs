@@ -419,7 +419,7 @@ public class DeckCommands(CliContext context)
                     if (SubtitleCleanStartsWith.Any(s => lines[i].StartsWith(s)))
                     {
                         lines.RemoveAt(i);
-                        break;
+                        continue;
                     }
 
                     lines[i] = Regex.Replace(lines[i], @"\((.*?)\)", "");
@@ -444,7 +444,7 @@ public class DeckCommands(CliContext context)
                 deck.SpeechMoraCount = subtitleStats.Value.MoraCount;
             }
 
-            if (deckType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
+            if (deckType is MediaType.Manga or MediaType.Audio)
                 deck.SentenceCount = 0;
 
             if (options.Verbose)

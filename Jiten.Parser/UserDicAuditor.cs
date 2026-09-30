@@ -3,13 +3,7 @@ using Jiten.Parser.Runtime;
 
 namespace Jiten.Parser;
 
-/// <summary>
-/// Finds user dictionary entries that capture text across genuine word boundaries by
-/// tokenizing sentences twice — with and without the user dictionary — and flagging
-/// user-dic tokens whose start offset falls strictly inside a token of the no-user-dic
-/// parse (e.g. 彼女|の|手 → 彼|[女の手]). Benign user-dic firings start on an existing
-/// boundary (お|尻|の|穴 → お|[尻の穴]) and are not reported. Pure tokenizer pass, no DB.
-/// </summary>
+/// <summary>Flags user-dic tokens starting inside a no-user-dic token (彼女|の|手 → 彼|[女の手]), not on a boundary (お|[尻の穴]).</summary>
 public static class UserDicAuditor
 {
     public sealed record AuditFinding(
@@ -56,9 +50,7 @@ public static class UserDicAuditor
 
         private static HashSet<string> LoadSurfaces(string xmlPath)
         {
-            // user_dic.xml is Sudachi CSV: surface,leftId,rightId,cost,display,pos1,...
-            // Tokens in output carry the original surface text, which may match either
-            // the lookup surface (col 0, lowercased) or the display form (col 4).
+            // Output tokens may match the CSV's lookup surface (col 0, lowercased) or display form (col 4).
             var surfaces = new HashSet<string>();
             foreach (var line in File.ReadLines(xmlPath))
             {
@@ -134,7 +126,6 @@ public static class UserDicAuditor
                 if (startB == 0 || startsA.Contains(startB) || !_surfaces.Contains(token.Text))
                     continue;
 
-                // Started strictly inside a no-user-dic token: boundary-crossing capture
                 int crossedIdx = offsetsA.FindIndex(o => o.Start < startB && o.End > startB);
                 if (crossedIdx < 0)
                     continue;

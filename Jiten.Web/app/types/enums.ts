@@ -91,6 +91,7 @@ export enum DeckOrder {
   DeckFrequency = 3,
   ImportOrder = 4,
   Random = 5,
+  SentenceUnlock = 6,
 }
 
 export enum StudyDeckType {

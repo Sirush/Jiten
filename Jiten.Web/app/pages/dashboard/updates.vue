@@ -8,6 +8,8 @@
   import { useConfirm } from 'primevue/useconfirm';
   import { debounce } from 'perfect-debounce';
   import type { AdminSiteUpdate } from '~/types';
+  import { convertHeifImage, isHeifBlob } from '~/utils/heifImage';
+  import { spliceAsParagraph, toDiscordMarkdown } from '~/utils/siteUpdateMarkdown';
 
   useHead({ title: 'Site Updates - Jiten' });
 
@@ -30,6 +32,13 @@
   const body = ref('');
   const teaser = ref('');
   const showPreview = ref(true);
+  const savedSnapshot = ref('');
+
+  const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+  const bodyInput = ref<{ $el: HTMLTextAreaElement } | null>(null);
+  const imageInput = ref<HTMLInputElement | null>(null);
+  const uploadingImages = ref(0);
+  let placeholderSeq = 0;
 
   // The preview re-parses markdown on every source change; debounced so typing stays responsive.
   const previewSource = ref('');
@@ -40,6 +49,8 @@
 
   const editingUpdate = computed(() => updates.value.find((u) => u.id === editingId.value) ?? null);
   const isPublished = computed(() => !!editingUpdate.value?.publishedAt);
+  const editorSnapshot = () => JSON.stringify([title.value, teaser.value, body.value]);
+  const isDirty = computed(() => editorOpen.value && editorSnapshot() !== savedSnapshot.value);
   const isValid = computed(() => title.value.trim().length > 0 && body.value.trim().length > 0);
 
   async function load() {
@@ -61,6 +72,7 @@
     body.value = '';
     previewSource.value = '';
     teaser.value = '';
+    savedSnapshot.value = editorSnapshot();
     editorOpen.value = true;
   }
 
@@ -70,12 +82,101 @@
     body.value = update.bodyMarkdown;
     previewSource.value = update.bodyMarkdown;
     teaser.value = update.notificationTeaser ?? '';
+    savedSnapshot.value = editorSnapshot();
     editorOpen.value = true;
   }
 
   function closeEditor() {
     editorOpen.value = false;
     editingId.value = null;
+  }
+
+  function discardThen(action: () => void) {
+    if (!isDirty.value) return action();
+    confirm.require({
+      message: 'Discard your unsaved changes to this update?',
+      header: 'Unsaved changes',
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Discard',
+      rejectLabel: 'Keep editing',
+      acceptClass: 'p-button-danger',
+      accept: action,
+    });
+  }
+
+  function isImageFile(file: File) {
+    return file.type.startsWith('image/') || /\.(heic|heif|avif)$/i.test(file.name);
+  }
+
+  async function prepareImage(file: File): Promise<File> {
+    if (!(await isHeifBlob(file).catch(() => false))) return file;
+    const converted = await convertHeifImage(file).catch(() => {
+      throw new Error("Couldn't read this image. Save it as JPEG or PNG and try again.");
+    });
+    return new File([converted.blob], `image.${converted.extension}`, { type: converted.blob.type });
+  }
+
+  async function uploadInto(file: File, placeholder: string, undo: { inserted: string; original: string }) {
+    uploadingImages.value++;
+    try {
+      const prepared = await prepareImage(file);
+      if (prepared.size > MAX_IMAGE_BYTES) throw new Error('Images must be 10 MB or smaller.');
+
+      const form = new FormData();
+      form.append('file', prepared, prepared.name || 'image');
+      const { url } = await $api<{ url: string }>('/admin/updates/images', { method: 'POST', body: form });
+      body.value = body.value.replace(placeholder, `![](${url})`);
+    } catch (e) {
+      body.value =
+        body.value === undo.inserted ? undo.original : body.value.replace(`${placeholder}\n\n`, '').replace(placeholder, '');
+      const detail = e instanceof Error && !('data' in e) ? e.message : extractApiError(e, 'Failed to upload image');
+      toast.add({ severity: 'error', summary: 'Image upload failed', detail, life: 5000 });
+    } finally {
+      uploadingImages.value--;
+    }
+  }
+
+  function insertImages(files: File[]) {
+    const el = bodyInput.value?.$el;
+    const start = el?.selectionStart ?? body.value.length;
+    const end = el?.selectionEnd ?? start;
+    const jobs = files.map((file) => ({ file, placeholder: `![Uploading image ${++placeholderSeq}...]()` }));
+    const original = body.value;
+    const spliced = spliceAsParagraph(original, start, end, jobs.map((j) => j.placeholder).join('\n\n'));
+    body.value = spliced.text;
+    nextTick(() => {
+      el?.focus();
+      el?.setSelectionRange(spliced.cursor, spliced.cursor);
+    });
+    for (const job of jobs) void uploadInto(job.file, job.placeholder, { inserted: spliced.text, original });
+  }
+
+  function onBodyPaste(e: ClipboardEvent) {
+    const data = e.clipboardData;
+
+    if (!data || data.getData('text/plain')) return;
+    const files = Array.from(data.files).filter(isImageFile);
+    if (!files.length) return;
+    e.preventDefault();
+    insertImages(files);
+  }
+
+  function onBodyDragOver(e: DragEvent) {
+    if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+  }
+
+  function onBodyDrop(e: DragEvent) {
+    const files = Array.from(e.dataTransfer?.files ?? []).filter(isImageFile);
+    if (!files.length) return;
+    e.preventDefault();
+    insertImages(files);
+  }
+
+  function onImagePicked(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []).filter(isImageFile);
+    input.value = '';
+    if (files.length) insertImages(files);
   }
 
   async function save() {
@@ -144,7 +245,7 @@
   }
 
   function copyAsDiscord(update: AdminSiteUpdate) {
-    const text = `**${update.title}**\n\n${update.bodyMarkdown}`;
+    const text = toDiscordMarkdown(update.title, update.bodyMarkdown);
     navigator.clipboard
       .writeText(text)
       .then(() => toast.add({ severity: 'success', summary: 'Copied', detail: 'Copied in Discord format', life: 3000 }))
@@ -157,9 +258,9 @@
 <template>
   <div class="container mx-auto p-4">
     <div class="flex items-center mb-6">
-      <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="navigateTo('/dashboard')" />
+      <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="discardThen(() => navigateTo('/dashboard'))" />
       <h1 class="text-3xl font-bold">Site Updates</h1>
-      <Button label="New update" icon="pi pi-plus" class="ml-auto" @click="openNew" />
+      <Button v-if="!editorOpen" label="New update" icon="pi pi-plus" class="ml-auto" @click="openNew" />
     </div>
 
     <Card v-if="editorOpen" class="shadow-md mb-6">
@@ -192,8 +293,23 @@
 
           <div class="grid grid-cols-1 gap-4" :class="showPreview ? 'lg:grid-cols-2' : ''">
             <div>
-              <label for="updateBody" class="block text-sm font-medium mb-1">Body (Markdown)</label>
-              <Textarea id="updateBody" v-model="body" rows="18" class="w-full font-mono text-sm" placeholder="## Heading&#10;&#10;- item" />
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <label for="updateBody" class="block text-sm font-medium">Body (Markdown)</label>
+                <Button label="Insert image" icon="pi pi-image" text size="small" :loading="uploadingImages > 0" @click="imageInput?.click()" />
+                <input ref="imageInput" type="file" accept="image/*,.heic,.heif,.avif" multiple class="hidden" @change="onImagePicked" />
+              </div>
+              <Textarea
+                id="updateBody"
+                ref="bodyInput"
+                v-model="body"
+                rows="18"
+                class="w-full font-mono text-sm"
+                placeholder="## Heading&#10;&#10;- item"
+                @paste="onBodyPaste"
+                @dragover="onBodyDragOver"
+                @drop="onBodyDrop"
+              />
+              <small class="text-surface-500 dark:text-surface-400">Paste or drop images into the body to upload them.</small>
             </div>
 
             <div v-if="showPreview">
@@ -211,8 +327,8 @@
           </div>
 
           <div class="flex justify-end gap-2">
-            <Button label="Cancel" class="p-button-text" @click="closeEditor" />
-            <Button label="Save" icon="pi pi-save" :loading="saving" :disabled="!isValid || saving" @click="save" />
+            <Button label="Cancel" class="p-button-text" @click="discardThen(closeEditor)" />
+            <Button label="Save" icon="pi pi-save" :loading="saving" :disabled="!isValid || saving || uploadingImages > 0" @click="save" />
           </div>
         </div>
       </template>
@@ -239,7 +355,7 @@
             </div>
 
             <div class="flex items-center gap-1 shrink-0">
-              <Button v-tooltip.top="'Edit'" icon="pi pi-pencil" text size="small" aria-label="Edit" @click="openEdit(update)" />
+              <Button v-tooltip.top="'Edit'" icon="pi pi-pencil" text size="small" aria-label="Edit" @click="discardThen(() => openEdit(update))" />
               <Button
                 v-tooltip.top="'Copy in Discord format'"
                 icon="pi pi-copy"

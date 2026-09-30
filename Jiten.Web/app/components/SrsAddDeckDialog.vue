@@ -15,12 +15,13 @@
     preselectedFrequencyListId?: number;
     initialFilterMode?: Mode;
     initialMinOccurrences?: number;
+    initialOrder?: DeckOrder;
   }>();
 
   const emit = defineEmits(['update:visible', 'smart']);
   const { $api } = useNuxtApp();
   const srsStore = useSrsStore();
-  const { isPlus } = useJitenPlus();
+  const { isPlus, hasFeature, fetched: planFetched } = useJitenPlus();
   const hasSmartDeck = computed(() => srsStore.studyDecks.some((d) => d.deckType === StudyDeckType.Smart));
 
   function pickSmart() {
@@ -82,55 +83,54 @@
     return 'manual';
   }
 
-  watch(
-    () => props.editDeck,
-    (deck) => {
-      if (!deck) return;
-      if (deck.deckType === StudyDeckType.MediaDeck) {
-        selectedDeck.value = { deckId: deck.deckId!, title: deck.title, coverName: deck.coverName };
-        downloadMode.value = modeFromDownloadType(deck.downloadType);
-        downloadType.value = [
-          DeckDownloadType.Full,
-          DeckDownloadType.TopGlobalFrequency,
-          DeckDownloadType.TopDeckFrequency,
-          DeckDownloadType.TopChronological,
-        ].includes(deck.downloadType)
-          ? deck.downloadType
-          : DeckDownloadType.TopGlobalFrequency;
-        deckOrder.value = deck.order;
-        minFrequency.value = deck.minFrequency;
-        maxFrequency.value = deck.maxFrequency;
-        targetPercentage.value = deck.targetPercentage ?? 80;
-        startFromKnown.value = deck.startFromKnown ?? false;
-        if (deck.minOccurrences) {
-          occurrenceFilterType.value = 'gte';
-          occurrenceThreshold.value = deck.minOccurrences;
-        } else if (deck.maxOccurrences) {
-          occurrenceFilterType.value = 'lte';
-          occurrenceThreshold.value = deck.maxOccurrences;
-        }
-        mediaPosFilter.value = deck.posFilter ? JSON.parse(deck.posFilter) : [];
-        excludeKana.value = deck.excludeKana;
-        step.value = 'filters';
-      } else if (deck.deckType === StudyDeckType.GlobalDynamic) {
-        globalName.value = deck.name;
-        globalDescription.value = deck.description ?? '';
-        globalOrder.value = deck.order;
-        globalMinFreq.value = deck.minGlobalFrequency;
-        globalMaxFreq.value = deck.maxGlobalFrequency;
-        globalPosFilter.value = deck.posFilter ? JSON.parse(deck.posFilter) : [];
-        excludeKana.value = deck.excludeKana;
-        freqSource.value = frequencySourceKey(deck.frequencyMediaType, deck.frequencyListId);
-        globalNameTouched.value = true;
-        step.value = 'global';
-      } else if (deck.deckType === StudyDeckType.StaticWordList) {
-        staticName.value = deck.name;
-        staticDescription.value = deck.description ?? '';
-        staticOrder.value = deck.order;
-        step.value = 'static';
+  function applyEditDeck(deck: StudyDeckDto | undefined) {
+    if (!deck) return;
+    if (deck.deckType === StudyDeckType.MediaDeck) {
+      selectedDeck.value = { deckId: deck.deckId!, title: deck.title, coverName: deck.coverName };
+      downloadMode.value = modeFromDownloadType(deck.downloadType);
+      downloadType.value = [
+        DeckDownloadType.Full,
+        DeckDownloadType.TopGlobalFrequency,
+        DeckDownloadType.TopDeckFrequency,
+        DeckDownloadType.TopChronological,
+      ].includes(deck.downloadType)
+        ? deck.downloadType
+        : DeckDownloadType.TopGlobalFrequency;
+      deckOrder.value = props.initialOrder ?? deck.order;
+      minFrequency.value = deck.minFrequency;
+      maxFrequency.value = deck.maxFrequency;
+      targetPercentage.value = deck.targetPercentage ?? 80;
+      startFromKnown.value = deck.startFromKnown ?? false;
+      if (deck.minOccurrences) {
+        occurrenceFilterType.value = 'gte';
+        occurrenceThreshold.value = deck.minOccurrences;
+      } else if (deck.maxOccurrences) {
+        occurrenceFilterType.value = 'lte';
+        occurrenceThreshold.value = deck.maxOccurrences;
       }
+      mediaPosFilter.value = deck.posFilter ? JSON.parse(deck.posFilter) : [];
+      excludeKana.value = deck.excludeKana;
+      step.value = 'filters';
+    } else if (deck.deckType === StudyDeckType.GlobalDynamic) {
+      globalName.value = deck.name;
+      globalDescription.value = deck.description ?? '';
+      globalOrder.value = deck.order;
+      globalMinFreq.value = deck.minGlobalFrequency;
+      globalMaxFreq.value = deck.maxGlobalFrequency;
+      globalPosFilter.value = deck.posFilter ? JSON.parse(deck.posFilter) : [];
+      excludeKana.value = deck.excludeKana;
+      freqSource.value = frequencySourceKey(deck.frequencyMediaType, deck.frequencyListId);
+      globalNameTouched.value = true;
+      step.value = 'global';
+    } else if (deck.deckType === StudyDeckType.StaticWordList) {
+      staticName.value = deck.name;
+      staticDescription.value = deck.description ?? '';
+      staticOrder.value = deck.order;
+      step.value = 'static';
     }
-  );
+  }
+
+  watch(() => props.editDeck, applyEditDeck);
 
   // Step: Search (media)
   const searchQuery = ref('');
@@ -165,7 +165,7 @@
   // Media filters
   const downloadMode = ref<Mode>(props.initialFilterMode ?? 'manual');
   const downloadType = ref(DeckDownloadType.TopGlobalFrequency);
-  const deckOrder = ref(DeckOrder.DeckFrequency);
+  const deckOrder = ref(props.initialOrder ?? DeckOrder.DeckFrequency);
   const minFrequency = ref(0);
   const maxFrequency = ref(30000);
   const targetPercentage = ref(80);
@@ -201,7 +201,7 @@
   const isCountLoading = ref(false);
 
   watch(downloadMode, (mode) => {
-    if (isEditMode.value) return;
+    if (isEditMode.value || deckOrder.value === DeckOrder.SentenceUnlock) return;
     deckOrder.value = mode === 'manual' ? DeckOrder.GlobalFrequency : DeckOrder.DeckFrequency;
   });
 
@@ -549,7 +549,7 @@
     if (!props.preselectedDeck && !props.editDeck) selectedDeck.value = null;
     downloadMode.value = props.initialFilterMode ?? 'manual';
     downloadType.value = DeckDownloadType.TopGlobalFrequency;
-    deckOrder.value = DeckOrder.DeckFrequency;
+    deckOrder.value = props.initialOrder ?? DeckOrder.DeckFrequency;
     minFrequency.value = 0;
     maxFrequency.value = 30000;
     targetPercentage.value = 80;
@@ -600,12 +600,20 @@
     { label: 'Top Chronological', value: DeckDownloadType.TopChronological },
   ];
 
-  const orderOptions = [
+  const canUseSentenceOrder = computed(() => hasFeature('sentence-order'));
+  const sentenceOrderLapsed = computed(() => deckOrder.value === DeckOrder.SentenceUnlock && planFetched.value && !canUseSentenceOrder.value);
+  const orderOptions = computed(() => [
     { label: 'Chronological', value: DeckOrder.Chronological },
     { label: 'Global Frequency', value: DeckOrder.GlobalFrequency },
     { label: 'Deck Frequency', value: DeckOrder.DeckFrequency },
     { label: 'Random', value: DeckOrder.Random },
-  ];
+    {
+      label: getDeckOrderText(DeckOrder.SentenceUnlock),
+      value: DeckOrder.SentenceUnlock,
+      plusOnly: !canUseSentenceOrder.value,
+      disabled: !canUseSentenceOrder.value && deckOrder.value !== DeckOrder.SentenceUnlock,
+    },
+  ]);
 
   const globalOrderOptions = computed(() => [
     { label: 'Frequency rank', value: DeckOrder.GlobalFrequency },
@@ -624,6 +632,9 @@
     { label: 'Target Coverage', value: 'target' },
     { label: 'Occurrence Count', value: 'occurrence' },
   ];
+
+  // Runs last: the form refs it fills are declared above, and a dialog mounted with editDeck already set never sees the watcher fire.
+  applyEditDeck(props.editDeck);
 </script>
 
 <template>
@@ -711,7 +722,7 @@
             class="w-10 h-14 object-cover rounded shrink-0"
           />
           <div class="flex-1 min-w-0">
-            <div class="text-sm font-medium truncate">{{ localiseTitle(result) }}</div>
+            <div class="text-sm font-medium truncate" v-bind="japaneseTextAttrs(localiseTitle(result))">{{ localiseTitle(result) }}</div>
             <div class="text-xs text-gray-500 dark:text-gray-400">{{ getMediaTypeText(result.mediaType) }}</div>
           </div>
         </div>
@@ -725,7 +736,7 @@
     <div v-if="step === 'filters' && selectedDeck">
       <div class="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
         <Button v-if="!preselectedDeck && !isEditMode" icon="pi pi-arrow-left" severity="secondary" text size="small" @click="goBack" />
-        <span class="font-semibold">{{ selectedDeck.title }}</span>
+        <span class="font-semibold" v-bind="japaneseTextAttrs(selectedDeck.title)">{{ selectedDeck.title }}</span>
       </div>
 
       <div class="mb-4">
@@ -811,7 +822,22 @@
 
       <div class="mb-3">
         <label class="block text-sm font-medium mb-1">Card Order</label>
-        <Select v-model="deckOrder" :options="orderOptions" option-label="label" option-value="value" class="w-full" />
+        <Select v-model="deckOrder" :options="orderOptions" option-label="label" option-value="value" option-disabled="disabled" class="w-full">
+          <template #option="{ option }">
+            <span class="flex items-center gap-2">{{ option.label }} <JitenPlusBadge v-if="option.plusOnly" :link="false" /></span>
+          </template>
+        </Select>
+        <p v-if="sentenceOrderLapsed" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Sentence unlock needs
+          <NuxtLink to="/jiten-plus" class="text-primary-600 dark:text-primary-400 hover:underline">Jiten+</NuxtLink>. New cards follow deck frequency until
+          you subscribe again.
+        </p>
+        <p v-else-if="deckOrder === DeckOrder.SentenceUnlock" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          New cards follow the list on this title's
+          <NuxtLink :to="`/decks/media/${selectedDeck.deckId}/sentences`" class="text-primary-600 dark:text-primary-400 hover:underline"
+            >sentences page</NuxtLink
+          >, presenting to you the words that will make the most sentences readable first. The order updates as you learn.
+        </p>
       </div>
 
       <div class="flex flex-col gap-2 mb-4">

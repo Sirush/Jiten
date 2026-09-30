@@ -54,15 +54,15 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
 
             case DeckDownloadType.TopDeckFrequency:
                 deckWordsQuery = ThenByGlobalRank(deckWordsQuery.OrderByDescending(dw => dw.Occurrences))
-                                 .Skip(minFrequency)
-                                 .Take(maxFrequency - minFrequency);
+                                 .Skip(Math.Max(0, minFrequency))
+                                 .Take(Math.Max(0, maxFrequency - minFrequency));
                 break;
 
             case DeckDownloadType.TopChronological:
                 deckWordsQuery = deckWordsQuery
                                  .OrderBy(dw => dw.DeckWordId)
-                                 .Skip(minFrequency)
-                                 .Take(maxFrequency - minFrequency);
+                                 .Skip(Math.Max(0, minFrequency))
+                                 .Take(Math.Max(0, maxFrequency - minFrequency));
                 break;
 
             case DeckDownloadType.TargetCoverage:
@@ -151,6 +151,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                     break;
 
                 case DeckOrder.DeckFrequency:
+                case DeckOrder.SentenceUnlock:
                     deckWordsQuery = deckWordsQuery.OrderByDescending(dw => dw.Occurrences);
                     break;
                 case DeckOrder.Random:

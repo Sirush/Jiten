@@ -212,6 +212,10 @@ public class Deck
     /// </summary>
     public DeckRawText? RawText { get; set; }
 
+    /// <summary>Parser output carried to persistence; stored in <see cref="DeckSentenceProfile"/>.</summary>
+    [NotMapped]
+    public byte[]? SentenceProfile { get; set; }
+
     /// <summary>
     /// Example sentences in this deck
     /// </summary>

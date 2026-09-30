@@ -19,6 +19,8 @@
   const mobileMenuOpen = ref(false);
   const toggleMobileMenu = () => (mobileMenuOpen.value = !mobileMenuOpen.value);
 
+  const communityUrl = useRuntimeConfig().public.communityUrl as string;
+
   const route = useRoute();
   watch(
     () => route.fullPath,
@@ -60,6 +62,8 @@
     if (themeMode.value === ThemeMode.Dark) return 'Dark';
     return 'Auto';
   });
+
+  watch(themeMode, (mode) => applyTheme(mode));
 
   onMounted(() => {
     applyTheme(store.themeMode);
@@ -148,7 +152,7 @@
         </NuxtLink>
 
         <!-- Desktop nav -->
-        <nav class="hidden md:flex items-center space-x-4">
+        <nav class="hidden min-[900px]:flex items-center space-x-4">
           <nuxt-link to="/decks/media" :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'">Media</nuxt-link>
           <nuxt-link
             v-if="auth.isAuthenticated"
@@ -167,6 +171,7 @@
             >Tools</nuxt-link
           >
           <nuxt-link to="/guides" :class="route.path.startsWith('/guides') ? 'font-semibold !text-purple-200' : '!text-white'">Guides</nuxt-link>
+          <a :href="communityUrl" class="!text-white">Community</a>
           <nuxt-link
             v-if="auth.isAuthenticated"
             to="/jiten-plus"
@@ -222,7 +227,7 @@
         </nav>
 
         <!-- Mobile: search + bell + hamburger -->
-        <div class="md:hidden flex items-center gap-1">
+        <div class="min-[900px]:hidden flex items-center gap-1">
           <button
             type="button"
             class="inline-flex items-center justify-center p-2 rounded text-white hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-white"
@@ -244,7 +249,7 @@
       </div>
 
       <!-- Mobile menu panel -->
-      <div v-if="mobileMenuOpen" class="md:hidden mx-auto max-w-6xl px-4 pb-4">
+      <div v-if="mobileMenuOpen" class="min-[900px]:hidden mx-auto max-w-6xl px-4 pb-4">
         <div class="bg-indigo-800 rounded-lg shadow-lg divide-y divide-indigo-700">
           <div class="flex flex-col py-2">
             <nuxt-link
@@ -314,6 +319,7 @@
               @click="mobileMenuOpen = false"
               >Guides</nuxt-link
             >
+            <a :href="communityUrl" class="py-2 px-3 !text-white" @click="mobileMenuOpen = false">Community</a>
             <nuxt-link
               v-if="auth.isAuthenticated"
               to="/jiten-plus"

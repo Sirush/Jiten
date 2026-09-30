@@ -5,8 +5,7 @@ public sealed class DeconjugationForm : IEquatable<DeconjugationForm>
     // Arrays are never mutated after construction; exposed directly.
     private readonly string[] _tags;
     private readonly string[] _process;
-    // Texts reached along the chain, root first, duplicate-free. Stored as a persistent chain so a
-    // child form shares its parent's nodes instead of copying them; compared as a set.
+    // Persistent chain shared with the parent (no copying), root first, duplicate-free; compared as a set.
     private readonly SeenTextNode? _seen;
     private string[]? _seenArray;
     private readonly int _hashCode;

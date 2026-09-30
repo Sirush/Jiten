@@ -2,7 +2,6 @@
 
 internal static class TransitionRuleSets
 {
-    // Auxiliaries that can only attach to verbs (passive/causative/desire/polite)
     internal static readonly HashSet<string> VerbOnlyAuxDictForms =
     [
         "られる", "れる", "せる", "させる",
@@ -10,7 +9,6 @@ internal static class TransitionRuleSets
         "ます"
     ];
 
-    // Auxiliaries that can attach to verbs OR i-adjectives (past, negative)
     internal static readonly HashSet<string> VerbOrAdjAuxDictForms = ["た", "ぬ"];
 
     internal static readonly HashSet<string> CommonParticles =
@@ -21,7 +19,7 @@ internal static class TransitionRuleSets
 
     internal static readonly HashSet<string> CaseMarkingParticles = ["が", "を", "に", "で", "へ"];
 
-    // Strictly impossible case-marking particles at sentence start (topic/conjunctive particles excluded)
+    // Never sentence-initial; で is left out because conjunctive で can open a sentence.
     internal static readonly HashSet<string> StrictCaseMarkingParticles = ["が", "を", "へ"];
 
     internal static readonly HashSet<string> CopulaForms = ["だ", "です", "である"];
@@ -46,8 +44,7 @@ internal static class TransitionRuleSets
         "する", "した", "して", "し", "される", "させる"
     ];
 
-    // 〜(volitional)とする "try to" — the と+する after a volitional ending demands the
-    // volitional reading (走り出そう = 走り出す volitional, not 走り出る + seemingness そう)
+    // Volitional とする "try to" forces the volitional reading (走り出そうと = 走り出す, not 走り出る + そう).
     internal static readonly HashSet<string> VolitionalToVerbForms =
     [
         "とする", "として", "とした", "としている", "としていた", "とすれば", "としたら", "と思う", "と思った"
@@ -65,9 +62,7 @@ internal static class TransitionRuleSets
         "的", "性", "化", "中", "用", "式", "風"
     ];
 
-    // Noun→verb collocations: when a nearby resolved token matches the key wordId,
-    // the target verb candidate gets a scoring bonus to beat homophones.
-    // (contextWordId) → (targetWordId, bonus)
+    // A nearby resolved contextWordId boosts the target verb over its homophones.
     internal static readonly Dictionary<int, (int TargetWordId, int Bonus)> NounVerbCollocations = new()
     {
         { 1172400, (1444150, 30) }, // 嘘 → 吐く (to tell a lie), not 点く/付く
@@ -75,29 +70,21 @@ internal static class TransitionRuleSets
         { 1371260, (1229610, 30) }, // 水 → 汲む (to draw water), not 組む
     };
 
-    // Forward-anchor homograph disambiguation: when the immediately following token's surface
-    // is one of the anchor strings, the target wordId candidate is boosted to beat a
-    // higher-priority homograph that the scorer would otherwise pick.
-    // (targetWordId) → (anchor surfaces, bonus)
+    // A next-token surface in NextAnchors boosts the target wordId over a higher-priority homograph.
     internal static readonly Dictionary<int, (string[] NextAnchors, int Bonus)> ForwardAnchorBoosts = new()
     {
-        // 一分前 / 一分後 / １分ぐらい = いっぷん (one minute, 1166290), not the news-ranked
-        // いちぶ (one tenth, 1166270) — quantity approximators anchor the duration reading
+        // 一分前 = いっぷん "one minute", not the news-ranked いちぶ "one tenth" (1166270).
         { 1166290, (["前", "後", "ぐらい", "くらい", "ほど", "経つ", "経った", "経って"], 40) },
     };
 
-    // Flattened set of every anchor surface, used by the pass-2 prefilter to keep an
-    // otherwise-confident token rescorable when a forward anchor could flip its homograph.
+    // Pass-2 prefilter keeps a confident token rescorable when an anchor could flip its homograph.
     internal static readonly HashSet<string> ForwardAnchorSurfaces =
         ForwardAnchorBoosts.Values.SelectMany(a => a.NextAnchors).ToHashSet();
 
-    // Backward-nominal homograph disambiguation: when the previous resolved token is nominal,
-    // the target wordId candidate is boosted to beat a higher-priority homograph of the same surface.
-    // (targetWordId) → (surface, bonus)
+    // A nominal previous token boosts the target wordId over a higher-priority homograph of the surface.
     internal static readonly Dictionary<int, (string Surface, int Bonus)> PrevNominalBoosts = new()
     {
-        // NといいNといい "both N and N" (2844736) vs the sentence-final wish 〜といい "(I) hope" (2872982):
-        // only the enumerating sense follows a nominal; the wish sense follows a predicate.
+        // NといいNといい "both N and N" follows a nominal; the wish 〜といい (2872982) follows a predicate.
         { 2844736, ("といい", 40) },
     };
 
@@ -121,8 +108,7 @@ internal static class TransitionRuleSets
             [ScoringCondition.NextIsNaConnector],
             30),
 
-        // Adverbial adj-na + に (露になった = あらわ, not dew; 変に, 楽に) must outweigh the
-        // noun-particle synergy (+40) the noun homograph gets from the same に.
+        // Must outweigh noun-particle-synergy (+40) from the same に (露になった = あらわ, not dew).
         new("na-adj-ni-adverbial-synergy",
             [ScoringCondition.CandidateIsNaAdj],
             [ScoringCondition.NextIsNiParticle],
@@ -173,8 +159,7 @@ internal static class TransitionRuleSets
             [ScoringCondition.NextIsExplanatoryN],
             25),
 
-        // High enough that a numeral+counter pair outbids a top-priority noun homograph together
-        // with its ruby prior (第二話: the counter わ must beat はなし).
+        // Must outbid a top-priority noun homograph plus its ruby prior (第二話: counter わ beats はなし).
         new("numeral-counter-cohesion",
             [ScoringCondition.CandidateIsCounter],
             [ScoringCondition.PrevIsNumeral],
@@ -215,9 +200,7 @@ internal static class TransitionRuleSets
             [ScoringCondition.PrevIsNoParticle],
             20),
 
-        // A 連用形 cannot directly follow the genitive の (子供たちの群れ is the noun 群れ,
-        // never 群れる's infinitive); after a bare noun it's nearly as implausible
-        // (群れ、群れ、群れ enumerations) — real compounds are fused upstream.
+        // A 連用形 never follows genitive の (子供たちの群れ is the noun); real noun+verb compounds are fused upstream.
         new("genitive-infinitive-penalty",
             [ScoringCondition.CandidateIsVerb, ScoringCondition.CandidateIsInfinitiveOrImperative],
             [ScoringCondition.PrevIsNoParticle],
@@ -334,72 +317,58 @@ internal static class TransitionRuleSets
             40),
     ];
 
-    // Parity rules encoding current ValidateGrammaticalSequences behavior (phases 1–3)
     internal static readonly TransitionRule[] HardRules =
     [
-        // Phase 1: leading auxiliaries can never begin a clause
         new(
             Id: "leading-aux-strip",
             WhenToken: [MatchCondition.IsSentenceInitial, MatchCondition.IsVerbAttachingAux],
             ValidIf: [],
             OnViolation: ViolationAction.RemoveCurrent),
 
-        // Phase 2a: passive/causative/desire/polite/polite-past aux must follow verb or aux
         new(
             Id: "aux-must-follow-verb",
             WhenToken: [MatchCondition.IsVerbOnlyAux],
             ValidIf: [MatchCondition.PrevIsVerbOrAux],
             OnViolation: ViolationAction.MergeWithPrevious),
 
-        // Phase 2b: past/negative aux must follow verb, aux, i-adjective, or sentence-ending particle
         new(
             Id: "verb-or-adj-aux-must-follow-content",
             WhenToken: [MatchCondition.IsVerbOrAdjAux],
             ValidIf: [MatchCondition.PrevIsVerbAuxIAdjOrSfp],
             OnViolation: ViolationAction.MergeWithPrevious),
 
-        // Phase 3: counter suffix must follow a number or noun-like token
         new(
             Id: "counter-must-follow-numberlike",
             WhenToken: [MatchCondition.IsCounter],
             ValidIf: [MatchCondition.PrevExists, MatchCondition.PrevIsNumericOrNoun],
             OnViolation: ViolationAction.ReclassifyCurrentAsNoun),
 
-        // Phase 4: sentence-final particles (よ/ね/な/ぞ/ぜ/わ) must be near clause end
-        // Exception: SFP after an auxiliary/particle (だな, はね) or a plain-form verb/i-adj
-        // (prohibitive えぐるな, exclamatory 欲しいな — run-on speech has no punctuation) is valid.
-        // Emphatic ぞ/ぜ are excluded: they never merge into a longer expression, and vocatives
-        // follow them directly (出るぞ無名！) — merging would just delete the particle.
+        // Plain predicates host an SFP in unpunctuated speech (欲しいな); ぞ/ぜ never merge (出るぞ無名！).
         new(
             Id: "sfp-must-be-near-clause-end",
             WhenToken: [MatchCondition.IsSentenceEndingParticle, MatchCondition.IsNotEmphaticSfp, MatchCondition.NextIsContentWord, MatchCondition.NextIsNotQuotative],
             ValidIf: [MatchCondition.PrevIsSfpValidHost],
             OnViolation: ViolationAction.MergeWithPrevious),
 
-        // Phase 5a: prefix at sentence-end is almost always a misparse → reclassify as noun
         new(
             Id: "prefix-at-sentence-end",
             WhenToken: [MatchCondition.IsPrefix, MatchCondition.IsSentenceFinal],
             ValidIf: [],
             OnViolation: ViolationAction.ReclassifyCurrentAsNoun),
 
-        // Phase 5b: prefix before a particle is almost always a misparse → reclassify as noun
         new(
             Id: "prefix-before-particle",
             WhenToken: [MatchCondition.IsPrefix, MatchCondition.NextIsParticle],
             ValidIf: [],
             OnViolation: ViolationAction.ReclassifyCurrentAsNoun),
 
-        // Phase 6: suffix at sentence start has no content to attach to → reclassify as noun
         new(
             Id: "suffix-must-follow-content",
             WhenToken: [MatchCondition.IsSuffix, MatchCondition.IsSentenceInitial],
             ValidIf: [],
             OnViolation: ViolationAction.ReclassifyCurrentAsNoun),
 
-        // Phase 7: case-marking particles (を/が/へ) at sentence start are almost always misparsed
-        // Topic/conjunctive particles (は/も/で/でも/けど) can legitimately start sentences
-        // Exception: if followed by a content word, the fragment is a valid sentence-start (e.g. がいないと)
+        // A following content word makes it a valid fragment start (がいないと).
         new(
             Id: "particle-at-sentence-start",
             WhenToken: [MatchCondition.IsSentenceInitial, MatchCondition.IsStrictCaseMarkingParticle],

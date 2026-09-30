@@ -17,11 +17,7 @@ public partial class MorphologicalAnalyser
                         (f.Tags.Any(t => t == "v5b") && f.Text.EndsWith('ぶ')) ||
                         (f.Tags.Any(t => t == "v5g") && f.Text.EndsWith('ぐ'))));
 
-    /// <summary>
-    /// Checks if a verb ending in ん + だ is a valid past tense form (from む/ぬ/ぶ/ぐ verbs).
-    /// Used to prevent combining negative ん (from ない/ぬ contraction) + copula だ (e.g., 知らん + だ).
-    /// Returns false if the ん is from a slurred negative form.
-    /// </summary>
+    /// <summary>True only for む/ぬ/ぶ/ぐ past tense (読んだ); a slurred negative ん + copula (知らん + だ) is false.</summary>
     private bool IsValidNdaPastTense(string verbText)
     {
         if (!verbText.EndsWith('ん')) return false;
@@ -86,8 +82,7 @@ public partial class MorphologicalAnalyser
     {
         combined = null;
 
-        // Skip na-adjective + な pattern entirely - the な belongs to the adjective, not to んだ
-        // e.g., 好きなんだ should be 好きな + んだ, not 好き + なんだ or 好きなんだ
+        // な after a na-adjective belongs to it (好きな + んだ).
         if (result.Count >= 2)
         {
             var lastToken = result[^1];
@@ -98,8 +93,7 @@ public partial class MorphologicalAnalyser
             }
         }
 
-        // Skip i-adjective + んだ pattern - the んだ is explanatory, not verb conjugation
-        // e.g., いいんだ should be いい + んだ, not combined as verb form
+        // After an i-adjective んだ is explanatory (いい + んだ), not a verb conjugation.
         if (result.Count >= 1 && suffix.StartsWith('ん'))
         {
             var lastToken = result[^1];
@@ -121,10 +115,10 @@ public partial class MorphologicalAnalyser
                 break;
             }
 
-            // Skip blank spaces since they will deconjugate to a correct form and break the parser
+            // Blank spaces deconjugate to a false match.
             if (hasBlankSpace) continue;
 
-            // Skip when lookback includes て/で particle — ん after te-form is a contraction of いる (ている → てん), not past tense
+            // ん after a te-form contracts いる (ている → てん), not past tense.
             bool hasTeParticle = false;
             for (int j = result.Count - lookback; j < result.Count; j++)
             {

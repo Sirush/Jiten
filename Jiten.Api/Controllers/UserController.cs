@@ -291,20 +291,21 @@ public partial class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        var cards = await userContext.FsrsCards
-                                     .Where(uk => uk.UserId == userId)
-                                     .ToListAsync();
-        var cardIds = cards.Select(c => c.CardId).ToList();
-        var reviewLogs = await userContext.FsrsReviewLogs
-                                          .Where(rl => cardIds.Contains(rl.CardId))
-                                          .ToListAsync();
-        if (cards.Count == 0) return Results.Ok(new { removed = 0 });
-
         // Deliberately not archived: this is a Danger Zone action behind an explicit confirm, archiving would
         // double-write the whole card table, and backup export already covers "I want this back".
-        userContext.FsrsReviewLogs.RemoveRange(reviewLogs);
-        userContext.FsrsCards.RemoveRange(cards);
-        await userContext.SaveChangesAsync();
+        int removedLogs, removedCards;
+        await using (var transaction = await userContext.Database.BeginTransactionAsync())
+        {
+            removedLogs = await userContext.FsrsReviewLogs
+                                           .Where(rl => rl.Card.UserId == userId)
+                                           .ExecuteDeleteAsync();
+            removedCards = await userContext.FsrsCards
+                                            .Where(c => c.UserId == userId)
+                                            .ExecuteDeleteAsync();
+            await transaction.CommitAsync();
+        }
+
+        if (removedCards == 0) return Results.Ok(new { removed = 0 });
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
@@ -313,8 +314,8 @@ public partial class UserController(
         await MarkReviewRollupDirty(userId);
 
         logger.LogInformation("User cleared all known words: UserId={UserId}, RemovedCount={RemovedCount}, RemovedLogsCount={RemovedLogsCount}",
-                              userId, cards.Count, reviewLogs.Count);
-        return Results.Ok(new { removed = cards.Count, removedLogs = reviewLogs.Count });
+                              userId, removedCards, removedLogs);
+        return Results.Ok(new { removed = removedCards, removedLogs });
     }
 
     /// <summary>
@@ -1778,7 +1779,7 @@ public partial class UserController(
             // Check for duplicates
             if (processedPairs.TryGetValue(key, out var existing))
             {
-                logger.LogWarning("Duplicate word detected in import request: {Word} (WordId={WordId}, ReadingIndex={ReadingIndex})",
+                logger.LogDebug("Duplicate word detected in import request: {Word} (WordId={WordId}, ReadingIndex={ReadingIndex})",
                                   word, wordInfo.WordId, wordInfo.ReadingIndex);
                 skippedCount++;
                 continue;
@@ -2236,7 +2237,19 @@ public partial class UserController(
             return Results.BadRequest("A deck cannot be both favourited and ignored");
 
         preference.IsFavourite = request.IsFavourite;
-        await userContext.SaveChangesAsync();
+        try
+        {
+            await userContext.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.IsUniqueViolation() && userContext.Entry(preference).State == EntityState.Added)
+        {
+            userContext.ChangeTracker.Clear();
+            await userContext.UserDeckPreferences
+                             .Where(p => p.UserId == userId && p.DeckId == deckId && !(request.IsFavourite && p.IsIgnored))
+                             .ExecuteUpdateAsync(s => s.SetProperty(p => p.IsFavourite, request.IsFavourite));
+            preference = await userContext.UserDeckPreferences.AsNoTracking()
+                                          .FirstAsync(p => p.UserId == userId && p.DeckId == deckId);
+        }
 
         return Results.Ok(new { preference.DeckId, preference.Status, preference.IsFavourite, preference.IsIgnored });
     }
@@ -4385,7 +4398,7 @@ public partial class UserController(
                 ReadingIndex = readingIndex,
                 Text = text,
                 Source = source,
-                SortOrder = (byte)saved.Count
+                SortOrder = (byte)(saved.Select(e => (int)e.SortOrder).DefaultIfEmpty(-1).Max() + 1)
             };
 
             userContext.UserExampleSentences.Add(sentence);
@@ -4747,7 +4760,18 @@ public partial class UserController(
             entry.HiddenMask = mask;
         }
 
-        await userContext.SaveChangesAsync();
+        try
+        {
+            await userContext.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (entry == null && ex.IsUniqueViolation())
+        {
+            // A concurrent toggle inserted the row first; last write wins.
+            userContext.ChangeTracker.Clear();
+            await userContext.UserHiddenDefinitions
+                             .Where(e => e.UserId == userId && e.WordId == wordId)
+                             .ExecuteUpdateAsync(s => s.SetProperty(e => e.HiddenMask, mask));
+        }
 
         return Results.Ok(new UserHiddenDefinitionsDto { WordId = wordId, HiddenIndices = UserHiddenDefinition.ToIndices(mask) });
     }

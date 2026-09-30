@@ -59,7 +59,7 @@ export function useListAnchor(items: Ref<unknown[]>, attribute = 'data-list-anch
   };
 
   const flash = (element: Element) => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (prefersReducedMotion()) return;
     element.classList.add(FLASH_CLASS);
     setTimeout(() => element.classList.remove(FLASH_CLASS), FLASH_DURATION_MS);
   };

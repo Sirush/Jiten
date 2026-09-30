@@ -24,4 +24,9 @@ public interface IStudySessionService
 
     Task StoreNewCardCursorHints(string userId, IReadOnlyDictionary<long, int> nextDeckByWordKey);
     Task<int?> TakeNewCardCursorHint(string userId, long wordKey);
+
+    /// <summary>Marks cards a study batch handed out; i+1 sentence picks are limited to these so the supply follows review pace.</summary>
+    Task RecordServedCards(string userId, IReadOnlyCollection<long> wordKeys);
+    /// <summary>The subset of the word keys served to the user within the last day; empty when the store is unreachable.</summary>
+    Task<HashSet<long>> GetServedCards(string userId, IReadOnlyCollection<long> wordKeys);
 }

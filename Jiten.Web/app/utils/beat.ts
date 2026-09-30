@@ -1,3 +1,5 @@
+import { isReportableError } from '~/utils/beatErrorFilter';
+
 type Payload = Record<string, unknown>;
 
 const ENDPOINT = '/api/jr';
@@ -182,10 +184,12 @@ export function beatEvent(name: string, data?: Record<string, string | number | 
 
 export function beatError(source: 'vue' | 'window' | 'promise', error: unknown): void {
   if (!enabled || viewErrors >= MAX_ERRORS_PER_VIEW) return;
-  viewErrors++;
-  const err = error as { message?: unknown; stack?: unknown } | null;
+  const err = error as { name?: unknown; message?: unknown; stack?: unknown } | null;
   const message = String(err?.message ?? error ?? 'Unknown error').slice(0, 200);
   const stack = typeof err?.stack === 'string' ? err.stack.slice(0, 1500) : '';
+  const report = { name: String(err?.name ?? ''), message, stack, userAgent: navigator.userAgent, automated: navigator.webdriver === true };
+  if (!isReportableError(report)) return;
+  viewErrors++;
   const u = userIdSource();
   const item: Payload = { t: 'error', n: message, p: viewPath, v: viewId, d: { stack, source } };
   if (u) item.u = u;

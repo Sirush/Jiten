@@ -463,11 +463,18 @@ builder.Services.Configure<Jiten.Core.Services.CardMediaStorageOptions>(
 builder.Services.AddScoped<ICardMediaQuotaService, CardMediaQuotaService>();
 builder.Services.AddScoped<ICardMediaWriteService, CardMediaWriteService>();
 builder.Services.AddScoped<IExampleSentenceQueryService, ExampleSentenceQueryService>();
+builder.Services.AddSingleton<ReadableSentenceListingCache>();
+builder.Services.AddScoped<IReadableSentenceSearch, ReadableSentenceSearch>();
+builder.Services.AddSingleton<SentenceStatsCache>();
+builder.Services.AddScoped<ISentenceStatsService, SentenceStatsService>();
+builder.Services.AddScoped<ISentenceTokenService, SentenceTokenService>();
 builder.Services.Configure<Jiten.Core.Services.JitenPlusLimitsOptions>(
     builder.Configuration.GetSection(Jiten.Core.Services.JitenPlusLimitsOptions.SectionName));
 builder.Services.AddScoped<IUserLimitsService, UserLimitsService>();
 builder.Services.AddSingleton<IBillingAlertService, BillingAlertService>();
 builder.Services.Configure<Jiten.Api.Services.Stripe.StripeOptions>(builder.Configuration.GetSection("Stripe"));
+builder.Services.Configure<Jiten.Api.Services.DiscourseOptions>(
+    builder.Configuration.GetSection(Jiten.Api.Services.DiscourseOptions.SectionName));
 builder.Services.Configure<Jiten.Api.Services.Legal.LegalDocumentsOptions>(
     builder.Configuration.GetSection(Jiten.Api.Services.Legal.LegalDocumentsOptions.SectionName));
 builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Api.Services.Stripe.StripeGateway>();
@@ -663,6 +670,20 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 20, Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
+    options.AddPolicy("sentence-stats", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30, Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
                 AutoReplenishment = true
             });

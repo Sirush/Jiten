@@ -84,7 +84,8 @@ public partial class MorphologicalAnalyser
 
         Stage(TokenStageGroup.Cleanup, ApplyTokenRewriteRulesCleanup),
         Stage(TokenStageGroup.Cleanup, RepairDanTobashi, TokenFeatures.TextTobashi),
-        Stage(TokenStageGroup.Cleanup, FilterMisparse),
+        Stage(TokenStageGroup.Cleanup, ApplyContextPins),
+        Stage(TokenStageGroup.Disambiguation, ApplyTokenRewriteRulesReading),
         Stage(TokenStageGroup.Disambiguation, FixReadingAmbiguity),
     ];
 
@@ -112,8 +113,7 @@ public partial class MorphologicalAnalyser
             if (stage.RequiredFeatures != TokenFeatures.None &&
                 (features & stage.RequiredFeatures) == TokenFeatures.None)
             {
-                // Features go stale after a modifying stage. A stale-set bit only costs one no-op
-                // stage run, but a skip must never trust a stale-clear bit — rescan before skipping.
+                // A stale set bit only costs a no-op run, but a skip must never trust a stale clear bit.
                 if (featuresStale)
                 {
                     features = TokenFeatureScanner.Scan(wordInfos);
@@ -141,8 +141,7 @@ public partial class MorphologicalAnalyser
             }
             else if (!stage.UsesCandidatePositions)
             {
-                // Earlier stages may edit tokens in place. Refresh once, immediately before the
-                // structural candidate block, instead of trusting positions collected before it.
+                // In-place edits leave the list reference unchanged, so candidate positions must still be rescanned.
                 candidateScanDirty = true;
             }
 

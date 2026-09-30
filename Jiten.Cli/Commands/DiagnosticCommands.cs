@@ -143,12 +143,24 @@ public class DiagnosticCommands(CliContext context)
         var deckResult = deck.DeckWords?.FirstOrDefault(w => w.OriginalText == watchWord);
 
         // Find example sentences where the watch word appears
-        var watchExampleSentences = deck.ExampleSentences?
-            .Where(s => s.Text.Contains(watchWord))
+        var watchSentences = deck.ExampleSentences?.Where(s => s.Text.Contains(watchWord)).ToList() ?? [];
+        var sentenceTokens = watchSentences.ToDictionary(s => s, s => ExampleSentenceTokens.Decode(s.Tokens));
+        var tokenWordIds = sentenceTokens.Values.SelectMany(t => t).Select(t => t.WordId).Distinct().ToList();
+        await using var formsContext = await context.ContextFactory.CreateDbContextAsync();
+        var forms = await formsContext.WordForms.AsNoTracking()
+                                      .Where(f => tokenWordIds.Contains(f.WordId))
+                                      .ToDictionaryAsync(f => (f.WordId, f.ReadingIndex));
+        RubyTextHelper.EnrichForms(forms);
+
+        var watchExampleSentences = watchSentences
             .Select(s => new
             {
                 s.Text,
-                Words = s.Words?.Select(w => new { w.WordId, w.ReadingIndex, w.Position, w.Length }).ToList()
+                Furigana = RenderFurigana(s.Text, SentenceFurigana.Build(s.Text, sentenceTokens[s], forms)),
+                Tokens = sentenceTokens[s].Select(t => new
+                {
+                    Surface = s.Text.Substring(t.Position, t.Length), t.WordId, t.ReadingIndex, t.IsTarget, t.IsFunctionWord
+                }).ToList()
             })
             .ToList();
 
@@ -196,6 +208,20 @@ public class DiagnosticCommands(CliContext context)
             Console.WriteLine($"Written to {options.ParseTestOutput}");
         }
         else Console.WriteLine(focusedJson);
+    }
+
+    private static string RenderFurigana(string text, List<FuriganaGroup> groups)
+    {
+        var sb = new StringBuilder();
+        int cursor = 0;
+        foreach (var group in groups.OrderBy(g => g.Position))
+        {
+            sb.Append(text, cursor, group.Position - cursor);
+            sb.Append(text, group.Position, group.Length).Append('[').Append(group.Reading).Append(']');
+            cursor = group.Position + group.Length;
+        }
+
+        return sb.Append(text, cursor, text.Length - cursor).ToString();
     }
 
     public Task DeconjugateTest(CliOptions options)

@@ -3,6 +3,8 @@
   import { applyTtsVolume } from '~/composables/useTts';
   import { DEFAULT_TTS_VOLUME, resolveTtsVolume } from '~/utils/ttsVolume';
 
+  /** Leaves out the control's own label, for places that label it already. */
+  defineProps<{ unlabelled?: boolean }>();
   const emit = defineEmits<{ interactStart: []; interactEnd: [] }>();
 
   const store = useJitenStore();
@@ -30,7 +32,7 @@
 
 <template>
   <div class="flex flex-col gap-1" @focusin="emit('interactStart')" @focusout="emit('interactEnd')">
-    <div class="flex items-center justify-between gap-2">
+    <div v-if="!unlabelled" class="flex items-center justify-between gap-2">
       <label :for="inputId" class="text-sm">TTS Volume</label>
       <span class="text-sm tabular-nums text-muted-color">{{ muted ? 'Muted' : `${percent}%` }}</span>
     </div>
@@ -55,6 +57,7 @@
         @pointerdown="emit('interactStart')"
         @slideend="emit('interactEnd')"
       />
+      <span v-if="unlabelled" class="w-12 shrink-0 text-right text-sm tabular-nums text-muted-color">{{ muted ? 'Muted' : `${percent}%` }}</span>
     </div>
   </div>
 </template>

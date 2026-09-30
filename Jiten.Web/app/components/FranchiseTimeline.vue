@@ -436,7 +436,7 @@
               height="160"
             />
             <div class="flex flex-col gap-0.5 p-1.5">
-              <span class="line-clamp-2 text-xs font-medium leading-tight" :title="localiseTitle(node)">
+              <span class="line-clamp-2 text-xs font-medium leading-tight" :title="localiseTitle(node)" v-bind="japaneseTextAttrs(localiseTitle(node))">
                 {{ localiseTitle(node) }}
               </span>
               <div class="flex items-center justify-between gap-1 text-[11px]">
@@ -463,7 +463,7 @@
     >
       <!-- Header: hovered deck title + explicit open link (touch navigation path). -->
       <div class="flex items-baseline justify-between gap-2 border-b border-surface-200 px-2 py-1.5 dark:border-surface-700">
-        <span class="truncate text-xs font-semibold" :title="localiseTitle(activeNodeData)">{{ localiseTitle(activeNodeData) }}</span>
+        <span class="truncate text-xs font-semibold" :title="localiseTitle(activeNodeData)" v-bind="japaneseTextAttrs(localiseTitle(activeNodeData))">{{ localiseTitle(activeNodeData) }}</span>
         <NuxtLink :to="`/decks/media/${activeNode}/detail`" class="shrink-0 text-xs font-semibold text-primary hover:underline">Open →</NuxtLink>
       </div>
       <div v-if="activeCaptions.length" class="flex flex-col gap-1 p-2">

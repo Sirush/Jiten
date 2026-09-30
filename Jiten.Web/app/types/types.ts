@@ -54,6 +54,10 @@ export interface Deck {
   uniqueCoverage: number;
   youngCoverage: number;
   youngUniqueCoverage: number;
+  /** Jiten+ only: percent of sentences with every content word known; null for free users and decks without a sentence profile. */
+  readableSentences?: number | null;
+  /** Jiten+ only: percent of sentences with exactly one unknown content word. */
+  iPlusOneSentences?: number | null;
   hideDialoguePercentage: boolean;
   hideAverageSentenceLength: boolean;
   externalRating: number;
@@ -102,6 +106,8 @@ export interface DeckCard {
   uniqueCoverage: number;
   youngCoverage: number;
   youngUniqueCoverage: number;
+  readableSentences?: number | null;
+  iPlusOneSentences?: number | null;
 }
 
 export interface SimilarDeck {
@@ -534,6 +540,14 @@ export interface AccountInfo {
   receivesNewsletter: boolean;
   rateLimitTier: string;
   roles: string[];
+  displayName: string | null;
+  /** When the display name can next be changed; null when it can be changed now. */
+  displayNameChangeAvailableAt: string | null;
+}
+
+export interface DisplayNameUpdateResponse {
+  displayName: string;
+  displayNameChangeAvailableAt: string | null;
 }
 
 export interface ChangePasswordRequest {
@@ -574,7 +588,39 @@ export interface ExampleSentence {
   sourceDeck: StudyExampleSourceDto;
   sourceDeckParent?: StudyExampleSourceDto;
   fromStudyDeck?: boolean;
+  isIPlusOne?: boolean;
+  /** Unknown words besides the target; set only by the Jiten+ readable-sentence search. */
+  unknownCount?: number | null;
+  /** Where the other unknown words sit in text; set only by the Jiten+ readable-sentence search. */
+  unknownSpans?: { position: number; length: number }[] | null;
+  furigana?: SentenceFurigana[] | null;
 }
+
+export type ReadableSentenceSort = 'Random' | 'EasiestFirst' | 'HardestFirst';
+
+export interface ReadableSentencesCursor {
+  bucket: number;
+  skip: number;
+}
+
+export interface ReadableSentencesResponse {
+  sentences: ExampleSentence[];
+  /** Null once every sentence holding the word has been checked. */
+  next: ReadableSentencesCursor | null;
+}
+
+/** A ruby group over a sentence's text; `known` is the signed-in user's own state for the word. */
+export interface SentenceFurigana {
+  position: number;
+  length: number;
+  reading: string;
+  wordId: number;
+  known: boolean;
+  /** The signed-in user's states for the word; null when signed out. */
+  states?: KnownState[] | null;
+}
+
+export type SentenceFuriganaMode = 'off' | 'unknown' | 'all' | 'exceptTarget';
 
 export interface UserExampleSentenceDto {
   userExampleSentenceId: number;
@@ -865,6 +911,7 @@ export interface WordSummary {
   mainDefinition: string | null;
   frequencyRank: number | null;
   matchSurface?: string | null;
+  isGrammatical?: boolean;
 }
 
 export interface DeckVocabularyPreviewWord {
@@ -1408,6 +1455,8 @@ export interface StudyExampleSentenceDto {
   isCustom?: boolean;
   customSource?: string;
   customText?: string;
+  isIPlusOne?: boolean;
+  furigana?: SentenceFurigana[] | null;
 }
 
 export interface StudyExampleSourceDto {
@@ -2108,6 +2157,7 @@ export interface ExampleSentenceBlockOptions {
   showActions: boolean;
   unblurOnFlip: boolean;
   size: CardTextSize;
+  furigana: SentenceFuriganaMode;
 }
 
 export interface FrequencyRankBlockOptions {
@@ -2437,4 +2487,71 @@ export interface WatchTimeline {
   /** Start (ms) of the first line with unknown words in each bucket; -1 when the bucket has none */
   starts: number[];
   unknownWords: number;
+}
+
+export interface SentenceSegment {
+  index: number;
+  /** 1-based positions of the first and last part; both 0 when the segment is a slice of one text. */
+  firstPart: number;
+  lastPart: number;
+  title?: string | null;
+  total: number;
+  readable: number;
+  oneUnknown: number;
+  twoUnknown: number;
+}
+
+export interface SentenceSegmentBar {
+  label: string;
+  tooltipTitle: string;
+  total: number;
+  readable: number;
+  oneUnknown: number;
+  twoUnknown: number;
+}
+
+export interface SentenceLearnStep {
+  word: WordSummary;
+  unlocked: number;
+  readableAfter: number;
+}
+
+export interface SentenceProjectionPoint {
+  words: number;
+  greedy: number;
+  byFrequency: number;
+}
+
+export interface SentenceMilestone {
+  percent: number;
+  words: number | null;
+}
+
+export interface DeckSentenceStats {
+  hasData: boolean;
+  total: number;
+  readable: number;
+  oneUnknown: number;
+  twoUnknown: number;
+  threeOrMoreUnknown: number;
+  unknownWords: number;
+  profiledParts: number;
+  totalParts: number;
+  segmentsArePart: boolean;
+  segments: SentenceSegment[];
+  learnNext: SentenceLearnStep[];
+  projection: SentenceProjectionPoint[];
+  milestones: SentenceMilestone[];
+}
+
+export interface DeckIPlusOneSentence {
+  sentence: ExampleSentence;
+  word: WordSummary;
+  wordSentences: number;
+}
+
+export interface DeckIPlusOneSentencesResponse {
+  sentences: DeckIPlusOneSentence[];
+  total: number;
+  checked: number;
 }

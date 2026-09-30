@@ -43,6 +43,8 @@ public class DeckDto : IDeckCoverageTarget
     public float UniqueCoverage { get; set; }
     public float YoungCoverage { get; set; }
     public float YoungUniqueCoverage { get; set; }
+    public float? ReadableSentences { get; set; }
+    public float? IPlusOneSentences { get; set; }
     public byte ExternalRating { get; set; }
 
     /// <summary>Rank within the media type, null when the deck is outside the display window.</summary>

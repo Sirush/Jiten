@@ -127,9 +127,7 @@ internal static class RederivationHelper
             if (!skipPosFilter)
             {
                 bool isNameWord = word.CachedPOS.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown);
-                // Counter (ctr) entries are never POS-compatible with Sudachi Suffix (the check is
-                // context-free); the caller sets allowCounterCandidates after numeric material so
-                // numeral-counter cohesion can select them (第二|話 → わ).
+                // ctr fails the context-free POS check vs Suffix; allowCounterCandidates admits it after numerals (第二|話 → わ).
                 if (!PosMapper.IsJmDictCompatibleWithSudachi(word.CachedPOS, state.WordInfo.PartOfSpeech)
                     && !(state.WordInfo.IsPersonNameContext && isNameWord)
                     && !(allowCounterCandidates && word.CachedPOS.Contains(PartOfSpeech.Counter)))

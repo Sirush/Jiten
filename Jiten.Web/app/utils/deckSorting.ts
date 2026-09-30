@@ -14,6 +14,8 @@ export const deckSortMeta: Record<string, DeckSortMeta> = {
   totalCoverage: { default: SortOrder.Descending, asc: 'Lowest first', desc: 'Highest first' },
   uCoverage: { default: SortOrder.Descending, asc: 'Lowest first', desc: 'Highest first' },
   uTotalCoverage: { default: SortOrder.Descending, asc: 'Lowest first', desc: 'Highest first' },
+  readable: { default: SortOrder.Descending, asc: 'Lowest first', desc: 'Highest first' },
+  iPlusOne: { default: SortOrder.Descending, asc: 'Fewest first', desc: 'Most first' },
   extRating: { default: SortOrder.Descending, asc: 'Lowest first', desc: 'Highest first' },
   communityVotes: { default: SortOrder.Descending, asc: 'Fewest first', desc: 'Most first' },
   sentenceLength: { default: SortOrder.Ascending, asc: 'Shortest first', desc: 'Longest first' },
@@ -40,6 +42,8 @@ export const deckSortLabels: Record<string, string> = {
   coverage: 'Coverage (Mature)',
   uTotalCoverage: 'Unique Coverage (Total)',
   uCoverage: 'Unique Coverage (Mature)',
+  readable: 'Readable Sentences (i+0)',
+  iPlusOne: 'i+1 Sentences',
   extRating: 'External Rating',
   sentenceLength: 'Average Sentence Length',
   uKanji: 'Unique Kanji',
@@ -66,6 +70,8 @@ export const deckSortOrdering = [
   'coverage',
   'uTotalCoverage',
   'uCoverage',
+  'readable',
+  'iPlusOne',
   'extRating',
   'sentenceLength',
   'uKanji',
@@ -85,6 +91,73 @@ export interface DeckSortOption {
 
 export function deckSortOption(key: string): DeckSortOption {
   return { label: deckSortLabels[key] ?? key, value: key };
+}
+
+export interface DeckSortChoice {
+  key: string;
+  label: string;
+}
+
+/** An entry with several choices renders as one labelled row of segments, one per variant. */
+export interface DeckSortEntry {
+  label: string;
+  choices: DeckSortChoice[];
+}
+
+export interface DeckSortGroup {
+  label: string;
+  entries: DeckSortEntry[];
+}
+
+const single = (key: string): DeckSortEntry => {
+  const label = deckSortLabels[key] ?? key;
+  return { label, choices: [{ key, label }] };
+};
+
+const variants = (label: string, choices: [key: string, label: string][]): DeckSortEntry => ({
+  label,
+  choices: choices.map(([key, choiceLabel]) => ({ key, label: choiceLabel })),
+});
+
+const deckSortLayout: DeckSortGroup[] = [
+  {
+    label: 'General',
+    entries: ['occurrences', 'popularity', 'title', 'difficulty', 'extRating', 'communityVotes', 'releaseDate', 'addedDate'].map(single),
+  },
+  {
+    label: 'Your Knowledge',
+    entries: [
+      variants('Coverage', [
+        ['totalCoverage', 'Total'],
+        ['coverage', 'Mature'],
+      ]),
+      variants('Unique Coverage', [
+        ['uTotalCoverage', 'Total'],
+        ['uCoverage', 'Mature'],
+      ]),
+      variants('Readable Sentences', [
+        ['readable', 'i+0'],
+        ['iPlusOne', 'i+1'],
+      ]),
+    ],
+  },
+  {
+    label: 'Content',
+    entries: ['wordCount', 'uWordCount', 'uKanji', 'uKanjiOnce', 'sentenceLength', 'subdeckCount'].map(single),
+  },
+  { label: 'Novel', entries: ['charCount', 'dialoguePercentage'].map(single) },
+  { label: 'Audio-Video', entries: ['speechSpeed', 'speechDuration'].map(single) },
+];
+
+export function deckSortGroups(available: ReadonlySet<string>): DeckSortGroup[] {
+  return deckSortLayout
+    .map((group) => ({
+      label: group.label,
+      entries: group.entries
+        .map((entry) => ({ ...entry, choices: entry.choices.filter((choice) => available.has(choice.key)) }))
+        .filter((entry) => entry.choices.length > 0),
+    }))
+    .filter((group) => group.entries.length > 0);
 }
 
 const deckSortValues: Record<string, (deck: Deck) => number | string> = {
@@ -108,6 +181,8 @@ const deckSortValues: Record<string, (deck: Deck) => number | string> = {
   uCoverage: (d) => d.uniqueCoverage,
   totalCoverage: (d) => Math.min(d.coverage + d.youngCoverage, 100),
   uTotalCoverage: (d) => Math.min(d.uniqueCoverage + d.youngUniqueCoverage, 100),
+  readable: (d) => d.readableSentences ?? 0,
+  iPlusOne: (d) => d.iPlusOneSentences ?? 0,
 };
 
 const UNSET_RELEASE_DATE_CUTOFF = new Date('1900-01-01').getTime();
@@ -122,6 +197,9 @@ function isMissing(deck: Deck, key: string): boolean {
       return deck.hideDialoguePercentage;
     case 'sentenceLength':
       return deck.hideAverageSentenceLength;
+    case 'readable':
+    case 'iPlusOne':
+      return deck.readableSentences == null;
     default:
       return false;
   }

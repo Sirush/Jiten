@@ -202,7 +202,7 @@
           <tr v-for="(deck, i) in rows" :key="deck.deckId" class="even:bg-surface-100 hover:bg-primary-50 dark:even:bg-surface-800 dark:hover:bg-surface-700">
             <td class="px-3 py-2 tabular-nums text-surface-400">{{ rankOffset + i + 1 }}</td>
             <td class="px-3 py-2">
-              <NuxtLink :to="`/decks/media/${deck.deckId}/detail`" class="font-medium">{{ localiseTitle(deck) }}</NuxtLink>
+              <NuxtLink :to="`/decks/media/${deck.deckId}/detail`" class="font-medium" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</NuxtLink>
               <span v-for="title in secondaryTitles(deck)" :key="title" class="ml-2 text-xs text-surface-400">{{ title }}</span>
             </td>
             <td class="px-3 py-2"><DifficultyDisplay :difficulty="deck.difficulty" :difficulty-raw="deck.difficulty" /></td>

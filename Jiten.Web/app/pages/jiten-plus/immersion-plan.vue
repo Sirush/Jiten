@@ -74,6 +74,7 @@
     mediaType: number;
     genres: number[];
     difficulty: number;
+    adjustedDifficulty?: number | null;
     coverage: number;
     newWords: number;
     goalNewWords: number | null;
@@ -829,14 +830,20 @@
     for (const step of activePayload.value?.steps ?? []) {
       characters += step.characterCount ?? 0;
       if (step.speechDuration > 0) hours += step.speechDuration / 3_600_000;
-      else if (step.characterCount > 0) hours += step.characterCount / store.readingSpeed;
+      else if (step.characterCount > 0) hours += step.characterCount / store.readingSpeedFor(step.adjustedDifficulty ?? step.difficulty);
     }
     return { characters, hours };
   });
 
+  const readingSpeedPhrase = computed(() =>
+    store.readingSpeedByDifficulty
+      ? 'your reading speed for each title’s difficulty'
+      : `your reading speed of ${store.readingSpeed.toLocaleString()} characters per hour`
+  );
+
   function stepHours(step: RoadmapStep): number {
     if (step.speechDuration > 0) return step.speechDuration / 3_600_000;
-    return step.characterCount > 0 ? step.characterCount / store.readingSpeed : 0;
+    return step.characterCount > 0 ? step.characterCount / store.readingSpeedFor(step.adjustedDifficulty ?? step.difficulty) : 0;
   }
 
   function formatHours(hours: number): string {
@@ -1328,7 +1335,7 @@
                       <div class="flex items-center gap-3">
                         <img :src="coverUrl(option.coverName)" :alt="localiseTitle(option)" class="h-14 w-10 shrink-0 rounded object-cover" />
                         <div class="min-w-0">
-                          <div class="truncate text-sm font-medium">{{ localiseTitle(option) }}</div>
+                          <div class="truncate text-sm font-medium" v-bind="japaneseTextAttrs(localiseTitle(option))">{{ localiseTitle(option) }}</div>
                           <div class="text-xs opacity-70">{{ getMediaTypeText(option.mediaType) }}</div>
                         </div>
                       </div>
@@ -1760,7 +1767,7 @@
                     <div class="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">
                       Time
                       <Tooltip
-                        :content="`Anime, film, drama and audio are timed by their speech duration; everything else by your reading speed of ${store.readingSpeed.toLocaleString()} characters per hour, which you can change in the quick settings cog at the top right.`"
+                        :content="`Anime, film, drama and audio are timed by their speech duration; everything else by ${readingSpeedPhrase}, which you can change in the display settings.`"
                         placement="top"
                       >
                         <i class="pi pi-info-circle ml-0.5 cursor-help text-xs text-primary-400" />
@@ -1840,7 +1847,7 @@
                   <!-- Difficulty — matches the deck card's stat row -->
                   <div class="stat-row mt-1 flex items-center justify-between">
                     <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">Difficulty</span>
-                    <DifficultyDisplay :difficulty="step.difficulty" />
+                    <DifficultyDisplay :difficulty="step.adjustedDifficulty ?? step.difficulty" />
                   </div>
 
                   <div v-if="stepHours(step) > 0" class="stat-row flex items-center justify-between">
@@ -1850,7 +1857,7 @@
                         :content="
                           step.speechDuration > 0
                             ? 'Total duration of speech, excluding silence.'
-                            : `At your reading speed of ${store.readingSpeed.toLocaleString()} characters per hour.`
+                            : `At ${readingSpeedPhrase}.`
                         "
                         placement="top"
                       >

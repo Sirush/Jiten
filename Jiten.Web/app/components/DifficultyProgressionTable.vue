@@ -2,7 +2,9 @@
   import { computed } from 'vue';
   import type { ProgressionSegmentDto } from '~/types';
   import { MediaType } from '~/types';
-  import { getDifficultyTextClass, peakColour, formatDifficultyValue } from '~/utils/difficultyColours';
+  import { peakColour, formatDifficultyValue } from '~/utils/difficultyColours';
+
+  const { textClass: getDifficultyTextClass } = useDifficultyColours();
 
   const props = defineProps<{
     progression: ProgressionSegmentDto[];

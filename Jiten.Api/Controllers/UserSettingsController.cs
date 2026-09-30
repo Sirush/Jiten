@@ -13,7 +13,7 @@ namespace Jiten.Api.Controllers;
 [ApiController]
 [Route("api/user/settings")]
 [Authorize]
-public class UserSettingsController(
+public partial class UserSettingsController(
     UserDbContext context,
     ILogger<UserSettingsController> logger,
     ICurrentUserService currentUserService) : ControllerBase

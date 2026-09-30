@@ -10,9 +10,9 @@ internal static class ResegmentationScorer
     private const int MaxEdgeLength      = 10;
     private const int MaxEdgesPerStart   = 10;
     private const int BeamWidth          = 16;
+    private const int KanaReadingFragmentMaxRank = 10000;
 
-    /// Katakana particles that legitimately appear as single-char segments in katakana-styled
-    /// text (オマエガ来イ, ナニガ悪イ). Other single kana are treated as shred noise.
+    /// <summary>Single-kana particles valid in katakana-styled text (オマエガ来イ); other single kana are shred noise.</summary>
     internal static bool IsKatakanaParticleChar(char c) =>
         c is 'ガ' or 'ヲ' or 'ニ' or 'ハ' or 'ヘ' or 'デ' or 'ト' or 'モ' or 'カ' or 'ノ';
 
@@ -28,10 +28,7 @@ internal static class ResegmentationScorer
 
         for (int len = maxLen; len >= 1 && result.Count < MaxEdgesPerStart; len--)
         {
-            // Single-kana edges crowd the beam with high-frequency noise entries (部/リ/ン...) and
-            // prune correct paths (ゴブリンスレイヤー → ゴ+ブ+リ+ン+スレイヤー). Allowed only where the
-            // engine's HasBadSingleKana gate accepts them: honorific お/ご at the start, or a
-            // katakana-styled particle (オマエガ → オマエ+ガ, ナニガ悪イ → ナニ+ガ+悪イ).
+            // Single-kana noise (リ/ン) crowds correct paths out of the beam; mirrors the engine's HasBadSingleKana gate.
             if (len == 1 && JapaneseTextHelper.IsKana(spanText[startPos])
                          && !(startPos == 0 && spanText[startPos] is 'お' or 'ご')
                          && !IsKatakanaParticleChar(spanText[startPos]))
@@ -63,9 +60,7 @@ internal static class ResegmentationScorer
         return result;
     }
 
-    // A compound decomposes into nominal material: a segment whose every match is a bare verb
-    // (スク→空く) is never a component, and suffix/particle/auxiliary-only matches (ディ, whose
-    // only entry is the suffix デー "day") can only close a span, prefix-only matches only open one.
+    // Verb-only matches (スク→空く) are never components; suffix-only (ディ→デー) only close a span, prefix-only only open one.
     private static bool IsPlausibleSegment(SpanTokenCandidate edge,
         Dictionary<int, JmDictWordMeta> wordMeta, bool isFirst, bool isFinal)
     {
@@ -104,8 +99,7 @@ internal static class ResegmentationScorer
         if (spanText.Length == 0 || spanText.Length > MaxSpanLength)
             return null;
 
-        // beamByPos[pos] = list of (segmentCount, lastLength, partialScore, segments)
-        // partialScore = sum of per-segment frequency bonuses minus 15 per segment (matches ScorePath's additive terms)
+        // partialScore must track ScorePath's per-segment additive terms.
         var beamByPos = new Dictionary<int, List<(int segCount, int lastLen, int partialScore, List<SpanTokenCandidate> segs)>>();
         beamByPos[0] = [(0, 0, 0, [])];
 
@@ -119,24 +113,23 @@ internal static class ResegmentationScorer
                 continue;
 
             var edges = BuildEdges(spanText, pos, lookups);
-            // Drop the trivial whole-span edge: for a name-only span it just re-finds the bad name,
-            // so only genuine multi-segment paths should remain.
+            // For a name-only span the whole-span edge just re-finds the bad name.
             if (forbidFullSpanEdge && pos == 0)
                 edges.RemoveAll(e => e.Length == spanText.Length);
-            // Scoped to short fragments of pure-katakana spans: that is where a hiragana-normalised
-            // lookup invents verb/suffix readings for word fragments (テラバイトディスク → ディ|スク).
-            // Kanji-bearing or hiragana spans (elongated verbs, katakana-styled sentences with
-            // particles) resegment through grammar tokens legitimately.
+            // A katakana fragment attested only via a rare kanji word's reading (アンブ → 安否) is coincidence.
+            if (filterKatakanaFragments && frequencyRanks != null)
+                edges.RemoveAll(e => e.Length < spanText.Length
+                                     && !lookups.ContainsKey(spanText.Substring(e.StartChar, e.Length))
+                                     && !e.WordIds.Exists(id => frequencyRanks.TryGetValue(id, out var r)
+                                                                && r <= KanaReadingFragmentMaxRank));
+            // Pure-katakana only: kana-normalised lookup invents verb/suffix readings (テラバイトディスク → ディ|スク).
             if (filterKatakanaFragments)
                 edges.RemoveAll(e => e.Length <= 2 && e.Length < spanText.Length
                                      && !(e.Length == 1 && IsKatakanaParticleChar(spanText[e.StartChar]))
                                      && !(e.Length == 1 && pos == 0 && spanText[0] == 'ド')
                                      && !IsPlausibleSegment(e, wordMeta!, pos == 0,
                                          pos + e.Length == spanText.Length));
-            // In a mixed span, a cut between two katakana characters is never a real word
-            // boundary: ポンコツ車 splits ポンコツ|車, not ポン|コツ|車; クオンツが splits
-            // クオンツ|が. Pure-katakana spans keep the plausibility filter above instead
-            // (テラバイト|ディスク is a legitimate intra-katakana split).
+            // Mixed spans never cut inside a katakana run (ポンコツ車 → ポンコツ|車); pure katakana may (テラバイト|ディスク).
             if (!JapaneseTextHelper.IsAllKatakana(spanText))
                 edges.RemoveAll(e => pos + e.Length < spanText.Length
                                      && IsKatakanaRunChar(spanText[pos + e.Length - 1])
@@ -186,14 +179,12 @@ internal static class ResegmentationScorer
                 }
             }
 
-            // Prune each bucket to beamWidth
             foreach (var (p, bucket) in beamByPos)
             {
                 if (bucket.Count > beamWidth)
                 {
                     if (frequencyRanks != null)
                     {
-                        // Higher partial score first (encodes both frequency quality and fewer-segments penalty)
                         bucket.Sort((a, b) => b.partialScore.CompareTo(a.partialScore));
                     }
                     else
@@ -212,10 +203,7 @@ internal static class ResegmentationScorer
         if (!beamByPos.TryGetValue(spanText.Length, out var completeStates) || completeStates.Count == 0)
             return null;
 
-        // Prefer paths that:
-        // 1. don't exceed half the span length in segment count (too fragmented)
-        // 2. don't have single-char kana in non-terminal positions (likely wrong word boundary)
-        //    Exception: a single-char katakana at the LAST position is allowed (common particles like ガ/ニ/ヲ)
+        // A final single kana is allowed since it is usually a particle (ガ/ニ/ヲ).
         int maxSegments = (spanText.Length + 1) / 2;
         var validStates = completeStates
             .Where(s => s.segCount <= maxSegments && !HasNonTerminalSingleCharKana(s.segs, spanText))
@@ -225,10 +213,7 @@ internal static class ResegmentationScorer
         if (validStates.Count == 0)
             validStates = completeStates;
 
-        // A long pure-katakana span shredding into three-plus short fragments (コーポ|レイ|テッド) is
-        // an OOV loanword, not a compound of real words — no path is better than a junk path. Two-piece
-        // splits stay (a two-name sequence, or a real katakana compound テラバイト|ディスク), as do
-        // katakana-styled sentences carrying particle segments.
+        // 3+ short katakana fragments (コーポ|レイ|テッド) are an OOV loanword; two-piece splits (テラバイト|ディスク) stay.
         if (filterKatakanaFragments && spanText.Length >= 5)
         {
             validStates.RemoveAll(s => s.segs.Count >= 3
@@ -241,7 +226,7 @@ internal static class ResegmentationScorer
 
         if (frequencyRanks != null)
         {
-            // Use full ScorePath for final selection — adds structural bonuses not tracked in partial score.
+            // ScorePath adds structural bonuses the partial score omits.
             return validStates
                 .Select(s => new SpanPath(s.segs))
                 .MaxBy(p => ScorePath(p, frequencyRanks, spanText));
@@ -264,9 +249,7 @@ internal static class ResegmentationScorer
         score -= 15 * path.Segments.Count;
 
         bool noWeakSingleCharSegments = true;
-        // A leftover single Latin char is shred noise only when the whole span is Latin — an acronym
-        // split into Latin fragments (ＤＡＴＡ → Ｄ + ＡＴＡ drops the Ｄ). A single Latin letter prefixing a
-        // real word (Ｂ + メロ) is a valid extraction and must keep the clean-split bonus.
+        // A single Latin char is noise only in an all-Latin span (ＤＡＴＡ → Ｄ+ＡＴＡ), not before a word (Ｂ+メロ).
         bool spanAllLatin = spanText != null && JapaneseTextHelper.IsAllLatin(spanText);
         foreach (var seg in path.Segments)
         {

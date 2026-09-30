@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import type { UserExampleSentenceDto } from '~/types';
+  import { useJitenStore } from '~/stores/jitenStore';
 
+  const jitenStore = useJitenStore();
   const props = defineProps<{
     sentence: UserExampleSentenceDto;
     // When true, shows an edit pencil that opens the inline editor (used on the vocabulary page).
@@ -40,7 +42,7 @@
     <template v-else>
       <blockquote class="relative inline-block border-l-4 border-yellow-500 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r shadow-sm overflow-hidden">
         <div class="flex items-start gap-2">
-          <div class="md:text-lg text-sm flex-1" lang="ja" v-html="formattedText" />
+          <div class="flex-1" :class="sentenceSizeClass(jitenStore.sentenceSize)" lang="ja" v-html="formattedText" />
           <TtsButton :text="plainText" :custom-sentence-id="sentence.userExampleSentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
           <button
             v-if="canEdit"

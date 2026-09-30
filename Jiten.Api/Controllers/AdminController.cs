@@ -427,7 +427,10 @@ public partial class AdminController(
             var (text, stats) = await GetTextFromFile(parentFile);
             deck.OriginalFileName = parentFile.FileName;
             if (deck.RawText != null)
+            {
                 deck.RawText.RawText = text;
+                deck.RawText.SpeechBoundaries = null;
+            }
             else
                 deck.RawText = new DeckRawText(text);
             if (stats.DurationMs > 0)
@@ -508,6 +511,7 @@ public partial class AdminController(
                         var (text, stats) = await GetTextFromFile(subdeck.File);
                         existingSubdeck.OriginalFileName = subdeck.File.FileName;
                         existingSubdeck.RawText!.RawText = text;
+                        existingSubdeck.RawText.SpeechBoundaries = null;
                         if (stats.DurationMs > 0)
                         {
                             existingSubdeck.SpeechDuration = stats.DurationMs;
@@ -1406,6 +1410,22 @@ public partial class AdminController(
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { Message = "Word replacement failed", Details = ex.Message });
         }
+    }
+
+    [HttpGet("moved-forms/preview")]
+    public async Task<ActionResult<List<MovedFormMigrationRow>>> PreviewMovedForms(
+        [FromServices] WordReplacementService wordReplacementService)
+    {
+        return await wordReplacementService.MigrateMovedFormsAsync(dryRun: true);
+    }
+
+    [HttpPost("moved-forms/migrate")]
+    public IActionResult MigrateMovedForms()
+    {
+        backgroundJobs.Enqueue<WordReplacementService>(s => s.MigrateMovedFormsAsync(false));
+
+        logger.LogWarning("Admin queued moved-form migration");
+        return Ok(new { Message = "Moved-form migration has been queued" });
     }
 
     [HttpPost("split-word")]

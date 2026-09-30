@@ -212,7 +212,7 @@ public class Deconjugator
         Interlocked.Exchange(ref _cacheEvictionCount, 0);
     }
 
-    /// <summary>Results are ordered by Text.Length descending, then ordinal — call sites must not re-sort.</summary>
+    /// <summary>Results are ordered by Text.Length descending, then ordinal; call sites must not re-sort.</summary>
     public IReadOnlyList<DeconjugationForm> Deconjugate(string text)
     {
         if (TryGetCached(text, out var cached))
@@ -262,8 +262,7 @@ public class Deconjugator
         return SortForms(ordered);
     }
 
-    // Length descending, then ordinal text, then discovery order: a stable sort, so equal-key
-    // forms (same text, different chains) keep the order the BFS found them in.
+    // Stable sort: same-text forms with different chains keep BFS discovery order.
     private static DeconjugationForm[] SortForms(List<DeconjugationForm> ordered)
     {
         int n = ordered.Count;
@@ -291,8 +290,7 @@ public class Deconjugator
         var text = form.Text;
         int maxSuffix = Math.Min(_maxConEndLength, text.Length);
 
-        // One buffer for every candidate: a stackalloc inside the loops would accumulate
-        // stack space until the method returns.
+        // One shared buffer: a stackalloc inside the loops would pile up stack until return.
         int maxNewTextLength = text.Length + _maxDecEndLength;
         Span<char> buffer = maxNewTextLength <= 256 ? stackalloc char[256] : new char[maxNewTextLength];
 
@@ -383,8 +381,7 @@ public class Deconjugator
         return new DeconjugationForm(newText, form.OriginalText, tags, seenText, process);
     }
 
-    // Parent chain, then the parent text when the chain is empty, then the new text; a text
-    // already on the chain keeps its first position.
+    // A text already on the chain keeps its first position.
     private static SeenTextNode BuildSeenText(DeconjugationForm form, string newText)
     {
         var chain = form.SeenChain ?? SeenTextNode.Append(null, form.Text);

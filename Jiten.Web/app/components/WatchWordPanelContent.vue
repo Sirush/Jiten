@@ -69,7 +69,7 @@
           :to="`/vocabulary/${word.wordId}/${word.mainReading.readingIndex}`"
           class="text-3xl leading-tight font-noto-sans !text-surface-900 dark:!text-surface-0 hover:underline"
           lang="ja"
-          v-html="convertToRuby(word.mainReading.text)"
+          v-html="convertToRuby(word.mainReading.text, undefined, states)"
         />
         <div v-if="conjugationText" class="text-xs text-surface-500 dark:text-surface-400">Conjugation: {{ conjugationText }}</div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-surface-500 dark:text-surface-400">
@@ -83,11 +83,7 @@
     <div class="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col gap-3">
       <Skeleton v-if="loading || !word" height="10rem" />
       <template v-else>
-        <ClientOnly>
-          <div v-if="word.pitchAccents && word.pitchAccents.length > 0" class="flex flex-wrap gap-6">
-            <LazyPitchDiagram v-for="pitchAccent in word.pitchAccents" :key="pitchAccent" :reading="word.mainReading.text" :pitch-accent="pitchAccent" />
-          </div>
-        </ClientOnly>
+        <PitchAccentView v-if="word.pitchAccents?.length" :reading="word.mainReading.text" :accents="word.pitchAccents" />
 
         <VocabularyDictionaryDefinitions :resolved-groups="resolvedGroups" :is-compact="false" :current-reading-index="word.mainReading.readingIndex" :readings="word.alternativeReadings" />
 

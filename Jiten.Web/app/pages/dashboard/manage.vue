@@ -17,9 +17,24 @@
     exampleSentenceWordsUpdated: number;
     fsrsCardsUpdated: number;
     fsrsCardsSkipped: number;
+    studyDeckWordsUpdated: number;
+    wordSetMembersUpdated: number;
+    cardMediaMoved: number;
+    userSentencesMoved: number;
     affectedDeckCount: number;
     parentDecksQueued: number;
     wasDryRun: boolean;
+  }
+
+  interface MovedFormMigrationRow {
+    text: string;
+    oldWordId: number;
+    oldReadingIndex: number;
+    newWordId: number;
+    newReadingIndex: number;
+    ownerCount: number;
+    skipped: 'ambiguous' | 'deleted' | null;
+    result: WordReplacementResult | null;
   }
 
   interface SplitWordResult {
@@ -73,6 +88,8 @@
     difficultyVotes: false,
     speechSpeed: false,
     lapseRecount: false,
+    movedFormsPreview: false,
+    movedFormsExecute: false,
     wordReplacementPreview: false,
     wordReplacementExecute: false,
     splitWordPreview: false,
@@ -483,6 +500,71 @@
     } finally {
       isLoading.value.lapseRecount = false;
     }
+  };
+
+  const movedFormRows = ref<MovedFormMigrationRow[] | null>(null);
+
+  const movedFormRemaps = computed(() =>
+    (movedFormRows.value ?? [])
+      .filter((r) => !r.skipped && r.result)
+      .map((r) => ({ ...r, deckWords: r.result!.deckWordsUpdated + r.result!.deckWordsMerged }))
+      .sort((a, b) => b.deckWords - a.deckWords),
+  );
+
+  const movedFormSkipped = computed(() => (movedFormRows.value ?? []).filter((r) => r.skipped));
+
+  const movedFormTotals = computed(() => {
+    const totals = { deckWords: 0, cards: 0, mergedCards: 0, studyDeckWords: 0, wordSetMembers: 0 };
+    for (const r of movedFormRemaps.value) {
+      totals.deckWords += r.deckWords;
+      totals.cards += r.result!.fsrsCardsUpdated;
+      totals.mergedCards += r.result!.fsrsCardsSkipped;
+      totals.studyDeckWords += r.result!.studyDeckWordsUpdated;
+      totals.wordSetMembers += r.result!.wordSetMembersUpdated;
+    }
+    return totals;
+  });
+
+  const previewMovedForms = async () => {
+    isLoading.value.movedFormsPreview = true;
+    movedFormRows.value = null;
+    try {
+      movedFormRows.value = await $api<MovedFormMigrationRow[]>('/admin/moved-forms/preview');
+    } catch (error) {
+      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to preview moved forms', life: 5000 });
+      console.error('Error previewing moved forms:', error);
+    } finally {
+      isLoading.value.movedFormsPreview = false;
+    }
+  };
+
+  const migrateMovedForms = async () => {
+    isLoading.value.movedFormsExecute = true;
+    try {
+      await $api('/admin/moved-forms/migrate', { method: 'POST' });
+      movedFormRows.value = null;
+      toast.add({ severity: 'success', summary: 'Success', detail: 'Moved-form remap queued', life: 5000 });
+    } catch (error) {
+      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to queue moved-form remap', life: 5000 });
+      console.error('Error queueing moved-form remap:', error);
+    } finally {
+      isLoading.value.movedFormsExecute = false;
+    }
+  };
+
+  const confirmMigrateMovedForms = () => {
+    const t = movedFormTotals.value;
+    confirm.require({
+      message:
+        `Remap ${movedFormRemaps.value.length} moved forms: ${t.deckWords} deck words, ${t.cards} cards (${t.mergedCards} merged), ` +
+        `${t.studyDeckWords} study deck words and ${t.wordSetMembers} word set members. Continue?`,
+      header: 'Remap moved forms',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-danger',
+      rejectClass: 'p-button-secondary',
+      accept: () => migrateMovedForms(),
+      reject: () => {},
+    });
   };
 
   const confirmRecountLapses = () => {
@@ -1280,6 +1362,96 @@
       </Card>
 
       <Card class="shadow-md">
+        <template #title>Remap Moved Dictionary Forms</template>
+        <template #content>
+          <p class="mb-4">
+            When JMdict moves a spelling to another entry, cards, study decks, word sets and deck words stay on the old entry. This moves them to the new one.
+            Run it after a full reparse, then recompute frequencies. Ambiguous moves and deleted entries are left to the reparse.
+          </p>
+
+          <div v-if="movedFormRows" class="mb-4 p-4 bg-surface-100 dark:bg-surface-800 rounded-lg">
+            <h4 class="font-semibold mb-2">Preview</h4>
+            <p class="text-sm mb-1">
+              <strong>{{ movedFormRemaps.length }}</strong> forms to remap, {{ movedFormSkipped.length }} left to the reparse
+              ({{ movedFormSkipped.filter((r) => r.skipped === 'ambiguous').length }} ambiguous,
+              {{ movedFormSkipped.filter((r) => r.skipped === 'deleted').length }} deleted entries).
+            </p>
+            <p class="text-sm mb-3">
+              {{ movedFormTotals.deckWords }} deck words, {{ movedFormTotals.cards }} cards ({{ movedFormTotals.mergedCards }} merged, the card with more
+              reviews is kept), {{ movedFormTotals.studyDeckWords }} study deck words, {{ movedFormTotals.wordSetMembers }} word set members.
+            </p>
+
+            <div v-if="movedFormRemaps.length" class="max-h-96 overflow-auto rounded border border-surface-200 dark:border-surface-700">
+              <table class="w-full text-sm">
+                <thead class="sticky top-0 bg-surface-100 dark:bg-surface-800">
+                  <tr class="text-left">
+                    <th class="px-2 py-1">Form</th>
+                    <th class="px-2 py-1">From</th>
+                    <th class="px-2 py-1">To</th>
+                    <th class="px-2 py-1 text-right">Deck words</th>
+                    <th class="px-2 py-1 text-right">Cards</th>
+                    <th class="px-2 py-1 text-right">Merged</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="r in movedFormRemaps"
+                    :key="`${r.oldWordId}-${r.oldReadingIndex}`"
+                    class="border-t border-surface-200 dark:border-surface-700"
+                  >
+                    <td class="px-2 py-1 whitespace-nowrap">{{ r.text }}</td>
+                    <td class="px-2 py-1 whitespace-nowrap">
+                      <NuxtLink :to="`/vocabulary/${r.oldWordId}/${r.oldReadingIndex}`" target="_blank" class="underline">
+                        {{ r.oldWordId }}/{{ r.oldReadingIndex }}
+                      </NuxtLink>
+                    </td>
+                    <td class="px-2 py-1 whitespace-nowrap">
+                      <NuxtLink :to="`/vocabulary/${r.newWordId}/${r.newReadingIndex}`" target="_blank" class="underline">
+                        {{ r.newWordId }}/{{ r.newReadingIndex }}
+                      </NuxtLink>
+                    </td>
+                    <td class="px-2 py-1 text-right">{{ r.deckWords }}</td>
+                    <td class="px-2 py-1 text-right">{{ r.result!.fsrsCardsUpdated }}</td>
+                    <td class="px-2 py-1 text-right">{{ r.result!.fsrsCardsSkipped }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-else class="text-sm">Nothing to remap.</p>
+
+            <details v-if="movedFormSkipped.length" class="mt-3 text-sm">
+              <summary class="cursor-pointer">Show the {{ movedFormSkipped.length }} forms left to the reparse</summary>
+              <ul class="mt-2 max-h-64 overflow-auto space-y-0.5">
+                <li v-for="r in movedFormSkipped" :key="`${r.oldWordId}-${r.oldReadingIndex}`">
+                  {{ r.text }}: {{ r.oldWordId }}/{{ r.oldReadingIndex }},
+                  {{ r.skipped === 'ambiguous' ? `${r.ownerCount} entries share this form` : 'old entry deleted' }}
+                </li>
+              </ul>
+            </details>
+          </div>
+
+          <div class="flex justify-center gap-2">
+            <Button
+              label="Preview Changes"
+              icon="pi pi-search"
+              class="p-button-info"
+              :disabled="isLoading.movedFormsPreview"
+              :loading="isLoading.movedFormsPreview"
+              @click="previewMovedForms"
+            />
+            <Button
+              label="Run Remap"
+              icon="pi pi-check"
+              class="p-button-danger"
+              :disabled="!movedFormRemaps.length || isLoading.movedFormsExecute"
+              :loading="isLoading.movedFormsExecute"
+              @click="confirmMigrateMovedForms"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
         <template #title>Replace Word Reading</template>
         <template #content>
           <p class="mb-4">Replace a misparsed WordId/ReadingIndex with the correct one across all decks.</p>
@@ -1362,8 +1534,8 @@
                 {{ wordReplacementResult.fsrsCardsUpdated }}
               </li>
               <li>
-                <strong>User Vocab Skipped:</strong>
-                {{ wordReplacementResult.fsrsCardsSkipped }} (user has both)
+                <strong>User Vocab Merged:</strong>
+                {{ wordReplacementResult.fsrsCardsSkipped }} (user has both, the card with more reviews is kept)
               </li>
               <li>
                 <strong>Parent Decks to Recalc:</strong>

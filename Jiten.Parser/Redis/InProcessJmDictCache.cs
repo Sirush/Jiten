@@ -5,20 +5,7 @@ using Jiten.Parser.Scoring;
 
 namespace Jiten.Parser.Data.Redis;
 
-/// <summary>
-/// In-process bounded cache of <see cref="JmDictWord"/> sitting in front of an inner (Redis) cache.
-/// Eliminates the repeated Redis MGET + MessagePack deserialize for hot vocabulary that recurs across
-/// documents/sentences (の/する/いる/common kanji…), which the per-document batch cache cannot.
-///
-/// Storage is a two-generation approximate LRU (mirrors <c>KanaConverter</c>): bounded to ~2×
-/// <see cref="MaxGen0Entries"/> resident. With ~0.8–0.95 KB/word that is ~40–90 MB for 50–100K words.
-///
-/// Cached instances are SHARED across documents and threads and treated as READ-ONLY. At insert,
-/// before an instance becomes visible, we (a) apply <see cref="PriorityOverrides"/> once and (b)
-/// pre-warm the lazy CachedPOS/CachedPOSMask/IsSuruVerb fields, so concurrent readers never trigger a
-/// lazy-init race and never need to mutate the instance. Callers that copy a word's POS list into an
-/// escaping <c>DeckWord</c> must copy the list (the Parser DeckWord builds do: <c>[..word.CachedPOS]</c>).
-/// </summary>
+/// <summary>Two-generation LRU over Redis; instances are shared read-only, so escaping DeckWords must copy CachedPOS.</summary>
 public sealed class InProcessJmDictCache : IJmDictCache
 {
     private readonly IJmDictCache _inner;
@@ -47,7 +34,7 @@ public sealed class InProcessJmDictCache : IJmDictCache
         var gen1 = _gen1;
         if (gen1 != null && gen1.TryGetValue(id, out word!))
         {
-            Add(id, word); // promote previous-generation hit into gen0
+            Add(id, word);
             return true;
         }
 
@@ -55,11 +42,10 @@ public sealed class InProcessJmDictCache : IJmDictCache
         return false;
     }
 
-    // Prepare a freshly fetched instance once, then publish it to gen0.
     private void Insert(int id, JmDictWord word)
     {
         PriorityOverrides.Apply(word);
-        _ = word.CachedPOS;     // pre-warm lazy fields while still single-owner
+        _ = word.CachedPOS;     // Pre-warm before publishing; concurrent readers would race the lazy init.
         _ = word.CachedPOSMask;
         _ = word.IsSuruVerb;
         Add(id, word);
@@ -101,7 +87,7 @@ public sealed class InProcessJmDictCache : IJmDictCache
 
     public async Task<Dictionary<int, JmDictWord>> GetWordsAsync(IEnumerable<int> wordIds)
     {
-        var result = new Dictionary<int, JmDictWord>();
+        var result = new Dictionary<int, JmDictWord>(wordIds.TryGetNonEnumeratedCount(out int count) ? count : 0);
         List<int>? missed = null;
 
         foreach (var id in wordIds)

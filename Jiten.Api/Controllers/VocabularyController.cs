@@ -1,9 +1,11 @@
-﻿using Jiten.Api.Dtos;
+using Jiten.Api.Authorization;
+using Jiten.Api.Dtos;
 using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
+using Jiten.Core.Data.User;
 using Jiten.Core.Utils;
 using Jiten.Parser;
 using Microsoft.AspNetCore.Mvc;
@@ -487,8 +489,12 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     /// <param name="readingIndex">The reading index for the word.</param>
     /// <param name="alreadyLoaded">A list of deck IDs already loaded on the client to avoid duplicates.</param>
     /// <param name="mediaType">Optional media type filter.</param>
+    /// <param name="mediaTypes">Optional media type filter; several may be given, and they combine with mediaType.</param>
     /// <returns>A list of example sentences with metadata.</returns>
     private const int MaxExcludedDeckIds = 500;
+
+    private static List<MediaType> MediaTypeFilter(MediaType? mediaType, List<MediaType>? mediaTypes) =>
+        (mediaTypes ?? []).Concat(mediaType.HasValue ? [mediaType.Value] : []).Where(Enum.IsDefined).Distinct().ToList();
 
     [HttpPost("{wordId}/{readingIndex}/random-example-sentences/{mediaType?}")]
     [EnableRateLimiting("heavy")]
@@ -497,10 +503,11 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                           "Returns up to three random example sentences for the given word and reading index, excluding already loaded ones.")]
     [ProducesResponseType(typeof(List<ExampleSentenceDto>), StatusCodes.Status200OK)]
     public async Task<IResult> GetRandomExampleSentences([FromRoute] int wordId, [FromRoute] int readingIndex,
-                                                         [FromBody] List<int> alreadyLoaded, [FromRoute] MediaType? mediaType = null)
+                                                         [FromBody] List<int> alreadyLoaded, [FromRoute] MediaType? mediaType = null,
+                                                         [FromQuery] List<MediaType>? mediaTypes = null)
     {
         if (alreadyLoaded.Count > MaxExcludedDeckIds) return Results.BadRequest();
-        return Results.Ok(await exampleSentences.GetRandomAsync(wordId, readingIndex, alreadyLoaded, mediaType, 3));
+        return Results.Ok(await exampleSentences.GetRandomAsync(wordId, readingIndex, alreadyLoaded, MediaTypeFilter(mediaType, mediaTypes), 3));
     }
 
     [HttpPost("{wordId}/{readingIndex}/example-sentences-by-difficulty/{mediaType?}")]
@@ -514,11 +521,41 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         [FromRoute] int wordId, [FromRoute] int readingIndex,
         [FromBody] List<int> alreadyLoaded, [FromRoute] MediaType? mediaType = null,
         [FromQuery] float minDifficulty = 0f, [FromQuery] float maxDifficulty = 0.5f,
-        [FromQuery] bool descending = false, [FromQuery] int take = 3)
+        [FromQuery] bool descending = false, [FromQuery] int take = 3, [FromQuery] List<MediaType>? mediaTypes = null)
     {
         if (alreadyLoaded.Count > MaxExcludedDeckIds) return Results.BadRequest();
-        return Results.Ok(await exampleSentences.GetByDifficultyAsync(wordId, readingIndex, alreadyLoaded, mediaType,
+        return Results.Ok(await exampleSentences.GetByDifficultyAsync(wordId, readingIndex, alreadyLoaded, MediaTypeFilter(mediaType, mediaTypes),
                                                                       minDifficulty, maxDifficulty, descending, take));
+    }
+
+    [HttpPost("{wordId}/{readingIndex}/readable-sentences")]
+    [JitenPlus(Feature = "readable-sentences")]
+    [EnableRateLimiting("heavy")]
+    [SwaggerOperation(Summary = "Find sentences the user can read",
+                      Description = "Sentences holding the word with exactly `unknown` content words the caller doesn't know besides it. " +
+                                    "Pass the returned cursor and the same seed to continue a search.")]
+    [ProducesResponseType(typeof(ReadableSentencesResponse), StatusCodes.Status200OK)]
+    public async Task<IResult> GetReadableSentences([FromRoute] int wordId, [FromRoute] byte readingIndex,
+                                                    [FromBody] ReadableSentencesRequest request,
+                                                    [FromServices] IReadableSentenceSearch search)
+    {
+        int[]? deckIds = null;
+        var statuses = request.Statuses.Where(s => s is DeckStatus.Planning or DeckStatus.Ongoing or DeckStatus.Completed).Distinct().ToList();
+        if (statuses.Count > 0)
+        {
+            var userId = currentUserService.UserId!;
+            var marked = await userContext.UserDeckPreferences.AsNoTracking()
+                                          .Where(p => p.UserId == userId && statuses.Contains(p.Status))
+                                          .Select(p => p.DeckId)
+                                          .ToListAsync();
+            var subdecks = await context.Decks.AsNoTracking()
+                                        .Where(d => d.ParentDeckId.HasValue && marked.Contains(d.ParentDeckId.Value))
+                                        .Select(d => d.DeckId)
+                                        .ToListAsync();
+            deckIds = marked.Union(subdecks).ToArray();
+        }
+
+        return Results.Ok(await search.SearchAsync(wordId, readingIndex, request, deckIds));
     }
 
 

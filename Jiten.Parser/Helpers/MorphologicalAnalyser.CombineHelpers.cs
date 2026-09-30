@@ -59,11 +59,9 @@ public partial class MorphologicalAnalyser
             currentWord.PartOfSpeech == PartOfSpeech.Verb &&
             nextWord.DictionaryForm != "おる" &&
             nextWord.Text != currentWord.Text &&
-            // A bare interjection is never a verb-dependent auxiliary: 持って + あ (mis-split 当たれ)
-            // must not fuse into 持ってあ.
+            // An interjection is never a verb dependant: 持って + あ (mis-split 当たれ) must not fuse.
             nextWord.PartOfSpeech != PartOfSpeech.Interjection &&
-            // くて is always an i-adjective te-form (verb te-forms are って/いて); dependant
-            // auxiliaries attach to verb te-forms only (頭が良くて + やりたい stays split)
+            // くて is an i-adjective te-form; dependants attach to verb te-forms only (頭が良くて + やりたい stays split).
             !currentWord.Text.EndsWith("くて", StringComparison.Ordinal));
 
     private List<WordInfo> CombineVerbPossibleDependants(List<WordInfo> wordInfos) =>
@@ -77,9 +75,7 @@ public partial class MorphologicalAnalyser
                    !currentWord.Text.EndsWith("くて", StringComparison.Ordinal) &&
                    !isClassicalWaRowTeForm &&
                    (nextWord.DictionaryForm is "しまう" or "こなす" or "いく" or "貰う" or "いる" or "ない" ||
-                    // Aspectual だす only re-attaches when the compound verb is real (走り出す):
-                    // an unattested pair (混じり+だした) stays split so the aspectual verb remains
-                    // a visible word instead of vanishing into an unmatchable merged surface.
+                    // Aspectual だす attaches only to an attested compound (走り出す); 混じり+だした stays split, not unmatchable.
                     (nextWord.DictionaryForm == "だす" && HasCompoundLookup != null &&
                      (HasCompoundLookup(currentWord.Text + "だす") || HasCompoundLookup(currentWord.Text + "出す"))) ||
                     (nextWord.DictionaryForm == "得る" && HasCompoundLookup != null &&
@@ -140,7 +136,6 @@ public partial class MorphologicalAnalyser
         {
             WordInfo currentWord = wordInfos[i];
 
-            // Pattern 1: Verb + て (particle) + te-form auxiliary (3 tokens)
             if (i + 2 < wordInfos.Count)
             {
                 WordInfo nextWord1 = wordInfos[i + 1];
@@ -161,26 +156,20 @@ public partial class MorphologicalAnalyser
                 }
             }
 
-            // Pattern 2: Word ending in て/で + subsidiary verb (2 tokens)
             if (i + 1 < wordInfos.Count)
             {
                 WordInfo nextWord = wordInfos[i + 1];
 
                 bool isClassicalWaRowTeForm = nextWord.DictionaryForm.EndsWith('う') &&
                                               nextWord.Text.EndsWith("いて", StringComparison.Ordinal);
-                // A demonstrative is never a te-form subsidiary verb: 夢見て + これ must not fuse
-                // into 夢見てこれ (これ spuriously deconjugates to a subsidiary-verb form). Gate on the
-                // demonstrative dict-form, not POS Pronoun — こん (来ん) is also POS Pronoun but is a
-                // genuine 来る negative that must still attach (出て+こん → 出てこん). Exception: これ
-                // followed by an inflection continuation (ない/た/ます/ん/ず) is the ら抜き potential stem
-                // of 来る (戻って|これ|なかった → 戻ってこれなかった), not the pronoun, and must still attach.
+                // Demonstratives never attach (夢見て + これ); gated on dict form, not POS, since Pronoun こん (来ん) must (出てこん).
+                // これ before an inflection (ない/た/ます) is 来る's ら抜き potential stem and attaches (戻ってこれなかった).
                 bool isDemonstrative = nextWord.DictionaryForm is "これ" or "それ" or "あれ" or "どれ";
                 bool koreIsPotentialStem = nextWord.DictionaryForm == "これ" && i + 2 < wordInfos.Count
                     && wordInfos[i + 2].DictionaryForm is "ない" or "無い" or "た" or "ます" or "ん" or "ぬ" or "ず" or "る";
                 if ((currentWord.Text.EndsWith('て') || currentWord.Text.EndsWith('で')) &&
                     currentWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective &&
-                    // くて is a genuine i-adjective te-form — subsidiary verbs attach to verb
-                    // te-forms only (頭が良くて + やりたい stays split)
+                    // くて is an i-adjective te-form; subsidiary verbs attach to verb te-forms only (良くて + やりたい).
                     !currentWord.Text.EndsWith("くて", StringComparison.Ordinal) &&
                     !isClassicalWaRowTeForm &&
                     nextWord.PartOfSpeech != PartOfSpeech.IAdjective &&
@@ -229,7 +218,7 @@ public partial class MorphologicalAnalyser
                 }
             }
 
-            // Pattern 3: Verb ending in っ + dialectal とる auxiliary (2 tokens)
+            // Dialectal とる (contracted ておる) after a っ stem: 待っとる.
             if (i + 1 < wordInfos.Count)
             {
                 WordInfo nextWord = wordInfos[i + 1];
@@ -275,15 +264,14 @@ public partial class MorphologicalAnalyser
 
     private static List<WordInfo> CopyAccumulatorUpTo(List<WordInfo> source, int upToExclusive)
     {
-        var list = new List<WordInfo>(source.Count);
+        // Slack for split stages, which append more tokens than they consume; a regrow copies the whole document.
+        var list = new List<WordInfo>(source.Count + source.Count / 32 + 8);
         for (int i = 0; i < upToExclusive; i++)
             list.Add(source[i]);
         return list;
     }
 
-    // Copy-on-write adjacent merge: folds nextWord into a growing accumulator whenever shouldMerge
-    // accepts the pair; the accumulator handed to the predicate already carries earlier merges.
-    // Returns the original list reference when nothing merges.
+    // Copy-on-write; shouldMerge sees the accumulator with earlier merges applied. Returns the input list when nothing merges.
     private static List<WordInfo> MergeAdjacentWhere(List<WordInfo> wordInfos, Func<WordInfo, WordInfo, bool> shouldMerge)
     {
         if (wordInfos.Count < 2)
@@ -318,12 +306,10 @@ public partial class MorphologicalAnalyser
         return newList;
     }
 
-    // On a match at tokens[i]: append replacement tokens via output() and return how many source
-    // tokens were consumed; return 0 for no match. result is the accumulator built so far (null
-    // while the scan is still all pass-through) — read-only peek at already-emitted tokens.
+    // Returns tokens consumed at i (0 = no match), emitting via output(); result is read-only, null until a rewrite fires.
     private delegate int TryRewriteAt(List<WordInfo> tokens, int i, List<WordInfo>? result, Func<List<WordInfo>> output);
 
-    // Copy-on-write scan-rewrite shell: returns the original list reference when no rewrite fires.
+    // Returns the input list when no rewrite fires.
     private static List<WordInfo> ScanRewrite(List<WordInfo> wordInfos, TryRewriteAt tryRewrite)
     {
         List<WordInfo>? result = null;

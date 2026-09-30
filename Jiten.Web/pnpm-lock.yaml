@@ -28,6 +28,15 @@ importers:
       '@fontsource-variable/noto-sans-jp':
         specifier: 5.2.10
         version: 5.2.10
+      '@fontsource/biz-udpgothic':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/klee-one':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/zen-maru-gothic':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@nuxt/content':
         specifier: ^3.14.0
         version: 3.14.0(better-sqlite3@12.11.1)(esbuild@0.27.7)(magic-string@1.2.2)(magicast@0.5.4)(oxc-parser@0.143.0)(rolldown@1.2.5)(rollup@4.62.0)(valibot@1.4.2(typescript@5.9.3))(vite@8.2.2(@types/node@25.9.3)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0))
@@ -819,6 +828,15 @@ packages:
 
   '@fontsource-variable/noto-sans-jp@5.2.10':
     resolution: {integrity: sha512-m0XfZ38rZtCaGAuAQL0cBPQ6fc/RguYEOqw66zvuLOV9vNRUBf9MFqyoazTu2JVCRIcnkrxbwF29UUaHHgTKdg==}
+
+  '@fontsource/biz-udpgothic@5.3.0':
+    resolution: {integrity: sha512-uBcdaC2/Bg7GEhzWSb2REs8azL1ys+KpI8TmPnJa2xtaD8DVMgsRbtIcEss8xjN5KRtp8E0+LFbG43FhkWZdPw==}
+
+  '@fontsource/klee-one@5.3.0':
+    resolution: {integrity: sha512-1mnMRQO70AnTCHaWy5ovYKjbvszpOp7//bMDZ+PnjBMmar5YRcbskVzM4u+Syd8CMWw353R3BvsrsKQrwVRnEw==}
+
+  '@fontsource/zen-maru-gothic@5.3.0':
+    resolution: {integrity: sha512-BuigfmzszMR3AOyAMSocQZ9bEq9o5sGCMOC/laI4TMpba1/KB1jxsdNFXWMUz02wVPd4vAVuMhsV00AQizFj3w==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -7502,6 +7520,12 @@ snapshots:
       - vue
 
   '@fontsource-variable/noto-sans-jp@5.2.10': {}
+
+  '@fontsource/biz-udpgothic@5.3.0': {}
+
+  '@fontsource/klee-one@5.3.0': {}
+
+  '@fontsource/zen-maru-gothic@5.3.0': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

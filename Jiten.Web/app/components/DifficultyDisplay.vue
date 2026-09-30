@@ -2,7 +2,7 @@
   import { computed } from 'vue';
   import { useJitenStore } from '~/stores/jitenStore';
   import { DifficultyDisplayStyle, DifficultyValueDisplayStyle } from '~/types';
-  import { difficultyNames, difficultyTextClasses, formatDifficultyValue } from '~/utils/difficultyColours';
+  import { difficultyNames, formatDifficultyValue } from '~/utils/difficultyColours';
 
   const props = defineProps<{
     difficulty: number;
@@ -19,7 +19,7 @@
   const nameValues = difficultyNames;
   const starValues = ['★☆☆☆☆', '★★☆☆☆', '★★★☆☆', '★★★★☆', '★★★★★', '★★★★★'];
 
-  const colorClasses = difficultyTextClasses;
+  const { textClass, adjustmentClass } = useDifficultyColours();
 
   const effectiveRaw = computed(() => {
     return Math.min(Math.max(props.difficultyRaw ?? props.difficulty, 0), 5);
@@ -73,7 +73,7 @@
   const arrowClass = computed(() => {
     const adj = props.userAdjustment ?? 0;
     if (!hasAdjustment.value) return '';
-    return adj > 0 ? 'text-amber-500 dark:text-amber-400' : 'text-sky-500 dark:text-sky-400';
+    return adjustmentClass(adj);
   });
 
   const rawBucket = computed(() => {
@@ -125,10 +125,7 @@
     return parts.join('\n');
   });
 
-  const difficultyClass = computed(() => {
-    const index = Math.min(Math.max(effectiveBucket.value, 0), colorClasses.length - 1);
-    return colorClasses[index];
-  });
+  const difficultyClass = computed(() => textClass(effectiveBucket.value));
 
   defineExpose({ tooltip });
 </script>

@@ -2,35 +2,30 @@ using Jiten.Core.Data.JMDict;
 
 namespace Jiten.Parser.Scoring;
 
-/// <summary>
-/// Code-defined priority overrides applied on top of DB-loaded JMDict words.
-/// Supports both word-level and per-form (readingIndex) overrides.
-/// </summary>
+/// <summary>Adds a "jiten" priority tag to DB-loaded JMDict words or single forms to win homograph ties.</summary>
 internal static class PriorityOverrides
 {
     private static readonly HashSet<int> WordLevelJitenIds =
     [
-        1204860, // 各 (かく, pref) — prefix "each", beats 各々 おのおの by 1pt
-        1300520, // ３時 (さんじ, n) — "3 o'clock", beats 三次 (third/tertiary) whose ３時 form wins by ruby priors
-        1545300, // 妖怪 (ようかい, n) — ghost/yokai, beats 溶解 (dissolution) whose NormalizedForm bonus inflates its score
-        1922120, // 兼ねない (かねない, exp/suf) — "might", standalone beats conjugated 兼ねる
-        2579880, // コホン/こほん (int) — cough/ahem onomatopoeia, beats 古本 こほん (secondhand book)
-        1571330, // 舐る (ねぶる, uk, vt) — "to lick", beats 眠る's rare ねぶる reading (眠る's normal reading is ねむる)
-        1709300, // 数度 (すうど, n) — "several times", beats JMnedict surname 数度 すどう (Sudachi guesses the name reading)
-        1467400, // 忍び (しのび, n) — shinobi/stealth, beats the fern しのぶ (2179930) on a bare 忍, whose
-                 // ruby priors are carried by the given name Shinobu rather than by the plant
+        1204860, // 各 (かく): beats 各々 おのおの by 1pt
+        1300520, // ３時 (さんじ): beats 三次, whose ３時 form wins by ruby priors
+        1545300, // 妖怪: beats 溶解, whose NormalizedForm bonus inflates its score
+        1922120, // 兼ねない: standalone beats conjugated 兼ねる
+        2579880, // コホン (ahem): beats 古本 こほん
+        1571330, // 舐る (ねぶる): beats 眠る's rare ねぶる reading
+        1709300, // 数度 (すうど): beats the surname すどう that Sudachi guesses
+        1467400, // 忍び: beats the fern しのぶ (2179930) on bare 忍, whose ruby priors come from the name Shinobu
     ];
 
     private static readonly HashSet<(int WordId, byte ReadingIndex)> FormLevelJitenIds =
     [
-        (1168660, 4), // 依る reading index 4 = よる (kana) — most common kana-only よる, beats 寄る
-        (1313580, 2), // 事 reading index 2 = こと (kana) — top-frequency nominalizer, beats 琴 (instrument)
-        (1495740, 2), // 付く reading index 2 = つく (kana) — most general つく, beats 点く (to be lit)
-        (1508300, 2), // 柄 reading index 2 = ガラ (katakana) — "character/nature", exempts from short-kana gate
-        (1593500, 2), // 轟々 reading index 2 = ごうごう (kana) — thundering/roaring, beats 囂々 (noisy) to avoid margin=0 reseg
-        (2013900, 4), // 赤 reading index 4 = あか (kana) — "red", beats 垢 (dirt) and 銅 (copper) homophones
-        (1529560, 1), // 無し reading index 1 = なし (kana) — negation "without", beats 梨 (pear) on the
-                      // katakana surface ナシ that casual writing uses for the negation
+        (1168660, 4), // 依る よる: beats 寄る
+        (1313580, 2), // 事 こと: beats 琴
+        (1495740, 2), // 付く つく: beats 点く
+        (1508300, 2), // 柄 ガラ: exempts it from the short-kana gate
+        (1593500, 2), // 轟々 ごうごう: beats 囂々, avoiding a margin=0 reseg
+        (2013900, 4), // 赤 あか: beats 垢 and 銅
+        (1529560, 1), // 無し なし: beats 梨 on the casual katakana negation ナシ
     ];
 
     public static void Apply(JmDictWord word)
