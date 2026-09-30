@@ -1054,7 +1054,7 @@ public class MediaDeckController(
                     "totalCoverage" => totalCoverageDict,
                     "uTotalCoverage" => uniqueTotalCoverageDict,
                     "readable" => coverages.ReadableSentences,
-                    "iPlusOne" => coverages.IPlusOneSentences,
+                    "iPlusOne" => CombineCoverage(coverages.ReadableSentences, coverages.IPlusOneSentences),
                     _ => coverageDict
                 };
 
