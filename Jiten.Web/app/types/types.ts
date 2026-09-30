@@ -540,6 +540,14 @@ export interface AccountInfo {
   receivesNewsletter: boolean;
   rateLimitTier: string;
   roles: string[];
+  displayName: string | null;
+  /** When the display name can next be changed; null when it can be changed now. */
+  displayNameChangeAvailableAt: string | null;
+}
+
+export interface DisplayNameUpdateResponse {
+  displayName: string;
+  displayNameChangeAvailableAt: string | null;
 }
 
 export interface ChangePasswordRequest {

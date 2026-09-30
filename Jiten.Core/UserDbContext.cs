@@ -72,6 +72,10 @@ public class UserDbContext : IdentityDbContext<User>
         {
             if (isNpgsql)
                 entity.Property(e => e.Id).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+
+            entity.Property(e => e.DisplayName).HasMaxLength(20);
+            entity.Property(e => e.NormalizedDisplayName).HasMaxLength(20);
+            entity.HasIndex(e => e.NormalizedDisplayName).IsUnique();
         });
 
         modelBuilder.Entity<IdentityUserClaim<string>>(entity =>

@@ -11,6 +11,14 @@ public class User : IdentityUser
     public bool ReceivesNewsletter { get; set; }
     public RateLimitTier RateLimitTier { get; set; } = RateLimitTier.Default;
 
+    /// <summary>Public name for the forum and community features</summary>
+    public string? DisplayName { get; set; }
+
+    /// <summary>Case-insensitive uniqueness key for <see cref="DisplayName"/>.</summary>
+    public string? NormalizedDisplayName { get; set; }
+
+    public DateTime? DisplayNameChangedAt { get; set; }
+
     /// <summary>Last time a password reset email was sent, used to throttle reset requests.</summary>
     public DateTime? LastPasswordResetRequestedAt { get; set; }
 
