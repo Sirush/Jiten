@@ -2435,6 +2435,13 @@ public class MorphologicalAnalyserTests
         yield return ["あてぃしだけの責任にしたら", new[] { "あてぃし", "だけ", "の", "責任", "に", "したら" }];
         // A kana-less line of non-Shift_JIS hanzi is a Chinese subtitle track, not Japanese
         yield return ["我爱你，这是我们的约定\n私はあなたを愛している。", new[] { "私", "は", "あなた", "を", "愛している" }];
+        // Sudachi's adverb もさ is も + さ (kana 猛者 must not claim it)
+        yield return ["でもさあの人って", new[] { "でも", "さ", "あの", "人", "って" }];
+        yield return ["ソーマくんもさ……ハルモニーに来てから", new[] { "ソーマ", "くん", "も", "さ", "ハルモニー", "に", "来て", "から" }];
+        yield return ["でもサ……どうする気？", new[] { "でも", "サ", "どう", "する", "気" }];
+        // VN ruby/emphasis markup (base#［N reading］) is stripped, never parsed as text
+        yield return ["「癒#［１なお］すがよい。」", new[] { "癒す", "が", "よい" }];
+        yield return ["「御厨#［２みくりや］は起きた」", new[] { "御厨", "は", "起きた" }];
     }
 
     [Theory]

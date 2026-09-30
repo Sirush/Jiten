@@ -2588,8 +2588,20 @@ namespace Jiten.Parser
                                  (extraProcessPrefix != null && d.Text.StartsWith(extraProcessPrefix, StringComparison.Ordinal))))
                     .MinBy(d => d.Text.Length)?.Process
                     ?.Where(p => !string.IsNullOrEmpty(p)).ToList() ?? [];
+                var verbClassTags = deconjugated
+                    .Where(d => d.Process.Length > 0 && d.Text == formHiragana)
+                    .Select(d => PosMapper.GetValidatableDeconjTags(d.Tags).LastOrDefault())
+                    .Where(t => t != null && t[0] == 'v')
+                    .Select(t => t!)
+                    .ToList();
                 foreach (var word in wordCache.Values)
                 {
+                    // A verb entry must fit the surface's conjugation class: godan 癒り is 治る, not ichidan 癒る (いる).
+                    if (verbClassTags.Count > 0
+                        && word.CachedPOS.Contains(PartOfSpeech.Verb)
+                        && !verbClassTags.Any(t => PosMapper.IsDeconjTagCompatibleWithJmDict(t, word.PartsOfSpeech)))
+                        continue;
+
                     if (word.CachedPOS.Contains(wordInfo.PartOfSpeech))
                     {
                         var form = new DeconjugationForm(formHiragana, wordInfo.Text,

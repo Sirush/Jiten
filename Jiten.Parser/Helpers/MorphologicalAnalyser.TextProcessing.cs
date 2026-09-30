@@ -11,6 +11,10 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"[^\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005\u3001-\u3003\u3008-\u3011\u3014-\u301F\uFF01-\uFF0F\uFF1A-\uFF1F\uFF3B-\uFF3F\uFF5B-\uFF60\uFF62-\uFF65．\n…\u3000―\u2500()。！？「」）|]")]
     private static partial Regex NonJapaneseCharRegex();
 
+    // VN script ruby/emphasis markup: 癒#［１なお］す, も#［１・］ど (the digit is the base length).
+    [GeneratedRegex(@"#［[0-9０-９]+[^］\n]*］")]
+    private static partial Regex HashRubyAnnotationRegex();
+
     [GeneratedRegex(@"(?<=[\u3040-\u309F\u30A0-\u30FF])[～〜]+")]
     private static partial Regex TildeAfterKanaRegex();
 
@@ -221,6 +225,7 @@ public partial class MorphologicalAnalyser
     private void PreprocessText(ref string text, bool preserveStopToken, out int rawContentCharCount)
     {
         text = StripChineseLines(text);
+        text = HashRubyAnnotationRegex().Replace(text, "");
         text = text.Replace("<", " ").Replace(">", " ").Replace("〝", " ").Replace("〟", " ");
         text = text.Replace('‥', '…');
         text = text.ToFullWidthDigits();

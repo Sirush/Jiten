@@ -2042,6 +2042,16 @@ public class FormSelectionTests
         yield return ["彼女は話題をさらった。", "さらった", 1593870, (byte)3];
         yield return ["川底をさらう作業。", "さらう", 1593865, (byte)2];
         yield return ["その前に、今まで手に入れた情報をさらっておこう。", "さらっておこう", 1500810, (byte)2];
+
+        // ヤード after a numeral is the unit; elsewhere the working-area entry
+        yield return ["百ヤード先にある。", "ヤード", 1136260, (byte)1];
+        yield return ["５０ヤード走った", "ヤード", 1136260, (byte)1];
+        yield return ["ヤードで待ってる。", "ヤード", 2873071, (byte)0];
+
+        yield return ["で…でもさこれは決まりなんだよ。", "でも", 1008460, (byte)0];
+
+        // Godan 癒り (なおり) is 治る, never the ichidan archaic 癒る (いる)
+        yield return ["こんどこそは、癒りきるまで、充分に療養せい。", "癒り", 1599400, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

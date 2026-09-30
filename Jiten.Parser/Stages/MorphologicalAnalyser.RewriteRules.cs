@@ -54,12 +54,14 @@ internal sealed record TokenTemplate(
     bool RecoverConjugations = false);
 
 // Constraints AND, Negate flips; ClauseBoundary = a Symbol/SupplementarySymbol/BlankSpace neighbour or the list edge.
+// Numeral also matches Sudachi's 名詞-数詞 nouns (百, ５０), which PosAnyOf: [Numeral] misses.
 internal sealed record ContextCond(
     string[]? TextAnyOf = null,
     string[]? TextEndsWithAnyOf = null,
     string[]? TextStartsWithAnyOf = null,
     PartOfSpeech[]? PosAnyOf = null,
     bool ClauseBoundary = false,
+    bool Numeral = false,
     bool Negate = false);
 
 // Some token in [From, To] relative to the match start satisfies the constraints (帽子 near ツバ = brim); Negate flips.
@@ -444,7 +446,13 @@ public partial class MorphologicalAnalyser
         new RewriteRule("sen-line", RewritePhase.Cleanup,
             [new TokenPattern(Text: "セン", RequireUnpinned: false)],
             [new TokenTemplate("", Pin: 1391780)],
-            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Numeral], Negate: true)),
+            Prev: new ContextCond(Numeral: true, Negate: true)),
+
+        // ヤード after a numeral is the unit (碼), not the working-area ヤード.
+        new RewriteRule("yard-unit", RewritePhase.Cleanup,
+            [new TokenPattern(Text: "ヤード", RequireUnpinned: false)],
+            [new TokenTemplate("", Pin: 1136260, PinReadingIndex: 1)],
+            Prev: new ContextCond(Numeral: true)),
 
         // ノリ = 乗り, not 海苔.
         new RewriteRule("nori", RewritePhase.Cleanup,
@@ -752,6 +760,34 @@ public partial class MorphologicalAnalyser
             ],
             Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun]),
             Next: new ContextCond(TextAnyOf: ["れ", "れる", "れた", "せ", "せる"], Negate: true)),
+
+        // Sudachi's adverb もさ is always particle も + さ; kana 猛者 is [uk] in JMdict and would otherwise claim it.
+        new RewriteRule("demo-sa", RewritePhase.Early,
+            [new TokenPattern(Text: "で"),
+             new TokenPattern(Text: "もさ", Pos: [PartOfSpeech.Adverb])],
+            [
+                new TokenTemplate("でも", DictForm: "でも", NormalizedForm: "でも", Pos: PartOfSpeech.Conjunction, Reading: "デモ"),
+                new TokenTemplate("さ", DictForm: "さ", NormalizedForm: "さ", Pos: PartOfSpeech.Particle, Reading: "サ"),
+            ]),
+        new RewriteRule("mo-sa", RewritePhase.Early,
+            [new TokenPattern(Text: "もさ", Pos: [PartOfSpeech.Adverb])],
+            [
+                new TokenTemplate("も", DictForm: "も", NormalizedForm: "も", Pos: PartOfSpeech.Particle, Reading: "モ"),
+                new TokenTemplate("さ", DictForm: "さ", NormalizedForm: "さ", Pos: PartOfSpeech.Particle, Reading: "サ"),
+            ]),
+        new RewriteRule("demo-sa-katakana", RewritePhase.Early,
+            [new TokenPattern(Text: "で"),
+             new TokenPattern(Text: "もサ", Pos: [PartOfSpeech.Adverb])],
+            [
+                new TokenTemplate("でも", DictForm: "でも", NormalizedForm: "でも", Pos: PartOfSpeech.Conjunction, Reading: "デモ"),
+                new TokenTemplate("サ", DictForm: "さ", NormalizedForm: "さ", Pos: PartOfSpeech.Particle, Reading: "サ"),
+            ]),
+        new RewriteRule("mo-sa-katakana", RewritePhase.Early,
+            [new TokenPattern(Text: "もサ", Pos: [PartOfSpeech.Adverb])],
+            [
+                new TokenTemplate("も", DictForm: "も", NormalizedForm: "も", Pos: PartOfSpeech.Particle, Reading: "モ"),
+                new TokenTemplate("サ", DictForm: "さ", NormalizedForm: "さ", Pos: PartOfSpeech.Particle, Reading: "サ"),
+            ]),
 
         // あ directly against いつも is あいつ + も; a genuine interjection あ is set off by punctuation.
         new RewriteRule("aitsu-mo", RewritePhase.Late,
@@ -1335,6 +1371,8 @@ public partial class MorphologicalAnalyser
                 s => neighbour.Text.StartsWith(s, StringComparison.Ordinal));
         if (cond.PosAnyOf != null)
             ok &= neighbour != null && Array.IndexOf(cond.PosAnyOf, neighbour.PartOfSpeech) >= 0;
+        if (cond.Numeral)
+            ok &= neighbour != null && IsNumeralToken(neighbour);
         if (cond.ClauseBoundary)
             ok &= IsClauseBoundary(neighbour);
         return cond.Negate ? !ok : ok;
