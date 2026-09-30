@@ -3,6 +3,7 @@ import { escapeHtml } from '~/utils/sanitiseHtml';
 
 const highlightClass = 'text-primary-500 dark:text-primary-500 font-bold';
 const unknownMarkClass = 'bg-blue-100 dark:bg-blue-900/60 rounded-sm';
+const unknownLinkClass = 'hover:bg-blue-200 dark:hover:bg-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-primary-500';
 
 export function visibleFurigana(
   furigana: SentenceFurigana[] | null | undefined,
@@ -27,7 +28,7 @@ export interface SentenceRubyOptions {
   /** A #rrggbb colour for the group's word, or null for the ordinary text colour. */
   colourOf?: (group: SentenceFurigana) => string | null;
   /** Spans to highlight as words the reader doesn't know yet. */
-  unknownSpans?: { position: number; length: number }[];
+  unknownSpans?: { position: number; length: number; wordId?: number; readingIndex?: number }[];
 }
 
 const hexColour = /^#[0-9a-fA-F]{6}$/;
@@ -58,7 +59,12 @@ export function sentenceRubyHtml(text: string, wordPosition: number, wordLength:
     let cursor = start;
     for (const s of spans) {
       if (s.position < cursor || s.position + s.length > end) continue;
-      html += render(cursor, s.position) + `<span class="${unknownMarkClass}">${render(s.position, s.position + s.length)}</span>`;
+      const inner = render(s.position, s.position + s.length);
+      const marked =
+        s.wordId != null && Number.isInteger(s.wordId) && Number.isInteger(s.readingIndex)
+          ? `<a href="/vocabulary/${s.wordId}/${s.readingIndex}" target="_blank" rel="noopener" class="${unknownMarkClass} ${unknownLinkClass}">${inner}</a>`
+          : `<span class="${unknownMarkClass}">${inner}</span>`;
+      html += render(cursor, s.position) + marked;
       cursor = s.position + s.length;
     }
     return html + render(cursor, end);

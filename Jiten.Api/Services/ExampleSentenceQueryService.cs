@@ -16,6 +16,9 @@ public interface IExampleSentenceQueryService
                                                                     IReadOnlyCollection<MediaType>? mediaTypes, float minDifficulty, float maxDifficulty,
                                                                     bool descending, int take, int[]? priorityDeckIds = null);
 
+    /// <summary>Up to take i+1 sentences for the current user, one per title, study-deck ones first; judged over a study-deck sample and the corpus sample.</summary>
+    Task<List<ExampleSentenceDto>> GetReadableAsync(int wordId, int readingIndex, List<int> excludedDeckIds, int take, int[]? priorityDeckIds = null);
+
     /// <summary>Sentence DTOs for the given ids, in the order given, with source decks and the caller's furigana.</summary>
     Task<List<ExampleSentenceDto>> BuildDtosAsync(IReadOnlyList<long> sentenceIds, int wordId, int readingIndex);
 }
@@ -193,6 +196,52 @@ public class ExampleSentenceQueryService(JitenDbContext context, ISentenceTokenS
             SearchedBandMax = descending ? maxDifficulty : bandMin,
             Sentences = collected.Count == 0 ? [] : await BuildExampleSentenceDtos(collected, wordId, readingIndex)
         };
+    }
+
+    /// <summary>Candidates judged per source by the readable pick; the same size as the random page's corpus sample.</summary>
+    private const int ReadableSampleSize = 200;
+
+    public async Task<List<ExampleSentenceDto>> GetReadableAsync(int wordId, int readingIndex, List<int> excludedDeckIds, int take,
+                                                                 int[]? priorityDeckIds = null)
+    {
+        if (take <= 0) return [];
+
+        priorityDeckIds = await NarrowToDecksHoldingWord(wordId, readingIndex, priorityDeckIds, excludedDeckIds);
+
+        var studyIds = priorityDeckIds.Length > 0
+            ? await SentencesWithForm(wordId, readingIndex)
+                    .Where(s => priorityDeckIds.Contains(s.DeckId))
+                    .OrderBy(_ => EF.Functions.Random())
+                    .Take(ReadableSampleSize)
+                    .Select(s => s.SentenceId)
+                    .ToListAsync()
+            : [];
+        var ids = studyIds.Union(await SampleSentenceIds(wordId, readingIndex, ReadableSampleSize)).ToList();
+        if (ids.Count == 0) return [];
+
+        var candidates = await SentencesById(ids)
+                               .Join(context.Decks.AsNoTracking(), s => s.DeckId, d => d.DeckId, (s, d) => new { Sentence = s, Deck = d })
+                               .Where(j => !excludedDeckIds.Contains(j.Deck.DeckId)
+                                           && (!j.Deck.ParentDeckId.HasValue || !excludedDeckIds.Contains(j.Deck.ParentDeckId.Value)))
+                               .Select(j => new PickedSentence(j.Sentence.SentenceId, j.Sentence.Text, j.Sentence.Difficulty,
+                                                               j.Deck.DeckId, j.Deck.ParentDeckId, false, j.Sentence.Tokens))
+                               .ToListAsync();
+
+        var unknownCounts = await sentenceTokens.CountUnknownAsync(candidates.Select(c => (c.SentenceId, wordId, c.Tokens)));
+
+        var picked = candidates.Where(c => unknownCounts.GetValueOrDefault((c.SentenceId, wordId), -1) == 0)
+                               .Select(c => c with { FromStudyDeck = priorityDeckIds.Contains(c.DeckId) })
+                               .OrderByDescending(c => c.FromStudyDeck)
+                               .ThenBy(_ => Random.Shared.Next())
+                               .DistinctBy(c => c.ParentDeckId ?? c.DeckId)
+                               .Take(take)
+                               .ToList();
+        if (picked.Count == 0) return [];
+
+        var dtos = await BuildExampleSentenceDtos(picked, wordId, readingIndex);
+        foreach (var dto in dtos)
+            dto.IsIPlusOne = true;
+        return dtos;
     }
 
     /// <summary>

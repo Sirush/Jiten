@@ -4165,28 +4165,57 @@ public partial class StudyController(
             : await ActiveStudyDeckSentenceSources(userId);
 
         var take = Math.Clamp(request.Take, 1, 20);
+        var readingIndex = (byte)request.ReadingIndex;
+        var served = (await sessionService.GetServedCards(userId, [WordFormHelper.EncodeWordKey(request.WordId, readingIndex)])).Count > 0;
+
+        // Only the first page of a served card leads with i+1 sentences; later pages stay random or walk the difficulty bands.
+        var readable = request.ReadableFirst && served
+            ? await exampleSentences.GetReadableAsync(request.WordId, request.ReadingIndex, request.ExcludedDeckIds, take, studyDeckIds)
+            : [];
+        var remaining = take - readable.Count;
+        var excludedDeckIds = request.ExcludedDeckIds
+                                     .Concat(readable.Select(s => s.SourceDeckParent?.DeckId ?? s.SourceDeck?.DeckId).OfType<int>())
+                                     .Distinct()
+                                     .ToList();
 
         if (request.Sorting == ExampleSentenceSorting.Random)
         {
-            var sentences = await exampleSentences.GetRandomAsync(request.WordId, request.ReadingIndex, request.ExcludedDeckIds,
-                                                                  null, take, studyDeckIds);
-            await FlagIPlusOne(userId, request.WordId, (byte)request.ReadingIndex, sentences, sentenceTokens);
-            return Results.Ok(new ExampleSentencesByDifficultyResponse { Sentences = sentences });
+            var sentences = remaining > 0
+                ? await exampleSentences.GetRandomAsync(request.WordId, request.ReadingIndex, excludedDeckIds, null, remaining, studyDeckIds)
+                : [];
+            if (served) await FlagIPlusOne(request.WordId, sentences, sentenceTokens);
+            return Results.Ok(new ExampleSentencesByDifficultyResponse { Sentences = [..readable, ..sentences] });
         }
 
-        var byDifficulty = await exampleSentences.GetByDifficultyAsync(request.WordId, request.ReadingIndex, request.ExcludedDeckIds,
+        var readableByDifficulty = request.Descending
+            ? readable.OrderByDescending(s => s.Difficulty).ToList()
+            : readable.OrderBy(s => s.Difficulty).ToList();
+
+        if (remaining == 0)
+        {
+            // No band was searched, so the cursor stays put and the next page starts the walk from the requested band.
+            var cursor = request.Descending ? request.MaxDifficulty : request.MinDifficulty;
+            return Results.Ok(new ExampleSentencesByDifficultyResponse
+            {
+                MinDifficulty = request.MinDifficulty,
+                MaxDifficulty = request.MaxDifficulty,
+                SearchedBandMin = cursor,
+                SearchedBandMax = cursor,
+                Sentences = readableByDifficulty
+            });
+        }
+
+        var byDifficulty = await exampleSentences.GetByDifficultyAsync(request.WordId, request.ReadingIndex, excludedDeckIds,
                                                                        null, request.MinDifficulty, request.MaxDifficulty,
-                                                                       request.Descending, take, studyDeckIds);
-        await FlagIPlusOne(userId, request.WordId, (byte)request.ReadingIndex, byDifficulty.Sentences, sentenceTokens);
+                                                                       request.Descending, remaining, studyDeckIds);
+        if (served) await FlagIPlusOne(request.WordId, byDifficulty.Sentences, sentenceTokens);
+        byDifficulty.Sentences = [..readableByDifficulty, ..byDifficulty.Sentences];
         return Results.Ok(byDifficulty);
     }
 
-    private async Task FlagIPlusOne(string userId, int wordId, byte readingIndex, List<ExampleSentenceDto> sentences,
-                                    ISentenceTokenService sentenceTokens)
+    private async Task FlagIPlusOne(int wordId, List<ExampleSentenceDto> sentences, ISentenceTokenService sentenceTokens)
     {
         if (sentences.Count == 0) return;
-        var served = await sessionService.GetServedCards(userId, [WordFormHelper.EncodeWordKey(wordId, readingIndex)]);
-        if (served.Count == 0) return;
 
         var ids = sentences.Select(s => s.SentenceId).ToList();
         var tokens = await context.ExampleSentences

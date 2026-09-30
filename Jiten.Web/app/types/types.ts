@@ -592,7 +592,7 @@ export interface ExampleSentence {
   /** Unknown words besides the target; set only by the Jiten+ readable-sentence search. */
   unknownCount?: number | null;
   /** Where the other unknown words sit in text; set only by the Jiten+ readable-sentence search. */
-  unknownSpans?: { position: number; length: number }[] | null;
+  unknownSpans?: { position: number; length: number; wordId: number; readingIndex: number }[] | null;
   furigana?: SentenceFurigana[] | null;
 }
 

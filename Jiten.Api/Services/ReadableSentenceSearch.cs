@@ -147,7 +147,7 @@ public class ReadableSentenceSearch(
             dto.UnknownCount = unknown;
             dto.IsIPlusOne = unknown == 0;
             dto.UnknownSpans = unknownById[dto.SentenceId]
-                               .Select(t => new SentenceSpanDto { Position = t.Position, Length = t.Length })
+                               .Select(t => new SentenceSpanDto { Position = t.Position, Length = t.Length, WordId = t.WordId, ReadingIndex = t.ReadingIndex })
                                .ToList();
         }
 

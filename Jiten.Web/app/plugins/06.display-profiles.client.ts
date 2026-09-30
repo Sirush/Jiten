@@ -30,8 +30,8 @@ export default defineNuxtPlugin((nuxtApp) => {
       (signedIn, previous) => {
         if (signedIn) {
           if (previous && previous !== signedIn) profiles.reset();
-          profiles.init().then(() => {
-            if (!profiles.localOffer) return;
+          profiles.init().then((offerMade) => {
+            if (!offerMade) return;
             // The offer itself lives on the display page; this makes sure the reader learns their settings just changed.
             nuxtApp.vueApp.config.globalProperties.$toast?.add({
               severity: 'info',

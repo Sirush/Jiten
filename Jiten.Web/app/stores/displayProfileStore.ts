@@ -62,10 +62,12 @@ export const useDisplayProfileStore = defineStore('displayProfile', () => {
       // Storage can be unavailable in private modes; the offer then lasts until the next reload.
     }
   };
-  const restoreOffer = () => {
+  const restoreOffer = (active: DisplayProfile) => {
     try {
       const stored = JSON.parse(sessionStorage.getItem(OFFER_KEY) ?? 'null');
-      if (stored?.values) localOffer.value = { values: stored.values, statColumns: sanitiseMediaCardStatColumns(stored.statColumns) };
+      if (!stored?.values) return;
+      const offer = { values: { ...DEFAULT_DISPLAY_VALUES, ...sanitiseDisplayValues(stored.values) }, statColumns: sanitiseMediaCardStatColumns(stored.statColumns) };
+      saveOffer(localSettingsWorthKeeping(offer, active) ? offer : null);
     } catch {
       localOffer.value = null;
     }
@@ -220,11 +222,12 @@ export const useDisplayProfileStore = defineStore('displayProfile', () => {
     );
   }
 
-  async function init() {
-    if (status.value === 'loading') return;
+  async function init(): Promise<boolean> {
+    if (status.value === 'loading') return false;
     status.value = 'loading';
     // A browser with no active-profile cookie has never synced, so its local settings may be worth keeping.
     const firstSyncOnThisBrowser = !activeIdCookie.value;
+    let offerMade = false;
 
     try {
       const response = await $api<{ profiles: ProfileDto[] }>(ENDPOINT);
@@ -239,8 +242,12 @@ export const useDisplayProfileStore = defineStore('displayProfile', () => {
         const active = pickActiveProfile(profiles.value, activeIdCookie.value)!;
         activeIdCookie.value = active.id;
         const local = { values: readValues(), statColumns: readStatColumns() };
-        if (firstSyncOnThisBrowser && localSettingsWorthKeeping(local, active)) saveOffer(local);
-        else if (!firstSyncOnThisBrowser) restoreOffer();
+        if (firstSyncOnThisBrowser && localSettingsWorthKeeping(local, active)) {
+          saveOffer(local);
+          offerMade = true;
+        } else if (!firstSyncOnThisBrowser) {
+          restoreOffer(active);
+        }
         applyProfile(active);
       }
 
@@ -250,6 +257,7 @@ export const useDisplayProfileStore = defineStore('displayProfile', () => {
       console.error('Failed to load display profiles', error);
       status.value = 'error';
     }
+    return offerMade;
   }
 
   /** Picks up edits made on another device, unless this one has an edit still waiting to save. */
