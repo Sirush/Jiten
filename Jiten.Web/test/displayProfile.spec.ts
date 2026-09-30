@@ -7,6 +7,7 @@ import {
   exportDisplayProfile,
   isFontFamilyName,
   localSettingsDiffer,
+  localSettingsWorthKeeping,
   parseDisplayProfileImport,
   pickActiveProfile,
   sanitiseDisplayValues,
@@ -89,6 +90,25 @@ describe('localSettingsDiffer', () => {
     const local = { values: { ...DEFAULT_DISPLAY_VALUES, japaneseFont: 'kyokasho' as const }, statColumns: null };
     expect(localSettingsDiffer(local, profile('desk'))).toBe(true);
     expect(localSettingsDiffer({ values: DEFAULT_DISPLAY_VALUES, statColumns: [['wordCount'], [], []] }, profile('desk'))).toBe(true);
+  });
+});
+
+describe('localSettingsWorthKeeping', () => {
+  const customised = profile('desk', { japaneseFont: 'kyokasho', headwordFurigana: 'hidden' });
+
+  it('ignores a browser still on the defaults, even when the profile is customised', () => {
+    expect(localSettingsWorthKeeping({ values: DEFAULT_DISPLAY_VALUES, statColumns: null }, customised)).toBe(false);
+  });
+
+  it('keeps customised local settings that differ from the profile', () => {
+    const local = { values: { ...DEFAULT_DISPLAY_VALUES, sentenceSize: 'lg' as const }, statColumns: null };
+    expect(localSettingsWorthKeeping(local, customised)).toBe(true);
+    expect(localSettingsWorthKeeping({ values: DEFAULT_DISPLAY_VALUES, statColumns: [['wordCount'], [], []] }, customised)).toBe(true);
+  });
+
+  it('ignores customised local settings that already match the profile', () => {
+    const local = { values: { ...DEFAULT_DISPLAY_VALUES, japaneseFont: 'kyokasho' as const, headwordFurigana: 'hidden' as const }, statColumns: null };
+    expect(localSettingsWorthKeeping(local, customised)).toBe(false);
   });
 });
 

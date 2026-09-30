@@ -266,3 +266,8 @@ export function pickActiveProfile(profiles: DisplayProfile[], activeId: string |
 export function localSettingsDiffer(local: { values: DisplayValues; statColumns: MediaCardStatColumns | null }, profile: DisplayProfile): boolean {
   return !displayValuesEqual(local.values, { ...DEFAULT_DISPLAY_VALUES, ...profile.values }) || !statColumnsEqual(local.statColumns, profile.statColumns);
 }
+
+export function localSettingsWorthKeeping(local: { values: DisplayValues; statColumns: MediaCardStatColumns | null }, profile: DisplayProfile): boolean {
+  const untouched = displayValuesEqual(local.values, DEFAULT_DISPLAY_VALUES) && local.statColumns === null;
+  return !untouched && localSettingsDiffer(local, profile);
+}
