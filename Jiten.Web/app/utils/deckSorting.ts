@@ -15,7 +15,7 @@ export const deckSortMeta: Record<string, DeckSortMeta> = {
   uCoverage: { default: SortOrder.Descending, asc: 'Lowest first', desc: 'Highest first' },
   uTotalCoverage: { default: SortOrder.Descending, asc: 'Lowest first', desc: 'Highest first' },
   readable: { default: SortOrder.Descending, asc: 'Lowest first', desc: 'Highest first' },
-  iPlusOne: { default: SortOrder.Descending, asc: 'Fewest first', desc: 'Most first' },
+  iPlusOne: { default: SortOrder.Descending, asc: 'Lowest first', desc: 'Highest first' },
   extRating: { default: SortOrder.Descending, asc: 'Lowest first', desc: 'Highest first' },
   communityVotes: { default: SortOrder.Descending, asc: 'Fewest first', desc: 'Most first' },
   sentenceLength: { default: SortOrder.Ascending, asc: 'Shortest first', desc: 'Longest first' },
@@ -43,7 +43,7 @@ export const deckSortLabels: Record<string, string> = {
   uTotalCoverage: 'Unique Coverage (Total)',
   uCoverage: 'Unique Coverage (Mature)',
   readable: 'Readable Sentences (i+0)',
-  iPlusOne: 'i+1 Sentences',
+  iPlusOne: 'Readable Sentences (i+0 and i+1)',
   extRating: 'External Rating',
   sentenceLength: 'Average Sentence Length',
   uKanji: 'Unique Kanji',
@@ -137,7 +137,7 @@ const deckSortLayout: DeckSortGroup[] = [
       ]),
       variants('Readable Sentences', [
         ['readable', 'i+0'],
-        ['iPlusOne', 'i+1'],
+        ['iPlusOne', 'i+0 & i+1'],
       ]),
     ],
   },
@@ -182,7 +182,7 @@ const deckSortValues: Record<string, (deck: Deck) => number | string> = {
   totalCoverage: (d) => Math.min(d.coverage + d.youngCoverage, 100),
   uTotalCoverage: (d) => Math.min(d.uniqueCoverage + d.youngUniqueCoverage, 100),
   readable: (d) => d.readableSentences ?? 0,
-  iPlusOne: (d) => d.iPlusOneSentences ?? 0,
+  iPlusOne: (d) => Math.min((d.readableSentences ?? 0) + (d.iPlusOneSentences ?? 0), 100),
 };
 
 const UNSET_RELEASE_DATE_CUTOFF = new Date('1900-01-01').getTime();

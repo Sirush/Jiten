@@ -276,6 +276,36 @@ public class ExampleSentenceTokensTests
         example.WordKeys.Should().Equal(ExampleSentenceTokens.WordKeys(ExampleSentenceTokens.Decode(example.Tokens), fineBucket!.Value));
     }
 
+    [Fact]
+    public void ExtractorRejectsSentencesWithASingleContentWord()
+    {
+        var bare = new SentenceInfo("待ち焦がれていたよ。");
+        bare.Words.AddRange(
+        [
+            Token("待ち焦がれていた", PartOfSpeech.Verb, 0, (1410550, 0)),
+            Token("よ", PartOfSpeech.Particle, 8, (2029090, 0)),
+            Token("。", PartOfSpeech.SupplementarySymbol, 9, null),
+        ]);
+
+        var withObject = new SentenceInfo("理代子を待ち焦がれてたぜ。");
+        withObject.Words.AddRange(
+        [
+            Token("理代子", PartOfSpeech.Name, 0, (5000001, 0)),
+            Token("を", PartOfSpeech.Particle, 3, (2003, 0)),
+            Token("待ち焦がれてた", PartOfSpeech.Verb, 4, (1410550, 0)),
+            Token("ぜ", PartOfSpeech.Particle, 11, (2004, 0)),
+            Token("。", PartOfSpeech.SupplementarySymbol, 12, null),
+        ]);
+
+        DeckWord[] deckWords = [Deck(1410550, 0, "待ち焦がれていた"), Deck(1410550, 0, "待ち焦がれてた")];
+        foreach (var word in deckWords)
+            word.SudachiPartOfSpeech = PartOfSpeech.Verb;
+
+        var extracted = ExampleSentenceExtractor.ExtractSentences([bare, withObject], deckWords, [], [], subtitleSpeech: true);
+
+        extracted.Should().ContainSingle().Which.Text.Should().Be("理代子を待ち焦がれてたぜ。");
+    }
+
     private static (WordInfo, int, int) Token(string text, PartOfSpeech pos, int position, (int, byte)? keptForm) =>
         (new WordInfo { Text = text, PartOfSpeech = pos, KeptForm = keptForm }, position, text.Length);
 

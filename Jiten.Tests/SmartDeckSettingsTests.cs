@@ -16,10 +16,11 @@ public class SmartDeckSettingsTests
     }
 
     [Fact]
-    public void RestTargetPercentage_DefaultsTo90_AndAllowsZero()
+    public void RestTargetPercentage_HasDefault_AndAllowsZero()
     {
-        SmartDeckSettings.Parse(null).RestTargetPercentage.Should().Be(90);
-        SmartDeckSettings.Parse("{\"enabled\":true,\"targetPercentage\":80}").RestTargetPercentage.Should().Be(90, "documents saved before the field existed keep the default");
+        SmartDeckSettings.Parse(null).RestTargetPercentage.Should().Be(SmartDeckConstants.DefaultRestTargetPercentage);
+        SmartDeckSettings.Parse("{\"enabled\":true,\"targetPercentage\":80}").RestTargetPercentage
+                         .Should().Be(SmartDeckConstants.DefaultRestTargetPercentage, "documents saved before the field existed keep the default");
         new SmartDeckSettings { RestTargetPercentage = -5 }.Normalized().RestTargetPercentage.Should().Be(0);
         new SmartDeckSettings { RestTargetPercentage = 0 }.Normalized().RestTargetPercentage.Should().Be(0);
         new SmartDeckSettings { RestTargetPercentage = 140 }.Normalized().RestTargetPercentage.Should().Be(100);

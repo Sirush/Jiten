@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { CardLayoutBlock, ExampleSentenceBlockOptions, UserExampleSentenceDto } from '~/types';
+  import type { CardLayoutBlock, ExampleSentenceBlockOptions, SentenceFuriganaMode, UserExampleSentenceDto } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { sanitiseHtml } from '~/utils/sanitiseHtml';
   import { sentenceRubyHtml, visibleFurigana } from '~/utils/sentenceRuby';
@@ -28,6 +28,9 @@
 
   const hiddenWordId = computed(() => (isFlipped.value ? undefined : card.value?.wordId));
 
+  const furiganaMode = computed<SentenceFuriganaMode>(() => (opts.value.furigana === 'inherit' ? jitenStore.sentenceFurigana : opts.value.furigana));
+  const readingHiddenWordId = computed(() => hiddenWordId.value ?? (furiganaMode.value === 'exceptTarget' ? card.value?.wordId : undefined));
+
   const previewHtml = computed(() => {
     if (!isPreview) return '';
     const { text, word } = sample!.example;
@@ -43,7 +46,7 @@
       return parseCustomSentenceHtml(ex.customText);
     }
     const { text, wordPosition, wordLength } = ex;
-    const shown = new Set(visibleFurigana(ex.furigana, opts.value.furigana, hiddenWordId.value));
+    const shown = new Set(visibleFurigana(ex.furigana, furiganaMode.value, readingHiddenWordId.value));
     const peek = jitenStore.furiganaOnHover;
     if (ex.furigana?.length && (shown.size > 0 || peek)) {
       return sanitiseHtml(
@@ -265,7 +268,7 @@
           :key="i"
           :example-sentence="sentence"
           :show-source="true"
-          :furigana-mode="opts.furigana"
+          :furigana-mode="furiganaMode"
           :hidden-word-id="hiddenWordId"
         />
         <div v-if="isLoadingMoreSentences" class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r">

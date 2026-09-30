@@ -136,7 +136,8 @@ public static partial class ExampleSentenceExtractor
                 if (distinctChars.Count >= 6) break;
             }
 
-            if (distinctChars.Count >= 6 && !(subtitleSpeech && EndsInOpenParticle(sentence)))
+            if (distinctChars.Count >= 6 && HasMinimumContentWords(sentence) &&
+                !(subtitleSpeech && EndsInOpenParticle(sentence)))
             {
                 validSentences.Add(sentence);
             }
@@ -311,6 +312,21 @@ public static partial class ExampleSentenceExtractor
 
     [GeneratedRegex(@"。(?=[！？!?]+[」』）]*$)")]
     private static partial Regex PeriodBeforeFinalMark();
+
+    private const uint SentenceContentWord =
+        PosMask.ContentWord | PosMask.NameBit | PosMask.Numeral | (1u << (int)PartOfSpeech.Pronoun);
+
+    private static bool HasMinimumContentWords(SentenceInfo sentence)
+    {
+        int count = 0;
+        foreach (var (word, _, _) in sentence.Words)
+        {
+            if (PosMask.Has(SentenceContentWord, PosMask.Bit(word.PartOfSpeech)) && ++count >= 2)
+                return true;
+        }
+
+        return false;
+    }
 
     /// <summary>A subtitle sentence ending in a case, binding or adverbial particle is usually half of a sentence split across cues.</summary>
     private static bool EndsInOpenParticle(SentenceInfo sentence)

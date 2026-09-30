@@ -2151,13 +2151,15 @@ export interface HeadwordBlockOptions {
   size: CardTextSize;
 }
 
+export type ExampleSentenceBlockFurigana = SentenceFuriganaMode | 'inherit';
+
 export interface ExampleSentenceBlockOptions {
   blur: boolean;
   showSource: boolean;
   showActions: boolean;
   unblurOnFlip: boolean;
   size: CardTextSize;
-  furigana: SentenceFuriganaMode;
+  furigana: ExampleSentenceBlockFurigana;
 }
 
 export interface FrequencyRankBlockOptions {

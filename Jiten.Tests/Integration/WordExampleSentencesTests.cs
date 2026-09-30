@@ -1,10 +1,12 @@
 ﻿using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Jiten.Api.Services.SmartDeck;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.User;
+using Jiten.Core.Services.SmartDeck;
 using Jiten.Parser.Tests.Integration.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -383,6 +385,42 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
         var more = await Query(new { wordId = WordId, readingIndex = 0, sorting = "Random", take = 3 });
         more.Sentences[0].SentenceId.Should().Be(volumeSentenceId);
         more.Sentences[0].FromStudyDeck.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SmartDeckOnly_DrawsFromItsSourceTitles()
+    {
+        await SetExampleSentenceSource("StudyDecks");
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            await userDb.UserStudyDecks.Where(d => d.UserId == TestUsers.UserA).ExecuteDeleteAsync();
+            await userDb.UserDeckPreferences.Where(p => p.UserId == TestUsers.UserA).ExecuteDeleteAsync();
+            await userDb.UserSettings.Where(s => s.UserId == TestUsers.UserA).ExecuteDeleteAsync();
+
+            userDb.UserStudyDecks.Add(new UserStudyDeck
+            {
+                UserId = TestUsers.UserA, DeckType = StudyDeckType.Smart, Name = "Smart Deck", IsActive = true,
+            });
+            userDb.UserDeckPreferences.Add(new UserDeckPreference
+            {
+                UserId = TestUsers.UserA, DeckId = _studyDeckIds[0], Status = DeckStatus.Ongoing,
+            });
+            userDb.UserSettings.Add(new UserSettings
+            {
+                UserId = TestUsers.UserA, SmartDeckJson = new SmartDeckSettings { Enabled = true }.Serialize(),
+            });
+            await userDb.SaveChangesAsync();
+            scope.ServiceProvider.GetRequiredService<ISmartDeckBuilder>().ForgetSources(TestUsers.UserA);
+        }
+
+        for (var i = 0; i < 10; i++)
+            (await CardExampleSentenceId()).Should().Be(_studySentenceIds[0]);
+
+        var more = await Query(new { wordId = WordId, readingIndex = 0, sorting = "Random", take = 3 });
+        more.Sentences[0].SentenceId.Should().Be(_studySentenceIds[0]);
+        more.Sentences.Count(s => s.FromStudyDeck).Should().Be(1);
     }
 
     [Fact]
