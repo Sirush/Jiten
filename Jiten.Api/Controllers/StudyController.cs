@@ -4237,15 +4237,23 @@ public partial class StudyController(
             sentence.IsIPlusOne = unknownCounts.GetValueOrDefault((sentence.SentenceId, wordId), -1) == 0;
     }
 
-    /// <summary>Active media study decks plus their subdecks, since a series keeps its sentences on its volumes.</summary>
+    /// <summary>Active media study decks and an active Smart Deck's source titles, plus their subdecks, since a series keeps its sentences on its volumes.</summary>
     private async Task<int[]> ActiveStudyDeckSentenceSources(string userId)
     {
-        var deckIds = await userContext.UserStudyDecks
+        var activeDecks = await userContext.UserStudyDecks
             .AsNoTracking()
-            .Where(sd => sd.UserId == userId && sd.IsActive && sd.DeckId.HasValue)
-            .Select(sd => sd.DeckId!.Value)
-            .Distinct()
+            .Where(sd => sd.UserId == userId && sd.IsActive && (sd.DeckId.HasValue || sd.DeckType == StudyDeckType.Smart))
+            .Select(sd => new { sd.DeckId, sd.DeckType })
             .ToListAsync();
+
+        var deckIds = activeDecks.Where(sd => sd.DeckId.HasValue).Select(sd => sd.DeckId!.Value).ToList();
+        if (activeDecks.Any(sd => sd.DeckType == StudyDeckType.Smart))
+        {
+            var sources = await smartDeckBuilder.LoadSourcesCached(userId);
+            deckIds.AddRange(sources.Titles.Select(t => t.ParentDeckId));
+        }
+
+        deckIds = deckIds.Distinct().ToList();
         if (deckIds.Count == 0) return [];
 
         var subdeckIds = await context.Decks
