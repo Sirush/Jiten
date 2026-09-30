@@ -202,6 +202,25 @@ public class IPlusOneCardExampleTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task ServedCard_WithNoMediaStudyDeck_GetsTheReadableCorpusSentence()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            await userDb.UserStudyDecks.ExecuteDeleteAsync();
+            userDb.UserStudyDecks.Add(new UserStudyDeck
+            {
+                UserId = TestUsers.UserA, DeckType = StudyDeckType.StaticWordList, Name = "Mining",
+            });
+            await userDb.SaveChangesAsync();
+        }
+
+        await ServeBatch();
+
+        (await PickedSentences(20)).Should().Equal(_readableId);
+    }
+
+    [Fact]
     public async Task CardOutsideTheBatch_KeepsTheRandomPick()
     {
         (await PickedSentences(30)).Should().Contain(_unknownId);
