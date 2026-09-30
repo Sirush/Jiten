@@ -22,7 +22,7 @@ export const exampleSentenceDefaults: ExampleSentenceBlockOptions = {
   showActions: true,
   unblurOnFlip: false,
   size: 'medium',
-  furigana: 'unknown',
+  furigana: 'inherit',
 };
 export const frequencyRankDefaults: FrequencyRankBlockOptions = { onlyAfterFlip: true };
 export const definitionsDefaults: DefinitionsBlockOptions = { maxDefinitions: null, size: 'medium', spoiler: false };

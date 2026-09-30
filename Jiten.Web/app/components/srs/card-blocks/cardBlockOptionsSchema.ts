@@ -51,6 +51,7 @@ export const blockOptionsSchema: Partial<Record<CardBlockType, OptionControl[]>>
       label: 'Furigana',
       type: 'select',
       options: [
+        { label: 'Same as display settings', value: 'inherit' },
         { label: 'Words you don’t know', value: 'unknown' },
         { label: 'All words', value: 'all' },
         { label: 'Hidden', value: 'off' },
