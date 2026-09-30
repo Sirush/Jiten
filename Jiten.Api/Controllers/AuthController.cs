@@ -244,10 +244,7 @@ public class AuthController : ControllerBase
                                    oldRefreshToken?.UserId ?? principalUserId);
 
             if (oldRefreshToken is { IsRevoked: true })
-            {
-                _context.RefreshTokens.Remove(oldRefreshToken);
-                await _context.SaveChangesAsync();
-            }
+                await _context.RefreshTokens.Where(rt => rt.Token == oldRefreshToken.Token).ExecuteDeleteAsync();
             return BadRequest(new { message = "Invalid or expired refresh token." });
         }
 
@@ -265,8 +262,7 @@ public class AuthController : ControllerBase
                                            ? (int)(DateTime.UtcNow - oldRefreshToken.UsedAt.Value).TotalSeconds
                                            : -1);
 
-                _context.RefreshTokens.Remove(oldRefreshToken);
-                await _context.SaveChangesAsync();
+                await _context.RefreshTokens.Where(rt => rt.Token == oldRefreshToken.Token).ExecuteDeleteAsync();
                 return BadRequest(new { message = "Invalid or expired refresh token." });
             }
         }

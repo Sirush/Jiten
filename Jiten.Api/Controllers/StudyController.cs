@@ -848,8 +848,11 @@ public partial class StudyController(
 
             if (request.Sentence.Length <= 150 && SentenceMarkerRegex.IsMatch(request.Sentence))
             {
-                var sentenceCount = await userContext.UserExampleSentences
-                    .CountAsync(e => e.UserId == userId && e.WordId == request.WordId && e.ReadingIndex == request.ReadingIndex);
+                var sortOrders = await userContext.UserExampleSentences
+                    .Where(e => e.UserId == userId && e.WordId == request.WordId && e.ReadingIndex == request.ReadingIndex)
+                    .Select(e => (int)e.SortOrder)
+                    .ToListAsync();
+                var sentenceCount = sortOrders.Count;
 
                 var limits = await userLimits.GetLimitsAsync(userId);
                 sentenceLimitReached = sentenceCount >= limits.CustomSentencesPerWord;
@@ -863,14 +866,23 @@ public partial class StudyController(
                         ReadingIndex = (byte)request.ReadingIndex,
                         Text = request.Sentence,
                         Source = request.Source?.Length > 150 ? request.Source[..150] : request.Source,
-                        SortOrder = (byte)sentenceCount
+                        SortOrder = (byte)(sortOrders.DefaultIfEmpty(-1).Max() + 1)
                     });
                     sentenceStored = true;
                 }
             }
         }
 
-        await userContext.SaveChangesAsync();
+        try
+        {
+            await userContext.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (existing == null && ex.IsUniqueViolation())
+        {
+            // A concurrent add of the same word committed first.
+            return Results.Conflict("This word was just added to the deck.");
+        }
+
         await transaction.CommitAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
 
@@ -914,17 +926,17 @@ public partial class StudyController(
         var sentenceWordIds = request.Words
             .Where(w => w.Sentence is { Length: > 0 })
             .Select(w => w.WordId).Distinct().ToList();
-        var sentenceCounts = new Dictionary<long, int>();
+        var sentenceSlots = new Dictionary<long, (int Count, int NextSort)>();
         var sentenceLimit = 0;
         if (sentenceWordIds.Count > 0)
         {
             sentenceLimit = (await userLimits.GetLimitsAsync(userId)).CustomSentencesPerWord;
-            sentenceCounts = (await userContext.UserExampleSentences
+            sentenceSlots = (await userContext.UserExampleSentences
                     .Where(e => e.UserId == userId && sentenceWordIds.Contains(e.WordId))
-                    .Select(e => new { e.WordId, e.ReadingIndex })
+                    .Select(e => new { e.WordId, e.ReadingIndex, e.SortOrder })
                     .ToListAsync())
                 .GroupBy(e => WordFormHelper.EncodeWordKey(e.WordId, e.ReadingIndex))
-                .ToDictionary(g => g.Key, g => g.Count());
+                .ToDictionary(g => g.Key, g => (g.Count(), g.Max(e => (int)e.SortOrder) + 1));
         }
 
         var added = 0;
@@ -959,7 +971,7 @@ public partial class StudyController(
 
             if (word.Sentence is { Length: > 0 } sentence)
             {
-                var sentenceCount = sentenceCounts.GetValueOrDefault(key);
+                var (sentenceCount, nextSort) = sentenceSlots.GetValueOrDefault(key);
                 if (sentence.Length <= 150 && SentenceMarkerRegex.IsMatch(sentence) && sentenceCount < sentenceLimit)
                 {
                     userContext.UserExampleSentences.Add(new UserExampleSentence
@@ -969,9 +981,9 @@ public partial class StudyController(
                         ReadingIndex = (byte)word.ReadingIndex,
                         Text = sentence,
                         Source = word.Source?.Length > 150 ? word.Source[..150] : word.Source,
-                        SortOrder = (byte)sentenceCount
+                        SortOrder = (byte)nextSort
                     });
-                    sentenceCounts[key] = sentenceCount + 1;
+                    sentenceSlots[key] = (sentenceCount + 1, nextSort + 1);
                     sentencesStored++;
                 }
                 else

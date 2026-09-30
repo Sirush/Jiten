@@ -97,8 +97,8 @@
 
     // The "View franchise" tag is always visible, so reserve its width up front like the label.
     const fr = franchiseRef.value;
-    const franchiseEl = fr instanceof HTMLElement ? fr : (fr?.$el as HTMLElement | undefined);
-    const franchiseWidth = franchiseEl?.getBoundingClientRect().width ?? 0;
+    const franchiseEl: unknown = fr instanceof HTMLElement ? fr : fr?.$el;
+    const franchiseWidth = franchiseEl instanceof Element ? franchiseEl.getBoundingClientRect().width : 0;
 
     let accumulatedWidth = labelWidth + 4 + (franchiseWidth > 0 ? franchiseWidth + props.gapSize : 0); // Label + margin
     let count = 0;

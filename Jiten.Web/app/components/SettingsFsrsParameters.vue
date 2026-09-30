@@ -2,7 +2,7 @@
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { Line } from 'vue-chartjs';
-  import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, type ChartOptions, type ChartData } from 'chart.js';
+  import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip as ChartTooltip, type ChartOptions, type ChartData } from 'chart.js';
   import { extractApiError } from '~/utils/toast';
   import type {
     FsrsParametersResponse,
@@ -13,7 +13,7 @@
     ReschedulePreviewResponse,
   } from '~/types';
 
-  ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip);
+  ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ChartTooltip);
 
   const { $api } = useNuxtApp();
   const toast = useToast();

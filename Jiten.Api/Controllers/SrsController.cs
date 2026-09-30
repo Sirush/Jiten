@@ -157,6 +157,11 @@ public class SrsController(
         {
             return await ReviewClaimed(request, userId, hasIdempotency, idempotencyScope);
         }
+        catch (DbUpdateException ex) when (ex.IsUniqueViolation())
+        {
+            if (hasIdempotency) await sessionService.ReleaseReviewClaim(idempotencyScope, request.ClientRequestId!);
+            return DuplicateJustRecorded();
+        }
         catch
         {
             if (hasIdempotency) await sessionService.ReleaseReviewClaim(idempotencyScope, request.ClientRequestId!);
@@ -1445,7 +1450,14 @@ public class SrsController(
             userContext, userId, card is { CardId: 0 } ? [card] : []);
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
-        await userContext.SaveChangesAsync();
+        try
+        {
+            await userContext.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.IsUniqueViolation())
+        {
+            return Results.Conflict(new { error_message = "This word's state was just changed by another request. Duplicate ignored." });
+        }
         await sessionService.BumpStudyOverviewVersion(userId);
 
         if (autoRestored > 0)
