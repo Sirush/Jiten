@@ -53,6 +53,7 @@ export function useExtraExampleSentences(target: MaybeRefOrGetter<ExtraSentenceT
           maxDifficulty: nextBandMax.value,
           descending,
           take: 3,
+          readableFirst: sentences.value.length === 0,
         },
       });
     }

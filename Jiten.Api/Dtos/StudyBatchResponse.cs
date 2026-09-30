@@ -153,6 +153,7 @@ public class WordExampleSentencesRequest
     public float MaxDifficulty { get; set; } = 0.5f;
     public bool Descending { get; set; }
     public int Take { get; set; } = 3;
+    public bool ReadableFirst { get; set; }
 }
 
 public class CardExamplesResponse

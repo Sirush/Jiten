@@ -50,6 +50,7 @@ public class IPlusOneCardExampleTests(JitenWebApplicationFactory factory)
 
         var deck = new Deck { OriginalTitle = "Study", MediaType = MediaType.Novel, ReleaseDate = new DateOnly(2020, 1, 1) };
         jitenDb.Decks.Add(deck);
+        jitenDb.DeckWords.Add(new DeckWord { Deck = deck, WordId = Target, ReadingIndex = 0, Occurrences = 3 });
         await jitenDb.SaveChangesAsync();
 
         _readableId = await AddSentence(jitenDb, deck.DeckId, "readable",
@@ -75,11 +76,12 @@ public class IPlusOneCardExampleTests(JitenWebApplicationFactory factory)
     private static SentenceToken Token(int wordId, byte position, bool functionWord = false)
         => new(wordId, 0, position, 1, IsTarget: wordId == Target, IsFunctionWord: functionWord);
 
-    private static async Task<long> AddSentence(JitenDbContext db, int deckId, string text, SentenceToken[] tokens, bool partial = false)
+    private static async Task<long> AddSentence(JitenDbContext db, int deckId, string text, SentenceToken[] tokens, bool partial = false,
+                                                float difficulty = 0.2f)
     {
         var sentence = new ExampleSentence
         {
-            DeckId = deckId, Text = text, Difficulty = 0.2f,
+            DeckId = deckId, Text = text, Difficulty = difficulty,
             Tokens = ExampleSentenceTokens.Encode(tokens, partial),
             WordKeys = ExampleSentenceTokens.WordKeys(tokens, Random.Shared.Next(ExampleSentenceTokens.FineBucketCount)),
         };
@@ -130,6 +132,45 @@ public class IPlusOneCardExampleTests(JitenWebApplicationFactory factory)
         }
 
         return all;
+    }
+
+    /// <summary>One sentence per new title outside the study deck; readable ones get rising difficulties from 0.1.</summary>
+    private async Task<(List<long> Readable, List<long> Unknown)> AddOtherTitles(int readable, int unknown)
+    {
+        using var scope = factory.Services.CreateScope();
+        var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+
+        async Task<long> AddTitle(string text, SentenceToken[] tokens, float difficulty)
+        {
+            var deck = new Deck { OriginalTitle = text, MediaType = MediaType.Anime, ReleaseDate = new DateOnly(2020, 1, 1) };
+            jitenDb.Decks.Add(deck);
+            await jitenDb.SaveChangesAsync();
+            return await AddSentence(jitenDb, deck.DeckId, text, tokens, difficulty: difficulty);
+        }
+
+        var readableIds = new List<long>();
+        for (var i = 0; i < readable; i++)
+            readableIds.Add(await AddTitle($"readable {i}", [Token(Target, 0), Token(KnownWord, 2)], 0.1f + i * 0.1f));
+
+        var unknownIds = new List<long>();
+        for (var i = 0; i < unknown; i++)
+            unknownIds.Add(await AddTitle($"unknown {i}", [Token(Target, 0), Token(UnknownWord, 2)], 0.2f));
+
+        return (readableIds, unknownIds);
+    }
+
+    private async Task<ExtraPayload> FirstExtraPage(string sorting = "Random")
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/srs/word-example-sentences")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new
+            {
+                wordId = Target, readingIndex = 0, sorting, take = 3, readableFirst = true,
+                minDifficulty = 0, maxDifficulty = 0.5, descending = false,
+            });
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        return (await response.Content.ReadFromJsonAsync<ExtraPayload>())!;
     }
 
     private async Task SetExampleSentenceSource(string source)
@@ -230,8 +271,61 @@ public class IPlusOneCardExampleTests(JitenWebApplicationFactory factory)
         extras.Should().OnlyContain(s => !s.IsIPlusOne);
     }
 
+    [Fact]
+    public async Task ServedCard_ReadableFirstPage_IsAllReadable_StudyDeckFirst()
+    {
+        var (readable, _) = await AddOtherTitles(readable: 3, unknown: 4);
+        await ServeBatch();
+
+        for (var i = 0; i < 10; i++)
+        {
+            var page = await FirstExtraPage();
+            page.Sentences.Should().HaveCount(3).And.OnlyContain(s => s.IsIPlusOne);
+            page.Sentences.Select(s => s.SentenceId).Should().OnlyContain(id => id == _readableId || readable.Contains(id));
+            page.Sentences[0].SentenceId.Should().Be(_readableId, "the study deck's readable sentence comes first");
+        }
+    }
+
+    [Fact]
+    public async Task ServedCard_ReadableFirstPage_TopsUpWithRandomSentences()
+    {
+        var (_, unknown) = await AddOtherTitles(readable: 0, unknown: 3);
+        await ServeBatch();
+
+        var page = await FirstExtraPage();
+        page.Sentences.Should().HaveCount(3);
+        page.Sentences[0].SentenceId.Should().Be(_readableId);
+        page.Sentences.Skip(1).Should().OnlyContain(s => unknown.Contains(s.SentenceId) && !s.IsIPlusOne);
+    }
+
+    [Fact]
+    public async Task CardOutsideTheBatch_ReadableFirstIsIgnored()
+    {
+        var (_, unknown) = await AddOtherTitles(readable: 3, unknown: 4);
+
+        var pages = new List<SentenceRef>();
+        for (var i = 0; i < 10; i++)
+            pages.AddRange((await FirstExtraPage()).Sentences);
+
+        pages.Should().OnlyContain(s => !s.IsIPlusOne);
+        pages.Should().Contain(s => unknown.Contains(s.SentenceId));
+    }
+
+    [Fact]
+    public async Task ServedCard_ReadableFirstPage_DifficultySorting_OrdersByDifficultyAndKeepsTheBandCursor()
+    {
+        await AddOtherTitles(readable: 3, unknown: 4);
+        await ServeBatch();
+
+        var page = await FirstExtraPage("EasiestFirst");
+        page.Sentences.Should().HaveCount(3).And.OnlyContain(s => s.IsIPlusOne);
+        page.Sentences.Select(s => s.Difficulty).Should().BeInAscendingOrder();
+        page.SearchedBandMax.Should().Be(0, "a page filled by the readable pick leaves the band walk at its start");
+    }
+
     private class ExtraPayload
     {
+        public float SearchedBandMax { get; set; }
         public List<SentenceRef> Sentences { get; set; } = [];
     }
 
@@ -254,5 +348,6 @@ public class IPlusOneCardExampleTests(JitenWebApplicationFactory factory)
     {
         public long SentenceId { get; set; }
         public bool IsIPlusOne { get; set; }
+        public float Difficulty { get; set; }
     }
 }
