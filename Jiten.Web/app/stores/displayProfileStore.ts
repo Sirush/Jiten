@@ -5,7 +5,7 @@ import {
   DEFAULT_DISPLAY_VALUES,
   DISPLAY_SECTION_KEYS,
   MAX_DISPLAY_PROFILES,
-  localSettingsDiffer,
+  localSettingsWorthKeeping,
   newDisplayProfileId,
   pickActiveProfile,
   sanitiseDisplayValues,
@@ -239,7 +239,7 @@ export const useDisplayProfileStore = defineStore('displayProfile', () => {
         const active = pickActiveProfile(profiles.value, activeIdCookie.value)!;
         activeIdCookie.value = active.id;
         const local = { values: readValues(), statColumns: readStatColumns() };
-        if (firstSyncOnThisBrowser && localSettingsDiffer(local, active)) saveOffer(local);
+        if (firstSyncOnThisBrowser && localSettingsWorthKeeping(local, active)) saveOffer(local);
         else if (!firstSyncOnThisBrowser) restoreOffer();
         applyProfile(active);
       }

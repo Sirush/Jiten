@@ -24,7 +24,7 @@ public static class DiscourseConnect
     public readonly record struct Request(string Nonce, string ReturnUrl);
 
     /// <summary>Verifies and decodes the payload the forum sends, or returns null if the signature or return URL is wrong.</summary>
-    public static Request? ReadRequest(string sso, string sig, DiscourseOptions options)
+    public static Request? ReadRequest(string sso, string sig, DiscourseOptions options, ILogger? logger = null)
     {
         if (string.IsNullOrEmpty(sso) || string.IsNullOrEmpty(sig)) return null;
 
@@ -39,7 +39,10 @@ public static class DiscourseConnect
         }
 
         if (!CryptographicOperations.FixedTimeEquals(given, ComputeHmac(sso, options.SsoSecret)))
+        {
+            logger?.LogWarning("Rejected DiscourseConnect payload: signature mismatch, Discourse:SsoSecret differs from the forum's discourse_connect_secret");
             return null;
+        }
 
         string decoded;
         try
@@ -57,7 +60,10 @@ public static class DiscourseConnect
 
         // The signature already proves the forum sent this; the host check stops a leaked secret from turning the endpoint into an open redirect.
         if (nonce.Length == 0 || !returnUrl.StartsWith(options.Url.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            logger?.LogWarning("Rejected DiscourseConnect payload: return URL {ReturnUrl} is not under Discourse:Url {DiscourseUrl}", returnUrl, options.Url);
             return null;
+        }
 
         return new Request(nonce, returnUrl);
     }
